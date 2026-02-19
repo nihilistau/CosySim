@@ -22,6 +22,8 @@ import json
 # Add project root to path
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
+import os
+os.chdir(project_root)
 
 from engine.assets import AssetManager, CharacterAsset, SceneAsset
 from engine.config import ConfigManager

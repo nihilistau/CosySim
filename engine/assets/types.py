@@ -8,7 +8,6 @@ Implementations of specific asset types:
 """
 
 import os
-import imghdr
 from pathlib import Path
 from typing import Any, Dict, Optional
 import logging
@@ -181,11 +180,6 @@ class ImageAsset(BaseAsset):
         # Check file is not empty
         if os.path.getsize(self.filepath) == 0:
             raise AssetValidationError(f"Image file is empty: {self.filepath}")
-        
-        # Verify actual image format matches extension
-        actual_format = imghdr.what(self.filepath)
-        if actual_format is None:
-            raise AssetValidationError(f"File is not a valid image: {self.filepath}")
         
         return True
     
