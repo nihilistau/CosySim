@@ -575,7 +575,7 @@ async function _cliCharacter(args) {
             if (d.success) {
                 appendLog({level:'INFO', ts:_ts(), message:'Active character: ' + d.character.name});
                 // update phone.js display
-                if (typeof loadFirstCharacter === 'function') loadFirstCharacter();
+                if (typeof loadCharacters === 'function') loadCharacters();
             } else {
                 appendLog({level:'ERROR', ts:_ts(), message:'Set failed: '+(d.error||'')});
             }

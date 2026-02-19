@@ -182,8 +182,7 @@ class Character:
 
         - State fields   (mood, energy, relationship_level, arousal) → update_state()
         - Character table fields (name, age, sex, hair_color, eye_color, height,
-          body_type, tags, appearance, traits, avatar_url, personality_id,
-          role_id, voice_id) → update_attributes()
+          body_type, tags, personality_id) → update_attributes()
         - Metadata fields (backstory, occupation, physical_description, speech_style,
           interests, quirks, fears, secrets, …) → stored in the metadata JSON column
         - 'personality' string → looked up by name → personality_id set
@@ -191,17 +190,19 @@ class Character:
         Returns True if at least one update succeeded.
         """
         STATE_FIELDS = {'mood', 'energy', 'relationship_level', 'arousal',
-                        'last_interaction', 'location', 'activity'}
+                        'last_interaction'}
         # Only real columns that exist in the `characters` table
         CHAR_TABLE_FIELDS = {
             'name', 'age', 'sex', 'hair_color', 'eye_color', 'height', 'body_type',
-            'tags', 'appearance', 'traits', 'avatar_url',
-            'personality_id', 'role_id', 'voice_id',
+            'tags', 'personality_id',
         }
         # Fields that live in the metadata JSON blob
         META_FIELDS = {
             'backstory', 'occupation', 'physical_description', 'speech_style',
             'interests', 'quirks', 'fears', 'secrets', 'personality_name',
+            # Phantom fields that don't exist as real DB columns go to metadata:
+            'appearance', 'traits', 'avatar_url', 'role_id', 'voice_id',
+            'location', 'activity',
         }
 
         state_kwargs: Dict[str, Any] = {}

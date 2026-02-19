@@ -1542,11 +1542,14 @@ class PhoneScene(BaseScene):
         history = []
         try:
             conv_history = self.active_character.get_conversation_history(limit=10)
-            for turn in conv_history:
-                if isinstance(turn, dict):
-                    role = turn.get("role", "user")
-                    content = turn.get("content", "")
-                    history.append({"role": role, "content": content})
+            for conv in conv_history:
+                if isinstance(conv, dict):
+                    for turn in conv.get("messages", []):
+                        if isinstance(turn, dict):
+                            role = turn.get("role", "user")
+                            content = turn.get("content", "")
+                            if role and content:
+                                history.append({"role": role, "content": content})
         except Exception:
             history = []
 
@@ -1721,8 +1724,8 @@ class PhoneScene(BaseScene):
             sex=char_asset.gender or 'female',
             hair_color=char_asset.hair_color or 'brown',
             eye_color=char_asset.eye_color or 'brown',
-            height=char_asset.height or '5\'6"',
-            body_type=char_asset.build or 'slim',
+            height=getattr(char_asset, 'height', None) or char_asset.attributes.get('height', '5\'6"'),
+            body_type=getattr(char_asset, 'build', None) or char_asset.attributes.get('body_type', 'slim'),
             personality_id=char_asset.personality_id,
             metadata={
                 'description': char_asset.description,

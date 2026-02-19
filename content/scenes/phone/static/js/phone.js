@@ -9,9 +9,7 @@ let currentPhotoUrl = null;
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
     initializeSocket();
-    updateTime();
     loadCharacters();
-    setInterval(updateTime, 1000);
 });
 
 // Socket.IO initialization
@@ -79,19 +77,6 @@ function updateConnectionStatus(connected) {
         statusEl.textContent = connected ? 'Connected' : 'Disconnected';
         statusEl.className = 'status-indicator ' + (connected ? 'connected' : 'disconnected');
     }
-}
-
-// Update time displays
-function updateTime() {
-    const now = new Date();
-    const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
-    const dateStr = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
-    
-    const statusTime = document.getElementById('statusTime');
-    if (statusTime) statusTime.textContent = timeStr;
-    
-    const homeDate = document.getElementById('homeDate');
-    if (homeDate) homeDate.textContent = dateStr;
 }
 
 // Load available characters
@@ -500,22 +485,19 @@ function startCall(type) {
     
     socket.emit('start_call', { type: type });
     
-    // Show call screen
+    // Show call screen (elements may not exist in all UI variants)
     const screens = document.querySelectorAll('.screen-view');
     screens.forEach(screen => screen.style.display = 'none');
-    document.getElementById('callScreen').style.display = 'block';
+    const callScreen = document.getElementById('callScreen');
+    if (callScreen) callScreen.style.display = 'block';
     
     // Update call info
-    const callType = document.getElementById('callType');
-    callType.textContent = type === 'video' ? 'Video Call' : 'Voice Call';
+    const callTypeEl = document.getElementById('callType');
+    if (callTypeEl) callTypeEl.textContent = type === 'video' ? 'Video Call' : 'Voice Call';
     
-    // Show video if video call
+    // Show/hide video element
     const callVideo = document.getElementById('callVideo');
-    if (type === 'video') {
-        callVideo.style.display = 'block';
-    } else {
-        callVideo.style.display = 'none';
-    }
+    if (callVideo) callVideo.style.display = type === 'video' ? 'block' : 'none';
     
     // Start timer
     callDuration = 0;

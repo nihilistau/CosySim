@@ -825,12 +825,6 @@
 function handleMessageKeyDown(e) {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
 }
-function handleMessageKeyPress(e) { /* replaced by handleMessageKeyDown */ }
-
-function scrollToBottom() {
-    const c = document.getElementById('messagesContainer');
-    if (c) c.scrollTop = c.scrollHeight;
-}
 
 // Patch addMessage so it always scrolls
 document.addEventListener('DOMContentLoaded', function() {

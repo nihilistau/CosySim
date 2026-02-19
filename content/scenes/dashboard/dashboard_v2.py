@@ -324,7 +324,7 @@ elif page == "👤 Characters":
                         new_arousal= st.slider("Arousal Level",      0.0, 1.0, float(state.get('arousal', 0.0)))
 
                     st.markdown("#### 📝 Profile")
-                    new_backstory  = st.text_area("Backstory",            value=char_data.get('backstory', '') or '', height=80)
+                    new_backstory  = st.text_area("Backstory",            value=meta.get('backstory', ''), height=80)
                     new_phys_desc  = st.text_area("Physical Description", value=meta.get('physical_description', ''), height=60)
                     new_speech     = st.text_input("Speech Style",         value=meta.get('speech_style', ''))
                     new_interests  = st.text_input("Interests",            value=meta.get('interests', ''))

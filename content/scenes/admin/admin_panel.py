@@ -370,8 +370,10 @@ def show_character_manager():
                                                     index=["female","male","non-binary","other"].index(char.gender or "female"))
                             e_hair = st.text_input("Hair Color", value=char.hair_color or "")
                             e_eye  = st.text_input("Eye Color",  value=char.eye_color or "")
-                            e_freq = st.selectbox("Messaging Frequency", ["low","medium","high"],
-                                                  index=["low","medium","high"].index(char.messaging_frequency or "medium"))
+                            _freq_opts = ["rare", "occasional", "frequent"]
+                            _cur_freq = char.messaging_frequency if char.messaging_frequency in _freq_opts else "occasional"
+                            e_freq = st.selectbox("Messaging Frequency", _freq_opts,
+                                                  index=_freq_opts.index(_cur_freq))
                             e_auto = st.slider("Autonomy Level", 0.0, 1.0,
                                                float(char.autonomy_level or 0.5), 0.1)
                             e_nsfw = st.checkbox("NSFW Enabled", value=bool(char.nsfw_enabled))

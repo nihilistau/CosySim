@@ -236,8 +236,7 @@ class Database:
         # Whitelist of allowed columns to prevent SQL injection
         ALLOWED_COLUMNS = {
             'name', 'age', 'sex', 'hair_color', 'eye_color', 'height', 'body_type',
-            'personality_id', 'role_id', 'appearance', 'voice_id', 'traits',
-            'tags', 'metadata', 'avatar_url'
+            'personality_id', 'tags', 'metadata'
         }
         
         timestamp = datetime.now().isoformat()
@@ -626,7 +625,7 @@ class Database:
         # Whitelist of allowed columns to prevent SQL injection
         ALLOWED_COLUMNS = {
             'mood', 'energy', 'relationship_level', 'arousal', 'last_interaction',
-            'conversation_id', 'location', 'activity', 'metadata'
+            'metadata'
         }
         
         timestamp = datetime.now().isoformat()
