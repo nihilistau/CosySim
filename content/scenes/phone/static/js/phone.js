@@ -31,12 +31,11 @@ function initializeSocket() {
     socket.on('message_received', (data) => {
         addMessageToUI(data.role, data.content, data.timestamp, data.autonomous);
         
-        // Update mood/relationship if the server sent new values
-        if (data.mood && currentCharacter) {
-            currentCharacter.mood = data.mood;
-        }
-        if (data.relationship_level !== undefined && currentCharacter) {
-            currentCharacter.relationship_level = data.relationship_level;
+        // Update mood/relationship/arousal if the server sent new values
+        if (currentCharacter) {
+            if (data.mood) currentCharacter.mood = data.mood;
+            if (data.relationship_level !== undefined) currentCharacter.relationship_level = data.relationship_level;
+            if (data.arousal !== undefined) currentCharacter.arousal = data.arousal;
         }
         if (data.role === 'assistant') updateMoodRelDisplay();
         
@@ -62,7 +61,7 @@ function initializeSocket() {
     });
     
     socket.on('photo_received', (data) => {
-        addPhotoMessage(data.url, data.timestamp, data.role || 'assistant');
+        addPhotoMessage(data.url, data.timestamp, data.role || 'assistant', data.caption);
     });
     
     socket.on('voice_message_received', (data) => {
@@ -183,11 +182,12 @@ function updateCharacterUI() {
     updateMoodRelDisplay();
 }
 
-/** Refresh the mood dot and relationship hearts in the message header. */
+/** Refresh the mood dot, relationship hearts, and arousal bar in the message header. */
 function updateMoodRelDisplay() {
     if (!currentCharacter) return;
-    const mood  = currentCharacter.mood || 'neutral';
-    const rel   = parseFloat(currentCharacter.relationship_level || 0.5);
+    const mood    = currentCharacter.mood || 'neutral';
+    const rel     = parseFloat(currentCharacter.relationship_level || 0.5);
+    const arousal = parseFloat(currentCharacter.arousal || 0);
     
     // Mood dot colour mapping
     const moodColours = {
@@ -195,6 +195,8 @@ function updateMoodRelDisplay() {
         sad:'#5ac8fa', angry:'#ff3b30', neutral:'#8e8e93',
         anxious:'#ffcc00', playful:'#af52de', loving:'#ff375f',
         bored:'#636366', curious:'#0a84ff', shy:'#d4a0e8',
+        seductive:'#e63946', aroused:'#d00000', passionate:'#dc2f02',
+        teasing:'#f77f00', needy:'#9d4edd', confident:'#f4a261',
     };
     const dot = document.getElementById('moodDot');
     if (dot) dot.style.background = moodColours[mood] || '#8e8e93';
@@ -207,6 +209,14 @@ function updateMoodRelDisplay() {
     if (hearts) {
         const filled = Math.round(rel * 5);
         hearts.textContent = '❤️'.repeat(filled) + '🤍'.repeat(5 - filled);
+    }
+    
+    // Arousal fire bar (0–5 flames)
+    const fire = document.getElementById('arousalFire');
+    if (fire) {
+        const flames = Math.round(arousal * 5);
+        fire.textContent = flames > 0 ? '🔥'.repeat(flames) : '';
+        fire.style.display = flames > 0 ? 'inline' : 'none';
     }
 }
 
@@ -511,7 +521,7 @@ function addMessageToUI(role, content, timestamp, autonomous = false, shouldScro
     if (shouldScroll) scrollToBottom();
 }
 
-function addPhotoMessage(url, timestamp, role = 'assistant') {
+function addPhotoMessage(url, timestamp, role = 'assistant', caption = '') {
     const container = document.getElementById('messagesContainer');
     
     const messageDiv = document.createElement('div');
@@ -525,12 +535,21 @@ function addPhotoMessage(url, timestamp, role = 'assistant') {
     img.className = 'message-photo';
     img.onclick = () => openPhotoViewer(url);
     
+    imgDiv.appendChild(img);
+    
+    // Caption under the photo
+    if (caption) {
+        const capDiv = document.createElement('div');
+        capDiv.className = 'photo-caption';
+        capDiv.textContent = caption;
+        imgDiv.appendChild(capDiv);
+    }
+    
     const timeDiv = document.createElement('div');
     timeDiv.className = 'message-time';
     const time = new Date(timestamp);
     timeDiv.textContent = time.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
     
-    imgDiv.appendChild(img);
     imgDiv.appendChild(timeDiv);
     messageDiv.appendChild(imgDiv);
     container.appendChild(messageDiv);

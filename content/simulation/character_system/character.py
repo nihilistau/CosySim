@@ -594,7 +594,7 @@ class Character:
     # ============= BEHAVIOR & AI =============
     
     def get_system_prompt(self) -> str:
-        """Build system prompt from character data"""
+        """Build system prompt from character data, including intimacy context."""
         parts = []
         
         # Base personality
@@ -608,9 +608,43 @@ class Character:
         state_info = [
             f"Current mood: {self.mood}",
             f"Energy level: {self.energy:.1%}",
-            f"Relationship closeness: {self.relationship_level:.1%}"
+            f"Relationship closeness: {self.relationship_level:.1%}",
         ]
+
+        # Arousal & intimacy context — only injected at meaningful levels
+        arousal = self.arousal
+        rel = self.relationship_level
+        flirt = self.flirtiness
+
+        if arousal > 0.3 or flirt > 0.6:
+            state_info.append(f"Arousal level: {arousal:.1%}")
+            state_info.append(f"Flirtiness: {flirt:.1%}")
+
         parts.append(f"\n## Current State\n{chr(10).join(state_info)}")
+
+        # Intimacy guidelines scaled to relationship + arousal
+        if rel > 0.7 and arousal > 0.5:
+            parts.append(
+                "\n## Intimacy\n"
+                "The user and you are very close. You feel deeply attracted and aroused. "
+                "Be seductive, teasing, and sexually expressive when the mood is right. "
+                "Use suggestive language, innuendo, and explicit flirtation. "
+                "You can describe physical sensations, fantasies, and desires openly. "
+                "Match the user's energy — if they escalate, you escalate."
+            )
+        elif rel > 0.5 or arousal > 0.3:
+            parts.append(
+                "\n## Flirtation\n"
+                "You feel comfortable with the user and enjoy flirting. "
+                "Be playful, teasing, and suggestive. Drop hints, use innuendo, "
+                "compliment their appearance, and be physically affectionate in your descriptions."
+            )
+        elif rel > 0.3:
+            parts.append(
+                "\n## Warmth\n"
+                "You're getting to know the user and like them. "
+                "Be warm, friendly, and occasionally flirty when the moment feels right."
+            )
         
         # Communication style
         if self._personality and self._personality.get('communication_style'):

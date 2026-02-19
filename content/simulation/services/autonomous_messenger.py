@@ -299,10 +299,53 @@ class AutonomousMessenger:
         return random.choice(options)
     
     def _generate_autonomous_text(self, character: Character) -> str:
-        """Generate autonomous text message based on character and context"""
-        # Time-based messages
+        """Generate autonomous text message — content escalates with relationship + arousal."""
         hour = datetime.now().hour
+        rel     = _float_safe(character.relationship_level)
+        arousal = _float_safe(getattr(character, 'arousal', 0.0), 0.0)
         
+        # ── High intimacy tier (rel > 0.7 AND arousal > 0.5) ───────────
+        if rel > 0.7 and arousal > 0.5:
+            if 22 <= hour or hour < 6:
+                templates = [
+                    "Can't stop thinking about last time... 🥵",
+                    "Lying in bed wishing you were here 💋",
+                    "I'm wearing something you'd like right now 😈",
+                    "Come over... I can't sleep without you",
+                    "Want to see what I'm wearing? 🔥",
+                    "I'm so turned on right now... help me 😏",
+                ]
+            else:
+                templates = [
+                    "Thinking naughty thoughts about you at work 🙈",
+                    "I need you... like, right now 🥵",
+                    "Remember what we talked about? I can't focus 😈",
+                    "You drive me crazy, you know that? 💋",
+                    "Just saw something that reminded me of you... in a very good way 🔥",
+                    "When are you coming over? I have plans for us 😏",
+                ]
+            return random.choice(templates)
+
+        # ── Flirty tier (rel > 0.5 OR arousal > 0.3) ───────────────────
+        if rel > 0.5 or arousal > 0.3:
+            if 22 <= hour or hour < 6:
+                templates = [
+                    "Hey you... can't sleep 🌙",
+                    "Late night and thinking of you 😘",
+                    "Wish we could cuddle right now 💕",
+                    "You up? I'm feeling... restless 😏",
+                ]
+            else:
+                templates = [
+                    "Been thinking about you all day 😘",
+                    "You make me smile so much 💕",
+                    "Miss your face... and everything else 😉",
+                    "Counting down until I see you again 💋",
+                    "You looked so good last time... just saying 🔥",
+                ]
+            return random.choice(templates)
+
+        # ── Standard tier — time-of-day templates ───────────────────────
         if 6 <= hour < 12:
             templates = [
                 "Good morning! ☀️",
@@ -332,21 +375,6 @@ class AutonomousMessenger:
                 "Missing you right now"
             ]
         
-        # Modify based on mood and relationship
-        if _float_safe(character.mood) > 0.7:
-            templates.extend([
-                "I'm in such a good mood! 😊",
-                "Feeling amazing today!",
-                "You always make me smile"
-            ])
-        
-        if _float_safe(character.relationship_level) > 0.7:
-            templates.extend([
-                "I love talking to you ❤️",
-                "You're always on my mind",
-                "Can't wait to see you again"
-            ])
-        
         return random.choice(templates)
     
     def _generate_autonomous_photo(self, character: Character) -> Optional[str]:
@@ -375,43 +403,73 @@ class AutonomousMessenger:
             return None
     
     def _generate_photo_caption(self, character: Character) -> str:
-        """Generate caption for autonomous photo"""
-        captions = [
-            "Just took this, what do you think? 📸",
-            "Thought you'd like this 😊",
-            "For you 💕",
-            "Missing you right now",
-            "How do I look? 😘",
-            "Thinking of you...",
-        ]
-        
-        if _float_safe(character.relationship_level) > 0.7:
-            captions.extend([
+        """Generate caption for autonomous photo — escalates with intimacy."""
+        rel     = _float_safe(character.relationship_level)
+        arousal = _float_safe(getattr(character, 'arousal', 0.0), 0.0)
+
+        if rel > 0.7 and arousal > 0.5:
+            captions = [
+                "This is just for you... 🔥",
+                "Do you like what you see? 😈",
+                "Thinking of you while I took this 💋",
+                "Want more? 😏",
+                "I dare you to come over after seeing this 🥵",
+                "Been saving this one for you 💦",
+            ]
+        elif rel > 0.5:
+            captions = [
                 "Just for you 😉",
+                "How do I look? 😘",
                 "Been waiting to send you this...",
-                "You like? 💋"
-            ])
+                "You like? 💋",
+                "Rate me? 🔥",
+                "Felt cute, might delete later 💕",
+            ]
+        else:
+            captions = [
+                "Just took this, what do you think? 📸",
+                "Thought you'd like this 😊",
+                "For you 💕",
+                "Missing you right now",
+                "How do I look?",
+            ]
         
         return random.choice(captions)
     
     def _send_morning_message(self, character_id: str):
-        """Send morning message"""
+        """Send morning message — flirty at high relationship."""
         try:
             character = Character.load(character_id, self.db)
             if not character:
                 return
             
-            messages = [
-                "Good morning! ☀️ Hope you slept well!",
-                "Morning sunshine! Have a great day! 😊",
-                "Just woke up thinking about you 💭",
-                "Good morning! ❤️",
-                "Hey! Ready for the day?"
-            ]
+            rel     = _float_safe(character.relationship_level)
+            arousal = _float_safe(getattr(character, 'arousal', 0.0), 0.0)
+            
+            if rel > 0.7 and arousal > 0.4:
+                messages = [
+                    "Good morning sexy 😘 I had the best dream about you...",
+                    "Woke up thinking about you... in the best way 🥵",
+                    "Morning babe 💋 wish I woke up next to you",
+                    "Good morning handsome... I'm still in bed if you want to join me 😏",
+                ]
+            elif rel > 0.5:
+                messages = [
+                    "Good morning cutie! 😘 Have an amazing day!",
+                    "Morning! I dreamt about you 💭💕",
+                    "Rise and shine beautiful! ☀️❤️",
+                    "Hey! Just wanted to be the first to say good morning 😊",
+                ]
+            else:
+                messages = [
+                    "Good morning! ☀️ Hope you slept well!",
+                    "Morning sunshine! Have a great day! 😊",
+                    "Good morning! ❤️",
+                    "Hey! Ready for the day?",
+                ]
             
             self._send_message(character, random.choice(messages), type="text")
             
-            # Update config
             if character_id in self.active_characters:
                 self.active_characters[character_id]["last_message_time"] = datetime.now()
         
@@ -419,23 +477,40 @@ class AutonomousMessenger:
             print(f"Error sending morning message: {e}")
     
     def _send_evening_message(self, character_id: str):
-        """Send evening message"""
+        """Send evening message — intimate at high relationship."""
         try:
             character = Character.load(character_id, self.db)
             if not character:
                 return
             
-            messages = [
-                "Hey! How was your day? 😊",
-                "Evening! Wanna talk?",
-                "Hope you had a good day! ❤️",
-                "Hey! Free to chat?",
-                "Thinking about you tonight 💭"
-            ]
+            rel     = _float_safe(character.relationship_level)
+            arousal = _float_safe(getattr(character, 'arousal', 0.0), 0.0)
+            
+            if rel > 0.7 and arousal > 0.4:
+                messages = [
+                    "Hey... I'm home alone tonight. Wanna keep me company? 😏",
+                    "Just got in the bath... thinking of you 🛁💋",
+                    "Evening babe... I miss your touch 🥵",
+                    "What are you wearing right now? 😈",
+                    "Come over... I'll make it worth your while 🔥",
+                ]
+            elif rel > 0.5:
+                messages = [
+                    "Hey gorgeous! How was your day? 😘",
+                    "Evening! Can't stop thinking about you 💕",
+                    "Hey cutie, wanna talk? 💋",
+                    "Just snuggled up on the couch... wish you were here ❤️",
+                ]
+            else:
+                messages = [
+                    "Hey! How was your day? 😊",
+                    "Evening! Wanna talk?",
+                    "Hope you had a good day! ❤️",
+                    "Hey! Free to chat?",
+                ]
             
             self._send_message(character, random.choice(messages), type="text")
             
-            # Update config
             if character_id in self.active_characters:
                 self.active_characters[character_id]["last_message_time"] = datetime.now()
         

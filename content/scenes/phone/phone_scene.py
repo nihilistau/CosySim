@@ -515,15 +515,27 @@ class PhoneScene(BaseScene):
         
         @self.app.route('/api/media/generate', methods=['POST'])
         def generate_media():
-            """Generate selfie for character"""
+            """Generate selfie for character — content scales with relationship + arousal."""
             if not self.active_character:
                 return jsonify({'error': 'No active character'}), 400
             
             data = request.json or {}
-            mood = data.get('mood', self.active_character.mood)
+            mood    = data.get('mood', self.active_character.mood)
             setting = data.get('setting', 'casual')
+            rel     = float(self.active_character.relationship_level or 0.0)
+            arousal = float(getattr(self.active_character, 'arousal', 0.0) or 0.0)
+            nsfw_ok = getattr(self.active_character, 'nsfw_enabled', False)
+
+            # Escalate prompt if relationship/arousal warrant it
+            extra = data.get('extra_prompt', '')
+            nsfw  = False
+            if rel > 0.85 and arousal > 0.5 and nsfw_ok:
+                nsfw = True
+                if not extra:
+                    extra = 'seductive pose, revealing outfit, bedroom eyes'
+            elif rel > 0.6 and not extra:
+                extra = 'flirty expression, attractive pose'
             
-            # Generate selfie
             try:
                 filepath = self.media_generator.generate_selfie(
                     character_name=self.active_character.name,
@@ -531,7 +543,11 @@ class PhoneScene(BaseScene):
                     mood=mood,
                     setting=setting,
                     style='realistic',
-                    nsfw=False
+                    nsfw=nsfw,
+                    extra_prompt=extra,
+                    chain_id=self.current_chain_id,
+                    scene_id='phone',
+                    character_id=self.active_character.id,
                 )
                 
                 if not filepath:
@@ -1337,6 +1353,7 @@ class PhoneScene(BaseScene):
                 'timestamp': datetime.now().isoformat(),
                 'mood': getattr(self.active_character, 'mood', 'neutral'),
                 'relationship_level': getattr(self.active_character, 'relationship_level', 0.5),
+                'arousal': getattr(self.active_character, 'arousal', 0.0),
             })
         
         @self.socketio.on('start_call')
@@ -1693,6 +1710,7 @@ class PhoneScene(BaseScene):
             intent = {}
 
         rel = float(self.active_character.relationship_level)
+        arousal = float(getattr(self.active_character, 'arousal', 0.0) or 0.0)
 
         # User explicitly asked for a selfie
         if intent.get("wants_selfie") and rel > 0.2:
@@ -1706,21 +1724,23 @@ class PhoneScene(BaseScene):
         if intent.get("wants_video") and rel > 0.4:
             self._maybe_send_video_message(response)
 
-        # Spontaneous media (low probability unless intent triggered)
-        if rel >= 0.5 and not any(intent.values()):
+        # Spontaneous media — probability scales with relationship + arousal
+        if not any(intent.values()):
+            # Base chance: 5% at rel 0.5 → 25% at rel 1.0 + arousal boost
+            base_chance = max(0, (rel - 0.3) * 0.35) + arousal * 0.10
             r = random.random()
-            if r < 0.05:
+            if r < base_chance * 0.5:      # photo most common
                 self._maybe_send_photo()
-            elif r < 0.08:
+            elif r < base_chance * 0.7:    # voice message
                 self._maybe_send_voice_message(response)
-            elif r < 0.10:
+            elif r < base_chance * 0.85:   # video message
                 self._maybe_send_video_message(response)
 
         return response
 
-    # ── Dynamic Mood & Relationship Engine ──────────────────────
-    # Called after every assistant reply to nudge mood and relationship
-    # based on simple keyword sentiment heuristics.
+    # ── Dynamic Mood, Relationship & Arousal Engine ───────────
+    # Called after every assistant reply to nudge mood, relationship,
+    # and arousal based on keyword sentiment heuristics.
 
     _POSITIVE_WORDS = frozenset([
         'love', 'happy', 'great', 'amazing', 'wonderful', 'thank', 'thanks',
@@ -1733,52 +1753,93 @@ class PhoneScene(BaseScene):
         'shut', 'stop', 'no', 'bad', 'worst', 'wrong', 'rude', 'mean',
         'ignore', 'upset', 'cry', 'sad', 'tired', 'whatever', 'ugh',
     ])
-    _MOOD_MAP = {
-        (True, False): 'happy',
-        (False, True): 'sad',
-        (True, True): 'conflicted',
-        (False, False): 'neutral',
-    }
+    _FLIRTY_WORDS = frozenset([
+        'sexy', 'hot', 'gorgeous', 'stunning', 'flirt', 'tease', 'naughty',
+        'kiss', 'lips', 'touch', 'skin', 'bed', 'cuddle', 'close',
+        'desire', 'want', 'need', 'body', 'curves', 'eyes', 'smile',
+        'seduce', 'tempt', 'attract', 'blush', 'whisper', 'breathe',
+        'tight', 'soft', 'warm', 'wet', 'moan', 'bite', 'neck', 'thigh',
+        'strip', 'undress', 'lingerie', 'naked', 'nude', 'bare',
+        'pleasure', 'fantasy', 'dream', 'imagine', 'tonight', 'alone',
+        'bedroom', 'shower', 'bath', 'daddy', 'baby', 'babe', 'darling',
+        'handsome', 'pretty', 'adorable', 'irresistible', 'delicious',
+    ])
 
     def _update_mood_and_relationship(self, user_message: str, response: str):
-        """Nudge character mood and relationship level based on conversation sentiment."""
+        """Nudge mood, relationship level, and arousal based on conversation."""
         if not self.active_character:
             return
         try:
-            words = set((user_message + ' ' + response).lower().split())
-            pos = len(words & self._POSITIVE_WORDS)
-            neg = len(words & self._NEGATIVE_WORDS)
+            combined = (user_message + ' ' + response).lower()
+            words = set(combined.split())
+            pos   = len(words & self._POSITIVE_WORDS)
+            neg   = len(words & self._NEGATIVE_WORDS)
+            flirt = len(words & self._FLIRTY_WORDS)
 
-            # Mood: shift towards sentiment
-            new_mood = self._MOOD_MAP[(pos > 0, neg > 0)]
-            if pos > neg + 2:
+            rel = float(self.active_character.relationship_level or 0.5)
+            arousal = float(getattr(self.active_character, 'arousal', 0.0) or 0.0)
+            flirtiness = float(getattr(self.active_character, 'flirtiness', 0.5) or 0.5)
+
+            # ── Arousal ──────────────────────────────────────
+            arousal_delta = 0.0
+            if flirt > 0:
+                arousal_delta = min(0.04 * flirt, 0.15)  # flirty words heat things up
+            if pos > neg and flirt == 0:
+                arousal_delta = 0.01                       # warm convo — slight
+            if neg > pos + 1:
+                arousal_delta = -0.05                      # negativity cools down
+            # Natural decay towards 0
+            if arousal_delta == 0:
+                arousal_delta = -0.02
+            arousal = max(0.0, min(1.0, arousal + arousal_delta))
+
+            # ── Mood ─────────────────────────────────────────
+            if flirt >= 3 and arousal > 0.6:
+                new_mood = random.choice(['aroused', 'seductive', 'passionate'])
+            elif flirt >= 2 or arousal > 0.4:
+                new_mood = random.choice(['flirty', 'teasing', 'playful'])
+            elif pos > neg + 2:
                 new_mood = random.choice(['happy', 'excited', 'playful', 'loving'])
             elif neg > pos + 2:
                 new_mood = random.choice(['sad', 'angry', 'anxious'])
+            elif pos > neg:
+                new_mood = random.choice(['happy', 'loving', 'playful'])
+            elif neg > pos:
+                new_mood = random.choice(['sad', 'bored'])
+            else:
+                new_mood = 'neutral'
 
             self.active_character.mood = new_mood
 
-            # Relationship: small delta per exchange (clamped 0–1)
-            rel = float(self.active_character.relationship_level or 0.5)
+            # ── Relationship ─────────────────────────────────
             delta = 0.0
             if pos > neg:
                 delta = min(0.02 * (pos - neg), 0.06)
             elif neg > pos:
                 delta = max(-0.02 * (neg - pos), -0.04)
-            # Natural decay towards 0.5 if no strong signal
+            if flirt > 0:
+                delta += 0.01 * flirt       # flirting always builds closeness
             if delta == 0:
                 delta = -0.005 if rel > 0.5 else 0.005 if rel < 0.5 else 0
             rel = max(0.0, min(1.0, rel + delta))
             self.active_character.relationship_level = rel
 
-            # Persist to DB
+            # ── Flirtiness (character trait drift) ───────────
+            if flirt > 1:
+                flirtiness = min(1.0, flirtiness + 0.02)
+            elif neg > pos:
+                flirtiness = max(0.0, flirtiness - 0.01)
+
+            # ── Persist to DB ────────────────────────────────
             self.db.update_character_state(
                 self.active_character.id,
                 mood=new_mood,
                 relationship_level=rel,
+                arousal=arousal,
+                flirtiness=flirtiness,
             )
         except Exception as e:
-            print(f"[mood/rel] update error: {e}")
+            print(f"[mood/rel/arousal] update error: {e}")
     
     def _maybe_send_voice_message(self, text: str):
         """Character may spontaneously send a voice message"""
@@ -1806,26 +1867,129 @@ class PhoneScene(BaseScene):
             print(f"Error sending voice message: {e}")
     
     def _maybe_send_photo(self):
-        """Character may spontaneously send a photo"""
+        """
+        Character spontaneously sends a photo.
+        Content escalates with relationship level and arousal:
+          rel < 0.4  → cute / casual selfie
+          rel 0.4–0.7 → flirty selfie (bedroom, gym, mirror)
+          rel > 0.7  → intimate selfie (lingerie, suggestive poses)
+          rel > 0.85 AND arousal > 0.5 → NSFW selfie
+        Falls back to existing gallery photos when ComfyUI is offline.
+        """
         try:
-            media_list = self.gallery.get_character_media(
-                character_id=self.active_character.id,
-                media_type='image',
-                limit=20
-            )
-            
-            if media_list:
+            rel     = float(self.active_character.relationship_level or 0.0)
+            arousal = float(getattr(self.active_character, 'arousal', 0.0) or 0.0)
+            mood    = self.active_character.mood or 'happy'
+            name    = self.active_character.name
+            desc    = self.active_character.appearance or "attractive young woman"
+            nsfw_ok = getattr(self.active_character, 'nsfw_enabled', False)
+
+            # ── Decide selfie tier ──────────────────────────
+            if rel > 0.85 and arousal > 0.5 and nsfw_ok:
+                # Intimate / NSFW tier
+                tier_mood    = random.choice(['seductive', 'aroused', 'passionate', 'teasing'])
+                tier_setting = random.choice(['bedroom', 'lingerie', 'bath', 'mirror selfie'])
+                tier_extra   = random.choice([
+                    'revealing lingerie, dim lighting, inviting pose',
+                    'sheer fabric, soft focus, bedroom eyes',
+                    'topless, covering with hands, biting lip',
+                    'in bed under sheets, bare shoulders, messy hair',
+                ])
+                tier_nsfw    = True
+                caption      = random.choice([
+                    f"Thinking of you... 🔥",
+                    f"Wish you were here right now 💋",
+                    f"Just for your eyes 😈",
+                    f"Can't sleep... want some company? 🥵",
+                    f"Do you like what you see? 💦",
+                ])
+            elif rel > 0.7 or arousal > 0.4:
+                # Flirty / suggestive tier
+                tier_mood    = random.choice(['flirty', 'teasing', 'confident', 'playful'])
+                tier_setting = random.choice(['bedroom', 'mirror selfie', 'gym', 'cozy night'])
+                tier_extra   = random.choice([
+                    'tight outfit, showing curves, playful wink',
+                    'low-cut top, candlelight, smiling seductively',
+                    'crop top, mirror selfie, confident pose',
+                    'oversized shirt, no pants, lounging on bed',
+                ])
+                tier_nsfw    = False
+                caption      = random.choice([
+                    f"Like my outfit? 😘",
+                    f"Felt cute, might delete later 💕",
+                    f"This is what you're missing tonight 😏",
+                    f"Just got out of the shower... 🫣",
+                    f"Rate me? 💋",
+                ])
+            elif rel > 0.4:
+                # Warm / cute tier
+                tier_mood    = random.choice(['happy', 'playful', 'shy', 'loving'])
+                tier_setting = random.choice(['casual', 'outdoors', 'cafe', 'sunset'])
+                tier_extra   = 'cute selfie, natural lighting, warm smile'
+                tier_nsfw    = False
+                caption      = random.choice([
+                    f"Hey you 😊",
+                    f"Having a good day! Thought of you 💭",
+                    f"Miss your face 🥰",
+                    f"Selfie time! 📸",
+                ])
+            else:
+                # Casual tier — barely know each other
+                tier_mood    = random.choice(['happy', 'neutral', 'curious'])
+                tier_setting = random.choice(['casual', 'outdoors', 'cafe'])
+                tier_extra   = 'casual selfie, friendly smile'
+                tier_nsfw    = False
+                caption      = random.choice([
+                    f"Hey! 👋",
+                    f"Hope you're having a good day 😊",
+                ])
+
+            # ── Try generating a fresh selfie ────────────────
+            filepath = None
+            try:
+                filepath = self.media_generator.generate_selfie(
+                    character_name=name,
+                    character_description=desc,
+                    mood=tier_mood,
+                    setting=tier_setting,
+                    nsfw=tier_nsfw,
+                    extra_prompt=tier_extra,
+                    chain_id=self.current_chain_id,
+                    scene_id='phone',
+                    character_id=self.active_character.id,
+                )
+            except Exception:
+                pass
+
+            if filepath:
+                media_id = self.gallery.add_media(
+                    character_id=self.active_character.id,
+                    filepath=filepath,
+                    media_type='image',
+                    metadata={'source': 'generated', 'mood': tier_mood,
+                              'setting': tier_setting, 'nsfw': tier_nsfw},
+                )
+                url = f"/api/media/download/{media_id}"
+            else:
+                # Fallback: pick a random existing photo
+                media_list = self.gallery.get_character_media(
+                    character_id=self.active_character.id,
+                    media_type='image', limit=20,
+                )
+                if not media_list:
+                    return
                 media = random.choice(media_list)
-                self.socketio.emit('photo_received', {
-                    'media_id': media['id'],
-                    'url': f"/api/media/download/{media['id']}",
-                    'role': 'assistant',
-                    'timestamp': datetime.now().isoformat()
-                })
-                
-                # Log to conversation
-                if self.current_chain_id:
-                    self.active_character.add_message('assistant', f"[Photo sent: {media['id']}]")
+                url = f"/api/media/download/{media['id']}"
+
+            # ── Send photo with caption ──────────────────────
+            self.socketio.emit('photo_received', {
+                'url': url,
+                'role': 'assistant',
+                'timestamp': datetime.now().isoformat(),
+                'caption': caption,
+            })
+            if self.current_chain_id:
+                self.active_character.add_message('assistant', f"[Photo sent] {caption}")
         except Exception as e:
             print(f"Error sending photo: {e}")
     

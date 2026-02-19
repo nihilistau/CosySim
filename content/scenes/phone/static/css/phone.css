@@ -121,6 +121,8 @@ body {
 }
 .mood-label { font-size:10px; opacity:.7; }
 .rel-hearts { font-size:10px; letter-spacing:1px; }
+.arousal-fire { font-size:10px; letter-spacing:1px; margin-left:4px; animation: fireGlow 1.2s ease-in-out infinite alternate; }
+@keyframes fireGlow { from { filter: brightness(1); } to { filter: brightness(1.4); } }
 
 .call-button {
     background:rgba(255,255,255,.18); border:none; color:#fff;
@@ -160,6 +162,19 @@ body {
 .message.assistant .message-bubble {
     background:#1c1c1e; color:#fff;
     border-bottom-left-radius:4px;
+}
+
+/* Photo messages */
+.photo-bubble { padding:4px; overflow:hidden; }
+.photo-bubble .message-photo {
+    width:100%; max-width:240px; border-radius:14px;
+    cursor:pointer; display:block;
+    transition: transform 0.2s ease;
+}
+.photo-bubble .message-photo:hover { transform: scale(1.03); }
+.photo-caption {
+    padding:6px 10px 2px; font-size:13px;
+    color:#e0e0e0; font-style:italic;
 }
 
 /* Timestamp + read receipt row */
