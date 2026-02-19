@@ -12,13 +12,14 @@
 
 ## 🌟 What is This?
 
-A complete virtual companion system featuring:
-- 🎭 **5 Unique AI Characters** with distinct personalities
-- 📱 **Phone Simulator** with voice/video calls, messaging, and photo sharing
-- 🏠 **3D Bedroom Scene** with interactive environment
-- 🎨 **Asset Management System** for all content
-- 🛠️ **Admin Panel** with 13 management sections
-- 🎯 **Central Hub** with tutorials and scene launcher
+An AI agent simulation framework with pluggable scenes for exploring LLM-driven characters, multi-agent interactions, media generation, and tool use — all orchestrated through **EventChain** ground truth.
+
+- 🎮 **Framework** — `engine/` is a reusable toolkit: agents, skills, spatial system, media standards, logging, benchmarking
+- 📱 **Phone Scene** — adult-themed chat with mood/arousal engine, NSFW selfies, autonomous messaging
+- 🛏️ **Bedroom Scene** — multi-agent spatial environment: 2 characters, 7 locations, tick-based agent loop
+- 🎛️ **Admin Panel** — 12-page diagnostic center with EventChain browser, GOD mode, RAG editor
+- 🏠 **Hub** — landing page with service health strip and scene launcher
+- 🎨 **Scene Creator** — guided wizard for scaffolding new scenes
 
 ---
 
@@ -89,32 +90,33 @@ python launcher.py
 
 ### 🏗️ System Architecture
 ```
-├── engine/              # Framework (reusable)
-│   ├── agents/         # CharacterAgent, SceneAgent
-│   ├── assets/         # Asset management system
-│   ├── lmstudio/       # LMStudio SDK wrapper + model manager
-│   ├── scenes/         # BaseScene framework (plugin contract)
-│   ├── skills/         # @skill decorator, SkillRegistry, builtin packs
-│   └── config.py       # Configuration manager
-│
-├── content/            # Game-specific content
-│   └── simulation/
-│       ├── scenes/     # Phone (5555), Bedroom (5556), Admin, Hub
-│       │   └── phone/
-│       │       └── apps/  # VideoMessagesApp, VoiceMessagesApp, Gallery
-│       ├── character_system/
-│       ├── services/   # Voice, video, media, LLM, autonomous messenger
-│       └── database/   # SQLite + ChromaDB + EventChain
-│
-├── config/             # YAML configurations
-│   ├── default.yaml    # Base config (lmstudio, comfyui, hardware)
-│   ├── development.yaml
-│   └── production.yaml
-│
-└── docs/               # Documentation
-    ├── API.md          # Full HTTP + Python API reference
-    ├── SKILLS.md       # Skill authoring guide
-    └── QUICKSTART.md   # Get started in 10 minutes
+engine/                  # Reusable framework
+├── agents/             # CharacterAgent + AgentLoop (tick-based)
+├── assets/             # Asset management system
+├── config.py           # YAML config with env var overrides
+├── config_validator.py # Schema-based config validation
+├── logging/            # CosyLogger, @timed benchmarks, SystemMonitor
+├── lmstudio/           # LMStudio SDK wrapper
+├── media/              # MediaConfig singleton (image/video/audio standards)
+├── scenes/             # BaseScene, SceneRegistry (auto-discover)
+├── services/           # @retry, CircuitBreaker
+├── skills/             # @skill decorator, packs (memory, character, comfyui)
+└── spatial/            # Location, SceneMap (capacity, occupancy, nearby)
+
+content/                # Example scenes (customize freely)
+├── scenes/
+│   ├── phone/          # Port 5555 — adult phone scene
+│   ├── bedroom/        # Port 5556 — multi-agent spatial
+│   ├── admin/          # Port 8502 — 12-page admin panel
+│   ├── hub/            # Port 8500 — landing page + scene creator
+│   └── dashboard/      # Port 8501 — metrics
+└── simulation/
+    ├── database/       # SQLite (10 tables) + ChromaDB + EventChain
+    ├── character_system/
+    └── services/       # ComfyUI client, media gen, voice/video
+
+config/                 # YAML configuration files
+tests/                  # 170+ tests
 ```
 
 ---
@@ -124,33 +126,13 @@ python launcher.py
 ### Launch Modes
 
 ```bash
-# Central Hub (recommended starting point)
-python launcher.py --mode play
-
-# Admin Panel (system management)
-python launcher.py --mode admin
-
-# Development Mode (with debugging)
-python launcher.py --mode dev
-
-# Run Tests
-python launcher.py --mode test
-```
-
-### Individual Scenes
-
-```bash
-# Phone Scene (port 5555)
-python content/simulation/scenes/phone/phone_scene.py
-
-# Bedroom Scene (port 5003)
-python content/simulation/scenes/bedroom/bedroom_scene.py
-
-# Admin Panel (port 8502)
-streamlit run content/simulation/scenes/admin/admin_panel.py --server.port 8502
-
-# Central Hub (port 8500)
-streamlit run content/simulation/scenes/hub/hub_scene.py --server.port 8500
+python launcher.py                # Hub (default, port 8500)
+python launcher.py --mode phone   # Phone Scene (port 5555)
+python launcher.py --mode bedroom # Bedroom Scene (port 5556)
+python launcher.py --mode admin   # Admin Panel (port 8502)
+python launcher.py --mode creator # Scene Creator (port 8504)
+python launcher.py --mode test    # Run 170+ tests
+python launcher.py --status       # System status check
 ```
 
 ---
@@ -174,55 +156,51 @@ Each character has:
 
 ---
 
-## 🛠️ Admin Panel Features
+## 🛠️ Admin Panel (port 8502)
 
-Access at **http://localhost:8502**
-
-| Section | Features |
-|---------|----------|
-| 📊 **Dashboard** | System overview, statistics, health checks |
-| 📁 **Asset Browser** | Browse, search, filter all assets |
-| 👤 **Character Manager** | Create, edit, delete characters |
-| 🎬 **Scene Manager** | Manage scenes, save/load states |
-| 🎭 **Personality Library** | Create custom personalities |
-| ⚙️ **Configuration** | Edit system settings |
-| 💾 **Database** | Query, export, backup data |
-| 🔍 **Search** | Advanced asset search |
-| 🖼️ **Media Gallery** | Browse images/videos/audio with thumbnails |
-| 🔗 **Dependency Graph** | Visualize asset relationships |
-| 📜 **Log Viewer** | View/filter system logs |
-| 📈 **Performance Monitor** | CPU/memory/DB metrics |
-| 💾 **Backup & Restore** | Backup/restore system |
+| Page | Features |
+|------|----------|
+| 📊 **Dashboard** | Service health (LMStudio/ComfyUI/DB), system metrics (CPU/RAM/GPU), benchmark table |
+| 📋 **Logs** | Ring buffer + file logs, level/search filters, export |
+| 🔗 **EventChain** | Chain browser with tree view, scene/character/type filters |
+| ⚙️ **Config Editor** | Type-aware inputs, validation, save & apply to YAML |
+| ✏️ **RAG Editor** | Edit conversations/memories with logic guards |
+| 🔴 **GOD Mode** | Raw SQL, event injection, force character state, danger zone |
+| 👤 **Characters** | Character CRUD with personality traits |
+| 🎬 **Scenes** | Scene registry, status monitoring |
+| 🖼️ **Media** | Gallery browser |
+| 🧠 **LMStudio** | Model management |
+| 💾 **Backup** | Backup & restore |
+| 🗂️ **Assets** | Browser, search, personality library |
 
 ---
 
 ## 📚 Documentation
 
-- **[ARCHITECTURE.md](docs/ARCHITECTURE.md)** - System architecture and design
-- **[API_REFERENCE.md](docs/API_REFERENCE.md)** - All REST APIs and SocketIO events
-- **[DEVELOPMENT.md](docs/DEVELOPMENT.md)** - Development guidelines and testing
-- **[DEPLOYMENT.md](DEPLOYMENT.md)** - Production deployment guide
-- **[ASSET_SYSTEM.md](docs/ASSET_SYSTEM.md)** - Asset management documentation
+| Doc | Description |
+|-----|-------------|
+| [STRUCTURE_GUIDE.md](docs/STRUCTURE_GUIDE.md) | Three-layer architecture, file map |
+| [API.md](docs/API.md) | REST API reference for all scenes |
+| [SKILLS.md](docs/SKILLS.md) | Skill authoring guide |
+| [COMFYUI.md](docs/COMFYUI.md) | ComfyUI integration + PromptBuilder tiers |
+| [LOGGING.md](docs/LOGGING.md) | @timed, SystemMonitor, ring buffer |
+| [ADMIN_GUIDE.md](docs/ADMIN_GUIDE.md) | Admin panel usage + GOD mode |
+| [AGENTS_GUIDE.md](AGENTS_GUIDE.md) | Agent handoff guide |
 
 ---
 
 ## 🧪 Testing
 
 ```bash
-# Run all tests
-pytest
+# Run all 170+ tests
+python -m pytest tests/ -v --tb=short
 
-# Run with coverage
-pytest --cov=. --cov-report=html
-
-# Run specific test file
-pytest tests/test_assets.py
-
-# Run integration tests
-pytest tests/integration/
+# Run specific suite
+python -m pytest tests/test_database.py -v
+python -m pytest tests/test_spatial.py -v
 ```
 
-**Current Coverage: 85%+**
+**Coverage:** Database (66 tests), EventChain (20), Skills (18), Spatial (30), AgentLoop (18), MediaConfig (16), PromptBuilder (17)
 
 ---
 
@@ -332,22 +310,25 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 🗺️ Roadmap
 
 ### Completed ✅
-- [x] EventChain diagnostic system (full causal event tracing)
+- [x] EventChain ground truth system (chain_id/parent_id causal trees, 16+ event types)
 - [x] LMStudio SDK integration (load/unload models, VRAM management)
 - [x] Skills system (`@skill` decorator, pack registry, MCP bridge)
 - [x] CharacterAgent with RAG + tools + EventChain logging
-- [x] Video/Voice message gallery apps (phone scene)
-- [x] Admin panel: LM Studio model management panel
-- [x] Admin panel: EventChain log viewer
-- [x] Config-driven service URLs (no more hardcoded IPs)
+- [x] Multi-agent bedroom scene (AgentLoop, spatial system, 7 locations)
+- [x] Phone scene: mood engine, arousal engine, 5 NSFW tiers, autonomous messaging
+- [x] Media standards: MediaConfig singleton, PromptBuilder with escalation tiers
+- [x] Logging/benchmarking/monitoring (`@timed`, SystemMonitor, ring buffer)
+- [x] Admin panel: 12-page diagnostic center with GOD mode, RAG editor, chain browser
+- [x] Config validation, retry/circuit breaker, scene registry
+- [x] Per-pair relationship table (character_relationships with canonical ordering)
+- [x] 170+ tests covering all framework components
+- [x] Scene Creator wizard with 4 templates
 
 ### Upcoming
-- [ ] Multi-character scene support
-- [ ] Web-based skill pack editor
+- [ ] Qwen3-TTS voice generation server (voicemail, long-form audio, voice designer)
+- [ ] Service migration (remaining 6 services from content/ → engine/)
 - [ ] Real-time EventChain streaming via WebSocket
 - [ ] Plugin system for community skill packs
-- [ ] Cloud deployment templates (AWS, GCP, Azure)
-- [ ] Mobile app (React Native)
 
 ---
 

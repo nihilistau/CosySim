@@ -216,7 +216,7 @@ For more information, see: docs/README.md
     
     parser.add_argument(
         "--mode",
-        choices=["hub", "phone", "bedroom", "dashboard", "admin", "assets", "test"],
+        choices=["hub", "phone", "bedroom", "dashboard", "admin", "assets", "creator", "test"],
         default="hub",
         help="Launch mode (default: hub)"
     )
@@ -256,6 +256,7 @@ For more information, see: docs/README.md
         "dashboard": _launch_streamlit(PROJECT_ROOT / "content" / "scenes" / "dashboard" / "dashboard_v2.py", 8501),
         "admin":     _launch_streamlit(PROJECT_ROOT / "content" / "scenes" / "admin" / "admin_panel.py", 8502),
         "assets":    _launch_streamlit(PROJECT_ROOT / "content" / "scenes" / "assets" / "asset_generator.py", 8503),
+        "creator":   _launch_streamlit(PROJECT_ROOT / "content" / "scenes" / "hub" / "scene_creator.py", 8504),
     }
 
     if args.mode in mode_map:

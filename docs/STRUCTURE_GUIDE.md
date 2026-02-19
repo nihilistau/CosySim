@@ -28,28 +28,51 @@
 
 ```
 engine/
+├── __init__.py          ⭐ Top-level exports (get_config, BaseScene, etc.)
+│
+├── agents/              🤖 Agent Framework
+│   ├── character_agent.py → LLM-backed character with skills
+│   └── agent_loop.py     → Tick-based perceive→decide→execute loop
+│
 ├── assets/              ⭐ Asset Management System
 │   ├── manager.py       → Central registry for all media
 │   ├── types.py         → Asset type definitions
 │   └── base.py          → Base asset classes
 │
-├── config.py            ⭐ Configuration System
-│   └── ConfigManager    → Loads YAML configs
+├── config.py            ⭐ Configuration System (dot-notation, env overrides)
+├── config_validator.py  🛡️ Schema-based config validation
 │
-├── scenes/              ⭐ Scene Framework
-│   ├── base_scene.py    → Base class all scenes inherit
-│   └── scene_manager.py → Scene lifecycle management
+├── logging/             📊 Logging, Benchmarking & Monitoring
+│   ├── cosy_logger.py   → Ring-buffer logger with install_logger()
+│   ├── benchmark.py     → @timed decorator, BenchmarkStore (min/max/avg/p95)
+│   └── monitor.py       → SystemMonitor (CPU/RAM/GPU/services)
 │
-├── tts/                 🎤 Text-to-Speech (Advanced)
+├── lmstudio/            🧠 LMStudio Integration
+│   └── client.py        → HTTP client for LMStudio API
+│
+├── media/               🖼️ Media Standards
+│   └── media_config.py  → MediaConfig singleton from YAML
+│
+├── scenes/              🎮 Scene Framework
+│   ├── base_scene.py    → Base class + get_health() + register_health_route()
+│   ├── scene_manager.py → Scene lifecycle management
+│   └── scene_registry.py → Auto-discover BaseScene subclasses
+│
+├── services/            🔧 Service Infrastructure
+│   └── resilience.py    → @retry, CircuitBreaker (closed→open→half_open)
+│
+├── skills/              ⚡ Skill System
+│   ├── skill.py         → @skill decorator
+│   ├── registry.py      → SKILL_REGISTRY, get_pack_tools()
+│   ├── chain_context.py → Thread-local chain_id propagation
+│   └── packs/           → Skill packs (memory, character, comfyui)
+│
+├── spatial/             📍 Spatial System
+│   ├── location.py      → Location dataclass (capacity, properties)
+│   └── scene_map.py     → SceneMap (place, move, nearby, interact)
+│
+├── tts/                 🎤 Text-to-Speech (CosyVoice)
 │   └── cosyvoice/       → Complete TTS implementation
-│       ├── cli/         → Command-line interfaces
-│       ├── transformer/ → Neural network models
-│       └── flow/        → Flow matching modules
-│
-├── deployment/          🚀 Production Deployment
-│   └── runtime/
-│       ├── python/      → FastAPI & gRPC servers
-│       └── triton_trtllm/ → GPU-optimized inference
 │
 └── testing/             🧪 Testing Framework
     └── framework/       → Automated test system
@@ -68,23 +91,37 @@ engine/
 content/
 ├── scenes/              ⭐ Scene Implementations
 │   ├── hub/            🏠 Central Hub (Tutorial & Launcher)
-│   │   └── hub_scene.py → Main landing page
+│   │   ├── hub_scene.py   → Landing page with health strip & scene cards
+│   │   └── scene_creator.py → Guided scene scaffolding wizard
 │   │
-│   ├── phone/          📱 Phone Scene (Messages, Calls)
-│   │   ├── phone_scene.py → Phone interface
+│   ├── phone/          📱 Phone Scene (Messages, Calls, Adult)
+│   │   ├── phone_scene.py → Phone interface with mood/arousal engine
 │   │   ├── apps/
 │   │   │   ├── messages.py  → Messaging app
 │   │   │   └── gallery.py   → Photo gallery
 │   │   ├── static/     → CSS, JavaScript, images
 │   │   └── templates/  → HTML UI
 │   │
-│   ├── bedroom/        🛏️ Bedroom Scene (Interactive)
-│   │   ├── bedroom_scene.py → 3D environment
+│   ├── bedroom/        🛏️ Bedroom Scene (Multi-Agent, Adult)
+│   │   ├── bedroom_scene.py → 2-character spatial environment
 │   │   ├── static/     → Assets, CSS, JS
 │   │   └── templates/  → HTML
 │   │
-│   ├── admin/          🛠️ Admin Panel (Management)
-│   │   └── admin_panel.py → 13 admin sections
+│   ├── admin/          🛠️ Admin Panel (Multi-Panel Diagnostic Center)
+│   │   ├── admin_panel.py → Thin Streamlit router (120 lines)
+│   │   └── pages/         → 12 page modules
+│   │       ├── dashboard.py      → Service health, system metrics
+│   │       ├── logs.py           → Log viewer + benchmarks
+│   │       ├── chains.py         → EventChain browser (tree view)
+│   │       ├── config_editor.py  → Type-aware config editor
+│   │       ├── rag_editor.py     → RAG message editor with guards
+│   │       ├── god_mode.py       → Raw SQL, force ops, danger zone
+│   │       ├── character_manager.py
+│   │       ├── scene_manager.py
+│   │       ├── media.py
+│   │       ├── lmstudio.py
+│   │       ├── backup.py
+│   │       └── assets.py
 │   │
 │   └── dashboard/      📊 Dashboard (Overview)
 │       └── dashboard_v2.py → System metrics
@@ -96,19 +133,20 @@ content/
     │   └── role.py           → Roles (girlfriend, friend, etc.)
     │
     ├── database/             💾 Data Storage
-    │   ├── db.py             → SQLite database
+    │   ├── db.py             → SQLite (10 tables, full CRUD)
     │   └── rag.py            → ChromaDB vector store
     │
-    ├── services/             🎬 Media Services
+    ├── services/             🎬 Media & Communication Services
+    │   ├── comfyui_client.py → ComfyUI API + PromptBuilder (5 tiers)
+    │   ├── media_generator.py → Generate images/videos
     │   ├── voice_call.py     → Real-time voice calls
     │   ├── video_call.py     → Video calls with lip-sync
     │   ├── voice_message.py  → Voice messages
     │   ├── video_message.py  → Video messages
-    │   ├── media_generator.py → Generate images/videos
     │   └── autonomous_messenger.py → Auto messaging
     │
-    └── scenes/               📂 Legacy Scene Copies
-        └── (backup copies of scenes)
+    └── shared/               🎨 Shared UI
+        └── streamlit_theme.py → Dark theme injection
 ```
 
 **Key Insight:** This is your **"game content"** - customize freely!

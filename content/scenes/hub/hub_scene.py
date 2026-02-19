@@ -18,6 +18,32 @@ from typing import Dict, List, Optional
 import subprocess
 import socket
 import json
+import requests
+
+
+def _service_up(url: str, timeout: float = 1.0) -> bool:
+    """Check if an HTTP service responds."""
+    try:
+        r = requests.get(url, timeout=timeout)
+        return r.status_code < 500
+    except Exception:
+        return False
+
+
+def _render_health_strip():
+    """Render a horizontal service-health indicator bar."""
+    services = [
+        ("LMStudio", "http://localhost:1234/v1/models"),
+        ("ComfyUI", "http://localhost:8188/system_stats"),
+        ("Admin", f"http://localhost:8502"),
+        ("Phone", f"http://localhost:5555/api/health"),
+        ("Bedroom", f"http://localhost:5556/api/health"),
+    ]
+    cols = st.columns(len(services))
+    for col, (name, url) in zip(cols, services):
+        up = _service_up(url)
+        dot = "🟢" if up else "🔴"
+        col.markdown(f"**{dot} {name}**")
 
 # Add project root to path
 project_root = Path(__file__).parent.parent.parent.parent
@@ -161,6 +187,9 @@ def main():
         if st.button("🔄 Refresh", use_container_width=True):
             st.rerun()
     
+    # Service health strip
+    _render_health_strip()
+
     # Main content tabs
     tab1, tab2, tab3, tab4 = st.tabs(["🎮 Launch Scenes", "📖 Tutorials", "🗂️ Assets", "⚙️ Settings"])
     
@@ -278,44 +307,9 @@ def show_scene_launcher():
 
     st.markdown("---")
     st.subheader("➕ Create New Scene")
-    
-    with st.form("create_scene"):
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            scene_name = st.text_input("Scene Name*", placeholder="My Custom Scene")
-            scene_type = st.selectbox("Scene Type", ["phone", "dashboard", "bedroom", "custom"])
-            scene_port = st.number_input("Port", min_value=5000, max_value=9000, value=5557)
-        
-        with col2:
-            scene_desc = st.text_area("Description", placeholder="Describe your scene...")
-            scene_chars = st.text_input("Characters (IDs, comma-separated)", placeholder="char-001, char-002")
-            scene_tags = st.text_input("Tags (comma-separated)", placeholder="custom, experimental")
-        
-        if st.form_submit_button("✨ Create Scene"):
-            if not scene_name:
-                st.error("Scene name is required!")
-            else:
-                try:
-                    from engine.assets import SceneAsset
-                    
-                    char_list = [c.strip() for c in scene_chars.split(",")] if scene_chars else []
-                    tag_list = [t.strip() for t in scene_tags.split(",")] if scene_tags else []
-                    
-                    scene = SceneAsset.create(
-                        name=scene_name,
-                        description=scene_desc,
-                        scene_type=scene_type,
-                        server_config={"host": "localhost", "port": scene_port},
-                        characters=char_list,
-                        tags=tag_list
-                    )
-                    
-                    st.session_state.asset_manager.save(scene)
-                    st.success(f"✅ Created scene: {scene_name}")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Error: {e}")
+    st.markdown("Use the **Scene Creator** wizard for guided scene scaffolding.")
+    if st.button("🎨 Open Scene Creator", use_container_width=True):
+        st.info("Run: `python launcher.py --mode creator`  (port 8504)")
 
 
 def show_tutorials():
