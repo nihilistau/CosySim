@@ -17,6 +17,8 @@ document.addEventListener('DOMContentLoaded', () => {
 // Socket.IO initialization
 function initializeSocket() {
     socket = io();
+    // Initialize voice module now that socket exists
+    if (typeof initializeVoice === 'function') initializeVoice();
     
     socket.on('connect', () => {
         console.log('Connected to server');

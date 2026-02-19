@@ -1,7 +1,6 @@
 // Voice Call and Voice Message Handler
+// NOTE: callTimer, callDuration, socket, currentCharacter are declared in phone.js
 let currentCall = null;
-let callTimer = null;
-let callDuration = 0;
 let isMuted = false;
 let isSpeakerOn = false;
 let audioContext = null;
@@ -586,9 +585,4 @@ function formatTimestamp(isoString) {
     return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
 }
 
-// Initialize voice functionality when document is ready
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initializeVoice);
-} else {
-    initializeVoice();
-}
+// initializeVoice() is called from phone.js after socket is set up
