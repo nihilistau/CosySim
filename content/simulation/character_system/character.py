@@ -83,6 +83,28 @@ class Character:
         return self._data.get('body_type')
     
     @property
+    def appearance(self) -> str:
+        """Get full appearance description for image generation"""
+        parts = []
+        if self.sex:
+            parts.append(self.sex)
+        if self.age:
+            parts.append(f"{self.age} years old")
+        if self.body_type:
+            parts.append(self.body_type)
+        if self.hair_color:
+            parts.append(f"{self.hair_color} hair")
+        if self.eye_color:
+            parts.append(f"{self.eye_color} eyes")
+        
+        # Add from description if available
+        description = self._data.get('description', '')
+        if description and len(parts) < 3:
+            parts.append(description[:100])  # First 100 chars
+        
+        return ", ".join(parts) if parts else "attractive person"
+    
+    @property
     def tags(self) -> List[str]:
         return self._data.get('tags', [])
     
@@ -92,19 +114,27 @@ class Character:
     
     @property
     def mood(self) -> str:
-        return self._state.get('mood', 'neutral') if self._state else 'neutral'
+        """Get mood as string"""
+        value = self._state.get('mood', 'neutral') if self._state else 'neutral'
+        return str(value) if value is not None else 'neutral'
     
     @property
     def energy(self) -> float:
-        return self._state.get('energy', 0.8) if self._state else 0.8
+        """Get energy as float, ensuring type safety"""
+        value = self._state.get('energy', 0.8) if self._state else 0.8
+        return float(value) if value is not None else 0.8
     
     @property
     def relationship_level(self) -> float:
-        return self._state.get('relationship_level', 0.0) if self._state else 0.0
+        """Get relationship level as float, ensuring type safety"""
+        value = self._state.get('relationship_level', 0.0) if self._state else 0.0
+        return float(value) if value is not None else 0.0
     
     @property
     def arousal(self) -> float:
-        return self._state.get('arousal', 0.0) if self._state else 0.0
+        """Get arousal as float, ensuring type safety"""
+        value = self._state.get('arousal', 0.0) if self._state else 0.0
+        return float(value) if value is not None else 0.0
     
     # ============= CHARACTER MANAGEMENT =============
     

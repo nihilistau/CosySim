@@ -9,7 +9,9 @@ from datetime import datetime
 from typing import Dict, List, Optional
 import json
 
-project_root = Path(__file__).parent.parent.parent.parent
+# Add project root to path
+# dashboard_v2.py -> scenes -> simulation -> content -> CosySim (4 parents)
+project_root = Path(__file__).parent.parent.parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 from content.simulation.database.db import Database

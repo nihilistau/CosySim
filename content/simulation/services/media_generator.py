@@ -11,11 +11,19 @@ from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 from pathlib import Path
 
-# Import ComfyUI generators
+# Import ComfyUI generators (optional)
 import sys
-project_root = Path(__file__).parent.parent.parent
+project_root = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(project_root))
-from comfyui_generator import ImageGenerator
+
+try:
+    from comfyui_generator import ImageGenerator
+    COMFYUI_AVAILABLE = True
+except ImportError:
+    ImageGenerator = None
+    COMFYUI_AVAILABLE = False
+    print("⚠️  ComfyUI not available - image generation will use placeholders")
+
 from engine.assets import AssetManager, ImageAsset
 
 
@@ -24,18 +32,22 @@ class MediaGenerator:
     
     def __init__(self, comfyui_url: str = "http://127.0.0.1:8188"):
         self.comfyui_url = comfyui_url
-        self.workflow_dir = Path(__file__).parent.parent.parent / "workflows"
+        self.workflow_dir = Path(__file__).parent.parent.parent.parent / "workflows"
         self.media_dir = Path(__file__).parent.parent / "media"
         self.media_dir.mkdir(exist_ok=True)
         self.asset_manager = AssetManager()
         
-        # Load image generation workflow
-        workflow_path = self.workflow_dir / "generate_Image.json"
-        if workflow_path.exists():
-            self.image_gen = ImageGenerator(str(workflow_path), comfyui_url)
+        # Load image generation workflow (if ComfyUI available)
+        if COMFYUI_AVAILABLE:
+            workflow_path = self.workflow_dir / "generate_Image.json"
+            if workflow_path.exists():
+                self.image_gen = ImageGenerator(str(workflow_path), comfyui_url)
+            else:
+                self.image_gen = None
+                print(f"⚠️  Image workflow not found at {workflow_path}")
         else:
             self.image_gen = None
-            print(f"Warning: Image workflow not found at {workflow_path}")
+            print("ℹ️  ComfyUI not available - using placeholder images")
     
     def generate_selfie(
         self,

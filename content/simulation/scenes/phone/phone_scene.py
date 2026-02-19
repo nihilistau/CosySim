@@ -13,7 +13,9 @@ import os
 import random
 from werkzeug.utils import secure_filename
 
-project_root = Path(__file__).parent.parent.parent.parent
+# Add project root to path
+# content/simulation/scenes/phone/phone_scene.py -> scenes -> simulation -> content -> CosySim (5 parents)
+project_root = Path(__file__).parent.parent.parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 from content.simulation.database.db import Database
