@@ -1,0 +1,137 @@
+# CosyVoice Default Configuration
+# This is the base configuration file. Override settings in development.yaml or production.yaml
+
+system:
+  name: "CosyVoice Virtual Companion"
+  version: "1.0.0"
+  environment: "default"
+
+# Paths configuration
+paths:
+  project_root: "."
+  data_dir: "./data"
+  models_dir: "./pretrained_models"
+  cache_dir: "./cache"
+  logs_dir: "./logs"
+  media_dir: "./content/simulation/media"
+  assets_dir: "./content/assets"
+  database_dir: "."
+
+# Database configuration
+database:
+  sqlite:
+    path: "simulation.db"
+    pool_size: 5
+    timeout: 30
+  chromadb:
+    path: "./content/simulation/chroma_db"
+    collection_name: "memories"
+    embedding_model: "sentence-transformers/all-MiniLM-L6-v2"
+
+# Scene configuration
+scenes:
+  phone:
+    host: "localhost"
+    port: 5555
+    debug: false
+    auto_reload: false
+  
+  dashboard:
+    host: "localhost"
+    port: 8501
+    theme: "dark"
+  
+  bedroom:
+    host: "localhost"
+    port: 5556
+    debug: false
+
+# TTS configuration
+tts:
+  engine: "cosyvoice"
+  model_name: "CosyVoice-300M"
+  sample_rate: 22050
+  warm_start: true
+  stream: true
+  device: "cuda"  # or "cpu"
+
+# STT configuration  
+stt:
+  engine: "whisper"
+  model_size: "base"
+  language: "en"
+  device: "cuda"
+
+# LLM configuration
+llm:
+  provider: "lmstudio"  # or "openai", "local"
+  base_url: "http://localhost:1234/v1"
+  model: "default"
+  temperature: 0.7
+  max_tokens: 500
+  stream: true
+
+# ComfyUI configuration
+comfyui:
+  enabled: false
+  base_url: "http://localhost:8188"
+  timeout: 300
+
+# Character system
+characters:
+  default_personality: "playful"
+  default_role: "girlfriend"
+  memory:
+    max_context_messages: 20
+    importance_threshold: 0.5
+    embedding_batch_size: 32
+
+# Services configuration
+services:
+  autonomous_messenger:
+    enabled: true
+    frequency: "moderate"  # low, moderate, high
+    active_hours:
+      start: 8
+      end: 23
+  
+  voice_calls:
+    enabled: true
+    max_duration: 3600  # seconds
+  
+  video_calls:
+    enabled: true
+    fps: 15
+    resolution: [512, 512]
+
+# Asset management
+assets:
+  validation:
+    check_existence: true
+    check_format: true
+    check_integrity: true
+  versioning:
+    enabled: true
+    max_versions: 5
+
+# Security
+security:
+  input_validation:
+    max_message_length: 10000
+    max_file_size: 10485760  # 10MB
+  rate_limiting:
+    enabled: false
+    requests_per_minute: 60
+
+# Logging
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: "./logs/cosyvoice.log"
+  max_bytes: 10485760  # 10MB
+  backup_count: 5
+
+# Testing
+testing:
+  database: "simulation_test.db"
+  mock_external_services: true

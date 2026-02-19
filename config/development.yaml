@@ -1,0 +1,42 @@
+# Development Configuration
+# Overrides for development environment
+
+system:
+  environment: "development"
+
+# Use development database
+database:
+  sqlite:
+    path: "simulation_dev.db"
+
+# Enable debug mode for all scenes
+scenes:
+  phone:
+    debug: true
+    auto_reload: true
+  
+  bedroom:
+    debug: true
+
+# Development TTS settings (faster, lower quality)
+tts:
+  warm_start: false
+  device: "cpu"  # Use CPU for development
+
+# Development STT settings
+stt:
+  device: "cpu"
+
+# Disable ComfyUI in development
+comfyui:
+  enabled: false
+
+# Development logging
+logging:
+  level: "DEBUG"
+  file: "./logs/cosyvoice_dev.log"
+
+# Relaxed security for development
+security:
+  rate_limiting:
+    enabled: false

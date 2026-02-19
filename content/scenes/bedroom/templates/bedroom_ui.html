@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Bedroom Scene - Virtual Companion</title>
+    
+    <!-- Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    
+    <!-- Socket.IO -->
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/bedroom.css') }}">
+</head>
+<body>
+    <!-- Loading Screen -->
+    <div id="loading-screen">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">Loading 3D Scene...</div>
+    </div>
+    
+    <!-- 3D Canvas -->
+    <div id="scene-container">
+        <canvas id="bedroom-canvas"></canvas>
+    </div>
+    
+    <!-- UI Overlay -->
+    <div id="ui-overlay">
+        <!-- Header -->
+        <header class="scene-header">
+            <button id="back-btn" class="header-btn">← Back to Phone</button>
+            <h1 class="scene-title">Penthouse Bedroom</h1>
+            <div class="header-controls">
+                <button id="settings-btn" class="header-btn">⚙️ Settings</button>
+            </div>
+        </header>
+        
+        <!-- Character Selector -->
+        <div class="character-selector">
+            <label>Character:</label>
+            <button id="character-selector-btn" class="selector-btn">
+                <span id="selected-character-name">Select Character</span> ▼
+            </button>
+            <div id="character-dropdown" class="character-dropdown hidden">
+                <div class="dropdown-header">
+                    <input type="text" id="character-search" placeholder="Search characters..." />
+                </div>
+                <div id="character-list" class="character-list">
+                    <!-- Populated dynamically -->
+                </div>
+            </div>
+        </div>
+        
+        <!-- Time of Day Selector -->
+        <div class="time-selector">
+            <label>Time of Day:</label>
+            <div class="time-buttons">
+                <button class="time-btn" data-time="morning">☀️ Morning</button>
+                <button class="time-btn active" data-time="afternoon">🌤️ Afternoon</button>
+                <button class="time-btn" data-time="evening">🌅 Evening</button>
+                <button class="time-btn" data-time="night">🌙 Night</button>
+            </div>
+        </div>
+        
+        <!-- Scene Management -->
+        <div class="scene-management">
+            <button id="save-scene-btn" class="scene-btn">💾 Save Scene</button>
+            <button id="load-scene-btn" class="scene-btn">📂 Load Scene</button>
+        </div>
+        
+        <!-- Interaction Panel -->
+        <div id="interaction-panel" class="interaction-panel">
+            <h3>Interact with Character</h3>
+            <div class="interaction-buttons">
+                <button class="interaction-btn" data-action="talk">💬 Talk</button>
+                <button class="interaction-btn" data-action="hug">🤗 Hug</button>
+                <button class="interaction-btn" data-action="wave">👋 Wave</button>
+                <button class="interaction-btn" data-action="kiss">💋 Kiss</button>
+            </div>
+            <button id="close-interaction" class="close-btn">✕</button>
+        </div>
+        
+        <!-- Chat Panel -->
+        <div id="chat-panel" class="chat-panel">
+            <div class="chat-header">
+                <h3>Chat</h3>
+                <button id="close-chat" class="close-btn">✕</button>
+            </div>
+            <div id="chat-messages" class="chat-messages"></div>
+            <div class="chat-input-container">
+                <input type="text" id="chat-input" placeholder="Type a message..." />
+                <button id="send-chat">Send</button>
+            </div>
+        </div>
+        
+        <!-- Info Panel -->
+        <div class="info-panel">
+            <div id="fps-counter">FPS: 60</div>
+            <div id="status-indicator">
+                <span class="status-dot"></span>
+                <span id="status-text">Connected</span>
+            </div>
+        </div>
+        
+        <!-- Control Hints -->
+        <div class="control-hints">
+            <div class="hint">🖱️ Left Click + Drag: Rotate Camera</div>
+            <div class="hint">🖱️ Right Click + Drag: Pan Camera</div>
+            <div class="hint">🖱️ Scroll: Zoom</div>
+            <div class="hint">👆 Click Character: Interact</div>
+        </div>
+    </div>
+    
+    <!-- Toast Notifications -->
+    <div id="toast-container"></div>
+    
+    <!-- Custom Scripts -->
+    <script src="{{ url_for('static', filename='js/bedroom.js') }}"></script>
+</body>
+</html>

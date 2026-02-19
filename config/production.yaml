@@ -1,0 +1,51 @@
+# Production Configuration
+# Overrides for production environment
+
+system:
+  environment: "production"
+
+# Production database
+database:
+  sqlite:
+    path: "/var/lib/cosyvoice/simulation.db"
+    pool_size: 10
+
+# Production scene settings
+scenes:
+  phone:
+    host: "0.0.0.0"
+    port: 5555
+    debug: false
+  
+  dashboard:
+    host: "0.0.0.0"
+    port: 8501
+  
+  bedroom:
+    host: "0.0.0.0"
+    port: 5556
+    debug: false
+
+# Production TTS (GPU acceleration)
+tts:
+  warm_start: true
+  device: "cuda"
+
+# Production STT (GPU acceleration)
+stt:
+  device: "cuda"
+
+# Enable ComfyUI in production
+comfyui:
+  enabled: true
+
+# Production logging
+logging:
+  level: "WARNING"
+  file: "/var/log/cosyvoice/cosyvoice.log"
+
+# Enable security in production
+security:
+  rate_limiting:
+    enabled: true
+    requests_per_minute: 60

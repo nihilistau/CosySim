@@ -1,0 +1,96 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Visual Studio Code files
+.vscode
+.vs
+
+# PyCharm files
+.idea
+
+# Eclipse Project settings
+*.*project
+.settings
+
+# Sublime Text settings
+*.sublime-workspace
+*.sublime-project
+
+# Editor temporaries
+*.swn
+*.swo
+*.swp
+*.swm
+*~
+
+# IPython notebook checkpoints
+.ipynb_checkpoints
+
+# macOS dir files
+.DS_Store
+
+exp
+data
+raw_wav
+tensorboard
+**/*build*
+
+# Clangd files
+.cache
+compile_commands.json
+
+# train/inference files
+*.wav
+*.m4a
+*.aac
+*.pt
+pretrained_models/*
+*_pb2_grpc.py
+*_pb2.py
+*.tar
+# Security - API tokens and sensitive files
+.lmstudio_token
+*.token
+.env
+.env.local
+*.key
+*.pem
+
+# User-specific files
+conversation_history.db
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs and temporary files
+logs/
+*.log
+kernel.errors.txt
+
+# Audio test files (keep sample files in examples/)
+test_*.wav
+audio_output/
+
+# Cache and benchmarks
+cache/
+benchmarks/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Jupyter notebooks (keep if needed, but ignore checkpoints)
+Untitled.ipynb
+.ipynb_checkpoints/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# Python bytecode
+*.pyc
+__pycache__/

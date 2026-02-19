@@ -1,0 +1,120 @@
+# CosyVoice Virtual Companion - Production Docker Setup
+version: '3.8'
+
+services:
+  # Central Hub
+  hub:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: cosyvoice-hub
+    ports:
+      - "8500:8500"
+    environment:
+      - ENVIRONMENT=production
+      - SECRET_KEY=${SECRET_KEY}
+      - HUB_PORT=8500
+    volumes:
+      - ./config:/app/config:ro
+      - ./logs:/app/logs
+      - asset_data:/app/asset_registry.db
+    command: streamlit run content/simulation/scenes/hub/hub_scene.py --server.port 8500
+    restart: unless-stopped
+    networks:
+      - cosyvoice-net
+
+  # Phone Scene
+  phone:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: cosyvoice-phone
+    ports:
+      - "5555:5555"
+    environment:
+      - ENVIRONMENT=production
+      - PHONE_PORT=5555
+    volumes:
+      - ./config:/app/config:ro
+      - ./logs:/app/logs
+      - ./content/simulation/media:/app/content/simulation/media
+      - asset_data:/app/asset_registry.db
+      - db_data:/app/simulation/simulation.db
+    command: python content/simulation/scenes/phone/phone_scene.py
+    restart: unless-stopped
+    networks:
+      - cosyvoice-net
+    depends_on:
+      - hub
+
+  # Bedroom Scene
+  bedroom:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: cosyvoice-bedroom
+    ports:
+      - "5003:5003"
+    environment:
+      - ENVIRONMENT=production
+    volumes:
+      - ./config:/app/config:ro
+      - ./logs:/app/logs
+      - asset_data:/app/asset_registry.db
+      - db_data:/app/simulation/simulation.db
+    command: python content/simulation/scenes/bedroom/bedroom_scene.py
+    restart: unless-stopped
+    networks:
+      - cosyvoice-net
+    depends_on:
+      - hub
+
+  # Admin Panel (localhost only in production)
+  admin:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: cosyvoice-admin
+    ports:
+      - "127.0.0.1:8502:8502"
+    environment:
+      - ENVIRONMENT=production
+      - ADMIN_PORT=8502
+    volumes:
+      - ./config:/app/config:ro
+      - ./logs:/app/logs
+      - asset_data:/app/asset_registry.db
+      - db_data:/app/simulation/simulation.db
+      - ./content/simulation/media:/app/content/simulation/media
+    command: streamlit run content/simulation/scenes/admin/admin_panel.py --server.port 8502
+    restart: unless-stopped
+    networks:
+      - cosyvoice-net
+
+  # Nginx Reverse Proxy (optional)
+  nginx:
+    image: nginx:alpine
+    container_name: cosyvoice-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./docker/nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - hub
+      - phone
+      - bedroom
+    restart: unless-stopped
+    networks:
+      - cosyvoice-net
+
+volumes:
+  asset_data:
+    driver: local
+  db_data:
+    driver: local
+
+networks:
+  cosyvoice-net:
+    driver: bridge

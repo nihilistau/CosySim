@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Virtual Companion - Phone</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/phone.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/gallery.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/voice_call.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/video_call.css') }}">
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+</head>
+<body>
+    <div class="phone-container">
+        <!-- Phone Frame -->
+        <div class="phone-frame">
+            <!-- Status Bar -->
+            <div class="status-bar">
+                <div class="status-left">
+                    <span class="time" id="statusTime">9:41</span>
+                </div>
+                <div class="status-right">
+                    <span class="signal">📶</span>
+                    <span class="wifi">📶</span>
+                    <span class="battery">🔋 100%</span>
+                </div>
+            </div>
+            
+            <!-- Screen Content -->
+            <div class="phone-screen" id="phoneScreen">
+                <!-- Home Screen (Default) -->
+                <div class="screen-view" id="homeScreen">
+                    <div class="home-wallpaper">
+                        <h1 class="home-time">9:41</h1>
+                        <p class="home-date" id="homeDate">Monday, January 1</p>
+                    </div>
+                    
+                    <div class="app-grid">
+                        <div class="app-icon" onclick="openApp('messages')">
+                            <div class="icon messages-icon">💬</div>
+                            <span>Messages</span>
+                            <span class="badge" id="messageBadge" style="display:none;">0</span>
+                        </div>
+                        
+                        <div class="app-icon" onclick="openApp('phone')">
+                            <div class="icon phone-icon">📞</div>
+                            <span>Phone</span>
+                        </div>
+                        
+                        <div class="app-icon" onclick="openApp('gallery')">
+                            <div class="icon gallery-icon">🖼️</div>
+                            <span>Gallery</span>
+                        </div>
+                        
+                        <div class="app-icon" onclick="openApp('camera')">
+                            <div class="icon camera-icon">📷</div>
+                            <span>Camera</span>
+                        </div>
+                        
+                        <div class="app-icon" onclick="window.location.href='http://localhost:5556'">
+                            <div class="icon bedroom-icon">🏠</div>
+                            <span>Bedroom</span>
+                        </div>
+                        
+                        <div class="app-icon" onclick="openApp('settings')">
+                            <div class="icon settings-icon">⚙️</div>
+                            <span>Settings</span>
+                        </div>
+                        
+                        <div class="app-icon" onclick="openApp('browser')">
+                            <div class="icon browser-icon">🌐</div>
+                            <span>Browser</span>
+                        </div>
+                    </div>
+                    
+                    <div class="dock">
+                        <div class="dock-icon" onclick="openApp('messages')">💬</div>
+                        <div class="dock-icon" onclick="openApp('phone')">📞</div>
+                        <div class="dock-icon" onclick="openApp('camera')">📷</div>
+                    </div>
+                </div>
+                
+                <!-- Messages App -->
+                <div class="screen-view" id="messagesScreen" style="display:none;">
+                    <div class="app-header">
+                        <button class="back-button" onclick="goHome()">←</button>
+                        <div class="header-content">
+                            <h2 id="contactName">Loading...</h2>
+                            <p class="header-subtitle" id="contactStatus">Active</p>
+                        </div>
+                        <button class="settings-icon-btn" onclick="openAutonomousSettings()" title="Autonomous Settings">⚙️</button>
+                        <button class="gallery-icon-btn" onclick="openGalleryView()" title="Gallery">🖼️</button>
+                        <button class="call-button" onclick="startCall('video')" title="Video Call">📹</button>
+                        <button class="call-button" onclick="startCall('voice')" title="Voice Call">📞</button>
+                    </div>
+                    
+                    <div class="messages-container" id="messagesContainer">
+                        <!-- Messages will be added here -->
+                    </div>
+                    
+                    <div class="typing-indicator" id="typingIndicator" style="display:none;">
+                        <div class="typing-dots">
+                            <span></span>
+                            <span></span>
+                            <span></span>
+                        </div>
+                    </div>
+                    
+                    <div class="message-input-container">
+                        <button class="camera-button" onclick="openPhotoUpload()" title="Send Photo">📷</button>
+                        <button class="attachment-button" onclick="requestPhoto()" title="Request Photo">🖼️</button>
+                        <button class="video-button" onclick="recordVideoMessage()" title="Video Message">🎥</button>
+                        <button class="microphone-button" onclick="startVoiceMessageRecording()" title="Voice Message">🎤</button>
+                        <input type="text" 
+                               id="messageInput" 
+                               placeholder="Message..." 
+                               class="message-input"
+                               onkeypress="handleMessageKeyPress(event)">
+                        <button class="send-button" onclick="sendMessage()">➤</button>
+                    </div>
+                </div>
+                
+                <!-- Photo Upload Dialog -->
+                <div class="photo-upload-dialog" id="photoUploadDialog" style="display:none;">
+                    <div class="dialog-content">
+                        <h3>Send Photo</h3>
+                        <div class="upload-options">
+                            <button class="upload-btn" onclick="triggerFileUpload()">
+                                📁 Choose from device
+                            </button>
+                            <button class="upload-btn generate-btn" onclick="generateSelfie()">
+                                ✨ Generate selfie
+                            </button>
+                        </div>
+                        <div class="photo-preview" id="photoPreview" style="display:none;">
+                            <img id="previewImage" src="" alt="Preview">
+                            <div class="preview-actions">
+                                <button class="btn-send" onclick="uploadPhoto()">Send</button>
+                                <button class="btn-cancel" onclick="cancelPhotoUpload()">Cancel</button>
+                            </div>
+                        </div>
+                        <input type="file" id="photoFileInput" accept="image/*" style="display:none;" onchange="handleFileSelect(event)">
+                        <button class="close-dialog" onclick="closePhotoUpload()">✕</button>
+                    </div>
+                </div>
+                
+                <!-- Gallery View in Messages -->
+                <div class="gallery-view-overlay" id="galleryViewOverlay" style="display:none;">
+                    <div class="gallery-view-container">
+                        <div class="gallery-view-header">
+                            <h3>Gallery</h3>
+                            <button class="close-gallery-btn" onclick="closeGalleryView()">✕</button>
+                        </div>
+                        <div class="gallery-view-grid" id="galleryViewGrid">
+                            <p style="text-align:center; color:#666; margin-top:50px;">Loading...</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Autonomous Settings Modal -->
+                <div class="autonomous-settings-overlay" id="autonomousSettingsOverlay" style="display:none;">
+                    <div class="autonomous-settings-modal">
+                        <div class="modal-header">
+                            <h3>Autonomous Messaging</h3>
+                            <button class="close-modal-btn" onclick="closeAutonomousSettings()">✕</button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="setting-item">
+                                <label class="toggle-label">
+                                    <span>Enable Autonomous Messages</span>
+                                    <input type="checkbox" id="autonomousToggle" onchange="toggleAutonomous()">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                            
+                            <div class="setting-item">
+                                <label>Message Frequency</label>
+                                <select id="frequencySelect" onchange="updateAutonomousSettings()">
+                                    <option value="low">Low (1-2 hours)</option>
+                                    <option value="moderate" selected>Moderate (30min-1hr)</option>
+                                    <option value="high">High (10-30 minutes)</option>
+                                </select>
+                            </div>
+                            
+                            <div class="setting-item">
+                                <label>Active Hours</label>
+                                <div class="time-range-slider">
+                                    <input type="range" id="startHourSlider" min="0" max="23" value="8" 
+                                           oninput="updateTimeRange()">
+                                    <input type="range" id="endHourSlider" min="0" max="23" value="23" 
+                                           oninput="updateTimeRange()">
+                                </div>
+                                <div class="time-range-display">
+                                    <span id="timeRangeDisplay">8:00 AM - 11:00 PM</span>
+                                </div>
+                            </div>
+                            
+                            <div class="setting-item">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="enablePhotosCheck" checked onchange="updateAutonomousSettings()">
+                                    <span>Enable Autonomous Photos</span>
+                                </label>
+                            </div>
+                            
+                            <div class="modal-actions">
+                                <button class="btn-save" onclick="saveAutonomousSettings()">Save Settings</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Phone/Call App -->
+                <div class="screen-view" id="phoneScreen" style="display:none;">
+                    <div class="app-header">
+                        <button class="back-button" onclick="goHome()">←</button>
+                        <h2>Phone</h2>
+                    </div>
+                    
+                    <div class="call-interface">
+                        <div class="caller-info">
+                            <div class="caller-avatar">👤</div>
+                            <h2 id="callerName">Contact</h2>
+                            <p id="callStatus">Tap to call</p>
+                        </div>
+                        
+                        <div class="call-buttons">
+                            <button class="call-btn voice-call" onclick="startCall('voice')">
+                                📞<br>Voice Call
+                            </button>
+                            <button class="call-btn video-call" onclick="startCall('video')">
+                                📹<br>Video Call
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Call Screen -->
+                <div class="screen-view" id="callScreen" style="display:none;">
+                    <div class="call-active">
+                        <h2 id="activeCallerName">Contact</h2>
+                        <p id="callTimer">00:00</p>
+                        <p id="callType">Voice Call</p>
+                        
+                        <div class="call-video" id="callVideo" style="display:none;">
+                            <div class="video-placeholder">
+                                📹 Video feed will appear here
+                            </div>
+                        </div>
+                        
+                        <div class="call-controls">
+                            <button class="call-control-btn" onclick="toggleMute()">🔇</button>
+                            <button class="call-control-btn end-call" onclick="endCall()">📵</button>
+                            <button class="call-control-btn" onclick="toggleSpeaker()">🔊</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Gallery App -->
+                <div class="screen-view" id="galleryScreen" style="display:none;">
+                    <div class="app-header">
+                        <button class="back-button" onclick="goHome()">←</button>
+                        <h2>Gallery</h2>
+                        <button class="refresh-btn" onclick="loadGallery()">🔄</button>
+                    </div>
+                    
+                    <div class="gallery-grid" id="galleryGrid">
+                        <p style="text-align:center; color:#666; margin-top:50px;">Loading gallery...</p>
+                    </div>
+                </div>
+                
+                <!-- Full Screen Photo Viewer -->
+                <div class="photo-viewer" id="photoViewer" style="display:none;">
+                    <button class="close-viewer" onclick="closePhotoViewer()">✕</button>
+                    <img id="viewerImage" src="" alt="Photo">
+                    <div class="viewer-controls">
+                        <button onclick="downloadPhoto()">⬇️ Download</button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Navigation Bar -->
+            <div class="nav-bar">
+                <div class="nav-button" onclick="goHome()">◀</div>
+                <div class="nav-button" onclick="goHome()">⚫</div>
+                <div class="nav-button">▣</div>
+            </div>
+        </div>
+        
+        <!-- Control Panel (Optional) -->
+        <div class="control-panel">
+            <h3>Phone Control</h3>
+            <div class="control-section">
+                <label>Active Character:</label>
+                <select id="characterSelect" onchange="selectCharacter()">
+                    <option value="">Loading...</option>
+                </select>
+            </div>
+            
+            <div class="control-section">
+                <label>Scene Management:</label>
+                <div style="display: flex; gap: 5px; flex-wrap: wrap;">
+                    <button onclick="saveScene()" title="Save current scene">💾 Save Scene</button>
+                    <button onclick="loadScene()" title="Load saved scene">📂 Load Scene</button>
+                    <select id="sceneSelect" style="flex: 1; min-width: 120px;">
+                        <option value="">Select Scene...</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="control-section">
+                <label>Connection Status:</label>
+                <span id="connectionStatus" class="status-indicator">Disconnected</span>
+            </div>
+            
+            <div class="control-section">
+                <button onclick="simulateIncomingMessage()">Simulate Incoming Message</button>
+                <button onclick="simulateIncomingCall()">Simulate Incoming Call</button>
+            </div>
+        </div>
+    </div>
+    
+    <script src="{{ url_for('static', filename='js/video.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/voice.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/phone.js') }}"></script>
+</body>
+</html>

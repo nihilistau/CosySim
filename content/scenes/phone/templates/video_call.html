@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Call</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/video_call.css') }}">
+</head>
+<body>
+    <div id="video-call-container">
+        <!-- Character Video -->
+        <div id="character-video-container">
+            <img id="character-video" src="" alt="Character Video">
+            <div id="video-loading" class="loading-spinner">
+                <div class="spinner"></div>
+                <p>Connecting...</p>
+            </div>
+        </div>
+        
+        <!-- User Video (Picture-in-Picture) -->
+        <div id="user-video-container" class="user-video-pip">
+            <video id="user-video" autoplay muted playsinline></video>
+            <div id="user-video-placeholder" class="video-placeholder">
+                <i class="video-off-icon">📷</i>
+                <p>Camera Off</p>
+            </div>
+        </div>
+        
+        <!-- Call Info -->
+        <div id="call-info">
+            <h2 id="character-name">Character Name</h2>
+            <p id="call-status">Calling...</p>
+            <p id="call-timer">00:00</p>
+        </div>
+        
+        <!-- Call Controls -->
+        <div id="call-controls">
+            <button id="mute-btn" class="control-btn" title="Mute/Unmute">
+                <span class="icon">🎤</span>
+            </button>
+            
+            <button id="video-toggle-btn" class="control-btn" title="Toggle Video">
+                <span class="icon">📹</span>
+            </button>
+            
+            <button id="end-call-btn" class="control-btn end-call" title="End Call">
+                <span class="icon">📞</span>
+            </button>
+            
+            <button id="fullscreen-btn" class="control-btn" title="Fullscreen">
+                <span class="icon">⛶</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script src="{{ url_for('static', filename='js/video.js') }}"></script>
+    <script>
+        // Initialize video call
+        const urlParams = new URLSearchParams(window.location.search);
+        const callId = urlParams.get('call_id');
+        const characterName = urlParams.get('character') || 'Character';
+        
+        document.getElementById('character-name').textContent = characterName;
+        
+        if (callId) {
+            // Join existing call
+            VideoCall.joinCall(callId);
+        } else {
+            // Start new call
+            VideoCall.startCall();
+        }
+    </script>
+</body>
+</html>
