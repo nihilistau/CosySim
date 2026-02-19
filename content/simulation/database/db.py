@@ -161,6 +161,8 @@ class Database:
             """)
             
             # Events table — causal event chain for diagnostics and memory compaction
+            # NOTE: No FK on character_id — EventChain is the ground truth and must
+            # log events for any actor, even if the character isn't in the DB yet.
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS events (
                     id TEXT PRIMARY KEY,
@@ -173,8 +175,7 @@ class Database:
                     payload TEXT NOT NULL,
                     summary TEXT DEFAULT '',
                     timestamp TEXT NOT NULL,
-                    FOREIGN KEY (parent_id) REFERENCES events(id),
-                    FOREIGN KEY (character_id) REFERENCES characters(id)
+                    FOREIGN KEY (parent_id) REFERENCES events(id)
                 )
             """)
 

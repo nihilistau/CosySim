@@ -39,7 +39,9 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS
+# Dark theme + custom CSS
+from content.shared.streamlit_theme import inject_dark_theme
+inject_dark_theme()
 st.markdown("""
 <style>
     .main-header {

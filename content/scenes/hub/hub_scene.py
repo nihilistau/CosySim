@@ -37,13 +37,15 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS
+# Dark theme + custom CSS
+from content.shared.streamlit_theme import inject_dark_theme
+inject_dark_theme()
 st.markdown("""
 <style>
     .main-header {
         font-size: 3.5rem;
         font-weight: bold;
-        background: linear-gradient(90deg, #4F46E5 0%, #7C3AED 50%, #EC4899 100%);
+        background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         margin-bottom: 1rem;
@@ -51,7 +53,7 @@ st.markdown("""
     }
     .subtitle {
         font-size: 1.3rem;
-        color: #6B7280;
+        color: #a0a0a0;
         text-align: center;
         margin-bottom: 3rem;
     }
@@ -85,18 +87,19 @@ st.markdown("""
         opacity: 0.9;
     }
     .tutorial-card {
-        background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         padding: 1.5rem;
         border-radius: 10px;
         color: white;
         margin-bottom: 1rem;
     }
     .quick-stat {
-        background: white;
+        background: #1a1a1a;
         padding: 1rem;
         border-radius: 10px;
         border-left: 4px solid #667eea;
         margin-bottom: 0.5rem;
+        color: #f0f0f0;
     }
 </style>
 """, unsafe_allow_html=True)

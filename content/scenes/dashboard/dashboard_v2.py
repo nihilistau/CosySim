@@ -29,21 +29,11 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS
+# Dark theme + custom CSS
+from content.shared.streamlit_theme import inject_dark_theme
+inject_dark_theme()
 st.markdown("""
 <style>
-    .stApp {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    }
-    .main .block-container {
-        padding: 2rem;
-        background: white;
-        border-radius: 15px;
-        margin: 1rem;
-    }
-    h1 {
-        color: #667eea;
-    }
     .character-card {
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         color: white;
