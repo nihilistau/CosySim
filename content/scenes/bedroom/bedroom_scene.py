@@ -150,9 +150,6 @@ class BedroomScene(BaseScene):
     
     def _setup_routes(self):
         """Setup Flask routes"""
-
-    def _setup_routes(self):
-        """Setup Flask routes"""
         
         @self.app.route('/')
         def index():

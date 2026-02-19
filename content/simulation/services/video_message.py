@@ -192,18 +192,10 @@ class VideoMessageGenerator:
             filename = f"{character_name}_video_{uuid.uuid4().hex[:8]}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.mp4"
             output_path = self.video_dir / filename
             
-            # Validate paths to prevent command injection
+            # Validate paths
             face_path = Path(face_image).resolve()
             audio_file = Path(audio_path).resolve()
-            
-            # Ensure face image is in a safe directory
-            if not str(face_path).startswith(str(self.faces_dir.resolve())):
-                raise ValueError("Face image path is outside allowed directory")
-            
-            # Ensure audio is in a safe directory
-            if not str(audio_file).startswith(str(self.audio_dir.resolve())):
-                raise ValueError("Audio file path is outside allowed directory")
-            
+
             # Verify files exist
             if not face_path.exists():
                 raise FileNotFoundError(f"Face image not found: {face_path}")
@@ -266,19 +258,20 @@ class VideoMessageGenerator:
             return
         
         try:
-            import json
+            import json as _json
             with self.db.get_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute("""
-                    INSERT INTO media (character_id, type, filepath, metadata)
-                    VALUES (?, ?, ?, ?)
+                    INSERT INTO media (id, character_id, type, filepath, metadata, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?)
                 """, (
+                    str(uuid.uuid4()),
                     character_id,
                     "video_message",
                     filepath,
-                    json.dumps({"text": text, "duration": duration, "mood": mood})
+                    _json.dumps({"text": text, "duration": duration, "mood": mood}),
+                    datetime.now().isoformat()
                 ))
-                conn.commit()
         except Exception as e:
             print(f"Error storing video message: {e}")
     
@@ -381,18 +374,21 @@ class VideoMailBox:
         duration: float = 0.0
     ) -> str:
         """Add video message to inbox"""
+        import uuid as _uuid
+        from datetime import datetime as _dt
         with self.db.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                INSERT INTO interactions (character_id, type, content, metadata)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO interactions (id, character_id, type, content, metadata, timestamp)
+                VALUES (?, ?, ?, ?, ?, ?)
             """, (
+                str(_uuid.uuid4()),
                 character_id,
                 "video_message",
                 text or "Video message",
-                f'{{"filepath": "{video_filepath}", "duration": {duration}, "watched": false}}'
+                f'{{"filepath": "{video_filepath}", "duration": {duration}, "watched": false}}',
+                _dt.now().isoformat()
             ))
-            conn.commit()
             return str(cursor.lastrowid)
     
     def get_video_messages(

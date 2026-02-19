@@ -28,6 +28,8 @@ from content.simulation.services.video_message import VideoMessageGenerator
 from content.scenes.phone.apps.gallery import Gallery
 from engine.scenes.base_scene import BaseScene
 from engine.assets import CharacterAsset
+from content.simulation.services.llm_service import get_llm_service
+from content.simulation.services.anonymous_character import create_anonymous_character, AnonymousCharacter
 
 
 class PhoneScene(BaseScene):
@@ -71,6 +73,13 @@ class PhoneScene(BaseScene):
         
         # Initialize autonomous messenger (will be started later with socketio)
         self.autonomous_messenger = None
+
+        # Anonymous stranger character
+        self.anon_char: Optional[AnonymousCharacter] = None
+        try:
+            self.anon_char = create_anonymous_character(self.db)
+        except Exception as _e:
+            print(f"[PhoneScene] Anonymous character init failed: {_e}")
         
         # Flask app
         self.app = Flask(
@@ -974,7 +983,33 @@ class PhoneScene(BaseScene):
                     return jsonify({'messages': messages})
             except Exception as e:
                 return jsonify({'error': str(e)}), 500
-    
+
+        # ── Anonymous Character Routes ───────────────────────────────────────
+
+        @self.app.route('/api/anon/info', methods=['GET'])
+        def anon_info():
+            """Return display info for the anonymous character."""
+            if not self.anon_char:
+                return jsonify({'error': 'Anonymous character not initialized'}), 503
+            return jsonify(self.anon_char.get_display_info())
+
+        @self.app.route('/api/anon/message', methods=['POST'])
+        def anon_message():
+            """Send a message to / receive reply from the anonymous character."""
+            if not self.anon_char:
+                return jsonify({'error': 'Anonymous character not initialized'}), 503
+            data = request.get_json() or {}
+            user_msg = data.get('message', '')
+            reply = self.anon_char.receive_reply(user_msg) if user_msg else self.anon_char.send_message()
+            return jsonify({'reply': reply, 'info': self.anon_char.get_display_info()})
+
+        @self.app.route('/api/anon/history', methods=['GET'])
+        def anon_history():
+            """Get anonymous character conversation history."""
+            if not self.anon_char:
+                return jsonify({'error': 'Anonymous character not initialized'}), 503
+            return jsonify({'history': self.anon_char.get_conversation_history()})
+
     def _setup_socketio(self):
         """Setup SocketIO event handlers"""
         
@@ -1337,39 +1372,63 @@ class PhoneScene(BaseScene):
     
     def _generate_response(self, user_message: str) -> str:
         """
-        Generate character response
-        TODO: Integrate with LM Studio for actual AI responses
+        Generate character response via LM Studio LLM.
+        Parses intent and may trigger spontaneous media sends.
         """
         if not self.active_character:
             return "Error: No active character"
-        
-        # Build context from memories
-        context = self.active_character.build_context(user_message)
-        
-        # Get system prompt
-        system_prompt = self.active_character.get_system_prompt()
-        
-        # Placeholder response (integrate with LM Studio)
-        # This should call the LM Studio API with:
-        # - system_prompt
-        # - context
-        # - user_message
-        
-        response = f"Hey! I received your message: '{user_message}' 😊"
-        
-        # Sometimes send a photo back (based on mood/relationship)
-        if self.active_character.relationship_level >= 3 and random.random() < 0.1:
-            # 10% chance to send photo if relationship is good
+
+        llm = get_llm_service()
+
+        # Build conversation history from recent messages
+        history = []
+        try:
+            conv_history = self.active_character.get_conversation_history(limit=10)
+            for turn in conv_history:
+                if isinstance(turn, dict):
+                    role = turn.get("role", "user")
+                    content = turn.get("content", "")
+                    history.append({"role": role, "content": content})
+        except Exception:
+            history = []
+
+        # Generate LLM response
+        response = llm.chat_with_character(
+            character=self.active_character,
+            user_message=user_message,
+            conversation_history=history,
+        )
+
+        # Parse intent to decide if media should be triggered
+        try:
+            intent = llm.parse_intent(user_message)
+        except Exception:
+            intent = {}
+
+        rel = float(self.active_character.relationship_level)
+
+        # User explicitly asked for a selfie
+        if intent.get("wants_selfie") and rel > 0.2:
             self._maybe_send_photo()
-        
-        # Sometimes send a voice message instead of text (5% chance)
-        if self.active_character.relationship_level >= 2 and random.random() < 0.05:
+
+        # User asked for a voice message
+        if intent.get("wants_voice") and rel > 0.3:
             self._maybe_send_voice_message(response)
-        
-        # Sometimes send a video message (3% chance, relationship >= 0.5)
-        if self.active_character.relationship_level >= 0.5 and random.random() < 0.03:
+
+        # User asked for a video message
+        if intent.get("wants_video") and rel > 0.4:
             self._maybe_send_video_message(response)
-        
+
+        # Spontaneous media (low probability unless intent triggered)
+        if rel >= 0.5 and not any(intent.values()):
+            r = random.random()
+            if r < 0.05:
+                self._maybe_send_photo()
+            elif r < 0.08:
+                self._maybe_send_voice_message(response)
+            elif r < 0.10:
+                self._maybe_send_video_message(response)
+
         return response
     
     def _maybe_send_voice_message(self, text: str):

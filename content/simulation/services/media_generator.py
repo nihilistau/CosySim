@@ -1,30 +1,181 @@
 """
 Media Generator Service
-Handles photo and video generation for characters using ComfyUI
+Handles photo and video generation for characters using ComfyUI (192.168.8.150:8188)
 """
 
 import os
-import json
 import uuid
 import random
+import logging
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 from pathlib import Path
-
-# Import ComfyUI generators (optional)
 import sys
+
 project_root = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-try:
-    from comfyui_generator import ImageGenerator
-    COMFYUI_AVAILABLE = True
-except ImportError:
-    ImageGenerator = None
-    COMFYUI_AVAILABLE = False
-    print("⚠️  ComfyUI not available - image generation will use placeholders")
+logger = logging.getLogger(__name__)
 
-from engine.assets import AssetManager, ImageAsset
+from content.simulation.services.comfyui_client import ComfyUIClient, PromptBuilder, get_comfyui_client
+from engine.assets import AssetManager
+
+
+class MediaGenerator:
+    """Generate photos and videos for characters using ComfyUI."""
+
+    def __init__(self, comfyui_url: str = "http://192.168.8.150:8188"):
+        self.comfyui_url = comfyui_url
+        self.client = ComfyUIClient(base_url=comfyui_url)
+        self.media_dir = Path(__file__).parent.parent / "media"
+        self.image_dir = self.media_dir / "images"
+        self.video_dir = self.media_dir / "video"
+        self.voice_dir = self.media_dir / "voice"
+        for d in [self.image_dir, self.video_dir, self.voice_dir]:
+            d.mkdir(parents=True, exist_ok=True)
+        self.asset_manager = AssetManager()
+
+    def is_available(self) -> bool:
+        """Check if ComfyUI is reachable."""
+        return self.client.is_available()
+
+    def generate_selfie(
+        self,
+        character_name: str,
+        character_description: str,
+        mood: str = "happy",
+        setting: str = "casual",
+        style: str = "realistic",
+        nsfw: bool = False,
+        extra_prompt: str = "",
+    ) -> Optional[str]:
+        """
+        Generate a selfie image for a character.
+
+        Args:
+            character_name: Name of character
+            character_description: Physical description string
+            mood: Mood/expression (happy, flirty, seductive, shy, etc.)
+            setting: Scene setting (casual, bedroom, beach, gym, etc.)
+            style: Photo style (unused – kept for API compat)
+            nsfw: Allow NSFW content
+            extra_prompt: Additional prompt keywords
+
+        Returns:
+            Path to generated/placeholder image, or None
+        """
+        path = self.client.generate_character_selfie(
+            appearance=character_description,
+            mood=mood,
+            setting=setting,
+            nsfw=nsfw,
+            save_dir=str(self.image_dir),
+            extra_prompt=extra_prompt,
+        )
+
+        if path:
+            # Register as asset (best-effort)
+            try:
+                from engine.assets import ImageAsset
+                asset = ImageAsset.create(
+                    filepath=path,
+                    tags=[character_name, mood, setting, "selfie", "generated"],
+                )
+                self.asset_manager.save(asset)
+            except Exception:
+                pass
+
+        return path
+
+    def generate_portrait(
+        self,
+        character_name: str,
+        appearance: str,
+        mood: str = "neutral",
+        setting: str = "casual",
+        nsfw: bool = False,
+    ) -> Optional[str]:
+        """Generate a portrait / headshot."""
+        return self.generate_selfie(character_name, appearance, mood, setting, nsfw=nsfw)
+
+    def get_random_selfie_context(self, relationship_level: float = 0.5) -> Dict:
+        """
+        Generate random selfie context based on relationship level.
+
+        Args:
+            relationship_level: 0.0–1.0
+
+        Returns:
+            Dict with keys: mood, setting, nsfw
+        """
+        rel = float(relationship_level)  # ensure float
+
+        innocent = [
+            {"mood": "happy", "setting": "casual", "nsfw": False},
+            {"mood": "playful", "setting": "outdoors", "nsfw": False},
+            {"mood": "excited", "setting": "beach", "nsfw": False},
+            {"mood": "shy", "setting": "morning", "nsfw": False},
+            {"mood": "loving", "setting": "cafe", "nsfw": False},
+        ]
+        flirty = [
+            {"mood": "flirty", "setting": "bedroom", "nsfw": False},
+            {"mood": "seductive", "setting": "night", "nsfw": False},
+            {"mood": "playful", "setting": "gym", "nsfw": False},
+            {"mood": "confident", "setting": "casual", "nsfw": False},
+        ]
+        intimate = [
+            {"mood": "seductive", "setting": "bedroom", "nsfw": True},
+            {"mood": "playful", "setting": "lingerie", "nsfw": True},
+            {"mood": "confident", "setting": "nude", "nsfw": True},
+        ]
+
+        if rel > 0.8 and random.random() > 0.6:
+            return random.choice(intimate)
+        elif rel > 0.5:
+            return random.choice(flirty + innocent)
+        else:
+            return random.choice(innocent)
+
+    def create_thumbnail(self, image_path: str, size: Tuple[int, int] = (200, 200)) -> Optional[str]:
+        """Create thumbnail for an image."""
+        try:
+            from PIL import Image as _PIL
+            p = Path(image_path)
+            thumb = p.parent / f"{p.stem}_thumb{p.suffix}"
+            with _PIL.open(image_path) as img:
+                img.thumbnail(size, _PIL.Resampling.LANCZOS)
+                img.save(thumb, quality=85)
+            return str(thumb)
+        except Exception as e:
+            logger.debug("Thumbnail creation failed: %s", e)
+            return None
+
+    def get_media_info(self, filepath: str) -> Dict:
+        """Get metadata about a media file."""
+        p = Path(filepath)
+        if not p.exists():
+            return {"exists": False}
+        stat = p.stat()
+        return {
+            "filename": p.name,
+            "size": stat.st_size,
+            "created": datetime.fromtimestamp(stat.st_ctime).isoformat(),
+            "type": p.suffix.lower(),
+            "exists": True,
+        }
+
+
+if __name__ == "__main__":
+    gen = MediaGenerator()
+    print("ComfyUI available:", gen.is_available())
+    path = gen.generate_selfie(
+        character_name="Emma",
+        character_description="25 year old woman, long brown hair, green eyes, slim build",
+        mood="happy",
+        setting="casual",
+    )
+    print("Generated:", path)
+
 
 
 class MediaGenerator:

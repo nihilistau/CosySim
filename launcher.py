@@ -1,17 +1,22 @@
 #!/usr/bin/env python3
 """
-CosyVoice System Launcher
+CosySim System Launcher
 
 Unified entry point for all system modes:
-- play: Launch the virtual companion simulation
-- admin: System administration panel
-- dev: Development mode with debugging
-- test: Run test suite
+- hub:     Central hub (recommended starting point)
+- phone:   Phone scene  (port 5555)
+- bedroom: Bedroom scene (port 5556)
+- dashboard: Dashboard (port 8501)
+- admin:   Admin panel (port 8502)
+- assets:  Asset generator (port 8503)
+- dev:     Development mode with debugging
+- test:    Run test suite
 """
 
 import argparse
 import sys
 import os
+import subprocess
 from pathlib import Path
 
 # Add project root to path
@@ -348,9 +353,9 @@ For more information, see: docs/README.md
     
     parser.add_argument(
         "--mode",
-        choices=["play", "admin", "dev", "test"],
-        default="play",
-        help="Launch mode (default: play)"
+        choices=["hub", "phone", "bedroom", "dashboard", "admin", "assets", "play", "dev", "test"],
+        default="hub",
+        help="Launch mode (default: hub)"
     )
     
     parser.add_argument(
@@ -383,14 +388,41 @@ For more information, see: docs/README.md
         return
     
     # Launch appropriate mode
+    mode_map = {
+        "hub":       _launch_streamlit(PROJECT_ROOT / "content" / "scenes" / "hub" / "hub_scene.py", 8500),
+        "dashboard": _launch_streamlit(PROJECT_ROOT / "content" / "scenes" / "dashboard" / "dashboard_v2.py", 8501),
+        "admin":     _launch_streamlit(PROJECT_ROOT / "content" / "scenes" / "admin" / "admin_panel.py", 8502),
+        "assets":    _launch_streamlit(PROJECT_ROOT / "content" / "scenes" / "assets" / "asset_generator.py", 8503),
+    }
+
     if args.mode == "play":
         launch_play_mode()
-    elif args.mode == "admin":
-        launch_admin_mode()
+    elif args.mode in mode_map:
+        mode_map[args.mode]()
+    elif args.mode == "phone":
+        from content.scenes.phone.phone_scene import PhoneScene
+        PhoneScene().start()
+    elif args.mode == "bedroom":
+        from content.scenes.bedroom.bedroom_scene import BedroomScene
+        BedroomScene().start()
     elif args.mode == "dev":
         launch_dev_mode()
     elif args.mode == "test":
         launch_test_mode()
+
+
+def _launch_streamlit(script_path: Path, port: int):
+    """Return a callable that launches a Streamlit app."""
+    def _launch():
+        print(f"\n🚀 Launching {script_path.name} on http://localhost:{port}")
+        subprocess.run([
+            "streamlit", "run",
+            str(script_path),
+            f"--server.port={port}",
+            "--server.address=localhost",
+            "--browser.gatherUsageStats=false",
+        ])
+    return _launch
 
 
 if __name__ == "__main__":

@@ -214,17 +214,18 @@ class VoiceMessageGenerator:
         try:
             with self.db.get_connection() as conn:
                 cursor = conn.cursor()
-                import json
+                import json as _json
                 cursor.execute("""
-                    INSERT INTO media (character_id, type, filepath, metadata)
-                    VALUES (?, ?, ?, ?)
+                    INSERT INTO media (id, character_id, type, filepath, metadata, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?)
                 """, (
+                    str(uuid.uuid4()),
                     character_id,
                     "voice",
                     filepath,
-                    json.dumps({"text": text, "duration": duration, "emotion": emotion})
+                    _json.dumps({"text": text, "duration": duration, "emotion": emotion}),
+                    datetime.now().isoformat()
                 ))
-                conn.commit()
         except Exception as e:
             print(f"Error storing voice message: {e}")
     
@@ -294,18 +295,21 @@ class VoiceMailBox:
         duration: float = 0.0
     ) -> str:
         """Add voicemail to inbox"""
+        import uuid as _uuid
+        from datetime import datetime as _dt
         with self.db.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                INSERT INTO interactions (character_id, type, content, metadata)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO interactions (id, character_id, type, content, metadata, timestamp)
+                VALUES (?, ?, ?, ?, ?, ?)
             """, (
+                str(_uuid.uuid4()),
                 character_id,
                 "voicemail",
                 text or "Voice message",
-                f'{{"filepath": "{voice_filepath}", "duration": {duration}, "listened": false}}'
+                f'{{"filepath": "{voice_filepath}", "duration": {duration}, "listened": false}}',
+                _dt.now().isoformat()
             ))
-            conn.commit()
             return str(cursor.lastrowid)
     
     def get_voicemails(self, character_id: str, unheard_only: bool = False) -> List[Dict]:

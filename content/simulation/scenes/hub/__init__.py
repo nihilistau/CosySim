@@ -1,1 +1,0 @@
-"""Hub scene package"""

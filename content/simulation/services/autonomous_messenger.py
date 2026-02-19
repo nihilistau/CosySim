@@ -151,12 +151,18 @@ class AutonomousMessenger:
             return  # Outside active hours
         
         # Check if enough time has passed since last message
-        if config["last_message_time"]:
-            time_since_last = (datetime.now() - config["last_message_time"]).total_seconds()
-            min_interval = config["min_interval"]
-            
-            if time_since_last < min_interval:
-                return  # Too soon
+        if config["last_message_time"] is not None:
+            last = config["last_message_time"]
+            if not isinstance(last, datetime):
+                try:
+                    last = datetime.fromisoformat(str(last))
+                except Exception:
+                    last = None
+            if last is not None:
+                time_since_last = (datetime.now() - last).total_seconds()
+                min_interval = float(config["min_interval"])
+                if time_since_last < min_interval:
+                    return  # Too soon
         
         # Random chance based on frequency
         chance = {
@@ -208,7 +214,7 @@ class AutonomousMessenger:
         """Choose what type of message to send"""
         options = ["text"]
         
-        if config["enable_photos"] and character.relationship_level > 0.3:
+        if config["enable_photos"] and float(character.relationship_level) > 0.3:
             options.extend(["photo"] * 2)  # Twice the weight
         
         if config["enable_voice"]:
@@ -384,14 +390,14 @@ class AutonomousMessenger:
         
         # Send via SocketIO if available
         if self.socketio:
-            self.socketio.emit('message_received', {
+            self.socketio.emit('autonomous_message', {
                 "role": "assistant",
                 "content": content,
                 "timestamp": datetime.now().isoformat(),
                 "type": type,
                 "media_url": f"/api/media/download/{media_path}" if media_path else None,
                 "autonomous": True
-            }, broadcast=True)
+            })
 
 
 # Quick test

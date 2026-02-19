@@ -31,7 +31,7 @@ from engine.config import ConfigManager
 
 # Page config
 st.set_page_config(
-    page_title="CosyVoice Admin Panel",
+    page_title="CosySim Admin Panel",
     page_icon="🎛️",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -82,7 +82,7 @@ def main():
     init_session_state()
     
     # Header
-    st.markdown('<h1 class="main-header">🎛️ CosyVoice Admin Control Panel</h1>', unsafe_allow_html=True)
+    st.markdown('<h1 class="main-header">🎛️ CosySim Admin Panel</h1>', unsafe_allow_html=True)
     st.markdown("**Unified system management for assets, characters, scenes, and configuration**")
     st.markdown("---")
     
@@ -102,6 +102,7 @@ def main():
                 "💾 Database",
                 "🔍 Search & Filter",
                 "🖼️ Media Gallery",
+                "🎨 Asset Generator",
                 "🔗 Dependency Graph",
                 "📜 Log Viewer",
                 "📈 Performance Monitor",
@@ -142,6 +143,8 @@ def main():
         show_media_gallery()
     elif page == "🔗 Dependency Graph":
         show_dependency_graph()
+    elif page == "🎨 Asset Generator":
+        show_asset_generator()
     elif page == "📜 Log Viewer":
         show_log_viewer()
     elif page == "📈 Performance Monitor":
@@ -327,25 +330,79 @@ def show_character_manager():
                 char = st.session_state.asset_manager.load("character", char_data['id'])
                 
                 with st.expander(f"**{char.name}** ({char_data['id'][:8]}...)"):
-                    col1, col2 = st.columns(2)
-                    
-                    with col1:
-                        st.markdown(f"**Description**: {char.description}")
-                        st.markdown(f"**Age**: {char.age}")
-                        st.markdown(f"**Gender**: {char.gender}")
-                        st.markdown(f"**Messaging Frequency**: {char.messaging_frequency}")
-                        st.markdown(f"**Autonomy Level**: {char.autonomy_level}")
-                    
-                    with col2:
-                        st.markdown(f"**Hair Color**: {char.hair_color}")
-                        st.markdown(f"**Eye Color**: {char.eye_color}")
-                        st.markdown(f"**NSFW**: {char.nsfw_enabled}")
-                        st.markdown(f"**Tags**: {', '.join(char.metadata.tags)}")
-                    
-                    if st.button(f"🗑️ Delete {char.name}", key=f"del_char_{char.id}"):
-                        st.session_state.asset_manager.delete(char.id)
-                        st.success("Deleted!")
-                        st.rerun()
+                    view_col, edit_col = st.columns([2, 1])
+
+                    with view_col:
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.markdown(f"**Description**: {char.description}")
+                            st.markdown(f"**Age**: {char.age}")
+                            st.markdown(f"**Gender**: {char.gender}")
+                            st.markdown(f"**Messaging Frequency**: {char.messaging_frequency}")
+                            st.markdown(f"**Autonomy Level**: {char.autonomy_level}")
+                        with col2:
+                            st.markdown(f"**Hair Color**: {char.hair_color}")
+                            st.markdown(f"**Eye Color**: {char.eye_color}")
+                            st.markdown(f"**NSFW**: {char.nsfw_enabled}")
+                            current_tags = ", ".join(char.metadata.tags) if hasattr(char, 'metadata') else ""
+                            st.markdown(f"**Tags**: {current_tags}")
+
+                    with edit_col:
+                        if st.button(f"✏️ Edit", key=f"edit_char_{char.id}"):
+                            st.session_state[f"editing_{char.id}"] = True
+                        if st.button(f"🗑️ Delete {char.name}", key=f"del_char_{char.id}"):
+                            st.session_state.asset_manager.delete(char.id)
+                            st.success("Deleted!")
+                            st.rerun()
+
+                    # Edit form (shown when edit button pressed)
+                    if st.session_state.get(f"editing_{char.id}"):
+                        st.markdown("---")
+                        st.subheader(f"Edit: {char.name}")
+                        existing_tags = ", ".join(char.metadata.tags) if hasattr(char, 'metadata') else ""
+                        with st.form(f"edit_char_form_{char.id}"):
+                            e_name = st.text_input("Name", value=char.name)
+                            e_desc = st.text_area("Description", value=char.description or "")
+                            e_age  = st.number_input("Age", min_value=18, max_value=100, value=int(char.age or 25))
+                            e_gender = st.selectbox("Gender", ["female","male","non-binary","other"],
+                                                    index=["female","male","non-binary","other"].index(char.gender or "female"))
+                            e_hair = st.text_input("Hair Color", value=char.hair_color or "")
+                            e_eye  = st.text_input("Eye Color",  value=char.eye_color or "")
+                            e_freq = st.selectbox("Messaging Frequency", ["low","medium","high"],
+                                                  index=["low","medium","high"].index(char.messaging_frequency or "medium"))
+                            e_auto = st.slider("Autonomy Level", 0.0, 1.0,
+                                               float(char.autonomy_level or 0.5), 0.1)
+                            e_nsfw = st.checkbox("NSFW Enabled", value=bool(char.nsfw_enabled))
+                            e_tags = st.text_input("Tags (comma-separated)", value=existing_tags)
+
+                            c1, c2 = st.columns(2)
+                            save_clicked   = c1.form_submit_button("💾 Save")
+                            cancel_clicked = c2.form_submit_button("✕ Cancel")
+
+                        if save_clicked:
+                            try:
+                                tag_list = [t.strip() for t in e_tags.split(",") if t.strip()]
+                                char.name              = e_name
+                                char.description       = e_desc
+                                char.age               = e_age
+                                char.gender            = e_gender
+                                char.hair_color        = e_hair
+                                char.eye_color         = e_eye
+                                char.messaging_frequency = e_freq
+                                char.autonomy_level    = e_auto
+                                char.nsfw_enabled      = e_nsfw
+                                if hasattr(char, 'metadata'):
+                                    char.metadata.tags = tag_list
+                                st.session_state.asset_manager.save(char)
+                                st.session_state[f"editing_{char.id}"] = False
+                                st.success("✅ Saved!")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Save failed: {e}")
+
+                        if cancel_clicked:
+                            st.session_state[f"editing_{char.id}"] = False
+                            st.rerun()
     
     with tab2:
         st.subheader("Create New Character")
@@ -588,7 +645,7 @@ config/production.yaml    - Production settings
         
         st.markdown("**Environment Variables:**")
         import os
-        env_vars = {k: v for k, v in os.environ.items() if k.startswith("COSYVOICE_")}
+        env_vars = {k: v for k, v in os.environ.items() if k.startswith("COSYSIM_") or k.startswith("COSYVOICE_")}
         if env_vars:
             st.json(env_vars)
         else:
@@ -816,6 +873,154 @@ def show_dependency_graph():
             st.rerun()
     else:
         st.success("No orphans!")
+
+
+def show_asset_generator():
+    """Generate images, videos, audio and stories via ComfyUI / TTS / LLM."""
+    st.header("🎨 Asset Generator")
+    st.markdown("Generate media assets directly from the admin panel. Requires ComfyUI (192.168.8.150:8188) and LM Studio (localhost:1234) to be running.")
+
+    tab_img, tab_vid, tab_voice, tab_story = st.tabs(["🖼️ Image", "🎥 Video", "🎤 Voice", "📖 Story"])
+
+    # --- Image ---
+    with tab_img:
+        st.subheader("Generate Image via ComfyUI")
+        c1, c2 = st.columns(2)
+        with c1:
+            pos_prompt = st.text_area("Positive Prompt", placeholder="beautiful woman, brown hair, green eyes, happy, outdoor, realistic, 8k")
+            neg_prompt = st.text_area("Negative Prompt", value="blurry, low quality, nsfw" if True else "")
+        with c2:
+            img_width  = st.number_input("Width",  value=512, step=64)
+            img_height = st.number_input("Height", value=512, step=64)
+            img_steps  = st.number_input("Steps",  value=20, min_value=5, max_value=100)
+            nsfw_img   = st.checkbox("Allow NSFW")
+
+        if st.button("🎨 Generate Image", type="primary"):
+            with st.spinner("Generating via ComfyUI..."):
+                try:
+                    import sys
+                    from pathlib import Path
+                    sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+                    from content.simulation.services.comfyui_client import get_comfyui_client
+                    client = get_comfyui_client()
+                    if not client.is_available():
+                        st.error("ComfyUI not reachable at 192.168.8.150:8188")
+                    else:
+                        save_dir = Path(__file__).parent.parent.parent / "simulation" / "media" / "images"
+                        save_dir.mkdir(parents=True, exist_ok=True)
+                        path = client.generate_image(
+                            positive_prompt=pos_prompt,
+                            negative_prompt=neg_prompt,
+                            save_dir=str(save_dir),
+                        )
+                        if path:
+                            st.image(path, caption="Generated image", use_column_width=True)
+                            st.success(f"Saved: {path}")
+                        else:
+                            st.error("Generation failed or ComfyUI returned no output.")
+                except Exception as e:
+                    st.error(f"Error: {e}")
+
+    # --- Video ---
+    with tab_vid:
+        st.subheader("Generate Video Message")
+        char_list_vid = []
+        try:
+            char_list_vid = [c['id'] for c in st.session_state.asset_manager.search(asset_type="character")]
+        except Exception:
+            pass
+        vid_char = st.selectbox("Character", char_list_vid or ["(no characters)"], key="vid_char")
+        vid_text = st.text_area("Script / Text", placeholder="Hey, I was thinking about you today...")
+        vid_mood = st.selectbox("Mood", ["happy", "flirty", "seductive", "sad", "excited", "romantic"])
+        if st.button("🎥 Generate Video Message"):
+            with st.spinner("Generating..."):
+                try:
+                    from content.simulation.database.db import Database
+                    from content.simulation.character_system.character import Character
+                    from content.simulation.services.media_generator import MediaGenerator
+                    from content.simulation.services.voice_message import VoiceMessageGenerator
+                    from content.simulation.services.video_message import VideoMessageGenerator
+                    db  = Database()
+                    mg  = MediaGenerator()
+                    vmg = VoiceMessageGenerator(db=db)
+                    vdg = VideoMessageGenerator(media_gen=mg, voice_gen=vmg, db=db)
+                    char = Character.load(vid_char, db=db)
+                    if char:
+                        result = vdg.generate_video_message(
+                            character_id=char.id,
+                            character_name=char.name,
+                            character_description=getattr(char, 'appearance', char.description or ''),
+                            text=vid_text,
+                            mood=vid_mood,
+                        )
+                        if result:
+                            st.success(f"Video created: {result['filename']}")
+                            st.video(result['filepath'])
+                        else:
+                            st.warning("Generation returned nothing. Check ComfyUI and CosyVoice are running.")
+                    else:
+                        st.error(f"Character {vid_char} not found.")
+                except Exception as e:
+                    st.error(f"Error: {e}")
+
+    # --- Voice ---
+    with tab_voice:
+        st.subheader("Generate Voice Message (TTS)")
+        char_list_v = []
+        try:
+            char_list_v = [c['id'] for c in st.session_state.asset_manager.search(asset_type="character")]
+        except Exception:
+            pass
+        v_char = st.selectbox("Character", char_list_v or ["(no characters)"], key="v_char")
+        v_text = st.text_area("Text", placeholder="Hey, just thinking of you ❤️")
+        v_emotion = st.selectbox("Emotion", ["happy", "flirty", "sad", "excited", "neutral", "romantic"])
+        if st.button("🎤 Generate Voice Message"):
+            with st.spinner("Generating TTS..."):
+                try:
+                    from content.simulation.database.db import Database
+                    from content.simulation.character_system.character import Character
+                    from content.simulation.services.voice_message import VoiceMessageGenerator
+                    db  = Database()
+                    vmg = VoiceMessageGenerator(db=db)
+                    char = Character.load(v_char, db=db)
+                    if char:
+                        result = vmg.generate_voice_message(
+                            character_id=char.id,
+                            character_name=char.name,
+                            text=v_text,
+                            emotion=v_emotion,
+                        )
+                        if result:
+                            st.success(f"Audio file: {result['filename']}")
+                            st.audio(result['filepath'])
+                        else:
+                            st.warning("TTS not available or returned nothing.")
+                    else:
+                        st.error(f"Character {v_char} not found.")
+                except Exception as e:
+                    st.error(f"Error: {e}")
+
+    # --- Story ---
+    with tab_story:
+        st.subheader("Generate Story / Scenario via LLM")
+        story_prompt = st.text_area("Prompt / Scenario brief", placeholder="Write a romantic evening scene where Emma and the user meet at a cafe...")
+        story_len = st.slider("Target length (tokens)", 100, 2000, 500, 50)
+        story_temp = st.slider("Temperature (creativity)", 0.1, 2.0, 0.85, 0.05)
+        if st.button("📖 Generate Story"):
+            with st.spinner("Generating via LLM..."):
+                try:
+                    from content.simulation.services.llm_service import get_llm_service
+                    llm = get_llm_service()
+                    result = llm.chat(
+                        messages=[{"role": "user", "content": story_prompt}],
+                        system_prompt="You are a creative fiction writer. Write vivid, immersive scenes. Adult content is allowed when requested.",
+                        temperature=story_temp,
+                        max_tokens=story_len,
+                    )
+                    st.markdown("---")
+                    st.markdown(result)
+                except Exception as e:
+                    st.error(f"Error: {e}")
 
 
 def show_log_viewer():

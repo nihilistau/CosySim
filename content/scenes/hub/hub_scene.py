@@ -1,7 +1,7 @@
 """
 Central Hub - Main Launcher Scene
 
-The central hub is the main entry point for the CosyVoice system.
+The central hub is the main entry point for the CosySim system.
 Features:
 - Scene launcher with previews
 - Asset browser
@@ -16,6 +16,7 @@ from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Optional
 import subprocess
+import socket
 import json
 
 # Add project root to path
@@ -28,7 +29,7 @@ from engine.config import ConfigManager
 
 # Page config
 st.set_page_config(
-    page_title="CosyVoice Central Hub",
+    page_title="CosySim Hub",
     page_icon="🏠",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -116,7 +117,7 @@ def main():
     init_session_state()
     
     # Header
-    st.markdown('<h1 class="main-header">🏠 CosyVoice Central Hub</h1>', unsafe_allow_html=True)
+    st.markdown('<h1 class="main-header">🏠 CosySim Hub</h1>', unsafe_allow_html=True)
     st.markdown('<p class="subtitle">Your gateway to the virtual companion system</p>', unsafe_allow_html=True)
     
     # Sidebar
@@ -171,83 +172,105 @@ def main():
         show_settings()
 
 
+def _port_open(port: int) -> bool:
+    """Check if a TCP port is listening on localhost."""
+    try:
+        with socket.create_connection(("127.0.0.1", port), timeout=0.5):
+            return True
+    except OSError:
+        return False
+
+
 def show_scene_launcher():
-    """Scene launcher with cards"""
+    """Scene launcher with live status cards"""
     st.header("🎮 Available Scenes")
-    
-    # Define available scenes
+
     scenes = [
         {
             "name": "Phone Scene",
             "icon": "📱",
-            "description": "Simulated Android phone with texting, calls, photos",
+            "description": "Simulated Android phone — texting, photos, autonomous messages",
             "port": 5555,
-            "script": "content/simulation/scenes/phone/phone_scene.py",
-            "color": "#667eea"
+            "launch_args": ["--mode", "phone"],
+            "color": "#667eea",
+        },
+        {
+            "name": "Bedroom Scene",
+            "icon": "🛏️",
+            "description": "Private penthouse environment with character interactions",
+            "port": 5556,
+            "launch_args": ["--mode", "bedroom"],
+            "color": "#f093fb",
         },
         {
             "name": "Dashboard",
             "icon": "📊",
-            "description": "Character management and system overview",
+            "description": "Character stats, relationship levels, activity feed",
             "port": 8501,
-            "script": "content/simulation/scenes/dashboard/dashboard_v2.py",
-            "color": "#764ba2"
-        },
-        {
-            "name": "Bedroom Scene",
-            "icon": "🏠",
-            "description": "Private penthouse environment",
-            "port": 5556,
-            "script": "content/simulation/scenes/bedroom/bedroom_scene.py",
-            "color": "#f093fb"
+            "launch_args": ["--mode", "dashboard"],
+            "color": "#764ba2",
         },
         {
             "name": "Admin Panel",
             "icon": "🎛️",
-            "description": "System administration and asset management",
+            "description": "Character editor, asset manager, running log",
             "port": 8502,
-            "script": "content/simulation/scenes/admin/admin_panel.py",
-            "color": "#f5576c"
-        }
+            "launch_args": ["--mode", "admin"],
+            "color": "#f5576c",
+        },
+        {
+            "name": "Asset Generator",
+            "icon": "🎨",
+            "description": "Generate images, videos, voices and stories via ComfyUI / TTS",
+            "port": 8503,
+            "launch_args": ["--mode", "assets"],
+            "color": "#0ea5e9",
+        },
     ]
-    
-    # Display scene cards in grid
+
     cols = st.columns(2)
-    
+    project_root_path = Path(__file__).parent.parent.parent
+
     for i, scene in enumerate(scenes):
         with cols[i % 2]:
+            running = _port_open(scene["port"])
+            status_badge = "🟢 Running" if running else "⚫ Stopped"
+            url = f"http://localhost:{scene['port']}"
+
             st.markdown(
                 f"""
-                <div class="scene-card" style="background: linear-gradient(135deg, {scene['color']} 0%, {scene['color']}dd 100%);">
+                <div class="scene-card" style="background: linear-gradient(135deg, {scene['color']} 0%, {scene['color']}cc 100%);">
                     <div class="scene-icon">{scene['icon']}</div>
                     <div class="scene-name">{scene['name']}</div>
                     <div class="scene-desc">{scene['description']}</div>
-                    <div style="margin-top: 1rem; font-size: 0.8rem;">Port: {scene['port']}</div>
+                    <div style="margin-top:0.6rem;font-size:0.85rem;">{status_badge} &bull; Port {scene['port']}</div>
                 </div>
                 """,
-                unsafe_allow_html=True
+                unsafe_allow_html=True,
             )
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                if st.button(f"🚀 Launch {scene['name']}", key=f"launch_{i}", use_container_width=True):
-                    st.success(f"Launching {scene['name']}...")
-                    st.info(f"Run: `python launcher.py --mode play`\nThen select option {i+1}")
-            
-            with col2:
-                if st.button(f"ℹ️ Info", key=f"info_{i}", use_container_width=True):
-                    st.info(f"""
-                    **{scene['name']}**
-                    
-                    Port: {scene['port']}
-                    Script: {scene['script']}
-                    
-                    {scene['description']}
-                    """)
-            
+
+            c1, c2 = st.columns(2)
+            with c1:
+                if running:
+                    if st.button(f"🔗 Open", key=f"open_{i}", use_container_width=True):
+                        st.markdown(f"**[Open {scene['name']}]({url})**")
+                else:
+                    if st.button(f"🚀 Launch", key=f"launch_{i}", use_container_width=True):
+                        try:
+                            subprocess.Popen(
+                                [sys.executable, str(project_root_path / "launcher.py")] + scene["launch_args"],
+                                cwd=str(project_root_path),
+                                creationflags=subprocess.CREATE_NEW_CONSOLE if sys.platform == "win32" else 0,
+                            )
+                            st.success(f"Launching {scene['name']}...")
+                        except Exception as e:
+                            st.error(f"Launch failed: {e}")
+            with c2:
+                if running:
+                    st.markdown(f"[🔗 {url}]({url})")
+
             st.markdown("<br>", unsafe_allow_html=True)
-    
-    # Create new scene
+
     st.markdown("---")
     st.subheader("➕ Create New Scene")
     
@@ -297,7 +320,7 @@ def show_tutorials():
     tutorials = [
         {
             "title": "🚀 Getting Started",
-            "description": "Learn the basics of CosyVoice",
+            "description": "Learn the basics of CosySim",
             "steps": [
                 "Launch a scene from the Scene Launcher",
                 "Create your first character in Admin Panel",
@@ -452,7 +475,7 @@ def show_settings():
         st.json({
             "version": "1.0.0",
             "environment": config.get("system.environment", "development"),
-            "name": config.get("system.name", "CosyVoice")
+            "name": config.get("system.name", "CosySim")
         })
     
     with col2:
