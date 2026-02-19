@@ -280,56 +280,95 @@ elif page == "👤 Characters":
     # EDIT CHARACTER TAB
     with tab3:
         st.subheader("Edit Character")
-        
+
         characters = st.session_state.db.get_all_characters()
-        
+
         if characters:
             char_options = {c['name']: c['id'] for c in characters}
             selected_name = st.selectbox("Select Character", list(char_options.keys()))
             selected_id = char_options[selected_name]
-            
+
             char_data = st.session_state.db.get_character(selected_id)
-            
+            state     = st.session_state.db.get_character_state(selected_id) or {}
+            meta      = char_data.get('metadata', {}) or {}
+
             if char_data:
                 with st.form("edit_character"):
+                    st.markdown("#### 💼 Identity")
                     col1, col2 = st.columns(2)
-                    
                     with col1:
-                        new_age = st.number_input("Age", value=char_data.get('age', 25))
-                        new_mood = st.selectbox(
-                            "Mood", 
-                            ["neutral", "happy", "sad", "playful", "romantic", "horny", "angry"],
-                            index=0
-                        )
-                    
+                        new_name       = st.text_input("Name",       value=char_data.get('name', ''))
+                        new_age        = st.number_input("Age",        value=int(char_data.get('age', 25) or 25), min_value=18, max_value=99)
+                        new_sex        = st.selectbox("Sex",          ["female", "male", "other"],
+                                                      index=["female","male","other"].index(char_data.get('sex','female'))
+                                                      if char_data.get('sex') in ["female","male","other"] else 0)
+                        new_occupation = st.text_input("Occupation",  value=meta.get('occupation', ''))
                     with col2:
-                        state = st.session_state.db.get_character_state(selected_id)
-                        current_rel = state.get('relationship_level', 0.0) if state else 0.0
-                        new_relationship = st.slider("Relationship Level", 0.0, 1.0, current_rel)
-                        
-                        current_arousal = state.get('arousal', 0.0) if state else 0.0
-                        new_arousal = st.slider("Arousal Level", 0.0, 1.0, current_arousal)
-                    
-                    # Tags
-                    current_tags = ", ".join(char_data.get('tags', []))
-                    new_tags_input = st.text_input("Tags", value=current_tags)
-                    
-                    if st.form_submit_button("Update Character"):
-                        # Update basic attributes
-                        st.session_state.db.update_character(selected_id, age=new_age)
-                        
-                        # Update state
+                        new_hair  = st.text_input("Hair Color",  value=char_data.get('hair_color', ''))
+                        new_eyes  = st.text_input("Eye Color",   value=char_data.get('eye_color', ''))
+                        new_height= st.text_input("Height",      value=char_data.get('height', ''))
+                        new_body  = st.text_input("Body Type",   value=char_data.get('body_type', ''))
+
+                    st.markdown("#### 🎭 State")
+                    col3, col4 = st.columns(2)
+                    with col3:
+                        mood_opts  = ["neutral","happy","sad","playful","romantic",
+                                      "flirty","loving","excited","horny","shy",
+                                      "teasing","protective","angry","anxious"]
+                        cur_mood   = state.get('mood', 'neutral')
+                        mood_idx   = mood_opts.index(cur_mood) if cur_mood in mood_opts else 0
+                        new_mood   = st.selectbox("Mood", mood_opts, index=mood_idx)
+                        new_energy = st.slider("Energy",        0.0, 1.0, float(state.get('energy', 0.8)))
+                    with col4:
+                        new_rel    = st.slider("Relationship Level", 0.0, 1.0, float(state.get('relationship_level', 0.0)))
+                        new_arousal= st.slider("Arousal Level",      0.0, 1.0, float(state.get('arousal', 0.0)))
+
+                    st.markdown("#### 📝 Profile")
+                    new_backstory  = st.text_area("Backstory",            value=char_data.get('backstory', '') or '', height=80)
+                    new_phys_desc  = st.text_area("Physical Description", value=meta.get('physical_description', ''), height=60)
+                    new_speech     = st.text_input("Speech Style",         value=meta.get('speech_style', ''))
+                    new_interests  = st.text_input("Interests",            value=meta.get('interests', ''))
+                    new_quirks     = st.text_input("Quirks",               value=meta.get('quirks', ''))
+                    new_fears      = st.text_input("Fears",                value=meta.get('fears', ''))
+                    new_secrets    = st.text_input("Secrets",              value=meta.get('secrets', ''))
+
+                    st.markdown("#### 🏷️ Tags")
+                    current_tags   = ", ".join(char_data.get('tags', []))
+                    new_tags_input = st.text_input("Tags (comma-separated)", value=current_tags)
+
+                    if st.form_submit_button("Update Character", type="primary"):
+                        # Build updated metadata
+                        new_meta = dict(meta)
+                        new_meta.update({
+                            'occupation':           new_occupation,
+                            'physical_description': new_phys_desc,
+                            'speech_style':         new_speech,
+                            'interests':            new_interests,
+                            'quirks':               new_quirks,
+                            'fears':                new_fears,
+                            'secrets':              new_secrets,
+                        })
+
+                        st.session_state.db.update_character(
+                            selected_id,
+                            name=new_name,
+                            age=new_age,
+                            sex=new_sex,
+                            hair_color=new_hair,
+                            eye_color=new_eyes,
+                            height=new_height,
+                            body_type=new_body,
+                            backstory=new_backstory,
+                            tags=[t.strip() for t in new_tags_input.split(',') if t.strip()],
+                            metadata=new_meta,
+                        )
                         st.session_state.db.update_character_state(
                             selected_id,
                             mood=new_mood,
-                            relationship_level=new_relationship,
-                            arousal=new_arousal
+                            energy=new_energy,
+                            relationship_level=new_rel,
+                            arousal=new_arousal,
                         )
-                        
-                        # Update tags
-                        new_tags = [t.strip() for t in new_tags_input.split(',') if t.strip()]
-                        st.session_state.db.update_character(selected_id, tags=new_tags)
-                        
                         st.success("✅ Character updated!")
                         st.rerun()
         else:
@@ -466,61 +505,95 @@ elif page == "🎬 Roles":
 
 # ============= MEMORIES PAGE =============
 elif page == "💾 Memories":
-    st.title("💾 Memory Browser")
-    
+    st.title("💾 Memory Management")
+
     characters = st.session_state.db.get_all_characters()
-    
-    if characters:
+
+    if not characters:
+        st.info("No characters available. Create one first!")
+    else:
         char_options = {c['name']: c['id'] for c in characters}
         selected_name = st.selectbox("Select Character", list(char_options.keys()))
         selected_id = char_options[selected_name]
-        
-        # Memory stats
-        mem_count = st.session_state.rag.get_memory_count(selected_id)
-        st.metric("Total Memories", mem_count)
-        
-        # Memory tabs
-        tab1, tab2, tab3 = st.tabs(["Recent", "Important", "Search"])
-        
-        with tab1:
-            st.subheader("Recent Memories")
-            recent = st.session_state.rag.get_recent_memories(selected_id, n_results=20)
-            
-            for mem in recent:
-                with st.container():
-                    col1, col2 = st.columns([4, 1])
-                    with col1:
-                        st.write(mem['content'])
-                    with col2:
-                        importance = mem['metadata'].get('importance', 0.5)
-                        st.progress(importance)
-                        st.caption(f"{importance:.0%}")
-                    
-                    st.caption(f"🕐 {mem['metadata'].get('timestamp', 'N/A')}")
-                    st.divider()
-        
-        with tab2:
-            st.subheader("Important Memories")
-            important = st.session_state.rag.get_important_memories(selected_id, n_results=10, min_importance=0.7)
-            
-            for mem in important:
-                st.info(mem['content'])
-                st.caption(f"Importance: {mem['metadata'].get('importance', 0):.0%} • {mem['metadata'].get('timestamp', 'N/A')}")
-        
-        with tab3:
+
+        mem_count = st.session_state.db.get_character_memories(selected_id)
+        st.metric("Total Memories", len(mem_count))
+
+        tab_browse, tab_add, tab_search = st.tabs(["Browse & Edit", "Add Memory", "Search"])
+
+        # ---- BROWSE & EDIT ----
+        with tab_browse:
+            memories = st.session_state.db.get_character_memories(selected_id, limit=100)
+
+            if not memories:
+                st.info("No memories yet.")
+            else:
+                for mem in memories:
+                    mem_id = mem['id']
+                    with st.expander(f"💭 {mem['content'][:80]}{'...' if len(mem['content'])>80 else ''}  •  {mem['importance']:.0%}"):
+                        col_edit, col_del = st.columns([5, 1])
+
+                        with col_edit:
+                            with st.form(f"edit_mem_{mem_id}"):
+                                new_content = st.text_area("Content",    value=mem['content'], height=80,
+                                                           key=f"content_{mem_id}")
+                                new_imp     = st.slider("Importance", 0.0, 1.0,
+                                                        float(mem.get('importance', 0.5)),
+                                                        key=f"imp_{mem_id}")
+                                if st.form_submit_button("💾 Save"):
+                                    st.session_state.db.update_memory(
+                                        mem_id, content=new_content, importance=new_imp
+                                    )
+                                    st.success("✅ Memory updated")
+                                    st.rerun()
+
+                        with col_del:
+                            if st.button("🗑️", key=f"del_{mem_id}", help="Delete this memory"):
+                                st.session_state.db.delete_memory(mem_id)
+                                st.success("Memory deleted")
+                                st.rerun()
+
+                        st.caption(f"🕐 {mem.get('timestamp','N/A')}  •  emotion: {mem.get('emotion') or 'none'}")
+
+        # ---- ADD MEMORY ----
+        with tab_add:
+            st.subheader("Add New Memory")
+            with st.form("add_memory"):
+                new_content = st.text_area("Memory Content *",
+                                           placeholder="She loves hiking in the mountains...",
+                                           height=100)
+                col_imp, col_emo = st.columns(2)
+                with col_imp:
+                    new_importance = st.slider("Importance", 0.0, 1.0, 0.5)
+                with col_emo:
+                    new_emotion = st.text_input("Emotion (optional)", placeholder="happy")
+
+                if st.form_submit_button("Add Memory", type="primary"):
+                    if not new_content.strip():
+                        st.error("Memory content is required!")
+                    else:
+                        st.session_state.db.add_memory(
+                            selected_id,
+                            new_content.strip(),
+                            importance=new_importance,
+                            emotion=new_emotion or None,
+                        )
+                        st.success("✅ Memory added!")
+                        st.rerun()
+
+        # ---- SEARCH ----
+        with tab_search:
             st.subheader("Search Memories")
             query = st.text_input("Search query", placeholder="What do you remember about...")
-            
+
             if st.button("Search") and query:
                 results = st.session_state.rag.query_memories(selected_id, query, n_results=10)
-                
+
                 for mem in results:
                     st.success(mem['content'])
-                    relevance = 1.0 - (mem['distance'] or 0)
+                    relevance = 1.0 - (mem.get('distance') or 0)
                     st.caption(f"Relevance: {relevance:.0%}")
                     st.divider()
-    else:
-        st.info("No characters available. Create one first!")
 
 
 # ============= DEPLOY PAGE =============

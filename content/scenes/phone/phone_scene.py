@@ -175,17 +175,10 @@ class PhoneScene(BaseScene):
         
         @self.app.route('/api/character/info', methods=['GET'])
         def get_character_info():
-            """Get active character info"""
+            """Get active character info — full payload for the character editor"""
             if not self.active_character:
                 return jsonify({'error': 'No active character'}), 400
-            
-            return jsonify({
-                'id': self.active_character.id,
-                'name': self.active_character.name,
-                'age': self.active_character.age,
-                'mood': self.active_character.mood,
-                'relationship_level': self.active_character.relationship_level
-            })
+            return jsonify(self.active_character.to_dict())
         
         @self.app.route('/api/messages/history', methods=['GET'])
         def get_message_history():
@@ -1141,19 +1134,22 @@ class PhoneScene(BaseScene):
             if not self.active_character:
                 return jsonify({'error': 'No active character'}), 400
             data = request.get_json() or {}
-            editable = {
-                'name', 'age', 'mood', 'relationship_level', 'personality',
-                'backstory', 'physical_description', 'interests', 'speech_style',
-                'occupation', 'hobbies', 'quirks', 'fears', 'secrets',
+            # Whitelist accepted keys to prevent injection vectors
+            ALLOWED = {
+                'name', 'age', 'sex', 'hair_color', 'eye_color', 'height', 'body_type',
+                'mood', 'energy', 'relationship_level', 'arousal',
+                'backstory', 'appearance', 'tags', 'avatar_url',
+                'occupation', 'physical_description', 'speech_style',
+                'interests', 'quirks', 'fears', 'secrets', 'personality',
             }
-            for k, v in data.items():
-                if k in editable and hasattr(self.active_character, k):
-                    setattr(self.active_character, k, v)
+            filtered = {k: v for k, v in data.items() if k in ALLOWED}
+            if not filtered:
+                return jsonify({'success': True, 'message': 'No valid fields provided'})
             try:
-                self.active_character.save(db=self.db)
+                self.active_character.save(**filtered)
             except Exception as e:
                 return jsonify({'error': f'Save failed: {e}'}), 500
-            return jsonify({'success': True})
+            return jsonify({'success': True, 'character': self.active_character.to_dict()})
 
         @self.app.route('/api/logs', methods=['GET'])
         def stream_logs():

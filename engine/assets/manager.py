@@ -547,6 +547,9 @@ class AssetManager:
             # Total versions
             cursor.execute("SELECT COUNT(*) FROM asset_versions")
             stats["total_versions"] = cursor.fetchone()[0]
+
+            # Registered type names (derived from by_type for backward compat)
+            stats["registered_types"] = list(stats["by_type"].keys())
             
             return stats
             

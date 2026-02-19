@@ -175,6 +175,62 @@ class Character:
             # Reload data
             self._data = self.db.get_character(self.id)
         return success
+
+    def save(self, **kwargs) -> bool:
+        """
+        Persist arbitrary kwargs to the right DB tables.
+
+        - State fields   (mood, energy, relationship_level, arousal) → update_state()
+        - Character table fields (name, age, sex, hair_color, eye_color, height,
+          body_type, tags, backstory, appearance, traits, avatar_url, personality_id,
+          role_id, voice_id) → update_attributes()
+        - Extended profile fields (occupation, physical_description, speech_style,
+          interests, quirks, fears, secrets, personality_name, …) → stored in
+          the metadata JSON column via update_attributes(metadata={…})
+
+        Returns True if at least one update succeeded.
+        """
+        STATE_FIELDS = {'mood', 'energy', 'relationship_level', 'arousal',
+                        'last_interaction', 'location', 'activity'}
+        CHAR_TABLE_FIELDS = {
+            'name', 'age', 'sex', 'hair_color', 'eye_color', 'height', 'body_type',
+            'tags', 'backstory', 'appearance', 'traits', 'avatar_url',
+            'personality_id', 'role_id', 'voice_id',
+        }
+
+        state_kwargs: Dict[str, Any] = {}
+        char_kwargs:  Dict[str, Any] = {}
+        meta_updates: Dict[str, Any] = {}
+
+        for k, v in kwargs.items():
+            if k in STATE_FIELDS:
+                state_kwargs[k] = v
+            elif k in CHAR_TABLE_FIELDS:
+                char_kwargs[k] = v
+            elif k == 'personality':
+                # Accept personality name string — look up personality_id
+                pers = self.db.get_personality_by_name(str(v)) if v else None
+                if pers:
+                    char_kwargs['personality_id'] = pers['id']
+                    self._personality = pers
+                else:
+                    meta_updates['personality_name'] = v
+            else:
+                meta_updates[k] = v
+
+        # Merge meta_updates into existing metadata
+        if meta_updates:
+            current_meta = dict(self.metadata or {})
+            current_meta.update(meta_updates)
+            char_kwargs['metadata'] = current_meta
+
+        results = []
+        if state_kwargs:
+            results.append(self.update_state(**state_kwargs))
+        if char_kwargs:
+            results.append(self.update_attributes(**char_kwargs))
+
+        return any(results)
     
     def add_tag(self, tag: str) -> bool:
         """Add a tag to the character"""
@@ -488,8 +544,11 @@ class Character:
         return False
     
     def to_dict(self) -> Dict:
-        """Convert character to dictionary"""
+        """Convert character to dictionary with all fields expanded"""
+        meta = self.metadata or {}
+        state = self._state or {}
         return {
+            # Core identity
             'id': self.id,
             'name': self.name,
             'age': self.age,
@@ -499,9 +558,31 @@ class Character:
             'height': self.height,
             'body_type': self.body_type,
             'tags': self.tags,
+            'backstory': self._data.get('backstory', ''),
+            'avatar_url': self._data.get('avatar_url', ''),
+            'appearance': self._data.get('appearance', ''),
+            # State
+            'mood': self.mood,
+            'energy': self.energy,
+            'relationship_level': self.relationship_level,
+            'arousal': self.arousal,
+            'last_interaction': state.get('last_interaction'),
+            # Extended profile (stored in metadata)
+            'occupation': meta.get('occupation', ''),
+            'physical_description': meta.get('physical_description', ''),
+            'speech_style': meta.get('speech_style', ''),
+            'interests': meta.get('interests', ''),
+            'quirks': meta.get('quirks', ''),
+            'fears': meta.get('fears', ''),
+            'secrets': meta.get('secrets', ''),
+            'personality_name': meta.get('personality_name', ''),
+            # Personality object and metadata
             'personality': self._personality,
-            'state': self._state,
-            'created_at': self._data.get('created_at')
+            'personality_id': self._data.get('personality_id'),
+            'metadata': meta,
+            'state': state,
+            'created_at': self._data.get('created_at'),
+            'updated_at': self._data.get('updated_at'),
         }
     
     @classmethod

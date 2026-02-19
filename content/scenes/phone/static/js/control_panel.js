@@ -31,6 +31,76 @@ function initControlPanel() {
 }
 
 // ════════════════════════════════════════════════════════════
+//  0b. Toast notifications
+// ════════════════════════════════════════════════════════════
+/**
+ * Show a floating toast notification.
+ * @param {string} message  - Text to display
+ * @param {'success'|'error'|'info'|'warning'} [type='info']
+ * @param {number} [duration=3000]  - ms before auto-dismiss
+ */
+function showToast(message, type = 'info', duration = 3000) {
+    // Create container if it doesn't exist yet
+    let container = document.getElementById('cp-toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'cp-toast-container';
+        Object.assign(container.style, {
+            position:  'fixed',
+            top:       '16px',
+            right:     '16px',
+            zIndex:    '9999',
+            display:   'flex',
+            flexDirection: 'column',
+            gap:       '8px',
+            pointerEvents: 'none',
+        });
+        document.body.appendChild(container);
+    }
+
+    const COLORS = {
+        success: { bg: '#22c55e', border: '#16a34a', icon: '✓' },
+        error:   { bg: '#ef4444', border: '#dc2626', icon: '✕' },
+        warning: { bg: '#f59e0b', border: '#d97706', icon: '⚠' },
+        info:    { bg: '#3b82f6', border: '#2563eb', icon: 'ℹ' },
+    };
+    const c = COLORS[type] || COLORS.info;
+
+    const toast = document.createElement('div');
+    Object.assign(toast.style, {
+        background:  c.bg,
+        border:      `1px solid ${c.border}`,
+        borderRadius:'8px',
+        color:       '#fff',
+        padding:     '10px 16px',
+        fontSize:    '13px',
+        fontWeight:  '500',
+        boxShadow:   '0 4px 12px rgba(0,0,0,0.35)',
+        opacity:     '0',
+        transition:  'opacity 0.25s ease, transform 0.25s ease',
+        transform:   'translateX(40px)',
+        pointerEvents:'auto',
+        maxWidth:    '320px',
+        wordBreak:   'break-word',
+    });
+    toast.textContent = `${c.icon}  ${message}`;
+    container.appendChild(toast);
+
+    // Animate in
+    requestAnimationFrame(() => {
+        toast.style.opacity   = '1';
+        toast.style.transform = 'translateX(0)';
+    });
+
+    // Auto-dismiss
+    setTimeout(() => {
+        toast.style.opacity   = '0';
+        toast.style.transform = 'translateX(40px)';
+        setTimeout(() => toast.remove(), 280);
+    }, duration);
+}
+
+// ════════════════════════════════════════════════════════════
 //  1.  Tab switching
 // ════════════════════════════════════════════════════════════
 const CP_TABS = ['status', 'character', 'settings', 'terminal'];
@@ -228,12 +298,14 @@ async function reloadCharacterEditor() {
 }
 
 function _fillCharEditor(c) {
-    const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val || ''; };
+    const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val ?? ''; };
     set('charName',        c.name);
     set('charAge',         c.age);
     set('charOccupation',  c.occupation);
     set('charRelLevel',    c.relationship_level);
-    set('charPersonality', c.personality);
+    // personality is an object in to_dict(); use name string for the text field
+    const personalityName = c.personality_name || (c.personality && c.personality.name) || '';
+    set('charPersonality', personalityName);
     set('charBackstory',   c.backstory);
     set('charPhysDesc',    c.physical_description);
     set('charSpeechStyle', c.speech_style);
@@ -278,9 +350,18 @@ async function saveCharacterEdits() {
             body: JSON.stringify(payload)
         });
         const d = await r.json();
-        if (d.success) appendLog({level:'INFO', ts:_ts(), message:'Character saved.'});
-        else appendLog({level:'ERROR', ts:_ts(), message:'Save failed: ' + (d.error||'')});
-    } catch (e) { appendLog({level:'ERROR', ts:_ts(), message:'Save error: '+e}); }
+        if (d.success) {
+            appendLog({level:'INFO', ts:_ts(), message:'Character saved.'});
+            showToast('Character saved!', 'success');
+        } else {
+            const msg = 'Save failed: ' + (d.error||'unknown error');
+            appendLog({level:'ERROR', ts:_ts(), message: msg});
+            showToast(msg, 'error');
+        }
+    } catch (e) {
+        appendLog({level:'ERROR', ts:_ts(), message:'Save error: '+e});
+        showToast('Save error: ' + e, 'error');
+    }
 }
 
 // ════════════════════════════════════════════════════════════
@@ -316,8 +397,16 @@ async function saveSettings() {
             body: JSON.stringify(payload)
         });
         const d = await r.json();
-        if (d.success) appendLog({level:'INFO', ts:_ts(), message:'Settings saved.'});
-    } catch (e) { appendLog({level:'ERROR', ts:_ts(), message:'Settings save error: '+e}); }
+        if (d.success) {
+            appendLog({level:'INFO', ts:_ts(), message:'Settings saved.'});
+            showToast('Settings saved!', 'success');
+        } else {
+            showToast('Settings save failed.', 'error');
+        }
+    } catch (e) {
+        appendLog({level:'ERROR', ts:_ts(), message:'Settings save error: '+e});
+        showToast('Settings save error: ' + e, 'error');
+    }
 }
 
 // ════════════════════════════════════════════════════════════

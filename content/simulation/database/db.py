@@ -235,8 +235,8 @@ class Database:
         """Update character attributes"""
         # Whitelist of allowed columns to prevent SQL injection
         ALLOWED_COLUMNS = {
-            'name', 'age', 'sex', 'hair_color', 'eye_color', 'personality_id',
-            'role_id', 'appearance', 'voice_id', 'traits', 'backstory',
+            'name', 'age', 'sex', 'hair_color', 'eye_color', 'height', 'body_type',
+            'personality_id', 'role_id', 'appearance', 'voice_id', 'traits', 'backstory',
             'tags', 'metadata', 'avatar_url'
         }
         
@@ -454,6 +454,36 @@ class Database:
             
             return memories
     
+    def update_memory(self, memory_id: str, **kwargs) -> bool:
+        """Update a memory entry's content and/or importance"""
+        ALLOWED = {'content', 'importance', 'emotion', 'metadata'}
+        updates = []
+        values = []
+        for key, value in kwargs.items():
+            if key not in ALLOWED:
+                raise ValueError(f"Invalid memory column: {key}")
+            if key == 'metadata':
+                value = json.dumps(value)
+            updates.append(f"{key} = ?")
+            values.append(value)
+        if not updates:
+            return False
+        values.append(memory_id)
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                f"UPDATE memories SET {', '.join(updates)} WHERE id = ?",
+                values
+            )
+            return cursor.rowcount > 0
+
+    def delete_memory(self, memory_id: str) -> bool:
+        """Delete a memory entry by ID"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM memories WHERE id = ?", (memory_id,))
+            return cursor.rowcount > 0
+
     # ============= CONVERSATION OPERATIONS =============
     
     def create_conversation(self, character_id: str, chain_id: str, **kwargs) -> str:
@@ -595,7 +625,7 @@ class Database:
         """Update character state"""
         # Whitelist of allowed columns to prevent SQL injection
         ALLOWED_COLUMNS = {
-            'mood', 'energy', 'relationship_level', 'last_interaction',
+            'mood', 'energy', 'relationship_level', 'arousal', 'last_interaction',
             'conversation_id', 'location', 'activity', 'metadata'
         }
         
