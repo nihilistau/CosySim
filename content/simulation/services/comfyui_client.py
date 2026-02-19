@@ -57,22 +57,30 @@ COMFYUI_BASE_URL = _get_comfyui_base_url()
 # ─────────────────────────────────────────────────────────────────────────────
 
 class PromptBuilder:
-    """Builds consistent prompts for character image/video generation."""
+    """Builds consistent prompts for character image/video generation.
 
-    # Appearance anchors used to keep character consistent across generations
-    LORA_STYLE = "realistic, photorealistic, 8k uhd, high detail, professional photography"
+    Escalation tiers control content intensity:
+      0 — innocent (casual clothing, natural pose)
+      1 — suggestive (tight/low-cut, inviting pose, bedroom eyes)
+      2 — lingerie (boudoir, underwear, intimate setting)
+      3 — nude (artistic nude, tasteful nudity)
+      4 — explicit (explicit nude, sexual pose — nsfw_enabled only)
+    """
+
+    # Quality anchors
+    QUALITY_PREFIX = "masterpiece, best quality, realistic, photorealistic, 8k uhd, high detail, professional photography"
+    QUALITY_SUFFIX = "sharp focus, detailed skin texture, natural lighting"
+
     NEGATIVE_BASE = (
-        "nsfw, nude, explicit, lowres, bad anatomy, bad hands, text, error, "
+        "lowres, bad anatomy, bad hands, text, error, "
         "missing fingers, extra digit, fewer digits, cropped, worst quality, "
         "low quality, normal quality, jpeg artifacts, signature, watermark, "
         "username, blurry, artist name, deformed, ugly, mutilated"
     )
-    NEGATIVE_SAFE = NEGATIVE_BASE
+    NEGATIVE_SAFE = "nsfw, nude, explicit, " + NEGATIVE_BASE
     NEGATIVE_NSFW = (
-        "lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, "
-        "fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, "
-        "signature, watermark, username, blurry, artist name, deformed, ugly, mutilated, "
-        "child, minor, underage"
+        NEGATIVE_BASE + ", child, minor, underage, "
+        "grotesque, gore, scat, extreme"
     )
 
     MOOD_MAP = {
@@ -80,10 +88,16 @@ class PromptBuilder:
         "playful": "playful grin, mischievous smile, sparkling eyes",
         "flirty": "flirty smile, seductive gaze, inviting look, smirk",
         "seductive": "seductive gaze, sultry expression, alluring, bedroom eyes",
+        "aroused": "flushed cheeks, parted lips, heavy-lidded eyes, sensual gaze",
+        "passionate": "intense gaze, flushed skin, passionate expression, biting lip",
+        "teasing": "teasing smirk, playful wink, coy expression, tilted head",
+        "needy": "vulnerable expression, pleading eyes, soft pout, yearning look",
+        "confident": "confident expression, strong gaze, self-assured smile, power pose",
         "shy": "shy smile, blushing, looking down slightly, soft expression",
         "excited": "excited expression, wide smile, energetic, vibrant",
         "loving": "warm loving smile, soft gaze, affectionate, tender",
         "mysterious": "confident mysterious gaze, subtle smile, intense eyes",
+        "vulnerable": "soft vulnerable expression, doe eyes, gentle, exposed",
         "sad": "melancholy expression, downcast eyes, wistful",
         "angry": "stern expression, furrowed brow",
         "surprised": "surprised look, wide eyes, open mouth smile",
@@ -103,14 +117,82 @@ class PromptBuilder:
         "video_call": "neutral clean background, good lighting, facing camera",
         "lingerie": "bedroom setting, soft pink lighting, elegant lingerie",
         "nude": "bedroom, soft light, artistic nude photography",
+        "bath": "luxurious bathroom, steam, candlelight, bubble bath",
+        "shower": "shower setting, wet skin, steam, glass, water droplets",
+        "pool": "poolside, sparkling water, sun-kissed skin, summer vibes",
+        "couch": "cozy couch, blanket, living room, relaxed setting",
+        "kitchen": "modern kitchen, morning coffee, casual domestic setting",
+        "balcony": "balcony at night, city skyline, moonlight, wine glass",
+        "hotel_room": "luxury hotel room, king bed, ambient lighting, elegant",
+        "mirror": "mirror selfie, bathroom mirror, phone in hand, reflection",
+    }
+
+    # ── Escalation tier prompt fragments ────────────────────────────────
+    TIER_PROMPTS = {
+        0: {  # Innocent
+            "clothing": "casual everyday clothing, dressed modestly",
+            "pose": "natural relaxed pose, standing or sitting casually",
+            "extra": "",
+        },
+        1: {  # Suggestive
+            "clothing": "tight fitting clothes, low-cut top, showing curves",
+            "pose": "inviting pose, hand on hip, looking over shoulder, confident stance",
+            "extra": "attractive, alluring, body-conscious outfit",
+        },
+        2: {  # Lingerie
+            "clothing": "elegant lingerie, lace bra, silk underwear, stockings",
+            "pose": "boudoir pose, lying on bed, kneeling, sensual body language",
+            "extra": "intimate, boudoir photography, soft pink lighting, sensual",
+        },
+        3: {  # Nude (artistic)
+            "clothing": "nude, artistic nudity, tasteful, implied nudity, covering with hands or sheets",
+            "pose": "artistic nude pose, elegant, body curves, tasteful composition",
+            "extra": "fine art nude, natural beauty, soft lighting, sensual",
+        },
+        4: {  # Explicit
+            "clothing": "fully nude, naked, no clothing, exposed",
+            "pose": "provocative pose, sexual, explicit, spread, inviting",
+            "extra": "explicit, sexual, erotic photography, uncensored",
+        },
     }
 
     @staticmethod
     def build_character_seed(appearance: str) -> str:
         """Create a stable appearance anchor string."""
-        # Hash appearance for consistency between calls
         h = hashlib.md5(appearance.encode()).hexdigest()[:6]
         return f"consistent character, same person, {appearance}"
+
+    @classmethod
+    def character_description(
+        cls,
+        age: int = 25,
+        gender: str = "woman",
+        ethnicity: str = "",
+        hair_color: str = "",
+        hair_style: str = "",
+        eye_color: str = "",
+        body_type: str = "",
+        features: str = "",
+    ) -> str:
+        """Build a structured visual description string for prompt injection.
+
+        Example output: ``"22 year old blonde woman, long wavy hair, blue eyes,
+        slim athletic build, freckles"``
+        """
+        parts = [f"{age} year old"]
+        if ethnicity:
+            parts.append(ethnicity)
+        parts.append(gender)
+        if hair_color or hair_style:
+            hair = " ".join(filter(None, [hair_color, hair_style, "hair"]))
+            parts.append(hair)
+        if eye_color:
+            parts.append(f"{eye_color} eyes")
+        if body_type:
+            parts.append(f"{body_type} build")
+        if features:
+            parts.append(features)
+        return ", ".join(parts)
 
     @classmethod
     def selfie(
@@ -120,22 +202,38 @@ class PromptBuilder:
         setting: str = "casual",
         nsfw: bool = False,
         extra: str = "",
+        tier: int = 0,
     ) -> Tuple[str, str]:
-        """Build (positive_prompt, negative_prompt) for a character selfie."""
+        """Build (positive_prompt, negative_prompt) for a character selfie.
+
+        Args:
+            appearance: Character visual description.
+            mood: Mood key from MOOD_MAP.
+            setting: Setting key from SETTING_MAP.
+            nsfw: Master NSFW toggle.
+            extra: Additional prompt text appended at end.
+            tier: Escalation tier 0–4 (higher = more explicit).
+        """
         mood_desc = cls.MOOD_MAP.get(mood, cls.MOOD_MAP["neutral"])
         setting_desc = cls.SETTING_MAP.get(setting, cls.SETTING_MAP["casual"])
         char_anchor = cls.build_character_seed(appearance)
 
+        # Clamp tier: without nsfw, max is 1
+        effective_tier = min(tier, 1) if not nsfw else min(tier, 4)
+        tier_data = cls.TIER_PROMPTS.get(effective_tier, cls.TIER_PROMPTS[0])
+
         positive = (
-            f"{cls.LORA_STYLE}, "
-            f"portrait of a beautiful woman, {char_anchor}, "
+            f"{cls.QUALITY_PREFIX}, "
+            f"portrait of a beautiful {appearance}, {char_anchor}, "
             f"{mood_desc}, {setting_desc}, "
+            f"{tier_data['clothing']}, {tier_data['pose']}, "
             f"selfie perspective, close up, face visible"
         )
+        if tier_data["extra"]:
+            positive += f", {tier_data['extra']}"
         if extra:
             positive += f", {extra}"
-        if nsfw and setting in ("bedroom", "lingerie", "nude"):
-            positive += ", tasteful nudity, artistic, sensual"
+        positive += f", {cls.QUALITY_SUFFIX}"
 
         negative = cls.NEGATIVE_NSFW if nsfw else cls.NEGATIVE_SAFE
         return positive, negative
@@ -163,15 +261,19 @@ class PromptBuilder:
 def _default_image_workflow(positive: str, negative: str, seed: int = -1, model: str = "v1-5-pruned-emaonly.ckpt") -> Dict:
     """
     Minimal ComfyUI workflow (API format) for image generation.
-    Auto-selects resolution: 1024×1024 for SDXL/Pony/Flux models, 512×768 for SD1.5.
+    Reads target resolution from MediaConfig; falls back to auto-select by model family.
     """
     if seed == -1:
         seed = int(uuid.uuid4().int % (2**31))
 
-    # SDXL-family models need higher resolution
-    _xl_keywords = ("xl", "sdxl", "pony", "flux", "juggernaut")
-    is_xl = any(k in model.lower() for k in _xl_keywords)
-    width, height = (1024, 1024) if is_xl else (512, 768)
+    # Try MediaConfig first, then fall back to model-based auto-select
+    try:
+        from engine.media.media_config import get_media_config
+        width, height = get_media_config().image_dims("selfie")
+    except Exception:
+        _xl_keywords = ("xl", "sdxl", "pony", "flux", "juggernaut")
+        is_xl = any(k in model.lower() for k in _xl_keywords)
+        width, height = (1024, 1024) if is_xl else (512, 768)
 
     return {
         "3": {

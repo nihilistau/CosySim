@@ -25,8 +25,8 @@ from engine.skills.skill import skill
 def generate_image(
     prompt: str,
     negative_prompt: str = "",
-    width: int = 512,
-    height: int = 512,
+    width: int = 0,
+    height: int = 0,
     steps: int = 20,
     cfg_scale: float = 7.0,
     style: str = "realistic",
@@ -37,8 +37,8 @@ def generate_image(
     Args:
         prompt:          Text description of the desired image.
         negative_prompt: Things to exclude from the image.
-        width:           Image width in pixels (multiples of 64 recommended).
-        height:          Image height in pixels (multiples of 64 recommended).
+        width:           Image width (0 = use MediaConfig default).
+        height:          Image height (0 = use MediaConfig default).
         steps:           Diffusion steps (higher = better quality, slower).
         cfg_scale:       Prompt guidance strength (7–12 typical).
         style:           Style hint: "realistic", "anime", "portrait", "fantasy".
@@ -50,6 +50,14 @@ def generate_image(
         from engine.config import get_config
         from engine.skills.chain_context import get_chain_context
         from content.simulation.services.comfyui_client import ComfyUIClient
+
+        # Read standard dimensions from MediaConfig
+        if width == 0 or height == 0:
+            try:
+                from engine.media.media_config import get_media_config
+                width, height = get_media_config().image_dims("selfie")
+            except Exception:
+                width, height = 512, 768
 
         ctx      = get_chain_context()
         config   = get_config()

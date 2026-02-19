@@ -98,6 +98,19 @@ comfyui:
   base_url: "http://localhost:8188"
   timeout: 300
 
+# Media standards — all services read dimensions from here
+media_standards:
+  image:
+    selfie:    { width: 512, height: 768, format: png }
+    portrait:  { width: 512, height: 768, format: png }
+    thumbnail: { width: 200, height: 200, format: jpg }
+  video:
+    message: { width: 640, height: 480, fps: 24, codec: h264, max_duration: 15 }
+    call:    { width: 640, height: 480, fps: 15, codec: h264 }
+  audio:
+    voice_message: { sample_rate: 22050, channels: 1, format: wav, min_duration: 10, max_duration: 3600 }
+    voice_mail:    { sample_rate: 22050, channels: 1, format: wav, min_duration: 10, max_duration: 3600 }
+
 # MCP (Model Context Protocol) servers
 mcp:
   servers: []
@@ -132,7 +145,7 @@ services:
   video_calls:
     enabled: true
     fps: 15
-    resolution: [512, 512]
+    resolution: [640, 480]
 
 # Asset management
 assets:

@@ -35,8 +35,13 @@ class VoiceMessageGenerator:
         self.voice_dir = Path(__file__).parent.parent / "media" / "voice"
         self.voice_dir.mkdir(parents=True, exist_ok=True)
         
-        # Default voice settings
-        self.sample_rate = 22050
+        # Voice settings from centralised MediaConfig
+        try:
+            from engine.media.media_config import get_media_config
+            spec = get_media_config().audio_spec("voice_message")
+            self.sample_rate = spec.get("sample_rate", 22050)
+        except Exception:
+            self.sample_rate = 22050
         self.prompt_wav = None  # Character's voice sample
         self.prompt_text = "Hello, this is my voice."
     

@@ -1,1033 +1,568 @@
 /**
- * 3D Bedroom Scene - Three.js Implementation
- * Penthouse bedroom with character interaction
+ * Bedroom Scene — Multi-Agent 3D Playground
+ * Two characters move between 7 locations, converse, flirt, and exhibit
+ * emergent behaviour.  The user can observe or direct via whispers.
  */
 
-// Scene variables
+// ─── Three.js globals ──────────────────────────────────────────────────
 let scene, camera, renderer, controls;
-let character, characterSprite;
-let roomMesh, floorMesh, bedMesh;
 let ambientLight, directionalLight, pointLights = [];
-let skybox;
-let particles = [];
-let socket;
 let clock = new THREE.Clock();
-let currentAnimation = 'idle';
-let timeOfDay = 'afternoon';
+let timeOfDay = 'evening';
 
-// FPS counter
-let lastTime = performance.now();
-let frames = 0;
+// Location 3D markers  { id → THREE.Mesh }
+const locationMarkers = {};
+// Character sprites { charId → { mesh, targetPos, currentLoc } }
+const charSprites = {};
+// Color palette for characters
+const CHAR_COLORS = ['#ff6b9d', '#51cf66'];
 
-// Configuration
+// ─── App state ─────────────────────────────────────────────────────────
+let sceneState = {};
+let agentRunning = false;
+let currentMode = 'observe';
+let socket = null;
+let allCharacters = [];  // from /api/characters/list
+
+// FPS
+let lastFpsTime = performance.now();
+let fpsFrames = 0;
+
+// ─── Configuration ─────────────────────────────────────────────────────
 const CONFIG = {
-    cameraPosition: { x: 8, y: 5, z: 8 },
-    cameraTarget: { x: 0, y: 2, z: 0 },
-    characterPosition: { x: 0, y: 0, z: 0 },
-    roomSize: { width: 12, height: 4, depth: 10 }
+    cameraPos: { x: 10, y: 8, z: 10 },
+    cameraTarget: { x: 0, y: 1, z: 0 },
+    roomSize: { w: 14, h: 4, d: 12 },
 };
 
-/**
- * Initialize the scene
- */
+// ═══════════════════════════════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════════════════════════════
 function init() {
-    console.log('Initializing 3D Bedroom Scene...');
-    
-    // Setup renderer
     const canvas = document.getElementById('bedroom-canvas');
-    renderer = new THREE.WebGLRenderer({ 
-        canvas: canvas, 
-        antialias: true,
-        alpha: false
-    });
+    renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    
-    // Create scene
+
     scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x87ceeb);
-    scene.fog = new THREE.Fog(0x87ceeb, 20, 50);
-    
-    // Setup camera
-    camera = new THREE.PerspectiveCamera(
-        60,
-        window.innerWidth / window.innerHeight,
-        0.1,
-        1000
-    );
-    camera.position.set(CONFIG.cameraPosition.x, CONFIG.cameraPosition.y, CONFIG.cameraPosition.z);
-    
-    // Setup controls
+    scene.background = new THREE.Color(0x1a1a2e);
+
+    camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 500);
+    camera.position.set(CONFIG.cameraPos.x, CONFIG.cameraPos.y, CONFIG.cameraPos.z);
+
     controls = new THREE.OrbitControls(camera, renderer.domElement);
     controls.target.set(CONFIG.cameraTarget.x, CONFIG.cameraTarget.y, CONFIG.cameraTarget.z);
     controls.enableDamping = true;
-    controls.dampingFactor = 0.05;
-    controls.minDistance = 3;
-    controls.maxDistance = 20;
-    controls.maxPolarAngle = Math.PI / 2;
+    controls.dampingFactor = 0.08;
+    controls.minDistance = 5;
+    controls.maxDistance = 25;
+    controls.maxPolarAngle = Math.PI / 2.1;
     controls.update();
-    
-    // Create lighting
+
     createLighting();
-    
-    // Create room
     createRoom();
-    
-    // Create furniture
-    createFurniture();
-    
-    // Create windows and skybox
-    createWindows();
-    
-    // Create character
-    createCharacter();
-    
-    // Setup interactions
-    setupInteractions();
-    
-    // Connect to server
     connectSocket();
-    
-    // Start animation loop
+    fetchState();
+
     animate();
-    
-    // Hide loading screen
-    hideLoadingScreen();
-    
-    console.log('Scene initialized successfully!');
+    console.log('Bedroom scene initialized!');
 }
 
-/**
- * Create lighting system
- */
+// ═══════════════════════════════════════════════════════════════════════
+//  LIGHTING
+// ═══════════════════════════════════════════════════════════════════════
 function createLighting() {
-    // Ambient light
-    ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+    ambientLight = new THREE.AmbientLight(0xffffff, 0.25);
     scene.add(ambientLight);
-    
-    // Directional light (sun)
-    directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+
+    directionalLight = new THREE.DirectionalLight(0xffeedd, 0.6);
     directionalLight.position.set(5, 10, 5);
     directionalLight.castShadow = true;
-    directionalLight.shadow.mapSize.width = 2048;
-    directionalLight.shadow.mapSize.height = 2048;
-    directionalLight.shadow.camera.near = 0.5;
-    directionalLight.shadow.camera.far = 50;
-    directionalLight.shadow.camera.left = -15;
-    directionalLight.shadow.camera.right = 15;
-    directionalLight.shadow.camera.top = 15;
-    directionalLight.shadow.camera.bottom = -15;
     scene.add(directionalLight);
-    
-    // Point lights (room lighting)
-    const pointLight1 = new THREE.PointLight(0xfff5e6, 0.5, 10);
-    pointLight1.position.set(3, 3.5, 0);
-    scene.add(pointLight1);
-    pointLights.push(pointLight1);
-    
-    const pointLight2 = new THREE.PointLight(0xfff5e6, 0.5, 10);
-    pointLight2.position.set(-3, 3.5, 0);
-    scene.add(pointLight2);
-    pointLights.push(pointLight2);
-}
 
-/**
- * Update lighting based on time of day
- */
-function updateLighting(lighting) {
-    const color = new THREE.Color(lighting.color);
-    ambientLight.intensity = lighting.ambient;
-    directionalLight.intensity = lighting.directional;
-    directionalLight.color = color;
-    
-    // Update point lights for night time
-    const nightIntensity = timeOfDay === 'night' ? 0.8 : 0.3;
-    pointLights.forEach(light => {
-        light.intensity = nightIntensity;
+    // Warm room point lights
+    [{ x: -3, z: -3 }, { x: 3, z: 0 }, { x: 0, z: -5 }].forEach(p => {
+        const pl = new THREE.PointLight(0xffddaa, 0.4, 10);
+        pl.position.set(p.x, 3, p.z);
+        scene.add(pl);
+        pointLights.push(pl);
     });
 }
 
-/**
- * Create the bedroom
- */
+function applyLighting(preset) {
+    if (!preset) return;
+    const c = new THREE.Color(preset.color);
+    ambientLight.intensity = preset.ambient * 0.6;
+    directionalLight.intensity = preset.directional;
+    directionalLight.color = c;
+    const nightMul = (timeOfDay === 'night') ? 0.7 : 0.4;
+    pointLights.forEach(l => l.intensity = nightMul);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  ROOM GEOMETRY
+// ═══════════════════════════════════════════════════════════════════════
 function createRoom() {
-    const { width, height, depth } = CONFIG.roomSize;
-    
+    const { w, h, d } = CONFIG.roomSize;
+
     // Floor
-    const floorGeometry = new THREE.PlaneGeometry(width, depth);
-    const floorMaterial = new THREE.MeshStandardMaterial({
-        color: 0x8b7355,
-        roughness: 0.8,
-        metalness: 0.2
-    });
-    floorMesh = new THREE.Mesh(floorGeometry, floorMaterial);
-    floorMesh.rotation.x = -Math.PI / 2;
-    floorMesh.receiveShadow = true;
-    scene.add(floorMesh);
-    
-    // Add wood texture effect
-    const floorTexture = createWoodTexture();
-    floorMaterial.map = floorTexture;
-    floorMaterial.needsUpdate = true;
-    
-    // Walls
-    const wallMaterial = new THREE.MeshStandardMaterial({
-        color: 0xf5f5dc,
-        roughness: 0.9,
-        metalness: 0.1
-    });
-    
-    // Back wall
-    const backWallGeometry = new THREE.BoxGeometry(width, height, 0.2);
-    const backWall = new THREE.Mesh(backWallGeometry, wallMaterial);
-    backWall.position.set(0, height / 2, -depth / 2);
-    backWall.receiveShadow = true;
-    scene.add(backWall);
-    
-    // Left wall
-    const sideWallGeometry = new THREE.BoxGeometry(0.2, height, depth);
-    const leftWall = new THREE.Mesh(sideWallGeometry, wallMaterial);
-    leftWall.position.set(-width / 2, height / 2, 0);
-    leftWall.receiveShadow = true;
-    scene.add(leftWall);
-    
-    // Right wall (partial - windows)
-    const rightWall = new THREE.Mesh(sideWallGeometry, wallMaterial);
-    rightWall.position.set(width / 2, height / 2, 0);
-    rightWall.receiveShadow = true;
-    scene.add(rightWall);
-    
-    // Ceiling
-    const ceilingGeometry = new THREE.PlaneGeometry(width, depth);
-    const ceilingMaterial = new THREE.MeshStandardMaterial({
-        color: 0xffffff,
-        roughness: 0.7,
-        metalness: 0.1
-    });
-    const ceiling = new THREE.Mesh(ceilingGeometry, ceilingMaterial);
-    ceiling.rotation.x = Math.PI / 2;
-    ceiling.position.y = height;
-    ceiling.receiveShadow = true;
-    scene.add(ceiling);
+    const floorGeo = new THREE.PlaneGeometry(w, d);
+    const floorMat = new THREE.MeshStandardMaterial({ color: 0x3d2b1f, roughness: 0.85 });
+    const floor = new THREE.Mesh(floorGeo, floorMat);
+    floor.rotation.x = -Math.PI / 2;
+    floor.receiveShadow = true;
+    scene.add(floor);
+
+    // Walls (3 sides — front open for camera)
+    const wallMat = new THREE.MeshStandardMaterial({ color: 0x2a2a3d, roughness: 0.9 });
+    const addWall = (geo, x, y, z) => {
+        const m = new THREE.Mesh(geo, wallMat);
+        m.position.set(x, y, z);
+        m.receiveShadow = true;
+        scene.add(m);
+    };
+    addWall(new THREE.BoxGeometry(w, h, 0.15), 0, h / 2, -d / 2); // back
+    addWall(new THREE.BoxGeometry(0.15, h, d), -w / 2, h / 2, 0); // left
+    addWall(new THREE.BoxGeometry(0.15, h, d), w / 2, h / 2, 0);  // right
 }
 
-/**
- * Create furniture
- */
-function createFurniture() {
-    // Bed
-    const bedFrame = new THREE.BoxGeometry(3, 0.3, 4);
-    const bedMaterial = new THREE.MeshStandardMaterial({
-        color: 0x654321,
-        roughness: 0.7,
-        metalness: 0.3
-    });
-    bedMesh = new THREE.Mesh(bedFrame, bedMaterial);
-    bedMesh.position.set(-3, 0.15, -3);
-    bedMesh.castShadow = true;
-    scene.add(bedMesh);
-    
-    // Mattress
-    const mattressGeometry = new THREE.BoxGeometry(2.8, 0.4, 3.8);
-    const mattressMaterial = new THREE.MeshStandardMaterial({
-        color: 0xf0f0f0,
-        roughness: 0.8,
-        metalness: 0.1
-    });
-    const mattress = new THREE.Mesh(mattressGeometry, mattressMaterial);
-    mattress.position.set(-3, 0.55, -3);
-    mattress.castShadow = true;
-    scene.add(mattress);
-    
-    // Pillow
-    const pillowGeometry = new THREE.BoxGeometry(0.8, 0.2, 0.6);
-    const pillowMaterial = new THREE.MeshStandardMaterial({
-        color: 0xffffff,
-        roughness: 0.9
-    });
-    const pillow = new THREE.Mesh(pillowGeometry, pillowMaterial);
-    pillow.position.set(-3, 0.85, -4.2);
-    pillow.castShadow = true;
-    scene.add(pillow);
-    
-    // Nightstand
-    const nightstandGeometry = new THREE.BoxGeometry(0.8, 1, 0.6);
-    const nightstandMaterial = new THREE.MeshStandardMaterial({
-        color: 0x8b4513,
-        roughness: 0.5,
-        metalness: 0.2
-    });
-    const nightstand = new THREE.Mesh(nightstandGeometry, nightstandMaterial);
-    nightstand.position.set(-5, 0.5, -3);
-    nightstand.castShadow = true;
-    scene.add(nightstand);
-    
-    // Lamp on nightstand
-    const lampBaseGeometry = new THREE.CylinderGeometry(0.1, 0.15, 0.5, 8);
-    const lampMaterial = new THREE.MeshStandardMaterial({
-        color: 0xccaa77,
-        roughness: 0.3,
-        metalness: 0.7
-    });
-    const lampBase = new THREE.Mesh(lampBaseGeometry, lampMaterial);
-    lampBase.position.set(-5, 1.25, -3);
-    scene.add(lampBase);
-    
-    // Lamp shade
-    const lampShadeGeometry = new THREE.ConeGeometry(0.3, 0.4, 8);
-    const lampShadeMaterial = new THREE.MeshStandardMaterial({
-        color: 0xffffee,
-        roughness: 0.8,
-        emissive: 0xffffaa,
-        emissiveIntensity: 0.2
-    });
-    const lampShade = new THREE.Mesh(lampShadeGeometry, lampShadeMaterial);
-    lampShade.position.set(-5, 1.7, -3);
-    scene.add(lampShade);
-    
-    // Dresser
-    const dresserGeometry = new THREE.BoxGeometry(2, 1.5, 0.8);
-    const dresserMaterial = new THREE.MeshStandardMaterial({
-        color: 0x8b4513,
-        roughness: 0.5,
-        metalness: 0.2
-    });
-    const dresser = new THREE.Mesh(dresserGeometry, dresserMaterial);
-    dresser.position.set(4, 0.75, -4.5);
-    dresser.castShadow = true;
-    scene.add(dresser);
-    
-    // Rug
-    const rugGeometry = new THREE.PlaneGeometry(4, 3);
-    const rugMaterial = new THREE.MeshStandardMaterial({
-        color: 0xaa6644,
-        roughness: 1.0,
-        metalness: 0.0
-    });
-    const rug = new THREE.Mesh(rugGeometry, rugMaterial);
-    rug.rotation.x = -Math.PI / 2;
-    rug.position.set(0, 0.01, 0);
-    rug.receiveShadow = true;
-    scene.add(rug);
+// ═══════════════════════════════════════════════════════════════════════
+//  LOCATION MARKERS  (created dynamically from server state)
+// ═══════════════════════════════════════════════════════════════════════
+function buildLocationMarkers(locations) {
+    // Remove old markers
+    Object.values(locationMarkers).forEach(m => scene.remove(m));
+    for (const k in locationMarkers) delete locationMarkers[k];
+
+    for (const [id, loc] of Object.entries(locations)) {
+        const pos = loc.pos || { x: 0, y: 0, z: 0 };
+
+        // Glowing disc on floor
+        const geo = new THREE.CylinderGeometry(0.8, 0.8, 0.05, 32);
+        const hue = (loc.spiciness || 1) / 5;
+        const col = new THREE.Color().setHSL(0.0 + hue * 0.08, 0.6, 0.35 + hue * 0.1);
+        const mat = new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: 0.3, transparent: true, opacity: 0.7 });
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.position.set(pos.x, 0.03, pos.z);
+        mesh.userData = { locId: id, locName: loc.name };
+        scene.add(mesh);
+        locationMarkers[id] = mesh;
+
+        // Label (CSS would be nicer, but a simple sprite works)
+        const label = makeTextSprite(loc.name, 0.6);
+        label.position.set(pos.x, 0.6, pos.z);
+        scene.add(label);
+    }
 }
 
-/**
- * Create windows with city skyline
- */
-function createWindows() {
-    const windowGeometry = new THREE.PlaneGeometry(4, 3);
-    
-    // Create gradient sky texture
+function makeTextSprite(text, scale) {
     const canvas = document.createElement('canvas');
-    canvas.width = 512;
-    canvas.height = 512;
+    canvas.width = 256; canvas.height = 64;
     const ctx = canvas.getContext('2d');
-    
-    // Sky gradient
-    const gradient = ctx.createLinearGradient(0, 0, 0, 512);
-    gradient.addColorStop(0, '#87ceeb');
-    gradient.addColorStop(0.5, '#b0d4f1');
-    gradient.addColorStop(1, '#e0f2ff');
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, 512, 512);
-    
-    // Add simple city silhouette
-    ctx.fillStyle = '#333333';
-    for (let i = 0; i < 20; i++) {
-        const x = (i * 30) % 512;
-        const height = Math.random() * 200 + 100;
-        const width = 25;
-        ctx.fillRect(x, 512 - height, width, height);
-        
-        // Add windows to buildings
-        ctx.fillStyle = '#ffee88';
-        for (let y = 512 - height + 10; y < 512; y += 20) {
-            for (let wx = x + 5; wx < x + width - 5; wx += 8) {
-                if (Math.random() > 0.3) {
-                    ctx.fillRect(wx, y, 4, 8);
-                }
-            }
-        }
-        ctx.fillStyle = '#333333';
-    }
-    
-    const texture = new THREE.CanvasTexture(canvas);
-    
-    const windowMaterial = new THREE.MeshBasicMaterial({
-        map: texture,
-        side: THREE.DoubleSide
-    });
-    
-    // Window 1
-    const window1 = new THREE.Mesh(windowGeometry, windowMaterial);
-    window1.position.set(0, 2, 4.9);
-    scene.add(window1);
-    
-    // Window 2
-    const window2 = new THREE.Mesh(windowGeometry, windowMaterial.clone());
-    window2.position.set(4, 2, 4.9);
-    scene.add(window2);
-    
-    // Window frame
-    const frameMaterial = new THREE.MeshStandardMaterial({
-        color: 0x444444,
-        roughness: 0.3,
-        metalness: 0.7
-    });
-    
-    const frameGeometry = new THREE.BoxGeometry(4.2, 0.1, 0.1);
-    const frame1Top = new THREE.Mesh(frameGeometry, frameMaterial);
-    frame1Top.position.set(0, 3.5, 4.95);
-    scene.add(frame1Top);
-    
-    const frame1Bottom = new THREE.Mesh(frameGeometry, frameMaterial);
-    frame1Bottom.position.set(0, 0.5, 4.95);
-    scene.add(frame1Bottom);
+    ctx.fillStyle = 'rgba(0,0,0,0)';
+    ctx.fillRect(0, 0, 256, 64);
+    ctx.font = 'bold 28px sans-serif';
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'center';
+    ctx.fillText(text, 128, 40);
+    const tex = new THREE.CanvasTexture(canvas);
+    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
+    const sp = new THREE.Sprite(mat);
+    sp.scale.set(scale * 2, scale * 0.5, 1);
+    return sp;
 }
 
-/**
- * Create character
- */
-function createCharacter() {
-    // Create a simple character using a sprite
-    const canvas = document.createElement('canvas');
-    canvas.width = 256;
-    canvas.height = 256;
-    const ctx = canvas.getContext('2d');
-    
-    // Draw character sprite
-    ctx.fillStyle = '#ffdbac';
-    ctx.beginPath();
-    ctx.arc(128, 80, 40, 0, Math.PI * 2);
-    ctx.fill();
-    
-    // Body
-    ctx.fillStyle = '#4a90e2';
-    ctx.fillRect(98, 120, 60, 80);
-    
-    // Arms
-    ctx.fillStyle = '#ffdbac';
-    ctx.fillRect(80, 130, 18, 50);
-    ctx.fillRect(158, 130, 18, 50);
-    
-    // Legs
-    ctx.fillStyle = '#2c3e50';
-    ctx.fillRect(100, 200, 25, 50);
-    ctx.fillRect(131, 200, 25, 50);
-    
-    // Eyes
-    ctx.fillStyle = '#000000';
-    ctx.beginPath();
-    ctx.arc(115, 75, 5, 0, Math.PI * 2);
-    ctx.arc(141, 75, 5, 0, Math.PI * 2);
-    ctx.fill();
-    
-    // Smile
-    ctx.strokeStyle = '#000000';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(128, 85, 15, 0, Math.PI);
-    ctx.stroke();
-    
-    const texture = new THREE.CanvasTexture(canvas);
-    const spriteMaterial = new THREE.SpriteMaterial({ 
-        map: texture,
-        transparent: true
-    });
-    
-    characterSprite = new THREE.Sprite(spriteMaterial);
-    characterSprite.scale.set(2, 2, 1);
-    characterSprite.position.set(
-        CONFIG.characterPosition.x,
-        1.5,
-        CONFIG.characterPosition.z
-    );
-    characterSprite.userData.interactive = true;
-    scene.add(characterSprite);
-    
-    character = characterSprite;
+// ═══════════════════════════════════════════════════════════════════════
+//  CHARACTER SPRITES
+// ═══════════════════════════════════════════════════════════════════════
+function ensureCharSprite(charId, name, colorIdx) {
+    if (charSprites[charId]) return charSprites[charId];
+
+    const color = new THREE.Color(CHAR_COLORS[colorIdx % CHAR_COLORS.length]);
+
+    // Body (capsule approximation)
+    const bodyGeo = new THREE.CylinderGeometry(0.3, 0.35, 1.4, 16);
+    const bodyMat = new THREE.MeshStandardMaterial({ color, roughness: 0.5 });
+    const body = new THREE.Mesh(bodyGeo, bodyMat);
+    body.position.y = 0.7;
+    body.castShadow = true;
+
+    // Head
+    const headGeo = new THREE.SphereGeometry(0.25, 16, 16);
+    const headMat = new THREE.MeshStandardMaterial({ color: 0xffd5b4, roughness: 0.6 });
+    const head = new THREE.Mesh(headGeo, headMat);
+    head.position.y = 1.6;
+    head.castShadow = true;
+
+    const group = new THREE.Group();
+    group.add(body);
+    group.add(head);
+
+    // Name label
+    const label = makeTextSprite(name, 0.5);
+    label.position.y = 2.1;
+    group.add(label);
+
+    scene.add(group);
+    charSprites[charId] = { group, targetPos: new THREE.Vector3(0, 0, 0), currentPos: new THREE.Vector3(0, 0, 0) };
+    return charSprites[charId];
 }
 
-/**
- * Create wood texture
- */
-function createWoodTexture() {
-    const canvas = document.createElement('canvas');
-    canvas.width = 512;
-    canvas.height = 512;
-    const ctx = canvas.getContext('2d');
-    
-    // Base wood color
-    ctx.fillStyle = '#8b7355';
-    ctx.fillRect(0, 0, 512, 512);
-    
-    // Wood grain lines
-    ctx.strokeStyle = '#6b5345';
-    ctx.lineWidth = 2;
-    for (let i = 0; i < 512; i += 40) {
-        ctx.beginPath();
-        ctx.moveTo(0, i);
-        ctx.lineTo(512, i + Math.random() * 10 - 5);
-        ctx.stroke();
-    }
-    
-    return new THREE.CanvasTexture(canvas);
-}
-
-/**
- * Setup interactions
- */
-function setupInteractions() {
-    const raycaster = new THREE.Raycaster();
-    const mouse = new THREE.Vector2();
-    
-    renderer.domElement.addEventListener('click', (event) => {
-        // Calculate mouse position
-        mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-        mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
-        
-        // Raycast
-        raycaster.setFromCamera(mouse, camera);
-        const intersects = raycaster.intersectObjects([character]);
-        
-        if (intersects.length > 0) {
-            showInteractionPanel();
-        }
-    });
-}
-
-/**
- * Create particle effect
- */
-function createParticles(type) {
-    const particleCount = 20;
-    const particleGeometry = new THREE.BufferGeometry();
-    const positions = new Float32Array(particleCount * 3);
-    
-    for (let i = 0; i < particleCount * 3; i++) {
-        positions[i] = (Math.random() - 0.5) * 2;
-    }
-    
-    particleGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    
-    let color = 0xff69b4;
-    if (type === 'hug') color = 0xffff00;
-    if (type === 'wave') color = 0x00ffff;
-    if (type === 'kiss') color = 0xff1493;
-    
-    const particleMaterial = new THREE.PointsMaterial({
-        color: color,
-        size: 0.2,
-        transparent: true,
-        opacity: 1
-    });
-    
-    const particleSystem = new THREE.Points(particleGeometry, particleMaterial);
-    particleSystem.position.copy(character.position);
-    particleSystem.userData.velocity = [];
-    particleSystem.userData.lifetime = 2;
-    particleSystem.userData.age = 0;
-    
-    for (let i = 0; i < particleCount; i++) {
-        particleSystem.userData.velocity.push({
-            x: (Math.random() - 0.5) * 2,
-            y: Math.random() * 3,
-            z: (Math.random() - 0.5) * 2
-        });
-    }
-    
-    scene.add(particleSystem);
-    particles.push(particleSystem);
-}
-
-/**
- * Update particles
- */
-function updateParticles(delta) {
-    for (let i = particles.length - 1; i >= 0; i--) {
-        const particle = particles[i];
-        particle.userData.age += delta;
-        
-        if (particle.userData.age >= particle.userData.lifetime) {
-            scene.remove(particle);
-            particles.splice(i, 1);
-            continue;
-        }
-        
-        // Update positions
-        const positions = particle.geometry.attributes.position.array;
-        const velocities = particle.userData.velocity;
-        
-        for (let j = 0; j < positions.length / 3; j++) {
-            positions[j * 3] += velocities[j].x * delta;
-            positions[j * 3 + 1] += velocities[j].y * delta;
-            positions[j * 3 + 2] += velocities[j].z * delta;
-            
-            velocities[j].y -= 2 * delta;
-        }
-        
-        particle.geometry.attributes.position.needsUpdate = true;
-        
-        // Fade out
-        const fadeProgress = particle.userData.age / particle.userData.lifetime;
-        particle.material.opacity = 1 - fadeProgress;
+function removeCharSprite(charId) {
+    const s = charSprites[charId];
+    if (s) {
+        scene.remove(s.group);
+        delete charSprites[charId];
     }
 }
 
-/**
- * Animate character
- */
-function animateCharacter() {
-    const time = clock.getElapsedTime();
-    
-    switch (currentAnimation) {
-        case 'idle':
-            character.position.y = 1.5 + Math.sin(time * 2) * 0.05;
-            break;
-        case 'waving':
-            character.position.y = 1.5 + Math.sin(time * 4) * 0.1;
-            character.rotation.z = Math.sin(time * 8) * 0.2;
-            break;
-        case 'talking':
-            character.scale.y = 2 + Math.sin(time * 10) * 0.05;
-            break;
-        case 'hugging':
-            character.scale.x = 2 + Math.sin(time * 3) * 0.1;
-            break;
-        case 'kissing':
-            character.rotation.y = Math.sin(time * 2) * 0.1;
-            break;
+function updateCharPositions(characters, locations) {
+    // Compute a small offset per occupant so they don't overlap
+    const occupantIndex = {};
+    for (const [cid, info] of Object.entries(characters)) {
+        const locId = info.location_id;
+        if (!locId) continue;
+        if (!occupantIndex[locId]) occupantIndex[locId] = [];
+        occupantIndex[locId].push(cid);
+    }
+
+    let colorIdx = 0;
+    for (const [cid, info] of Object.entries(characters)) {
+        const sprite = ensureCharSprite(cid, info.name, colorIdx);
+        colorIdx++;
+
+        const locId = info.location_id;
+        if (!locId || !locations[locId]) continue;
+        const pos = locations[locId].pos || { x: 0, y: 0, z: 0 };
+
+        // Offset for multiple occupants
+        const idx = (occupantIndex[locId] || []).indexOf(cid);
+        const off = (idx === 0) ? -0.6 : 0.6;
+
+        sprite.targetPos.set(pos.x + off, 0, pos.z);
+    }
+
+    // Remove sprites for characters no longer present
+    for (const cid of Object.keys(charSprites)) {
+        if (!characters[cid]) removeCharSprite(cid);
     }
 }
 
-/**
- * Animation loop
- */
+// ═══════════════════════════════════════════════════════════════════════
+//  ANIMATION LOOP
+// ═══════════════════════════════════════════════════════════════════════
 function animate() {
     requestAnimationFrame(animate);
-    
-    const delta = clock.getDelta();
-    
-    // Update controls
+    const dt = clock.getDelta();
     controls.update();
-    
-    // Animate character
-    animateCharacter();
-    
-    // Update particles
-    updateParticles(delta);
-    
-    // Render scene
+
+    // Smooth character movement
+    for (const s of Object.values(charSprites)) {
+        s.group.position.lerp(s.targetPos, Math.min(1, dt * 3));
+    }
+
+    // Pulse location markers
+    const t = clock.elapsedTime;
+    for (const m of Object.values(locationMarkers)) {
+        m.material.opacity = 0.5 + 0.2 * Math.sin(t * 2 + m.position.x);
+    }
+
     renderer.render(scene, camera);
-    
-    // Update FPS
-    updateFPS();
+    updateFps();
 }
 
-/**
- * Update FPS counter
- */
-function updateFPS() {
-    frames++;
-    const time = performance.now();
-    
-    if (time >= lastTime + 1000) {
-        const fps = Math.round((frames * 1000) / (time - lastTime));
-        document.getElementById('fps-counter').textContent = `FPS: ${fps}`;
-        frames = 0;
-        lastTime = time;
+function updateFps() {
+    fpsFrames++;
+    const now = performance.now();
+    if (now - lastFpsTime >= 1000) {
+        const el = document.getElementById('fps-counter');
+        if (el) el.textContent = 'FPS: ' + fpsFrames;
+        fpsFrames = 0;
+        lastFpsTime = now;
     }
 }
 
-/**
- * Connect to Socket.IO server
- */
+// ═══════════════════════════════════════════════════════════════════════
+//  SOCKET.IO
+// ═══════════════════════════════════════════════════════════════════════
 function connectSocket() {
-    socket = io('http://localhost:5003');
-    
+    socket = io({ transports: ['websocket', 'polling'] });
+
     socket.on('connect', () => {
-        console.log('Connected to server');
-        updateStatus('Connected', true);
-        socket.emit('request_state');
+        document.getElementById('status-text').textContent = 'Connected';
+        document.querySelector('.status-dot').style.background = '#4caf50';
     });
-    
     socket.on('disconnect', () => {
-        console.log('Disconnected from server');
-        updateStatus('Disconnected', false);
+        document.getElementById('status-text').textContent = 'Disconnected';
+        document.querySelector('.status-dot').style.background = '#f44336';
     });
-    
-    socket.on('scene_state', (state) => {
-        console.log('Received scene state:', state);
-        if (state.time_of_day) {
-            timeOfDay = state.time_of_day;
-            updateTimeButtons(timeOfDay);
-        }
-        if (state.lighting) {
-            updateLighting(state.lighting);
-        }
-    });
-    
+
+    socket.on('scene_state', (data) => applyState(data));
     socket.on('time_changed', (data) => {
         timeOfDay = data.time;
-        updateLighting(data.lighting);
-        updateTimeButtons(timeOfDay);
-        showToast(`Time changed to ${timeOfDay}`);
+        applyLighting(data.lighting);
+        document.querySelectorAll('.time-btn').forEach(b => b.classList.toggle('active', b.dataset.time === data.time));
     });
-    
-    socket.on('character_animation', (data) => {
-        currentAnimation = data.animation;
-        if (data.type !== 'reset') {
-            createParticles(data.type);
-            showToast(`Character is ${data.animation}!`);
-        }
+
+    // Agent events
+    socket.on('agent_action', (data) => addFeedEntry(data));
+    socket.on('agent_tick', (data) => {
+        if (data.actions) data.actions.forEach(a => addFeedEntry(a));
     });
-    
-    socket.on('character_moved', (data) => {
-        character.position.set(data.position.x, 1.5, data.position.z);
-    });
-    
     socket.on('chat_message', (data) => {
-        addChatMessage(data.message, data.timestamp);
+        addFeedEntry({ character_name: data.name, action: 'speak', message: data.message, timestamp: data.timestamp });
     });
 }
 
-/**
- * Update status indicator
- */
-function updateStatus(text, connected) {
-    document.getElementById('status-text').textContent = text;
-    const dot = document.querySelector('.status-dot');
-    dot.style.backgroundColor = connected ? '#4caf50' : '#f44336';
+// ═══════════════════════════════════════════════════════════════════════
+//  STATE MANAGEMENT
+// ═══════════════════════════════════════════════════════════════════════
+async function fetchState() {
+    try {
+        const r = await fetch('/api/scene/state');
+        if (r.ok) applyState(await r.json());
+    } catch (e) { console.error('fetchState error', e); }
 }
 
-/**
- * UI Event Handlers
- */
+function applyState(st) {
+    sceneState = st;
+    agentRunning = st.agent_loop_running || false;
+    currentMode = st.mode || 'observe';
 
-// Back button
-document.getElementById('back-btn').addEventListener('click', () => {
-    window.location.href = 'http://localhost:5001';
-});
+    // Locations
+    if (st.locations) buildLocationMarkers(st.locations);
 
-// Time selector
-document.querySelectorAll('.time-btn').forEach(btn => {
-    btn.addEventListener('click', async () => {
-        const time = btn.dataset.time;
-        
-        try {
-            const response = await fetch('/api/scene/time', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ time: time })
-            });
-            
-            if (response.ok) {
-                updateTimeButtons(time);
-            }
-        } catch (error) {
-            console.error('Error setting time:', error);
-            showToast('Failed to change time', 'error');
-        }
-    });
-});
+    // Characters
+    if (st.characters) {
+        updateCharPositions(st.characters, st.locations || {});
+        renderCharList(st.characters);
+    }
 
-function updateTimeButtons(activeTime) {
-    document.querySelectorAll('.time-btn').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.time === activeTime);
-    });
+    // Lighting
+    if (st.lighting) applyLighting(st.lighting);
+    timeOfDay = st.time_of_day || 'evening';
+
+    // UI sync
+    document.querySelectorAll('.time-btn').forEach(b => b.classList.toggle('active', b.dataset.time === timeOfDay));
+    document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === currentMode));
+    updateAgentBtn();
+    updateWhisperBox();
+    document.getElementById('charCount').textContent = '(' + Object.keys(st.characters || {}).length + '/2)';
 }
 
-// Interaction buttons
-document.querySelectorAll('.interaction-btn').forEach(btn => {
-    btn.addEventListener('click', async () => {
-        const action = btn.dataset.action;
-        
-        if (action === 'talk') {
-            showChatPanel();
-            hideInteractionPanel();
-            return;
-        }
-        
-        try {
-            const response = await fetch('/api/character/interact', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ type: action })
-            });
-            
-            if (response.ok) {
-                hideInteractionPanel();
-            }
-        } catch (error) {
-            console.error('Error interacting:', error);
-            showToast('Failed to interact', 'error');
-        }
-    });
-});
-
-// Close interaction panel
-document.getElementById('close-interaction').addEventListener('click', hideInteractionPanel);
-
-// Chat functionality
-document.getElementById('send-chat').addEventListener('click', sendChatMessage);
-document.getElementById('chat-input').addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') sendChatMessage();
-});
-document.getElementById('close-chat').addEventListener('click', hideChatPanel);
-
-function sendChatMessage() {
-    const input = document.getElementById('chat-input');
-    const message = input.value.trim();
-    
-    if (message && socket) {
-        socket.emit('chat_message', { message: message });
-        input.value = '';
+// ═══════════════════════════════════════════════════════════════════════
+//  SIDE-PANEL: Characters
+// ═══════════════════════════════════════════════════════════════════════
+function renderCharList(chars) {
+    const el = document.getElementById('charList');
+    el.innerHTML = '';
+    let idx = 0;
+    for (const [cid, info] of Object.entries(chars)) {
+        const color = CHAR_COLORS[idx % CHAR_COLORS.length];
+        const arousalPct = Math.round((info.arousal || 0) * 100);
+        const card = document.createElement('div');
+        card.className = 'char-card';
+        card.innerHTML =
+            '<div class="char-dot" style="background:' + color + '"></div>' +
+            '<div class="char-info">' +
+                '<strong>' + esc(info.name) + '</strong>' +
+                '<span class="char-mood">' + esc(info.mood || 'neutral') + '</span>' +
+                '<span class="char-loc">📍 ' + esc(info.location || '—') + '</span>' +
+                '<div class="mini-bar"><div class="mini-fill" style="width:' + arousalPct + '%;background:' + color + '"></div></div>' +
+            '</div>' +
+            '<button class="btn-x" onclick="removeChar(\'' + cid + '\')">✕</button>';
+        el.appendChild(card);
+        idx++;
     }
 }
 
-function addChatMessage(message, timestamp) {
-    const messagesDiv = document.getElementById('chat-messages');
-    const messageDiv = document.createElement('div');
-    messageDiv.className = 'chat-message';
-    messageDiv.innerHTML = `
-        <div class="message-content">${escapeHtml(message)}</div>
-        <div class="message-time">${new Date(timestamp).toLocaleTimeString()}</div>
-    `;
-    messagesDiv.appendChild(messageDiv);
-    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+async function removeChar(cid) {
+    await fetch('/api/character/remove', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ character_id: cid }) });
 }
 
-function escapeHtml(text) {
+// ═══════════════════════════════════════════════════════════════════════
+//  SIDE-PANEL: Locations
+// ═══════════════════════════════════════════════════════════════════════
+function renderLocations(locs) {
+    const el = document.getElementById('locationList');
+    if (!el) return;
+    el.innerHTML = '';
+    for (const [id, loc] of Object.entries(locs || {})) {
+        const occ = (loc.occupants || []).length;
+        const div = document.createElement('div');
+        div.className = 'loc-item';
+        div.innerHTML = '<span>' + esc(loc.name) + '</span><span class="loc-occ">' + occ + '</span>';
+        el.appendChild(div);
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  CHARACTER PICKER MODAL
+// ═══════════════════════════════════════════════════════════════════════
+async function openCharPicker() {
+    try {
+        const r = await fetch('/api/characters/list');
+        const data = await r.json();
+        allCharacters = data.characters || [];
+    } catch (e) { console.error(e); return; }
+
+    const list = document.getElementById('charPickerList');
+    list.innerHTML = '';
+    allCharacters.forEach(c => {
+        const div = document.createElement('div');
+        div.className = 'picker-item' + (c.loaded ? ' loaded' : '');
+        div.innerHTML = '<strong>' + esc(c.name) + '</strong><small>' + esc(c.description || '') + '</small>';
+        if (!c.loaded) div.onclick = () => pickChar(c.id);
+        list.appendChild(div);
+    });
+    document.getElementById('charPickerModal').style.display = 'flex';
+}
+
+function closeCharPicker() { document.getElementById('charPickerModal').style.display = 'none'; }
+
+async function pickChar(cid) {
+    const r = await fetch('/api/character/load', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ character_id: cid }) });
+    if (r.ok) closeCharPicker();
+    else {
+        const e = await r.json();
+        alert(e.error || 'Failed');
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  AGENT LOOP CONTROLS
+// ═══════════════════════════════════════════════════════════════════════
+async function toggleAgentLoop() {
+    if (agentRunning) {
+        await fetch('/api/agents/stop', { method: 'POST' });
+        agentRunning = false;
+    } else {
+        const r = await fetch('/api/agents/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ interval: 30 }) });
+        if (r.ok) agentRunning = true;
+        else {
+            const e = await r.json();
+            alert(e.error || 'Cannot start');
+        }
+    }
+    updateAgentBtn();
+}
+
+async function manualTick() {
+    const r = await fetch('/api/agents/tick', { method: 'POST' });
+    if (r.ok) {
+        const data = await r.json();
+        (data.actions || []).forEach(a => addFeedEntry(a));
+    }
+}
+
+function updateAgentBtn() {
+    const btn = document.getElementById('btnStartAgents');
+    const status = document.getElementById('agentStatus');
+    if (agentRunning) {
+        btn.textContent = '⏹ Stop';
+        status.textContent = '● Agents Running';
+        status.className = 'agent-status on';
+    } else {
+        btn.textContent = '▶ Start';
+        status.textContent = '● Agents Off';
+        status.className = 'agent-status off';
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  TIME & MODE
+// ═══════════════════════════════════════════════════════════════════════
+async function setTime(t) {
+    await fetch('/api/scene/time', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ time: t }) });
+}
+
+async function setMode(m) {
+    await fetch('/api/mode', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: m }) });
+    currentMode = m;
+    document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === m));
+    updateWhisperBox();
+}
+
+function updateWhisperBox() {
+    const box = document.getElementById('whisperBox');
+    if (!box) return;
+    box.style.display = (currentMode === 'direct') ? 'flex' : 'none';
+    // Update target dropdown
+    const sel = document.getElementById('whisperTarget');
+    sel.innerHTML = '';
+    for (const [cid, info] of Object.entries(sceneState.characters || {})) {
+        const opt = document.createElement('option');
+        opt.value = cid;
+        opt.textContent = info.name;
+        sel.appendChild(opt);
+    }
+}
+
+async function sendWhisper() {
+    const input = document.getElementById('whisperInput');
+    const target = document.getElementById('whisperTarget').value;
+    const msg = input.value.trim();
+    if (!msg || !target) return;
+    await fetch('/api/agents/whisper', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ character_id: target, message: msg }) });
+    addFeedEntry({ character_name: '(Director)', action: 'whisper', message: msg, timestamp: new Date().toISOString() });
+    input.value = '';
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  ACTIVITY FEED
+// ═══════════════════════════════════════════════════════════════════════
+const ACTION_ICONS = {
+    speak: '💬', move: '🚶', idle: '😌', flirt: '😏', touch: '✋',
+    kiss: '💋', cuddle: '🤗', intimate: '🔥', interact: '🎯', whisper: '🤫',
+};
+
+function addFeedEntry(data) {
+    const feed = document.getElementById('feedMessages');
+    if (!feed) return;
+
+    const action = data.action || 'speak';
+    const icon = ACTION_ICONS[action] || '▪';
+    const name = data.character_name || data.name || '?';
+    const msg = data.message || data.detail || action;
+    const loc = data.location ? (' @ ' + data.location) : '';
+
     const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+    div.className = 'feed-entry feed-' + action;
+    div.innerHTML = '<span class="feed-icon">' + icon + '</span>' +
+        '<span class="feed-name">' + esc(name) + '</span>' +
+        '<span class="feed-msg">' + esc(msg) + loc + '</span>';
+    feed.appendChild(div);
+    feed.scrollTop = feed.scrollHeight;
+
+    // Cap at 200 entries
+    while (feed.children.length > 200) feed.removeChild(feed.firstChild);
+
+    // Also refresh location list
+    if (sceneState.locations) renderLocations(sceneState.locations);
 }
 
-// Panel visibility
-function showInteractionPanel() {
-    document.getElementById('interaction-panel').classList.add('visible');
+function clearFeed() {
+    document.getElementById('feedMessages').innerHTML = '';
 }
 
-function hideInteractionPanel() {
-    document.getElementById('interaction-panel').classList.remove('visible');
+// ═══════════════════════════════════════════════════════════════════════
+//  HELPERS
+// ═══════════════════════════════════════════════════════════════════════
+function esc(str) {
+    const d = document.createElement('div');
+    d.textContent = str || '';
+    return d.innerHTML;
 }
 
-function showChatPanel() {
-    document.getElementById('chat-panel').classList.add('visible');
-}
-
-function hideChatPanel() {
-    document.getElementById('chat-panel').classList.remove('visible');
-}
-
-// ============= CHARACTER SELECTION =============
-
-let allCharacters = [];
-
-// Load characters on init
-async function loadCharacters() {
-    try {
-        const response = await fetch('/api/characters/list');
-        if (response.ok) {
-            const data = await response.json();
-            allCharacters = data.characters || [];
-            renderCharacterList(allCharacters);
-        }
-    } catch (error) {
-        console.error('Error loading characters:', error);
-    }
-}
-
-// Render character list
-function renderCharacterList(characters) {
-    const listDiv = document.getElementById('character-list');
-    listDiv.innerHTML = '';
-    
-    if (characters.length === 0) {
-        listDiv.innerHTML = '<div class="no-characters">No characters available</div>';
-        return;
-    }
-    
-    characters.forEach(char => {
-        const charDiv = document.createElement('div');
-        charDiv.className = 'character-item';
-        charDiv.innerHTML = `
-            <div class="character-name">${char.name}</div>
-            <div class="character-desc">${char.description || 'No description'}</div>
-            <div class="character-source">${char.source}</div>
-        `;
-        charDiv.addEventListener('click', () => selectCharacter(char));
-        listDiv.appendChild(charDiv);
-    });
-}
-
-// Character selector button
-document.getElementById('character-selector-btn').addEventListener('click', (e) => {
-    e.stopPropagation();
-    const dropdown = document.getElementById('character-dropdown');
-    dropdown.classList.toggle('hidden');
-});
-
-// Character search
-document.getElementById('character-search').addEventListener('input', (e) => {
-    const query = e.target.value.toLowerCase();
-    const filtered = allCharacters.filter(char => 
-        char.name.toLowerCase().includes(query) || 
-        (char.description && char.description.toLowerCase().includes(query))
-    );
-    renderCharacterList(filtered);
-});
-
-// Click outside to close
-document.addEventListener('click', (e) => {
-    const dropdown = document.getElementById('character-dropdown');
-    const btn = document.getElementById('character-selector-btn');
-    if (!dropdown.contains(e.target) && !btn.contains(e.target)) {
-        dropdown.classList.add('hidden');
-    }
-});
-
-// Select character
-async function selectCharacter(char) {
-    try {
-        const endpoint = char.source === 'asset' ? '/api/character/load_asset' : '/api/character/set';
-        const response = await fetch(endpoint, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ character_id: char.id })
-        });
-        
-        if (response.ok) {
-            document.getElementById('selected-character-name').textContent = char.name;
-            document.getElementById('character-dropdown').classList.add('hidden');
-            showToast(`Character ${char.name} loaded`, 'success');
-        } else {
-            const error = await response.json();
-            showToast(error.error || 'Failed to load character', 'error');
-        }
-    } catch (error) {
-        console.error('Error selecting character:', error);
-        showToast('Failed to load character', 'error');
-    }
-}
-
-// ============= SCENE MANAGEMENT =============
-
-// Save scene
-document.getElementById('save-scene-btn').addEventListener('click', async () => {
-    const name = prompt('Enter scene name:');
-    if (!name) return;
-    
-    try {
-        const response = await fetch('/api/scene/save', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: name })
-        });
-        
-        if (response.ok) {
-            const data = await response.json();
-            showToast(`Scene saved: ${data.scene_id}`, 'success');
-        } else {
-            const error = await response.json();
-            showToast(error.error || 'Failed to save scene', 'error');
-        }
-    } catch (error) {
-        console.error('Error saving scene:', error);
-        showToast('Failed to save scene', 'error');
-    }
-});
-
-// Load scene
-document.getElementById('load-scene-btn').addEventListener('click', async () => {
-    try {
-        // Get list of scenes
-        const listResponse = await fetch('/api/scene/list');
-        if (!listResponse.ok) {
-            showToast('Failed to load scene list', 'error');
-            return;
-        }
-        
-        const listData = await listResponse.json();
-        const scenes = listData.scenes || [];
-        
-        if (scenes.length === 0) {
-            showToast('No saved scenes available', 'info');
-            return;
-        }
-        
-        // Create selection prompt
-        const sceneList = scenes.map((s, i) => `${i + 1}. ${s.name || s.id}`).join('\n');
-        const selection = prompt(`Select scene to load:\n${sceneList}\n\nEnter number:`);
-        
-        if (!selection) return;
-        
-        const index = parseInt(selection) - 1;
-        if (index < 0 || index >= scenes.length) {
-            showToast('Invalid selection', 'error');
-            return;
-        }
-        
-        const sceneId = scenes[index].id;
-        
-        // Load scene
-        const response = await fetch('/api/scene/load', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ scene_id: sceneId })
-        });
-        
-        if (response.ok) {
-            showToast('Scene loaded successfully', 'success');
-            // Refresh the page to apply all scene settings
-            setTimeout(() => window.location.reload(), 1000);
-        } else {
-            const error = await response.json();
-            showToast(error.error || 'Failed to load scene', 'error');
-        }
-    } catch (error) {
-        console.error('Error loading scene:', error);
-        showToast('Failed to load scene', 'error');
-    }
-});
-
-// Toast notifications
-function showToast(message, type = 'info') {
-    const container = document.getElementById('toast-container');
-    const toast = document.createElement('div');
-    toast.className = `toast toast-${type}`;
-    toast.textContent = message;
-    container.appendChild(toast);
-    
-    setTimeout(() => toast.classList.add('show'), 10);
-    setTimeout(() => {
-        toast.classList.remove('show');
-        setTimeout(() => container.removeChild(toast), 300);
-    }, 3000);
-}
-
-// Loading screen
-function hideLoadingScreen() {
-    const loadingScreen = document.getElementById('loading-screen');
-    setTimeout(() => {
-        loadingScreen.style.opacity = '0';
-        setTimeout(() => {
-            loadingScreen.style.display = 'none';
-        }, 500);
-    }, 500);
-    
-    // Load characters after scene is initialized
-    loadCharacters();
-}
-
-// Window resize
+// ═══════════════════════════════════════════════════════════════════════
+//  RESIZE + INIT
+// ═══════════════════════════════════════════════════════════════════════
 window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
-// Initialize scene when page loads
 window.addEventListener('load', init);

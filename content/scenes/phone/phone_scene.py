@@ -1881,7 +1881,7 @@ class PhoneScene(BaseScene):
             arousal = float(getattr(self.active_character, 'arousal', 0.0) or 0.0)
             mood    = self.active_character.mood or 'happy'
             name    = self.active_character.name
-            desc    = self.active_character.appearance or "attractive young woman"
+            desc    = self.active_character.get_visual_description()
             nsfw_ok = getattr(self.active_character, 'nsfw_enabled', False)
 
             # ── Decide selfie tier ──────────────────────────

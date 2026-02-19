@@ -3,121 +3,97 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D Bedroom Scene - Virtual Companion</title>
-    
-    <!-- Three.js -->
+    <title>CosySim — Bedroom</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-    
-    <!-- Socket.IO -->
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
-    
-    <!-- Custom CSS -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/bedroom.css') }}">
 </head>
 <body>
-    <!-- Loading Screen -->
-    <div id="loading-screen">
-        <div class="loading-spinner"></div>
-        <div class="loading-text">Loading 3D Scene...</div>
-    </div>
-    
-    <!-- 3D Canvas -->
+    <!-- ── Header ──────────────────────────────────────────────── -->
+    <header class="scene-header">
+        <a href="/" class="back-btn">← Back</a>
+        <h1 class="scene-title">🛏️ Bedroom</h1>
+        <div class="header-controls">
+            <span id="agentStatus" class="agent-status off">● Agents Off</span>
+            <button id="btnStartAgents" class="header-btn" onclick="toggleAgentLoop()">▶ Start</button>
+            <button class="header-btn" onclick="manualTick()" title="Force one tick">⏩ Tick</button>
+        </div>
+    </header>
+
+    <!-- ── 3D Canvas ───────────────────────────────────────────── -->
     <div id="scene-container">
         <canvas id="bedroom-canvas"></canvas>
     </div>
-    
-    <!-- UI Overlay -->
-    <div id="ui-overlay">
-        <!-- Header -->
-        <header class="scene-header">
-            <button id="back-btn" class="header-btn">← Back to Phone</button>
-            <h1 class="scene-title">Penthouse Bedroom</h1>
-            <div class="header-controls">
-                <button id="settings-btn" class="header-btn">⚙️ Settings</button>
-            </div>
-        </header>
-        
-        <!-- Character Selector -->
-        <div class="character-selector">
-            <label>Character:</label>
-            <button id="character-selector-btn" class="selector-btn">
-                <span id="selected-character-name">Select Character</span> ▼
-            </button>
-            <div id="character-dropdown" class="character-dropdown hidden">
-                <div class="dropdown-header">
-                    <input type="text" id="character-search" placeholder="Search characters..." />
-                </div>
-                <div id="character-list" class="character-list">
-                    <!-- Populated dynamically -->
-                </div>
-            </div>
-        </div>
-        
-        <!-- Time of Day Selector -->
-        <div class="time-selector">
-            <label>Time of Day:</label>
+
+    <!-- ── Side Panel ──────────────────────────────────────────── -->
+    <aside id="sidePanel" class="side-panel">
+        <!-- Characters -->
+        <section class="panel-section">
+            <h3>Characters <small id="charCount">(0/2)</small></h3>
+            <div id="charList" class="char-list"></div>
+            <button class="btn-sm" onclick="openCharPicker()">+ Add Character</button>
+        </section>
+
+        <!-- Locations -->
+        <section class="panel-section">
+            <h3>Locations</h3>
+            <div id="locationList" class="loc-list"></div>
+        </section>
+
+        <!-- Time of Day -->
+        <section class="panel-section">
+            <h3>Time of Day</h3>
             <div class="time-buttons">
-                <button class="time-btn" data-time="morning">☀️ Morning</button>
-                <button class="time-btn active" data-time="afternoon">🌤️ Afternoon</button>
-                <button class="time-btn" data-time="evening">🌅 Evening</button>
-                <button class="time-btn" data-time="night">🌙 Night</button>
+                <button class="time-btn" data-time="morning" onclick="setTime('morning')">🌅</button>
+                <button class="time-btn" data-time="afternoon" onclick="setTime('afternoon')">☀️</button>
+                <button class="time-btn active" data-time="evening" onclick="setTime('evening')">🌆</button>
+                <button class="time-btn" data-time="night" onclick="setTime('night')">🌙</button>
             </div>
-        </div>
-        
-        <!-- Scene Management -->
-        <div class="scene-management">
-            <button id="save-scene-btn" class="scene-btn">💾 Save Scene</button>
-            <button id="load-scene-btn" class="scene-btn">📂 Load Scene</button>
-        </div>
-        
-        <!-- Interaction Panel -->
-        <div id="interaction-panel" class="interaction-panel">
-            <h3>Interact with Character</h3>
-            <div class="interaction-buttons">
-                <button class="interaction-btn" data-action="talk">💬 Talk</button>
-                <button class="interaction-btn" data-action="hug">🤗 Hug</button>
-                <button class="interaction-btn" data-action="wave">👋 Wave</button>
-                <button class="interaction-btn" data-action="kiss">💋 Kiss</button>
+        </section>
+
+        <!-- Mode -->
+        <section class="panel-section">
+            <h3>Mode</h3>
+            <div class="mode-buttons">
+                <button onclick="setMode('observe')" class="mode-btn active" data-mode="observe">👁 Observe</button>
+                <button onclick="setMode('direct')" class="mode-btn" data-mode="direct">🎬 Direct</button>
             </div>
-            <button id="close-interaction" class="close-btn">✕</button>
+        </section>
+    </aside>
+
+    <!-- ── Activity Feed ───────────────────────────────────────── -->
+    <div id="activityFeed" class="activity-feed">
+        <div class="feed-header">
+            <h3>Activity Feed</h3>
+            <button class="btn-clear" onclick="clearFeed()">Clear</button>
         </div>
-        
-        <!-- Chat Panel -->
-        <div id="chat-panel" class="chat-panel">
-            <div class="chat-header">
-                <h3>Chat</h3>
-                <button id="close-chat" class="close-btn">✕</button>
-            </div>
-            <div id="chat-messages" class="chat-messages"></div>
-            <div class="chat-input-container">
-                <input type="text" id="chat-input" placeholder="Type a message..." />
-                <button id="send-chat">Send</button>
-            </div>
-        </div>
-        
-        <!-- Info Panel -->
-        <div class="info-panel">
-            <div id="fps-counter">FPS: 60</div>
-            <div id="status-indicator">
-                <span class="status-dot"></span>
-                <span id="status-text">Connected</span>
-            </div>
-        </div>
-        
-        <!-- Control Hints -->
-        <div class="control-hints">
-            <div class="hint">🖱️ Left Click + Drag: Rotate Camera</div>
-            <div class="hint">🖱️ Right Click + Drag: Pan Camera</div>
-            <div class="hint">🖱️ Scroll: Zoom</div>
-            <div class="hint">👆 Click Character: Interact</div>
+        <div id="feedMessages" class="feed-messages"></div>
+        <div id="whisperBox" class="whisper-box" style="display:none">
+            <select id="whisperTarget"></select>
+            <input id="whisperInput" type="text" placeholder="Whisper a direction…" onkeydown="if(event.key==='Enter')sendWhisper()">
+            <button onclick="sendWhisper()">💬</button>
         </div>
     </div>
-    
-    <!-- Toast Notifications -->
-    <div id="toast-container"></div>
-    
-    <!-- Custom Scripts -->
+
+    <!-- ── Character Picker Modal ──────────────────────────────── -->
+    <div id="charPickerModal" class="modal" style="display:none">
+        <div class="modal-content">
+            <h2>Add Character</h2>
+            <div id="charPickerList" class="picker-list"></div>
+            <button class="btn-cancel" onclick="closeCharPicker()">Cancel</button>
+        </div>
+    </div>
+
+    <!-- ── Info Panel ──────────────────────────────────────────── -->
+    <div class="info-panel">
+        <div id="fps-counter">FPS: 60</div>
+        <div id="status-indicator">
+            <span class="status-dot"></span>
+            <span id="status-text">Connected</span>
+        </div>
+    </div>
+
     <script src="{{ url_for('static', filename='js/bedroom.js') }}"></script>
 </body>
 </html>

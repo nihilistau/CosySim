@@ -40,9 +40,15 @@ class VideoMessageGenerator:
         self.video_dir = Path(__file__).parent.parent / "media" / "video"
         self.video_dir.mkdir(parents=True, exist_ok=True)
         
-        # Video settings
-        self.fps = 30
-        self.resolution = (512, 512)  # Square video like social media
+        # Video settings from centralised MediaConfig
+        try:
+            from engine.media.media_config import get_media_config
+            spec = get_media_config().video_spec("message")
+            self.fps = spec.get("fps", 24)
+            self.resolution = (spec.get("width", 640), spec.get("height", 480))
+        except Exception:
+            self.fps = 24
+            self.resolution = (640, 480)
     
     def generate_video_message(
         self,

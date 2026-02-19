@@ -1,485 +1,447 @@
 """
-3D Bedroom Scene - Flask Server with SocketIO
-Handles scene state, character interactions, and real-time updates
-Now with asset-based character system
+3D Bedroom Scene — Multi-Agent Emergent Playground
+
+Two characters occupy a bedroom with 7 interactive locations (bed, couch,
+bar, bathroom, balcony, vanity, doorway).  An :class:`AgentLoop` runs a
+tick-based decision cycle where each character autonomously perceives,
+decides, and acts — producing emergent conversation, movement, flirtation,
+and intimacy.
+
+The user can **observe** (read-only) or **direct** (whisper to either agent
+to influence their next decision).
 """
 
 from flask import Flask, render_template, jsonify, request
 from flask_socketio import SocketIO, emit
 from flask_cors import CORS
-from typing import Optional
-import sqlite3
+from typing import Optional, Dict, List
 import json
+import random
 from datetime import datetime
 import os
 import sys
 from pathlib import Path
 
-# Add parent directory to path for imports
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 from engine.scenes.base_scene import BaseScene
-from engine.assets import CharacterAsset
+from engine.agents.agent_loop import AgentLoop
+from engine.spatial.location import Location
+from engine.spatial.scene_map import SceneMap
 from content.simulation.database.db import Database
 from content.simulation.character_system.character import Character
 
 
+# ── Bedroom Locations ───────────────────────────────────────────────────
+def _build_bedroom_map() -> SceneMap:
+    """Create the default bedroom layout with 7 interactive locations."""
+    sm = SceneMap()
+    locations = [
+        Location(
+            id="bed", name="Bed",
+            description="A large king-size bed with soft sheets and dim warm lighting.",
+            interactions=["lie down", "cuddle", "pillow talk", "sleep", "get intimate"],
+            capacity=2,
+            properties={"privacy": 0.9, "comfort": 1.0, "spiciness": 5,
+                        "pos": {"x": -3, "y": 0, "z": -3}},
+        ),
+        Location(
+            id="couch", name="Couch",
+            description="A plush velvet couch facing a large TV. Perfect for lounging.",
+            interactions=["sit", "watch TV", "cuddle", "chat", "make out"],
+            capacity=2,
+            properties={"privacy": 0.5, "comfort": 0.8, "spiciness": 3,
+                        "pos": {"x": 3, "y": 0, "z": 0}},
+        ),
+        Location(
+            id="bar", name="Bar",
+            description="A small home bar with mood lighting, bottles, and two stools.",
+            interactions=["make a drink", "pour wine", "toast", "chat", "eat"],
+            capacity=2,
+            properties={"privacy": 0.3, "comfort": 0.5, "spiciness": 2,
+                        "pos": {"x": 4, "y": 0, "z": -4}},
+        ),
+        Location(
+            id="bathroom", name="Bathroom",
+            description="A luxurious bathroom with a large bathtub, shower, and candles.",
+            interactions=["shower", "take a bath", "freshen up", "share a bath"],
+            capacity=2,
+            properties={"privacy": 1.0, "comfort": 0.7, "spiciness": 5,
+                        "pos": {"x": -5, "y": 0, "z": 2}},
+        ),
+        Location(
+            id="balcony", name="Balcony",
+            description="A romantic balcony overlooking the city skyline at night.",
+            interactions=["gaze at stars", "smoke", "lean on railing", "chat", "kiss"],
+            capacity=2,
+            properties={"privacy": 0.2, "comfort": 0.4, "spiciness": 2,
+                        "pos": {"x": 0, "y": 0, "z": -5}},
+        ),
+        Location(
+            id="vanity", name="Vanity",
+            description="An elegant vanity mirror with soft ring-light. Good for selfies.",
+            interactions=["check mirror", "apply makeup", "take a selfie", "pose"],
+            capacity=1,
+            properties={"privacy": 0.4, "comfort": 0.5, "spiciness": 3,
+                        "pos": {"x": -5, "y": 0, "z": -1}},
+        ),
+        Location(
+            id="doorway", name="Doorway",
+            description="The entrance to the bedroom. A neutral spot.",
+            interactions=["enter", "leave", "greet", "lean against frame"],
+            capacity=2,
+            properties={"privacy": 0.1, "comfort": 0.2, "spiciness": 1,
+                        "pos": {"x": 5, "y": 0, "z": 3}},
+        ),
+    ]
+    for loc in locations:
+        sm.add_location(loc)
+    return sm
+
+
 class BedroomScene(BaseScene):
-    """
-    3D Bedroom Scene with asset-based character system
-    Inherits from BaseScene for character/asset management
-    """
-    
-    def __init__(self, host: str = "0.0.0.0", port: int = 5003):
-        # Initialize BaseScene first
+    """Multi-agent 3D bedroom with emergent behaviour and spatial locations."""
+
+    def __init__(self, host: str = "0.0.0.0", port: int = 5556):
         super().__init__(scene_name="bedroom", host=host, port=port)
-        
-        # Initialize database
         self.db = Database()
-        
-        # Scene state
-        self.scene_state = {
-            'time_of_day': 'afternoon',
-            'character_position': {'x': 0, 'y': 0, 'z': 0},
-            'character_animation': 'idle',
-            'lighting': {
-                'ambient': 0.6,
-                'directional': 0.8,
-                'color': '#ffffff'
-            },
-            'active_character_id': None
-        }
-        
-        # Active character instance (for compatibility)
-        self.active_character: Optional[Character] = None
-        
+
+        # Spatial system
+        self.scene_map = _build_bedroom_map()
+
+        # Characters (max 2)
+        self.characters: Dict[str, Character] = {}
+        self.active_character: Optional[Character] = None  # compat
+
+        # Agent loop
+        self.agent_loop: Optional[AgentLoop] = None
+
         # Lighting presets
         self.lighting_presets = {
-            'morning': {
-                'ambient': 0.7,
-                'directional': 0.9,
-                'color': '#e8f4f8'
-            },
-            'afternoon': {
-                'ambient': 0.6,
-                'directional': 0.8,
-                'color': '#fff8e8'
-            },
-            'evening': {
-                'ambient': 0.4,
-                'directional': 0.5,
-                'color': '#ffb088'
-            },
-            'night': {
-                'ambient': 0.2,
-                'directional': 0.3,
-                'color': '#6688cc'
-            }
+            'morning':   {'ambient': 0.7, 'directional': 0.9, 'color': '#e8f4f8'},
+            'afternoon': {'ambient': 0.6, 'directional': 0.8, 'color': '#fff8e8'},
+            'evening':   {'ambient': 0.4, 'directional': 0.5, 'color': '#ffb088'},
+            'night':     {'ambient': 0.2, 'directional': 0.3, 'color': '#6688cc'},
         }
-        
-        # Flask app
+
+        # Scene state
+        self.scene_state = {
+            'time_of_day': 'evening',
+            'lighting': self.lighting_presets['evening'],
+            'characters': {},      # id → {name, location, mood, arousal, …}
+            'locations': {},       # id → {name, occupants, pos}
+            'agent_loop_running': False,
+            'mode': 'observe',     # observe | direct
+        }
+        self._refresh_location_state()
+
+        # Flask
         self.app = Flask(
             __name__,
             template_folder=str(Path(__file__).parent / "templates"),
-            static_folder=str(Path(__file__).parent / "static")
+            static_folder=str(Path(__file__).parent / "static"),
         )
-        self.app.config['SECRET_KEY'] = 'bedroom_scene_secret_key_2024'
+        self.app.config['SECRET_KEY'] = 'bedroom_scene_secret_2024'
         CORS(self.app)
-        
-        # Socket.IO for real-time communication
         self.socketio = SocketIO(self.app, cors_allowed_origins="*", manage_session=False)
-        
-        # Initialize lighting
-        self.update_lighting_for_time('afternoon')
-        
-        # Setup routes
+
         self._setup_routes()
         self._setup_socketio()
-    
-    def update_lighting_for_time(self, time_of_day: str):
-        """Update lighting based on time of day"""
-        self.scene_state['lighting'] = self.lighting_presets.get(
-            time_of_day, 
-            self.lighting_presets['afternoon']
-        )
-    
-    # _asset_to_character() inherited from BaseScene
 
+    # ── Helpers ──────────────────────────────────────────────────────────
+    def _refresh_location_state(self):
+        """Rebuild the scene_state.locations dict from the SceneMap."""
+        self.scene_state['locations'] = {}
+        for loc in self.scene_map.locations:
+            self.scene_state['locations'][loc.id] = {
+                'name': loc.name,
+                'description': loc.description,
+                'interactions': loc.interactions,
+                'occupants': loc.occupants,
+                'pos': loc.properties.get('pos', {'x': 0, 'y': 0, 'z': 0}),
+                'spiciness': loc.spiciness,
+            }
+
+    def _refresh_character_state(self):
+        """Rebuild scene_state.characters from loaded Character objects."""
+        self.scene_state['characters'] = {}
+        for cid, char in self.characters.items():
+            loc = self.scene_map.get_character_location(cid)
+            self.scene_state['characters'][cid] = {
+                'name': char.name,
+                'mood': char.mood,
+                'arousal': getattr(char, 'arousal', 0.0),
+                'energy': getattr(char, 'energy', 1.0),
+                'relationship_level': getattr(char, 'relationship_level', 0.5),
+                'location': loc.name if loc else None,
+                'location_id': loc.id if loc else None,
+            }
+
+    def _broadcast_state(self):
+        """Push full state to all connected clients."""
+        self._refresh_location_state()
+        self._refresh_character_state()
+        self.scene_state['agent_loop_running'] = (
+            self.agent_loop.is_running if self.agent_loop else False
+        )
+        self.socketio.emit('scene_state', self.scene_state)
+
+    def _load_character(self, char_id: str, slot: str = "a") -> Optional[Character]:
+        """Load a character from DB and register in the scene."""
+        if len(self.characters) >= 2 and char_id not in self.characters:
+            return None  # max 2
+        char = Character.load(char_id, db=self.db)
+        if not char:
+            return None
+        self.characters[char.id] = char
+        if not self.active_character:
+            self.active_character = char
+        # Place at a random empty location (or doorway)
+        empty = self.scene_map.get_empty_locations()
+        loc = random.choice(empty) if empty else self.scene_map.get_location("doorway")
+        if loc:
+            self.scene_map.place_character(char.id, loc.id)
+        self._broadcast_state()
+        return char
+
+    # ── Routes ──────────────────────────────────────────────────────────
     def _setup_routes(self):
-        """Setup Flask routes"""
-        
+
         @self.app.route('/')
         def index():
-            """Render bedroom scene"""
             return render_template('bedroom_ui.html')
-        
-        @self.app.route('/api/scene/state', methods=['GET'])
+
+        @self.app.route('/api/scene/state')
         def get_scene_state():
-            """Get current scene state"""
+            self._refresh_location_state()
+            self._refresh_character_state()
             return jsonify(self.scene_state)
-        
+
         @self.app.route('/api/scene/time', methods=['POST'])
-        def set_time_of_day():
-            """Set time of day"""
-            data = request.json
-            time_of_day = data.get('time', 'afternoon')
-            self.scene_state['time_of_day'] = time_of_day
-            self.update_lighting_for_time(time_of_day)
-            
-            # Broadcast to all clients
+        def set_time():
+            t = (request.json or {}).get('time', 'evening')
+            self.scene_state['time_of_day'] = t
+            self.scene_state['lighting'] = self.lighting_presets.get(t, self.lighting_presets['evening'])
             self.socketio.emit('time_changed', {
-                'time': time_of_day,
-                'lighting': self.scene_state['lighting']
+                'time': t, 'lighting': self.scene_state['lighting'],
             })
-            
-            return jsonify({'success': True, 'state': self.scene_state})
-        
-        @self.app.route('/api/character/interact', methods=['POST'])
-        def character_interact():
-            """Handle character interaction"""
-            data = request.json
-            interaction_type = data.get('type', 'wave')
-            
-            # Set character animation
-            animations = {
-                'talk': 'talking',
-                'hug': 'hugging',
-                'wave': 'waving',
-                'kiss': 'kissing'
-            }
-            
-            animation = animations.get(interaction_type, 'idle')
-            self.scene_state['character_animation'] = animation
-            
-            # Broadcast to all clients
-            self.socketio.emit('character_animation', {
-                'animation': animation,
-                'type': interaction_type
-            })
-            
-            # Store interaction in database
-            try:
-                with self.db.get_connection() as conn:
-                    cursor = conn.cursor()
-                    cursor.execute('''
-                        INSERT INTO interactions (type, timestamp, data)
-                        VALUES (?, ?, ?)
-                    ''', (interaction_type, datetime.now().isoformat(), json.dumps(data)))
-                    conn.commit()
-            except Exception as e:
-                print(f"Database error: {e}")
-            
-            # Reset animation after delay
-            def reset_animation():
-                import time
-                time.sleep(3)
-                self.scene_state['character_animation'] = 'idle'
-                self.socketio.emit('character_animation', {
-                    'animation': 'idle',
-                    'type': 'reset'
-                })
-            
-            from threading import Thread
-            Thread(target=reset_animation, daemon=True).start()
-            
-            return jsonify({
-                'success': True,
-                'animation': animation,
-                'message': f'Character is {animation}!'
-            })
-        
-        @self.app.route('/api/character/position', methods=['POST'])
-        def update_character_position():
-            """Update character position"""
-            data = request.json
-            position = data.get('position', {'x': 0, 'y': 0, 'z': 0})
-            self.scene_state['character_position'] = position
-            
-            # Broadcast to all clients
-            self.socketio.emit('character_moved', {
-                'position': position
-            })
-            
-            return jsonify({'success': True, 'position': position})
-        
-        @self.app.route('/api/history', methods=['GET'])
-        def get_history():
-            """Get conversation history"""
-            try:
-                with self.db.get_connection() as conn:
-                    cursor = conn.cursor()
-                    cursor.execute('''
-                        SELECT * FROM conversations
-                        ORDER BY timestamp DESC
-                        LIMIT 50
-                    ''')
-                    rows = cursor.fetchall()
-                
-                history = [dict(row) for row in rows]
-                return jsonify({'success': True, 'history': history})
-            except Exception as e:
-                return jsonify({'success': False, 'error': str(e)})
-        
-        # ============= CHARACTER MANAGEMENT ROUTES =============
-        
-        @self.app.route('/api/characters/list', methods=['GET'])
+            return jsonify({'success': True})
+
+        # ── Character management ────────────────────────────────────────
+        @self.app.route('/api/characters/list')
         def list_characters():
-            """List all characters (from both asset system and database)"""
-            # Get characters from asset system
-            asset_characters = []
-            try:
-                search_results = self.asset_manager.search(asset_type='character', limit=100)
-                for result in search_results:
-                    char_asset = self.asset_manager.load('character', result['id'])
-                    asset_characters.append({
-                        'id': char_asset.id,
-                        'name': char_asset.name,
-                        'description': char_asset.description,
-                        'source': 'asset'
-                    })
-            except Exception as e:
-                print(f"Error loading asset characters: {e}")
-            
-            # Get characters from database (legacy)
-            db_characters = self.db.get_all_characters()
-            for char in db_characters:
-                char['source'] = 'database'
-            
-            # Combine both
-            all_characters = asset_characters + db_characters
-            return jsonify({'characters': all_characters})
-        
-        @self.app.route('/api/character/set', methods=['POST'])
-        def set_character():
-            """Set active character (legacy database)"""
-            data = request.json
-            char_id = data.get('character_id')
-            
-            if not char_id:
-                return jsonify({'error': 'No character_id provided'}), 400
-            
-            try:
-                self.active_character = Character.load(char_id, db=self.db)
-                if not self.active_character:
-                    return jsonify({'error': 'Character not found'}), 404
-                
-                self.scene_state['active_character_id'] = char_id
-                
-                # Broadcast character change
-                self.socketio.emit('character_changed', {
-                    'character_id': char_id,
-                    'character_name': self.active_character.name
+            db_chars = self.db.get_all_characters()
+            for c in db_chars:
+                c['source'] = 'database'
+                c['loaded'] = c['id'] in self.characters
+            return jsonify({'characters': db_chars})
+
+        @self.app.route('/api/character/load', methods=['POST'])
+        def load_character():
+            cid = (request.json or {}).get('character_id')
+            if not cid:
+                return jsonify({'error': 'No character_id'}), 400
+            if len(self.characters) >= 2 and cid not in self.characters:
+                return jsonify({'error': 'Maximum 2 characters in bedroom'}), 400
+            char = self._load_character(cid)
+            if not char:
+                return jsonify({'error': 'Character not found'}), 404
+            return jsonify({'success': True, 'character': {
+                'id': char.id, 'name': char.name,
+            }})
+
+        @self.app.route('/api/character/remove', methods=['POST'])
+        def remove_character():
+            cid = (request.json or {}).get('character_id')
+            if cid in self.characters:
+                del self.characters[cid]
+                self.scene_map.remove_character(cid)
+                if self.agent_loop:
+                    self.agent_loop.unregister_character(cid)
+                self._broadcast_state()
+            return jsonify({'success': True})
+
+        @self.app.route('/api/characters/loaded')
+        def loaded_characters():
+            self._refresh_character_state()
+            return jsonify({'characters': self.scene_state['characters']})
+
+        # ── Spatial ─────────────────────────────────────────────────────
+        @self.app.route('/api/location/move', methods=['POST'])
+        def move_character():
+            data = request.json or {}
+            cid = data.get('character_id')
+            loc_name = data.get('location')
+            loc = self.scene_map.get_location_by_name(loc_name)
+            if not loc or cid not in self.characters:
+                return jsonify({'error': 'Invalid character or location'}), 400
+            ok = self.scene_map.move_character(cid, loc.id)
+            self._broadcast_state()
+            return jsonify({'success': ok})
+
+        @self.app.route('/api/locations')
+        def list_locations():
+            self._refresh_location_state()
+            return jsonify({'locations': self.scene_state['locations']})
+
+        # ── Agent Loop ──────────────────────────────────────────────────
+        @self.app.route('/api/agents/start', methods=['POST'])
+        def start_agent_loop():
+            if len(self.characters) < 2:
+                return jsonify({'error': 'Need 2 characters to start'}), 400
+            interval = (request.json or {}).get('interval', 30)
+            self._start_agent_loop(interval)
+            return jsonify({'success': True, 'interval': interval})
+
+        @self.app.route('/api/agents/stop', methods=['POST'])
+        def stop_agent_loop():
+            if self.agent_loop:
+                self.agent_loop.stop()
+            self.scene_state['agent_loop_running'] = False
+            self._broadcast_state()
+            return jsonify({'success': True})
+
+        @self.app.route('/api/agents/tick', methods=['POST'])
+        def manual_tick():
+            """Force a single tick (useful for testing)."""
+            if not self.agent_loop:
+                self._start_agent_loop(interval=9999)  # create but don't auto-run
+                self.agent_loop.stop()
+            actions = self.agent_loop.tick()
+            self._broadcast_state()
+            return jsonify({'actions': actions})
+
+        @self.app.route('/api/agents/whisper', methods=['POST'])
+        def whisper():
+            """User whispers a direction to one agent."""
+            data = request.json or {}
+            cid = data.get('character_id')
+            msg = data.get('message', '')
+            if cid not in self.characters:
+                return jsonify({'error': 'Character not loaded'}), 400
+            # Inject as context into the agent loop shared log
+            if self.agent_loop:
+                self.agent_loop.shared_log.append({
+                    'name': '(Director)',
+                    'text': f"[whisper to {self.characters[cid].name}] {msg}",
+                    'timestamp': datetime.now().isoformat(),
+                    'type': 'whisper',
                 })
-                
-                return jsonify({
-                    'success': True,
-                    'character': {
-                        'id': self.active_character.id,
-                        'name': self.active_character.name
-                    }
-                })
-            except Exception as e:
-                return jsonify({'error': str(e)}), 500
-        
-        @self.app.route('/api/character/load_asset', methods=['POST'])
-        def load_character_asset():
-            """Load character from asset system"""
-            data = request.json
-            char_id = data.get('character_id')
-            
-            if not char_id:
-                return jsonify({'error': 'No character_id provided'}), 400
-            
-            try:
-                # Load character asset
-                char_asset = self.load_character(char_id)
-                
-                # Create or update Character wrapper for compatibility
-                self.active_character = self._asset_to_character(char_asset)
-                self.scene_state['active_character_id'] = char_id
-                
-                # Broadcast character change
-                self.socketio.emit('character_changed', {
-                    'character_id': char_id,
-                    'character_name': char_asset.name
-                })
-                
-                return jsonify({
-                    'success': True,
-                    'character': {
-                        'id': char_asset.id,
-                        'name': char_asset.name,
-                        'description': char_asset.description
-                    }
-                })
-            except Exception as e:
-                return jsonify({'error': str(e)}), 500
-        
-        @self.app.route('/api/character/info', methods=['GET'])
-        def get_character_info():
-            """Get active character info"""
-            if not self.active_character:
-                return jsonify({'error': 'No active character'}), 400
-            
-            return jsonify({
-                'id': self.active_character.id,
-                'name': self.active_character.name,
-                'age': self.active_character.age,
-                'mood': self.active_character.mood,
-                'relationship_level': self.active_character.relationship_level
-            })
-        
-        # ============= SCENE SAVE/LOAD ROUTES =============
-        
+            return jsonify({'success': True})
+
+        # ── Mode ────────────────────────────────────────────────────────
+        @self.app.route('/api/mode', methods=['POST'])
+        def set_mode():
+            mode = (request.json or {}).get('mode', 'observe')
+            self.scene_state['mode'] = mode
+            self._broadcast_state()
+            return jsonify({'success': True, 'mode': mode})
+
+        # ── Scene persistence ───────────────────────────────────────────
         @self.app.route('/api/scene/save', methods=['POST'])
         def save_scene_route():
-            """Save current scene state"""
-            data = request.json
-            name = data.get('name')
-            
-            # Save additional settings
+            name = (request.json or {}).get('name')
             self.scene_config['settings'] = {
                 'time_of_day': self.scene_state['time_of_day'],
-                'character_position': self.scene_state['character_position'],
-                'lighting': self.scene_state['lighting']
+                'character_ids': list(self.characters.keys()),
+                'map_snapshot': self.scene_map.snapshot(),
             }
-            
             try:
-                scene_id = self.save_scene(name)
-                return jsonify({'success': True, 'scene_id': scene_id})
+                sid = self.save_scene(name)
+                return jsonify({'success': True, 'scene_id': sid})
             except Exception as e:
                 return jsonify({'error': str(e)}), 500
-        
-        @self.app.route('/api/scene/load', methods=['POST'])
-        def load_scene_route():
-            """Load scene from asset"""
-            data = request.json
-            scene_id = data.get('scene_id')
-            
-            if not scene_id:
-                return jsonify({'error': 'No scene_id provided'}), 400
-            
-            try:
-                self.load_scene(scene_id)
-                
-                # Restore scene settings
-                settings = self.scene_config.get('settings', {})
-                if 'time_of_day' in settings:
-                    self.scene_state['time_of_day'] = settings['time_of_day']
-                    self.update_lighting_for_time(settings['time_of_day'])
-                if 'character_position' in settings:
-                    self.scene_state['character_position'] = settings['character_position']
-                
-                # Load first character as active if available
-                if self.active_characters:
-                    first_char_id = list(self.active_characters.keys())[0]
-                    char_asset = self.active_characters[first_char_id]
-                    self.active_character = self._asset_to_character(char_asset)
-                    self.scene_state['active_character_id'] = first_char_id
-                
-                # Broadcast scene loaded
-                self.socketio.emit('scene_loaded', {
-                    'scene_id': scene_id,
-                    'state': self.scene_state
-                })
-                
-                return jsonify({'success': True})
-            except Exception as e:
-                return jsonify({'error': str(e)}), 500
-        
-        @self.app.route('/api/scene/list', methods=['GET'])
+
+        @self.app.route('/api/scene/list')
         def list_scenes():
-            """List all saved scenes"""
             try:
                 scenes = self.asset_manager.search(asset_type='scene', limit=100)
                 return jsonify({'scenes': scenes})
             except Exception as e:
                 return jsonify({'error': str(e)}), 500
-    
+
+        @self.app.route('/api/history')
+        def get_history():
+            if self.agent_loop:
+                return jsonify({'success': True, 'history': self.agent_loop.shared_log[-100:]})
+            return jsonify({'success': True, 'history': []})
+
+    # ── SocketIO ────────────────────────────────────────────────────────
     def _setup_socketio(self):
-        """Setup SocketIO event handlers"""
-        
+
         @self.socketio.on('connect')
         def handle_connect():
-            """Handle client connection"""
-            print('Client connected')
+            self._refresh_location_state()
+            self._refresh_character_state()
             emit('scene_state', self.scene_state)
-        
+
         @self.socketio.on('disconnect')
         def handle_disconnect():
-            """Handle client disconnection"""
-            print('Client disconnected')
-        
+            pass
+
         @self.socketio.on('request_state')
-        def handle_request_state():
-            """Send current scene state to client"""
-            emit('scene_state', self.scene_state)
-        
+        def handle_request():
+            self._broadcast_state()
+
         @self.socketio.on('chat_message')
-        def handle_chat_message(data):
-            """Handle chat messages — store via Character if loaded, then animate."""
-            message = data.get('message', '')
-            timestamp = datetime.now().isoformat()
+        def handle_chat(data):
+            msg = data.get('message', '')
+            ts = datetime.now().isoformat()
+            if self.agent_loop:
+                self.agent_loop.shared_log.append({
+                    'name': 'You', 'text': msg,
+                    'timestamp': ts, 'type': 'speech',
+                })
+            self.socketio.emit('chat_message', {
+                'name': 'You', 'message': msg, 'timestamp': ts,
+            })
 
-            # Store via active character (uses interactions table via add_message)
-            if self.active_character:
-                try:
-                    self.active_character.add_message('user', message)
-                except Exception as e:
-                    print(f"DB error storing message: {e}")
+    # ── Agent Loop wiring ───────────────────────────────────────────────
+    def _start_agent_loop(self, interval: float = 30):
+        if self.agent_loop and self.agent_loop.is_running:
+            return
+        self.agent_loop = AgentLoop(
+            scene_map=self.scene_map,
+            db=self.db,
+            socketio=self.socketio,
+            scene_id='bedroom',
+        )
+        for cid, char in self.characters.items():
+            self.agent_loop.register_character(char)
+        self.agent_loop.set_action_callback(self._on_agent_action)
+        self.agent_loop.start(interval=interval)
+        self.scene_state['agent_loop_running'] = True
+        self._broadcast_state()
 
-            # Broadcast to all clients
-            emit('chat_message', {
-                'message': message,
-                'timestamp': timestamp,
-            }, broadcast=True)
+    def _on_agent_action(self, character_id: str, action: Dict):
+        """Callback fired after every agent action — update UI."""
+        self._broadcast_state()
 
-            # Trigger character talking animation
-            self.scene_state['character_animation'] = 'talking'
-            emit('character_animation', {
-                'animation': 'talking',
-                'type': 'talk',
-            }, broadcast=True)
-    
+    # ── BaseScene interface ─────────────────────────────────────────────
     def get_plugin_info(self) -> dict:
-        """
-        Return metadata describing this scene.
-
-        Implements :meth:`BaseScene.get_plugin_info`.
-        """
         return {
-            "name":        "Bedroom Scene",
-            "description": "Interactive 3D bedroom environment with real-time character animation",
-            "version":     "2.0.0",
-            "author":      "CosySim",
-            "port":        self.port,
-            "tags":        ["bedroom", "3d", "character", "animation", "websocket"],
+            "name": "Bedroom Scene",
+            "description": "Multi-agent 3D bedroom with emergent behaviour, 7 locations, and spicy interactions",
+            "version": "3.0.0",
+            "author": "CosySim",
+            "port": self.port,
+            "tags": ["bedroom", "3d", "multi-agent", "emergent", "spatial", "intimate"],
             "skill_packs": ["memory", "character", "comfyui"],
-            "routes": [
-                {"path": "/",                 "methods": ["GET"],  "description": "Bedroom 3D UI"},
-                {"path": "/api/status",       "methods": ["GET"],  "description": "Scene status"},
-                {"path": "/api/character",    "methods": ["GET"],  "description": "Active character info"},
-            ],
         }
 
     def start(self) -> None:
-        """Start the bedroom scene server"""
-        print("Starting 3D Bedroom Scene Server...")
-        print(f"Access at: http://{self.host}:{self.port}")
+        print("🛏️  Starting Multi-Agent Bedroom Scene...")
+        print(f"   Access at: http://{self.host}:{self.port}")
         self.socketio.run(
-            self.app, 
-            host=self.host, 
-            port=self.port, 
-            debug=True, 
-            allow_unsafe_werkzeug=True
+            self.app, host=self.host, port=self.port,
+            debug=False, allow_unsafe_werkzeug=True,
         )
-    
+
     def stop(self) -> None:
-        """Stop the bedroom scene server"""
-        print("Stopping 3D Bedroom Scene Server...")
-        # Flask-SocketIO doesn't have a clean stop method
-        # The server will be stopped when the process exits
+        if self.agent_loop:
+            self.agent_loop.stop()
+        print("Bedroom scene stopped.")
 
 
 if __name__ == '__main__':

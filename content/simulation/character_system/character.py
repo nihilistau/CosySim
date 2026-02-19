@@ -312,6 +312,29 @@ class Character:
             parts.append(f"Traits: {', '.join(self.tags)}")
         
         return "\n".join(parts)
+
+    def get_visual_description(self) -> str:
+        """Build a structured prompt-ready visual description for image generation.
+
+        Returns a string like ``"22 year old blonde woman, long wavy hair, blue eyes,
+        slim athletic build, freckles"`` that can be injected directly into a ComfyUI
+        prompt via :class:`PromptBuilder`.
+        """
+        parts = []
+        if self.age:
+            parts.append(f"{self.age} year old")
+        if self.sex:
+            parts.append(self.sex)
+        if self.hair_color:
+            parts.append(f"{self.hair_color} hair")
+        if self.eye_color:
+            parts.append(f"{self.eye_color} eyes")
+        if self.body_type:
+            parts.append(f"{self.body_type} build")
+        # Fall back to the free-text appearance field
+        if self.appearance:
+            parts.append(self.appearance)
+        return ", ".join(parts) if parts else "attractive young woman"
     
     # ============= STATE MANAGEMENT =============
     
