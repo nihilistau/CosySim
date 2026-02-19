@@ -11,6 +11,8 @@ from datetime import datetime
 import uuid
 import os
 import random
+import threading
+import requests as http_requests
 from werkzeug.utils import secure_filename
 
 project_root = Path(__file__).parent.parent.parent
@@ -30,6 +32,7 @@ from engine.scenes.base_scene import BaseScene
 from engine.assets import CharacterAsset
 from content.simulation.services.llm_service import get_llm_service
 from content.simulation.services.anonymous_character import create_anonymous_character, AnonymousCharacter
+from content.simulation.services.cosylogger import install_logger, get_logs
 
 
 class PhoneScene(BaseScene):
@@ -99,6 +102,22 @@ class PhoneScene(BaseScene):
         
         # Active character
         self.active_character: Optional[Character] = None
+        
+        # Control-panel settings (configurable at runtime)
+        self.settings: Dict = {
+            "message_timeout": 180,   # seconds for LLM text response
+            "audio_timeout":   600,   # seconds for voice generation
+            "video_timeout":   600,   # seconds for video generation
+            "custom_llm_context": "",  # prepended to system prompt
+            "autonomous_frequency": "moderate",
+        }
+        
+        # Active-request tracking for cancel button
+        self._cancel_event = threading.Event()
+        self._active_request_in_progress = False
+        
+        # Install ring-buffer logger so the terminal can stream logs
+        install_logger()
         
         # Current conversation state
         self.current_chain_id = None
@@ -404,7 +423,6 @@ class PhoneScene(BaseScene):
                 return jsonify({'error': 'No file selected'}), 400
             
             # Validate MIME type
-            import imghdr
             ALLOWED_TYPES = {'image/jpeg', 'image/png', 'image/gif', 'image/webp'}
             
             if file.content_type not in ALLOWED_TYPES:
@@ -414,12 +432,11 @@ class PhoneScene(BaseScene):
             temp_path = self.media_dir / f"temp_{uuid.uuid4().hex[:8]}"
             file.save(str(temp_path))
             
-            # Verify actual file type matches MIME type
+            # Simple size check instead of imghdr (removed in Python 3.13)
             try:
-                actual_type = imghdr.what(str(temp_path))
-                if actual_type not in ['jpeg', 'png', 'gif', 'webp']:
-                    temp_path.unlink()  # Delete temp file
-                    return jsonify({'error': f'File content does not match extension'}), 400
+                if temp_path.stat().st_size < 16:
+                    temp_path.unlink()
+                    return jsonify({'error': 'File too small to be a valid image'}), 400
             except Exception as e:
                 if temp_path.exists():
                     temp_path.unlink()
@@ -1010,6 +1027,142 @@ class PhoneScene(BaseScene):
                 return jsonify({'error': 'Anonymous character not initialized'}), 503
             return jsonify({'history': self.anon_char.get_conversation_history()})
 
+        # ── Control-Panel API ────────────────────────────────────────────────
+
+        @self.app.route('/api/status', methods=['GET'])
+        def get_status():
+            """Composite status for the control-panel status tab."""
+            llm = get_llm_service()
+            llm_ok = False
+            llm_model = "unknown"
+            try:
+                r = http_requests.get(f"{llm.base_url}/models", timeout=3)
+                if r.ok:
+                    data = r.json()
+                    models = [m['id'] for m in data.get('data', [])]
+                    llm_ok = True
+                    llm_model = llm.model or (models[0] if models else "unknown")
+            except Exception:
+                pass
+
+            comfy_ok = False
+            comfy_progress = 0
+            try:
+                from content.simulation.services.comfyui_client import ComfyUIClient
+                client = ComfyUIClient()
+                r2 = http_requests.get(f"{client.base_url}/queue", timeout=3)
+                if r2.ok:
+                    comfy_ok = True
+                    q = r2.json()
+                    running = q.get('queue_running', [])
+                    comfy_progress = 50 if running else 0
+            except Exception:
+                pass
+
+            return jsonify({
+                'llm': {'ok': llm_ok, 'model': llm_model},
+                'comfyui': {'ok': comfy_ok, 'progress': comfy_progress},
+                'active_request': self._active_request_in_progress,
+            })
+
+        @self.app.route('/api/llm/models', methods=['GET'])
+        def list_llm_models():
+            """List models available on LM Studio."""
+            llm = get_llm_service()
+            try:
+                r = http_requests.get(f"{llm.base_url}/models", timeout=5)
+                if r.ok:
+                    models = [m['id'] for m in r.json().get('data', [])]
+                    return jsonify({'models': models, 'current': llm.model})
+                return jsonify({'models': [], 'current': llm.model})
+            except Exception as e:
+                return jsonify({'error': str(e), 'models': [], 'current': llm.model}), 500
+
+        @self.app.route('/api/llm/set_model', methods=['POST'])
+        def set_llm_model():
+            """Switch active LLM model."""
+            data = request.get_json() or {}
+            model = data.get('model', '')
+            if not model:
+                return jsonify({'error': 'No model specified'}), 400
+            llm = get_llm_service()
+            llm.model = model
+            return jsonify({'success': True, 'model': model})
+
+        @self.app.route('/api/comfyui/models', methods=['GET'])
+        def list_comfyui_models():
+            """List models available on ComfyUI."""
+            try:
+                from content.simulation.services.comfyui_client import ComfyUIClient
+                client = ComfyUIClient()
+                models = client.get_models()
+                return jsonify({'models': models, 'current': client._get_model_name()})
+            except Exception as e:
+                return jsonify({'error': str(e), 'models': []}), 500
+
+        @self.app.route('/api/comfyui/set_model', methods=['POST'])
+        def set_comfyui_model():
+            """Override the ComfyUI model to use."""
+            data = request.get_json() or {}
+            model = data.get('model', '')
+            if not model:
+                return jsonify({'error': 'No model specified'}), 400
+            try:
+                from content.simulation.services.comfyui_client import ComfyUIClient
+                ComfyUIClient._force_model = model   # class-level override
+                return jsonify({'success': True, 'model': model})
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+
+        @self.app.route('/api/request/cancel', methods=['POST'])
+        def cancel_request():
+            """Signal the active LLM request (if any) to abort."""
+            if self._active_request_in_progress:
+                self._cancel_event.set()
+                return jsonify({'success': True, 'cancelled': True})
+            return jsonify({'success': True, 'cancelled': False, 'note': 'No active request'})
+
+        @self.app.route('/api/settings', methods=['GET', 'POST'])
+        def handle_settings():
+            """Get or update control-panel settings."""
+            if request.method == 'GET':
+                return jsonify(self.settings)
+            data = request.get_json() or {}
+            allowed = {'message_timeout', 'audio_timeout', 'video_timeout',
+                       'custom_llm_context', 'autonomous_frequency'}
+            for k, v in data.items():
+                if k in allowed:
+                    self.settings[k] = v
+            return jsonify({'success': True, 'settings': self.settings})
+
+        @self.app.route('/api/character/update', methods=['PATCH'])
+        def update_character():
+            """Update attributes of the active character and persist to DB."""
+            if not self.active_character:
+                return jsonify({'error': 'No active character'}), 400
+            data = request.get_json() or {}
+            editable = {
+                'name', 'age', 'mood', 'relationship_level', 'personality',
+                'backstory', 'physical_description', 'interests', 'speech_style',
+                'occupation', 'hobbies', 'quirks', 'fears', 'secrets',
+            }
+            for k, v in data.items():
+                if k in editable and hasattr(self.active_character, k):
+                    setattr(self.active_character, k, v)
+            try:
+                self.active_character.save(db=self.db)
+            except Exception as e:
+                return jsonify({'error': f'Save failed: {e}'}), 500
+            return jsonify({'success': True})
+
+        @self.app.route('/api/logs', methods=['GET'])
+        def stream_logs():
+            """Return recent log entries for the terminal tab."""
+            level    = request.args.get('level', 'ALL')
+            limit    = request.args.get('limit', 200, type=int)
+            since_id = request.args.get('since_id', 0, type=int)
+            return jsonify({'logs': get_logs(level=level, limit=limit, since_id=since_id)})
+
     def _setup_socketio(self):
         """Setup SocketIO event handlers"""
         
@@ -1072,8 +1225,17 @@ class PhoneScene(BaseScene):
             # Show typing indicator
             self.socketio.emit('typing', {'is_typing': True})
             
-            # Generate response (placeholder - integrate with LM Studio)
-            response = self._generate_response(message)
+            # Signal active LLM request to the control panel
+            self._cancel_event.clear()
+            self._active_request_in_progress = True
+            self.socketio.emit('active_request_start', {'type': 'message'})
+            
+            try:
+                # Generate response
+                response = self._generate_response(message)
+            finally:
+                self._active_request_in_progress = False
+                self.socketio.emit('active_request_end', {})
             
             # Add assistant message
             self.active_character.add_message('assistant', response)
@@ -1393,11 +1555,42 @@ class PhoneScene(BaseScene):
             history = []
 
         # Generate LLM response
-        response = llm.chat_with_character(
-            character=self.active_character,
-            user_message=user_message,
-            conversation_history=history,
-        )
+        # Apply timeout and custom context from control-panel settings
+        original_timeout = llm.timeout
+        llm.timeout = self.settings.get('message_timeout', 180)
+        
+        # Build system prompt directly so we can inject custom context
+        try:
+            system_prompt = self.active_character.get_system_prompt()
+        except Exception:
+            system_prompt = f"You are {self.active_character.name}, a virtual companion. Be warm and stay in character."
+        
+        try:
+            memory_context = self.active_character.build_context(user_message)
+            if memory_context:
+                system_prompt += f"\n\n## Relevant Memories\n{memory_context}"
+        except Exception:
+            pass
+        
+        custom_ctx = self.settings.get('custom_llm_context', '').strip()
+        if custom_ctx:
+            system_prompt += f"\n\n## Operator Context\n{custom_ctx}"
+        
+        # Check for cancel before the (potentially slow) API call
+        if self._cancel_event.is_set():
+            llm.timeout = original_timeout
+            return "(Request cancelled)"
+        
+        try:
+            response = llm.chat(
+                messages=history + [{"role": "user", "content": user_message}],
+                system_prompt=system_prompt,
+            ) or llm._character_fallback(self.active_character, user_message)
+        finally:
+            llm.timeout = original_timeout
+        
+        if self._cancel_event.is_set():
+            return "(Request cancelled)"
 
         # Parse intent to decide if media should be triggered
         try:

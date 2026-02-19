@@ -219,11 +219,16 @@ class ComfyUIClient:
         self.client_id = str(uuid.uuid4())
         self._model_name: Optional[str] = None
 
+    _force_model: Optional[str] = None  # class-level override set by control panel
+
     def _get_model_name(self) -> str:
         """Return best available checkpoint for image generation.
 
         Prefers realistic/photo models, skips known video-only models.
+        Class-level _force_model overrides all heuristics.
         """
+        if ComfyUIClient._force_model:
+            return ComfyUIClient._force_model
         if self._model_name:
             return self._model_name
         models = self.get_models()

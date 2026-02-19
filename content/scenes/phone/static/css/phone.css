@@ -6,19 +6,15 @@
     box-sizing: border-box;
 }
 
+/* Body & root layout defined in phone_ui.html <style> block.
+   phone.css only handles internal phone-frame styles. */
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    min-height: 100vh;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    padding: 20px;
 }
 
 .phone-container {
     display: flex;
-    gap: 30px;
+    gap: 0;
     align-items: flex-start;
 }
 

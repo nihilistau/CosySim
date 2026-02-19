@@ -11,6 +11,935 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/video_call.css') }}">
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <style>
+        /* ═══════════════ ROOT LAYOUT ═══════════════ */
+        html, body {
+            margin:0; padding:0;
+            height:100%; overflow:hidden;
+            background:#0a0a0f;
+            font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+        }
+        .cosysim-root {
+            display:flex;
+            height:100vh;
+            overflow:hidden;
+        }
+
+        /* ═══════════════ LEFT — PHONE PANEL ═══════════════ */
+        .phone-panel {
+            width:420px;
+            flex-shrink:0;
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            background:linear-gradient(145deg,#12121a,#0a0a0f);
+            padding:12px 0;
+        }
+        /* keep the phone container centred inside the panel */
+        .phone-panel .phone-container { margin:0; gap:0; }
+
+        /* ═══════════════ PHONE FRAME (unchanged) ═══════════════ */
+        .phone-frame {
+            width:375px;
+            height:812px;
+            background:#1a1a1a;
+            border-radius:40px;
+            box-shadow:0 20px 60px rgba(0,0,0,.6);
+            overflow:hidden;
+            position:relative;
+            border:8px solid #2a2a2a;
+        }
+        .status-bar {
+            height:44px;
+            background:rgba(0,0,0,.3);
+            display:flex;
+            justify-content:space-between;
+            align-items:center;
+            padding:0 20px;
+            color:#fff;
+            font-size:14px;
+        }
+        .status-right { display:flex; gap:8px; }
+        .phone-screen {
+            height:calc(100% - 44px - 50px);
+            background:#000;
+            overflow:hidden;
+            position:relative;
+            display:flex;
+            flex-direction:column;
+        }
+        .screen-view { height:100%; width:100%; }
+
+        /* ── messages screen fix: scroll in content, sticky input ── */
+        #messagesScreen {
+            display:flex;
+            flex-direction:column;
+            height:100%;
+        }
+        .messages-container {
+            flex:1;
+            overflow-y:auto;
+            min-height:0;
+            padding:8px 12px;
+        }
+        .message-input-container {
+            flex-shrink:0;
+            display:flex;
+            flex-direction:column;
+            gap:6px;
+            padding:8px 10px;
+            background:#1c1c1e;
+            border-top:1px solid #3a3a3c;
+        }
+
+        /* ── Input area ── */
+        .input-icons-row { display:flex; gap:4px; align-items:center; }
+        .icon-action-btn {
+            background:none; border:none; font-size:20px;
+            cursor:pointer; padding:4px 6px; border-radius:8px;
+            transition:background .15s; color:#ebebf5cc;
+        }
+        .icon-action-btn:hover { background:#2c2c2e; }
+        .icon-action-btn:disabled { opacity:.3; cursor:not-allowed; }
+        .input-row { display:flex; align-items:flex-end; gap:8px; }
+        .message-textarea {
+            flex:1; background:#2c2c2e; border:1px solid #3a3a3c;
+            border-radius:18px; color:#fff; font-size:15px;
+            padding:10px 14px; resize:none; outline:none;
+            line-height:1.4; max-height:120px; overflow-y:auto;
+            font-family:inherit;
+        }
+        .message-textarea::placeholder { color:#8e8e93; }
+        .input-send-btn {
+            background:#0a84ff; border:none; border-radius:50%;
+            width:36px; height:36px; font-size:16px; color:#fff;
+            cursor:pointer; flex-shrink:0;
+            display:flex; align-items:center; justify-content:center;
+            transition:background .15s;
+        }
+        .input-send-btn:hover { background:#0070d8; }
+        .call-button-disabled { opacity:.35; cursor:not-allowed!important; }
+
+        /* ── Conv tabs ── */
+        .conv-tabs {
+            display:flex; border-bottom:1px solid #3a3a3c;
+            background:#1c1c1e; flex-shrink:0;
+        }
+        .conv-tab {
+            flex:1; padding:8px; text-align:center;
+            cursor:pointer; color:#8e8e93; font-size:13px;
+            transition:background .15s,color .15s;
+        }
+        .conv-tab.active { color:#0a84ff; border-bottom:2px solid #0a84ff; }
+        .anon-header { background:linear-gradient(135deg,#0f0f0f,#1a1a2e); }
+        .anon-name { color:#9b59b6; text-shadow:0 0 8px #9b59b6; }
+
+        /* nav bar */
+        .nav-bar {
+            height:50px; background:#1a1a1a;
+            display:flex; justify-content:space-around;
+            align-items:center; border-top:1px solid #333;
+        }
+        .nav-button {
+            color:#fff; font-size:20px; cursor:pointer;
+            padding:8px 16px; border-radius:8px;
+            transition:background .15s;
+        }
+        .nav-button:hover { background:#2a2a2a; }
+
+        /* ═══════════════ RIGHT — CONTROL PANEL ═══════════════ */
+        .cp-panel {
+            flex:1;
+            min-width:0;
+            display:flex;
+            flex-direction:column;
+            background:#0e0e14;
+            border-left:1px solid #1e1e2a;
+            overflow:hidden;
+        }
+        .cp-header {
+            flex-shrink:0;
+            display:flex;
+            align-items:center;
+            justify-content:space-between;
+            padding:10px 18px 6px;
+            border-bottom:1px solid #1e1e2a;
+            background:#0e0e14;
+        }
+        .cp-title {
+            font-size:16px; font-weight:700;
+            color:#e0e0ff; letter-spacing:.05em;
+        }
+        .cp-conn {
+            display:flex; align-items:center; gap:6px;
+            font-size:12px; color:#666;
+        }
+        .cp-conn-dot {
+            width:8px; height:8px; border-radius:50%;
+            background:#444; transition:background .3s;
+        }
+        .cp-conn-dot.ok { background:#30d158; }
+
+        /* tab bar */
+        .cp-tabs {
+            flex-shrink:0;
+            display:flex;
+            border-bottom:1px solid #1e1e2a;
+            background:#0a0a0f;
+        }
+        .cp-tab {
+            flex:1; padding:9px 4px; text-align:center;
+            font-size:12px; color:#555; cursor:pointer;
+            transition:color .2s,border-bottom .2s;
+            border-bottom:2px solid transparent;
+            user-select:none;
+        }
+        .cp-tab.active { color:#7c6af7; border-bottom:2px solid #7c6af7; }
+        .cp-tab:hover:not(.active) { color:#aaa; }
+
+        /* tab content */
+        .cp-tabcontent {
+            flex:1; overflow-y:auto; min-height:0;
+            padding:14px 16px;
+            display:none;
+        }
+        .cp-tabcontent.active { display:flex; flex-direction:column; gap:14px; }
+
+        /* section cards */
+        .cp-card {
+            background:#13131e;
+            border:1px solid #1e1e2a;
+            border-radius:10px;
+            padding:12px 14px;
+        }
+        .cp-card-title {
+            font-size:11px; font-weight:600;
+            color:#6060a0; letter-spacing:.08em;
+            text-transform:uppercase; margin-bottom:10px;
+        }
+
+        /* status dots */
+        .svc-row {
+            display:flex; align-items:center; gap:10px;
+            padding:6px 0; border-bottom:1px solid #1a1a26;
+        }
+        .svc-row:last-child { border-bottom:none; }
+        .svc-dot {
+            width:10px; height:10px; border-radius:50%;
+            background:#333; flex-shrink:0;
+            transition:background .4s, box-shadow .4s;
+        }
+        .svc-dot.ok { background:#30d158; box-shadow:0 0 6px #30d158; }
+        .svc-dot.err { background:#ff453a; box-shadow:0 0 6px #ff453a; }
+        .svc-dot.busy { background:#ffd60a; box-shadow:0 0 6px #ffd60a; }
+        .svc-label { font-size:13px; color:#ccc; min-width:60px; }
+        .svc-model { font-size:11px; color:#666; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .svc-select {
+            background:#1a1a2a; border:1px solid #2a2a3a;
+            color:#ccc; border-radius:6px; font-size:12px;
+            padding:3px 6px; flex:1; min-width:0; cursor:pointer;
+        }
+        .svc-select:focus { outline:none; border-color:#7c6af7; }
+
+        /* progress bar */
+        .cp-progress-bar {
+            height:4px; background:#1a1a2a;
+            border-radius:2px; overflow:hidden; margin-top:4px;
+        }
+        .cp-progress-fill {
+            height:100%; background:#7c6af7;
+            width:0%; transition:width .5s ease;
+        }
+
+        /* active request indicator */
+        .req-indicator {
+            display:flex; align-items:center; gap:8px;
+            padding:8px 10px;
+            background:#131320; border-radius:8px;
+            border:1px solid #1e1e2a;
+        }
+        .req-spinner {
+            width:14px; height:14px; border-radius:50%;
+            border:2px solid #333; border-top-color:#7c6af7;
+            animation:spin .8s linear infinite; flex-shrink:0;
+        }
+        @keyframes spin { to { transform:rotate(360deg); } }
+        .req-label { font-size:12px; color:#888; flex:1; }
+        .req-cancel-btn {
+            background:#ff3b30; border:none; border-radius:6px;
+            color:#fff; font-size:11px; padding:4px 10px;
+            cursor:pointer; transition:background .15s;
+        }
+        .req-cancel-btn:hover { background:#cc2020; }
+
+        /* form controls */
+        .cp-label {
+            font-size:12px; color:#888; display:block; margin-bottom:4px;
+        }
+        .cp-input, .cp-select, .cp-textarea {
+            width:100%; background:#1a1a2a; border:1px solid #2a2a3a;
+            color:#e0e0ff; border-radius:8px; padding:8px 10px;
+            font-size:13px; font-family:inherit;
+            outline:none; box-sizing:border-box;
+            transition:border-color .2s;
+        }
+        .cp-input:focus,.cp-select:focus,.cp-textarea:focus { border-color:#7c6af7; }
+        .cp-textarea { resize:vertical; min-height:80px; }
+        .cp-select { cursor:pointer; }
+        .cp-row { display:flex; gap:8px; align-items:flex-end; }
+        .cp-row .cp-select,.cp-row .cp-input { flex:1; }
+
+        /* buttons */
+        .cp-btn {
+            background:#7c6af7; border:none; border-radius:8px;
+            color:#fff; font-size:13px; padding:8px 14px;
+            cursor:pointer; transition:background .15s; white-space:nowrap;
+        }
+        .cp-btn:hover { background:#6a59e0; }
+        .cp-btn.secondary {
+            background:#1e1e2e; border:1px solid #2a2a3a; color:#ccc;
+        }
+        .cp-btn.secondary:hover { background:#2a2a3e; }
+        .cp-btn.danger { background:#ff3b30; }
+        .cp-btn.danger:hover { background:#cc2020; }
+        .cp-btn-row { display:flex; gap:8px; flex-wrap:wrap; }
+
+        /* character editor fields */
+        .char-attrs { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+        .char-attrs .full-row { grid-column:1/-1; }
+        .mood-grid {
+            display:grid; grid-template-columns:repeat(4,1fr); gap:4px; margin-top:4px;
+        }
+        .mood-btn {
+            background:#1a1a2a; border:1px solid #2a2a3a; border-radius:6px;
+            color:#888; font-size:11px; padding:5px 4px; cursor:pointer;
+            text-align:center; transition:all .15s;
+        }
+        .mood-btn:hover,.mood-btn.active {
+            background:#7c6af7; border-color:#7c6af7; color:#fff;
+        }
+
+        /* terminal */
+        .terminal-toolbar {
+            display:flex; align-items:center; gap:8px; flex-shrink:0;
+        }
+        .terminal-output {
+            flex:1; min-height:0;
+            background:#060608; border:1px solid #1a1a2a;
+            border-radius:8px; padding:10px;
+            font-family:'Cascadia Code','Consolas','Courier New',monospace;
+            font-size:12px; line-height:1.6;
+            overflow-y:auto; color:#ccc;
+        }
+        .log-line { margin:0; padding:1px 0; }
+        .log-line.DEBUG { color:#555; }
+        .log-line.INFO  { color:#7ec8e3; }
+        .log-line.WARNING { color:#ffd60a; }
+        .log-line.ERROR { color:#ff453a; }
+        .log-line.CRITICAL { color:#ff2d55; font-weight:700; }
+        .terminal-input-row {
+            display:flex; gap:8px; flex-shrink:0; margin-top:8px;
+        }
+        .terminal-command-input {
+            flex:1; background:#0d0d14; border:1px solid #1e1e2a;
+            border-radius:8px; color:#e0e0ff; font-family:'Cascadia Code','Consolas',monospace;
+            font-size:12px; padding:8px 12px; outline:none;
+        }
+        .terminal-command-input:focus { border-color:#7c6af7; }
+    </style>
+</head>
+<body>
+<div class="cosysim-root">
+
+    <!-- ════════════════════════ LEFT — PHONE ════════════════════════ -->
+    <div class="phone-panel">
+      <div class="phone-container">
+        <div class="phone-frame">
+            <!-- Status Bar -->
+            <div class="status-bar">
+                <div class="status-left">
+                    <span class="time" id="statusTime">9:41</span>
+                </div>
+                <div class="status-right">
+                    <span class="signal">📶</span>
+                    <span class="battery">🔋</span>
+                </div>
+            </div>
+
+            <!-- Screen Content -->
+            <div class="phone-screen" id="phoneScreen">
+
+                <!-- Home Screen -->
+                <div class="screen-view" id="homeScreen">
+                    <div class="home-wallpaper">
+                        <h1 class="home-time" id="homeTime">9:41</h1>
+                        <p class="home-date" id="homeDate">Monday, January 1</p>
+                    </div>
+                    <div class="app-grid">
+                        <div class="app-icon" onclick="openApp('messages')">
+                            <div class="icon messages-icon">💬</div>
+                            <span>Messages</span>
+                            <span class="badge" id="messageBadge" style="display:none;">0</span>
+                        </div>
+                        <div class="app-icon" onclick="openGalleryApp()">
+                            <div class="icon gallery-icon">🖼️</div>
+                            <span>Gallery</span>
+                        </div>
+                        <div class="app-icon" onclick="openApp('camera')">
+                            <div class="icon camera-icon">📷</div>
+                            <span>Camera</span>
+                        </div>
+                        <div class="app-icon" onclick="window.location.href='http://localhost:5556'">
+                            <div class="icon bedroom-icon">🏠</div>
+                            <span>Bedroom</span>
+                        </div>
+                        <div class="app-icon" onclick="window.location.href='http://localhost:8500'">
+                            <div class="icon">🌐</div>
+                            <span>Hub</span>
+                        </div>
+                        <div class="app-icon" onclick="openApp('settings')">
+                            <div class="icon settings-icon">⚙️</div>
+                            <span>Settings</span>
+                        </div>
+                    </div>
+                    <div class="dock">
+                        <div class="dock-icon" onclick="openApp('messages')">💬</div>
+                        <div class="dock-icon" onclick="openApp('phone')">📞</div>
+                        <div class="dock-icon" onclick="openApp('camera')">📷</div>
+                    </div>
+                </div>
+
+                <!-- Messages App -->
+                <div class="screen-view" id="messagesScreen" style="display:none;">
+                    <div class="conv-tabs">
+                        <div class="conv-tab active" id="tabNormal" onclick="switchConvTab('normal')">💬 Chat</div>
+                        <div class="conv-tab" id="tabAnon" onclick="switchConvTab('anon')">❓ Unknown</div>
+                    </div>
+                    <div class="app-header" id="normalChatHeader">
+                        <button class="back-button" onclick="goHome()">←</button>
+                        <div class="header-content">
+                            <h2 id="contactName">Loading...</h2>
+                            <p class="header-subtitle" id="contactStatus">Active</p>
+                        </div>
+                        <button class="settings-icon-btn" onclick="openAutonomousSettings()" title="Autonomous Settings">⚙️</button>
+                        <button class="gallery-icon-btn" onclick="openGalleryView()" title="Gallery">🖼️</button>
+                        <button class="call-button call-button-disabled" title="Video Call (coming soon)" disabled>📹</button>
+                        <button class="call-button call-button-disabled" title="Voice Call (coming soon)" disabled>📞</button>
+                    </div>
+                    <div class="app-header anon-header" id="anonChatHeader" style="display:none;">
+                        <button class="back-button" onclick="goHome()">←</button>
+                        <div class="header-content">
+                            <h2 class="anon-name" id="anonDisplayName">❓ Unknown</h2>
+                            <p class="header-subtitle" id="anonStatus">...</p>
+                        </div>
+                    </div>
+
+                    <div class="messages-container" id="messagesContainer"></div>
+                    <div class="typing-indicator" id="typingIndicator" style="display:none;">
+                        <div class="typing-dots"><span></span><span></span><span></span></div>
+                    </div>
+
+                    <div class="message-input-container">
+                        <div class="input-icons-row">
+                            <button class="icon-action-btn" onclick="openPhotoUpload()" title="Send photo">📷</button>
+                            <button class="icon-action-btn" onclick="requestPhoto()" title="Request selfie">🖼️</button>
+                            <button class="icon-action-btn" id="btnVoiceMsg" onclick="sendVoiceMessage()" title="Voice message">🎤</button>
+                            <button class="icon-action-btn" id="btnVideoMsg" onclick="sendVideoMessage()" title="Video message">🎥</button>
+                            <button class="icon-action-btn call-button-disabled" title="Voice call (coming soon)" disabled>📞</button>
+                            <button class="icon-action-btn call-button-disabled" title="Video call (coming soon)" disabled>📹</button>
+                        </div>
+                        <div class="input-row">
+                            <textarea id="messageInput" class="message-textarea" rows="2"
+                                      placeholder="Message..."
+                                      onkeydown="handleMessageKeyDown(event)"></textarea>
+                            <button class="input-send-btn" onclick="sendMessage()">➤</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Photo Upload Dialog -->
+                <div class="photo-upload-dialog" id="photoUploadDialog" style="display:none;">
+                    <div class="dialog-content">
+                        <h3>Send Photo</h3>
+                        <div class="upload-options">
+                            <button class="upload-btn" onclick="triggerFileUpload()">📁 Choose from device</button>
+                            <button class="upload-btn generate-btn" onclick="generateSelfie()">✨ Generate selfie</button>
+                        </div>
+                        <div class="photo-preview" id="photoPreview" style="display:none;">
+                            <img id="previewImage" src="" alt="Preview">
+                            <div class="preview-actions">
+                                <button class="btn-send" onclick="uploadPhoto()">Send</button>
+                                <button class="btn-cancel" onclick="cancelPhotoUpload()">Cancel</button>
+                            </div>
+                        </div>
+                        <input type="file" id="photoFileInput" accept="image/*" style="display:none;" onchange="handleFileSelect(event)">
+                        <button class="close-dialog" onclick="closePhotoUpload()">✕</button>
+                    </div>
+                </div>
+
+                <!-- Gallery View Overlay -->
+                <div class="gallery-view-overlay" id="galleryViewOverlay" style="display:none;">
+                    <div class="gallery-view-container">
+                        <div class="gallery-view-header">
+                            <h3>Gallery</h3>
+                            <button class="close-gallery-btn" onclick="closeGalleryView()">✕</button>
+                        </div>
+                        <div class="gallery-view-grid" id="galleryViewGrid">
+                            <p style="text-align:center;color:#666;margin-top:50px;">Loading...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Autonomous Settings Modal -->
+                <div class="autonomous-settings-overlay" id="autonomousSettingsOverlay" style="display:none;">
+                    <div class="autonomous-settings-modal">
+                        <div class="modal-header">
+                            <h3>Autonomous Messaging</h3>
+                            <button class="close-modal-btn" onclick="closeAutonomousSettings()">✕</button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="setting-item">
+                                <label class="toggle-label">
+                                    <span>Enable Autonomous Messages</span>
+                                    <input type="checkbox" id="autonomousToggle" onchange="toggleAutonomous()">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                            <div class="setting-item">
+                                <label>Message Frequency</label>
+                                <select id="frequencySelect" onchange="updateAutonomousSettings()">
+                                    <option value="low">Low (1-2 hours)</option>
+                                    <option value="moderate" selected>Moderate (30min-1hr)</option>
+                                    <option value="high">High (10-30 minutes)</option>
+                                </select>
+                            </div>
+                            <div class="setting-item">
+                                <label>Active Hours</label>
+                                <div class="time-range-slider">
+                                    <input type="range" id="startHourSlider" min="0" max="23" value="8" oninput="updateTimeRange()">
+                                    <input type="range" id="endHourSlider" min="0" max="23" value="23" oninput="updateTimeRange()">
+                                </div>
+                                <div class="time-range-display">
+                                    <span id="timeRangeDisplay">8:00 AM - 11:00 PM</span>
+                                </div>
+                            </div>
+                            <div class="setting-item">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="enablePhotosCheck" checked onchange="updateAutonomousSettings()">
+                                    <span>Enable Autonomous Photos</span>
+                                </label>
+                            </div>
+                            <div class="modal-actions">
+                                <button class="btn-save" onclick="saveAutonomousSettings()">Save Settings</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Gallery App -->
+                <div class="screen-view" id="galleryScreen" style="display:none;">
+                    <div class="app-header">
+                        <button class="back-button" onclick="goHome()">←</button>
+                        <h2>Gallery</h2>
+                        <button class="refresh-btn" onclick="loadGallery()">🔄</button>
+                    </div>
+                    <div class="gallery-grid" id="galleryGrid">
+                        <p style="text-align:center;color:#666;margin-top:50px;">Loading gallery...</p>
+                    </div>
+                </div>
+
+                <!-- Full Screen Photo Viewer -->
+                <div class="photo-viewer" id="photoViewer" style="display:none;">
+                    <button class="close-viewer" onclick="closePhotoViewer()">✕</button>
+                    <img id="viewerImage" src="" alt="Photo">
+                    <div class="viewer-controls">
+                        <button onclick="downloadPhoto()">⬇️ Download</button>
+                    </div>
+                </div>
+
+            </div><!-- /phone-screen -->
+
+            <div class="nav-bar">
+                <div class="nav-button" onclick="goHome()">◀</div>
+                <div class="nav-button" onclick="goHome()">⚫</div>
+                <div class="nav-button">▣</div>
+            </div>
+        </div><!-- /phone-frame -->
+      </div>
+    </div><!-- /phone-panel -->
+
+    <!-- ════════════════════════ RIGHT — CONTROL PANEL ════════════════════════ -->
+    <div class="cp-panel">
+
+        <!-- Header -->
+        <div class="cp-header">
+            <span class="cp-title">⚡ CosySim Control</span>
+            <div class="cp-conn">
+                <div class="cp-conn-dot" id="cpConnDot"></div>
+                <span id="cpConnLabel">Disconnected</span>
+            </div>
+        </div>
+
+        <!-- Tabs -->
+        <div class="cp-tabs">
+            <div class="cp-tab active" id="cpTab-status"   onclick="switchCpTab('status')">📡 Status</div>
+            <div class="cp-tab"        id="cpTab-character" onclick="switchCpTab('character')">👤 Character</div>
+            <div class="cp-tab"        id="cpTab-settings"  onclick="switchCpTab('settings')">⚙️ Settings</div>
+            <div class="cp-tab"        id="cpTab-terminal"  onclick="switchCpTab('terminal')">💻 Terminal</div>
+        </div>
+
+        <!-- ── TAB: STATUS ── -->
+        <div class="cp-tabcontent active" id="cpContent-status">
+
+            <!-- Active request card -->
+            <div class="cp-card">
+                <div class="cp-card-title">Active Request</div>
+                <div class="req-indicator" id="reqIndicator">
+                    <div class="req-spinner" id="reqSpinner" style="display:none;"></div>
+                    <span class="req-label" id="reqLabel">Idle</span>
+                    <button class="req-cancel-btn" id="reqCancelBtn" onclick="cancelRequest()" style="display:none;">✕ Cancel</button>
+                </div>
+            </div>
+
+            <!-- LM Studio connection -->
+            <div class="cp-card">
+                <div class="cp-card-title">LM Studio</div>
+                <div class="svc-row">
+                    <div class="svc-dot" id="llmDot"></div>
+                    <span class="svc-label">LM Studio</span>
+                    <span class="svc-model" id="llmModelLabel">—</span>
+                </div>
+                <div class="cp-row" style="margin-top:8px;">
+                    <select class="cp-select" id="llmModelSelect" onchange="setLLMModel(this.value)">
+                        <option value="">Loading models…</option>
+                    </select>
+                    <button class="cp-btn secondary" onclick="loadLLMModels()">↺</button>
+                </div>
+            </div>
+
+            <!-- ComfyUI connection -->
+            <div class="cp-card">
+                <div class="cp-card-title">ComfyUI</div>
+                <div class="svc-row">
+                    <div class="svc-dot" id="comfyDot"></div>
+                    <span class="svc-label">ComfyUI</span>
+                    <span class="svc-model" id="comfyModelLabel">—</span>
+                </div>
+                <div class="cp-progress-bar"><div class="cp-progress-fill" id="comfyProgress"></div></div>
+                <div class="cp-row" style="margin-top:8px;">
+                    <select class="cp-select" id="comfyModelSelect" onchange="setComfyModel(this.value)">
+                        <option value="">Loading models…</option>
+                    </select>
+                    <button class="cp-btn secondary" onclick="loadComfyModels()">↺</button>
+                </div>
+            </div>
+
+        </div><!-- /status -->
+
+        <!-- ── TAB: CHARACTER ── -->
+        <div class="cp-tabcontent" id="cpContent-character">
+
+            <div class="cp-card">
+                <div class="cp-card-title">Select Character</div>
+                <div class="cp-row">
+                    <select class="cp-select" id="characterSelect" onchange="selectCharacter()">
+                        <option value="">Loading…</option>
+                    </select>
+                    <button class="cp-btn secondary" onclick="loadCharacters()">↺</button>
+                </div>
+            </div>
+
+            <div class="cp-card" id="charEditorCard" style="display:none;">
+                <div class="cp-card-title">Character Editor</div>
+                <div class="char-attrs">
+                    <div>
+                        <label class="cp-label">Name</label>
+                        <input class="cp-input" id="charName" placeholder="Name">
+                    </div>
+                    <div>
+                        <label class="cp-label">Age</label>
+                        <input class="cp-input" id="charAge" type="number" placeholder="Age">
+                    </div>
+                    <div>
+                        <label class="cp-label">Occupation</label>
+                        <input class="cp-input" id="charOccupation" placeholder="Occupation">
+                    </div>
+                    <div>
+                        <label class="cp-label">Relationship Level</label>
+                        <input class="cp-input" id="charRelLevel" type="number" step="0.05" min="0" max="1" placeholder="0.0–1.0">
+                    </div>
+                    <div class="full-row">
+                        <label class="cp-label">Mood</label>
+                        <div class="mood-grid" id="moodGrid">
+                            <!-- populated by JS -->
+                        </div>
+                    </div>
+                    <div class="full-row">
+                        <label class="cp-label">Personality</label>
+                        <textarea class="cp-textarea" id="charPersonality" rows="3" placeholder="Personality description…"></textarea>
+                    </div>
+                    <div class="full-row">
+                        <label class="cp-label">Backstory</label>
+                        <textarea class="cp-textarea" id="charBackstory" rows="3" placeholder="Character backstory…"></textarea>
+                    </div>
+                    <div class="full-row">
+                        <label class="cp-label">Physical Description</label>
+                        <textarea class="cp-textarea" id="charPhysDesc" rows="2" placeholder="Appearance…"></textarea>
+                    </div>
+                    <div class="full-row">
+                        <label class="cp-label">Speech Style</label>
+                        <input class="cp-input" id="charSpeechStyle" placeholder="e.g. playful, formal, shy…">
+                    </div>
+                    <div class="full-row">
+                        <label class="cp-label">Interests / Hobbies</label>
+                        <input class="cp-input" id="charInterests" placeholder="Comma-separated interests…">
+                    </div>
+                    <div class="full-row">
+                        <label class="cp-label">Quirks</label>
+                        <input class="cp-input" id="charQuirks" placeholder="Notable quirks…">
+                    </div>
+                    <div class="full-row">
+                        <label class="cp-label">Fears</label>
+                        <input class="cp-input" id="charFears" placeholder="Fears…">
+                    </div>
+                    <div class="full-row">
+                        <label class="cp-label">Secrets</label>
+                        <input class="cp-input" id="charSecrets" placeholder="Hidden secrets…">
+                    </div>
+                </div>
+                <div class="cp-btn-row" style="margin-top:12px;">
+                    <button class="cp-btn" onclick="saveCharacterEdits()">💾 Save Character</button>
+                    <button class="cp-btn secondary" onclick="reloadCharacterEditor()">↺ Reload</button>
+                </div>
+            </div>
+
+        </div><!-- /character -->
+
+        <!-- ── TAB: SETTINGS ── -->
+        <div class="cp-tabcontent" id="cpContent-settings">
+
+            <div class="cp-card">
+                <div class="cp-card-title">Request Timeouts</div>
+                <div style="display:grid;gap:10px;">
+                    <div>
+                        <label class="cp-label">Message Response Timeout</label>
+                        <select class="cp-select" id="setMsgTimeout">
+                            <option value="60">1 min</option>
+                            <option value="120">2 min</option>
+                            <option value="180" selected>3 min</option>
+                            <option value="300">5 min</option>
+                            <option value="600">10 min</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="cp-label">Audio Generation Timeout</label>
+                        <select class="cp-select" id="setAudioTimeout">
+                            <option value="120">2 min</option>
+                            <option value="300">5 min</option>
+                            <option value="600" selected>10 min</option>
+                            <option value="900">15 min</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="cp-label">Video Generation Timeout</label>
+                        <select class="cp-select" id="setVideoTimeout">
+                            <option value="120">2 min</option>
+                            <option value="300">5 min</option>
+                            <option value="600" selected>10 min</option>
+                            <option value="900">15 min</option>
+                            <option value="1800">30 min</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div class="cp-card">
+                <div class="cp-card-title">Custom LLM Context</div>
+                <label class="cp-label">Injected at the end of the system prompt for every request</label>
+                <textarea class="cp-textarea" id="setCustomCtx" rows="5"
+                          placeholder="e.g. 'The user prefers short replies. The setting is a cozy coffee shop.'"></textarea>
+            </div>
+
+            <div class="cp-card">
+                <div class="cp-card-title">Autonomous Messaging</div>
+                <div>
+                    <label class="cp-label">Frequency</label>
+                    <select class="cp-select" id="setAutoFreq">
+                        <option value="low">Low (1–2 hrs)</option>
+                        <option value="moderate" selected>Moderate (30min–1hr)</option>
+                        <option value="high">High (10–30 min)</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="cp-btn-row">
+                <button class="cp-btn" onclick="saveSettings()">💾 Save Settings</button>
+                <button class="cp-btn secondary" onclick="loadSettings()">↺ Reload</button>
+            </div>
+
+        </div><!-- /settings -->
+
+        <!-- ── TAB: TERMINAL ── -->
+        <div class="cp-tabcontent" id="cpContent-terminal" style="height:calc(100% - 0px);">
+
+            <div class="terminal-toolbar">
+                <select class="cp-select" id="logLevelSelect" onchange="setLogLevel(this.value)" style="max-width:110px;">
+                    <option value="ALL">All</option>
+                    <option value="DEBUG">Debug</option>
+                    <option value="INFO" selected>Info</option>
+                    <option value="WARNING">Warning</option>
+                    <option value="ERROR">Error</option>
+                </select>
+                <label style="font-size:12px;color:#666;display:flex;align-items:center;gap:4px;cursor:pointer;">
+                    <input type="checkbox" id="logAutoScroll" checked> Auto-scroll
+                </label>
+                <button class="cp-btn secondary" onclick="clearLogs()" style="padding:6px 10px;font-size:12px;">🗑 Clear</button>
+                <button class="cp-btn secondary" onclick="toggleLogPoll()" id="logPollBtn" style="padding:6px 10px;font-size:12px;">⏸ Pause</button>
+            </div>
+
+            <div class="terminal-output" id="terminalOutput">
+                <p class="log-line INFO">— CosySim terminal ready —</p>
+            </div>
+
+            <div class="terminal-input-row">
+                <input type="text" class="terminal-command-input" id="terminalInput"
+                       placeholder="&gt; type a command (help, status, char list, send &lt;msg&gt;, …)"
+                       onkeydown="handleTerminalKey(event)">
+                <button class="cp-btn" onclick="runTerminalCommand()" style="padding:8px 12px;">⏎</button>
+            </div>
+
+        </div><!-- /terminal -->
+
+    </div><!-- /cp-panel -->
+
+</div><!-- /cosysim-root -->
+
+<script src="{{ url_for('static', filename='js/video.js') }}"></script>
+<script src="{{ url_for('static', filename='js/voice.js') }}"></script>
+<script src="{{ url_for('static', filename='js/phone.js') }}"></script>
+<script src="{{ url_for('static', filename='js/control_panel.js') }}"></script>
+<script>
+// ── Phone frame helpers (kept from original) ──────────────────────────────
+
+function handleMessageKeyDown(e) {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+}
+function handleMessageKeyPress(e) { /* replaced by handleMessageKeyDown */ }
+
+function scrollToBottom() {
+    const c = document.getElementById('messagesContainer');
+    if (c) c.scrollTop = c.scrollHeight;
+}
+
+// Patch addMessage so it always scrolls
+document.addEventListener('DOMContentLoaded', function() {
+    setTimeout(function() {
+        if (typeof addMessage === 'function' && !addMessage._patched) {
+            const orig = addMessage;
+            window.addMessage = function() { orig.apply(this, arguments); scrollToBottom(); };
+            window.addMessage._patched = true;
+        }
+    }, 500);
+});
+
+// ── Conversation tab switching ──────────────────────────────────────────────
+let activeConvTab = 'normal';
+
+function switchConvTab(tab) {
+    activeConvTab = tab;
+    document.getElementById('tabNormal').classList.toggle('active', tab === 'normal');
+    document.getElementById('tabAnon').classList.toggle('active', tab === 'anon');
+    document.getElementById('normalChatHeader').style.display = tab === 'normal' ? '' : 'none';
+    document.getElementById('anonChatHeader').style.display  = tab === 'anon'   ? '' : 'none';
+    document.getElementById('messagesContainer').innerHTML = '';
+    if (tab === 'anon') loadAnonChat();
+    scrollToBottom();
+}
+
+function _renderMessage(msg, container) {
+    const div = document.createElement('div');
+    div.className = 'message ' + (msg.role === 'user' ? 'sent' : 'received');
+    div.innerHTML = '<span class="message-text">' + _esc(msg.content || msg.text || '') + '</span>'
+                  + '<span class="message-time">' + (msg.time || '') + '</span>';
+    container.appendChild(div);
+}
+function _esc(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function loadAnonChat() {
+    fetch('/api/anon/info').then(r=>r.json()).then(info=>{
+        document.getElementById('anonDisplayName').textContent = info.display_name || '❓ Unknown';
+        document.getElementById('anonStatus').textContent = info.status || '...';
+    }).catch(()=>{});
+    fetch('/api/anon/history').then(r=>r.json()).then(data=>{
+        const c = document.getElementById('messagesContainer');
+        c.innerHTML = '';
+        (data.history||[]).forEach(m=>_renderMessage(m,c));
+        scrollToBottom();
+    }).catch(()=>{});
+}
+
+// Route messages to correct backend based on active tab
+document.addEventListener('DOMContentLoaded', function() {
+    setTimeout(function() {
+        if (typeof sendMessage === 'function' && !sendMessage._tabPatched) {
+            const orig = sendMessage;
+            window.sendMessage = function() {
+                if (activeConvTab === 'anon') {
+                    const input = document.getElementById('messageInput');
+                    const msg = input.value.trim();
+                    if (!msg) return;
+                    input.value = '';
+                    const c = document.getElementById('messagesContainer');
+                    _renderMessage({role:'user',content:msg,time:new Date().toLocaleTimeString()},c);
+                    scrollToBottom();
+                    fetch('/api/anon/message',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:msg})})
+                        .then(r=>r.json()).then(data=>{
+                            if(data.reply){_renderMessage({role:'assistant',content:data.reply,time:new Date().toLocaleTimeString()},c);scrollToBottom();}
+                        }).catch(()=>{});
+                } else {
+                    orig.apply(this, arguments);
+                }
+            };
+            window.sendMessage._tabPatched = true;
+        }
+    }, 600);
+});
+
+// ── Voice / video message helpers ──────────────────────────────────────────
+function sendVoiceMessage() {
+    if (!window.socket) return;
+    const text = document.getElementById('messageInput').value.trim() || null;
+    window.socket.emit('send_voice_message', {text, mood:'happy'});
+}
+function sendVideoMessage() {
+    if (!window.socket) return;
+    const text = document.getElementById('messageInput').value.trim() || null;
+    window.socket.emit('send_video_message', {text, mood:'happy'});
+}
+
+function openGalleryApp() {
+    document.querySelectorAll('.screen-view').forEach(el=>el.style.display='none');
+    document.getElementById('galleryScreen').style.display='';
+    if (typeof loadGallery === 'function') loadGallery();
+}
+
+// Clock
+function updateClock() {
+    const now = new Date();
+    const t = now.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+    const el = document.getElementById('statusTime');
+    const hel = document.getElementById('homeTime');
+    if (el) el.textContent = t;
+    if (hel) hel.textContent = t;
+    const del = document.getElementById('homeDate');
+    if (del) del.textContent = now.toLocaleDateString([],{weekday:'long',month:'long',day:'numeric'});
+}
+setInterval(updateClock,1000); updateClock();
+</script>
+</body>
+</html>
+    <style>
         /* ---- Input area redesign ---- */
         .message-input-container {
             display: flex;

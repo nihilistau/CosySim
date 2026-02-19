@@ -21,6 +21,14 @@ from content.simulation.character_system.character import Character
 from content.simulation.services.media_generator import MediaGenerator
 
 
+def _float_safe(val, default=0.5):
+    """Safely convert a value to float, returning default if it's a non-numeric string."""
+    try:
+        return float(val)
+    except (TypeError, ValueError):
+        return default
+
+
 class AutonomousMessenger:
     """
     Background service that makes characters send messages autonomously
@@ -257,14 +265,14 @@ class AutonomousMessenger:
             ]
         
         # Modify based on mood and relationship
-        if float(character.mood or 0) > 0.7:
+        if _float_safe(character.mood) > 0.7:
             templates.extend([
                 "I'm in such a good mood! 😊",
                 "Feeling amazing today!",
                 "You always make me smile"
             ])
         
-        if float(character.relationship_level or 0) > 0.7:
+        if _float_safe(character.relationship_level) > 0.7:
             templates.extend([
                 "I love talking to you ❤️",
                 "You're always on my mind",
@@ -309,7 +317,7 @@ class AutonomousMessenger:
             "Thinking of you...",
         ]
         
-        if float(character.relationship_level or 0) > 0.7:
+        if _float_safe(character.relationship_level) > 0.7:
             captions.extend([
                 "Just for you 😉",
                 "Been waiting to send you this...",
