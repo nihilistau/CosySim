@@ -176,9 +176,6 @@ if __name__ == "__main__":
     )
     print("Generated:", path)
 
-
-
-class MediaGenerator:
     """Generate photos and videos for characters"""
     
     def __init__(self, comfyui_url: str = "http://127.0.0.1:8188"):
