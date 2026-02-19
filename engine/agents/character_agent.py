@@ -32,6 +32,14 @@ import logging
 import threading
 from typing import Any, Dict, List, Optional
 
+try:
+    from engine.logging import timed
+except ImportError:
+    def timed(name):
+        def decorator(fn):
+            return fn
+        return decorator
+
 logger = logging.getLogger(__name__)
 
 
@@ -249,6 +257,7 @@ class CharacterAgent:
             return lms.llm(self.model)
         return lms.llm()
 
+    @timed("llm.complete")
     def _complete(self, llm_handle, chat) -> str:
         """Simple text completion (no tools)."""
         stream = llm_handle.respond(chat)
@@ -264,6 +273,7 @@ class CharacterAgent:
             self._stream = None
         return "".join(chunks).strip()
 
+    @timed("llm.act")
     def _act(self, llm_handle, chat, tools: List, *, chain_id: Optional[str]) -> str:
         """Agentic loop completion with skill tools."""
         from engine.skills.chain_context import set_chain_context, clear_chain_context

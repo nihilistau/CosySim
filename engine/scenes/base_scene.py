@@ -264,19 +264,41 @@ class BaseScene(ABC):
 
     def get_health(self) -> Dict[str, Any]:
         """
-        Return a simple health-check dict for the admin panel.
+        Return a health-check dict for the admin panel and hub.
 
+        Includes system metrics from the monitor when available.
         Subclasses can override to add service-level checks.
-
-        Returns:
-            dict with keys ``ok`` (bool), ``scene`` (str), ``port`` (int),
-            and optional ``details`` string.
         """
-        return {
+        health = {
             "ok": True,
             "scene": self.scene_name,
             "port": self.port,
+            "characters": len(self.active_characters),
         }
+        try:
+            from engine.logging import get_system_monitor
+            monitor = get_system_monitor()
+            health["system"] = monitor.snapshot()
+        except Exception:
+            pass
+        return health
+
+    def register_health_route(self, app) -> None:
+        """Register ``/api/health`` on a Flask app.
+
+        Call this in ``start()`` after creating the Flask app::
+
+            self.register_health_route(self.app)
+        """
+        import json as _json
+        from flask import Response
+
+        @app.route("/api/health")
+        def _health():
+            return Response(
+                _json.dumps(self.get_health()),
+                mimetype="application/json",
+            )
     
     # ============= LIFECYCLE HOOKS =============
     # Override these in subclasses to react to scene events.

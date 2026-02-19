@@ -18,6 +18,15 @@ from typing import Optional, Dict, List, Tuple, Any
 import sys
 
 project_root = Path(__file__).parent.parent.parent.parent
+
+try:
+    from engine.logging import timed
+except ImportError:
+    def timed(name):
+        """Fallback no-op if engine.logging not available."""
+        def decorator(fn):
+            return fn
+        return decorator
 sys.path.insert(0, str(project_root))
 
 try:
@@ -480,6 +489,7 @@ class ComfyUIClient:
     #  Public generation methods
     # ──────────────────────────────
 
+    @timed("comfyui.generate_image")
     def generate_image(
         self,
         positive_prompt: str,
@@ -543,6 +553,7 @@ class ComfyUIClient:
 
         return self._create_placeholder_image(save_dir, filename_prefix)
 
+    @timed("comfyui.generate_selfie")
     def generate_character_selfie(
         self,
         appearance: str,

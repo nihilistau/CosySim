@@ -202,6 +202,26 @@ class Database:
                 )
             """)
 
+            # ── Character relationships (per-pair) ──
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS character_relationships (
+                    id TEXT PRIMARY KEY,
+                    character_a_id TEXT NOT NULL,
+                    character_b_id TEXT NOT NULL,
+                    relationship_level REAL DEFAULT 0.5,
+                    trust REAL DEFAULT 0.5,
+                    attraction REAL DEFAULT 0.5,
+                    arousal_a REAL DEFAULT 0.0,
+                    arousal_b REAL DEFAULT 0.0,
+                    interaction_count INTEGER DEFAULT 0,
+                    last_interaction TEXT,
+                    metadata TEXT DEFAULT '{}',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    UNIQUE(character_a_id, character_b_id)
+                )
+            """)
+
             # Create indexes for performance
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_memories_character ON memories(character_id)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_conversations_character ON conversations(character_id)")
@@ -211,6 +231,8 @@ class Database:
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_events_chain ON events(chain_id)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_events_scene ON events(scene_id)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_events_character ON events(character_id)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_rel_a ON character_relationships(character_a_id)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_rel_b ON character_relationships(character_b_id)")
 
         # Apply column migrations for existing databases
         self._migrate_schema()
@@ -1132,6 +1154,118 @@ class Database:
                 m['metadata'] = json.loads(m['metadata']) if m['metadata'] else {}
                 items.append(m)
         return items, total
+
+    # ============= CHARACTER RELATIONSHIPS =============
+
+    def _rel_key(self, a: str, b: str):
+        """Canonical order so (a,b) and (b,a) map to the same row."""
+        return (min(a, b), max(a, b))
+
+    def get_relationship(self, char_a: str, char_b: str) -> dict | None:
+        """Get the relationship between two characters (order-independent)."""
+        a, b = self._rel_key(char_a, char_b)
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT * FROM character_relationships WHERE character_a_id=? AND character_b_id=?",
+                (a, b),
+            )
+            row = cursor.fetchone()
+            if not row:
+                return None
+            r = dict(row)
+            r['metadata'] = json.loads(r['metadata']) if r['metadata'] else {}
+            return r
+
+    def create_relationship(self, char_a: str, char_b: str, **kwargs) -> str:
+        """Create a new relationship between two characters."""
+        a, b = self._rel_key(char_a, char_b)
+        rel_id = str(uuid.uuid4())
+        ts = datetime.now().isoformat()
+        meta = json.dumps(kwargs.get('metadata', {}))
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT OR IGNORE INTO character_relationships
+                (id, character_a_id, character_b_id, relationship_level, trust, attraction,
+                 arousal_a, arousal_b, interaction_count, last_interaction, metadata, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                rel_id, a, b,
+                kwargs.get('relationship_level', 0.5),
+                kwargs.get('trust', 0.5),
+                kwargs.get('attraction', 0.5),
+                kwargs.get('arousal_a', 0.0),
+                kwargs.get('arousal_b', 0.0),
+                kwargs.get('interaction_count', 0),
+                kwargs.get('last_interaction'),
+                meta, ts, ts,
+            ))
+        return rel_id
+
+    def update_relationship(self, char_a: str, char_b: str, **kwargs) -> bool:
+        """Update relationship fields between two characters."""
+        a, b = self._rel_key(char_a, char_b)
+        allowed = {'relationship_level', 'trust', 'attraction', 'arousal_a',
+                    'arousal_b', 'interaction_count', 'last_interaction', 'metadata'}
+        sets = []
+        vals = []
+        for k, v in kwargs.items():
+            if k not in allowed:
+                continue
+            if k == 'metadata':
+                v = json.dumps(v) if isinstance(v, dict) else v
+            sets.append(f"{k} = ?")
+            vals.append(v)
+        if not sets:
+            return False
+        sets.append("updated_at = ?")
+        vals.append(datetime.now().isoformat())
+        vals.extend([a, b])
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                f"UPDATE character_relationships SET {', '.join(sets)} "
+                f"WHERE character_a_id=? AND character_b_id=?",
+                vals,
+            )
+            return cursor.rowcount > 0
+
+    def get_or_create_relationship(self, char_a: str, char_b: str, **defaults) -> dict:
+        """Get existing relationship or create a new one with defaults."""
+        rel = self.get_relationship(char_a, char_b)
+        if rel:
+            return rel
+        self.create_relationship(char_a, char_b, **defaults)
+        return self.get_relationship(char_a, char_b)
+
+    def list_relationships(self, character_id: str) -> list:
+        """List all relationships for a character."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT * FROM character_relationships "
+                "WHERE character_a_id=? OR character_b_id=? "
+                "ORDER BY updated_at DESC",
+                (character_id, character_id),
+            )
+            rows = []
+            for row in cursor.fetchall():
+                r = dict(row)
+                r['metadata'] = json.loads(r['metadata']) if r['metadata'] else {}
+                rows.append(r)
+            return rows
+
+    def delete_relationship(self, char_a: str, char_b: str) -> bool:
+        """Delete a relationship."""
+        a, b = self._rel_key(char_a, char_b)
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "DELETE FROM character_relationships WHERE character_a_id=? AND character_b_id=?",
+                (a, b),
+            )
+            return cursor.rowcount > 0
 
 
 if __name__ == "__main__":

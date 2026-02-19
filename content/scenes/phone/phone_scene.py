@@ -34,7 +34,7 @@ from engine.scenes.base_scene import BaseScene
 from engine.assets import CharacterAsset
 from content.simulation.services.llm_service import get_llm_service
 from content.simulation.services.anonymous_character import create_anonymous_character, AnonymousCharacter
-from content.simulation.services.cosylogger import install_logger, get_logs
+from engine.logging import install_logger, get_logs
 
 
 class PhoneScene(BaseScene):

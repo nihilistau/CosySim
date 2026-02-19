@@ -406,3 +406,98 @@ class TestCharacterState:
         cid = _make_character(db)
         assert db.delete_character_state(cid)
         assert db.get_character_state(cid) is None
+
+
+# ═══════════════════════════════════════════════════════════════════════
+#  CHARACTER RELATIONSHIPS
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestRelationships:
+    def _pair(self, db):
+        a = _make_character(db, "Alice")
+        b = _make_character(db, "Bob")
+        return a, b
+
+    def test_create_and_get(self, db):
+        a, b = self._pair(db)
+        rid = db.create_relationship(a, b, trust=0.7)
+        assert rid
+        rel = db.get_relationship(a, b)
+        assert rel is not None
+        assert rel["trust"] == 0.7
+
+    def test_order_independent(self, db):
+        a, b = self._pair(db)
+        db.create_relationship(a, b, attraction=0.9)
+        assert db.get_relationship(b, a)["attraction"] == 0.9
+
+    def test_defaults(self, db):
+        a, b = self._pair(db)
+        db.create_relationship(a, b)
+        rel = db.get_relationship(a, b)
+        assert rel["relationship_level"] == 0.5
+        assert rel["arousal_a"] == 0.0
+
+    def test_update(self, db):
+        a, b = self._pair(db)
+        db.create_relationship(a, b)
+        assert db.update_relationship(a, b, trust=0.9, arousal_a=0.3)
+        rel = db.get_relationship(a, b)
+        assert rel["trust"] == 0.9
+        assert rel["arousal_a"] == 0.3
+
+    def test_update_nonexistent_returns_false(self, db):
+        assert not db.update_relationship("x", "y", trust=0.5)
+
+    def test_update_bad_field_ignored(self, db):
+        a, b = self._pair(db)
+        db.create_relationship(a, b)
+        assert not db.update_relationship(a, b, badfield=1)
+
+    def test_get_or_create(self, db):
+        a, b = self._pair(db)
+        rel = db.get_or_create_relationship(a, b, trust=0.8)
+        assert rel["trust"] == 0.8
+        rel2 = db.get_or_create_relationship(a, b, trust=0.1)
+        assert rel2["trust"] == 0.8  # not overwritten
+
+    def test_list_relationships(self, db):
+        a, b = self._pair(db)
+        c = _make_character(db, "Charlie")
+        db.create_relationship(a, b)
+        db.create_relationship(a, c)
+        rels = db.list_relationships(a)
+        assert len(rels) == 2
+
+    def test_list_empty(self, db):
+        a = _make_character(db, "Alice")
+        assert db.list_relationships(a) == []
+
+    def test_delete_relationship(self, db):
+        a, b = self._pair(db)
+        db.create_relationship(a, b)
+        assert db.delete_relationship(a, b)
+        assert db.get_relationship(a, b) is None
+
+    def test_delete_nonexistent(self, db):
+        assert not db.delete_relationship("x", "y")
+
+    def test_metadata_roundtrip(self, db):
+        a, b = self._pair(db)
+        db.create_relationship(a, b, metadata={"history": ["met at bar"]})
+        rel = db.get_relationship(a, b)
+        assert rel["metadata"]["history"] == ["met at bar"]
+
+    def test_update_metadata(self, db):
+        a, b = self._pair(db)
+        db.create_relationship(a, b)
+        db.update_relationship(a, b, metadata={"note": "close"})
+        rel = db.get_relationship(a, b)
+        assert rel["metadata"]["note"] == "close"
+
+    def test_duplicate_create_ignored(self, db):
+        a, b = self._pair(db)
+        db.create_relationship(a, b, trust=0.3)
+        db.create_relationship(a, b, trust=0.9)  # INSERT OR IGNORE
+        rel = db.get_relationship(a, b)
+        assert rel["trust"] == 0.3  # first wins
