@@ -1,6 +1,10 @@
 """
 Autonomous Messenger Service
-Background service for character-initiated messaging
+Background service for character-initiated messaging.
+
+Every autonomous send cycle is recorded as an EventChain starting with an
+``autonomous_trigger`` root event so that the diagnostics panel can trace
+exactly when and why a character reached out.
 """
 
 import time
@@ -17,6 +21,7 @@ project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 from content.simulation.database.db import Database
+from content.simulation.database.events import EventChain
 from content.simulation.character_system.character import Character
 from content.simulation.services.media_generator import MediaGenerator
 
@@ -31,7 +36,11 @@ def _float_safe(val, default=0.5):
 
 class AutonomousMessenger:
     """
-    Background service that makes characters send messages autonomously
+    Background service that makes characters send messages autonomously.
+
+    Characters registered with :meth:`register_character` will have messages
+    generated and delivered on a schedule controlled by their frequency setting.
+    Each send cycle is logged to the EventChain for full audit-trail visibility.
     """
     
     def __init__(self, db: Database, socketio=None):
@@ -39,7 +48,8 @@ class AutonomousMessenger:
         self.socketio = socketio  # For real-time push
         self.scheduler = BackgroundScheduler()
         self.media_gen = MediaGenerator()
-        
+        self.event_chain = EventChain(self.db)  # Shared diagnostics log
+
         # Configuration
         self.enabled = False
         self.active_characters: Dict[str, Dict] = {}  # character_id -> config
@@ -183,39 +193,97 @@ class AutonomousMessenger:
             self._send_autonomous_message(character_id)
     
     def _send_autonomous_message(self, character_id: str):
-        """Send an autonomous message from character"""
+        """Send an autonomous message from character with full EventChain logging."""
+        # Start a diagnostics chain so every part of this cycle is traceable
+        chain_id = self.event_chain.start_chain(
+            scene_id='autonomous_messenger',
+            character_id=character_id,
+            summary=f'Autonomous cycle for {character_id}',
+        )
+        trigger_ev = self.event_chain.log(
+            event_type='autonomous_trigger',
+            actor='system',
+            payload={
+                'character_id': character_id,
+                'frequency': self.active_characters.get(character_id, {}).get('frequency', 'unknown'),
+            },
+            summary=f'Autonomous trigger fired for {character_id}',
+            chain_id=chain_id,
+            scene_id='autonomous_messenger',
+            character_id=character_id,
+        )
+
         try:
             # Load character
             character = Character.load(character_id, self.db)
             if not character:
+                self.event_chain.log(
+                    event_type='error',
+                    actor='system',
+                    payload={'reason': 'character_not_found', 'character_id': character_id},
+                    summary=f'Character {character_id} not found — skipping cycle',
+                    chain_id=chain_id,
+                    scene_id='autonomous_messenger',
+                    character_id=character_id,
+                    parent_id=trigger_ev,
+                )
                 return
-            
+
             config = self.active_characters[character_id]
-            
+
             # Decide message type
             message_type = self._choose_message_type(character, config)
-            
+
+            # Log the decision
+            decide_ev = self.event_chain.log(
+                event_type='tool_call',
+                actor='system',
+                payload={'message_type': message_type, 'enable_photos': config.get('enable_photos'), 'enable_voice': config.get('enable_voice')},
+                summary=f'Chose message type: {message_type}',
+                chain_id=chain_id,
+                scene_id='autonomous_messenger',
+                character_id=character_id,
+                parent_id=trigger_ev,
+            )
+
             if message_type == "text":
                 content = self._generate_autonomous_text(character)
                 self._send_message(character, content, type="text")
-            
             elif message_type == "photo":
                 # Generate and send photo
                 photo_path = self._generate_autonomous_photo(character)
                 if photo_path:
                     caption = self._generate_photo_caption(character)
                     self._send_message(character, caption, type="photo", media_path=photo_path)
-            
             elif message_type == "voice":
                 # TODO: Implement voice message generation
                 pass
-            
+
+            # Log successful send
+            self.event_chain.log(
+                event_type='message_out',
+                actor='agent',
+                payload={'message_type': message_type, 'character': character.name},
+                summary=f'{character.name} sent autonomous {message_type}',
+                chain_id=chain_id,
+                scene_id='autonomous_messenger',
+                character_id=character_id,
+                parent_id=decide_ev,
+            )
+
             # Update last message time
             config["last_message_time"] = datetime.now()
-            
+
             print(f"📱 {character.name} sent autonomous {message_type} message")
-        
+
         except Exception as e:
+            self.event_chain.log_error(
+                e,
+                chain_id=chain_id,
+                scene_id='autonomous_messenger',
+                character_id=character_id,
+                parent_id=trigger_ev,
+            )
             print(f"Error sending autonomous message: {e}")
     
     def _choose_message_type(self, character: Character, config: Dict) -> str:

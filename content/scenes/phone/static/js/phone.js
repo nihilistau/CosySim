@@ -179,12 +179,14 @@ function openApp(appName) {
     
     // Show selected screen
     const screenMap = {
-        'messages': 'messagesScreen',
-        'phone': 'phoneScreen',
-        'gallery': 'galleryScreen',
-        'camera': 'homeScreen', // Placeholder
-        'settings': 'homeScreen', // Placeholder
-        'browser': 'homeScreen' // Placeholder
+        'messages':      'messagesScreen',
+        'phone':         'phoneScreen',
+        'gallery':       'galleryScreen',
+        'camera':        'homeScreen',        // Placeholder
+        'browser':       'homeScreen',        // Placeholder
+        'videoMessages': 'videoMessagesScreen',
+        'voiceMessages': 'voiceMessagesScreen',
+        'settings':      'settingsScreen'
     };
     
     const screenId = screenMap[appName] || 'homeScreen';
@@ -196,6 +198,12 @@ function openApp(appName) {
         loadMessages();
     } else if (appName === 'gallery') {
         loadGallery();
+    } else if (appName === 'videoMessages') {
+        loadVideoMessages();
+    } else if (appName === 'voiceMessages') {
+        loadVoiceMessages();
+    } else if (appName === 'settings') {
+        loadPhoneSettings();
     }
 }
 
@@ -203,6 +211,189 @@ function goHome() {
     const screens = document.querySelectorAll('.screen-view');
     screens.forEach(screen => screen.style.display = 'none');
     document.getElementById('homeScreen').style.display = 'block';
+}
+
+// ══════════════════════════════ Video Messages gallery ══════════════════════
+async function loadVideoMessages() {
+    const list = document.getElementById('videoMsgList');
+    if (!list) return;
+    list.innerHTML = '<div class="media-empty">Loading…</div>';
+
+    try {
+        const res  = await fetch('/api/video-messages/list?limit=50');
+        const data = await res.json();
+
+        if (!data.messages || data.messages.length === 0) {
+            list.innerHTML = '<div class="media-empty">🎥<br>No video messages yet.<br>Send one from the chat!</div>';
+            return;
+        }
+
+        list.innerHTML = data.messages.map(m => `
+            <div class="media-card" onclick="openMediaOverlay('video', '${_escAttr(m.url)}', '${_escAttr(m.title)}')">
+                <div class="media-card-thumb">🎥</div>
+                <div class="media-card-info">
+                    <div class="media-card-title">${_escHtml(m.title)}</div>
+                    <div class="media-card-meta">${_escHtml(m.timestamp_display)}${m.mood ? '  ·  ' + _escHtml(m.mood) : ''}</div>
+                </div>
+                ${m.duration ? `<div class="media-card-duration">${_fmtDur(m.duration)}</div>` : ''}
+            </div>
+        `).join('');
+    } catch (err) {
+        list.innerHTML = '<div class="media-empty">⚠️ Could not load video messages.</div>';
+        console.error('loadVideoMessages error:', err);
+    }
+}
+
+// ══════════════════════════════ Voice Messages gallery ══════════════════════
+async function loadVoiceMessages() {
+    const list = document.getElementById('voiceMsgList');
+    if (!list) return;
+    list.innerHTML = '<div class="media-empty">Loading…</div>';
+
+    try {
+        const res  = await fetch('/api/voice-messages/list?limit=50');
+        const data = await res.json();
+
+        if (!data.messages || data.messages.length === 0) {
+            list.innerHTML = '<div class="media-empty">🎤<br>No voice messages yet.<br>Send one from the chat!</div>';
+            return;
+        }
+
+        list.innerHTML = data.messages.map(m => `
+            <div class="media-card" onclick="openMediaOverlay('audio', '${_escAttr(m.url)}', '${_escAttr(m.title)}')">
+                <div class="media-card-thumb">🎤</div>
+                <div class="media-card-info">
+                    <div class="media-card-title">${_escHtml(m.title)}</div>
+                    <div class="media-card-meta">${_escHtml(m.timestamp_display)}${m.mood ? '  ·  ' + _escHtml(m.mood) : ''}</div>
+                </div>
+                ${m.duration ? `<div class="media-card-duration">${_escHtml(m.duration_display || _fmtDur(m.duration))}</div>` : ''}
+            </div>
+        `).join('');
+    } catch (err) {
+        list.innerHTML = '<div class="media-empty">⚠️ Could not load voice messages.</div>';
+        console.error('loadVoiceMessages error:', err);
+    }
+}
+
+// ═══════════════════════ Skype-style connecting overlay ═════════════════════
+/**
+ * Open the connecting animation then switch to the media player.
+ * @param {'video'|'audio'} type  - which HTML media element to use
+ * @param {string}          url   - media source URL
+ * @param {string}          title - display title
+ */
+function openMediaOverlay(type, url, title) {
+    const overlay       = document.getElementById('mediaOverlay');
+    const connecting    = document.getElementById('connectingPhase');
+    const playerWrap    = document.getElementById('mediaPlayerWrap');
+    const playerTitle   = document.getElementById('mediaPlayerTitle');
+    const playerVideo   = document.getElementById('mediaPlayerVideo');
+    const playerAudio   = document.getElementById('mediaPlayerAudio');
+
+    if (!overlay) return;
+
+    // Reset state
+    connecting.style.display   = 'flex';
+    playerWrap.classList.remove('active');
+    playerVideo.src = '';
+    playerAudio.src = '';
+    playerVideo.style.display = 'none';
+    playerAudio.style.display = 'none';
+    document.getElementById('connectingLabel').textContent = 'Connecting…';
+
+    // Show overlay
+    overlay.classList.add('active');
+
+    // Simulate the Skype-style connecting phase (800 ms → player)
+    setTimeout(() => {
+        connecting.style.display = 'none';
+        playerTitle.textContent  = title || '';
+
+        if (type === 'video') {
+            playerVideo.src           = url;
+            playerVideo.style.display = 'block';
+        } else {
+            playerAudio.src           = url;
+            playerAudio.style.display = 'block';
+        }
+
+        playerWrap.classList.add('active');
+
+        // Auto-play
+        const el = type === 'video' ? playerVideo : playerAudio;
+        el.play().catch(() => {/* autoplay blocked — user can still press play */});
+    }, 820);
+}
+
+function closeMediaOverlay() {
+    const overlay     = document.getElementById('mediaOverlay');
+    const playerVideo = document.getElementById('mediaPlayerVideo');
+    const playerAudio = document.getElementById('mediaPlayerAudio');
+    if (!overlay) return;
+    overlay.classList.remove('active');
+    playerVideo.pause(); playerVideo.src = '';
+    playerAudio.pause(); playerAudio.src = '';
+    // Reset phases for next open
+    document.getElementById('connectingPhase').style.display  = 'flex';
+    document.getElementById('mediaPlayerWrap').classList.remove('active');
+}
+
+// ═══════════════════════════════ Settings screen ════════════════════════════
+async function loadPhoneSettings() {
+    try {
+        const res  = await fetch('/api/settings');
+        const data = await res.json();
+        const _v   = (id, val) => { const el = document.getElementById(id); if (el) el.value = val ?? el.value; };
+        _v('set_msg_timeout',   data.message_timeout);
+        _v('set_audio_timeout', data.audio_timeout);
+        _v('set_video_timeout', data.video_timeout);
+        _v('set_custom_ctx',    data.custom_llm_context ?? '');
+        const freq = document.getElementById('set_auto_freq');
+        if (freq && data.autonomous_frequency) freq.value = data.autonomous_frequency;
+    } catch (err) {
+        console.error('loadPhoneSettings error:', err);
+    }
+}
+
+async function savePhoneSettings() {
+    const _num = id => { const el = document.getElementById(id); return el ? parseInt(el.value) : undefined; };
+    const _str = id => { const el = document.getElementById(id); return el ? el.value : undefined; };
+    const payload = {
+        message_timeout:        _num('set_msg_timeout'),
+        audio_timeout:          _num('set_audio_timeout'),
+        video_timeout:          _num('set_video_timeout'),
+        custom_llm_context:     _str('set_custom_ctx'),
+        autonomous_frequency:   _str('set_auto_freq')
+    };
+    try {
+        const res  = await fetch('/api/settings', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (data.success) {
+            const btn = document.querySelector('.settings-save-btn');
+            if (btn) { btn.textContent = '✅ Saved!'; setTimeout(() => btn.textContent = '💾 Save Settings', 1800); }
+        }
+    } catch (err) {
+        console.error('savePhoneSettings error:', err);
+    }
+}
+
+// ═════════════════════════════ Shared helpers ════════════════════════════════
+/** Escape HTML special chars for textContent injection */
+function _escHtml(s) {
+    if (!s) return '';
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+/** Escape for HTML attribute values (already escaped < > but also double-quotes) */
+function _escAttr(s) { return _escHtml(s); }
+/** Format integer seconds as M:SS */
+function _fmtDur(sec) {
+    sec = parseInt(sec) || 0;
+    const m = Math.floor(sec / 60), s = sec % 60;
+    return `${m}:${String(s).padStart(2,'0')}`;
 }
 
 // Messages functionality

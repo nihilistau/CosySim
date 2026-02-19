@@ -7,6 +7,7 @@ import os
 import uuid
 import wave
 import struct
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict, List
@@ -14,6 +15,8 @@ import sys
 
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
+
+logger = logging.getLogger(__name__)
 
 from content.simulation.database.db import Database
 from engine.assets import AssetManager, AudioAsset
@@ -58,7 +61,9 @@ class VoiceMessageGenerator:
         character_id: str,
         character_name: str,
         text: str,
-        emotion: str = "neutral"
+        emotion: str = "neutral",
+        chain_id: Optional[str] = None,
+        scene_id: str = "unknown",
     ) -> Optional[Dict]:
         """
         Generate a voice message from text
@@ -141,7 +146,7 @@ class VoiceMessageGenerator:
                     emotion=emotion
                 )
             
-            return {
+            result = {
                 "asset_id": audio_asset.id,
                 "filepath": str(filepath),
                 "filename": filename,
@@ -151,6 +156,25 @@ class VoiceMessageGenerator:
                 "sample_rate": self.sample_rate,
                 "timestamp": datetime.now().isoformat()
             }
+
+            # Log to EventChain
+            try:
+                from content.simulation.database.events import EventChain
+                ec = EventChain()
+                if chain_id:
+                    ec.log(
+                        'media_generated', actor='voice_generator',
+                        payload={'type': 'voice', 'path': str(filepath),
+                                 'character': character_name, 'emotion': emotion,
+                                 'duration': duration, 'text': text[:100]},
+                        summary=f'Voice generated: {character_name} ({emotion}, {duration:.1f}s)',
+                        chain_id=chain_id, scene_id=scene_id,
+                        character_id=character_id,
+                    )
+            except Exception:
+                pass
+
+            return result
         
         except Exception as e:
             print(f"Error generating voice message: {e}")

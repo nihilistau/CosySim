@@ -107,7 +107,9 @@ def main():
                 "🎨 Asset Generator",
                 "🔗 Dependency Graph",
                 "📜 Log Viewer",
-                "📈 Performance Monitor",
+                "  Event Chains",
+                "🤖 LM Studio",
+                " 📈 Performance Monitor",
                 "💾 Backup & Restore"
             ],
             label_visibility="collapsed"
@@ -149,7 +151,11 @@ def main():
         show_asset_generator()
     elif page == "📜 Log Viewer":
         show_log_viewer()
-    elif page == "📈 Performance Monitor":
+    elif page == "  Event Chains":
+        show_event_chains()
+    elif page == "🤖 LM Studio":
+        show_lmstudio()
+    elif page == " 📈 Performance Monitor":
         show_performance_monitor()
     elif page == "💾 Backup & Restore":
         show_backup_restore()
@@ -882,7 +888,7 @@ def show_dependency_graph():
 def show_asset_generator():
     """Generate images, videos, audio and stories via ComfyUI / TTS / LLM."""
     st.header("🎨 Asset Generator")
-    st.markdown("Generate media assets directly from the admin panel. Requires ComfyUI (192.168.8.150:8188) and LM Studio (localhost:1234) to be running.")
+    st.markdown("Generate media assets directly from the admin panel. Requires ComfyUI and LM Studio (localhost:1234) to be running.")
 
     tab_img, tab_vid, tab_voice, tab_story = st.tabs(["🖼️ Image", "🎥 Video", "🎤 Voice", "📖 Story"])
 
@@ -908,7 +914,7 @@ def show_asset_generator():
                     from content.simulation.services.comfyui_client import get_comfyui_client
                     client = get_comfyui_client()
                     if not client.is_available():
-                        st.error("ComfyUI not reachable at 192.168.8.150:8188")
+                        st.error("ComfyUI not reachable. Check config/default.yaml for comfyui.base_url.")
                     else:
                         save_dir = Path(__file__).parent.parent.parent / "simulation" / "media" / "images"
                         save_dir.mkdir(parents=True, exist_ok=True)
@@ -1061,6 +1067,223 @@ def show_log_viewer():
             st.error(f"Error: {e}")
 
 
+def show_event_chains():
+    """
+    EventChain diagnostics viewer.
+
+    Shows recent event chains from the ``events`` table so developers can
+    trace every LLM request, tool call, and autonomous trigger in one place.
+    """
+    st.header("\U0001f517 Event Chains")
+    st.markdown(
+        "Browse causal event trees logged by ``CharacterAgent``, ``AutonomousMessenger``, "
+        "and other services.  Each *chain* groups all events for a single turn or "
+        "autonomous cycle."
+    )
+
+    try:
+        import sys
+        from pathlib import Path
+        project_root = Path(__file__).parent.parent.parent.parent
+        sys.path.insert(0, str(project_root))
+        from content.simulation.database.db import Database
+        from content.simulation.database.events import EventChain
+
+        db = Database()
+        ec = EventChain(db)
+
+        col1, col2 = st.columns(2)
+        with col1:
+            scene_filter = st.text_input("Scene filter (leave blank for all)", "")
+        with col2:
+            limit = st.number_input("Max chains", 5, 200, 20)
+
+        chains = ec.get_recent_chains(scene_id=scene_filter or None, limit=int(limit))
+
+        if not chains:
+            st.info("No event chains recorded yet.  Start the phone scene and send a message.")
+            return
+
+        st.markdown(f"**{len(chains)} chain(s) found**")
+        st.markdown("---")
+
+        for chain in chains:
+            chain_id   = chain.get("chain_id", "?")
+            scene_id   = chain.get("scene_id", "?")
+            summary    = chain.get("summary", "")
+            char_id    = chain.get("character_id", "")
+            timestamp  = chain.get("started_at", "")
+            
+            tree = ec.get_chain_as_tree(chain_id)
+            root_events = tree.get("events", [])
+            # Count all events recursively
+            def _count(nodes):
+                n = len(nodes)
+                for node in nodes:
+                    n += _count(node.get("children", []))
+                return n
+            evt_count = _count(root_events)
+            
+            with st.expander(
+                f"{evt_count} events  |  {timestamp[:19]}  |  {scene_id}",
+                expanded=False,
+            ):
+                if not root_events:
+                    st.info("No events")
+                    continue
+
+                icon_map = {
+                    "llm_request":  "\U0001f4e4",
+                    "llm_response": "\U0001f916",
+                    "llm_cancelled": "\u274c",
+                    "tool_call":    "\U0001f527",
+                    "tool_result":  "\u2705",
+                    "rag_query":    "\U0001f50d",
+                    "rag_result":   "\U0001f9e0",
+                    "memory_stored": "\U0001f4be",
+                    "media_generated": "\U0001f3a8",
+                    "message_in":   "\U0001f4ac",
+                    "message_out":  "\U0001f4f1",
+                    "autonomous_trigger": "\u23f0",
+                    "scene_state_change": "\u2699\ufe0f",
+                    "error":        "\u26a0\ufe0f",
+                }
+
+                def _render_node(node, depth=0):
+                    ev_type = node.get("event_type", "?")
+                    actor   = node.get("actor", "?")
+                    ev_sum  = node.get("summary", "")
+                    ts      = node.get("timestamp", "")[:19]
+                    icon    = icon_map.get(ev_type, "\u25b6\ufe0f")
+                    indent  = "\u00a0\u00a0\u00a0\u00a0" * depth
+                    connector = "\u2514\u2500 " if depth > 0 else ""
+                    st.markdown(
+                        f"{indent}{connector}{icon} **{ev_type}** _(actor={actor})_"
+                        f"  &nbsp; {ts}  \n"
+                        f"{indent}\u00a0\u00a0\u00a0\u00a0 {ev_sum}",
+                        unsafe_allow_html=True,
+                    )
+                    payload = node.get("payload", {})
+                    if payload and st.checkbox(
+                        f"Payload ({ev_type})",
+                        key=node.get("id", f"{chain_id}_{ev_type}_{depth}"),
+                    ):
+                        st.json(payload)
+                    for child in node.get("children", []):
+                        _render_node(child, depth + 1)
+
+                for root_ev in root_events:
+                    _render_node(root_ev)
+
+    except ImportError as e:
+        st.error(f"Could not load EventChain module: {e}")
+    except Exception as e:
+        st.error(f"Error loading event chains: {e}")
+
+
+def show_lmstudio():
+    """
+    LM Studio model management panel.
+
+    Shows server status, currently loaded models, and allows browsing the
+    available model catalogue on disk.  Uses ``engine.lmstudio.LMStudioManager``.
+    """
+    st.header("\U0001f916 LM Studio")
+    st.markdown(
+        "Monitor and manage your local LM Studio instance.  Uses the LMStudio "
+        "Python SDK and CLI.  Make sure **LM Studio server** is running on the "
+        "configured host/port before using this panel."
+    )
+
+    try:
+        from engine.lmstudio import get_lmstudio_manager
+        mgr = get_lmstudio_manager()
+
+        # ── Status row ──
+        col1, col2, col3 = st.columns(3)
+        running = mgr.is_server_running()
+        with col1:
+            st.metric("Server", "\U0001f7e2 Online" if running else "\U0001f534 Offline")
+        with col2:
+            st.metric("Host", mgr.host)
+        with col3:
+            st.metric("Port", str(mgr.port))
+
+        if not running:
+            st.warning(
+                "LM Studio server not reachable.  Start it with:\n"
+                "```\nlms server start\n```"
+            )
+            return
+
+        st.markdown("---")
+
+        # ── Loaded models ──
+        st.subheader("Loaded Models")
+        loaded = mgr.list_loaded_models()
+        if not loaded:
+            st.info("No models currently loaded.  Load one from the catalogue below.")
+        else:
+            for m in loaded:
+                with st.expander(f"\U0001f4e6 {m.get('path', m.get('id', 'unknown'))}", expanded=True):
+                    col_a, col_b = st.columns(2)
+                    with col_a:
+                        st.markdown(f"**Status:** `{m.get('status', '?')}`")
+                    with col_b:
+                        if st.button(f"Unload", key=f"unload_{m.get('id', m.get('path','?'))}"):
+                            try:
+                                mgr.unload_model()
+                                st.success("Model unloaded.  Refresh to update.")
+                            except Exception as ue:
+                                st.error(str(ue))
+
+        st.markdown("---")
+
+        # ── Available models ──
+        st.subheader("Available Models (on disk)")
+        if st.button("\U0001f504 Refresh model list"):
+            st.session_state.pop("lms_available", None)
+
+        if "lms_available" not in st.session_state:
+            with st.spinner("Scanning models\u2026"):
+                st.session_state["lms_available"] = mgr.get_available_models()
+
+        available = st.session_state.get("lms_available", [])
+        if not available:
+            st.info("No models found in LM Studio library.  Add models via the LM Studio app.")
+        else:
+            search = st.text_input("\U0001f50d Filter models", "")
+            shown = [m for m in available if search.lower() in str(m).lower()] if search else available
+
+            st.markdown(f"**{len(shown)} model(s)**")
+            for m in shown[:100]:
+                key = m if isinstance(m, str) else m.get("path", str(m))
+                col_a, col_b = st.columns([4, 1])
+                with col_a:
+                    st.markdown(f"\u2022 `{key}`")
+                with col_b:
+                    if st.button("Load", key=f"load_{hash(key)}"):
+                        try:
+                            mgr.load_model(key)
+                            st.success(f"Load requested for `{key}`")
+                        except Exception as le:
+                            st.error(str(le))
+
+        st.markdown("---")
+
+        # ── VRAM estimate ──
+        st.subheader("VRAM Budget")
+        st.markdown(
+            f"**Cap:** {mgr.vram_cap_mb:,} MB  \u00a0|\u00a0 "
+            f"**Default GPU fraction:** {mgr.default_gpu * 100:.0f}%"
+        )
+
+    except ImportError as e:
+        st.error(f"LM Studio engine module not found: {e}")
+    except Exception as e:
+        st.error(f"Unexpected error: {e}")
+
+
 def show_performance_monitor():
     """Performance monitoring"""
     st.header("📈 Performance Monitor")
@@ -1074,7 +1297,8 @@ def show_performance_monitor():
         with col2:
             st.metric("Memory", f"{psutil.virtual_memory().percent}%")
         with col3:
-            st.metric("Disk", f"{psutil.disk_usage('/').percent}%")
+            disk_path = 'C:\\' if __import__('sys').platform == 'win32' else '/'
+            st.metric("Disk", f"{psutil.disk_usage(disk_path).percent}%")
         with col4:
             st.metric("Python", platform.python_version())
         

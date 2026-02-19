@@ -28,6 +28,8 @@ from content.simulation.services.voice_message import VoiceMessageGenerator
 from content.simulation.services.video_call import VideoCallHandler
 from content.simulation.services.video_message import VideoMessageGenerator
 from content.scenes.phone.apps.gallery import Gallery
+from content.scenes.phone.apps.video_messages import VideoMessagesApp
+from content.scenes.phone.apps.voice_messages import VoiceMessagesApp
 from engine.scenes.base_scene import BaseScene
 from engine.assets import CharacterAsset
 from content.simulation.services.llm_service import get_llm_service
@@ -52,6 +54,8 @@ class PhoneScene(BaseScene):
         # Initialize media services
         self.media_generator = MediaGenerator()
         self.gallery = Gallery(self.db)
+        self.video_messages_app = VideoMessagesApp(self.db)
+        self.voice_messages_app = VoiceMessagesApp(self.db)
         
         # Initialize voice services (TTS/STT models loaded on demand)
         self.voice_call_handler = VoiceCallHandler(db=self.db, socketio=None)  # socketio set later
@@ -994,6 +998,92 @@ class PhoneScene(BaseScene):
             except Exception as e:
                 return jsonify({'error': str(e)}), 500
 
+        # ── Gallery App List Routes ──────────────────────────────────────────
+
+        @self.app.route('/api/video-messages/list', methods=['GET'])
+        def list_video_messages():
+            """
+            Return structured video message cards for the Video Messages gallery screen.
+            Uses VideoMessagesApp which enriches each record with title, duration, etc.
+            Query param: limit (int, default 50)
+            """
+            if not self.active_character:
+                return jsonify({'error': 'No active character'}), 400
+            limit = request.args.get('limit', 50, type=int)
+            cards = self.video_messages_app.get_list(self.active_character.id, limit=limit)
+            return jsonify({'messages': cards, 'count': len(cards)})
+
+        @self.app.route('/api/voice-messages/list', methods=['GET'])
+        def list_voice_messages():
+            """
+            Return structured voice message cards for the Voice Messages gallery screen.
+            Uses VoiceMessagesApp which enriches each record with title, duration, etc.
+            Query param: limit (int, default 50)
+            """
+            if not self.active_character:
+                return jsonify({'error': 'No active character'}), 400
+            limit = request.args.get('limit', 50, type=int)
+            cards = self.voice_messages_app.get_list(self.active_character.id, limit=limit)
+            return jsonify({'messages': cards, 'count': len(cards)})
+
+        # ── Skills API ───────────────────────────────────────────────────────
+
+        @self.app.route('/api/skills/list', methods=['GET'])
+        def list_skills():
+            """
+            List all registered skills (optionally filtered by pack or tag).
+
+            Query params:
+                pack  – filter by pack name (e.g. ``comfyui``)
+                tag   – filter by tag (e.g. ``image``)
+            Returns JSON list of skill dicts with name, pack, description, tags.
+            """
+            try:
+                from engine.skills import SKILL_REGISTRY
+                pack = request.args.get('pack')
+                tag  = request.args.get('tag')
+                tags = [tag] if tag else None
+                skills = [
+                    {
+                        'name':        m.name,
+                        'pack':        m.pack,
+                        'description': m.description,
+                        'tags':        list(m.tags),
+                    }
+                    for m in SKILL_REGISTRY.all_tools(tags=tags)
+                    if (pack is None or m.pack == pack)
+                ]
+                return jsonify({'skills': skills, 'count': len(skills)})
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+
+        @self.app.route('/api/skills/run', methods=['POST'])
+        def run_skill():
+            """
+            Execute a registered skill by name with the provided kwargs.
+
+            Request JSON::
+
+                {"skill": "generate_image", "kwargs": {"prompt": "...", "width": 512}}
+
+            Returns ``{"result": <skill return value>}`` or ``{"error": "..."}`` on
+            failure.  Skill output is always stringified for transport.
+            """
+            try:
+                from engine.skills import SKILL_REGISTRY
+                data    = request.get_json() or {}
+                name    = data.get('skill', '')
+                kwargs  = data.get('kwargs', {})
+                if not name:
+                    return jsonify({'error': 'skill name required'}), 400
+                meta = SKILL_REGISTRY.get_skill(name)
+                if meta is None:
+                    return jsonify({'error': f'Unknown skill: {name}'}), 404
+                result = meta.func(**kwargs)
+                return jsonify({'result': result})
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+
         # ── Anonymous Character Routes ───────────────────────────────────────
 
         @self.app.route('/api/anon/info', methods=['GET'])
@@ -1703,52 +1793,34 @@ class PhoneScene(BaseScene):
         """Set active character (legacy database method)"""
         self.active_character = Character.load(character_id, db=self.db)
     
-    def _asset_to_character(self, char_asset: CharacterAsset) -> Character:
+    # _asset_to_character() inherited from BaseScene
+
+    def get_plugin_info(self) -> dict:
         """
-        Convert CharacterAsset to Character object for compatibility
-        This maintains compatibility with existing services
+        Return metadata describing this scene to the admin panel and launcher.
+
+        Implements the :meth:`BaseScene.get_plugin_info` abstract contract.
         """
-        # Try to load existing character from database
-        try:
-            char = Character.load(char_asset.id, db=self.db)
-            if char:
-                return char
-        except:
-            pass
-        
-        # Create new character in database from asset
-        # Using create_character with proper parameters
-        char_id_new = self.db.create_character(
-            name=char_asset.name,
-            age=char_asset.age or 25,
-            sex=char_asset.gender or 'female',
-            hair_color=char_asset.hair_color or 'brown',
-            eye_color=char_asset.eye_color or 'brown',
-            height=getattr(char_asset, 'height', None) or char_asset.attributes.get('height', '5\'6"'),
-            body_type=getattr(char_asset, 'build', None) or char_asset.attributes.get('body_type', 'slim'),
-            personality_id=char_asset.personality_id,
-            metadata={
-                'description': char_asset.description,
-                'backstory': char_asset.attributes.get('backstory', ''),
-                'voice_profile': char_asset.voice_profile,
-                'relationship_level': char_asset.relationships.get('user', 0.5),
-                'from_asset': True,
-                'asset_id': char_asset.id
-            }
-        )
-        
-        # Update character ID in database to match asset ID if needed
-        if char_id_new != char_asset.id:
-            # Update the ID to match the asset
-            with self.db.get_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute("UPDATE characters SET id = ? WHERE id = ?", (char_asset.id, char_id_new))
-                cursor.execute("UPDATE character_states SET character_id = ? WHERE character_id = ?", (char_asset.id, char_id_new))
-                conn.commit()
-        
-        # Load and return
-        return Character.load(char_asset.id, db=self.db)
-    
+        return {
+            "name":        "Phone Scene",
+            "description": "Android-style phone interface — messages, calls, media gallery, apps",
+            "version":     "2.0.0",
+            "author":      "CosySim",
+            "port":        self.port,
+            "tags":        ["phone", "character", "chat", "media", "voice", "video"],
+            "skill_packs": ["memory", "voice", "comfyui", "character"],
+            "routes": [
+                {"path": "/",                         "methods": ["GET"],  "description": "Phone UI"},
+                {"path": "/api/chat",                 "methods": ["POST"], "description": "Chat with character"},
+                {"path": "/api/gallery/list",         "methods": ["GET"],  "description": "Image gallery"},
+                {"path": "/api/video-messages/list",  "methods": ["GET"],  "description": "Video message gallery"},
+                {"path": "/api/voice-messages/list",  "methods": ["GET"],  "description": "Voice message gallery"},
+                {"path": "/api/skills/list",          "methods": ["GET"],  "description": "List registered skills"},
+                {"path": "/api/skills/run",           "methods": ["POST"], "description": "Execute a skill by name"},
+                {"path": "/api/status",               "methods": ["GET"],  "description": "Scene health / status"},
+            ],
+        }
+
     def start(self) -> None:
         """Start the phone scene (Flask + SocketIO server)"""
         self.run(debug=False)

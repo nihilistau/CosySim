@@ -6,10 +6,14 @@ Character, Scene, Personality, Role, and Message assets for the virtual companio
 
 import json
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, TYPE_CHECKING
 from datetime import datetime
 
-from .base import BaseAsset, register_asset_type, AssetValidationError
+from .base import BaseAsset, AssetMetadata, register_asset_type, AssetValidationError
+
+if TYPE_CHECKING:
+    from content.simulation.database.db import Database
+    from content.simulation.character_system.character import Character
 
 
 @register_asset_type("character")
@@ -32,11 +36,17 @@ class CharacterAsset(BaseAsset):
         # Physical attributes
         self.age: Optional[int] = kwargs.get("age")
         self.gender: Optional[str] = kwargs.get("gender")
+        # sex is the DB column name; gender is the asset field name — both refer to the same concept
+        if not self.gender and kwargs.get("sex"):
+            self.gender = kwargs.get("sex")
         self.ethnicity: Optional[str] = kwargs.get("ethnicity")
         self.hair_color: Optional[str] = kwargs.get("hair_color")
         self.eye_color: Optional[str] = kwargs.get("eye_color")
         self.height: Optional[str] = kwargs.get("height")
         self.build: Optional[str] = kwargs.get("build")
+        # body_type is the DB column name; build is the asset field name
+        if not self.build and kwargs.get("body_type"):
+            self.build = kwargs.get("body_type")
         
         # Behavior settings
         self.messaging_frequency: str = kwargs.get("messaging_frequency", "medium")  # low/medium/high
@@ -106,13 +116,63 @@ class CharacterAsset(BaseAsset):
             nsfw_enabled=data.get("nsfw_enabled", False)
         )
         char.id = data["id"]
-        char.metadata.from_dict(data.get("metadata", {}))
+        char.metadata = AssetMetadata.from_dict(data.get("metadata", {}) or {
+            'asset_id': data['id'], 'asset_type': 'character',
+            'created_at': datetime.now().isoformat(),
+            'updated_at': datetime.now().isoformat(),
+        })
         return char
     
     @classmethod
     def create(cls, name: str, **kwargs) -> "CharacterAsset":
         """Factory method to create a character."""
         return cls(name=name, **kwargs)
+
+    def to_character(self, db: Optional["Database"] = None) -> "Character":
+        """
+        Instantiate a live Character object from this asset.
+
+        The asset holds the static definition (appearance, personality reference, etc.).
+        to_character() either loads an existing DB character by the same name, or creates
+        a new one seeded from the asset's attributes.
+
+        Args:
+            db: Database instance (creates a new one if None)
+
+        Returns:
+            A live Character instance backed by the simulation database.
+        """
+        import sys
+        from pathlib import Path
+        sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+        from content.simulation.database.db import Database as _Database
+        from content.simulation.character_system.character import Character
+
+        _db = db or _Database()
+
+        # Try to find an existing DB character by name first
+        for char_data in _db.get_all_characters():
+            if char_data['name'] == self.name:
+                return Character(char_data['id'], db=_db)
+
+        # Create a new one seeded from asset attributes
+        char_id = _db.create_character(
+            name=self.name,
+            age=self.age,
+            sex=self.gender,
+            hair_color=self.hair_color,
+            eye_color=self.eye_color,
+            height=self.height,
+            body_type=self.build,
+            nsfw_enabled=self.nsfw_enabled,
+            metadata={
+                'backstory': self.description,
+                'asset_id': self.id,
+                'autonomy_level': str(self.autonomy_level),
+                'messaging_frequency': self.messaging_frequency,
+            }
+        )
+        return Character(char_id, db=_db)
 
 
 @register_asset_type("personality")
@@ -192,7 +252,11 @@ class PersonalityAsset(BaseAsset):
             creativity=data.get("creativity", 0.6)
         )
         personality.id = data["id"]
-        personality.metadata.from_dict(data.get("metadata", {}))
+        personality.metadata = AssetMetadata.from_dict(data.get("metadata", {}) or {
+            'asset_id': data['id'], 'asset_type': 'personality',
+            'created_at': datetime.now().isoformat(),
+            'updated_at': datetime.now().isoformat(),
+        })
         return personality
     
     @classmethod
@@ -255,7 +319,11 @@ class RoleAsset(BaseAsset):
             capabilities=data.get("capabilities", [])
         )
         role.id = data["id"]
-        role.metadata.from_dict(data.get("metadata", {}))
+        role.metadata = AssetMetadata.from_dict(data.get("metadata", {}) or {
+            'asset_id': data['id'], 'asset_type': 'role',
+            'created_at': datetime.now().isoformat(),
+            'updated_at': datetime.now().isoformat(),
+        })
         return role
     
     @classmethod
@@ -318,7 +386,11 @@ class SceneAsset(BaseAsset):
             ui_config=data.get("ui_config", {})
         )
         scene.id = data["id"]
-        scene.metadata.from_dict(data.get("metadata", {}))
+        scene.metadata = AssetMetadata.from_dict(data.get("metadata", {}) or {
+            'asset_id': data['id'], 'asset_type': 'scene',
+            'created_at': datetime.now().isoformat(),
+            'updated_at': datetime.now().isoformat(),
+        })
         return scene
     
     @classmethod
@@ -387,7 +459,11 @@ class MessageAsset(BaseAsset):
             metadata_extra=data.get("metadata_extra", {})
         )
         message.id = data["id"]
-        message.metadata.from_dict(data.get("metadata", {}))
+        message.metadata = AssetMetadata.from_dict(data.get("metadata", {}) or {
+            'asset_id': data['id'], 'asset_type': 'message',
+            'created_at': datetime.now().isoformat(),
+            'updated_at': datetime.now().isoformat(),
+        })
         return message
     
     @classmethod

@@ -24,6 +24,7 @@ class Database:
         """Context manager for database connections"""
         conn = sqlite3.connect(str(self.db_path))
         conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys = ON")
         try:
             yield conn
             conn.commit()
@@ -159,13 +160,81 @@ class Database:
                 )
             """)
             
+            # Events table — causal event chain for diagnostics and memory compaction
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS events (
+                    id TEXT PRIMARY KEY,
+                    chain_id TEXT NOT NULL,
+                    parent_id TEXT,
+                    scene_id TEXT NOT NULL DEFAULT 'unknown',
+                    character_id TEXT,
+                    event_type TEXT NOT NULL,
+                    actor TEXT NOT NULL,
+                    payload TEXT NOT NULL,
+                    summary TEXT DEFAULT '',
+                    timestamp TEXT NOT NULL,
+                    FOREIGN KEY (parent_id) REFERENCES events(id),
+                    FOREIGN KEY (character_id) REFERENCES characters(id)
+                )
+            """)
+
             # Create indexes for performance
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_memories_character ON memories(character_id)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_conversations_character ON conversations(character_id)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_interactions_character ON interactions(character_id)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_interactions_chain ON interactions(chain_id)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_media_character ON media(character_id)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_events_chain ON events(chain_id)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_events_scene ON events(scene_id)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_events_character ON events(character_id)")
+
+        # Apply column migrations for existing databases
+        self._migrate_schema()
     
+    def _migrate_schema(self):
+        """
+        Safely add new columns to existing databases.
+        Uses PRAGMA table_info to check before ALTER TABLE — idempotent.
+        """
+        # Whitelist for security - prevent SQL injection
+        VALID_TABLES = {'characters', 'personalities', 'character_states'}
+        VALID_COLUMNS = {'nsfw_enabled', 'warmth', 'formality', 'humor', 
+                         'flirtiness', 'intelligence', 'creativity'}
+        
+        migrations = {
+            'characters': [
+                ('nsfw_enabled', 'INTEGER DEFAULT 0'),
+            ],
+            'personalities': [
+                ('warmth',       'REAL DEFAULT 0.5'),
+                ('formality',    'REAL DEFAULT 0.5'),
+                ('humor',        'REAL DEFAULT 0.5'),
+                ('flirtiness',   'REAL DEFAULT 0.5'),
+                ('intelligence', 'REAL DEFAULT 0.5'),
+                ('creativity',   'REAL DEFAULT 0.5'),
+            ],
+            'character_states': [
+                ('warmth',       'REAL DEFAULT 0.5'),
+                ('formality',    'REAL DEFAULT 0.5'),
+                ('humor',        'REAL DEFAULT 0.5'),
+                ('flirtiness',   'REAL DEFAULT 0.5'),
+                ('intelligence', 'REAL DEFAULT 0.5'),
+                ('creativity',   'REAL DEFAULT 0.5'),
+            ],
+        }
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            for table, columns in migrations.items():
+                if table not in VALID_TABLES:
+                    raise ValueError(f"Invalid table name: {table}")
+                cursor.execute(f"PRAGMA table_info({table})")
+                existing = {row[1] for row in cursor.fetchall()}
+                for col_name, col_def in columns:
+                    if col_name not in VALID_COLUMNS:
+                        raise ValueError(f"Invalid column name: {col_name}")
+                    if col_name not in existing:
+                        cursor.execute(f"ALTER TABLE {table} ADD COLUMN {col_name} {col_def}")
+
     # ============= CHARACTER OPERATIONS =============
     
     def create_character(self, name: str, **kwargs) -> str:
@@ -175,29 +244,53 @@ class Database:
         
         tags = json.dumps(kwargs.get('tags', []))
         metadata = json.dumps(kwargs.get('metadata', {}))
+        nsfw_enabled = 1 if kwargs.get('nsfw_enabled') else 0
         
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
                 INSERT INTO characters 
                 (id, name, age, sex, hair_color, eye_color, height, body_type, 
-                 personality_id, tags, metadata, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 personality_id, tags, metadata, nsfw_enabled, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 char_id, name, 
                 kwargs.get('age'), kwargs.get('sex'),
                 kwargs.get('hair_color'), kwargs.get('eye_color'),
                 kwargs.get('height'), kwargs.get('body_type'),
                 kwargs.get('personality_id'),
-                tags, metadata, timestamp, timestamp
+                tags, metadata, nsfw_enabled, timestamp, timestamp
             ))
             
-            # Initialize character state
+            # Seed character_state traits from personality if provided
+            trait_defaults = {'warmth': 0.5, 'formality': 0.5, 'humor': 0.5,
+                              'flirtiness': 0.5, 'intelligence': 0.5, 'creativity': 0.5}
+            if kwargs.get('personality_id'):
+                cursor.execute(
+                    "SELECT warmth, formality, humor, flirtiness, intelligence, creativity "
+                    "FROM personalities WHERE id = ?",
+                    (kwargs['personality_id'],)
+                )
+                row = cursor.fetchone()
+                if row:
+                    trait_defaults = {
+                        'warmth': row[0] or 0.5, 'formality': row[1] or 0.5,
+                        'humor': row[2] or 0.5,   'flirtiness': row[3] or 0.5,
+                        'intelligence': row[4] or 0.5, 'creativity': row[5] or 0.5,
+                    }
+
+            # Initialize character state with seeded traits
             cursor.execute("""
                 INSERT INTO character_states 
-                (id, character_id, updated_at)
-                VALUES (?, ?, ?)
-            """, (str(uuid.uuid4()), char_id, timestamp))
+                (id, character_id, warmth, formality, humor, flirtiness, intelligence, creativity, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                str(uuid.uuid4()), char_id,
+                trait_defaults['warmth'], trait_defaults['formality'],
+                trait_defaults['humor'], trait_defaults['flirtiness'],
+                trait_defaults['intelligence'], trait_defaults['creativity'],
+                timestamp
+            ))
         
         return char_id
     
@@ -236,7 +329,7 @@ class Database:
         # Whitelist of allowed columns to prevent SQL injection
         ALLOWED_COLUMNS = {
             'name', 'age', 'sex', 'hair_color', 'eye_color', 'height', 'body_type',
-            'personality_id', 'tags', 'metadata'
+            'personality_id', 'tags', 'metadata', 'nsfw_enabled',
         }
         
         timestamp = datetime.now().isoformat()
@@ -304,11 +397,17 @@ class Database:
             cursor.execute("""
                 INSERT INTO personalities 
                 (id, name, system_prompt, traits, communication_style, 
-                 sexual_openness, personality_values, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                 sexual_openness, personality_values,
+                 warmth, formality, humor, flirtiness, intelligence, creativity,
+                 created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 pers_id, name, system_prompt, traits, communication_style,
-                kwargs.get('sexual_openness', 0.5), personality_values, timestamp
+                kwargs.get('sexual_openness', 0.5), personality_values,
+                kwargs.get('warmth', 0.5), kwargs.get('formality', 0.5),
+                kwargs.get('humor', 0.5), kwargs.get('flirtiness', 0.5),
+                kwargs.get('intelligence', 0.5), kwargs.get('creativity', 0.5),
+                timestamp
             ))
         
         return pers_id
@@ -625,7 +724,8 @@ class Database:
         # Whitelist of allowed columns to prevent SQL injection
         ALLOWED_COLUMNS = {
             'mood', 'energy', 'relationship_level', 'arousal', 'last_interaction',
-            'metadata'
+            'metadata',
+            'warmth', 'formality', 'humor', 'flirtiness', 'intelligence', 'creativity',
         }
         
         timestamp = datetime.now().isoformat()

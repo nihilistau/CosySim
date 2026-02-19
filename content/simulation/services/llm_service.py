@@ -1,8 +1,19 @@
 """
 LLM Service - Connects to LM Studio (or any OpenAI-compatible API)
-Used for all character AI responses in CosySim
+Used for all character AI responses in CosySim.
+
+The base URL is resolved in this priority order:
+  1. Explicit argument passed to LLMService() or get_llm_service()
+  2. ``COSYSIM_LMSTUDIO_HOST`` / ``COSYSIM_LMSTUDIO_PORT`` environment vars
+  3. ``lmstudio.host`` / ``lmstudio.port`` in config/default.yaml
+  4. Hard-coded fallback: http://localhost:1234/v1
+
+For full agentic replies with RAG + skills + EventChain logging, use
+``engine.agents.CharacterAgent`` instead; this service is kept as a
+lightweight shim for simple HTTP-only calls.
 """
 import json
+import os
 import time
 import logging
 from typing import Optional, Dict, List, Generator
@@ -21,19 +32,52 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
+def _default_base_url() -> str:
+    """
+    Resolve the LM Studio base URL from environment variables or config yaml.
+    Returns a fully-qualified URL ending in ``/v1``.
+    """
+    # 1) Explicit env-var override (canonical CosySim naming)
+    env_host = os.environ.get("COSYSIM_LMSTUDIO_HOST") or os.environ.get("COSYVOICE_LMSTUDIO_HOST")
+    env_port = os.environ.get("COSYSIM_LMSTUDIO_PORT") or os.environ.get("COSYVOICE_LMSTUDIO_PORT")
+    if env_host:
+        port = env_port or "1234"
+        return f"http://{env_host}:{port}/v1"
+
+    # 2) config/default.yaml (or active env yaml)
+    try:
+        from engine.config import get_config
+        cfg = get_config()
+        host = cfg.get("lmstudio", {}).get("host", "localhost")
+        port = cfg.get("lmstudio", {}).get("port", 1234)
+        return f"http://{host}:{port}/v1"
+    except Exception:
+        pass
+
+    # 3) Safe default
+    return "http://localhost:1234/v1"
+
+
 class LLMService:
     """
     OpenAI-compatible LLM client for LM Studio or any local LLM.
-    Defaults to LM Studio at localhost:1234.
+
+    Defaults to LM Studio at localhost:1234. When ``base_url`` is omitted, the
+    URL is resolved automatically from env vars and config yaml via
+    ``_default_base_url()``.
+
+    For full agentic usage (RAG + skills + EventChain), prefer
+    ``engine.agents.CharacterAgent``. This class is retained as a thin shim
+    that works without the LMStudio SDK installed.
     """
 
     def __init__(
         self,
-        base_url: str = "http://localhost:1234/v1",
+        base_url: Optional[str] = None,
         model: str = None,
         timeout: int = 60,
     ):
-        self.base_url = base_url.rstrip("/")
+        self.base_url = (base_url or _default_base_url()).rstrip("/")
         self.model = model  # If None, auto-detect first available model
         self.timeout = timeout
         self._model_cache: Optional[str] = None
@@ -312,11 +356,18 @@ class LLMService:
 _llm_service: Optional[LLMService] = None
 
 
-def get_llm_service(base_url: str = "http://localhost:1234/v1") -> LLMService:
-    """Return the module-level singleton LLM service."""
+def get_llm_service(base_url: Optional[str] = None) -> LLMService:
+    """
+    Return the module-level singleton LLM service.
+
+    On first call the base URL is resolved (in priority order):
+    explicit argument → env vars → config yaml → localhost:1234.
+    Subsequent calls return the cached singleton regardless of ``base_url``.
+    Pass ``base_url`` on the first call to override the default.
+    """
     global _llm_service
     if _llm_service is None:
-        _llm_service = LLMService(base_url=base_url)
+        _llm_service = LLMService(base_url=base_url)  # None → auto-resolve
     return _llm_service
 
 

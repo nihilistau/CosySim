@@ -166,6 +166,42 @@ class Character:
         value = self._state.get('arousal', 0.0) if self._state else 0.0
         return float(value) if value is not None else 0.0
     
+    @property
+    def warmth(self) -> float:
+        """How warm/caring vs cold the character currently is (0-1)"""
+        value = self._state.get('warmth', 0.5) if self._state else 0.5
+        return float(value) if value is not None else 0.5
+
+    @property
+    def formality(self) -> float:
+        """How formal vs casual the character currently is (0-1)"""
+        value = self._state.get('formality', 0.5) if self._state else 0.5
+        return float(value) if value is not None else 0.5
+
+    @property
+    def humor(self) -> float:
+        """How playful/humorous the character currently is (0-1)"""
+        value = self._state.get('humor', 0.5) if self._state else 0.5
+        return float(value) if value is not None else 0.5
+
+    @property
+    def flirtiness(self) -> float:
+        """How flirtatious the character currently is (0-1)"""
+        value = self._state.get('flirtiness', 0.5) if self._state else 0.5
+        return float(value) if value is not None else 0.5
+
+    @property
+    def intelligence(self) -> float:
+        """How intellectually engaged the character currently is (0-1)"""
+        value = self._state.get('intelligence', 0.5) if self._state else 0.5
+        return float(value) if value is not None else 0.5
+
+    @property
+    def creativity(self) -> float:
+        """How creative/imaginative the character currently is (0-1)"""
+        value = self._state.get('creativity', 0.5) if self._state else 0.5
+        return float(value) if value is not None else 0.5
+
     # ============= CHARACTER MANAGEMENT =============
     
     def update_attributes(self, **kwargs) -> bool:
@@ -190,7 +226,8 @@ class Character:
         Returns True if at least one update succeeded.
         """
         STATE_FIELDS = {'mood', 'energy', 'relationship_level', 'arousal',
-                        'last_interaction'}
+                        'last_interaction',
+                        'warmth', 'formality', 'humor', 'flirtiness', 'intelligence', 'creativity'}
         # Only real columns that exist in the `characters` table
         CHAR_TABLE_FIELDS = {
             'name', 'age', 'sex', 'hair_color', 'eye_color', 'height', 'body_type',
@@ -299,6 +336,20 @@ class Character:
         """Adjust arousal level"""
         new_level = max(0.0, min(1.0, self.arousal + delta))
         return self.update_state(arousal=new_level)
+
+    def adjust_trait(self, trait: str, delta: float, min_val: float = 0.0, max_val: float = 1.0) -> bool:
+        """
+        Adjust one of the 6 mutable personality traits by delta.
+
+        Trait names: 'warmth', 'formality', 'humor', 'flirtiness', 'intelligence', 'creativity'
+        Delta is clamped so the result stays in [min_val, max_val].
+        """
+        VALID_TRAITS = {'warmth', 'formality', 'humor', 'flirtiness', 'intelligence', 'creativity'}
+        if trait not in VALID_TRAITS:
+            raise ValueError(f"Unknown trait '{trait}'. Must be one of: {VALID_TRAITS}")
+        current = float(self._state.get(trait, 0.5) if self._state else 0.5)
+        new_val = max(min_val, min(max_val, current + delta))
+        return self.update_state(**{trait: new_val})
     
     def adjust_energy(self, delta: float) -> bool:
         """Adjust energy level"""
@@ -307,25 +358,25 @@ class Character:
     
     def add_interaction(self, interaction_type: str, details: Optional[Dict] = None) -> bool:
         """
-        Record an interaction with this character
-        
+        Record an interaction with this character in the interactions table.
+
         Args:
-            interaction_type: Type of interaction (message, call, photo, etc.)
-            details: Additional details about the interaction
-        
+            interaction_type: e.g. 'message', 'call', 'photo', 'voice_message', 'video_message'
+            details: Additional details stored as metadata
+
         Returns:
             Success status
         """
-        interaction_data = {
-            'character_id': self.id,
-            'type': interaction_type,
-            'timestamp': datetime.now().isoformat(),
-            'details': details or {}
-        }
-        
-        # Store in metadata or database
         try:
-            # You can extend this to store in a proper interactions table
+            self.db.log_interaction(
+                interaction_type,
+                self.id,
+                interaction_type,  # content — type string as a minimal content value
+                metadata=details or {},
+                chain_id=self._current_chain_id,
+            )
+            # Update last_interaction timestamp
+            self.update_state(last_interaction=datetime.now().isoformat())
             return True
         except Exception as e:
             print(f"Error adding interaction: {e}")
@@ -498,6 +549,47 @@ class Character:
     def get_media(self, media_type: Optional[str] = None) -> List[Dict]:
         """Get character's media"""
         return self.db.get_character_media(self.id, media_type=media_type)
+
+    def to_asset(self):
+        """
+        Convert this live Character into a CharacterAsset for use with the engine
+        asset system.  The returned asset is NOT persisted — call
+        asset_manager.save(asset) yourself if you want it stored.
+
+        Returns:
+            CharacterAsset populated from this Character's DB data.
+        """
+        import sys
+        from pathlib import Path
+        sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
+        from engine.assets.advanced_types import CharacterAsset
+
+        meta = self.metadata or {}
+        return CharacterAsset(
+            name=self.name,
+            description=meta.get('backstory', self._data.get('description', '')),
+            age=self.age,
+            gender=self.sex,
+            hair_color=self.hair_color,
+            eye_color=self.eye_color,
+            height=self.height,
+            build=self.body_type,
+            nsfw_enabled=self._data.get('nsfw_enabled', False),
+            messaging_frequency=meta.get('messaging_frequency', 'medium'),
+            autonomy_level=float(meta.get('autonomy_level', 0.5)),
+            attributes={
+                'mood': self.mood,
+                'relationship_level': self.relationship_level,
+                'energy': self.energy,
+                'arousal': self.arousal,
+                'warmth': self.warmth,
+                'formality': self.formality,
+                'humor': self.humor,
+                'flirtiness': self.flirtiness,
+                'intelligence': self.intelligence,
+                'creativity': self.creativity,
+            },
+        )
     
     # ============= BEHAVIOR & AI =============
     
@@ -585,6 +677,12 @@ class Character:
             'fears': meta.get('fears', ''),
             'secrets': meta.get('secrets', ''),
             'personality_name': meta.get('personality_name', ''),
+            'warmth': float(state.get('warmth', 0.5)),
+            'formality': float(state.get('formality', 0.5)),
+            'humor': float(state.get('humor', 0.5)),
+            'flirtiness': float(state.get('flirtiness', 0.5)),
+            'intelligence': float(state.get('intelligence', 0.5)),
+            'creativity': float(state.get('creativity', 0.5)),
             # Personality object and metadata
             'personality': self._personality,
             'personality_id': self._data.get('personality_id'),

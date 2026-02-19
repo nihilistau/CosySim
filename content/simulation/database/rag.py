@@ -7,8 +7,11 @@ from chromadb.config import Settings
 from chromadb.utils import embedding_functions
 from typing import List, Dict, Optional, Any
 import uuid
+import logging
 from datetime import datetime
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 class RAGMemory:
@@ -25,6 +28,7 @@ class RAGMemory:
         self.persist_directory = Path(persist_directory)
         self.persist_directory.mkdir(parents=True, exist_ok=True)
         self.collection_name = collection_name
+        self._event_chain = None
         
         # Initialize ChromaDB client
         self.client = chromadb.PersistentClient(
@@ -51,6 +55,32 @@ class RAGMemory:
                 metadata={"description": "Character memories for Virtual Companion System"}
             )
     
+    def _get_event_chain(self):
+        """Lazy-load EventChain to avoid circular imports."""
+        if self._event_chain is None:
+            try:
+                from content.simulation.database.events import EventChain
+                self._event_chain = EventChain()
+            except Exception:
+                self._event_chain = False  # sentinel: unavailable
+        return self._event_chain if self._event_chain else None
+
+    def _log_event(self, event_type, actor, payload, summary='',
+                   chain_id=None, scene_id='unknown', character_id=None,
+                   parent_id=None):
+        """Best-effort EventChain logging — never raises."""
+        try:
+            ec = self._get_event_chain()
+            if ec:
+                return ec.log(
+                    event_type=event_type, actor=actor, payload=payload,
+                    summary=summary, chain_id=chain_id, scene_id=scene_id,
+                    character_id=character_id, parent_id=parent_id,
+                )
+        except Exception as e:
+            logger.debug("EventChain logging failed in RAG: %s", e)
+        return None
+
     def add_memory(
         self, 
         character_id: str, 
@@ -58,7 +88,10 @@ class RAGMemory:
         memory_type: str = "conversation",
         importance: float = 0.5,
         emotion: Optional[str] = None,
-        metadata: Optional[Dict] = None
+        metadata: Optional[Dict] = None,
+        chain_id: Optional[str] = None,
+        scene_id: str = 'unknown',
+        parent_id: Optional[str] = None,
     ) -> str:
         """
         Add a memory to the RAG system
@@ -96,6 +129,16 @@ class RAGMemory:
             documents=[content],
             metadatas=[meta],
             ids=[memory_id]
+        )
+        
+        # Log to EventChain
+        self._log_event(
+            'memory_stored', actor='rag',
+            payload={'memory_id': memory_id, 'content': content[:200],
+                     'memory_type': memory_type, 'importance': importance},
+            summary=f'Memory stored: {memory_type} for {character_id}',
+            chain_id=chain_id, scene_id=scene_id,
+            character_id=character_id, parent_id=parent_id,
         )
         
         return memory_id
@@ -160,7 +203,10 @@ class RAGMemory:
         query: str,
         n_results: int = 5,
         memory_type: Optional[str] = None,
-        min_importance: Optional[float] = None
+        min_importance: Optional[float] = None,
+        chain_id: Optional[str] = None,
+        scene_id: str = 'unknown',
+        parent_id: Optional[str] = None,
     ) -> List[Dict]:
         """
         Query memories using semantic search
@@ -208,6 +254,24 @@ class RAGMemory:
                     'distance': results['distances'][0][i] if 'distances' in results else None
                 }
                 memories.append(memory)
+        
+        # Log query + result to EventChain
+        query_ev = self._log_event(
+            'rag_query', actor='rag',
+            payload={'query': query[:200], 'character_id': character_id,
+                     'n_results': n_results, 'memory_type': memory_type},
+            summary=f'RAG query: {query[:60]}',
+            chain_id=chain_id, scene_id=scene_id,
+            character_id=character_id, parent_id=parent_id,
+        )
+        self._log_event(
+            'rag_result', actor='rag',
+            payload={'result_count': len(memories),
+                     'top_ids': [m['id'] for m in memories[:3]]},
+            summary=f'RAG returned {len(memories)} memories',
+            chain_id=chain_id, scene_id=scene_id,
+            character_id=character_id, parent_id=query_ev,
+        )
         
         return memories
     

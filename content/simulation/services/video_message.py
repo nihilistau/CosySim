@@ -51,7 +51,9 @@ class VideoMessageGenerator:
         character_description: str,
         text: str,
         mood: str = "happy",
-        duration: float = 5.0
+        duration: float = 5.0,
+        chain_id: Optional[str] = None,
+        scene_id: str = "unknown",
     ) -> Optional[Dict]:
         """
         Generate a video message with character speaking
@@ -137,7 +139,7 @@ class VideoMessageGenerator:
             
             print(f"  ✅ Video message created: {Path(video_path).name}")
             
-            return {
+            result = {
                 "asset_id": video_asset.id,
                 "filepath": video_path,
                 "filename": Path(video_path).name,
@@ -148,6 +150,26 @@ class VideoMessageGenerator:
                 "fps": fps,
                 "timestamp": datetime.now().isoformat()
             }
+
+            # Log to EventChain
+            try:
+                from content.simulation.database.events import EventChain
+                ec = EventChain()
+                if chain_id:
+                    ec.log(
+                        'media_generated', actor='video_generator',
+                        payload={'type': 'video', 'path': video_path,
+                                 'character': character_name, 'mood': mood,
+                                 'duration': audio_data["duration"],
+                                 'text': text[:100]},
+                        summary=f'Video generated: {character_name} ({mood}, {audio_data["duration"]:.1f}s)',
+                        chain_id=chain_id, scene_id=scene_id,
+                        character_id=character_id,
+                    )
+            except Exception:
+                pass
+
+            return result
         
         except Exception as e:
             print(f"❌ Error generating video message: {e}")

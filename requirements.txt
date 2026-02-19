@@ -350,3 +350,6 @@ pillow>=10.0.0
 # Database
 chromadb>=0.4.0
 langchain>=0.1.0
+
+# LMStudio SDK (AI agent / tool calling)
+lmstudio>=1.0.0

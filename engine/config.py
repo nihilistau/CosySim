@@ -1,5 +1,5 @@
 """
-Configuration Manager for CosyVoice System
+Configuration Manager for CosySim
 
 Loads and merges configuration from:
 1. config/default.yaml (base)
@@ -34,7 +34,7 @@ class ConfigManager:
             environment: Environment name (development, production, etc.)
                         If None, uses COSYVOICE_ENV environment variable or "default"
         """
-        self.environment = environment or os.getenv("COSYVOICE_ENV", "default")
+        self.environment = environment or os.getenv("COSYSIM_ENV") or os.getenv("COSYVOICE_ENV", "default")
         self.config_dir = Path(__file__).parent.parent / "config"
         self._config: Dict[str, Any] = {}
         
@@ -87,16 +87,30 @@ class ConfigManager:
     
     def _apply_env_overrides(self) -> None:
         """Apply environment variable overrides."""
-        # Map environment variables to config paths
+        # Map environment variables to config paths.
+        # COSYSIM_* is the canonical prefix; COSYVOICE_* kept for backwards compatibility.
         env_mappings = {
-            "COSYVOICE_DB_PATH": "database.sqlite.path",
-            "COSYVOICE_PHONE_PORT": "scenes.phone.port",
-            "COSYVOICE_DASHBOARD_PORT": "scenes.dashboard.port",
-            "COSYVOICE_LLM_URL": "llm.base_url",
-            "COSYVOICE_LLM_MODEL": "llm.model",
-            "COSYVOICE_TTS_DEVICE": "tts.device",
-            "COSYVOICE_STT_DEVICE": "stt.device",
-            "COSYVOICE_LOG_LEVEL": "logging.level",
+            # CosySim canonical
+            "COSYSIM_DB_PATH":           "database.sqlite.path",
+            "COSYSIM_PHONE_PORT":        "scenes.phone.port",
+            "COSYSIM_DASHBOARD_PORT":    "scenes.dashboard.port",
+            "COSYSIM_LLM_URL":           "llm.base_url",
+            "COSYSIM_LLM_MODEL":         "llm.model",
+            "COSYSIM_TTS_DEVICE":        "tts.device",
+            "COSYSIM_STT_DEVICE":        "stt.device",
+            "COSYSIM_LOG_LEVEL":         "logging.level",
+            "COSYSIM_COMFYUI_URL":       "comfyui.base_url",
+            "COSYSIM_LMSTUDIO_HOST":     "lmstudio.host",
+            "COSYSIM_LMSTUDIO_PORT":     "lmstudio.port",
+            # Legacy COSYVOICE_* (backwards compat — overridden by COSYSIM_* if both set)
+            "COSYVOICE_DB_PATH":         "database.sqlite.path",
+            "COSYVOICE_PHONE_PORT":      "scenes.phone.port",
+            "COSYVOICE_DASHBOARD_PORT":  "scenes.dashboard.port",
+            "COSYVOICE_LLM_URL":         "llm.base_url",
+            "COSYVOICE_LLM_MODEL":       "llm.model",
+            "COSYVOICE_TTS_DEVICE":      "tts.device",
+            "COSYVOICE_STT_DEVICE":      "stt.device",
+            "COSYVOICE_LOG_LEVEL":       "logging.level",
         }
         
         for env_var, config_path in env_mappings.items():

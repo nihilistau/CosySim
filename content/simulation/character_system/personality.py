@@ -22,7 +22,15 @@ class PersonalityTemplate:
     communication_style: Dict
     sexual_openness: float
     values: List[str]
-    
+    # Mutable personality trait floats (0.0–1.0)
+    # These seed character_states at character creation time
+    warmth: float = 0.5
+    formality: float = 0.5
+    humor: float = 0.5
+    flirtiness: float = 0.5
+    intelligence: float = 0.5
+    creativity: float = 0.5
+
     def to_dict(self) -> Dict:
         return {
             'name': self.name,
@@ -30,7 +38,13 @@ class PersonalityTemplate:
             'traits': self.traits,
             'communication_style': self.communication_style,
             'sexual_openness': self.sexual_openness,
-            'values': self.values
+            'values': self.values,
+            'warmth': self.warmth,
+            'formality': self.formality,
+            'humor': self.humor,
+            'flirtiness': self.flirtiness,
+            'intelligence': self.intelligence,
+            'creativity': self.creativity,
         }
 
 
@@ -52,7 +66,8 @@ You're genuinely interested in your partner and remember details about their lif
                 "directness": "medium"
             },
             sexual_openness=0.7,
-            values=["fun", "connection", "authenticity"]
+            values=["fun", "connection", "authenticity"],
+            warmth=0.8, formality=0.1, humor=0.8, flirtiness=0.8, intelligence=0.5, creativity=0.7,
         ),
         
         'sweet_girlfriend': PersonalityTemplate(
@@ -68,7 +83,8 @@ You're a good listener and remember important things. You're romantic but not ov
                 "directness": "low"
             },
             sexual_openness=0.4,
-            values=["love", "trust", "emotional_connection"]
+            values=["love", "trust", "emotional_connection"],
+            warmth=0.9, formality=0.3, humor=0.5, flirtiness=0.5, intelligence=0.6, creativity=0.6,
         ),
         
         'confident_girlfriend': PersonalityTemplate(
@@ -84,7 +100,8 @@ You're sexually confident and open. You value honesty and mutual respect.""",
                 "directness": "high"
             },
             sexual_openness=0.8,
-            values=["respect", "honesty", "ambition"]
+            values=["respect", "honesty", "ambition"],
+            warmth=0.5, formality=0.4, humor=0.6, flirtiness=0.7, intelligence=0.8, creativity=0.5,
         ),
         
         'shy_girlfriend': PersonalityTemplate(
@@ -100,7 +117,8 @@ You're romantic but reserved. As trust builds, you become more comfortable and p
                 "directness": "low"
             },
             sexual_openness=0.3,
-            values=["trust", "patience", "gentleness"]
+            values=["trust", "patience", "gentleness"],
+            warmth=0.8, formality=0.4, humor=0.4, flirtiness=0.3, intelligence=0.6, creativity=0.6,
         ),
         
         'adventurous_girlfriend': PersonalityTemplate(
@@ -116,7 +134,8 @@ You're sexually adventurous and playful. You value experiences over material thi
                 "directness": "medium"
             },
             sexual_openness=0.75,
-            values=["experiences", "growth", "spontaneity"]
+            values=["experiences", "growth", "spontaneity"],
+            warmth=0.7, formality=0.1, humor=0.7, flirtiness=0.7, intelligence=0.6, creativity=0.8,
         ),
         
         'intellectual_girlfriend': PersonalityTemplate(
@@ -132,7 +151,8 @@ You're sensual rather than overtly sexual. You value mental connection as much a
                 "directness": "medium"
             },
             sexual_openness=0.5,
-            values=["knowledge", "depth", "meaningful_connection"]
+            values=["knowledge", "depth", "meaningful_connection"],
+            warmth=0.6, formality=0.5, humor=0.7, flirtiness=0.4, intelligence=0.9, creativity=0.8,
         ),
         
         'submissive_girlfriend': PersonalityTemplate(
@@ -148,7 +168,8 @@ You're sexually submissive and enjoy being dominated. You seek approval and prai
                 "directness": "low"
             },
             sexual_openness=0.8,
-            values=["service", "pleasing", "devotion"]
+            values=["service", "pleasing", "devotion"],
+            warmth=0.9, formality=0.2, humor=0.5, flirtiness=0.7, intelligence=0.5, creativity=0.4,
         ),
         
         'dominant_girlfriend': PersonalityTemplate(
@@ -164,7 +185,8 @@ You're sexually dominant and enjoy power dynamics. You're demanding but fair."""
                 "directness": "high"
             },
             sexual_openness=0.85,
-            values=["control", "loyalty", "discipline"]
+            values=["control", "loyalty", "discipline"],
+            warmth=0.4, formality=0.5, humor=0.6, flirtiness=0.7, intelligence=0.7, creativity=0.5,
         ),
     }
     
@@ -189,7 +211,13 @@ You're sexually dominant and enjoy power dynamics. You're demanding but fair."""
             traits=template.traits,
             communication_style=template.communication_style,
             sexual_openness=template.sexual_openness,
-            values=template.values
+            values=template.values,
+            warmth=template.warmth,
+            formality=template.formality,
+            humor=template.humor,
+            flirtiness=template.flirtiness,
+            intelligence=template.intelligence,
+            creativity=template.creativity,
         )
     
     def create_custom(

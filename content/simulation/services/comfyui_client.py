@@ -1,6 +1,9 @@
 """
-ComfyUI Client – HTTP API wrapper for ComfyUI running at 192.168.8.150:8188
-Handles image generation, video generation, and consistent character prompting.
+ComfyUI Client – HTTP API wrapper for ComfyUI image/video generation.
+
+The server URL is read from config (``comfyui.base_url``) so it never needs
+to be hardcoded.  Set ``COSYSIM_COMFYUI_URL`` env var or edit
+``config/default.yaml`` to point at your ComfyUI instance.
 """
 
 import json
@@ -26,12 +29,27 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  ComfyUI default server
+#  ComfyUI default server — read from config, NOT hardcoded
 # ─────────────────────────────────────────────────────────────────────────────
 
-COMFYUI_HOST = "192.168.8.150"
-COMFYUI_PORT = 8188
-COMFYUI_BASE_URL = f"http://{COMFYUI_HOST}:{COMFYUI_PORT}"
+def _get_comfyui_base_url() -> str:
+    """Return the ComfyUI base URL from config or the COSYSIM_COMFYUI_URL env var."""
+    import os
+    env_url = os.environ.get("COSYSIM_COMFYUI_URL") or os.environ.get("COMFYUI_URL")
+    if env_url:
+        return env_url.rstrip("/")
+    try:
+        from engine.config import get_config
+        url = get_config().get("comfyui.base_url", "http://localhost:8188")
+        # Ensure we have a valid string, not None
+        if url:
+            return url.rstrip("/")
+        return "http://localhost:8188"
+    except Exception:
+        return "http://localhost:8188"
+
+
+COMFYUI_BASE_URL = _get_comfyui_base_url()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -214,6 +232,9 @@ class ComfyUIClient:
     """
 
     def __init__(self, base_url: str = COMFYUI_BASE_URL, timeout: int = 300):
+        # Handle None case for base_url
+        if base_url is None:
+            base_url = "http://localhost:8188"
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
         self.client_id = str(uuid.uuid4())

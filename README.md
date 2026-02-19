@@ -55,45 +55,66 @@ python launcher.py
 ## 📱 Features
 
 ### 🎭 AI Character System
-- **5 Diverse Characters** (Maya, Luna, Dr. Sophia Reed, Jade, Emma)
-- **Personality Engine** with 6 customizable parameters (warmth, formality, humor, flirtiness, intelligence, creativity)
+- **Expressive Characters** with distinct personalities (warmth, formality, humor, flirtiness, intelligence, creativity)
 - **Role System** with goals, constraints, and capabilities
-- **RAG Memory** via ChromaDB for long-term context
-- **Autonomous Messaging** - characters message you proactively
+- **RAG Memory** via ChromaDB for long-term episodic context
+- **Autonomous Messaging** — characters message you proactively on a configurable schedule
+- **EventChain diagnostics** — every LLM call, tool use, and autonomous trigger fully logged
+
+### 🤖 Agent Framework
+| Component | Module | Description |
+|---|---|---|
+| **CharacterAgent** | `engine/agents/character_agent.py` | Persona + RAG + tools + EventChain |
+| **SceneAgent** | `engine/agents/scene_agent.py` | Quick one-shot tasks (title, summarise, classify) |
+| **LMStudioManager** | `engine/lmstudio/client.py` | LM Studio server + model management via SDK & CLI |
+| **SkillRegistry** | `engine/skills/registry.py` | `@skill` decorator registry, pack tools, MCP bridge |
+
+### 🔧 Built-in Skill Packs
+| Pack | Skills |
+|---|---|
+| `memory` | `search_memory`, `store_memory`, `get_event_chain_summary`, `summarize_chain` |
+| `character` | `get_character_state`, `adjust_trait`, `set_mood`, `adjust_relationship` |
+| `comfyui` | `generate_image`, `generate_character_portrait`, `list_comfyui_workflows` |
+| `voice` | `generate_voice_message`, `list_voice_messages` |
 
 ### 📞 Communication Features
 | Feature | Description | Status |
-|---------|-------------|--------|
+|---|---|---|
 | **Voice Calls** | Real-time voice with CosyVoice TTS | ✅ Working |
 | **Video Calls** | Live video with generated faces | ✅ Working |
-| **Voice Messages** | Async audio messages | ✅ Working |
-| **Video Messages** | Short video clips | ✅ Working |
+| **Voice Messages** | Async audio messages + gallery | ✅ Working |
+| **Video Messages** | Short video clips + gallery | ✅ Working |
 | **Text Messaging** | Rich text chat | ✅ Working |
-| **Photo Sharing** | AI-generated selfies | ✅ Working |
+| **Photo Sharing** | AI-generated selfies via ComfyUI | ✅ Working |
 
 ### 🏗️ System Architecture
 ```
 ├── engine/              # Framework (reusable)
+│   ├── agents/         # CharacterAgent, SceneAgent
 │   ├── assets/         # Asset management system
-│   ├── scenes/         # BaseScene framework
-│   ├── testing/        # Test utilities
+│   ├── lmstudio/       # LMStudio SDK wrapper + model manager
+│   ├── scenes/         # BaseScene framework (plugin contract)
+│   ├── skills/         # @skill decorator, SkillRegistry, builtin packs
 │   └── config.py       # Configuration manager
 │
 ├── content/            # Game-specific content
 │   └── simulation/
-│       ├── scenes/     # Phone, Bedroom, Admin, Hub
+│       ├── scenes/     # Phone (5555), Bedroom (5556), Admin, Hub
+│       │   └── phone/
+│       │       └── apps/  # VideoMessagesApp, VoiceMessagesApp, Gallery
 │       ├── character_system/
-│       ├── services/   # Voice, video, media generation
-│       └── database/   # SQLite + ChromaDB
+│       ├── services/   # Voice, video, media, LLM, autonomous messenger
+│       └── database/   # SQLite + ChromaDB + EventChain
 │
 ├── config/             # YAML configurations
-│   ├── default.yaml    # Base config
+│   ├── default.yaml    # Base config (lmstudio, comfyui, hardware)
 │   ├── development.yaml
 │   └── production.yaml
 │
-└── tools/              # Utilities
-    ├── character_migrator.py
-    └── create_default_characters.py
+└── docs/               # Documentation
+    ├── API.md          # Full HTTP + Python API reference
+    ├── SKILLS.md       # Skill authoring guide
+    └── QUICKSTART.md   # Get started in 10 minutes
 ```
 
 ---
@@ -303,30 +324,41 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 - 📧 **Email**: support@example.com
 - 💬 **Discord**: [Join our server](https://discord.gg/example)
-- 🐛 **Issues**: [GitHub Issues](https://github.com/yourusername/CosyVoice/issues)
+- 🐛 **Issues**: [GitHub Issues](https://github.com/yourusername/CosySim/issues)
 - 📖 **Docs**: [Full Documentation](docs/)
 
 ---
 
 ## 🗺️ Roadmap
 
-- [ ] Mobile app (React Native)
-- [ ] Multi-user support
-- [ ] Advanced AI model integration (GPT-4, Claude)
-- [ ] VR support (Unity integration)
+### Completed ✅
+- [x] EventChain diagnostic system (full causal event tracing)
+- [x] LMStudio SDK integration (load/unload models, VRAM management)
+- [x] Skills system (`@skill` decorator, pack registry, MCP bridge)
+- [x] CharacterAgent with RAG + tools + EventChain logging
+- [x] Video/Voice message gallery apps (phone scene)
+- [x] Admin panel: LM Studio model management panel
+- [x] Admin panel: EventChain log viewer
+- [x] Config-driven service URLs (no more hardcoded IPs)
+
+### Upcoming
+- [ ] Multi-character scene support
+- [ ] Web-based skill pack editor
+- [ ] Real-time EventChain streaming via WebSocket
+- [ ] Plugin system for community skill packs
 - [ ] Cloud deployment templates (AWS, GCP, Azure)
-- [ ] Plugin system for community extensions
+- [ ] Mobile app (React Native)
 
 ---
 
 ## ⭐ Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=yourusername/CosyVoice&type=Date)](https://star-history.com/#yourusername/CosyVoice&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=yourusername/CosySim&type=Date)](https://star-history.com/#yourusername/CosySim&Date)
 
 ---
 
 <p align="center">
-  <strong>Built with ❤️ by the CosyVoice Team</strong>
+  <strong>Built with ❤️ by the CosySim Team</strong>
 </p>
 
 <p align="center">

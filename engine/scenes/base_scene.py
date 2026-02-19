@@ -3,10 +3,13 @@ BaseScene - Abstract base class for all scenes
 Provides common functionality: character loading, asset management, save/load
 """
 from abc import ABC, abstractmethod
-from typing import Dict, List, Optional, Any
+from typing import TYPE_CHECKING, Dict, List, Optional, Any
 from pathlib import Path
 import json
 from datetime import datetime
+
+if TYPE_CHECKING:
+    from content.simulation.character_system.character import Character
 
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -149,22 +152,10 @@ class BaseScene(ABC):
         Args:
             export_path: Directory to export to
         """
-        if not self.scene_asset_id:
-            self.save_scene()
-        
-        export_path = Path(export_path)
-        export_path.mkdir(parents=True, exist_ok=True)
-        
-        # Export scene asset
-        scene_data = self.asset_manager.export_asset(self.scene_asset_id)
-        with open(export_path / f"{self.scene_name}_scene.json", 'w') as f:
-            json.dump(scene_data, f, indent=2)
-        
-        # Export all character assets
-        for char_id in self.active_characters:
-            char_data = self.asset_manager.export_asset(char_id)
-            with open(export_path / f"character_{char_id[:8]}.json", 'w') as f:
-                json.dump(char_data, f, indent=2)
+        raise NotImplementedError(
+            "Scene export is not yet implemented. "
+            "AssetManager needs export_asset() method — see plan Phase 1.8."
+        )
     
     def import_scene(self, import_path: Path) -> str:
         """
@@ -176,24 +167,102 @@ class BaseScene(ABC):
         Returns:
             Imported scene asset ID
         """
-        with open(import_path, 'r') as f:
-            scene_data = json.load(f)
-        
-        scene_id = self.asset_manager.import_asset(scene_data)
-        self.load_scene(scene_id)
-        return scene_id
-    
+        raise NotImplementedError(
+            "Scene import is not yet implemented. "
+            "AssetManager needs import_asset() method — see plan Phase 1.8."
+        )
+
+    def _asset_to_character(self, char_asset: CharacterAsset) -> 'Character':
+        """
+        Convert a CharacterAsset to a Character DB object.
+
+        Uses the CharacterAsset.to_character() bridge (Phase 3) which:
+        - Tries to load an existing DB row by asset ID
+        - Creates a new row seeded from asset attributes if none found
+        - Returns the loaded Character instance
+
+        Requires the scene to have a ``self.db`` attribute (Database instance).
+        Falls back gracefully if db is not yet available.
+
+        Args:
+            char_asset: CharacterAsset to convert
+
+        Returns:
+            Character instance ready for services / LLM calls
+        """
+        db = getattr(self, 'db', None)
+        return char_asset.to_character(db)
+
     # ============= ABSTRACT METHODS =============
-    
+
     @abstractmethod
     def start(self) -> None:
         """Start the scene (Flask app, Streamlit, etc.)"""
         pass
-    
+
     @abstractmethod
     def stop(self) -> None:
         """Stop the scene and cleanup"""
         pass
+
+    @abstractmethod
+    def get_plugin_info(self) -> Dict[str, Any]:
+        """
+        Return scene metadata consumed by the admin panel and launcher.
+
+        Every concrete scene **must** implement this to be discoverable.
+
+        Returns a dict with at minimum::
+
+            {
+                "name":        str,          # human-readable scene name
+                "description": str,          # one-line description
+                "version":     str,          # semver string, e.g. "1.0.0"
+                "author":      str,
+                "port":        int,          # HTTP port this scene binds to
+                "tags":        List[str],    # e.g. ["phone", "character", "chat"]
+                "skill_packs": List[str],    # skill pack names the scene uses
+                "routes":      List[Dict],   # [{"path": "/api/...", "methods": [...], "description": "..."}]
+            }
+
+        The admin panel calls ``get_plugin_info()`` on each loaded scene to
+        populate the scene registry and skill-pack cross-reference table.
+        """
+        pass
+
+    # ============= PLUGIN HOOKS =============
+
+    def get_skill_packs(self) -> List[str]:
+        """
+        Return the list of skill pack names this scene exposes.
+
+        Override in subclass to advertise skills.  Defaults to empty list
+        (scene uses no tools).  The base implementation reads
+        ``get_plugin_info()["skill_packs"]`` when available.
+
+        Returns:
+            List of pack name strings understood by SKILL_REGISTRY.
+        """
+        try:
+            return self.get_plugin_info().get("skill_packs", [])
+        except NotImplementedError:
+            return []
+
+    def get_health(self) -> Dict[str, Any]:
+        """
+        Return a simple health-check dict for the admin panel.
+
+        Subclasses can override to add service-level checks.
+
+        Returns:
+            dict with keys ``ok`` (bool), ``scene`` (str), ``port`` (int),
+            and optional ``details`` string.
+        """
+        return {
+            "ok": True,
+            "scene": self.scene_name,
+            "port": self.port,
+        }
     
     # ============= LIFECYCLE HOOKS =============
     

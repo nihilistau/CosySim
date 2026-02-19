@@ -345,6 +345,122 @@
             font-size:12px; padding:8px 12px; outline:none;
         }
         .terminal-command-input:focus { border-color:#7c6af7; }
+
+        /* ══════════ Video / Voice Messages Gallery ══════════ */
+        .media-gallery-list { padding:12px; overflow-y:auto; height:calc(100% - 56px); }
+        .media-card {
+            display:flex; align-items:center; gap:12px;
+            background:#151520; border:1px solid #2a2a3a;
+            border-radius:12px; padding:10px 12px; margin-bottom:10px;
+            cursor:pointer; transition:background .15s;
+        }
+        .media-card:hover { background:#1e1e30; border-color:#7c6af7; }
+        .media-card-thumb {
+            flex-shrink:0; width:52px; height:52px; border-radius:10px;
+            background:#0d0d18; display:flex; align-items:center;
+            justify-content:center; font-size:24px; border:1px solid #333;
+        }
+        .media-card-info { flex:1; min-width:0; }
+        .media-card-title {
+            font-size:13px; font-weight:600; color:#e0e0ff;
+            white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+        }
+        .media-card-meta { font-size:11px; color:#666; margin-top:3px; }
+        .media-card-duration {
+            flex-shrink:0; font-size:11px; color:#aaa;
+            background:#222; padding:2px 6px; border-radius:6px;
+        }
+        .media-empty {
+            text-align:center; color:#555; margin-top:60px;
+            font-size:13px; line-height:1.8;
+        }
+
+        /* ══════════ Settings Screen ══════════ */
+        .settings-list { padding:14px; overflow-y:auto; height:calc(100% - 56px); }
+        .settings-group {
+            background:#151520; border:1px solid #2a2a3a;
+            border-radius:12px; padding:14px 16px; margin-bottom:12px;
+        }
+        .settings-group-title { font-size:11px; color:#7c6af7; font-weight:700; text-transform:uppercase; margin-bottom:10px; }
+        .settings-row { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
+        .settings-label { font-size:12px; color:#bbb; }
+        .settings-input {
+            background:#0d0d18; border:1px solid #333; border-radius:6px;
+            color:#e0e0ff; font-size:12px; padding:4px 8px; width:100px; text-align:right;
+        }
+        .settings-input:focus { outline:none; border-color:#7c6af7; }
+        .settings-textarea {
+            width:100%; background:#0d0d18; border:1px solid #333;
+            border-radius:6px; color:#e0e0ff; font-size:12px;
+            padding:6px 8px; resize:vertical; min-height:60px;
+            box-sizing:border-box; margin-top:6px;
+        }
+        .settings-save-btn {
+            width:100%; padding:10px; border-radius:10px;
+            background:#7c6af7; color:#fff; border:none; font-size:13px;
+            font-weight:600; cursor:pointer; margin-top:4px;
+        }
+        .settings-save-btn:hover { background:#6a59e0; }
+
+        /* ══════════ Connecting / Media Player Overlay ══════════ */
+        .media-overlay {
+            display:none; position:absolute; inset:0;
+            background:rgba(5,5,12,.97); z-index:900;
+            flex-direction:column; align-items:center; justify-content:center;
+            border-radius:36px;
+        }
+        .media-overlay.active { display:flex; }
+
+        /* Skype-style pulse ring */
+        .connecting-ring {
+            position:relative; width:100px; height:100px;
+            display:flex; align-items:center; justify-content:center;
+        }
+        .connecting-ring::before, .connecting-ring::after {
+            content:''; position:absolute; border-radius:50%;
+            border:2px solid #7c6af7; animation:ripple 1.4s ease-out infinite;
+        }
+        .connecting-ring::after { animation-delay:.7s; }
+        @keyframes ripple {
+            0%   { width:60px; height:60px; opacity:.9; }
+            100% { width:110px; height:110px; opacity:0; }
+        }
+        .connecting-avatar {
+            width:60px; height:60px; border-radius:50%;
+            background:#1e1e30; display:flex; align-items:center;
+            justify-content:center; font-size:26px;
+            border:2px solid #7c6af7; z-index:1;
+        }
+        .connecting-label {
+            margin-top:22px; font-size:14px; color:#ccc; letter-spacing:.5px;
+        }
+        .connecting-cancel {
+            margin-top:16px; font-size:12px; color:#666;
+            background:none; border:1px solid #333; border-radius:16px;
+            padding:6px 18px; cursor:pointer; color:#aaa;
+        }
+        .connecting-cancel:hover { border-color:#7c6af7; color:#7c6af7; }
+
+        /* In-overlay media player */
+        .media-player-wrap {
+            display:none; flex-direction:column; align-items:center;
+            width:100%; padding:0 20px; box-sizing:border-box;
+        }
+        .media-player-wrap.active { display:flex; }
+        .media-player-title {
+            font-size:13px; color:#bbb; margin-bottom:12px; text-align:center;
+        }
+        .media-player-wrap video {
+            width:100%; max-height:320px; border-radius:12px;
+            background:#000; outline:none;
+        }
+        .media-player-wrap audio { width:100%; margin-top:8px; }
+        .media-player-close {
+            margin-top:16px; font-size:12px; background:none;
+            border:1px solid #444; border-radius:16px; padding:6px 18px;
+            color:#aaa; cursor:pointer;
+        }
+        .media-player-close:hover { border-color:#7c6af7; color:#7c6af7; }
     </style>
 </head>
 <body>
@@ -383,6 +499,14 @@
                         <div class="app-icon" onclick="openGalleryApp()">
                             <div class="icon gallery-icon">🖼️</div>
                             <span>Gallery</span>
+                        </div>
+                        <div class="app-icon" onclick="openApp('videoMessages')">
+                            <div class="icon" style="background:linear-gradient(135deg,#1a1030,#2d1a50);">🎥</div>
+                            <span>Videos</span>
+                        </div>
+                        <div class="app-icon" onclick="openApp('voiceMessages')">
+                            <div class="icon" style="background:linear-gradient(135deg,#0d2020,#1a3535);">🎤</div>
+                            <span>Voice</span>
                         </div>
                         <div class="app-icon" onclick="openApp('camera')">
                             <div class="icon camera-icon">📷</div>
@@ -547,7 +671,101 @@
                     <div class="gallery-grid" id="galleryGrid">
                         <p style="text-align:center;color:#666;margin-top:50px;">Loading gallery...</p>
                     </div>
-                </div>
+                </div><!-- /galleryScreen -->
+
+                <!-- ══════ Video Messages Screen ══════ -->
+                <div class="screen-view" id="videoMessagesScreen" style="display:none;">
+                    <div class="app-header">
+                        <button class="back-button" onclick="goHome()">←</button>
+                        <h2>Video Messages</h2>
+                        <button class="refresh-btn" onclick="loadVideoMessages()">🔄</button>
+                    </div>
+                    <div class="media-gallery-list" id="videoMsgList">
+                        <div class="media-empty">🎥<br>No video messages yet.<br>Send one from the chat!</div>
+                    </div>
+                </div><!-- /videoMessagesScreen -->
+
+                <!-- ══════ Voice Messages Screen ══════ -->
+                <div class="screen-view" id="voiceMessagesScreen" style="display:none;">
+                    <div class="app-header">
+                        <button class="back-button" onclick="goHome()">←</button>
+                        <h2>Voice Messages</h2>
+                        <button class="refresh-btn" onclick="loadVoiceMessages()">🔄</button>
+                    </div>
+                    <div class="media-gallery-list" id="voiceMsgList">
+                        <div class="media-empty">🎤<br>No voice messages yet.<br>Send one from the chat!</div>
+                    </div>
+                </div><!-- /voiceMessagesScreen -->
+
+                <!-- ══════ Settings Screen ══════ -->
+                <div class="screen-view" id="settingsScreen" style="display:none;">
+                    <div class="app-header">
+                        <button class="back-button" onclick="goHome()">←</button>
+                        <h2>Settings</h2>
+                        <button class="refresh-btn" onclick="loadPhoneSettings()">🔄</button>
+                    </div>
+                    <div class="settings-list">
+
+                        <div class="settings-group">
+                            <div class="settings-group-title">Request Timeouts</div>
+                            <div class="settings-row">
+                                <span class="settings-label">Message (s)</span>
+                                <input class="settings-input" id="set_msg_timeout" type="number" min="10" max="600" value="180">
+                            </div>
+                            <div class="settings-row">
+                                <span class="settings-label">Audio (s)</span>
+                                <input class="settings-input" id="set_audio_timeout" type="number" min="30" max="1800" value="600">
+                            </div>
+                            <div class="settings-row">
+                                <span class="settings-label">Video (s)</span>
+                                <input class="settings-input" id="set_video_timeout" type="number" min="30" max="1800" value="600">
+                            </div>
+                        </div>
+
+                        <div class="settings-group">
+                            <div class="settings-group-title">LLM Context</div>
+                            <div class="settings-label" style="margin-bottom:6px;">Custom system prompt prefix</div>
+                            <textarea class="settings-textarea" id="set_custom_ctx" placeholder="Optional extra instructions prepended to the system prompt..."></textarea>
+                        </div>
+
+                        <div class="settings-group">
+                            <div class="settings-group-title">Autonomous Messaging</div>
+                            <div class="settings-row">
+                                <span class="settings-label">Frequency</span>
+                                <select class="settings-input" id="set_auto_freq" style="width:auto;text-align:left;padding-left:6px;">
+                                    <option value="off">Off</option>
+                                    <option value="rare">Rare</option>
+                                    <option value="moderate" selected>Moderate</option>
+                                    <option value="frequent">Frequent</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <button class="settings-save-btn" onclick="savePhoneSettings()">💾 Save Settings</button>
+                    </div>
+                </div><!-- /settingsScreen -->
+
+                <!-- ══════ Media Player Overlay (Skype-style connecting → player) ══════ -->
+                <div class="media-overlay" id="mediaOverlay">
+
+                    <!-- Phase 1: Connecting animation -->
+                    <div id="connectingPhase">
+                        <div class="connecting-ring">
+                            <div class="connecting-avatar" id="connectingAvatar">🎬</div>
+                        </div>
+                        <div class="connecting-label" id="connectingLabel">Connecting…</div>
+                        <button class="connecting-cancel" onclick="closeMediaOverlay()">Cancel</button>
+                    </div>
+
+                    <!-- Phase 2: Media player (hidden until connecting completes) -->
+                    <div class="media-player-wrap" id="mediaPlayerWrap">
+                        <div class="media-player-title" id="mediaPlayerTitle"></div>
+                        <video id="mediaPlayerVideo" controls style="display:none;"></video>
+                        <audio id="mediaPlayerAudio" controls style="display:none;"></audio>
+                        <button class="media-player-close" onclick="closeMediaOverlay()">✕ Close</button>
+                    </div>
+
+                </div><!-- /mediaOverlay -->
 
                 <!-- Full Screen Photo Viewer -->
                 <div class="photo-viewer" id="photoViewer" style="display:none;">

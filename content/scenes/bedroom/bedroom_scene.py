@@ -104,50 +104,8 @@ class BedroomScene(BaseScene):
             self.lighting_presets['afternoon']
         )
     
-    def _asset_to_character(self, char_asset: CharacterAsset) -> Character:
-        """
-        Convert CharacterAsset to Character object for compatibility
-        This maintains compatibility with existing services
-        """
-        # Try to load existing character from database
-        try:
-            char = Character.load(char_asset.id, db=self.db)
-            if char:
-                return char
-        except:
-            pass
-        
-        # Create new character in database from asset
-        char_id_new = self.db.create_character(
-            name=char_asset.name,
-            age=char_asset.age or 25,
-            sex=char_asset.gender or 'female',
-            hair_color=char_asset.hair_color or 'brown',
-            eye_color=char_asset.eye_color or 'brown',
-            height=char_asset.height or '5\'6"',
-            body_type=char_asset.build or 'slim',
-            personality_id=char_asset.personality_id,
-            metadata={
-                'description': char_asset.description,
-                'backstory': char_asset.attributes.get('backstory', ''),
-                'voice_profile': char_asset.voice_profile,
-                'relationship_level': char_asset.relationships.get('user', 0.5),
-                'from_asset': True,
-                'asset_id': char_asset.id
-            }
-        )
-        
-        # Update character ID in database to match asset ID if needed
-        if char_id_new != char_asset.id:
-            with self.db.get_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute("UPDATE characters SET id = ? WHERE id = ?", (char_asset.id, char_id_new))
-                cursor.execute("UPDATE character_states SET character_id = ? WHERE character_id = ?", (char_asset.id, char_id_new))
-                conn.commit()
-        
-        # Load and return
-        return Character.load(char_asset.id, db=self.db)
-    
+    # _asset_to_character() inherited from BaseScene
+
     def _setup_routes(self):
         """Setup Flask routes"""
         
@@ -441,8 +399,6 @@ class BedroomScene(BaseScene):
     
     def _setup_socketio(self):
         """Setup SocketIO event handlers"""
-    def _setup_socketio(self):
-        """Setup SocketIO event handlers"""
         
         @self.socketio.on('connect')
         def handle_connect():
@@ -462,34 +418,51 @@ class BedroomScene(BaseScene):
         
         @self.socketio.on('chat_message')
         def handle_chat_message(data):
-            """Handle chat messages"""
+            """Handle chat messages — store via Character if loaded, then animate."""
             message = data.get('message', '')
-            
-            # Store in database
-            try:
-                with self.db.get_connection() as conn:
-                    cursor = conn.cursor()
-                    cursor.execute('''
-                        INSERT INTO conversations (user_message, timestamp)
-                        VALUES (?, ?)
-                    ''', (message, datetime.now().isoformat()))
-                    conn.commit()
-            except Exception as e:
-                print(f"Database error: {e}")
-            
+            timestamp = datetime.now().isoformat()
+
+            # Store via active character (uses interactions table via add_message)
+            if self.active_character:
+                try:
+                    self.active_character.add_message('user', message)
+                except Exception as e:
+                    print(f"DB error storing message: {e}")
+
             # Broadcast to all clients
             emit('chat_message', {
                 'message': message,
-                'timestamp': datetime.now().isoformat()
+                'timestamp': timestamp,
             }, broadcast=True)
-            
+
             # Trigger character talking animation
             self.scene_state['character_animation'] = 'talking'
             emit('character_animation', {
                 'animation': 'talking',
-                'type': 'talk'
+                'type': 'talk',
             }, broadcast=True)
     
+    def get_plugin_info(self) -> dict:
+        """
+        Return metadata describing this scene.
+
+        Implements :meth:`BaseScene.get_plugin_info`.
+        """
+        return {
+            "name":        "Bedroom Scene",
+            "description": "Interactive 3D bedroom environment with real-time character animation",
+            "version":     "2.0.0",
+            "author":      "CosySim",
+            "port":        self.port,
+            "tags":        ["bedroom", "3d", "character", "animation", "websocket"],
+            "skill_packs": ["memory", "character", "comfyui"],
+            "routes": [
+                {"path": "/",                 "methods": ["GET"],  "description": "Bedroom 3D UI"},
+                {"path": "/api/status",       "methods": ["GET"],  "description": "Scene status"},
+                {"path": "/api/character",    "methods": ["GET"],  "description": "Active character info"},
+            ],
+        }
+
     def start(self) -> None:
         """Start the bedroom scene server"""
         print("Starting 3D Bedroom Scene Server...")
@@ -510,5 +483,5 @@ class BedroomScene(BaseScene):
 
 
 if __name__ == '__main__':
-    scene = BedroomScene(host='0.0.0.0', port=5003)
+    scene = BedroomScene(host='0.0.0.0', port=5556)
     scene.start()

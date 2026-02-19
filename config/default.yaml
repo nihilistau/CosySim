@@ -1,9 +1,9 @@
-# CosyVoice Default Configuration
-# This is the base configuration file. Override settings in development.yaml or production.yaml
+# CosySim Default Configuration
+# Base config file. Override settings in development.yaml or production.yaml
 
 system:
-  name: "CosyVoice Virtual Companion"
-  version: "1.0.0"
+  name: "CosySim AI Playground"
+  version: "2.0.0"
   environment: "default"
 
 # Paths configuration
@@ -71,11 +71,41 @@ llm:
   max_tokens: 500
   stream: true
 
+# LMStudio SDK configuration
+lmstudio:
+  host: "127.0.0.1"
+  port: 1234
+  # Default model-load options (tuned for RTX 2060 12 GB)
+  default_load_opts:
+    gpu: 0.9          # fraction of layers to offload to GPU
+    ttl: 3600         # model time-to-live in seconds (0 = never unload)
+    context_length: 4096
+  # Hard cap: keep total GPU usage below this (MB)
+  vram_cap_mb: 11500
+  # CLI command (must be on PATH or full path)
+  cli: "lms"
+
+# Hardware profile (used by LMStudioManager for VRAM estimation)
+hardware:
+  gpu_name: "NVIDIA GeForce RTX 2060"
+  gpu_vram_mb: 12288   # 12 GB
+  ram_gb: 32
+  cpu: "Intel Core i9"
+
 # ComfyUI configuration
 comfyui:
   enabled: false
   base_url: "http://localhost:8188"
   timeout: 300
+
+# MCP (Model Context Protocol) servers
+mcp:
+  servers: []
+  # Example server entry:
+  # - name: "filesystem"
+  #   url: "ws://127.0.0.1:3001"
+  #   allowed_tools: []   # empty = all tools
+  #   enabled: true
 
 # Character system
 characters:
@@ -127,7 +157,7 @@ security:
 logging:
   level: "INFO"
   format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-  file: "./logs/cosyvoice.log"
+  file: "./logs/cosysim.log"
   max_bytes: 10485760  # 10MB
   backup_count: 5
 

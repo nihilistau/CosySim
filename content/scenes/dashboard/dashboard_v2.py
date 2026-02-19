@@ -616,12 +616,12 @@ elif page == "🚀 Deploy":
         
         with col2:
             if st.button("Launch Phone Scene", type="primary"):
-                st.info(f"To launch the phone scene, run:\n\n```\npython simulation/scenes/phone/phone_scene.py\n```")
+                st.info(f"To launch the phone scene, run:\n\n```\npython launcher.py --mode phone\n```")
                 st.code(f"""
-from content.simulation.scenes.phone.phone_scene import create_phone_scene
+from content.scenes.phone.phone_scene import PhoneScene
 
-scene = create_phone_scene(character_id="{selected_id}", port={port})
-scene.run(debug=True)
+scene = PhoneScene(port={port})
+scene.start()
                 """, language="python")
     else:
         st.warning("No characters available. Create one first!")
