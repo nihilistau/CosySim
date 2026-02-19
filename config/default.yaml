@@ -75,6 +75,8 @@ llm:
 lmstudio:
   host: "127.0.0.1"
   port: 1234
+  # API version: "v1" = legacy OpenAI-compat, "api_v1" = new LMStudio protocol
+  api_version: "v1"
   # Default model-load options (tuned for RTX 2060 12 GB)
   default_load_opts:
     gpu: 0.9          # fraction of layers to offload to GPU
@@ -84,6 +86,10 @@ lmstudio:
   vram_cap_mb: 11500
   # CLI command (must be on PATH or full path)
   cli: "lms"
+  # MCP integration
+  mcp_enabled: false          # set true to use per-request MCP via REST API
+  cosysim_mcp_url: ""         # URL of CosySim MCP server (e.g. http://localhost:8600/mcp/sse)
+  mcp_json_path: ""           # path to LMStudio mcp.json for auto-registration
 
 # Hardware profile (used by LMStudioManager for VRAM estimation)
 hardware:

@@ -73,17 +73,25 @@ class CharacterAgent:
         skill_packs: Optional[List[str]] = None,
         model:       Optional[str]       = None,
         max_context_memories: int        = 5,
+        use_mcp:     bool                = False,
+        mcp_servers: Optional[List[Dict]] = None,
     ) -> None:
         self.character            = character
         self.db                   = db
         self.skill_packs          = skill_packs or []
         self.model                = model
         self.max_context_memories = max_context_memories
+        self.use_mcp              = use_mcp
+        self.mcp_servers          = mcp_servers or []
 
         if config is None:
             from engine.config import get_config
             config = get_config()
         self.config = config
+
+        # Enable MCP if configured globally
+        if not self.use_mcp:
+            self.use_mcp = bool(config.get("lmstudio.mcp_enabled", False))
 
         # Cancellation support
         self._cancel_event: threading.Event          = threading.Event()
@@ -192,13 +200,19 @@ class CharacterAgent:
         # ── 5. LLM call ──────────────────────────────────────────────
         reply_text = ""
         try:
-            llm_handle = self._get_llm()
-
-            if use_tools and self.skill_packs:
-                tools = self._get_tools()
-                reply_text = self._act(llm_handle, chat, tools, chain_id=chain_id)
+            if self.use_mcp:
+                # REST API path with MCP integrations
+                reply_text = self._reply_via_rest(
+                    system_prompt, user_message, history, chain_id=chain_id
+                )
             else:
-                reply_text = self._complete(llm_handle, chat)
+                # SDK path (original)
+                llm_handle = self._get_llm()
+                if use_tools and self.skill_packs:
+                    tools = self._get_tools()
+                    reply_text = self._act(llm_handle, chat, tools, chain_id=chain_id)
+                else:
+                    reply_text = self._complete(llm_handle, chat)
 
         except Exception as exc:
             logger.error("LLM call failed: %s", exc)
@@ -332,6 +346,84 @@ class CharacterAgent:
             with self._lock:
                 self._stream = None
         return result_text
+
+    @timed("llm.rest_mcp")
+    def _reply_via_rest(
+        self,
+        system_prompt: str,
+        user_message: str,
+        history: Optional[List[Dict]],
+        *,
+        chain_id: Optional[str],
+    ) -> str:
+        """
+        Reply using the REST v2 client with MCP integrations.
+
+        Falls back to SDK path on connection failure.
+        """
+        from engine.lmstudio.client_v2 import get_lmstudio_client, MCP
+
+        ec = self._get_event_chain()
+        client = get_lmstudio_client()
+
+        # Build messages array
+        messages = [{"role": "system", "content": system_prompt}]
+        for turn in (history or []):
+            messages.append({
+                "role": turn.get("role", "user"),
+                "content": turn.get("content", ""),
+            })
+        messages.append({"role": "user", "content": user_message})
+
+        # Build integrations list
+        integrations = list(self.mcp_servers) if self.mcp_servers else []
+        # Auto-add CosySim MCP server if configured
+        cosysim_mcp_url = self.config.get("lmstudio.cosysim_mcp_url", "")
+        if cosysim_mcp_url:
+            integrations.append(MCP.ephemeral(cosysim_mcp_url))
+
+        try:
+            resp = client.chat(
+                messages,
+                model=self.model,
+                integrations=integrations if integrations else None,
+            )
+
+            # Log token stats
+            if ec and chain_id:
+                try:
+                    ec.log(
+                        "mcp_tool_call" if integrations else "llm_response",
+                        actor=self.character.name,
+                        payload={
+                            "input_tokens": resp.input_tokens,
+                            "output_tokens": resp.output_tokens,
+                            "latency_ms": resp.latency_ms,
+                            "tokens_per_sec": resp.tokens_per_second,
+                            "model": resp.model,
+                            "mcp_servers": len(integrations),
+                        },
+                        summary=resp.content[:120],
+                        chain_id=chain_id,
+                        character_id=self.character.id,
+                    )
+                except Exception:
+                    pass
+
+            return resp.content
+
+        except ConnectionError:
+            logger.warning("REST client failed, falling back to SDK")
+            llm_handle = self._get_llm()
+            import lmstudio as lms
+            chat = lms.Chat(system_prompt)
+            for turn in (history or []):
+                if turn.get("role") == "user":
+                    chat.add_user_message(turn.get("content", ""))
+                elif turn.get("role") == "assistant":
+                    chat.add_assistant_response(turn.get("content", ""))
+            chat.add_user_message(user_message)
+            return self._complete(llm_handle, chat)
 
     def _build_system_prompt(self, memories: List[str]) -> str:
         """Build the full system prompt for the character."""
