@@ -12,9 +12,10 @@ from pathlib import Path
 from typing import Optional, Dict, List
 import sys
 
-sys.path.append(str(Path(__file__).parent.parent.parent))
+project_root = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(project_root))
 
-from simulation.database.db import Database
+from content.simulation.database.db import Database
 from engine.assets import AssetManager, AudioAsset
 
 
@@ -344,7 +345,7 @@ class VoiceMailBox:
 
 # Quick test
 if __name__ == "__main__":
-    from simulation.database.db import Database
+    from content.simulation.database.db import Database
     
     db = Database()
     

@@ -13,11 +13,12 @@ from apscheduler.triggers.interval import IntervalTrigger
 from apscheduler.triggers.cron import CronTrigger
 import sys
 
-sys.path.append(str(Path(__file__).parent.parent.parent))
+project_root = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(project_root))
 
-from simulation.database.db import Database
-from simulation.character_system.character import Character
-from simulation.services.media_generator import MediaGenerator
+from content.simulation.database.db import Database
+from content.simulation.character_system.character import Character
+from content.simulation.services.media_generator import MediaGenerator
 
 
 class AutonomousMessenger:

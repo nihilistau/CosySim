@@ -6,13 +6,14 @@ import sys
 from pathlib import Path
 
 # Add to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
 
-from simulation.database.db import Database
-from simulation.database.rag import RAGMemory
-from simulation.character_system.personality import Personality
-from simulation.character_system.role import Role
-from simulation.character_system.character import Character
+from content.simulation.database.db import Database
+from content.simulation.database.rag import RAGMemory
+from content.simulation.character_system.personality import Personality
+from content.simulation.character_system.role import Role
+from content.simulation.character_system.character import Character
 
 
 def test_database():

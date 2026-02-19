@@ -7,11 +7,12 @@ from pathlib import Path
 import requests
 from typing import Dict, Optional
 
-sys.path.insert(0, str(Path(__file__).parent))
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
 
-from simulation.character_system.character import Character
-from simulation.character_system.personality import Personality
-from simulation.database.db import Database
+from content.simulation.character_system.character import Character
+from content.simulation.character_system.personality import Personality
+from content.simulation.database.db import Database
 
 
 class AICompanion:

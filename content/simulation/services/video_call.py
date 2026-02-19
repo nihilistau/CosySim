@@ -12,11 +12,12 @@ from pathlib import Path
 from typing import Optional, Dict, Callable
 import sys
 
-sys.path.append(str(Path(__file__).parent.parent.parent))
+project_root = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(project_root))
 
-from simulation.database.db import Database
-from simulation.services.media_generator import MediaGenerator
-from simulation.services.voice_call import VoiceCallHandler
+from content.simulation.database.db import Database
+from content.simulation.services.media_generator import MediaGenerator
+from content.simulation.services.voice_call import VoiceCallHandler
 
 
 class VideoCallHandler:
@@ -368,7 +369,7 @@ class VideoCallHandler:
 
 # Quick test
 if __name__ == "__main__":
-    from simulation.database.db import Database
+    from content.simulation.database.db import Database
     
     db = Database()
     handler = VideoCallHandler(db=db)

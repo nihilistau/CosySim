@@ -19,7 +19,8 @@ import subprocess
 import json
 
 # Add project root to path
-sys.path.append(str(Path(__file__).parent.parent.parent.parent))
+project_root = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(project_root))
 
 from engine.assets import AssetManager, CharacterAsset, SceneAsset
 from engine.config import ConfigManager

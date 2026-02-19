@@ -13,18 +13,19 @@ import os
 import random
 from werkzeug.utils import secure_filename
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
+project_root = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(project_root))
 
-from simulation.database.db import Database
-from simulation.database.rag import RAGMemory
-from simulation.character_system.character import Character
-from simulation.services.media_generator import MediaGenerator
-from simulation.services.autonomous_messenger import AutonomousMessenger
-from simulation.services.voice_call import VoiceCallHandler
-from simulation.services.voice_message import VoiceMessageGenerator
-from simulation.services.video_call import VideoCallHandler
-from simulation.services.video_message import VideoMessageGenerator
-from simulation.scenes.phone.apps.gallery import Gallery
+from content.simulation.database.db import Database
+from content.simulation.database.rag import RAGMemory
+from content.simulation.character_system.character import Character
+from content.simulation.services.media_generator import MediaGenerator
+from content.simulation.services.autonomous_messenger import AutonomousMessenger
+from content.simulation.services.voice_call import VoiceCallHandler
+from content.simulation.services.voice_message import VoiceMessageGenerator
+from content.simulation.services.video_call import VideoCallHandler
+from content.simulation.services.video_message import VideoMessageGenerator
+from content.scenes.phone.apps.gallery import Gallery
 from engine.scenes.base_scene import BaseScene
 from engine.assets import CharacterAsset
 

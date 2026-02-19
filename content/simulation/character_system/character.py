@@ -9,10 +9,11 @@ import sys
 from pathlib import Path
 
 # Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+project_root = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(project_root))
 
-from simulation.database.db import Database
-from simulation.database.rag import RAGMemory
+from content.simulation.database.db import Database
+from content.simulation.database.rag import RAGMemory
 
 
 class Character:

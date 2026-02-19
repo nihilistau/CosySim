@@ -13,7 +13,8 @@ from pathlib import Path
 
 # Import ComfyUI generators
 import sys
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
+project_root = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(project_root))
 from comfyui_generator import ImageGenerator
 from engine.assets import AssetManager, ImageAsset
 
