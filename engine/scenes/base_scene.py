@@ -1,6 +1,23 @@
 """
-BaseScene - Abstract base class for all scenes
-Provides common functionality: character loading, asset management, save/load
+BaseScene — Abstract base for all CosySim scenes.
+==================================================
+
+Provides a standard contract every scene inherits:
+
+* **Character management** — load / unload / list from asset system
+* **Scene persistence** — save_scene / load_scene
+* **Discovery** — get_plugin_info(), get_health(), get_skill_packs()
+* **Lifecycle hooks** — on_scene_loaded, on_character_added, on_character_removed
+
+Concrete scenes must implement ``start()``, ``stop()``, and
+``get_plugin_info()`` at minimum.
+
+Usage::
+
+    class MyScene(BaseScene):
+        def start(self):   ...
+        def stop(self):    ...
+        def get_plugin_info(self): return {...}
 """
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Dict, List, Optional, Any
@@ -60,28 +77,25 @@ class BaseScene(ABC):
     
     def load_character(self, character_id: str) -> CharacterAsset:
         """
-        Load a character from assets
-        
-        Args:
-            character_id: Character asset ID
-            
-        Returns:
-            CharacterAsset instance
+        Load a character from assets and fire on_character_added hook.
         """
         character = self.asset_manager.load('character', character_id)
         self.active_characters[character_id] = character
         
-        # Update scene config
         if character_id not in self.scene_config['characters']:
             self.scene_config['characters'].append(character_id)
         
+        # Fire lifecycle hook
+        self.on_character_added(character)
         return character
     
     def unload_character(self, character_id: str) -> None:
-        """Remove character from scene"""
+        """Remove character from scene and fire on_character_removed hook."""
         if character_id in self.active_characters:
             del self.active_characters[character_id]
-            self.scene_config['characters'].remove(character_id)
+            if character_id in self.scene_config['characters']:
+                self.scene_config['characters'].remove(character_id)
+            self.on_character_removed(character_id)
     
     def get_character(self, character_id: str) -> Optional[CharacterAsset]:
         """Get active character by ID"""
@@ -265,15 +279,19 @@ class BaseScene(ABC):
         }
     
     # ============= LIFECYCLE HOOKS =============
+    # Override these in subclasses to react to scene events.
     
     def on_scene_loaded(self, scene_asset: SceneAsset) -> None:
-        """Called after scene is loaded from asset"""
+        """Called after a saved scene is restored from an asset.
+        Override to apply scene-specific configuration from the asset."""
         pass
     
     def on_character_added(self, character: CharacterAsset) -> None:
-        """Called when character is added to scene"""
+        """Called after a character is loaded into the scene.
+        Override to initialise character-specific resources (e.g. 3D model, SocketIO room)."""
         pass
     
     def on_character_removed(self, character_id: str) -> None:
-        """Called when character is removed from scene"""
+        """Called after a character is removed from the scene.
+        Override to clean up character-specific resources."""
         pass
