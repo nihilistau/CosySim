@@ -466,9 +466,19 @@ function recordVideoMessage() {
 
 function showTypingIndicator(show) {
     const indicator = document.getElementById('typingIndicator');
-    if (indicator) {
-        indicator.style.display = show ? 'block' : 'none';
-        if (show) scrollToBottom();
+    if (!indicator) return;
+    if (show) {
+        // Re-append to keep it as the last child so it shows below all messages
+        const container = document.getElementById('messagesContainer');
+        if (container && indicator.parentNode !== container) {
+            container.appendChild(indicator);
+        } else if (container) {
+            container.appendChild(indicator); // moves to end even if already a child
+        }
+        indicator.style.display = 'block';
+        scrollToBottom();
+    } else {
+        indicator.style.display = 'none';
     }
 }
 

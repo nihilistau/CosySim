@@ -182,20 +182,26 @@ class Character:
 
         - State fields   (mood, energy, relationship_level, arousal) → update_state()
         - Character table fields (name, age, sex, hair_color, eye_color, height,
-          body_type, tags, backstory, appearance, traits, avatar_url, personality_id,
+          body_type, tags, appearance, traits, avatar_url, personality_id,
           role_id, voice_id) → update_attributes()
-        - Extended profile fields (occupation, physical_description, speech_style,
-          interests, quirks, fears, secrets, personality_name, …) → stored in
-          the metadata JSON column via update_attributes(metadata={…})
+        - Metadata fields (backstory, occupation, physical_description, speech_style,
+          interests, quirks, fears, secrets, …) → stored in the metadata JSON column
+        - 'personality' string → looked up by name → personality_id set
 
         Returns True if at least one update succeeded.
         """
         STATE_FIELDS = {'mood', 'energy', 'relationship_level', 'arousal',
                         'last_interaction', 'location', 'activity'}
+        # Only real columns that exist in the `characters` table
         CHAR_TABLE_FIELDS = {
             'name', 'age', 'sex', 'hair_color', 'eye_color', 'height', 'body_type',
-            'tags', 'backstory', 'appearance', 'traits', 'avatar_url',
+            'tags', 'appearance', 'traits', 'avatar_url',
             'personality_id', 'role_id', 'voice_id',
+        }
+        # Fields that live in the metadata JSON blob
+        META_FIELDS = {
+            'backstory', 'occupation', 'physical_description', 'speech_style',
+            'interests', 'quirks', 'fears', 'secrets', 'personality_name',
         }
 
         state_kwargs: Dict[str, Any] = {}
@@ -207,6 +213,8 @@ class Character:
                 state_kwargs[k] = v
             elif k in CHAR_TABLE_FIELDS:
                 char_kwargs[k] = v
+            elif k in META_FIELDS:
+                meta_updates[k] = v
             elif k == 'personality':
                 # Accept personality name string — look up personality_id
                 pers = self.db.get_personality_by_name(str(v)) if v else None
@@ -558,7 +566,7 @@ class Character:
             'height': self.height,
             'body_type': self.body_type,
             'tags': self.tags,
-            'backstory': self._data.get('backstory', ''),
+            'backstory': (self.metadata or {}).get('backstory', '') or self._data.get('backstory', ''),
             'avatar_url': self._data.get('avatar_url', ''),
             'appearance': self._data.get('appearance', ''),
             # State

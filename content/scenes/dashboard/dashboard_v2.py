@@ -347,6 +347,7 @@ elif page == "👤 Characters":
                             'quirks':               new_quirks,
                             'fears':                new_fears,
                             'secrets':              new_secrets,
+                            'backstory':            new_backstory,
                         })
 
                         st.session_state.db.update_character(
@@ -358,7 +359,6 @@ elif page == "👤 Characters":
                             eye_color=new_eyes,
                             height=new_height,
                             body_type=new_body,
-                            backstory=new_backstory,
                             tags=[t.strip() for t in new_tags_input.split(',') if t.strip()],
                             metadata=new_meta,
                         )

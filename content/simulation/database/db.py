@@ -236,7 +236,7 @@ class Database:
         # Whitelist of allowed columns to prevent SQL injection
         ALLOWED_COLUMNS = {
             'name', 'age', 'sex', 'hair_color', 'eye_color', 'height', 'body_type',
-            'personality_id', 'role_id', 'appearance', 'voice_id', 'traits', 'backstory',
+            'personality_id', 'role_id', 'appearance', 'voice_id', 'traits',
             'tags', 'metadata', 'avatar_url'
         }
         
