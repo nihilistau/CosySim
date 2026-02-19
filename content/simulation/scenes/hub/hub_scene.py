@@ -19,8 +19,8 @@ import subprocess
 import json
 
 # Add project root to path
+# content/simulation/scenes/hub/hub_scene.py -> scenes -> simulation -> content -> CosySim (5 parents)
 project_root = Path(__file__).parent.parent.parent.parent.parent
-project_root = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 from engine.assets import AssetManager, CharacterAsset, SceneAsset

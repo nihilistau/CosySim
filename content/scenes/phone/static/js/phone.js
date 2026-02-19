@@ -996,10 +996,6 @@ async function loadScene() {
         alert('Failed to load scene');
     }
 }
-    };
-    
-    localStorage.setItem('autonomousSettings', JSON.stringify(settings));
-}
 
 async function getAutonomousStatus() {
     try {

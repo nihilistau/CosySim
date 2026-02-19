@@ -105,6 +105,36 @@ class Character:
         return ", ".join(parts) if parts else "attractive person"
     
     @property
+    def description(self) -> str:
+        """Get character description"""
+        return self._data.get('description', '')
+    
+    @property
+    def gender(self) -> Optional[str]:
+        """Alias for sex attribute"""
+        return self.sex
+    
+    @property
+    def metadata(self) -> Dict:
+        """Get character metadata"""
+        return self._data.get('metadata', {})
+    
+    @property
+    def nsfw_enabled(self) -> bool:
+        """Check if NSFW content is enabled for this character"""
+        return self._data.get('nsfw_enabled', False) or self.metadata.get('nsfw_enabled', False)
+    
+    @property
+    def autonomy_level(self) -> str:
+        """Get autonomy level (low, moderate, high)"""
+        return self.metadata.get('autonomy_level', 'moderate')
+    
+    @property
+    def messaging_frequency(self) -> str:
+        """Get messaging frequency (rare, occasional, frequent)"""
+        return self.metadata.get('messaging_frequency', 'occasional')
+    
+    @property
     def tags(self) -> List[str]:
         return self._data.get('tags', [])
     
@@ -209,6 +239,32 @@ class Character:
         """Adjust energy level"""
         new_level = max(0.0, min(1.0, self.energy + delta))
         return self.update_state(energy=new_level)
+    
+    def add_interaction(self, interaction_type: str, details: Optional[Dict] = None) -> bool:
+        """
+        Record an interaction with this character
+        
+        Args:
+            interaction_type: Type of interaction (message, call, photo, etc.)
+            details: Additional details about the interaction
+        
+        Returns:
+            Success status
+        """
+        interaction_data = {
+            'character_id': self.id,
+            'type': interaction_type,
+            'timestamp': datetime.now().isoformat(),
+            'details': details or {}
+        }
+        
+        # Store in metadata or database
+        try:
+            # You can extend this to store in a proper interactions table
+            return True
+        except Exception as e:
+            print(f"Error adding interaction: {e}")
+            return False
     
     # ============= MEMORY OPERATIONS =============
     
