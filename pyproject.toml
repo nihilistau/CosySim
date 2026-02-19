@@ -215,9 +215,10 @@ dependencies = [
     "nvidia-cusparse-cu12==12.5.4.2",
     "nvidia-cusparselt-cu12==0.6.3",
     "nvidia-ml-py==12.575.51",
-    "nvidia-modelopt==0.33.1",
-    "nvidia-modelopt-core==0.33.1",
-    "nvidia-nccl-cu12==2.26.2",
+    "nvidia-modelopt==0.33.0",
+    "nvidia-modelopt-core==0.33.0",  # 0.33.1 not available, using 0.33.0
+    # nvidia-nccl-cu12 is Linux-only (multi-GPU communication)
+    # "nvidia-nccl-cu12==2.26.2",
     "nvidia-nvjitlink-cu12==12.6.85",
     "nvidia-nvtx-cu12==12.6.77",
     "nvtx==0.2.14",
@@ -328,7 +329,8 @@ dependencies = [
     "tornado==6.5.4",
     "tqdm==4.67.1",
     "traitlets==5.14.3",
-    "triton==3.3.1",
+    # triton is Linux-only (GPU kernel compilation)
+    # "triton==3.3.1",
     "typeguard==4.4.4",
     "typing-extensions==4.15.0",
     "typing-inspection==0.4.2",
@@ -363,7 +365,7 @@ dev = [
 ]
 
 [tool.setuptools]
-packages = ["engine", "content", "tools"]
+packages = ["engine", "content"]
 include-package-data = true
 
 [tool.setuptools.package-data]
