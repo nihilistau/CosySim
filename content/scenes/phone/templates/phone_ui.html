@@ -492,36 +492,36 @@
                     </div>
                     <div class="app-grid">
                         <div class="app-icon" onclick="openApp('messages')">
-                            <div class="icon messages-icon">💬</div>
+                            <div class="icon icon-messages">💬</div>
                             <span>Messages</span>
                             <span class="badge" id="messageBadge" style="display:none;">0</span>
                         </div>
                         <div class="app-icon" onclick="openGalleryApp()">
-                            <div class="icon gallery-icon">🖼️</div>
+                            <div class="icon icon-gallery">🖼️</div>
                             <span>Gallery</span>
                         </div>
                         <div class="app-icon" onclick="openApp('videoMessages')">
-                            <div class="icon" style="background:linear-gradient(135deg,#1a1030,#2d1a50);">🎥</div>
+                            <div class="icon icon-videos">🎥</div>
                             <span>Videos</span>
                         </div>
                         <div class="app-icon" onclick="openApp('voiceMessages')">
-                            <div class="icon" style="background:linear-gradient(135deg,#0d2020,#1a3535);">🎤</div>
+                            <div class="icon icon-voice">🎤</div>
                             <span>Voice</span>
                         </div>
                         <div class="app-icon" onclick="openApp('camera')">
-                            <div class="icon camera-icon">📷</div>
+                            <div class="icon icon-camera">📷</div>
                             <span>Camera</span>
                         </div>
                         <div class="app-icon" onclick="window.location.href='http://localhost:5556'">
-                            <div class="icon bedroom-icon">🏠</div>
+                            <div class="icon icon-bedroom">🏠</div>
                             <span>Bedroom</span>
                         </div>
                         <div class="app-icon" onclick="window.location.href='http://localhost:8500'">
-                            <div class="icon">🌐</div>
+                            <div class="icon icon-hub">🌐</div>
                             <span>Hub</span>
                         </div>
                         <div class="app-icon" onclick="openApp('settings')">
-                            <div class="icon settings-icon">⚙️</div>
+                            <div class="icon icon-settings">⚙️</div>
                             <span>Settings</span>
                         </div>
                     </div>
@@ -542,7 +542,11 @@
                         <button class="back-button" onclick="goHome()">←</button>
                         <div class="header-content">
                             <h2 id="contactName">Loading...</h2>
-                            <p class="header-subtitle" id="contactStatus">Active</p>
+                            <div class="header-mood-bar">
+                                <span class="mood-dot" id="moodDot" style="background:#8e8e93;"></span>
+                                <span class="mood-label" id="moodLabel">neutral</span>
+                                <span class="rel-hearts" id="relHearts">🤍🤍🤍🤍🤍</span>
+                            </div>
                         </div>
                         <button class="settings-icon-btn" onclick="openAutonomousSettings()" title="Autonomous Settings">⚙️</button>
                         <button class="gallery-icon-btn" onclick="openGalleryView()" title="Gallery">🖼️</button>
@@ -558,9 +562,12 @@
                     </div>
 
                     <div class="messages-container" id="messagesContainer">
-                        <!-- typing indicator lives inside the scroll container so it never displaces the input -->
+                        <!-- Typing indicator (re-appended to end by JS) -->
                         <div class="typing-indicator" id="typingIndicator" style="display:none;">
-                            <div class="typing-dots"><span></span><span></span><span></span></div>
+                            <div class="typing-bubble">
+                                <span class="typing-name"></span>
+                                <div class="typing-dots"><span></span><span></span><span></span></div>
+                            </div>
                         </div>
                     </div>
 

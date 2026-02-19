@@ -31,6 +31,15 @@ function initializeSocket() {
     socket.on('message_received', (data) => {
         addMessageToUI(data.role, data.content, data.timestamp, data.autonomous);
         
+        // Update mood/relationship if the server sent new values
+        if (data.mood && currentCharacter) {
+            currentCharacter.mood = data.mood;
+        }
+        if (data.relationship_level !== undefined && currentCharacter) {
+            currentCharacter.relationship_level = data.relationship_level;
+        }
+        if (data.role === 'assistant') updateMoodRelDisplay();
+        
         // Show notification badge if not on messages screen
         const messagesScreen = document.getElementById('messagesScreen');
         if (messagesScreen.style.display !== 'block' && data.role === 'assistant') {
@@ -169,6 +178,36 @@ function updateCharacterUI() {
     
     const activeCallerName = document.getElementById('activeCallerName');
     if (activeCallerName) activeCallerName.textContent = currentCharacter.name;
+    
+    // Update mood & relationship indicators in chat header
+    updateMoodRelDisplay();
+}
+
+/** Refresh the mood dot and relationship hearts in the message header. */
+function updateMoodRelDisplay() {
+    if (!currentCharacter) return;
+    const mood  = currentCharacter.mood || 'neutral';
+    const rel   = parseFloat(currentCharacter.relationship_level || 0.5);
+    
+    // Mood dot colour mapping
+    const moodColours = {
+        happy:'#34c759', excited:'#ff9500', flirty:'#ff2d55',
+        sad:'#5ac8fa', angry:'#ff3b30', neutral:'#8e8e93',
+        anxious:'#ffcc00', playful:'#af52de', loving:'#ff375f',
+        bored:'#636366', curious:'#0a84ff', shy:'#d4a0e8',
+    };
+    const dot = document.getElementById('moodDot');
+    if (dot) dot.style.background = moodColours[mood] || '#8e8e93';
+    
+    const label = document.getElementById('moodLabel');
+    if (label) label.textContent = mood;
+    
+    // Relationship hearts (0–5 filled)
+    const hearts = document.getElementById('relHearts');
+    if (hearts) {
+        const filled = Math.round(rel * 5);
+        hearts.textContent = '❤️'.repeat(filled) + '🤍'.repeat(5 - filled);
+    }
 }
 
 // App navigation
@@ -439,26 +478,37 @@ function addMessageToUI(role, content, timestamp, autonomous = false, shouldScro
     
     const messageDiv = document.createElement('div');
     messageDiv.className = `message ${role}`;
-    if (autonomous) {
-        messageDiv.classList.add('autonomous');
-    }
+    if (autonomous) messageDiv.classList.add('autonomous');
     
     const bubbleDiv = document.createElement('div');
     bubbleDiv.className = 'message-bubble';
     bubbleDiv.textContent = content;
     
-    const timeDiv = document.createElement('div');
-    timeDiv.className = 'message-time';
-    const time = new Date(timestamp);
-    timeDiv.textContent = time.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    // Timestamp + read-receipt row
+    const metaDiv = document.createElement('div');
+    metaDiv.className = 'message-meta';
     
-    bubbleDiv.appendChild(timeDiv);
+    const timeSpan = document.createElement('span');
+    timeSpan.className = 'message-time';
+    const time = new Date(timestamp);
+    timeSpan.textContent = time.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    metaDiv.appendChild(timeSpan);
+    
+    // Read receipt checkmarks for user messages
+    if (role === 'user') {
+        const receipt = document.createElement('span');
+        receipt.className = 'read-receipt delivered';
+        receipt.textContent = '✓✓';
+        metaDiv.appendChild(receipt);
+        // Mark as read after a brief delay (simulates delivery)
+        setTimeout(() => { receipt.className = 'read-receipt read'; }, 800);
+    }
+    
+    bubbleDiv.appendChild(metaDiv);
     messageDiv.appendChild(bubbleDiv);
     container.appendChild(messageDiv);
     
-    if (shouldScroll) {
-        scrollToBottom();
-    }
+    if (shouldScroll) scrollToBottom();
 }
 
 function addPhotoMessage(url, timestamp, role = 'assistant') {
@@ -644,13 +694,14 @@ function showTypingIndicator(show) {
     const indicator = document.getElementById('typingIndicator');
     if (!indicator) return;
     if (show) {
+        // Set character name in typing bubble
+        const nameEl = indicator.querySelector('.typing-name');
+        if (nameEl && currentCharacter) {
+            nameEl.textContent = currentCharacter.name;
+        }
         // Re-append to keep it as the last child so it shows below all messages
         const container = document.getElementById('messagesContainer');
-        if (container && indicator.parentNode !== container) {
-            container.appendChild(indicator);
-        } else if (container) {
-            container.appendChild(indicator); // moves to end even if already a child
-        }
+        if (container) container.appendChild(indicator);
         indicator.style.display = 'block';
         scrollToBottom();
     } else {

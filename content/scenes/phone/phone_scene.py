@@ -1323,15 +1323,20 @@ class PhoneScene(BaseScene):
                 self._active_request_in_progress = False
                 self.socketio.emit('active_request_end', {})
             
+            # Update mood & relationship based on this exchange
+            self._update_mood_and_relationship(message, response)
+            
             # Add assistant message
             self.active_character.add_message('assistant', response)
             
-            # Hide typing indicator and emit response
+            # Hide typing indicator and emit response with updated mood/rel
             self.socketio.emit('typing', {'is_typing': False})
             emit('message_received', {
                 'role': 'assistant',
                 'content': response,
-                'timestamp': datetime.now().isoformat()
+                'timestamp': datetime.now().isoformat(),
+                'mood': getattr(self.active_character, 'mood', 'neutral'),
+                'relationship_level': getattr(self.active_character, 'relationship_level', 0.5),
             })
         
         @self.socketio.on('start_call')
@@ -1712,6 +1717,68 @@ class PhoneScene(BaseScene):
                 self._maybe_send_video_message(response)
 
         return response
+
+    # ── Dynamic Mood & Relationship Engine ──────────────────────
+    # Called after every assistant reply to nudge mood and relationship
+    # based on simple keyword sentiment heuristics.
+
+    _POSITIVE_WORDS = frozenset([
+        'love', 'happy', 'great', 'amazing', 'wonderful', 'thank', 'thanks',
+        'awesome', 'beautiful', 'sweet', 'kind', 'funny', 'cute', 'miss',
+        'haha', 'lol', 'yes', 'cool', 'nice', 'good', 'perfect', 'best',
+        'appreciate', 'care', 'adore', 'excited', 'joy', 'hug', 'kiss',
+    ])
+    _NEGATIVE_WORDS = frozenset([
+        'hate', 'angry', 'annoyed', 'stupid', 'ugly', 'boring', 'leave',
+        'shut', 'stop', 'no', 'bad', 'worst', 'wrong', 'rude', 'mean',
+        'ignore', 'upset', 'cry', 'sad', 'tired', 'whatever', 'ugh',
+    ])
+    _MOOD_MAP = {
+        (True, False): 'happy',
+        (False, True): 'sad',
+        (True, True): 'conflicted',
+        (False, False): 'neutral',
+    }
+
+    def _update_mood_and_relationship(self, user_message: str, response: str):
+        """Nudge character mood and relationship level based on conversation sentiment."""
+        if not self.active_character:
+            return
+        try:
+            words = set((user_message + ' ' + response).lower().split())
+            pos = len(words & self._POSITIVE_WORDS)
+            neg = len(words & self._NEGATIVE_WORDS)
+
+            # Mood: shift towards sentiment
+            new_mood = self._MOOD_MAP[(pos > 0, neg > 0)]
+            if pos > neg + 2:
+                new_mood = random.choice(['happy', 'excited', 'playful', 'loving'])
+            elif neg > pos + 2:
+                new_mood = random.choice(['sad', 'angry', 'anxious'])
+
+            self.active_character.mood = new_mood
+
+            # Relationship: small delta per exchange (clamped 0–1)
+            rel = float(self.active_character.relationship_level or 0.5)
+            delta = 0.0
+            if pos > neg:
+                delta = min(0.02 * (pos - neg), 0.06)
+            elif neg > pos:
+                delta = max(-0.02 * (neg - pos), -0.04)
+            # Natural decay towards 0.5 if no strong signal
+            if delta == 0:
+                delta = -0.005 if rel > 0.5 else 0.005 if rel < 0.5 else 0
+            rel = max(0.0, min(1.0, rel + delta))
+            self.active_character.relationship_level = rel
+
+            # Persist to DB
+            self.db.update_character_state(
+                self.active_character.id,
+                mood=new_mood,
+                relationship_level=rel,
+            )
+        except Exception as e:
+            print(f"[mood/rel] update error: {e}")
     
     def _maybe_send_voice_message(self, text: str):
         """Character may spontaneously send a voice message"""

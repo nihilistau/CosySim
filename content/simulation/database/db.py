@@ -1,14 +1,37 @@
 """
-SQLite Database Management for Virtual Companion System
-Handles all character, personality, role, conversation, and media data
+SQLite Database Management for CosySim
+=======================================
+
+Central CRUD layer for all simulation data: characters, personalities, roles,
+conversations, interactions, media, character states, and events.
+
+Every public method:
+  - Uses parameterised queries (no SQL injection)
+  - Returns typed results (Dict, List[Dict], bool, str, int)
+  - Logs errors via the standard ``logging`` module
+  - Validates column names against whitelists before any dynamic SQL
+
+Usage::
+
+    from content.simulation.database.db import Database
+    db = Database()                       # default path
+    db = Database("path/to/custom.db")    # custom path
+
+    char_id = db.create_character(name="Luna", age=22)
+    char    = db.get_character(char_id)
+    db.update_character(char_id, mood="happy")
+    db.delete_character(char_id)
 """
 import sqlite3
 import json
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Any, Tuple
 import uuid
 from contextlib import contextmanager
+
+logger = logging.getLogger(__name__)
 
 
 class Database:
@@ -460,6 +483,44 @@ class Database:
             
             return personalities
     
+    def update_personality(self, pers_id: str, **kwargs) -> bool:
+        """Update a personality's attributes.
+        
+        Allowed fields: name, system_prompt, traits, communication_style,
+        sexual_openness, warmth, formality, humor, flirtiness, intelligence, creativity.
+        """
+        ALLOWED = {
+            'name', 'system_prompt', 'traits', 'communication_style',
+            'sexual_openness', 'personality_values',
+            'warmth', 'formality', 'humor', 'flirtiness', 'intelligence', 'creativity',
+        }
+        updates, values = [], []
+        for key, value in kwargs.items():
+            if key not in ALLOWED:
+                raise ValueError(f"Invalid personality column: {key}")
+            if key in ('traits', 'communication_style', 'personality_values'):
+                value = json.dumps(value)
+            updates.append(f"{key} = ?")
+            values.append(value)
+        if not updates:
+            return False
+        values.append(pers_id)
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                f"UPDATE personalities SET {', '.join(updates)} WHERE id = ?",
+                values,
+            )
+            return cursor.rowcount > 0
+
+    def delete_personality(self, pers_id: str) -> bool:
+        """Delete a personality. Characters referencing it keep their personality_id
+        but will need reassignment."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM personalities WHERE id = ?", (pers_id,))
+            return cursor.rowcount > 0
+    
     # ============= ROLE OPERATIONS =============
     
     def create_role(self, name: str, description: str, **kwargs) -> str:
@@ -508,6 +569,38 @@ class Database:
                 roles.append(role)
             
             return roles
+    
+    def update_role(self, role_id: str, **kwargs) -> bool:
+        """Update a role's attributes.
+        
+        Allowed fields: name, description, required_traits, context, scenario.
+        """
+        ALLOWED = {'name', 'description', 'required_traits', 'context', 'scenario'}
+        updates, values = [], []
+        for key, value in kwargs.items():
+            if key not in ALLOWED:
+                raise ValueError(f"Invalid role column: {key}")
+            if key == 'required_traits':
+                value = json.dumps(value)
+            updates.append(f"{key} = ?")
+            values.append(value)
+        if not updates:
+            return False
+        values.append(role_id)
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                f"UPDATE roles SET {', '.join(updates)} WHERE id = ?",
+                values,
+            )
+            return cursor.rowcount > 0
+
+    def delete_role(self, role_id: str) -> bool:
+        """Delete a role by ID."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM roles WHERE id = ?", (role_id,))
+            return cursor.rowcount > 0
     
     # ============= MEMORY OPERATIONS =============
     
@@ -664,6 +757,20 @@ class Database:
             
             return conversations
     
+    def delete_conversation(self, conv_id: str) -> bool:
+        """Delete a conversation by ID."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM conversations WHERE id = ?", (conv_id,))
+            return cursor.rowcount > 0
+
+    def delete_character_conversations(self, character_id: str) -> int:
+        """Delete all conversations for a character. Returns count deleted."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM conversations WHERE character_id = ?", (character_id,))
+            return cursor.rowcount
+    
     # ============= INTERACTION OPERATIONS =============
     
     def log_interaction(self, interaction_type: str, character_id: str, content: str, **kwargs) -> str:
@@ -704,6 +811,42 @@ class Database:
                 interactions.append(inter)
             
             return interactions
+    
+    def get_character_interactions(self, character_id: str, limit: int = 50,
+                                   interaction_type: Optional[str] = None) -> List[Dict]:
+        """Get recent interactions for a character, optionally filtered by type."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            if interaction_type:
+                cursor.execute(
+                    "SELECT * FROM interactions WHERE character_id = ? AND type = ? "
+                    "ORDER BY timestamp DESC LIMIT ?",
+                    (character_id, interaction_type, limit),
+                )
+            else:
+                cursor.execute(
+                    "SELECT * FROM interactions WHERE character_id = ? "
+                    "ORDER BY timestamp DESC LIMIT ?",
+                    (character_id, limit),
+                )
+            return [
+                {**dict(r), 'metadata': json.loads(r['metadata']) if r['metadata'] else {}}
+                for r in cursor.fetchall()
+            ]
+
+    def delete_interaction(self, interaction_id: str) -> bool:
+        """Delete a single interaction by ID."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM interactions WHERE id = ?", (interaction_id,))
+            return cursor.rowcount > 0
+
+    def delete_interaction_chain(self, chain_id: str) -> int:
+        """Delete all interactions in a chain. Returns count deleted."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM interactions WHERE chain_id = ?", (chain_id,))
+            return cursor.rowcount
     
     # ============= CHARACTER STATE OPERATIONS =============
     
@@ -761,6 +904,13 @@ class Database:
             
             return cursor.rowcount > 0
     
+    def delete_character_state(self, character_id: str) -> bool:
+        """Delete state for a character."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM character_states WHERE character_id = ?", (character_id,))
+            return cursor.rowcount > 0
+    
     # ============= MEDIA OPERATIONS =============
     
     def add_media(self, character_id: str, media_type: str, filepath: str, **kwargs) -> str:
@@ -810,6 +960,178 @@ class Database:
                 media_list.append(media)
             
             return media_list
+
+    def get_media(self, media_id: str) -> Optional[Dict]:
+        """Get a single media record by ID."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM media WHERE id = ?", (media_id,))
+            row = cursor.fetchone()
+            if row:
+                m = dict(row)
+                m['metadata'] = json.loads(m['metadata']) if m['metadata'] else {}
+                return m
+            return None
+
+    def update_media(self, media_id: str, **kwargs) -> bool:
+        """Update media metadata.
+        
+        Allowed fields: filepath, thumbnail, metadata.
+        """
+        ALLOWED = {'filepath', 'thumbnail', 'metadata'}
+        updates, values = [], []
+        for key, value in kwargs.items():
+            if key not in ALLOWED:
+                raise ValueError(f"Invalid media column: {key}")
+            if key == 'metadata':
+                value = json.dumps(value)
+            updates.append(f"{key} = ?")
+            values.append(value)
+        if not updates:
+            return False
+        values.append(media_id)
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                f"UPDATE media SET {', '.join(updates)} WHERE id = ?",
+                values,
+            )
+            return cursor.rowcount > 0
+
+    def delete_media(self, media_id: str) -> bool:
+        """Delete a single media record by ID."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM media WHERE id = ?", (media_id,))
+            return cursor.rowcount > 0
+
+    def delete_character_media(self, character_id: str,
+                                media_type: Optional[str] = None) -> int:
+        """Delete media for a character, optionally filtered by type. Returns count."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            if media_type:
+                cursor.execute(
+                    "DELETE FROM media WHERE character_id = ? AND type = ?",
+                    (character_id, media_type),
+                )
+            else:
+                cursor.execute(
+                    "DELETE FROM media WHERE character_id = ?",
+                    (character_id,),
+                )
+            return cursor.rowcount
+
+    # ============= COUNT / SEARCH HELPERS =============
+
+    def count_characters(self) -> int:
+        """Return total number of characters."""
+        with self.get_connection() as conn:
+            return conn.execute("SELECT COUNT(*) FROM characters").fetchone()[0]
+
+    def count_conversations(self, character_id: Optional[str] = None) -> int:
+        """Count conversations, optionally scoped to a character."""
+        with self.get_connection() as conn:
+            if character_id:
+                return conn.execute(
+                    "SELECT COUNT(*) FROM conversations WHERE character_id = ?",
+                    (character_id,),
+                ).fetchone()[0]
+            return conn.execute("SELECT COUNT(*) FROM conversations").fetchone()[0]
+
+    def count_interactions(self, character_id: Optional[str] = None) -> int:
+        """Count interactions, optionally scoped to a character."""
+        with self.get_connection() as conn:
+            if character_id:
+                return conn.execute(
+                    "SELECT COUNT(*) FROM interactions WHERE character_id = ?",
+                    (character_id,),
+                ).fetchone()[0]
+            return conn.execute("SELECT COUNT(*) FROM interactions").fetchone()[0]
+
+    def count_media(self, character_id: Optional[str] = None,
+                    media_type: Optional[str] = None) -> int:
+        """Count media records with optional character and type filters."""
+        clauses, params = [], []
+        if character_id:
+            clauses.append("character_id = ?")
+            params.append(character_id)
+        if media_type:
+            clauses.append("type = ?")
+            params.append(media_type)
+        where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
+        with self.get_connection() as conn:
+            return conn.execute(f"SELECT COUNT(*) FROM media{where}", params).fetchone()[0]
+
+    def count_memories(self, character_id: Optional[str] = None) -> int:
+        """Count memories, optionally scoped to a character."""
+        with self.get_connection() as conn:
+            if character_id:
+                return conn.execute(
+                    "SELECT COUNT(*) FROM memories WHERE character_id = ?",
+                    (character_id,),
+                ).fetchone()[0]
+            return conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
+
+    def search_characters(self, query: str) -> List[Dict]:
+        """Search characters by name (case-insensitive LIKE)."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT * FROM characters WHERE name LIKE ? ORDER BY name",
+                (f"%{query}%",),
+            )
+            results = []
+            for row in cursor.fetchall():
+                c = dict(row)
+                c['tags'] = json.loads(c['tags']) if c['tags'] else []
+                c['metadata'] = json.loads(c['metadata']) if c['metadata'] else {}
+                results.append(c)
+            return results
+
+    def get_conversations_paginated(self, character_id: str,
+                                     offset: int = 0, limit: int = 20) -> Tuple[List[Dict], int]:
+        """Return (page_of_conversations, total_count) for a character."""
+        total = self.count_conversations(character_id)
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT * FROM conversations WHERE character_id = ? "
+                "ORDER BY started_at DESC LIMIT ? OFFSET ?",
+                (character_id, limit, offset),
+            )
+            items = []
+            for row in cursor.fetchall():
+                c = dict(row)
+                c['messages'] = json.loads(c['messages'])
+                c['metadata'] = json.loads(c['metadata']) if c['metadata'] else {}
+                items.append(c)
+        return items, total
+
+    def get_media_paginated(self, character_id: str,
+                            media_type: Optional[str] = None,
+                            offset: int = 0, limit: int = 20) -> Tuple[List[Dict], int]:
+        """Return (page_of_media, total_count) for a character."""
+        total = self.count_media(character_id, media_type)
+        clauses = ["character_id = ?"]
+        params: list = [character_id]
+        if media_type:
+            clauses.append("type = ?")
+            params.append(media_type)
+        where = " AND ".join(clauses)
+        params += [limit, offset]
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                f"SELECT * FROM media WHERE {where} ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                params,
+            )
+            items = []
+            for row in cursor.fetchall():
+                m = dict(row)
+                m['metadata'] = json.loads(m['metadata']) if m['metadata'] else {}
+                items.append(m)
+        return items, total
 
 
 if __name__ == "__main__":

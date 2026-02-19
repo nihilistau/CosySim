@@ -1,0 +1,408 @@
+"""
+Tests for content.simulation.database.db — full CRUD coverage.
+
+Every table (characters, personalities, roles, memories, conversations,
+interactions, media, character_states) gets create/read/update/delete tests
+plus count/search/pagination helpers.
+"""
+import json
+import pytest
+from content.simulation.database.db import Database
+
+
+@pytest.fixture
+def db(tmp_path):
+    """Fresh database per test."""
+    return Database(str(tmp_path / "test.db"))
+
+
+# ─── helpers ───────────────────────────────────────────────────────────
+
+def _make_personality(db: Database, name="Test Personality") -> str:
+    return db.create_personality(
+        name=name,
+        system_prompt="You are helpful.",
+        traits=["kind"],
+        warmth=0.8,
+    )
+
+
+def _make_character(db: Database, name="Luna", personality_id=None) -> str:
+    return db.create_character(
+        name=name, age=22, sex="female",
+        personality_id=personality_id,
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════
+#  CHARACTER CRUD
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestCharacters:
+    def test_create_and_get(self, db):
+        cid = _make_character(db)
+        char = db.get_character(cid)
+        assert char is not None
+        assert char["name"] == "Luna"
+        assert char["age"] == 22
+
+    def test_get_all(self, db):
+        _make_character(db, "A")
+        _make_character(db, "B")
+        assert len(db.get_all_characters()) == 2
+
+    def test_update(self, db):
+        cid = _make_character(db)
+        assert db.update_character(cid, name="Nova")
+        assert db.get_character(cid)["name"] == "Nova"
+
+    def test_update_rejects_bad_column(self, db):
+        cid = _make_character(db)
+        with pytest.raises(ValueError, match="Invalid column"):
+            db.update_character(cid, evil_col="x")
+
+    def test_delete_cascades(self, db):
+        cid = _make_character(db)
+        db.add_memory(cid, "test memory")
+        db.add_media(cid, "image", "/fake.png")
+        assert db.delete_character(cid)
+        assert db.get_character(cid) is None
+        assert db.get_character_memories(cid) == []
+        assert db.get_character_media(cid) == []
+
+    def test_search(self, db):
+        _make_character(db, "Luna Star")
+        _make_character(db, "Nova Ray")
+        assert len(db.search_characters("luna")) == 1
+        assert len(db.search_characters("a")) == 2  # both contain 'a'
+
+    def test_count(self, db):
+        assert db.count_characters() == 0
+        _make_character(db)
+        assert db.count_characters() == 1
+
+    def test_personality_seeds_state(self, db):
+        pid = _make_personality(db, "Warm")
+        cid = _make_character(db, personality_id=pid)
+        state = db.get_character_state(cid)
+        assert state is not None
+        assert state["warmth"] == 0.8  # seeded from personality
+
+
+# ═══════════════════════════════════════════════════════════════════════
+#  PERSONALITY CRUD
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestPersonalities:
+    def test_create_and_get(self, db):
+        pid = _make_personality(db)
+        p = db.get_personality(pid)
+        assert p["name"] == "Test Personality"
+        assert p["traits"] == ["kind"]
+
+    def test_get_by_name(self, db):
+        _make_personality(db, "Unique Name")
+        p = db.get_personality_by_name("Unique Name")
+        assert p is not None
+
+    def test_get_all(self, db):
+        _make_personality(db, "A")
+        _make_personality(db, "B")
+        assert len(db.get_all_personalities()) == 2
+
+    def test_update(self, db):
+        pid = _make_personality(db)
+        assert db.update_personality(pid, name="Updated")
+        assert db.get_personality(pid)["name"] == "Updated"
+
+    def test_update_json_field(self, db):
+        pid = _make_personality(db)
+        assert db.update_personality(pid, traits=["brave", "loyal"])
+        assert db.get_personality(pid)["traits"] == ["brave", "loyal"]
+
+    def test_update_rejects_bad_column(self, db):
+        pid = _make_personality(db)
+        with pytest.raises(ValueError):
+            db.update_personality(pid, bad_col="x")
+
+    def test_delete(self, db):
+        pid = _make_personality(db)
+        assert db.delete_personality(pid)
+        assert db.get_personality(pid) is None
+
+    def test_delete_nonexistent(self, db):
+        assert not db.delete_personality("no-such-id")
+
+
+# ═══════════════════════════════════════════════════════════════════════
+#  ROLE CRUD
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestRoles:
+    def test_create_and_get(self, db):
+        rid = db.create_role("Nurse", "A caring nurse", required_traits=["kind"])
+        r = db.get_role(rid)
+        assert r["name"] == "Nurse"
+        assert r["required_traits"] == ["kind"]
+
+    def test_get_all(self, db):
+        db.create_role("A", "desc")
+        db.create_role("B", "desc")
+        assert len(db.get_all_roles()) == 2
+
+    def test_update(self, db):
+        rid = db.create_role("Old", "desc")
+        assert db.update_role(rid, name="New", description="updated")
+        r = db.get_role(rid)
+        assert r["name"] == "New"
+        assert r["description"] == "updated"
+
+    def test_update_rejects_bad_column(self, db):
+        rid = db.create_role("R", "d")
+        with pytest.raises(ValueError):
+            db.update_role(rid, evil="x")
+
+    def test_delete(self, db):
+        rid = db.create_role("R", "d")
+        assert db.delete_role(rid)
+        assert db.get_role(rid) is None
+
+
+# ═══════════════════════════════════════════════════════════════════════
+#  MEMORY CRUD
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestMemories:
+    def test_create_and_get(self, db):
+        cid = _make_character(db)
+        mid = db.add_memory(cid, "She likes cats", importance=0.9)
+        mems = db.get_character_memories(cid)
+        assert len(mems) == 1
+        assert mems[0]["content"] == "She likes cats"
+        assert mems[0]["importance"] == 0.9
+
+    def test_update(self, db):
+        cid = _make_character(db)
+        mid = db.add_memory(cid, "old content")
+        assert db.update_memory(mid, content="new content", importance=1.0)
+        mems = db.get_character_memories(cid)
+        assert mems[0]["content"] == "new content"
+
+    def test_delete(self, db):
+        cid = _make_character(db)
+        mid = db.add_memory(cid, "temp")
+        assert db.delete_memory(mid)
+        assert db.get_character_memories(cid) == []
+
+    def test_count(self, db):
+        cid = _make_character(db)
+        assert db.count_memories(cid) == 0
+        db.add_memory(cid, "a")
+        db.add_memory(cid, "b")
+        assert db.count_memories(cid) == 2
+        assert db.count_memories() >= 2  # global count
+
+
+# ═══════════════════════════════════════════════════════════════════════
+#  CONVERSATION CRUD
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestConversations:
+    def test_create_and_get(self, db):
+        cid = _make_character(db)
+        cvid = db.create_conversation(cid, "chain-1", messages=[{"role": "user", "text": "hi"}])
+        conv = db.get_conversation(cvid)
+        assert conv is not None
+        assert conv["chain_id"] == "chain-1"
+        assert len(conv["messages"]) == 1
+
+    def test_update_messages(self, db):
+        cid = _make_character(db)
+        cvid = db.create_conversation(cid, "c1")
+        msgs = [{"role": "user", "text": "hello"}, {"role": "assistant", "text": "hi"}]
+        assert db.update_conversation(cvid, msgs)
+        assert len(db.get_conversation(cvid)["messages"]) == 2
+
+    def test_update_ended(self, db):
+        cid = _make_character(db)
+        cvid = db.create_conversation(cid, "c1")
+        db.update_conversation(cvid, [], ended=True)
+        conv = db.get_conversation(cvid)
+        assert conv["ended_at"] is not None
+
+    def test_get_character_conversations(self, db):
+        cid = _make_character(db)
+        db.create_conversation(cid, "c1")
+        db.create_conversation(cid, "c2")
+        assert len(db.get_character_conversations(cid)) == 2
+
+    def test_delete(self, db):
+        cid = _make_character(db)
+        cvid = db.create_conversation(cid, "c1")
+        assert db.delete_conversation(cvid)
+        assert db.get_conversation(cvid) is None
+
+    def test_delete_character_conversations(self, db):
+        cid = _make_character(db)
+        db.create_conversation(cid, "c1")
+        db.create_conversation(cid, "c2")
+        assert db.delete_character_conversations(cid) == 2
+
+    def test_count(self, db):
+        cid = _make_character(db)
+        db.create_conversation(cid, "c1")
+        assert db.count_conversations(cid) == 1
+        assert db.count_conversations() >= 1
+
+    def test_pagination(self, db):
+        cid = _make_character(db)
+        for i in range(5):
+            db.create_conversation(cid, f"c{i}")
+        page, total = db.get_conversations_paginated(cid, offset=0, limit=2)
+        assert len(page) == 2
+        assert total == 5
+        page2, _ = db.get_conversations_paginated(cid, offset=2, limit=2)
+        assert len(page2) == 2
+
+
+# ═══════════════════════════════════════════════════════════════════════
+#  INTERACTION CRUD
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestInteractions:
+    def test_log_and_get_chain(self, db):
+        cid = _make_character(db)
+        db.log_interaction("message", cid, "hello", chain_id="ch1")
+        db.log_interaction("response", cid, "hi there", chain_id="ch1")
+        chain = db.get_interaction_chain("ch1")
+        assert len(chain) == 2
+
+    def test_get_character_interactions(self, db):
+        cid = _make_character(db)
+        db.log_interaction("msg", cid, "a")
+        db.log_interaction("media", cid, "b")
+        assert len(db.get_character_interactions(cid)) == 2
+        assert len(db.get_character_interactions(cid, interaction_type="msg")) == 1
+
+    def test_delete_single(self, db):
+        cid = _make_character(db)
+        iid = db.log_interaction("msg", cid, "temp")
+        assert db.delete_interaction(iid)
+        assert db.get_character_interactions(cid) == []
+
+    def test_delete_chain(self, db):
+        cid = _make_character(db)
+        db.log_interaction("a", cid, "1", chain_id="ch")
+        db.log_interaction("b", cid, "2", chain_id="ch")
+        assert db.delete_interaction_chain("ch") == 2
+
+    def test_count(self, db):
+        cid = _make_character(db)
+        db.log_interaction("a", cid, "x")
+        assert db.count_interactions(cid) == 1
+        assert db.count_interactions() >= 1
+
+
+# ═══════════════════════════════════════════════════════════════════════
+#  MEDIA CRUD
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestMedia:
+    def test_add_and_get(self, db):
+        cid = _make_character(db)
+        mid = db.add_media(cid, "image", "/img.png", metadata={"prompt": "test"})
+        media = db.get_character_media(cid)
+        assert len(media) == 1
+        assert media[0]["filepath"] == "/img.png"
+        assert media[0]["metadata"]["prompt"] == "test"
+
+    def test_get_single(self, db):
+        cid = _make_character(db)
+        mid = db.add_media(cid, "image", "/img.png")
+        m = db.get_media(mid)
+        assert m is not None
+        assert m["type"] == "image"
+
+    def test_filter_by_type(self, db):
+        cid = _make_character(db)
+        db.add_media(cid, "image", "/a.png")
+        db.add_media(cid, "video", "/b.mp4")
+        assert len(db.get_character_media(cid, "image")) == 1
+
+    def test_update(self, db):
+        cid = _make_character(db)
+        mid = db.add_media(cid, "image", "/old.png")
+        assert db.update_media(mid, filepath="/new.png", metadata={"edited": True})
+        m = db.get_media(mid)
+        assert m["filepath"] == "/new.png"
+        assert m["metadata"]["edited"] is True
+
+    def test_update_rejects_bad_column(self, db):
+        cid = _make_character(db)
+        mid = db.add_media(cid, "image", "/x.png")
+        with pytest.raises(ValueError):
+            db.update_media(mid, evil="x")
+
+    def test_delete_single(self, db):
+        cid = _make_character(db)
+        mid = db.add_media(cid, "image", "/x.png")
+        assert db.delete_media(mid)
+        assert db.get_media(mid) is None
+
+    def test_delete_character_media(self, db):
+        cid = _make_character(db)
+        db.add_media(cid, "image", "/a.png")
+        db.add_media(cid, "video", "/b.mp4")
+        assert db.delete_character_media(cid, "image") == 1
+        assert len(db.get_character_media(cid)) == 1  # video remains
+
+    def test_delete_all_character_media(self, db):
+        cid = _make_character(db)
+        db.add_media(cid, "image", "/a.png")
+        db.add_media(cid, "video", "/b.mp4")
+        assert db.delete_character_media(cid) == 2
+
+    def test_count(self, db):
+        cid = _make_character(db)
+        db.add_media(cid, "image", "/a.png")
+        db.add_media(cid, "video", "/b.mp4")
+        assert db.count_media(cid) == 2
+        assert db.count_media(cid, "image") == 1
+        assert db.count_media() >= 2
+
+    def test_pagination(self, db):
+        cid = _make_character(db)
+        for i in range(5):
+            db.add_media(cid, "image", f"/{i}.png")
+        page, total = db.get_media_paginated(cid, offset=0, limit=2)
+        assert len(page) == 2
+        assert total == 5
+
+
+# ═══════════════════════════════════════════════════════════════════════
+#  CHARACTER STATE CRUD
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestCharacterState:
+    def test_created_with_character(self, db):
+        cid = _make_character(db)
+        state = db.get_character_state(cid)
+        assert state is not None
+        assert state["warmth"] == 0.5  # default
+
+    def test_update(self, db):
+        cid = _make_character(db)
+        assert db.update_character_state(cid, mood="happy", energy=0.9)
+        state = db.get_character_state(cid)
+        assert state["mood"] == "happy"
+        assert state["energy"] == 0.9
+
+    def test_update_rejects_bad_column(self, db):
+        cid = _make_character(db)
+        with pytest.raises(ValueError):
+            db.update_character_state(cid, evil="x")
+
+    def test_delete(self, db):
+        cid = _make_character(db)
+        assert db.delete_character_state(cid)
+        assert db.get_character_state(cid) is None

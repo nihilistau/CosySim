@@ -1,368 +1,251 @@
-/* Phone UI Styles */
+/* ═══════════════════════════════════════════════════════════════════
+   Phone UI Styles — CosySim
+   Internal phone-frame + message bubbles + game mechanics UI.
+   Root layout lives in phone_ui.html <style> block.
+   ═══════════════════════════════════════════════════════════════════ */
 
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-}
+* { margin:0; padding:0; box-sizing:border-box; }
 
-/* Body & root layout defined in phone_ui.html <style> block.
-   phone.css only handles internal phone-frame styles. */
 body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Oxygen,Ubuntu,Cantarell,sans-serif;
 }
 
-.phone-container {
-    display: flex;
-    gap: 0;
-    align-items: flex-start;
-}
+.phone-container { display:flex; gap:0; align-items:flex-start; }
 
-/* Phone Frame */
+/* ── Phone Frame ─────────────────────────────────────────────── */
 .phone-frame {
-    width: 375px;
-    height: 812px;
-    background: #1a1a1a;
-    border-radius: 40px;
-    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
-    overflow: hidden;
-    position: relative;
-    border: 8px solid #2a2a2a;
+    width:375px; height:812px;
+    background:#1a1a1a;
+    border-radius:40px;
+    box-shadow:0 20px 60px rgba(0,0,0,.5), inset 0 0 0 1px rgba(255,255,255,.04);
+    overflow:hidden; position:relative;
+    border:6px solid #2a2a2a;
 }
 
-/* Status Bar */
+/* ── Status Bar ──────────────────────────────────────────────── */
 .status-bar {
-    height: 44px;
-    background: rgba(0,0,0,0.3);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0 20px;
-    color: white;
-    font-size: 14px;
-    backdrop-filter: blur(10px);
+    height:44px;
+    background:rgba(0,0,0,.4);
+    backdrop-filter:blur(14px);
+    display:flex; justify-content:space-between; align-items:center;
+    padding:0 20px; color:#fff; font-size:14px;
+    z-index:10; position:relative;
 }
+.status-right { display:flex; gap:8px; align-items:center; }
 
-.status-right {
-    display: flex;
-    gap: 8px;
-}
-
-/* Phone Screen */
+/* ── Phone Screen ────────────────────────────────────────────── */
 .phone-screen {
-    height: calc(100% - 44px - 50px);
-    background: #000;
-    overflow-y: auto;
-    position: relative;
+    height:calc(100% - 44px - 50px);
+    background:#000; overflow-y:auto;
+    position:relative;
 }
+.screen-view { height:100%; width:100%; }
 
-.screen-view {
-    height: 100%;
-    width: 100%;
-}
-
-/* Home Screen */
+/* ══════════════ HOME SCREEN ══════════════ */
 .home-wallpaper {
-    padding: 40px 20px;
-    text-align: center;
-    color: white;
+    padding:40px 20px 20px; text-align:center; color:#fff;
+    background:radial-gradient(ellipse at 50% 0%, rgba(102,126,234,.12) 0%, transparent 60%);
 }
-
-.home-time {
-    font-size: 80px;
-    font-weight: 200;
-    margin-bottom: 10px;
-}
-
-.home-date {
-    font-size: 18px;
-    opacity: 0.8;
-}
+.home-time { font-size:72px; font-weight:100; letter-spacing:-2px; margin-bottom:4px; }
+.home-date { font-size:16px; opacity:.7; letter-spacing:.5px; }
 
 .app-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 20px;
-    padding: 20px;
+    display:grid; grid-template-columns:repeat(4,1fr);
+    gap:18px; padding:24px 16px;
 }
-
 .app-icon {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    cursor: pointer;
-    position: relative;
+    display:flex; flex-direction:column; align-items:center;
+    cursor:pointer; position:relative;
+    transition:transform .15s;
 }
-
+.app-icon:active { transform:scale(.92); }
 .icon {
-    width: 60px;
-    height: 60px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    border-radius: 15px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 32px;
-    margin-bottom: 8px;
-    transition: transform 0.2s;
+    width:58px; height:58px;
+    border-radius:14px;
+    display:flex; align-items:center; justify-content:center;
+    font-size:28px; margin-bottom:6px;
+    transition:transform .15s, box-shadow .15s;
+    box-shadow:0 4px 12px rgba(0,0,0,.3);
 }
+/* Per-app icon colours */
+.icon-messages  { background:linear-gradient(135deg,#34c759,#30d158); }
+.icon-gallery   { background:linear-gradient(135deg,#ff9500,#ff6b00); }
+.icon-videos    { background:linear-gradient(135deg,#ff2d55,#ff375f); }
+.icon-voice     { background:linear-gradient(135deg,#5856d6,#af52de); }
+.icon-camera    { background:linear-gradient(135deg,#636366,#48484a); }
+.icon-bedroom   { background:linear-gradient(135deg,#667eea,#764ba2); }
+.icon-hub       { background:linear-gradient(135deg,#0a84ff,#5ac8fa); }
+.icon-settings  { background:linear-gradient(135deg,#636366,#8e8e93); }
+/* Fallback gradient for icons without a specific class */
+.icon:not([class*="icon-"]) { background:linear-gradient(135deg,#667eea,#764ba2); }
 
-.app-icon:active .icon {
-    transform: scale(0.9);
-}
-
-.app-icon span {
-    color: white;
-    font-size: 12px;
-}
+.app-icon span { color:#fff; font-size:11px; font-weight:500; }
 
 .badge {
-    position: absolute;
-    top: -5px;
-    right: 10px;
-    background: #ff3b30;
-    color: white;
-    border-radius: 10px;
-    padding: 2px 6px;
-    font-size: 11px;
-    font-weight: bold;
+    position:absolute; top:-5px; right:10px;
+    background:#ff3b30; color:#fff;
+    border-radius:10px; padding:2px 6px;
+    font-size:11px; font-weight:700; min-width:18px; text-align:center;
 }
 
-/* Dock */
+/* ── Dock ────────────────────────────────────────────────── */
 .dock {
-    position: absolute;
-    bottom: 20px;
-    left: 20px;
-    right: 20px;
-    background: rgba(255,255,255,0.15);
-    backdrop-filter: blur(20px);
-    border-radius: 25px;
-    padding: 15px;
-    display: flex;
-    justify-content: space-around;
+    position:absolute; bottom:16px; left:16px; right:16px;
+    background:rgba(255,255,255,.12);
+    backdrop-filter:blur(24px);
+    border-radius:22px; padding:12px 0;
+    display:flex; justify-content:space-around;
 }
+.dock-icon { font-size:32px; cursor:pointer; transition:transform .15s; }
+.dock-icon:active { transform:scale(.88); }
 
-.dock-icon {
-    font-size: 36px;
-    cursor: pointer;
-    transition: transform 0.2s;
-}
-
-.dock-icon:active {
-    transform: scale(0.9);
-}
-
-/* Messages App */
+/* ══════════════ MESSAGES APP ══════════════ */
 .app-header {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    padding: 15px;
-    display: flex;
-    align-items: center;
-    gap: 15px;
+    background:linear-gradient(135deg,#667eea,#764ba2);
+    color:#fff; padding:12px 14px;
+    display:flex; align-items:center; gap:12px;
+    flex-shrink:0;
 }
-
-.back-button {
-    background: none;
-    border: none;
-    color: white;
-    font-size: 24px;
-    cursor: pointer;
+.back-button { background:none; border:none; color:#fff; font-size:22px; cursor:pointer; }
+.header-content { flex:1; }
+.header-content h2 { font-size:17px; margin-bottom:1px; font-weight:600; }
+.header-subtitle { font-size:11px; opacity:.75; }
+/* Mood/relationship bar in header */
+.header-mood-bar {
+    display:flex; align-items:center; gap:6px;
+    margin-top:2px;
 }
-
-.header-content {
-    flex: 1;
+.mood-dot {
+    width:6px; height:6px; border-radius:50%;
+    transition:background .4s;
 }
-
-.header-content h2 {
-    font-size: 18px;
-    margin-bottom: 2px;
-}
-
-.header-subtitle {
-    font-size: 12px;
-    opacity: 0.8;
-}
+.mood-label { font-size:10px; opacity:.7; }
+.rel-hearts { font-size:10px; letter-spacing:1px; }
 
 .call-button {
-    background: rgba(255,255,255,0.2);
-    border: none;
-    color: white;
-    font-size: 20px;
-    width: 40px;
-    height: 40px;
-    border-radius: 20px;
-    cursor: pointer;
+    background:rgba(255,255,255,.18); border:none; color:#fff;
+    font-size:18px; width:36px; height:36px; border-radius:18px; cursor:pointer;
+    transition:background .15s;
 }
+.call-button:hover { background:rgba(255,255,255,.28); }
 
 .messages-container {
-    padding: 20px;
-    min-height: calc(100% - 180px);
-    background: #1a1a1a;
-    overflow-y: auto;
+    padding:12px 14px 4px;
+    min-height:calc(100% - 180px);
+    background:#0f0f0f;
+    overflow-y:auto;
 }
 
+/* ── Message Bubbles ─────────────────────────────────────── */
 .message {
-    margin-bottom: 15px;
-    display: flex;
-    animation: slideIn 0.3s ease;
+    margin-bottom:6px; display:flex;
+    animation:msgSlide .28s ease-out;
 }
-
-@keyframes slideIn {
-    from {
-        opacity: 0;
-        transform: translateY(10px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
+@keyframes msgSlide {
+    from { opacity:0; transform:translateY(8px); }
+    to   { opacity:1; transform:translateY(0); }
 }
-
-.message.user {
-    justify-content: flex-end;
-}
+.message.user { justify-content:flex-end; }
 
 .message-bubble {
-    max-width: 70%;
-    padding: 12px 16px;
-    border-radius: 20px;
-    word-wrap: break-word;
+    max-width:72%; padding:10px 14px;
+    border-radius:18px; word-wrap:break-word;
+    font-size:15px; line-height:1.38;
+    position:relative;
 }
-
 .message.user .message-bubble {
-    background: #007AFF;
-    color: white;
-    border-bottom-right-radius: 5px;
+    background:linear-gradient(135deg,#0a84ff,#0066cc);
+    color:#fff; border-bottom-right-radius:4px;
 }
-
 .message.assistant .message-bubble {
-    background: #2a2a2a;
-    color: white;
-    border-bottom-left-radius: 5px;
+    background:#1c1c1e; color:#fff;
+    border-bottom-left-radius:4px;
 }
 
+/* Timestamp + read receipt row */
+.message-meta {
+    display:flex; align-items:center; gap:4px;
+    margin-top:3px;
+}
 .message-time {
-    font-size: 10px;
-    opacity: 0.6;
-    margin-top: 5px;
+    font-size:10px; opacity:.5;
 }
+/* Read receipt checkmarks */
+.read-receipt {
+    font-size:10px; letter-spacing:-1px;
+    transition:color .3s;
+}
+.read-receipt.sent     { color:#8e8e93; }
+.read-receipt.delivered{ color:#8e8e93; }
+.read-receipt.read     { color:#34c759; }
 
+/* ── Typing Indicator ────────────────────────────────────── */
 .typing-indicator {
-    padding: 20px;
-    background: #1a1a1a;
+    padding:8px 14px;
+    background:transparent;
 }
-
-.typing-dots {
-    display: flex;
-    gap: 5px;
+.typing-bubble {
+    display:inline-flex; align-items:center; gap:6px;
+    background:#1c1c1e; padding:10px 16px;
+    border-radius:18px 18px 18px 4px;
 }
-
+.typing-name { font-size:11px; color:#8e8e93; margin-right:2px; }
+.typing-dots { display:flex; gap:4px; }
 .typing-dots span {
-    width: 8px;
-    height: 8px;
-    background: #666;
-    border-radius: 50%;
-    animation: typing 1.4s infinite;
+    width:7px; height:7px; background:#666;
+    border-radius:50%; animation:typeBounce 1.4s infinite;
+}
+.typing-dots span:nth-child(2) { animation-delay:.15s; }
+.typing-dots span:nth-child(3) { animation-delay:.3s; }
+@keyframes typeBounce {
+    0%,60%,100% { opacity:.25; transform:translateY(0); }
+    30% { opacity:1; transform:translateY(-4px); }
 }
 
-.typing-dots span:nth-child(2) {
-    animation-delay: 0.2s;
-}
-
-.typing-dots span:nth-child(3) {
-    animation-delay: 0.4s;
-}
-
-@keyframes typing {
-    0%, 60%, 100% {
-        opacity: 0.3;
-        transform: scale(1);
-    }
-    30% {
-        opacity: 1;
-        transform: scale(1.2);
-    }
-}
-
+/* ── Input Area (overrides kept in phone_ui.html <style>) ── */
 .message-input-container {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    background: #2a2a2a;
-    padding: 10px;
-    display: flex;
-    gap: 10px;
-    align-items: center;
+    position:absolute; bottom:0; left:0; right:0;
+    background:#1c1c1e; padding:8px 10px;
+    display:flex; flex-direction:column; gap:5px;
+    border-top:1px solid #2a2a2a;
 }
-
-.attachment-button {
-    background: none;
-    border: none;
-    color: #007AFF;
-    font-size: 24px;
-    cursor: pointer;
+.attachment-button, .video-button, .camera-button, .microphone-button {
+    background:none; border:none; color:#0a84ff; font-size:22px; cursor:pointer;
 }
-
-.video-button {
-    background: none;
-    border: none;
-    color: #007AFF;
-    font-size: 24px;
-    cursor: pointer;
-}
-
-.camera-button {
-    background: none;
-    border: none;
-    color: #007AFF;
-    font-size: 24px;
-    cursor: pointer;
-}
-
-.microphone-button {
-    background: none;
-    border: none;
-    color: #007AFF;
-    font-size: 24px;
-    cursor: pointer;
-}
-
 .message-input {
-    flex: 1;
-    background: #3a3a3a;
-    border: none;
-    border-radius: 20px;
-    padding: 10px 15px;
-    color: white;
-    font-size: 14px;
+    flex:1; background:#2c2c2e; border:1px solid #3a3a3c;
+    border-radius:20px; padding:10px 14px;
+    color:#fff; font-size:15px; outline:none;
+    font-family:inherit;
 }
-
-.message-input:focus {
-    outline: none;
-    background: #4a4a4a;
-}
-
+.message-input:focus { border-color:#0a84ff; }
 .send-button {
-    background: #007AFF;
-    border: none;
-    color: white;
-    font-size: 20px;
-    width: 36px;
-    height: 36px;
-    border-radius: 18px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    background:#0a84ff; border:none; color:#fff;
+    font-size:18px; width:34px; height:34px;
+    border-radius:17px; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    transition:background .15s;
 }
+.send-button:hover { background:#0070d8; }
+.send-button:active { background:#005bb5; }
+.call-button-disabled { opacity:.35; cursor:not-allowed!important; }
 
-.send-button:active {
-    background: #0051D5;
+/* ── Conv Tabs ────────────────────────────────────────────── */
+.conv-tabs {
+    display:flex; border-bottom:1px solid #2a2a2a;
+    background:#111; flex-shrink:0;
 }
+.conv-tab {
+    flex:1; padding:8px; text-align:center;
+    cursor:pointer; color:#8e8e93; font-size:13px;
+    transition:color .15s;
+    border-bottom:2px solid transparent;
+}
+.conv-tab.active { color:#0a84ff; border-bottom-color:#0a84ff; }
+.anon-header { background:linear-gradient(135deg,#0f0f0f,#1a1a2e); }
+.anon-name   { color:#af52de; text-shadow:0 0 8px rgba(175,82,222,.4); }
 
-/* Call Interface */
+/* ── Call Interface ──────────────────────────────────────── */
 .call-interface {
     background: #1a1a1a;
     height: 100%;
