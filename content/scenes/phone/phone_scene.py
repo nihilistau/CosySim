@@ -691,7 +691,7 @@ class PhoneScene(BaseScene):
                         'duration': voice_msg['duration'],
                         'text': voice_msg['text'],
                         'timestamp': datetime.now().isoformat()
-                    }, broadcast=True)
+                    })
                     
                     return jsonify({'success': True})
                 else:
@@ -919,7 +919,7 @@ class PhoneScene(BaseScene):
                         'duration': video_msg['duration'],
                         'text': video_msg['text'],
                         'timestamp': datetime.now().isoformat()
-                    }, broadcast=True)
+                    })
                     
                     return jsonify({'success': True})
                 else:
@@ -1032,10 +1032,10 @@ class PhoneScene(BaseScene):
                 'role': 'user',
                 'content': message,
                 'timestamp': datetime.now().isoformat()
-            }, broadcast=True)
+            })
             
             # Show typing indicator
-            emit('typing', {'is_typing': True}, broadcast=True)
+            self.socketio.emit('typing', {'is_typing': True})
             
             # Generate response (placeholder - integrate with LM Studio)
             response = self._generate_response(message)
@@ -1044,12 +1044,12 @@ class PhoneScene(BaseScene):
             self.active_character.add_message('assistant', response)
             
             # Hide typing indicator and emit response
-            emit('typing', {'is_typing': False}, broadcast=True)
+            self.socketio.emit('typing', {'is_typing': False})
             emit('message_received', {
                 'role': 'assistant',
                 'content': response,
                 'timestamp': datetime.now().isoformat()
-            }, broadcast=True)
+            })
         
         @self.socketio.on('start_call')
         def handle_start_call(data):
@@ -1075,7 +1075,7 @@ class PhoneScene(BaseScene):
                     'call_id': call_id,
                     'type': call_type,
                     'character': self.active_character.name
-                }, broadcast=True)
+                })
             except Exception as e:
                 emit('error', {'message': str(e)})
         
@@ -1092,7 +1092,7 @@ class PhoneScene(BaseScene):
                 success = self.voice_call_handler.answer_call(call_id)
                 
                 if success:
-                    emit('call_answered', {'call_id': call_id}, broadcast=True)
+                    self.socketio.emit('call_answered', {'call_id': call_id})
                 else:
                     emit('error', {'message': 'Failed to answer call'})
             except Exception as e:
@@ -1110,7 +1110,7 @@ class PhoneScene(BaseScene):
                     emit('call_ended', {
                         'call_id': call_info['id'],
                         'duration': call_info['duration']
-                    }, broadcast=True)
+                    })
             except Exception as e:
                 emit('error', {'message': str(e)})
         
@@ -1152,7 +1152,7 @@ class PhoneScene(BaseScene):
                         'duration': voice_msg['duration'],
                         'text': voice_msg['text'],
                         'timestamp': datetime.now().isoformat()
-                    }, broadcast=True)
+                    })
                 else:
                     emit('error', {'message': 'Failed to generate voice message'})
             except Exception as e:
@@ -1181,7 +1181,7 @@ class PhoneScene(BaseScene):
                 'url': f"/api/media/download/{media_id}",
                 'role': 'user',
                 'timestamp': datetime.now().isoformat()
-            }, broadcast=True)
+            })
             
             # Log to conversation
             if self.current_chain_id:
@@ -1209,7 +1209,7 @@ class PhoneScene(BaseScene):
                     'url': f"/api/media/download/{media['id']}",
                     'role': 'assistant',
                     'timestamp': datetime.now().isoformat()
-                }, broadcast=True)
+                })
                 
                 # Log to conversation
                 if self.current_chain_id:
@@ -1219,7 +1219,7 @@ class PhoneScene(BaseScene):
                     'role': 'assistant',
                     'content': "I don't have any photos to send right now 😅",
                     'timestamp': datetime.now().isoformat()
-                }, broadcast=True)
+                })
         
         # Video Call SocketIO Events
         @self.socketio.on('start_video_call')
@@ -1247,7 +1247,7 @@ class PhoneScene(BaseScene):
                     'call_id': call_id,
                     'type': call_type,
                     'character': self.active_character.name
-                }, broadcast=True)
+                })
             except Exception as e:
                 emit('error', {'message': str(e)})
         
@@ -1264,7 +1264,7 @@ class PhoneScene(BaseScene):
                 success = self.video_call_handler.answer_video_call(call_id)
                 
                 if success:
-                    emit('video_call_answered', {'call_id': call_id}, broadcast=True)
+                    self.socketio.emit('video_call_answered', {'call_id': call_id})
                 else:
                     emit('error', {'message': 'Failed to answer video call'})
             except Exception as e:
@@ -1282,7 +1282,7 @@ class PhoneScene(BaseScene):
                     emit('video_call_ended', {
                         'call_id': call_info['call_id'],
                         'duration': call_info.get('duration', 0)
-                    }, broadcast=True)
+                    })
             except Exception as e:
                 emit('error', {'message': str(e)})
         
@@ -1293,7 +1293,7 @@ class PhoneScene(BaseScene):
             
             try:
                 self.video_call_handler.toggle_video(enabled)
-                emit('video_toggled', {'enabled': enabled}, broadcast=True)
+                self.socketio.emit('video_toggled', {'enabled': enabled})
             except Exception as e:
                 emit('error', {'message': str(e)})
         
@@ -1329,7 +1329,7 @@ class PhoneScene(BaseScene):
                         'duration': video_msg['duration'],
                         'text': video_msg['text'],
                         'timestamp': datetime.now().isoformat()
-                    }, broadcast=True)
+                    })
                 else:
                     emit('error', {'message': 'Failed to generate video message'})
             except Exception as e:
