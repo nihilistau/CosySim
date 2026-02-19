@@ -42,6 +42,10 @@ class VoiceCallHandler:
         self.audio_queue = queue.Queue()
         self.response_queue = queue.Queue()
         
+        # Thread management
+        self.listen_thread = None
+        self.speak_thread = None
+        
         # Voice settings
         self.sample_rate = 22050
         self.prompt_wav = None
