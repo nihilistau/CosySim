@@ -257,14 +257,14 @@ class AutonomousMessenger:
             ]
         
         # Modify based on mood and relationship
-        if character.mood > 0.7:
+        if float(character.mood or 0) > 0.7:
             templates.extend([
                 "I'm in such a good mood! 😊",
                 "Feeling amazing today!",
                 "You always make me smile"
             ])
         
-        if character.relationship_level > 0.7:
+        if float(character.relationship_level or 0) > 0.7:
             templates.extend([
                 "I love talking to you ❤️",
                 "You're always on my mind",
@@ -309,7 +309,7 @@ class AutonomousMessenger:
             "Thinking of you...",
         ]
         
-        if character.relationship_level > 0.7:
+        if float(character.relationship_level or 0) > 0.7:
             captions.extend([
                 "Just for you 😉",
                 "Been waiting to send you this...",

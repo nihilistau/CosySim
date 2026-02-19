@@ -142,14 +142,18 @@ class PromptBuilder:
 #  ComfyUI Workflow Templates
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _default_image_workflow(positive: str, negative: str, seed: int = -1) -> Dict:
+def _default_image_workflow(positive: str, negative: str, seed: int = -1, model: str = "v1-5-pruned-emaonly.ckpt") -> Dict:
     """
     Minimal ComfyUI workflow (API format) for image generation.
-    Uses the default Stable Diffusion CheckpointLoaderSimple approach.
-    You can replace this dict with your own workflow JSON export.
+    Auto-selects resolution: 1024×1024 for SDXL/Pony/Flux models, 512×768 for SD1.5.
     """
     if seed == -1:
         seed = int(uuid.uuid4().int % (2**31))
+
+    # SDXL-family models need higher resolution
+    _xl_keywords = ("xl", "sdxl", "pony", "flux", "juggernaut")
+    is_xl = any(k in model.lower() for k in _xl_keywords)
+    width, height = (1024, 1024) if is_xl else (512, 768)
 
     return {
         "3": {
@@ -169,11 +173,11 @@ def _default_image_workflow(positive: str, negative: str, seed: int = -1) -> Dic
         },
         "4": {
             "class_type": "CheckpointLoaderSimple",
-            "inputs": {"ckpt_name": "v1-5-pruned-emaonly.ckpt"}
+            "inputs": {"ckpt_name": model}
         },
         "5": {
             "class_type": "EmptyLatentImage",
-            "inputs": {"batch_size": 1, "height": 768, "width": 512}
+            "inputs": {"batch_size": 1, "height": height, "width": width}
         },
         "6": {
             "class_type": "CLIPTextEncode",
@@ -213,6 +217,45 @@ class ComfyUIClient:
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
         self.client_id = str(uuid.uuid4())
+        self._model_name: Optional[str] = None
+
+    def _get_model_name(self) -> str:
+        """Return best available checkpoint for image generation.
+
+        Prefers realistic/photo models, skips known video-only models.
+        """
+        if self._model_name:
+            return self._model_name
+        models = self.get_models()
+        if not models:
+            return "v1-5-pruned-emaonly.ckpt"
+
+        # Video model prefixes/keywords to skip
+        VIDEO_SKIP = ("ltxv", "ltx_v", "animate", "svd", "xtend", "i2vgen", "video")
+        # Prefer keywords that suggest photo/realistic models
+        PHOTO_PREF = ("photo", "realistic", "love", "xl", "flux", "sdxl", "pony")
+
+        def score(name: str) -> int:
+            lower = name.lower()
+            if any(v in lower for v in VIDEO_SKIP):
+                return -1
+            s = 0
+            for p in PHOTO_PREF:
+                if p in lower:
+                    s += 1
+            return s
+
+        scored = sorted([(score(m), m) for m in models], key=lambda x: (-x[0], x[1]))
+        # Pick highest scoring non-video model
+        for s, m in scored:
+            if s >= 0:
+                self._model_name = m
+                break
+        else:
+            self._model_name = models[0]
+
+        logger.info("ComfyUI using model: %s", self._model_name)
+        return self._model_name
 
     # ──────────────────────────────
     #  Connectivity
@@ -342,7 +385,8 @@ class ComfyUIClient:
 
         # Use provided workflow or build default
         if workflow is None:
-            workflow = _default_image_workflow(positive_prompt, negative_prompt, seed)
+            workflow = _default_image_workflow(positive_prompt, negative_prompt, seed,
+                                               model=self._get_model_name())
 
         prompt_id = self._queue_prompt(workflow)
         if not prompt_id:
