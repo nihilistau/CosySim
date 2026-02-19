@@ -91,7 +91,7 @@ class PhoneScene(BaseScene):
         self.app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max upload
         
         # Socket.IO for real-time communication
-        self.socketio = SocketIO(self.app, cors_allowed_origins="*")
+        self.socketio = SocketIO(self.app, cors_allowed_origins="*", manage_session=False)
         
         # Connect voice and video services to socketio
         self.voice_call_handler.socketio = self.socketio

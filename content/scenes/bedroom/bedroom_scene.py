@@ -88,7 +88,7 @@ class BedroomScene(BaseScene):
         CORS(self.app)
         
         # Socket.IO for real-time communication
-        self.socketio = SocketIO(self.app, cors_allowed_origins="*")
+        self.socketio = SocketIO(self.app, cors_allowed_origins="*", manage_session=False)
         
         # Initialize lighting
         self.update_lighting_for_time('afternoon')
