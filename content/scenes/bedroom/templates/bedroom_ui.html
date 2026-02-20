@@ -3,130 +3,326 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CosySim — Bedroom</title>
+    <title>CosySim — Bedroom v4</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/bedroom.css') }}">
 </head>
 <body>
-    <!-- ── Header ──────────────────────────────────────────────── -->
-    <header class="scene-header">
-        <a href="/" class="back-btn">← Back</a>
-        <h1 class="scene-title">🛏️ Bedroom</h1>
-        <div class="header-controls">
-            <span id="agentStatus" class="agent-status off">● Agents Off</span>
-            <button id="btnStartAgents" class="header-btn" onclick="toggleAgentLoop()">▶ Start</button>
-            <button class="header-btn" onclick="manualTick()" title="Force one tick">⏩ Tick</button>
-        </div>
-    </header>
 
-    <!-- ── 3D Canvas ───────────────────────────────────────────── -->
-    <div id="scene-container">
-        <canvas id="bedroom-canvas"></canvas>
+<!-- ── Header ───────────────────────────────────────────────────────── -->
+<header class="scene-header">
+    <a href="/" class="back-btn">← Back</a>
+    <h1 class="scene-title">Bedroom</h1>
+    <div class="header-controls">
+        <span id="scenarioLabel" class="scenario-badge" style="display:none"></span>
+        <span id="agentStatus" class="agent-status off">● Agents Off</span>
+        <button id="btnStartAgents" class="header-btn" onclick="toggleAgentLoop()">▶ Start</button>
+        <button class="header-btn" onclick="manualTick()" title="Force one tick">⏩ Tick</button>
+        <button class="header-btn" onclick="toggleSidePanel()" title="Toggle panel">⚙</button>
+    </div>
+</header>
+
+<!-- ── 3D Canvas ─────────────────────────────────────────────────────── -->
+<div id="scene-container">
+    <canvas id="bedroom-canvas"></canvas>
+    <!-- floating location labels -->
+    <div id="locLabels" class="loc-labels"></div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     DIRECTOR CONTROL CENTER (right panel)
+═══════════════════════════════════════════════════════════════════════ -->
+<aside id="sidePanel" class="side-panel">
+
+    <!-- Tab Bar -->
+    <div class="tab-bar">
+        <button class="tab-btn active" data-tab="scene"      onclick="showTab('scene')">Scene</button>
+        <button class="tab-btn"        data-tab="characters" onclick="showTab('characters')">Cast</button>
+        <button class="tab-btn"        data-tab="direct"     onclick="showTab('direct')">Direct</button>
+        <button class="tab-btn"        data-tab="storyline"  onclick="showTab('storyline')">Story</button>
+        <button class="tab-btn"        data-tab="props"      onclick="showTab('props')">Props</button>
+        <button class="tab-btn"        data-tab="events"     onclick="showTab('events')">Events</button>
     </div>
 
-    <!-- ── Side Panel ──────────────────────────────────────────── -->
-    <aside id="sidePanel" class="side-panel">
-        <!-- Characters -->
+    <!-- ── TAB: SCENE ────────────────────────────────────────────── -->
+    <div id="tab-scene" class="tab-content active">
+
         <section class="panel-section">
-            <h3>Characters <small id="charCount">(0/2)</small></h3>
-            <div id="charList" class="char-list"></div>
-            <button class="btn-sm" onclick="openCharPicker()">+ Add Character</button>
+            <h3>Cast <small id="charCount">(0/2)</small></h3>
+            <div id="charListCompact" class="char-list-compact"></div>
+            <button class="btn-sm btn-add" onclick="openCharPicker()">+ Add Character</button>
         </section>
 
-        <!-- Locations -->
+        <section class="panel-section">
+            <h3>Lighting</h3>
+            <div class="lighting-grid" id="lightingGrid">
+                {% for key, preset in lighting_presets.items() %}
+                <button class="light-btn{% if key == 'evening' %} active{% endif %}"
+                        data-key="{{ key }}" onclick="setTime('{{ key }}')">{{ preset.label }}</button>
+                {% endfor %}
+            </div>
+        </section>
+
         <section class="panel-section">
             <h3>Locations</h3>
             <div id="locationList" class="loc-list"></div>
         </section>
 
-        <!-- Time of Day -->
         <section class="panel-section">
-            <h3>Time of Day</h3>
-            <div class="time-buttons">
-                <button class="time-btn" data-time="morning" onclick="setTime('morning')">🌅</button>
-                <button class="time-btn" data-time="afternoon" onclick="setTime('afternoon')">☀️</button>
-                <button class="time-btn active" data-time="evening" onclick="setTime('evening')">🌆</button>
-                <button class="time-btn" data-time="night" onclick="setTime('night')">🌙</button>
-            </div>
-        </section>
-
-        <!-- Mode -->
-        <section class="panel-section">
-            <h3>Mode</h3>
-            <div class="mode-buttons">
-                <button onclick="setMode('observe')" class="mode-btn active" data-mode="observe">👁 Observe</button>
-                <button onclick="setMode('direct')" class="mode-btn" data-mode="direct">🎬 Direct</button>
-            </div>
-        </section>
-
-        <!-- Agent Model Config -->
-        <section class="panel-section">
-            <h3>🧠 Agent Models</h3>
+            <h3>Agent Models</h3>
             <div id="modelConfigList" class="model-config-list"></div>
-            <button class="btn-sm" onclick="refreshModels()">🔄 Refresh Models</button>
+            <button class="btn-sm" onclick="refreshModels()">↻ Refresh</button>
         </section>
 
-        <!-- Ambient Audio -->
         <section class="panel-section">
-            <h3>🎵 Ambient</h3>
+            <h3>Ambient Audio</h3>
             <div class="ambient-controls">
                 <select id="ambientTrack" onchange="setAmbientTrack(this.value)">
                     <option value="">Off</option>
                 </select>
-                <input type="range" id="ambientVolume" min="0" max="100" value="30" oninput="setAmbientVolume(this.value)" style="width:100%">
+                <input type="range" id="ambientVolume" min="0" max="100" value="30"
+                       oninput="setAmbientVolume(this.value)" style="width:100%;margin-top:6px">
             </div>
         </section>
 
-        <!-- Menace Menu -->
-        <section class="panel-section menace-section">
-            <h3>😈 Menace Menu</h3>
-            <div class="menace-buttons">
-                <button class="menace-btn" onclick="menace('flicker_lights')" title="Lights flicker eerily">💡 Flicker Lights</button>
-                <button class="menace-btn" onclick="menace('strange_sound')" title="They hear a sound">👻 Strange Sound</button>
-                <button class="menace-btn" onclick="menace('cold_draft')" title="A sudden cold draft">🌬️ Cold Draft</button>
-                <button class="menace-btn" onclick="menace('move_object')" title="Something moves on its own">🪑 Move Object</button>
-                <button class="menace-btn" onclick="menace('knock')" title="Knocking from nowhere">🚪 Mysterious Knock</button>
-                <button class="menace-btn" onclick="menace('power_out')" title="Lights go out briefly">⚡ Power Out</button>
-                <button class="menace-btn" onclick="menace('romantic_mood')" title="Set a romantic atmosphere">🕯️ Romantic Mood</button>
-                <button class="menace-btn" onclick="menace('thunder')" title="Thunder and lightning">⛈️ Thunder</button>
+    </div><!-- /tab-scene -->
+
+    <!-- ── TAB: CHARACTERS (full stat sheets) ────────────────────── -->
+    <div id="tab-characters" class="tab-content">
+        <div id="charStatSheets"></div>
+        <p id="noCharsMsg" class="muted-hint">No characters loaded yet.</p>
+    </div>
+
+    <!-- ── TAB: DIRECT ───────────────────────────────────────────── -->
+    <div id="tab-direct" class="tab-content">
+
+        <section class="panel-section">
+            <h3>Director Identity</h3>
+            <div class="row-2">
+                <label class="mini-label">Enter scene as:</label>
+                <div style="display:flex;gap:6px;align-items:center">
+                    <input id="directorNameInput" type="text" placeholder="Director name" class="text-input" value="The Director">
+                    <button class="btn-sm" onclick="enterScene()">Enter</button>
+                    <button class="btn-sm btn-ghost" onclick="exitScene()">Exit</button>
+                </div>
+            </div>
+            <div id="directorStatus" class="director-status"></div>
+        </section>
+
+        <section class="panel-section">
+            <h3>Whisper</h3>
+            <div class="director-form">
+                <select id="whisperTarget" class="select-input">
+                    <option value="">All characters</option>
+                </select>
+                <textarea id="whisperInput" class="textarea-input" rows="2" placeholder="Secret message…"></textarea>
+                <button class="btn-action" onclick="sendWhisper()">Send Whisper</button>
             </div>
         </section>
-    </aside>
 
-    <!-- ── Activity Feed ───────────────────────────────────────── -->
-    <div id="activityFeed" class="activity-feed">
-        <div class="feed-header">
-            <h3>Activity Feed</h3>
+        <section class="panel-section">
+            <h3>Give Line</h3>
+            <div class="director-form">
+                <select id="giveLineTarget" class="select-input">
+                    <option value="">— pick character —</option>
+                </select>
+                <textarea id="giveLineInput" class="textarea-input" rows="2" placeholder="Say exactly…"></textarea>
+                <div class="row-2">
+                    <span id="complianceHint" class="compliance-hint"></span>
+                    <button class="btn-action" onclick="giveLine()">Give Line</button>
+                </div>
+            </div>
+        </section>
+
+        <section class="panel-section">
+            <h3>Give Action</h3>
+            <div class="director-form">
+                <select id="giveActionTarget" class="select-input">
+                    <option value="">All characters</option>
+                </select>
+                <textarea id="giveActionInput" class="textarea-input" rows="2" placeholder="Do this action…"></textarea>
+                <button class="btn-action" onclick="giveAction()">Give Action</button>
+            </div>
+        </section>
+
+        <section class="panel-section">
+            <h3>Conversation Starters</h3>
+            <div class="starter-grid">
+                <button class="starter-btn" onclick="startConversation('flirt')">Flirt</button>
+                <button class="starter-btn" onclick="startConversation('confession')">Confess</button>
+                <button class="starter-btn" onclick="startConversation('dare')">Dare</button>
+                <button class="starter-btn" onclick="startConversation('compliment')">Compliment</button>
+                <button class="starter-btn" onclick="startConversation('fantasy')">Fantasy</button>
+                <button class="starter-btn" onclick="startConversation('game')">Game</button>
+                <button class="starter-btn" onclick="startConversation('power_play')">Power Play</button>
+                <button class="starter-btn" onclick="startConversation('roleplay_meta')">New Encounter</button>
+            </div>
+        </section>
+
+    </div><!-- /tab-direct -->
+
+    <!-- ── TAB: STORYLINE ────────────────────────────────────────── -->
+    <div id="tab-storyline" class="tab-content">
+
+        <section class="panel-section">
+            <h3>Active Scenario</h3>
+            <div id="activeScenarioDisplay" class="scenario-display">None</div>
+            <select id="scenarioPicker" class="select-input" onchange="scenarioChanged()">
+                <option value="">— pick a scenario —</option>
+                {% for key, sc in scenarios.items() %}
+                <option value="{{ key }}">{{ sc.emoji }} {{ sc.label }}</option>
+                {% endfor %}
+            </select>
+            <div id="scenarioPreview" class="scenario-preview" style="display:none"></div>
+            <div style="display:flex;gap:6px;margin-top:8px">
+                <button class="btn-action" onclick="activateScenario()">Launch Scenario</button>
+                <button class="btn-sm btn-ghost" onclick="clearScenario()">Clear</button>
+            </div>
+        </section>
+
+        <section class="panel-section">
+            <h3>Story Beats</h3>
+            <div id="storyBeatsList" class="beats-list"></div>
+            <textarea id="newBeatInput" class="textarea-input" rows="2" placeholder="Next story beat to inject…"></textarea>
+            <button class="btn-action" onclick="injectBeat()">Inject Beat</button>
+        </section>
+
+        <section class="panel-section">
+            <h3>Broadcast Message</h3>
+            <textarea id="broadcastInput" class="textarea-input" rows="2" placeholder="Director speaks into the scene…"></textarea>
+            <button class="btn-action" onclick="directorBroadcast()">Broadcast</button>
+        </section>
+
+    </div><!-- /tab-storyline -->
+
+    <!-- ── TAB: PROPS ────────────────────────────────────────────── -->
+    <div id="tab-props" class="tab-content">
+
+        <section class="panel-section">
+            <h3>Room Props</h3>
+            <p class="muted-hint">Click to add/remove props from the scene.</p>
+            <div id="propGrid" class="prop-grid">
+                {% for pid, prop in props.items() %}
+                <button class="prop-btn" id="prop-{{ pid }}" data-pid="{{ pid }}"
+                        onclick="toggleProp('{{ pid }}')" title="{{ prop.effect }}">
+                    <span class="prop-emoji">{{ prop.emoji }}</span>
+                    <span class="prop-label">{{ prop.label }}</span>
+                </button>
+                {% endfor %}
+            </div>
+        </section>
+
+        <section class="panel-section">
+            <h3>Give Prop to Character</h3>
+            <div class="director-form">
+                <select id="givePropChar" class="select-input"><option value="">— character —</option></select>
+                <select id="givePropItem" class="select-input">
+                    <option value="">— prop —</option>
+                    {% for pid, prop in props.items() %}
+                    <option value="{{ pid }}">{{ prop.emoji }} {{ prop.label }}</option>
+                    {% endfor %}
+                </select>
+                <button class="btn-action" onclick="givePropToChar()">Give</button>
+            </div>
+        </section>
+
+    </div><!-- /tab-props -->
+
+    <!-- ── TAB: EVENTS ───────────────────────────────────────────── -->
+    <div id="tab-events" class="tab-content">
+
+        <section class="panel-section">
+            <h3>Environment Events</h3>
+            <div class="event-grid">
+                <button class="event-btn" onclick="fireEvent('flicker_lights')">💡 Flicker Lights</button>
+                <button class="event-btn" onclick="fireEvent('strange_sound')">👂 Strange Sound</button>
+                <button class="event-btn" onclick="fireEvent('cold_draft')">🌬 Cold Draft</button>
+                <button class="event-btn" onclick="fireEvent('move_object')">🪑 Move Object</button>
+                <button class="event-btn" onclick="fireEvent('knock')">🚪 Knock</button>
+                <button class="event-btn" onclick="fireEvent('power_out')">⚡ Power Out</button>
+                <button class="event-btn romantic" onclick="fireEvent('romantic_mood')">🕯 Romantic Mood</button>
+                <button class="event-btn" onclick="fireEvent('thunder')">⛈ Thunder</button>
+                <button class="event-btn spicy" onclick="fireEvent('lock_door')">🔒 Lock Door</button>
+                <button class="event-btn spicy" onclick="fireEvent('music_on')">🎵 Music On</button>
+                <button class="event-btn spicy" onclick="fireEvent('candles_light')">🕯 All Candles</button>
+                <button class="event-btn spicy" onclick="fireEvent('rose_petals')">🌹 Rose Petals</button>
+                <button class="event-btn" onclick="fireEvent('phone_rings')">📱 Phone Rings</button>
+                <button class="event-btn" onclick="fireEvent('door_opens')">🚪 Door Opens</button>
+            </div>
+        </section>
+
+        <section class="panel-section">
+            <h3>Custom Event</h3>
+            <textarea id="customEventInput" class="textarea-input" rows="2" placeholder="Describe what happens…"></textarea>
+            <button class="btn-action" onclick="fireCustomEvent()">Fire Event</button>
+        </section>
+
+        <section class="panel-section">
+            <h3>Legacy Menace</h3>
+            <p class="muted-hint">These map to environment events above.</p>
+        </section>
+
+    </div><!-- /tab-events -->
+
+</aside><!-- /sidePanel -->
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     ACTIVITY FEED (bottom)
+═══════════════════════════════════════════════════════════════════════ -->
+<div id="activityFeed" class="activity-feed">
+    <div class="feed-header">
+        <h3>Activity Feed</h3>
+        <div style="display:flex;gap:6px;align-items:center">
+            <select id="feedFilter" class="select-input-sm" onchange="filterFeed(this.value)">
+                <option value="">All</option>
+                <option value="speech">Speech</option>
+                <option value="director">Director</option>
+                <option value="environment">Environment</option>
+                <option value="scenario">Scenario</option>
+                <option value="system">System</option>
+            </select>
             <button class="btn-clear" onclick="clearFeed()">Clear</button>
         </div>
-        <div id="feedMessages" class="feed-messages"></div>
-        <div id="whisperBox" class="whisper-box" style="display:none">
-            <select id="whisperTarget"></select>
-            <input id="whisperInput" type="text" placeholder="Whisper a direction…" onkeydown="if(event.key==='Enter')sendWhisper()">
-            <button onclick="sendWhisper()">💬</button>
-        </div>
     </div>
-
-    <!-- ── Character Picker Modal ──────────────────────────────── -->
-    <div id="charPickerModal" class="modal" style="display:none">
-        <div class="modal-content">
-            <h2>Add Character</h2>
-            <div id="charPickerList" class="picker-list"></div>
-            <button class="btn-cancel" onclick="closeCharPicker()">Cancel</button>
-        </div>
+    <div id="feedMessages" class="feed-messages"></div>
+    <!-- Director chat input -->
+    <div class="director-chat">
+        <input id="directorChatInput" type="text" placeholder="Director speaks to the scene…"
+               onkeydown="if(event.key==='Enter')directorSend()">
+        <button onclick="directorSend()">Send</button>
     </div>
+</div>
 
-    <!-- ── Info Panel ──────────────────────────────────────────── -->
-    <div class="info-panel">
-        <div id="fps-counter">FPS: 60</div>
-        <div id="status-indicator">
-            <span class="status-dot"></span>
-            <span id="status-text">Connected</span>
+<!-- ═══════════════════════════════════════════════════════════════════
+     CHARACTER PICKER MODAL
+═══════════════════════════════════════════════════════════════════════ -->
+<div id="charPickerModal" class="modal" style="display:none">
+    <div class="modal-content">
+        <h2>Add Character</h2>
+        <div style="margin-bottom:12px">
+            <label class="mini-label">Personality Profile</label>
+            <select id="charPickerPersonality" class="select-input">
+                {% for key, p in personalities.items() %}
+                <option value="{{ key }}">{{ key.replace('_',' ').title() }} — {{ p.traits[0] }}</option>
+                {% endfor %}
+            </select>
         </div>
+        <div id="charPickerList" class="picker-list"></div>
+        <button class="btn-cancel" onclick="closeCharPicker()">Cancel</button>
     </div>
+</div>
 
-    <script src="{{ url_for('static', filename='js/bedroom.js') }}"></script>
+<!-- HUD -->
+<div class="hud">
+    <span id="fps-counter">FPS: 60</span>
+    <span id="status-indicator">
+        <span class="status-dot green"></span>
+        <span id="status-text">Connected</span>
+    </span>
+</div>
+
+<script src="{{ url_for('static', filename='js/bedroom.js') }}"></script>
 </body>
 </html>

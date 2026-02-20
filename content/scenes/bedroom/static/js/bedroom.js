@@ -1,28 +1,35 @@
 /**
- * Bedroom Scene — Multi-Agent 3D Playground
- * Two characters move between 7 locations, converse, flirt, and exhibit
- * emergent behaviour.  The user can observe or direct via whispers.
+ * Bedroom Scene v4 — Director Control Center
+ * Three.js 3D room + full Director UI (stats, scenarios, props, events)
  */
 
 // ─── Three.js globals ──────────────────────────────────────────────────
 let scene, camera, renderer, controls;
 let ambientLight, directionalLight, pointLights = [];
 let clock = new THREE.Clock();
-let timeOfDay = 'evening';
 
 // Location 3D markers  { id → THREE.Mesh }
 const locationMarkers = {};
-// Character sprites { charId → { mesh, targetPos, currentLoc } }
+// Character sprites { charId → { group, ring, targetPos } }
 const charSprites = {};
 // Color palette for characters
-const CHAR_COLORS = ['#ff6b9d', '#51cf66'];
+const CHAR_COLORS = ['#ff6b9d', '#51cf66', '#64b5f6', '#ffd54f'];
 
 // ─── App state ─────────────────────────────────────────────────────────
 let sceneState = {};
 let agentRunning = false;
-let currentMode = 'observe';
 let socket = null;
-let allCharacters = [];  // from /api/characters/list
+let allCharacters = [];     // from /api/characters/list
+let timeOfDay = 'evening';
+
+// Director-side constants (loaded from /api/meta/constants)
+let POSITIONS = [];
+let OUTFITS = [];
+let SCENARIOS = {};
+let PERSONALITIES = {};
+
+// Feed filter state
+let activeFeedFilter = '';
 
 // FPS
 let lastFpsTime = performance.now();
@@ -64,10 +71,12 @@ function init() {
     createLighting();
     createRoom();
     connectSocket();
+    loadConstants();
     fetchState();
+    loadAmbientTracks();
 
     animate();
-    console.log('Bedroom scene initialized!');
+    console.log('Bedroom v4 initialized');
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -558,19 +567,46 @@ function connectSocket() {
     });
 
     socket.on('scene_state', (data) => applyState(data));
+
     socket.on('time_changed', (data) => {
         timeOfDay = data.time;
         applyLighting(data.lighting);
-        document.querySelectorAll('.time-btn').forEach(b => b.classList.toggle('active', b.dataset.time === data.time));
+        document.querySelectorAll('.light-btn').forEach(b =>
+            b.classList.toggle('active', b.dataset.key === data.time));
     });
 
-    // Agent events
     socket.on('agent_action', (data) => addFeedEntry(data));
     socket.on('agent_tick', (data) => {
         if (data.actions) data.actions.forEach(a => addFeedEntry(a));
     });
     socket.on('chat_message', (data) => {
-        addFeedEntry({ character_name: data.name, action: 'speak', message: data.message, timestamp: data.timestamp });
+        addFeedEntry({ character_name: data.name, action: 'speak', message: data.message,
+                       timestamp: data.timestamp });
+    });
+
+    // v4 additions
+    socket.on('director_speaks', (data) => {
+        addFeedEntry({ character_name: data.name || '(Director)', action: 'director',
+                       message: data.message, timestamp: data.timestamp }, 'director');
+    });
+    socket.on('scene_event', (data) => {
+        addFeedEntry({ character_name: '(Event)', action: 'environment',
+                       message: data.description || data.type, timestamp: data.timestamp }, 'environment');
+        triggerEventEffect(data.type);
+    });
+    socket.on('constants', (data) => {
+        if (data.positions)     POSITIONS = data.positions;
+        if (data.outfits)       OUTFITS = data.outfits;
+        if (data.scenarios)     SCENARIOS = data.scenarios;
+        if (data.personalities) PERSONALITIES = data.personalities;
+    });
+    socket.on('quick_stat', (data) => {
+        // Server pushed a single stat update — re-render stat sheets from current sceneState
+        if (sceneState.characters && sceneState.characters[data.character_id]) {
+            const st = sceneState.characters[data.character_id].stats || {};
+            st[data.stat] = data.value;
+            renderCharStatSheets(sceneState.characters);
+        }
     });
 }
 
@@ -587,58 +623,168 @@ async function fetchState() {
 function applyState(st) {
     sceneState = st;
     agentRunning = st.agent_loop_running || false;
-    currentMode = st.mode || 'observe';
 
-    // Locations
+    // 3D
     if (st.locations) buildLocationMarkers(st.locations);
-
-    // Characters
-    if (st.characters) {
-        updateCharPositions(st.characters, st.locations || {});
-        renderCharList(st.characters);
-    }
-
-    // Lighting
-    if (st.lighting) applyLighting(st.lighting);
+    if (st.characters) updateCharPositions(st.characters, st.locations || {});
+    if (st.lighting)   applyLighting(st.lighting);
     timeOfDay = st.time_of_day || 'evening';
 
-    // UI sync
-    document.querySelectorAll('.time-btn').forEach(b => b.classList.toggle('active', b.dataset.time === timeOfDay));
-    document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === currentMode));
-    updateAgentBtn();
-    updateWhisperBox();
-    renderModelConfig();
+    // Scene tab
+    if (st.characters) renderCompactCharList(st.characters);
     document.getElementById('charCount').textContent = '(' + Object.keys(st.characters || {}).length + '/2)';
+    document.querySelectorAll('.light-btn').forEach(b =>
+        b.classList.toggle('active', b.dataset.key === timeOfDay));
+    if (st.locations) renderLocations(st.locations);
+
+    // Cast tab
+    if (st.characters) renderCharStatSheets(st.characters);
+
+    // Storyline tab
+    const activeEl = document.getElementById('activeScenarioDisplay');
+    const badgeEl  = document.getElementById('scenarioLabel');
+    if (activeEl) {
+        const sc = st.active_scenario;
+        activeEl.textContent = sc ? (SCENARIOS[sc]?.label || sc) : 'None';
+        if (badgeEl) {
+            badgeEl.textContent  = sc ? (SCENARIOS[sc]?.emoji + ' ' + (SCENARIOS[sc]?.label || sc)) : '';
+            badgeEl.style.display = sc ? 'inline-block' : 'none';
+        }
+    }
+    if (Array.isArray(st.story_beats)) renderStoryBeats(st.story_beats);
+
+    // Props tab
+    if (Array.isArray(st.room_props)) renderPropGrid(st.room_props);
+
+    // Director tab — populate char dropdowns
+    populateCharacterDropdowns(st.characters || {});
+
+    // Agent button
+    updateAgentBtn();
+    renderModelConfig();
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-//  SIDE-PANEL: Characters
+//  SIDE-PANEL: Scene tab — compact char list
 // ═══════════════════════════════════════════════════════════════════════
-function renderCharList(chars) {
-    const el = document.getElementById('charList');
+function renderCompactCharList(chars) {
+    const el = document.getElementById('charListCompact');
+    if (!el) return;
     el.innerHTML = '';
     let idx = 0;
     for (const [cid, info] of Object.entries(chars)) {
         const color = CHAR_COLORS[idx % CHAR_COLORS.length];
-        const arousalPct = Math.round((info.arousal || 0) * 100);
-        const card = document.createElement('div');
-        card.className = 'char-card';
-        card.innerHTML =
+        const feeling = info.feeling || info.mood || 'neutral';
+        const loc = info.location || '—';
+        const div = document.createElement('div');
+        div.className = 'char-compact';
+        div.innerHTML =
             '<div class="char-dot" style="background:' + color + '"></div>' +
-            '<div class="char-info">' +
-                '<strong>' + esc(info.name) + '</strong>' +
-                '<span class="char-mood">' + esc(info.mood || 'neutral') + '</span>' +
-                '<span class="char-loc">📍 ' + esc(info.location || '—') + '</span>' +
-                '<div class="mini-bar"><div class="mini-fill" style="width:' + arousalPct + '%;background:' + color + '"></div></div>' +
-            '</div>' +
+            '<strong>' + esc(info.name) + '</strong>' +
+            '<span class="char-feeling">' + esc(feeling) + '</span>' +
+            '<span class="char-loc">📍' + esc(loc) + '</span>' +
             '<button class="btn-x" onclick="removeChar(\'' + cid + '\')">✕</button>';
-        el.appendChild(card);
+        el.appendChild(div);
         idx++;
     }
 }
 
 async function removeChar(cid) {
-    await fetch('/api/character/remove', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ character_id: cid }) });
+    await fetch('/api/character/remove', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({ character_id: cid }) });
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  SIDE-PANEL: Cast tab — full stat sheets
+// ═══════════════════════════════════════════════════════════════════════
+const STAT_LIST = ['arousal','horniness','drunkenness','tiredness','happiness','anger','fear','pleasure','explicitness','openness'];
+
+function renderCharStatSheets(chars) {
+    const container = document.getElementById('charStatSheets');
+    const noMsg = document.getElementById('noCharsMsg');
+    if (!container) return;
+
+    const hasChars = Object.keys(chars).length > 0;
+    if (noMsg) noMsg.style.display = hasChars ? 'none' : 'block';
+    if (!hasChars) { container.innerHTML = ''; return; }
+
+    container.innerHTML = '';
+    let idx = 0;
+    for (const [cid, info] of Object.entries(chars)) {
+        const color = CHAR_COLORS[idx % CHAR_COLORS.length];
+        const stats = info.stats || {};
+        const compliance = info.compliance_score != null ? info.compliance_score : 50;
+        const feeling = info.feeling || info.mood || 'neutral';
+
+        const sheet = document.createElement('div');
+        sheet.className = 'stat-sheet';
+        sheet.id = 'sheet-' + cid;
+
+        // Header
+        sheet.innerHTML =
+            '<div class="stat-sheet-header">' +
+                '<div class="char-dot" style="background:' + color + '"></div>' +
+                '<span class="stat-sheet-name">' + esc(info.name) + '</span>' +
+                '<span class="stat-sheet-feeling">' + esc(feeling) + '</span>' +
+            '</div>';
+
+        // Compliance
+        sheet.innerHTML +=
+            '<div class="compliance-label">Compliance: ' + Math.round(compliance) + '%</div>' +
+            '<div class="compliance-bar"><div class="compliance-fill" style="width:' + compliance + '%"></div></div>';
+
+        // Stat rows
+        let rowsHtml = '<div class="stat-rows">';
+        for (const stat of STAT_LIST) {
+            const val = Math.round(stats[stat] != null ? stats[stat] : 0);
+            rowsHtml +=
+                '<div class="stat-row">' +
+                    '<span class="stat-name">' + stat + '</span>' +
+                    '<div class="stat-bar-track">' +
+                        '<div class="stat-bar-fill stat-bar-' + stat + '" style="width:' + val + '%"></div>' +
+                    '</div>' +
+                    '<span class="stat-val">' + val + '</span>' +
+                    '<div class="stat-quick">' +
+                        '<button class="sq-btn" onclick="quickStat(\'' + cid + '\',\'' + stat + '\',-10)">-</button>' +
+                        '<button class="sq-btn" onclick="quickStat(\'' + cid + '\',\'' + stat + '\',10)">+</button>' +
+                    '</div>' +
+                '</div>';
+        }
+        rowsHtml += '</div>';
+        sheet.innerHTML += rowsHtml;
+
+        // Outfit / position dropdowns
+        const outfitOpts = (OUTFITS.length ? OUTFITS : (info.outfit ? [info.outfit] : []));
+        const posOpts    = (POSITIONS.length ? POSITIONS : (info.position ? [info.position] : []));
+        let selHtml = '<div class="stat-sheet-selects">';
+        selHtml += '<select onchange="setOutfit(\'' + cid + '\',this.value)" title="Outfit">';
+        outfitOpts.forEach(o => {
+            selHtml += '<option value="' + esc(o) + '"' + (o === info.outfit ? ' selected' : '') + '>' + esc(o) + '</option>';
+        });
+        selHtml += '</select>';
+        selHtml += '<select onchange="setPosition(\'' + cid + '\',this.value)" title="Position">';
+        posOpts.forEach(p => {
+            selHtml += '<option value="' + esc(p) + '"' + (p === info.position ? ' selected' : '') + '>' + esc(p) + '</option>';
+        });
+        selHtml += '</select>';
+        selHtml += '</div>';
+        sheet.innerHTML += selHtml;
+
+        container.appendChild(sheet);
+        idx++;
+    }
+}
+
+async function quickStat(cid, stat, delta) {
+    await postJSON('/api/character/stats/adjust', { character_id: cid, adjustments: { [stat]: delta } });
+}
+
+async function setOutfit(cid, outfit) {
+    await postJSON('/api/character/outfit', { character_id: cid, outfit });
+}
+
+async function setPosition(cid, position) {
+    await postJSON('/api/character/position', { character_id: cid, position });
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -682,11 +828,15 @@ async function openCharPicker() {
 function closeCharPicker() { document.getElementById('charPickerModal').style.display = 'none'; }
 
 async function pickChar(cid) {
-    const r = await fetch('/api/character/load', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ character_id: cid }) });
+    const personalityEl = document.getElementById('charPickerPersonality');
+    const personality = personalityEl ? personalityEl.value : '';
+    const body = { character_id: cid };
+    if (personality) body.personality = personality;
+    const r = await postJSON('/api/character/load', body);
     if (r.ok) closeCharPicker();
     else {
-        const e = await r.json();
-        alert(e.error || 'Failed');
+        const e = await r.json().catch(() => ({}));
+        alert(e.error || 'Failed to load character');
     }
 }
 
@@ -698,10 +848,10 @@ async function toggleAgentLoop() {
         await fetch('/api/agents/stop', { method: 'POST' });
         agentRunning = false;
     } else {
-        const r = await fetch('/api/agents/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ interval: 30 }) });
+        const r = await postJSON('/api/agents/start', { interval: 30 });
         if (r.ok) agentRunning = true;
         else {
-            const e = await r.json();
+            const e = await r.json().catch(() => ({}));
             alert(e.error || 'Cannot start');
         }
     }
@@ -717,53 +867,32 @@ async function manualTick() {
 }
 
 function updateAgentBtn() {
-    const btn = document.getElementById('btnStartAgents');
+    const btn    = document.getElementById('btnStartAgents');
     const status = document.getElementById('agentStatus');
+    if (!btn) return;
     if (agentRunning) {
-        btn.textContent = '⏹ Stop';
+        btn.textContent    = '⏹ Stop';
         status.textContent = '● Agents Running';
-        status.className = 'agent-status on';
+        status.className   = 'agent-status on';
     } else {
-        btn.textContent = '▶ Start';
+        btn.textContent    = '▶ Start';
         status.textContent = '● Agents Off';
-        status.className = 'agent-status off';
+        status.className   = 'agent-status off';
     }
 }
 
+function toggleSidePanel() {
+    const p = document.getElementById('sidePanel');
+    if (p) p.style.display = p.style.display === 'none' ? '' : 'none';
+}
+
 // ═══════════════════════════════════════════════════════════════════════
-//  TIME & MODE
+//  TIME (lighting) & MODEL CONFIG
 // ═══════════════════════════════════════════════════════════════════════
 async function setTime(t) {
-    await fetch('/api/scene/time', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ time: t }) });
+    await postJSON('/api/scene/time', { time: t });
 }
 
-async function setMode(m) {
-    await fetch('/api/mode', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: m }) });
-    currentMode = m;
-    document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === m));
-    updateWhisperBox();
-}
-
-function updateWhisperBox() {
-    const box = document.getElementById('whisperBox');
-    if (!box) return;
-    box.style.display = (currentMode === 'direct') ? 'flex' : 'none';
-    // Update target dropdown
-    const sel = document.getElementById('whisperTarget');
-    if (sel) {
-        sel.innerHTML = '';
-        for (const [cid, info] of Object.entries(sceneState.characters || {})) {
-            const opt = document.createElement('option');
-            opt.value = cid;
-            opt.textContent = info.name;
-            sel.appendChild(opt);
-        }
-    }
-}
-
-// ═══════════════════════════════════════════════════════════════════════
-//  AGENT MODEL CONFIG
-// ═══════════════════════════════════════════════════════════════════════
 let availableModels = [];
 
 async function refreshModels() {
@@ -771,8 +900,9 @@ async function refreshModels() {
         const r = await fetch('/api/models/available');
         const data = await r.json();
         availableModels = [
-            ...(data.loaded || []).map(m => ({ id: m.id, label: m.id + ' (loaded)' })),
-            ...(data.available || []).filter(m => !(data.loaded || []).find(l => l.id === m.id))
+            ...(data.loaded  || []).map(m => ({ id: m.id, label: m.id + ' (loaded)' })),
+            ...(data.available || [])
+                .filter(m => !(data.loaded || []).find(l => l.id === m.id))
                 .map(m => ({ id: m.id, label: m.id })),
         ];
     } catch { availableModels = []; }
@@ -782,103 +912,422 @@ async function refreshModels() {
 async function renderModelConfig() {
     const container = document.getElementById('modelConfigList');
     if (!container) return;
-
-    // Get current config
     let config = {};
-    try {
-        const r = await fetch('/api/agents/model');
-        config = await r.json();
-    } catch {}
-
+    try { config = await (await fetch('/api/agents/model')).json(); } catch {}
     const chars = sceneState.characters || {};
     if (Object.keys(chars).length === 0) {
         container.innerHTML = '<p style="color:#888;font-size:12px">Load characters first</p>';
         return;
     }
-
     let html = '';
     for (const [cid, info] of Object.entries(chars)) {
         const cfg = config[cid] || {};
-        const currentModel = cfg.model || '(default — loaded)';
-        const currentMode = cfg.mode || 'default';
-
+        const curMode = cfg.mode || 'default';
         html += `<div class="model-config-card">
-            <div class="mcc-name">${info.name}</div>
+            <div class="mcc-name">${esc(info.name)}</div>
             <select class="mcc-select" id="modelSel_${cid}" onchange="setAgentModel('${cid}')">
                 <option value="">Default (loaded model)</option>
                 ${availableModels.map(m =>
-                    `<option value="${m.id}" ${m.id === cfg.model ? 'selected' : ''}>${m.label}</option>`
+                    `<option value="${m.id}" ${m.id === cfg.model ? 'selected' : ''}>${esc(m.label)}</option>`
                 ).join('')}
             </select>
             <div class="mcc-modes">
-                <label><input type="radio" name="mode_${cid}" value="default" ${currentMode === 'default' ? 'checked' : ''} onchange="setAgentModel('${cid}')"> Standard</label>
-                <label><input type="radio" name="mode_${cid}" value="speculative" ${currentMode === 'speculative' ? 'checked' : ''} onchange="setAgentModel('${cid}')"> Speculative</label>
-                <label><input type="radio" name="mode_${cid}" value="concurrent" ${currentMode === 'concurrent' ? 'checked' : ''} onchange="setAgentModel('${cid}')"> Concurrent</label>
+                <label><input type="radio" name="mode_${cid}" value="default" ${curMode==='default'?'checked':''} onchange="setAgentModel('${cid}')"> Standard</label>
+                <label><input type="radio" name="mode_${cid}" value="speculative" ${curMode==='speculative'?'checked':''} onchange="setAgentModel('${cid}')"> Speculative</label>
+                <label><input type="radio" name="mode_${cid}" value="concurrent" ${curMode==='concurrent'?'checked':''} onchange="setAgentModel('${cid}')"> Concurrent</label>
             </div>
         </div>`;
     }
     container.innerHTML = html;
 }
-
+        const cfg = config[cid] || {};
+        const currentModel = cfg.model || '(default — loaded)';
 async function setAgentModel(cid) {
-    const modelSel = document.getElementById(`modelSel_${cid}`);
+    const modelSel  = document.getElementById(`modelSel_${cid}`);
     const modeRadio = document.querySelector(`input[name="mode_${cid}"]:checked`);
-    const model = modelSel ? modelSel.value : '';
-    const mode = modeRadio ? modeRadio.value : 'default';
-
-    await fetch('/api/agents/model', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ character_id: cid, model: model || null, mode }),
-    });
+    const model = modelSel  ? modelSel.value  : '';
+    const mode  = modeRadio ? modeRadio.value : 'default';
+    await postJSON('/api/agents/model', { character_id: cid, model: model || null, mode });
 }
 
 async function sendWhisper() {
-    const input = document.getElementById('whisperInput');
-    const target = document.getElementById('whisperTarget').value;
-    const msg = input.value.trim();
-    if (!msg || !target) return;
-    await fetch('/api/agents/whisper', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ character_id: target, message: msg }) });
-    addFeedEntry({ character_name: '(Director)', action: 'whisper', message: msg, timestamp: new Date().toISOString() });
-    input.value = '';
+    const input  = document.getElementById('whisperInput');
+    const target = document.getElementById('whisperTarget')?.value || '';
+    const msg    = input?.value.trim();
+    if (!msg) return;
+    const body = { message: msg };
+    if (target) body.character_id = target;
+    await postJSON('/api/director/whisper', body);
+    addFeedEntry({ character_name: '(Director ↯)', action: 'whisper', message: msg }, 'director');
+    if (input) input.value = '';
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-//  ACTIVITY FEED
+//  DIRECTOR CONTROLS — Direct tab
+// ═══════════════════════════════════════════════════════════════════════
+async function enterScene() {
+    const nameEl = document.getElementById('directorNameInput');
+    const name   = nameEl ? nameEl.value.trim() || 'The Director' : 'The Director';
+    const r = await postJSON('/api/director/enter_scene', { in_scene: true, name });
+    const statusEl = document.getElementById('directorStatus');
+    if (statusEl) {
+        statusEl.textContent = r.ok ? '✅ In scene as ' + name : '❌ Failed';
+    }
+    addFeedEntry({ character_name: '(Director)', action: 'director',
+                   message: name + ' entered the scene' });
+}
+
+async function exitScene() {
+    await postJSON('/api/director/enter_scene', { in_scene: false });
+    const statusEl = document.getElementById('directorStatus');
+    if (statusEl) statusEl.textContent = '';
+    addFeedEntry({ character_name: '(Director)', action: 'director', message: 'Director left the scene' });
+}
+
+async function giveLine() {
+    const target  = document.getElementById('giveLineTarget')?.value;
+    const lineEl  = document.getElementById('giveLineInput');
+    const line    = lineEl?.value.trim();
+    if (!line || !target) return alert('Pick a character and enter a line.');
+    const r = await postJSON('/api/director/give_line', { character_id: target, line });
+    const data = r.ok ? await r.json().catch(() => ({})) : {};
+    const hintEl = document.getElementById('complianceHint');
+    if (hintEl) hintEl.textContent = data.compliance_note || '';
+    addFeedEntry({ character_name: '(Director → ' + (getCharName(target) || target) + ')',
+                   action: 'director', message: '"' + line + '"' }, 'director');
+    if (lineEl) lineEl.value = '';
+}
+
+async function giveAction() {
+    const target = document.getElementById('giveActionTarget')?.value || '';
+    const actEl  = document.getElementById('giveActionInput');
+    const action = actEl?.value.trim();
+    if (!action) return;
+    const body = { action };
+    if (target) body.character_id = target;
+    await postJSON('/api/director/give_action', body);
+    addFeedEntry({ character_name: '(Director)', action: 'director', message: '→ ' + action }, 'director');
+    if (actEl) actEl.value = '';
+}
+
+async function startConversation(type) {
+    const chars = Object.keys(sceneState.characters || {});
+    await postJSON('/api/conversation/start', { type, character_ids: chars });
+    addFeedEntry({ character_name: '(Director)', action: 'scenario', message: 'Conversation started: ' + type }, 'scenario');
+}
+
+// Update compliance hint when target changes
+function updateComplianceHint(selectEl) {
+    const cid = selectEl.value;
+    const info = (sceneState.characters || {})[cid];
+    const hint = document.getElementById('complianceHint');
+    if (!hint) return;
+    if (info && info.compliance_score != null) {
+        const score = Math.round(info.compliance_score);
+        const note  = score >= 70 ? 'Likely to comply ✓' : score >= 40 ? 'Might resist' : 'Will probably resist ✗';
+        hint.textContent = 'Compliance: ' + score + '% — ' + note;
+    } else {
+        hint.textContent = '';
+    }
+}
+
+function getCharName(cid) {
+    return (sceneState.characters || {})[cid]?.name || null;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  DIRECTOR CONTROLS — Storyline tab
+// ═══════════════════════════════════════════════════════════════════════
+function scenarioChanged() {
+    const picker  = document.getElementById('scenarioPicker');
+    const preview = document.getElementById('scenarioPreview');
+    if (!picker || !preview) return;
+    const key = picker.value;
+    if (!key) { preview.style.display = 'none'; return; }
+    const sc = SCENARIOS[key] || {};
+    preview.style.display = 'block';
+    preview.innerHTML = '<strong>' + esc(sc.emoji || '') + ' ' + esc(sc.label || key) + '</strong><br>' +
+                        esc(sc.opening || '') + (sc.beats ? '<br><em>Beats: ' + sc.beats.length + '</em>' : '');
+}
+
+async function activateScenario() {
+    const key = document.getElementById('scenarioPicker')?.value;
+    if (!key) return alert('Pick a scenario first.');
+    await postJSON('/api/scenario/set', { scenario_key: key });
+    addFeedEntry({ character_name: '(Director)', action: 'scenario',
+                   message: 'Scenario activated: ' + (SCENARIOS[key]?.label || key) }, 'scenario');
+}
+
+async function clearScenario() {
+    await postJSON('/api/scenario/clear', {});
+    addFeedEntry({ character_name: '(Director)', action: 'scenario', message: 'Scenario cleared' }, 'scenario');
+}
+
+async function injectBeat() {
+    const beatEl = document.getElementById('newBeatInput');
+    const text   = beatEl?.value.trim();
+    if (!text) return;
+    await postJSON('/api/story/beat', { text });
+    addFeedEntry({ character_name: '(Director)', action: 'scenario', message: '📌 Beat: ' + text }, 'scenario');
+    if (beatEl) beatEl.value = '';
+}
+
+function renderStoryBeats(beats) {
+    const list = document.getElementById('storyBeatsList');
+    if (!list) return;
+    list.innerHTML = '';
+    if (!beats.length) {
+        list.innerHTML = '<span class="muted-hint">No beats queued</span>';
+        return;
+    }
+    beats.forEach((b, i) => {
+        const item = document.createElement('div');
+        item.className = 'beat-item';
+        item.innerHTML =
+            '<span class="beat-text">' + esc(b) + '</span>' +
+            '<button class="beat-remove" onclick="removeBeat(' + i + ')">✕</button>';
+        list.appendChild(item);
+    });
+}
+
+async function removeBeat(index) {
+    await postJSON('/api/story/clear_beat', { index });
+}
+
+async function directorBroadcast() {
+    const el  = document.getElementById('broadcastInput');
+    const msg = el?.value.trim();
+    if (!msg) return;
+    await postJSON('/api/director/broadcast', { message: msg });
+    addFeedEntry({ character_name: '(Director → ALL)', action: 'director', message: msg }, 'director');
+    if (el) el.value = '';
+}
+
+async function directorSend() {
+    const el  = document.getElementById('directorChatInput');
+    const msg = el?.value.trim();
+    if (!msg) return;
+    await postJSON('/api/director/broadcast', { message: msg });
+    addFeedEntry({ character_name: '(Director)', action: 'director', message: msg }, 'director');
+    if (el) el.value = '';
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  DIRECTOR CONTROLS — Props tab
+// ═══════════════════════════════════════════════════════════════════════
+async function toggleProp(pid) {
+    const btn = document.getElementById('prop-' + pid);
+    const active = btn && btn.classList.contains('active');
+    if (active) {
+        await postJSON('/api/props/remove', { prop_id: pid });
+    } else {
+        await postJSON('/api/props/add', { prop_id: pid });
+    }
+}
+
+function renderPropGrid(roomProps) {
+    document.querySelectorAll('.prop-btn').forEach(btn => {
+        const pid = btn.dataset.pid;
+        btn.classList.toggle('active', roomProps.includes(pid));
+    });
+}
+
+async function givePropToChar() {
+    const charEl = document.getElementById('givePropChar');
+    const itemEl = document.getElementById('givePropItem');
+    const cid    = charEl?.value;
+    const pid    = itemEl?.value;
+    if (!cid || !pid) return alert('Pick a character and a prop.');
+    await postJSON('/api/props/give', { character_id: cid, prop_id: pid });
+    addFeedEntry({ character_name: '(Director)', action: 'director',
+                   message: 'Gave ' + pid + ' to ' + (getCharName(cid) || cid) }, 'director');
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  DIRECTOR CONTROLS — Events tab
+// ═══════════════════════════════════════════════════════════════════════
+async function fireEvent(type) {
+    await postJSON('/api/event/fire', { type });
+    addFeedEntry({ character_name: '(Event)', action: 'environment', message: type.replace(/_/g, ' ') }, 'environment');
+    triggerEventEffect(type);
+}
+
+async function fireCustomEvent() {
+    const el   = document.getElementById('customEventInput');
+    const desc = el?.value.trim();
+    if (!desc) return;
+    await postJSON('/api/event/fire', { type: 'custom', description: desc });
+    addFeedEntry({ character_name: '(Event)', action: 'environment', message: desc }, 'environment');
+    if (el) el.value = '';
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  THREE.JS VISUAL EVENT EFFECTS
+// ═══════════════════════════════════════════════════════════════════════
+function triggerEventEffect(type) {
+    switch (type) {
+        case 'flicker_lights':
+            (function() {
+                const orig = renderer.toneMappingExposure;
+                let n = 0;
+                const iv = setInterval(() => {
+                    renderer.toneMappingExposure = n++ % 2 === 0 ? 0.05 : orig * 1.5;
+                    if (n > 8) { clearInterval(iv); renderer.toneMappingExposure = orig; }
+                }, 100);
+            })();
+            break;
+        case 'cold_draft':
+            scene.fog = new THREE.FogExp2(0x1a2040, 0.08);
+            setTimeout(() => { scene.fog = null; }, 4000);
+            break;
+        case 'power_out':
+            const origBg = scene.background.clone();
+            scene.background = new THREE.Color(0x000000);
+            scene.children.filter(c => c.isLight).forEach(l => { l.userData._oi = l.intensity; l.intensity = 0; });
+            setTimeout(() => {
+                scene.background = origBg;
+                scene.children.filter(c => c.isLight).forEach(l => { l.intensity = l.userData._oi || 1; });
+            }, 2500);
+            break;
+        case 'romantic_mood':
+            scene.children.filter(c => c.isPointLight).forEach(l => {
+                l.color.set(0xff6644); l.intensity *= 0.6;
+            });
+            setTimeout(() => applyLighting(sceneState.lighting || {}), 8000);
+            break;
+        case 'thunder':
+            const flash = new THREE.PointLight(0xffffff, 5, 50);
+            flash.position.set(0, 10, 0);
+            scene.add(flash);
+            setTimeout(() => { flash.intensity = 0; }, 100);
+            setTimeout(() => { flash.intensity = 3; }, 200);
+            setTimeout(() => { scene.remove(flash); }, 400);
+            break;
+        case 'candles_light':
+            scene.children.filter(c => c.isPointLight).forEach(l => {
+                l.color.set(0xff8800); l.intensity = Math.min(l.intensity * 1.4, 2);
+            });
+            break;
+        case 'move_object':
+            const objs = scene.children.filter(c => c.isMesh && c.castShadow && c !== ambientLight);
+            if (objs.length) {
+                const obj = objs[Math.floor(Math.random() * objs.length)];
+                const op = obj.position.clone();
+                let s = 0;
+                const iv2 = setInterval(() => {
+                    obj.position.x = op.x + (Math.random() - 0.5) * 0.15;
+                    obj.position.z = op.z + (Math.random() - 0.5) * 0.15;
+                    if (++s > 12) { clearInterval(iv2); obj.position.copy(op); }
+                }, 60);
+            }
+            break;
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  TAB SYSTEM
+// ═══════════════════════════════════════════════════════════════════════
+function showTab(name) {
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    const content = document.getElementById('tab-' + name);
+    if (content) content.classList.add('active');
+    document.querySelectorAll('.tab-btn').forEach(b => {
+        if (b.dataset.tab === name) b.classList.add('active');
+    });
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  FEED
 // ═══════════════════════════════════════════════════════════════════════
 const ACTION_ICONS = {
     speak: '💬', move: '🚶', idle: '😌', flirt: '😏', touch: '✋',
     kiss: '💋', cuddle: '🤗', intimate: '🔥', interact: '🎯', whisper: '🤫',
-    menace: '😈',
+    director: '🎬', scenario: '📖', environment: '🌐', system: '⚙️',
 };
 
-function addFeedEntry(data) {
+function addFeedEntry(data, feedType) {
     const feed = document.getElementById('feedMessages');
     if (!feed) return;
 
-    const action = data.action || 'speak';
-    const icon = ACTION_ICONS[action] || '▪';
-    const name = data.character_name || data.name || '?';
-    const msg = data.message || data.detail || action;
-    const loc = data.location ? (' @ ' + data.location) : '';
+    const action = feedType || data.action || 'speak';
+    const icon   = ACTION_ICONS[action] || ACTION_ICONS[data.action] || '▪';
+    const name   = data.character_name || data.name || '?';
+    const msg    = data.message || data.detail || data.action || '';
 
     const div = document.createElement('div');
-    div.className = 'feed-entry feed-' + action;
-    div.innerHTML = '<span class="feed-icon">' + icon + '</span>' +
+    div.className    = 'feed-entry feed-' + action;
+    div.dataset.feedType = action;
+    div.innerHTML =
+        '<span class="feed-icon">' + icon + '</span>' +
         '<span class="feed-name">' + esc(name) + '</span>' +
-        '<span class="feed-msg">' + esc(msg) + loc + '</span>';
+        '<span class="feed-msg">' + esc(msg) + '</span>';
+
+    if (activeFeedFilter && activeFeedFilter !== action) {
+        div.dataset.feedType = 'hidden';
+    }
+
     feed.appendChild(div);
     feed.scrollTop = feed.scrollHeight;
+    while (feed.children.length > 300) feed.removeChild(feed.firstChild);
 
-    // Cap at 200 entries
-    while (feed.children.length > 200) feed.removeChild(feed.firstChild);
-
-    // Also refresh location list
     if (sceneState.locations) renderLocations(sceneState.locations);
 }
 
 function clearFeed() {
-    document.getElementById('feedMessages').innerHTML = '';
+    const feed = document.getElementById('feedMessages');
+    if (feed) feed.innerHTML = '';
+}
+
+function filterFeed(type) {
+    activeFeedFilter = type;
+    const feed = document.getElementById('feedMessages');
+    if (!feed) return;
+    feed.querySelectorAll('.feed-entry').forEach(el => {
+        const t = el.dataset.feedType;
+        if (!type || t === type) {
+            el.style.display = '';
+        } else {
+            el.style.display = 'none';
+        }
+    });
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  POPULATE CHARACTER DROPDOWNS
+// ═══════════════════════════════════════════════════════════════════════
+function populateCharacterDropdowns(chars) {
+    const ids = ['whisperTarget', 'giveLineTarget', 'giveActionTarget', 'givePropChar'];
+    ids.forEach(elId => {
+        const sel = document.getElementById(elId);
+        if (!sel) return;
+        const cur = sel.value;
+        // Keep a blank option for multi-target
+        sel.innerHTML = '<option value="">All / —</option>';
+        for (const [cid, info] of Object.entries(chars)) {
+            const opt = document.createElement('option');
+            opt.value = cid;
+            opt.textContent = info.name;
+            sel.appendChild(opt);
+        }
+        if (cur) sel.value = cur;
+    });
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  CONSTANTS LOADER
+// ═══════════════════════════════════════════════════════════════════════
+async function loadConstants() {
+    try {
+        const r = await fetch('/api/meta/constants');
+        if (r.ok) {
+            const data = await r.json();
+            if (data.positions)     POSITIONS = data.positions;
+            if (data.outfits)       OUTFITS = data.outfits;
+            if (data.scenarios)     SCENARIOS = data.scenarios;
+            if (data.personalities) PERSONALITIES = data.personalities;
+        }
+    } catch (e) { console.warn('loadConstants failed', e); }
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -888,6 +1337,14 @@ function esc(str) {
     const d = document.createElement('div');
     d.textContent = str || '';
     return d.innerHTML;
+}
+
+async function postJSON(url, body) {
+    return fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+    });
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -935,84 +1392,8 @@ function setAmbientVolume(val) {
     if (ambientAudio) ambientAudio.volume = val / 100;
 }
 
-// ═══════════════════════════════════════════════════════════════════════
-//  MENACE MENU — GOD MODE ENVIRONMENTAL PRANKS
-// ═══════════════════════════════════════════════════════════════════════
-const MENACE_EFFECTS = {
-    flicker_lights() {
-        const orig = renderer.toneMappingExposure;
-        let flicks = 0;
-        const iv = setInterval(() => {
-            renderer.toneMappingExposure = flicks % 2 === 0 ? 0.05 : orig * 1.5;
-            flicks++;
-            if (flicks > 8) { clearInterval(iv); renderer.toneMappingExposure = orig; }
-        }, 100);
-    },
-    cold_draft() {
-        // Shift lighting to cold blue temporarily
-        scene.fog = new THREE.FogExp2(0x1a2040, 0.08);
-        setTimeout(() => { scene.fog = null; }, 4000);
-    },
-    move_object() {
-        // Shake a random furniture piece
-        const furniture = scene.children.filter(c => c.userData?.furniture);
-        if (furniture.length === 0) return;
-        const obj = furniture[Math.floor(Math.random() * furniture.length)];
-        const origPos = obj.position.clone();
-        let shakes = 0;
-        const iv = setInterval(() => {
-            obj.position.x = origPos.x + (Math.random() - 0.5) * 0.15;
-            obj.position.z = origPos.z + (Math.random() - 0.5) * 0.15;
-            shakes++;
-            if (shakes > 12) { clearInterval(iv); obj.position.copy(origPos); }
-        }, 60);
-    },
-    power_out() {
-        const origBg = scene.background;
-        scene.background = new THREE.Color(0x000000);
-        scene.children.filter(c => c.isLight).forEach(l => { l.userData._origInt = l.intensity; l.intensity = 0; });
-        setTimeout(() => {
-            scene.background = origBg;
-            scene.children.filter(c => c.isLight).forEach(l => { l.intensity = l.userData._origInt || 1; });
-        }, 2500);
-    },
-    romantic_mood() {
-        scene.children.filter(c => c.isLight && c.isPointLight).forEach(l => {
-            l.color.set(0xff6644);
-            l.intensity *= 0.6;
-        });
-        setTimeout(() => applyLighting({}), 8000);
-    },
-    thunder() {
-        const flash = new THREE.PointLight(0xffffff, 5, 50);
-        flash.position.set(0, 10, 0);
-        scene.add(flash);
-        setTimeout(() => { flash.intensity = 0; }, 100);
-        setTimeout(() => { flash.intensity = 3; }, 200);
-        setTimeout(() => { scene.remove(flash); }, 400);
-    },
-};
-
+// ─── Legacy menace() kept for backwards compatibility ──────────────────
 async function menace(type) {
-    // Visual effect in the browser
-    if (MENACE_EFFECTS[type]) MENACE_EFFECTS[type]();
-
-    // Also notify backend so agents perceive the event
-    try {
-        await fetch('/api/menace', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ type }),
-        });
-    } catch (e) { /* ok */ }
-
-    addFeedEntry({
-        character_name: '(God)',
-        action: 'menace',
-        message: '😈 ' + type.replace(/_/g, ' '),
-        timestamp: new Date().toISOString(),
-    });
+    triggerEventEffect(type);
+    await fireEvent(type);
 }
-
-// Load ambient tracks on init
-loadAmbientTracks();
