@@ -22,3 +22,11 @@ int_voice_check:
   model_size: 1.7b
   reference_audio: null
   tags: []
+live_wire_luna:
+  description: A warm, playful female voice with slight vocal fry and a teasing cadence.
+  model_size: 1.7b
+  reference_audio: null
+  tags:
+  - playful
+  - warm
+  - teasing

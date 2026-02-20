@@ -543,7 +543,17 @@ def create_tts_app() -> FastAPI:
         designer.cast(request.character_id, design)
         return {"status": "ok", "character_id": request.character_id}
 
-    # ── Status ──────────────────────────────────────────────────────
+    # ── Health & Status ─────────────────────────────────────────────
+
+    @app.get("/health")
+    async def health():
+        """Quick health check for service discovery."""
+        return {
+            "status": "ok",
+            "engine": "qwen3-tts",
+            "models_loaded": _engine.is_loaded,
+            "mode": "live" if _engine.is_loaded else "placeholder",
+        }
 
     @app.get("/status")
     async def status():

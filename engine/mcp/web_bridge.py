@@ -75,6 +75,7 @@ def create_bridge_app(
 
     # ── Health ──────────────────────────────────────────────────────
 
+    @app.get("/health")
     @app.get("/api/health")
     async def health():
         """Bridge health check."""
@@ -86,10 +87,21 @@ def create_bridge_app(
         except Exception:
             pass
         return {
+            "status": "ok",
             "bridge": "ok",
             "lmstudio": "connected" if lms_ok else "disconnected",
             "lmstudio_url": lmstudio_url,
         }
+
+    @app.get("/tools")
+    async def list_tools():
+        """List available MCP tools exposed by the bridge."""
+        try:
+            from engine.mcp.cosysim_server import mcp as cosysim_mcp
+            tools = cosysim_mcp.list_tools() if hasattr(cosysim_mcp, "list_tools") else []
+            return {"tools": [{"name": t.name, "description": t.description} for t in tools] if tools else []}
+        except Exception:
+            return {"tools": []}
 
     # ── File Upload ─────────────────────────────────────────────────
 
