@@ -48,6 +48,33 @@ _DEFAULT_SCHEDULERS = ["normal", "karras", "exponential", "sgm_uniform",
                        "simple", "ddim_uniform"]
 
 
+class _PhoneCharacterAgent:
+    """
+    Thin adapter exposing PhoneScene._generate_response() as a CharacterAgent to
+    AgentGovernor so all 15 interceptors (CharacterRegistry sync, DialogDirective,
+    SkillAwareness, PersonalityGuard, ActivityLogger, …) fire on every phone reply.
+
+    AgentGovernor requires:
+        agent.character    – CharacterData (read by CharacterRegistryInterceptor)
+        agent.reply(msg, *, chain_id, history, **kwargs) -> str
+        agent.quick_query(prompt) -> str
+
+    We store a *bound-method reference* rather than the scene object to avoid
+    circular lookups. ``character`` is refreshed before every governor call so
+    interceptors always observe the current active character.
+    """
+
+    def __init__(self, generate_fn, character):
+        self._generate_fn = generate_fn   # PhoneScene._generate_response (bound method)
+        self.character    = character      # CharacterData — updated per-call
+
+    def reply(self, message: str, *, chain_id=None, history=None, **_kwargs) -> str:
+        return self._generate_fn(message)
+
+    def quick_query(self, prompt: str) -> str:
+        return self._generate_fn(prompt)
+
+
 class PhoneScene(BaseScene, MCPSceneMixin, mcp_scene_id="phone"):
     """
     Phone scene manager - handles phone UI and interactions
@@ -155,8 +182,9 @@ class PhoneScene(BaseScene, MCPSceneMixin, mcp_scene_id="phone"):
         }
 
         # Current conversation state
-        self.current_chain_id = None
-        self.typing_indicator = False
+        self.current_chain_id  = None
+        self.typing_indicator  = False
+        self._phone_governor   = None   # AgentGovernor wrapping _PhoneCharacterAgent
         
         # Setup routes
         self._setup_routes()
@@ -1620,8 +1648,30 @@ class PhoneScene(BaseScene, MCPSceneMixin, mcp_scene_id="phone"):
             self.socketio.emit('active_request_start', {'type': 'message'})
             
             try:
-                # Generate response
-                response = self._generate_response(message)
+                # Route through AgentGovernor so all 15 interceptors fire:
+                # (CharacterRegistry sync, DialogDirective, RouterMessageInjector,
+                #  SkillAwareness, PersonalityGuard, ActivityLogger, etc.)
+                try:
+                    from engine.mcp.comms_framework import get_governor
+                    # (Re-)build governor when character changes
+                    if (self._phone_governor is None
+                            or getattr(self._phone_governor, "_adapter_char_id", None)
+                            != self.active_character.id):
+                        _adapter = _PhoneCharacterAgent(
+                            self._generate_response,
+                            self.active_character,
+                        )
+                        self._phone_governor = get_governor(_adapter, scene="phone")
+                        self._phone_governor._adapter_char_id = self.active_character.id
+                    else:
+                        # Refresh character reference so interceptors see current state
+                        self._phone_governor.agent.character = self.active_character
+                    response = self._phone_governor.reply(
+                        message, chain_id=self.current_chain_id
+                    )
+                except Exception:
+                    # Graceful fallback — bare generation pipeline still works
+                    response = self._generate_response(message)
             finally:
                 self._active_request_in_progress = False
                 self.socketio.emit('active_request_end', {})

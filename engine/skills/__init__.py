@@ -33,3 +33,7 @@ __all__ = [
     "get_pack_tools",
     "mcp_skill_pack",
 ]
+
+# Auto-import builtin packs so their @skill decorators fire at import time.
+# Any module that does `from engine.skills import ...` will trigger registration.
+from . import builtin as _builtin_skills  # noqa: F401, E402

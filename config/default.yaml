@@ -89,8 +89,8 @@ lmstudio:
   # CLI command (must be on PATH or full path)
   cli: "lms"
   # MCP integration
-  mcp_enabled: false          # set true to use per-request MCP via REST API
-  cosysim_mcp_url: ""         # URL of CosySim MCP server (e.g. http://localhost:8600/mcp/sse)
+  mcp_enabled: true           # use per-request MCP via REST API
+  cosysim_mcp_url: "http://localhost:8700/mcp/sse"   # CosySim MCP server SSE endpoint
   mcp_json_path: ""           # path to LMStudio mcp.json for auto-registration
   # Model loading strategy
   # concurrent — one model always resident; up to concurrent_slots parallel requests
@@ -139,11 +139,15 @@ media_standards:
 mcp:
   port: 8700
   base_url: "http://localhost:8700"
-  servers: []
-  # Example server entry:
+  servers:
+    - name: "cosysim"
+      url: "http://localhost:8700/mcp/sse"
+      allowed_tools: []   # empty = all tools enabled
+      enabled: true
+  # Additional servers can be appended here:
   # - name: "filesystem"
   #   url: "ws://127.0.0.1:3001"
-  #   allowed_tools: []   # empty = all tools
+  #   allowed_tools: []
   #   enabled: true
 
 # Character system
@@ -207,7 +211,7 @@ testing:
 
 # Communications / Governance framework
 comms:
-  governance_enabled: false     # set true to route CharacterAgent.reply() through interceptors
+  governance_enabled: true      # route CharacterAgent.reply() through interceptors
   skill_manifest_path: "config/skill_manifests.yaml"
   interceptors:
     router_message_injector:  true

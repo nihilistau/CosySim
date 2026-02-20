@@ -461,6 +461,7 @@ class AgentGovernor:
         chain_id:   Optional[str]  = None,
         history:    Optional[List] = None,
         skip_gov:   bool           = False,
+        **_kwargs,                            # absorb extra kwargs (e.g. use_tools=False)
     ) -> str:
         """
         Governed reply — runs through the full pipeline.

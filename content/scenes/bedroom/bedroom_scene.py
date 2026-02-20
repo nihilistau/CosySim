@@ -1236,6 +1236,14 @@ class BedroomScene(BaseScene, MCPSceneMixin, mcp_scene_id="bedroom"):
                 skill_packs=["memory", "character"],
                 model=agent_cfg.get("model") or None,
             )
+            # MCP: wrap every bedroom agent in the governance pipeline so all
+            # 15 interceptors (CharacterRegistry, DialogDirective, PersonalityGuard,
+            # SkillAwareness, ActivityLogger, etc.) fire on every turn.
+            try:
+                from engine.mcp.comms_framework import get_governor
+                agent = get_governor(agent, scene="bedroom")
+            except Exception:
+                pass  # graceful fallback — bare CharacterAgent still works
             self.agent_loop.register_character(char, agent=agent)
 
         # Inject roleplay context

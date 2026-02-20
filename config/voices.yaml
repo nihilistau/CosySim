@@ -30,3 +30,78 @@ live_wire_luna:
   - playful
   - warm
   - teasing
+
+# ── Production Characters ────────────────────────────────────────────────────
+
+lola:
+  description: >-
+    A warm, smoky contralto with a 1920s jazz torch-singer quality.
+    Slightly husky and intimate. Slow, deliberate pacing with soft breath on
+    vulnerable syllables. Faint Eastern European consonant colour on certain words.
+    Conveys intimacy rather than projection.
+  model_size: 1.7b
+  reference_audio: null
+  tags:
+  - female
+  - contralto
+  - jazz
+  - smoky
+  - warm
+  - 1920s
+  - eastern_european
+
+viktor:
+  description: >-
+    A deep, measured baritone with a noticeable but refined Eastern European accent.
+    Unhurried and deliberate. Short sentences. Resonates from the chest.
+    Professional but carries quiet weight – a man who has seen things.
+  model_size: 1.7b
+  reference_audio: null
+  tags:
+  - male
+  - baritone
+  - eastern_european
+  - deep
+  - calm
+  - reserved
+
+# ── Generic Companion Voices ─────────────────────────────────────────────────
+
+companion_f:
+  description: >-
+    A warm, expressive female voice in the mid range. Natural brightness with
+    slight breathiness on affectionate phrases. Conversational pacing, emotionally
+    responsive — rises slightly when excited, softens when tender.
+  model_size: 1.7b
+  reference_audio: null
+  tags:
+  - female
+  - warm
+  - playful
+  - mid_range
+  - conversational
+
+companion_m:
+  description: >-
+    A confident, friendly male voice. Mid-to-low pitch, relaxed pacing.
+    Warm resonance without artificiality. Slightly informal cadence.
+  model_size: 1.7b
+  reference_audio: null
+  tags:
+  - male
+  - confident
+  - warm
+  - mid_range
+  - relaxed
+
+narrator:
+  description: >-
+    A neutral, clear narrator voice. Steady measured pace. No strong accent.
+    Used for scene introductions, system announcements, and tutorial text.
+  model_size: 0.6b
+  reference_audio: null
+  tags:
+  - neutral
+  - narrator
+  - clear
+  - informational

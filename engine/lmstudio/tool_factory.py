@@ -372,3 +372,80 @@ def _raw_chat(client, messages, tools, model, temperature, max_tokens, integrati
     except Exception as exc:
         logger.error("_raw_chat failed: %s", exc)
         return None
+
+
+# ── SKILL_REGISTRY bridge ───────────────────────────────────────────────
+
+def register_in_skill_registry(
+    spec: ToolSpec,
+    *,
+    pack: str = "tool_factory",
+    tags: Optional[List[str]] = None,
+) -> None:
+    """
+    Register a ``ToolSpec`` created by ``from_callable`` / ``@tool`` into
+    the global ``SKILL_REGISTRY`` so it is discoverable by:
+      - ``/api/skills/list`` (phone-scene API)
+      - ``SkillAwarenessInterceptor`` (injects available-tools block into LLM context)
+      - ``mcp_skill_pack()`` (exports to MCP tool registry)
+
+    The ToolSpec's callable is registered verbatim; its LMStudio-style
+    OpenAI function schema is attached as ``_tool_schema`` for inspection.
+
+    Args:
+        spec: A ``ToolSpec`` to register (built via ``from_callable`` or ``@tool``).
+        pack: Pack name that groups this tool (default ``"tool_factory"``).
+        tags: Optional search tags (default ``[]``).
+
+    Example::
+
+        spec = from_callable(my_fn, name="my_tool", description="Does X")
+        register_in_skill_registry(spec, pack="workflow", tags=["dynamic"])
+    """
+    try:
+        from engine.skills.registry import SKILL_REGISTRY
+        from engine.skills.skill import SkillMeta
+
+        # Attach the OpenAI-compatible schema to the callable for inspection
+        spec.fn._tool_schema = spec.to_openai_dict()
+
+        meta = SkillMeta(
+            func        = spec.fn,
+            name        = spec.name,
+            pack        = pack,
+            description = spec.description,
+            tags        = list(tags or []),
+        )
+        SKILL_REGISTRY.register(meta)
+        logger.debug("Registered ToolSpec %r in SKILL_REGISTRY (pack=%r)", spec.name, pack)
+    except Exception as exc:
+        logger.warning("register_in_skill_registry failed for %r: %s", spec.name, exc)
+
+
+def register_all_in_skill_registry(
+    tools: List[Any],
+    *,
+    pack: str = "tool_factory",
+    tags: Optional[List[str]] = None,
+) -> None:
+    """
+    Convenience wrapper — registers every item in *tools* that is a
+    ``ToolSpec`` or a plain callable (auto-wrapped) into ``SKILL_REGISTRY``.
+
+    Args:
+        tools: Mix of ``ToolSpec`` objects and/or plain callables.
+        pack:  Pack name applied to all tools.
+        tags:  Tags applied to all tools.
+
+    Example::
+
+        register_all_in_skill_registry([fn_a, fn_b, my_spec], pack="pipeline")
+    """
+    for t in tools:
+        if isinstance(t, ToolSpec):
+            register_in_skill_registry(t, pack=pack, tags=tags)
+        elif callable(t):
+            register_in_skill_registry(from_callable(t), pack=pack, tags=tags)
+        else:
+            logger.warning("register_all_in_skill_registry: skipping non-tool %r", t)
+
