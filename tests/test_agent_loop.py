@@ -186,6 +186,25 @@ class TestStartStop:
 class TestDecideWithAgent:
     """Test _decide uses CharacterAgent.reply() when available."""
 
+    def test_location_activities_with_privacy(self):
+        sm = _make_scene()
+        loop = AgentLoop(scene_map=sm, llm_url="http://fake:9999/v1")
+        char = _make_char("c1", "Luna")
+        loop.register_character(char)
+        sm.place_character("c1", "bed")
+        activities = loop._location_activities("c1")
+        assert "Bed" in activities
+        assert "private" in activities.lower()  # privacy > 0.7
+
+    def test_location_activities_no_location(self):
+        sm = _make_scene()
+        loop = AgentLoop(scene_map=sm)
+        char = _make_char("c1", "Luna")
+        loop.register_character(char)
+        # Not placed anywhere
+        activities = loop._location_activities("c1")
+        assert "No activities" in activities
+
     def test_decide_uses_agent_reply(self):
         sm = _make_scene()
         loop = AgentLoop(scene_map=sm, llm_url="http://fake:9999/v1")

@@ -31,13 +31,15 @@ def _service_up(url: str, timeout: float = 1.0) -> bool:
 
 
 def _render_health_strip():
-    """Render a horizontal service-health indicator bar."""
+    """Render a horizontal service-health indicator bar for all three pillars."""
     services = [
         ("LMStudio", "http://localhost:1234/v1/models"),
         ("ComfyUI", "http://localhost:8188/system_stats"),
-        ("Admin", f"http://localhost:8502"),
-        ("Phone", f"http://localhost:5555/api/health"),
-        ("Bedroom", f"http://localhost:5556/api/health"),
+        ("TTS", "http://localhost:8600/status"),
+        ("MCP Bridge", "http://localhost:8601/health"),
+        ("Phone", "http://localhost:5555/api/health"),
+        ("Bedroom", "http://localhost:5556/api/health"),
+        ("Admin", "http://localhost:8502"),
     ]
     cols = st.columns(len(services))
     for col, (name, url) in zip(cols, services):
@@ -190,6 +192,44 @@ def main():
     # Service health strip
     _render_health_strip()
 
+    # Three Pillars quick status
+    with st.expander("🏛️ Three Pillars Status", expanded=False):
+        p1, p2, p3 = st.columns(3)
+        with p1:
+            lm_up = _service_up("http://localhost:1234/v1/models")
+            st.markdown(f"### {'🟢' if lm_up else '🔴'} LMStudio")
+            if lm_up:
+                try:
+                    r = requests.get("http://localhost:1234/v1/models", timeout=2)
+                    models = r.json().get("data", [])
+                    if models:
+                        st.caption(f"Model: {models[0].get('id', 'unknown')}")
+                    else:
+                        st.caption("No model loaded")
+                except Exception:
+                    st.caption("Connected")
+            else:
+                st.caption("Not running — start LMStudio")
+        with p2:
+            comfy_up = _service_up("http://localhost:8188/system_stats")
+            st.markdown(f"### {'🟢' if comfy_up else '🔴'} ComfyUI")
+            if comfy_up:
+                st.caption("Image/video generation ready")
+            else:
+                st.caption("Not running — start ComfyUI")
+        with p3:
+            tts_up = _service_up("http://localhost:8600/status")
+            st.markdown(f"### {'🟢' if tts_up else '🔴'} TTS Server")
+            if tts_up:
+                try:
+                    r = requests.get("http://localhost:8600/status", timeout=2)
+                    mode = r.json().get("mode", "unknown")
+                    st.caption(f"Mode: {mode}")
+                except Exception:
+                    st.caption("Connected")
+            else:
+                st.caption("Run: python launcher.py --mode tts")
+
     # Main content tabs
     tab1, tab2, tab3, tab4 = st.tabs(["🎮 Launch Scenes", "📖 Tutorials", "🗂️ Assets", "⚙️ Settings"])
     
@@ -259,6 +299,22 @@ def show_scene_launcher():
             "port": 8503,
             "launch_args": ["--mode", "assets"],
             "color": "#0ea5e9",
+        },
+        {
+            "name": "TTS Server",
+            "icon": "🎙️",
+            "description": "Qwen3-TTS voice generation — voicemails, stories, character voices",
+            "port": 8600,
+            "launch_args": ["--mode", "tts"],
+            "color": "#10b981",
+        },
+        {
+            "name": "MCP Bridge",
+            "icon": "🔌",
+            "description": "LMStudio ↔ CosySim bridge — SSE streaming, MCP tools, file upload",
+            "port": 8601,
+            "launch_args": ["--mode", "bridge"],
+            "color": "#f59e0b",
         },
     ]
 

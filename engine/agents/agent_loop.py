@@ -195,6 +195,8 @@ class AgentLoop:
             f"\n## Nearby People\n{chr(10).join(others_info) if others_info else 'You are alone.'}\n"
             f"\n## Recent Conversation\n{convo}\n"
             f"\n## Available Locations\n{', '.join(all_locs)}\n"
+            f"\n## Location Activities\n"
+            f"{self._location_activities(character_id)}\n"
             f"\n## Instructions\n"
             f"Choose ONE action. Respond as JSON: "
             f'{{"action": "<ACTION>", "target": "<target_name_or_location>", "message": "<what_you_say>"}}\n'
@@ -205,6 +207,21 @@ class AgentLoop:
             f"- flirt/touch/kiss/cuddle/intimate: physical interaction with someone nearby\n"
             f"- idle: do nothing, observe\n"
         )
+
+    def _location_activities(self, character_id: str) -> str:
+        """Describe what activities are available at the character's location."""
+        loc = self.scene_map.get_character_location(character_id)
+        if not loc:
+            return "No activities available."
+        activities = loc.interactions or []
+        privacy = loc.properties.get("privacy", 0.5)
+        spiciness = loc.properties.get("spiciness", 0) if hasattr(loc, "properties") else 0
+        lines = [f"At the {loc.name}: {', '.join(activities)}" if activities else f"At the {loc.name}: nothing specific"]
+        if privacy > 0.7:
+            lines.append("This is a private location — intimate actions feel natural here.")
+        if spiciness >= 4:
+            lines.append("The atmosphere is sensual and inviting.")
+        return "\n".join(lines)
 
     # ── Decide ──────────────────────────────────────────────────────────
     def _decide(self, character_id: str, context: str) -> Dict:
@@ -409,11 +426,15 @@ class AgentLoop:
                 result["description"] = f"{character.name} looks around."
 
         else:  # idle
+            loc = self.scene_map.get_character_location(character_id)
+            loc_name = loc.name if loc else "the room"
             idle_descs = [
-                f"{character.name} looks around thoughtfully.",
-                f"{character.name} stretches and relaxes.",
+                f"{character.name} looks around the {loc_name} thoughtfully.",
+                f"{character.name} stretches and relaxes at the {loc_name}.",
                 f"{character.name} checks their phone.",
                 f"{character.name} gazes out the window.",
+                f"{character.name} hums softly to themselves.",
+                f"{character.name} adjusts their hair in a nearby mirror.",
             ]
             result["description"] = random.choice(idle_descs)
 
