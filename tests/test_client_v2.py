@@ -91,7 +91,9 @@ class TestStreamResult:
 class TestBuildPayload:
     def test_basic_payload(self, client):
         msgs = [{"role": "user", "content": "hi"}]
-        p = client._build_payload(msgs, stream=False)
+        # Ensure resolve_model never hits the live /v1/models endpoint
+        with patch.object(client, "get_models", return_value=[]):
+            p = client._build_payload(msgs, stream=False)
         assert p["messages"] == msgs
         assert p["model"] == "test-model"
         assert p["temperature"] == 0.7

@@ -129,7 +129,7 @@ class TestAgentLoopIntegration:
             assert a["action"] in loop.VALID_ACTIONS
 
     def test_tick_produces_idle_without_llm(self):
-        """Without an LLM, agents fall back to idle actions."""
+        """Without an LLM, agents fall back to a random fallback action."""
         from engine.agents.agent_loop import AgentLoop
         from engine.spatial.location import Location
         from engine.spatial.scene_map import SceneMap
@@ -141,9 +141,14 @@ class TestAgentLoopIntegration:
         loop.register_character(c)
         sm.place_character("c1", "room")
 
-        actions = loop.tick()
+        # Block the live LMStudio client so the loop genuinely has no LLM
+        with patch("engine.lmstudio.client_v2.get_lmstudio_client",
+                   side_effect=Exception("LMStudio offline")):
+            actions = loop.tick()
+
         assert len(actions) == 1
-        assert actions[0]["action"] == "idle"
+        # Solo character with no LLM falls back to _random_action: move or idle
+        assert actions[0]["action"] in ("move", "idle")
 
 
 # ═══════════════════════════════════════════════════════════════════════
