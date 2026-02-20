@@ -2155,7 +2155,8 @@ class PhoneScene(BaseScene):
                 enable_photos=True
             )
         
-        self.socketio.run(self.app, host=self.host, port=self.port, debug=debug)
+        self.socketio.run(self.app, host=self.host, port=self.port, debug=debug,
+                          allow_unsafe_werkzeug=True)
 
 
 def create_phone_scene(character_id: Optional[str] = None, **kwargs) -> PhoneScene:
