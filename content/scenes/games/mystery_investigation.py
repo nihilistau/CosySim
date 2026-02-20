@@ -1,4 +1,4 @@
-the """
+"""
 Mystery Investigation game — CosySim scene module
 ===================================================
 Exposes a Flask Blueprint (``mystery_bp``) that can be registered on any

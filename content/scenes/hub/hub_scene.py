@@ -39,6 +39,7 @@ def _render_health_strip():
         ("MCP Bridge", "http://localhost:8601/health"),
         ("Phone", "http://localhost:5555/api/health"),
         ("Bedroom", "http://localhost:5556/api/health"),
+        ("Lounge", "http://localhost:5557/api/health"),
         ("Admin", "http://localhost:8502"),
     ]
     cols = st.columns(len(services))
@@ -275,6 +276,14 @@ def show_scene_launcher():
             "port": 5556,
             "launch_args": ["--mode", "bedroom"],
             "color": "#f093fb",
+        },
+        {
+            "name": "The Velvet Lounge",
+            "icon": "🎷",
+            "description": "1920s underground jazz speakeasy — Lola Voss, Viktor Marlowe, MCP heat/trust system",
+            "port": 5557,
+            "launch_args": ["--mode", "lounge"],
+            "color": "#c9a84c",
         },
         {
             "name": "Dashboard",
