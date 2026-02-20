@@ -67,7 +67,7 @@ stt:
 llm:
   provider: "lmstudio"  # or "openai", "local"
   base_url: "http://localhost:1234/v1"
-  model: "default"
+  model: "qwen3-4b-z-engineer-q8"
   temperature: 0.7
   max_tokens: 500
   stream: true
