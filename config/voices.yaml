@@ -1,0 +1,12 @@
+test_luna:
+  description: A playful, warm female voice.
+  model_size: 1.7b
+  reference_audio: null
+  tags: []
+test_char:
+  description: A deep male voice.
+  model_size: 1.7b
+  reference_audio: null
+  tags:
+  - male
+  - deep

@@ -216,7 +216,7 @@ For more information, see: docs/README.md
     
     parser.add_argument(
         "--mode",
-        choices=["hub", "phone", "bedroom", "dashboard", "admin", "assets", "creator", "test"],
+        choices=["hub", "phone", "bedroom", "dashboard", "admin", "assets", "creator", "tts", "bridge", "test"],
         default="hub",
         help="Launch mode (default: hub)"
     )
@@ -269,6 +269,16 @@ For more information, see: docs/README.md
         BedroomScene().start()
     elif args.mode == "test":
         launch_test_mode()
+    elif args.mode == "tts":
+        from engine.tts.qwen3_server import create_tts_app
+        import uvicorn
+        print("\n🎙️ Launching TTS Server on http://localhost:8600")
+        uvicorn.run(create_tts_app(), host="0.0.0.0", port=8600)
+    elif args.mode == "bridge":
+        from engine.mcp.web_bridge import create_bridge_app
+        import uvicorn
+        print("\n🌉 Launching Web Bridge on http://localhost:8601")
+        uvicorn.run(create_bridge_app(), host="0.0.0.0", port=8601)
 
 
 def _launch_streamlit(script_path: Path, port: int):
