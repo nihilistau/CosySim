@@ -21,6 +21,7 @@ class Location:
     interactions: List[str] = field(default_factory=list)
     capacity: int = 4
     properties: Dict = field(default_factory=dict)
+    scene_id: str = ""  # set by SceneMap.add_location so ActivityBus events carry the scene
 
     # Runtime state
     _occupants: Set[str] = field(default_factory=set, repr=False)

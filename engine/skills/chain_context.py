@@ -39,18 +39,31 @@ def set_chain_context(
     **extra: Any,
 ) -> None:
     """Set the chain context for the current thread."""
-    _local.chain_ctx = {
+    ctx: Dict[str, Any] = {
         "chain_id": chain_id,
         "scene_id": scene_id,
         "character_id": character_id,
         "parent_id": parent_id,
         **extra,
     }
+    # Attach MCPCharacterNode so skill functions can access scene/character context
+    if character_id and scene_id != "unknown":
+        try:
+            from engine.mcp.framework import get_framework
+            ctx["_mcp_char"] = get_framework().get_character(character_id)
+        except Exception:
+            pass
+    _local.chain_ctx = ctx
 
 
 def get_chain_context() -> Dict[str, Any]:
     """Return the current chain context (empty dict if not set)."""
     return getattr(_local, "chain_ctx", {})
+
+
+def get_mcp_character():
+    """Return the MCPCharacterNode bound to the current skill invocation, or None."""
+    return getattr(_local, "chain_ctx", {}).get("_mcp_char")
 
 
 def clear_chain_context() -> None:

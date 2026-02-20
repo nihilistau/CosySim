@@ -13,12 +13,14 @@ from engine.spatial.location import Location
 class SceneMap:
     """Container for all :class:`Location` objects in one scene."""
 
-    def __init__(self):
+    def __init__(self, scene_id: str = "unknown"):
         self._locations: Dict[str, Location] = {}
         self._char_location: Dict[str, str] = {}  # character_id → location_id
+        self.scene_id = scene_id
 
     # ── Location management ─────────────────────────────────────────────
     def add_location(self, loc: Location) -> None:
+        loc.scene_id = self.scene_id
         self._locations[loc.id] = loc
 
     def remove_location(self, location_id: str) -> None:
@@ -60,6 +62,23 @@ class SceneMap:
             self._locations[prev].remove_occupant(character_id)
         loc.add_occupant(character_id)
         self._char_location[character_id] = location_id
+        # MCP: sync CharacterRegistry location state + publish movement event
+        try:
+            from engine.mcp.character_registry import get_character_registry
+            get_character_registry().set_state(character_id, {"location": loc.name})
+        except Exception:
+            pass
+        try:
+            from engine.services.activity_bus import get_activity_bus
+            get_activity_bus().publish(
+                activity_type="character_moved",
+                description=f"Character moved to {loc.name}",
+                agent_id=character_id,
+                scene=self.scene_id,
+                data={"location": loc.name, "location_id": location_id},
+            )
+        except Exception:
+            pass
         return True
 
     def move_character(self, character_id: str, to_location_id: str) -> bool:
@@ -68,8 +87,26 @@ class SceneMap:
 
     def remove_character(self, character_id: str) -> None:
         loc_id = self._char_location.pop(character_id, None)
+        loc_name = self._locations[loc_id].name if loc_id and loc_id in self._locations else "unknown"
         if loc_id and loc_id in self._locations:
             self._locations[loc_id].remove_occupant(character_id)
+        # MCP: clear CharacterRegistry location state + publish departure event
+        try:
+            from engine.mcp.character_registry import get_character_registry
+            get_character_registry().set_state(character_id, {"location": None})
+        except Exception:
+            pass
+        try:
+            from engine.services.activity_bus import get_activity_bus
+            get_activity_bus().publish(
+                activity_type="character_left_location",
+                description=f"Character left {loc_name}",
+                agent_id=character_id,
+                scene=self.scene_id,
+                data={"location": loc_name, "location_id": loc_id},
+            )
+        except Exception:
+            pass
 
     def get_character_location(self, character_id: str) -> Optional[Location]:
         loc_id = self._char_location.get(character_id)

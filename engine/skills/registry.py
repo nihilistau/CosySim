@@ -75,6 +75,18 @@ class SkillRegistry:
             ]
             self._skills[meta.pack].append(meta)
             logger.debug("Registered skill: %r in pack %r", meta.name, meta.pack)
+        # Publish to ActivityBus (best-effort — may be called before bus is ready)
+        try:
+            from engine.services.activity_bus import get_activity_bus
+            get_activity_bus().publish(
+                activity_type="skill_registered",
+                description=f"Skill '{meta.name}' registered in pack '{meta.pack}'",
+                agent_id="skill_registry",
+                scene="system",
+                data={"skill": meta.name, "pack": meta.pack, "tags": meta.tags},
+            )
+        except Exception:
+            pass
 
     # ──────────────────────────────────────────────────── read ──
 
@@ -126,6 +138,20 @@ class SkillRegistry:
                        for m in metas]
                 for pack, metas in self._skills.items()
             }
+
+    def mcp_manifest(self) -> List[Dict]:
+        """Flat list of all skills for MCP admin / tool discovery panels."""
+        with self._lock:
+            return [
+                {
+                    "name":        m.name,
+                    "pack":        m.pack,
+                    "description": m.description,
+                    "tags":        m.tags,
+                }
+                for metas in self._skills.values()
+                for m in metas
+            ]
 
     def __len__(self) -> int:
         with self._lock:
