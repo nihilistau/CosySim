@@ -33,6 +33,7 @@ from content.scenes.admin.pages import (
     god_mode,
     backup,
     assets,
+    kpi,
 )
 
 
@@ -85,6 +86,7 @@ _PAGES = {
     "🎨 Asset Generator":  assets.render_generator,
     "🔗 Dependency Graph":  assets.render_dependency_graph,
     "📜 Log Viewer":       logs.render,
+    "📈 KPI Dashboard":    kpi.render,
     "🔗 Event Chains":     chains.render,
     "✏️ RAG Editor":       rag_editor.render,
     "🤖 LM Studio":       lmstudio.render,
