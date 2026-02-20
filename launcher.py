@@ -21,6 +21,13 @@ import os
 import subprocess
 from pathlib import Path
 
+# Ensure stdout/stderr can handle Unicode (emoji) on Windows cp1252 consoles
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding='utf-8', errors='replace')
+    except (AttributeError, OSError):
+        pass  # Not supported or already fine
+
 # Add project root to path
 PROJECT_ROOT = Path(__file__).parent
 sys.path.insert(0, str(PROJECT_ROOT))
