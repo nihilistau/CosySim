@@ -221,7 +221,7 @@ def _render_interactions(db):
 
 
 def _log_rag_edit(db, entity_type, entity_id, old_value, new_value, character_id):
-    """Log a RAG edit to EventChain."""
+    """Log a RAG edit to EventChain and ActivityBus."""
     try:
         from content.simulation.database.events import EventChain
         ec = EventChain(db)
@@ -238,6 +238,18 @@ def _log_rag_edit(db, entity_type, entity_id, old_value, new_value, character_id
             chain_id=None,  # generates new chain
             scene_id="admin",
             character_id=character_id,
+        )
+    except Exception:
+        pass
+    # MCP: publish to ActivityBus
+    try:
+        from engine.services.activity_bus import get_activity_bus
+        get_activity_bus().publish(
+            activity_type="rag_edit",
+            description=f"RAG edit: {entity_type} {entity_id[:8]}…",
+            agent_id="admin_panel",
+            scene="admin",
+            data={"entity_type": entity_type, "entity_id": entity_id, "character_id": character_id},
         )
     except Exception:
         pass

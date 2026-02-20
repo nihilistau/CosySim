@@ -175,6 +175,19 @@ class VideoMessageGenerator:
             except Exception:
                 pass
 
+            # MCP: publish to ActivityBus
+            try:
+                from engine.services.activity_bus import get_activity_bus
+                get_activity_bus().publish(
+                    activity_type="video_generated",
+                    description=f"{character_name}: {audio_data['duration']:.1f}s video ({mood})",
+                    agent_id=character_id,
+                    scene=scene_id,
+                    data={"filename": Path(video_path).name if video_path else "", "duration": audio_data.get("duration", 0), "mood": mood, "chain_id": chain_id},
+                )
+            except Exception:
+                pass
+
             return result
         
         except Exception as e:

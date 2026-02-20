@@ -327,13 +327,27 @@ class ModelManager:
 
     def _cli_load(self, model_key: str, *, gpu: float, ctx: int, ttl: int) -> bool:
         try:
-            return self._cli.load_model(
+            result = self._cli.load_model(
                 model_key,
                 gpu=gpu,
                 context_length=ctx,
                 ttl=ttl,
                 force=True,  # skip VRAM guard — manager owns that decision
             )
+            if result:
+                # MCP: publish to ActivityBus
+                try:
+                    from engine.services.activity_bus import get_activity_bus
+                    get_activity_bus().publish(
+                        activity_type="model_loaded",
+                        description=f"Model loaded: {model_key}",
+                        agent_id="model_manager",
+                        scene=None,
+                        data={"model_key": model_key, "gpu": gpu, "ctx": ctx, "ttl": ttl},
+                    )
+                except Exception:
+                    pass
+            return result
         except Exception as exc:
             logger.error("CLI load failed for %r: %s", model_key, exc)
             return False
@@ -341,6 +355,18 @@ class ModelManager:
     def _cli_unload(self, model_key: str) -> None:
         try:
             self._cli.unload_model(model_key)
+            # MCP: publish to ActivityBus
+            try:
+                from engine.services.activity_bus import get_activity_bus
+                get_activity_bus().publish(
+                    activity_type="model_unloaded",
+                    description=f"Model unloaded: {model_key}",
+                    agent_id="model_manager",
+                    scene=None,
+                    data={"model_key": model_key},
+                )
+            except Exception:
+                pass
         except Exception as exc:
             logger.warning("CLI unload failed for %r: %s", model_key, exc)
 

@@ -181,6 +181,19 @@ class EventChain:
                 ),
             )
 
+        # MCP: bridge to ActivityBus (non-blocking, fire-and-forget)
+        try:
+            from engine.services.activity_bus import get_activity_bus
+            get_activity_bus().publish(
+                activity_type="event_chain_event",
+                description=f"[{event_type}] {actor}: {summary[:100]}" if summary else f"[{event_type}] {actor}",
+                agent_id=actor,
+                scene=scene_id,
+                data={"event_type": event_type, "chain_id": effective_chain, "character_id": character_id, "event_id": event_id},
+            )
+        except Exception:
+            pass
+
         return event_id
 
     def log_error(

@@ -190,6 +190,19 @@ class VoiceMessageGenerator:
             except Exception:
                 pass
 
+            # MCP: publish to ActivityBus
+            try:
+                from engine.services.activity_bus import get_activity_bus
+                get_activity_bus().publish(
+                    activity_type="voice_generated",
+                    description=f"{character_name}: {duration:.1f}s voice ({emotion})",
+                    agent_id=character_id,
+                    scene=scene_id,
+                    data={"filename": filename, "duration": duration, "emotion": emotion, "chain_id": chain_id},
+                )
+            except Exception:
+                pass
+
             return result
         
         except Exception as e:

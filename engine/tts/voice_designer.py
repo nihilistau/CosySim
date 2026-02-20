@@ -140,6 +140,18 @@ class VoiceDesigner:
         self._registry[character_id] = design
         self._save()
         logger.info("Voice cast for %s: %s (%s)", character_id, design.model_size, design.tags)
+        # MCP: publish to ActivityBus
+        try:
+            from engine.services.activity_bus import get_activity_bus
+            get_activity_bus().publish(
+                activity_type="voice_cast",
+                description=f"Voice cast: {character_id} ({design.model_size})",
+                agent_id="voice_designer",
+                scene=None,
+                data={"character_id": character_id, "model_size": design.model_size, "tags": design.tags},
+            )
+        except Exception:
+            pass
 
     def get(self, character_id: str) -> VoiceDesign:
         """Get a character's voice design, or a sensible default."""

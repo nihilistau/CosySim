@@ -272,7 +272,20 @@ class RAGMemory:
             chain_id=chain_id, scene_id=scene_id,
             character_id=character_id, parent_id=query_ev,
         )
-        
+
+        # MCP: publish to ActivityBus
+        try:
+            from engine.services.activity_bus import get_activity_bus
+            get_activity_bus().publish(
+                activity_type="rag_query",
+                description=f"RAG: '{query[:60]}' → {len(memories)} results",
+                agent_id=character_id or "rag",
+                scene=scene_id,
+                data={"query": query[:200], "result_count": len(memories), "memory_type": memory_type, "chain_id": chain_id},
+            )
+        except Exception:
+            pass
+
         return memories
     
     def get_recent_memories(

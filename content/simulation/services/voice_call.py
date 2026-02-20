@@ -114,7 +114,20 @@ class VoiceCallHandler:
             }, broadcast=True)
         
         print(f"📞 Call started: {call_id} ({call_type})")
-        
+
+        # MCP: publish to ActivityBus
+        try:
+            from engine.services.activity_bus import get_activity_bus
+            get_activity_bus().publish(
+                activity_type="call_started",
+                description=f"Call started: {call_type} [{call_id[:8]}]",
+                agent_id=self.character_id if hasattr(self, 'character_id') else "voice_call",
+                scene=None,
+                data={"call_id": call_id, "call_type": call_type},
+            )
+        except Exception:
+            pass
+
         return call_id
     
     def answer_call(self, call_id: str):
@@ -176,11 +189,24 @@ class VoiceCallHandler:
             }, broadcast=True)
         
         print(f"📞 Call ended: {self.active_call['id']} (duration: {duration:.1f}s)")
-        
+
+        # MCP: publish to ActivityBus
+        try:
+            from engine.services.activity_bus import get_activity_bus
+            get_activity_bus().publish(
+                activity_type="call_ended",
+                description=f"Call ended: {duration:.1f}s [{self.active_call['id'][:8]}]",
+                agent_id=self.character_id if hasattr(self, 'character_id') else "voice_call",
+                scene=None,
+                data={"call_id": self.active_call["id"], "duration": duration},
+            )
+        except Exception:
+            pass
+
         # Clear state
         call_info = self.active_call
         self.active_call = None
-        
+
         return call_info
     
     def _start_audio_threads(self):

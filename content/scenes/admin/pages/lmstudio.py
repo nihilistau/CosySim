@@ -319,6 +319,30 @@ def _render_kpi():
 
 # ── Main entry point ───────────────────────────────────────────────────
 
+
+def _render_activity_feed():
+    """Live ActivityBus feed filtered to LLM inference events."""
+    st.subheader("⚡ LLM Activity Feed")
+    try:
+        from engine.services.activity_bus import get_activity_bus
+        bus = get_activity_bus()
+        events = bus.get_recent(activity_type="llm_inference", limit=50)
+        if not events:
+            st.info("No LLM activity yet — send a message to generate some.")
+        else:
+            for ev in reversed(events):
+                ts = ev.get("timestamp", "")[:19]
+                desc = ev.get("description", "")
+                data = ev.get("data", {})
+                model = data.get("model", "?")
+                tokens = data.get("tokens_out", "?")
+                st.markdown(f"`{ts}` **{desc}** — model=`{model}` tokens_out=`{tokens}`")
+        if st.button("🔄 Refresh", key="refresh_activity"):
+            st.rerun()
+    except Exception as exc:
+        st.warning(f"Activity feed unavailable: {exc}")
+
+
 def render():
     st.header("🤖 LM Studio")
 
@@ -332,12 +356,13 @@ def render():
     _render_status(client, mgr)
     st.markdown("---")
 
-    tab_config, tab_sessions, tab_models, tab_bench, tab_kpi = st.tabs([
+    tab_config, tab_sessions, tab_models, tab_bench, tab_kpi, tab_activity = st.tabs([
         "⚙️ Load Strategy",
         "📋 Sessions",
         "🔧 Model Controls",
         "🏁 Benchmark",
         "📊 KPI",
+        "⚡ Activity",
     ])
 
     with tab_config:
@@ -354,4 +379,7 @@ def render():
 
     with tab_kpi:
         _render_kpi()
+
+    with tab_activity:
+        _render_activity_feed()
 

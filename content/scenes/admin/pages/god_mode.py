@@ -285,7 +285,7 @@ def _render_db_tables():
 
 
 def _log_god_action(action: str, details: dict):
-    """Log GOD mode actions to EventChain."""
+    """Log GOD mode actions to EventChain and ActivityBus."""
     try:
         from content.simulation.database.events import EventChain
         ec = EventChain()
@@ -295,6 +295,18 @@ def _log_god_action(action: str, details: dict):
             payload={"action": action, **details},
             summary=f"GOD: {action}",
             scene_id="admin",
+        )
+    except Exception:
+        pass
+    # MCP: publish to ActivityBus
+    try:
+        from engine.services.activity_bus import get_activity_bus
+        get_activity_bus().publish(
+            activity_type="god_mode_action",
+            description=f"GOD: {action}",
+            agent_id="god_mode",
+            scene="admin",
+            data={"action": action, **details},
         )
     except Exception:
         pass

@@ -177,7 +177,20 @@ class LLMService:
             )
             r.raise_for_status()
             data = r.json()
-            return data["choices"][0]["message"]["content"].strip()
+            _reply = data["choices"][0]["message"]["content"].strip()
+            # MCP: publish to ActivityBus
+            try:
+                from engine.services.activity_bus import get_activity_bus
+                get_activity_bus().publish(
+                    activity_type="llm_inference",
+                    description=f"LLM [{model}]: {len(_reply)} chars",
+                    agent_id="llm_service",
+                    scene=None,
+                    data={"model": model, "tokens_out": len(_reply.split()), "temperature": temperature},
+                )
+            except Exception:
+                pass
+            return _reply
 
         except requests.exceptions.ConnectionError:
             logger.error("LLM backend not reachable at %s", self.base_url)

@@ -389,6 +389,20 @@ class AnonymousCharacter:
         # Log to DB
         self._log_message(response, "outgoing")
 
+        # MCP: publish to ActivityBus
+        try:
+            from engine.services.activity_bus import get_activity_bus
+            persona_name = self.persona.get("display_name", "Unknown")
+            get_activity_bus().publish(
+                activity_type="anon_message_sent",
+                description=f"{persona_name}: {response[:80]}",
+                agent_id=f"anon_{self.persona_type}",
+                scene="phone",
+                data={"persona_type": self.persona_type, "msg_count": self.state["message_count"], "reply_to": bool(user_reply)},
+            )
+        except Exception:
+            pass
+
         return response
 
     def receive_reply(self, user_message: str) -> str:

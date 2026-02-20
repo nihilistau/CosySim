@@ -121,6 +121,19 @@ class MediaGenerator:
             except Exception:
                 pass
 
+            # MCP: publish to ActivityBus
+            try:
+                from engine.services.activity_bus import get_activity_bus
+                get_activity_bus().publish(
+                    activity_type="media_generated",
+                    description=f"Selfie: {character_name} ({mood}@{setting})",
+                    agent_id=character_id or "media_generator",
+                    scene=scene_id,
+                    data={"path": str(path), "mood": mood, "setting": setting, "chain_id": chain_id},
+                )
+            except Exception:
+                pass
+
         return path
 
     def generate_portrait(

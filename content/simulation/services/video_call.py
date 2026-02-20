@@ -96,7 +96,20 @@ class VideoCallHandler:
         self.video_active = False  # Not answered yet
         
         print(f"📹 Video call started: {call_id}")
-        
+
+        # MCP: publish to ActivityBus
+        try:
+            from engine.services.activity_bus import get_activity_bus
+            get_activity_bus().publish(
+                activity_type="video_call_started",
+                description=f"Video call started [{call_id[:8]}]",
+                agent_id=self.character_id if hasattr(self, 'character_id') else "video_call",
+                scene=None,
+                data={"call_id": call_id},
+            )
+        except Exception:
+            pass
+
         return call_id
     
     def answer_video_call(self, call_id: str):
@@ -151,7 +164,20 @@ class VideoCallHandler:
         self.character_images = {}
         
         print(f"📹 Video call ended: {call_id}")
-        
+
+        # MCP: publish to ActivityBus
+        try:
+            from engine.services.activity_bus import get_activity_bus
+            get_activity_bus().publish(
+                activity_type="video_call_ended",
+                description=f"Video call ended [{str(call_id)[:8] if call_id else '?'}]",
+                agent_id=self.character_id if hasattr(self, 'character_id') else "video_call",
+                scene=None,
+                data={"call_id": call_id, "duration": video_call_info.get("duration") if isinstance(video_call_info, dict) else None},
+            )
+        except Exception:
+            pass
+
         return video_call_info
     
     def _stop_video_thread(self):

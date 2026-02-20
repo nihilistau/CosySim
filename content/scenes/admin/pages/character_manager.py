@@ -43,6 +43,22 @@ def _show_characters():
             if tags:
                 st.markdown(f"**Tags:** {', '.join(tags)}")
 
+            # MCP: CharacterRegistry live state
+            try:
+                from engine.mcp.character_registry import get_character_registry
+                reg = get_character_registry()
+                char_id = char_data["id"]
+                reg.ensure(char_id, name)
+                summary = reg.get_character_summary(char_id)
+                if summary:
+                    st.markdown("**🔴 Live State**")
+                    lcol1, lcol2, lcol3 = st.columns(3)
+                    lcol1.metric("Mood", summary.get("mood", "—"))
+                    lcol2.metric("Location", summary.get("location", "—"))
+                    lcol3.metric("Scene", summary.get("scene", "—"))
+            except Exception:
+                pass
+
             # Delete button
             if st.button(f"🗑️ Delete", key=f"del_char_{char_data['id']}"):
                 try:
