@@ -117,6 +117,9 @@ class BedroomScene(BaseScene):
 
         # Agent loop
         self.agent_loop: Optional[AgentLoop] = None
+        # Per-agent model config: {character_id: {"model": str, "mode": str}}
+        # mode: "default" | "speculative" | "concurrent"
+        self.agent_model_config: Dict[str, Dict] = {}
 
         # Lighting presets
         self.lighting_presets = {
@@ -331,6 +334,58 @@ class BedroomScene(BaseScene):
                 })
             return jsonify({'success': True})
 
+        # ── Model selection ─────────────────────────────────────────────
+        @self.app.route('/api/models/available')
+        def list_models():
+            """List models from LMStudio (loaded + available)."""
+            models = {"loaded": [], "available": []}
+            try:
+                from engine.lmstudio.client_v2 import LMStudioClientV2
+                client = LMStudioClientV2()
+                loaded = client.get_models()
+                models["loaded"] = [
+                    {"id": m.get("id", ""), "object": m.get("object", "")}
+                    for m in loaded
+                ]
+            except Exception:
+                pass
+            try:
+                from engine.lmstudio.client import get_lmstudio_manager
+                mgr = get_lmstudio_manager()
+                available = mgr.get_available_models()
+                models["available"] = [
+                    {"id": m.get("path", m.get("id", "")), "size": m.get("size", "")}
+                    for m in (available if isinstance(available, list) else [])
+                ]
+            except Exception:
+                pass
+            return jsonify(models)
+
+        @self.app.route('/api/agents/model', methods=['POST'])
+        def set_agent_model():
+            """Set model + inference mode for a specific agent."""
+            data = request.json or {}
+            cid = data.get('character_id')
+            model = data.get('model')  # model ID string
+            mode = data.get('mode', 'default')  # default | speculative | concurrent
+            if cid and cid in self.characters:
+                self.agent_model_config[cid] = {"model": model, "mode": mode}
+                return jsonify({'success': True, 'config': self.agent_model_config[cid]})
+            return jsonify({'error': 'Character not loaded'}), 400
+
+        @self.app.route('/api/agents/model', methods=['GET'])
+        def get_agent_models():
+            """Get current model config for all agents."""
+            config = {}
+            for cid in self.characters:
+                cfg = self.agent_model_config.get(cid, {})
+                config[cid] = {
+                    "character": self.characters[cid].name,
+                    "model": cfg.get("model"),
+                    "mode": cfg.get("mode", "default"),
+                }
+            return jsonify(config)
+
         # ── Mode ────────────────────────────────────────────────────────
         @self.app.route('/api/mode', methods=['POST'])
         def set_mode():
@@ -409,11 +464,14 @@ class BedroomScene(BaseScene):
             scene_id='bedroom',
         )
         for cid, char in self.characters.items():
-            # Create CharacterAgent with skill packs for rich agent behaviour
+            # Use per-agent model if configured
+            agent_cfg = self.agent_model_config.get(cid, {})
+            agent_model = agent_cfg.get("model") or None
             agent = CharacterAgent(
                 char,
                 db=self.db,
                 skill_packs=["memory", "character", "comfyui"],
+                model=agent_model,
             )
             self.agent_loop.register_character(char, agent=agent)
         self.agent_loop.set_action_callback(self._on_agent_action)

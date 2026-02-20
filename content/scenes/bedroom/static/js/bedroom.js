@@ -293,6 +293,7 @@ function connectSocket() {
     socket.on('connect', () => {
         document.getElementById('status-text').textContent = 'Connected';
         document.querySelector('.status-dot').style.background = '#4caf50';
+        refreshModels();
     });
     socket.on('disconnect', () => {
         document.getElementById('status-text').textContent = 'Disconnected';
@@ -349,6 +350,7 @@ function applyState(st) {
     document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === currentMode));
     updateAgentBtn();
     updateWhisperBox();
+    renderModelConfig();
     document.getElementById('charCount').textContent = '(' + Object.keys(st.characters || {}).length + '/2)';
 }
 
@@ -490,6 +492,79 @@ function updateWhisperBox() {
     if (!box) return;
     box.style.display = (currentMode === 'direct') ? 'flex' : 'none';
     // Update target dropdown
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  AGENT MODEL CONFIG
+// ═══════════════════════════════════════════════════════════════════════
+let availableModels = [];
+
+async function refreshModels() {
+    try {
+        const r = await fetch('/api/models/available');
+        const data = await r.json();
+        availableModels = [
+            ...(data.loaded || []).map(m => ({ id: m.id, label: m.id + ' (loaded)' })),
+            ...(data.available || []).filter(m => !(data.loaded || []).find(l => l.id === m.id))
+                .map(m => ({ id: m.id, label: m.id })),
+        ];
+    } catch { availableModels = []; }
+    renderModelConfig();
+}
+
+async function renderModelConfig() {
+    const container = document.getElementById('modelConfigList');
+    if (!container) return;
+
+    // Get current config
+    let config = {};
+    try {
+        const r = await fetch('/api/agents/model');
+        config = await r.json();
+    } catch {}
+
+    const chars = sceneState.characters || {};
+    if (Object.keys(chars).length === 0) {
+        container.innerHTML = '<p style="color:#888;font-size:12px">Load characters first</p>';
+        return;
+    }
+
+    let html = '';
+    for (const [cid, info] of Object.entries(chars)) {
+        const cfg = config[cid] || {};
+        const currentModel = cfg.model || '(default — loaded)';
+        const currentMode = cfg.mode || 'default';
+
+        html += `<div class="model-config-card">
+            <div class="mcc-name">${info.name}</div>
+            <select class="mcc-select" id="modelSel_${cid}" onchange="setAgentModel('${cid}')">
+                <option value="">Default (loaded model)</option>
+                ${availableModels.map(m =>
+                    `<option value="${m.id}" ${m.id === cfg.model ? 'selected' : ''}>${m.label}</option>`
+                ).join('')}
+            </select>
+            <div class="mcc-modes">
+                <label><input type="radio" name="mode_${cid}" value="default" ${currentMode === 'default' ? 'checked' : ''} onchange="setAgentModel('${cid}')"> Standard</label>
+                <label><input type="radio" name="mode_${cid}" value="speculative" ${currentMode === 'speculative' ? 'checked' : ''} onchange="setAgentModel('${cid}')"> Speculative</label>
+                <label><input type="radio" name="mode_${cid}" value="concurrent" ${currentMode === 'concurrent' ? 'checked' : ''} onchange="setAgentModel('${cid}')"> Concurrent</label>
+            </div>
+        </div>`;
+    }
+    container.innerHTML = html;
+}
+
+async function setAgentModel(cid) {
+    const modelSel = document.getElementById(`modelSel_${cid}`);
+    const modeRadio = document.querySelector(`input[name="mode_${cid}"]:checked`);
+    const model = modelSel ? modelSel.value : '';
+    const mode = modeRadio ? modeRadio.value : 'default';
+
+    await fetch('/api/agents/model', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ character_id: cid, model: model || null, mode }),
+    });
+}
     const sel = document.getElementById('whisperTarget');
     sel.innerHTML = '';
     for (const [cid, info] of Object.entries(sceneState.characters || {})) {

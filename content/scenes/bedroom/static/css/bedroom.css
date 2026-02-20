@@ -224,6 +224,24 @@ body {
     background: #4caf50; animation: pulse 2s ease-in-out infinite;
 }
 
+/* ─── Model Config ─────────────────────────────────────────────────── */
+.model-config-list { display: flex; flex-direction: column; gap: 8px; }
+.model-config-card {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 8px; padding: 8px 10px;
+}
+.mcc-name { font-size: 13px; font-weight: 600; margin-bottom: 6px; color: #ff6b9d; }
+.mcc-select {
+    width: 100%; background: #1a1a2e; color: #ddd; border: 1px solid #333;
+    border-radius: 4px; padding: 4px 6px; font-size: 11px; margin-bottom: 6px;
+}
+.mcc-modes {
+    display: flex; gap: 8px; flex-wrap: wrap; font-size: 11px; color: #aaa;
+}
+.mcc-modes label { display: flex; align-items: center; gap: 3px; cursor: pointer; }
+.mcc-modes input[type="radio"] { accent-color: #667eea; }
+
 /* ─── Animations ───────────────────────────────────────────────────── */
 @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
 @keyframes fadeSlideIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }

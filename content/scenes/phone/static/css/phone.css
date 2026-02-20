@@ -40,6 +40,9 @@ body {
     position:relative;
 }
 .screen-view { height:100%; width:100%; }
+#messagesScreen {
+    display:flex; flex-direction:column;
+}
 
 /* ══════════════ HOME SCREEN ══════════════ */
 .home-wallpaper {
@@ -220,7 +223,7 @@ body {
 
 /* ── Input Area (overrides kept in phone_ui.html <style>) ── */
 .message-input-container {
-    position:absolute; bottom:0; left:0; right:0;
+    flex-shrink:0;
     background:#1c1c1e; padding:8px 10px;
     display:flex; flex-direction:column; gap:5px;
     border-top:1px solid #2a2a2a;
