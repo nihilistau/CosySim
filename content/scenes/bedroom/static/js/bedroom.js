@@ -940,8 +940,7 @@ async function renderModelConfig() {
     }
     container.innerHTML = html;
 }
-        const cfg = config[cid] || {};
-        const currentModel = cfg.model || '(default — loaded)';
+
 async function setAgentModel(cid) {
     const modelSel  = document.getElementById(`modelSel_${cid}`);
     const modeRadio = document.querySelector(`input[name="mode_${cid}"]:checked`);

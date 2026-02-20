@@ -35,6 +35,15 @@ from engine.assets import CharacterAsset
 from content.simulation.services.llm_service import get_llm_service
 from content.simulation.services.anonymous_character import create_anonymous_character, AnonymousCharacter
 from content.simulation.services.cosylogger import install_logger, get_logs
+from content.simulation.database.events import EventChain
+from content.scenes.phone.apps.voice_studio import VoiceStudio, EMOTION_TAGS
+
+# ComfyUI fallback samplers / schedulers when the API is unreachable
+_DEFAULT_SAMPLERS   = ["euler", "euler_ancestral", "dpm_2", "dpm_2_ancestral",
+                       "lms", "heun", "dpm_fast", "dpm_adaptive",
+                       "dpmpp_2m", "dpmpp_sde", "ddim", "uni_pc"]
+_DEFAULT_SCHEDULERS = ["normal", "karras", "exponential", "sgm_uniform",
+                       "simple", "ddim_uniform"]
 
 
 class PhoneScene(BaseScene):
@@ -130,7 +139,19 @@ class PhoneScene(BaseScene):
         
         # Install ring-buffer logger so the terminal can stream logs
         install_logger()
-        
+
+        # Event chain tracker
+        self.event_chain = EventChain(db=self.db)
+
+        # Voice Studio app backend
+        self.voice_studio = VoiceStudio(db=self.db)
+
+        # Image generation settings (ComfyUI params, in-memory)
+        self._image_settings: Dict = {
+            "steps": 30, "cfg": 7.0, "denoise": 1.0,
+            "sampler": "euler", "scheduler": "normal", "model": ""
+        }
+
         # Current conversation state
         self.current_chain_id = None
         self.typing_indicator = False
@@ -1306,6 +1327,148 @@ class PhoneScene(BaseScene):
             since_id = request.args.get('since_id', 0, type=int)
             return jsonify({'logs': get_logs(level=level, limit=limit, since_id=since_id)})
 
+        # ── Voice Studio Routes ──────────────────────────────────────────────
+
+        @self.app.route('/api/voice-studio/voices', methods=['GET'])
+        def vs_list_voices():
+            """List all saved voice designs (including premade presets)."""
+            try:
+                voices = self.voice_studio.list_voices(include_premade=True)
+                return jsonify({'voices': voices})
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+
+        @self.app.route('/api/voice-studio/tones', methods=['GET'])
+        def vs_get_tones():
+            """Return emotion/tone/style tags for the quick-insert cheat sheet."""
+            return jsonify(EMOTION_TAGS)
+
+        @self.app.route('/api/voice-studio/generate', methods=['POST'])
+        def vs_generate():
+            """Generate TTS audio for the given text and voice."""
+            data       = request.get_json() or {}
+            text       = data.get('text', '').strip()
+            if not text:
+                return jsonify({'error': 'text required'}), 400
+            voice_id   = data.get('voice_id')
+            emotion    = data.get('emotion')
+            model_size = data.get('model_size', 'auto')
+            name       = data.get('name')
+            try:
+                result = self.voice_studio.generate(
+                    text=text, voice_id=voice_id, emotion=emotion,
+                    model_size=model_size, name=name,
+                )
+                if not result:
+                    return jsonify({'error': 'TTS generation failed'}), 500
+                result['url'] = f"/api/voice/download/{result['filename']}"
+                return jsonify({'success': True, 'recording': result})
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+
+        @self.app.route('/api/voice-studio/recordings', methods=['GET'])
+        def vs_list_recordings():
+            """List saved voice recordings."""
+            voice_id = request.args.get('voice_id')
+            limit    = request.args.get('limit', 30, type=int)
+            try:
+                recordings = self.voice_studio.list_recordings(voice_id=voice_id, limit=limit)
+                for r in recordings:
+                    if r.get('filename'):
+                        r['url'] = f"/api/voice/download/{r['filename']}"
+                return jsonify({'recordings': recordings})
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+
+        @self.app.route('/api/voice-studio/voice/new', methods=['POST'])
+        def vs_new_voice():
+            """Create a new custom voice design."""
+            data = request.get_json() or {}
+            name = data.get('name', '').strip()
+            desc = data.get('description', '').strip()
+            if not name or not desc:
+                return jsonify({'error': 'name and description required'}), 400
+            try:
+                voice = self.voice_studio.create_voice(
+                    name=name,
+                    description=desc,
+                    model_size=data.get('model_size', '1.7b'),
+                    tags=data.get('tags', []),
+                    character_id=self.active_character.id if self.active_character else None,
+                )
+                return jsonify({'success': True, 'voice': voice})
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+
+        @self.app.route('/api/voice-studio/voice/clone', methods=['POST'])
+        def vs_clone_voice():
+            """Clone a voice from an uploaded WAV reference file."""
+            if 'audio' not in request.files:
+                return jsonify({'error': 'No audio file provided'}), 400
+            f    = request.files['audio']
+            name = (request.form.get('name') or f.filename or 'Cloned Voice').strip()
+            try:
+                ref_path = self.voice_studio.save_reference_audio(f.filename, f.read())
+                voice = self.voice_studio.create_voice(
+                    name=name,
+                    description=f"Zero-shot cloned voice from uploaded reference: {f.filename}",
+                    model_size='1.7b',
+                    reference_audio=ref_path,
+                    character_id=self.active_character.id if self.active_character else None,
+                )
+                return jsonify({'success': True, 'voice': voice})
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+
+        # ── Image Settings Routes ────────────────────────────────────────────
+
+        @self.app.route('/api/image-settings', methods=['GET', 'POST'])
+        def handle_image_settings():
+            """Get or update ComfyUI image generation parameters."""
+            if request.method == 'GET':
+                return jsonify(self._image_settings)
+            data    = request.get_json() or {}
+            allowed = {'steps', 'cfg', 'denoise', 'sampler', 'scheduler', 'model'}
+            for k, v in data.items():
+                if k in allowed:
+                    self._image_settings[k] = v
+            # Propagate to ComfyUI client if available
+            try:
+                from content.simulation.services.comfyui_client import ComfyUIClient
+                client = ComfyUIClient()
+                if hasattr(client, 'set_sampling_params'):
+                    client.set_sampling_params(**{k: v for k, v in self._image_settings.items() if k != 'model'})
+                if self._image_settings.get('model'):
+                    ComfyUIClient._force_model = self._image_settings['model']
+            except Exception:
+                pass
+            return jsonify({'success': True, 'settings': self._image_settings})
+
+        @self.app.route('/api/comfyui/samplers', methods=['GET'])
+        def list_comfyui_samplers():
+            """Return available ComfyUI samplers and schedulers."""
+            try:
+                from content.simulation.services.comfyui_client import ComfyUIClient
+                client   = ComfyUIClient()
+                samplers = getattr(client, 'get_samplers', lambda: _DEFAULT_SAMPLERS)()
+                schedulers = getattr(client, 'get_schedulers', lambda: _DEFAULT_SCHEDULERS)()
+                return jsonify({'samplers': samplers, 'schedulers': schedulers})
+            except Exception:
+                return jsonify({'samplers': _DEFAULT_SAMPLERS, 'schedulers': _DEFAULT_SCHEDULERS})
+
+        @self.app.route('/api/events/chain', methods=['GET'])
+        def get_event_chain():
+            """Return events for the current or a specified chain (for terminal/diagnostics)."""
+            chain_id = request.args.get('chain_id', self.current_chain_id)
+            limit    = request.args.get('limit', 50, type=int)
+            if not chain_id:
+                return jsonify({'events': [], 'chain_id': None})
+            try:
+                events = self.event_chain.get_chain(chain_id, limit=limit)
+                return jsonify({'events': events, 'chain_id': chain_id})
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+
     def _setup_socketio(self):
         """Setup SocketIO event handlers"""
         
@@ -1469,12 +1632,11 @@ class PhoneScene(BaseScene):
             if not self.active_character:
                 emit('error', {'message': 'No active character'})
                 return
-            
-            text = data.get('text')
-            
-            if not text:
-                emit('error', {'message': 'No text provided'})
-                return
+
+            text = data.get('text') or ''
+            # If no text provided, generate a warm contextual greeting
+            if not text.strip():
+                text = f"Hey, I was thinking about you. Just wanted to send you a little message."
             
             try:
                 # Generate voice message
@@ -1643,13 +1805,12 @@ class PhoneScene(BaseScene):
             if not self.active_character:
                 emit('error', {'message': 'No active character'})
                 return
-            
-            text = data.get('text')
+
+            text = data.get('text') or ''
             mood = data.get('mood', 'happy')
-            
-            if not text:
-                emit('error', {'message': 'No text provided'})
-                return
+            # If no text provided, generate a default visual greeting
+            if not text.strip():
+                text = f"Hi! Just wanted to send you a quick video to brighten your day! 😊"
             
             try:
                 # Generate video message
@@ -1679,11 +1840,24 @@ class PhoneScene(BaseScene):
         """
         Generate character response via LM Studio LLM.
         Parses intent and may trigger spontaneous media sends.
+        All steps are logged to the EventChain for diagnostics.
         """
         if not self.active_character:
             return "Error: No active character"
 
         llm = get_llm_service()
+        ec  = self.event_chain
+        char_id = self.active_character.id
+
+        # Log the incoming user message to the event chain
+        msg_ev = ec.log(
+            'message_in', actor='user',
+            payload={'content': user_message},
+            summary=f'User: {user_message[:80]}',
+            chain_id=self.current_chain_id,
+            scene_id='phone',
+            character_id=char_id,
+        )
 
         # Build conversation history from recent messages
         history = []
@@ -1700,17 +1874,16 @@ class PhoneScene(BaseScene):
         except Exception:
             history = []
 
-        # Generate LLM response
-        # Apply timeout and custom context from control-panel settings
+        # Apply timeout from control-panel settings
         original_timeout = llm.timeout
         llm.timeout = self.settings.get('message_timeout', 180)
-        
-        # Build system prompt directly so we can inject custom context
+
+        # Build system prompt with memories + RAG topics injected
         try:
             system_prompt = self.active_character.get_system_prompt()
         except Exception:
             system_prompt = f"You are {self.active_character.name}, a virtual companion. Be warm and stay in character."
-        
+
         try:
             memory_context = self.active_character.build_context(user_message)
             if memory_context:
@@ -1721,12 +1894,10 @@ class PhoneScene(BaseScene):
         # RAG: inject conversation topics the character can choose to raise
         try:
             rag_topics = self.rag.query_memories(
-                character_id=self.active_character.id,
+                character_id=char_id,
                 query=user_message,
                 n_results=4,
                 memory_type="conversation_topic",
-                chain_id=self.current_chain_id,
-                scene_id="phone",
             )
             if rag_topics:
                 topic_lines = "\n".join(f"- {m['content']}" for m in rag_topics)
@@ -1735,28 +1906,61 @@ class PhoneScene(BaseScene):
                     "If the moment feels right, you may weave one of these into the conversation:\n"
                     f"{topic_lines}"
                 )
+                ec.log('rag_result', actor='system',
+                       payload={'topics': [m['content'] for m in rag_topics]},
+                       summary=f'RAG: {len(rag_topics)} conversation topics injected',
+                       chain_id=self.current_chain_id, scene_id='phone', character_id=char_id,
+                       parent_id=msg_ev)
         except Exception:
             pass
-        
+
         custom_ctx = self.settings.get('custom_llm_context', '').strip()
         if custom_ctx:
             system_prompt += f"\n\n## Operator Context\n{custom_ctx}"
-        
+
         # Check for cancel before the (potentially slow) API call
         if self._cancel_event.is_set():
             llm.timeout = original_timeout
             return "(Request cancelled)"
-        
+
+        # Log LLM request
+        llm_ev = ec.log(
+            'llm_request', actor='llm',
+            payload={'model': llm.model, 'history_turns': len(history),
+                     'system_len': len(system_prompt)},
+            summary=f'LLM request → {llm.model or "(default)"}',
+            chain_id=self.current_chain_id, scene_id='phone', character_id=char_id,
+            parent_id=msg_ev,
+        )
+
         try:
             response = llm.chat(
                 messages=history + [{"role": "user", "content": user_message}],
                 system_prompt=system_prompt,
             ) or llm._character_fallback(self.active_character, user_message)
+        except Exception as llm_err:
+            ec.log('error', actor='llm', payload={'error': str(llm_err)},
+                   summary=f'LLM error: {llm_err}',
+                   chain_id=self.current_chain_id, scene_id='phone', character_id=char_id,
+                   parent_id=llm_ev)
+            raise
         finally:
             llm.timeout = original_timeout
-        
+
         if self._cancel_event.is_set():
+            ec.log('llm_cancelled', actor='system', payload={},
+                   summary='Request cancelled by user',
+                   chain_id=self.current_chain_id, scene_id='phone', character_id=char_id)
             return "(Request cancelled)"
+
+        # Log LLM response
+        resp_ev = ec.log(
+            'llm_response', actor='agent',
+            payload={'content': response[:500], 'length': len(response)},
+            summary=f'{self.active_character.name}: {response[:80]}',
+            chain_id=self.current_chain_id, scene_id='phone', character_id=char_id,
+            parent_id=llm_ev,
+        )
 
         # Parse intent to decide if media should be triggered
         try:
@@ -1768,29 +1972,29 @@ class PhoneScene(BaseScene):
 
         # User explicitly asked for a selfie
         if intent.get("type") == "selfie" and rel > 0.2:
-            self._maybe_send_photo()
+            self._maybe_send_photo(resp_ev)
 
         # User asked for a voice message
         if intent.get("type") == "voice_message" and rel > 0.3:
-            self._maybe_send_voice_message(response)
+            self._maybe_send_voice_message(response, resp_ev)
 
         # User asked for a video message
         if intent.get("type") == "video_message" and rel > 0.4:
-            self._maybe_send_video_message(response)
+            self._maybe_send_video_message(response, resp_ev)
 
         # Spontaneous media (low probability unless intent triggered)
         if rel >= 0.5 and intent.get("type") == "text":
             r = random.random()
             if r < 0.05:
-                self._maybe_send_photo()
+                self._maybe_send_photo(resp_ev)
             elif r < 0.08:
-                self._maybe_send_voice_message(response)
+                self._maybe_send_voice_message(response, resp_ev)
             elif r < 0.10:
-                self._maybe_send_video_message(response)
+                self._maybe_send_video_message(response, resp_ev)
 
         return response
     
-    def _maybe_send_voice_message(self, text: str):
+    def _maybe_send_voice_message(self, text: str, parent_ev: Optional[str] = None):
         """Character may spontaneously send a voice message"""
         try:
             voice_msg = self.voice_message_generator.generate_voice_message(
@@ -1798,7 +2002,6 @@ class PhoneScene(BaseScene):
                 character_name=self.active_character.name,
                 text=text
             )
-            
             if voice_msg:
                 self.socketio.emit('voice_message_received', {
                     'role': 'assistant',
@@ -1808,14 +2011,20 @@ class PhoneScene(BaseScene):
                     'text': voice_msg['text'],
                     'timestamp': datetime.now().isoformat()
                 })
-                
-                # Log to conversation
                 if self.current_chain_id:
                     self.active_character.add_message('assistant', f"[Voice message: {text}]")
+                self.event_chain.log(
+                    'media_generated', actor='agent',
+                    payload={'type': 'voice_message', 'filename': voice_msg['filename'],
+                             'duration': voice_msg.get('duration')},
+                    summary=f'Voice message generated: {voice_msg["filename"]}',
+                    chain_id=self.current_chain_id, scene_id='phone',
+                    character_id=self.active_character.id, parent_id=parent_ev,
+                )
         except Exception as e:
             print(f"Error sending voice message: {e}")
-    
-    def _maybe_send_photo(self):
+
+    def _maybe_send_photo(self, parent_ev: Optional[str] = None):
         """Character may spontaneously send a photo"""
         try:
             media_list = self.gallery.get_character_media(
@@ -1823,7 +2032,6 @@ class PhoneScene(BaseScene):
                 media_type='image',
                 limit=20
             )
-            
             if media_list:
                 media = random.choice(media_list)
                 self.socketio.emit('photo_received', {
@@ -1832,14 +2040,19 @@ class PhoneScene(BaseScene):
                     'role': 'assistant',
                     'timestamp': datetime.now().isoformat()
                 })
-                
-                # Log to conversation
                 if self.current_chain_id:
                     self.active_character.add_message('assistant', f"[Photo sent: {media['id']}]")
+                self.event_chain.log(
+                    'media_generated', actor='agent',
+                    payload={'type': 'photo', 'media_id': media['id']},
+                    summary=f'Photo sent: {media["id"]}',
+                    chain_id=self.current_chain_id, scene_id='phone',
+                    character_id=self.active_character.id, parent_id=parent_ev,
+                )
         except Exception as e:
             print(f"Error sending photo: {e}")
-    
-    def _maybe_send_video_message(self, text: str):
+
+    def _maybe_send_video_message(self, text: str, parent_ev: Optional[str] = None):
         """Character may spontaneously send a video message"""
         try:
             video_msg = self.video_message_generator.generate_video_message(
@@ -1849,7 +2062,6 @@ class PhoneScene(BaseScene):
                 text=text,
                 mood=self.active_character.mood or "happy"
             )
-            
             if video_msg:
                 self.socketio.emit('video_message_received', {
                     'role': 'assistant',
@@ -1859,10 +2071,16 @@ class PhoneScene(BaseScene):
                     'text': video_msg['text'],
                     'timestamp': datetime.now().isoformat()
                 })
-                
-                # Log to conversation
                 if self.current_chain_id:
                     self.active_character.add_message('assistant', f"[Video message: {text}]")
+                self.event_chain.log(
+                    'media_generated', actor='agent',
+                    payload={'type': 'video_message', 'filename': video_msg['filename'],
+                             'duration': video_msg.get('duration')},
+                    summary=f'Video message generated: {video_msg["filename"]}',
+                    chain_id=self.current_chain_id, scene_id='phone',
+                    character_id=self.active_character.id, parent_id=parent_ev,
+                )
         except Exception as e:
             print(f"Error sending video message: {e}")
     

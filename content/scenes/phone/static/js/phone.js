@@ -186,7 +186,9 @@ function openApp(appName) {
         'browser':       'homeScreen',        // Placeholder
         'videoMessages': 'videoMessagesScreen',
         'voiceMessages': 'voiceMessagesScreen',
-        'settings':      'settingsScreen'
+        'settings':      'settingsScreen',
+        'voiceStudio':   'voiceStudioScreen',
+        'imageSettings': 'imageSettingsScreen'
     };
     
     const screenId = screenMap[appName] || 'homeScreen';
@@ -204,6 +206,12 @@ function openApp(appName) {
         loadVoiceMessages();
     } else if (appName === 'settings') {
         loadPhoneSettings();
+    } else if (appName === 'voiceStudio') {
+        vsLoadVoices();
+        vsLoadToneButtons();
+        vsLoadRecordings();
+    } else if (appName === 'imageSettings') {
+        loadImageSettings();
     }
 }
 
@@ -394,6 +402,274 @@ function _fmtDur(sec) {
     sec = parseInt(sec) || 0;
     const m = Math.floor(sec / 60), s = sec % 60;
     return `${m}:${String(s).padStart(2,'0')}`;
+}
+
+/** Ping /api/health and update the status-bar health dot colour */
+function toggleGuiHealth() {
+    fetch('/api/health').then(r => r.json()).then(h => {
+        const dot = document.getElementById('guiHealthDot');
+        if (!dot) return;
+        const ok = h.ok !== false;
+        dot.style.background = ok ? '#51cf66' : '#ff6b6b';
+        dot.title = ok ? 'Services healthy' : ('Unhealthy: ' + (h.error || JSON.stringify(h)));
+    }).catch(e => {
+        const dot = document.getElementById('guiHealthDot');
+        if (dot) { dot.style.background = '#ff6b6b'; dot.title = 'Health check failed: ' + e.message; }
+    });
+}
+
+// ═══════════════════════ Voice Studio ════════════════════════════════════════
+
+let _vsVoices = [];
+
+async function vsLoadVoices() {
+    try {
+        const res  = await fetch('/api/voice-studio/voices');
+        const data = await res.json();
+        _vsVoices = data.voices || [];
+        const sel = document.getElementById('vsVoiceSelect');
+        if (!sel) return;
+        sel.innerHTML = '<option value="">- Select a voice -</option>'
+            + _vsVoices.map(v =>
+                `<option value="${_escAttr(v.id)}">${_escHtml(v.name)}${v.is_premade ? ' ⭐' : ''}</option>`
+            ).join('');
+    } catch (e) {
+        console.error('vsLoadVoices:', e);
+    }
+}
+
+async function vsLoadToneButtons() {
+    const container = document.getElementById('vsToneButtons');
+    if (!container) return;
+    try {
+        const res  = await fetch('/api/voice-studio/tones');
+        const data = await res.json();
+        container.innerHTML = '';
+        const allTags = {
+            ...(data.emotions  || {}),
+            ...(data.tones     || {}),
+            ...(data.styles    || {})
+        };
+        Object.entries(allTags).forEach(([tag, desc]) => {
+            const btn = document.createElement('button');
+            btn.className = 'icon-action-btn';
+            btn.style.cssText = 'font-size:11px;padding:3px 7px;';
+            btn.title = desc;
+            btn.textContent = tag.replace(/_/g, ' ');
+            btn.onclick = () => {
+                const ta = document.getElementById('vsTextInput');
+                if (ta) ta.value += (ta.value ? ' ' : '') + `[${tag}]`;
+            };
+            container.appendChild(btn);
+        });
+    } catch (e) {
+        console.error('vsLoadToneButtons:', e);
+    }
+}
+
+async function vsLoadRecordings() {
+    const voiceId = document.getElementById('vsVoiceSelect')?.value || '';
+    try {
+        const res  = await fetch(`/api/voice-studio/recordings?voice_id=${encodeURIComponent(voiceId)}&limit=20`);
+        const data = await res.json();
+        const list = document.getElementById('vsRecordingsList');
+        if (!list) return;
+        const recs = data.recordings || [];
+        if (!recs.length) {
+            list.innerHTML = '<p style="color:#666;font-size:12px;text-align:center;">No recordings yet</p>';
+            return;
+        }
+        list.innerHTML = recs.map(r => `
+            <div class="media-card" onclick="openMediaOverlay('audio','${_escAttr(r.url)}','${_escAttr(r.name)}')">
+                <div class="media-card-thumb">🎵</div>
+                <div class="media-card-info">
+                    <div class="media-card-title">${_escHtml(r.name)}</div>
+                    <div class="media-card-meta" style="font-size:10px;">${_escHtml(r.text?.substring(0,60) || '')}…</div>
+                </div>
+                ${r.duration ? `<div class="media-card-duration">${_fmtDur(r.duration)}</div>` : ''}
+            </div>
+        `).join('');
+    } catch (e) {
+        console.error('vsLoadRecordings:', e);
+    }
+}
+
+async function vsGenerate() {
+    const text = document.getElementById('vsTextInput')?.value.trim();
+    if (!text) { alert('Please enter some text to synthesize.'); return; }
+    const voiceId   = document.getElementById('vsVoiceSelect')?.value || '';
+    const emotion   = document.getElementById('vsEmotion')?.value || '';
+    const modelSize = document.getElementById('vsModelSize')?.value || 'auto';
+    const btn       = document.querySelector('#voiceStudioScreen .settings-save-btn');
+    if (btn) { btn.textContent = '⏳ Generating…'; btn.disabled = true; }
+    try {
+        const res  = await fetch('/api/voice-studio/generate', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({text, voice_id: voiceId || null, emotion: emotion || null, model_size: modelSize})
+        });
+        const data = await res.json();
+        if (data.success && data.recording) {
+            openMediaOverlay('audio', data.recording.url, data.recording.name || 'Recording');
+            vsLoadRecordings();
+        } else {
+            alert('Generation failed: ' + (data.error || 'Unknown error'));
+        }
+    } catch (e) {
+        alert('Voice generation error: ' + e.message);
+    } finally {
+        if (btn) { btn.textContent = '🎤 Generate'; btn.disabled = false; }
+    }
+}
+
+async function vsNewVoice() {
+    const name = prompt('Voice name:');
+    if (!name) return;
+    const desc = prompt('Voice description (personality, tone, accent etc.):');
+    if (!desc) return;
+    try {
+        const res  = await fetch('/api/voice-studio/voice/new', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({name, description: desc})
+        });
+        const data = await res.json();
+        if (data.success) { vsLoadVoices(); }
+        else { alert('Error: ' + data.error); }
+    } catch (e) { alert('Error: ' + e.message); }
+}
+
+async function vsEditVoice() {
+    const sel  = document.getElementById('vsVoiceSelect');
+    const voiceId = sel?.value;
+    if (!voiceId) { alert('Select a voice first.'); return; }
+    const voice = _vsVoices.find(v => v.id === voiceId);
+    if (!voice) return;
+    const desc = prompt('Update voice description:', voice.description || '');
+    if (desc === null) return;
+    try {
+        await fetch('/api/voice-studio/voice/new', {  // reuse create to keep it simple
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({name: voice.name + ' (edited)', description: desc})
+        });
+        vsLoadVoices();
+    } catch (e) { alert('Error: ' + e.message); }
+}
+
+function vsCloneVoice() {
+    const inp = document.createElement('input');
+    inp.type = 'file'; inp.accept = 'audio/wav,audio/*';
+    inp.style.display = 'none';
+    document.body.appendChild(inp);
+    inp.onchange = async () => {
+        const file = inp.files[0];
+        if (!file) return;
+        const name = prompt('Name for cloned voice:', file.name.replace(/\.[^.]+$/, '')) || file.name;
+        const form = new FormData();
+        form.append('audio', file);
+        form.append('name', name);
+        try {
+            const res  = await fetch('/api/voice-studio/voice/clone', {method: 'POST', body: form});
+            const data = await res.json();
+            if (data.success) { vsLoadVoices(); alert('Voice cloned!'); }
+            else { alert('Clone error: ' + data.error); }
+        } catch (e) { alert('Clone error: ' + e.message); }
+        document.body.removeChild(inp);
+    };
+    inp.click();
+}
+
+async function vsBatchDialog() {
+    const raw = prompt('Batch generation: Enter one line of text per recording (up to 5):');
+    if (!raw) return;
+    const lines = raw.split('\n').map(l => l.trim()).filter(Boolean).slice(0, 5);
+    if (!lines.length) return;
+    const voiceId   = document.getElementById('vsVoiceSelect')?.value || '';
+    const emotion   = document.getElementById('vsEmotion')?.value || '';
+    const modelSize = document.getElementById('vsModelSize')?.value || 'auto';
+    let done = 0;
+    for (const line of lines) {
+        try {
+            await fetch('/api/voice-studio/generate', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({text: line, voice_id: voiceId || null,
+                                      emotion: emotion || null, model_size: modelSize})
+            });
+            done++;
+        } catch (e) { console.error('Batch line failed:', e); }
+    }
+    alert(`Batch done: ${done}/${lines.length} recordings generated.`);
+    vsLoadRecordings();
+}
+
+// ═══════════════════════ Image Settings ═══════════════════════════════════
+
+async function loadImageSettings() {
+    try {
+        // Load current settings and sampler lists in parallel
+        const [settingsRes, samplersRes] = await Promise.all([
+            fetch('/api/image-settings'),
+            fetch('/api/comfyui/samplers')
+        ]);
+        const settings  = await settingsRes.json();
+        const samplerData = await samplersRes.json();
+
+        const _v = (id, val) => { const el = document.getElementById(id); if (el) el.value = val ?? el.value; };
+        _v('imgSteps',   settings.steps);
+        _v('imgCfg',     settings.cfg);
+        _v('imgDenoise', settings.denoise);
+
+        // Populate sampler select
+        const samplerSel = document.getElementById('imgSampler');
+        if (samplerSel && samplerData.samplers) {
+            samplerSel.innerHTML = samplerData.samplers
+                .map(s => `<option value="${_escAttr(s)}"${s === settings.sampler ? ' selected' : ''}>${_escHtml(s)}</option>`)
+                .join('');
+        }
+
+        // Populate scheduler select
+        const schedulerSel = document.getElementById('imgScheduler');
+        if (schedulerSel && samplerData.schedulers) {
+            schedulerSel.innerHTML = samplerData.schedulers
+                .map(s => `<option value="${_escAttr(s)}"${s === settings.scheduler ? ' selected' : ''}>${_escHtml(s)}</option>`)
+                .join('');
+        }
+
+        // Populate model select if available
+        const modelSel = document.getElementById('imgModel');
+        if (modelSel && settings.model) modelSel.value = settings.model;
+    } catch (e) {
+        console.error('loadImageSettings:', e);
+    }
+}
+
+async function saveImageSettings() {
+    const _num = id => { const el = document.getElementById(id); return el ? parseFloat(el.value) : undefined; };
+    const _str = id => { const el = document.getElementById(id); return el ? el.value : undefined; };
+    const payload = {
+        steps:     parseInt(_num('imgSteps') || 30),
+        cfg:       _num('imgCfg'),
+        denoise:   _num('imgDenoise'),
+        sampler:   _str('imgSampler'),
+        scheduler: _str('imgScheduler'),
+        model:     _str('imgModel') || ''
+    };
+    try {
+        const res  = await fetch('/api/image-settings', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (data.success) {
+            const btn = document.querySelector('#imageSettingsScreen .settings-save-btn');
+            if (btn) { btn.textContent = '✅ Saved!'; setTimeout(() => btn.textContent = '💾 Save Image Settings', 1800); }
+        }
+    } catch (e) {
+        console.error('saveImageSettings:', e);
+    }
 }
 
 // Messages functionality
