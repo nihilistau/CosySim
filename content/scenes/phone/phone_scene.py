@@ -30,6 +30,7 @@ from content.simulation.services.video_message import VideoMessageGenerator
 from content.scenes.phone.apps.gallery import Gallery
 from content.scenes.phone.apps.video_messages import VideoMessagesApp
 from content.scenes.phone.apps.voice_messages import VoiceMessagesApp
+from content.scenes.phone.apps.voice_studio import VoiceStudio
 from engine.scenes.base_scene import BaseScene
 from engine.assets import CharacterAsset
 from engine.agents.character_agent import CharacterAgent
@@ -57,6 +58,7 @@ class PhoneScene(BaseScene):
         self.gallery = Gallery(self.db)
         self.video_messages_app = VideoMessagesApp(self.db)
         self.voice_messages_app = VoiceMessagesApp(self.db)
+        self.voice_studio = VoiceStudio(self.db)
         
         # Initialize voice services (TTS/STT models loaded on demand)
         self.voice_call_handler = VoiceCallHandler(db=self.db, socketio=None)  # socketio set later
@@ -552,6 +554,13 @@ class PhoneScene(BaseScene):
                 extra = 'flirty expression, attractive pose'
             
             try:
+                # Merge runtime image settings
+                gen_kwargs = getattr(self, '_image_settings', {}).copy()
+                # Allow per-request overrides
+                for k in ('steps', 'cfg', 'sampler_name', 'scheduler', 'denoise', 'width', 'height'):
+                    if k in data:
+                        gen_kwargs[k] = data[k]
+
                 filepath = self.media_generator.generate_selfie(
                     character_name=self.active_character.name,
                     character_description=self.active_character.appearance or "attractive person",
@@ -563,6 +572,7 @@ class PhoneScene(BaseScene):
                     chain_id=self.current_chain_id,
                     scene_id='phone',
                     character_id=self.active_character.id,
+                    **gen_kwargs,
                 )
                 
                 if not filepath:
@@ -1288,6 +1298,206 @@ class PhoneScene(BaseScene):
             limit    = request.args.get('limit', 200, type=int)
             since_id = request.args.get('since_id', 0, type=int)
             return jsonify({'logs': get_logs(level=level, limit=limit, since_id=since_id)})
+
+        # ── Voice Studio API ──────────────────────────────────────────
+
+        @self.app.route('/api/voice-studio/voices', methods=['GET'])
+        def vs_list_voices():
+            """List all voice designs (custom + premade)."""
+            return jsonify({'voices': self.voice_studio.list_voices()})
+
+        @self.app.route('/api/voice-studio/voices', methods=['POST'])
+        def vs_create_voice():
+            """Create a custom voice design."""
+            data = request.json or {}
+            name = data.get('name')
+            description = data.get('description')
+            if not name or not description:
+                return jsonify({'error': 'name and description required'}), 400
+            voice = self.voice_studio.create_voice(
+                name=name, description=description,
+                model_size=data.get('model_size', '1.7b'),
+                tags=data.get('tags', []),
+                character_id=data.get('character_id'),
+            )
+            return jsonify({'success': True, 'voice': voice})
+
+        @self.app.route('/api/voice-studio/voices/<voice_id>', methods=['PUT'])
+        def vs_update_voice(voice_id):
+            """Update a voice design."""
+            data = request.json or {}
+            ok = self.voice_studio.update_voice(voice_id, **data)
+            return jsonify({'success': ok})
+
+        @self.app.route('/api/voice-studio/voices/<voice_id>', methods=['DELETE'])
+        def vs_delete_voice(voice_id):
+            """Delete a voice design."""
+            ok = self.voice_studio.delete_voice(voice_id)
+            return jsonify({'success': ok})
+
+        @self.app.route('/api/voice-studio/generate', methods=['POST'])
+        def vs_generate():
+            """Generate speech from text with a voice."""
+            data = request.json or {}
+            text = data.get('text', '').strip()
+            if not text:
+                return jsonify({'error': 'text required'}), 400
+            result = self.voice_studio.generate(
+                text=text,
+                voice_id=data.get('voice_id'),
+                voice_description=data.get('voice_description'),
+                name=data.get('name'),
+                emotion=data.get('emotion'),
+                model_size=data.get('model_size', 'auto'),
+            )
+            if result:
+                result['url'] = f"/api/voice-studio/download/{result['filename']}"
+                return jsonify({'success': True, 'recording': result})
+            return jsonify({'error': 'Generation failed'}), 500
+
+        @self.app.route('/api/voice-studio/batch', methods=['POST'])
+        def vs_batch_generate():
+            """Batch generate from a script or line list."""
+            data = request.json or {}
+            # Accept either parsed lines or raw script text
+            if 'script' in data:
+                lines = self.voice_studio.parse_script(data['script'])
+            elif 'lines' in data:
+                lines = data['lines']
+            else:
+                return jsonify({'error': 'script or lines required'}), 400
+            result = self.voice_studio.batch_generate(
+                lines=lines,
+                voice_id=data.get('voice_id'),
+                voice_description=data.get('voice_description'),
+            )
+            return jsonify({'success': True, **result})
+
+        @self.app.route('/api/voice-studio/clone', methods=['POST'])
+        def vs_clone_voice():
+            """Upload a WAV reference for zero-shot voice cloning."""
+            if 'audio' not in request.files:
+                return jsonify({'error': 'audio file required'}), 400
+            f = request.files['audio']
+            filepath = self.voice_studio.save_reference_audio(f.filename, f.read())
+            # Create a voice design with the reference
+            name = request.form.get('name', f'Clone: {f.filename}')
+            desc = request.form.get('description', 'Zero-shot voice — cloned from reference audio.')
+            voice = self.voice_studio.create_voice(
+                name=name, description=desc,
+                model_size='1.7b', reference_audio=filepath,
+                tags=['clone', 'zero-shot'],
+            )
+            return jsonify({'success': True, 'voice': voice})
+
+        @self.app.route('/api/voice-studio/recordings', methods=['GET'])
+        def vs_recordings():
+            """List generated recordings."""
+            voice_id = request.args.get('voice_id')
+            batch_id = request.args.get('batch_id')
+            limit = request.args.get('limit', 50, type=int)
+            recs = self.voice_studio.list_recordings(voice_id=voice_id, batch_id=batch_id, limit=limit)
+            for r in recs:
+                if r.get('filename'):
+                    r['url'] = f"/api/voice-studio/download/{r['filename']}"
+            return jsonify({'recordings': recs})
+
+        @self.app.route('/api/voice-studio/recordings/<rec_id>', methods=['DELETE'])
+        def vs_delete_recording(rec_id):
+            """Delete a recording."""
+            return jsonify({'success': self.voice_studio.delete_recording(rec_id)})
+
+        @self.app.route('/api/voice-studio/download/<filename>', methods=['GET'])
+        def vs_download(filename):
+            """Download a voice studio recording."""
+            from werkzeug.utils import secure_filename as sf
+            filename = sf(filename)
+            search_dirs = [
+                self.voice_studio.recordings_dir,
+                self.voice_studio.voice_dir,
+                Path(__file__).parent.parent.parent / "simulation" / "media" / "voice",
+            ]
+            for d in search_dirs:
+                candidate = d / filename
+                if candidate.exists():
+                    return send_file(str(candidate), mimetype='audio/wav')
+            return jsonify({'error': 'File not found'}), 404
+
+        @self.app.route('/api/voice-studio/presets', methods=['GET'])
+        def vs_presets():
+            """Get emotion/tone/style presets for the cheat sheet."""
+            return jsonify({
+                'emotion_tags': VoiceStudio.get_emotion_tags(),
+                'premade_voices': VoiceStudio.get_premade_voices(),
+            })
+
+        # ── Image Generation Settings API ─────────────────────────────
+
+        @self.app.route('/api/image-settings', methods=['GET'])
+        def get_image_settings():
+            """Get current image generation settings."""
+            try:
+                from engine.config import get_config
+                cfg = get_config()
+                comfyui_gen = cfg.get('comfyui', {}).get('generation', {})
+            except Exception:
+                comfyui_gen = {}
+
+            # Get available models from ComfyUI
+            models = []
+            try:
+                models = self.media_generator.client.get_models()
+            except Exception:
+                pass
+
+            current_model = None
+            try:
+                current_model = self.media_generator.client._get_model_name()
+            except Exception:
+                pass
+
+            return jsonify({
+                'settings': {
+                    'steps': comfyui_gen.get('steps', 30),
+                    'cfg': comfyui_gen.get('cfg', 7.0),
+                    'sampler_name': comfyui_gen.get('sampler_name', 'euler'),
+                    'scheduler': comfyui_gen.get('scheduler', 'normal'),
+                    'denoise': comfyui_gen.get('denoise', 1.0),
+                    'model': current_model,
+                },
+                'available_models': models,
+                'available_samplers': [
+                    'euler', 'euler_ancestral', 'heun', 'heunpp2',
+                    'dpm_2', 'dpm_2_ancestral', 'lms', 'dpm_fast',
+                    'dpm_adaptive', 'dpmpp_2s_ancestral', 'dpmpp_sde',
+                    'dpmpp_sde_gpu', 'dpmpp_2m', 'dpmpp_2m_sde',
+                    'dpmpp_2m_sde_gpu', 'dpmpp_3m_sde', 'dpmpp_3m_sde_gpu',
+                    'ddpm', 'lcm', 'uni_pc', 'uni_pc_bh2',
+                ],
+                'available_schedulers': [
+                    'normal', 'karras', 'exponential', 'sgm_uniform',
+                    'simple', 'ddim_uniform', 'beta',
+                ],
+            })
+
+        @self.app.route('/api/image-settings', methods=['POST'])
+        def set_image_settings():
+            """Update image generation settings (runtime override)."""
+            data = request.json or {}
+
+            # Override the model if provided
+            if 'model' in data and data['model']:
+                from content.simulation.services.comfyui_client import ComfyUIClient
+                ComfyUIClient._force_model = data['model']
+
+            # Store settings in instance for runtime use
+            if not hasattr(self, '_image_settings'):
+                self._image_settings = {}
+            for key in ('steps', 'cfg', 'sampler_name', 'scheduler', 'denoise'):
+                if key in data:
+                    self._image_settings[key] = data[key]
+
+            return jsonify({'success': True, 'settings': self._image_settings})
 
     def _setup_socketio(self):
         """Setup SocketIO event handlers"""

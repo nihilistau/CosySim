@@ -105,6 +105,14 @@ comfyui:
   enabled: false
   base_url: "http://localhost:8188"
   timeout: 300
+  generation:
+    steps: 30
+    cfg: 7.0
+    sampler_name: "euler"
+    scheduler: "normal"
+    denoise: 1.0
+    # model: auto (detected from available checkpoints)
+    # width/height: from media_standards below
 
 # Media standards — all services read dimensions from here
 media_standards:

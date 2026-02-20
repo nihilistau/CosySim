@@ -524,6 +524,14 @@
                             <div class="icon icon-settings">⚙️</div>
                             <span>Settings</span>
                         </div>
+                        <div class="app-icon" onclick="openApp('voiceStudio')">
+                            <div class="icon icon-studio">🎙️</div>
+                            <span>Voice Studio</span>
+                        </div>
+                        <div class="app-icon" onclick="openApp('imageSettings')">
+                            <div class="icon icon-imgsettings">🎨</div>
+                            <span>Image Gen</span>
+                        </div>
                     </div>
                     <div class="dock">
                         <div class="dock-icon" onclick="openApp('messages')">💬</div>
@@ -752,6 +760,118 @@
                         <button class="settings-save-btn" onclick="savePhoneSettings()">💾 Save Settings</button>
                     </div>
                 </div><!-- /settingsScreen -->
+
+                <!-- ══════ VOICE STUDIO ══════ -->
+                <div class="screen-view" id="voiceStudioScreen" style="display:none;">
+                    <div class="app-header">
+                        <button class="back-button" onclick="goHome()">←</button>
+                        <h2>🎙️ Voice Studio</h2>
+                    </div>
+                    <div style="padding:10px; overflow-y:auto; flex:1; min-height:0;">
+                        <!-- Voice selector -->
+                        <div class="settings-group">
+                            <div class="settings-group-title">Voice</div>
+                            <select id="vsVoiceSelect" class="settings-input" style="width:100%;text-align:left;padding-left:6px;">
+                                <option value="">Loading voices...</option>
+                            </select>
+                            <div style="display:flex; gap:4px; margin-top:6px;">
+                                <button class="icon-action-btn" onclick="vsNewVoice()" title="New voice">➕</button>
+                                <button class="icon-action-btn" onclick="vsEditVoice()" title="Edit voice">✏️</button>
+                                <button class="icon-action-btn" onclick="vsCloneVoice()" title="Clone from WAV">📎</button>
+                            </div>
+                        </div>
+
+                        <!-- Text input -->
+                        <div class="settings-group">
+                            <div class="settings-group-title">Text</div>
+                            <textarea id="vsTextInput" class="settings-textarea" rows="5"
+                                placeholder="Type or paste text to generate speech..."></textarea>
+                            <div style="display:flex; gap:4px; margin-top:6px; flex-wrap:wrap;">
+                                <select id="vsEmotion" class="settings-input" style="width:auto;text-align:left;padding:2px 6px;font-size:11px;">
+                                    <option value="">No emotion</option>
+                                    <option value="happy">😊 Happy</option>
+                                    <option value="sad">😢 Sad</option>
+                                    <option value="angry">😠 Angry</option>
+                                    <option value="excited">🤩 Excited</option>
+                                    <option value="flirty">😏 Flirty</option>
+                                    <option value="seductive">🔥 Seductive</option>
+                                    <option value="confident">💪 Confident</option>
+                                    <option value="shy">🙈 Shy</option>
+                                    <option value="sarcastic">😒 Sarcastic</option>
+                                    <option value="mysterious">🌙 Mysterious</option>
+                                    <option value="loving">💕 Loving</option>
+                                    <option value="scared">😰 Scared</option>
+                                </select>
+                                <select id="vsModelSize" class="settings-input" style="width:auto;text-align:left;padding:2px 6px;font-size:11px;">
+                                    <option value="auto">Auto</option>
+                                    <option value="0.6b">0.6B (Fast)</option>
+                                    <option value="1.7b">1.7B (Quality)</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Tone helpers (cheat sheet) -->
+                        <div class="settings-group">
+                            <div class="settings-group-title">Quick Insert</div>
+                            <div id="vsToneButtons" style="display:flex; flex-wrap:wrap; gap:3px;"></div>
+                        </div>
+
+                        <!-- Generate buttons -->
+                        <div style="display:flex; gap:6px; margin:8px 0;">
+                            <button class="settings-save-btn" onclick="vsGenerate()" style="flex:1;">🎙️ Generate</button>
+                            <button class="settings-save-btn" onclick="vsBatchDialog()" style="flex:1;background:#333;">📋 Batch</button>
+                        </div>
+
+                        <!-- Recordings -->
+                        <div class="settings-group">
+                            <div class="settings-group-title">Recordings</div>
+                            <div id="vsRecordingsList" style="max-height:200px;overflow-y:auto;"></div>
+                        </div>
+                    </div>
+                </div><!-- /voiceStudioScreen -->
+
+                <!-- ══════ IMAGE SETTINGS ══════ -->
+                <div class="screen-view" id="imageSettingsScreen" style="display:none;">
+                    <div class="app-header">
+                        <button class="back-button" onclick="goHome()">←</button>
+                        <h2>🎨 Image Settings</h2>
+                    </div>
+                    <div style="padding:10px; overflow-y:auto; flex:1; min-height:0;">
+                        <div class="settings-group">
+                            <div class="settings-group-title">Sampling</div>
+                            <div class="settings-row">
+                                <span class="settings-label">Steps</span>
+                                <input class="settings-input" id="imgSteps" type="number" min="1" max="150" value="30">
+                            </div>
+                            <div class="settings-row">
+                                <span class="settings-label">CFG Scale</span>
+                                <input class="settings-input" id="imgCfg" type="number" min="1" max="30" step="0.5" value="7">
+                            </div>
+                            <div class="settings-row">
+                                <span class="settings-label">Denoise</span>
+                                <input class="settings-input" id="imgDenoise" type="number" min="0" max="1" step="0.05" value="1">
+                            </div>
+                        </div>
+                        <div class="settings-group">
+                            <div class="settings-group-title">Sampler & Scheduler</div>
+                            <div class="settings-row">
+                                <span class="settings-label">Sampler</span>
+                                <select class="settings-input" id="imgSampler" style="width:auto;text-align:left;padding-left:6px;"></select>
+                            </div>
+                            <div class="settings-row">
+                                <span class="settings-label">Scheduler</span>
+                                <select class="settings-input" id="imgScheduler" style="width:auto;text-align:left;padding-left:6px;"></select>
+                            </div>
+                        </div>
+                        <div class="settings-group">
+                            <div class="settings-group-title">Model</div>
+                            <select class="settings-input" id="imgModel" style="width:100%;text-align:left;padding-left:6px;">
+                                <option value="">Auto-detect</option>
+                            </select>
+                        </div>
+                        <button class="settings-save-btn" onclick="saveImageSettings()">💾 Save Image Settings</button>
+                    </div>
+                </div><!-- /imageSettingsScreen -->
 
                 <!-- ══════ Media Player Overlay (Skype-style connecting → player) ══════ -->
                 <div class="media-overlay" id="mediaOverlay">

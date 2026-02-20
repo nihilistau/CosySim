@@ -267,37 +267,50 @@ class PromptBuilder:
 #  ComfyUI Workflow Templates
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _default_image_workflow(positive: str, negative: str, seed: int = -1, model: str = "v1-5-pruned-emaonly.ckpt") -> Dict:
+def _default_image_workflow(
+    positive: str,
+    negative: str,
+    seed: int = -1,
+    model: str = "v1-5-pruned-emaonly.ckpt",
+    steps: int = 30,
+    cfg: float = 7.0,
+    sampler_name: str = "euler",
+    scheduler: str = "normal",
+    denoise: float = 1.0,
+    width: Optional[int] = None,
+    height: Optional[int] = None,
+) -> Dict:
     """
     Minimal ComfyUI workflow (API format) for image generation.
-    Reads target resolution from MediaConfig; falls back to auto-select by model family.
+    All sampler params are overridable; reads resolution from MediaConfig when not given.
     """
     if seed == -1:
         seed = int(uuid.uuid4().int % (2**31))
 
-    # Try MediaConfig first, then fall back to model-based auto-select
-    try:
-        from engine.media.media_config import get_media_config
-        width, height = get_media_config().image_dims("selfie")
-    except Exception:
-        _xl_keywords = ("xl", "sdxl", "pony", "flux", "juggernaut")
-        is_xl = any(k in model.lower() for k in _xl_keywords)
-        width, height = (1024, 1024) if is_xl else (512, 768)
+    # Resolve dimensions: explicit > MediaConfig > model-based auto
+    if width is None or height is None:
+        try:
+            from engine.media.media_config import get_media_config
+            width, height = get_media_config().image_dims("selfie")
+        except Exception:
+            _xl_keywords = ("xl", "sdxl", "pony", "flux", "juggernaut")
+            is_xl = any(k in model.lower() for k in _xl_keywords)
+            width, height = (1024, 1024) if is_xl else (512, 768)
 
     return {
         "3": {
             "class_type": "KSampler",
             "inputs": {
-                "cfg": 7,
-                "denoise": 1,
+                "cfg": cfg,
+                "denoise": denoise,
                 "latent_image": ["5", 0],
                 "model": ["4", 0],
                 "negative": ["7", 0],
                 "positive": ["6", 0],
-                "sampler_name": "euler",
-                "scheduler": "normal",
+                "sampler_name": sampler_name,
+                "scheduler": scheduler,
                 "seed": seed,
-                "steps": 30
+                "steps": steps
             }
         },
         "4": {
@@ -498,6 +511,13 @@ class ComfyUIClient:
         filename_prefix: str = "cosysim",
         workflow: Optional[Dict] = None,
         seed: int = -1,
+        steps: int = 30,
+        cfg: float = 7.0,
+        sampler_name: str = "euler",
+        scheduler: str = "normal",
+        denoise: float = 1.0,
+        width: Optional[int] = None,
+        height: Optional[int] = None,
     ) -> Optional[str]:
         """
         Generate an image via ComfyUI.
@@ -509,6 +529,13 @@ class ComfyUIClient:
             filename_prefix: File name prefix
             workflow: Custom ComfyUI workflow dict (uses default if None)
             seed: Generation seed (-1 for random)
+            steps: Sampling steps (default 30)
+            cfg: CFG scale (default 7.0)
+            sampler_name: Sampler algorithm (euler, dpmpp_2m, etc.)
+            scheduler: Scheduler type (normal, karras, exponential, etc.)
+            denoise: Denoising strength 0.0-1.0
+            width: Image width (None = auto from MediaConfig)
+            height: Image height (None = auto from MediaConfig)
 
         Returns:
             Absolute path to saved image, or None on failure
@@ -521,10 +548,15 @@ class ComfyUIClient:
             logger.warning("ComfyUI not reachable at %s – using placeholder", self.base_url)
             return self._create_placeholder_image(save_dir, filename_prefix)
 
-        # Use provided workflow or build default
+        # Use provided workflow or build default with all params
         if workflow is None:
-            workflow = _default_image_workflow(positive_prompt, negative_prompt, seed,
-                                               model=self._get_model_name())
+            workflow = _default_image_workflow(
+                positive_prompt, negative_prompt, seed,
+                model=self._get_model_name(),
+                steps=steps, cfg=cfg,
+                sampler_name=sampler_name, scheduler=scheduler,
+                denoise=denoise, width=width, height=height,
+            )
 
         prompt_id = self._queue_prompt(workflow)
         if not prompt_id:
@@ -562,8 +594,13 @@ class ComfyUIClient:
         nsfw: bool = False,
         save_dir: Optional[str] = None,
         extra_prompt: str = "",
+        **gen_kwargs,
     ) -> Optional[str]:
-        """High-level helper for character selfie generation."""
+        """High-level helper for character selfie generation.
+
+        Extra kwargs (steps, cfg, sampler_name, scheduler, denoise, width, height)
+        are forwarded to generate_image.
+        """
         positive, negative = PromptBuilder.selfie(
             appearance=appearance,
             mood=mood,
@@ -572,7 +609,10 @@ class ComfyUIClient:
             extra=extra_prompt,
         )
         prefix = f"selfie_{mood}"
-        return self.generate_image(positive, negative, save_dir=save_dir, filename_prefix=prefix)
+        return self.generate_image(
+            positive, negative, save_dir=save_dir, filename_prefix=prefix,
+            **gen_kwargs,
+        )
 
     # ──────────────────────────────
     #  Placeholder (offline mode)

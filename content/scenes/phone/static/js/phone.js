@@ -235,7 +235,9 @@ function openApp(appName) {
         'browser':       'homeScreen',        // Placeholder
         'videoMessages': 'videoMessagesScreen',
         'voiceMessages': 'voiceMessagesScreen',
-        'settings':      'settingsScreen'
+        'settings':      'settingsScreen',
+        'voiceStudio':   'voiceStudioScreen',
+        'imageSettings': 'imageSettingsScreen'
     };
     
     const screenId = screenMap[appName] || 'homeScreen';
@@ -253,6 +255,12 @@ function openApp(appName) {
         loadVoiceMessages();
     } else if (appName === 'settings') {
         loadPhoneSettings();
+    } else if (appName === 'voiceStudio') {
+        vsLoadVoices();
+        vsLoadRecordings();
+        vsLoadToneButtons();
+    } else if (appName === 'imageSettings') {
+        loadImageSettings();
     }
 }
 
@@ -1302,3 +1310,241 @@ window.toggleAutonomous = toggleAutonomous;
 window.updateTimeRange = updateTimeRange;
 window.updateAutonomousSettings = updateAutonomousSettings;
 window.saveAutonomousSettings = saveAutonomousSettings;
+
+// ══════════════════════════════ VOICE STUDIO ══════════════════════════════
+
+async function vsLoadVoices() {
+    try {
+        const resp = await fetch('/api/voice-studio/voices');
+        const data = await resp.json();
+        const sel = document.getElementById('vsVoiceSelect');
+        if (!sel) return;
+        sel.innerHTML = '<option value="">-- Select Voice --</option>';
+        (data.voices || []).forEach(v => {
+            const opt = document.createElement('option');
+            opt.value = v.id;
+            opt.textContent = `${v.name} (${v.model_size})${v.is_premade ? ' ★' : ''}`;
+            sel.appendChild(opt);
+        });
+    } catch(e) { console.error('vsLoadVoices:', e); }
+}
+
+async function vsLoadRecordings() {
+    try {
+        const resp = await fetch('/api/voice-studio/recordings?limit=20');
+        const data = await resp.json();
+        const list = document.getElementById('vsRecordingsList');
+        if (!list) return;
+        const recs = data.recordings || [];
+        if (!recs.length) { list.innerHTML = '<div style="color:#888;font-size:12px;padding:8px;">No recordings yet</div>'; return; }
+        list.innerHTML = recs.map(r => `
+            <div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid #222;">
+                <button onclick="vsPlayRec('${r.url}')" style="background:none;border:none;cursor:pointer;font-size:16px;">▶️</button>
+                <div style="flex:1;min-width:0;">
+                    <div style="font-size:12px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${r.name || 'Recording'}</div>
+                    <div style="font-size:10px;color:#888;">${r.duration ? r.duration.toFixed(1) + 's' : ''} · ${r.text ? r.text.substring(0,40) + '...' : ''}</div>
+                </div>
+                <button onclick="vsDeleteRec('${r.id}')" style="background:none;border:none;cursor:pointer;font-size:12px;color:#f44;">🗑️</button>
+            </div>
+        `).join('');
+    } catch(e) { console.error('vsLoadRecordings:', e); }
+}
+
+function vsLoadToneButtons() {
+    const container = document.getElementById('vsToneButtons');
+    if (!container) return;
+    const tags = {
+        '😊 Happy':'happy', '😢 Sad':'sad', '😠 Angry':'angry',
+        '🤩 Excited':'excited', '😏 Flirty':'flirty', '🔥 Seductive':'seductive',
+        '💪 Confident':'confident', '🙈 Shy':'shy', '🌙 Mystery':'mysterious',
+        '💕 Loving':'loving', '🎭 Dramatic':'dramatic', '💤 ASMR':'asmr',
+        '📢 Shout':'shout', '🤫 Whisper':'whisper', '😤 Raspy':'raspy',
+    };
+    container.innerHTML = Object.entries(tags).map(([label, val]) =>
+        `<button onclick="vsInsertTone('${val}')" style="font-size:10px;padding:2px 6px;border-radius:8px;border:1px solid #444;background:#222;color:#fff;cursor:pointer;">${label}</button>`
+    ).join('');
+}
+
+function vsInsertTone(tone) {
+    const ta = document.getElementById('vsTextInput');
+    if (ta) ta.value += ` [${tone}] `;
+    ta.focus();
+}
+
+async function vsGenerate() {
+    const text = document.getElementById('vsTextInput')?.value?.trim();
+    if (!text) { alert('Enter text first'); return; }
+    const voiceId = document.getElementById('vsVoiceSelect')?.value || null;
+    const emotion = document.getElementById('vsEmotion')?.value || null;
+    const modelSize = document.getElementById('vsModelSize')?.value || 'auto';
+
+    try {
+        const resp = await fetch('/api/voice-studio/generate', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ text, voice_id: voiceId, emotion, model_size: modelSize })
+        });
+        const data = await resp.json();
+        if (data.success && data.recording) {
+            vsPlayRec(data.recording.url);
+            vsLoadRecordings();
+        } else {
+            alert(data.error || 'Generation failed');
+        }
+    } catch(e) { alert('Error: ' + e.message); }
+}
+
+function vsPlayRec(url) {
+    const audio = new Audio(url);
+    audio.play().catch(e => console.error('Playback error:', e));
+}
+
+async function vsDeleteRec(id) {
+    if (!confirm('Delete this recording?')) return;
+    await fetch(`/api/voice-studio/recordings/${id}`, { method: 'DELETE' });
+    vsLoadRecordings();
+}
+
+function vsNewVoice() {
+    const name = prompt('Voice name:');
+    if (!name) return;
+    const desc = prompt('Voice description (acoustic traits, pitch, pace, style):');
+    if (!desc) return;
+    const modelSize = prompt('Model size (0.6b or 1.7b):', '1.7b');
+    fetch('/api/voice-studio/voices', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ name, description: desc, model_size: modelSize || '1.7b' })
+    }).then(() => vsLoadVoices());
+}
+
+function vsEditVoice() {
+    const id = document.getElementById('vsVoiceSelect')?.value;
+    if (!id || id.startsWith('premade_')) { alert('Select a custom voice to edit'); return; }
+    const desc = prompt('New voice description:');
+    if (!desc) return;
+    fetch(`/api/voice-studio/voices/${id}`, {
+        method: 'PUT',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ description: desc })
+    }).then(() => vsLoadVoices());
+}
+
+function vsCloneVoice() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.wav,.mp3,.ogg';
+    input.onchange = async () => {
+        const file = input.files[0];
+        if (!file) return;
+        const name = prompt('Name for cloned voice:', `Clone: ${file.name}`);
+        if (!name) return;
+        const form = new FormData();
+        form.append('audio', file);
+        form.append('name', name);
+        const resp = await fetch('/api/voice-studio/clone', { method: 'POST', body: form });
+        const data = await resp.json();
+        if (data.success) { vsLoadVoices(); alert('Voice cloned!'); }
+        else alert(data.error || 'Clone failed');
+    };
+    input.click();
+}
+
+function vsBatchDialog() {
+    const script = prompt(
+        'Paste a batch script (one line per generation):\n\n' +
+        'Format: CHARACTER (emotion): "dialogue"\n' +
+        'Or plain text lines\n\n' +
+        'Example:\nCOMMANDER: "Fire all batteries!"\nAI (calm): "Reactor at 84%"'
+    );
+    if (!script) return;
+    const voiceId = document.getElementById('vsVoiceSelect')?.value || null;
+    fetch('/api/voice-studio/batch', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ script, voice_id: voiceId })
+    }).then(r => r.json()).then(data => {
+        alert(`Batch complete: ${data.generated}/${data.total} generated`);
+        vsLoadRecordings();
+    }).catch(e => alert('Batch error: ' + e.message));
+}
+
+// Export voice studio functions
+window.vsLoadVoices = vsLoadVoices;
+window.vsLoadRecordings = vsLoadRecordings;
+window.vsLoadToneButtons = vsLoadToneButtons;
+window.vsInsertTone = vsInsertTone;
+window.vsGenerate = vsGenerate;
+window.vsPlayRec = vsPlayRec;
+window.vsDeleteRec = vsDeleteRec;
+window.vsNewVoice = vsNewVoice;
+window.vsEditVoice = vsEditVoice;
+window.vsCloneVoice = vsCloneVoice;
+window.vsBatchDialog = vsBatchDialog;
+
+// ══════════════════════════════ IMAGE SETTINGS ════════════════════════════
+
+async function loadImageSettings() {
+    try {
+        const resp = await fetch('/api/image-settings');
+        const data = await resp.json();
+        const s = data.settings || {};
+
+        const stepsEl = document.getElementById('imgSteps');
+        const cfgEl = document.getElementById('imgCfg');
+        const denoiseEl = document.getElementById('imgDenoise');
+        const samplerEl = document.getElementById('imgSampler');
+        const schedulerEl = document.getElementById('imgScheduler');
+        const modelEl = document.getElementById('imgModel');
+
+        if (stepsEl) stepsEl.value = s.steps || 30;
+        if (cfgEl) cfgEl.value = s.cfg || 7;
+        if (denoiseEl) denoiseEl.value = s.denoise || 1;
+
+        // Populate sampler options
+        if (samplerEl) {
+            samplerEl.innerHTML = (data.available_samplers || []).map(name =>
+                `<option value="${name}" ${name === s.sampler_name ? 'selected' : ''}>${name}</option>`
+            ).join('');
+        }
+
+        // Populate scheduler options
+        if (schedulerEl) {
+            schedulerEl.innerHTML = (data.available_schedulers || []).map(name =>
+                `<option value="${name}" ${name === s.scheduler ? 'selected' : ''}>${name}</option>`
+            ).join('');
+        }
+
+        // Populate model options
+        if (modelEl) {
+            modelEl.innerHTML = '<option value="">Auto-detect</option>' +
+                (data.available_models || []).map(name =>
+                    `<option value="${name}" ${name === s.model ? 'selected' : ''}>${name}</option>`
+                ).join('');
+        }
+    } catch(e) { console.error('loadImageSettings:', e); }
+}
+
+async function saveImageSettings() {
+    const settings = {
+        steps: parseInt(document.getElementById('imgSteps')?.value) || 30,
+        cfg: parseFloat(document.getElementById('imgCfg')?.value) || 7,
+        denoise: parseFloat(document.getElementById('imgDenoise')?.value) || 1,
+        sampler_name: document.getElementById('imgSampler')?.value || 'euler',
+        scheduler: document.getElementById('imgScheduler')?.value || 'normal',
+        model: document.getElementById('imgModel')?.value || null,
+    };
+    try {
+        const resp = await fetch('/api/image-settings', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify(settings)
+        });
+        const data = await resp.json();
+        if (data.success) alert('Image settings saved!');
+        else alert('Error saving settings');
+    } catch(e) { alert('Error: ' + e.message); }
+}
+
+window.loadImageSettings = loadImageSettings;
+window.saveImageSettings = saveImageSettings;

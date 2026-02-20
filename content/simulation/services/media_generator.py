@@ -65,6 +65,7 @@ class MediaGenerator:
         chain_id: Optional[str] = None,
         scene_id: str = "unknown",
         character_id: Optional[str] = None,
+        **gen_kwargs,
     ) -> Optional[str]:
         """
         Generate a selfie image for a character.
@@ -77,6 +78,7 @@ class MediaGenerator:
             style: Photo style (unused – kept for API compat)
             nsfw: Allow NSFW content
             extra_prompt: Additional prompt keywords
+            **gen_kwargs: ComfyUI params: steps, cfg, sampler_name, scheduler, denoise, width, height
 
         Returns:
             Path to generated/placeholder image, or None
@@ -88,6 +90,7 @@ class MediaGenerator:
             nsfw=nsfw,
             save_dir=str(self.image_dir),
             extra_prompt=extra_prompt,
+            **gen_kwargs,
         )
 
         if path:
