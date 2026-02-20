@@ -6,7 +6,9 @@ Concrete interceptors for the ``InterceptorPipeline``.  Each one focuses on
 a single concern and composes cleanly with the others.
 
 Execution order (by priority):
+   8  CharacterRegistryInterceptor — inject character identity/mood; handle force_response
   10  RouterMessageInjector        — inject inbox messages from other agents
+  12  DialogDirectiveInterceptor   — inject must_include/style_lock; post-call verification
   15  BedroomSceneInterceptor      — inject wardrobe/stats/narrative for bedroom scene
   15  PhoneSceneInterceptor        — inject conversation heat/stats for phone scene
   20  AutoResultInjector           — inject auto-skill results into system prompt
@@ -576,3 +578,185 @@ class PhoneSceneInterceptor(InterceptorBase):
 
         except Exception as exc:
             logger.debug("PhoneSceneInterceptor pre_call failed: %s", exc)
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  CharacterRegistryInterceptor  (priority 8)
+# ══════════════════════════════════════════════════════════════════════
+
+class CharacterRegistryInterceptor(InterceptorBase):
+    """
+    Runs BEFORE all scene interceptors (priority 8).
+
+    pre_call
+    --------
+    1. Ensures the active character has a registry entry (auto-creates a stub
+       if not found).
+    2. Injects a compact character-summary block into the system prompt so the
+       LLM always knows its own name, mood, personality, and active skills.
+    3. Checks the DialogSystem for a ``force_response`` directive — if one is
+       active it short-circuits the LLM call by writing the forced reply
+       directly into ctx["reply"] and setting ctx["skip_llm"] = True.
+
+    This makes the registry the authoritative first step for every agent turn.
+    """
+    name     = "character_registry"
+    priority = 8
+
+    def pre_call(self, ctx: ResponseContext) -> None:
+        agent_id = ctx.get("agent_id", "")
+        if not agent_id:
+            return
+
+        try:
+            from engine.mcp.character_registry import get_character_registry, apply_default_skills
+            reg = get_character_registry()
+            reg.ensure(agent_id)
+
+            # One-time: apply default skills if the character has none yet
+            existing = reg.get_skills(agent_id, enabled_only=False)
+            if not existing:
+                apply_default_skills(agent_id)
+
+            summary = reg.get_character_summary(agent_id)
+            if summary:
+                lines = [
+                    f"[CHARACTER IDENTITY]",
+                    f"Name: {summary.get('name', agent_id)}",
+                ]
+                if summary.get("mood"):
+                    lines.append(f"Current mood: {summary['mood']} (intensity {summary.get('mood_intensity', 0.5):.0%})")
+                p = summary.get("personality", {})
+                if p:
+                    p_str = ", ".join(f"{k}={v:.0%}" for k, v in p.items())
+                    lines.append(f"Personality: {p_str}")
+                voice = summary.get("voice_style")
+                if voice:
+                    lines.append(f"Voice style: {voice}")
+                if summary.get("restrictions"):
+                    lines.append(f"Current restrictions: {', '.join(summary['restrictions'])}")
+                active_skills = [s["label"] for s in summary.get("skills", []) if s.get("trigger") == "auto"]
+                if active_skills:
+                    lines.append(f"Auto-active skills: {', '.join(active_skills)}")
+                lines.append("[/CHARACTER IDENTITY]")
+                block = "\n".join(lines)
+                ctx["system_prompt"] = block + "\n\n" + ctx.get("system_prompt", "")
+
+        except Exception as exc:
+            logger.debug("CharacterRegistryInterceptor pre_call failed: %s", exc)
+            return
+
+        # ── Check for force_response directive ──────────────────────
+        try:
+            scene = ctx.get("scene", "")
+            from engine.mcp.dialog_system import get_dialog_system
+            ds = get_dialog_system()
+            directive = ds.get_active_directive(agent_id, scene)
+            if directive and directive.get("directive_type") == "force_response":
+                forced = directive.get("value", "")
+                if forced:
+                    ctx["reply"]     = forced
+                    ctx["skip_llm"]  = True
+                    ds.consume_directive(agent_id, scene)
+                    logger.debug("CharacterRegistryInterceptor: force_response applied for %s", agent_id)
+        except Exception as exc:
+            logger.debug("CharacterRegistryInterceptor directive check failed: %s", exc)
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  DialogDirectiveInterceptor  (priority 12)
+# ══════════════════════════════════════════════════════════════════════
+
+class DialogDirectiveInterceptor(InterceptorBase):
+    """
+    Runs between CharacterRegistryInterceptor and scene interceptors (priority 12).
+
+    pre_call
+    --------
+    - Injects ``must_include`` fragments and ``style_lock`` style instructions
+      into the system prompt so the model naturally incorporates them.
+    - Records any active style_lock in ctx so ResponseShaperInterceptor can
+      reference it.
+
+    post_call
+    ---------
+    - Checks if a ``must_include`` directive is active; if the fragment is
+      missing from the final reply it is appended gracefully.
+    - Ticks the DialogSystem conversation state (increments turn counter,
+      decrements directive turns).
+    """
+    name     = "dialog_directive"
+    priority = 12
+
+    def pre_call(self, ctx: ResponseContext) -> None:
+        agent_id = ctx.get("agent_id", "")
+        scene    = ctx.get("scene", "")
+        if not agent_id:
+            return
+
+        try:
+            from engine.mcp.dialog_system import get_dialog_system
+            ds = get_dialog_system()
+            directive = ds.get_active_directive(agent_id, scene)
+            if not directive:
+                return
+
+            dtype = directive.get("directive_type", "")
+            value = directive.get("value", "")
+
+            if dtype == "must_include" and value:
+                ctx.setdefault("dialog_must_include", []).append(value)
+                ctx["system_prompt"] = (
+                    ctx.get("system_prompt", "") +
+                    f"\n\n[DIRECTIVE] Your response MUST naturally include or reference: \"{value}\". "
+                    f"Work it in organically — do not quote it verbatim."
+                )
+
+            elif dtype == "style_lock" and value:
+                from engine.mcp.dialog_system import SpeechStyle, _STYLE_INSTRUCTIONS
+                instr = _STYLE_INSTRUCTIONS.get(value, "")
+                if instr:
+                    ctx["system_prompt"] = (
+                        ctx.get("system_prompt", "") +
+                        f"\n\n[STYLE LOCK] Respond in this style for this turn: {value.upper()} — {instr}"
+                    )
+                ctx["active_style_lock"] = value
+
+            elif dtype == "topic_steer" and value:
+                ctx["system_prompt"] = (
+                    ctx.get("system_prompt", "") +
+                    f"\n\n[DIRECTIVE] Steer the conversation toward this topic: {value}"
+                )
+
+            elif dtype == "mood_set" and value:
+                ctx["system_prompt"] = (
+                    ctx.get("system_prompt", "") +
+                    f"\n\n[DIRECTIVE] Your mood and tone for this turn: {value}"
+                )
+
+        except Exception as exc:
+            logger.debug("DialogDirectiveInterceptor pre_call failed: %s", exc)
+
+    def post_call(self, ctx: ResponseContext) -> None:
+        agent_id = ctx.get("agent_id", "")
+        scene    = ctx.get("scene", "")
+        if not agent_id:
+            return
+
+        # ── Enforce must_include fragments ───────────────────────────
+        must_list = ctx.get("dialog_must_include", [])
+        reply     = ctx.get("reply", "")
+        if must_list and reply:
+            for fragment in must_list:
+                if fragment.lower() not in reply.lower():
+                    # Append gracefully
+                    ctx["reply"] = reply.rstrip() + f"  ({fragment})"
+                    reply = ctx["reply"]
+
+        # ── Tick conversation state ──────────────────────────────────
+        try:
+            from engine.mcp.dialog_system import get_dialog_system
+            ds = get_dialog_system()
+            ds.tick(agent_id, scene)
+        except Exception as exc:
+            logger.debug("DialogDirectiveInterceptor post_call tick failed: %s", exc)

@@ -1694,7 +1694,866 @@ def resolve_random_scene_event(scene_id: str = "bedroom") -> str:
     }, indent=2)
 
 
-@mcp.resource("config://cosysim")
+# ══════════════════════════════════════════════════════════════════════
+#  CHARACTER REGISTRY TOOLS
+# ══════════════════════════════════════════════════════════════════════
+
+@mcp.tool()
+def character_register(
+    character_id: str,
+    name: str,
+    age: int = 25,
+    appearance_json: str = "{}",
+    personality_json: str = "{}",
+    backstory: str = "",
+    voice_style: str = "natural",
+    pronouns: str = "she/her",
+    scene_roles_json: str = "{}",
+) -> str:
+    """
+    Register a character in the central CharacterRegistry.
+    Call this once per character at scene start.  Safe to call multiple times —
+    it will auto-create a stub if the character doesn't exist yet.
+
+    Args:
+        character_id:     Unique key e.g. "aria" or "user"
+        name:             Display name
+        age:              Character age
+        appearance_json:  JSON dict e.g. '{"hair": "dark", "eyes": "green"}'
+        personality_json: JSON dict of 0-1 floats e.g. '{"openness": 0.8}'
+        backstory:        Short backstory paragraph
+        voice_style:      Speaking style e.g. "warm and literary"
+        pronouns:         e.g. "she/her"
+        scene_roles_json: JSON dict of scene → role  e.g. '{"bedroom": "lover"}'
+    """
+    try:
+        import json as _json
+        from engine.mcp.character_registry import get_character_registry, apply_default_skills
+        reg = get_character_registry()
+        appearance   = _json.loads(appearance_json)   if appearance_json   else {}
+        personality  = _json.loads(personality_json)  if personality_json  else {}
+        scene_roles  = _json.loads(scene_roles_json)  if scene_roles_json  else {}
+        rec = reg.register(
+            character_id,
+            name        = name,
+            age         = age,
+            appearance  = appearance,
+            personality = personality,
+            backstory   = backstory,
+            voice_style = voice_style,
+            pronouns    = pronouns,
+            scene_roles = scene_roles,
+        )
+        apply_default_skills(character_id)
+        return json.dumps({"ok": True, "character_id": character_id, "name": rec.profile.name})
+    except Exception as exc:
+        return json.dumps({"ok": False, "error": str(exc)})
+
+
+@mcp.tool()
+def character_query(character_id: str, attribute: str) -> str:
+    """
+    Retrieve any attribute from a character's profile, state, or appearance.
+
+    Args:
+        character_id: e.g. "aria"
+        attribute:    Any key: "name", "age", "mood", "arousal", "voice_style",
+                      "hair", "eye_colour", "restrictions", "flags", etc.
+    """
+    try:
+        from engine.mcp.character_registry import get_character_registry
+        reg = get_character_registry()
+        reg.ensure(character_id)
+        value = reg.get_attribute(character_id, attribute)
+        if value is None:
+            # Try state fields directly
+            state = reg.get_state(character_id)
+            value = state.__dict__.get(attribute) if state else None
+        return json.dumps({"character_id": character_id, "attribute": attribute, "value": value})
+    except Exception as exc:
+        return json.dumps({"error": str(exc)})
+
+
+@mcp.tool()
+def character_set_attribute(
+    character_id: str,
+    attribute: str,
+    value: str,
+) -> str:
+    """
+    Set a mutable state attribute on a character.
+
+    Supports: mood, mood_intensity, focus, current_role, energy, inhibition,
+    or any arbitrary flag stored in character_flags.
+
+    Args:
+        character_id: e.g. "aria"
+        attribute:    State field name
+        value:        New value (will be coerced from string where possible)
+    """
+    try:
+        from engine.mcp.character_registry import get_character_registry
+        reg = get_character_registry()
+        reg.ensure(character_id)
+        # Coerce numeric strings
+        coerced: Any = value
+        try:
+            coerced = float(value) if '.' in value else int(value)
+        except (ValueError, TypeError):
+            if value.lower() in ("true", "false"):
+                coerced = value.lower() == "true"
+        reg.set_state(character_id, **{attribute: coerced})
+        return json.dumps({"ok": True, "character_id": character_id, attribute: coerced})
+    except Exception as exc:
+        return json.dumps({"ok": False, "error": str(exc)})
+
+
+@mcp.tool()
+def character_get_summary(character_id: str) -> str:
+    """
+    Return a compact summary of a character's current identity, mood,
+    personality, skills, and restrictions — ready for prompt injection.
+
+    Args:
+        character_id: e.g. "aria"
+    """
+    try:
+        from engine.mcp.character_registry import get_character_registry
+        reg = get_character_registry()
+        reg.ensure(character_id)
+        summary = reg.get_character_summary(character_id)
+        return json.dumps(summary, indent=2)
+    except Exception as exc:
+        return json.dumps({"error": str(exc)})
+
+
+@mcp.tool()
+def character_assign_skill(
+    character_id: str,
+    skill_id: str,
+    skill_type: str = "custom",
+    label: str = "",
+    params_json: str = "{}",
+    trigger: str = "optional",
+    priority: int = 50,
+) -> str:
+    """
+    Assign a new skill to a character.
+
+    Args:
+        character_id: Character to receive the skill
+        skill_id:     Unique skill identifier
+        skill_type:   "memory" | "speech" | "action" | "query" | "custom"
+        label:        Human-readable name
+        params_json:  JSON dict of skill parameters
+        trigger:      "auto" (always runs) | "optional" | "required"
+        priority:     Execution priority (lower = earlier)
+    """
+    try:
+        import json as _json
+        from engine.mcp.character_registry import get_character_registry
+        reg = get_character_registry()
+        reg.ensure(character_id)
+        params = _json.loads(params_json) if params_json else {}
+        entry = reg.assign_skill(
+            character_id,
+            skill_id   = skill_id,
+            skill_type = skill_type,
+            label      = label or skill_id,
+            params     = params,
+            trigger    = trigger,
+            priority   = priority,
+        )
+        return json.dumps({"ok": True, "character_id": character_id, "skill_id": skill_id, "trigger": entry.trigger})
+    except Exception as exc:
+        return json.dumps({"ok": False, "error": str(exc)})
+
+
+@mcp.tool()
+def character_revoke_skill(character_id: str, skill_id: str) -> str:
+    """
+    Remove a skill from a character.
+
+    Args:
+        character_id: e.g. "aria"
+        skill_id:     Skill to remove
+    """
+    try:
+        from engine.mcp.character_registry import get_character_registry
+        ok = get_character_registry().revoke_skill(character_id, skill_id)
+        return json.dumps({"ok": ok, "character_id": character_id, "skill_id": skill_id})
+    except Exception as exc:
+        return json.dumps({"ok": False, "error": str(exc)})
+
+
+@mcp.tool()
+def character_get_skills(character_id: str, trigger: str = "") -> str:
+    """
+    List all skills assigned to a character, optionally filtered by trigger type.
+
+    Args:
+        character_id: e.g. "aria"
+        trigger:      Optional filter: "auto" | "optional" | "required" | "" (all)
+    """
+    try:
+        from engine.mcp.character_registry import get_character_registry
+        reg = get_character_registry()
+        reg.ensure(character_id)
+        skills = reg.get_skills(character_id, trigger=trigger or None)
+        return json.dumps([
+            {"skill_id": s.skill_id, "label": s.label, "type": s.skill_type,
+             "trigger": s.trigger, "priority": s.priority, "enabled": s.enabled}
+            for s in skills
+        ], indent=2)
+    except Exception as exc:
+        return json.dumps({"error": str(exc)})
+
+
+@mcp.tool()
+def character_add_restriction(character_id: str, restriction: str) -> str:
+    """
+    Add a named restriction to a character.  Restrictions are checked by the
+    rules engine and character_registry interceptor before actions are allowed.
+
+    Args:
+        character_id: e.g. "aria"
+        restriction:  Named restriction e.g. "no_nudity", "safe_mode"
+    """
+    try:
+        from engine.mcp.character_registry import get_character_registry
+        get_character_registry().add_restriction(character_id, restriction)
+        return json.dumps({"ok": True, "character_id": character_id, "added": restriction})
+    except Exception as exc:
+        return json.dumps({"ok": False, "error": str(exc)})
+
+
+@mcp.tool()
+def character_remove_restriction(character_id: str, restriction: str) -> str:
+    """
+    Remove a named restriction from a character.
+
+    Args:
+        character_id: e.g. "aria"
+        restriction:  Name of the restriction to remove
+    """
+    try:
+        from engine.mcp.character_registry import get_character_registry
+        get_character_registry().remove_restriction(character_id, restriction)
+        return json.dumps({"ok": True, "character_id": character_id, "removed": restriction})
+    except Exception as exc:
+        return json.dumps({"ok": False, "error": str(exc)})
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  DIALOG SYSTEM TOOLS
+# ══════════════════════════════════════════════════════════════════════
+
+@mcp.tool()
+def get_dialog_options(
+    character_id: str,
+    scene_id: str,
+    context_tags_json: str = "[]",
+    stats_json: str = "{}",
+    max_options: int = 4,
+) -> str:
+    """
+    Get situationally appropriate dialog/action options for a character.
+    Options are filtered by current stats and context tags.
+    Use this before responding to pick the right kind of response.
+
+    Args:
+        character_id:      e.g. "aria"
+        scene_id:          e.g. "bedroom" or "phone"
+        context_tags_json: JSON list of current context tags e.g. '["intimate", "cuddle"]'
+        stats_json:        JSON dict of current stats e.g. '{"arousal": 55, "openness": 40}'
+        max_options:       Maximum number of options to return
+    """
+    try:
+        import json as _json
+        from engine.mcp.dialog_system import get_dialog_system
+        ds = get_dialog_system()
+        tags  = _json.loads(context_tags_json) if context_tags_json else []
+        stats = _json.loads(stats_json)        if stats_json        else {}
+        opts  = ds.get_options(character_id, scene_id, context_tags=tags, stats=stats, max_options=max_options)
+        heat  = ds.get_conversation_heat(character_id, scene_id)
+        return json.dumps({"options": opts, "conversation_heat": heat, "scene": scene_id}, indent=2)
+    except Exception as exc:
+        return json.dumps({"error": str(exc)})
+
+
+@mcp.tool()
+def speech_enhance(
+    character_id: str,
+    text: str,
+    style: str = "natural",
+    scene_id: str = "",
+) -> str:
+    """
+    Enhance or rewrite a piece of speech in the character's authentic voice.
+    Returns a rewrite prompt you can use with an LLM, plus a quick heuristic
+    version available immediately.
+
+    Valid styles: natural, playful, warm, dominant, vulnerable, teasing,
+                  direct, literary, whisper, charged
+
+    Args:
+        character_id: e.g. "aria"
+        text:         The original text to enhance
+        style:        Speech style to apply
+        scene_id:     Current scene for context
+    """
+    try:
+        from engine.mcp.dialog_system import get_dialog_system
+        result = get_dialog_system().enhance_speech(character_id, text, style=style, scene=scene_id)
+        return json.dumps(result, indent=2)
+    except Exception as exc:
+        return json.dumps({"error": str(exc)})
+
+
+@mcp.tool()
+def set_response_directive(
+    character_id: str,
+    scene_id: str,
+    directive_type: str,
+    value: str,
+    turns: int = 1,
+    issued_by: str = "director",
+) -> str:
+    """
+    Issue a directive that controls how the character responds for the next N turns.
+
+    Directive types:
+      force_response  — override the LLM: use this exact response
+      must_include    — the reply MUST naturally include this phrase/fragment
+      style_lock      — lock speech to a style: natural/playful/warm/dominant/
+                        vulnerable/teasing/direct/literary/whisper/charged
+      topic_steer     — steer the conversation toward this topic
+      mood_set        — override the character's mood tone
+      refuse          — character refuses the next action (in-character)
+
+    Args:
+        character_id:   Target character
+        scene_id:       Scene context
+        directive_type: One of the types above
+        value:          The directive value (response text, style name, topic, etc.)
+        turns:          How many turns this directive lasts
+        issued_by:      Who issued it (for audit)
+    """
+    try:
+        from engine.mcp.dialog_system import get_dialog_system
+        get_dialog_system().set_directive(
+            character_id, scene_id,
+            directive_type = directive_type,
+            value          = value,
+            turns          = turns,
+            issued_by      = issued_by,
+        )
+        return json.dumps({
+            "ok": True, "character_id": character_id, "scene": scene_id,
+            "directive_type": directive_type, "turns": turns,
+        })
+    except Exception as exc:
+        return json.dumps({"ok": False, "error": str(exc)})
+
+
+@mcp.tool()
+def get_active_directive(character_id: str, scene_id: str) -> str:
+    """
+    Return the currently active response directive for a character in a scene,
+    or null if none is set.
+
+    Args:
+        character_id: e.g. "aria"
+        scene_id:     e.g. "bedroom"
+    """
+    try:
+        from engine.mcp.dialog_system import get_dialog_system
+        directive = get_dialog_system().get_active_directive(character_id, scene_id)
+        return json.dumps(directive or {"active": False})
+    except Exception as exc:
+        return json.dumps({"error": str(exc)})
+
+
+@mcp.tool()
+def clear_directive(character_id: str, scene_id: str) -> str:
+    """
+    Clear any active response directive for a character.
+
+    Args:
+        character_id: e.g. "aria"
+        scene_id:     e.g. "bedroom"
+    """
+    try:
+        from engine.mcp.dialog_system import get_dialog_system
+        get_dialog_system().clear_directive(character_id, scene_id)
+        return json.dumps({"ok": True, "character_id": character_id, "scene": scene_id})
+    except Exception as exc:
+        return json.dumps({"ok": False, "error": str(exc)})
+
+
+@mcp.tool()
+def get_conversation_heat(character_id: str, scene_id: str) -> str:
+    """
+    Return the current conversation heat (0-100) for a character in a scene.
+    Higher heat = more intense/intimate exchange.  Affects dialog option availability.
+
+    Args:
+        character_id: e.g. "aria"
+        scene_id:     e.g. "phone"
+    """
+    try:
+        from engine.mcp.dialog_system import get_dialog_system
+        ds   = get_dialog_system()
+        heat = ds.get_conversation_heat(character_id, scene_id)
+        turn = ds.get_turn(character_id, scene_id)
+        topics = ds.get_recent_topics(character_id, scene_id)
+        return json.dumps({"heat": heat, "turn": turn, "recent_topics": topics})
+    except Exception as exc:
+        return json.dumps({"error": str(exc)})
+
+
+@mcp.tool()
+def bump_conversation_heat(character_id: str, scene_id: str, delta: int = 10) -> str:
+    """
+    Manually adjust the conversation heat for a character in a scene.
+    Positive delta increases heat; negative decreases.
+
+    Args:
+        character_id: e.g. "aria"
+        scene_id:     e.g. "phone"
+        delta:        Amount to add (can be negative)
+    """
+    try:
+        from engine.mcp.dialog_system import get_dialog_system
+        ds = get_dialog_system()
+        ds.bump_heat(character_id, scene_id, delta)
+        new_heat = ds.get_conversation_heat(character_id, scene_id)
+        return json.dumps({"ok": True, "new_heat": new_heat, "delta_applied": delta})
+    except Exception as exc:
+        return json.dumps({"ok": False, "error": str(exc)})
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  SCENE RULES ENGINE TOOLS
+# ══════════════════════════════════════════════════════════════════════
+
+@mcp.tool()
+def get_scene_rules(scene_id: str) -> str:
+    """
+    Return the full rules reference for a scene in human-readable form.
+    Inject this into your system prompt at scene start to understand what
+    is expected, what is forbidden, and what the Director can activate.
+
+    Args:
+        scene_id: e.g. "bedroom" or "phone"
+    """
+    try:
+        from engine.mcp.scene_rules_engine import get_rules_engine
+        return get_rules_engine().get_rules_text(scene_id)
+    except Exception as exc:
+        return f"Error: {exc}"
+
+
+@mcp.tool()
+def get_scene_available_actions(
+    scene_id: str,
+    character_id: str,
+    stats_json: str = "{}",
+    scene_state_json: str = "{}",
+) -> str:
+    """
+    Return all actions available to a character in a scene right now,
+    filtered by their current stats and the scene's permission matrix.
+
+    Args:
+        scene_id:         e.g. "bedroom"
+        character_id:     e.g. "aria"
+        stats_json:       JSON dict of current stats
+        scene_state_json: JSON dict of scene state flags
+    """
+    try:
+        import json as _json
+        from engine.mcp.scene_rules_engine import get_rules_engine
+        stats       = _json.loads(stats_json)       if stats_json       else {}
+        scene_state = _json.loads(scene_state_json) if scene_state_json else {}
+        actions = get_rules_engine().get_available_actions(
+            scene_id, character_id, stats=stats, scene_state=scene_state
+        )
+        return json.dumps({"scene": scene_id, "character": character_id, "actions": actions}, indent=2)
+    except Exception as exc:
+        return json.dumps({"error": str(exc)})
+
+
+@mcp.tool()
+def apply_scene_rule(
+    scene_id: str,
+    rule_id: str,
+    target_ids_json: str = "[]",
+    issuer: str = "director",
+) -> str:
+    """
+    Apply a named Director rule immediately — fires all its effects on the
+    target characters.  Can be used to set atmosphere, issue directives,
+    adjust stats, etc. via a single memorable rule name.
+
+    Examples: "bedroom_lights_off", "bedroom_mood_lift", "phone_escalate"
+
+    Args:
+        scene_id:        Scene the rule belongs to
+        rule_id:         Rule identifier
+        target_ids_json: JSON list of target character IDs
+        issuer:          Who triggered this (for audit)
+    """
+    try:
+        import json as _json
+        from engine.mcp.scene_rules_engine import get_rules_engine
+        targets = _json.loads(target_ids_json) if target_ids_json else []
+        result  = get_rules_engine().apply_rule(scene_id, rule_id, target_ids=targets or None, issuer=issuer)
+        return json.dumps(result, indent=2)
+    except Exception as exc:
+        return json.dumps({"ok": False, "error": str(exc)})
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  5 KEY PYTHON-POWERED TOOLS  (hooks into the full MCP stack)
+# ══════════════════════════════════════════════════════════════════════
+
+@mcp.tool()
+def memory_recall(
+    character_id: str,
+    query: str,
+    context_limit: int = 5,
+    scene_id: str = "",
+) -> str:
+    """
+    **MEMORY SKILL** — Retrieve the character's most relevant memories for a query.
+
+    This is the memory skill entry point.  It layers:
+    1. RAG search of long-term memory (ChromaDB)
+    2. Recent scene narrative (short-term)
+    3. A formatted "You remember:" hook ready for system prompt injection
+
+    Use this at the start of every response to ground the character in their
+    history and ensure continuity.
+
+    Args:
+        character_id:  The character doing the remembering
+        query:         What to search for — use the current topic/context
+        context_limit: Max memory snippets to return
+        scene_id:      Current scene (pulls recent narrative)
+    """
+    try:
+        results: Dict[str, Any] = {}
+
+        # Long-term memory (RAG)
+        try:
+            rag = _get_rag()
+            if rag:
+                raw = rag.search(query, character_id=character_id, top_k=context_limit)
+                if isinstance(raw, list):
+                    results["long_term"] = [
+                        r.get("text", r) if isinstance(r, dict) else str(r)
+                        for r in raw[:context_limit]
+                    ]
+                else:
+                    results["long_term"] = []
+            else:
+                results["long_term"] = []
+        except Exception:
+            results["long_term"] = []
+
+        # Short-term narrative
+        try:
+            from engine.mcp.scene_state import get_scene_state_manager
+            ssm = get_scene_state_manager()
+            entries = ssm.get_narrative_entries(scene_id or "bedroom", limit=4)
+            results["recent"] = [e.get("event", "") for e in entries if e.get("event")]
+        except Exception:
+            results["recent"] = []
+
+        # Build the memory hook
+        try:
+            from engine.mcp.dialog_system import get_dialog_system
+            name = character_id
+            try:
+                from engine.mcp.character_registry import get_character_registry
+                rec = get_character_registry().get_record(character_id)
+                if rec:
+                    name = rec.profile.name
+            except Exception:
+                pass
+            all_memories = results["long_term"] + results["recent"]
+            hook = get_dialog_system().build_memory_hook(all_memories, name)
+            results["memory_hook"] = hook
+        except Exception:
+            results["memory_hook"] = ""
+
+        results["character_id"] = character_id
+        results["query"]        = query
+        return json.dumps(results, indent=2)
+    except Exception as exc:
+        return json.dumps({"error": str(exc)})
+
+
+@mcp.tool()
+def speak_as(
+    character_id: str,
+    text: str,
+    style: str = "",
+    scene_id: str = "",
+) -> str:
+    """
+    **SPEECH SKILL** — Transform plain text into a character's authentic voice.
+
+    This is the full speech pipeline:
+    1. Looks up the character's registered voice_style and current mood
+    2. Determines the best speech style (or uses the one you specify)
+    3. Applies quick heuristic enhancement
+    4. Returns both the enhanced version AND a full LLM rewrite prompt
+
+    Use the ``rewrite_prompt`` field to have an LLM produce the definitive version
+    in the character's voice.  Use ``quick_version`` when you need something now.
+
+    Args:
+        character_id: The speaking character
+        text:         The raw text to enhance
+        style:        Force a style (or leave blank to auto-select)
+        scene_id:     Current scene for context
+    """
+    try:
+        from engine.mcp.dialog_system import get_dialog_system, SpeechStyle
+        from engine.mcp.character_registry import get_character_registry
+
+        reg = get_character_registry()
+        reg.ensure(character_id)
+
+        # Auto-select style based on mood if not specified
+        if not style:
+            try:
+                state = reg.get_state(character_id)
+                mood_map = {
+                    "excited":   SpeechStyle.PLAYFUL,
+                    "aroused":   SpeechStyle.CHARGED,
+                    "tender":    SpeechStyle.WARM,
+                    "dominant":  SpeechStyle.DOMINANT,
+                    "sad":       SpeechStyle.VULNERABLE,
+                    "teasing":   SpeechStyle.TEASING,
+                    "confident": SpeechStyle.DIRECT,
+                    "reflective": SpeechStyle.LITERARY,
+                    "whisper":   SpeechStyle.WHISPER,
+                }
+                style = mood_map.get(state.mood, SpeechStyle.NATURAL) if state else SpeechStyle.NATURAL
+            except Exception:
+                style = SpeechStyle.NATURAL
+
+        ds     = get_dialog_system()
+        result = ds.enhance_speech(character_id, text, style=style, scene=scene_id)
+        result["character_id"] = character_id
+        return json.dumps(result, indent=2)
+    except Exception as exc:
+        return json.dumps({"error": str(exc)})
+
+
+@mcp.tool()
+def enforce_behavior(
+    character_id: str,
+    behavior_type: str,
+    value: str,
+    reason: str = "",
+    scene_id: str = "",
+    turns: int = 1,
+) -> str:
+    """
+    **BEHAVIOR ENFORCEMENT TOOL** — Force, block, or shape a character's next response.
+
+    This is the Director's primary behavioral override tool.  It issues a
+    ResponseDirective that the interceptor pipeline executes automatically before
+    the next LLM call.
+
+    Behavior types:
+      force_response  — skip the LLM entirely; use ``value`` as the reply
+      refuse          — character refuses the current action in-character
+      style_lock      — lock to a style: charged/dominant/vulnerable/whisper/etc.
+      must_include    — the reply MUST naturally contain ``value``
+      topic_steer     — steer to a topic
+      mood_set        — override the character's emotional tone
+
+    This also updates the scene narrative with a record of what was enforced.
+
+    Args:
+        character_id: Target character
+        behavior_type: One of the types above
+        value:         The value for the behavior (response/style/topic/mood)
+        reason:        Why this was enforced (for audit log)
+        scene_id:      Scene context
+        turns:         How many turns the enforcement lasts
+    """
+    try:
+        from engine.mcp.dialog_system import get_dialog_system
+        ds = get_dialog_system()
+        ds.set_directive(
+            character_id, scene_id,
+            directive_type = behavior_type,
+            value          = value,
+            turns          = turns,
+            issued_by      = f"enforce_behavior:{reason or 'unspecified'}",
+        )
+        # Audit to scene narrative
+        try:
+            from engine.mcp.scene_state import get_scene_state_manager
+            ssm = get_scene_state_manager()
+            note = f"[Director enforced {behavior_type} on {character_id}]"
+            if reason:
+                note += f" Reason: {reason}"
+            ssm.add_narrative(scene_id or "bedroom", note, entry_type="directive", character_id=character_id)
+        except Exception:
+            pass
+        return json.dumps({"ok": True, "character_id": character_id, "behavior": behavior_type, "turns": turns})
+    except Exception as exc:
+        return json.dumps({"ok": False, "error": str(exc)})
+
+
+@mcp.tool()
+def scene_broadcast(
+    scene_id: str,
+    event_type: str,
+    payload_json: str = "{}",
+    target_characters_json: str = "[]",
+) -> str:
+    """
+    **SCENE EVENT BROADCAST** — Push a named event to all characters in a scene.
+
+    This tool applies a scene event to multiple characters simultaneously:
+    - Records the event in the scene narrative
+    - Applies any stat adjustments in the payload
+    - Can issue directives to a specific subset of characters
+    - Returns a summary of everything that happened
+
+    Use this to drive simultaneous scene transitions, shared mood shifts,
+    or coordinated Director interventions.
+
+    Args:
+        scene_id:                Scene to broadcast to
+        event_type:              Event name e.g. "lights_dim", "tension_spikes"
+        payload_json:            JSON dict — optional keys:
+                                   description (str): narrative text
+                                   stat_effects (dict): {char_id: {stat: delta}}
+                                   directive (dict): {type, value, turns}
+        target_characters_json:  JSON list of character IDs (empty = all in scene)
+    """
+    try:
+        import json as _json
+        payload   = _json.loads(payload_json)   if payload_json   else {}
+        targets   = _json.loads(target_characters_json) if target_characters_json else []
+
+        applied: Dict[str, Any] = {"event_type": event_type, "scene_id": scene_id, "applied": []}
+
+        desc = payload.get("description", f"Scene event: {event_type}")
+        try:
+            from engine.mcp.scene_state import get_scene_state_manager
+            ssm = get_scene_state_manager()
+            ssm.add_narrative(scene_id, desc, entry_type="environment")
+            applied["narrative"] = desc
+        except Exception:
+            pass
+
+        stat_effects: Dict[str, Dict] = payload.get("stat_effects", {})
+        for char_id, effects in stat_effects.items():
+            if targets and char_id not in targets:
+                continue
+            try:
+                from engine.mcp.scene_state import get_scene_state_manager
+                ssm = get_scene_state_manager()
+                ssm.update_stats(char_id, **effects)
+                applied["applied"].append({"char": char_id, "stats": effects})
+            except Exception as se:
+                applied["applied"].append({"char": char_id, "error": str(se)})
+
+        directive_info = payload.get("directive")
+        if directive_info and targets:
+            try:
+                from engine.mcp.dialog_system import get_dialog_system
+                ds = get_dialog_system()
+                for char_id in targets:
+                    ds.set_directive(
+                        char_id, scene_id,
+                        directive_type = directive_info.get("type", "topic_steer"),
+                        value          = directive_info.get("value", ""),
+                        turns          = directive_info.get("turns", 1),
+                        issued_by      = "scene_broadcast",
+                    )
+                applied["directive_issued_to"] = targets
+            except Exception as de:
+                applied["directive_error"] = str(de)
+
+        return json.dumps(applied, indent=2)
+    except Exception as exc:
+        return json.dumps({"ok": False, "error": str(exc)})
+
+
+@mcp.tool()
+def get_scene_rules_summary(scene_id: str, character_id: str = "") -> str:
+    """
+    **SCENE INTELLIGENCE SUMMARY** — Complete scene rules + actions + character
+    capabilities in a single call.  This is the "what can I do right now?" tool.
+
+    Returns:
+    - All active rules for the scene
+    - Every available action for this character (with availability status)
+    - Current conversation heat and any active directive
+    - Character skills active in this context
+
+    Call this at scene start or when you're unsure what's appropriate.
+
+    Args:
+        scene_id:     e.g. "bedroom" or "phone"
+        character_id: The character you're working with
+    """
+    try:
+        result: Dict[str, Any] = {"scene_id": scene_id, "character_id": character_id}
+
+        # Scene rules and actions
+        try:
+            from engine.mcp.scene_rules_engine import get_rules_engine
+            eng = get_rules_engine()
+            result["rules_text"] = eng.get_rules_text(scene_id)
+            if character_id:
+                result["available_actions"] = eng.get_available_actions(scene_id, character_id)
+        except Exception as re:
+            result["rules_error"] = str(re)
+
+        # Character skills
+        if character_id:
+            try:
+                from engine.mcp.character_registry import get_character_registry
+                reg = get_character_registry()
+                reg.ensure(character_id)
+                skills = reg.get_skills(character_id)
+                result["character_skills"] = [
+                    {"id": s.skill_id, "label": s.label, "trigger": s.trigger}
+                    for s in skills
+                ]
+                result["character_summary"] = reg.get_character_summary(character_id)
+            except Exception as ce:
+                result["character_error"] = str(ce)
+
+        # Conversation heat + directive
+        if character_id:
+            try:
+                from engine.mcp.dialog_system import get_dialog_system
+                ds = get_dialog_system()
+                result["conversation_heat"] = ds.get_conversation_heat(character_id, scene_id)
+                result["active_directive"]  = ds.get_active_directive(character_id, scene_id)
+                result["recent_topics"]     = ds.get_recent_topics(character_id, scene_id)
+            except Exception as de:
+                result["dialog_error"] = str(de)
+
+        return json.dumps(result, indent=2)
+    except Exception as exc:
+        return json.dumps({"error": str(exc)})
+
+
+
 def resource_config() -> str:
     """Current CosySim configuration snapshot."""
     try:
