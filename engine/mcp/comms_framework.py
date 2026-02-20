@@ -318,14 +318,27 @@ class InterceptorPipeline:
 
 class GameState:
     """
-    Thread-safe, multi-game key-value store.
+    Thread-safe, multi-game key-value store with reactive observers.
 
     Each game has its own namespace:  ``get_game_state().get("tod", "round")``
+
+    Observer example::
+
+        def on_change(game_id: str, key: str, value: Any) -> None:
+            print(f"[{game_id}] {key} = {value}")
+
+        gs = get_game_state()
+        gs.subscribe("tod_game", on_change)
+        gs.set("tod_game", "round", 3)   # triggers on_change
     """
 
     def __init__(self) -> None:
-        self._lock  = threading.Lock()
-        self._store: Dict[str, Dict[str, Any]] = {}
+        self._lock      = threading.Lock()
+        self._store:    Dict[str, Dict[str, Any]] = {}
+        self._obs_lock  = threading.Lock()
+        self._observers: Dict[str, List[Callable]] = {}   # game_id → list of callables
+
+    # ── CRUD ─────────────────────────────────────────────────────────
 
     def get(self, game_id: str, key: str, default: Any = None) -> Any:
         with self._lock:
@@ -344,6 +357,7 @@ class GameState:
                 self._store[game_id] = {}
             new_val = self._store[game_id].get(key, 0) + amount
             self._store[game_id][key] = new_val
+        self._notify(game_id, key, new_val)
         return new_val
 
     def get_all(self, game_id: str) -> Dict[str, Any]:
@@ -353,15 +367,60 @@ class GameState:
     def reset(self, game_id: str) -> None:
         with self._lock:
             self._store.pop(game_id, None)
+        self._notify(game_id, "__reset__", None)
         logger.info("GameState reset for game %r", game_id)
 
     def all_games(self) -> List[str]:
         with self._lock:
             return list(self._store.keys())
 
-    # Observers — lightweight pub/sub for game events
+    # ── Observers ────────────────────────────────────────────────────
+
+    def subscribe(self, game_id: str, fn: Callable) -> None:
+        """
+        Register *fn* as an observer for all state changes in *game_id*.
+
+        ``fn`` will be called as ``fn(game_id, key, value)`` synchronously
+        after each ``set()`` or ``increment()`` (and with key=``"__reset__"``
+        on ``reset()``).
+
+        Multiple subscribers for the same game are supported.
+        """
+        with self._obs_lock:
+            if game_id not in self._observers:
+                self._observers[game_id] = []
+            if fn not in self._observers[game_id]:
+                self._observers[game_id].append(fn)
+
+    def unsubscribe(self, game_id: str, fn: Callable) -> None:
+        """Remove a previously registered observer."""
+        with self._obs_lock:
+            obs = self._observers.get(game_id, [])
+            if fn in obs:
+                obs.remove(fn)
+
+    def subscribe_all(self, fn: Callable) -> None:
+        """
+        Register *fn* as a catch-all observer for ALL games.
+
+        Useful for logging or audit trails:  ``fn(game_id, key, value)``
+        """
+        with self._obs_lock:
+            if "__all__" not in self._observers:
+                self._observers["__all__"] = []
+            if fn not in self._observers["__all__"]:
+                self._observers["__all__"].append(fn)
+
     def _notify(self, game_id: str, key: str, value: Any) -> None:
-        pass  # hook for future observer pattern
+        """Internal: fire all observers for *game_id* and catch-all observers."""
+        with self._obs_lock:
+            targets = list(self._observers.get(game_id, []))
+            targets += list(self._observers.get("__all__", []))
+        for fn in targets:
+            try:
+                fn(game_id, key, value)
+            except Exception as exc:
+                logger.debug("GameState observer %r raised: %s", fn, exc)
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -535,6 +594,71 @@ class AgentGovernor:
             self._bus = get_activity_bus()
         return self._bus
 
+    # ── IAgent-compatible convenience methods ────────────────────────
+
+    def quick_query(self, prompt: str, *, max_tokens: int = 200) -> str:
+        """
+        Delegate to the underlying agent's ``quick_query()`` or fall back to
+        a bare ``reply()`` call with governance bypassed.
+
+        This lets ``AgentLoop._decide()`` work whether the agent is a raw
+        ``CharacterAgent`` or a governor-wrapped agent.
+        """
+        inner = self.agent
+        if hasattr(inner, "quick_query"):
+            return inner.quick_query(prompt, max_tokens=max_tokens)
+        # Fallback: skip governance for fast JSON action queries
+        return self.reply(prompt, skip_gov=True)
+
+    def cancel(self) -> None:
+        """Delegate cancellation to the underlying agent."""
+        if hasattr(self.agent, "cancel"):
+            self.agent.cancel()
+
+    @property
+    def character(self):
+        """Expose the underlying agent's character for interceptors."""
+        return getattr(self.agent, "character", None)
+
+    @property
+    def capabilities(self):
+        """Expose the underlying agent's capability set."""
+        from engine.agents.protocols import AgentCapability
+        caps = set(getattr(self.agent, "capabilities", set()))
+        caps.add(AgentCapability.GOVERNED)
+        return caps
+
+    def context_dump(self, user_message: str = "") -> dict:
+        """
+        Return a dry-run snapshot of the ``ResponseContext`` that would be built
+        for *user_message* — useful for debugging interceptor state.
+
+        Does NOT call the LLM.  Auto skills and the interceptor pre-call pipeline
+        ARE executed so you can see what each interceptor injects.
+        """
+        manifest  = self._manifest.get(self.scene)
+        agent_name = getattr(self.character, "name", "Agent") if self.character else "Agent"
+        agent_id   = getattr(self.character, "id", "unknown") if self.character else "unknown"
+        ctx = ResponseContext(
+            scene         = self.scene,
+            agent_id      = agent_id,
+            agent_name    = agent_name,
+            user_message  = user_message,
+            system_prompt = "",
+            messages      = [],
+            reply         = "<<DRY RUN — LLM NOT CALLED>>",
+            skill_manifest= manifest,
+            policy        = self.policy,
+            game_state    = {},
+            auto_results  = {},
+            abort         = False,
+            skip_llm      = True,
+            history       = [],
+            chain_id      = None,
+        )
+        self.pipeline.run_pre(ctx)
+        return dict(ctx)
+
 
 def _invoke_mcp_tool(tool_name: str, args: Dict, ctx: ResponseContext) -> Any:
     """Call a tool function by name via the MCP registry."""
@@ -569,7 +693,9 @@ def _build_default_pipeline() -> InterceptorPipeline:
         PolicyEnforcerInterceptor,
         MemoryEnhancerInterceptor,
         ResponseShaperInterceptor,
+        TTSStyleInterceptor,
         ActivityLoggerInterceptor,
+        MoodSyncInterceptor,
     )
     pipeline = InterceptorPipeline()
     pipeline.add(CharacterRegistryInterceptor()) #  8
@@ -580,13 +706,15 @@ def _build_default_pipeline() -> InterceptorPipeline:
     pipeline.add(LoungeSceneInterceptor())       # 15
     pipeline.add(AutoResultInjector())           # 20
     pipeline.add(SkillAwarenessInterceptor())    # 30
-    pipeline.add(GameSessionInterceptor())       # 35  ← MCP game history + actions
+    pipeline.add(GameSessionInterceptor())       # 35
     pipeline.add(GameRulesInterceptor())         # 40
     pipeline.add(PersonalityGuardInterceptor())  # 50
     pipeline.add(PolicyEnforcerInterceptor())    # 60
     pipeline.add(MemoryEnhancerInterceptor())    # 70
     pipeline.add(ResponseShaperInterceptor())    # 80
+    pipeline.add(TTSStyleInterceptor())          # 85
     pipeline.add(ActivityLoggerInterceptor())    # 90
+    pipeline.add(MoodSyncInterceptor())          # 92
     return pipeline
 
 

@@ -30,7 +30,9 @@ from __future__ import annotations
 
 import logging
 import threading
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
+
+from engine.agents.protocols import AgentCapability
 
 try:
     from engine.logging import timed
@@ -86,6 +88,13 @@ class CharacterAgent:
         self.mcp_servers          = mcp_servers or []
         self.scene                = scene  # used by AgentGovernor for skill manifest lookup
 
+        # Declared capabilities — inspected by AgentLoop and AgentRouter
+        self.capabilities: Set[AgentCapability] = {AgentCapability.TEXT, AgentCapability.MEMORY}
+        if skill_packs:
+            self.capabilities.add(AgentCapability.TOOLS)
+        if use_mcp:
+            self.capabilities.add(AgentCapability.GOVERNED)
+
         if config is None:
             from engine.config import get_config
             config = get_config()
@@ -122,9 +131,10 @@ class CharacterAgent:
         self,
         user_message: str,
         *,
-        chain_id:    Optional[str] = None,
+        chain_id:    Optional[str]       = None,
         history:     Optional[List[Dict]] = None,
-        use_tools:   bool          = True,
+        use_tools:   bool                 = True,
+        **_kwargs,                         # absorb extra kwargs (e.g. from AgentLoop or test harnesses)
     ) -> str:
         """
         Generate a character reply to ``user_message``.
@@ -150,20 +160,12 @@ class CharacterAgent:
         """
         self._cancel_event.clear()
 
-        # ── 0. Governance pipeline (interceptors) ────────────────────
-        _gov_enabled = bool(self.config.get("comms.governance_enabled", False))
-        if _gov_enabled and getattr(self, "scene", None):
-            try:
-                from engine.mcp.comms_framework import get_governor
-                gov = get_governor(self, scene=self.scene)
-                return gov.reply(
-                    user_message,
-                    chain_id=chain_id,
-                    history=history,
-                    skip_gov=True,
-                )
-            except Exception as _gov_exc:
-                logger.warning("AgentGovernor failed, falling back: %s", _gov_exc)
+        # ── Governance note ──────────────────────────────────────────
+        # CharacterAgent does NOT self-wrap in a governor.  Governance is
+        # applied *externally* by the scene that owns this agent:
+        #   • bedroom_scene._start_agent_loop() wraps via get_governor()
+        #   • phone_scene.handle_send_message() wraps via _phone_governor
+        # Internal self-wrapping was removed to avoid double-pipeline.
 
         # ── 1. EventChain setup ──────────────────────────────────────
         ec = self._get_event_chain()
@@ -325,6 +327,38 @@ class CharacterAgent:
                     self._stream.cancel()
                 except Exception:
                     logger.debug("Stream cancel failed", exc_info=True)
+
+    def quick_query(self, prompt: str, *, max_tokens: int = 200) -> str:
+        """
+        Lightweight single-shot text completion — no tools, no events, no RAG.
+
+        Used by ``AgentLoop._decide()`` to get a fast JSON action decision.  Also
+        useful for any caller that needs a brief LLM response without the full
+        ``reply()`` pipeline.
+
+        Args:
+            prompt:     The full prompt string (system + context combined).
+            max_tokens: Soft token cap (default 200 — faster for JSON actions).
+
+        Returns:
+            Reply text string, or empty string on failure.
+        """
+        try:
+            from engine.lmstudio.client_v2 import get_lmstudio_client
+            client = get_lmstudio_client()
+            resp = client.chat(
+                messages=[
+                    {"role": "system", "content": self._build_system_prompt([])},
+                    {"role": "user", "content": prompt},
+                ],
+                model=self.model,
+                max_tokens=max_tokens,
+                temperature=0.9,
+            )
+            return resp.content.strip()
+        except Exception as exc:
+            logger.debug("CharacterAgent.quick_query failed: %s", exc)
+            return ""
 
     # ─────────────────────────────────────────────────── internals ──
 

@@ -1026,3 +1026,173 @@ class DialogDirectiveInterceptor(InterceptorBase):
                 ctx.setdefault("fired_consequences", []).extend(fired)
         except Exception as exc:
             logger.debug("DialogDirectiveInterceptor framework tick failed: %s", exc)
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  TTSStyleInterceptor  (priority 85)
+#  Post-call: annotate the reply with a TTS emotion hint and voice style
+#  tags so CosyVoice / Qwen3-TTS picks up the right prosody.
+# ══════════════════════════════════════════════════════════════════════
+
+class TTSStyleInterceptor(InterceptorBase):
+    """
+    Post-call: attach TTS rendering metadata to ``ctx["tts_meta"]``.
+
+    The metadata is a dict with keys:
+    * ``emotion``    — primary emotion label for CosyVoice instruction mode
+    * ``speed``      — float multiplier (1.0 = normal)
+    * ``style_lock`` — style tag from ``DialogDirectiveInterceptor`` (if any)
+    * ``voice_id``   — character voice id from CharacterRegistry (if configured)
+
+    Scene UIs can read ``ctx["tts_meta"]`` after the governor call to drive
+    voice synthesis.  Does NOT modify the reply text.
+    """
+    name     = "tts_style"
+    priority = 85
+
+    # Maps mood keyword → CosyVoice-compatible emotion label
+    _MOOD_EMOTION: Dict[str, str] = {
+        "happy":    "happy",
+        "excited":  "happy",
+        "sad":      "sad",
+        "angry":    "angry",
+        "fearful":  "fearful",
+        "surprised":"surprised",
+        "disgust":  "disgusted",
+        "tender":   "tender",
+        "romantic": "tender",
+        "flirty":   "happy",
+        "mischievous": "happy",
+        "tired":    "sad",
+        "calm":     "neutral",
+        "neutral":  "neutral",
+    }
+
+    def post_call(self, ctx: ResponseContext) -> None:
+        reply     = ctx.get("reply", "")
+        agent_id  = ctx.get("agent_id", "")
+        scene     = ctx.get("scene", "")
+        if not reply:
+            return
+
+        # ── Determine emotion from character registry mood ────────────
+        emotion = "neutral"
+        speed   = 1.0
+        voice_id = ""
+        try:
+            from engine.mcp.character_registry import get_character_registry
+            reg   = get_character_registry()
+            summary = reg.get_character_summary(agent_id)
+            if summary:
+                mood = (summary.get("mood") or "neutral").lower()
+                emotion  = self._MOOD_EMOTION.get(mood, "neutral")
+                intensity = float(summary.get("mood_intensity", 0.5))
+                # Higher intensity → slightly faster
+                speed = 1.0 + (intensity - 0.5) * 0.2
+                voice_id = summary.get("voice_id", "") or ""
+        except Exception as exc:
+            logger.debug("TTSStyleInterceptor: registry lookup failed: %s", exc)
+
+        # ── Inherit style_lock from DialogDirectiveInterceptor ────────
+        style_lock = ctx.get("active_style_lock", "")
+
+        # ── Heuristic: scan reply text for emotion cues ───────────────
+        reply_lower = reply.lower()
+        for keyword, emo in self._MOOD_EMOTION.items():
+            if keyword in reply_lower:
+                emotion = emo
+                break
+
+        ctx["tts_meta"] = {
+            "emotion":    emotion,
+            "speed":      round(speed, 2),
+            "style_lock": style_lock,
+            "voice_id":   voice_id,
+            "scene":      scene,
+        }
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  MoodSyncInterceptor  (priority 92)
+#  Post-call: detect mood shifts in the LLM reply and sync them back to
+#  CharacterRegistry so future turns see an updated mood.
+# ══════════════════════════════════════════════════════════════════════
+
+class MoodSyncInterceptor(InterceptorBase):
+    """
+    Post-call: parse the reply for explicit ``[MOOD:xxx]`` annotations or
+    detect mood-indicative phrases and push back to the CharacterRegistry.
+
+    Characters can signal a mood shift by including ``[MOOD:happy]`` anywhere
+    in their reply.  The annotation is stripped from the final text before it
+    reaches the user.
+
+    Examples::
+
+        [MOOD:sad]
+        [MOOD:excited]
+        [MOOD:flirty intensity=0.8]
+    """
+    name     = "mood_sync"
+    priority = 92
+
+    import re as _re
+    _MOOD_TAG = _re.compile(r"\[MOOD:(\w+)(?:\s+intensity=([\d.]+))?\]", _re.IGNORECASE)
+
+    def post_call(self, ctx: ResponseContext) -> None:
+        agent_id = ctx.get("agent_id", "")
+        reply    = ctx.get("reply", "")
+        if not reply or not agent_id:
+            return
+
+        matches = self._MOOD_TAG.findall(reply)
+        if not matches:
+            return
+
+        # Strip all mood tags from the reply
+        cleaned = self._MOOD_TAG.sub("", reply).strip()
+        ctx["reply"] = cleaned
+
+        mood_name, intensity_str = matches[-1]   # use last tag if multiple
+        intensity = float(intensity_str) if intensity_str else 0.6
+
+        try:
+            from engine.mcp.character_registry import get_character_registry
+            get_character_registry().set_state(agent_id, {
+                "mood":            mood_name.lower(),
+                "mood_intensity":  intensity,
+            })
+            logger.debug(
+                "MoodSyncInterceptor: %s → mood=%s (%.0f%%)",
+                agent_id, mood_name, intensity * 100,
+            )
+        except Exception as exc:
+            logger.debug("MoodSyncInterceptor: registry update failed: %s", exc)
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  Module exports
+# ══════════════════════════════════════════════════════════════════════
+
+__all__ = [
+    # Priority order
+    "CharacterRegistryInterceptor",    #  8
+    "RouterMessageInjector",           # 10
+    "DialogDirectiveInterceptor",      # 12
+    "BedroomSceneInterceptor",         # 15
+    "PhoneSceneInterceptor",           # 15
+    "LoungeSceneInterceptor",          # 15
+    "AutoResultInjector",              # 20
+    "SkillAwarenessInterceptor",       # 30
+    "GameSessionInterceptor",          # 35
+    "GameRulesInterceptor",            # 40
+    "PersonalityGuardInterceptor",     # 50
+    "PolicyEnforcerInterceptor",       # 60
+    "MemoryEnhancerInterceptor",       # 70
+    "ResponseShaperInterceptor",       # 80
+    "TTSStyleInterceptor",             # 85
+    "ActivityLoggerInterceptor",       # 90
+    "MoodSyncInterceptor",             # 92
+    # Constant for scene ID
+    "BEDROOM_SCENE_ID",
+]

@@ -50,7 +50,7 @@ class AgentLoop:
         scene_map,
         db=None,
         socketio=None,
-        llm_url: str = "http://localhost:1234/v1",
+        llm_url: str = "",   # deprecated — REST client is auto-configured; kept for compat
         scene_id: str = "bedroom",
     ):
         self.scene_map = scene_map

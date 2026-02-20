@@ -40,6 +40,34 @@ from engine.mcp.scene_state import (
     SceneStateManager,
 )
 
+# ─── Communications & Governance Framework ────────────────────────────────────
+from engine.mcp.comms_framework import (
+    # Governor factory + class
+    get_governor,
+    AgentGovernor,
+    # Interceptor base + pipeline
+    InterceptorBase,
+    InterceptorPipeline,
+    # Policy, context, manifest
+    InteractionPolicy,
+    ResponseContext,
+    SkillManifest,
+    SceneManifest,
+    SkillEntry,
+    # Trigger type constants
+    TRIGGER_AUTO,
+    TRIGGER_OPTIONAL,
+    TRIGGER_REQUIRED,
+    # Game state
+    get_game_state,
+    GameState,
+    # Agent router
+    get_router,
+    AgentRouter,
+    # Skill manifest singleton
+    get_skill_manifest,
+)
+
 __all__ = [
     # Framework
     "get_framework",
@@ -66,4 +94,22 @@ __all__ = [
     # Scene State
     "get_scene_state_manager",
     "SceneStateManager",
+    # Comms / Governance
+    "get_governor",
+    "AgentGovernor",
+    "InterceptorBase",
+    "InterceptorPipeline",
+    "InteractionPolicy",
+    "ResponseContext",
+    "SkillManifest",
+    "SceneManifest",
+    "SkillEntry",
+    "TRIGGER_AUTO",
+    "TRIGGER_OPTIONAL",
+    "TRIGGER_REQUIRED",
+    "get_game_state",
+    "GameState",
+    "get_router",
+    "AgentRouter",
+    "get_skill_manifest",
 ]
