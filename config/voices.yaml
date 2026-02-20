@@ -10,3 +10,15 @@ test_char:
   tags:
   - male
   - deep
+int_test_luna:
+  description: A warm, playful female voice with slight vocal fry.
+  model_size: 1.7b
+  reference_audio: null
+  tags:
+  - playful
+  - warm
+int_voice_check:
+  description: Deep male voice.
+  model_size: 1.7b
+  reference_audio: null
+  tags: []

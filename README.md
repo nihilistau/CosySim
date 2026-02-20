@@ -135,7 +135,7 @@ python launcher.py --mode phone   # Phone Scene (port 5555)
 python launcher.py --mode bedroom # Bedroom Scene (port 5556)
 python launcher.py --mode admin   # Admin Panel (port 8502)
 python launcher.py --mode creator # Scene Creator (port 8504)
-python launcher.py --mode test    # Run 170+ tests
+python launcher.py --mode test    # Run 315+ tests
 python launcher.py --status       # System status check
 ```
 
@@ -329,14 +329,24 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [x] Admin panel: 12-page diagnostic center with GOD mode, RAG editor, chain browser
 - [x] Config validation, retry/circuit breaker, scene registry
 - [x] Per-pair relationship table (character_relationships with canonical ordering)
-- [x] 170+ tests covering all framework components
+- [x] 315+ tests covering all framework components
 - [x] Scene Creator wizard with 4 templates
+- [x] LMStudio Deep Integration: REST v2 client, per-request MCP, SSE streaming
+- [x] FastMCP server: 9 tools + 5 resources exposing CosySim to LMStudio
+- [x] FastAPI web bridge with SSE streaming proxy
+- [x] Qwen3-TTS voice generation server (real inference + placeholder fallback)
+- [x] Voice Designer with CASTING_OFFICE, 6 presets, zero-shot support
+- [x] KPI dashboard: LLM timing, token throughput, system monitor, chain analytics
+- [x] CharacterAgent wired into all scenes with skill packs
+- [x] AgentLoop with location-aware perception and enriched idle actions
+- [x] Voice message pipeline: AutonomousMessenger → TTS server → WAV
+- [x] End-to-end integration tests across all three pillars
 
 ### Upcoming
-- [ ] Qwen3-TTS voice generation server (voicemail, long-form audio, voice designer)
-- [ ] Service migration (remaining 6 services from content/ → engine/)
 - [ ] Real-time EventChain streaming via WebSocket
 - [ ] Plugin system for community skill packs
+- [ ] Additional TTS models (CosyVoice, StyleTTS2)
+- [ ] Video generation via ComfyUI AnimateDiff workflows
 
 ---
 
