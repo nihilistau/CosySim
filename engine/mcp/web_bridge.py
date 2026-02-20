@@ -85,7 +85,7 @@ def create_bridge_app(
                 r = await client.get(f"{lmstudio_url}/v1/models", timeout=3.0)
                 lms_ok = r.status_code == 200
         except Exception:
-            pass
+            lms_ok = False  # LMStudio unreachable — expected when offline
         return {
             "status": "ok",
             "bridge": "ok",
@@ -101,6 +101,7 @@ def create_bridge_app(
             tools = cosysim_mcp.list_tools() if hasattr(cosysim_mcp, "list_tools") else []
             return {"tools": [{"name": t.name, "description": t.description} for t in tools] if tools else []}
         except Exception:
+            logger.debug("MCP tools listing failed — MCP server may not be mounted")
             return {"tools": []}
 
     # ── File Upload ─────────────────────────────────────────────────

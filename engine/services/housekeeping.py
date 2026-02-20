@@ -56,6 +56,7 @@ class HousekeepingService:
             from engine.config import get_config
             return get_config()
         except Exception:
+            logger.debug("Config unavailable, using defaults")
             return {}
 
     # ── Media Ingest ──────────────────────────────────────────────────
@@ -81,7 +82,7 @@ class HousekeepingService:
                 cursor.execute("SELECT filepath FROM media")
                 known_paths = {row[0] for row in cursor.fetchall()}
         except Exception:
-            pass
+            logger.warning("Could not read known media paths from DB")
 
         for folder_key, folder_path in MEDIA_DIRS.items():
             if not folder_path.exists():
@@ -141,7 +142,7 @@ class HousekeepingService:
                     summary=f"Ingested {len(ingested)} new media files",
                 )
             except Exception:
-                pass
+                logger.debug("EventChain log for ingest failed")
 
         return ingested
 
@@ -195,7 +196,7 @@ class HousekeepingService:
                 cursor.execute("SELECT id, filepath, type FROM media")
                 records = cursor.fetchall()
         except Exception:
-            pass
+            logger.warning("Could not query media records for integrity check")
 
         result["total_records"] = len(records)
 

@@ -3,14 +3,16 @@
 CosySim System Launcher
 
 Unified entry point for all system modes:
-- hub:     Central hub (recommended starting point)
-- phone:   Phone scene  (port 5555)
-- bedroom: Bedroom scene (port 5556)
-- dashboard: Dashboard (port 8501)
-- admin:   Admin panel (port 8502)
-- assets:  Asset generator (port 8503)
-- dev:     Development mode with debugging
-- test:    Run test suite
+- hub:       Central hub (recommended starting point, port 8500)
+- phone:     Phone scene  (port 5555)
+- bedroom:   Bedroom scene (port 5556)
+- dashboard: Dashboard (port 8501, Streamlit)
+- admin:     Admin panel (port 8502, Streamlit)
+- assets:    Asset generator (port 8503, Streamlit)
+- tts:       TTS voice server (port 8600)
+- bridge:    MCP web bridge (port 8601)
+- all:       Hub + Phone + Bedroom + TTS + Bridge in one terminal
+- test:      Run test suite
 """
 
 import argparse
@@ -298,17 +300,18 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  %(prog)s                      # Default: play mode
-  %(prog)s --mode play          # Launch virtual companion
-  %(prog)s --mode admin         # System administration
+  %(prog)s                      # Default: hub mode
+  %(prog)s --mode hub           # Central hub (start here)
+  %(prog)s --mode phone         # Phone scene only
+  %(prog)s --mode bedroom       # Bedroom scene only
   %(prog)s --mode all           # Launch all services in one terminal
-  %(prog)s --mode dev           # Development mode
+  %(prog)s --mode admin         # System administration (Streamlit)
   %(prog)s --mode test          # Run tests
   %(prog)s --housekeep          # Run media ingest + health checks
   %(prog)s --init-db            # Initialize database
   %(prog)s --status             # Show system status
 
-For more information, see: docs/README.md
+For more information, see: ONBOARDING.md
         """
     )
     

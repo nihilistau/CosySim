@@ -145,9 +145,8 @@ class CharacterAgent:
                     summary=f"User: {user_message[:80]}",
                 )
             except Exception:
+                logger.debug("EventChain start_chain failed", exc_info=True)
                 chain_id = None
-
-        # ── 2. RAG memories ─────────────────────────────────────────
         memories: List[str] = []
         try:
             memories = self._search_memories(user_message)
@@ -195,7 +194,7 @@ class CharacterAgent:
                     character_id=self.character.id,
                 )
             except Exception:
-                pass
+                logger.debug("EventChain log llm_request failed", exc_info=True)
 
         # ── 5. LLM call ──────────────────────────────────────────────
         reply_text = ""
@@ -220,7 +219,7 @@ class CharacterAgent:
                 try:
                     ec.log_error(str(exc), chain_id=chain_id, character_id=self.character.id)
                 except Exception:
-                    pass
+                    logger.debug("EventChain log_error failed", exc_info=True)
             return ""
 
         # ── 6. Log response / cancellation ───────────────────────────
@@ -243,7 +242,7 @@ class CharacterAgent:
                         character_id=self.character.id,
                     )
             except Exception:
-                pass
+                logger.debug("EventChain log response failed", exc_info=True)
 
         return reply_text
 
@@ -260,7 +259,7 @@ class CharacterAgent:
                 try:
                     self._stream.cancel()
                 except Exception:
-                    pass
+                    logger.debug("Stream cancel failed", exc_info=True)
 
     # ─────────────────────────────────────────────────── internals ──
 
@@ -321,7 +320,7 @@ class CharacterAgent:
                         character_id=self.character.id,
                     )
                 except Exception:
-                    pass
+                    logger.debug("EventChain tool log failed", exc_info=True)
 
         # lmstudio.llm.act() is synchronous — it handles the loop internally.
         # The callback signature depends on the SDK version; we try the common form.
@@ -408,7 +407,7 @@ class CharacterAgent:
                         character_id=self.character.id,
                     )
                 except Exception:
-                    pass
+                    logger.debug("EventChain MCP log failed", exc_info=True)
 
             return resp.content
 
@@ -486,6 +485,7 @@ class CharacterAgent:
                 from content.simulation.database.rag import RAGMemory
                 self._rag = RAGMemory()
             except Exception:
+                logger.debug("RAG init failed, memories disabled", exc_info=True)
                 return []
         results = self._rag.search(
             query,
@@ -514,4 +514,5 @@ class CharacterAgent:
             from content.simulation.database.events import get_event_chain
             return get_event_chain()
         except Exception:
+            logger.debug("EventChain unavailable")
             return None

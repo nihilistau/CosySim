@@ -749,6 +749,16 @@ function updateWhisperBox() {
     if (!box) return;
     box.style.display = (currentMode === 'direct') ? 'flex' : 'none';
     // Update target dropdown
+    const sel = document.getElementById('whisperTarget');
+    if (sel) {
+        sel.innerHTML = '';
+        for (const [cid, info] of Object.entries(sceneState.characters || {})) {
+            const opt = document.createElement('option');
+            opt.value = cid;
+            opt.textContent = info.name;
+            sel.appendChild(opt);
+        }
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -822,15 +832,6 @@ async function setAgentModel(cid) {
         body: JSON.stringify({ character_id: cid, model: model || null, mode }),
     });
 }
-    const sel = document.getElementById('whisperTarget');
-    sel.innerHTML = '';
-    for (const [cid, info] of Object.entries(sceneState.characters || {})) {
-        const opt = document.createElement('option');
-        opt.value = cid;
-        opt.textContent = info.name;
-        sel.appendChild(opt);
-    }
-}
 
 async function sendWhisper() {
     const input = document.getElementById('whisperInput');
@@ -848,6 +849,7 @@ async function sendWhisper() {
 const ACTION_ICONS = {
     speak: '💬', move: '🚶', idle: '😌', flirt: '😏', touch: '✋',
     kiss: '💋', cuddle: '🤗', intimate: '🔥', interact: '🎯', whisper: '🤫',
+    menace: '😈',
 };
 
 function addFeedEntry(data) {
