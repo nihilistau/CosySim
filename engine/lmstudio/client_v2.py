@@ -326,7 +326,7 @@ class LMStudioClient:
         choice = data.get("choices", [{}])[0]
         usage = data.get("usage", {})
 
-        return ChatResponse(
+        resp = ChatResponse(
             content=choice.get("message", {}).get("content", ""),
             model=data.get("model", ""),
             finish_reason=choice.get("finish_reason", ""),
@@ -336,6 +336,21 @@ class LMStudioClient:
             latency_ms=latency,
             request_id=request_id,
         )
+
+        # Auto-record KPI for every chat call
+        try:
+            from engine.logging.benchmark import record_llm_kpi
+            record_llm_kpi(
+                "lmstudio_chat",
+                latency_ms=resp.latency_ms,
+                tokens_in=resp.input_tokens,
+                tokens_out=resp.output_tokens,
+                model=resp.model,
+            )
+        except Exception:
+            pass  # Never let KPI recording break inference
+
+        return resp
 
     # ── Chat (streaming) ──────────────────────────────────────────────
 
@@ -482,6 +497,126 @@ class LMStudioClient:
             return handle.get_context_length()
         except Exception:
             return 4096
+
+    # ── Benchmarking ──────────────────────────────────────────────────
+
+    def benchmark_model(
+        self,
+        messages: List[Dict[str, str]],
+        *,
+        n_runs: int = 10,
+        models: Optional[List[str]] = None,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """
+        Run ``n_runs`` completions and return latency/throughput statistics.
+
+        If ``models`` is a list, benchmark each model separately and include
+        a per-model breakdown.  Useful for A/B comparisons.
+
+        Args:
+            messages:    Prompt to use for every run.
+            n_runs:      Number of completions per model (default 10).
+            models:      List of model IDs to test (default: current loaded model).
+            temperature: Sampling temperature for benchmark runs.
+            max_tokens:  Max tokens per run.
+
+        Returns:
+            Dict with keys ``total_runs``, ``models_tested``, ``results``
+            (per-model stats: count, avg_latency_ms, p50_ms, p95_ms,
+            avg_tokens_out, avg_tps, errors).
+        """
+        import statistics
+
+        target_models = models or [self.resolve_model()]
+        all_results: Dict[str, Any] = {}
+
+        for mdl in target_models:
+            latencies: List[float] = []
+            tps_list: List[float] = []
+            toks_out: List[int] = []
+            errors = 0
+
+            for i in range(n_runs):
+                try:
+                    resp = self.chat(
+                        messages,
+                        model=mdl,
+                        temperature=temperature,
+                        max_tokens=max_tokens,
+                    )
+                    latencies.append(resp.latency_ms)
+                    toks_out.append(resp.output_tokens)
+                    if resp.tokens_per_second > 0:
+                        tps_list.append(resp.tokens_per_second)
+                    logger.debug("benchmark %s run %d/%d: %.0fms", mdl, i + 1, n_runs, resp.latency_ms)
+                except Exception as exc:
+                    errors += 1
+                    logger.warning("benchmark run %d failed: %s", i + 1, exc)
+
+            if latencies:
+                sorted_lat = sorted(latencies)
+                n = len(sorted_lat)
+                all_results[mdl] = {
+                    "count": n,
+                    "errors": errors,
+                    "avg_latency_ms": round(statistics.mean(sorted_lat), 1),
+                    "p50_ms": round(sorted_lat[n // 2], 1),
+                    "p95_ms": round(sorted_lat[min(int(n * 0.95), n - 1)], 1),
+                    "min_ms": round(sorted_lat[0], 1),
+                    "max_ms": round(sorted_lat[-1], 1),
+                    "avg_tokens_out": round(statistics.mean(toks_out), 1) if toks_out else 0,
+                    "avg_tps": round(statistics.mean(tps_list), 2) if tps_list else 0.0,
+                    "stddev_ms": round(statistics.stdev(sorted_lat), 1) if n > 1 else 0.0,
+                }
+            else:
+                all_results[mdl] = {"count": 0, "errors": errors}
+
+        return {
+            "total_runs": n_runs * len(target_models),
+            "models_tested": target_models,
+            "results": all_results,
+        }
+
+    def concurrent_chat(
+        self,
+        messages_list: List[List[Dict[str, str]]],
+        *,
+        model: Optional[str] = None,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+        max_workers: Optional[int] = None,
+    ) -> List[Any]:
+        """
+        Run multiple chat requests concurrently using ``ConcurrentExecutor``.
+
+        Args:
+            messages_list: Each element is a full messages list for one request.
+            model:         Model to use for all requests.
+            temperature:   Temperature for all requests.
+            max_tokens:    Max tokens for all requests.
+            max_workers:   Override the thread-pool size.
+
+        Returns:
+            List of ``ConcurrentResult`` objects (one per input).
+        """
+        from engine.lmstudio.concurrency import get_executor
+
+        executor = get_executor()
+        if max_workers:
+            executor.max_workers = max_workers
+
+        tasks = [
+            {
+                "messages": msgs,
+                "model": model,
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+            }
+            for msgs in messages_list
+        ]
+        return executor.parallel_tasks(tasks)
 
     # ── Internal ──────────────────────────────────────────────────────
 

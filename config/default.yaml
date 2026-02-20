@@ -92,6 +92,14 @@ lmstudio:
   mcp_enabled: false          # set true to use per-request MCP via REST API
   cosysim_mcp_url: ""         # URL of CosySim MCP server (e.g. http://localhost:8600/mcp/sse)
   mcp_json_path: ""           # path to LMStudio mcp.json for auto-registration
+  # Model loading strategy
+  # concurrent — one model always resident; up to concurrent_slots parallel requests
+  # jit        — load on demand, evict previous model
+  # jit_ttl    — like jit but auto-unload after jit_ttl_seconds of inactivity
+  load_mode: "concurrent"     # concurrent | jit | jit_ttl
+  concurrent_slots: 4         # must match LMStudio Server → Advanced → "Max parallel requests"
+  concurrent_model: ""        # pin a model for concurrent mode (empty = auto-resolve)
+  jit_ttl_seconds: 300        # idle TTL for jit_ttl mode (seconds)
 
 # Hardware profile (used by LMStudioManager for VRAM estimation)
 hardware:
