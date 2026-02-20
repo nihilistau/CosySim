@@ -31,6 +31,7 @@ project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 from engine.scenes.base_scene import BaseScene
+from engine.mcp.framework import MCPSceneMixin
 from engine.agents.agent_loop import AgentLoop
 from engine.agents.character_agent import CharacterAgent
 from engine.spatial.location import Location
@@ -527,7 +528,7 @@ def _build_bedroom_map() -> SceneMap:
     return sm
 
 
-class BedroomScene(BaseScene):
+class BedroomScene(BaseScene, MCPSceneMixin, mcp_scene_id="bedroom"):
     """Adult multi-agent roleplay bedroom — v4."""
 
     def __init__(self, host: str = "0.0.0.0", port: int = 5556):
@@ -583,6 +584,7 @@ class BedroomScene(BaseScene):
 
         self._setup_routes()
         self._setup_socketio()
+        self._mcp_init()
 
     # ── Helpers ──────────────────────────────────────────────────────────
 

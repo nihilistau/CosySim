@@ -31,6 +31,7 @@ from content.scenes.phone.apps.gallery import Gallery
 from content.scenes.phone.apps.video_messages import VideoMessagesApp
 from content.scenes.phone.apps.voice_messages import VoiceMessagesApp
 from engine.scenes.base_scene import BaseScene
+from engine.mcp.framework import MCPSceneMixin
 from engine.assets import CharacterAsset
 from content.simulation.services.llm_service import get_llm_service
 from content.simulation.services.anonymous_character import create_anonymous_character, AnonymousCharacter
@@ -46,7 +47,7 @@ _DEFAULT_SCHEDULERS = ["normal", "karras", "exponential", "sgm_uniform",
                        "simple", "ddim_uniform"]
 
 
-class PhoneScene(BaseScene):
+class PhoneScene(BaseScene, MCPSceneMixin, mcp_scene_id="phone"):
     """
     Phone scene manager - handles phone UI and interactions
     Inherits from BaseScene for asset management
@@ -159,7 +160,8 @@ class PhoneScene(BaseScene):
         # Setup routes
         self._setup_routes()
         self._setup_socketio()
-    
+        self._mcp_init()
+
     def _setup_routes(self):
         """Setup Flask routes"""
         

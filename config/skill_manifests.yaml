@@ -97,6 +97,67 @@ scenes:
       trigger: optional
       description: "Inject a random event to keep the conversation surprising"
       when: always
+    # ── MCP Framework tools ─────────────────────────────────────────────
+    - name: memory_recall
+      trigger: auto
+      description: "Deep memory recall with semantic search across all past interactions"
+      when: always
+    - name: character_get_summary
+      trigger: auto
+      description: "Get your full character profile — identity, skills, restrictions — used to inject identity context"
+      when: first_message
+    - name: speak_as
+      trigger: optional
+      description: "Force a specific character voice register and speech style for your reply"
+      when: always
+    - name: speech_enhance
+      trigger: optional
+      description: "Enhance your response to match your character's voice style and emotional state"
+      when: always
+    - name: get_dialog_options
+      trigger: optional
+      description: "Get branching dialog choices weighted by your mood, relationship heat, and scene context"
+      when: always
+    - name: set_response_directive
+      trigger: optional
+      description: "Set a Director directive — force content, guide style, or lock off a topic"
+      when: always
+    - name: mood_contagion
+      trigger: optional
+      description: "Spread your current mood to other characters in the scene — influence their emotional state"
+      when: always
+    - name: cross_scene_message
+      trigger: optional
+      description: "Send a message to a character in a different scene — async cross-scene communication"
+      when: always
+    - name: get_cross_scene_inbox
+      trigger: auto
+      description: "Read messages sent to you from characters in other scenes"
+      when: always
+    - name: start_timer
+      trigger: optional
+      description: "Start a named countdown timer — e.g. 'waiting_for_callback' for 300 seconds"
+      when: always
+    - name: check_timer
+      trigger: optional
+      description: "Check if a named timer has completed and what the completion note says"
+      when: always
+    - name: random_pick
+      trigger: optional
+      description: "Pick randomly from a list of outcomes with optional weights — for spontaneous story beats"
+      when: always
+    - name: schedule_consequence
+      trigger: optional
+      description: "Schedule a deferred effect to fire after N turns — delayed mood shifts, scene changes"
+      when: always
+    - name: get_scene_rules_summary
+      trigger: optional
+      description: "Get the full summary of scene rules, available actions, and permission matrix"
+      when: first_message
+    - name: enforce_behavior
+      trigger: optional
+      description: "Apply a behavioral constraint or permission to a character for this scene"
+      when: always
 
   # ──────────────────────────────────────────────────────────────────────
   #  BEDROOM  —  Adult multi-agent roleplay
@@ -223,6 +284,75 @@ scenes:
     - name: roll_dice
       trigger: optional
       description: "Randomise an outcome — who makes the first move, what happens next"
+      when: always
+    # ── MCP Framework tools ─────────────────────────────────────────────
+    - name: memory_recall
+      trigger: auto
+      description: "Deep memory recall — surface shared history, previous intimate moments, known preferences"
+      when: always
+    - name: character_get_summary
+      trigger: auto
+      description: "Get your full character profile — identity, skills, restrictions — used to inject identity context"
+      when: first_message
+    - name: speak_as
+      trigger: optional
+      description: "Force a specific character voice register for your reply — dominant, submissive, playful, etc."
+      when: always
+    - name: speech_enhance
+      trigger: optional
+      description: "Polish your response to perfectly match your character's voice style and current arousal state"
+      when: always
+    - name: get_dialog_options
+      trigger: optional
+      description: "Get branching dialog choices weighted by your mood, arousal, and relationship heat"
+      when: always
+    - name: set_response_directive
+      trigger: optional
+      description: "Set a Director directive — force content, guide style, or lock off a topic for this turn"
+      when: always
+    - name: mood_contagion
+      trigger: optional
+      description: "Spread your arousal/mood to other characters in the room — influence the room's emotional state"
+      when: always
+    - name: cross_scene_message
+      trigger: optional
+      description: "Send an async message to a character in a different scene (phone, hub, etc.)"
+      when: always
+    - name: start_timer
+      trigger: optional
+      description: "Start a countdown timer — e.g. 'scene_timer' for a 10-minute intimacy window"
+      when: always
+    - name: check_timer
+      trigger: optional
+      description: "Check if a scene timer has fired and read its completion note"
+      when: always
+    - name: random_pick
+      trigger: optional
+      description: "Pick randomly from story outcomes with optional weights — for reactive scene branching"
+      when: always
+    - name: schedule_consequence
+      trigger: optional
+      description: "Schedule a deferred effect N turns from now — mood cascade, position change, scene escalation"
+      when: always
+    - name: apply_scene_rule
+      trigger: optional
+      description: "Directly apply a named scene rule — triggers its effects and conditions immediately"
+      when: always
+    - name: get_scene_available_actions
+      trigger: optional
+      description: "See all actions available to your character given current stats and permissions"
+      when: always
+    - name: get_scene_rules_summary
+      trigger: optional
+      description: "Get full summary of bedroom scene rules, permission matrix, and active constraints"
+      when: first_message
+    - name: enforce_behavior
+      trigger: optional
+      description: "Apply or lift a behavioral constraint or permission for a character in this scene"
+      when: always
+    - name: scene_broadcast
+      trigger: optional
+      description: "Broadcast a message or event to all characters currently present in the bedroom"
       when: always
 
   # ──────────────────────────────────────────────────────────────────────
