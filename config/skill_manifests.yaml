@@ -355,6 +355,24 @@ scenes:
       description: "Broadcast a message or event to all characters currently present in the bedroom"
       when: always
 
+    # ── Game skills (bedroom) ─────────────────────────────────────────
+    - name: launch_game
+      trigger: optional
+      description: "Start a Truth-or-Dare or Mystery game session — fully MCP-tracked with turn history and stat sync. game_type: 'truth_or_dare' | 'mystery'"
+      when: always
+    - name: get_active_game
+      trigger: optional
+      description: "Check if there is an active game session and retrieve its current state summary and recent history"
+      when: always
+    - name: game_action
+      trigger: optional
+      description: "Perform a game action: roll or answer (Truth or Dare), next_clue or accuse (Mystery). Pass extra params as data_json e.g. {\"completed\": true} or {\"suspect\": \"Name\"}"
+      when: game_active
+    - name: game_history
+      trigger: optional
+      description: "Get the full turn-by-turn MCP history of the current game session"
+      when: game_active
+
   # ──────────────────────────────────────────────────────────────────────
   #  HUB
   # ──────────────────────────────────────────────────────────────────────

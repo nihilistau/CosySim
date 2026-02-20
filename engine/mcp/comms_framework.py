@@ -562,6 +562,7 @@ def _build_default_pipeline() -> InterceptorPipeline:
         LoungeSceneInterceptor,
         AutoResultInjector,
         SkillAwarenessInterceptor,
+        GameSessionInterceptor,
         GameRulesInterceptor,
         PersonalityGuardInterceptor,
         PolicyEnforcerInterceptor,
@@ -578,6 +579,7 @@ def _build_default_pipeline() -> InterceptorPipeline:
     pipeline.add(LoungeSceneInterceptor())       # 15
     pipeline.add(AutoResultInjector())           # 20
     pipeline.add(SkillAwarenessInterceptor())    # 30
+    pipeline.add(GameSessionInterceptor())       # 35  ← MCP game history + actions
     pipeline.add(GameRulesInterceptor())         # 40
     pipeline.add(PersonalityGuardInterceptor())  # 50
     pipeline.add(PolicyEnforcerInterceptor())    # 60

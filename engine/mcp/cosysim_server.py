@@ -498,6 +498,119 @@ def end_game(game_id: str) -> str:
         return f"Failed to end game: {e}"
 
 
+# ── MCP-tracked game tools (MCPGameSession) ───────────────────────────
+
+@mcp.tool()
+def launch_game(
+    character_id: str,
+    game_type:    str,
+    case_index:   int = -1,
+) -> str:
+    """
+    Start an MCP-tracked Truth-or-Dare or Mystery game session for a character.
+
+    Creates an MCPGameSession with full history, stat sync, and ActivityBus
+    integration.  Any previous session for this character+game_type is reset.
+
+    Parameters
+    ----------
+    character_id : The character / player starting the game.
+    game_type    : "truth_or_dare"  or  "mystery".
+    case_index   : Mystery only — 0-based index of the case to play (-1 = random).
+
+    Returns
+    -------
+    JSON with the new session summary including game_id and initial state.
+    """
+    try:
+        from content.scenes.bedroom.bedroom_game_skill import launch_game as _lg
+        return _lg(character_id, game_type, case_index)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def get_active_game(character_id: str) -> str:
+    """
+    Return the active MCP game session summary and recent history for a character.
+
+    Checks the MCPGameSession registry first; falls back to legacy GameState if
+    no MCP session is found.
+
+    Returns
+    -------
+    JSON: {"active": false} if no session, or full session summary + 10-turn history.
+    """
+    try:
+        from content.scenes.bedroom.bedroom_game_skill import get_active_game as _gag
+        return _gag(character_id)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def game_action(
+    character_id: str,
+    action:       str,
+    data_json:    str = "{}",
+) -> str:
+    """
+    Perform a game action for a character's active MCP game session.
+
+    Truth or Dare actions
+    ---------------------
+    roll         — Roll for truth or dare; receive the prompt.
+    answer       — Resolve the current prompt.
+                   data_json: {"completed": true}  for completing a dare.
+                   Truths are always resolved as answered.
+
+    Mystery actions
+    ---------------
+    next_clue    — Reveal the next clue on the board.
+    accuse       — Name the culprit and resolve the case.
+                   data_json: {"suspect": "Full Name"}
+
+    Parameters
+    ----------
+    character_id : The acting character.
+    action       : One of roll | answer | next_clue | accuse.
+    data_json    : JSON-encoded extra parameters (see above).
+
+    Returns
+    -------
+    JSON result dict with outcome details.
+    """
+    try:
+        from content.scenes.bedroom.bedroom_game_skill import game_action as _ga
+        return _ga(character_id, action, data_json)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def game_history(character_id: str, limit: int = 20) -> str:
+    """
+    Retrieve the full turn-by-turn MCP game history for a character's active session.
+
+    Each entry includes: turn number, event_type, description, actor,
+    data payload, and timestamp.
+
+    Parameters
+    ----------
+    character_id : The character to look up.
+    limit        : Maximum number of history entries to return (default 20).
+
+    Returns
+    -------
+    JSON with game_id, game_type, current turn, and history list.
+    """
+    try:
+        from content.scenes.bedroom.bedroom_game_skill import game_history as _gh
+        return _gh(character_id, limit)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
 # ── Character emotion & mood ───────────────────────────────────────────
 
 @mcp.tool()

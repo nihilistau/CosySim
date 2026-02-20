@@ -155,6 +155,19 @@ def start():
     gs.set(gid, "_clues_pool", case["clues"])
     gs.set(gid, "_red_herrings_pool", case["red_herrings"])
 
+    # ── MCP session ──────────────────────────────────────────────────
+    try:
+        from engine.mcp.game_mcp import get_or_create_session
+        _s = get_or_create_session(gid, "mystery", character_id, "bedroom")
+        _s.log_event(
+            "game_start",
+            f"Mystery '{case['title']}' started for {character_id}",
+            {"case_index": case_index, "case_title": case["title"]},
+            actor="system",
+        )
+    except Exception as _mcp_exc:
+        logger.debug("Mystery start: MCP session init skipped: %s", _mcp_exc)
+
     logger.info(
         "Mystery started: character=%s case='%s' game_id=%s",
         character_id, case["title"], gid,
@@ -201,6 +214,13 @@ def next_clue():
         rh_revealed.append(clue_text)
         gs.set(gid, "_red_herrings_pool", rh_pool)
         gs.set(gid, "red_herrings_revealed", rh_revealed)
+        try:
+            from engine.mcp.game_mcp import get_session
+            _s = get_session(gid)
+            if _s:
+                _s.log_event("red_herring", f"Red herring: {clue_text[:60]}", {"clue": clue_text}, actor="system")
+        except Exception:
+            pass
         return jsonify({
             "clue":        clue_text,
             "type":        "red_herring",
@@ -218,6 +238,19 @@ def next_clue():
     gs.set(gid, "_clues_pool", clues_pool)
     gs.set(gid, "clues_revealed", revealed)
     gs.set(gid, "clues_found", clues_found)
+
+    try:
+        from engine.mcp.game_mcp import get_session
+        _s = get_session(gid)
+        if _s:
+            _s.log_event(
+                "clue_found",
+                f"Clue {clues_found}: {clue_text[:60]}",
+                {"clue": clue_text, "number": clues_found},
+                actor="system",
+            )
+    except Exception:
+        pass
 
     return jsonify({
         "clue":        clue_text,
@@ -249,6 +282,27 @@ def accuse():
     gs.set(gid, "won", correct)
     gs.set(gid, "active", False)
     gs.set(gid, "ended_at", time.time())
+
+    # ── MCP session ─────────────────────────────────────────────────
+    try:
+        from engine.mcp.game_mcp import get_session
+        _s = get_session(gid)
+        if _s:
+            _evt = "culprit_named" if correct else "wrong_accusation"
+            real = gs.get(gid, "culprit")
+            _s.log_event(
+                _evt,
+                f"Accused '{suspect}' — {'CORRECT' if correct else f'WRONG (was {real})'}",
+                {"suspect": suspect, "culprit": real, "correct": correct},
+                actor="player",
+            )
+            if _s.get("active"):
+                _s.end(
+                    won=correct,
+                    final_note=f"Case {'solved' if correct else 'failed'}: {suspect}",
+                )
+    except Exception as _mcp_exc:
+        logger.debug("Mystery accuse: MCP event skipped: %s", _mcp_exc)
 
     logger.info(
         "Mystery accusation: character=%s suspect='%s' culprit='%s' correct=%s",
@@ -292,8 +346,16 @@ def end():
     gs.set(gid, "active", False)
     gs.set(gid, "ended_at", time.time())
 
+    try:
+        from engine.mcp.game_mcp import get_session
+        _s = get_session(gid)
+        if _s and _s.get("active"):
+            _s.end(won=False, final_note=f"Case abandoned after {clues_found} clues")
+    except Exception as _mcp_exc:
+        logger.debug("Mystery end: MCP session end skipped: %s", _mcp_exc)
+
     return jsonify({
-        "status":      "abandoned",
+        "status":       "abandoned",
         "real_culprit": real_culprit,
         "clues_found":  clues_found,
     })
@@ -305,6 +367,9 @@ class MysteryGame:
     """
     Programmatic wrapper — useful for agent integration or testing.
     """
+
+    #: Expose the built-in cases list for external inspection (e.g. bedroom_game_skill)
+    cases = CASES
 
     def __init__(self, character_id: str = "default") -> None:
         self.character_id = character_id

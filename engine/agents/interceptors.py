@@ -13,6 +13,7 @@ Execution order (by priority):
   15  PhoneSceneInterceptor        — inject conversation heat/stats for phone scene
   20  AutoResultInjector           — inject auto-skill results into system prompt
   30  SkillAwarenessInterceptor    — build the "available skills" list for the LLM
+  35  GameSessionInterceptor       — inject MCPGameSession history + actions when a game is active
   40  GameRulesInterceptor         — inject game-specific rules and required tools
   50  PersonalityGuardInterceptor  — add in-character reminders and tone guidance
   60  PolicyEnforcerInterceptor    — enforce reply length, forbidden topics
@@ -169,6 +170,41 @@ class SkillAwarenessInterceptor(InterceptorBase):
             ctx["system_prompt"] = ctx.get("system_prompt", "") + (
                 "\n\n--- Skills & Tools ---\n" + "\n\n".join(parts) + "\n---"
             )
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  GameSessionInterceptor  (priority 35)
+# ══════════════════════════════════════════════════════════════════════
+
+class GameSessionInterceptor(InterceptorBase):
+    """
+    Priority 35 — injected between SkillAwarenessInterceptor and
+    GameRulesInterceptor.
+
+    Pre-call
+    --------
+    Detects any active ``MCPGameSession`` for the current character and adds:
+    - Full game type, turn, score, and state snapshot
+    - Recent 10-turn history summary
+    - Type-specific available actions hint
+
+    Post-call
+    ---------
+    Scans the reply for shorthand game event markers such as
+    ``[DARE_COMPLETE]``, ``[GAME_WIN]``, etc. and fires the corresponding
+    MCPGameSession events automatically.
+    """
+    name     = "game_session"
+    priority = 35
+
+    def pre_call(self, ctx: ResponseContext) -> None:
+        from engine.mcp.game_mcp import get_active_session, GameSessionInterceptor as _GSI
+        # Delegate to MCPGameNode-based implementation in game_mcp.py
+        _GSI().pre_call(ctx)
+
+    def post_call(self, ctx: ResponseContext) -> None:
+        from engine.mcp.game_mcp import GameSessionInterceptor as _GSI
+        _GSI().post_call(ctx)
 
 
 # ══════════════════════════════════════════════════════════════════════

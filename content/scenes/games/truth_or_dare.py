@@ -115,6 +115,14 @@ def start():
     gs.set(gid, "rounds_history", [])
     gs.set(gid, "started_at", time.time())
 
+    # ── MCP session ──────────────────────────────────────────────────
+    try:
+        from engine.mcp.game_mcp import get_or_create_session
+        session = get_or_create_session(gid, "truth_or_dare", character_id, "bedroom")
+        session.log_event("game_start", f"Truth or Dare started for {character_id}", actor="system")
+    except Exception as _mcp_exc:
+        logger.debug("TOD start: MCP session init skipped: %s", _mcp_exc)
+
     logger.info("Truth-or-Dare started for character=%s game_id=%s", character_id, gid)
     return jsonify({"status": "started", "game_id": gid, "state": gs.all_games().get(gid, {})})
 
@@ -185,6 +193,24 @@ def answer():
     gs.set(gid, "current_type", None)
     gs.set(gid, "current_prompt", None)
 
+    # ── MCP session event ────────────────────────────────────────────
+    try:
+        from engine.mcp.game_mcp import get_session
+        _s = get_session(gid)
+        if _s:
+            if kind == "dare":
+                _evt = "dare_completed" if completed else "dare_refused"
+            else:
+                _evt = "truth_answered"
+            _s.log_event(
+                _evt,
+                f"Round {round_n}: {kind} — {'done' if completed else 'skipped'} — {prompt[:60]}",
+                {"kind": kind, "prompt": prompt, "completed": completed, "response": response_text},
+                actor="player",
+            )
+    except Exception as _mcp_exc:
+        logger.debug("TOD answer: MCP event skipped: %s", _mcp_exc)
+
     return jsonify({
         "accepted": True,
         "score": gs.get(gid, "score"),
@@ -211,6 +237,15 @@ def end():
     rounds      = gs.get(gid, "round") or 0
     gs.set(gid, "active", False)
     gs.set(gid, "ended_at", time.time())
+
+    # ── MCP session end ──────────────────────────────────────────────
+    try:
+        from engine.mcp.game_mcp import get_session
+        _s = get_session(gid)
+        if _s and _s.get("active"):
+            _s.end(won=(final_score >= 5), final_note=f"Game ended score={final_score} rounds={rounds}")
+    except Exception as _mcp_exc:
+        logger.debug("TOD end: MCP session end skipped: %s", _mcp_exc)
 
     logger.info(
         "Truth-or-Dare ended for character=%s score=%d rounds=%d",
@@ -240,6 +275,12 @@ class TruthOrDareGame:
         gs.set(self.game_id, "round", 0)
         gs.set(self.game_id, "score", 0)
         gs.set(self.game_id, "started_at", time.time())
+        try:
+            from engine.mcp.game_mcp import get_or_create_session
+            _s = get_or_create_session(self.game_id, "truth_or_dare", self.character_id)
+            _s.log_event("game_start", f"TOD game started", actor="system")
+        except Exception:
+            pass
         return {"started": True, "game_id": self.game_id}
 
     def roll(self) -> dict:
@@ -266,6 +307,14 @@ class TruthOrDareGame:
             gs.increment(self.game_id, "score", 2 if kind == "dare" else 1)
         gs.set(self.game_id, "current_type", None)
         gs.set(self.game_id, "current_prompt", None)
+        try:
+            from engine.mcp.game_mcp import get_session
+            _s = get_session(self.game_id)
+            if _s:
+                _evt = ("dare_completed" if completed else "dare_refused") if kind == "dare" else "truth_answered"
+                _s.log_event(_evt, f"Round {round_n}: {kind}", actor="player")
+        except Exception:
+            pass
         return {"score": gs.get(self.game_id, "score"), "round": round_n}
 
     def end(self) -> dict:
@@ -273,6 +322,14 @@ class TruthOrDareGame:
         score  = gs.get(self.game_id, "score") or 0
         rounds = gs.get(self.game_id, "round") or 0
         gs.set(self.game_id, "active", False)
+        gs.set(self.game_id, "ended_at", time.time())
+        try:
+            from engine.mcp.game_mcp import get_session
+            _s = get_session(self.game_id)
+            if _s and _s.get("active"):
+                _s.end(won=(score >= 5), final_note=f"Game ended score={score}")
+        except Exception:
+            pass
         return {"score": score, "rounds": rounds}
 
     @property

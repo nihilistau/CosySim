@@ -110,7 +110,8 @@ def main():
                 "⛓️ Event Chains",
                 "🤖 LM Studio",
                 "📈 Performance Monitor",
-                "🗄️ Backup & Restore"
+                "🗄️ Backup & Restore",
+                "🎮 MCP Monitor",
             ],
             label_visibility="collapsed"
         )
@@ -159,6 +160,8 @@ def main():
         show_performance_monitor()
     elif page == "🗄️ Backup & Restore":
         show_backup_restore()
+    elif page == "🎮 MCP Monitor":
+        show_mcp_monitor()
 
 
 def show_dashboard():
@@ -1600,6 +1603,352 @@ def show_backup_restore():
                 st.info("No backups")
         else:
             st.info("No backup directory")
+
+
+def show_mcp_monitor():
+    """
+    🎮 MCP Monitor — live view and control of the MCP framework state.
+
+    Sections
+    --------
+    1. MCPFramework Status     — scenes, characters, turn counter, pending consequences
+    2. Active Game Sessions    — per-session history viewer and action panel
+    3. GameState Editor        — raw key-value inspection + inline edit
+    4. AgentRouter Inbox       — pending messages per agent
+    5. Channel Actions         — send router message, fire consequence, cross-scene send
+    6. Character Registry      — all known characters with state/skills
+    """
+    st.header("🎮 MCP Monitor")
+    st.markdown("Live view and control of the MCP framework state machine.")
+
+    tabs = st.tabs([
+        "📡 Framework",
+        "🎲 Game Sessions",
+        "🗂️ GameState Editor",
+        "📬 Agent Router",
+        "⚡ Channel Actions",
+        "🧑 Character Registry",
+    ])
+
+    # ── Tab 1: MCPFramework Status ────────────────────────────────────
+    with tabs[0]:
+        st.subheader("MCPFramework Status")
+
+        try:
+            from engine.mcp.framework import get_framework
+            fw     = get_framework()
+            status = fw.get_status()
+
+            col1, col2, col3 = st.columns(3)
+            col1.metric("Turn",       status.get("turn", 0))
+            col2.metric("Scenes",     len(status.get("scenes", {})))
+            col3.metric("Characters", len(status.get("characters", {})))
+
+            st.divider()
+            left, right = st.columns(2)
+
+            with left:
+                st.markdown("**Registered Scenes**")
+                scene_map = status.get("scenes", {})
+                if scene_map:
+                    for sid, sdata in scene_map.items():
+                        with st.expander(f"🏠 {sid}"):
+                            st.json(sdata)
+                else:
+                    st.info("No scenes registered yet.")
+
+            with right:
+                st.markdown("**Registered Characters**")
+                char_map = status.get("characters", {})
+                if char_map:
+                    for cid, cdata in char_map.items():
+                        with st.expander(f"👤 {cid}"):
+                            st.json(cdata)
+                else:
+                    st.info("No characters registered yet.")
+
+            st.divider()
+            st.markdown("**Pending Consequences**")
+            consequences = status.get("consequences", [])
+            if consequences:
+                import pandas as pd
+                st.dataframe(pd.DataFrame(consequences), use_container_width=True)
+            else:
+                st.info("No pending consequences.")
+
+        except Exception as exc:
+            st.warning(f"MCPFramework unavailable: {exc}")
+
+    # ── Tab 2: Game Sessions ──────────────────────────────────────────
+    with tabs[1]:
+        st.subheader("Active Game Sessions")
+
+        try:
+            from engine.mcp.game_mcp import active_sessions, all_sessions, get_session
+
+            active = active_sessions()
+            if active:
+                for sess in active:
+                    gid = sess.get("game_id", "?")
+                    with st.expander(
+                        f"🎲 {sess.get('type', '?').replace('_', ' ').title()} "
+                        f"— {gid}  |  Turn {sess.get('turn', 0)}  |  Score {sess.get('score', 0)}",
+                        expanded=True,
+                    ):
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.markdown(f"**Character:** `{sess.get('character_id')}`")
+                            st.markdown(f"**Scene:** `{sess.get('scene_id')}`")
+                            st.markdown(f"**Won:** {sess.get('won')}")
+                        with col2:
+                            st.markdown("**Recent History**")
+                            recent = sess.get("recent_history", "No history yet.")
+                            st.code(recent, language=None)
+
+                        # Full turn history
+                        _s = get_session(gid)
+                        if _s:
+                            full_hist = _s.get_history(50)
+                            if full_hist:
+                                st.markdown("**Full Turn Log**")
+                                import pandas as pd
+                                df = pd.DataFrame(full_hist)
+                                cols_to_show = ["turn", "event_type", "actor", "description"]
+                                st.dataframe(
+                                    df[[c for c in cols_to_show if c in df.columns]],
+                                    use_container_width=True,
+                                )
+            else:
+                st.info("No active game sessions.")
+
+            st.divider()
+            st.markdown("**All Sessions (including ended)**")
+            all_s = all_sessions()
+            if all_s:
+                import pandas as pd
+                df = pd.DataFrame([
+                    {
+                        "game_id": s.get("game_id"),
+                        "type":    s.get("type"),
+                        "char":    s.get("character_id"),
+                        "scene":   s.get("scene_id"),
+                        "active":  s.get("active"),
+                        "turn":    s.get("turn"),
+                        "score":   s.get("score"),
+                        "won":     s.get("won"),
+                    }
+                    for s in all_s
+                ])
+                st.dataframe(df, use_container_width=True)
+            else:
+                st.info("No sessions recorded this run.")
+        except Exception as exc:
+            st.warning(f"Game session registry unavailable: {exc}")
+
+    # ── Tab 3: GameState Editor ───────────────────────────────────────
+    with tabs[2]:
+        st.subheader("GameState Key-Value Editor")
+
+        try:
+            from engine.mcp.comms_framework import get_game_state
+            gs = get_game_state()
+            games = gs.all_games()
+
+            if not games:
+                st.info("No game states stored.")
+            else:
+                selected_game = st.selectbox(
+                    "Select game ID to inspect",
+                    list(games.keys()),
+                )
+                state_data = gs.get_all(selected_game)
+
+                st.markdown(f"**State for `{selected_game}`**")
+                st.json(state_data)
+
+                st.divider()
+                st.markdown("**Edit a key**")
+                edit_col1, edit_col2, edit_col3 = st.columns([2, 3, 1])
+                with edit_col1:
+                    edit_key = st.text_input("Key", key="gs_edit_key")
+                with edit_col2:
+                    edit_val = st.text_input("New value (JSON or string)", key="gs_edit_val")
+                with edit_col3:
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    if st.button("💾 Set", key="gs_set_btn"):
+                        if edit_key:
+                            import json as _json
+                            try:
+                                parsed_val = _json.loads(edit_val)
+                            except Exception:
+                                parsed_val = edit_val
+                            gs.set(selected_game, edit_key, parsed_val)
+                            st.success(f"Set {selected_game}.{edit_key} = {parsed_val!r}")
+                            st.rerun()
+        except Exception as exc:
+            st.warning(f"GameState unavailable: {exc}")
+
+    # ── Tab 4: Agent Router Inbox ─────────────────────────────────────
+    with tabs[3]:
+        st.subheader("AgentRouter Inbox Viewer")
+
+        try:
+            from engine.mcp.comms_framework import get_router
+            router = get_router()
+
+            agent_id_to_inspect = st.text_input(
+                "Agent ID to inspect",
+                placeholder="e.g. char:001",
+                key="router_agent_id",
+            )
+
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("📥 Peek", key="router_peek"):
+                    if agent_id_to_inspect:
+                        msgs = router.peek(agent_id_to_inspect)
+                        if msgs:
+                            for i, m in enumerate(msgs, 1):
+                                st.markdown(
+                                    f"**{i}.** _{m.get('sender_id', 'unknown')}_ → "
+                                    f"`{m.get('message', '')[:120]}`"
+                                )
+                        else:
+                            st.info("No pending messages.")
+                    else:
+                        st.warning("Enter an agent ID.")
+            with col2:
+                if st.button("🗑️ Drain (read + clear)", key="router_drain"):
+                    if agent_id_to_inspect:
+                        msgs = router.drain(agent_id_to_inspect)
+                        st.success(f"Drained {len(msgs)} messages.")
+                    else:
+                        st.warning("Enter an agent ID.")
+        except Exception as exc:
+            st.warning(f"AgentRouter unavailable: {exc}")
+
+    # ── Tab 5: Channel Actions ────────────────────────────────────────
+    with tabs[4]:
+        st.subheader("Channel Action Panel")
+
+        st.markdown("### 📤 Send Router Message")
+        with st.form("send_router_msg"):
+            r_to      = st.text_input("Recipient agent ID",  placeholder="char:001")
+            r_from    = st.text_input("Sender ID (optional)", placeholder="admin")
+            r_message = st.text_area("Message", placeholder="You've received a game invite…")
+            if st.form_submit_button("Send"):
+                try:
+                    from engine.mcp.comms_framework import get_router
+                    get_router().send(r_to, r_message, sender_id=r_from or "admin")
+                    st.success(f"Message sent to {r_to}.")
+                except Exception as exc:
+                    st.error(f"Failed: {exc}")
+
+        st.divider()
+        st.markdown("### ⚡ Schedule Consequence")
+        with st.form("schedule_consequence"):
+            c_scene  = st.text_input("Scene ID",      placeholder="bedroom")
+            c_char   = st.text_input("Character ID",  placeholder="char:001")
+            c_type   = st.text_input("Type",          placeholder="stat_adjust")
+            c_params = st.text_input("Params JSON",   placeholder='{"stat": "happiness", "delta": 10}')
+            c_turns  = st.number_input("After turns", value=1, min_value=0, max_value=100)
+            c_desc   = st.text_input("Description",   placeholder="post-game mood lift")
+            if st.form_submit_button("Schedule"):
+                try:
+                    import json as _json
+                    from engine.mcp.framework import get_framework
+                    params = _json.loads(c_params) if c_params else {}
+                    get_framework().schedule_consequence(
+                        scene_id=c_scene,
+                        character_id=c_char,
+                        consequence_type=c_type,
+                        params=params,
+                        trigger_after_turns=int(c_turns),
+                        description=c_desc,
+                    )
+                    st.success("Consequence scheduled.")
+                except Exception as exc:
+                    st.error(f"Failed: {exc}")
+
+        st.divider()
+        st.markdown("### 🌐 Cross-Scene Message")
+        with st.form("cross_scene_msg"):
+            cs_from   = st.text_input("From scene",   placeholder="bedroom")
+            cs_to     = st.text_input("To scene",     placeholder="phone")
+            cs_type   = st.text_input("Message type", placeholder="game_invite")
+            cs_payload = st.text_input("Payload JSON", placeholder='{"game": "mystery"}')
+            if st.form_submit_button("Send"):
+                try:
+                    import json as _json
+                    from engine.mcp.framework import get_framework
+                    payload = _json.loads(cs_payload) if cs_payload else {}
+                    get_framework().cross_scene_send(cs_from, cs_to, cs_type, payload)
+                    st.success(f"Cross-scene message sent {cs_from} → {cs_to}.")
+                except Exception as exc:
+                    st.error(f"Failed: {exc}")
+
+        st.divider()
+        st.markdown("### 🚀 Launch Game (quick)")
+        with st.form("quick_launch_game"):
+            ql_char = st.text_input("Character ID",  placeholder="char:001")
+            ql_type = st.selectbox("Game type", ["truth_or_dare", "mystery"])
+            ql_case = st.number_input("Case index (mystery, -1 = random)", value=-1, min_value=-1)
+            if st.form_submit_button("Launch"):
+                try:
+                    from content.scenes.bedroom.bedroom_game_skill import launch_game
+                    result = launch_game(ql_char, ql_type, int(ql_case))
+                    st.success("Game launched!")
+                    import json as _json
+                    st.json(_json.loads(result))
+                except Exception as exc:
+                    st.error(f"Failed: {exc}")
+
+    # ── Tab 6: Character Registry ─────────────────────────────────────
+    with tabs[5]:
+        st.subheader("Character Registry")
+
+        try:
+            from engine.mcp.character_registry import get_character_registry
+            reg = get_character_registry()
+
+            # Try to get all records from the registry
+            records = {}
+            try:
+                records = getattr(reg, "_records", {})
+            except Exception:
+                pass
+
+            if not records:
+                st.info("No characters registered in the character registry yet.")
+            else:
+                st.markdown(f"**{len(records)} character(s) registered**")
+                for cid, record in records.items():
+                    with st.expander(f"👤 {cid}"):
+                        # State
+                        try:
+                            state = reg.get_state(cid)
+                            st.markdown("**State**")
+                            st.json(state or {})
+                        except Exception:
+                            pass
+
+                        # Skills
+                        try:
+                            skills = getattr(record, "skills", None) or getattr(record, "skill_ids", [])
+                            if skills:
+                                st.markdown(f"**Skills:** {', '.join(str(s) for s in skills)}")
+                        except Exception:
+                            pass
+
+                        # Current scene
+                        try:
+                            scene = getattr(record, "current_scene", None)
+                            if scene:
+                                st.markdown(f"**Current scene:** `{scene}`")
+                        except Exception:
+                            pass
+        except Exception as exc:
+            st.warning(f"Character registry unavailable: {exc}")
 
 
 if __name__ == "__main__":
