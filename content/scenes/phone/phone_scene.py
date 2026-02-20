@@ -503,18 +503,25 @@ class PhoneScene(BaseScene):
                 media = self.gallery.get_media(media_id)
                 if not media:
                     return jsonify({'error': 'Media not found'}), 404
-                
-                # Validate path is within media directory (prevent path traversal)
+
                 filepath = Path(media['filepath']).resolve()
-                media_dir = self.media_dir.resolve()
-                
-                if not str(filepath).startswith(str(media_dir)):
+
+                # Security: file must exist and must reside within the project root.
+                # We do NOT check against self.media_dir because Gallery, ComfyUI, and
+                # other generators may write to different sub-directories of the project.
+                project_root = Path(__file__).resolve().parent.parent.parent.parent
+                if not str(filepath).startswith(str(project_root)):
                     return jsonify({'error': 'Invalid file path'}), 403
-                
+
                 if not filepath.exists():
                     return jsonify({'error': 'File not found'}), 404
-                
-                return send_file(str(filepath), mimetype='image/jpeg')
+
+                # Derive mimetype from extension so PNGs/WebPs/JPEGs are all served
+                ext = filepath.suffix.lower()
+                mime = {'.png': 'image/png', '.jpg': 'image/jpeg',
+                        '.jpeg': 'image/jpeg', '.webp': 'image/webp',
+                        '.gif': 'image/gif'}.get(ext, 'image/jpeg')
+                return send_file(str(filepath), mimetype=mime)
             except Exception as e:
                 return jsonify({'error': str(e)}), 500
         
