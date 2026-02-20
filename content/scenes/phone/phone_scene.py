@@ -1837,7 +1837,7 @@ class PhoneScene(BaseScene):
             else:
                 new_mood = 'neutral'
 
-            self.active_character.mood = new_mood
+            self.active_character.set_mood(new_mood)
 
             # ── Relationship ─────────────────────────────────
             delta = 0.0
@@ -1850,7 +1850,7 @@ class PhoneScene(BaseScene):
             if delta == 0:
                 delta = -0.005 if rel > 0.5 else 0.005 if rel < 0.5 else 0
             rel = max(0.0, min(1.0, rel + delta))
-            self.active_character.relationship_level = rel
+            self.active_character.adjust_relationship(delta)
 
             # ── Flirtiness (character trait drift) ───────────
             if flirt > 1:

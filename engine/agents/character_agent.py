@@ -179,7 +179,7 @@ class CharacterAgent:
             if role == "user":
                 chat.add_user_message(content)
             elif role == "assistant":
-                chat.add_assistant_message(content)
+                chat.add_assistant_response(content)
 
         chat.add_user_message(user_message)
 
