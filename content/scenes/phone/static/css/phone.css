@@ -1,10 +1,10 @@
 /* ═══════════════════════════════════════════════════════════════════
-   Phone UI Styles — CosySim
-   Internal phone-frame + message bubbles + game mechanics UI.
+   Tablet UI Styles — CosySim
+   Internal tablet-frame + message bubbles + game mechanics UI.
    Root layout lives in phone_ui.html <style> block.
    ═══════════════════════════════════════════════════════════════════ */
 
-* { margin:0; padding:0; box-sizing:border-box; }
+*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
 
 body {
     font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Oxygen,Ubuntu,Cantarell,sans-serif;
@@ -12,34 +12,30 @@ body {
 
 .phone-container { display:flex; gap:0; align-items:flex-start; }
 
-/* ── Phone Frame ─────────────────────────────────────────────── */
+/* ── Tablet Frame (overrides from inline CSS take priority) ──── */
 .phone-frame {
-    width:375px; height:812px;
-    background:#1a1a1a;
-    border-radius:40px;
-    box-shadow:0 20px 60px rgba(0,0,0,.5), inset 0 0 0 1px rgba(255,255,255,.04);
+    background:#111118;
+    border-radius:20px;
     overflow:hidden; position:relative;
-    border:6px solid #2a2a2a;
 }
 
 /* ── Status Bar ──────────────────────────────────────────────── */
 .status-bar {
-    height:44px;
-    background:rgba(0,0,0,.4);
-    backdrop-filter:blur(14px);
+    height:32px;
+    background:rgba(12,12,18,.85);
+    backdrop-filter:blur(20px);
     display:flex; justify-content:space-between; align-items:center;
-    padding:0 20px; color:#fff; font-size:14px;
+    padding:0 16px; color:#999; font-size:12px;
     z-index:10; position:relative;
 }
 .status-right { display:flex; gap:8px; align-items:center; }
 
-/* ── Phone Screen ────────────────────────────────────────────── */
+/* ── Tablet Screen ───────────────────────────────────────────── */
 .phone-screen {
-    height:calc(100% - 44px - 50px);
-    background:#000; overflow:hidden;
+    background:#0a0a10; overflow-x:hidden;
     position:relative;
 }
-.screen-view { height:100%; width:100%; }
+.screen-view { width:100%; }
 #messagesScreen {
     display:flex; flex-direction:column;
 }
@@ -49,12 +45,12 @@ body {
     padding:40px 20px 20px; text-align:center; color:#fff;
     background:radial-gradient(ellipse at 50% 0%, rgba(102,126,234,.12) 0%, transparent 60%);
 }
-.home-time { font-size:72px; font-weight:100; letter-spacing:-2px; margin-bottom:4px; }
-.home-date { font-size:16px; opacity:.7; letter-spacing:.5px; }
+.home-time { font-size:56px; font-weight:100; letter-spacing:-2px; margin-bottom:4px; }
+.home-date { font-size:14px; opacity:.7; letter-spacing:.5px; }
 
 .app-grid {
-    display:grid; grid-template-columns:repeat(4,1fr);
-    gap:18px; padding:24px 16px;
+    display:grid; grid-template-columns:repeat(5,1fr);
+    gap:16px 12px; padding:20px 24px;
 }
 .app-icon {
     display:flex; flex-direction:column; align-items:center;
@@ -63,10 +59,10 @@ body {
 }
 .app-icon:active { transform:scale(.92); }
 .icon {
-    width:58px; height:58px;
+    width:54px; height:54px;
     border-radius:14px;
     display:flex; align-items:center; justify-content:center;
-    font-size:28px; margin-bottom:6px;
+    font-size:26px; margin-bottom:5px;
     transition:transform .15s, box-shadow .15s;
     box-shadow:0 4px 12px rgba(0,0,0,.3);
 }
@@ -79,10 +75,12 @@ body {
 .icon-bedroom   { background:linear-gradient(135deg,#667eea,#764ba2); }
 .icon-hub       { background:linear-gradient(135deg,#0a84ff,#5ac8fa); }
 .icon-settings  { background:linear-gradient(135deg,#636366,#8e8e93); }
+.icon-studio    { background:linear-gradient(135deg,#ff6b9d,#c44569); }
+.icon-imgsettings { background:linear-gradient(135deg,#f7971e,#ffd200); }
 /* Fallback gradient for icons without a specific class */
 .icon:not([class*="icon-"]) { background:linear-gradient(135deg,#667eea,#764ba2); }
 
-.app-icon span { color:#fff; font-size:11px; font-weight:500; }
+.app-icon span { color:#fff; font-size:10px; font-weight:500; }
 
 .badge {
     position:absolute; top:-5px; right:10px;
@@ -390,25 +388,24 @@ body {
     object-fit: cover;
 }
 
-/* Navigation Bar */
+/* Navigation Bar — inline CSS takes priority, these are fallbacks */
 .nav-bar {
-    height: 50px;
-    background: #000;
-    display: flex;
-    justify-content: space-around;
-    align-items: center;
-    color: white;
+    height:48px;
+    background:rgba(12,12,18,.9);
+    backdrop-filter:blur(20px);
+    display:flex; justify-content:space-around; align-items:center;
+    border-top:1px solid rgba(255,255,255,.04);
 }
 
 .nav-button {
-    font-size: 24px;
-    cursor: pointer;
-    width: 50px;
-    height: 50px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    font-size:13px; cursor:pointer;
+    padding:4px 14px; border-radius:10px;
+    display:flex; flex-direction:column; align-items:center; gap:2px;
+    color:#666; transition:all .2s;
 }
+.nav-button:hover { color:#fff; background:rgba(255,255,255,.05); }
+.nav-icon { font-size:18px; }
+.nav-label { font-size:9px; letter-spacing:.03em; }
 
 /* Control Panel */
 .control-panel {

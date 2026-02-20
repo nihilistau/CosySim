@@ -11,12 +11,12 @@
     display: flex;
     justify-content: center;
     align-items: center;
-    z-index: 10000;
+    z-index: 500;
 }
 
 .dialog-content {
-    background: white;
-    border-radius: 20px;
+    background: #1a1a24;
+    border-radius: 16px;
     padding: 30px;
     max-width: 400px;
     width: 90%;
@@ -227,12 +227,12 @@
     display: flex;
     justify-content: center;
     align-items: center;
-    z-index: 9999;
+    z-index: 500;
 }
 
 .gallery-view-container {
-    background: white;
-    border-radius: 20px;
+    background: #1a1a24;
+    border-radius: 16px;
     width: 90%;
     max-width: 800px;
     max-height: 80vh;
@@ -246,13 +246,13 @@
     justify-content: space-between;
     align-items: center;
     padding: 20px;
-    border-bottom: 1px solid #E5E5EA;
+    border-bottom: 1px solid rgba(255,255,255,.06);
 }
 
 .gallery-view-header h3 {
     margin: 0;
-    font-size: 24px;
-    color: #333;
+    font-size: 20px;
+    color: #e0e0ff;
 }
 
 .close-gallery-btn {
@@ -289,7 +289,7 @@
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    z-index: 10001;
+    z-index: 1000;
 }
 
 .close-viewer {
@@ -304,7 +304,7 @@
     padding: 10px 20px;
     border-radius: 50%;
     transition: background 0.3s;
-    z-index: 10002;
+    z-index: 1100;
 }
 
 .close-viewer:hover {

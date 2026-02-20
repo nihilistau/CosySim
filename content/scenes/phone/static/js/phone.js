@@ -223,17 +223,20 @@ function updateMoodRelDisplay() {
 
 // App navigation
 function openApp(appName) {
-    // Hide all screens
+    // Remove active class from all screens (triggers fade-out)
     const screens = document.querySelectorAll('.screen-view');
-    screens.forEach(screen => screen.style.display = 'none');
+    screens.forEach(screen => {
+        screen.classList.remove('active');
+        screen.style.display = 'none';
+    });
     
     // Show selected screen
     const screenMap = {
         'messages':      'messagesScreen',
         'phone':         'phoneScreen',
         'gallery':       'galleryScreen',
-        'camera':        'homeScreen',        // Placeholder
-        'browser':       'homeScreen',        // Placeholder
+        'camera':        'homeScreen',
+        'browser':       'homeScreen',
         'videoMessages': 'videoMessagesScreen',
         'voiceMessages': 'voiceMessagesScreen',
         'settings':      'settingsScreen',
@@ -243,10 +246,16 @@ function openApp(appName) {
     
     const screenId = screenMap[appName] || 'homeScreen';
     const screenEl = document.getElementById(screenId);
-    if (screenEl) screenEl.style.display = 'block';
-    else { document.getElementById('homeScreen').style.display = 'block'; return; }
+    if (screenEl) {
+        screenEl.style.display = 'flex';
+        requestAnimationFrame(() => screenEl.classList.add('active'));
+    } else {
+        const home = document.getElementById('homeScreen');
+        if (home) { home.style.display = 'flex'; home.classList.add('active'); }
+        return;
+    }
     
-    // Clear notification badge when opening messages
+    // Load data for the app
     if (appName === 'messages') {
         showNotificationBadge(0);
         loadMessages();
@@ -269,8 +278,12 @@ function openApp(appName) {
 
 function goHome() {
     const screens = document.querySelectorAll('.screen-view');
-    screens.forEach(screen => screen.style.display = 'none');
-    document.getElementById('homeScreen').style.display = 'block';
+    screens.forEach(screen => {
+        screen.classList.remove('active');
+        screen.style.display = 'none';
+    });
+    const home = document.getElementById('homeScreen');
+    if (home) { home.style.display = 'flex'; requestAnimationFrame(() => home.classList.add('active')); }
 }
 
 // ══════════════════════════════ Video Messages gallery ══════════════════════
@@ -1584,3 +1597,78 @@ async function saveImageSettings() {
 
 window.loadImageSettings = loadImageSettings;
 window.saveImageSettings = saveImageSettings;
+
+// ══════════════════════════════ GUI HEALTH MONITOR ════════════════════════════
+
+const guiHealth = {
+    status: 'ok',       // ok | warn | error
+    checks: [],
+    intervalId: null,
+
+    start() {
+        this.intervalId = setInterval(() => this.runChecks(), 5000);
+        this.runChecks();
+    },
+
+    runChecks() {
+        const issues = [];
+
+        // Check messages container exists and has proper dimensions
+        const mc = document.getElementById('messagesContainer');
+        if (mc) {
+            if (mc.clientHeight < 10) issues.push('Messages container collapsed (height < 10px)');
+            if (mc.scrollHeight > 0 && mc.clientHeight === 0) issues.push('Messages container invisible');
+        }
+
+        // Check that exactly one screen is visible
+        const visible = document.querySelectorAll('.screen-view.active');
+        if (visible.length === 0) issues.push('No active screen');
+        if (visible.length > 1) issues.push(`${visible.length} screens active simultaneously`);
+
+        // Check input area is accessible
+        const input = document.getElementById('messageInput');
+        if (input && input.offsetParent === null && document.getElementById('messagesScreen')?.classList.contains('active')) {
+            issues.push('Message input hidden while on messages screen');
+        }
+
+        // Check socket connection
+        if (typeof socket !== 'undefined' && socket && !socket.connected) {
+            issues.push('Socket disconnected');
+        }
+
+        // Update status
+        this.checks = issues;
+        if (issues.length === 0) this.status = 'ok';
+        else if (issues.some(i => i.includes('collapsed') || i.includes('invisible'))) this.status = 'error';
+        else this.status = 'warn';
+
+        // Update health dot
+        const dot = document.getElementById('guiHealthDot');
+        if (dot) {
+            dot.className = 'status-health' + (this.status !== 'ok' ? ' ' + this.status : '');
+            dot.title = issues.length ? 'GUI Issues:\n' + issues.join('\n') : 'GUI Health: OK';
+        }
+    },
+
+    stop() {
+        if (this.intervalId) clearInterval(this.intervalId);
+    }
+};
+
+function toggleGuiHealth() {
+    const issues = guiHealth.checks;
+    if (issues.length === 0) {
+        console.log('%c✅ GUI Health: All checks passed', 'color:#30d158');
+    } else {
+        console.warn('⚠️ GUI Health Issues:', issues);
+        alert('GUI Health Issues:\n\n' + issues.join('\n'));
+    }
+}
+window.toggleGuiHealth = toggleGuiHealth;
+
+// Start health monitor after DOM ready
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => guiHealth.start());
+} else {
+    guiHealth.start();
+}

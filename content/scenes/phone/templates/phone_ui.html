@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CosySim - Phone</title>
+    <title>CosySim - Tablet</title>
     <link rel="icon" href="data:,">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/phone.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/gallery.css') }}">
@@ -12,139 +12,204 @@
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <style>
         /* ═══════════════ ROOT LAYOUT ═══════════════ */
+        *, *::before, *::after { box-sizing: border-box; }
         html, body {
             margin:0; padding:0;
             height:100%; overflow:hidden;
-            background:#0a0a0f;
+            background:#07070c;
             font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+            color:#fff;
         }
         .cosysim-root {
             display:flex;
             height:100vh;
             overflow:hidden;
+            gap:0;
         }
 
-        /* ═══════════════ LEFT — PHONE PANEL ═══════════════ */
+        /* ═══════════════ LEFT — TABLET PANEL ═══════════════ */
         .phone-panel {
-            width:420px;
-            flex-shrink:0;
+            flex:0 0 auto;
             display:flex;
             align-items:center;
             justify-content:center;
-            background:linear-gradient(145deg,#12121a,#0a0a0f);
-            padding:12px 0;
+            background:linear-gradient(145deg,#0c0c14,#07070c);
+            padding:16px;
         }
-        /* keep the phone container centred inside the panel */
         .phone-panel .phone-container { margin:0; gap:0; }
 
-        /* ═══════════════ PHONE FRAME (unchanged) ═══════════════ */
+        /* ═══════════════ TABLET FRAME ═══════════════ */
         .phone-frame {
-            width:375px;
-            height:812px;
-            background:#1a1a1a;
-            border-radius:40px;
-            box-shadow:0 20px 60px rgba(0,0,0,.6);
+            width:780px;
+            height:calc(100vh - 32px);
+            max-height:680px;
+            background:#111118;
+            border-radius:20px;
+            box-shadow:
+                0 0 0 1px rgba(255,255,255,.06),
+                0 20px 60px rgba(0,0,0,.5),
+                0 0 80px rgba(100,100,255,.04);
             overflow:hidden;
             position:relative;
-            border:8px solid #2a2a2a;
+            display:flex;
+            flex-direction:column;
         }
         .status-bar {
-            height:44px;
-            background:rgba(0,0,0,.3);
+            height:32px;
+            background:rgba(12,12,18,.85);
+            backdrop-filter:blur(20px);
+            -webkit-backdrop-filter:blur(20px);
             display:flex;
             justify-content:space-between;
             align-items:center;
-            padding:0 20px;
-            color:#fff;
-            font-size:14px;
+            padding:0 16px;
+            color:#999;
+            font-size:12px;
+            flex-shrink:0;
+            border-bottom:1px solid rgba(255,255,255,.04);
+            z-index:10;
         }
-        .status-right { display:flex; gap:8px; }
+        .status-right { display:flex; gap:8px; align-items:center; }
+        .status-health {
+            width:7px; height:7px; border-radius:50%;
+            background:#30d158; cursor:pointer;
+            transition:background .3s;
+        }
+        .status-health.warn { background:#ff9f0a; }
+        .status-health.error { background:#ff3b30; }
+
+        /* ═══════════════ TABLET SCREEN ═══════════════ */
         .phone-screen {
-            height:calc(100% - 44px - 50px);
-            background:#000;
-            overflow:hidden;
+            flex:1;
+            min-height:0;
+            background:#0a0a10;
+            overflow-x:hidden;
+            overflow-y:hidden;
             position:relative;
             display:flex;
             flex-direction:column;
         }
-        .screen-view { height:100%; width:100%; }
 
-        /* ── messages screen fix: scroll in content, sticky input ── */
-        #messagesScreen {
-            display:flex;
+        /* Screen views: hidden by default, flex column when shown */
+        .screen-view {
+            position:absolute;
+            inset:0;
+            display:none;
             flex-direction:column;
-            height:100%;
+            opacity:0;
+            transition:opacity .15s ease;
         }
+        .screen-view.active {
+            display:flex !important;
+            opacity:1;
+            z-index:1;
+        }
+
+        /* ═══════════════ MESSAGES SCREEN ═══════════════ */
+        #messagesScreen {
+            display:none;
+            flex-direction:column;
+        }
+        #messagesScreen.active {
+            display:flex !important;
+            opacity:1;
+        }
+        .conv-tabs {
+            display:flex;
+            border-bottom:1px solid rgba(255,255,255,.06);
+            background:rgba(18,18,24,.9);
+            backdrop-filter:blur(12px);
+            flex-shrink:0;
+        }
+        .conv-tab {
+            flex:1; padding:8px; text-align:center;
+            cursor:pointer; color:#666; font-size:13px;
+            transition:all .2s;
+            border-bottom:2px solid transparent;
+        }
+        .conv-tab.active { color:#5e9eff; border-bottom-color:#5e9eff; }
+        .conv-tab:hover:not(.active) { color:#999; }
+        .anon-header { background:linear-gradient(135deg,#0f0f0f,#1a1a2e); }
+        .anon-name { color:#9b59b6; text-shadow:0 0 8px #9b59b6; }
+
         .messages-container {
             flex:1;
             overflow-y:auto;
+            overflow-x:hidden;
             min-height:0;
-            padding:8px 12px;
+            padding:12px 16px;
+            scroll-behavior:smooth;
         }
+        /* Styled scrollbar */
+        .messages-container::-webkit-scrollbar { width:5px; }
+        .messages-container::-webkit-scrollbar-track { background:transparent; }
+        .messages-container::-webkit-scrollbar-thumb {
+            background:rgba(255,255,255,.12); border-radius:4px;
+        }
+        .messages-container::-webkit-scrollbar-thumb:hover { background:rgba(255,255,255,.25); }
+
         .message-input-container {
             flex-shrink:0;
             display:flex;
             flex-direction:column;
             gap:6px;
-            padding:8px 10px;
-            background:#1c1c1e;
-            border-top:1px solid #3a3a3c;
+            padding:10px 14px;
+            background:rgba(18,18,24,.95);
+            backdrop-filter:blur(12px);
+            border-top:1px solid rgba(255,255,255,.06);
         }
 
-        /* ── Input area ── */
+        /* ═══════════════ INPUT AREA ═══════════════ */
         .input-icons-row { display:flex; gap:4px; align-items:center; }
         .icon-action-btn {
-            background:none; border:none; font-size:20px;
-            cursor:pointer; padding:4px 6px; border-radius:8px;
-            transition:background .15s; color:#ebebf5cc;
+            background:none; border:none; font-size:18px;
+            cursor:pointer; padding:4px 7px; border-radius:8px;
+            transition:all .15s; color:rgba(235,235,245,.5);
         }
-        .icon-action-btn:hover { background:#2c2c2e; }
-        .icon-action-btn:disabled { opacity:.3; cursor:not-allowed; }
+        .icon-action-btn:hover { background:rgba(255,255,255,.06); color:#fff; }
+        .icon-action-btn:disabled { opacity:.25; cursor:not-allowed; }
         .input-row { display:flex; align-items:flex-end; gap:8px; }
         .message-textarea {
-            flex:1; background:#2c2c2e; border:1px solid #3a3a3c;
-            border-radius:18px; color:#fff; font-size:15px;
-            padding:10px 14px; resize:none; outline:none;
+            flex:1; background:rgba(255,255,255,.05);
+            border:1px solid rgba(255,255,255,.08);
+            border-radius:16px; color:#fff; font-size:15px;
+            padding:10px 16px; resize:none; outline:none;
             line-height:1.4; max-height:120px; overflow-y:auto;
             font-family:inherit;
+            transition:border-color .2s;
         }
-        .message-textarea::placeholder { color:#8e8e93; }
+        .message-textarea:focus { border-color:rgba(94,158,255,.4); }
+        .message-textarea::placeholder { color:#555; }
         .input-send-btn {
-            background:#0a84ff; border:none; border-radius:50%;
-            width:36px; height:36px; font-size:16px; color:#fff;
+            background:linear-gradient(135deg,#5e9eff,#4080e0);
+            border:none; border-radius:50%;
+            width:38px; height:38px; font-size:16px; color:#fff;
             cursor:pointer; flex-shrink:0;
             display:flex; align-items:center; justify-content:center;
-            transition:background .15s;
+            transition:all .2s; box-shadow:0 2px 8px rgba(94,158,255,.3);
         }
-        .input-send-btn:hover { background:#0070d8; }
-        .call-button-disabled { opacity:.35; cursor:not-allowed!important; }
+        .input-send-btn:hover { transform:scale(1.05); box-shadow:0 4px 16px rgba(94,158,255,.4); }
+        .call-button-disabled { opacity:.25; cursor:not-allowed!important; }
 
-        /* ── Conv tabs ── */
-        .conv-tabs {
-            display:flex; border-bottom:1px solid #3a3a3c;
-            background:#1c1c1e; flex-shrink:0;
-        }
-        .conv-tab {
-            flex:1; padding:8px; text-align:center;
-            cursor:pointer; color:#8e8e93; font-size:13px;
-            transition:background .15s,color .15s;
-        }
-        .conv-tab.active { color:#0a84ff; border-bottom:2px solid #0a84ff; }
-        .anon-header { background:linear-gradient(135deg,#0f0f0f,#1a1a2e); }
-        .anon-name { color:#9b59b6; text-shadow:0 0 8px #9b59b6; }
-
-        /* nav bar */
+        /* ═══════════════ NAV BAR ═══════════════ */
         .nav-bar {
-            height:50px; background:#1a1a1a;
+            height:48px;
+            background:rgba(12,12,18,.9);
+            backdrop-filter:blur(20px);
             display:flex; justify-content:space-around;
-            align-items:center; border-top:1px solid #333;
+            align-items:center;
+            border-top:1px solid rgba(255,255,255,.04);
+            flex-shrink:0;
         }
         .nav-button {
-            color:#fff; font-size:20px; cursor:pointer;
-            padding:8px 16px; border-radius:8px;
-            transition:background .15s;
+            color:#666; font-size:13px; cursor:pointer;
+            padding:4px 14px; border-radius:10px;
+            transition:all .2s;
+            display:flex; flex-direction:column; align-items:center; gap:2px;
         }
-        .nav-button:hover { background:#2a2a2a; }
+        .nav-button:hover { color:#fff; background:rgba(255,255,255,.05); }
+        .nav-icon { font-size:18px; }
+        .nav-label { font-size:9px; letter-spacing:.03em; }
 
         /* ═══════════════ RIGHT — CONTROL PANEL ═══════════════ */
         .cp-panel {
@@ -152,8 +217,8 @@
             min-width:0;
             display:flex;
             flex-direction:column;
-            background:#0e0e14;
-            border-left:1px solid #1e1e2a;
+            background:#0b0b12;
+            border-left:1px solid rgba(255,255,255,.04);
             overflow:hidden;
         }
         .cp-header {
@@ -161,40 +226,40 @@
             display:flex;
             align-items:center;
             justify-content:space-between;
-            padding:10px 18px 6px;
-            border-bottom:1px solid #1e1e2a;
-            background:#0e0e14;
+            padding:8px 16px;
+            border-bottom:1px solid rgba(255,255,255,.04);
+            background:#0b0b12;
         }
         .cp-title {
-            font-size:16px; font-weight:700;
-            color:#e0e0ff; letter-spacing:.05em;
+            font-size:14px; font-weight:700;
+            color:#c0c0e0; letter-spacing:.05em;
         }
         .cp-conn {
             display:flex; align-items:center; gap:6px;
-            font-size:12px; color:#666;
+            font-size:11px; color:#555;
         }
         .cp-conn-dot {
-            width:8px; height:8px; border-radius:50%;
+            width:7px; height:7px; border-radius:50%;
             background:#444; transition:background .3s;
         }
         .cp-conn-dot.ok { background:#30d158; }
 
-        /* tab bar */
+        /* CP tab bar */
         .cp-tabs {
             flex-shrink:0;
             display:flex;
-            border-bottom:1px solid #1e1e2a;
-            background:#0a0a0f;
+            border-bottom:1px solid rgba(255,255,255,.04);
+            background:#08080e;
         }
         .cp-tab {
-            flex:1; padding:9px 4px; text-align:center;
-            font-size:12px; color:#555; cursor:pointer;
-            transition:color .2s,border-bottom .2s;
+            flex:1; padding:8px 4px; text-align:center;
+            font-size:11px; color:#444; cursor:pointer;
+            transition:all .2s;
             border-bottom:2px solid transparent;
             user-select:none;
         }
-        .cp-tab.active { color:#7c6af7; border-bottom:2px solid #7c6af7; }
-        .cp-tab:hover:not(.active) { color:#aaa; }
+        .cp-tab.active { color:#7c6af7; border-bottom-color:#7c6af7; }
+        .cp-tab:hover:not(.active) { color:#888; }
 
         /* tab content */
         .cp-tabcontent {
@@ -405,9 +470,9 @@
         /* ══════════ Connecting / Media Player Overlay ══════════ */
         .media-overlay {
             display:none; position:absolute; inset:0;
-            background:rgba(5,5,12,.97); z-index:900;
+            background:rgba(5,5,12,.97); z-index:800;
             flex-direction:column; align-items:center; justify-content:center;
-            border-radius:36px;
+            border-radius:16px;
         }
         .media-overlay.active { display:flex; }
 
@@ -474,10 +539,12 @@
             <div class="status-bar">
                 <div class="status-left">
                     <span class="time" id="statusTime">9:41</span>
+                    <span style="margin-left:8px;color:#555;font-size:11px;">CosySim Tablet</span>
                 </div>
                 <div class="status-right">
-                    <span class="signal">📶</span>
-                    <span class="battery">🔋</span>
+                    <span class="status-health" id="guiHealthDot" onclick="toggleGuiHealth()" title="GUI Health"></span>
+                    <span style="color:#555">📶</span>
+                    <span style="color:#555">🔋</span>
                 </div>
             </div>
 
@@ -485,7 +552,7 @@
             <div class="phone-screen" id="phoneScreen">
 
                 <!-- Home Screen -->
-                <div class="screen-view" id="homeScreen">
+                <div class="screen-view active" id="homeScreen" style="display:flex;flex-direction:column;">
                     <div class="home-wallpaper">
                         <h1 class="home-time" id="homeTime">9:41</h1>
                         <p class="home-date" id="homeDate">Monday, January 1</p>
@@ -512,6 +579,14 @@
                             <div class="icon icon-camera">📷</div>
                             <span>Camera</span>
                         </div>
+                        <div class="app-icon" onclick="openApp('voiceStudio')">
+                            <div class="icon icon-studio">🎙️</div>
+                            <span>Voice Studio</span>
+                        </div>
+                        <div class="app-icon" onclick="openApp('imageSettings')">
+                            <div class="icon icon-imgsettings">🎨</div>
+                            <span>Image Gen</span>
+                        </div>
                         <div class="app-icon" onclick="window.location.href='http://localhost:5556'">
                             <div class="icon icon-bedroom">🏠</div>
                             <span>Bedroom</span>
@@ -523,14 +598,6 @@
                         <div class="app-icon" onclick="openApp('settings')">
                             <div class="icon icon-settings">⚙️</div>
                             <span>Settings</span>
-                        </div>
-                        <div class="app-icon" onclick="openApp('voiceStudio')">
-                            <div class="icon icon-studio">🎙️</div>
-                            <span>Voice Studio</span>
-                        </div>
-                        <div class="app-icon" onclick="openApp('imageSettings')">
-                            <div class="icon icon-imgsettings">🎨</div>
-                            <span>Image Gen</span>
                         </div>
                     </div>
                     <div class="dock">
@@ -908,9 +975,10 @@
             </div><!-- /phone-screen -->
 
             <div class="nav-bar">
-                <div class="nav-button" onclick="goHome()">◀</div>
-                <div class="nav-button" onclick="goHome()">⚫</div>
-                <div class="nav-button">▣</div>
+                <div class="nav-button" onclick="goHome()"><span class="nav-icon">🏠</span><span class="nav-label">Home</span></div>
+                <div class="nav-button" onclick="openApp('messages')"><span class="nav-icon">💬</span><span class="nav-label">Chat</span></div>
+                <div class="nav-button" onclick="openGalleryApp()"><span class="nav-icon">🖼️</span><span class="nav-label">Gallery</span></div>
+                <div class="nav-button" onclick="openApp('settings')"><span class="nav-icon">⚙️</span><span class="nav-label">Settings</span></div>
             </div>
         </div><!-- /phone-frame -->
       </div>
@@ -1262,8 +1330,12 @@ function sendVideoMessage() {
 }
 
 function openGalleryApp() {
-    document.querySelectorAll('.screen-view').forEach(el=>el.style.display='none');
-    document.getElementById('galleryScreen').style.display='';
+    document.querySelectorAll('.screen-view').forEach(el => {
+        el.classList.remove('active');
+        el.style.display = 'none';
+    });
+    const g = document.getElementById('galleryScreen');
+    if (g) { g.style.display = 'flex'; requestAnimationFrame(() => g.classList.add('active')); }
     if (typeof loadGallery === 'function') loadGallery();
 }
 
