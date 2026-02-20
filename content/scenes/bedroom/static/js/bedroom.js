@@ -74,18 +74,28 @@ function init() {
 //  LIGHTING
 // ═══════════════════════════════════════════════════════════════════════
 function createLighting() {
-    ambientLight = new THREE.AmbientLight(0xffffff, 0.25);
+    ambientLight = new THREE.AmbientLight(0xffffff, 0.2);
     scene.add(ambientLight);
 
-    directionalLight = new THREE.DirectionalLight(0xffeedd, 0.6);
+    directionalLight = new THREE.DirectionalLight(0xffeedd, 0.5);
     directionalLight.position.set(5, 10, 5);
     directionalLight.castShadow = true;
+    directionalLight.shadow.mapSize.set(1024, 1024);
     scene.add(directionalLight);
 
-    // Warm room point lights
-    [{ x: -3, z: -3 }, { x: 3, z: 0 }, { x: 0, z: -5 }].forEach(p => {
-        const pl = new THREE.PointLight(0xffddaa, 0.4, 10);
-        pl.position.set(p.x, 3, p.z);
+    // Warm lamps at key locations
+    const lampPositions = [
+        { x: -3, y: 2.5, z: -3, color: 0xffaa66, intensity: 0.6 },  // bedside
+        { x: 3, y: 2.5, z: 0, color: 0xffd4a3, intensity: 0.4 },    // couch area
+        { x: -5, y: 2.5, z: 2, color: 0xddaaff, intensity: 0.3 },   // vanity
+        { x: 0, y: 3.2, z: -4, color: 0xffccaa, intensity: 0.5 },   // bar
+        { x: 5, y: 2.5, z: -4, color: 0x88bbff, intensity: 0.25 },  // bathroom cool
+        { x: 5, y: 2, z: 4, color: 0x667eea, intensity: 0.3 },      // balcony moonlight
+    ];
+    lampPositions.forEach(p => {
+        const pl = new THREE.PointLight(p.color, p.intensity, 8);
+        pl.position.set(p.x, p.y, p.z);
+        pl.castShadow = true;
         scene.add(pl);
         pointLights.push(pl);
     });
@@ -94,20 +104,20 @@ function createLighting() {
 function applyLighting(preset) {
     if (!preset) return;
     const c = new THREE.Color(preset.color);
-    ambientLight.intensity = preset.ambient * 0.6;
-    directionalLight.intensity = preset.directional;
+    ambientLight.intensity = preset.ambient * 0.5;
+    directionalLight.intensity = preset.directional * 0.8;
     directionalLight.color = c;
-    const nightMul = (timeOfDay === 'night') ? 0.7 : 0.4;
-    pointLights.forEach(l => l.intensity = nightMul);
+    const mul = (timeOfDay === 'night') ? 0.8 : (timeOfDay === 'morning') ? 0.3 : 0.5;
+    pointLights.forEach(l => { l.intensity = l.userData?.baseIntensity * mul || mul * 0.5; });
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-//  ROOM GEOMETRY
+//  ROOM GEOMETRY + FURNITURE
 // ═══════════════════════════════════════════════════════════════════════
 function createRoom() {
     const { w, h, d } = CONFIG.roomSize;
 
-    // Floor
+    // ── Floor: dark hardwood ──
     const floorGeo = new THREE.PlaneGeometry(w, d);
     const floorMat = new THREE.MeshStandardMaterial({ color: 0x3d2b1f, roughness: 0.85 });
     const floor = new THREE.Mesh(floorGeo, floorMat);
@@ -115,17 +125,238 @@ function createRoom() {
     floor.receiveShadow = true;
     scene.add(floor);
 
-    // Walls (3 sides — front open for camera)
-    const wallMat = new THREE.MeshStandardMaterial({ color: 0x2a2a3d, roughness: 0.9 });
-    const addWall = (geo, x, y, z) => {
+    // ── Ceiling ──
+    const ceilMat = new THREE.MeshStandardMaterial({ color: 0x222233, roughness: 0.95 });
+    const ceil = new THREE.Mesh(new THREE.PlaneGeometry(w, d), ceilMat);
+    ceil.rotation.x = Math.PI / 2;
+    ceil.position.y = h;
+    scene.add(ceil);
+
+    // ── Walls ──
+    const wallMat = new THREE.MeshStandardMaterial({ color: 0x2a2a3d, roughness: 0.9, side: THREE.DoubleSide });
+    const addWall = (geo, x, y, z, ry) => {
         const m = new THREE.Mesh(geo, wallMat);
         m.position.set(x, y, z);
+        if (ry) m.rotation.y = ry;
         m.receiveShadow = true;
         scene.add(m);
     };
-    addWall(new THREE.BoxGeometry(w, h, 0.15), 0, h / 2, -d / 2); // back
-    addWall(new THREE.BoxGeometry(0.15, h, d), -w / 2, h / 2, 0); // left
-    addWall(new THREE.BoxGeometry(0.15, h, d), w / 2, h / 2, 0);  // right
+    addWall(new THREE.BoxGeometry(w, h, 0.12), 0, h/2, -d/2);        // back
+    addWall(new THREE.BoxGeometry(0.12, h, d), -w/2, h/2, 0);        // left
+    addWall(new THREE.BoxGeometry(0.12, h, d), w/2, h/2, 0);         // right
+
+    // ── Area rug ──
+    const rugGeo = new THREE.PlaneGeometry(6, 4);
+    const rugMat = new THREE.MeshStandardMaterial({ color: 0x4a2040, roughness: 0.95 });
+    const rug = new THREE.Mesh(rugGeo, rugMat);
+    rug.rotation.x = -Math.PI / 2;
+    rug.position.set(0, 0.01, -1);
+    scene.add(rug);
+
+    // ── Build furniture ──
+    buildBed();
+    buildCouch();
+    buildBar();
+    buildVanity();
+    buildBathroomFixtures();
+    buildBalcony();
+    buildDecorations();
+}
+
+function _box(w, h, d, color, x, y, z, castShadow = true) {
+    const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.7 });
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+    mesh.position.set(x, y, z);
+    mesh.castShadow = castShadow;
+    mesh.receiveShadow = true;
+    scene.add(mesh);
+    return mesh;
+}
+
+function buildBed() {
+    // Frame
+    _box(3.2, 0.4, 2.4, 0x5c3a1e, -3, 0.2, -3);          // base
+    _box(3.2, 0.2, 2.4, 0xeeeeee, -3, 0.5, -3, false);    // mattress (white)
+    _box(3.2, 0.12, 2.4, 0xcc4466, -3, 0.62, -3, false);   // bedspread
+    _box(3.2, 0.8, 0.12, 0x5c3a1e, -3, 0.6, -4.15);       // headboard
+    // Pillows
+    _box(0.6, 0.15, 0.4, 0xffeeff, -3.5, 0.72, -3.8, false);
+    _box(0.6, 0.15, 0.4, 0xffeeff, -2.5, 0.72, -3.8, false);
+    // Bedside table
+    _box(0.5, 0.6, 0.5, 0x4a3520, -4.8, 0.3, -3.8);
+    // Lamp on bedside table
+    _box(0.12, 0.4, 0.12, 0xddccaa, -4.8, 0.8, -3.8, false);
+    const lampShade = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.08, 0.18, 0.2, 16),
+        new THREE.MeshStandardMaterial({ color: 0xffeecc, emissive: 0xffaa44, emissiveIntensity: 0.4, transparent: true, opacity: 0.8 })
+    );
+    lampShade.position.set(-4.8, 1.1, -3.8);
+    scene.add(lampShade);
+}
+
+function buildCouch() {
+    // Base
+    _box(2.5, 0.45, 1.0, 0x3a2244, 3, 0.22, 0);
+    // Back
+    _box(2.5, 0.6, 0.15, 0x3a2244, 3, 0.6, -0.45);
+    // Armrests
+    _box(0.15, 0.35, 1.0, 0x3a2244, 1.82, 0.5, 0);
+    _box(0.15, 0.35, 1.0, 0x3a2244, 4.18, 0.5, 0);
+    // Cushions
+    _box(1.1, 0.12, 0.8, 0x5c3060, 2.5, 0.5, 0.05, false);
+    _box(1.1, 0.12, 0.8, 0x5c3060, 3.5, 0.5, 0.05, false);
+    // Coffee table
+    _box(1.4, 0.35, 0.6, 0x2a1a15, 3, 0.17, 1.3);
+    // TV on back wall
+    _box(2.0, 1.2, 0.06, 0x111111, 3, 2.6, -5.9);
+    const screenMat = new THREE.MeshStandardMaterial({ color: 0x222244, emissive: 0x112244, emissiveIntensity: 0.15 });
+    const screen = new THREE.Mesh(new THREE.BoxGeometry(1.8, 1.0, 0.02), screenMat);
+    screen.position.set(3, 2.6, -5.85);
+    scene.add(screen);
+}
+
+function buildBar() {
+    // Counter
+    _box(2.0, 1.1, 0.5, 0x2a1810, 0, 0.55, -4.5);
+    // Top surface (darker polished)
+    _box(2.1, 0.06, 0.55, 0x1a0e08, 0, 1.12, -4.5, false);
+    // Stools
+    for (let i = -0.5; i <= 0.5; i += 1.0) {
+        // Stool leg
+        const legMat = new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.8, roughness: 0.3 });
+        const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.7, 8), legMat);
+        leg.position.set(i, 0.35, -3.8);
+        scene.add(leg);
+        // Stool seat
+        const seat = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.2, 0.18, 0.08, 16),
+            new THREE.MeshStandardMaterial({ color: 0x333333 })
+        );
+        seat.position.set(i, 0.72, -3.8);
+        seat.castShadow = true;
+        scene.add(seat);
+    }
+    // Bottles
+    [0xaa3333, 0x33aa33, 0x3333aa].forEach((c, i) => {
+        const bottle = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.05, 0.06, 0.3, 8),
+            new THREE.MeshStandardMaterial({ color: c, transparent: true, opacity: 0.7 })
+        );
+        bottle.position.set(-0.5 + i * 0.4, 1.3, -4.7);
+        scene.add(bottle);
+    });
+}
+
+function buildVanity() {
+    // Table
+    _box(1.6, 0.8, 0.5, 0x4a3520, -5.5, 0.4, 2);
+    // Mirror (reflective plane)
+    const mirrorMat = new THREE.MeshStandardMaterial({ color: 0xaabbcc, metalness: 0.9, roughness: 0.1 });
+    const mirror = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.0, 0.04), mirrorMat);
+    mirror.position.set(-5.5, 1.5, 2);
+    mirror.rotation.y = Math.PI / 2;
+    scene.add(mirror);
+    // Mirror frame
+    _box(0.04, 1.1, 1.3, 0x8b7355, -5.5, 1.5, 2, false);
+    // Stool
+    const stool = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.2, 0.2, 0.45, 16),
+        new THREE.MeshStandardMaterial({ color: 0xcc88aa })
+    );
+    stool.position.set(-4.8, 0.22, 2);
+    stool.castShadow = true;
+    scene.add(stool);
+}
+
+function buildBathroomFixtures() {
+    // Partition wall (half wall)
+    _box(0.1, 2.5, 3, 0x2a2a3d, 4.5, 1.25, -4);
+    // Bathtub
+    const tubMat = new THREE.MeshStandardMaterial({ color: 0xdddddd, roughness: 0.3 });
+    const tub = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.6, 0.8), tubMat);
+    tub.position.set(5.8, 0.3, -4);
+    tub.castShadow = true;
+    scene.add(tub);
+    // Water
+    const water = new THREE.Mesh(
+        new THREE.BoxGeometry(1.6, 0.02, 0.6),
+        new THREE.MeshStandardMaterial({ color: 0x4488bb, transparent: true, opacity: 0.5 })
+    );
+    water.position.set(5.8, 0.55, -4);
+    scene.add(water);
+    // Sink
+    _box(0.5, 0.05, 0.4, 0xdddddd, 5.8, 0.9, -2.5, false);
+    _box(0.1, 0.9, 0.3, 0xaaaaaa, 5.8, 0.45, -2.5);
+}
+
+function buildBalcony() {
+    // Balcony floor (slightly elevated)
+    _box(3, 0.1, 2, 0x555555, 5, 0.05, 4, false);
+    // Railing
+    const railMat = new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.7, roughness: 0.3 });
+    // Front rail
+    const frontRail = new THREE.Mesh(new THREE.BoxGeometry(3, 0.06, 0.06), railMat);
+    frontRail.position.set(5, 1.0, 5);
+    scene.add(frontRail);
+    // Side rails
+    const sideRail1 = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 2), railMat);
+    sideRail1.position.set(3.5, 1.0, 4);
+    scene.add(sideRail1);
+    const sideRail2 = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 2), railMat);
+    sideRail2.position.set(6.5, 1.0, 4);
+    scene.add(sideRail2);
+    // Vertical posts
+    for (let x = 3.5; x <= 6.5; x += 0.75) {
+        const post = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 1, 6), railMat);
+        post.position.set(x, 0.5, 5);
+        scene.add(post);
+    }
+    // Small table + chairs
+    _box(0.6, 0.5, 0.6, 0x5a4a3a, 5, 0.25, 3.8);
+    const chairMat = new THREE.MeshStandardMaterial({ color: 0x444444 });
+    [-0.6, 0.6].forEach(off => {
+        const chair = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.4), chairMat);
+        chair.position.set(5 + off, 0.2, 3.3);
+        chair.castShadow = true;
+        scene.add(chair);
+    });
+}
+
+function buildDecorations() {
+    // Ceiling light fixture
+    const fixtureMat = new THREE.MeshStandardMaterial({ color: 0xddccaa, emissive: 0xffddaa, emissiveIntensity: 0.3 });
+    const fixture = new THREE.Mesh(new THREE.SphereGeometry(0.3, 16, 16), fixtureMat);
+    fixture.position.set(0, 3.7, -1);
+    scene.add(fixture);
+
+    // Picture frames on back wall
+    [{ x: -2, c: 0x663344 }, { x: 2, c: 0x334466 }].forEach(p => {
+        _box(0.8, 0.6, 0.03, 0x5c3a1e, p.x, 2.5, -5.9, false);  // frame
+        _box(0.7, 0.5, 0.02, p.c, p.x, 2.5, -5.88, false);       // canvas
+    });
+
+    // Potted plant near doorway
+    _box(0.3, 0.3, 0.3, 0x4a3520, -1, 0.15, 4.5, false);  // pot
+    const leavesGeo = new THREE.SphereGeometry(0.35, 8, 8);
+    const leavesMat = new THREE.MeshStandardMaterial({ color: 0x2d6b2d, roughness: 0.9 });
+    const leaves = new THREE.Mesh(leavesGeo, leavesMat);
+    leaves.position.set(-1, 0.6, 4.5);
+    scene.add(leaves);
+
+    // Candles on bar
+    for (let i = 0; i < 2; i++) {
+        const candle = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.03, 0.03, 0.15, 8),
+            new THREE.MeshStandardMaterial({ color: 0xeeeecc })
+        );
+        candle.position.set(0.7 + i * 0.3, 1.2, -4.7);
+        scene.add(candle);
+        // Flame glow
+        const flame = new THREE.PointLight(0xff8800, 0.15, 2);
+        flame.position.set(0.7 + i * 0.3, 1.32, -4.7);
+        scene.add(flame);
+        pointLights.push(flame);
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -181,32 +412,57 @@ function ensureCharSprite(charId, name, colorIdx) {
     if (charSprites[charId]) return charSprites[charId];
 
     const color = new THREE.Color(CHAR_COLORS[colorIdx % CHAR_COLORS.length]);
+    const group = new THREE.Group();
 
-    // Body (capsule approximation)
-    const bodyGeo = new THREE.CylinderGeometry(0.3, 0.35, 1.4, 16);
-    const bodyMat = new THREE.MeshStandardMaterial({ color, roughness: 0.5 });
+    // Body — tapered cylinder with emissive outline
+    const bodyGeo = new THREE.CylinderGeometry(0.22, 0.3, 1.3, 16);
+    const bodyMat = new THREE.MeshStandardMaterial({ color, roughness: 0.4, metalness: 0.1 });
     const body = new THREE.Mesh(bodyGeo, bodyMat);
-    body.position.y = 0.7;
+    body.position.y = 0.65;
     body.castShadow = true;
+    group.add(body);
+
+    // Shoulders
+    const shoulderGeo = new THREE.SphereGeometry(0.28, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2);
+    const shoulderMat = new THREE.MeshStandardMaterial({ color, roughness: 0.5 });
+    const shoulders = new THREE.Mesh(shoulderGeo, shoulderMat);
+    shoulders.position.y = 1.3;
+    group.add(shoulders);
 
     // Head
-    const headGeo = new THREE.SphereGeometry(0.25, 16, 16);
+    const headGeo = new THREE.SphereGeometry(0.22, 16, 16);
     const headMat = new THREE.MeshStandardMaterial({ color: 0xffd5b4, roughness: 0.6 });
     const head = new THREE.Mesh(headGeo, headMat);
     head.position.y = 1.6;
     head.castShadow = true;
-
-    const group = new THREE.Group();
-    group.add(body);
     group.add(head);
+
+    // Hair (half-sphere on top)
+    const hairGeo = new THREE.SphereGeometry(0.24, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2);
+    const hairColor = colorIdx === 0 ? 0x2a1a0a : 0x4a3020;
+    const hairMat = new THREE.MeshStandardMaterial({ color: hairColor, roughness: 0.8 });
+    const hair = new THREE.Mesh(hairGeo, hairMat);
+    hair.position.y = 1.68;
+    group.add(hair);
+
+    // Glow ring at feet (subtle)
+    const ringGeo = new THREE.RingGeometry(0.35, 0.5, 32);
+    const ringMat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.3, side: THREE.DoubleSide });
+    const ring = new THREE.Mesh(ringGeo, ringMat);
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.y = 0.02;
+    group.add(ring);
 
     // Name label
     const label = makeTextSprite(name, 0.5);
-    label.position.y = 2.1;
+    label.position.y = 2.2;
     group.add(label);
 
     scene.add(group);
-    charSprites[charId] = { group, targetPos: new THREE.Vector3(0, 0, 0), currentPos: new THREE.Vector3(0, 0, 0) };
+    charSprites[charId] = {
+        group, ring, targetPos: new THREE.Vector3(0, 0, 0),
+        currentPos: new THREE.Vector3(0, 0, 0),
+    };
     return charSprites[charId];
 }
 
@@ -258,9 +514,10 @@ function animate() {
     const dt = clock.getDelta();
     controls.update();
 
-    // Smooth character movement
+    // Smooth character movement + glow pulse
     for (const s of Object.values(charSprites)) {
         s.group.position.lerp(s.targetPos, Math.min(1, dt * 3));
+        if (s.ring) s.ring.material.opacity = 0.2 + 0.15 * Math.sin(t * 3);
     }
 
     // Pulse location markers
@@ -641,3 +898,119 @@ window.addEventListener('resize', () => {
 });
 
 window.addEventListener('load', init);
+
+// ═══════════════════════════════════════════════════════════════════════
+//  AMBIENT AUDIO SYSTEM
+// ═══════════════════════════════════════════════════════════════════════
+let ambientAudio = null;
+
+async function loadAmbientTracks() {
+    try {
+        const res = await fetch('/api/ambient/tracks');
+        const tracks = await res.json();
+        const sel = document.getElementById('ambientTrack');
+        if (!sel) return;
+        sel.innerHTML = '<option value="">Off</option>';
+        tracks.forEach(t => {
+            const opt = document.createElement('option');
+            opt.value = t;
+            opt.textContent = t.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ');
+            sel.appendChild(opt);
+        });
+    } catch (e) { /* no ambient tracks available */ }
+}
+
+function setAmbientTrack(track) {
+    if (ambientAudio) { ambientAudio.pause(); ambientAudio = null; }
+    if (!track) return;
+    ambientAudio = new Audio('/static/audio/' + track);
+    ambientAudio.loop = true;
+    ambientAudio.volume = (document.getElementById('ambientVolume')?.value || 30) / 100;
+    ambientAudio.play().catch(() => {});
+}
+
+function setAmbientVolume(val) {
+    if (ambientAudio) ambientAudio.volume = val / 100;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  MENACE MENU — GOD MODE ENVIRONMENTAL PRANKS
+// ═══════════════════════════════════════════════════════════════════════
+const MENACE_EFFECTS = {
+    flicker_lights() {
+        const orig = renderer.toneMappingExposure;
+        let flicks = 0;
+        const iv = setInterval(() => {
+            renderer.toneMappingExposure = flicks % 2 === 0 ? 0.05 : orig * 1.5;
+            flicks++;
+            if (flicks > 8) { clearInterval(iv); renderer.toneMappingExposure = orig; }
+        }, 100);
+    },
+    cold_draft() {
+        // Shift lighting to cold blue temporarily
+        scene.fog = new THREE.FogExp2(0x1a2040, 0.08);
+        setTimeout(() => { scene.fog = null; }, 4000);
+    },
+    move_object() {
+        // Shake a random furniture piece
+        const furniture = scene.children.filter(c => c.userData?.furniture);
+        if (furniture.length === 0) return;
+        const obj = furniture[Math.floor(Math.random() * furniture.length)];
+        const origPos = obj.position.clone();
+        let shakes = 0;
+        const iv = setInterval(() => {
+            obj.position.x = origPos.x + (Math.random() - 0.5) * 0.15;
+            obj.position.z = origPos.z + (Math.random() - 0.5) * 0.15;
+            shakes++;
+            if (shakes > 12) { clearInterval(iv); obj.position.copy(origPos); }
+        }, 60);
+    },
+    power_out() {
+        const origBg = scene.background;
+        scene.background = new THREE.Color(0x000000);
+        scene.children.filter(c => c.isLight).forEach(l => { l.userData._origInt = l.intensity; l.intensity = 0; });
+        setTimeout(() => {
+            scene.background = origBg;
+            scene.children.filter(c => c.isLight).forEach(l => { l.intensity = l.userData._origInt || 1; });
+        }, 2500);
+    },
+    romantic_mood() {
+        scene.children.filter(c => c.isLight && c.isPointLight).forEach(l => {
+            l.color.set(0xff6644);
+            l.intensity *= 0.6;
+        });
+        setTimeout(() => applyLighting({}), 8000);
+    },
+    thunder() {
+        const flash = new THREE.PointLight(0xffffff, 5, 50);
+        flash.position.set(0, 10, 0);
+        scene.add(flash);
+        setTimeout(() => { flash.intensity = 0; }, 100);
+        setTimeout(() => { flash.intensity = 3; }, 200);
+        setTimeout(() => { scene.remove(flash); }, 400);
+    },
+};
+
+async function menace(type) {
+    // Visual effect in the browser
+    if (MENACE_EFFECTS[type]) MENACE_EFFECTS[type]();
+
+    // Also notify backend so agents perceive the event
+    try {
+        await fetch('/api/menace', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ type }),
+        });
+    } catch (e) { /* ok */ }
+
+    addFeedEntry({
+        character_name: '(God)',
+        action: 'menace',
+        message: '😈 ' + type.replace(/_/g, ' '),
+        timestamp: new Date().toISOString(),
+    });
+}
+
+// Load ambient tracks on init
+loadAmbientTracks();

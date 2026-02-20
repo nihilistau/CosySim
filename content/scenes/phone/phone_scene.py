@@ -1762,7 +1762,7 @@ class PhoneScene(BaseScene):
                     self.active_character.add_message('assistant', f"[Photo sent: {media['id']}]")
             else:
                 # No photos yet — generate one via ComfyUI
-                emit('typing', {'typing': True})
+                emit('typing', {'is_typing': True})
                 try:
                     rel = float(self.active_character.relationship_level or 0.0)
                     arousal = float(getattr(self.active_character, 'arousal', 0.0) or 0.0)
@@ -1819,7 +1819,7 @@ class PhoneScene(BaseScene):
                         'timestamp': datetime.now().isoformat()
                     })
                 finally:
-                    emit('typing', {'typing': False})
+                    emit('typing', {'is_typing': False})
         
         # Video Call SocketIO Events
         @self.socketio.on('start_video_call')

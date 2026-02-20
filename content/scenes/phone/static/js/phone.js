@@ -30,6 +30,7 @@ function initializeSocket() {
     
     socket.on('message_received', (data) => {
         addMessageToUI(data.role, data.content, data.timestamp, data.autonomous);
+        scrollToBottom();
         
         // Update mood/relationship/arousal if the server sent new values
         if (currentCharacter) {
@@ -241,7 +242,9 @@ function openApp(appName) {
     };
     
     const screenId = screenMap[appName] || 'homeScreen';
-    document.getElementById(screenId).style.display = 'block';
+    const screenEl = document.getElementById(screenId);
+    if (screenEl) screenEl.style.display = 'block';
+    else { document.getElementById('homeScreen').style.display = 'block'; return; }
     
     // Clear notification badge when opening messages
     if (appName === 'messages') {
@@ -478,17 +481,34 @@ function handleMessageKeyPress(event) {
     }
 }
 
+function handleMessageKeyDown(event) {
+    if (event.key === 'Enter' && !event.shiftKey) {
+        event.preventDefault();
+        sendMessage();
+    }
+}
+
 function sendMessage() {
     const input = document.getElementById('messageInput');
+    const sendBtn = document.querySelector('.input-send-btn');
     const message = input.value.trim();
     
     if (!message) return;
+    if (input.disabled) return;
     
-    // Send via socket
+    // Prevent double-send
+    input.disabled = true;
+    if (sendBtn) sendBtn.disabled = true;
+    
     socket.emit('send_message', { message: message });
     
-    // Clear input
     input.value = '';
+    // Re-enable after brief delay
+    setTimeout(() => {
+        input.disabled = false;
+        if (sendBtn) sendBtn.disabled = false;
+        input.focus();
+    }, 500);
 }
 
 function addMessageToUI(role, content, timestamp, autonomous = false, shouldScroll = true) {
@@ -736,9 +756,12 @@ function showTypingIndicator(show) {
     }
 }
 
-function scrollToBottom() {
+function scrollToBottom(force = false) {
     const container = document.getElementById('messagesContainer');
-    if (container) {
+    if (!container) return;
+    // Only auto-scroll if user is near the bottom (within 150px) or forced
+    const nearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 150;
+    if (nearBottom || force) {
         container.scrollTop = container.scrollHeight;
     }
 }

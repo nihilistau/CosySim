@@ -67,8 +67,9 @@ class AgentLoop:
         self._stop_event = threading.Event()
         self._tick_count = 0
 
-        # Conversation log visible to all agents
+        # Conversation log visible to all agents (pruned to 200 max)
         self.shared_log: List[Dict] = []
+        self._shared_log_max = 200
 
         # Callbacks
         self._on_action: Optional[Callable] = None
@@ -213,13 +214,43 @@ class AgentLoop:
         if not loc:
             return "No activities available."
         activities = loc.interactions or []
-        privacy = loc.properties.get("privacy", 0.5)
-        spiciness = loc.properties.get("spiciness", 0) if hasattr(loc, "properties") else 0
+        props = loc.properties if hasattr(loc, "properties") and loc.properties else {}
+        privacy = props.get("privacy", 0.5)
+        spiciness = props.get("spiciness", 0)
+        capacity = props.get("capacity", 4)
+
         lines = [f"At the {loc.name}: {', '.join(activities)}" if activities else f"At the {loc.name}: nothing specific"]
+
+        # Location mood influence
+        mood_hints = {
+            "bed": "Soft pillows and warm sheets invite closeness and vulnerability.",
+            "couch": "A comfortable spot for relaxed conversation or cuddling up together.",
+            "bar": "The glow of bottles and candlelight creates a social, flirty atmosphere.",
+            "bathroom": "Steam and water sounds create an intimate, private atmosphere.",
+            "balcony": "The night air and distant city sounds feel romantic and freeing.",
+            "vanity": "The mirror reflects a space for self-admiration or shared grooming.",
+            "doorway": "The threshold between staying and leaving — a liminal, uncertain space.",
+        }
+        loc_lower = loc.name.lower()
+        for key, hint in mood_hints.items():
+            if key in loc_lower:
+                lines.append(hint)
+                break
+
         if privacy > 0.7:
             lines.append("This is a private location — intimate actions feel natural here.")
+        elif privacy < 0.3:
+            lines.append("This location feels exposed — bold actions would take courage.")
         if spiciness >= 4:
             lines.append("The atmosphere is sensual and inviting.")
+        elif spiciness >= 2:
+            lines.append("There's a subtle romantic tension in the air.")
+
+        # Environmental events (from menace menu or similar)
+        env_events = [e for e in self.shared_log[-5:] if e.get("type") == "environment"]
+        if env_events:
+            lines.append("⚠ Something just happened in the environment: " + env_events[-1].get("text", ""))
+
         return "\n".join(lines)
 
     # ── Decide ──────────────────────────────────────────────────────────
@@ -376,6 +407,7 @@ class AgentLoop:
                 "name": character.name, "text": message,
                 "timestamp": timestamp, "type": "speech",
             })
+            self.shared_log = self.shared_log[-self._shared_log_max:]
             result["description"] = f'{character.name} says: "{message}"'
 
         elif action in ("flirt", "touch", "kiss", "cuddle", "intimate"):
@@ -401,7 +433,7 @@ class AgentLoop:
                     "name": character.name, "text": f"*{result['description']}*",
                     "timestamp": timestamp, "type": "action",
                 })
-                # Nudge arousal for both characters
+                self.shared_log = self.shared_log[-self._shared_log_max:]
                 arousal_boost = {"flirt": 0.05, "touch": 0.08, "kiss": 0.12, "cuddle": 0.10, "intimate": 0.20}
                 delta = arousal_boost.get(action, 0.05)
                 for cid in (character_id, target_id):
@@ -421,6 +453,7 @@ class AgentLoop:
                     "name": character.name, "text": f"*{result['description']}*",
                     "timestamp": timestamp, "type": "action",
                 })
+                self.shared_log = self.shared_log[-self._shared_log_max:]
             else:
                 result["description"] = f"{character.name} looks around."
 

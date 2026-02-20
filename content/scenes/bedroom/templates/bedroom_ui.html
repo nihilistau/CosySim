@@ -67,6 +67,32 @@
             <div id="modelConfigList" class="model-config-list"></div>
             <button class="btn-sm" onclick="refreshModels()">🔄 Refresh Models</button>
         </section>
+
+        <!-- Ambient Audio -->
+        <section class="panel-section">
+            <h3>🎵 Ambient</h3>
+            <div class="ambient-controls">
+                <select id="ambientTrack" onchange="setAmbientTrack(this.value)">
+                    <option value="">Off</option>
+                </select>
+                <input type="range" id="ambientVolume" min="0" max="100" value="30" oninput="setAmbientVolume(this.value)" style="width:100%">
+            </div>
+        </section>
+
+        <!-- Menace Menu -->
+        <section class="panel-section menace-section">
+            <h3>😈 Menace Menu</h3>
+            <div class="menace-buttons">
+                <button class="menace-btn" onclick="menace('flicker_lights')" title="Lights flicker eerily">💡 Flicker Lights</button>
+                <button class="menace-btn" onclick="menace('strange_sound')" title="They hear a sound">👻 Strange Sound</button>
+                <button class="menace-btn" onclick="menace('cold_draft')" title="A sudden cold draft">🌬️ Cold Draft</button>
+                <button class="menace-btn" onclick="menace('move_object')" title="Something moves on its own">🪑 Move Object</button>
+                <button class="menace-btn" onclick="menace('knock')" title="Knocking from nowhere">🚪 Mysterious Knock</button>
+                <button class="menace-btn" onclick="menace('power_out')" title="Lights go out briefly">⚡ Power Out</button>
+                <button class="menace-btn" onclick="menace('romantic_mood')" title="Set a romantic atmosphere">🕯️ Romantic Mood</button>
+                <button class="menace-btn" onclick="menace('thunder')" title="Thunder and lightning">⛈️ Thunder</button>
+            </div>
+        </section>
     </aside>
 
     <!-- ── Activity Feed ───────────────────────────────────────── -->

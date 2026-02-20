@@ -423,6 +423,44 @@ class BedroomScene(BaseScene):
                 return jsonify({'success': True, 'history': self.agent_loop.shared_log[-100:]})
             return jsonify({'success': True, 'history': []})
 
+        # ── Ambient Audio ──────────────────────────────────────────────
+        @self.app.route('/api/ambient/tracks')
+        def list_ambient_tracks():
+            audio_dir = Path(__file__).parent / 'static' / 'audio'
+            audio_dir.mkdir(parents=True, exist_ok=True)
+            exts = {'.mp3', '.wav', '.ogg', '.flac', '.m4a'}
+            tracks = [f.name for f in audio_dir.iterdir()
+                      if f.suffix.lower() in exts]
+            return jsonify(sorted(tracks))
+
+        # ── Menace Menu ────────────────────────────────────────────────
+        @self.app.route('/api/menace', methods=['POST'])
+        def menace_action():
+            data = request.get_json(force=True)
+            menace_type = data.get('type', 'unknown')
+            event_messages = {
+                'flicker_lights': 'The lights flicker and dim ominously.',
+                'strange_sound': 'A strange, unidentifiable sound echoes through the room.',
+                'cold_draft': 'A sudden icy draft sweeps through the room despite the closed windows.',
+                'move_object': 'Something on the table shifts on its own.',
+                'knock': 'Three slow, deliberate knocks come from the door — but nobody is there.',
+                'power_out': 'The lights go completely dark for a few seconds.',
+                'romantic_mood': 'The lighting shifts to a warm, intimate glow. Candles seem to brighten.',
+                'thunder': 'A crack of thunder shakes the room, followed by a flash of lightning.',
+            }
+            msg = event_messages.get(menace_type, f'Something strange happens: {menace_type}')
+            if self.agent_loop:
+                self.agent_loop.shared_log.append({
+                    'name': '(environment)',
+                    'text': msg,
+                    'timestamp': datetime.now().isoformat(),
+                    'type': 'environment',
+                })
+            self.socketio.emit('menace_event', {
+                'type': menace_type, 'message': msg,
+            })
+            return jsonify({'success': True, 'message': msg})
+
     # ── SocketIO ────────────────────────────────────────────────────────
     def _setup_socketio(self):
 
