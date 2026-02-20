@@ -896,9 +896,10 @@
                 </div><!-- /mediaOverlay -->
 
                 <!-- Full Screen Photo Viewer -->
-                <div class="photo-viewer" id="photoViewer" style="display:none;">
+                <div class="photo-viewer" id="photoViewer" style="display:none;" onclick="if(event.target===this)closePhotoViewer()">
                     <button class="close-viewer" onclick="closePhotoViewer()">✕</button>
                     <img id="viewerImage" src="" alt="Photo">
+                    <div class="viewer-info" id="viewerInfo"></div>
                     <div class="viewer-controls">
                         <button onclick="downloadPhoto()">⬇️ Download</button>
                     </div>

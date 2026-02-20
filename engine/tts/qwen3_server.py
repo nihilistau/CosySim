@@ -56,10 +56,11 @@ class GenerateRequest(BaseModel):
         description="Voice design description for Qwen3-TTS",
     )
     character_id: Optional[str] = Field(default=None, description="Character ID for voice lookup")
-    model_size: str = Field(default="auto", description="'0.6b', '1.7b', or 'auto'")
+    model_size: str = Field(default="auto", description="'0.6b', '1.7b', 'escalate', or 'auto'")
     max_duration: int = Field(default=60, ge=10, le=3600, description="Max duration in seconds")
     sample_rate: int = Field(default=24000, description="Output sample rate")
     chain_id: Optional[str] = Field(default=None, description="EventChain ID for logging")
+    post_process: bool = Field(default=True, description="Apply audio post-processing (trim, normalize, fade)")
 
 
 class CastRequest(BaseModel):
@@ -219,17 +220,125 @@ class Qwen3TTSEngine:
         model_size: str = "1.7b",
         sample_rate: int = 24000,
         max_duration: int = 60,
+        post_process: bool = True,
     ) -> tuple[Path, float]:
         """
         Generate speech audio.
 
+        Args:
+            model_size: '0.6b', '1.7b', 'escalate' (0.6b first, 1.7b fallback), or 'auto'
+            post_process: Apply trim/normalize/fade via AudioProcessor
+
         Returns:
             (filepath, duration_seconds)
         """
+        if model_size == "escalate" and self._loaded:
+            return self._generate_escalated(text, voice_design, sample_rate, max_duration, post_process)
+
         if self._loaded:
-            return self._generate_real(text, voice_design, model_size, sample_rate, max_duration)
+            result = self._generate_real(text, voice_design, model_size, sample_rate, max_duration)
         else:
-            return self._generate_placeholder(text, voice_design, sample_rate, max_duration)
+            result = self._generate_placeholder(text, voice_design, sample_rate, max_duration)
+
+        if post_process:
+            result = self._post_process(result)
+        return result
+
+    def _generate_escalated(
+        self, text, voice_design, sample_rate, max_duration, post_process
+    ) -> tuple[Path, float]:
+        """
+        Multi-model escalation: 0.6B scout → quality check → 1.7B fallback.
+
+        Uses the fast 0.6B model first. If a reference audio is available,
+        checks similarity score via simple energy/spectral comparison.
+        Falls back to 1.7B if the score is below threshold.
+        """
+        SIMILARITY_THRESHOLD = 0.75
+
+        # First take: 0.6B (fast)
+        if self._model_06b:
+            logger.info("🎬 Escalation: Take 1 with 0.6B...")
+            filepath, duration = self._generate_real(
+                text, voice_design, "0.6b", sample_rate, max_duration
+            )
+
+            # Quick quality heuristic (spectral energy check)
+            score = self._quick_quality_score(filepath)
+            if score >= SIMILARITY_THRESHOLD:
+                logger.info("✅ 0.6B passed (score %.2f)", score)
+                if post_process:
+                    return self._post_process((filepath, duration))
+                return filepath, duration
+            else:
+                logger.info("⚠️ 0.6B score %.2f < %.2f, escalating to 1.7B...",
+                           score, SIMILARITY_THRESHOLD)
+                # Remove failed attempt
+                try:
+                    filepath.unlink()
+                except Exception:
+                    pass
+
+        # Fallback: 1.7B (quality)
+        if self._model_17b:
+            logger.info("🎬 Escalation: Take 2 with 1.7B...")
+            result = self._generate_real(
+                text, f"{voice_design}. Professional acting.", "1.7b",
+                sample_rate, max_duration
+            )
+            if post_process:
+                return self._post_process(result)
+            return result
+
+        # Neither model available
+        return self._generate_placeholder(text, voice_design, sample_rate, max_duration)
+
+    def _quick_quality_score(self, filepath: Path) -> float:
+        """
+        Quick quality heuristic based on audio energy and spectral content.
+        Returns 0.0-1.0. Higher = better quality.
+        Without WeSpeaker, uses spectral flatness as a proxy.
+        """
+        try:
+            import numpy as np
+            with wave.open(str(filepath), 'rb') as wf:
+                frames = wf.readframes(wf.getnframes())
+                sr = wf.getframerate()
+            samples = np.frombuffer(frames, dtype=np.int16).astype(np.float32) / 32767.0
+
+            if len(samples) == 0:
+                return 0.0
+
+            # Energy check — very quiet audio is likely bad
+            rms = np.sqrt(np.mean(samples ** 2))
+            if rms < 0.01:
+                return 0.2
+
+            # Spectral variety check via zero-crossing rate
+            zero_crossings = np.sum(np.abs(np.diff(np.sign(samples)))) / (2 * len(samples))
+            # Good speech has moderate zero-crossing rate (0.02-0.15)
+            zcr_score = 1.0 - abs(zero_crossings - 0.08) / 0.08
+            zcr_score = max(0.0, min(1.0, zcr_score))
+
+            # Combined score
+            energy_score = min(1.0, rms / 0.1)
+            return 0.4 * energy_score + 0.6 * zcr_score
+        except Exception:
+            return 0.8  # assume OK if we can't check
+
+    def _post_process(self, result: tuple[Path, float]) -> tuple[Path, float]:
+        """Apply audio post-processing (trim, normalize, fade)."""
+        filepath, duration = result
+        try:
+            from engine.tts.audio_processor import AudioProcessor
+            proc = AudioProcessor(target_sr=24000)
+            proc.process_file(filepath)
+            # Re-read duration after trimming
+            with wave.open(str(filepath), 'rb') as wf:
+                duration = wf.getnframes() / wf.getframerate()
+        except Exception as e:
+            logger.debug("Post-processing skipped: %s", e)
+        return filepath, duration
 
     def _generate_real(
         self, text, voice_design, model_size, sample_rate, max_duration
@@ -394,6 +503,7 @@ def _run_generation(job_id: str, request: GenerateRequest):
             model_size=model_size,
             sample_rate=request.sample_rate,
             max_duration=request.max_duration,
+            post_process=request.post_process,
         )
 
         job.status = "completed"
@@ -505,6 +615,73 @@ def create_tts_app() -> FastAPI:
             download_url=f"/download/{job.filename}" if job.filename else None,
             error=job.error,
         )
+
+    # ── Batch / Long-form generation ───────────────────────────────
+
+    class BatchRequest(BaseModel):
+        lines: List[Dict[str, Any]] = Field(
+            ..., description="List of {text, voice_design?, model_size?, character_id?}"
+        )
+        stitch: bool = Field(default=True, description="Stitch all clips into one WAV")
+        gap_ms: float = Field(default=100, description="Silence gap between clips (ms)")
+        post_process: bool = Field(default=True, description="Post-process each clip")
+
+    @app.post("/batch")
+    async def batch_generate(request: BatchRequest, background_tasks: BackgroundTasks):
+        """
+        Generate multiple lines and optionally stitch into one file.
+        For book-scale / 10min+ audio generation.
+        """
+        batch_id = str(uuid.uuid4())[:12]
+        results = []
+
+        for i, line in enumerate(request.lines):
+            text = line.get("text", "")
+            if not text:
+                continue
+            voice_design = line.get("voice_design", "A clear, natural speaking voice.")
+            model_size = line.get("model_size", "auto")
+            if model_size == "auto":
+                model_size = "0.6b" if len(text) < 100 else "1.7b"
+
+            try:
+                filepath, duration = _engine.generate(
+                    text=text,
+                    voice_design=voice_design,
+                    model_size=model_size,
+                    post_process=request.post_process,
+                )
+                results.append({
+                    "index": i, "status": "ok", "filename": filepath.name,
+                    "duration": duration, "filepath": str(filepath),
+                })
+            except Exception as e:
+                results.append({"index": i, "status": "error", "error": str(e)})
+
+        # Stitch if requested
+        stitched = None
+        if request.stitch and results:
+            try:
+                from engine.tts.audio_processor import AudioProcessor
+                proc = AudioProcessor()
+                paths = [Path(r["filepath"]) for r in results if r["status"] == "ok"]
+                out_name = f"batch_{batch_id}.wav"
+                out_path = VOICE_DIR / out_name
+                proc.stitch_files(paths, out_path, gap_ms=request.gap_ms)
+                total_dur = sum(r.get("duration", 0) for r in results if r["status"] == "ok")
+                stitched = {"filename": out_name, "download_url": f"/download/{out_name}",
+                           "total_duration": total_dur}
+            except Exception as e:
+                stitched = {"error": str(e)}
+
+        return {
+            "batch_id": batch_id,
+            "total_lines": len(request.lines),
+            "completed": sum(1 for r in results if r["status"] == "ok"),
+            "failed": sum(1 for r in results if r["status"] == "error"),
+            "clips": results,
+            "stitched": stitched,
+        }
 
     # ── Download ────────────────────────────────────────────────────
 

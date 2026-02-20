@@ -195,6 +195,102 @@ def show_status():
     print("")
 
 
+def launch_all():
+    """Launch all core services in one terminal using threads/subprocesses."""
+    import threading
+    import time
+    import signal
+
+    banner = """
+╔══════════════════════════════════════════════════════════╗
+║             CosySim — All Services Launcher              ║
+╠══════════════════════════════════════════════════════════╣
+║  Hub ............ http://localhost:8500  (Streamlit)      ║
+║  Phone .......... http://localhost:5555  (Flask)          ║
+║  Bedroom ........ http://localhost:5556  (Flask)          ║
+║  TTS Server ..... http://localhost:8600  (FastAPI)        ║
+║  MCP Bridge ..... http://localhost:8601  (FastAPI)        ║
+╠══════════════════════════════════════════════════════════╣
+║  Press Ctrl+C to stop all services                       ║
+╚══════════════════════════════════════════════════════════╝
+"""
+    print(banner)
+
+    procs = []
+    threads = []
+
+    def _run_flask(scene_cls_path, name):
+        """Run a Flask scene in a thread."""
+        try:
+            mod, cls = scene_cls_path.rsplit(".", 1)
+            import importlib
+            m = importlib.import_module(mod)
+            scene = getattr(m, cls)()
+            print(f"  ✅ {name} starting...")
+            scene.start()
+        except Exception as e:
+            print(f"  ❌ {name} failed: {e}")
+
+    def _run_uvicorn(factory_path, port, name):
+        """Run a FastAPI app in a thread."""
+        try:
+            mod, func = factory_path.rsplit(".", 1)
+            import importlib
+            m = importlib.import_module(mod)
+            app = getattr(m, func)()
+            import uvicorn
+            print(f"  ✅ {name} starting on :{port}...")
+            uvicorn.run(app, host="0.0.0.0", port=port, log_level="warning")
+        except Exception as e:
+            print(f"  ❌ {name} failed: {e}")
+
+    # Flask scenes in threads
+    for path, name in [
+        ("content.scenes.phone.phone_scene.PhoneScene", "Phone Scene (:5555)"),
+        ("content.scenes.bedroom.bedroom_scene.BedroomScene", "Bedroom Scene (:5556)"),
+    ]:
+        t = threading.Thread(target=_run_flask, args=(path, name), daemon=True)
+        t.start()
+        threads.append(t)
+        time.sleep(1)
+
+    # FastAPI services in threads
+    for factory, port, name in [
+        ("engine.tts.qwen3_server.create_tts_app", 8600, "TTS Server (:8600)"),
+        ("engine.mcp.web_bridge.create_bridge_app", 8601, "MCP Bridge (:8601)"),
+    ]:
+        t = threading.Thread(target=_run_uvicorn, args=(factory, port, name), daemon=True)
+        t.start()
+        threads.append(t)
+        time.sleep(0.5)
+
+    # Hub as a subprocess (Streamlit needs its own process)
+    hub_script = PROJECT_ROOT / "content" / "scenes" / "hub" / "hub_scene.py"
+    try:
+        hub_proc = subprocess.Popen(
+            ["streamlit", "run", str(hub_script), "--server.port=8500",
+             "--server.headless=true", "--logger.level=warning"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        procs.append(hub_proc)
+        print("  ✅ Hub starting on :8500...")
+    except Exception as e:
+        print(f"  ⚠️ Hub failed (Streamlit?): {e}")
+
+    print("\n🚀 All services launched! Open http://localhost:8500 for the Hub.\n")
+
+    # Wait for Ctrl+C
+    try:
+        signal.signal(signal.SIGINT, signal.default_int_handler)
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        print("\n🛑 Shutting down all services...")
+        for p in procs:
+            p.terminate()
+        print("   Done.")
+
+
 def main():
     """Main entry point."""
     parser = argparse.ArgumentParser(
@@ -205,8 +301,10 @@ Examples:
   %(prog)s                      # Default: play mode
   %(prog)s --mode play          # Launch virtual companion
   %(prog)s --mode admin         # System administration
+  %(prog)s --mode all           # Launch all services in one terminal
   %(prog)s --mode dev           # Development mode
   %(prog)s --mode test          # Run tests
+  %(prog)s --housekeep          # Run media ingest + health checks
   %(prog)s --init-db            # Initialize database
   %(prog)s --status             # Show system status
 
@@ -216,9 +314,9 @@ For more information, see: docs/README.md
     
     parser.add_argument(
         "--mode",
-        choices=["hub", "phone", "bedroom", "dashboard", "admin", "assets", "creator", "tts", "bridge", "test"],
+        choices=["hub", "phone", "bedroom", "dashboard", "admin", "assets", "creator", "tts", "bridge", "all", "test"],
         default="hub",
-        help="Launch mode (default: hub)"
+        help="Launch mode (default: hub). 'all' starts hub + phone + bedroom + tts in one terminal."
     )
     
     parser.add_argument(
@@ -231,6 +329,18 @@ For more information, see: docs/README.md
         "--status",
         action="store_true",
         help="Show system status"
+    )
+    
+    parser.add_argument(
+        "--housekeep",
+        action="store_true",
+        help="Run housekeeping (media ingest, health checks, integrity)"
+    )
+    
+    parser.add_argument(
+        "--watch",
+        action="store_true",
+        help="With --housekeep: run continuously"
     )
     
     parser.add_argument(
@@ -248,6 +358,15 @@ For more information, see: docs/README.md
     
     if args.status:
         show_status()
+        return
+    
+    if args.housekeep:
+        from engine.services.housekeeping import HousekeepingService
+        hk = HousekeepingService()
+        if args.watch:
+            hk.watch()
+        else:
+            hk.run_all()
         return
     
     # Launch appropriate mode
@@ -279,6 +398,8 @@ For more information, see: docs/README.md
         import uvicorn
         print("\n🌉 Launching Web Bridge on http://localhost:8601")
         uvicorn.run(create_bridge_app(), host="0.0.0.0", port=8601)
+    elif args.mode == "all":
+        launch_all()
 
 
 def _launch_streamlit(script_path: Path, port: int):

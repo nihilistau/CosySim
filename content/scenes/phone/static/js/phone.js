@@ -1033,7 +1033,12 @@ function closeGalleryView() {
 
 function openPhotoViewer(url) {
     currentPhotoUrl = url;
-    document.getElementById('viewerImage').src = url;
+    const img = document.getElementById('viewerImage');
+    img.src = url;
+    img.onload = function() {
+        const info = document.getElementById('viewerInfo');
+        if (info) info.textContent = `${this.naturalWidth} × ${this.naturalHeight}`;
+    };
     document.getElementById('photoViewer').style.display = 'flex';
 }
 
@@ -1041,6 +1046,14 @@ function closePhotoViewer() {
     document.getElementById('photoViewer').style.display = 'none';
     currentPhotoUrl = null;
 }
+
+// ESC key closes photo viewer
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        const viewer = document.getElementById('photoViewer');
+        if (viewer && viewer.style.display === 'flex') closePhotoViewer();
+    }
+});
 
 function downloadPhoto() {
     if (currentPhotoUrl) {

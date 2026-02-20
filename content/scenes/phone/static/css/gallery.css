@@ -324,6 +324,15 @@
     bottom: 30px;
     display: flex;
     gap: 15px;
+    align-items: center;
+}
+
+.viewer-info {
+    position: absolute;
+    bottom: 80px;
+    color: rgba(255,255,255,0.5);
+    font-size: 13px;
+    letter-spacing: 1px;
 }
 
 .viewer-controls button {

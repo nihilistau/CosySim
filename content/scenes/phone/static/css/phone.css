@@ -168,9 +168,9 @@ body {
 /* Photo messages */
 .photo-bubble { padding:4px; overflow:hidden; }
 .photo-bubble .message-photo {
-    width:100%; max-width:240px; border-radius:14px;
-    cursor:pointer; display:block;
-    transition: transform 0.2s ease;
+    width:100%; max-width:240px; max-height:320px;
+    border-radius:14px; cursor:pointer; display:block;
+    object-fit: cover; transition: transform 0.2s ease;
 }
 .photo-bubble .message-photo:hover { transform: scale(1.03); }
 .photo-caption {
