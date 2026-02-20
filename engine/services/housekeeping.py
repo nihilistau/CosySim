@@ -109,11 +109,13 @@ class HousekeepingService:
                 try:
                     with db.get_connection() as conn:
                         cursor = conn.cursor()
+                        import json as _json
+                        metadata = _json.dumps({"source": "ingest", "original_name": fp.name})
                         cursor.execute("""
                             INSERT INTO media (id, character_id, type, filepath, metadata, created_at)
                             VALUES (?, ?, ?, ?, ?, ?)
                         """, (media_id, character_id, media_type, fp_str,
-                              f'{{"source": "ingest", "original_name": "{fp.name}"}}',
+                              metadata,
                               timestamp))
                         conn.commit()
 

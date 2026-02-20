@@ -631,48 +631,56 @@ def create_tts_app() -> FastAPI:
         """
         Generate multiple lines and optionally stitch into one file.
         For book-scale / 10min+ audio generation.
+        Runs generation in a background thread to avoid blocking the event loop.
         """
+        import asyncio
+
         batch_id = str(uuid.uuid4())[:12]
-        results = []
 
-        for i, line in enumerate(request.lines):
-            text = line.get("text", "")
-            if not text:
-                continue
-            voice_design = line.get("voice_design", "A clear, natural speaking voice.")
-            model_size = line.get("model_size", "auto")
-            if model_size == "auto":
-                model_size = "0.6b" if len(text) < 100 else "1.7b"
+        def _do_batch():
+            results = []
+            for i, line in enumerate(request.lines):
+                text = line.get("text", "")
+                if not text:
+                    continue
+                voice_design = line.get("voice_design", "A clear, natural speaking voice.")
+                model_size = line.get("model_size", "auto")
+                if model_size == "auto":
+                    model_size = "0.6b" if len(text) < 100 else "1.7b"
 
-            try:
-                filepath, duration = _engine.generate(
-                    text=text,
-                    voice_design=voice_design,
-                    model_size=model_size,
-                    post_process=request.post_process,
-                )
-                results.append({
-                    "index": i, "status": "ok", "filename": filepath.name,
-                    "duration": duration, "filepath": str(filepath),
-                })
-            except Exception as e:
-                results.append({"index": i, "status": "error", "error": str(e)})
+                try:
+                    filepath, duration = _engine.generate(
+                        text=text,
+                        voice_design=voice_design,
+                        model_size=model_size,
+                        post_process=request.post_process,
+                    )
+                    results.append({
+                        "index": i, "status": "ok", "filename": filepath.name,
+                        "duration": duration, "filepath": str(filepath),
+                    })
+                except Exception as e:
+                    results.append({"index": i, "status": "error", "error": str(e)})
 
-        # Stitch if requested
-        stitched = None
-        if request.stitch and results:
-            try:
-                from engine.tts.audio_processor import AudioProcessor
-                proc = AudioProcessor()
-                paths = [Path(r["filepath"]) for r in results if r["status"] == "ok"]
-                out_name = f"batch_{batch_id}.wav"
-                out_path = VOICE_DIR / out_name
-                proc.stitch_files(paths, out_path, gap_ms=request.gap_ms)
-                total_dur = sum(r.get("duration", 0) for r in results if r["status"] == "ok")
-                stitched = {"filename": out_name, "download_url": f"/download/{out_name}",
-                           "total_duration": total_dur}
-            except Exception as e:
-                stitched = {"error": str(e)}
+            # Stitch if requested
+            stitched = None
+            if request.stitch and results:
+                try:
+                    from engine.tts.audio_processor import AudioProcessor
+                    proc = AudioProcessor()
+                    paths = [Path(r["filepath"]) for r in results if r["status"] == "ok"]
+                    out_name = f"batch_{batch_id}.wav"
+                    out_path = VOICE_DIR / out_name
+                    proc.stitch_files(paths, out_path, gap_ms=request.gap_ms)
+                    total_dur = sum(r.get("duration", 0) for r in results if r["status"] == "ok")
+                    stitched = {"filename": out_name, "download_url": f"/download/{out_name}",
+                               "total_duration": total_dur}
+                except Exception as e:
+                    stitched = {"error": str(e)}
+
+            return results, stitched
+
+        results, stitched = await asyncio.to_thread(_do_batch)
 
         return {
             "batch_id": batch_id,

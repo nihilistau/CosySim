@@ -89,12 +89,16 @@ class AudioProcessor:
         silence = np.zeros(gap_samples, dtype=np.float32)
 
         for fp in filepaths:
-            if _HAS_LIBROSA:
-                y, _ = librosa.load(str(fp), sr=self.target_sr)
-            else:
-                y = self._read_wav_numpy(fp)
-            all_audio.append(y)
-            all_audio.append(silence)
+            try:
+                if _HAS_LIBROSA:
+                    y, _ = librosa.load(str(fp), sr=self.target_sr)
+                else:
+                    y = self._read_wav_numpy(fp)
+                all_audio.append(y)
+                all_audio.append(silence)
+            except Exception as e:
+                logger.warning("Skipping file %s: %s", fp, e)
+                continue
 
         if not all_audio:
             return output
