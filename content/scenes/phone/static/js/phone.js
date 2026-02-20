@@ -33,7 +33,7 @@ function initializeSocket() {
         
         // Show notification badge if not on messages screen
         const messagesScreen = document.getElementById('messagesScreen');
-        if (messagesScreen.style.display !== 'block' && data.role === 'assistant') {
+        if (!messagesScreen.classList.contains('active') && data.role === 'assistant') {
             const badge = document.getElementById('messageBadge');
             const currentCount = parseInt(badge.textContent) || 0;
             showNotificationBadge(currentCount + 1);
@@ -96,9 +96,13 @@ async function loadCharacters() {
             select.appendChild(option);
         });
         
-        // Auto-select first character if available
-        if (data.characters.length > 0) {
-            select.value = data.characters[0].id;
+        // Auto-select first non-anonymous character if available
+        const realChars = data.characters.filter(c =>
+            !c.id.startsWith('anon') && !(c.tags || []).includes('anonymous')
+        );
+        const toLoad = realChars[0] || data.characters[0];
+        if (toLoad) {
+            select.value = toLoad.id;
             selectCharacter();
         }
         
@@ -173,28 +177,35 @@ function updateCharacterUI() {
 
 // App navigation
 function openApp(appName) {
-    // Hide all screens
-    const screens = document.querySelectorAll('.screen-view');
-    screens.forEach(screen => screen.style.display = 'none');
-    
-    // Show selected screen
     const screenMap = {
         'messages':      'messagesScreen',
         'phone':         'phoneScreen',
         'gallery':       'galleryScreen',
-        'camera':        'homeScreen',        // Placeholder
-        'browser':       'homeScreen',        // Placeholder
+        'camera':        'homeScreen',
+        'browser':       'homeScreen',
         'videoMessages': 'videoMessagesScreen',
         'voiceMessages': 'voiceMessagesScreen',
         'settings':      'settingsScreen',
         'voiceStudio':   'voiceStudioScreen',
         'imageSettings': 'imageSettingsScreen'
     };
-    
+
     const screenId = screenMap[appName] || 'homeScreen';
-    document.getElementById(screenId).style.display = 'block';
-    
-    // Clear notification badge when opening messages
+
+    // Hide all screens and strip active class
+    document.querySelectorAll('.screen-view').forEach(s => {
+        s.classList.remove('active');
+        s.style.display = 'none';
+    });
+
+    // Show target screen with proper flex + active class (triggers opacity:1)
+    const target = document.getElementById(screenId);
+    if (target) {
+        target.style.display = 'flex';
+        requestAnimationFrame(() => target.classList.add('active'));
+    }
+
+    // Per-screen data loading
     if (appName === 'messages') {
         showNotificationBadge(0);
         loadMessages();
@@ -216,9 +227,15 @@ function openApp(appName) {
 }
 
 function goHome() {
-    const screens = document.querySelectorAll('.screen-view');
-    screens.forEach(screen => screen.style.display = 'none');
-    document.getElementById('homeScreen').style.display = 'block';
+    document.querySelectorAll('.screen-view').forEach(s => {
+        s.classList.remove('active');
+        s.style.display = 'none';
+    });
+    const home = document.getElementById('homeScreen');
+    if (home) {
+        home.style.display = 'flex';
+        requestAnimationFrame(() => home.classList.add('active'));
+    }
 }
 
 // ══════════════════════════════ Video Messages gallery ══════════════════════
@@ -1043,12 +1060,17 @@ function startCall(type) {
     }
     
     socket.emit('start_call', { type: type });
-    
-    // Show call screen (elements may not exist in all UI variants)
-    const screens = document.querySelectorAll('.screen-view');
-    screens.forEach(screen => screen.style.display = 'none');
+
+    // Show call screen
+    document.querySelectorAll('.screen-view').forEach(s => {
+        s.classList.remove('active');
+        s.style.display = 'none';
+    });
     const callScreen = document.getElementById('callScreen');
-    if (callScreen) callScreen.style.display = 'block';
+    if (callScreen) {
+        callScreen.style.display = 'flex';
+        requestAnimationFrame(() => callScreen.classList.add('active'));
+    }
     
     // Update call info
     const callTypeEl = document.getElementById('callType');
