@@ -1232,6 +1232,49 @@ class PhoneScene(BaseScene):
                     self.settings[k] = v
             return jsonify({'success': True, 'settings': self.settings})
 
+        # ── RAG Conversation Topic Routes ────────────────────────────────────
+
+        @self.app.route('/api/rag/topics', methods=['GET'])
+        def get_rag_topics():
+            """Retrieve conversation topics from RAG for the active character."""
+            if not self.active_character:
+                return jsonify({'error': 'No active character'}), 400
+            query = request.args.get('query', 'general conversation')
+            limit = request.args.get('limit', 10, type=int)
+            try:
+                topics = self.rag.query_memories(
+                    character_id=self.active_character.id,
+                    query=query,
+                    n_results=limit,
+                    memory_type='conversation_topic',
+                )
+                return jsonify({'topics': [{'id': m['id'], 'content': m['content'],
+                                            'metadata': m['metadata']} for m in topics]})
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+
+        @self.app.route('/api/rag/topics/add', methods=['POST'])
+        def add_rag_topic():
+            """Add a conversation topic seed to RAG for the active character."""
+            if not self.active_character:
+                return jsonify({'error': 'No active character'}), 400
+            data = request.get_json() or {}
+            content = data.get('content', '').strip()
+            if not content:
+                return jsonify({'error': 'content required'}), 400
+            importance = float(data.get('importance', 0.7))
+            try:
+                memory_id = self.rag.add_memory(
+                    character_id=self.active_character.id,
+                    content=content,
+                    memory_type='conversation_topic',
+                    importance=importance,
+                    metadata={'source': 'admin', 'added_by': 'operator'},
+                )
+                return jsonify({'success': True, 'memory_id': memory_id})
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+
         @self.app.route('/api/character/update', methods=['PATCH'])
         def update_character():
             """Update attributes of the active character and persist to DB."""
@@ -1674,6 +1717,26 @@ class PhoneScene(BaseScene):
                 system_prompt += f"\n\n## Relevant Memories\n{memory_context}"
         except Exception:
             pass
+
+        # RAG: inject conversation topics the character can choose to raise
+        try:
+            rag_topics = self.rag.query_memories(
+                character_id=self.active_character.id,
+                query=user_message,
+                n_results=4,
+                memory_type="conversation_topic",
+                chain_id=self.current_chain_id,
+                scene_id="phone",
+            )
+            if rag_topics:
+                topic_lines = "\n".join(f"- {m['content']}" for m in rag_topics)
+                system_prompt += (
+                    "\n\n## Conversation Topics You Can Bring Up\n"
+                    "If the moment feels right, you may weave one of these into the conversation:\n"
+                    f"{topic_lines}"
+                )
+        except Exception:
+            pass
         
         custom_ctx = self.settings.get('custom_llm_context', '').strip()
         if custom_ctx:
@@ -1704,19 +1767,19 @@ class PhoneScene(BaseScene):
         rel = float(self.active_character.relationship_level)
 
         # User explicitly asked for a selfie
-        if intent.get("wants_selfie") and rel > 0.2:
+        if intent.get("type") == "selfie" and rel > 0.2:
             self._maybe_send_photo()
 
         # User asked for a voice message
-        if intent.get("wants_voice") and rel > 0.3:
+        if intent.get("type") == "voice_message" and rel > 0.3:
             self._maybe_send_voice_message(response)
 
         # User asked for a video message
-        if intent.get("wants_video") and rel > 0.4:
+        if intent.get("type") == "video_message" and rel > 0.4:
             self._maybe_send_video_message(response)
 
         # Spontaneous media (low probability unless intent triggered)
-        if rel >= 0.5 and not any(intent.values()):
+        if rel >= 0.5 and intent.get("type") == "text":
             r = random.random()
             if r < 0.05:
                 self._maybe_send_photo()

@@ -165,7 +165,7 @@ class LMStudioClient:
 
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
-        self._default_model = (config.get("llm.model", "default") if config else "default")
+        self._default_model = (config.get("llm.model", "qwen3-vl-8b") if config else "qwen3-vl-8b")#Knack
         self._default_temp = float(config.get("llm.temperature", 0.7) if config else 0.7)
         self._default_max_tokens = int(config.get("llm.max_tokens", 500) if config else 500)
         self._mcp_enabled = bool(config.get("lmstudio.mcp_enabled", True) if config else True)
@@ -391,20 +391,30 @@ class LMStudioClient:
         """
         Count tokens using the LMStudio SDK.
 
-        Falls back to a rough estimate (chars / 4) if SDK unavailable.
+        Falls back to a rough estimate (chars / 4) if SDK unavailable or no
+        model is loaded.  Uses the first loaded model when ``model`` is None
+        to avoid the SDK "default model not being a thing" error.
         """
+        # Resolve model via REST before touching SDK (avoids SDK "no default model" err)
+        resolved = model or self._default_model or self.get_loaded_model_id()
         try:
             import lmstudio as lms
-            handle = lms.llm(model) if model else lms.llm()
+            handle = lms.llm(resolved) if resolved else lms.llm()
             return handle.count_tokens(text)
         except Exception:
             return max(1, len(text) // 4)
 
     def get_context_length(self, model: Optional[str] = None) -> int:
-        """Get the context length of the loaded model."""
+        """Get the context length of the loaded model.
+
+        Falls back to 4096 if the SDK is unavailable or no model is loaded.
+        Uses the first loaded model when ``model`` is None to avoid the SDK
+        "default model not being a thing" error.
+        """
+        resolved = model or self._default_model or self.get_loaded_model_id()
         try:
             import lmstudio as lms
-            handle = lms.llm(model) if model else lms.llm()
+            handle = lms.llm(resolved) if resolved else lms.llm()
             return handle.get_context_length()
         except Exception:
             return 4096

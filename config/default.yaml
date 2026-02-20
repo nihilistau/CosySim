@@ -67,9 +67,9 @@ stt:
 llm:
   provider: "lmstudio"  # or "openai", "local"
   base_url: "http://localhost:1234/v1"
-  model: "qwen3-4b-z-engineer-q8"
+  model: "qwen3-vl-8b"
   temperature: 0.7
-  max_tokens: 500
+  max_tokens: 5000
   stream: true
 
 # LMStudio SDK configuration
@@ -104,10 +104,10 @@ hardware:
 comfyui:
   enabled: false
   base_url: "http://localhost:8188"
-  timeout: 300
+  timeout: 500
   generation:
     steps: 30
-    cfg: 7.0
+    cfg: 5.5
     sampler_name: "euler"
     scheduler: "normal"
     denoise: 1.0
@@ -141,7 +141,7 @@ characters:
   default_personality: "playful"
   default_role: "girlfriend"
   memory:
-    max_context_messages: 20
+    max_context_messages: 200
     importance_threshold: 0.5
     embedding_batch_size: 32
 
