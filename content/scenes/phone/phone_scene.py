@@ -77,10 +77,19 @@ class PhoneScene(BaseScene):
             db=self.db
         )
         
-        # Ensure media directory exists
+        # Ensure media directories exist (content/media/* and content/simulation/media/*)
         self.media_dir = Path(__file__).parent.parent.parent / "media"
-        self.media_dir.mkdir(exist_ok=True)
-        
+        self.media_dir.mkdir(parents=True, exist_ok=True)
+
+        media_dirs = [
+            Path(__file__).parent.parent.parent / "media" / "voice",
+            Path(__file__).parent.parent.parent / "media" / "video",
+            Path(__file__).parent.parent.parent.parent / "simulation" / "media" / "voice",
+            Path(__file__).parent.parent.parent.parent / "simulation" / "media" / "video",
+        ]
+        for d in media_dirs:
+            d.mkdir(parents=True, exist_ok=True)
+
         # Initialize autonomous messenger (will be started later with socketio)
         self.autonomous_messenger = None
 
@@ -1015,12 +1024,23 @@ class PhoneScene(BaseScene):
             try:
                 # Secure the filename
                 filename = secure_filename(filename)
-                video_dir = Path(__file__).parent.parent / "media" / "video"
-                filepath = video_dir / filename
-                
-                if not filepath.exists():
-                    return jsonify({'error': 'File not found'}), 404
-                
+
+                # Check simulation dir first (where generator writes), then media dir
+                video_dirs = [
+                    Path(__file__).parent.parent.parent / "simulation" / "media" / "video",
+                    Path(__file__).parent.parent.parent / "media" / "video",
+                ]
+
+                filepath = None
+                for vdir in video_dirs:
+                    candidate = vdir / filename
+                    if candidate.exists():
+                        filepath = candidate
+                        break
+
+                if not filepath:
+                    return jsonify({'error': 'Video not found'}), 404
+
                 return send_file(str(filepath), mimetype='video/mp4')
             except Exception as e:
                 return jsonify({'error': str(e)}), 500

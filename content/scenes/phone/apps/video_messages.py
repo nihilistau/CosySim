@@ -68,16 +68,15 @@ class VideoMessagesApp:
 
     def get_list(self, character_id: str, limit: int = 50) -> List[Dict]:
         """
-        Return video messages for a character, newest first.
-
-        Args:
-            character_id: Active character's DB id.
-            limit: Maximum rows to return.
-
-        Returns:
-            List of card dicts (empty list on any error).
+        Return video messages for a character, newest first.  Falls back to
+        scanning the filesystem (simulation + content media folders) for any
+        video files that are not present in the DB so offline ingest works.
         """
         try:
+            cards: List[Dict] = []
+            seen_filenames = set()
+
+            # 1) DB-backed messages
             with self.db.get_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute(
@@ -90,7 +89,38 @@ class VideoMessagesApp:
                     """,
                     (character_id, limit),
                 )
-                return [self._row_to_card(row) for row in cursor.fetchall()]
+                rows = cursor.fetchall()
+                for row in rows:
+                    cards.append(self._row_to_card(row))
+                    fp = Path(row[1]) if row[1] else None
+                    if fp:
+                        seen_filenames.add(fp.name)
+
+            # 2) Filesystem fallback (scan simulation/media/video and content/media/video)
+            sim_dir = Path(__file__).parent.parent.parent.parent / "simulation" / "media" / "video"
+            content_dir = Path(__file__).parent.parent.parent / "media" / "video"
+            for vdir in (sim_dir, content_dir):
+                if not vdir.exists():
+                    continue
+                for f in sorted(vdir.glob('*.mp4'), key=lambda p: p.stat().st_mtime, reverse=True):
+                    if f.name in seen_filenames:
+                        continue
+                    cards.append({
+                        'id': f.stem,
+                        'filename': f.name,
+                        'url': f"/api/video-message/download/{f.name}",
+                        'title': f.stem.replace('_', ' '),
+                        'duration': 0,
+                        'mood': '',
+                        'text': '',
+                        'sender': 'filesystem',
+                        'timestamp': __import__('datetime').datetime.fromtimestamp(f.stat().st_mtime).isoformat(),
+                        'timestamp_display': _fmt_ts(__import__('datetime').datetime.fromtimestamp(f.stat().st_mtime).isoformat()),
+                    })
+                    seen_filenames.add(f.name)
+
+            return cards[:limit]
+
         except Exception as exc:
             logger.warning("VideoMessagesApp.get_list error: %s", exc)
             return []

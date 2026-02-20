@@ -77,16 +77,15 @@ class VoiceMessagesApp:
 
     def get_list(self, character_id: str, limit: int = 50) -> List[Dict]:
         """
-        Return voice messages for a character, newest first.
-
-        Args:
-            character_id: Active character's DB id.
-            limit: Maximum rows to return.
-
-        Returns:
-            List of card dicts (empty list on any error).
+        Return voice messages for a character, newest first.  Also scans the
+        filesystem for any .wav/.mp3 files not recorded in the DB so files
+        dropped into media folders are discoverable.
         """
         try:
+            cards: List[Dict] = []
+            seen_filenames = set()
+
+            # 1) DB-backed messages
             with self.db.get_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute(
@@ -99,7 +98,40 @@ class VoiceMessagesApp:
                     """,
                     (character_id, limit),
                 )
-                return [self._row_to_card(row) for row in cursor.fetchall()]
+                rows = cursor.fetchall()
+                for row in rows:
+                    cards.append(self._row_to_card(row))
+                    fp = Path(row[1]) if row[1] else None
+                    if fp:
+                        seen_filenames.add(fp.name)
+
+            # 2) Filesystem fallback (scan simulation + content media folders)
+            sim_dir = Path(__file__).parent.parent.parent.parent / "simulation" / "media" / "voice"
+            content_dir = Path(__file__).parent.parent.parent / "media" / "voice"
+            for vdir in (sim_dir, content_dir):
+                if not vdir.exists():
+                    continue
+                for ext in ('*.wav', '*.mp3'):
+                    for f in sorted(vdir.glob(ext), key=lambda p: p.stat().st_mtime, reverse=True):
+                        if f.name in seen_filenames:
+                            continue
+                        cards.append({
+                            'id': f.stem,
+                            'filename': f.name,
+                            'url': f"/api/voice/download/{f.name}",
+                            'title': f.stem.replace('_', ' '),
+                            'duration': 0,
+                            'duration_display': '0:00',
+                            'mood': '',
+                            'text': '',
+                            'sender': 'filesystem',
+                            'timestamp': __import__('datetime').datetime.fromtimestamp(f.stat().st_mtime).isoformat(),
+                            'timestamp_display': _fmt_ts(__import__('datetime').datetime.fromtimestamp(f.stat().st_mtime).isoformat()),
+                        })
+                        seen_filenames.add(f.name)
+
+            return cards[:limit]
+
         except Exception as exc:
             logger.warning("VoiceMessagesApp.get_list error: %s", exc)
             return []

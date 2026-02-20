@@ -616,8 +616,6 @@ function _addRichMediaBubble(container, role, timestamp, icon, label, transcript
     bubbleDiv.appendChild(iconSpan);
 
     const infoDiv = document.createElement('div');
-    infoDiv.innerHTML = `<div style="font-size:11px;color:#888;margin-bottom:2px;">${label}</div>`
-                      + `<div style="font-size:13px;">${_escHtml(transcript)}</div>`;
     bubbleDiv.appendChild(infoDiv);
 
     const metaDiv = document.createElement('div');
@@ -627,11 +625,112 @@ function _addRichMediaBubble(container, role, timestamp, icon, label, transcript
     const time = new Date(timestamp);
     timeSpan.textContent = time.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
     metaDiv.appendChild(timeSpan);
-    bubbleDiv.appendChild(metaDiv);
 
-    messageDiv.appendChild(bubbleDiv);
-    container.appendChild(messageDiv);
-    scrollToBottom();
+    // Determine candidate media URL (if transcript is a filename or URL)
+    const isVoice = icon === '🎤' || /voice/i.test(label);
+    const isVideo = icon === '🎥' || /video/i.test(label);
+
+    let candidateUrl = null;
+    if (typeof transcript === 'string') {
+        if (transcript.startsWith('/') || transcript.startsWith('http')) {
+            candidateUrl = transcript;
+        } else if (isVoice) {
+            candidateUrl = `/api/voice/download/${encodeURIComponent(transcript)}`;
+        } else if (isVideo) {
+            candidateUrl = `/api/video-message/download/${encodeURIComponent(transcript)}`;
+        }
+    }
+
+    const renderTranscriptOnly = () => {
+        infoDiv.innerHTML = `<div style="font-size:11px;color:#888;margin-bottom:2px;">${label}</div>`
+                          + `<div style="font-size:13px;">${_escHtml(transcript)}</div>`;
+        bubbleDiv.appendChild(infoDiv);
+        bubbleDiv.appendChild(metaDiv);
+        messageDiv.appendChild(bubbleDiv);
+        container.appendChild(messageDiv);
+        scrollToBottom();
+    };
+
+    if (!candidateUrl) {
+        // Not a media URL/filename — render transcript-only
+        renderTranscriptOnly();
+        return;
+    }
+
+    // Probe the media URL (HEAD preferred) and render player if available
+    fetch(candidateUrl, { method: 'HEAD' }).then(resp => {
+        if (resp.ok) {
+            // Render inline player
+            if (isVoice) {
+                const audio = document.createElement('audio');
+                audio.controls = true;
+                audio.src = candidateUrl;
+                audio.preload = 'metadata';
+                infoDiv.appendChild(audio);
+                if (transcript && transcript !== '') {
+                    const tdiv = document.createElement('div');
+                    tdiv.className = 'voice-transcript';
+                    tdiv.textContent = transcript;
+                    infoDiv.appendChild(tdiv);
+                }
+            } else if (isVideo) {
+                const video = document.createElement('video');
+                video.controls = true;
+                video.src = candidateUrl;
+                video.preload = 'metadata';
+                video.className = 'inline-video';
+                video.style.maxWidth = '320px';
+                infoDiv.appendChild(video);
+                if (transcript && transcript !== '') {
+                    const tdiv = document.createElement('div');
+                    tdiv.style.marginTop = '6px';
+                    tdiv.textContent = transcript;
+                    infoDiv.appendChild(tdiv);
+                }
+            } else {
+                renderTranscriptOnly();
+            }
+        } else {
+            // Not available — degrade to transcript-only
+            renderTranscriptOnly();
+        }
+
+        bubbleDiv.appendChild(metaDiv);
+        messageDiv.appendChild(bubbleDiv);
+        container.appendChild(messageDiv);
+        scrollToBottom();
+    }).catch(err => {
+        // HEAD may be blocked by some servers; try a quick GET probe as a fallback
+        fetch(candidateUrl, { method: 'GET', headers: { Range: 'bytes=0-0' } }).then(r2 => {
+            if (r2.ok) {
+                if (isVoice) {
+                    const audio = document.createElement('audio');
+                    audio.controls = true; audio.src = candidateUrl; audio.preload = 'metadata';
+                    infoDiv.appendChild(audio);
+                } else if (isVideo) {
+                    const video = document.createElement('video');
+                    video.controls = true; video.src = candidateUrl; video.preload = 'metadata'; video.className = 'inline-video';
+                    video.style.maxWidth = '320px';
+                    infoDiv.appendChild(video);
+                } else {
+                    renderTranscriptOnly();
+                }
+            } else {
+                renderTranscriptOnly();
+            }
+
+            bubbleDiv.appendChild(metaDiv);
+            messageDiv.appendChild(bubbleDiv);
+            container.appendChild(messageDiv);
+            scrollToBottom();
+        }).catch(_ => {
+            renderTranscriptOnly();
+            bubbleDiv.appendChild(metaDiv);
+            messageDiv.appendChild(bubbleDiv);
+            container.appendChild(messageDiv);
+            scrollToBottom();
+        });
+    });
 }
 
 function _escHtml(s) {
@@ -651,6 +750,16 @@ function addPhotoMessage(url, timestamp, role = 'assistant', caption = '') {
     img.src = url;
     img.className = 'message-photo';
     img.onclick = () => openPhotoViewer(url);
+
+    // Graceful fallback for missing images — inline SVG placeholder
+    img.onerror = function() {
+        this.onerror = null;
+        this.alt = 'Image not available';
+        this.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="480" height="320"><rect width="100%" height="100%" fill="%23f3f3f3"/><text x="50%" y="50%" font-size="18" fill="%23888888" dominant-baseline="middle" text-anchor="middle">Image not available</text></svg>';
+        this.style.objectFit = 'contain';
+        this.style.background = '#f3f3f3';
+        this.onclick = null;
+    };
     
     imgDiv.appendChild(img);
     
