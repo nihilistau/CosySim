@@ -33,6 +33,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from engine.assets import AssetManager, CharacterAsset, SceneAsset
 
+import logging as _logging
+_bslogger = _logging.getLogger(__name__)
+
 
 class BaseScene(ABC):
     """
@@ -74,6 +77,9 @@ class BaseScene(ABC):
         
         # Scene asset ID (if loaded from asset)
         self.scene_asset_id: Optional[str] = None
+
+        # Register this scene with MCPFramework (best-effort)
+        self._mcp_register_scene()
     
     def load_character(self, character_id: str) -> CharacterAsset:
         """
@@ -151,11 +157,18 @@ class BaseScene(ABC):
                 self.load_character(char_id)
             except Exception as e:
                 print(f"Warning: Could not load character {char_id}: {e}")
-        
+
         # Apply scene configuration
         self.scene_config['settings'] = scene_asset.config
         self.scene_asset_id = scene_id
-        
+
+        # Register with MCPFramework
+        try:
+            from engine.mcp.framework import get_framework
+            get_framework().get_scene(scene_asset.name)
+        except Exception:
+            pass
+
         # Call scene-specific load logic
         self.on_scene_loaded(scene_asset)
     
@@ -306,14 +319,58 @@ class BaseScene(ABC):
     def on_scene_loaded(self, scene_asset: SceneAsset) -> None:
         """Called after a saved scene is restored from an asset.
         Override to apply scene-specific configuration from the asset."""
-        pass
+        self._mcp_register_scene()
+
+    # ── MCP helpers ──────────────────────────────────────────────────
+
+    def _mcp_register_scene(self) -> None:
+        """Register (or re-register) this scene with MCPFramework.  Best-effort."""
+        try:
+            from engine.mcp.framework import get_framework
+            get_framework().get_scene(self.scene_name)   # auto-creates MCPSceneNode
+            _bslogger.debug("BaseScene: MCPFramework registered scene '%s'", self.scene_name)
+        except Exception as _exc:
+            _bslogger.debug("BaseScene._mcp_register_scene failed: %s", _exc)
+
+    def _mcp_deregister_scene(self) -> None:
+        """Broadcast scene stop to ActivityBus.  Call from subclass stop()."""
+        try:
+            from engine.services.activity_bus import get_activity_bus
+            get_activity_bus().publish(
+                activity_type="scene_stopped",
+                description=f"Scene '{self.scene_name}' stopped",
+                agent_id="system",
+                scene=self.scene_name,
+                data={"scene": self.scene_name, "port": self.port},
+            )
+        except Exception as _exc:
+            _bslogger.debug("BaseScene._mcp_deregister_scene failed: %s", _exc)
     
     def on_character_added(self, character: CharacterAsset) -> None:
         """Called after a character is loaded into the scene.
         Override to initialise character-specific resources (e.g. 3D model, SocketIO room)."""
-        pass
-    
+        # MCP: ensure character is tracked in CharacterRegistry + MCPFramework
+        try:
+            char_id = getattr(character, "id", None) or getattr(character, "asset_id", None)
+            if char_id:
+                from engine.mcp.character_registry import get_character_registry
+                reg = get_character_registry()
+                reg.ensure(char_id, display_name=getattr(character, "name", char_id))
+                from engine.mcp.framework import get_framework
+                fw_char = get_framework().get_character(char_id)
+                fw_char.enter_scene(self.scene_name)
+                _bslogger.debug("BaseScene: MCP registered character %s → %s", char_id, self.scene_name)
+        except Exception as _exc:
+            _bslogger.debug("BaseScene.on_character_added MCP sync failed: %s", _exc)
+
     def on_character_removed(self, character_id: str) -> None:
         """Called after a character is removed from the scene.
         Override to clean up character-specific resources."""
+        # MCP: remove character from scene node
+        try:
+            from engine.mcp.framework import get_framework
+            get_framework().get_character(character_id).leave_scene()
+            _bslogger.debug("BaseScene: MCP character %s left %s", character_id, self.scene_name)
+        except Exception as _exc:
+            _bslogger.debug("BaseScene.on_character_removed MCP sync failed: %s", _exc)
         pass

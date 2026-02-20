@@ -40,9 +40,13 @@ class SceneAgent:
         model:         Optional[str] = None,
         system_prompt: Optional[str] = None,
         config=None,
+        scene_id:      Optional[str] = None,
+        character_id:  Optional[str] = None,
     ) -> None:
         self.model         = model
         self.system_prompt = system_prompt or self.DEFAULT_SYSTEM
+        self.scene_id      = scene_id or "system"
+        self.character_id  = character_id or "scene_agent"
         if config is None:
             from engine.config import get_config
             config = get_config()
@@ -98,7 +102,22 @@ class SceneAgent:
                 max_tokens=max_tokens,
                 integrations=integrations,
             )
-            return resp.content.strip()
+            result = resp.content.strip()
+
+            # ActivityBus: make utility calls visible in admin panel
+            try:
+                from engine.services.activity_bus import get_activity_bus
+                get_activity_bus().publish(
+                    activity_type="scene_agent_task",
+                    description=f"SceneAgent task: {task[:80]}",
+                    agent_id=self.character_id,
+                    scene=self.scene_id,
+                    data={"task_preview": task[:200], "result_preview": result[:200]},
+                )
+            except Exception:
+                pass
+
+            return result
 
         except Exception as exc:
             logger.error("SceneAgent.run failed: %s", exc)

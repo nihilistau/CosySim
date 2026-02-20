@@ -103,6 +103,19 @@ class CharacterAgent:
         # RAG memory (lazy init)
         self._rag                                    = None
 
+        # MCP: register character (best-effort)
+        try:
+            from engine.mcp.character_registry import get_character_registry
+            get_character_registry().ensure(
+                character.id,
+                display_name=character.name,
+            )
+            if scene:
+                from engine.mcp.framework import get_framework
+                get_framework().get_character(character.id).enter_scene(scene)
+        except Exception as _mcp_exc:
+            logger.debug("CharacterAgent: MCP registration failed: %s", _mcp_exc)
+
     # ──────────────────────────────────────────────────── public API ──
 
     def reply(
@@ -268,6 +281,33 @@ class CharacterAgent:
                     )
             except Exception:
                 logger.debug("EventChain log response failed", exc_info=True)
+
+        # ── 7. MCP post-reply sync ────────────────────────────────────
+        if reply_text and not self._cancel_event.is_set():
+            try:
+                from engine.mcp.character_registry import get_character_registry
+                get_character_registry().set_state(self.character.id, {
+                    "mood":       getattr(self.character, "mood", "neutral"),
+                    "last_reply": reply_text[:200],
+                    "scene":      self.scene or "unknown",
+                })
+            except Exception:
+                pass
+            try:
+                from engine.services.activity_bus import get_activity_bus
+                get_activity_bus().publish(
+                    activity_type="character_reply",
+                    description=f"{self.character.name}: {reply_text[:120]}",
+                    agent_id=self.character.id,
+                    scene=self.scene or "unknown",
+                    data={
+                        "reply_preview": reply_text[:300],
+                        "user_message":  user_message[:200],
+                        "model":         self.model or "auto",
+                    },
+                )
+            except Exception:
+                pass
 
         return reply_text
 
@@ -454,6 +494,16 @@ class CharacterAgent:
         char = self.character
         name = char.name
 
+        # Pull MCPCharacterNode brief if available (adds inbox/game/mood context)
+        mcp_brief = ""
+        try:
+            if self.scene:
+                from engine.mcp.framework import get_framework
+                fw_char = get_framework().get_character(char.id)
+                mcp_brief = fw_char.brief()
+        except Exception:
+            pass
+
         # Trait description
         warmth     = getattr(char, "warmth",      0.5)
         formality  = getattr(char, "formality",   0.5)
@@ -501,6 +551,10 @@ class CharacterAgent:
         parts.append(
             "\nRespond naturally in-character. Keep replies concise unless detail is asked for."
         )
+
+        if mcp_brief:
+            parts.append(f"\n[MCP Context]\n{mcp_brief}")
+
         return "\n".join(parts)
 
     def _search_memories(self, query: str) -> List[str]:

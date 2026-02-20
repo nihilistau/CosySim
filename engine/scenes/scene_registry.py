@@ -68,6 +68,14 @@ class SceneRegistry:
         # Validate ports
         self._validate_ports()
 
+        # Register all discovered scenes with MCPFramework (best-effort)
+        for scene_info in self._scenes.values():
+            try:
+                from engine.mcp.framework import get_framework
+                get_framework().get_scene(scene_info.name)
+            except Exception:
+                pass
+
         logger.info("Discovered %d scenes: %s",
                      len(self._scenes),
                      ", ".join(f"{s.name}:{s.port}" for s in self._scenes.values()))

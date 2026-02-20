@@ -1,6 +1,5 @@
-"""
-SceneManager - Manages scene lifecycle and instances
-"""
+"""SceneManager - Manages scene lifecycle and instances"""
+import logging
 from typing import Dict, Optional, Type
 from pathlib import Path
 
@@ -9,6 +8,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from engine.scenes.base_scene import BaseScene
 from engine.assets import AssetManager
+
+logger = logging.getLogger(__name__)
 
 
 class SceneManager:
@@ -43,8 +44,16 @@ class SceneManager:
         
         scene_class = self.scene_registry[scene_type]
         scene = scene_class(scene_name=scene_name, **kwargs)
-        
         self.active_scenes[scene_name] = scene
+
+        # Register with MCPFramework
+        try:
+            from engine.mcp.framework import get_framework
+            get_framework().get_scene(scene_name)
+            logger.debug("SceneManager: MCPFramework registered scene '%s'", scene_name)
+        except Exception as _exc:
+            logger.debug("SceneManager create_scene MCP sync failed: %s", _exc)
+
         return scene
     
     def load_scene(self, scene_id: str) -> BaseScene:
@@ -84,11 +93,17 @@ class SceneManager:
         return self.active_scenes.get(scene_name)
     
     def stop_scene(self, scene_name: str) -> None:
-        """Stop and remove a scene"""
+        """Stop and remove a scene."""
         if scene_name in self.active_scenes:
             scene = self.active_scenes[scene_name]
             scene.stop()
+            # Notify MCP
+            try:
+                scene._mcp_deregister_scene()
+            except Exception:
+                pass
             del self.active_scenes[scene_name]
+            logger.info("SceneManager: stopped scene '%s'", scene_name)
     
     def stop_all(self) -> None:
         """Stop all active scenes"""

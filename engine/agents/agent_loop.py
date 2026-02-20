@@ -83,11 +83,30 @@ class AgentLoop:
         if agent:
             self._agents[character.id] = agent
 
+        # MCP: ensure tracked in CharacterRegistry + MCPFramework scene
+        try:
+            from engine.mcp.character_registry import get_character_registry
+            get_character_registry().ensure(
+                character.id,
+                display_name=character.name,
+            )
+            from engine.mcp.framework import get_framework
+            get_framework().get_character(character.id).enter_scene(self.scene_id)
+            logger.debug("AgentLoop: MCP registered %s → %s", character.id, self.scene_id)
+        except Exception as _exc:
+            logger.debug("AgentLoop.register_character MCP sync failed: %s", _exc)
+
     def unregister_character(self, character_id: str) -> None:
         self._characters.pop(character_id, None)
         self._agents.pop(character_id, None)
         self._names.pop(character_id, None)
         self.scene_map.remove_character(character_id)
+        # MCP: leave scene
+        try:
+            from engine.mcp.framework import get_framework
+            get_framework().get_character(character_id).leave_scene()
+        except Exception:
+            pass
 
     def set_action_callback(self, fn: Callable) -> None:
         """Set a callback ``fn(character_id, action_dict)`` fired after every action."""
@@ -155,6 +174,28 @@ class AgentLoop:
                 "actions": actions,
                 "timestamp": datetime.now().isoformat(),
             })
+
+        # MCPFramework tick — drains consequence queue, advances turn counter
+        try:
+            from engine.mcp.framework import get_framework
+            get_framework().tick()
+        except Exception:
+            pass
+
+        # ActivityBus: publish tick summary
+        try:
+            from engine.services.activity_bus import get_activity_bus
+            bus = get_activity_bus()
+            bus.publish(
+                activity_type="agent_loop_tick",
+                description=f"Tick {self._tick_count}: {len(actions)} actions in scene '{self.scene_id}'",
+                agent_id="agent_loop",
+                scene=self.scene_id,
+                data={"tick": self._tick_count, "action_count": len(actions)},
+            )
+        except Exception:
+            pass
+
         return actions
 
     # ── Perceive ────────────────────────────────────────────────────────
@@ -474,6 +515,19 @@ class AgentLoop:
 
         # Log to EventChain
         self._log_action(result)
+
+        # ActivityBus: publish every action for admin panel visibility
+        try:
+            from engine.services.activity_bus import get_activity_bus
+            get_activity_bus().publish(
+                activity_type=f"agent_{action}",
+                description=result.get("description", f"{character.name} {action}"),
+                agent_id=character_id,
+                scene=self.scene_id,
+                data={"action": action, "target": target, "message": message, "tick": self._tick_count},
+            )
+        except Exception:
+            pass
 
         # Emit to UI
         if self.socketio:
