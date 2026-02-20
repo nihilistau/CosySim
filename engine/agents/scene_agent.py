@@ -60,30 +60,46 @@ class SceneAgent:
         """
         Run a one-shot task and return the LLM output.
 
+        Uses the LMStudio REST v1 API (``/v1/chat/completions``).
+        The model is auto-resolved from the currently loaded model list;
+        the configured ``llm.model`` is preferred if it is loaded.
+
         Args:
             task:       Instruction / prompt for the task.
-            tools:      Optional tool list for agentic sub-tasks.
+            tools:      Ignored when using the REST path.  Pass an MCP URL
+                        via ``lmstudio.cosysim_mcp_url`` in config for tool use.
             max_tokens: Soft token cap for the response.
 
         Returns:
             Response text, or empty string on failure.
         """
+        if tools:
+            logger.debug(
+                "SceneAgent.run: local tool callables are not supported on the REST path; "
+                "expose them via the CosySim MCP server and set lmstudio.cosysim_mcp_url"
+            )
         try:
-            import lmstudio as lms
-            llm = lms.llm(self.model) if self.model else lms.llm()
-            chat = lms.Chat(self.system_prompt)
-            chat.add_user_message(task)
+            from engine.lmstudio.client_v2 import get_lmstudio_client
+            client = get_lmstudio_client()
+            messages = [
+                {"role": "system", "content": self.system_prompt},
+                {"role": "user", "content": task},
+            ]
+            # Build integrations if MCP URL configured
+            integrations = None
+            mcp_url = self.config.get("lmstudio.cosysim_mcp_url", "")
+            if mcp_url:
+                from engine.lmstudio.client_v2 import MCP
+                integrations = [MCP.ephemeral(mcp_url)]
 
-            if tools:
-                result = llm.act(chat, tools)
-            else:
-                result = llm.respond(chat)
+            resp = client.chat(
+                messages,
+                model=self.model or None,
+                max_tokens=max_tokens,
+                integrations=integrations,
+            )
+            return resp.content.strip()
 
-            return str(result).strip()
-
-        except ImportError:
-            logger.error("lmstudio package not installed — SceneAgent requires it")
-            return ""
         except Exception as exc:
             logger.error("SceneAgent.run failed: %s", exc)
             return ""

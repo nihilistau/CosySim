@@ -209,7 +209,8 @@ class AgentLoop:
             f"- flirt/touch/kiss/cuddle/intimate: physical interaction with someone nearby\n"
             f"- idle: do nothing, observe\n"
         )
-
+
+
     def _location_activities(self, character_id: str) -> str:
         """Describe what activities are available at the character's location."""
         loc = self.scene_map.get_character_location(character_id)
@@ -289,25 +290,20 @@ class AgentLoop:
             except Exception:
                 pass
 
-        # Fallback: try direct OpenAI-compatible API call
+        # Fallback: no CharacterAgent registered — call REST v1 directly
         try:
-            import requests
-            resp = requests.post(
-                f"{self.llm_url}/chat/completions",
-                json={
-                    "model": "default",
-                    "messages": [
-                        {"role": "system", "content": system},
-                        {"role": "user", "content": context},
-                    ],
-                    "temperature": 0.9,
-                    "max_tokens": 200,
-                },
-                timeout=30,
+            from engine.lmstudio.client_v2 import get_lmstudio_client
+            client = get_lmstudio_client()
+            resp = client.chat(
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": context},
+                ],
+                temperature=0.9,
+                max_tokens=200,
             )
-            if resp.status_code == 200:
-                text = resp.json()["choices"][0]["message"]["content"]
-                return self._parse_decision(text)
+            if resp.content:
+                return self._parse_decision(resp.content)
         except Exception as e:
             logger.debug("LLM call failed: %s", e)
 

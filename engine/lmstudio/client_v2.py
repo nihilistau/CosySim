@@ -47,6 +47,9 @@ from typing import Any, Dict, Generator, List, Optional, Union
 
 import httpx
 
+# Model-resolution cache TTL (seconds) — avoids hitting /v1/models on every call
+_MODEL_CACHE_TTL = 30.0
+
 logger = logging.getLogger(__name__)
 
 try:
@@ -165,13 +168,17 @@ class LMStudioClient:
 
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
-        self._default_model = (config.get("llm.model", "qwen3-vl-8b") if config else "qwen3-vl-8b")#Knack
+        self._default_model = (config.get("llm.model", "") if config else "")
         self._default_temp = float(config.get("llm.temperature", 0.7) if config else 0.7)
         self._default_max_tokens = int(config.get("llm.max_tokens", 500) if config else 500)
         self._mcp_enabled = bool(config.get("lmstudio.mcp_enabled", True) if config else True)
 
         # Persistent httpx client for connection pooling
         self._client = httpx.Client(timeout=timeout)
+
+        # Resolved model cache {model_id, timestamp}
+        self._resolved_model: Optional[str] = None
+        self._resolved_at: float = 0.0
 
     def close(self):
         """Close the underlying HTTP client."""
@@ -204,6 +211,63 @@ class LMStudioClient:
         if models:
             return models[0].get("id")
         return None
+
+    def resolve_model(self, hint: Optional[str] = None) -> str:
+        """
+        Return the best model ID to use for a request.
+
+        Priority order:
+          1. ``hint`` if provided and present in the loaded models list
+          2. ``hint`` as-is if provided (model may be loaded by LMStudio on demand)
+          3. ``self._default_model`` from config if it matches a loaded model
+          4. First loaded model from ``/v1/models``
+          5. ``self._default_model`` from config as last resort
+          6. Empty string (LMStudio picks whatever is loaded)
+
+        Results are cached for ``_MODEL_CACHE_TTL`` seconds so the model
+        list is not polled on every single call.
+        """
+        now = time.monotonic()
+        # Return hint immediately if explicitly provided — caller knows what they want
+        if hint:
+            return hint
+
+        # Use cached resolution if still fresh
+        if self._resolved_model and (now - self._resolved_at) < _MODEL_CACHE_TTL:
+            return self._resolved_model
+
+        # Fetch currently loaded models
+        try:
+            models = self.get_models()
+        except Exception:
+            models = []
+
+        model_ids = [m.get("id", "") for m in models if m.get("id")]
+
+        # Prefer the configured default if it's actually loaded
+        if self._default_model and self._default_model in model_ids:
+            resolved = self._default_model
+        elif model_ids:
+            resolved = model_ids[0]
+            if self._default_model:
+                logger.info(
+                    "Configured model %r not loaded; using %r instead",
+                    self._default_model, resolved,
+                )
+        else:
+            # Nothing loaded yet — use config default and let LMStudio decide
+            resolved = self._default_model or ""
+            if resolved:
+                logger.debug("No model loaded; will send model=%r and hope LMStudio loads it", resolved)
+
+        self._resolved_model = resolved
+        self._resolved_at = now
+        return resolved
+
+    def invalidate_model_cache(self) -> None:
+        """Force the next call to resolve_model() to re-query /v1/models."""
+        self._resolved_at = 0.0
+        self._resolved_model = None
 
     # ── Chat (non-streaming) ──────────────────────────────────────────
 
@@ -433,8 +497,10 @@ class LMStudioClient:
         tools: Optional[List[Dict]] = None,
         stream: bool = False,
     ) -> Dict[str, Any]:
+        # Auto-resolve: pick the actually-loaded model; fallback to hint/config
+        resolved = self.resolve_model(model)
         payload: Dict[str, Any] = {
-            "model": model or self._default_model,
+            "model": resolved,
             "messages": messages,
             "temperature": temperature if temperature is not None else self._default_temp,
             "max_tokens": max_tokens if max_tokens is not None else self._default_max_tokens,

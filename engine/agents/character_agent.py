@@ -188,8 +188,12 @@ class CharacterAgent:
                 ec.log(
                     "llm_request",
                     actor=self.character.name,
-                    payload={"model": self.model, "use_tools": use_tools},
-                    summary=f"Requesting LLM reply (tools={use_tools})",
+                    payload={
+                        "model": self.model or "auto",
+                        "use_tools": use_tools,
+                        "path": "rest_v1",
+                    },
+                    summary=f"Requesting LLM reply via REST v1 (tools={use_tools})",
                     chain_id=chain_id,
                     character_id=self.character.id,
                 )
@@ -197,21 +201,25 @@ class CharacterAgent:
                 logger.debug("EventChain log llm_request failed", exc_info=True)
 
         # ── 5. LLM call ──────────────────────────────────────────────
+        # Primary path: LMStudio REST v1 (/v1/chat/completions).
+        # MCP tools are attached via the `integrations` field when
+        # lmstudio.cosysim_mcp_url is configured (see _reply_via_rest).
+        #
+        # Exception: if skill_packs are configured but no MCP URL is set
+        # we fall back to the SDK act() loop so local callables still work.
         reply_text = ""
+        have_mcp = bool(self.config.get("lmstudio.cosysim_mcp_url", "")) or bool(self.mcp_servers)
         try:
-            if self.use_mcp:
-                # REST API path with MCP integrations
+            if use_tools and self.skill_packs and not have_mcp:
+                # Tools requested but no MCP URL — use SDK act() for tool loop
+                llm_handle = self._get_llm()
+                tools = self._get_tools()
+                reply_text = self._act(llm_handle, chat, tools, chain_id=chain_id)
+            else:
+                # REST v1 path — MCP handles tools if cosysim_mcp_url is configured
                 reply_text = self._reply_via_rest(
                     system_prompt, user_message, history, chain_id=chain_id
                 )
-            else:
-                # SDK path (original)
-                llm_handle = self._get_llm()
-                if use_tools and self.skill_packs:
-                    tools = self._get_tools()
-                    reply_text = self._act(llm_handle, chat, tools, chain_id=chain_id)
-                else:
-                    reply_text = self._complete(llm_handle, chat)
 
         except Exception as exc:
             logger.error("LLM call failed: %s", exc)
