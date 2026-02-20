@@ -6,15 +6,17 @@ Concrete interceptors for the ``InterceptorPipeline``.  Each one focuses on
 a single concern and composes cleanly with the others.
 
 Execution order (by priority):
-  10  RouterMessageInjector   — inject inbox messages from other agents
-  20  AutoResultInjector      — inject auto-skill results into system prompt
-  30  SkillAwarenessInterceptor — build the "available skills" list for the LLM
-  40  GameRulesInterceptor    — inject game-specific rules and required tools
-  50  PersonalityGuardInterceptor — add in-character reminders and tone guidance
-  60  PolicyEnforcerInterceptor   — enforce reply length, forbidden topics
-  70  MemoryEnhancerInterceptor   — augment context with extra RAG results
-  80  ResponseShaperInterceptor   — post-call: trim/reshape reply to match policy
-  90  ActivityLoggerInterceptor   — post-call: log final reply to EventChain
+  10  RouterMessageInjector        — inject inbox messages from other agents
+  15  BedroomSceneInterceptor      — inject wardrobe/stats/narrative for bedroom scene
+  15  PhoneSceneInterceptor        — inject conversation heat/stats for phone scene
+  20  AutoResultInjector           — inject auto-skill results into system prompt
+  30  SkillAwarenessInterceptor    — build the "available skills" list for the LLM
+  40  GameRulesInterceptor         — inject game-specific rules and required tools
+  50  PersonalityGuardInterceptor  — add in-character reminders and tone guidance
+  60  PolicyEnforcerInterceptor    — enforce reply length, forbidden topics
+  70  MemoryEnhancerInterceptor    — augment context with extra RAG results
+  80  ResponseShaperInterceptor    — post-call: trim/reshape reply to match policy
+  90  ActivityLoggerInterceptor    — post-call: log final reply to EventChain
 
 Adding your own::
 
@@ -390,3 +392,184 @@ class ActivityLoggerInterceptor(InterceptorBase):
                 )
         except Exception as exc:
             logger.debug("ActivityLoggerInterceptor failed: %s", exc)
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  BedroomSceneInterceptor  (priority 15)
+# ══════════════════════════════════════════════════════════════════════
+
+class BedroomSceneInterceptor(InterceptorBase):
+    """
+    Pre-call: loads full bedroom scene snapshot and injects wardrobe state,
+    emotional/physical stats, and recent narrative into the system prompt.
+
+    Runs at priority 15 (after RouterMessageInjector, before AutoResultInjector)
+    so that downstream interceptors can see the snapshot.
+
+    Snapshot is stored in ctx["extra"]["scene_snapshot"] for other interceptors.
+    """
+    name     = "bedroom_scene"
+    priority = 15
+
+    # ------------------------------------------------------------------ pre
+    def pre_call(self, ctx: ResponseContext) -> None:  # noqa: D401
+        scene = ctx.get("scene", "")
+        if scene != "bedroom":
+            return
+
+        agent_id  = ctx.get("agent_id", "")
+        scene_id  = ctx.get("scene_id") or ctx.get("room_id") or "bedroom"
+        char_ids: List[str] = ctx.get("character_ids") or ([agent_id] if agent_id else [])
+
+        try:
+            from engine.mcp.scene_state import get_scene_state_manager
+            ssm = get_scene_state_manager()
+
+            # ── wardrobe summary ────────────────────────────────────────────
+            wardrobe_lines: list[str] = []
+            for cid in char_ids:
+                wd = ssm.get_wardrobe(cid)
+                coverage = wd.coverage_description() if wd else "unknown"
+                worn = [i.name for i in wd.worn_items()] if wd else []
+                label = cid if cid != agent_id else "YOU"
+                wardrobe_lines.append(
+                    f"  {label}: {coverage} | wearing: {', '.join(worn) or 'nothing'}"
+                )
+
+            # ── stats summary ────────────────────────────────────────────────
+            stats_lines: list[str] = []
+            for cid in char_ids:
+                snap = ssm.get_stats(cid)
+                if snap:
+                    label = cid if cid != agent_id else "YOU"
+                    stats_lines.append(
+                        f"  {label}: {snap.emotional_state_text()} "
+                        f"(arousal={snap.arousal:.0f}, mood={snap.happiness:.0f}, "
+                        f"openness={snap.openness:.0f})"
+                    )
+
+            # ── recent narrative ─────────────────────────────────────────────
+            narrative = ssm.get_narrative(scene_id, limit=8)
+            narrative_block = "\n".join(f"  • {e}" for e in narrative) if narrative else "  (scene just started)"
+
+            # ── atmosphere ───────────────────────────────────────────────────
+            atm = ssm.get_atmosphere(scene_id)
+            atm_text = ""
+            if atm:
+                parts = []
+                if atm.get("lighting"):  parts.append(f"lighting={atm['lighting']}")
+                if atm.get("mood"):      parts.append(f"mood={atm['mood']}")
+                if atm.get("music"):     parts.append(f"music={atm['music']}")
+                atm_text = f"\nAtmosphere: {', '.join(parts)}" if parts else ""
+
+            # ── inject into system prompt ────────────────────────────────────
+            injection = (
+                "\n\n--- BEDROOM SCENE STATE ---"
+                f"{atm_text}"
+                "\nClothing:"
+                + ("\n" + "\n".join(wardrobe_lines) if wardrobe_lines else " (no data)")
+                + "\nEmotional state:"
+                + ("\n" + "\n".join(stats_lines) if stats_lines else " (no data)")
+                + "\nRecent events:"
+                + "\n" + narrative_block
+                + "\n--- END SCENE STATE ---"
+            )
+            ctx["system_prompt"] = ctx.get("system_prompt", "") + injection
+
+            # ── store for downstream ─────────────────────────────────────────
+            extra = ctx.setdefault("extra", {})
+            extra["scene_snapshot"] = {
+                "scene_id"         : scene_id,
+                "character_ids"    : char_ids,
+                "wardrobe_lines"   : wardrobe_lines,
+                "stats_lines"      : stats_lines,
+                "recent_narrative" : narrative,
+                "atmosphere"       : atm or {},
+            }
+
+        except Exception as exc:
+            logger.debug("BedroomSceneInterceptor pre_call failed: %s", exc)
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  PhoneSceneInterceptor  (priority 15)
+# ══════════════════════════════════════════════════════════════════════
+
+class PhoneSceneInterceptor(InterceptorBase):
+    """
+    Pre-call: injects conversation heat (arousal, mood) and stat-driven
+    behavioural cues into the phone-scene system prompt so agent texting
+    feels authentic and evolves with the conversation.
+
+    Also injects a one-line "current vibe" hint if stats are elevated.
+    """
+    name     = "phone_scene"
+    priority = 15
+
+    # Vibe hints keyed by (arousal_bucket, openness_bucket)
+    _VIBE_HINTS: Dict[tuple, str] = {
+        ("high", "high")  : "You are intensely engaged — flirty, forward, a little breathless.",
+        ("high", "mid")   : "You feel the heat rising but still hold a hint of playful restraint.",
+        ("high", "low")   : "You're aroused but guarded — mixed feelings, simmering tension.",
+        ("mid",  "high")  : "You're comfortable and warm, happy to lean into wherever this goes.",
+        ("mid",  "mid")   : "You're your usual self — curious, a little flirty, easy.",
+        ("mid",  "low")   : "You're present but not open to anything too intense right now.",
+        ("low",  "high")  : "You're relaxed, maybe a bit bored, easily amused.",
+        ("low",  "mid")   : "You're calm and composed, replying at your own pace.",
+        ("low",  "low")   : "You feel a bit flat today — short replies, guarded.",
+    }
+
+    @staticmethod
+    def _bucket(val: float) -> str:
+        if val >= 65:
+            return "high"
+        if val >= 35:
+            return "mid"
+        return "low"
+
+    def pre_call(self, ctx: ResponseContext) -> None:
+        scene = ctx.get("scene", "")
+        if scene != "phone":
+            return
+
+        agent_id = ctx.get("agent_id", "")
+        scene_id = ctx.get("scene_id") or ctx.get("room_id") or "phone"
+
+        try:
+            from engine.mcp.scene_state import get_scene_state_manager
+            ssm = get_scene_state_manager()
+
+            snap = ssm.get_stats(agent_id) if agent_id else None
+            narrative = ssm.get_narrative(scene_id, limit=6)
+
+            lines: List[str] = []
+
+            if snap:
+                a_bucket = self._bucket(snap.arousal)
+                o_bucket = self._bucket(snap.openness)
+                vibe = self._VIBE_HINTS.get((a_bucket, o_bucket), "")
+                if vibe:
+                    lines.append(f"Current vibe: {vibe}")
+                lines.append(
+                    f"Your stats: arousal={snap.arousal:.0f}, happiness={snap.happiness:.0f}, "
+                    f"openness={snap.openness:.0f}, affection={snap.affection:.0f}"
+                )
+
+            if narrative:
+                narr_block = " | ".join(narrative[-4:])
+                lines.append(f"Recent conversation context: {narr_block}")
+
+            if lines:
+                injection = "\n\n[PHONE SCENE CONTEXT]\n" + "\n".join(lines) + "\n[/PHONE SCENE CONTEXT]"
+                ctx["system_prompt"] = ctx.get("system_prompt", "") + injection
+
+            # store for downstream
+            extra = ctx.setdefault("extra", {})
+            extra["scene_snapshot"] = {
+                "scene_id"         : scene_id,
+                "stats"            : snap.__dict__ if snap else {},
+                "recent_narrative" : narrative,
+            }
+
+        except Exception as exc:
+            logger.debug("PhoneSceneInterceptor pre_call failed: %s", exc)

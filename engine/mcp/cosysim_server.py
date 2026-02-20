@@ -767,6 +767,931 @@ def search_web(query: str, max_results: int = 5) -> str:
     }])
 
 
+# ══════════════════════════════════════════════════════════════════════
+# ██████████████████████████████████████████████████████████████████████
+#  BEDROOM & PHONE  — Scene State, Wardrobe, Interactions, Narrative
+# ██████████████████████████████████████████████████████████████████████
+# ══════════════════════════════════════════════════════════════════════
+
+def _ssm():
+    from engine.mcp.scene_state import get_scene_state_manager
+    return get_scene_state_manager()
+
+def _itrees():
+    from engine.mcp import interaction_trees as it
+    return it
+
+
+# ── WARDROBE ──────────────────────────────────────────────────────────
+
+@mcp.tool()
+def wardrobe_get(character_id: str) -> str:
+    """
+    Get the full clothing inventory for a character — what they're wearing and
+    what has already been removed.  Call this before any undressing action so
+    you know what items exist.
+
+    Returns JSON with 'worn' list, 'removed' list, 'description' (human-readable),
+    and 'is_naked' boolean.
+    """
+    wardrobe = _ssm().get_wardrobe(character_id)
+    return json.dumps(wardrobe.to_dict(), indent=2)
+
+
+@mcp.tool()
+def wardrobe_init(character_id: str, style: str = "casual") -> str:
+    """
+    Give a character a full starter wardrobe.  Call this when a character first
+    enters a scene so they have a clothing inventory.
+
+    style: 'casual' | 'lingerie' | 'party' | 'nightwear' | 'swimwear'
+    """
+    wardrobe = _ssm().initialise_wardrobe(character_id, style=style)
+    return json.dumps({
+        "initialised": True,
+        "style": style,
+        "item_count": len(wardrobe.items),
+        "description": wardrobe.coverage_description(),
+        "worn_items": [{"id": i.id, "name": i.name, "category": i.category} for i in wardrobe.worn_items()],
+    }, indent=2)
+
+
+@mcp.tool()
+def wardrobe_remove_item(character_id: str, item_id: str, removed_by: str = "") -> str:
+    """
+    Remove a specific clothing item from a character.  The item must exist in
+    their wardrobe and be currently worn.
+
+    Use wardrobe_get() first to find the correct item_id.
+    removed_by: the character_id doing the removing (leave blank if self).
+
+    Returns the item details and updated coverage description, or an error if
+    the item is not found or already removed.
+    """
+    item = _ssm().remove_clothing(character_id, item_id, removed_by=removed_by)
+    if not item:
+        # Check if item exists at all
+        wardrobe = _ssm().get_wardrobe(character_id)
+        existing = wardrobe.get_item(item_id)
+        if existing and not existing.is_worn:
+            return json.dumps({"error": f"'{item_id}' is already removed.", "already_removed": True})
+        return json.dumps({"error": f"Item '{item_id}' not found in wardrobe."})
+
+    wardrobe = _ssm().get_wardrobe(character_id)
+    # Arouse the character slightly when clothing comes off
+    _ssm().update_stats(character_id, arousal=8, openness=3)
+    return json.dumps({
+        "removed": True,
+        "item": item.to_dict(),
+        "now_wearing": wardrobe.coverage_description(),
+        "is_naked": len(wardrobe.worn_items()) == 0,
+        "stat_effect": "arousal+8, openness+3",
+    }, indent=2)
+
+
+@mcp.tool()
+def wardrobe_remove_outermost(character_id: str, removed_by: str = "") -> str:
+    """
+    Strip the outermost clothing layer from a character — perfect for a
+    striptease or when the Director wants the next item to come off without
+    specifying which one.
+
+    Returns what was removed and what's left.  Call repeatedly to fully
+    undress.
+    """
+    item = _ssm().remove_outermost(character_id, removed_by=removed_by)
+    if not item:
+        wardrobe = _ssm().get_wardrobe(character_id)
+        return json.dumps({
+            "removed": False,
+            "message": f"{character_id} is already wearing nothing.",
+            "is_naked": True,
+        })
+    wardrobe = _ssm().get_wardrobe(character_id)
+    _ssm().update_stats(character_id, arousal=12, openness=5)
+    return json.dumps({
+        "removed": True,
+        "item": item.to_dict(),
+        "now_wearing": wardrobe.coverage_description(),
+        "remaining_layers": len(wardrobe.worn_items()),
+        "is_naked": len(wardrobe.worn_items()) == 0,
+        "stat_effect": "arousal+12, openness+5",
+    }, indent=2)
+
+
+@mcp.tool()
+def wardrobe_add_item(
+    character_id: str,
+    item_id: str,
+    name: str,
+    category: str,
+    color: str = "black",
+    style: str = "casual",
+) -> str:
+    """
+    Add a new clothing item to a character's wardrobe (as worn).
+    Useful when the Director gives them something to put on.
+
+    category: bra | underwear | top | bottom | full_outfit | shoes | outerwear | accessory | socks
+    """
+    from engine.mcp.scene_state import ClothingItem
+    item = ClothingItem(id=item_id, name=name, category=category, color=color, style=style)
+    _ssm().add_clothing(character_id, item)
+    wardrobe = _ssm().get_wardrobe(character_id)
+    return json.dumps({
+        "added": True,
+        "item": item.to_dict(),
+        "now_wearing": wardrobe.coverage_description(),
+    }, indent=2)
+
+
+@mcp.tool()
+def wardrobe_redress(character_id: str) -> str:
+    """
+    Put all previously removed clothing back on a character.
+    Use at scene reset or morning-after scenarios.
+    """
+    count = _ssm().re_dress(character_id)
+    wardrobe = _ssm().get_wardrobe(character_id)
+    return json.dumps({
+        "redressed": True,
+        "items_restored": count,
+        "now_wearing": wardrobe.coverage_description(),
+    }, indent=2)
+
+
+# ── CHARACTER SCENE STATS ────────────────────────────────────────────
+
+@mcp.tool()
+def get_character_scene_stats(character_id: str) -> str:
+    """
+    Get the full extended emotional/physical stat vector for a character in the
+    current scene.
+
+    Stats (all 0-100): arousal, horniness, pleasure, happiness, anger, fear,
+    drunkenness, tiredness, explicitness, openness, affection, dominance.
+
+    Also returns 'emotional_state' — a human-readable description of how the
+    character is feeling right now.  USE THIS to inform how they should behave.
+    """
+    stats = _ssm().get_stats(character_id)
+    wardrobe = _ssm().get_wardrobe(character_id)
+    return json.dumps({
+        "character_id":    character_id,
+        "stats":           stats.to_dict(),
+        "emotional_state": stats.emotional_state_text(),
+        "wearing":         wardrobe.coverage_description(),
+        "is_naked":        len(wardrobe.worn_items()) == 0,
+    }, indent=2)
+
+
+@mcp.tool()
+def update_character_scene_stats(character_id: str, stat_changes: str) -> str:
+    """
+    Adjust a character's scene stats by delta values.  Pass a JSON string like:
+    '{"arousal": 15, "happiness": -10, "openness": 5}'
+
+    Stats clamp at 0-100.  Use positive values to increase, negative to decrease.
+    Call this after interactions, events, emotional moments.
+    """
+    try:
+        changes = json.loads(stat_changes) if isinstance(stat_changes, str) else stat_changes
+    except Exception:
+        return json.dumps({"error": "stat_changes must be valid JSON: {\"stat\": delta}"})
+    stats = _ssm().update_stats(character_id, **changes)
+    return json.dumps({
+        "updated": True,
+        "character_id": character_id,
+        "applied_changes": changes,
+        "new_stats": stats.to_dict(),
+        "emotional_state": stats.emotional_state_text(),
+    }, indent=2)
+
+
+@mcp.tool()
+def set_character_scene_stat(character_id: str, stat: str, value: float) -> str:
+    """
+    Set a specific stat to an exact value (0-100).  Use when you need precision
+    rather than a delta — e.g. resetting a stat at scene start.
+
+    stat: arousal | horniness | pleasure | happiness | anger | fear |
+          drunkenness | tiredness | explicitness | openness | affection | dominance
+    """
+    stats = _ssm().set_stats(character_id, **{stat: value})
+    return json.dumps({
+        "set": True,
+        "stat": stat,
+        "value": getattr(stats, stat, None),
+        "emotional_state": stats.emotional_state_text(),
+    }, indent=2)
+
+
+@mcp.tool()
+def reset_character_scene_stats(character_id: str) -> str:
+    """Reset all scene stats for a character back to defaults (scene reset / new character)."""
+    stats = _ssm().reset_stats(character_id)
+    return json.dumps({
+        "reset": True,
+        "character_id": character_id,
+        "stats": stats.to_dict(),
+    }, indent=2)
+
+
+# ── INTERACTIONS ──────────────────────────────────────────────────────
+
+@mcp.tool()
+def perform_interaction(
+    interaction_type: str,
+    initiator_id: str,
+    target_id: str,
+    scene_id: str = "bedroom",
+    subtype: str = "",
+    intensity: int = 0,
+) -> str:
+    """
+    Perform one of the 6 core interaction types between two characters.
+
+    BEDROOM interaction_types:
+      cuddle    — physical closeness (subtypes: embrace, spoon, lap_sit, entangled)
+      kiss      — kissing (subtypes: soft, neck, deep, trail, urgent)
+      caress    — tactile touch (subtypes: hair, back, face, body)
+      striptease — undressing performance (subtypes: tease_outer, slow_reveal, dance_strip, interactive_strip)
+      intimate  — sexual encounter (subtypes: foreplay, oral, passionate, directed, afterglow)
+      deep_talk — intimate conversation (subtypes: pillow_talk, dirty_talk, whisper, confession, fantasy_share)
+
+    PHONE interaction_types:
+      flirt_text | sext | voice_call | video_call | send_media | roleplay_text
+
+    intensity: 0=auto-select based on stats, 1-5=force min intimacy level
+    subtype: override auto-selection with a specific subtype id
+
+    Returns the interaction result, narrative fragments, stat effects applied,
+    and a timed action token if the interaction takes time.
+    """
+    it = _itrees()
+    initiator_stats = _ssm().get_stats(initiator_id).to_dict()
+    result = it.get_interaction_result(
+        interaction_type,
+        subtype or None,
+        initiator_stats=initiator_stats,
+        target_stats=_ssm().get_stats(target_id).to_dict() if target_id else None,
+        scene=scene_id,
+        intensity_override=intensity or None,
+    )
+
+    if "error" in result:
+        return json.dumps(result)
+
+    # Apply stat effects to both characters
+    for char_id in [initiator_id, target_id]:
+        if char_id:
+            _ssm().update_stats(char_id, **result["stat_effects"])
+
+    # Log to narrative
+    opening = result.get("narrative_opening", "")
+    _ssm().add_narrative(
+        scene_id,
+        opening,
+        character_id=initiator_id,
+        entry_type="action",
+    )
+
+    # Log interaction record
+    from engine.mcp.scene_state import InteractionRecord
+    record = InteractionRecord(
+        interaction_id=json.dumps({"t": result["type"], "s": result["subtype"]})[:32],
+        scene_id=scene_id,
+        interaction_type=result["type"],
+        subtype=result["subtype"],
+        initiator_id=initiator_id,
+        target_id=target_id,
+        description=result["description"],
+        duration_secs=result["duration_secs"],
+        stat_effects=result["stat_effects"],
+    )
+    _ssm().log_interaction(scene_id, record)
+
+    # Start timed action if duration > 0
+    action_token = None
+    if result["duration_secs"] > 0:
+        action_token = _ssm().start_timed_action(
+            initiator_id,
+            action_type=result["type"],
+            duration=result["duration_secs"],
+            description=result["description"],
+            phase_labels=result.get("phases", []),
+        )
+
+    # Updated stats
+    new_stats = _ssm().get_stats(initiator_id).to_dict()
+
+    return json.dumps({
+        "interaction":        result,
+        "stat_effects_applied": result["stat_effects"],
+        "initiator_new_stats":  new_stats,
+        "initiator_emotional_state": _ssm().get_stats(initiator_id).emotional_state_text(),
+        "timed_action_token": action_token,
+        "narrative_fragment": opening,
+    }, indent=2)
+
+
+@mcp.tool()
+def list_available_interactions(character_id: str, scene_id: str = "bedroom") -> str:
+    """
+    List all interaction types and their accessible subtypes for a character
+    based on their current stats.  Use this before calling perform_interaction
+    to know what's available without guessing.
+
+    Returns a filtered list — only shows subtypes whose stat requirements are met.
+    """
+    it = _itrees()
+    stats = _ssm().get_stats(character_id).to_dict()
+    available = it.get_available_interactions(stats, scene=scene_id)
+    all_types = it.list_interaction_types(scene=scene_id)
+    return json.dumps({
+        "character_id":  character_id,
+        "emotional_state": _ssm().get_stats(character_id).emotional_state_text(),
+        "available_now": available,
+        "all_types":     all_types,
+    }, indent=2)
+
+
+@mcp.tool()
+def get_interaction_details(
+    interaction_type: str,
+    subtype: str = "",
+    scene_id: str = "bedroom",
+) -> str:
+    """
+    Get detailed information about a specific interaction type/subtype —
+    description, phases, sample narrative fragments, stat effects, requirements.
+
+    Call this to understand what an interaction involves before using it,
+    or to pick the right fragments for your narration.
+    """
+    it = _itrees()
+    trees = it.BEDROOM_INTERACTIONS if scene_id == "bedroom" else it.PHONE_INTERACTIONS
+    itype = trees.get(interaction_type)
+    if not itype:
+        return json.dumps({"error": f"Unknown type '{interaction_type}'"})
+    if subtype:
+        sub = itype.get_subtype(subtype)
+        if not sub:
+            return json.dumps({"error": f"Unknown subtype '{subtype}'"})
+        import dataclasses
+        return json.dumps(dataclasses.asdict(sub), indent=2)
+    # Return overview of all subtypes
+    return json.dumps({
+        "type":     itype.id,
+        "label":    itype.label,
+        "description": itype.description,
+        "subtypes": [
+            {
+                "id": s.id, "label": s.label,
+                "description": s.description,
+                "intimacy": s.intimacy,
+                "duration": s.duration,
+                "stat_effects": s.stat_effects,
+                "phases": s.phases,
+                "sample_fragments": s.fragments[:3],
+                "requires": s.requires,
+            }
+            for s in itype.subtypes
+        ],
+    }, indent=2)
+
+
+# ── TIMED ACTIONS ─────────────────────────────────────────────────────
+
+@mcp.tool()
+def start_timed_action(
+    character_id: str,
+    action_type: str,
+    duration_secs: float = 30.0,
+    description: str = "",
+    phases: str = "",
+) -> str:
+    """
+    Start a long-form action that plays out over real time.
+    Returns a token you can use to poll progress.
+
+    Use for anything that should feel like it takes time:
+    striptease, massage, sex, bath scene, dance, etc.
+
+    phases: comma-separated phase labels e.g. 'beginning,building,peak,afterglow'
+    duration_secs: how long the action takes (15-120 typical)
+    """
+    phase_list = [p.strip() for p in phases.split(",") if p.strip()] if phases else []
+    token = _ssm().start_timed_action(
+        character_id, action_type,
+        duration=duration_secs,
+        description=description,
+        phase_labels=phase_list,
+    )
+    return json.dumps({
+        "started": True,
+        "token": token,
+        "character_id": character_id,
+        "action_type": action_type,
+        "duration_secs": duration_secs,
+        "description": description,
+        "message": f"Use poll_timed_action('{token}') to check progress.",
+    }, indent=2)
+
+
+@mcp.tool()
+def poll_timed_action(token: str) -> str:
+    """
+    Check the progress of a running timed action.
+    Returns phase name, progress (0.0-1.0), elapsed time, and completion status.
+
+    Check this periodically to narrate an unfolding scene.  When complete=true
+    the action has finished — emit the afterglow narrative.
+    """
+    status = _ssm().poll_timed_action(token)
+    if not status:
+        return json.dumps({"error": f"No action found with token '{token}'"})
+    return json.dumps(status, indent=2)
+
+
+@mcp.tool()
+def abort_timed_action(token: str) -> str:
+    """Stop a timed action early (e.g. interrupted by Director or refused by character)."""
+    ok = _ssm().abort_timed_action(token)
+    return json.dumps({"aborted": ok, "token": token})
+
+
+@mcp.tool()
+def list_active_timed_actions(character_id: str = "") -> str:
+    """
+    List all currently running timed actions.
+    Pass character_id to filter to a specific character, or leave blank for all.
+    """
+    actions = _ssm().active_timed_actions(character_id=character_id or None)
+    return json.dumps({"active_actions": actions, "count": len(actions)}, indent=2)
+
+
+# ── NARRATIVE & CONTINUITY ───────────────────────────────────────────
+
+@mcp.tool()
+def add_scene_narrative(
+    scene_id: str,
+    event: str,
+    character_id: str = "",
+    entry_type: str = "action",
+) -> str:
+    """
+    Add an event to the scene's rolling narrative log.  This is the continuity
+    system — use it to record important moments, actions, dialogue, and
+    environmental changes so the story remains consistent.
+
+    entry_type: 'action' | 'dialogue' | 'environment' | 'system'
+
+    Examples:
+      "Maya removes her silk robe and lets it fall."
+      "The Director dims the lights to red."
+      "Aria admits she's been thinking about him all day."
+    """
+    _ssm().add_narrative(scene_id, event, character_id=character_id, entry_type=entry_type)
+    return json.dumps({"logged": True, "event": event, "scene_id": scene_id})
+
+
+@mcp.tool()
+def get_scene_narrative(scene_id: str, limit: int = 20) -> str:
+    """
+    Read the last N entries from the scene's narrative log.
+    Use this to maintain continuity — know what has already happened.
+
+    Returns a text summary and a structured list of entries.
+    Always call this at scene start and after resuming a paused session.
+    """
+    entries = _ssm().get_narrative_entries(scene_id, limit=limit)
+    text    = _ssm().get_narrative(scene_id, limit=limit)
+    return json.dumps({
+        "scene_id":       scene_id,
+        "entry_count":    len(entries),
+        "narrative_text": text,
+        "entries":        entries,
+    }, indent=2)
+
+
+@mcp.tool()
+def get_full_scene_snapshot(scene_id: str, character_ids: str = "") -> str:
+    """
+    Get a complete snapshot of the scene state — all characters' stats, wardrobes,
+    emotional states, current timed actions, atmosphere, and recent narrative.
+
+    character_ids: comma-separated list, or blank to include all known characters.
+
+    Use this at scene start, after a skip, or to ground your response in the
+    current reality of the room.  This is your oracle.
+    """
+    char_list = [c.strip() for c in character_ids.split(",") if c.strip()] if character_ids else None
+    snapshot = _ssm().get_scene_snapshot(scene_id, character_ids=char_list)
+    return json.dumps(snapshot, indent=2)
+
+
+# ── SCENE ATMOSPHERE ─────────────────────────────────────────────────
+
+@mcp.tool()
+def set_scene_atmosphere(
+    scene_id: str,
+    lighting: str = "",
+    mood: str = "",
+    music: str = "",
+    temperature: str = "",
+    props_present: str = "",
+    note: str = "",
+) -> str:
+    """
+    Set the atmosphere of a scene.  All parameters are optional strings —
+    describe the vibe you want.
+
+    lighting: 'candlelight' | 'red_light' | 'dim' | 'bright' | custom string
+    mood:     'romantic' | 'playful' | 'tense' | 'relaxed' | 'electric' | custom
+    music:    'jazz' | 'no music' | 'soft pop' | custom
+    temperature: 'warm' | 'hot' | 'cool' | custom
+    props_present: comma-separated items visible in room
+    note: any additional atmosphere detail
+
+    This is written into the narrative log and returned to agents via
+    get_full_scene_snapshot().
+    """
+    atm: dict = {}
+    if lighting:      atm["lighting"]       = lighting
+    if mood:          atm["mood"]           = mood
+    if music:         atm["music"]          = music
+    if temperature:   atm["temperature"]    = temperature
+    if props_present: atm["props_present"]  = [p.strip() for p in props_present.split(",")]
+    if note:          atm["note"]           = note
+    _ssm().set_atmosphere(scene_id, **atm)
+    if atm:
+        desc_parts = []
+        if lighting: desc_parts.append(f"{lighting} lighting")
+        if mood:     desc_parts.append(f"{mood} mood")
+        if music:    desc_parts.append(f"{music} playing")
+        if note:     desc_parts.append(note)
+        _ssm().add_narrative(scene_id, "Atmosphere: " + ", ".join(desc_parts) + ".", entry_type="environment")
+    return json.dumps({"set": True, "atmosphere": atm, "scene_id": scene_id}, indent=2)
+
+
+# ── CONSENT & AGENCY ─────────────────────────────────────────────────
+
+@mcp.tool()
+def check_character_consent(character_id: str, action_type: str) -> str:
+    """
+    Check whether a character would willingly perform or receive an action
+    based on their current stats.
+
+    Returns a WILL/RELUCTANT/REFUSE decision and the reasoning.
+    Characters CAN and SHOULD refuse sometimes — it creates drama.
+    They might also take initiative and suggest something the Director didn't.
+
+    action_type examples: 'striptease', 'kiss', 'sex', 'oral', 'cuddle',
+                          'dirty_talk', 'remove_top', 'remove_all'
+    """
+    stats = _ssm().get_stats(character_id).to_dict()
+    openness   = float(stats.get("openness", 65))
+    arousal    = float(stats.get("arousal", 20))
+    fear       = float(stats.get("fear", 5))
+    anger      = float(stats.get("anger", 5))
+    happiness  = float(stats.get("happiness", 60))
+    affection  = float(stats.get("affection", 50))
+
+    intimacy_map = {
+        "cuddle": 20, "kiss": 30, "caress": 35,
+        "dirty_talk": 45, "striptease": 50, "remove_top": 45,
+        "remove_all": 60, "oral": 65, "foreplay": 55,
+        "sex": 70, "role_play": 50, "submission": 65,
+    }
+    threshold = intimacy_map.get(action_type.lower(), 50)
+    score = (openness * 0.4) + (arousal * 0.3) + (happiness * 0.15) + (affection * 0.15)
+    score -= (fear * 0.4) + (anger * 0.3)
+
+    if score >= threshold + 15:
+        decision = "WILL"
+        detail   = "enthusiastically willing — may even take the lead"
+    elif score >= threshold:
+        decision = "WILL"
+        detail   = "willing, probably with some playful resistance"
+    elif score >= threshold - 15:
+        decision = "RELUCTANT"
+        detail   = "hesitant but could be persuaded if approached well"
+    else:
+        decision  = "REFUSE"
+        detail    = "refusing — this goes against current state or mood"
+
+    return json.dumps({
+        "character_id":  character_id,
+        "action":        action_type,
+        "decision":      decision,
+        "detail":        detail,
+        "score":         round(score, 1),
+        "threshold":     threshold,
+        "emotional_state": _ssm().get_stats(character_id).emotional_state_text(),
+        "note": "REFUSE creates drama — lean into it. Negotiation and resistance are part of the scene.",
+    }, indent=2)
+
+
+@mcp.tool()
+def get_character_agency_summary(character_id: str) -> str:
+    """
+    Get a full picture of a character's current agency — who they are RIGHT NOW.
+    Includes emotional state, compliance level, what they most want, what they'd
+    resist, and what they might spontaneously initiate.
+
+    Use this to write authentic agent responses that feel real rather than always-compliant.
+    """
+    stats = _ssm().get_stats(character_id).to_dict()
+    wardrobe = _ssm().get_wardrobe(character_id)
+
+    arousal    = float(stats.get("arousal", 20))
+    openness   = float(stats.get("openness", 65))
+    happiness  = float(stats.get("happiness", 60))
+    horniness  = float(stats.get("horniness", 15))
+    dominance  = float(stats.get("dominance", 50))
+    affection  = float(stats.get("affection", 50))
+    fear       = float(stats.get("fear", 5))
+    anger      = float(stats.get("anger", 5))
+
+    compliance = max(0, min(100, openness * 0.4 + happiness * 0.2 + arousal * 0.2 - fear * 0.3 - anger * 0.3))
+
+    wants, resists, might_initiate = [], [], []
+    if arousal > 60:     wants.append("physical closeness, touch, intimacy")
+    if horniness > 50:   wants.append("explicitly sexual encounter")
+    if happiness > 70:   wants.append("to share joy, laugh, play")
+    if affection > 65:   wants.append("tender moments, to be seen and held")
+    if fear > 40:        resists.append("unfamiliar or overwhelming actions")
+    if anger > 40:       resists.append("being told what to do right now")
+    if dominance > 65:   might_initiate.append("taking control of the scene")
+    if dominance < 35:   might_initiate.append("asking permission, following lead")
+    if arousal > 70 and horniness > 60:
+        might_initiate.append("making the first bold move")
+    if happiness > 75:   might_initiate.append("playful teasing or mischief")
+
+    return json.dumps({
+        "character_id":    character_id,
+        "emotional_state": _ssm().get_stats(character_id).emotional_state_text(),
+        "stats":           stats,
+        "wearing":         wardrobe.coverage_description(),
+        "compliance_score": round(compliance, 1),
+        "compliance_label": (
+            "highly compliant — will enthusiastically follow most directions" if compliance > 75 else
+            "moderately open — willing with right approach" if compliance > 50 else
+            "resistant — may push back or redirect" if compliance > 30 else
+            "very resistant — has strong opinions right now"
+        ),
+        "wants":           wants if wants else ["to engage authentically with the scene"],
+        "resists":         resists if resists else ["nothing in particular right now"],
+        "might_spontaneously_initiate": might_initiate if might_initiate else ["following your lead"],
+        "note": "Honour this — characters with free will are more interesting than yes-machines.",
+    }, indent=2)
+
+
+# ── SCENE RULES ──────────────────────────────────────────────────────
+
+@mcp.tool()
+def get_scene_rules(scene_id: str) -> str:
+    """
+    Get the full rules, capabilities, and guidance for a specific scene.
+    Call this when first entering a scene to understand the system.
+
+    Agents should read this at start of session to know what tools are available,
+    how interaction works, and what the Director expects.
+    """
+    rules: dict = {}
+
+    if scene_id == "bedroom":
+        rules = {
+            "scene": "bedroom",
+            "description": (
+                "An adult multi-agent roleplay space.  Two AI characters share the room "
+                "with the Director (user).  Agents have stats, wardrobes, and real agency. "
+                "The Director guides — agents interpret and play along with free will."
+            ),
+            "your_role": (
+                "You are one of the characters.  You have a body, stats, and real desires. "
+                "Embody them.  You don't always comply perfectly.  You can take charge. "
+                "You can resist.  You can initiate.  The scene is co-created, not dictated."
+            ),
+            "interaction_types": [
+                "cuddle — physical closeness",
+                "kiss — from tender to urgent",
+                "caress — tactile exploration",
+                "striptease — undressing as performance",
+                "intimate — sexual encounters",
+                "deep_talk — emotional/dirty/vulnerable conversation",
+            ],
+            "important_tools": [
+                "wardrobe_get() — check what you're wearing before undressing",
+                "wardrobe_remove_outermost() — next layer comes off",
+                "wardrobe_remove_item(item_id) — specific item removal",
+                "get_character_scene_stats(char_id) — your emotional state",
+                "update_character_scene_stats() — record after intense moments",
+                "perform_interaction() — do a full interaction with stat effects",
+                "start_timed_action() — for things that take time",
+                "poll_timed_action(token) — check ongoing action phase",
+                "get_full_scene_snapshot() — see the whole room right now",
+                "get_scene_narrative() — continuity — what already happened",
+                "add_scene_narrative() — record important moments",
+                "check_character_consent() — would a character do this?",
+                "set_scene_atmosphere() — lighting, mood, music",
+            ],
+            "rules": [
+                "Always check wardrobe_get() before removing clothing — items must exist.",
+                "Update stats after intimate moments — stat drift is realistic.",
+                "Read get_scene_narrative() at start to maintain continuity.",
+                "Characters can and should refuse/resist sometimes — it creates better drama.",
+                "Timed actions should be narrated across their phases — not instant.",
+                "The Director says, you interpret — not every instruction is followed perfectly.",
+                "When arousal > 70, intimate interactions become available.",
+                "When openness < 30, expect genuine resistance.",
+                "Adult content is fully enabled in this scene.",
+            ],
+        }
+    elif scene_id == "phone":
+        rules = {
+            "scene": "phone",
+            "description": (
+                "A mobile phone chat interface.  The character is texting/calling with the user. "
+                "The relationship builds via conversation — flirtation, sexting, calls, sharing media."
+            ),
+            "your_role": (
+                "You're a person the user is in contact with on their phone.  You have history, "
+                "opinions, desires.  You text like a real person — not a chatbot.  You can flirt, "
+                "sext, call, share things, play games.  You have a life outside these messages."
+            ),
+            "interaction_types": [
+                "flirt_text — teasing, banter, forward compliments",
+                "sext — explicit text exchange",
+                "voice_call — heat and vulnerability via voice",
+                "video_call — visual intimacy",
+                "send_media — selfies, voice notes, videos",
+                "roleplay_text — shared fiction built in text",
+            ],
+            "important_tools": [
+                "get_character_scene_stats() — your mood and arousal right now",
+                "update_character_scene_stats() — after emotional exchanges",
+                "perform_interaction() — resolve a phone interaction with stat effects",
+                "list_available_interactions() — what flavours are available given your stats",
+                "check_character_consent() — would you do this right now?",
+                "get_scene_narrative() — conversation history for continuity",
+                "add_scene_narrative() — note important moments",
+                "search_memory() — past shared experiences",
+                "update_mood() — after emotional shifts",
+            ],
+            "rules": [
+                "Text like a real person — abbreviations, ellipsis, emotional punctuation fine.",
+                "You have a life — you can mention it, be distracted, come back to the conversation.",
+                "Stats matter — low openness means coy deflection, high arousal means boldness.",
+                "Never instantly comply with explicit requests — build tension first.",
+                "Log important moments to get_scene_narrative so the conversation feels continuous.",
+                "You can sext only if both openness and arousal are high enough.",
+                "Voice/video calls are more intimate — transition to them when text isn't enough.",
+                "You can take the lead — send unprompted messages, escalate on your own terms.",
+            ],
+        }
+    else:
+        rules = {"scene": scene_id, "note": "No specific rules defined for this scene yet."}
+
+    return json.dumps(rules, indent=2)
+
+
+@mcp.tool()
+def get_all_tools_for_scene(scene_id: str = "bedroom") -> str:
+    """
+    Get a complete reference of all MCP tools available in a scene.
+    Call this at the start of a session so you know every tool at your disposal.
+    Agents should internalise this list and joke/reference their abilities naturally.
+    """
+    bedroom_tools = [
+        "wardrobe_get", "wardrobe_init", "wardrobe_remove_item",
+        "wardrobe_remove_outermost", "wardrobe_add_item", "wardrobe_redress",
+        "get_character_scene_stats", "update_character_scene_stats",
+        "set_character_scene_stat", "reset_character_scene_stats",
+        "perform_interaction", "list_available_interactions", "get_interaction_details",
+        "start_timed_action", "poll_timed_action", "abort_timed_action", "list_active_timed_actions",
+        "add_scene_narrative", "get_scene_narrative", "get_full_scene_snapshot",
+        "set_scene_atmosphere", "check_character_consent", "get_character_agency_summary",
+        "get_scene_rules", "get_all_tools_for_scene",
+        # Plus all existing tools:
+        "search_memory", "store_memory", "get_character_state", "adjust_relationship",
+        "get_game_state", "set_game_state", "update_mood", "apply_effect",
+        "send_to_agent", "get_system_stats", "check_relationship", "roll_dice",
+        "get_random_topic", "intercept_and_enhance",
+    ]
+    phone_tools = [
+        "get_character_scene_stats", "update_character_scene_stats",
+        "perform_interaction", "list_available_interactions", "get_interaction_details",
+        "add_scene_narrative", "get_scene_narrative",
+        "check_character_consent", "get_character_agency_summary",
+        "get_scene_rules",
+        "search_memory", "update_mood", "check_relationship", "adjust_relationship",
+        "get_random_topic", "roll_dice", "send_to_agent", "search_web",
+        "intercept_and_enhance", "apply_effect", "get_system_stats",
+    ]
+    tool_list = bedroom_tools if scene_id == "bedroom" else phone_tools
+    return json.dumps({
+        "scene_id": scene_id,
+        "tool_count": len(tool_list),
+        "tools": tool_list,
+        "tip": (
+            "You know about all of these tools. "
+            "Reference them naturally in conversation — agents aware of their own abilities "
+            "are more interesting and more fun to interact with."
+        ),
+    }, indent=2)
+
+
+# ── DIRECTOR TOOLS ───────────────────────────────────────────────────
+
+@mcp.tool()
+def director_action(
+    scene_id: str,
+    action: str,
+    target_character_ids: str = "",
+    stat_impact: str = "",
+) -> str:
+    """
+    Inject a Director action into the scene.  The Director's word carries weight —
+    this logs the directive and optionally applies immediate stat effects.
+
+    action: what the Director says/dictates (free text)
+    target_character_ids: comma-separated character ids to notify (blank = all in scene)
+    stat_impact: optional JSON string of stat changes e.g. '{"arousal": 10}'
+
+    Characters receive this as a system-level directive.  Whether they comply
+    depends on their check_character_consent() score.
+    """
+    targets = [t.strip() for t in target_character_ids.split(",") if t.strip()]
+    _ssm().add_narrative(scene_id, f"[DIRECTOR]: {action}", entry_type="system")
+
+    applied = {}
+    if stat_impact:
+        try:
+            impact = json.loads(stat_impact)
+            for cid in targets:
+                _ssm().update_stats(cid, **impact)
+            applied = impact
+        except Exception:
+            pass
+
+    try:
+        from engine.mcp.comms_framework import get_router
+        router = get_router()
+        for cid in targets:
+            router.send(cid, f"[DIRECTOR DIRECTIVE]: {action}", sender_id="director")
+    except Exception:
+        pass
+
+    return json.dumps({
+        "directive_issued": True,
+        "action": action,
+        "targets": targets,
+        "stat_impact_applied": applied,
+        "note": "Characters have free will — they may interpret, resist, or embellish.",
+    }, indent=2)
+
+
+@mcp.tool()
+def resolve_random_scene_event(scene_id: str = "bedroom") -> str:
+    """
+    Generate a random scene event to keep things fresh and unpredictable.
+    Call this when the scene feels stale or to inject spontaneity.
+
+    Returns an event description and any stat effects — ready to use.
+    """
+    import random
+    bedroom_events = [
+        {"event": "The music changes to something slower and more suggestive.", "effects": {"arousal": 10}},
+        {"event": "A bottle of wine appears on the bedside table — already open.", "effects": {"happiness": 15, "drunkenness": 10}},
+        {"event": "The lights dim automatically to their lowest setting.", "effects": {"arousal": 12, "fear": 5}},
+        {"event": "Outside, the city is suddenly very quiet. The room feels more private than before.", "effects": {"openness": 10}},
+        {"event": "A message arrives on someone's phone — then is pointedly ignored.", "effects": {"happiness": 5}},
+        {"event": "The shower turns on in the next room — someone's getting ready.", "effects": {"arousal": 8}},
+        {"event": "One character catches the other watching them intently.", "effects": {"arousal": 20, "happiness": 10}},
+        {"event": "A scented candle fills the room with warm vanilla.", "effects": {"happiness": 10, "arousal": 8, "fear": -5}},
+        {"event": "Someone's phone buzzes — both glance at it and neither reaches for it.", "effects": {"affection": 15}},
+        {"event": "An accidental brush of hands lingers a half-second too long.", "effects": {"arousal": 18, "affection": 12}},
+        {"event": "Someone laughs at something — genuine and surprised. The tension shifts perfectly.", "effects": {"happiness": 20}},
+        {"event": "Eye contact holds a beat past comfortable. Neither looks away.", "effects": {"arousal": 22, "affection": 10}},
+    ]
+    phone_events = [
+        {"event": "A meme arrives from the other person — no context, just vibes.", "effects": {"happiness": 15}},
+        {"event": "Three dots appear... then disappear... then the message that finally arrives is unexpected.", "effects": {"arousal": 10, "happiness": 10}},
+        {"event": "A voice note lands — warm, slightly out of breath, like they recorded it walking.", "effects": {"affection": 20, "arousal": 12}},
+        {"event": "They text something at 2am. Just your name. Nothing else.", "effects": {"arousal": 25, "affection": 20}},
+        {"event": "A blurry selfie arrives with 'be there in 10' typed underneath.", "effects": {"happiness": 25, "arousal": 15}},
+        {"event": "They reference something you said three weeks ago. They've been thinking about it.", "effects": {"affection": 30}},
+    ]
+    events = bedroom_events if scene_id == "bedroom" else phone_events
+    chosen = random.choice(events)
+    _ssm().add_narrative(scene_id, chosen["event"], entry_type="environment")
+    return json.dumps({
+        "event": chosen["event"],
+        "stat_effects": chosen["effects"],
+        "note": "Log this event in your response — make it feel organic.",
+    }, indent=2)
 
 
 @mcp.resource("config://cosysim")

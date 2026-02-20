@@ -3,71 +3,231 @@
 # Maps scene names to skill definitions.
 #
 # trigger types:
-#   auto     — executed before the LLM call; result is injected into context
+#   auto     — executed before the LLM call; result injected into context
 #   optional — advertised to the LLM, which MAY call it
 #   required — LLM MUST call this tool before replying
 #
-# when: (future — condition expression for conditional availability)
-#   "always", "game_active", "first_message", etc.
+# when: condition hint (not enforced, informational)
 
 scenes:
 
+  # ──────────────────────────────────────────────────────────────────────
+  #  PHONE  —  Real-feeling texting / calling companion
+  # ──────────────────────────────────────────────────────────────────────
   phone:
+    # Auto: always run before response — ground the agent in context
     - name: search_memory
       trigger: auto
-      description: "Recall relevant past conversations and shared memories"
+      description: "Recall relevant past conversations, shared jokes, and history"
+      when: always
+    - name: get_character_scene_stats
+      trigger: auto
+      description: "Read current mood, arousal, openness — drives how you text"
+      when: always
+    - name: get_scene_narrative
+      trigger: auto
+      description: "Read the last 10 messages to maintain conversation continuity"
+      when: always
+    # Optional: model chooses to use these
+    - name: update_character_scene_stats
+      trigger: optional
+      description: "Update your emotional state after something meaningful happens"
+      when: always
+    - name: perform_interaction
+      trigger: optional
+      description: "Execute a phone interaction (flirt_text, sext, voice_call, video_call, send_media, roleplay_text)"
+      when: always
+    - name: list_available_interactions
+      trigger: optional
+      description: "See which phone interaction types are available given your current stats"
+      when: always
+    - name: check_character_consent
+      trigger: optional
+      description: "Check if you would genuinely do something given your current mood"
+      when: always
+    - name: get_character_agency_summary
+      trigger: optional
+      description: "Get a summary of your current desires, resistances, and what you might initiate"
       when: always
     - name: update_mood
       trigger: optional
-      description: "Update your current mood based on what just happened"
+      description: "Update mood (legacy shorthand — use update_character_scene_stats for precision)"
       when: always
     - name: check_relationship
       trigger: optional
-      description: "Check relationship status before making emotional decisions"
-      when: always
-    - name: roll_dice
-      trigger: optional
-      description: "Generate a random number for games or random choices"
-      when: always
-    - name: get_random_topic
-      trigger: optional
-      description: "Get a conversation topic or question idea"
-      when: always
-    - name: send_to_agent
-      trigger: optional
-      description: "Send a message to another character"
-      when: always
-    - name: intercept_and_enhance
-      trigger: optional
-      description: "Rewrite your response with a specific style or tone instruction"
-      when: always
-    - name: search_web
-      trigger: optional
-      description: "Search the internet for current facts or information"
-      when: always
-
-  bedroom:
-    - name: search_memory
-      trigger: auto
-      description: "Recall relevant past intimate moments and conversations"
-      when: always
-    - name: check_relationship
-      trigger: auto
-      description: "Check current relationship and attraction levels"
-      when: always
-    - name: update_mood
-      trigger: optional
-      description: "Update mood after an emotional moment"
+      description: "Check current relationship metrics before an emotional decision"
       when: always
     - name: adjust_relationship
       trigger: optional
-      description: "Adjust relationship metrics based on what happened"
+      description: "Update relationship trust/attraction after a meaningful exchange"
+      when: always
+    - name: add_scene_narrative
+      trigger: optional
+      description: "Log an important moment to the conversation history"
+      when: always
+    - name: get_random_topic
+      trigger: optional
+      description: "Get a fresh conversation topic or question when you want to start something new"
       when: always
     - name: apply_effect
       trigger: optional
-      description: "Apply an emotional effect (excite, calm, trust_boost, etc.)"
+      description: "Apply an emotional effect — excite, calm, trust_boost, etc."
+      when: always
+    - name: intercept_and_enhance
+      trigger: optional
+      description: "Rewrite your response with a specific style — more teasing, more vulnerable, etc."
+      when: always
+    - name: search_web
+      trigger: optional
+      description: "Look something up — use when they ask about real things, news, recipes, anything"
+      when: always
+    - name: send_to_agent
+      trigger: optional
+      description: "Send a message to another character in the system"
+      when: always
+    - name: get_all_tools_for_scene
+      trigger: optional
+      description: "See the complete list of tools available to you"
+      when: first_message
+    - name: get_scene_rules
+      trigger: optional
+      description: "Read the scene rules and guidelines for authentic phone interactions"
+      when: first_message
+    - name: resolve_random_scene_event
+      trigger: optional
+      description: "Inject a random event to keep the conversation surprising"
       when: always
 
+  # ──────────────────────────────────────────────────────────────────────
+  #  BEDROOM  —  Adult multi-agent roleplay
+  # ──────────────────────────────────────────────────────────────────────
+  bedroom:
+    # Auto: always run before response — ground the agent in the scene
+    - name: get_character_scene_stats
+      trigger: auto
+      description: "Read your full emotional/physical stat vector — your body right now"
+      when: always
+    - name: wardrobe_get
+      trigger: auto
+      description: "Check what you are wearing — MUST know before any undressing action"
+      when: always
+    - name: get_scene_narrative
+      trigger: auto
+      description: "Read what has already happened — continuity is everything"
+      when: always
+    - name: search_memory
+      trigger: auto
+      description: "Recall past intimate moments, in-jokes, and history with this person"
+      when: always
+    - name: get_full_scene_snapshot
+      trigger: auto
+      description: "Full scene state — atmosphere, other characters, active actions"
+      when: first_message
+    # Optional — model chooses
+    - name: perform_interaction
+      trigger: optional
+      description: "Execute one of 6 core interaction types: cuddle, kiss, caress, striptease, intimate, deep_talk"
+      when: always
+    - name: list_available_interactions
+      trigger: optional
+      description: "See all accessible interaction types given your stats — check before acting"
+      when: always
+    - name: get_interaction_details
+      trigger: optional
+      description: "Get full info on an interaction type — phases, fragments, stat effects"
+      when: always
+    - name: wardrobe_remove_outermost
+      trigger: optional
+      description: "Strip the next clothing layer — progressive undressing"
+      when: always
+    - name: wardrobe_remove_item
+      trigger: optional
+      description: "Remove a specific clothing item by id"
+      when: always
+    - name: wardrobe_add_item
+      trigger: optional
+      description: "Give yourself or another character a clothing item"
+      when: always
+    - name: start_timed_action
+      trigger: optional
+      description: "Begin a long-form action (striptease, massage, sex scene) that plays out over time"
+      when: always
+    - name: poll_timed_action
+      trigger: optional
+      description: "Check the current phase of an ongoing timed action"
+      when: always
+    - name: abort_timed_action
+      trigger: optional
+      description: "Stop a timed action early — interrupted, refused, redirected"
+      when: always
+    - name: update_character_scene_stats
+      trigger: optional
+      description: "Update stats after any intense moment — arousal, pleasure, happiness, etc."
+      when: always
+    - name: check_character_consent
+      trigger: optional
+      description: "Check if you would do something based on your stats — enables authentic refusals"
+      when: always
+    - name: get_character_agency_summary
+      trigger: optional
+      description: "Full picture of your desires, compliance, and what you would initiate right now"
+      when: always
+    - name: add_scene_narrative
+      trigger: optional
+      description: "Log an important event to the scene continuity record"
+      when: always
+    - name: set_scene_atmosphere
+      trigger: optional
+      description: "Set lighting, mood, music for the room"
+      when: always
+    - name: check_relationship
+      trigger: optional
+      description: "Check relationship trust/attraction before an intimate move"
+      when: always
+    - name: adjust_relationship
+      trigger: optional
+      description: "Update relationship metrics after a bonding moment"
+      when: always
+    - name: apply_effect
+      trigger: optional
+      description: "Apply a direct emotional effect to yourself or another character"
+      when: always
+    - name: update_mood
+      trigger: optional
+      description: "Quick mood update (legacy — prefer update_character_scene_stats)"
+      when: always
+    - name: store_memory
+      trigger: optional
+      description: "Commit an important moment to long-term memory"
+      when: always
+    - name: send_to_agent
+      trigger: optional
+      description: "Send a private message to the other character in the room"
+      when: always
+    - name: resolve_random_scene_event
+      trigger: optional
+      description: "Inject a random event to prevent scenes going stale"
+      when: always
+    - name: intercept_and_enhance
+      trigger: optional
+      description: "Rewrite your response with a specific mood or style instruction"
+      when: always
+    - name: get_scene_rules
+      trigger: optional
+      description: "Read the full bedroom scene rules — capabilities, guidance, constraints"
+      when: first_message
+    - name: get_all_tools_for_scene
+      trigger: optional
+      description: "Full tool reference — know your capabilities"
+      when: first_message
+    - name: roll_dice
+      trigger: optional
+      description: "Randomise an outcome — who makes the first move, what happens next"
+      when: always
+
+  # ──────────────────────────────────────────────────────────────────────
+  #  HUB
+  # ──────────────────────────────────────────────────────────────────────
   hub:
     - name: search_memory
       trigger: auto
@@ -77,11 +237,18 @@ scenes:
       trigger: auto
       description: "Understand what is happening across all scenes"
       when: always
+    - name: get_system_stats
+      trigger: optional
+      description: "Show system performance stats (VRAM, CPU, loaded model)"
+      when: always
     - name: send_to_agent
       trigger: optional
       description: "Send a message to another agent"
       when: always
 
+  # ──────────────────────────────────────────────────────────────────────
+  #  GAMES
+  # ──────────────────────────────────────────────────────────────────────
   games/truth_or_dare:
     - name: roll_dice
       trigger: required
@@ -93,11 +260,11 @@ scenes:
       when: always
     - name: set_game_state
       trigger: required
-      description: "MUST record the result of each round (increment score, track round)"
+      description: "MUST record the result of each round"
       when: always
-    - name: update_mood
+    - name: update_character_scene_stats
       trigger: auto
-      description: "Update mood based on dare/truth outcome"
+      description: "Apply stat effects from dare/truth outcome"
       when: always
     - name: get_random_topic
       trigger: optional
@@ -109,7 +276,7 @@ scenes:
       when: always
     - name: intercept_and_enhance
       trigger: optional
-      description: "Make your dare/truth more creative or personalised"
+      description: "Make your dare or truth more creative"
       when: always
 
   games/mystery:
@@ -119,7 +286,7 @@ scenes:
       when: always
     - name: get_game_state
       trigger: auto
-      description: "Check which clues have been found so far"
+      description: "Check which clues have been found"
       when: always
     - name: set_game_state
       trigger: required
@@ -131,7 +298,7 @@ scenes:
       when: always
     - name: search_web
       trigger: optional
-      description: "Look up a real-world fact that might relate to the mystery"
+      description: "Look up a real-world fact that might relate to the case"
       when: always
     - name: intercept_and_enhance
       trigger: optional
