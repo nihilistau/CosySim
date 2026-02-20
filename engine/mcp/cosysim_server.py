@@ -36,7 +36,7 @@ import json
 import logging
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
 # Ensure project root is importable
 _root = Path(__file__).parent.parent.parent
@@ -2552,6 +2552,466 @@ def get_scene_rules_summary(scene_id: str, character_id: str = "") -> str:
     except Exception as exc:
         return json.dumps({"error": str(exc)})
 
+
+# ══════════════════════════════════════════════════════════════════════
+#  FRAMEWORK TOOLS  ─ timers, random, cross-scene, consequences
+# ══════════════════════════════════════════════════════════════════════
+
+@mcp.tool()
+def start_timer(
+    timer_name:       str,
+    duration_secs:    float,
+    on_complete_note: str   = "",
+) -> str:
+    """
+    **TIMER SKILL** — Start a named countdown timer.
+
+    Timers are turn-passive: they count real-world seconds but are only
+    checked when you call ``check_timer()``.  Use them for:
+    - "Her blush takes 30 seconds to fade" → start_timer("blush_fade", 30)
+    - "The massage lasts 3 minutes" → start_timer("massage", 180, "Massage complete — she's relaxed and warm")
+    - Cooldowns, tension windows, delayed reveals
+
+    Multiple timers can run simultaneously under different names.
+
+    Args:
+        timer_name:       Unique name you will use to check this timer
+        duration_secs:    How long the timer runs in real seconds
+        on_complete_note: Text returned when the timer finishes (use it in your response)
+    """
+    try:
+        from engine.mcp.framework import get_framework
+        timer = get_framework().start_timer(timer_name, duration_secs, on_complete_note=on_complete_note)
+        return json.dumps({
+            "ok": True,
+            "timer_name":    timer.name,
+            "duration_secs": timer.duration_secs,
+            "status":        "started",
+            "note":          "Call check_timer(timer_name) each turn to see progress.",
+        })
+    except Exception as exc:
+        return json.dumps({"ok": False, "error": str(exc)})
+
+
+@mcp.tool()
+def check_timer(timer_name: str) -> str:
+    """
+    **TIMER SKILL** — Check the state of a running timer.
+
+    Returns remaining time, progress percentage, and whether it has completed.
+    When completed, the ``on_complete_note`` field tells you what should happen.
+
+    Call this every turn for any timer that is still running.
+    Use the progress to describe physical/emotional state mid-timer.
+
+    Args:
+        timer_name: The name you gave when starting the timer
+    """
+    try:
+        from engine.mcp.framework import get_framework
+        timer = get_framework().check_timer(timer_name)
+        if timer is None:
+            return json.dumps({"found": False, "timer_name": timer_name})
+        return json.dumps({**timer.to_dict(), "found": True})
+    except Exception as exc:
+        return json.dumps({"error": str(exc)})
+
+
+@mcp.tool()
+def cancel_timer(timer_name: str) -> str:
+    """
+    **TIMER SKILL** — Cancel a running timer before it completes.
+
+    Args:
+        timer_name: The timer to cancel
+    """
+    try:
+        from engine.mcp.framework import get_framework
+        ok = get_framework().cancel_timer(timer_name)
+        return json.dumps({"ok": ok, "timer_name": timer_name})
+    except Exception as exc:
+        return json.dumps({"ok": False, "error": str(exc)})
+
+
+@mcp.tool()
+def random_pick(
+    n:            int,
+    options_json: str            = "[]",
+    weights_json: str            = "[]",
+    seed:         Optional[int]  = None,
+) -> str:
+    """
+    **RANDOM CHOICE SKILL** — Roll a random number between 1 and n,
+    or pick from a list of options.
+
+    The system interprets the result for you: exceptional / strong /
+    moderate / weak / poor — use this to determine how successful,
+    intense, or interesting something is.
+
+    Examples:
+      random_pick(10)                                   → roll 1-10
+      random_pick(3, '["resist", "comply", "flirt"]')  → pick one option
+      random_pick(6, weights_json='[1,1,2,2,3,3]')     → weighted d6
+
+    Use this to:
+    - Determine if a seduction attempt works (roll high = success)
+    - Pick what mood a character wakes up in
+    - Add unpredictability to any decision point
+    - Decide the outcome of a risky action
+
+    Args:
+        n:            Max value (or number of options)
+        options_json: JSON list of strings to pick from (overrides n)
+        weights_json: JSON list of floats — bias the distribution
+        seed:         Integer seed for reproducible results (omit for random)
+    """
+    try:
+        import json as _json
+        from engine.mcp.framework import get_framework
+        options = _json.loads(options_json) if options_json and options_json != "[]" else None
+        weights = _json.loads(weights_json) if weights_json and weights_json != "[]" else None
+        result  = get_framework().random_pick(n=n, seed=seed, weights=weights, options=options)
+        return json.dumps(result)
+    except Exception as exc:
+        return json.dumps({"error": str(exc)})
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  AMAZING FEATURE 1: CROSS-SCENE COMMUNICATION
+# ══════════════════════════════════════════════════════════════════════
+
+@mcp.tool()
+def cross_scene_message(
+    from_char:    str,
+    from_scene:   str,
+    to_char:      str,
+    to_scene:     str,
+    message:      str,
+    message_type: str = "text",
+) -> str:
+    """
+    **CROSS-SCENE BRIDGE** — Send a message from a character in one scene to a
+    character in a *different* scene.
+
+    This is how two agents in separate scenes communicate — phone calls while
+    in the bedroom, texts while in different locations, notifications that cross
+    scene boundaries.
+
+    The message lands in the target character's inbox and is injected into their
+    next turn via the ``RouterMessageInjector``.  Their scene is also notified.
+
+    Message types:
+      text              — standard text message
+      call_notification — "incoming call" notification
+      event             — system-level event crossing scenes
+      system            — director/framework event
+
+    Example: Aria in the bedroom texts the user in the phone scene:
+      cross_scene_message("aria", "bedroom", "user", "phone",
+                          "Thinking about last night... 🔥", "text")
+
+    Args:
+        from_char:    Sending character ID
+        from_scene:   Sending character's current scene
+        to_char:      Receiving character ID
+        to_scene:     Receiving character's current scene
+        message:      The message content
+        message_type: text | call_notification | event | system
+    """
+    try:
+        from engine.mcp.framework import get_framework
+        msg = get_framework().cross_scene_send(
+            from_char    = from_char,
+            from_scene   = from_scene,
+            to_char      = to_char,
+            to_scene     = to_scene,
+            message      = message,
+            message_type = message_type,
+        )
+        return json.dumps({
+            "ok":          True,
+            "message_id":  msg.message_id,
+            "from":        f"{from_char}@{from_scene}",
+            "to":          f"{to_char}@{to_scene}",
+            "type":        message_type,
+            "preview":     message[:80],
+            "note":        f"{to_char} will see this message on their next turn.",
+        })
+    except Exception as exc:
+        return json.dumps({"ok": False, "error": str(exc)})
+
+
+@mcp.tool()
+def get_cross_scene_inbox(character_id: str) -> str:
+    """
+    **CROSS-SCENE BRIDGE** — Check for unread cross-scene messages for a character.
+    Messages are marked as read once retrieved.
+
+    Call this at the start of a character's turn if they might have received
+    cross-scene messages (phone calls, texts from other scenes, etc.)
+
+    Args:
+        character_id: The character whose inbox to check
+    """
+    try:
+        from engine.mcp.framework import get_framework
+        messages = get_framework().get_cross_scene_inbox(character_id)
+        return json.dumps({"character_id": character_id, "messages": messages, "count": len(messages)})
+    except Exception as exc:
+        return json.dumps({"error": str(exc)})
+
+
+@mcp.tool()
+def get_framework_status() -> str:
+    """
+    Return a full MCPFramework status snapshot: active scenes, characters,
+    timers, and pending consequence chains.  Use as a Director overview.
+    """
+    try:
+        from engine.mcp.framework import get_framework
+        return json.dumps(get_framework().get_status(), indent=2)
+    except Exception as exc:
+        return json.dumps({"error": str(exc)})
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  AMAZING FEATURE 2: MOOD CONTAGION
+# ══════════════════════════════════════════════════════════════════════
+
+@mcp.tool()
+def mood_contagion(
+    scene_id:         str,
+    initiator_id:     str,
+    emotion:          str,
+    intensity:        float = 0.6,
+    target_ids_json:  str   = "[]",
+    affinity_factor:  float = 1.0,
+) -> str:
+    """
+    **MOOD CONTAGION** — Spread an emotional state from one character to others
+    in the same scene.
+
+    Mood contagion is realistic: high-affinity characters absorb more mood.
+    Characters with restrictions or high inhibition resist.  The spread is
+    scaled by intensity (0.0→1.0) and the affinity_factor (how close they are).
+
+    This is physics for emotion.  Use it when:
+    - One character laughing makes others smile
+    - Sadness fills the room after a confession
+    - Dominant mood overtakes submissive character
+    - Tension spikes because one person is visibly aroused
+
+    The tool adjusts mood state in CharacterRegistry and optionally biases
+    stats.  It logs the contagion event to the scene narrative.
+
+    Emotions:
+      excited, aroused, tender, warm, sad, nervous, dominant, submissive,
+      playful, serious, angry, fearful, joyful, vulnerable, charged
+
+    Args:
+        scene_id:        Scene where contagion occurs
+        initiator_id:    Character whose mood is spreading
+        emotion:         The emotion/mood spreading
+        intensity:       How strongly it spreads (0.0 = no effect, 1.0 = full)
+        target_ids_json: JSON list of target char IDs (empty = all present in scene)
+        affinity_factor: Multiplier for closeness (1.0 = normal, 2.0 = very close)
+    """
+    try:
+        import json as _json
+        from engine.mcp.character_registry import get_character_registry
+        from engine.mcp.framework import get_framework
+        from engine.mcp.scene_state import get_scene_state_manager
+
+        target_ids: List[str] = _json.loads(target_ids_json) if target_ids_json and target_ids_json != "[]" else []
+
+        # If no targets specified, get everyone present in the scene
+        if not target_ids:
+            target_ids = get_framework().get_characters_in_scene(scene_id)
+            target_ids = [c for c in target_ids if c != initiator_id]
+
+        reg     = get_character_registry()
+        ssm     = get_scene_state_manager()
+        applied = []
+
+        # Emotion → stat impact mapping
+        _EMOTION_STATS: Dict[str, Dict[str, float]] = {
+            "excited":    {"happiness":  0.3, "arousal":  0.2},
+            "aroused":    {"arousal":    0.5, "openness": 0.15},
+            "tender":     {"affection":  0.4, "happiness": 0.2},
+            "warm":       {"happiness":  0.35, "affection": 0.2},
+            "sad":        {"happiness": -0.4},
+            "nervous":    {"fear":       0.3, "arousal":  0.1},
+            "dominant":   {"inhibition": -0.2, "openness": 0.1},
+            "submissive": {"inhibition":  0.2, "openness": 0.2},
+            "playful":    {"happiness":  0.3, "arousal":  0.1},
+            "serious":    {"happiness": -0.1},
+            "angry":      {"fear":       0.2, "happiness": -0.3},
+            "fearful":    {"fear":       0.5},
+            "joyful":     {"happiness":  0.5, "arousal":  0.15},
+            "vulnerable": {"affection":  0.3, "openness":  0.25},
+            "charged":    {"arousal":    0.4, "openness":  0.2},
+        }
+        stat_impacts = _EMOTION_STATS.get(emotion, {"happiness": 0.1})
+
+        for target_id in target_ids:
+            try:
+                reg.ensure(target_id)
+                state = reg.get_state(target_id)
+                # Check inhibition resistance
+                inhibition = getattr(state, "inhibition", 0.3)
+                resistance = inhibition * 0.5
+                effective  = max(0.0, intensity * affinity_factor * (1.0 - resistance))
+
+                # Set mood state
+                reg.set_state(target_id, mood=emotion, mood_intensity=effective)
+
+                # Apply stat impacts
+                for stat, delta_factor in stat_impacts.items():
+                    delta = delta_factor * effective * 100  # scale to stat points
+                    try:
+                        ssm.update_stats(target_id, **{stat: delta})
+                    except Exception:
+                        pass
+
+                applied.append({
+                    "target":                  target_id,
+                    "mood_set":                emotion,
+                    "effective_intensity":     round(effective, 2),
+                    "resistance":              round(resistance, 2),
+                    "inhibition":              round(inhibition, 2),
+                })
+            except Exception as te:
+                applied.append({"target": target_id, "error": str(te)})
+
+        # Narrative
+        narrative = (f"{initiator_id}'s {emotion} mood spreads through the room "
+                     f"(intensity: {intensity:.0%})")
+        ssm.add_narrative(scene_id, narrative, entry_type="mood_contagion",
+                          character_id=initiator_id)
+
+        return json.dumps({
+            "ok":         True,
+            "initiator":  initiator_id,
+            "emotion":    emotion,
+            "intensity":  intensity,
+            "affected":   applied,
+            "narrative":  narrative,
+        }, indent=2)
+    except Exception as exc:
+        return json.dumps({"ok": False, "error": str(exc)})
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  AMAZING FEATURE 3: CONSEQUENCE CHAINS
+# ══════════════════════════════════════════════════════════════════════
+
+@mcp.tool()
+def schedule_consequence(
+    scene_id:            str,
+    character_id:        str,
+    consequence_type:    str,
+    params_json:         str,
+    trigger_after_turns: int  = 1,
+    description:         str  = "",
+    created_by:          str  = "director",
+) -> str:
+    """
+    **CONSEQUENCE CHAINS** — Schedule a future effect that fires automatically
+    after N conversation turns.
+
+    This is how actions echo into the future.  A touch now leads to arousal
+    in two turns.  An emotional admission reverberates into affection
+    three turns later.  A timer expires and a consequence fires.
+
+    Consequences fire silently (injecting into narrative + stats) and are
+    reported back in post-call context.  Agents can then reference them naturally.
+
+    Consequence types mirror RuleEffect types:
+      stat_adjust     — {"stat": "arousal", "delta": 20}
+      state_set       — {"field": "mood", "value": "tender"}
+      add_restriction — {"restriction": "no_touch"}
+      add_narrative   — {"event": "The room feels different now."}
+      set_directive   — {"directive_type": "style_lock", "value": "warm", "turns": 1}
+      scene_event     — {"event": "tension_release"}
+
+    Examples:
+      schedule_consequence("bedroom", "aria", "stat_adjust",
+                          '{"stat": "arousal", "delta": 25}', 2,
+                          "The kiss lingers — arousal builds.")
+
+      schedule_consequence("bedroom", "aria", "state_set",
+                          '{"field": "mood", "value": "vulnerable"}', 3,
+                          "The confession settles in. She feels exposed.")
+
+    Args:
+        scene_id:            Scene where the consequence fires
+        character_id:        The affected character
+        consequence_type:    Effect type (see above)
+        params_json:         JSON dict of parameters for the effect
+        trigger_after_turns: How many turns until it fires (1 = next turn)
+        description:         Narrative text logged when it fires
+        created_by:          Who scheduled this (for audit)
+    """
+    try:
+        import json as _json
+        from engine.mcp.framework import get_framework
+        params = _json.loads(params_json) if params_json else {}
+        cseq   = get_framework().schedule_consequence(
+            scene_id             = scene_id,
+            character_id         = character_id,
+            consequence_type     = consequence_type,
+            params               = params,
+            trigger_after_turns  = trigger_after_turns,
+            description          = description,
+            created_by           = created_by,
+        )
+        return json.dumps({
+            "ok":             True,
+            "consequence_id": cseq.consequence_id,
+            "fires_at_turn":  cseq.fire_at_turn,
+            "type":           consequence_type,
+            "character_id":   character_id,
+            "description":    description,
+            "note":           f"Will fire in {trigger_after_turns} turn(s) automatically.",
+        })
+    except Exception as exc:
+        return json.dumps({"ok": False, "error": str(exc)})
+
+
+@mcp.tool()
+def get_pending_consequences(scene_id: str = "", character_id: str = "") -> str:
+    """
+    **CONSEQUENCE CHAINS** — List all scheduled consequences that haven't fired yet.
+
+    Use this to see what's coming and plan your response.
+    A thoughtful agent references pending consequences in their narration.
+
+    Args:
+        scene_id:     Filter by scene (optional)
+        character_id: Filter by character (optional)
+    """
+    try:
+        from engine.mcp.framework import get_framework
+        pending = get_framework().get_pending_consequences(scene_id=scene_id, character_id=character_id)
+        return json.dumps({"pending": pending, "count": len(pending)}, indent=2)
+    except Exception as exc:
+        return json.dumps({"error": str(exc)})
+
+
+@mcp.tool()
+def cancel_consequence(consequence_id: str) -> str:
+    """
+    **CONSEQUENCE CHAINS** — Cancel a scheduled consequence before it fires.
+
+    Args:
+        consequence_id: The ID returned by schedule_consequence
+    """
+    try:
+        from engine.mcp.framework import get_framework
+        ok = get_framework().cancel_consequence(consequence_id)
+        return json.dumps({"ok": ok, "consequence_id": consequence_id})
+    except Exception as exc:
+        return json.dumps({"ok": False, "error": str(exc)})
 
 
 def resource_config() -> str:

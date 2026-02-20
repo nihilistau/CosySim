@@ -71,6 +71,20 @@ class RouterMessageInjector(InterceptorBase):
             return
         router = get_router()
         pending = router.drain(agent_id)
+
+        # Cross-scene messages via MCPFramework
+        try:
+            from engine.mcp.framework import get_framework
+            cross = get_framework().get_cross_scene_inbox(agent_id)
+            if cross:
+                for cm in cross:
+                    pending.append({
+                        "sender":  f"{cm['from']}@{cm['from_scene']}",
+                        "message": f"[{cm['type'].upper()}] {cm['message']}",
+                    })
+        except Exception as exc:
+            logger.debug("RouterMessageInjector: cross-scene inbox error: %s", exc)
+
         if not pending:
             return
         lines = [f"[incoming from {m['sender']}]: {m['message']}" for m in pending]
@@ -646,6 +660,17 @@ class CharacterRegistryInterceptor(InterceptorBase):
             logger.debug("CharacterRegistryInterceptor pre_call failed: %s", exc)
             return
 
+        # ── Register character with MCPFramework + scene tracking ────
+        try:
+            scene = ctx.get("scene", "")
+            from engine.mcp.framework import get_framework
+            fw   = get_framework()
+            char_node = fw.get_character(agent_id)
+            if scene and char_node.current_scene != scene:
+                char_node.enter_scene(scene)
+        except Exception as exc:
+            logger.debug("CharacterRegistryInterceptor framework enter_scene failed: %s", exc)
+
         # ── Check for force_response directive ──────────────────────
         try:
             scene = ctx.get("scene", "")
@@ -753,10 +778,23 @@ class DialogDirectiveInterceptor(InterceptorBase):
                     ctx["reply"] = reply.rstrip() + f"  ({fragment})"
                     reply = ctx["reply"]
 
-        # ── Tick conversation state ──────────────────────────────────
+        # ── Tick conversation state + framework consequence chains ────────
         try:
             from engine.mcp.dialog_system import get_dialog_system
             ds = get_dialog_system()
             ds.tick(agent_id, scene)
         except Exception as exc:
             logger.debug("DialogDirectiveInterceptor post_call tick failed: %s", exc)
+
+        try:
+            from engine.mcp.framework import get_framework
+            fired = get_framework().tick(scene)
+            if fired:
+                for item in fired:
+                    logger.debug(
+                        "DialogDirectiveInterceptor: consequence fired: %s",
+                        item.get("consequence_id")
+                    )
+                ctx.setdefault("fired_consequences", []).extend(fired)
+        except Exception as exc:
+            logger.debug("DialogDirectiveInterceptor framework tick failed: %s", exc)
