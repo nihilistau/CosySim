@@ -30,13 +30,11 @@ from content.simulation.services.video_message import VideoMessageGenerator
 from content.scenes.phone.apps.gallery import Gallery
 from content.scenes.phone.apps.video_messages import VideoMessagesApp
 from content.scenes.phone.apps.voice_messages import VoiceMessagesApp
-from content.scenes.phone.apps.voice_studio import VoiceStudio
 from engine.scenes.base_scene import BaseScene
 from engine.assets import CharacterAsset
-from engine.agents.character_agent import CharacterAgent
 from content.simulation.services.llm_service import get_llm_service
 from content.simulation.services.anonymous_character import create_anonymous_character, AnonymousCharacter
-from engine.logging import install_logger, get_logs
+from content.simulation.services.cosylogger import install_logger, get_logs
 
 
 class PhoneScene(BaseScene):
@@ -58,7 +56,6 @@ class PhoneScene(BaseScene):
         self.gallery = Gallery(self.db)
         self.video_messages_app = VideoMessagesApp(self.db)
         self.voice_messages_app = VoiceMessagesApp(self.db)
-        self.voice_studio = VoiceStudio(self.db)
         
         # Initialize voice services (TTS/STT models loaded on demand)
         self.voice_call_handler = VoiceCallHandler(db=self.db, socketio=None)  # socketio set later
@@ -77,24 +74,20 @@ class PhoneScene(BaseScene):
             db=self.db
         )
         
-        # Ensure media directories exist (content/media/* and content/simulation/media/*)
+        # Ensure media directories exist
         self.media_dir = Path(__file__).parent.parent.parent / "media"
-        self.media_dir.mkdir(parents=True, exist_ok=True)
-
-        media_dirs = [
-            Path(__file__).parent.parent.parent / "media" / "voice",
-            Path(__file__).parent.parent.parent / "media" / "video",
-            Path(__file__).parent.parent.parent.parent / "simulation" / "media" / "voice",
-            Path(__file__).parent.parent.parent.parent / "simulation" / "media" / "video",
-        ]
-        for d in media_dirs:
-            d.mkdir(parents=True, exist_ok=True)
-
+        self.media_dir.mkdir(exist_ok=True)
+        _scene_root = Path(__file__).parent.parent.parent
+        for _media_dir in [
+            _scene_root / "simulation" / "media" / "voice",
+            _scene_root / "simulation" / "media" / "video",
+            Path(__file__).parent.parent / "media" / "voice",
+            Path(__file__).parent.parent / "media" / "video",
+        ]:
+            _media_dir.mkdir(parents=True, exist_ok=True)
+        
         # Initialize autonomous messenger (will be started later with socketio)
         self.autonomous_messenger = None
-
-        # CharacterAgent for LLM replies (created when character is set)
-        self._agent: Optional[CharacterAgent] = None
 
         # Anonymous stranger character
         self.anon_char: Optional[AnonymousCharacter] = None
@@ -173,13 +166,6 @@ class PhoneScene(BaseScene):
                 if not self.active_character:
                     return jsonify({'error': 'Character not found'}), 404
                 
-                # Create CharacterAgent with skills + MCP support
-                self._agent = CharacterAgent(
-                    self.active_character,
-                    db=self.db,
-                    skill_packs=["memory", "voice", "comfyui", "character"],
-                )
-                
                 # Auto-register character for autonomous messaging
                 if self.autonomous_messenger and self.autonomous_messenger.enabled:
                     self.autonomous_messenger.register_character(
@@ -208,7 +194,7 @@ class PhoneScene(BaseScene):
         
         @self.app.route('/api/messages/history', methods=['GET'])
         def get_message_history():
-            """Get conversation history with rich media type detection"""
+            """Get conversation history"""
             if not self.active_character:
                 return jsonify({'error': 'No active character'}), 400
             
@@ -224,19 +210,10 @@ class PhoneScene(BaseScene):
                 interactions = []
                 for conv in conversations:
                     for msg in conv['messages']:
-                        content = msg['content']
-                        msg_type = 'text'
-                        if content.startswith('[Photo sent'):
-                            msg_type = 'photo'
-                        elif content.startswith('[Voice message:'):
-                            msg_type = 'voice'
-                        elif content.startswith('[Video message:'):
-                            msg_type = 'video'
                         interactions.append({
                             'role': msg['role'],
-                            'content': content,
-                            'timestamp': msg['timestamp'],
-                            'type': msg_type
+                            'content': msg['content'],
+                            'timestamp': msg['timestamp']
                         })
             
             return jsonify({'messages': interactions})
@@ -506,21 +483,17 @@ class PhoneScene(BaseScene):
                 if not media:
                     return jsonify({'error': 'Media not found'}), 404
                 
+                # Validate path is within media directory (prevent path traversal)
                 filepath = Path(media['filepath']).resolve()
+                media_dir = self.media_dir.resolve()
                 
-                # Allow files from phone media dir or simulation media dir
-                allowed_dirs = [
-                    self.media_dir.resolve(),
-                    Path(__file__).parent.parent.parent.joinpath("simulation", "media").resolve(),
-                ]
-                if not any(str(filepath).startswith(str(d)) for d in allowed_dirs):
+                if not str(filepath).startswith(str(media_dir)):
                     return jsonify({'error': 'Invalid file path'}), 403
                 
                 if not filepath.exists():
                     return jsonify({'error': 'File not found'}), 404
                 
-                mimetype = 'image/png' if filepath.suffix == '.png' else 'image/jpeg'
-                return send_file(str(filepath), mimetype=mimetype)
+                return send_file(str(filepath), mimetype='image/jpeg')
             except Exception as e:
                 return jsonify({'error': str(e)}), 500
         
@@ -550,47 +523,23 @@ class PhoneScene(BaseScene):
         
         @self.app.route('/api/media/generate', methods=['POST'])
         def generate_media():
-            """Generate selfie for character — content scales with relationship + arousal."""
+            """Generate selfie for character"""
             if not self.active_character:
                 return jsonify({'error': 'No active character'}), 400
             
             data = request.json or {}
-            mood    = data.get('mood', self.active_character.mood)
+            mood = data.get('mood', self.active_character.mood)
             setting = data.get('setting', 'casual')
-            rel     = float(self.active_character.relationship_level or 0.0)
-            arousal = float(getattr(self.active_character, 'arousal', 0.0) or 0.0)
-            nsfw_ok = getattr(self.active_character, 'nsfw_enabled', False)
-
-            # Escalate prompt if relationship/arousal warrant it
-            extra = data.get('extra_prompt', '')
-            nsfw  = False
-            if rel > 0.85 and arousal > 0.5 and nsfw_ok:
-                nsfw = True
-                if not extra:
-                    extra = 'seductive pose, revealing outfit, bedroom eyes'
-            elif rel > 0.6 and not extra:
-                extra = 'flirty expression, attractive pose'
             
+            # Generate selfie
             try:
-                # Merge runtime image settings
-                gen_kwargs = getattr(self, '_image_settings', {}).copy()
-                # Allow per-request overrides
-                for k in ('steps', 'cfg', 'sampler_name', 'scheduler', 'denoise', 'width', 'height'):
-                    if k in data:
-                        gen_kwargs[k] = data[k]
-
                 filepath = self.media_generator.generate_selfie(
                     character_name=self.active_character.name,
                     character_description=self.active_character.appearance or "attractive person",
                     mood=mood,
                     setting=setting,
                     style='realistic',
-                    nsfw=nsfw,
-                    extra_prompt=extra,
-                    chain_id=self.current_chain_id,
-                    scene_id='phone',
-                    character_id=self.active_character.id,
-                    **gen_kwargs,
+                    nsfw=False
                 )
                 
                 if not filepath:
@@ -787,22 +736,16 @@ class PhoneScene(BaseScene):
             try:
                 # Secure the filename
                 filename = secure_filename(filename)
-                # Check both possible voice directories
+                # Check simulation dir first (where generator writes), then scene media dir
                 voice_dirs = [
                     Path(__file__).parent.parent.parent / "simulation" / "media" / "voice",
-                    Path(__file__).parent.parent.parent / "media" / "voice",
+                    Path(__file__).parent.parent / "media" / "voice",
                 ]
-                filepath = None
-                for vdir in voice_dirs:
-                    candidate = vdir / filename
-                    if candidate.exists():
-                        filepath = candidate
-                        break
-                
-                if not filepath:
-                    return jsonify({'error': 'File not found'}), 404
-                
-                return send_file(str(filepath), mimetype='audio/wav')
+                for voice_dir in voice_dirs:
+                    filepath = voice_dir / filename
+                    if filepath.exists():
+                        return send_file(str(filepath), mimetype='audio/wav')
+                return jsonify({'error': 'File not found'}), 404
             except Exception as e:
                 return jsonify({'error': str(e)}), 500
         
@@ -1024,24 +967,16 @@ class PhoneScene(BaseScene):
             try:
                 # Secure the filename
                 filename = secure_filename(filename)
-
-                # Check simulation dir first (where generator writes), then media dir
+                # Check simulation dir first (where generator writes), then scene media dir
                 video_dirs = [
                     Path(__file__).parent.parent.parent / "simulation" / "media" / "video",
-                    Path(__file__).parent.parent.parent / "media" / "video",
+                    Path(__file__).parent.parent / "media" / "video",
                 ]
-
-                filepath = None
-                for vdir in video_dirs:
-                    candidate = vdir / filename
-                    if candidate.exists():
-                        filepath = candidate
-                        break
-
-                if not filepath:
-                    return jsonify({'error': 'Video not found'}), 404
-
-                return send_file(str(filepath), mimetype='video/mp4')
+                for video_dir in video_dirs:
+                    filepath = video_dir / filename
+                    if filepath.exists():
+                        return send_file(str(filepath), mimetype='video/mp4')
+                return jsonify({'error': 'Video not found'}), 404
             except Exception as e:
                 return jsonify({'error': str(e)}), 500
         
@@ -1328,206 +1263,6 @@ class PhoneScene(BaseScene):
             since_id = request.args.get('since_id', 0, type=int)
             return jsonify({'logs': get_logs(level=level, limit=limit, since_id=since_id)})
 
-        # ── Voice Studio API ──────────────────────────────────────────
-
-        @self.app.route('/api/voice-studio/voices', methods=['GET'])
-        def vs_list_voices():
-            """List all voice designs (custom + premade)."""
-            return jsonify({'voices': self.voice_studio.list_voices()})
-
-        @self.app.route('/api/voice-studio/voices', methods=['POST'])
-        def vs_create_voice():
-            """Create a custom voice design."""
-            data = request.json or {}
-            name = data.get('name')
-            description = data.get('description')
-            if not name or not description:
-                return jsonify({'error': 'name and description required'}), 400
-            voice = self.voice_studio.create_voice(
-                name=name, description=description,
-                model_size=data.get('model_size', '1.7b'),
-                tags=data.get('tags', []),
-                character_id=data.get('character_id'),
-            )
-            return jsonify({'success': True, 'voice': voice})
-
-        @self.app.route('/api/voice-studio/voices/<voice_id>', methods=['PUT'])
-        def vs_update_voice(voice_id):
-            """Update a voice design."""
-            data = request.json or {}
-            ok = self.voice_studio.update_voice(voice_id, **data)
-            return jsonify({'success': ok})
-
-        @self.app.route('/api/voice-studio/voices/<voice_id>', methods=['DELETE'])
-        def vs_delete_voice(voice_id):
-            """Delete a voice design."""
-            ok = self.voice_studio.delete_voice(voice_id)
-            return jsonify({'success': ok})
-
-        @self.app.route('/api/voice-studio/generate', methods=['POST'])
-        def vs_generate():
-            """Generate speech from text with a voice."""
-            data = request.json or {}
-            text = data.get('text', '').strip()
-            if not text:
-                return jsonify({'error': 'text required'}), 400
-            result = self.voice_studio.generate(
-                text=text,
-                voice_id=data.get('voice_id'),
-                voice_description=data.get('voice_description'),
-                name=data.get('name'),
-                emotion=data.get('emotion'),
-                model_size=data.get('model_size', 'auto'),
-            )
-            if result:
-                result['url'] = f"/api/voice-studio/download/{result['filename']}"
-                return jsonify({'success': True, 'recording': result})
-            return jsonify({'error': 'Generation failed'}), 500
-
-        @self.app.route('/api/voice-studio/batch', methods=['POST'])
-        def vs_batch_generate():
-            """Batch generate from a script or line list."""
-            data = request.json or {}
-            # Accept either parsed lines or raw script text
-            if 'script' in data:
-                lines = self.voice_studio.parse_script(data['script'])
-            elif 'lines' in data:
-                lines = data['lines']
-            else:
-                return jsonify({'error': 'script or lines required'}), 400
-            result = self.voice_studio.batch_generate(
-                lines=lines,
-                voice_id=data.get('voice_id'),
-                voice_description=data.get('voice_description'),
-            )
-            return jsonify({'success': True, **result})
-
-        @self.app.route('/api/voice-studio/clone', methods=['POST'])
-        def vs_clone_voice():
-            """Upload a WAV reference for zero-shot voice cloning."""
-            if 'audio' not in request.files:
-                return jsonify({'error': 'audio file required'}), 400
-            f = request.files['audio']
-            filepath = self.voice_studio.save_reference_audio(f.filename, f.read())
-            # Create a voice design with the reference
-            name = request.form.get('name', f'Clone: {f.filename}')
-            desc = request.form.get('description', 'Zero-shot voice — cloned from reference audio.')
-            voice = self.voice_studio.create_voice(
-                name=name, description=desc,
-                model_size='1.7b', reference_audio=filepath,
-                tags=['clone', 'zero-shot'],
-            )
-            return jsonify({'success': True, 'voice': voice})
-
-        @self.app.route('/api/voice-studio/recordings', methods=['GET'])
-        def vs_recordings():
-            """List generated recordings."""
-            voice_id = request.args.get('voice_id')
-            batch_id = request.args.get('batch_id')
-            limit = request.args.get('limit', 50, type=int)
-            recs = self.voice_studio.list_recordings(voice_id=voice_id, batch_id=batch_id, limit=limit)
-            for r in recs:
-                if r.get('filename'):
-                    r['url'] = f"/api/voice-studio/download/{r['filename']}"
-            return jsonify({'recordings': recs})
-
-        @self.app.route('/api/voice-studio/recordings/<rec_id>', methods=['DELETE'])
-        def vs_delete_recording(rec_id):
-            """Delete a recording."""
-            return jsonify({'success': self.voice_studio.delete_recording(rec_id)})
-
-        @self.app.route('/api/voice-studio/download/<filename>', methods=['GET'])
-        def vs_download(filename):
-            """Download a voice studio recording."""
-            from werkzeug.utils import secure_filename as sf
-            filename = sf(filename)
-            search_dirs = [
-                self.voice_studio.recordings_dir,
-                self.voice_studio.voice_dir,
-                Path(__file__).parent.parent.parent / "simulation" / "media" / "voice",
-            ]
-            for d in search_dirs:
-                candidate = d / filename
-                if candidate.exists():
-                    return send_file(str(candidate), mimetype='audio/wav')
-            return jsonify({'error': 'File not found'}), 404
-
-        @self.app.route('/api/voice-studio/presets', methods=['GET'])
-        def vs_presets():
-            """Get emotion/tone/style presets for the cheat sheet."""
-            return jsonify({
-                'emotion_tags': VoiceStudio.get_emotion_tags(),
-                'premade_voices': VoiceStudio.get_premade_voices(),
-            })
-
-        # ── Image Generation Settings API ─────────────────────────────
-
-        @self.app.route('/api/image-settings', methods=['GET'])
-        def get_image_settings():
-            """Get current image generation settings."""
-            try:
-                from engine.config import get_config
-                cfg = get_config()
-                comfyui_gen = cfg.get('comfyui', {}).get('generation', {})
-            except Exception:
-                comfyui_gen = {}
-
-            # Get available models from ComfyUI
-            models = []
-            try:
-                models = self.media_generator.client.get_models()
-            except Exception:
-                pass
-
-            current_model = None
-            try:
-                current_model = self.media_generator.client._get_model_name()
-            except Exception:
-                pass
-
-            return jsonify({
-                'settings': {
-                    'steps': comfyui_gen.get('steps', 30),
-                    'cfg': comfyui_gen.get('cfg', 7.0),
-                    'sampler_name': comfyui_gen.get('sampler_name', 'euler'),
-                    'scheduler': comfyui_gen.get('scheduler', 'normal'),
-                    'denoise': comfyui_gen.get('denoise', 1.0),
-                    'model': current_model,
-                },
-                'available_models': models,
-                'available_samplers': [
-                    'euler', 'euler_ancestral', 'heun', 'heunpp2',
-                    'dpm_2', 'dpm_2_ancestral', 'lms', 'dpm_fast',
-                    'dpm_adaptive', 'dpmpp_2s_ancestral', 'dpmpp_sde',
-                    'dpmpp_sde_gpu', 'dpmpp_2m', 'dpmpp_2m_sde',
-                    'dpmpp_2m_sde_gpu', 'dpmpp_3m_sde', 'dpmpp_3m_sde_gpu',
-                    'ddpm', 'lcm', 'uni_pc', 'uni_pc_bh2',
-                ],
-                'available_schedulers': [
-                    'normal', 'karras', 'exponential', 'sgm_uniform',
-                    'simple', 'ddim_uniform', 'beta',
-                ],
-            })
-
-        @self.app.route('/api/image-settings', methods=['POST'])
-        def set_image_settings():
-            """Update image generation settings (runtime override)."""
-            data = request.json or {}
-
-            # Override the model if provided
-            if 'model' in data and data['model']:
-                from content.simulation.services.comfyui_client import ComfyUIClient
-                ComfyUIClient._force_model = data['model']
-
-            # Store settings in instance for runtime use
-            if not hasattr(self, '_image_settings'):
-                self._image_settings = {}
-            for key in ('steps', 'cfg', 'sampler_name', 'scheduler', 'denoise'):
-                if key in data:
-                    self._image_settings[key] = data[key]
-
-            return jsonify({'success': True, 'settings': self._image_settings})
-
     def _setup_socketio(self):
         """Setup SocketIO event handlers"""
         
@@ -1602,21 +1337,15 @@ class PhoneScene(BaseScene):
                 self._active_request_in_progress = False
                 self.socketio.emit('active_request_end', {})
             
-            # Update mood & relationship based on this exchange
-            self._update_mood_and_relationship(message, response)
-            
             # Add assistant message
             self.active_character.add_message('assistant', response)
             
-            # Hide typing indicator and emit response with updated mood/rel
+            # Hide typing indicator and emit response
             self.socketio.emit('typing', {'is_typing': False})
             emit('message_received', {
                 'role': 'assistant',
                 'content': response,
-                'timestamp': datetime.now().isoformat(),
-                'mood': getattr(self.active_character, 'mood', 'neutral'),
-                'relationship_level': getattr(self.active_character, 'relationship_level', 0.5),
-                'arousal': getattr(self.active_character, 'arousal', 0.0),
+                'timestamp': datetime.now().isoformat()
             })
         
         @self.socketio.on('start_call')
@@ -1700,18 +1429,9 @@ class PhoneScene(BaseScene):
             
             text = data.get('text')
             
-            # Auto-generate text if none provided
             if not text:
-                mood = self.active_character.mood or 'happy'
-                name = self.active_character.name
-                templates = [
-                    f"Hey, it's {name}. Just thinking about you right now...",
-                    f"Hi! I wanted to send you a little voice message. Miss you!",
-                    f"Hey babe, just wanted to hear myself say your name...",
-                    f"I'm feeling {mood} right now and wanted to share that with you.",
-                    f"Can't stop thinking about our conversation earlier...",
-                ]
-                text = random.choice(templates)
+                emit('error', {'message': 'No text provided'})
+                return
             
             try:
                 # Generate voice message
@@ -1766,7 +1486,7 @@ class PhoneScene(BaseScene):
         
         @self.socketio.on('request_photo')
         def handle_request_photo():
-            """Handle photo request — generate via ComfyUI if gallery empty"""
+            """Handle photo request from user"""
             if not self.active_character:
                 emit('error', {'message': 'No active character'})
                 return
@@ -1779,7 +1499,7 @@ class PhoneScene(BaseScene):
             )
             
             if media_list:
-                # Send random existing photo
+                # Send random photo
                 media = random.choice(media_list)
                 emit('photo_received', {
                     'media_id': media['id'],
@@ -1787,68 +1507,16 @@ class PhoneScene(BaseScene):
                     'role': 'assistant',
                     'timestamp': datetime.now().isoformat()
                 })
+                
+                # Log to conversation
                 if self.current_chain_id:
                     self.active_character.add_message('assistant', f"[Photo sent: {media['id']}]")
             else:
-                # No photos yet — generate one via ComfyUI
-                emit('typing', {'is_typing': True})
-                try:
-                    rel = float(self.active_character.relationship_level or 0.0)
-                    arousal = float(getattr(self.active_character, 'arousal', 0.0) or 0.0)
-                    nsfw_ok = getattr(self.active_character, 'nsfw_enabled', False)
-                    mood = self.active_character.mood or 'happy'
-                    
-                    extra = ''
-                    nsfw = False
-                    if rel > 0.85 and arousal > 0.5 and nsfw_ok:
-                        nsfw = True
-                        extra = 'seductive pose, revealing outfit, bedroom eyes'
-                    elif rel > 0.6:
-                        extra = 'flirty expression, attractive pose'
-                    
-                    filepath = self.media_generator.generate_selfie(
-                        character_name=self.active_character.name,
-                        character_description=self.active_character.appearance or "attractive person",
-                        mood=mood,
-                        setting='selfie',
-                        style='realistic',
-                        nsfw=nsfw,
-                        extra_prompt=extra,
-                        chain_id=self.current_chain_id,
-                        scene_id='phone',
-                        character_id=self.active_character.id,
-                    )
-                    
-                    if filepath:
-                        media_id = self.gallery.add_media(
-                            character_id=self.active_character.id,
-                            filepath=filepath,
-                            media_type='image',
-                            metadata={'source': 'generated', 'mood': mood}
-                        )
-                        emit('photo_received', {
-                            'media_id': media_id,
-                            'url': f"/api/media/download/{media_id}",
-                            'role': 'assistant',
-                            'timestamp': datetime.now().isoformat()
-                        })
-                        if self.current_chain_id:
-                            self.active_character.add_message('assistant', f"[Selfie sent: {media_id}]")
-                    else:
-                        emit('message_received', {
-                            'role': 'assistant',
-                            'content': "Sorry, couldn't take a selfie right now 😅 Try again in a bit!",
-                            'timestamp': datetime.now().isoformat()
-                        })
-                except Exception as e:
-                    logger.error(f"Photo generation failed: {e}")
-                    emit('message_received', {
-                        'role': 'assistant',
-                        'content': "My camera isn't working right now 📸😅",
-                        'timestamp': datetime.now().isoformat()
-                    })
-                finally:
-                    emit('typing', {'is_typing': False})
+                emit('message_received', {
+                    'role': 'assistant',
+                    'content': "I don't have any photos to send right now 😅",
+                    'timestamp': datetime.now().isoformat()
+                })
         
         # Video Call SocketIO Events
         @self.socketio.on('start_video_call')
@@ -1966,13 +1634,13 @@ class PhoneScene(BaseScene):
     
     def _generate_response(self, user_message: str) -> str:
         """
-        Generate character response via CharacterAgent (preferred) or direct LLM.
-        Uses CharacterAgent.reply() when available — this enables skills, MCP,
-        EventChain logging, and RAG memory automatically.
+        Generate character response via LM Studio LLM.
         Parses intent and may trigger spontaneous media sends.
         """
         if not self.active_character:
             return "Error: No active character"
+
+        llm = get_llm_service()
 
         # Build conversation history from recent messages
         history = []
@@ -1989,30 +1657,12 @@ class PhoneScene(BaseScene):
         except Exception:
             history = []
 
-        # Check for cancel before the (potentially slow) API call
-        if self._cancel_event.is_set():
-            return "(Request cancelled)"
-
-        # ── Primary path: CharacterAgent (skills + MCP + EventChain) ──
-        if self._agent:
-            try:
-                self._agent._cancel_event = self._cancel_event
-                response = self._agent.reply(
-                    user_message,
-                    chain_id=self.current_chain_id,
-                    history=history,
-                    use_tools=True,
-                )
-                if response and not self._cancel_event.is_set():
-                    return self._post_process_response(user_message, response)
-            except Exception as e:
-                print(f"[PhoneScene] CharacterAgent failed, falling back to direct LLM: {e}")
-
-        # ── Fallback: direct LLM call ──
-        llm = get_llm_service()
+        # Generate LLM response
+        # Apply timeout and custom context from control-panel settings
         original_timeout = llm.timeout
         llm.timeout = self.settings.get('message_timeout', 180)
         
+        # Build system prompt directly so we can inject custom context
         try:
             system_prompt = self.active_character.get_system_prompt()
         except Exception:
@@ -2029,6 +1679,11 @@ class PhoneScene(BaseScene):
         if custom_ctx:
             system_prompt += f"\n\n## Operator Context\n{custom_ctx}"
         
+        # Check for cancel before the (potentially slow) API call
+        if self._cancel_event.is_set():
+            llm.timeout = original_timeout
+            return "(Request cancelled)"
+        
         try:
             response = llm.chat(
                 messages=history + [{"role": "user", "content": user_message}],
@@ -2040,18 +1695,13 @@ class PhoneScene(BaseScene):
         if self._cancel_event.is_set():
             return "(Request cancelled)"
 
-        return self._post_process_response(user_message, response)
-
-    def _post_process_response(self, user_message: str, response: str) -> str:
-        """Parse intent from user message and trigger spontaneous media."""
-        llm = get_llm_service()
+        # Parse intent to decide if media should be triggered
         try:
             intent = llm.parse_intent(user_message)
         except Exception:
             intent = {}
 
         rel = float(self.active_character.relationship_level)
-        arousal = float(getattr(self.active_character, 'arousal', 0.0) or 0.0)
 
         # User explicitly asked for a selfie
         if intent.get("wants_selfie") and rel > 0.2:
@@ -2065,122 +1715,17 @@ class PhoneScene(BaseScene):
         if intent.get("wants_video") and rel > 0.4:
             self._maybe_send_video_message(response)
 
-        # Spontaneous media — probability scales with relationship + arousal
-        if not any(intent.values()):
-            # Base chance: 5% at rel 0.5 → 25% at rel 1.0 + arousal boost
-            base_chance = max(0, (rel - 0.3) * 0.35) + arousal * 0.10
+        # Spontaneous media (low probability unless intent triggered)
+        if rel >= 0.5 and not any(intent.values()):
             r = random.random()
-            if r < base_chance * 0.5:      # photo most common
+            if r < 0.05:
                 self._maybe_send_photo()
-            elif r < base_chance * 0.7:    # voice message
+            elif r < 0.08:
                 self._maybe_send_voice_message(response)
-            elif r < base_chance * 0.85:   # video message
+            elif r < 0.10:
                 self._maybe_send_video_message(response)
 
         return response
-
-    # ── Dynamic Mood, Relationship & Arousal Engine ───────────
-    # Called after every assistant reply to nudge mood, relationship,
-    # and arousal based on keyword sentiment heuristics.
-
-    _POSITIVE_WORDS = frozenset([
-        'love', 'happy', 'great', 'amazing', 'wonderful', 'thank', 'thanks',
-        'awesome', 'beautiful', 'sweet', 'kind', 'funny', 'cute', 'miss',
-        'haha', 'lol', 'yes', 'cool', 'nice', 'good', 'perfect', 'best',
-        'appreciate', 'care', 'adore', 'excited', 'joy', 'hug', 'kiss',
-    ])
-    _NEGATIVE_WORDS = frozenset([
-        'hate', 'angry', 'annoyed', 'stupid', 'ugly', 'boring', 'leave',
-        'shut', 'stop', 'no', 'bad', 'worst', 'wrong', 'rude', 'mean',
-        'ignore', 'upset', 'cry', 'sad', 'tired', 'whatever', 'ugh',
-    ])
-    _FLIRTY_WORDS = frozenset([
-        'sexy', 'hot', 'gorgeous', 'stunning', 'flirt', 'tease', 'naughty',
-        'kiss', 'lips', 'touch', 'skin', 'bed', 'cuddle', 'close',
-        'desire', 'want', 'need', 'body', 'curves', 'eyes', 'smile',
-        'seduce', 'tempt', 'attract', 'blush', 'whisper', 'breathe',
-        'tight', 'soft', 'warm', 'wet', 'moan', 'bite', 'neck', 'thigh',
-        'strip', 'undress', 'lingerie', 'naked', 'nude', 'bare',
-        'pleasure', 'fantasy', 'dream', 'imagine', 'tonight', 'alone',
-        'bedroom', 'shower', 'bath', 'daddy', 'baby', 'babe', 'darling',
-        'handsome', 'pretty', 'adorable', 'irresistible', 'delicious',
-    ])
-
-    def _update_mood_and_relationship(self, user_message: str, response: str):
-        """Nudge mood, relationship level, and arousal based on conversation."""
-        if not self.active_character:
-            return
-        try:
-            combined = (user_message + ' ' + response).lower()
-            words = set(combined.split())
-            pos   = len(words & self._POSITIVE_WORDS)
-            neg   = len(words & self._NEGATIVE_WORDS)
-            flirt = len(words & self._FLIRTY_WORDS)
-
-            rel = float(self.active_character.relationship_level or 0.5)
-            arousal = float(getattr(self.active_character, 'arousal', 0.0) or 0.0)
-            flirtiness = float(getattr(self.active_character, 'flirtiness', 0.5) or 0.5)
-
-            # ── Arousal ──────────────────────────────────────
-            arousal_delta = 0.0
-            if flirt > 0:
-                arousal_delta = min(0.04 * flirt, 0.15)  # flirty words heat things up
-            if pos > neg and flirt == 0:
-                arousal_delta = 0.01                       # warm convo — slight
-            if neg > pos + 1:
-                arousal_delta = -0.05                      # negativity cools down
-            # Natural decay towards 0
-            if arousal_delta == 0:
-                arousal_delta = -0.02
-            arousal = max(0.0, min(1.0, arousal + arousal_delta))
-
-            # ── Mood ─────────────────────────────────────────
-            if flirt >= 3 and arousal > 0.6:
-                new_mood = random.choice(['aroused', 'seductive', 'passionate'])
-            elif flirt >= 2 or arousal > 0.4:
-                new_mood = random.choice(['flirty', 'teasing', 'playful'])
-            elif pos > neg + 2:
-                new_mood = random.choice(['happy', 'excited', 'playful', 'loving'])
-            elif neg > pos + 2:
-                new_mood = random.choice(['sad', 'angry', 'anxious'])
-            elif pos > neg:
-                new_mood = random.choice(['happy', 'loving', 'playful'])
-            elif neg > pos:
-                new_mood = random.choice(['sad', 'bored'])
-            else:
-                new_mood = 'neutral'
-
-            self.active_character.set_mood(new_mood)
-
-            # ── Relationship ─────────────────────────────────
-            delta = 0.0
-            if pos > neg:
-                delta = min(0.02 * (pos - neg), 0.06)
-            elif neg > pos:
-                delta = max(-0.02 * (neg - pos), -0.04)
-            if flirt > 0:
-                delta += 0.01 * flirt       # flirting always builds closeness
-            if delta == 0:
-                delta = -0.005 if rel > 0.5 else 0.005 if rel < 0.5 else 0
-            rel = max(0.0, min(1.0, rel + delta))
-            self.active_character.adjust_relationship(delta)
-
-            # ── Flirtiness (character trait drift) ───────────
-            if flirt > 1:
-                flirtiness = min(1.0, flirtiness + 0.02)
-            elif neg > pos:
-                flirtiness = max(0.0, flirtiness - 0.01)
-
-            # ── Persist to DB ────────────────────────────────
-            self.db.update_character_state(
-                self.active_character.id,
-                mood=new_mood,
-                relationship_level=rel,
-                arousal=arousal,
-                flirtiness=flirtiness,
-            )
-        except Exception as e:
-            print(f"[mood/rel/arousal] update error: {e}")
     
     def _maybe_send_voice_message(self, text: str):
         """Character may spontaneously send a voice message"""
@@ -2208,129 +1753,26 @@ class PhoneScene(BaseScene):
             print(f"Error sending voice message: {e}")
     
     def _maybe_send_photo(self):
-        """
-        Character spontaneously sends a photo.
-        Content escalates with relationship level and arousal:
-          rel < 0.4  → cute / casual selfie
-          rel 0.4–0.7 → flirty selfie (bedroom, gym, mirror)
-          rel > 0.7  → intimate selfie (lingerie, suggestive poses)
-          rel > 0.85 AND arousal > 0.5 → NSFW selfie
-        Falls back to existing gallery photos when ComfyUI is offline.
-        """
+        """Character may spontaneously send a photo"""
         try:
-            rel     = float(self.active_character.relationship_level or 0.0)
-            arousal = float(getattr(self.active_character, 'arousal', 0.0) or 0.0)
-            mood    = self.active_character.mood or 'happy'
-            name    = self.active_character.name
-            desc    = self.active_character.get_visual_description()
-            nsfw_ok = getattr(self.active_character, 'nsfw_enabled', False)
-
-            # ── Decide selfie tier ──────────────────────────
-            if rel > 0.85 and arousal > 0.5 and nsfw_ok:
-                # Intimate / NSFW tier
-                tier_mood    = random.choice(['seductive', 'aroused', 'passionate', 'teasing'])
-                tier_setting = random.choice(['bedroom', 'lingerie', 'bath', 'mirror selfie'])
-                tier_extra   = random.choice([
-                    'revealing lingerie, dim lighting, inviting pose',
-                    'sheer fabric, soft focus, bedroom eyes',
-                    'topless, covering with hands, biting lip',
-                    'in bed under sheets, bare shoulders, messy hair',
-                ])
-                tier_nsfw    = True
-                caption      = random.choice([
-                    f"Thinking of you... 🔥",
-                    f"Wish you were here right now 💋",
-                    f"Just for your eyes 😈",
-                    f"Can't sleep... want some company? 🥵",
-                    f"Do you like what you see? 💦",
-                ])
-            elif rel > 0.7 or arousal > 0.4:
-                # Flirty / suggestive tier
-                tier_mood    = random.choice(['flirty', 'teasing', 'confident', 'playful'])
-                tier_setting = random.choice(['bedroom', 'mirror selfie', 'gym', 'cozy night'])
-                tier_extra   = random.choice([
-                    'tight outfit, showing curves, playful wink',
-                    'low-cut top, candlelight, smiling seductively',
-                    'crop top, mirror selfie, confident pose',
-                    'oversized shirt, no pants, lounging on bed',
-                ])
-                tier_nsfw    = False
-                caption      = random.choice([
-                    f"Like my outfit? 😘",
-                    f"Felt cute, might delete later 💕",
-                    f"This is what you're missing tonight 😏",
-                    f"Just got out of the shower... 🫣",
-                    f"Rate me? 💋",
-                ])
-            elif rel > 0.4:
-                # Warm / cute tier
-                tier_mood    = random.choice(['happy', 'playful', 'shy', 'loving'])
-                tier_setting = random.choice(['casual', 'outdoors', 'cafe', 'sunset'])
-                tier_extra   = 'cute selfie, natural lighting, warm smile'
-                tier_nsfw    = False
-                caption      = random.choice([
-                    f"Hey you 😊",
-                    f"Having a good day! Thought of you 💭",
-                    f"Miss your face 🥰",
-                    f"Selfie time! 📸",
-                ])
-            else:
-                # Casual tier — barely know each other
-                tier_mood    = random.choice(['happy', 'neutral', 'curious'])
-                tier_setting = random.choice(['casual', 'outdoors', 'cafe'])
-                tier_extra   = 'casual selfie, friendly smile'
-                tier_nsfw    = False
-                caption      = random.choice([
-                    f"Hey! 👋",
-                    f"Hope you're having a good day 😊",
-                ])
-
-            # ── Try generating a fresh selfie ────────────────
-            filepath = None
-            try:
-                filepath = self.media_generator.generate_selfie(
-                    character_name=name,
-                    character_description=desc,
-                    mood=tier_mood,
-                    setting=tier_setting,
-                    nsfw=tier_nsfw,
-                    extra_prompt=tier_extra,
-                    chain_id=self.current_chain_id,
-                    scene_id='phone',
-                    character_id=self.active_character.id,
-                )
-            except Exception:
-                pass
-
-            if filepath:
-                media_id = self.gallery.add_media(
-                    character_id=self.active_character.id,
-                    filepath=filepath,
-                    media_type='image',
-                    metadata={'source': 'generated', 'mood': tier_mood,
-                              'setting': tier_setting, 'nsfw': tier_nsfw},
-                )
-                url = f"/api/media/download/{media_id}"
-            else:
-                # Fallback: pick a random existing photo
-                media_list = self.gallery.get_character_media(
-                    character_id=self.active_character.id,
-                    media_type='image', limit=20,
-                )
-                if not media_list:
-                    return
+            media_list = self.gallery.get_character_media(
+                character_id=self.active_character.id,
+                media_type='image',
+                limit=20
+            )
+            
+            if media_list:
                 media = random.choice(media_list)
-                url = f"/api/media/download/{media['id']}"
-
-            # ── Send photo with caption ──────────────────────
-            self.socketio.emit('photo_received', {
-                'url': url,
-                'role': 'assistant',
-                'timestamp': datetime.now().isoformat(),
-                'caption': caption,
-            })
-            if self.current_chain_id:
-                self.active_character.add_message('assistant', f"[Photo sent] {caption}")
+                self.socketio.emit('photo_received', {
+                    'media_id': media['id'],
+                    'url': f"/api/media/download/{media['id']}",
+                    'role': 'assistant',
+                    'timestamp': datetime.now().isoformat()
+                })
+                
+                # Log to conversation
+                if self.current_chain_id:
+                    self.active_character.add_message('assistant', f"[Photo sent: {media['id']}]")
         except Exception as e:
             print(f"Error sending photo: {e}")
     

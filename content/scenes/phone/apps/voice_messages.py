@@ -77,15 +77,21 @@ class VoiceMessagesApp:
 
     def get_list(self, character_id: str, limit: int = 50) -> List[Dict]:
         """
-        Return voice messages for a character, newest first.  Also scans the
-        filesystem for any .wav/.mp3 files not recorded in the DB so files
-        dropped into media folders are discoverable.
-        """
-        try:
-            cards: List[Dict] = []
-            seen_filenames = set()
+        Return voice messages for a character, newest first.
 
-            # 1) DB-backed messages
+        Also scans media directories for .wav files not yet tracked in the DB
+        (offline ingest: drop files in the folder and they appear).
+
+        Args:
+            character_id: Active character's DB id.
+            limit: Maximum rows to return.
+
+        Returns:
+            List of card dicts (empty list on any error).
+        """
+        db_cards: List[Dict] = []
+        db_filenames: set = set()
+        try:
             with self.db.get_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute(
@@ -98,43 +104,42 @@ class VoiceMessagesApp:
                     """,
                     (character_id, limit),
                 )
-                rows = cursor.fetchall()
-                for row in rows:
-                    cards.append(self._row_to_card(row))
-                    fp = Path(row[1]) if row[1] else None
-                    if fp:
-                        seen_filenames.add(fp.name)
-
-            # 2) Filesystem fallback (scan simulation + content media folders)
-            sim_dir = Path(__file__).parent.parent.parent.parent / "simulation" / "media" / "voice"
-            content_dir = Path(__file__).parent.parent.parent / "media" / "voice"
-            for vdir in (sim_dir, content_dir):
-                if not vdir.exists():
-                    continue
-                for ext in ('*.wav', '*.mp3'):
-                    for f in sorted(vdir.glob(ext), key=lambda p: p.stat().st_mtime, reverse=True):
-                        if f.name in seen_filenames:
-                            continue
-                        cards.append({
-                            'id': f.stem,
-                            'filename': f.name,
-                            'url': f"/api/voice/download/{f.name}",
-                            'title': f.stem.replace('_', ' '),
-                            'duration': 0,
-                            'duration_display': '0:00',
-                            'mood': '',
-                            'text': '',
-                            'sender': 'filesystem',
-                            'timestamp': __import__('datetime').datetime.fromtimestamp(f.stat().st_mtime).isoformat(),
-                            'timestamp_display': _fmt_ts(__import__('datetime').datetime.fromtimestamp(f.stat().st_mtime).isoformat()),
-                        })
-                        seen_filenames.add(f.name)
-
-            return cards[:limit]
-
+                db_cards = [self._row_to_card(row) for row in cursor.fetchall()]
+                db_filenames = {c["filename"] for c in db_cards if c["filename"]}
         except Exception as exc:
-            logger.warning("VoiceMessagesApp.get_list error: %s", exc)
-            return []
+            logger.warning("VoiceMessagesApp.get_list DB error: %s", exc)
+
+        # Filesystem scan — pick up files dropped in the media dirs
+        content_root = Path(__file__).parent.parent.parent.parent
+        scan_dirs = [
+            content_root / "simulation" / "media" / "voice",
+            Path(__file__).parent.parent.parent / "media" / "voice",
+        ]
+        fs_cards: List[Dict] = []
+        for scan_dir in scan_dirs:
+            if not scan_dir.exists():
+                continue
+            for f in sorted(scan_dir.glob("*.wav"), key=lambda p: p.stat().st_mtime, reverse=True):
+                if f.name in db_filenames:
+                    continue
+                db_filenames.add(f.name)  # deduplicate across dirs
+                fs_cards.append({
+                    "id":               f.stem,
+                    "filename":         f.name,
+                    "url":              f"/api/voice/download/{f.name}",
+                    "title":            f.stem,
+                    "duration":         0,
+                    "duration_display": "0:00",
+                    "mood":             "",
+                    "text":             "",
+                    "sender":           "character",
+                    "timestamp":        "",
+                    "timestamp_display": _fmt_ts(None),
+                    "source":           "filesystem",
+                })
+
+        combined = db_cards + fs_cards
+        return combined[:limit]
 
     def get_item(self, media_id: str) -> Optional[Dict]:
         """

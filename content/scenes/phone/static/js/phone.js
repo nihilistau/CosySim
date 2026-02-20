@@ -30,19 +30,10 @@ function initializeSocket() {
     
     socket.on('message_received', (data) => {
         addMessageToUI(data.role, data.content, data.timestamp, data.autonomous);
-        scrollToBottom();
-        
-        // Update mood/relationship/arousal if the server sent new values
-        if (currentCharacter) {
-            if (data.mood) currentCharacter.mood = data.mood;
-            if (data.relationship_level !== undefined) currentCharacter.relationship_level = data.relationship_level;
-            if (data.arousal !== undefined) currentCharacter.arousal = data.arousal;
-        }
-        if (data.role === 'assistant') updateMoodRelDisplay();
         
         // Show notification badge if not on messages screen
         const messagesScreen = document.getElementById('messagesScreen');
-        if (messagesScreen && !messagesScreen.classList.contains('active') && data.role === 'assistant') {
+        if (messagesScreen.style.display !== 'block' && data.role === 'assistant') {
             const badge = document.getElementById('messageBadge');
             const currentCount = parseInt(badge.textContent) || 0;
             showNotificationBadge(currentCount + 1);
@@ -62,7 +53,7 @@ function initializeSocket() {
     });
     
     socket.on('photo_received', (data) => {
-        addPhotoMessage(data.url, data.timestamp, data.role || 'assistant', data.caption);
+        addPhotoMessage(data.url, data.timestamp, data.role || 'assistant');
     });
     
     socket.on('voice_message_received', (data) => {
@@ -142,7 +133,6 @@ async function selectCharacter() {
         
         if (data.success) {
             currentCharacter = data.character;
-            _messagesLoadedForCharacter = null;  // Force reload messages for new character
             updateCharacterUI();
             console.log('Character set:', data.character.name);
         } else if (data.error) {
@@ -157,7 +147,6 @@ async function selectCharacter() {
                 const fallbackData = await fallbackResponse.json();
                 if (fallbackData.success) {
                     currentCharacter = fallbackData.character;
-                    _messagesLoadedForCharacter = null;  // Force reload messages for new character
                     updateCharacterUI();
                     console.log('Character set (fallback):', fallbackData.character.name);
                 }
@@ -180,84 +169,30 @@ function updateCharacterUI() {
     
     const activeCallerName = document.getElementById('activeCallerName');
     if (activeCallerName) activeCallerName.textContent = currentCharacter.name;
-    
-    // Update mood & relationship indicators in chat header
-    updateMoodRelDisplay();
-}
-
-/** Refresh the mood dot, relationship hearts, and arousal bar in the message header. */
-function updateMoodRelDisplay() {
-    if (!currentCharacter) return;
-    const mood    = currentCharacter.mood || 'neutral';
-    const rel     = parseFloat(currentCharacter.relationship_level || 0.5);
-    const arousal = parseFloat(currentCharacter.arousal || 0);
-    
-    // Mood dot colour mapping
-    const moodColours = {
-        happy:'#34c759', excited:'#ff9500', flirty:'#ff2d55',
-        sad:'#5ac8fa', angry:'#ff3b30', neutral:'#8e8e93',
-        anxious:'#ffcc00', playful:'#af52de', loving:'#ff375f',
-        bored:'#636366', curious:'#0a84ff', shy:'#d4a0e8',
-        seductive:'#e63946', aroused:'#d00000', passionate:'#dc2f02',
-        teasing:'#f77f00', needy:'#9d4edd', confident:'#f4a261',
-    };
-    const dot = document.getElementById('moodDot');
-    if (dot) dot.style.background = moodColours[mood] || '#8e8e93';
-    
-    const label = document.getElementById('moodLabel');
-    if (label) label.textContent = mood;
-    
-    // Relationship hearts (0–5 filled)
-    const hearts = document.getElementById('relHearts');
-    if (hearts) {
-        const filled = Math.round(rel * 5);
-        hearts.textContent = '❤️'.repeat(filled) + '🤍'.repeat(5 - filled);
-    }
-    
-    // Arousal fire bar (0–5 flames)
-    const fire = document.getElementById('arousalFire');
-    if (fire) {
-        const flames = Math.round(arousal * 5);
-        fire.textContent = flames > 0 ? '🔥'.repeat(flames) : '';
-        fire.style.display = flames > 0 ? 'inline' : 'none';
-    }
 }
 
 // App navigation
 function openApp(appName) {
-    // Remove active class from all screens (triggers fade-out)
+    // Hide all screens
     const screens = document.querySelectorAll('.screen-view');
-    screens.forEach(screen => {
-        screen.classList.remove('active');
-        screen.style.display = 'none';
-    });
+    screens.forEach(screen => screen.style.display = 'none');
     
     // Show selected screen
     const screenMap = {
         'messages':      'messagesScreen',
         'phone':         'phoneScreen',
         'gallery':       'galleryScreen',
-        'camera':        'homeScreen',
-        'browser':       'homeScreen',
+        'camera':        'homeScreen',        // Placeholder
+        'browser':       'homeScreen',        // Placeholder
         'videoMessages': 'videoMessagesScreen',
         'voiceMessages': 'voiceMessagesScreen',
-        'settings':      'settingsScreen',
-        'voiceStudio':   'voiceStudioScreen',
-        'imageSettings': 'imageSettingsScreen'
+        'settings':      'settingsScreen'
     };
     
     const screenId = screenMap[appName] || 'homeScreen';
-    const screenEl = document.getElementById(screenId);
-    if (screenEl) {
-        screenEl.style.display = 'flex';
-        requestAnimationFrame(() => screenEl.classList.add('active'));
-    } else {
-        const home = document.getElementById('homeScreen');
-        if (home) { home.style.display = 'flex'; home.classList.add('active'); }
-        return;
-    }
+    document.getElementById(screenId).style.display = 'block';
     
-    // Load data for the app
+    // Clear notification badge when opening messages
     if (appName === 'messages') {
         showNotificationBadge(0);
         loadMessages();
@@ -269,23 +204,13 @@ function openApp(appName) {
         loadVoiceMessages();
     } else if (appName === 'settings') {
         loadPhoneSettings();
-    } else if (appName === 'voiceStudio') {
-        vsLoadVoices();
-        vsLoadRecordings();
-        vsLoadToneButtons();
-    } else if (appName === 'imageSettings') {
-        loadImageSettings();
     }
 }
 
 function goHome() {
     const screens = document.querySelectorAll('.screen-view');
-    screens.forEach(screen => {
-        screen.classList.remove('active');
-        screen.style.display = 'none';
-    });
-    const home = document.getElementById('homeScreen');
-    if (home) { home.style.display = 'flex'; requestAnimationFrame(() => home.classList.add('active')); }
+    screens.forEach(screen => screen.style.display = 'none');
+    document.getElementById('homeScreen').style.display = 'block';
 }
 
 // ══════════════════════════════ Video Messages gallery ══════════════════════
@@ -472,31 +397,19 @@ function _fmtDur(sec) {
 }
 
 // Messages functionality
-let _messagesLoadedForCharacter = null;
-
-async function loadMessages(forceReload = false) {
+async function loadMessages() {
     try {
-        const charId = currentCharacter ? currentCharacter.id : null;
-        const container = document.getElementById('messagesContainer');
-        if (!container) return;
-
-        // Skip reload if messages are already loaded for this character
-        if (!forceReload && _messagesLoadedForCharacter === charId && container.children.length > 0) {
-            scrollToBottom();
-            return;
-        }
-
         const response = await fetch('/api/messages/history?limit=50');
         const data = await response.json();
         
+        const container = document.getElementById('messagesContainer');
         container.innerHTML = '';
         
-        (data.messages || []).forEach(msg => {
-            addMessageToUI(msg.role, msg.content, msg.timestamp, false, false);
+        data.messages.forEach(msg => {
+            addMessageToUI(msg.role, msg.content, msg.timestamp, false);
         });
         
-        _messagesLoadedForCharacter = charId;
-        scrollToBottom(true);
+        scrollToBottom();
     } catch (error) {
         console.error('Error loading messages:', error);
     }
@@ -508,236 +421,134 @@ function handleMessageKeyPress(event) {
     }
 }
 
-function handleMessageKeyDown(event) {
-    if (event.key === 'Enter' && !event.shiftKey) {
-        event.preventDefault();
-        sendMessage();
-    }
-}
-
 function sendMessage() {
     const input = document.getElementById('messageInput');
-    const sendBtn = document.querySelector('.input-send-btn');
     const message = input.value.trim();
     
     if (!message) return;
-    if (input.disabled) return;
     
-    // Prevent double-send
-    input.disabled = true;
-    if (sendBtn) sendBtn.disabled = true;
-    
+    // Send via socket
     socket.emit('send_message', { message: message });
     
+    // Clear input
     input.value = '';
-    // Re-enable after brief delay
-    setTimeout(() => {
-        input.disabled = false;
-        if (sendBtn) sendBtn.disabled = false;
-        input.focus();
-    }, 500);
 }
 
 function addMessageToUI(role, content, timestamp, autonomous = false, shouldScroll = true) {
     const container = document.getElementById('messagesContainer');
-    if (!container) return;
 
-    // Detect rich media patterns stored in conversation history
-    const photoMatch = content.match(/^\[Photo sent(?:: ([a-f0-9-]+))?\]\s*(.*)?$/i);
+    // ── Rich-media pattern detection ────────────────────────────────────
+    // Photos stored as "[Photo sent: <media_id>]"
+    const photoMatch = content && content.match(/^\[Photo sent:\s*([^\]]+)\]$/);
     if (photoMatch) {
-        const mediaId = photoMatch[1];
-        const caption = (photoMatch[2] || '').trim();
-        const url = mediaId ? `/api/media/download/${mediaId}` : null;
-        if (url) {
-            addPhotoMessage(url, timestamp, role, caption);
-        }
+        const mediaId = photoMatch[1].trim();
+        addPhotoMessage(`/api/media/download/${mediaId}`, timestamp, role);
         return;
     }
 
-    const voiceMatch = content.match(/^\[Voice message: (.+)\]$/i);
+    // Voice messages stored as "[Voice message: <transcript>]"
+    const voiceMatch = content && content.match(/^\[Voice message:\s*(.*?)\]$/s);
     if (voiceMatch) {
-        _addRichMediaBubble(container, role, timestamp, '🎤', 'Voice Message', voiceMatch[1]);
+        const transcript = voiceMatch[1].trim();
+        _addVoiceHistoryBubble(role, transcript, timestamp, shouldScroll);
         return;
     }
 
-    const videoMatch = content.match(/^\[Video message: (.+)\]$/i);
+    // Video messages stored as "[Video message: <caption>]" or "[Video: <caption>]"
+    const videoMatch = content && content.match(/^\[Video(?:\s+message)?:\s*(.*?)\]$/s);
     if (videoMatch) {
-        _addRichMediaBubble(container, role, timestamp, '🎥', 'Video Message', videoMatch[1]);
+        const caption = videoMatch[1].trim();
+        _addVideoHistoryBubble(role, caption, timestamp, shouldScroll);
         return;
     }
-    
+    // ───────────────────────────────────────────────────────────────────
+
     const messageDiv = document.createElement('div');
     messageDiv.className = `message ${role}`;
-    if (autonomous) messageDiv.classList.add('autonomous');
+    if (autonomous) {
+        messageDiv.classList.add('autonomous');
+    }
     
     const bubbleDiv = document.createElement('div');
     bubbleDiv.className = 'message-bubble';
     bubbleDiv.textContent = content;
     
-    // Timestamp + read-receipt row
-    const metaDiv = document.createElement('div');
-    metaDiv.className = 'message-meta';
-    
-    const timeSpan = document.createElement('span');
-    timeSpan.className = 'message-time';
+    const timeDiv = document.createElement('div');
+    timeDiv.className = 'message-time';
     const time = new Date(timestamp);
-    timeSpan.textContent = time.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-    metaDiv.appendChild(timeSpan);
+    timeDiv.textContent = time.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
     
-    // Read receipt checkmarks for user messages
-    if (role === 'user') {
-        const receipt = document.createElement('span');
-        receipt.className = 'read-receipt delivered';
-        receipt.textContent = '✓✓';
-        metaDiv.appendChild(receipt);
-        // Mark as read after a brief delay (simulates delivery)
-        setTimeout(() => { receipt.className = 'read-receipt read'; }, 800);
-    }
-    
-    bubbleDiv.appendChild(metaDiv);
+    bubbleDiv.appendChild(timeDiv);
     messageDiv.appendChild(bubbleDiv);
     container.appendChild(messageDiv);
     
-    if (shouldScroll) scrollToBottom();
+    if (shouldScroll) {
+        scrollToBottom();
+    }
 }
 
-// Render a non-playable rich media placeholder in chat history
-function _addRichMediaBubble(container, role, timestamp, icon, label, transcript) {
+/** Render a voice-message history bubble (transcript only, no audio URL available). */
+function _addVoiceHistoryBubble(role, transcript, timestamp, shouldScroll = true) {
+    const container = document.getElementById('messagesContainer');
     const messageDiv = document.createElement('div');
     messageDiv.className = `message ${role}`;
 
     const bubbleDiv = document.createElement('div');
-    bubbleDiv.className = 'message-bubble';
-    bubbleDiv.style.cssText = 'display:flex;align-items:center;gap:8px;';
+    bubbleDiv.className = 'message-bubble voice-bubble';
 
-    const iconSpan = document.createElement('span');
-    iconSpan.style.fontSize = '22px';
-    iconSpan.textContent = icon;
-    bubbleDiv.appendChild(iconSpan);
+    bubbleDiv.innerHTML = `
+        <div class="voice-message-player">
+            <span style="font-size:18px;margin-right:8px;">🎤</span>
+            <div class="waveform">
+                <div class="waveform-bar"></div>
+                <div class="waveform-bar"></div>
+                <div class="waveform-bar"></div>
+                <div class="waveform-bar"></div>
+                <div class="waveform-bar"></div>
+            </div>
+        </div>
+        ${transcript ? `<div class="voice-transcript">${_escHtml(transcript)}</div>` : ''}
+    `;
 
-    const infoDiv = document.createElement('div');
-    bubbleDiv.appendChild(infoDiv);
+    const timeDiv = document.createElement('div');
+    timeDiv.className = 'message-time';
+    const t = new Date(timestamp);
+    timeDiv.textContent = t.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    bubbleDiv.appendChild(timeDiv);
 
-    const metaDiv = document.createElement('div');
-    metaDiv.className = 'message-meta';
-    const timeSpan = document.createElement('span');
-    timeSpan.className = 'message-time';
-    const time = new Date(timestamp);
-    timeSpan.textContent = time.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-    metaDiv.appendChild(timeSpan);
-
-    // Determine candidate media URL (if transcript is a filename or URL)
-    const isVoice = icon === '🎤' || /voice/i.test(label);
-    const isVideo = icon === '🎥' || /video/i.test(label);
-
-    let candidateUrl = null;
-    if (typeof transcript === 'string') {
-        if (transcript.startsWith('/') || transcript.startsWith('http')) {
-            candidateUrl = transcript;
-        } else if (isVoice) {
-            candidateUrl = `/api/voice/download/${encodeURIComponent(transcript)}`;
-        } else if (isVideo) {
-            candidateUrl = `/api/video-message/download/${encodeURIComponent(transcript)}`;
-        }
-    }
-
-    const renderTranscriptOnly = () => {
-        infoDiv.innerHTML = `<div style="font-size:11px;color:#888;margin-bottom:2px;">${label}</div>`
-                          + `<div style="font-size:13px;">${_escHtml(transcript)}</div>`;
-        bubbleDiv.appendChild(infoDiv);
-        bubbleDiv.appendChild(metaDiv);
-        messageDiv.appendChild(bubbleDiv);
-        container.appendChild(messageDiv);
-        scrollToBottom();
-    };
-
-    if (!candidateUrl) {
-        // Not a media URL/filename — render transcript-only
-        renderTranscriptOnly();
-        return;
-    }
-
-    // Probe the media URL (HEAD preferred) and render player if available
-    fetch(candidateUrl, { method: 'HEAD' }).then(resp => {
-        if (resp.ok) {
-            // Render inline player
-            if (isVoice) {
-                const audio = document.createElement('audio');
-                audio.controls = true;
-                audio.src = candidateUrl;
-                audio.preload = 'metadata';
-                infoDiv.appendChild(audio);
-                if (transcript && transcript !== '') {
-                    const tdiv = document.createElement('div');
-                    tdiv.className = 'voice-transcript';
-                    tdiv.textContent = transcript;
-                    infoDiv.appendChild(tdiv);
-                }
-            } else if (isVideo) {
-                const video = document.createElement('video');
-                video.controls = true;
-                video.src = candidateUrl;
-                video.preload = 'metadata';
-                video.className = 'inline-video';
-                video.style.maxWidth = '320px';
-                infoDiv.appendChild(video);
-                if (transcript && transcript !== '') {
-                    const tdiv = document.createElement('div');
-                    tdiv.style.marginTop = '6px';
-                    tdiv.textContent = transcript;
-                    infoDiv.appendChild(tdiv);
-                }
-            } else {
-                renderTranscriptOnly();
-            }
-        } else {
-            // Not available — degrade to transcript-only
-            renderTranscriptOnly();
-        }
-
-        bubbleDiv.appendChild(metaDiv);
-        messageDiv.appendChild(bubbleDiv);
-        container.appendChild(messageDiv);
-        scrollToBottom();
-    }).catch(err => {
-        // HEAD may be blocked by some servers; try a quick GET probe as a fallback
-        fetch(candidateUrl, { method: 'GET', headers: { Range: 'bytes=0-0' } }).then(r2 => {
-            if (r2.ok) {
-                if (isVoice) {
-                    const audio = document.createElement('audio');
-                    audio.controls = true; audio.src = candidateUrl; audio.preload = 'metadata';
-                    infoDiv.appendChild(audio);
-                } else if (isVideo) {
-                    const video = document.createElement('video');
-                    video.controls = true; video.src = candidateUrl; video.preload = 'metadata'; video.className = 'inline-video';
-                    video.style.maxWidth = '320px';
-                    infoDiv.appendChild(video);
-                } else {
-                    renderTranscriptOnly();
-                }
-            } else {
-                renderTranscriptOnly();
-            }
-
-            bubbleDiv.appendChild(metaDiv);
-            messageDiv.appendChild(bubbleDiv);
-            container.appendChild(messageDiv);
-            scrollToBottom();
-        }).catch(_ => {
-            renderTranscriptOnly();
-            bubbleDiv.appendChild(metaDiv);
-            messageDiv.appendChild(bubbleDiv);
-            container.appendChild(messageDiv);
-            scrollToBottom();
-        });
-    });
+    messageDiv.appendChild(bubbleDiv);
+    container.appendChild(messageDiv);
+    if (shouldScroll) scrollToBottom();
 }
 
-function _escHtml(s) {
-    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+/** Render a video-message history bubble (caption only, no video URL available). */
+function _addVideoHistoryBubble(role, caption, timestamp, shouldScroll = true) {
+    const container = document.getElementById('messagesContainer');
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `message ${role}`;
+
+    const bubbleDiv = document.createElement('div');
+    bubbleDiv.className = 'message-bubble video-bubble';
+
+    bubbleDiv.innerHTML = `
+        <div class="video-message-player" style="display:flex;align-items:center;gap:8px;">
+            <span style="font-size:24px;">🎥</span>
+            ${caption ? `<div class="video-caption" style="font-size:13px;opacity:.9;">${_escHtml(caption)}</div>` : '<div style="opacity:.6;">Video message</div>'}
+        </div>
+    `;
+
+    const timeDiv = document.createElement('div');
+    timeDiv.className = 'message-time';
+    const t = new Date(timestamp);
+    timeDiv.textContent = t.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    bubbleDiv.appendChild(timeDiv);
+
+    messageDiv.appendChild(bubbleDiv);
+    container.appendChild(messageDiv);
+    if (shouldScroll) scrollToBottom();
 }
 
-function addPhotoMessage(url, timestamp, role = 'assistant', caption = '') {
+function addPhotoMessage(url, timestamp, role = 'assistant') {
     const container = document.getElementById('messagesContainer');
     
     const messageDiv = document.createElement('div');
@@ -750,32 +561,18 @@ function addPhotoMessage(url, timestamp, role = 'assistant', caption = '') {
     img.src = url;
     img.className = 'message-photo';
     img.onclick = () => openPhotoViewer(url);
-
-    // Graceful fallback for missing images — inline SVG placeholder
     img.onerror = function() {
-        this.onerror = null;
         this.alt = 'Image not available';
-        this.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="480" height="320"><rect width="100%" height="100%" fill="%23f3f3f3"/><text x="50%" y="50%" font-size="18" fill="%23888888" dominant-baseline="middle" text-anchor="middle">Image not available</text></svg>';
-        this.style.objectFit = 'contain';
-        this.style.background = '#f3f3f3';
-        this.onclick = null;
+        this.style.cssText = 'width:120px;height:80px;background:#333;border-radius:8px;display:flex;align-items:center;justify-content:center;';
+        this.removeAttribute('src');
     };
-    
-    imgDiv.appendChild(img);
-    
-    // Caption under the photo
-    if (caption) {
-        const capDiv = document.createElement('div');
-        capDiv.className = 'photo-caption';
-        capDiv.textContent = caption;
-        imgDiv.appendChild(capDiv);
-    }
     
     const timeDiv = document.createElement('div');
     timeDiv.className = 'message-time';
     const time = new Date(timestamp);
     timeDiv.textContent = time.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
     
+    imgDiv.appendChild(img);
     imgDiv.appendChild(timeDiv);
     messageDiv.appendChild(imgDiv);
     container.appendChild(messageDiv);
@@ -939,14 +736,13 @@ function showTypingIndicator(show) {
     const indicator = document.getElementById('typingIndicator');
     if (!indicator) return;
     if (show) {
-        // Set character name in typing bubble
-        const nameEl = indicator.querySelector('.typing-name');
-        if (nameEl && currentCharacter) {
-            nameEl.textContent = currentCharacter.name;
-        }
         // Re-append to keep it as the last child so it shows below all messages
         const container = document.getElementById('messagesContainer');
-        if (container) container.appendChild(indicator);
+        if (container && indicator.parentNode !== container) {
+            container.appendChild(indicator);
+        } else if (container) {
+            container.appendChild(indicator); // moves to end even if already a child
+        }
         indicator.style.display = 'block';
         scrollToBottom();
     } else {
@@ -954,12 +750,9 @@ function showTypingIndicator(show) {
     }
 }
 
-function scrollToBottom(force = false) {
+function scrollToBottom() {
     const container = document.getElementById('messagesContainer');
-    if (!container) return;
-    // Only auto-scroll if user is near the bottom (within 150px) or forced
-    const nearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 150;
-    if (nearBottom || force) {
+    if (container) {
         container.scrollTop = container.scrollHeight;
     }
 }
@@ -1254,12 +1047,7 @@ function closeGalleryView() {
 
 function openPhotoViewer(url) {
     currentPhotoUrl = url;
-    const img = document.getElementById('viewerImage');
-    img.src = url;
-    img.onload = function() {
-        const info = document.getElementById('viewerInfo');
-        if (info) info.textContent = `${this.naturalWidth} × ${this.naturalHeight}`;
-    };
+    document.getElementById('viewerImage').src = url;
     document.getElementById('photoViewer').style.display = 'flex';
 }
 
@@ -1267,14 +1055,6 @@ function closePhotoViewer() {
     document.getElementById('photoViewer').style.display = 'none';
     currentPhotoUrl = null;
 }
-
-// ESC key closes photo viewer
-document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape') {
-        const viewer = document.getElementById('photoViewer');
-        if (viewer && viewer.style.display === 'flex') closePhotoViewer();
-    }
-});
 
 function downloadPhoto() {
     if (currentPhotoUrl) {
@@ -1544,316 +1324,3 @@ window.toggleAutonomous = toggleAutonomous;
 window.updateTimeRange = updateTimeRange;
 window.updateAutonomousSettings = updateAutonomousSettings;
 window.saveAutonomousSettings = saveAutonomousSettings;
-
-// ══════════════════════════════ VOICE STUDIO ══════════════════════════════
-
-async function vsLoadVoices() {
-    try {
-        const resp = await fetch('/api/voice-studio/voices');
-        const data = await resp.json();
-        const sel = document.getElementById('vsVoiceSelect');
-        if (!sel) return;
-        sel.innerHTML = '<option value="">-- Select Voice --</option>';
-        (data.voices || []).forEach(v => {
-            const opt = document.createElement('option');
-            opt.value = v.id;
-            opt.textContent = `${v.name} (${v.model_size})${v.is_premade ? ' ★' : ''}`;
-            sel.appendChild(opt);
-        });
-    } catch(e) { console.error('vsLoadVoices:', e); }
-}
-
-async function vsLoadRecordings() {
-    try {
-        const resp = await fetch('/api/voice-studio/recordings?limit=20');
-        const data = await resp.json();
-        const list = document.getElementById('vsRecordingsList');
-        if (!list) return;
-        const recs = data.recordings || [];
-        if (!recs.length) { list.innerHTML = '<div style="color:#888;font-size:12px;padding:8px;">No recordings yet</div>'; return; }
-        list.innerHTML = recs.map(r => `
-            <div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid #222;">
-                <button onclick="vsPlayRec('${r.url}')" style="background:none;border:none;cursor:pointer;font-size:16px;">▶️</button>
-                <div style="flex:1;min-width:0;">
-                    <div style="font-size:12px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${r.name || 'Recording'}</div>
-                    <div style="font-size:10px;color:#888;">${r.duration ? r.duration.toFixed(1) + 's' : ''} · ${r.text ? r.text.substring(0,40) + '...' : ''}</div>
-                </div>
-                <button onclick="vsDeleteRec('${r.id}')" style="background:none;border:none;cursor:pointer;font-size:12px;color:#f44;">🗑️</button>
-            </div>
-        `).join('');
-    } catch(e) { console.error('vsLoadRecordings:', e); }
-}
-
-function vsLoadToneButtons() {
-    const container = document.getElementById('vsToneButtons');
-    if (!container) return;
-    const tags = {
-        '😊 Happy':'happy', '😢 Sad':'sad', '😠 Angry':'angry',
-        '🤩 Excited':'excited', '😏 Flirty':'flirty', '🔥 Seductive':'seductive',
-        '💪 Confident':'confident', '🙈 Shy':'shy', '🌙 Mystery':'mysterious',
-        '💕 Loving':'loving', '🎭 Dramatic':'dramatic', '💤 ASMR':'asmr',
-        '📢 Shout':'shout', '🤫 Whisper':'whisper', '😤 Raspy':'raspy',
-    };
-    container.innerHTML = Object.entries(tags).map(([label, val]) =>
-        `<button onclick="vsInsertTone('${val}')" style="font-size:10px;padding:2px 6px;border-radius:8px;border:1px solid #444;background:#222;color:#fff;cursor:pointer;">${label}</button>`
-    ).join('');
-}
-
-function vsInsertTone(tone) {
-    const ta = document.getElementById('vsTextInput');
-    if (ta) ta.value += ` [${tone}] `;
-    ta.focus();
-}
-
-async function vsGenerate() {
-    const text = document.getElementById('vsTextInput')?.value?.trim();
-    if (!text) { alert('Enter text first'); return; }
-    const voiceId = document.getElementById('vsVoiceSelect')?.value || null;
-    const emotion = document.getElementById('vsEmotion')?.value || null;
-    const modelSize = document.getElementById('vsModelSize')?.value || 'auto';
-
-    try {
-        const resp = await fetch('/api/voice-studio/generate', {
-            method: 'POST',
-            headers: {'Content-Type':'application/json'},
-            body: JSON.stringify({ text, voice_id: voiceId, emotion, model_size: modelSize })
-        });
-        const data = await resp.json();
-        if (data.success && data.recording) {
-            vsPlayRec(data.recording.url);
-            vsLoadRecordings();
-        } else {
-            alert(data.error || 'Generation failed');
-        }
-    } catch(e) { alert('Error: ' + e.message); }
-}
-
-function vsPlayRec(url) {
-    const audio = new Audio(url);
-    audio.play().catch(e => console.error('Playback error:', e));
-}
-
-async function vsDeleteRec(id) {
-    if (!confirm('Delete this recording?')) return;
-    await fetch(`/api/voice-studio/recordings/${id}`, { method: 'DELETE' });
-    vsLoadRecordings();
-}
-
-function vsNewVoice() {
-    const name = prompt('Voice name:');
-    if (!name) return;
-    const desc = prompt('Voice description (acoustic traits, pitch, pace, style):');
-    if (!desc) return;
-    const modelSize = prompt('Model size (0.6b or 1.7b):', '1.7b');
-    fetch('/api/voice-studio/voices', {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ name, description: desc, model_size: modelSize || '1.7b' })
-    }).then(() => vsLoadVoices());
-}
-
-function vsEditVoice() {
-    const id = document.getElementById('vsVoiceSelect')?.value;
-    if (!id || id.startsWith('premade_')) { alert('Select a custom voice to edit'); return; }
-    const desc = prompt('New voice description:');
-    if (!desc) return;
-    fetch(`/api/voice-studio/voices/${id}`, {
-        method: 'PUT',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ description: desc })
-    }).then(() => vsLoadVoices());
-}
-
-function vsCloneVoice() {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.wav,.mp3,.ogg';
-    input.onchange = async () => {
-        const file = input.files[0];
-        if (!file) return;
-        const name = prompt('Name for cloned voice:', `Clone: ${file.name}`);
-        if (!name) return;
-        const form = new FormData();
-        form.append('audio', file);
-        form.append('name', name);
-        const resp = await fetch('/api/voice-studio/clone', { method: 'POST', body: form });
-        const data = await resp.json();
-        if (data.success) { vsLoadVoices(); alert('Voice cloned!'); }
-        else alert(data.error || 'Clone failed');
-    };
-    input.click();
-}
-
-function vsBatchDialog() {
-    const script = prompt(
-        'Paste a batch script (one line per generation):\n\n' +
-        'Format: CHARACTER (emotion): "dialogue"\n' +
-        'Or plain text lines\n\n' +
-        'Example:\nCOMMANDER: "Fire all batteries!"\nAI (calm): "Reactor at 84%"'
-    );
-    if (!script) return;
-    const voiceId = document.getElementById('vsVoiceSelect')?.value || null;
-    fetch('/api/voice-studio/batch', {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ script, voice_id: voiceId })
-    }).then(r => r.json()).then(data => {
-        alert(`Batch complete: ${data.generated}/${data.total} generated`);
-        vsLoadRecordings();
-    }).catch(e => alert('Batch error: ' + e.message));
-}
-
-// Export voice studio functions
-window.vsLoadVoices = vsLoadVoices;
-window.vsLoadRecordings = vsLoadRecordings;
-window.vsLoadToneButtons = vsLoadToneButtons;
-window.vsInsertTone = vsInsertTone;
-window.vsGenerate = vsGenerate;
-window.vsPlayRec = vsPlayRec;
-window.vsDeleteRec = vsDeleteRec;
-window.vsNewVoice = vsNewVoice;
-window.vsEditVoice = vsEditVoice;
-window.vsCloneVoice = vsCloneVoice;
-window.vsBatchDialog = vsBatchDialog;
-
-// ══════════════════════════════ IMAGE SETTINGS ════════════════════════════
-
-async function loadImageSettings() {
-    try {
-        const resp = await fetch('/api/image-settings');
-        const data = await resp.json();
-        const s = data.settings || {};
-
-        const stepsEl = document.getElementById('imgSteps');
-        const cfgEl = document.getElementById('imgCfg');
-        const denoiseEl = document.getElementById('imgDenoise');
-        const samplerEl = document.getElementById('imgSampler');
-        const schedulerEl = document.getElementById('imgScheduler');
-        const modelEl = document.getElementById('imgModel');
-
-        if (stepsEl) stepsEl.value = s.steps || 30;
-        if (cfgEl) cfgEl.value = s.cfg || 7;
-        if (denoiseEl) denoiseEl.value = s.denoise || 1;
-
-        // Populate sampler options
-        if (samplerEl) {
-            samplerEl.innerHTML = (data.available_samplers || []).map(name =>
-                `<option value="${name}" ${name === s.sampler_name ? 'selected' : ''}>${name}</option>`
-            ).join('');
-        }
-
-        // Populate scheduler options
-        if (schedulerEl) {
-            schedulerEl.innerHTML = (data.available_schedulers || []).map(name =>
-                `<option value="${name}" ${name === s.scheduler ? 'selected' : ''}>${name}</option>`
-            ).join('');
-        }
-
-        // Populate model options
-        if (modelEl) {
-            modelEl.innerHTML = '<option value="">Auto-detect</option>' +
-                (data.available_models || []).map(name =>
-                    `<option value="${name}" ${name === s.model ? 'selected' : ''}>${name}</option>`
-                ).join('');
-        }
-    } catch(e) { console.error('loadImageSettings:', e); }
-}
-
-async function saveImageSettings() {
-    const settings = {
-        steps: parseInt(document.getElementById('imgSteps')?.value) || 30,
-        cfg: parseFloat(document.getElementById('imgCfg')?.value) || 7,
-        denoise: parseFloat(document.getElementById('imgDenoise')?.value) || 1,
-        sampler_name: document.getElementById('imgSampler')?.value || 'euler',
-        scheduler: document.getElementById('imgScheduler')?.value || 'normal',
-        model: document.getElementById('imgModel')?.value || null,
-    };
-    try {
-        const resp = await fetch('/api/image-settings', {
-            method: 'POST',
-            headers: {'Content-Type':'application/json'},
-            body: JSON.stringify(settings)
-        });
-        const data = await resp.json();
-        if (data.success) alert('Image settings saved!');
-        else alert('Error saving settings');
-    } catch(e) { alert('Error: ' + e.message); }
-}
-
-window.loadImageSettings = loadImageSettings;
-window.saveImageSettings = saveImageSettings;
-
-// ══════════════════════════════ GUI HEALTH MONITOR ════════════════════════════
-
-const guiHealth = {
-    status: 'ok',       // ok | warn | error
-    checks: [],
-    intervalId: null,
-
-    start() {
-        this.intervalId = setInterval(() => this.runChecks(), 5000);
-        this.runChecks();
-    },
-
-    runChecks() {
-        const issues = [];
-
-        // Check messages container exists and has proper dimensions
-        const mc = document.getElementById('messagesContainer');
-        if (mc) {
-            if (mc.clientHeight < 10) issues.push('Messages container collapsed (height < 10px)');
-            if (mc.scrollHeight > 0 && mc.clientHeight === 0) issues.push('Messages container invisible');
-        }
-
-        // Check that exactly one screen is visible
-        const visible = document.querySelectorAll('.screen-view.active');
-        if (visible.length === 0) issues.push('No active screen');
-        if (visible.length > 1) issues.push(`${visible.length} screens active simultaneously`);
-
-        // Check input area is accessible
-        const input = document.getElementById('messageInput');
-        if (input && input.offsetParent === null && document.getElementById('messagesScreen')?.classList.contains('active')) {
-            issues.push('Message input hidden while on messages screen');
-        }
-
-        // Check socket connection
-        if (typeof socket !== 'undefined' && socket && !socket.connected) {
-            issues.push('Socket disconnected');
-        }
-
-        // Update status
-        this.checks = issues;
-        if (issues.length === 0) this.status = 'ok';
-        else if (issues.some(i => i.includes('collapsed') || i.includes('invisible'))) this.status = 'error';
-        else this.status = 'warn';
-
-        // Update health dot
-        const dot = document.getElementById('guiHealthDot');
-        if (dot) {
-            dot.className = 'status-health' + (this.status !== 'ok' ? ' ' + this.status : '');
-            dot.title = issues.length ? 'GUI Issues:\n' + issues.join('\n') : 'GUI Health: OK';
-        }
-    },
-
-    stop() {
-        if (this.intervalId) clearInterval(this.intervalId);
-    }
-};
-
-function toggleGuiHealth() {
-    const issues = guiHealth.checks;
-    if (issues.length === 0) {
-        console.log('%c✅ GUI Health: All checks passed', 'color:#30d158');
-    } else {
-        console.warn('⚠️ GUI Health Issues:', issues);
-        alert('GUI Health Issues:\n\n' + issues.join('\n'));
-    }
-}
-window.toggleGuiHealth = toggleGuiHealth;
-
-// Start health monitor after DOM ready
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => guiHealth.start());
-} else {
-    guiHealth.start();
-}
