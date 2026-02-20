@@ -33,6 +33,7 @@ from content.scenes.phone.apps.voice_messages import VoiceMessagesApp
 from engine.scenes.base_scene import BaseScene
 from engine.mcp.framework import MCPSceneMixin
 from engine.assets import CharacterAsset
+from content.scenes.phone.phone_rules import register_phone_rules
 from content.simulation.services.llm_service import get_llm_service
 from content.simulation.services.anonymous_character import create_anonymous_character, AnonymousCharacter
 from content.simulation.services.cosylogger import install_logger, get_logs
@@ -161,6 +162,7 @@ class PhoneScene(BaseScene, MCPSceneMixin, mcp_scene_id="phone"):
         self._setup_routes()
         self._setup_socketio()
         self._mcp_init()
+        register_phone_rules()
 
     def _setup_routes(self):
         """Setup Flask routes"""

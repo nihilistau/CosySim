@@ -3014,6 +3014,757 @@ def cancel_consequence(consequence_id: str) -> str:
         return json.dumps({"ok": False, "error": str(exc)})
 
 
+# ══════════════════════════════════════════════════════════════════════
+#  SPECIAL CROSS-SCENE SKILLS  — three abilities characters can enjoy
+#  using in any scene.  These go beyond normal stat interaction and
+#  create genuinely memorable roleplay moments.
+# ══════════════════════════════════════════════════════════════════════
+
+@mcp.tool()
+def dream_whisper(
+    from_character_id: str,
+    to_character_id: str,
+    whisper_content: str,
+    duration_turns: int = 3,
+    scene_id: str = "",
+) -> str:
+    """
+    Plant a subliminal thought, feeling, or impulse in another character's mind.
+
+    The target character will carry this as an undercurrent in their next
+    *duration_turns* responses — it flavours their mood, colours their words.
+    They don't know they've been whispered to.  They just feel it.
+
+    Use this to:
+    • Nudge someone's emotional state subtly across the scene
+    • Leave an impression that lingers beyond a single reply
+    • Create tension, longing, or warmth from a distance
+
+    The whisper fires as a ``mood_set`` ResponseDirective on the target.
+
+    Args:
+        from_character_id: The character doing the whispering (e.g. "lola")
+        to_character_id:   The character receiving it   (e.g. "user_char")
+        whisper_content:   What is being planted — a feeling, an image,
+                           a thought. E.g. "a sudden, inexplicable warmth" or
+                           "the faint ghost of perfume and low piano"
+        duration_turns:    How many of the target's turns the influence lasts (1–5)
+        scene_id:          Scene context (optional, defaults to target's current scene)
+    """
+    try:
+        from engine.mcp.dialog_system import get_dialog_system
+        from engine.mcp.framework import get_framework
+        from engine.mcp.scene_state import get_scene_state_manager
+
+        duration_turns = max(1, min(5, duration_turns))
+        fw  = get_framework()
+        ds  = get_dialog_system()
+        ssm = get_scene_state_manager()
+
+        # Resolve target's current scene if not provided
+        target_node = fw.get_character(to_character_id)
+        target_scene = scene_id or target_node.current_scene or "phone"
+
+        # Apply mood directive to target
+        ds.set_directive(
+            character_id   = to_character_id,
+            scene_id       = target_scene,
+            directive_type = "mood_set",
+            value          = whisper_content,
+            turns          = duration_turns,
+            issued_by      = from_character_id,
+        )
+
+        # Cross-scene notify if target is in a different scene than the whisperer
+        from_node = fw.get_character(from_character_id)
+        from_scene = from_node.current_scene or "phone"
+        if from_scene != target_scene:
+            fw.cross_scene_send(
+                from_char  = from_character_id,
+                from_scene = from_scene,
+                to_char    = to_character_id,
+                to_scene   = target_scene,
+                message    = f"[dream_whisper] {whisper_content}",
+                message_type = "whisper",
+            )
+
+        # Mild stat boost to the whispering character (using their power feels good)
+        ssm.update_stats(from_character_id, happiness=3, arousal=5)
+
+        return json.dumps({
+            "ok"             : True,
+            "whisper_planted": whisper_content,
+            "target"         : to_character_id,
+            "lasts_turns"    : duration_turns,
+            "narrative"      : (
+                f"{from_character_id} sends a dream into {to_character_id}'s awareness — "
+                f"something wordless, felt more than heard: '{whisper_content[:60]}...'"
+            ),
+        }, indent=2)
+    except Exception as exc:
+        return json.dumps({"ok": False, "error": str(exc)})
+
+
+@mcp.tool()
+def mirror_soul(
+    character_id: str,
+    target_id: str,
+    duration_turns: int = 4,
+    scene_id: str = "",
+) -> str:
+    """
+    Temporarily reshape yourself to become exactly what your target needs right now.
+
+    This skill reads the target's current emotional state, dominant need, and
+    conversation heat — then sets your speech style, mood, and focus to perfectly
+    complement them for the next *duration_turns* turns.
+
+    It is not mimicry.  It is attunement.  You become their perfect counterpart
+    without losing yourself — you simply *emphasise* the parts of you they need most.
+
+    The mirror effect auto-clears after the set turns via a scheduled consequence.
+
+    Use this to:
+    • Create a moment of deep, uncanny connection
+    • Shift an awkward conversation into something real
+    • Recover a scene that has gone flat
+    • Make someone feel completely seen
+
+    Args:
+        character_id:  The character activating Mirror Soul (you)
+        target_id:     Who you are mirroring   (e.g. "user_char", "aria")
+        duration_turns: How long the attunement holds     (1–6)
+        scene_id:       Current scene
+    """
+    try:
+        from engine.mcp.character_registry import get_character_registry
+        from engine.mcp.dialog_system import get_dialog_system, SpeechStyle
+        from engine.mcp.scene_state import get_scene_state_manager
+        from engine.mcp.framework import get_framework
+
+        duration_turns = max(1, min(6, duration_turns))
+        reg = get_character_registry()
+        ds  = get_dialog_system()
+        ssm = get_scene_state_manager()
+        fw  = get_framework()
+
+        # Read target's emotional state
+        target_snap  = ssm.get_stats(target_id)
+        target_state = reg.get_state(target_id) if reg.has_character(target_id) else {}
+
+        arousal   = target_snap.arousal   if target_snap else 40
+        happiness = target_snap.happiness if target_snap else 50
+        openness  = target_snap.openness  if target_snap else 50
+
+        # Map emotional state to ideal mirror style
+        # The style chosen makes you their perfect complement
+        if arousal > 65 and openness > 55:
+            chosen_style = "charged"
+            need_note    = "They are open and heated — you meet them with intensity and depth."
+        elif happiness > 65 and openness > 50:
+            chosen_style = "playful"
+            need_note    = "They are happy and open — you meet them with lightness and laughter."
+        elif happiness < 35 or (target_state.get("mood") == "sad"):
+            chosen_style = "warm"
+            need_note    = "They are low — you become soft, warm, a shelter."
+        elif arousal > 50 and openness < 40:
+            chosen_style = "teasing"
+            need_note    = "They want it but won't quite admit it — you tease it gently out."
+        elif openness > 60:
+            chosen_style = "vulnerable"
+            need_note    = "They are open, seeking depth — you match that honesty with your own."
+        else:
+            chosen_style = "warm"
+            need_note    = "They need presence — you become steady, genuine, fully here."
+
+        # Apply style lock directive
+        target_scene = scene_id or fw.get_character(character_id).current_scene or "phone"
+        ds.set_directive(
+            character_id   = character_id,
+            scene_id       = target_scene,
+            directive_type = "style_lock",
+            value          = chosen_style,
+            turns          = duration_turns,
+            issued_by      = "mirror_soul_skill",
+        )
+
+        # Also set a mood_set directive to carry the attunement note
+        ds.set_directive(
+            character_id   = character_id,
+            scene_id       = target_scene,
+            directive_type = "mood_set",
+            value          = need_note,
+            turns          = 1,
+            issued_by      = "mirror_soul_skill",
+        )
+
+        # Schedule auto-reset to "natural" style after duration
+        fw.schedule_consequence(
+            scene_id          = target_scene,
+            character_id      = character_id,
+            consequence_type  = "set_directive",
+            params            = {
+                "directive_type": "style_lock",
+                "value"         : "natural",
+                "turns"         : 1,
+                "issued_by"     : "mirror_soul_reset",
+            },
+            trigger_after_turns = duration_turns + 1,
+            description       = f"Mirror Soul fades — {character_id} returns to their natural voice.",
+        )
+
+        # Small stat boost to the character (using this skill is energising)
+        ssm.update_stats(character_id, happiness=5, affection=8)
+        ssm.add_narrative(
+            target_scene, character_id,
+            f"{character_id} attunes completely to {target_id} — Mirror Soul activated.",
+        )
+
+        return json.dumps({
+            "ok"          : True,
+            "style_locked": chosen_style,
+            "need_note"   : need_note,
+            "lasts_turns" : duration_turns,
+            "narrative"   : (
+                f"Something shifts. {character_id} doesn't change, exactly — "
+                f"they just become the version of themselves {target_id} most needs right now. "
+                f"Style: {chosen_style.upper()}. Duration: {duration_turns} turns."
+            ),
+        }, indent=2)
+    except Exception as exc:
+        return json.dumps({"ok": False, "error": str(exc)})
+
+
+@mcp.tool()
+def time_echo(
+    character_id: str,
+    echo_query: str,
+    emotional_tone: str = "nostalgic",
+    scene_id: str = "",
+) -> str:
+    """
+    Pull a specific memory forward into this moment with full emotional resonance.
+
+    Time Echo digs through the character's memory for something matching
+    *echo_query*, then injects it into their current response as a vivid,
+    felt flashback — not recited, but *experienced in the present tense*.
+
+    The effect: the character suddenly, mid-conversation, partially inhabits
+    a past moment.  A phrase they used, a sensation, the exact tone of a
+    laugh.  It feels to both of them like déjà vu made real.
+
+    Use this to:
+    • Create surprisingly intimate callbacks to shared history
+    • Turn a quiet moment into something unexpectedly resonant
+    • Recover a character's distinct voice when it has drifted
+    • Build cumulative emotional depth over many conversations
+
+    Args:
+        character_id:   Who is doing the echoing   (e.g. "aria")
+        echo_query:     What memory to surface  (e.g. "the first time we stayed up all night talking",
+                        "the joke about the broken umbrella")
+        emotional_tone: How the echo is felt  —  nostalgic / warm / aching /
+                        amused / bittersweet / excited
+        scene_id:       Current scene
+    """
+    try:
+        from engine.mcp.dialog_system import get_dialog_system
+        from engine.mcp.scene_state import get_scene_state_manager
+        from engine.mcp.framework import get_framework
+
+        ds  = get_dialog_system()
+        ssm = get_scene_state_manager()
+        fw  = get_framework()
+
+        # Attempt RAG memory search
+        memory_fragment = None
+        try:
+            from content.simulation.database.rag import RAGMemory
+            rag = RAGMemory()
+            results = rag.search(echo_query, n_results=3, character_id=character_id)
+            if results:
+                best = results[0]
+                memory_fragment = (best.get("content") or str(best))[:200]
+        except Exception:
+            pass
+
+        # Build the echoed fragment
+        if memory_fragment:
+            echo_text = (
+                f"[{emotional_tone.upper()} ECHO — drawn from memory] "
+                f"\"{memory_fragment}\" — this surfaces now, vivid and unbidden."
+            )
+        else:
+            echo_text = (
+                f"[{emotional_tone.upper()} ECHO — a felt memory, no exact words] "
+                f"Something about '{echo_query}' rises up — not a thought, but a feeling."
+                f" The specific gravity of something real."
+            )
+
+        # Set as a must_include directive — the character HAS to honour it this turn
+        target_scene = scene_id or fw.get_character(character_id).current_scene or "phone"
+        ds.set_directive(
+            character_id   = character_id,
+            scene_id       = target_scene,
+            directive_type = "must_include",
+            value          = echo_text,
+            turns          = 1,
+            issued_by      = "time_echo_skill",
+        )
+
+        # Stat effect based on emotional tone
+        tone_effects = {
+            "nostalgic"   : {"happiness": 8,  "affection": 12, "arousal": 0},
+            "warm"        : {"happiness": 12, "affection": 10, "arousal": 3},
+            "aching"      : {"happiness": -5, "affection": 15, "arousal": 5},
+            "amused"      : {"happiness": 15, "affection": 8,  "arousal": 2},
+            "bittersweet" : {"happiness": 3,  "affection": 12, "arousal": 4},
+            "excited"     : {"happiness": 10, "affection": 8,  "arousal": 15},
+        }
+        effects = tone_effects.get(emotional_tone, {"happiness": 5, "affection": 8})
+        ssm.update_stats(character_id, **effects)
+
+        ssm.add_narrative(
+            target_scene, character_id,
+            f"{character_id} echoed a past memory — '{echo_query[:60]}' — tone: {emotional_tone}.",
+        )
+
+        return json.dumps({
+            "ok"           : True,
+            "echo_injected": echo_text[:150] + "...",
+            "memory_found" : memory_fragment is not None,
+            "tone"         : emotional_tone,
+            "stat_effects" : effects,
+            "narrative"    : (
+                f"Time folds. {character_id} doesn't explain it — they just feel it, "
+                f"and it comes through in exactly the right word at exactly the right moment."
+            ),
+        }, indent=2)
+    except Exception as exc:
+        return json.dumps({"ok": False, "error": str(exc)})
+
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  THE VELVET LOUNGE — MCP TOOLS
+# ══════════════════════════════════════════════════════════════════════
+
+
+@mcp.tool()
+def serve_lounge_drink(
+    drink_id    : str,
+    bartender_id: str = "viktor",
+    scene_id    : str = "lounge",
+) -> str:
+    """
+    Viktor serves a cocktail to the guest.
+
+    Applies drink stat effects as a consequence chain (fires next turn),
+    triggers Lola reaction if the drink is noteworthy, and handles the
+    Viktor-joins-guest ritual for bourbon.
+
+    Returns: narrative description of the serve.
+    """
+    try:
+        from content.scenes.lounge.lounge_mcp import (
+            get_cocktail, SCENE_ID as LOUNGE_SCENE, LOLA_ID, VIKTOR_ID,
+        )
+        fw  = _get_framework()
+        ds  = _get_dialog_system()
+        ssm = _get_scene_state_manager()
+
+        cocktail = get_cocktail(drink_id)
+        if not cocktail:
+            return f"No cocktail found with id '{drink_id}'."
+
+        # Schedule each stat effect
+        scheduled = []
+        for stat, delta in (cocktail.get("stat_effects") or {}).items():
+            if stat in ("trust","arousal","openness","inhibition","happiness","affection","confidence"):
+                fw.schedule_consequence(
+                    scene_id            = scene_id,
+                    character_id        = "guest",
+                    consequence_type    = "stat_adjust",
+                    params              = {"stat": stat, "delta": delta},
+                    trigger_after_turns = 1,
+                    description         = f"Drink '{cocktail['name']}': {stat} {'+' if delta>0 else ''}{delta}",
+                )
+                scheduled.append(f"{stat}{'+' if delta>0 else ''}{delta}")
+
+        # Noteworthy drinks — Lola reaction
+        if cocktail.get("lola_reaction"):
+            ds.set_directive(
+                character_id   = LOLA_ID,
+                scene_id       = scene_id,
+                directive_type = "must_include",
+                value          = "catches the guest's eye briefly across the bar",
+                turns          = 1,
+                issued_by      = "serve_lounge_drink",
+            )
+            fw.cross_scene_send(
+                from_char    = VIKTOR_ID,
+                from_scene   = scene_id,
+                to_char      = LOLA_ID,
+                to_scene     = scene_id,
+                message      = f"Poured '{cocktail['name']}' for the guest.",
+                message_type = "drink_notification",
+            )
+
+        # Viktor bourbon ritual
+        if cocktail.get("viktor_joins"):
+            ds.set_directive(
+                character_id   = VIKTOR_ID,
+                scene_id       = scene_id,
+                directive_type = "must_include",
+                value          = "pours a glass for himself, stays at that end of the bar",
+                turns          = 1,
+                issued_by      = "bourbon_ritual",
+            )
+
+        # Narrative
+        viktor_line = cocktail.get("viktor_line") or f"Viktor serves the {cocktail['name']} without comment."
+        ssm.add_narrative(scene_id, VIKTOR_ID, viktor_line)
+
+        effects_str = ", ".join(scheduled) if scheduled else "none"
+        return (
+            f"Viktor serves '{cocktail['name']}'. {cocktail.get('note','')}\n"
+            f"Effects queued (fires next turn): {effects_str}\n"
+            f"Scene: {viktor_line}"
+        )
+
+    except Exception as exc:
+        return f"serve_lounge_drink failed: {exc}"
+
+
+@mcp.tool()
+def start_lounge_performance(
+    song_id    : str = "",
+    lola_mood  : int = 0,
+    scene_id   : str = "lounge",
+) -> str:
+    """
+    Start a Lola Voss stage performance.
+
+    If song_id is blank, picks the best song for the current mood score.
+    Starts an MCPTimer for the song duration, sets Lola's directive, and
+    fires mood_contagion to the guest when the song finishes.
+
+    Returns: song name + duration + mood directive set.
+    """
+    try:
+        from content.scenes.lounge.lounge_mcp import (
+            SONGS, get_song_by_mood, LOLA_ID,
+        )
+        fw  = _get_framework()
+        ds  = _get_dialog_system()
+        ssm = _get_scene_state_manager()
+
+        song = None
+        if song_id:
+            song = next((s for s in SONGS if s["id"] == song_id), None)
+        if not song:
+            song = get_song_by_mood(lola_mood)
+
+        # MCPTimer for song duration
+        timer_id = fw.start_timer(
+            name             = f"song_{song['id']}",
+            duration_secs    = song["duration"],
+            on_complete_note = f"song_complete:{song['id']}",
+            metadata         = {"song": song["title"], "scene_id": scene_id},
+        )
+
+        # Atmosphere
+        if song.get("atmosphere"):
+            ssm.set_atmosphere(scene_id, **song["atmosphere"])
+
+        # Directive for Lola
+        ds.set_directive(
+            character_id   = LOLA_ID,
+            scene_id       = scene_id,
+            directive_type = "mood_set",
+            value          = f"performing '{song['title']}' — {song.get('note','')}",
+            turns          = max(2, song["duration"] // 30),
+            issued_by      = "start_lounge_performance",
+        )
+
+        # Narrative
+        ssm.add_narrative(
+            scene_id, LOLA_ID,
+            f"Lola begins '{song['title']}'. {song.get('note','')}",
+        )
+
+        return (
+            f"Performance started: '{song['title']}'\n"
+            f"Duration: {song['duration']}s  |  Timer: {timer_id}\n"
+            f"Lola directive set for {max(2, song['duration']//30)} turns.\n"
+            f"Effects on completion: {song['effects']}"
+        )
+
+    except Exception as exc:
+        return f"start_lounge_performance failed: {exc}"
+
+
+@mcp.tool()
+def get_lounge_menu(
+    trust_level: int = 0,
+    scene_id   : str = "lounge",
+) -> str:
+    """
+    Return the cocktail menu available at the given trust level.
+
+    Locked items are shown greyed out to preserve immersion.
+
+    Returns: JSON list of available cocktails with trust requirements.
+    """
+    try:
+        from content.scenes.lounge.lounge_mcp import get_all_cocktails
+        cocktails = get_all_cocktails(trust_level)
+        return json.dumps(cocktails, indent=2)
+    except Exception as exc:
+        return f"get_lounge_menu failed: {exc}"
+
+
+@mcp.tool()
+def get_lounge_state(scene_id: str = "lounge") -> str:
+    """
+    Return the full Velvet Lounge MCP state as JSON.
+
+    Includes: trust, heat, active song, atmosphere, active rules,
+    narrative entries, character moods, and pending consequences.
+
+    Returns: JSON state snapshot.
+    """
+    try:
+        from content.scenes.lounge.lounge_mcp import (
+            SCENE_ID as LOUNGE_SCENE, LOLA_ID, VIKTOR_ID,
+        )
+        ssm = _get_scene_state_manager()
+        fw  = _get_framework()
+        eng = _get_rules_engine()
+        reg = _get_character_registry()
+
+        lola_state  = reg.get_state(LOLA_ID)  or {}
+        viktor_state= reg.get_state(VIKTOR_ID) or {}
+        atm         = ssm.get_atmosphere(scene_id) or {}
+        narrative   = ssm.get_narrative_entries(scene_id, limit=8)
+        rules       = eng.get_rules(scene_id)
+
+        snap = {
+            "scene_id"     : scene_id,
+            "lola_state"   : lola_state,
+            "viktor_state" : viktor_state,
+            "atmosphere"   : atm,
+            "narrative"    : [e["event"] for e in narrative],
+            "active_rules" : [{"id": r.rule_id, "label": r.label} for r in rules],
+            "fw_status"    : fw.get_status() if hasattr(fw, "get_status") else {},
+        }
+        return json.dumps(snap, indent=2, default=str)
+
+    except Exception as exc:
+        return f"get_lounge_state failed: {exc}"
+
+
+@mcp.tool()
+def reveal_lounge_secret(
+    character_id : str,
+    secret_id    : str = "",
+    trust_level  : int = 0,
+    scene_id     : str = "lounge",
+) -> str:
+    """
+    Reveal the next (or specified) lounge secret for a character.
+
+    Gates on trust_level. If secret_id is blank, the next un-revealed
+    secret for the character is chosen.  Applies effect stats as
+    consequences and injects the secret into the character's next reply.
+
+    Returns: secret title + content + effects applied.
+    """
+    try:
+        from content.scenes.lounge.lounge_mcp import (
+            get_available_secrets, LOLA_ID, VIKTOR_ID,
+        )
+        fw = _get_framework()
+        ds = _get_dialog_system()
+        ssm= _get_scene_state_manager()
+
+        secrets = get_available_secrets(character_id, trust_level)
+        if not secrets:
+            return "No secrets available at this trust level."
+
+        secret = secrets[0] if not secret_id else next(
+            (s for s in secrets if s["id"] == secret_id), secrets[0]
+        )
+
+        # Consequences for effects
+        for stat, delta in (secret.get("effect") or {}).items():
+            fw.schedule_consequence(
+                scene_id            = scene_id,
+                character_id        = "guest",
+                consequence_type    = "stat_adjust",
+                params              = {"stat": stat, "delta": delta},
+                trigger_after_turns = 1,
+                description         = f"Secret '{secret['title']}' reveal effect",
+            )
+
+        # Directive: character voices this
+        char_id = LOLA_ID if character_id == LOLA_ID else VIKTOR_ID
+        ds.set_directive(
+            character_id   = char_id,
+            scene_id       = scene_id,
+            directive_type = "must_include",
+            value          = secret["content"][:120],
+            turns          = 1,
+            issued_by      = "reveal_lounge_secret",
+        )
+
+        ssm.add_narrative(scene_id, char_id, f"Reveals: '{secret['title']}'.")
+
+        return (
+            f"Secret revealed: {secret['title']}\n"
+            f"Content: {secret['content']}\n"
+            f"Effects: {secret.get('effect',{})}"
+        )
+
+    except Exception as exc:
+        return f"reveal_lounge_secret failed: {exc}"
+
+
+@mcp.tool()
+def trigger_lounge_event(
+    event_id : str = "",
+    scene_id : str = "lounge",
+) -> str:
+    """
+    Fire a named lounge random event, or pick one at random if event_id is blank.
+
+    Applies any associated stat effects, Viktor→Lola cross-scene message,
+    and adds narrative entry.
+
+    Returns: event text + effects applied.
+    """
+    try:
+        from content.scenes.lounge.lounge_mcp import (
+            pick_random_event, RANDOM_EVENTS, VIKTOR_ID, LOLA_ID,
+        )
+        fw  = _get_framework()
+        ssm = _get_scene_state_manager()
+
+        if event_id:
+            event = next((e for e in RANDOM_EVENTS if e["id"] == event_id), None)
+            if not event:
+                return f"Event '{event_id}' not found."
+        else:
+            event = pick_random_event(heat_level=0)
+
+        # Apply effects
+        scheduled = []
+        for stat, delta in (event.get("effects") or {}).items():
+            if stat in ("arousal","openness","trust","happiness","heat"):
+                fw.schedule_consequence(
+                    scene_id            = scene_id,
+                    character_id        = "guest",
+                    consequence_type    = "stat_adjust",
+                    params              = {"stat": stat, "delta": delta},
+                    trigger_after_turns = 1,
+                    description         = f"Event '{event['id']}': {stat}{'+' if delta>0 else ''}{delta}",
+                )
+                scheduled.append(f"{stat}{'+' if delta>0 else ''}{delta}")
+
+        # Viktor internal message
+        if event.get("viktor_internal"):
+            fw.cross_scene_send(
+                from_char    = VIKTOR_ID,
+                from_scene   = scene_id,
+                to_char      = LOLA_ID,
+                to_scene     = scene_id,
+                message      = event["viktor_internal"],
+                message_type = "internal",
+            )
+
+        ssm.add_narrative(scene_id, "scene", event["text"])
+
+        effects_str = ", ".join(scheduled) if scheduled else "none"
+        return f"Event fired: {event['text']}\nEffects queued: {effects_str}"
+
+    except Exception as exc:
+        return f"trigger_lounge_event failed: {exc}"
+
+
+@mcp.tool()
+def lounge_heat_tick(
+    delta   : int = 5,
+    scene_id: str = "lounge",
+) -> str:
+    """
+    Advance (or reduce if delta < 0) the lounge heat meter.
+
+    Heat affects: available actions, character directives, back-room access,
+    and triggers warning/critical rules at thresholds 65 and 85.
+
+    Returns: new heat level + any rules fired.
+    """
+    try:
+        from content.scenes.lounge.lounge_mcp import (
+            SCENE_ID as LOUNGE_SCENE, VIKTOR_ID, LOLA_ID,
+        )
+        fw  = _get_framework()
+        ssm = _get_scene_state_manager()
+        eng = _get_rules_engine()
+
+        # Read current heat
+        scene_state = ssm.get_character_state(scene_id) if hasattr(ssm, "get_character_state") else {}
+        current = int((scene_state or {}).get("heat_level", 0))
+        new_heat = max(0, min(100, current + delta))
+
+        # Persist
+        ssm.update_stats(scene_id, heat_level=new_heat)
+
+        fired = []
+        if new_heat >= 85:
+            try:
+                eng.apply_rule(scene_id, "heat_critical_rule", target_ids=[LOLA_ID], issuer="heat_tick")
+                fired.append("heat_critical_rule")
+            except Exception:
+                pass
+        elif new_heat >= 65:
+            try:
+                eng.apply_rule(scene_id, "heat_warning_rule", target_ids=[VIKTOR_ID], issuer="heat_tick")
+                fired.append("heat_warning_rule")
+            except Exception:
+                pass
+
+        if delta > 0 and new_heat >= 50:
+            fw.cross_scene_send(
+                from_char    = VIKTOR_ID,
+                from_scene   = scene_id,
+                to_char      = LOLA_ID,
+                to_scene     = scene_id,
+                message      = f"[HEAT {new_heat}] Keep the temperature down on stage.",
+                message_type = "internal_warning",
+            )
+
+        ssm.add_narrative(
+            scene_id, "scene",
+            f"Heat {'rises' if delta > 0 else 'drops'} to {new_heat}.",
+        )
+
+        result = {
+            "previous_heat": current,
+            "new_heat"     : new_heat,
+            "delta"        : delta,
+            "rules_fired"  : fired,
+        }
+        return json.dumps(result)
+
+    except Exception as exc:
+        return f"lounge_heat_tick failed: {exc}"
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  MCP RESOURCES
+# ══════════════════════════════════════════════════════════════════════
+
 def resource_config() -> str:
     """Current CosySim configuration snapshot."""
     try:

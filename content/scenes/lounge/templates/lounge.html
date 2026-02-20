@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>The Velvet Lounge</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='lounge.css') }}"/>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.6.1/socket.io.min.js"></script>
+</head>
+
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     TOP BAR
+═══════════════════════════════════════════════════════════════════════════ -->
+<header class="topbar">
+  <div class="topbar-title">
+    <span class="title-the">THE</span>
+    <span class="title-velvet">VELVET</span>
+    <span class="title-lounge">LOUNGE</span>
+  </div>
+  <div class="topbar-meters">
+    <!-- Trust -->
+    <div class="meter-group">
+      <span class="meter-label">TRUST</span>
+      <div class="meter-bar trust-bar">
+        <div class="meter-fill trust-fill" id="trustFill" style="width:10%"></div>
+      </div>
+      <span class="meter-value" id="trustValue">10</span>
+    </div>
+    <!-- Heat -->
+    <div class="meter-group">
+      <span class="meter-label heat-label">HEAT</span>
+      <div class="meter-bar heat-bar">
+        <div class="meter-fill heat-fill" id="heatFill" style="width:0%"></div>
+      </div>
+      <span class="meter-value" id="heatValue">0</span>
+    </div>
+    <!-- Turn -->
+    <div class="meter-group">
+      <span class="meter-label">TURN</span>
+      <span class="meter-value" id="turnValue">—</span>
+    </div>
+  </div>
+</header>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     MAIN LAYOUT
+═══════════════════════════════════════════════════════════════════════════ -->
+<main class="layout">
+
+  <!-- ── LEFT: BAR COUNTER ──────────────────────────────────────────────── -->
+  <aside class="panel panel-left">
+
+    <div class="panel-head">
+      <span class="panel-icon">◈</span> THE BAR
+    </div>
+
+    <!-- Viktor portrait -->
+    <div class="char-portrait viktor-portrait">
+      <div class="char-name">VIKTOR MARLOWE</div>
+      <div class="char-role">Bartender</div>
+      <div class="char-mood" id="viktorMood">watchful</div>
+    </div>
+
+    <!-- Drink menu -->
+    <div class="menu-title">MENU</div>
+    <div class="drink-list" id="drinkList">
+      <!-- populated by JS -->
+    </div>
+
+    <!-- Viktor chat -->
+    <div class="panel-sub-head">SPEAK TO VIKTOR</div>
+    <div class="mini-chat" id="viktorChat"></div>
+    <div class="mini-input-row">
+      <input class="mini-input" id="viktorInput" type="text" placeholder="Say something…" maxlength="200"/>
+      <button class="btn-send" onclick="sendMessage('viktor')">▶</button>
+    </div>
+
+    <!-- Back room -->
+    <button class="btn-backroom" id="btnBackRoom" onclick="enterBackRoom()" disabled>
+      ▼ BACK ROOM (trust 70)
+    </button>
+
+    <!-- Ask Viktor secret -->
+    <button class="btn-secret" onclick="askSecret('viktor')">
+      ASK VIKTOR ···
+    </button>
+
+  </aside>
+
+  <!-- ── CENTER: STAGE ──────────────────────────────────────────────────── -->
+  <section class="panel panel-center">
+
+    <!-- Stage spotlight -->
+    <div class="stage">
+      <div class="spotlight"></div>
+      <div class="stage-label">THE STAGE</div>
+      <div class="char-portrait lola-portrait">
+        <div class="char-name">LOLA VOSS</div>
+        <div class="char-role">Singer · Owner</div>
+        <div class="char-mood" id="lolaMood">performing</div>
+      </div>
+    </div>
+
+    <!-- Song info -->
+    <div class="song-info" id="songInfo">
+      <div class="song-title" id="songTitle">—</div>
+      <div class="song-progress-bar">
+        <div class="song-progress-fill" id="songProgressFill" style="width:0%"></div>
+      </div>
+      <div class="song-timer" id="songTimer">—</div>
+    </div>
+
+    <!-- Atmosphere / narrative description -->
+    <div class="atmosphere-box" id="atmosphereBox">
+      <div class="atmosphere-line" id="atmosphereLine">Smoke and low piano. The bar is half-full. Someone laughs too loud in the corner.</div>
+    </div>
+
+    <!-- Event feed -->
+    <div class="event-feed" id="eventFeed">
+      <!-- scrolling scene events -->
+    </div>
+
+    <!-- Song request list -->
+    <div class="song-request-area">
+      <div class="panel-sub-head">REQUEST A SONG</div>
+      <div class="song-list" id="songRequestList">
+        <!-- populated by JS -->
+      </div>
+    </div>
+
+    <!-- MCP rules panel -->
+    <div class="rules-panel" id="rulesPanel">
+      <div class="rules-title">◈ ACTIVE MCP RULES</div>
+      <ul class="rules-list" id="rulesList"></ul>
+    </div>
+
+  </section>
+
+  <!-- ── RIGHT: CHAT WITH LOLA ──────────────────────────────────────────── -->
+  <aside class="panel panel-right">
+
+    <div class="panel-head">
+      <span class="panel-icon">◈</span> SPEAK TO LOLA
+    </div>
+
+    <!-- Full chat window -->
+    <div class="full-chat" id="lolaChat"></div>
+
+    <div class="input-row">
+      <input class="full-input" id="lolaInput" type="text" placeholder="Speak to her…" maxlength="300"/>
+      <button class="btn-send btn-send-lola" onclick="sendMessage('lola')">▶</button>
+    </div>
+
+    <!-- Ask secret -->
+    <button class="btn-secret" onclick="askSecret('lola')">
+      ASK LOLA'S SECRET ···
+    </button>
+
+    <!-- Scene state debug -->
+    <div class="debug-accordion">
+      <button class="debug-toggle" onclick="toggleDebug()">~ SCENE STATE</button>
+      <div class="debug-body" id="debugBody" style="display:none"></div>
+    </div>
+
+  </aside>
+
+</main>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     TOAST OVERLAY
+═══════════════════════════════════════════════════════════════════════════ -->
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     BACK ROOM OVERLAY
+═══════════════════════════════════════════════════════════════════════════ -->
+<div class="overlay" id="backRoomOverlay" style="display:none">
+  <div class="overlay-box">
+    <div class="overlay-title">THE BACK ROOM</div>
+    <p class="overlay-text" id="backRoomText">
+      Viktor tilts his head toward the curtain. You understand. Behind it: close air,
+      a round table with a single lamp, the residue of older, quieter conversations.
+    </p>
+    <button class="btn-overlay" onclick="closeOverlay('backRoomOverlay')">ENTER</button>
+  </div>
+</div>
+
+<!-- SECRET REVEAL OVERLAY -->
+<div class="overlay" id="secretOverlay" style="display:none">
+  <div class="overlay-box secret-box">
+    <div class="overlay-title" id="secretTitle">···</div>
+    <p class="overlay-text" id="secretContent"></p>
+    <button class="btn-overlay" onclick="closeOverlay('secretOverlay')">CLOSE</button>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='lounge.js') }}"></script>
+</body>
+</html>

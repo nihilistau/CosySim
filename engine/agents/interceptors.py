@@ -493,6 +493,31 @@ class BedroomSceneInterceptor(InterceptorBase):
             )
             ctx["system_prompt"] = ctx.get("system_prompt", "") + injection
 
+            # ── MCP rules engine: available actions ─────────────────────────
+            mcp_actions_block = ""
+            try:
+                from engine.mcp.scene_rules_engine import get_rules_engine
+                eng = get_rules_engine()
+                for cid in char_ids:
+                    snap = ssm.get_stats(cid)
+                    stats_dict = snap.__dict__ if snap else {}
+                    available = eng.get_available_actions(BEDROOM_SCENE_ID, stats_dict)
+                    if available:
+                        acts = ", ".join(
+                            f"{a['id']} ({a.get('label', '')})" for a in available[:8]
+                        )
+                        mcp_actions_block += f"\nMCP-available actions for {cid}: {acts}"
+                    # Live rules summary
+                    rules_summary = eng.get_rules_summary(BEDROOM_SCENE_ID)
+                    if rules_summary:
+                        mcp_actions_block += f"\nScene rules: {rules_summary[:300]}"
+                        break  # Same for all chars
+            except Exception:
+                pass
+
+            if mcp_actions_block:
+                ctx["system_prompt"] = ctx.get("system_prompt", "") + "\nMCP Governance:" + mcp_actions_block
+
             # ── store for downstream ─────────────────────────────────────────
             extra = ctx.setdefault("extra", {})
             extra["scene_snapshot"] = {
@@ -506,6 +531,9 @@ class BedroomSceneInterceptor(InterceptorBase):
 
         except Exception as exc:
             logger.debug("BedroomSceneInterceptor pre_call failed: %s", exc)
+
+
+BEDROOM_SCENE_ID = "bedroom"
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -577,6 +605,19 @@ class PhoneSceneInterceptor(InterceptorBase):
                 narr_block = " | ".join(narrative[-4:])
                 lines.append(f"Recent conversation context: {narr_block}")
 
+            # ── MCP available actions ─────────────────────────────────────
+            try:
+                from engine.mcp.scene_rules_engine import get_rules_engine
+                eng = get_rules_engine()
+                if agent_id:
+                    snap_for_rules = ssm.get_stats(agent_id) if agent_id else None
+                    stats_dict = snap_for_rules.__dict__ if snap_for_rules else {}
+                    available = eng.get_available_actions("phone", stats_dict)
+                    if available:
+                        acts = ", ".join(a["id"] for a in available[:6])
+                        lines.append(f"MCP-available actions: {acts}")
+            except Exception:
+                pass
 
             if lines:
                 injection = "\n\n[PHONE SCENE CONTEXT]\n" + "\n".join(lines) + "\n[/PHONE SCENE CONTEXT]"
@@ -592,6 +633,157 @@ class PhoneSceneInterceptor(InterceptorBase):
 
         except Exception as exc:
             logger.debug("PhoneSceneInterceptor pre_call failed: %s", exc)
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  LoungeSceneInterceptor  (priority 15)
+#  Injects: trust, heat, current song/atmosphere, available cocktails,
+#  back-room status, active MCP rules, and Lola↔Viktor cross-agent note.
+# ══════════════════════════════════════════════════════════════════════
+
+class LoungeSceneInterceptor(InterceptorBase):
+    """
+    Pre-call: enriches Lola's and Viktor's system prompt with the live
+    Velvet Lounge MCP state — heat, trust, stage performance, cocktail
+    menu, back-room access, and the full set of available MCP actions so
+    the LLM knows exactly what is allowed and what is restricted.
+    """
+    name     = "lounge_scene"
+    priority = 15
+
+    def pre_call(self, ctx: ResponseContext) -> None:
+        scene = ctx.get("scene", "") or ctx.get("scene_id", "")
+        if scene != "lounge":
+            return
+
+        agent_id = ctx.get("agent_id", "")
+
+        try:
+            from engine.mcp.scene_state   import get_scene_state_manager
+            from engine.mcp.scene_rules_engine import get_rules_engine
+            from engine.mcp.character_registry import get_character_registry
+            from engine.mcp.dialog_system  import get_dialog_system
+            from content.scenes.lounge.lounge_mcp import (
+                get_all_cocktails, SCENE_ID, LOLA_ID, VIKTOR_ID,
+            )
+
+            ssm = get_scene_state_manager()
+            eng = get_rules_engine()
+            reg = get_character_registry()
+            ds  = get_dialog_system()
+
+            # ── Character state ───────────────────────────────────────
+            lola_state   = reg.get_state(LOLA_ID)   or {}
+            viktor_state = reg.get_state(VIKTOR_ID) or {}
+            guest_stats  = ssm.get_stats("guest") if hasattr(ssm, "get_stats") else None
+            trust  = int((guest_stats.trust  if guest_stats else 0) or
+                         lola_state.get("guest_trust", 10))
+            heat   = int(lola_state.get("heat_level", 0))
+
+            # ── Atmosphere ────────────────────────────────────────────
+            atm = ssm.get_atmosphere(SCENE_ID) or {}
+            atm_line = " · ".join(str(v) for v in atm.values() if v)
+
+            # ── Narrative ─────────────────────────────────────────────
+            narrative_entries = ssm.get_narrative_entries(SCENE_ID, limit=5)
+            narrative = [e["event"] for e in narrative_entries]
+
+            # ── Active directive ──────────────────────────────────────
+            directive = None
+            try:
+                directive = ds.get_active_directive(agent_id, SCENE_ID)
+            except Exception:
+                pass
+
+            # ── Available cocktails this trust level ──────────────────
+            cocktails_avail = get_all_cocktails(trust)
+            avail_names = ", ".join(
+                c["name"] for c in cocktails_avail if not c.get("locked")
+            )
+
+            # ── MCP available actions ─────────────────────────────────
+            available_actions: List[str] = []
+            try:
+                stats_dict = guest_stats.__dict__ if guest_stats else {}
+                stats_dict["trust"]      = trust
+                stats_dict["heat_level"] = heat
+                actions = eng.get_available_actions(SCENE_ID, stats_dict)
+                available_actions = [a["id"] for a in actions[:8]]
+            except Exception:
+                pass
+
+            # ── Rules summary ─────────────────────────────────────────
+            rules_summary = ""
+            try:
+                rules_summary = eng.get_rules_summary(SCENE_ID)
+            except Exception:
+                pass
+
+            # ── Cross-agent inbox ─────────────────────────────────────
+            cross_note = ""
+            try:
+                from engine.mcp.framework import get_framework
+                fw    = get_framework()
+                inbox = fw.get_cross_scene_inbox(agent_id)
+                if inbox:
+                    msgs = [m.get("message", "") for m in inbox[:2] if m.get("message")]
+                    if msgs:
+                        cross_note = "Internal message: " + " / ".join(msgs)
+            except Exception:
+                pass
+
+            # ── Build injection block ─────────────────────────────────
+            lines: List[str] = [
+                "Scene: The Velvet Lounge, 1920s underground speakeasy.",
+                f"Guest trust level: {trust}/100  |  Heat level: {heat}/100",
+            ]
+
+            if atm_line:
+                lines.append(f"Atmosphere: {atm_line}")
+
+            if avail_names:
+                lines.append(f"Cocktails available at this trust: {avail_names}")
+
+            if available_actions:
+                lines.append(f"MCP-available actions: {', '.join(available_actions)}")
+
+            if rules_summary:
+                lines.append(f"Active rules: {rules_summary}")
+
+            if directive:
+                d_type = getattr(directive, "directive_type", "")
+                d_val  = getattr(directive, "value", "")
+                if d_type and d_val:
+                    lines.append(f"Your current directive [{d_type}]: {d_val}")
+
+            if narrative:
+                lines.append("Recent lounge events: " + " | ".join(narrative[-3:]))
+
+            if cross_note:
+                lines.append(cross_note)
+
+            if heat >= 65:
+                lines.append(
+                    "WARNING: heat level is dangerously high. "
+                    "Keep things low-key. Do not attract attention."
+                )
+            elif heat >= 40:
+                lines.append("Heat is elevated. Stay measured.")
+
+            injection = "\n\n[LOUNGE MCP CONTEXT]\n" + "\n".join(lines) + "\n[/LOUNGE MCP CONTEXT]"
+            ctx["system_prompt"] = ctx.get("system_prompt", "") + injection
+
+            # Stash for downstream interceptors
+            extra = ctx.setdefault("extra", {})
+            extra["lounge_snapshot"] = {
+                "trust": trust, "heat": heat,
+                "atmosphere": atm,
+                "available_actions": available_actions,
+                "directive": {"type": d_type, "value": d_val} if directive else None,
+            }
+
+        except Exception as exc:
+            logger.debug("LoungeSceneInterceptor pre_call failed: %s", exc)
 
 
 # ══════════════════════════════════════════════════════════════════════

@@ -33,6 +33,7 @@ sys.path.insert(0, str(project_root))
 from engine.scenes.base_scene import BaseScene
 from engine.mcp.framework import MCPSceneMixin
 from engine.agents.agent_loop import AgentLoop
+from content.scenes.bedroom.bedroom_rules import register_bedroom_rules
 from engine.agents.character_agent import CharacterAgent
 from engine.spatial.location import Location
 from engine.spatial.scene_map import SceneMap
@@ -585,6 +586,7 @@ class BedroomScene(BaseScene, MCPSceneMixin, mcp_scene_id="bedroom"):
         self._setup_routes()
         self._setup_socketio()
         self._mcp_init()
+        register_bedroom_rules()
 
     # ── Helpers ──────────────────────────────────────────────────────────
 

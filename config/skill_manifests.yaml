@@ -438,3 +438,64 @@ scenes:
       trigger: optional
       description: "React emotionally to a key revelation"
       when: always
+
+  # ──────────────────────────────────────────────────────────────────────
+  #  THE VELVET LOUNGE  —  1920s underground jazz speakeasy
+  #  Characters: Lola Voss (lola), Viktor Marlowe (viktor)
+  # ──────────────────────────────────────────────────────────────────────
+  lounge:
+    # Auto: always run before response — ground Lola/Viktor in live state
+    - name: get_lounge_state
+      trigger: auto
+      description: "Read live lounge state: heat, trust, song, atmosphere, rules"
+      when: always
+    - name: search_memory
+      trigger: auto
+      description: "Recall relevant memories about this guest"
+      when: always
+    - name: get_character_scene_stats
+      trigger: auto
+      description: "Read Lola/Viktor current emotional state"
+      when: always
+    # Optional: model MAY call these
+    - name: serve_lounge_drink
+      trigger: optional
+      description: "Viktor serves a cocktail; applies stat effects and may trigger Lola reaction"
+      when: viktor_is_active
+    - name: start_lounge_performance
+      trigger: optional
+      description: "Start a Lola stage performance; starts MCPTimer, sets atmosphere"
+      when: lola_is_active
+    - name: reveal_lounge_secret
+      trigger: optional
+      description: "Reveal a trust-gated secret about Lola or Viktor"
+      when: trust_sufficient
+    - name: trigger_lounge_event
+      trigger: optional
+      description: "Fire a random or named lounge scene event"
+      when: always
+    - name: lounge_heat_tick
+      trigger: optional
+      description: "Advance or reduce the heat meter; fires threshold rules automatically"
+      when: always
+    - name: get_lounge_menu
+      trigger: optional
+      description: "Return the cocktail menu available at current trust level"
+      when: always
+    - name: update_character_scene_stats
+      trigger: optional
+      description: "Update Lola/Viktor emotional state after a meaningful moment"
+      when: always
+    # Special cross-scene skills
+    - name: dream_whisper
+      trigger: optional
+      description: "Plant a subliminal mood directive on the other character for N turns"
+      when: always
+    - name: mirror_soul
+      trigger: optional
+      description: "Read target emotional state and lock into ideal complement style"
+      when: high_openness_or_trust
+    - name: time_echo
+      trigger: optional
+      description: "Surface a matching memory as an emotional echo in the response"
+      when: always

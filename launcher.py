@@ -311,6 +311,7 @@ Examples:
   %(prog)s --mode hub           # Central hub (start here)
   %(prog)s --mode phone         # Phone scene only
   %(prog)s --mode bedroom       # Bedroom scene only
+  %(prog)s --mode lounge        # The Velvet Lounge (port 5557)
   %(prog)s --mode all           # Launch all services in one terminal
   %(prog)s --mode admin         # System administration (Streamlit)
   %(prog)s --mode test          # Run tests
@@ -324,7 +325,7 @@ For more information, see: ONBOARDING.md
     
     parser.add_argument(
         "--mode",
-        choices=["hub", "phone", "bedroom", "dashboard", "admin", "assets", "creator", "tts", "bridge", "all", "test"],
+        choices=["hub", "phone", "bedroom", "lounge", "dashboard", "admin", "assets", "creator", "tts", "bridge", "all", "test"],
         default="hub",
         help="Launch mode (default: hub). 'all' starts hub + phone + bedroom + tts in one terminal."
     )
@@ -396,6 +397,10 @@ For more information, see: ONBOARDING.md
     elif args.mode == "bedroom":
         from content.scenes.bedroom.bedroom_scene import BedroomScene
         BedroomScene().start()
+    elif args.mode == "lounge":
+        from content.scenes.lounge.lounge_scene import LoungeScene
+        print("\n🎷 Launching The Velvet Lounge on http://localhost:5557")
+        LoungeScene().start()
     elif args.mode == "test":
         launch_test_mode()
     elif args.mode == "tts":

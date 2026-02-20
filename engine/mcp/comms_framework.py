@@ -559,6 +559,7 @@ def _build_default_pipeline() -> InterceptorPipeline:
         DialogDirectiveInterceptor,
         BedroomSceneInterceptor,
         PhoneSceneInterceptor,
+        LoungeSceneInterceptor,
         AutoResultInjector,
         SkillAwarenessInterceptor,
         GameRulesInterceptor,
@@ -574,6 +575,7 @@ def _build_default_pipeline() -> InterceptorPipeline:
     pipeline.add(DialogDirectiveInterceptor())   # 12
     pipeline.add(BedroomSceneInterceptor())      # 15
     pipeline.add(PhoneSceneInterceptor())        # 15
+    pipeline.add(LoungeSceneInterceptor())       # 15
     pipeline.add(AutoResultInjector())           # 20
     pipeline.add(SkillAwarenessInterceptor())    # 30
     pipeline.add(GameRulesInterceptor())         # 40
