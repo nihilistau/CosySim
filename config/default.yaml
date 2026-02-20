@@ -202,3 +202,19 @@ logging:
 testing:
   database: "simulation_test.db"
   mock_external_services: true
+
+# Communications / Governance framework
+comms:
+  governance_enabled: false     # set true to route CharacterAgent.reply() through interceptors
+  skill_manifest_path: "config/skill_manifests.yaml"
+  interceptors:
+    router_message_injector:  true
+    auto_result_injector:     true
+    skill_awareness:          true
+    game_rules:               true
+    personality_guard:        true
+    policy_enforcer:          true
+    memory_enhancer:          false   # extra RAG lookup — heavier, opt-in
+    response_shaper:          true
+    activity_logger:          true
+  stats_poll_interval_ms: 2000  # how often the browser overlay polls /api/stats/live

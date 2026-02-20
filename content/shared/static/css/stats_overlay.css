@@ -1,0 +1,205 @@
+/* CosySim Stats Overlay
+   =====================
+   Fixed overlay showing real-time system stats + AI activity.
+   Injected into all scene templates via a <script> tag.
+*/
+
+#cosysim-overlay {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 9999;
+  min-width: 220px;
+  max-width: 280px;
+  background: rgba(10, 10, 18, 0.88);
+  border: 1px solid rgba(100, 120, 220, 0.35);
+  border-radius: 10px;
+  backdrop-filter: blur(10px);
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 11px;
+  color: #c8d0e8;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.5);
+  transition: opacity 0.2s, transform 0.2s;
+  user-select: none;
+}
+
+#cosysim-overlay.collapsed {
+  min-width: auto;
+  max-width: auto;
+}
+
+#cosysim-overlay-header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 10px 5px;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(100, 120, 220, 0.2);
+}
+
+#cosysim-overlay.collapsed #cosysim-overlay-header {
+  border-bottom: none;
+}
+
+.cosysim-logo {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #8899ff;
+  text-transform: uppercase;
+}
+
+.cosysim-toggle {
+  margin-left: auto;
+  font-size: 10px;
+  color: #556;
+  cursor: pointer;
+}
+
+/* Activity indicator pulsing dot */
+.cosysim-activity-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #44cc88;
+  flex-shrink: 0;
+  transition: background 0.4s;
+}
+
+.cosysim-activity-dot.busy {
+  background: #ff9944;
+  animation: cosysim-pulse 0.8s ease-in-out infinite;
+}
+
+.cosysim-activity-dot.thinking {
+  background: #8888ff;
+  animation: cosysim-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes cosysim-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.5; transform: scale(1.4); }
+}
+
+#cosysim-overlay-body {
+  padding: 8px 10px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+#cosysim-overlay.collapsed #cosysim-overlay-body {
+  display: none;
+}
+
+/* Stat rows */
+.cosysim-stat-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  line-height: 1.4;
+}
+
+.cosysim-stat-label {
+  min-width: 60px;
+  color: #6678aa;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.cosysim-stat-value {
+  color: #dde8ff;
+  font-size: 11px;
+  flex: 1;
+}
+
+.cosysim-stat-value.warn  { color: #ffaa44; }
+.cosysim-stat-value.crit  { color: #ff5566; }
+.cosysim-stat-value.good  { color: #44dd88; }
+
+/* Mini bar */
+.cosysim-bar-wrap {
+  flex: 1;
+  height: 4px;
+  background: rgba(80, 90, 120, 0.3);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.cosysim-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #4499ff, #66aaff);
+  border-radius: 2px;
+  transition: width 0.6s ease;
+}
+
+.cosysim-bar-fill.warn { background: linear-gradient(90deg, #ff9944, #ffcc44); }
+.cosysim-bar-fill.crit { background: linear-gradient(90deg, #ff4455, #ff6677); }
+
+/* Activities section */
+.cosysim-activities {
+  margin-top: 5px;
+  border-top: 1px solid rgba(80,90,130,0.2);
+  padding-top: 5px;
+}
+
+.cosysim-activity-label {
+  font-size: 10px;
+  color: #6678aa;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 3px;
+}
+
+.cosysim-activity-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 0;
+  font-size: 10.5px;
+  color: #aab8dd;
+  border-radius: 3px;
+  animation: cosysim-fadein 0.3s ease;
+}
+
+@keyframes cosysim-fadein {
+  from { opacity: 0; transform: translateX(4px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+.cosysim-activity-kind {
+  font-size: 9px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: rgba(88,100,180,0.3);
+  color: #8899cc;
+  white-space: nowrap;
+}
+
+.cosysim-activity-kind.thinking  { background: rgba(80,80,200,0.35); color: #aab0ff; }
+.cosysim-activity-kind.tool_call { background: rgba(80,160,80,0.35);  color: #88cc88; }
+.cosysim-activity-kind.tts       { background: rgba(180,80,180,0.35); color: #dd88dd; }
+.cosysim-activity-kind.image_gen { background: rgba(180,140,40,0.35);  color: #ddcc66; }
+.cosysim-activity-kind.llm_call  { background: rgba(80,80,200,0.35); color: #8888ff; }
+
+.cosysim-idle-text {
+  font-size: 10px;
+  color: #44cc88;
+  padding: 2px 0;
+}
+
+/* Model chip */
+.cosysim-model-chip {
+  display: inline-block;
+  background: rgba(40,50,90,0.6);
+  border: 1px solid rgba(80,100,200,0.3);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 9.5px;
+  color: #8899cc;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

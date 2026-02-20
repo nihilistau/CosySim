@@ -1,0 +1,143 @@
+# CosySim Skill Manifests
+# ========================
+# Maps scene names to skill definitions.
+#
+# trigger types:
+#   auto     — executed before the LLM call; result is injected into context
+#   optional — advertised to the LLM, which MAY call it
+#   required — LLM MUST call this tool before replying
+#
+# when: (future — condition expression for conditional availability)
+#   "always", "game_active", "first_message", etc.
+
+scenes:
+
+  phone:
+    - name: search_memory
+      trigger: auto
+      description: "Recall relevant past conversations and shared memories"
+      when: always
+    - name: update_mood
+      trigger: optional
+      description: "Update your current mood based on what just happened"
+      when: always
+    - name: check_relationship
+      trigger: optional
+      description: "Check relationship status before making emotional decisions"
+      when: always
+    - name: roll_dice
+      trigger: optional
+      description: "Generate a random number for games or random choices"
+      when: always
+    - name: get_random_topic
+      trigger: optional
+      description: "Get a conversation topic or question idea"
+      when: always
+    - name: send_to_agent
+      trigger: optional
+      description: "Send a message to another character"
+      when: always
+    - name: intercept_and_enhance
+      trigger: optional
+      description: "Rewrite your response with a specific style or tone instruction"
+      when: always
+    - name: search_web
+      trigger: optional
+      description: "Search the internet for current facts or information"
+      when: always
+
+  bedroom:
+    - name: search_memory
+      trigger: auto
+      description: "Recall relevant past intimate moments and conversations"
+      when: always
+    - name: check_relationship
+      trigger: auto
+      description: "Check current relationship and attraction levels"
+      when: always
+    - name: update_mood
+      trigger: optional
+      description: "Update mood after an emotional moment"
+      when: always
+    - name: adjust_relationship
+      trigger: optional
+      description: "Adjust relationship metrics based on what happened"
+      when: always
+    - name: apply_effect
+      trigger: optional
+      description: "Apply an emotional effect (excite, calm, trust_boost, etc.)"
+      when: always
+
+  hub:
+    - name: search_memory
+      trigger: auto
+      description: "Recall past events and context"
+      when: always
+    - name: get_scene_context
+      trigger: auto
+      description: "Understand what is happening across all scenes"
+      when: always
+    - name: send_to_agent
+      trigger: optional
+      description: "Send a message to another agent"
+      when: always
+
+  games/truth_or_dare:
+    - name: roll_dice
+      trigger: required
+      description: "MUST roll dice at the start of each turn to determine truth or dare"
+      when: always
+    - name: get_game_state
+      trigger: auto
+      description: "Check current score and round number"
+      when: always
+    - name: set_game_state
+      trigger: required
+      description: "MUST record the result of each round (increment score, track round)"
+      when: always
+    - name: update_mood
+      trigger: auto
+      description: "Update mood based on dare/truth outcome"
+      when: always
+    - name: get_random_topic
+      trigger: optional
+      description: "Get a truth question or dare idea"
+      when: always
+    - name: apply_effect
+      trigger: optional
+      description: "Apply an emotional effect after an intense moment"
+      when: always
+    - name: intercept_and_enhance
+      trigger: optional
+      description: "Make your dare/truth more creative or personalised"
+      when: always
+
+  games/mystery:
+    - name: search_memory
+      trigger: auto
+      description: "Search memories for relevant clues or past discoveries"
+      when: always
+    - name: get_game_state
+      trigger: auto
+      description: "Check which clues have been found so far"
+      when: always
+    - name: set_game_state
+      trigger: required
+      description: "MUST record each newly discovered clue"
+      when: always
+    - name: get_random_topic
+      trigger: optional
+      description: "Generate a new mystery clue"
+      when: always
+    - name: search_web
+      trigger: optional
+      description: "Look up a real-world fact that might relate to the mystery"
+      when: always
+    - name: intercept_and_enhance
+      trigger: optional
+      description: "Make your clue more cryptic or atmospheric"
+      when: always
+    - name: update_mood
+      trigger: optional
+      description: "React emotionally to a key revelation"
+      when: always

@@ -1476,6 +1476,82 @@ class PhoneScene(BaseScene):
             except Exception as e:
                 return jsonify({'error': str(e)}), 500
 
+        # ── Stats & Activity overlay ─────────────────────────────────────
+
+        @self.app.route('/api/stats/live', methods=['GET'])
+        def stats_live():
+            """Real-time system stats for the overlay HUD."""
+            try:
+                from engine.logging.monitor import get_system_monitor
+                from engine.services.activity_bus import get_activity_bus
+                from engine.lmstudio import get_lmstudio_client
+                mon    = get_system_monitor()
+                bus    = get_activity_bus()
+                snap   = mon.snapshot()
+                client = get_lmstudio_client()
+                model  = None
+                try:
+                    model = client.get_loaded_model_id()
+                except Exception:
+                    pass
+                return jsonify({
+                    "system": {
+                        "cpu_percent":       snap.get("cpu_percent"),
+                        "ram_used_gb":       snap.get("ram_used_gb"),
+                        "ram_total_gb":      snap.get("ram_total_gb"),
+                        "ram_percent":       snap.get("ram_percent"),
+                        "gpu_vram_used_mb":  snap.get("gpu_vram_used_mb"),
+                        "gpu_vram_total_mb": snap.get("gpu_vram_total_mb"),
+                        "gpu_temp_c":        snap.get("gpu_temp_c"),
+                        "gpu_name":          snap.get("gpu_name"),
+                        "loaded_model":      model,
+                    },
+                    "activity": bus.snapshot(),
+                })
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        # ── Game endpoints ───────────────────────────────────────────────
+
+        @self.app.route('/api/game/start', methods=['POST'])
+        def game_start():
+            """Start a game (truth_or_dare, mystery)."""
+            data    = request.get_json() or {}
+            game_id = data.get('game_id', 'truth_or_dare')
+            scene   = data.get('scene', 'phone')
+            try:
+                from engine.mcp.comms_framework import get_game_state
+                gs = get_game_state()
+                gs.reset(game_id)
+                gs.set(game_id, 'active', True)
+                gs.set(game_id, 'scene', scene)
+                gs.set(game_id, 'round', 0)
+                gs.set(game_id, 'score', 0)
+                return jsonify({'success': True, 'game_id': game_id, 'state': gs.get_all(game_id)})
+            except Exception as exc:
+                return jsonify({'error': str(exc)}), 500
+
+        @self.app.route('/api/game/state', methods=['GET'])
+        def game_state_get():
+            game_id = request.args.get('game_id', 'truth_or_dare')
+            try:
+                from engine.mcp.comms_framework import get_game_state
+                return jsonify(get_game_state().get_all(game_id))
+            except Exception as exc:
+                return jsonify({'error': str(exc)}), 500
+
+        @self.app.route('/api/game/end', methods=['POST'])
+        def game_end():
+            data    = request.get_json() or {}
+            game_id = data.get('game_id', 'truth_or_dare')
+            try:
+                from engine.mcp.comms_framework import get_game_state
+                gs = get_game_state()
+                gs.set(game_id, 'active', False)
+                return jsonify({'success': True, 'final_state': gs.get_all(game_id)})
+            except Exception as exc:
+                return jsonify({'error': str(exc)}), 500
+
     def _setup_socketio(self):
         """Setup SocketIO event handlers"""
         

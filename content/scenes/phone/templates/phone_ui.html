@@ -9,6 +9,8 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/gallery.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/voice_call.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/video_call.css') }}">
+    <!-- Stats Overlay -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/stats_overlay.css') }}">
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <style>
         /* ═══════════════ ROOT LAYOUT ═══════════════ */
@@ -1234,6 +1236,7 @@
 <script src="{{ url_for('static', filename='js/voice.js') }}"></script>
 <script src="{{ url_for('static', filename='js/phone.js') }}"></script>
 <script src="{{ url_for('static', filename='js/control_panel.js') }}"></script>
+<script src="{{ url_for('static', filename='js/stats_overlay.js') }}"></script>
 <script>
 // ── Phone frame helpers (kept from original) ──────────────────────────────
 

@@ -75,6 +75,7 @@ class CharacterAgent:
         max_context_memories: int        = 5,
         use_mcp:     bool                = False,
         mcp_servers: Optional[List[Dict]] = None,
+        scene:       Optional[str]       = None,
     ) -> None:
         self.character            = character
         self.db                   = db
@@ -83,6 +84,7 @@ class CharacterAgent:
         self.max_context_memories = max_context_memories
         self.use_mcp              = use_mcp
         self.mcp_servers          = mcp_servers or []
+        self.scene                = scene  # used by AgentGovernor for skill manifest lookup
 
         if config is None:
             from engine.config import get_config
@@ -134,6 +136,21 @@ class CharacterAgent:
             Reply text string (empty string on cancellation or error).
         """
         self._cancel_event.clear()
+
+        # ── 0. Governance pipeline (interceptors) ────────────────────
+        _gov_enabled = bool(self.config.get("comms.governance_enabled", False))
+        if _gov_enabled and getattr(self, "scene", None):
+            try:
+                from engine.mcp.comms_framework import get_governor
+                gov = get_governor(self, scene=self.scene)
+                return gov.reply(
+                    user_message,
+                    chain_id=chain_id,
+                    history=history,
+                    skip_gov=True,
+                )
+            except Exception as _gov_exc:
+                logger.warning("AgentGovernor failed, falling back: %s", _gov_exc)
 
         # ── 1. EventChain setup ──────────────────────────────────────
         ec = self._get_event_chain()
