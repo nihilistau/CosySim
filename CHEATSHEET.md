@@ -226,6 +226,67 @@ llm:
 3. Run `python launcher.py`
 4. Explore the phone scene
 
+---
+
+## 🚀 Launch Modes
+
+```bash
+python launcher.py --mode all        # Hub + Phone + Bedroom + TTS + Bridge
+python launcher.py --mode hub        # Hub only → http://localhost:8500
+python launcher.py --mode phone      # Phone only → http://localhost:5555
+python launcher.py --mode bedroom    # Bedroom only → http://localhost:5556
+python launcher.py --mode admin      # Admin panel → http://localhost:8502
+python launcher.py --housekeep       # Media ingest + health checks
+python launcher.py --status          # Service health report
+python launcher.py --mode test       # Run 315 tests
+```
+
+## 🔗 Ports
+
+| Service | Port | Notes |
+|---------|------|-------|
+| Hub | 8500 | Start here |
+| Phone | 5555 | Main scene |
+| Bedroom | 5556 | 3D multi-agent |
+| Dashboard | 8501 | KPI (Streamlit) |
+| Admin | 8502 | GOD mode (Streamlit) |
+| Asset Gen | 8503 | Streamlit |
+| TTS | 8600 | Voice generation |
+| MCP Bridge | 8601 | LMStudio ↔ CosySim |
+| LMStudio | 1234 | External |
+| ComfyUI | 8188 | External |
+
+## 📁 Drop Media Here
+
+```
+content/simulation/media/images/   → .png .jpg .gif .webp
+content/simulation/media/video/    → .mp4 .webm .avi .mov
+content/simulation/media/voice/    → .wav .mp3 .ogg .flac
+content/scenes/bedroom/static/audio/ → ambient tracks (.mp3 .wav)
+```
+
+Then run `python launcher.py --housekeep` to register them.
+
+## 🧪 Tests
+
+```bash
+python -m pytest tests/ -x -q              # Quick (stop on first fail)
+python -m pytest tests/test_event_chain.py  # Single file
+python -m pytest tests/ -k "chain"          # Match pattern
+```
+
+## 😈 Bedroom Menace Menu
+
+God-mode pranks that agents perceive and react to:
+- 💡 Flicker Lights — lights strobe eerily
+- 👻 Strange Sound — unidentifiable echo
+- 🌬️ Cold Draft — icy blue fog
+- 🪑 Move Object — furniture shakes
+- 🚪 Mysterious Knock — three slow knocks
+- ⚡ Power Out — total darkness
+- 🕯️ Romantic Mood — warm candlelight
+- ⛈️ Thunder — flash and rumble
+
 **Developer:**
 1. Read `docs/STRUCTURE_GUIDE.md` (this file!)
 2. Read `docs/DEVELOPMENT.md`

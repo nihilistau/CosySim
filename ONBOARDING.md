@@ -91,10 +91,13 @@ A companion chat app with:
 
 ### Bedroom Scene (:5556)
 Multi-agent spatial simulation:
-- 2 AI characters in a shared space
-- 7 locations (bed, desk, bathroom, window, etc.)
+- 2 AI characters in a shared 3D room
+- 7 locations (bed, couch, bar, bathroom, balcony, vanity, doorway)
 - Tick-based agent loop (perceive → decide → act)
 - Characters move, interact, respond to environment
+- Per-agent model selection (choose different LMStudio models per character)
+- Ambient audio system (drop tracks in `content/scenes/bedroom/static/audio/`)
+- 😈 Menace Menu — god-mode pranks that agents perceive and react to
 
 ### Hub (:8500)
 Central dashboard showing:
