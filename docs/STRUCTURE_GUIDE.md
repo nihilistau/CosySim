@@ -48,7 +48,13 @@ engine/
 │   └── monitor.py       → SystemMonitor (CPU/RAM/GPU/services)
 │
 ├── lmstudio/            🧠 LMStudio Integration
-│   └── client.py        → HTTP client for LMStudio API
+│   ├── client.py        → LMStudioManager (SDK model lifecycle, load/unload)
+│   └── client_v2.py     → REST client (MCP integrations, SSE streaming, tokens)
+│
+├── mcp/                 🔌 MCP (Model Context Protocol)
+│   ├── __init__.py
+│   ├── cosysim_server.py → FastMCP server (9 tools + 5 resources)
+│   └── web_bridge.py    → FastAPI bridge (SSE proxy, CORS, file upload)
 │
 ├── media/               🖼️ Media Standards
 │   └── media_config.py  → MediaConfig singleton from YAML
@@ -65,14 +71,15 @@ engine/
 │   ├── skill.py         → @skill decorator
 │   ├── registry.py      → SKILL_REGISTRY, get_pack_tools()
 │   ├── chain_context.py → Thread-local chain_id propagation
-│   └── packs/           → Skill packs (memory, character, comfyui)
+│   └── builtin/         → Skill packs (memory, character, comfyui, voice, tts)
 │
 ├── spatial/             📍 Spatial System
 │   ├── location.py      → Location dataclass (capacity, properties)
 │   └── scene_map.py     → SceneMap (place, move, nearby, interact)
 │
-├── tts/                 🎤 Text-to-Speech (CosyVoice)
-│   └── cosyvoice/       → Complete TTS implementation
+├── tts/                 🎙️ TTS (Qwen3-TTS)
+│   ├── qwen3_server.py  → FastAPI+FastMCP TTS server (generate, cast, jobs)
+│   └── voice_designer.py → VoiceDesign, CASTING_OFFICE, presets, YAML persist
 │
 └── testing/             🧪 Testing Framework
     └── framework/       → Automated test system
@@ -109,9 +116,10 @@ content/
 │   │
 │   ├── admin/          🛠️ Admin Panel (Multi-Panel Diagnostic Center)
 │   │   ├── admin_panel.py → Thin Streamlit router (120 lines)
-│   │   └── pages/         → 12 page modules
+│   │   └── pages/         → 13 page modules
 │   │       ├── dashboard.py      → Service health, system metrics
 │   │       ├── logs.py           → Log viewer + benchmarks
+│   │       ├── kpi.py            → KPI Dashboard (4 tabs: ops, LLM, system, chains)
 │   │       ├── chains.py         → EventChain browser (tree view)
 │   │       ├── config_editor.py  → Type-aware config editor
 │   │       ├── rag_editor.py     → RAG message editor with guards

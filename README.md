@@ -65,9 +65,10 @@ python launcher.py
 ### 🤖 Agent Framework
 | Component | Module | Description |
 |---|---|---|
-| **CharacterAgent** | `engine/agents/character_agent.py` | Persona + RAG + tools + EventChain |
+| **CharacterAgent** | `engine/agents/character_agent.py` | Persona + RAG + tools + MCP + EventChain |
 | **SceneAgent** | `engine/agents/scene_agent.py` | Quick one-shot tasks (title, summarise, classify) |
 | **LMStudioManager** | `engine/lmstudio/client.py` | LM Studio server + model management via SDK & CLI |
+| **LMStudioClient** | `engine/lmstudio/client_v2.py` | REST client with MCP integrations + SSE streaming |
 | **SkillRegistry** | `engine/skills/registry.py` | `@skill` decorator registry, pack tools, MCP bridge |
 
 ### 🔧 Built-in Skill Packs
@@ -77,6 +78,7 @@ python launcher.py
 | `character` | `get_character_state`, `adjust_trait`, `set_mood`, `adjust_relationship` |
 | `comfyui` | `generate_image`, `generate_character_portrait`, `list_comfyui_workflows` |
 | `voice` | `generate_voice_message`, `list_voice_messages` |
+| `tts` | `generate_voice_message`, `cast_voice`, `list_voice_presets`, `list_voicemails` |
 
 ### 📞 Communication Features
 | Feature | Description | Status |
@@ -95,19 +97,21 @@ engine/                  # Reusable framework
 ├── assets/             # Asset management system
 ├── config.py           # YAML config with env var overrides
 ├── config_validator.py # Schema-based config validation
-├── logging/            # CosyLogger, @timed benchmarks, SystemMonitor
-├── lmstudio/           # LMStudio SDK wrapper
+├── logging/            # CosyLogger, @timed + LLM KPIs, SystemMonitor
+├── lmstudio/           # LMStudio SDK (client.py) + REST v2 (client_v2.py)
+├── mcp/                # CosySim MCP server + FastAPI web bridge
 ├── media/              # MediaConfig singleton (image/video/audio standards)
 ├── scenes/             # BaseScene, SceneRegistry (auto-discover)
 ├── services/           # @retry, CircuitBreaker
-├── skills/             # @skill decorator, packs (memory, character, comfyui)
-└── spatial/            # Location, SceneMap (capacity, occupancy, nearby)
+├── skills/             # @skill decorator, packs (memory, character, comfyui, tts)
+├── spatial/            # Location, SceneMap (capacity, occupancy, nearby)
+└── tts/                # Qwen3-TTS server + VoiceDesigner
 
 content/                # Example scenes (customize freely)
 ├── scenes/
 │   ├── phone/          # Port 5555 — adult phone scene
 │   ├── bedroom/        # Port 5556 — multi-agent spatial
-│   ├── admin/          # Port 8502 — 12-page admin panel
+│   ├── admin/          # Port 8502 — 13-page admin panel (+ KPI Dashboard)
 │   ├── hub/            # Port 8500 — landing page + scene creator
 │   └── dashboard/      # Port 8501 — metrics
 └── simulation/
@@ -116,7 +120,7 @@ content/                # Example scenes (customize freely)
     └── services/       # ComfyUI client, media gen, voice/video
 
 config/                 # YAML configuration files
-tests/                  # 170+ tests
+tests/                  # 281 tests
 ```
 
 ---
@@ -179,10 +183,14 @@ Each character has:
 
 | Doc | Description |
 |-----|-------------|
+| [THREE_PILLARS.md](docs/THREE_PILLARS.md) | Architecture: CosySim + LMStudio + ComfyUI |
 | [STRUCTURE_GUIDE.md](docs/STRUCTURE_GUIDE.md) | Three-layer architecture, file map |
 | [API.md](docs/API.md) | REST API reference for all scenes |
 | [SKILLS.md](docs/SKILLS.md) | Skill authoring guide |
 | [COMFYUI.md](docs/COMFYUI.md) | ComfyUI integration + PromptBuilder tiers |
+| [LMSTUDIO.md](docs/LMSTUDIO.md) | LMStudio v2 client, MCP server, streaming |
+| [TTS.md](docs/TTS.md) | Qwen3-TTS server, voice designer, casting |
+| [KPI.md](docs/KPI.md) | Benchmarking, LLM KPIs, system monitoring |
 | [LOGGING.md](docs/LOGGING.md) | @timed, SystemMonitor, ring buffer |
 | [ADMIN_GUIDE.md](docs/ADMIN_GUIDE.md) | Admin panel usage + GOD mode |
 | [AGENTS_GUIDE.md](AGENTS_GUIDE.md) | Agent handoff guide |
@@ -192,7 +200,7 @@ Each character has:
 ## 🧪 Testing
 
 ```bash
-# Run all 170+ tests
+# Run all 281 tests
 python -m pytest tests/ -v --tb=short
 
 # Run specific suite
