@@ -42,7 +42,7 @@ function initializeSocket() {
         
         // Show notification badge if not on messages screen
         const messagesScreen = document.getElementById('messagesScreen');
-        if (messagesScreen.style.display !== 'block' && data.role === 'assistant') {
+        if (messagesScreen && !messagesScreen.classList.contains('active') && data.role === 'assistant') {
             const badge = document.getElementById('messageBadge');
             const currentCount = parseInt(badge.textContent) || 0;
             showNotificationBadge(currentCount + 1);
@@ -142,6 +142,7 @@ async function selectCharacter() {
         
         if (data.success) {
             currentCharacter = data.character;
+            _messagesLoadedForCharacter = null;  // Force reload messages for new character
             updateCharacterUI();
             console.log('Character set:', data.character.name);
         } else if (data.error) {
@@ -156,6 +157,7 @@ async function selectCharacter() {
                 const fallbackData = await fallbackResponse.json();
                 if (fallbackData.success) {
                     currentCharacter = fallbackData.character;
+                    _messagesLoadedForCharacter = null;  // Force reload messages for new character
                     updateCharacterUI();
                     console.log('Character set (fallback):', fallbackData.character.name);
                 }
@@ -470,19 +472,31 @@ function _fmtDur(sec) {
 }
 
 // Messages functionality
-async function loadMessages() {
+let _messagesLoadedForCharacter = null;
+
+async function loadMessages(forceReload = false) {
     try {
+        const charId = currentCharacter ? currentCharacter.id : null;
+        const container = document.getElementById('messagesContainer');
+        if (!container) return;
+
+        // Skip reload if messages are already loaded for this character
+        if (!forceReload && _messagesLoadedForCharacter === charId && container.children.length > 0) {
+            scrollToBottom();
+            return;
+        }
+
         const response = await fetch('/api/messages/history?limit=50');
         const data = await response.json();
         
-        const container = document.getElementById('messagesContainer');
         container.innerHTML = '';
         
-        data.messages.forEach(msg => {
-            addMessageToUI(msg.role, msg.content, msg.timestamp, false);
+        (data.messages || []).forEach(msg => {
+            addMessageToUI(msg.role, msg.content, msg.timestamp, false, false);
         });
         
-        scrollToBottom();
+        _messagesLoadedForCharacter = charId;
+        scrollToBottom(true);
     } catch (error) {
         console.error('Error loading messages:', error);
     }
@@ -526,6 +540,31 @@ function sendMessage() {
 
 function addMessageToUI(role, content, timestamp, autonomous = false, shouldScroll = true) {
     const container = document.getElementById('messagesContainer');
+    if (!container) return;
+
+    // Detect rich media patterns stored in conversation history
+    const photoMatch = content.match(/^\[Photo sent(?:: ([a-f0-9-]+))?\]\s*(.*)?$/i);
+    if (photoMatch) {
+        const mediaId = photoMatch[1];
+        const caption = (photoMatch[2] || '').trim();
+        const url = mediaId ? `/api/media/download/${mediaId}` : null;
+        if (url) {
+            addPhotoMessage(url, timestamp, role, caption);
+        }
+        return;
+    }
+
+    const voiceMatch = content.match(/^\[Voice message: (.+)\]$/i);
+    if (voiceMatch) {
+        _addRichMediaBubble(container, role, timestamp, '🎤', 'Voice Message', voiceMatch[1]);
+        return;
+    }
+
+    const videoMatch = content.match(/^\[Video message: (.+)\]$/i);
+    if (videoMatch) {
+        _addRichMediaBubble(container, role, timestamp, '🎥', 'Video Message', videoMatch[1]);
+        return;
+    }
     
     const messageDiv = document.createElement('div');
     messageDiv.className = `message ${role}`;
@@ -560,6 +599,43 @@ function addMessageToUI(role, content, timestamp, autonomous = false, shouldScro
     container.appendChild(messageDiv);
     
     if (shouldScroll) scrollToBottom();
+}
+
+// Render a non-playable rich media placeholder in chat history
+function _addRichMediaBubble(container, role, timestamp, icon, label, transcript) {
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `message ${role}`;
+
+    const bubbleDiv = document.createElement('div');
+    bubbleDiv.className = 'message-bubble';
+    bubbleDiv.style.cssText = 'display:flex;align-items:center;gap:8px;';
+
+    const iconSpan = document.createElement('span');
+    iconSpan.style.fontSize = '22px';
+    iconSpan.textContent = icon;
+    bubbleDiv.appendChild(iconSpan);
+
+    const infoDiv = document.createElement('div');
+    infoDiv.innerHTML = `<div style="font-size:11px;color:#888;margin-bottom:2px;">${label}</div>`
+                      + `<div style="font-size:13px;">${_escHtml(transcript)}</div>`;
+    bubbleDiv.appendChild(infoDiv);
+
+    const metaDiv = document.createElement('div');
+    metaDiv.className = 'message-meta';
+    const timeSpan = document.createElement('span');
+    timeSpan.className = 'message-time';
+    const time = new Date(timestamp);
+    timeSpan.textContent = time.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    metaDiv.appendChild(timeSpan);
+    bubbleDiv.appendChild(metaDiv);
+
+    messageDiv.appendChild(bubbleDiv);
+    container.appendChild(messageDiv);
+    scrollToBottom();
+}
+
+function _escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
 function addPhotoMessage(url, timestamp, role = 'assistant', caption = '') {

@@ -199,7 +199,7 @@ class PhoneScene(BaseScene):
         
         @self.app.route('/api/messages/history', methods=['GET'])
         def get_message_history():
-            """Get conversation history"""
+            """Get conversation history with rich media type detection"""
             if not self.active_character:
                 return jsonify({'error': 'No active character'}), 400
             
@@ -215,10 +215,19 @@ class PhoneScene(BaseScene):
                 interactions = []
                 for conv in conversations:
                     for msg in conv['messages']:
+                        content = msg['content']
+                        msg_type = 'text'
+                        if content.startswith('[Photo sent'):
+                            msg_type = 'photo'
+                        elif content.startswith('[Voice message:'):
+                            msg_type = 'voice'
+                        elif content.startswith('[Video message:'):
+                            msg_type = 'video'
                         interactions.append({
                             'role': msg['role'],
-                            'content': msg['content'],
-                            'timestamp': msg['timestamp']
+                            'content': content,
+                            'timestamp': msg['timestamp'],
+                            'type': msg_type
                         })
             
             return jsonify({'messages': interactions})
