@@ -260,7 +260,10 @@ class VoiceMessageGenerator:
                 return None
             data = resp.json()
             filepath = data.get("filepath") or data.get("path")
-            if not filepath or not Path(filepath).exists():
+            if not filepath:
+                return None
+            resolved = Path(filepath).resolve()
+            if ".." in str(filepath) or not resolved.exists():
                 return None
             info = self.get_voice_message_info(filepath)
             result = {
@@ -396,18 +399,20 @@ class VoiceMailBox:
         from datetime import datetime as _dt
         with self.db.get_connection() as conn:
             cursor = conn.cursor()
+            import json as _json_mod
+            interaction_id = str(_uuid.uuid4())
             cursor.execute("""
                 INSERT INTO interactions (id, character_id, type, content, metadata, timestamp)
                 VALUES (?, ?, ?, ?, ?, ?)
             """, (
-                str(_uuid.uuid4()),
+                interaction_id,
                 character_id,
                 "voicemail",
                 text or "Voice message",
-                f'{{"filepath": "{voice_filepath}", "duration": {duration}, "listened": false}}',
+                _json_mod.dumps({"filepath": voice_filepath, "duration": duration, "listened": False}),
                 _dt.now().isoformat()
             ))
-            return str(cursor.lastrowid)
+            return interaction_id
     
     def get_voicemails(self, character_id: str, unheard_only: bool = False) -> List[Dict]:
         """Get voicemails for character"""

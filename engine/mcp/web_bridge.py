@@ -180,7 +180,7 @@ def create_bridge_app(
             except httpx.ConnectError:
                 yield f'data: {{"error": "Cannot connect to LMStudio"}}\n\n'
             except Exception as e:
-                yield f'data: {{"error": "{str(e)}"}}\n\n'
+                yield f'data: {{"error": {json.dumps(str(e))}}}\n\n'
 
         return StreamingResponse(
             event_generator(),

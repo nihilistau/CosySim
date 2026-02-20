@@ -38,7 +38,7 @@
 |-------|------|------|---------|
 | **Hub** | 8500 | `content/scenes/hub/` | Central launcher + tutorial |
 | **Phone** | 5555 | `content/scenes/phone/` | Messages, calls, gallery |
-| **Bedroom** | 5003 | `content/scenes/bedroom/` | Interactive environment |
+| **Bedroom** | 5556 | `content/scenes/bedroom/` | Interactive environment |
 | **Admin** | 8502 | `content/scenes/admin/` | System management |
 | **Dashboard** | 8501 | `content/scenes/dashboard/` | Metrics overview |
 
@@ -174,7 +174,7 @@ scenes:
   phone:
     port: 5555
   bedroom:
-    port: 5003
+    port: 5556
 
 tts:
   device: "cuda"  # or "cpu"

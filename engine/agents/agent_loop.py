@@ -70,6 +70,7 @@ class AgentLoop:
         # Conversation log visible to all agents (pruned to 200 max)
         self.shared_log: List[Dict] = []
         self._shared_log_max = 200
+        self._log_lock = threading.Lock()
 
         # Callbacks
         self._on_action: Optional[Callable] = None
@@ -163,7 +164,8 @@ class AgentLoop:
         loc_ctx = self.scene_map.context_for_character(character_id, self._names)
 
         # Recent shared conversation (last 10 entries)
-        recent = self.shared_log[-10:] if self.shared_log else []
+        with self._log_lock:
+            recent = self.shared_log[-10:] if self.shared_log else []
         convo = "\n".join(
             f"  {e.get('name','?')}: {e.get('text','')}" for e in recent
         ) if recent else "(silence)"
@@ -247,7 +249,8 @@ class AgentLoop:
             lines.append("There's a subtle romantic tension in the air.")
 
         # Environmental events (from menace menu or similar)
-        env_events = [e for e in self.shared_log[-5:] if e.get("type") == "environment"]
+        with self._log_lock:
+            env_events = [e for e in self.shared_log[-5:] if e.get("type") == "environment"]
         if env_events:
             lines.append("⚠ Something just happened in the environment: " + env_events[-1].get("text", ""))
 
@@ -403,11 +406,12 @@ class AgentLoop:
                 result["description"] = f"{character.name} doesn't know where '{target}' is."
 
         elif action == "speak":
-            self.shared_log.append({
-                "name": character.name, "text": message,
-                "timestamp": timestamp, "type": "speech",
-            })
-            self.shared_log = self.shared_log[-self._shared_log_max:]
+            with self._log_lock:
+                self.shared_log.append({
+                    "name": character.name, "text": message,
+                    "timestamp": timestamp, "type": "speech",
+                })
+                self.shared_log = self.shared_log[-self._shared_log_max:]
             result["description"] = f'{character.name} says: "{message}"'
 
         elif action in ("flirt", "touch", "kiss", "cuddle", "intimate"):
@@ -429,11 +433,12 @@ class AgentLoop:
                     "intimate": f"{character.name} and {other.name} share an intimate moment",
                 }
                 result["description"] = desc_map.get(action, f"{character.name} interacts with {other.name}")
-                self.shared_log.append({
-                    "name": character.name, "text": f"*{result['description']}*",
-                    "timestamp": timestamp, "type": "action",
-                })
-                self.shared_log = self.shared_log[-self._shared_log_max:]
+                with self._log_lock:
+                    self.shared_log.append({
+                        "name": character.name, "text": f"*{result['description']}*",
+                        "timestamp": timestamp, "type": "action",
+                    })
+                    self.shared_log = self.shared_log[-self._shared_log_max:]
                 arousal_boost = {"flirt": 0.05, "touch": 0.08, "kiss": 0.12, "cuddle": 0.10, "intimate": 0.20}
                 delta = arousal_boost.get(action, 0.05)
                 for cid in (character_id, target_id):
@@ -449,11 +454,12 @@ class AgentLoop:
             if loc and loc.interactions:
                 activity = random.choice(loc.interactions) if not message else message
                 result["description"] = f"{character.name} {activity} at the {loc.name}."
-                self.shared_log.append({
-                    "name": character.name, "text": f"*{result['description']}*",
-                    "timestamp": timestamp, "type": "action",
-                })
-                self.shared_log = self.shared_log[-self._shared_log_max:]
+                with self._log_lock:
+                    self.shared_log.append({
+                        "name": character.name, "text": f"*{result['description']}*",
+                        "timestamp": timestamp, "type": "action",
+                    })
+                    self.shared_log = self.shared_log[-self._shared_log_max:]
             else:
                 result["description"] = f"{character.name} looks around."
 

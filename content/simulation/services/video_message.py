@@ -406,18 +406,20 @@ class VideoMailBox:
         from datetime import datetime as _dt
         with self.db.get_connection() as conn:
             cursor = conn.cursor()
+            import json as _json_mod
+            interaction_id = str(_uuid.uuid4())
             cursor.execute("""
                 INSERT INTO interactions (id, character_id, type, content, metadata, timestamp)
                 VALUES (?, ?, ?, ?, ?, ?)
             """, (
-                str(_uuid.uuid4()),
+                interaction_id,
                 character_id,
                 "video_message",
                 text or "Video message",
-                f'{{"filepath": "{video_filepath}", "duration": {duration}, "watched": false}}',
+                _json_mod.dumps({"filepath": video_filepath, "duration": duration, "watched": False}),
                 _dt.now().isoformat()
             ))
-            return str(cursor.lastrowid)
+            return interaction_id
     
     def get_video_messages(
         self,

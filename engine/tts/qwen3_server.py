@@ -696,7 +696,11 @@ def create_tts_app() -> FastAPI:
     @app.get("/download/{filename}")
     async def download(filename: str):
         """Download a generated WAV file."""
-        filepath = VOICE_DIR / filename
+        if "/" in filename or "\\" in filename or ".." in filename:
+            raise HTTPException(400, "Invalid filename")
+        filepath = (VOICE_DIR / filename).resolve()
+        if not str(filepath).startswith(str(VOICE_DIR.resolve())):
+            raise HTTPException(403, "Access denied")
         if not filepath.exists():
             raise HTTPException(404, "File not found")
         return FileResponse(str(filepath), media_type="audio/wav", filename=filename)

@@ -513,6 +513,7 @@ function animate() {
     requestAnimationFrame(animate);
     const dt = clock.getDelta();
     controls.update();
+    const t = clock.elapsedTime;
 
     // Smooth character movement + glow pulse
     for (const s of Object.values(charSprites)) {
@@ -521,7 +522,6 @@ function animate() {
     }
 
     // Pulse location markers
-    const t = clock.elapsedTime;
     for (const m of Object.values(locationMarkers)) {
         m.material.opacity = 0.5 + 0.2 * Math.sin(t * 2 + m.position.x);
     }

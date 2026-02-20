@@ -3,7 +3,7 @@ CosySim - Entry point
 
 Delegates to launcher.py for all mode dispatch.
 Usage:
-    python launcher.py [phone|bedroom|hub|dashboard|admin|assets|test|init-db|status]
+    python launcher.py --mode [hub|phone|bedroom|admin|all|test]
 
 Running `python main.py` is an alias for the default launcher behaviour.
 """

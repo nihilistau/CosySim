@@ -161,12 +161,19 @@ class AudioProcessor:
         all_frames = b""
         sr = self.target_sr
         for fp in filepaths:
-            with wave.open(str(fp), 'rb') as wf:
-                sr = wf.getframerate()
-                all_frames += wf.readframes(wf.getnframes())
-                # Add gap
-                gap = int(0.1 * sr) * 2  # 100ms of silence (16-bit mono)
-                all_frames += b'\x00' * gap
+            try:
+                with wave.open(str(fp), 'rb') as wf:
+                    sr = wf.getframerate()
+                    all_frames += wf.readframes(wf.getnframes())
+                    # Add gap
+                    gap = int(0.1 * sr) * 2  # 100ms of silence (16-bit mono)
+                    all_frames += b'\x00' * gap
+            except Exception as e:
+                logger.warning("Failed to read audio file %s: %s", fp, e)
+                continue
+
+        if not all_frames:
+            raise ValueError("No valid audio files to stitch")
 
         with wave.open(str(output), 'wb') as wf:
             wf.setnchannels(1)
