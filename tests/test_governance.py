@@ -701,12 +701,22 @@ class TestCharacterAgentProtocolCompliance(unittest.TestCase):
 
     def test_reply_accepts_extra_kwargs(self):
         """reply() must absorb use_tools=False and any unexpected kwargs."""
+        import sys
+        import types
         from engine.agents.character_agent import CharacterAgent
+
         char  = _make_character()
         agent = CharacterAgent(char)
-        # Patch away the actual LLM call
-        with patch.object(agent, "_reply_via_rest", return_value="patched reply"):
-            result = agent.reply("hi", use_tools=False, unknown_kwarg="ignored")
+
+        # Stub out the `lmstudio` package so the import inside reply() succeeds
+        fake_lms = types.ModuleType("lmstudio")
+        fake_chat_instance = MagicMock()
+        fake_lms.Chat = MagicMock(return_value=fake_chat_instance)
+
+        with patch.dict(sys.modules, {"lmstudio": fake_lms}):
+            with patch.object(agent, "_reply_via_rest", return_value="patched reply"):
+                result = agent.reply("hi", use_tools=False, unknown_kwarg="ignored")
+
         self.assertEqual(result, "patched reply")
 
 
