@@ -110,11 +110,15 @@ class ConfigManager:
             "COSYVOICE_LLM_MODEL":       "llm.model",
             "COSYVOICE_TTS_DEVICE":      "tts.device",
             "COSYVOICE_STT_DEVICE":      "stt.device",
-            "COSYVOICE_LOG_LEVEL":       "logging.level",            # MCP / governance runtime overrides
+            "COSYVOICE_LOG_LEVEL":       "logging.level",
+            # MCP / governance runtime overrides
             "COSYSIM_MCP_ENABLED":         "lmstudio.mcp_enabled",
             "COSYSIM_MCP_PORT":            "mcp.port",
             "COSYSIM_MCP_URL":             "lmstudio.cosysim_mcp_url",
-            "COSYSIM_GOVERNANCE_ENABLED":  "comms.governance_enabled",        }
+            "COSYSIM_MCP_BASE_URL":        "mcp.base_url",
+            "COSYSIM_TTS_URL":             "tts.server_url",
+            "COSYSIM_GOVERNANCE_ENABLED":  "comms.governance_enabled",
+        }
         
         for env_var, config_path in env_mappings.items():
             value = os.getenv(env_var)

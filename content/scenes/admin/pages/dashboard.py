@@ -10,7 +10,7 @@ def render():
 
     # ── Service Health Row ──────────────────────────────────────────────
     st.subheader("🔌 Service Health")
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3, col4, col5, col6 = st.columns(6)
 
     # LMStudio
     with col1:
@@ -31,8 +31,28 @@ def render():
         except Exception:
             st.metric("ComfyUI", "⚪ Unknown")
 
-    # Database
+    # TTS Server
     with col3:
+        try:
+            from engine.logging import get_system_monitor
+            health = get_system_monitor().check_services()
+            tts_up = health.get("tts", {}).get("up", None)
+            st.metric("TTS", "🟢 Online" if tts_up else ("🔴 Offline" if tts_up is False else "⚪ Unknown"))
+        except Exception:
+            st.metric("TTS", "⚪ Unknown")
+
+    # MCP Server
+    with col4:
+        try:
+            from engine.logging import get_system_monitor
+            health = get_system_monitor().check_services()
+            mcp_up = health.get("mcp", {}).get("up", None)
+            st.metric("MCP", "🟢 Online" if mcp_up else ("🔴 Offline" if mcp_up is False else "⚪ Unknown"))
+        except Exception:
+            st.metric("MCP", "⚪ Unknown")
+
+    # Database
+    with col5:
         try:
             from content.simulation.database.db import Database
             db = Database()
@@ -41,7 +61,7 @@ def render():
             st.metric("Database", "🔴 Error")
 
     # EventChain
-    with col4:
+    with col6:
         try:
             from content.simulation.database.events import EventChain
             ec = EventChain()
@@ -161,6 +181,38 @@ def render():
     with col3:
         if st.button("🔄 Refresh", use_container_width=True):
             st.rerun()
+
+    # ── Live Activity Feed ───────────────────────────────────────────────
+    st.markdown("---")
+    st.subheader("⚡ Live Activity Feed")
+    try:
+        from engine.services.activity_bus import get_activity_bus
+        bus = get_activity_bus()
+        activities = bus.get_recent(limit=30)
+        if activities:
+            col_f, col_filt = st.columns([3, 1])
+            with col_filt:
+                atype_filter = st.selectbox(
+                    "Filter type",
+                    ["all"] + sorted({a.get("activity_type", "") for a in activities}),
+                    key="dash_act_filter",
+                )
+            if atype_filter != "all":
+                activities = [a for a in activities if a.get("activity_type") == atype_filter]
+            rows = []
+            for a in reversed(activities[-20:]):
+                rows.append({
+                    "Time":   a.get("timestamp", "")[-8:],
+                    "Type":   a.get("activity_type", ""),
+                    "Agent":  a.get("agent_id", ""),
+                    "Scene":  a.get("scene", ""),
+                    "Detail": a.get("description", "")[:80],
+                })
+            st.dataframe(rows, use_container_width=True, hide_index=True)
+        else:
+            st.info("No activity yet — interact with a scene to populate the feed.")
+    except Exception as _e:
+        st.warning(f"Activity bus not available: {_e}")
 
 
 def _stat_card(value, label):

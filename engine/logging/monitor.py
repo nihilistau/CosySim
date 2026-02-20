@@ -48,15 +48,30 @@ class SystemMonitor:
             data["ram_total_gb"] = round(mem.total / (1024 ** 3), 1)
             data["ram_used_gb"] = round(mem.used / (1024 ** 3), 1)
             data["ram_percent"] = mem.percent
+            # Also emit nested "ram" dict that dashboard expects
+            data["ram"] = {
+                "used_gb":  data["ram_used_gb"],
+                "total_gb": data["ram_total_gb"],
+                "percent":  data["ram_percent"],
+            }
         except ImportError:
             data["cpu_percent"] = None
             data["ram_total_gb"] = None
             data["ram_used_gb"] = None
             data["ram_percent"] = None
+            data["ram"] = {}
 
         # GPU via nvidia-smi
         gpu = self._gpu_metrics()
         data.update(gpu)
+        # Nested "gpu" dict that dashboard expects
+        data["gpu"] = {
+            "available":      (gpu.get("gpu_name") is not None),
+            "vram_used_mb":   gpu.get("gpu_vram_used_mb"),
+            "vram_total_mb":  gpu.get("gpu_vram_total_mb"),
+            "name":           gpu.get("gpu_name"),
+            "temp_c":         gpu.get("gpu_temp_c"),
+        }
 
         self._last_snapshot = data
         self._last_snapshot_time = now
@@ -101,6 +116,16 @@ class SystemMonitor:
         # ComfyUI
         services["comfyui"] = self._ping_http(
             self._get_url("comfyui.base_url", "http://localhost:8188") + "/system_stats"
+        )
+
+        # TTS server
+        services["tts"] = self._ping_http(
+            self._get_url("tts.server_url", "http://localhost:8600") + "/status"
+        )
+
+        # MCP server (CosySim)
+        services["mcp"] = self._ping_http(
+            self._get_url("mcp.base_url", "http://localhost:8700") + "/health"
         )
 
         return services

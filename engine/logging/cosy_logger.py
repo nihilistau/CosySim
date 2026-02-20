@@ -45,6 +45,19 @@ class _RingHandler(logging.Handler):
             }
             with self._lock:
                 self._buf.append(entry)
+            # Forward ERROR / CRITICAL to ActivityBus so the admin panel captures them
+            if record.levelno >= logging.ERROR:
+                try:
+                    from engine.services.activity_bus import get_activity_bus
+                    get_activity_bus().publish(
+                        activity_type="log_error",
+                        description=f"[{record.levelname}] {record.name}: {record.getMessage()[:200]}",
+                        agent_id=record.name,
+                        scene="system",
+                        data={"level": record.levelname, "logger": record.name},
+                    )
+                except Exception:
+                    pass
         except Exception:                 # never crash the emitting thread
             self.handleError(record)
 

@@ -51,6 +51,21 @@ class Character:
         # Cache for current conversation
         self._current_chain_id = None
         self._current_conversation_id = None
+
+        # MCP: register with CharacterRegistry (best-effort)
+        try:
+            from engine.mcp.character_registry import get_character_registry
+            get_character_registry().ensure(
+                self.id,
+                display_name=self._data.get("name", self.id),
+            )
+            if self._state:
+                get_character_registry().set_state(self.id, {
+                    "mood":  self._state.get("mood", "neutral"),
+                    "scene": "unknown",
+                })
+        except Exception:
+            pass
     
     # ============= PROPERTIES =============
     
@@ -344,11 +359,30 @@ class Character:
         if success:
             # Reload state
             self._state = self.db.get_character_state(self.id)
+            # MCP: keep CharacterRegistry in sync
+            try:
+                from engine.mcp.character_registry import get_character_registry
+                get_character_registry().set_state(self.id, dict(kwargs))
+            except Exception:
+                pass
         return success
     
     def set_mood(self, mood: str) -> bool:
         """Set character mood"""
-        return self.update_state(mood=mood)
+        result = self.update_state(mood=mood)
+        if result:
+            try:
+                from engine.services.activity_bus import get_activity_bus
+                get_activity_bus().publish(
+                    activity_type="character_mood_changed",
+                    description=f"{self.name} mood → {mood}",
+                    agent_id=self.id,
+                    scene="unknown",
+                    data={"mood": mood},
+                )
+            except Exception:
+                pass
+        return result
     
     def adjust_relationship(self, delta: float) -> bool:
         """Adjust relationship level"""

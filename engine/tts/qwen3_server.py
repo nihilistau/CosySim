@@ -536,6 +536,25 @@ def _run_generation(job_id: str, request: GenerateRequest):
 
         logger.info("TTS job %s completed: %s (%.1fs)", job_id, filepath.name, duration)
 
+        # MCP: publish to ActivityBus
+        try:
+            from engine.services.activity_bus import get_activity_bus
+            get_activity_bus().publish(
+                activity_type="tts_generated",
+                description=f"Voice generated ({model_size}): {duration:.1f}s",
+                agent_id=request.character_id or "tts_server",
+                scene="tts",
+                data={
+                    "filename":   filepath.name,
+                    "duration":   duration,
+                    "model_size": model_size,
+                    "text_len":   len(request.text),
+                    "chain_id":   request.chain_id,
+                },
+            )
+        except Exception:
+            pass
+
     except Exception as e:
         job.status = "failed"
         job.error = str(e)

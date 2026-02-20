@@ -137,6 +137,8 @@ media_standards:
 
 # MCP (Model Context Protocol) servers
 mcp:
+  port: 8700
+  base_url: "http://localhost:8700"
   servers: []
   # Example server entry:
   # - name: "filesystem"

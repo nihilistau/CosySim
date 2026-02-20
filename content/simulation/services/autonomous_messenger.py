@@ -287,6 +287,23 @@ class AutonomousMessenger:
             # Update last message time
             config["last_message_time"] = datetime.now()
 
+            # MCP: publish to ActivityBus
+            try:
+                from engine.services.activity_bus import get_activity_bus
+                get_activity_bus().publish(
+                    activity_type="autonomous_message",
+                    description=f"{character.name} sent autonomous {message_type}",
+                    agent_id=character_id,
+                    scene="autonomous_messenger",
+                    data={
+                        "message_type": message_type,
+                        "character_name": character.name,
+                        "chain_id": chain_id,
+                    },
+                )
+            except Exception:
+                pass
+
             print(f"📱 {character.name} sent autonomous {message_type} message")
 
         except Exception as e:

@@ -350,6 +350,25 @@ class LMStudioClient:
         except Exception:
             pass  # Never let KPI recording break inference
 
+        # MCP: publish inference event to ActivityBus
+        try:
+            from engine.services.activity_bus import get_activity_bus
+            get_activity_bus().publish(
+                activity_type="llm_inference",
+                description=f"LMStudio chat: {resp.output_tokens} tokens in {resp.latency_ms:.0f}ms",
+                agent_id="lmstudio_client",
+                scene="system",
+                data={
+                    "model":         resp.model,
+                    "input_tokens":  resp.input_tokens,
+                    "output_tokens": resp.output_tokens,
+                    "latency_ms":    resp.latency_ms,
+                    "request_id":    resp.request_id,
+                },
+            )
+        except Exception:
+            pass
+
         return resp
 
     # ── Chat (streaming) ──────────────────────────────────────────────
