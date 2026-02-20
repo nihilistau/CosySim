@@ -554,18 +554,30 @@ def _invoke_mcp_tool(tool_name: str, args: Dict, ctx: ResponseContext) -> Any:
 def _build_default_pipeline() -> InterceptorPipeline:
     """Build the default interceptor pipeline for new governors."""
     from engine.agents.interceptors import (
-        SkillAwarenessInterceptor,
-        PersonalityGuardInterceptor,
-        AutoResultInjector,
         RouterMessageInjector,
+        BedroomSceneInterceptor,
+        PhoneSceneInterceptor,
+        AutoResultInjector,
+        SkillAwarenessInterceptor,
+        GameRulesInterceptor,
+        PersonalityGuardInterceptor,
         PolicyEnforcerInterceptor,
+        MemoryEnhancerInterceptor,
+        ResponseShaperInterceptor,
+        ActivityLoggerInterceptor,
     )
     pipeline = InterceptorPipeline()
-    pipeline.add(RouterMessageInjector())
-    pipeline.add(AutoResultInjector())
-    pipeline.add(SkillAwarenessInterceptor())
-    pipeline.add(PersonalityGuardInterceptor())
-    pipeline.add(PolicyEnforcerInterceptor())
+    pipeline.add(RouterMessageInjector())        # 10
+    pipeline.add(BedroomSceneInterceptor())      # 15
+    pipeline.add(PhoneSceneInterceptor())        # 15
+    pipeline.add(AutoResultInjector())           # 20
+    pipeline.add(SkillAwarenessInterceptor())    # 30
+    pipeline.add(GameRulesInterceptor())         # 40
+    pipeline.add(PersonalityGuardInterceptor())  # 50
+    pipeline.add(PolicyEnforcerInterceptor())    # 60
+    pipeline.add(MemoryEnhancerInterceptor())    # 70
+    pipeline.add(ResponseShaperInterceptor())    # 80
+    pipeline.add(ActivityLoggerInterceptor())    # 90
     return pipeline
 
 

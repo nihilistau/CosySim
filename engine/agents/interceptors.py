@@ -449,7 +449,8 @@ class BedroomSceneInterceptor(InterceptorBase):
                     )
 
             # ── recent narrative ─────────────────────────────────────────────
-            narrative = ssm.get_narrative(scene_id, limit=8)
+            narrative_entries = ssm.get_narrative_entries(scene_id, limit=8)
+            narrative = [e["event"] for e in narrative_entries]
             narrative_block = "\n".join(f"  • {e}" for e in narrative) if narrative else "  (scene just started)"
 
             # ── atmosphere ───────────────────────────────────────────────────
@@ -540,7 +541,8 @@ class PhoneSceneInterceptor(InterceptorBase):
             ssm = get_scene_state_manager()
 
             snap = ssm.get_stats(agent_id) if agent_id else None
-            narrative = ssm.get_narrative(scene_id, limit=6)
+            narrative_entries = ssm.get_narrative_entries(scene_id, limit=6)
+            narrative = [e["event"] for e in narrative_entries]
 
             lines: List[str] = []
 
@@ -558,6 +560,7 @@ class PhoneSceneInterceptor(InterceptorBase):
             if narrative:
                 narr_block = " | ".join(narrative[-4:])
                 lines.append(f"Recent conversation context: {narr_block}")
+
 
             if lines:
                 injection = "\n\n[PHONE SCENE CONTEXT]\n" + "\n".join(lines) + "\n[/PHONE SCENE CONTEXT]"

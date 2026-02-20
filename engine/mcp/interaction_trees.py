@@ -101,7 +101,6 @@ BEDROOM_INTERACTIONS["cuddle"] = InteractionType(
             id="lap_sit", label="Lap Sit", duration=25, intimacy=2,
             description="Sitting in each other's lap, face-to-face intimacy.",
             stat_effects={"arousal": 20, "happiness": 15, "affection": 15, "dominance": 5},
-            phases=["settling", "finding comfort", "awareness of proximity"],
             phases=["settling down", "finding rhythm", "heat rising"],
             fragments=[
                 "slides onto {target}'s lap and faces {them} directly",
