@@ -486,17 +486,21 @@ class PhoneScene(BaseScene):
                 if not media:
                     return jsonify({'error': 'Media not found'}), 404
                 
-                # Validate path is within media directory (prevent path traversal)
                 filepath = Path(media['filepath']).resolve()
-                media_dir = self.media_dir.resolve()
                 
-                if not str(filepath).startswith(str(media_dir)):
+                # Allow files from phone media dir or simulation media dir
+                allowed_dirs = [
+                    self.media_dir.resolve(),
+                    Path(__file__).parent.parent.parent.joinpath("simulation", "media").resolve(),
+                ]
+                if not any(str(filepath).startswith(str(d)) for d in allowed_dirs):
                     return jsonify({'error': 'Invalid file path'}), 403
                 
                 if not filepath.exists():
                     return jsonify({'error': 'File not found'}), 404
                 
-                return send_file(str(filepath), mimetype='image/jpeg')
+                mimetype = 'image/png' if filepath.suffix == '.png' else 'image/jpeg'
+                return send_file(str(filepath), mimetype=mimetype)
             except Exception as e:
                 return jsonify({'error': str(e)}), 500
         
@@ -755,10 +759,19 @@ class PhoneScene(BaseScene):
             try:
                 # Secure the filename
                 filename = secure_filename(filename)
-                voice_dir = Path(__file__).parent.parent / "media" / "voice"
-                filepath = voice_dir / filename
+                # Check both possible voice directories
+                voice_dirs = [
+                    Path(__file__).parent.parent.parent / "simulation" / "media" / "voice",
+                    Path(__file__).parent.parent.parent / "media" / "voice",
+                ]
+                filepath = None
+                for vdir in voice_dirs:
+                    candidate = vdir / filename
+                    if candidate.exists():
+                        filepath = candidate
+                        break
                 
-                if not filepath.exists():
+                if not filepath:
                     return jsonify({'error': 'File not found'}), 404
                 
                 return send_file(str(filepath), mimetype='audio/wav')
@@ -1448,9 +1461,18 @@ class PhoneScene(BaseScene):
             
             text = data.get('text')
             
+            # Auto-generate text if none provided
             if not text:
-                emit('error', {'message': 'No text provided'})
-                return
+                mood = self.active_character.mood or 'happy'
+                name = self.active_character.name
+                templates = [
+                    f"Hey, it's {name}. Just thinking about you right now...",
+                    f"Hi! I wanted to send you a little voice message. Miss you!",
+                    f"Hey babe, just wanted to hear myself say your name...",
+                    f"I'm feeling {mood} right now and wanted to share that with you.",
+                    f"Can't stop thinking about our conversation earlier...",
+                ]
+                text = random.choice(templates)
             
             try:
                 # Generate voice message
@@ -1505,7 +1527,7 @@ class PhoneScene(BaseScene):
         
         @self.socketio.on('request_photo')
         def handle_request_photo():
-            """Handle photo request from user"""
+            """Handle photo request — generate via ComfyUI if gallery empty"""
             if not self.active_character:
                 emit('error', {'message': 'No active character'})
                 return
@@ -1518,7 +1540,7 @@ class PhoneScene(BaseScene):
             )
             
             if media_list:
-                # Send random photo
+                # Send random existing photo
                 media = random.choice(media_list)
                 emit('photo_received', {
                     'media_id': media['id'],
@@ -1526,16 +1548,68 @@ class PhoneScene(BaseScene):
                     'role': 'assistant',
                     'timestamp': datetime.now().isoformat()
                 })
-                
-                # Log to conversation
                 if self.current_chain_id:
                     self.active_character.add_message('assistant', f"[Photo sent: {media['id']}]")
             else:
-                emit('message_received', {
-                    'role': 'assistant',
-                    'content': "I don't have any photos to send right now 😅",
-                    'timestamp': datetime.now().isoformat()
-                })
+                # No photos yet — generate one via ComfyUI
+                emit('typing', {'typing': True})
+                try:
+                    rel = float(self.active_character.relationship_level or 0.0)
+                    arousal = float(getattr(self.active_character, 'arousal', 0.0) or 0.0)
+                    nsfw_ok = getattr(self.active_character, 'nsfw_enabled', False)
+                    mood = self.active_character.mood or 'happy'
+                    
+                    extra = ''
+                    nsfw = False
+                    if rel > 0.85 and arousal > 0.5 and nsfw_ok:
+                        nsfw = True
+                        extra = 'seductive pose, revealing outfit, bedroom eyes'
+                    elif rel > 0.6:
+                        extra = 'flirty expression, attractive pose'
+                    
+                    filepath = self.media_generator.generate_selfie(
+                        character_name=self.active_character.name,
+                        character_description=self.active_character.appearance or "attractive person",
+                        mood=mood,
+                        setting='selfie',
+                        style='realistic',
+                        nsfw=nsfw,
+                        extra_prompt=extra,
+                        chain_id=self.current_chain_id,
+                        scene_id='phone',
+                        character_id=self.active_character.id,
+                    )
+                    
+                    if filepath:
+                        media_id = self.gallery.add_media(
+                            character_id=self.active_character.id,
+                            filepath=filepath,
+                            media_type='image',
+                            metadata={'source': 'generated', 'mood': mood}
+                        )
+                        emit('photo_received', {
+                            'media_id': media_id,
+                            'url': f"/api/media/download/{media_id}",
+                            'role': 'assistant',
+                            'timestamp': datetime.now().isoformat()
+                        })
+                        if self.current_chain_id:
+                            self.active_character.add_message('assistant', f"[Selfie sent: {media_id}]")
+                    else:
+                        emit('message_received', {
+                            'role': 'assistant',
+                            'content': "Sorry, couldn't take a selfie right now 😅 Try again in a bit!",
+                            'timestamp': datetime.now().isoformat()
+                        })
+                except Exception as e:
+                    logger.error(f"Photo generation failed: {e}")
+                    emit('message_received', {
+                        'role': 'assistant',
+                        'content': "My camera isn't working right now 📸😅",
+                        'timestamp': datetime.now().isoformat()
+                    })
+                finally:
+                    emit('typing', {'typing': False})
         
         # Video Call SocketIO Events
         @self.socketio.on('start_video_call')

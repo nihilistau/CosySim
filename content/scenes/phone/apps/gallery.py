@@ -46,23 +46,28 @@ class Gallery:
         if not Path(filepath).exists():
             raise FileNotFoundError(f"Media file not found: {filepath}")
         
+        import uuid
+        media_id = str(uuid.uuid4())
+        timestamp = datetime.now().isoformat()
+        
         # Insert into database
         with self.db.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                INSERT INTO media (character_id, type, filepath, thumbnail, metadata)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO media (id, character_id, type, filepath, thumbnail, metadata, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
             """, (
+                media_id,
                 character_id,
                 media_type,
                 filepath,
                 thumbnail,
-                str(metadata) if metadata else None
+                str(metadata) if metadata else None,
+                timestamp
             ))
             conn.commit()
-            media_id = cursor.lastrowid
         
-        return str(media_id)
+        return media_id
     
     def get_media(self, media_id: str) -> Optional[Dict]:
         """Get media by ID"""

@@ -36,7 +36,7 @@ body {
 /* ── Phone Screen ────────────────────────────────────────────── */
 .phone-screen {
     height:calc(100% - 44px - 50px);
-    background:#000; overflow-y:auto;
+    background:#000; overflow:hidden;
     position:relative;
 }
 .screen-view { height:100%; width:100%; }
@@ -133,7 +133,8 @@ body {
 
 .messages-container {
     padding:12px 14px 4px;
-    min-height:calc(100% - 180px);
+    flex:1;
+    min-height:0;
     background:#0f0f0f;
     overflow-y:auto;
 }
