@@ -26,7 +26,6 @@ import json
 import logging
 import os
 import struct
-import time
 import uuid
 import wave
 from contextlib import asynccontextmanager

@@ -53,7 +53,7 @@ sys.path.insert(0, str(project_root))
 import os
 os.chdir(project_root)
 
-from engine.assets import AssetManager, CharacterAsset, SceneAsset
+from engine.assets import AssetManager
 from engine.config import ConfigManager
 
 

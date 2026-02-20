@@ -9,7 +9,7 @@ exactly when and why a character reached out.
 
 import time
 import random
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Optional, Dict, List
 from pathlib import Path
 from apscheduler.schedulers.background import BackgroundScheduler
