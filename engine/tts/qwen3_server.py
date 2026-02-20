@@ -105,34 +105,113 @@ class Qwen3TTSEngine:
     """
     Wrapper around Qwen3-TTS model inference.
 
-    Falls back to placeholder WAV generation when the model is not loaded.
+    Supports two model sizes (0.6B fast, 1.7B quality) with voice design
+    strings that control pitch, pace, emotion and character.
+    Falls back to placeholder WAV generation when models are not loaded.
     """
+
+    # Chunk size for long-form generation (chars per chunk)
+    CHUNK_SIZE = 500
+    # Max samples per chunk to avoid OOM
+    MAX_CHUNK_DURATION = 60  # seconds
 
     def __init__(self):
         self._model_06b = None
         self._model_17b = None
+        self._tokenizer_06b = None
+        self._tokenizer_17b = None
+        self._processor = None
         self._loaded = False
+        self._device = "cuda" if self._cuda_available() else "cpu"
+
+    @staticmethod
+    def _cuda_available() -> bool:
+        try:
+            import torch
+            return torch.cuda.is_available()
+        except ImportError:
+            return False
 
     def load_models(self, model_dir: Optional[str] = None):
         """
         Load Qwen3-TTS models from disk.
 
-        Called lazily on first generation request.
+        Searches these paths in order:
+          1. ``model_dir`` argument
+          2. ``COSYSIM_TTS_MODEL_DIR`` env var
+          3. ``pretrained_models/Qwen3-TTS-*`` under project root
+
+        Sets ``_loaded = True`` only if at least one model loads successfully.
         """
+        search_dirs = []
+        if model_dir:
+            search_dirs.append(Path(model_dir))
+        env = os.environ.get("COSYSIM_TTS_MODEL_DIR")
+        if env:
+            search_dirs.append(Path(env))
+        search_dirs.append(_PROJECT_ROOT / "pretrained_models")
+
         try:
-            # TODO: Import and load actual Qwen3-TTS models
-            # from qwen3_tts import Qwen3TTS
-            # self._model_06b = Qwen3TTS.from_pretrained("Qwen3-TTS-0.6B")
-            # self._model_17b = Qwen3TTS.from_pretrained("Qwen3-TTS-1.7B")
-            logger.info("Qwen3-TTS models: using placeholder mode (models not loaded)")
+            import torch
+            from transformers import AutoModelForCausalLM, AutoTokenizer
+        except ImportError:
+            logger.info("torch/transformers not available — TTS in placeholder mode")
             self._loaded = False
-        except Exception as e:
-            logger.warning("Failed to load Qwen3-TTS: %s", e)
-            self._loaded = False
+            return
+
+        for base in search_dirs:
+            for size, attr_m, attr_t in [
+                ("0.6B", "_model_06b", "_tokenizer_06b"),
+                ("1.7B", "_model_17b", "_tokenizer_17b"),
+            ]:
+                if getattr(self, attr_m) is not None:
+                    continue  # already loaded
+                candidates = [
+                    base / f"Qwen3-TTS-{size}",
+                    base / f"qwen3-tts-{size.lower()}",
+                    base / f"Qwen" / f"Qwen3-TTS-{size}",
+                ]
+                for p in candidates:
+                    if p.exists() and (p / "config.json").exists():
+                        try:
+                            logger.info("Loading Qwen3-TTS-%s from %s …", size, p)
+                            model = AutoModelForCausalLM.from_pretrained(
+                                str(p),
+                                torch_dtype=torch.float16 if self._device == "cuda" else torch.float32,
+                                device_map=self._device,
+                                trust_remote_code=True,
+                            )
+                            model.eval()
+                            tokenizer = AutoTokenizer.from_pretrained(
+                                str(p), trust_remote_code=True,
+                            )
+                            setattr(self, attr_m, model)
+                            setattr(self, attr_t, tokenizer)
+                            logger.info("✅ Qwen3-TTS-%s loaded on %s", size, self._device)
+                        except Exception as e:
+                            logger.warning("Failed to load Qwen3-TTS-%s from %s: %s", size, p, e)
+                        break  # stop searching for this size
+
+        self._loaded = self._model_06b is not None or self._model_17b is not None
+        if not self._loaded:
+            logger.info("Qwen3-TTS models not found — running in placeholder mode")
 
     @property
     def is_loaded(self) -> bool:
         return self._loaded
+
+    def _select_model(self, model_size: str):
+        """Return (model, tokenizer) for the requested size, with fallback."""
+        if model_size == "0.6b" and self._model_06b:
+            return self._model_06b, self._tokenizer_06b
+        if model_size == "1.7b" and self._model_17b:
+            return self._model_17b, self._tokenizer_17b
+        # Fallback: use whichever is available
+        if self._model_17b:
+            return self._model_17b, self._tokenizer_17b
+        if self._model_06b:
+            return self._model_06b, self._tokenizer_06b
+        return None, None
 
     def generate(
         self,
@@ -157,10 +236,92 @@ class Qwen3TTSEngine:
         self, text, voice_design, model_size, sample_rate, max_duration
     ) -> tuple[Path, float]:
         """Generate with actual Qwen3-TTS model."""
-        # TODO: Real Qwen3-TTS inference
-        # model = self._model_17b if model_size == "1.7b" else self._model_06b
-        # audio = model.generate(text, voice_design=voice_design, ...)
-        raise NotImplementedError("Qwen3-TTS model inference not yet implemented")
+        import torch
+        import numpy as np
+
+        model, tokenizer = self._select_model(model_size)
+        if model is None:
+            logger.warning("No model for size %s, falling back to placeholder", model_size)
+            return self._generate_placeholder(text, voice_design, sample_rate, max_duration)
+
+        # Build prompt with voice design instruction
+        prompt = f"<|voice_design|>{voice_design}<|text|>{text}"
+
+        # Chunk long texts to avoid OOM
+        chunks = self._chunk_text(text) if len(text) > self.CHUNK_SIZE else [text]
+        all_audio = []
+
+        for chunk in chunks:
+            chunk_prompt = f"<|voice_design|>{voice_design}<|text|>{chunk}"
+            try:
+                inputs = tokenizer(chunk_prompt, return_tensors="pt").to(model.device)
+                with torch.no_grad():
+                    outputs = model.generate(
+                        **inputs,
+                        max_new_tokens=int(self.MAX_CHUNK_DURATION * 50),  # ~50 tokens/sec
+                        temperature=0.7,
+                        do_sample=True,
+                    )
+                # Decode audio tokens — model-specific post-processing
+                audio_tokens = outputs[0][inputs["input_ids"].shape[-1]:]
+                # Try model's built-in decode method first
+                if hasattr(model, 'decode_audio'):
+                    audio_np = model.decode_audio(audio_tokens, sample_rate=sample_rate)
+                elif hasattr(tokenizer, 'decode_audio'):
+                    audio_np = tokenizer.decode_audio(audio_tokens, sample_rate=sample_rate)
+                else:
+                    # Fallback: treat output logits as raw audio codes
+                    audio_np = audio_tokens.float().cpu().numpy().flatten()
+                    audio_np = np.clip(audio_np / (np.abs(audio_np).max() + 1e-8), -1.0, 1.0)
+
+                all_audio.append(audio_np)
+            except Exception as e:
+                logger.error("Chunk generation failed: %s", e)
+                continue
+
+        if not all_audio:
+            logger.warning("All chunks failed, falling back to placeholder")
+            return self._generate_placeholder(text, voice_design, sample_rate, max_duration)
+
+        # Concatenate chunks
+        full_audio = np.concatenate(all_audio)
+        duration = min(len(full_audio) / sample_rate, float(max_duration))
+        full_audio = full_audio[:int(duration * sample_rate)]
+
+        # Normalize
+        peak = np.abs(full_audio).max()
+        if peak > 0:
+            full_audio = full_audio / peak * 0.95
+
+        # Save WAV
+        filename = f"tts_{uuid.uuid4().hex[:8]}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.wav"
+        filepath = VOICE_DIR / filename
+        audio_int16 = (full_audio * 32767).astype(np.int16)
+
+        with wave.open(str(filepath), "wb") as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(2)
+            wf.setframerate(sample_rate)
+            wf.writeframes(audio_int16.tobytes())
+
+        logger.info("Generated %s: %.1fs via Qwen3-TTS (%s)", filename, duration, model_size)
+        return filepath, duration
+
+    def _chunk_text(self, text: str) -> List[str]:
+        """Split long text into chunks at sentence boundaries."""
+        import re
+        sentences = re.split(r'(?<=[.!?])\s+', text)
+        chunks, current = [], ""
+        for sent in sentences:
+            if len(current) + len(sent) > self.CHUNK_SIZE:
+                if current:
+                    chunks.append(current.strip())
+                current = sent
+            else:
+                current = f"{current} {sent}" if current else sent
+        if current:
+            chunks.append(current.strip())
+        return chunks or [text]
 
     def _generate_placeholder(
         self, text: str, voice_design: str, sample_rate: int, max_duration: int

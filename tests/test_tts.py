@@ -251,3 +251,59 @@ class TestTTSServer:
             assert wf.getsampwidth() == 2
             assert wf.getframerate() > 0
             assert wf.getnframes() > 0
+
+
+# ═══════════════════════════════════════════════════════════════════════
+#  Qwen3TTSEngine unit tests
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestQwen3TTSEngine:
+    def test_engine_starts_unloaded(self):
+        from engine.tts.qwen3_server import Qwen3TTSEngine
+        engine = Qwen3TTSEngine()
+        assert engine.is_loaded is False
+
+    def test_placeholder_mode_generates_wav(self, tmp_path):
+        from engine.tts.qwen3_server import Qwen3TTSEngine
+        engine = Qwen3TTSEngine()
+        filepath, duration = engine._generate_placeholder(
+            "Hello world", "A warm voice", 24000, 30
+        )
+        assert Path(filepath).exists()
+        assert duration > 0
+        with wave.open(str(filepath), "rb") as wf:
+            assert wf.getnchannels() == 1
+
+    def test_load_models_graceful_when_no_models(self, tmp_path):
+        from engine.tts.qwen3_server import Qwen3TTSEngine
+        engine = Qwen3TTSEngine()
+        engine.load_models(model_dir=str(tmp_path))
+        assert engine.is_loaded is False
+
+    def test_chunk_text_short(self):
+        from engine.tts.qwen3_server import Qwen3TTSEngine
+        engine = Qwen3TTSEngine()
+        chunks = engine._chunk_text("Short text.")
+        assert len(chunks) == 1
+
+    def test_chunk_text_long(self):
+        from engine.tts.qwen3_server import Qwen3TTSEngine
+        engine = Qwen3TTSEngine()
+        long_text = ". ".join(["This is a sentence"] * 100)
+        chunks = engine._chunk_text(long_text)
+        assert len(chunks) > 1
+        for chunk in chunks:
+            assert len(chunk) <= engine.CHUNK_SIZE + 50  # some tolerance
+
+    def test_select_model_fallback(self):
+        from engine.tts.qwen3_server import Qwen3TTSEngine
+        engine = Qwen3TTSEngine()
+        model, tok = engine._select_model("1.7b")
+        assert model is None  # nothing loaded
+
+    def test_generate_falls_to_placeholder(self):
+        from engine.tts.qwen3_server import Qwen3TTSEngine
+        engine = Qwen3TTSEngine()
+        filepath, duration = engine.generate("Test", "Voice", max_duration=10)
+        assert Path(filepath).exists()
+        assert duration > 0
