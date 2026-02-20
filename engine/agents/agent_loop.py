@@ -220,8 +220,19 @@ class AgentLoop:
             f"Respond ONLY with a JSON object — no extra text."
         )
 
-        # If we have a CharacterAgent with LLM access, use it
+        # If we have a CharacterAgent, use reply() for full skill/MCP support
         if agent:
+            try:
+                response = agent.reply(
+                    context,
+                    history=[{"role": "system", "content": system}],
+                    use_tools=False,  # Decisions are text-only JSON
+                )
+                if response:
+                    return self._parse_decision(response)
+            except Exception as e:
+                logger.debug("CharacterAgent.reply() failed: %s, trying quick_query", e)
+            # Fallback to quick_query
             try:
                 response = agent.quick_query(system + "\n\n" + context)
                 return self._parse_decision(response)

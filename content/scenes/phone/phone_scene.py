@@ -32,6 +32,7 @@ from content.scenes.phone.apps.video_messages import VideoMessagesApp
 from content.scenes.phone.apps.voice_messages import VoiceMessagesApp
 from engine.scenes.base_scene import BaseScene
 from engine.assets import CharacterAsset
+from engine.agents.character_agent import CharacterAgent
 from content.simulation.services.llm_service import get_llm_service
 from content.simulation.services.anonymous_character import create_anonymous_character, AnonymousCharacter
 from engine.logging import install_logger, get_logs
@@ -80,6 +81,9 @@ class PhoneScene(BaseScene):
         
         # Initialize autonomous messenger (will be started later with socketio)
         self.autonomous_messenger = None
+
+        # CharacterAgent for LLM replies (created when character is set)
+        self._agent: Optional[CharacterAgent] = None
 
         # Anonymous stranger character
         self.anon_char: Optional[AnonymousCharacter] = None
@@ -157,6 +161,13 @@ class PhoneScene(BaseScene):
                 self.active_character = Character.load(char_id, db=self.db)
                 if not self.active_character:
                     return jsonify({'error': 'Character not found'}), 404
+                
+                # Create CharacterAgent with skills + MCP support
+                self._agent = CharacterAgent(
+                    self.active_character,
+                    db=self.db,
+                    skill_packs=["memory", "voice", "comfyui", "character"],
+                )
                 
                 # Auto-register character for autonomous messaging
                 if self.autonomous_messenger and self.autonomous_messenger.enabled:
@@ -1642,13 +1653,13 @@ class PhoneScene(BaseScene):
     
     def _generate_response(self, user_message: str) -> str:
         """
-        Generate character response via LM Studio LLM.
+        Generate character response via CharacterAgent (preferred) or direct LLM.
+        Uses CharacterAgent.reply() when available — this enables skills, MCP,
+        EventChain logging, and RAG memory automatically.
         Parses intent and may trigger spontaneous media sends.
         """
         if not self.active_character:
             return "Error: No active character"
-
-        llm = get_llm_service()
 
         # Build conversation history from recent messages
         history = []
@@ -1665,12 +1676,30 @@ class PhoneScene(BaseScene):
         except Exception:
             history = []
 
-        # Generate LLM response
-        # Apply timeout and custom context from control-panel settings
+        # Check for cancel before the (potentially slow) API call
+        if self._cancel_event.is_set():
+            return "(Request cancelled)"
+
+        # ── Primary path: CharacterAgent (skills + MCP + EventChain) ──
+        if self._agent:
+            try:
+                self._agent._cancel_event = self._cancel_event
+                response = self._agent.reply(
+                    user_message,
+                    chain_id=self.current_chain_id,
+                    history=history,
+                    use_tools=True,
+                )
+                if response and not self._cancel_event.is_set():
+                    return self._post_process_response(user_message, response)
+            except Exception as e:
+                print(f"[PhoneScene] CharacterAgent failed, falling back to direct LLM: {e}")
+
+        # ── Fallback: direct LLM call ──
+        llm = get_llm_service()
         original_timeout = llm.timeout
         llm.timeout = self.settings.get('message_timeout', 180)
         
-        # Build system prompt directly so we can inject custom context
         try:
             system_prompt = self.active_character.get_system_prompt()
         except Exception:
@@ -1687,11 +1716,6 @@ class PhoneScene(BaseScene):
         if custom_ctx:
             system_prompt += f"\n\n## Operator Context\n{custom_ctx}"
         
-        # Check for cancel before the (potentially slow) API call
-        if self._cancel_event.is_set():
-            llm.timeout = original_timeout
-            return "(Request cancelled)"
-        
         try:
             response = llm.chat(
                 messages=history + [{"role": "user", "content": user_message}],
@@ -1703,7 +1727,11 @@ class PhoneScene(BaseScene):
         if self._cancel_event.is_set():
             return "(Request cancelled)"
 
-        # Parse intent to decide if media should be triggered
+        return self._post_process_response(user_message, response)
+
+    def _post_process_response(self, user_message: str, response: str) -> str:
+        """Parse intent from user message and trigger spontaneous media."""
+        llm = get_llm_service()
         try:
             intent = llm.parse_intent(user_message)
         except Exception:

@@ -54,6 +54,7 @@ tts:
   warm_start: true
   stream: true
   device: "cuda"  # or "cpu"
+  server_url: "http://localhost:8600"  # Qwen3-TTS FastAPI server
 
 # STT configuration  
 stt:

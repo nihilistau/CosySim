@@ -44,6 +44,13 @@ class VoiceMessageGenerator:
             self.sample_rate = 22050
         self.prompt_wav = None  # Character's voice sample
         self.prompt_text = "Hello, this is my voice."
+
+        # Qwen3-TTS server URL (fallback when CosyVoice unavailable)
+        try:
+            from engine.config import get_config
+            self._tts_url = get_config().get("tts.server_url", "http://localhost:8600")
+        except Exception:
+            self._tts_url = "http://localhost:8600"
     
     def set_character_voice(self, prompt_wav_path: str, prompt_text: str = None):
         """
@@ -83,8 +90,12 @@ class VoiceMessageGenerator:
             Dict with filepath, duration, metadata
         """
         if not self.cosyvoice:
-            # If CosyVoice not available, return placeholder
-            print("⚠️ CosyVoice not available, generating placeholder")
+            # Try Qwen3-TTS server before falling back to placeholder
+            result = self._try_qwen3_tts(character_id, character_name, text, emotion,
+                                          chain_id, scene_id)
+            if result:
+                return result
+            print("⚠️ CosyVoice and Qwen3-TTS unavailable, generating placeholder")
             return self._generate_placeholder(character_name, text)
         
         try:
@@ -227,6 +238,63 @@ class VoiceMessageGenerator:
             "sample_rate": sample_rate,
             "timestamp": datetime.now().isoformat()
         }
+
+    def _try_qwen3_tts(
+        self, character_id: str, character_name: str, text: str,
+        emotion: str, chain_id: Optional[str], scene_id: str,
+    ) -> Optional[Dict]:
+        """Try generating via the Qwen3-TTS FastAPI server."""
+        try:
+            import requests
+            resp = requests.post(
+                f"{self._tts_url}/generate",
+                json={
+                    "text": text,
+                    "voice_design": f"A warm {emotion} voice for {character_name}",
+                    "character_id": character_id,
+                    "max_duration": min(max(len(text) * 0.1, 10), 300),
+                },
+                timeout=120,
+            )
+            if resp.status_code != 200:
+                return None
+            data = resp.json()
+            filepath = data.get("filepath") or data.get("path")
+            if not filepath or not Path(filepath).exists():
+                return None
+            info = self.get_voice_message_info(filepath)
+            result = {
+                "filepath": filepath,
+                "filename": Path(filepath).name,
+                "duration": info.get("duration", 0),
+                "text": text,
+                "emotion": emotion,
+                "sample_rate": info.get("sample_rate", self.sample_rate),
+                "timestamp": datetime.now().isoformat(),
+                "source": "qwen3_tts",
+            }
+            if self.db:
+                self._store_voice_message(character_id, filepath, text,
+                                          result["duration"], emotion)
+            # Log to EventChain
+            try:
+                from content.simulation.database.events import EventChain
+                ec = EventChain()
+                if chain_id:
+                    ec.log(
+                        'media_generated', actor='qwen3_tts',
+                        payload={'type': 'voice', 'path': filepath,
+                                 'character': character_name, 'emotion': emotion},
+                        summary=f'TTS voice: {character_name} ({emotion})',
+                        chain_id=chain_id, scene_id=scene_id,
+                        character_id=character_id,
+                    )
+            except Exception:
+                pass
+            return result
+        except Exception as e:
+            logger.debug("Qwen3-TTS server unavailable: %s", e)
+            return None
     
     def _store_voice_message(
         self,

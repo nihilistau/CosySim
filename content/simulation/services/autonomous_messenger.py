@@ -49,6 +49,9 @@ class AutonomousMessenger:
         self.scheduler = BackgroundScheduler()
         self.media_gen = MediaGenerator()
         self.event_chain = EventChain(self.db)  # Shared diagnostics log
+        # Voice message generator for autonomous voice sends
+        from content.simulation.services.voice_message import VoiceMessageGenerator
+        self.voice_gen = VoiceMessageGenerator(db=self.db)
 
         # Configuration
         self.enabled = False
@@ -256,8 +259,18 @@ class AutonomousMessenger:
                     caption = self._generate_photo_caption(character)
                     self._send_message(character, caption, type="photo", media_path=photo_path)
             elif message_type == "voice":
-                # TODO: Implement voice message generation
-                pass
+                text = self._generate_voice_text(character)
+                voice_msg = self.voice_gen.generate_voice_message(
+                    character_id=character_id,
+                    character_name=character.name,
+                    text=text,
+                    emotion=getattr(character, 'mood', 'neutral'),
+                    chain_id=chain_id,
+                    scene_id='autonomous_messenger',
+                )
+                if voice_msg:
+                    self._send_message(character, f"[Voice message: {text}]",
+                                       type="voice", media_path=voice_msg.get('filepath'))
 
             # Log successful send
             self.event_chain.log(
@@ -435,6 +448,35 @@ class AutonomousMessenger:
             ]
         
         return random.choice(captions)
+
+    def _generate_voice_text(self, character: Character) -> str:
+        """Generate text for voice messages — escalates with intimacy."""
+        rel = _float_safe(character.relationship_level)
+        arousal = _float_safe(getattr(character, 'arousal', 0.0), 0.0)
+        hour = datetime.now().hour
+
+        if rel > 0.7 and arousal > 0.5:
+            texts = [
+                "Hey... I just wanted to hear your voice. I'm lying in bed thinking about you.",
+                "I can't stop thinking about last night. Call me back when you get this...",
+                "You know that thing you do that drives me crazy? Yeah... thinking about that.",
+                "I miss you so much right now. Come over... please?",
+            ]
+        elif rel > 0.5:
+            texts = [
+                "Hey! Just wanted to leave you a little message. I miss you!",
+                "Hi babe, just thinking about you. Call me when you're free?",
+                f"It's {hour}:00 and I'm still thinking about our last conversation.",
+                "Hey you... I had something funny to tell you but I forgot. Call me!",
+            ]
+        else:
+            texts = [
+                "Hey! Just wanted to say hi and see how you're doing.",
+                "Hi! Hope you're having a good day. Talk soon!",
+                "Just leaving you a quick voice note. Call me when you can!",
+                "Hey! Thought I'd leave you a message instead of texting for once.",
+            ]
+        return random.choice(texts)
     
     def _send_morning_message(self, character_id: str):
         """Send morning message — flirty at high relationship."""

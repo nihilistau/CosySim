@@ -27,6 +27,7 @@ sys.path.insert(0, str(project_root))
 
 from engine.scenes.base_scene import BaseScene
 from engine.agents.agent_loop import AgentLoop
+from engine.agents.character_agent import CharacterAgent
 from engine.spatial.location import Location
 from engine.spatial.scene_map import SceneMap
 from content.simulation.database.db import Database
@@ -408,7 +409,13 @@ class BedroomScene(BaseScene):
             scene_id='bedroom',
         )
         for cid, char in self.characters.items():
-            self.agent_loop.register_character(char)
+            # Create CharacterAgent with skill packs for rich agent behaviour
+            agent = CharacterAgent(
+                char,
+                db=self.db,
+                skill_packs=["memory", "character", "comfyui"],
+            )
+            self.agent_loop.register_character(char, agent=agent)
         self.agent_loop.set_action_callback(self._on_agent_action)
         self.agent_loop.start(interval=interval)
         self.scene_state['agent_loop_running'] = True
