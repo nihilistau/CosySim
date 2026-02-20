@@ -698,11 +698,14 @@ async function loadMessages() {
         const container = document.getElementById('messagesContainer');
         container.innerHTML = '';
         
+        // Pass shouldScroll=false for each message — do one deferred scroll at the end
         data.messages.forEach(msg => {
-            addMessageToUI(msg.role, msg.content, msg.timestamp, false);
+            addMessageToUI(msg.role, msg.content, msg.timestamp, false, false);
         });
         
-        scrollToBottom();
+        // Double-rAF so the browser has finished laying out all the new DOM nodes
+        // before we measure scrollHeight
+        requestAnimationFrame(() => requestAnimationFrame(scrollToBottom));
     } catch (error) {
         console.error('Error loading messages:', error);
     }
@@ -719,6 +722,9 @@ function sendMessage() {
     const message = input.value.trim();
     
     if (!message) return;
+    
+    // Show user message immediately (optimistic UI) — don't wait for server echo
+    addMessageToUI('user', message, new Date().toISOString());
     
     // Send via socket
     socket.emit('send_message', { message: message });

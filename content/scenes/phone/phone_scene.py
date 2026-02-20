@@ -1528,12 +1528,8 @@ class PhoneScene(BaseScene):
             # Add user message
             self.active_character.add_message('user', message)
             
-            # Emit user message
-            emit('message_received', {
-                'role': 'user',
-                'content': message,
-                'timestamp': datetime.now().isoformat()
-            })
+            # NOTE: user message is shown optimistically in the frontend;
+            # we do NOT echo it back to avoid duplicates.
             
             # Show typing indicator
             self.socketio.emit('typing', {'is_typing': True})
