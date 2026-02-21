@@ -1083,6 +1083,10 @@ class LoungeScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
         """Gracefully stop the lounge scene."""
         logger.info("The Velvet Lounge closing")
         try:
+            self._fw.save_state()
+        except Exception:
+            pass
+        try:
             self.socketio.stop()
         except Exception:
             pass
@@ -1111,7 +1115,30 @@ class LoungeScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
 
     def start(self) -> None:
         logger.info("The Velvet Lounge opening on port %d", self.port)
+        # Wire up framework event bus for cross-scene events
+        try:
+            self._fw.on("environment_change", lambda evt: self._on_env_event(evt))
+            self._fw.on("story_beat", lambda evt: self._on_story_beat(evt))
+        except Exception:
+            pass
         self.socketio.run(self.app, host=self.host, port=self.port, debug=False)
+
+    def _on_env_event(self, evt) -> None:
+        """React to environment changes from the event bus."""
+        if evt.payload.get("scene_id") == SCENE_ID:
+            try:
+                self.socketio.emit("environment_update", evt.payload)
+            except Exception:
+                pass
+
+    def _on_story_beat(self, evt) -> None:
+        """React to story beats from the event bus."""
+        if evt.payload.get("scene_id") == SCENE_ID:
+            try:
+                self.events_log.append({"type": "story_beat", "data": evt.payload})
+                self.socketio.emit("story_beat", evt.payload)
+            except Exception:
+                pass
 
 
 # ── Standalone entry point ─────────────────────────────────────────────────────

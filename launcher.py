@@ -6,6 +6,8 @@ Unified entry point for all system modes:
 - hub:       Central hub (recommended starting point, port 8500)
 - phone:     Phone scene  (port 5555)
 - bedroom:   Bedroom scene (port 5556)
+- lounge:    Lounge scene (port 5557)
+- casino:    Casino scene (port 5559)
 - dashboard: Dashboard (port 8501, Streamlit)
 - admin:     Admin panel (port 8502, Streamlit)
 - assets:    Asset generator (port 8503, Streamlit)
@@ -325,7 +327,7 @@ For more information, see: ONBOARDING.md
     
     parser.add_argument(
         "--mode",
-        choices=["hub", "phone", "bedroom", "lounge", "dashboard", "admin", "assets", "creator", "tts", "bridge", "all", "test"],
+        choices=["hub", "phone", "bedroom", "lounge", "casino", "dashboard", "admin", "assets", "creator", "tts", "bridge", "all", "test"],
         default="hub",
         help="Launch mode (default: hub). 'all' starts hub + phone + bedroom + tts in one terminal."
     )
@@ -401,6 +403,10 @@ For more information, see: ONBOARDING.md
         from content.scenes.lounge.lounge_scene import LoungeScene
         print("\n🎷 Launching The Velvet Lounge on http://localhost:5557")
         LoungeScene().start()
+    elif args.mode == "casino":
+        from content.scenes.casino.casino_scene import CasinoScene
+        print("\n🎰 Launching The Midnight Casino on http://localhost:5559")
+        CasinoScene().start()
     elif args.mode == "test":
         launch_test_mode()
     elif args.mode == "tts":

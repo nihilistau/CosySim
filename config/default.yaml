@@ -46,6 +46,16 @@ scenes:
     port: 5556
     debug: false
 
+  lounge:
+    host: "localhost"
+    port: 5557
+    debug: false
+
+  casino:
+    host: "localhost"
+    port: 5559
+    debug: false
+
 # TTS configuration
 tts:
   engine: "cosyvoice"
@@ -209,6 +219,45 @@ testing:
   database: "simulation_test.db"
   mock_external_services: true
 
+# Agent profiles — map agent roles to LLM parameters
+# Used by MCPFramework.get_agent_profile() and ModelManager.ensure_for_agent()
+agent_profiles:
+  big:
+    model: ""                     # empty = use default loaded model
+    context_length: 8192
+    max_tokens: 4000
+    temperature: 0.75
+    top_p: 0.9
+    description: "Primary character agent — deep reasoning, long context"
+  small:
+    model: ""
+    context_length: 2048
+    max_tokens: 800
+    temperature: 0.6
+    top_p: 0.9
+    description: "Fast utility agent — narration, summaries, routing"
+  router:
+    model: ""
+    context_length: 1024
+    max_tokens: 200
+    temperature: 0.3
+    top_p: 0.9
+    description: "Intent classifier — low tokens, deterministic"
+  narrator:
+    model: ""
+    context_length: 4096
+    max_tokens: 1500
+    temperature: 0.8
+    top_p: 0.95
+    description: "Scene narrator — creative, atmospheric prose"
+  game_master:
+    model: ""
+    context_length: 4096
+    max_tokens: 2000
+    temperature: 0.65
+    top_p: 0.9
+    description: "Game engine agent — fair, rule-following, dramatic"
+
 # Communications / Governance framework
 comms:
   governance_enabled: true      # route CharacterAgent.reply() through interceptors
@@ -224,3 +273,10 @@ comms:
     response_shaper:          true
     activity_logger:          true
   stats_poll_interval_ms: 2000  # how often the browser overlay polls /api/stats/live
+
+# Framework settings
+framework:
+  state_persistence: true         # auto-save/load MCPFramework state
+  state_file: "data/mcp_framework_state.json"
+  max_event_log: 500              # max events in the event bus log
+  max_consequence_age_turns: 50   # auto-clean old fired consequences

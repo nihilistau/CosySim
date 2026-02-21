@@ -82,14 +82,101 @@ Standalone use::
 """
 from __future__ import annotations
 
+import json
 import logging
 import random
 import threading
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 logger = logging.getLogger(__name__)
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  AGENT PROFILES — per-role LLM configuration
+# ══════════════════════════════════════════════════════════════════════
+
+@dataclass
+class AgentProfile:
+    """
+    Defines how an agent role maps to LLM parameters.
+
+    Profiles allow the same framework to power small-fast utility agents
+    (scene narration, routing) and big-deep reasoning agents (main character
+    dialogue) without changing code — just configuration.
+
+    Fields
+    ------
+    role             — unique key: "big", "small", "router", "narrator", etc.
+    model            — preferred model key (empty = use default loaded model)
+    context_length   — max context window tokens
+    max_tokens       — max reply tokens
+    temperature      — sampling temperature
+    top_p            — nucleus sampling
+    description      — human-readable description
+    """
+    role:           str
+    model:          str   = ""
+    context_length: int   = 4096
+    max_tokens:     int   = 2000
+    temperature:    float = 0.7
+    top_p:          float = 0.9
+    description:    str   = ""
+
+    def to_dict(self) -> Dict:
+        return {
+            "role": self.role, "model": self.model,
+            "context_length": self.context_length,
+            "max_tokens": self.max_tokens,
+            "temperature": self.temperature, "top_p": self.top_p,
+            "description": self.description,
+        }
+
+
+# Built-in profiles — overrideable via config
+DEFAULT_AGENT_PROFILES: Dict[str, AgentProfile] = {
+    "big": AgentProfile(
+        role="big", context_length=8192, max_tokens=4000, temperature=0.75,
+        description="Primary character agent — deep reasoning, long context",
+    ),
+    "small": AgentProfile(
+        role="small", context_length=2048, max_tokens=800, temperature=0.6,
+        description="Fast utility agent — narration, summaries, routing",
+    ),
+    "router": AgentProfile(
+        role="router", context_length=1024, max_tokens=200, temperature=0.3,
+        description="Intent classifier — low tokens, deterministic",
+    ),
+    "narrator": AgentProfile(
+        role="narrator", context_length=4096, max_tokens=1500, temperature=0.8,
+        description="Scene narrator — creative, atmospheric prose",
+    ),
+    "game_master": AgentProfile(
+        role="game_master", context_length=4096, max_tokens=2000, temperature=0.65,
+        description="Game engine agent — fair, rule-following, dramatic reveals",
+    ),
+}
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  FRAMEWORK EVENT — typed event for the event bus
+# ══════════════════════════════════════════════════════════════════════
+
+@dataclass
+class FrameworkEvent:
+    """A typed event flowing through the MCPFramework event bus."""
+    event_type:   str
+    payload:      Dict    = field(default_factory=dict)
+    source:       str     = ""        # scene_id, character_id, or "framework"
+    timestamp:    float   = field(default_factory=time.time)
+
+    def to_dict(self) -> Dict:
+        return {
+            "event_type": self.event_type, "payload": self.payload,
+            "source": self.source, "timestamp": self.timestamp,
+        }
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -584,14 +671,41 @@ class MCPFramework:
         self._turn:          int                           = 0
         self._consequence_counter = 0
 
+        # ── Event bus ─────────────────────────────────────────────────
+        self._event_handlers: Dict[str, List[Callable[[FrameworkEvent], None]]] = {}
+        self._event_log: List[FrameworkEvent] = []
+        self._max_event_log = 500
+
+        # ── Lifecycle callbacks ───────────────────────────────────────
+        self._lifecycle_hooks: Dict[str, List[Callable]] = {
+            "framework_ready":       [],
+            "scene_registered":      [],
+            "character_registered":  [],
+            "scene_tick":            [],
+            "state_saved":           [],
+            "state_loaded":          [],
+        }
+
+        # ── Agent profiles ────────────────────────────────────────────
+        self._agent_profiles: Dict[str, AgentProfile] = dict(DEFAULT_AGENT_PROFILES)
+        self._load_agent_profiles_from_config()
+
+        # ── Framework ready ───────────────────────────────────────────
+        self._ready = False
+
     # ── Scene registry ────────────────────────────────────────────────
 
     def get_scene(self, scene_id: str) -> MCPSceneNode:
         """Get or auto-create the MCPSceneNode for ``scene_id``."""
+        created = False
         with self._lock:
             if scene_id not in self._scenes:
                 self._scenes[scene_id] = MCPSceneNode(scene_id, self)
+                created = True
                 logger.debug("MCPFramework: auto-created scene node '%s'", scene_id)
+        if created:
+            self._fire_lifecycle("scene_registered", scene_id)
+            self.emit_event("scene_registered", {"scene_id": scene_id})
         return self._scenes[scene_id]
 
     def register_scene(self, scene_id: str, node: Optional[MCPSceneNode] = None) -> MCPSceneNode:
@@ -609,10 +723,15 @@ class MCPFramework:
 
     def get_character(self, character_id: str) -> MCPCharacterNode:
         """Get or auto-create the MCPCharacterNode for ``character_id``."""
+        created = False
         with self._lock:
             if character_id not in self._characters:
                 self._characters[character_id] = MCPCharacterNode(character_id, self)
+                created = True
                 logger.debug("MCPFramework: auto-created character node '%s'", character_id)
+        if created:
+            self._fire_lifecycle("character_registered", character_id)
+            self.emit_event("character_registered", {"character_id": character_id})
         return self._characters[character_id]
 
     def list_characters(self) -> List[str]:
@@ -825,6 +944,12 @@ class MCPFramework:
             cseq.fired = True
             fired_reports.append(report)
 
+        self._fire_lifecycle("scene_tick", scene_id, current_turn)
+        self.emit_event("scene_tick", {
+            "scene_id": scene_id, "turn": current_turn,
+            "consequences_fired": len(fired_reports),
+        }, source=scene_id or "framework")
+
         return fired_reports
 
     def get_pending_consequences(self, scene_id: str = "", character_id: str = "") -> List[Dict]:
@@ -885,7 +1010,219 @@ class MCPFramework:
                 "characters":      {cid: n.brief() for cid, n in self._characters.items()},
                 "active_timers":   len(self._timers),
                 "pending_consequences": len([c for c in self._consequences if not c.fired]),
+                "ready":           self._ready,
+                "event_handlers":  {k: len(v) for k, v in self._event_handlers.items()},
+                "agent_profiles":  list(self._agent_profiles.keys()),
             }
+
+    # ── Event bus ─────────────────────────────────────────────────────
+
+    def on(self, event_type: str, callback: Callable[[FrameworkEvent], None]) -> None:
+        """Subscribe to a framework event type."""
+        with self._lock:
+            self._event_handlers.setdefault(event_type, []).append(callback)
+
+    def off(self, event_type: str, callback: Callable[[FrameworkEvent], None]) -> None:
+        """Unsubscribe from a framework event type."""
+        with self._lock:
+            handlers = self._event_handlers.get(event_type, [])
+            if callback in handlers:
+                handlers.remove(callback)
+
+    def emit_event(self, event_type: str, payload: Optional[Dict] = None, source: str = "framework") -> FrameworkEvent:
+        """
+        Emit a typed event to all subscribers.
+
+        Returns the event for chaining.  Handlers are called synchronously
+        but failures are caught and logged — a broken handler never breaks
+        the pipeline.
+        """
+        evt = FrameworkEvent(event_type=event_type, payload=payload or {}, source=source)
+        with self._lock:
+            self._event_log.append(evt)
+            if len(self._event_log) > self._max_event_log:
+                self._event_log = self._event_log[-300:]
+            handlers = list(self._event_handlers.get(event_type, []))
+            # Also notify wildcard subscribers
+            handlers += list(self._event_handlers.get("*", []))
+        for handler in handlers:
+            try:
+                handler(evt)
+            except Exception as exc:
+                logger.debug("Event handler error for %s: %s", event_type, exc)
+        return evt
+
+    def get_event_log(self, event_type: str = "", limit: int = 50) -> List[Dict]:
+        """Return recent events, optionally filtered by type."""
+        with self._lock:
+            events = list(self._event_log)
+        if event_type:
+            events = [e for e in events if e.event_type == event_type]
+        return [e.to_dict() for e in events[-limit:]]
+
+    # ── Lifecycle hooks ───────────────────────────────────────────────
+
+    def add_lifecycle_hook(self, hook_name: str, callback: Callable) -> None:
+        """Register a lifecycle callback (framework_ready, scene_registered, etc.)."""
+        with self._lock:
+            hooks = self._lifecycle_hooks.setdefault(hook_name, [])
+            hooks.append(callback)
+
+    def _fire_lifecycle(self, hook_name: str, *args, **kwargs) -> None:
+        """Fire all callbacks for a lifecycle event."""
+        with self._lock:
+            hooks = list(self._lifecycle_hooks.get(hook_name, []))
+        for hook in hooks:
+            try:
+                hook(*args, **kwargs)
+            except Exception as exc:
+                logger.debug("Lifecycle hook '%s' error: %s", hook_name, exc)
+
+    def mark_ready(self) -> None:
+        """Call once all scenes and services have been registered."""
+        self._ready = True
+        self._fire_lifecycle("framework_ready")
+        self.emit_event("framework_ready", {"turn": self._turn})
+        logger.info("MCPFramework: marked ready (%d scenes, %d characters)",
+                     len(self._scenes), len(self._characters))
+
+    @property
+    def is_ready(self) -> bool:
+        return self._ready
+
+    # ── Agent profiles ────────────────────────────────────────────────
+
+    def get_agent_profile(self, role: str) -> AgentProfile:
+        """Return the AgentProfile for a role (falls back to 'small')."""
+        return self._agent_profiles.get(role, self._agent_profiles.get("small", AgentProfile(role=role)))
+
+    def set_agent_profile(self, profile: AgentProfile) -> None:
+        """Register or update an agent profile."""
+        with self._lock:
+            self._agent_profiles[profile.role] = profile
+        self.emit_event("agent_profile_updated", {"role": profile.role})
+
+    def list_agent_profiles(self) -> Dict[str, Dict]:
+        """Return all agent profiles as dicts."""
+        with self._lock:
+            return {k: v.to_dict() for k, v in self._agent_profiles.items()}
+
+    def _load_agent_profiles_from_config(self) -> None:
+        """Load agent profiles from config/default.yaml if present."""
+        try:
+            from engine.config import get_config
+            config = get_config()
+            profiles_cfg = config.get("agent_profiles", {})
+            if isinstance(profiles_cfg, dict):
+                for role, pcfg in profiles_cfg.items():
+                    if isinstance(pcfg, dict):
+                        self._agent_profiles[role] = AgentProfile(
+                            role=role,
+                            model=pcfg.get("model", ""),
+                            context_length=int(pcfg.get("context_length", 4096)),
+                            max_tokens=int(pcfg.get("max_tokens", 2000)),
+                            temperature=float(pcfg.get("temperature", 0.7)),
+                            top_p=float(pcfg.get("top_p", 0.9)),
+                            description=pcfg.get("description", ""),
+                        )
+        except Exception:
+            pass  # Config not loaded yet — use defaults
+
+    # ── State persistence ─────────────────────────────────────────────
+
+    def save_state(self, path: Optional[str] = None) -> str:
+        """
+        Serialize current framework state to a JSON file.
+
+        Saves: turn counter, scene membership, character states, timers,
+        pending consequences, and agent profiles.  Designed for hot-reload
+        and crash recovery — call on graceful shutdown.
+        """
+        if path is None:
+            try:
+                from engine.config import get_config
+                data_dir = get_config().get("paths.data_dir", "./data")
+            except Exception:
+                data_dir = "./data"
+            path = str(Path(data_dir) / "mcp_framework_state.json")
+
+        state = {
+            "version": "2.1.0",
+            "saved_at": time.time(),
+            "turn": self._turn,
+            "scenes": {},
+            "characters": {},
+            "timers": {},
+            "consequences": [],
+        }
+
+        with self._lock:
+            for sid, scene in self._scenes.items():
+                state["scenes"][sid] = {
+                    "present": scene.get_present(),
+                    "event_count": len(scene._event_log),
+                }
+            for cid, char in self._characters.items():
+                state["characters"][cid] = {
+                    "current_scene": char.current_scene,
+                    "inbox_count": len(char._inbox),
+                }
+            for tname, timer in self._timers.items():
+                state["timers"][tname] = timer.to_dict()
+            for cseq in self._consequences:
+                if not cseq.fired:
+                    state["consequences"].append(cseq.to_dict())
+
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "w") as f:
+            json.dump(state, f, indent=2)
+
+        self._fire_lifecycle("state_saved", path)
+        self.emit_event("state_saved", {"path": path})
+        logger.info("MCPFramework: state saved to %s", path)
+        return path
+
+    def load_state(self, path: Optional[str] = None) -> bool:
+        """
+        Restore framework state from a JSON file.
+
+        Returns True if state was loaded, False if file not found or corrupt.
+        """
+        if path is None:
+            try:
+                from engine.config import get_config
+                data_dir = get_config().get("paths.data_dir", "./data")
+            except Exception:
+                data_dir = "./data"
+            path = str(Path(data_dir) / "mcp_framework_state.json")
+
+        state_path = Path(path)
+        if not state_path.exists():
+            logger.debug("MCPFramework: no saved state at %s", path)
+            return False
+
+        try:
+            with open(path, "r") as f:
+                state = json.load(f)
+
+            with self._lock:
+                self._turn = state.get("turn", 0)
+
+            # Re-populate scenes and character membership
+            for sid, sdata in state.get("scenes", {}).items():
+                scene_node = self.get_scene(sid)
+                for cid in sdata.get("present", []):
+                    char_node = self.get_character(cid)
+                    char_node.current_scene = sid
+                    scene_node.on_character_enter(cid)
+
+            self._fire_lifecycle("state_loaded", path)
+            self.emit_event("state_loaded", {"path": path, "turn": self._turn})
+            logger.info("MCPFramework: state restored from %s (turn=%d)", path, self._turn)
+            return True
+        except Exception as exc:
+            logger.warning("MCPFramework: failed to load state from %s: %s", path, exc)
+            return False
 
     def __repr__(self) -> str:
         s = self.get_status()
@@ -911,5 +1248,7 @@ def get_framework() -> MCPFramework:
         with _FW_LOCK:
             if _FW_INSTANCE is None:
                 _FW_INSTANCE = MCPFramework()
+                # Try to restore previous state (non-fatal)
+                _FW_INSTANCE.load_state()
                 logger.info("MCPFramework: singleton initialised")
     return _FW_INSTANCE

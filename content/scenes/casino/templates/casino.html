@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Midnight Casino</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/casino.css') }}">
+</head>
+<body>
+    <div id="casino-app">
+        <!-- Header -->
+        <header class="casino-header">
+            <h1>🎰 The Midnight Casino</h1>
+            <div class="chip-display">
+                <span class="chip-icon">🪙</span>
+                <span id="player-chips">500</span> chips
+            </div>
+        </header>
+
+        <!-- Main table area -->
+        <div class="table-area">
+            <!-- Dealer -->
+            <div class="dealer-area">
+                <div class="character-card dealer">
+                    <div class="character-avatar">🃏</div>
+                    <div class="character-name">Dealer Jack</div>
+                    <div class="character-comment" id="dealer-comment">Waiting for the game to begin...</div>
+                </div>
+            </div>
+
+            <!-- Cards -->
+            <div class="cards-area">
+                <div class="community-cards" id="community-cards">
+                    <div class="card-placeholder">Community Cards</div>
+                </div>
+                <div class="pot-display">
+                    Pot: <span id="pot-amount">0</span> 🪙
+                </div>
+            </div>
+
+            <!-- Player hand -->
+            <div class="player-area">
+                <div class="player-hand" id="player-hand">
+                    <div class="card-placeholder">Your Hand</div>
+                </div>
+            </div>
+
+            <!-- Mira -->
+            <div class="mira-area">
+                <div class="character-card mira">
+                    <div class="character-avatar">🎭</div>
+                    <div class="character-name">Mira Chen</div>
+                    <div class="character-chips">
+                        <span id="mira-chips">500</span> 🪙
+                    </div>
+                    <div class="character-comment" id="mira-comment">Care for a game?</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tell indicator -->
+        <div class="tell-area" id="tell-area" style="display:none;">
+            <span class="tell-label">🔍 Tell:</span>
+            <span id="current-tell"></span>
+        </div>
+
+        <!-- Actions -->
+        <div class="actions-area">
+            <div class="action-row" id="lobby-actions">
+                <button class="btn btn-primary" onclick="newHand()">🂡 Deal New Hand</button>
+            </div>
+            <div class="action-row" id="bet-actions" style="display:none;">
+                <button class="btn btn-bet" onclick="placeBet(10)">Bet 10</button>
+                <button class="btn btn-bet" onclick="placeBet(25)">Bet 25</button>
+                <button class="btn btn-bet" onclick="placeBet(50)">Bet 50</button>
+                <button class="btn btn-danger" onclick="goAllIn()">ALL IN</button>
+                <button class="btn btn-bluff" onclick="attemptBluff()">🃏 Bluff</button>
+                <button class="btn btn-fold" onclick="fold()">Fold</button>
+            </div>
+            <div class="action-row" id="showdown-actions" style="display:none;">
+                <button class="btn btn-primary" onclick="showdown()">👁 Showdown</button>
+            </div>
+            <div class="action-row" id="result-actions" style="display:none;">
+                <button class="btn btn-primary" onclick="newHand()">Next Hand →</button>
+            </div>
+        </div>
+
+        <!-- Stats panel -->
+        <div class="stats-panel">
+            <h3>Player Stats</h3>
+            <div class="stat-bar">
+                <label>Confidence</label>
+                <div class="bar"><div class="bar-fill" id="stat-confidence" style="width:50%"></div></div>
+            </div>
+            <div class="stat-bar">
+                <label>Focus</label>
+                <div class="bar"><div class="bar-fill focus" id="stat-focus" style="width:50%"></div></div>
+            </div>
+            <div class="stat-bar">
+                <label>Luck</label>
+                <div class="bar"><div class="bar-fill luck" id="stat-luck" style="width:50%"></div></div>
+            </div>
+            <div class="stat-bar">
+                <label>Charm</label>
+                <div class="bar"><div class="bar-fill charm" id="stat-charm" style="width:50%"></div></div>
+            </div>
+            <div class="stat-bar">
+                <label>Recklessness</label>
+                <div class="bar"><div class="bar-fill reckless" id="stat-recklessness" style="width:20%"></div></div>
+            </div>
+        </div>
+
+        <!-- Drink menu -->
+        <div class="drink-menu">
+            <h3>🍸 Casino Bar</h3>
+            <div class="drink-grid" id="drink-grid"></div>
+        </div>
+
+        <!-- Event log -->
+        <div class="event-log">
+            <h3>📜 Events</h3>
+            <div id="event-list"></div>
+            <button class="btn btn-small" onclick="triggerEvent()">🎲 Random Event</button>
+        </div>
+
+        <!-- Chat -->
+        <div class="chat-panel">
+            <h3>💬 Talk</h3>
+            <div id="chat-log"></div>
+            <div class="chat-input">
+                <select id="chat-target">
+                    <option value="dealer_jack">Dealer Jack</option>
+                    <option value="hustler_mira">Mira Chen</option>
+                </select>
+                <input type="text" id="chat-message" placeholder="Say something..." onkeypress="if(event.key==='Enter')sendChat()">
+                <button onclick="sendChat()">Send</button>
+            </div>
+        </div>
+
+        <!-- Framework status (debug) -->
+        <details class="framework-debug">
+            <summary>🔧 Framework Status</summary>
+            <pre id="framework-status">Loading...</pre>
+            <button class="btn btn-small" onclick="refreshFramework()">Refresh</button>
+        </details>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/casino.js') }}"></script>
+</body>
+</html>

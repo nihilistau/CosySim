@@ -1319,13 +1319,57 @@ class BedroomScene(BaseScene, MCPSceneMixin, mcp_scene_id="bedroom"):
     def start(self) -> None:
         print("Bedroom Scene v4 — Adult Roleplay Engine starting...")
         print(f"   Access at: http://{self.host}:{self.port}")
+        # Wire up framework event bus
+        try:
+            from engine.mcp.framework import get_framework
+            fw = get_framework()
+            fw.on("environment_change", lambda evt: self._on_env_change(evt))
+            fw.on("mood_contagion", lambda evt: self._on_mood_event(evt))
+            fw.on("story_beat", lambda evt: self._on_story_beat(evt))
+        except Exception:
+            pass
         self.socketio.run(self.app, host=self.host, port=self.port,
                           debug=False, allow_unsafe_werkzeug=True)
 
     def stop(self) -> None:
         if self.agent_loop:
             self.agent_loop.stop()
+        # Persist framework state
+        try:
+            from engine.mcp.framework import get_framework
+            get_framework().save_state()
+        except Exception:
+            pass
         print("Bedroom scene stopped.")
+
+    def _on_env_change(self, evt) -> None:
+        """React to environment_change events from the framework event bus."""
+        if evt.payload.get("scene_id") == "bedroom":
+            try:
+                change = evt.payload.get("change_type", "")
+                if change == "lighting":
+                    self.scene_state["lighting_key"] = evt.payload.get("value", "evening")
+                self.socketio.emit("environment_update", evt.payload)
+            except Exception:
+                pass
+
+    def _on_mood_event(self, evt) -> None:
+        """Push mood contagion updates to connected clients."""
+        try:
+            self.socketio.emit("mood_update", evt.payload)
+        except Exception:
+            pass
+
+    def _on_story_beat(self, evt) -> None:
+        """Inject story beats from the event bus."""
+        if evt.payload.get("scene_id") == "bedroom":
+            beat = evt.payload.get("beat", "")
+            if beat and beat not in self.story_beats:
+                self.story_beats.append(beat)
+            try:
+                self.socketio.emit("story_beat", evt.payload)
+            except Exception:
+                pass
 
 
 if __name__ == "__main__":

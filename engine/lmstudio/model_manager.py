@@ -413,6 +413,107 @@ class ModelManager:
             self._sessions.clear()
         logger.info("ModelManager shut down")
 
+    # ── Agent sizing ────────────────────────────────────────────────────
+
+    def ensure_for_agent(self, agent_role: str = "big", **kwargs) -> str:
+        """
+        Ensure the correct model is loaded for an agent role.
+
+        Uses MCPFramework agent profiles to determine model, context_length,
+        and other parameters.  Falls back to the default loaded model.
+
+        Returns the model_key to use for LLM calls.
+        """
+        try:
+            from engine.mcp.framework import get_framework
+            profile = get_framework().get_agent_profile(agent_role)
+            model = profile.model or self._concurrent_model or ""
+            if not model:
+                # Auto-detect from loaded models
+                loaded = self._cli.list_loaded_models()
+                if loaded:
+                    model = loaded[0].get("model_key", loaded[0].get("id", ""))
+            if model:
+                return self.ensure_loaded(
+                    model,
+                    context_length=kwargs.get("context_length", profile.context_length),
+                    gpu=kwargs.get("gpu", self._default_gpu),
+                    ttl_seconds=kwargs.get("ttl_seconds"),
+                )
+        except Exception as exc:
+            logger.debug("ensure_for_agent(%s) fallback: %s", agent_role, exc)
+        return self._concurrent_model or ""
+
+    def get_agent_config(self, agent_role: str = "big") -> Dict:
+        """
+        Return the full LLM config for an agent role.
+
+        Combines AgentProfile settings with ModelManager state.
+        """
+        try:
+            from engine.mcp.framework import get_framework
+            profile = get_framework().get_agent_profile(agent_role)
+        except Exception:
+            profile = None
+
+        return {
+            "role": agent_role,
+            "model": (profile.model if profile else "") or self._concurrent_model,
+            "context_length": profile.context_length if profile else self._default_ctx,
+            "max_tokens": profile.max_tokens if profile else 2000,
+            "temperature": profile.temperature if profile else 0.7,
+            "top_p": profile.top_p if profile else 0.9,
+            "load_mode": self._mode.value,
+            "gpu_fraction": self._default_gpu,
+            "vram_cap_mb": self.config.get("lmstudio.vram_cap_mb", 11500),
+        }
+
+    def get_full_config(self) -> Dict:
+        """Return the complete ModelManager configuration for admin panels."""
+        return {
+            "mode": self._mode.value,
+            "default_ttl": self._default_ttl,
+            "default_gpu": self._default_gpu,
+            "default_context_length": self._default_ctx,
+            "concurrent_model": self._concurrent_model,
+            "concurrent_slots": int(self.config.get("lmstudio.concurrent_slots", 4)),
+            "vram_cap_mb": int(self.config.get("lmstudio.vram_cap_mb", 11500)),
+            "hardware": {
+                "gpu_name": self.config.get("hardware.gpu_name", "Unknown"),
+                "gpu_vram_mb": int(self.config.get("hardware.gpu_vram_mb", 0)),
+                "ram_gb": int(self.config.get("hardware.ram_gb", 0)),
+            },
+            "mcp_enabled": bool(self.config.get("lmstudio.mcp_enabled", True)),
+            "api_version": self.config.get("lmstudio.api_version", "v1"),
+            "sessions": self.status(),
+        }
+
+    def update_config(self, **kwargs) -> Dict:
+        """
+        Update ModelManager config at runtime.
+
+        Supported keys: mode, ttl_seconds, concurrent_model, gpu, context_length.
+        Returns the updated config dict.
+        """
+        if "mode" in kwargs:
+            new_mode = LoadMode(kwargs["mode"])
+            self.set_mode(new_mode, ttl_seconds=kwargs.get("ttl_seconds"))
+        if "concurrent_model" in kwargs:
+            with self._lock:
+                self._concurrent_model = kwargs["concurrent_model"]
+        if "gpu" in kwargs:
+            with self._lock:
+                self._default_gpu = float(kwargs["gpu"])
+        if "context_length" in kwargs:
+            with self._lock:
+                self._default_ctx = int(kwargs["context_length"])
+        if "ttl_seconds" in kwargs and "mode" not in kwargs:
+            with self._lock:
+                self._default_ttl = int(kwargs["ttl_seconds"])
+
+        logger.info("ModelManager config updated: %s", kwargs)
+        return self.get_full_config()
+
 
 # ── Singleton ───────────────────────────────────────────────────────────
 

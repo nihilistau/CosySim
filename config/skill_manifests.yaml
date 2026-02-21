@@ -517,3 +517,71 @@ scenes:
       trigger: optional
       description: "Surface a matching memory as an emotional echo in the response"
       when: always
+
+  # ──────────────────────────────────────────────────────────────────────
+  #  THE MIDNIGHT CASINO  —  Noir poker night with AI opponents
+  #  Characters: Frankie DeLuca (dealer), Mira Vex (hustler)
+  # ──────────────────────────────────────────────────────────────────────
+  casino:
+    # Auto: always run before response — ground dealer/hustler in game state
+    - name: get_scene_snapshot
+      trigger: auto
+      description: "Read full casino state: pot, chips, hands, phase, active tells"
+      when: always
+    - name: search_memory
+      trigger: auto
+      description: "Recall what you know about this player's betting patterns"
+      when: always
+    - name: get_character_scene_stats
+      trigger: auto
+      description: "Read Frankie/Mira current mood and composure"
+      when: always
+    # Optional: model MAY call these
+    - name: mood_contagion
+      trigger: optional
+      description: "Spread nervousness or confidence to other players at the table"
+      when: always
+    - name: relationship_adjust
+      trigger: optional
+      description: "Update respect/rivalry with the player based on gameplay"
+      when: always
+    - name: scene_broadcast
+      trigger: optional
+      description: "Announce something to all characters at the table"
+      when: always
+    - name: environment_change
+      trigger: optional
+      description: "Change the casino atmosphere — dim lights, change music, signal tension"
+      when: always
+    - name: inject_story_beat
+      trigger: optional
+      description: "Inject a narrative moment — rival enters, power goes out, old debt called in"
+      when: always
+    - name: get_dialog_options
+      trigger: optional
+      description: "Get branching dialog choices weighted by game tension and chip advantage"
+      when: always
+    - name: update_character_scene_stats
+      trigger: optional
+      description: "Update emotional state after a big win, bad beat, or bluff call"
+      when: always
+    - name: schedule_consequence
+      trigger: optional
+      description: "Schedule a deferred casino event — loan shark arrives in 3 hands, lucky streak ends"
+      when: always
+    - name: start_timer
+      trigger: optional
+      description: "Start a casino timer — tournament round, closing time countdown"
+      when: always
+    - name: check_timer
+      trigger: optional
+      description: "Check if a casino timer has fired"
+      when: always
+    - name: random_pick
+      trigger: optional
+      description: "Pick a random casino event outcome with optional weights"
+      when: always
+    - name: cross_scene_message
+      trigger: optional
+      description: "Send a message to characters in other scenes — brag about winnings, call for backup"
+      when: always

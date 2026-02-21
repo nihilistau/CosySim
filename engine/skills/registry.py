@@ -28,7 +28,7 @@ import logging
 import threading
 from typing import Callable, Dict, List, Optional
 
-from .skill import SkillMeta
+from .skill import SkillMeta, SkillCategory, COOLDOWN_TRACKER
 
 logger = logging.getLogger(__name__)
 
@@ -95,10 +95,14 @@ class SkillRegistry:
         with self._lock:
             return [m.func for m in self._skills.get(pack, [])]
 
-    def get_pack_meta(self, pack: str) -> List[SkillMeta]:
+    def get_pack_metas(self, pack: str) -> List[SkillMeta]:
         """Return a list of SkillMeta for all skills in *pack*."""
         with self._lock:
             return list(self._skills.get(pack, []))
+
+    def get_pack_meta(self, pack: str) -> List[SkillMeta]:
+        """Alias for get_pack_metas (backward compat)."""
+        return self.get_pack_metas(pack)
 
     def get_skill(self, name: str) -> Optional[SkillMeta]:
         """Return SkillMeta by skill *name*, or None."""
@@ -148,10 +152,49 @@ class SkillRegistry:
                     "pack":        m.pack,
                     "description": m.description,
                     "tags":        m.tags,
+                    "category":    m.category,
+                    "cooldown":    m.cooldown_secs,
+                    "cost":        m.cost,
+                    "prerequisites": m.prerequisites,
                 }
                 for metas in self._skills.values()
                 for m in metas
             ]
+
+    def get_by_category(self, category: str) -> List[SkillMeta]:
+        """Return all skills matching a category."""
+        with self._lock:
+            return [
+                m for metas in self._skills.values()
+                for m in metas if m.category == category
+            ]
+
+    def get_available(self, *, tags: Optional[List[str]] = None, category: str = "") -> List[SkillMeta]:
+        """Return skills that are off cooldown and match filters."""
+        with self._lock:
+            metas = [m for metas_list in self._skills.values() for m in metas_list]
+        if tags:
+            metas = [m for m in metas if all(t in m.tags for t in tags)]
+        if category:
+            metas = [m for m in metas if m.category == category]
+        # Filter by cooldown
+        return [m for m in metas if COOLDOWN_TRACKER.can_use(m.name, m.cooldown_secs)]
+
+    def execute_skill(self, name: str, *args, **kwargs) -> Any:
+        """
+        Execute a skill by name with cooldown enforcement.
+
+        Raises ValueError if skill not found, RuntimeError if on cooldown.
+        """
+        meta = self.get_skill(name)
+        if not meta:
+            raise ValueError(f"Skill '{name}' not found")
+        if not COOLDOWN_TRACKER.can_use(meta.name, meta.cooldown_secs):
+            remaining = COOLDOWN_TRACKER.get_remaining(meta.name, meta.cooldown_secs)
+            raise RuntimeError(f"Skill '{name}' on cooldown ({remaining:.1f}s remaining)")
+        result = meta.func(*args, **kwargs)
+        COOLDOWN_TRACKER.mark_used(meta.name)
+        return result
 
     def __len__(self) -> int:
         with self._lock:

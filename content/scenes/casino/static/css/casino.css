@@ -1,0 +1,240 @@
+/* The Midnight Casino — Noir Theme */
+
+:root {
+    --bg-dark:       #0a0a0f;
+    --bg-card:       #14141e;
+    --bg-table:      #1a3320;
+    --accent-gold:   #d4a933;
+    --accent-red:    #c82333;
+    --accent-green:  #2d8a4e;
+    --text-primary:  #e8e0d4;
+    --text-muted:    #8a8275;
+    --text-bright:   #fff;
+    --border:        #2a2a3a;
+    --shadow:        0 4px 20px rgba(0,0,0,0.6);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+    font-family: 'Georgia', serif;
+    background: var(--bg-dark);
+    color: var(--text-primary);
+    min-height: 100vh;
+}
+
+#casino-app {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+    display: grid;
+    grid-template-columns: 1fr 280px;
+    grid-template-rows: auto auto auto auto;
+    gap: 20px;
+}
+
+/* Header */
+.casino-header {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px 25px;
+    background: linear-gradient(135deg, #1a1a2e, #16213e);
+    border: 1px solid var(--accent-gold);
+    border-radius: 8px;
+}
+
+.casino-header h1 {
+    font-size: 1.6rem;
+    color: var(--accent-gold);
+    text-shadow: 0 0 15px rgba(212,169,51,0.3);
+}
+
+.chip-display {
+    font-size: 1.3rem;
+    color: var(--accent-gold);
+    font-weight: bold;
+}
+
+/* Table area */
+.table-area {
+    background: radial-gradient(ellipse at center, #1e4a2e 0%, #0f2818 70%, #0a0a0f 100%);
+    border: 3px solid #2d5a3a;
+    border-radius: 20px;
+    padding: 30px;
+    box-shadow: var(--shadow), inset 0 0 60px rgba(0,0,0,0.5);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+    min-height: 400px;
+}
+
+/* Character cards */
+.character-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 15px;
+    text-align: center;
+    min-width: 200px;
+}
+
+.character-card.dealer { border-color: var(--accent-gold); }
+.character-card.mira { border-color: var(--accent-red); }
+
+.character-avatar { font-size: 2.5rem; margin-bottom: 8px; }
+.character-name { font-weight: bold; color: var(--accent-gold); margin-bottom: 5px; }
+.character-comment { font-style: italic; color: var(--text-muted); font-size: 0.9rem; min-height: 2em; }
+.character-chips { color: var(--accent-gold); font-size: 0.9rem; margin-bottom: 5px; }
+
+.dealer-area, .mira-area { display: flex; justify-content: center; }
+
+/* Cards */
+.cards-area { text-align: center; }
+
+.community-cards, .player-hand {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    min-height: 60px;
+    align-items: center;
+}
+
+.card {
+    background: white;
+    color: #333;
+    border: 2px solid #666;
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 1.2rem;
+    font-weight: bold;
+    min-width: 50px;
+    text-align: center;
+    box-shadow: 2px 2px 8px rgba(0,0,0,0.3);
+}
+
+.card.red { color: var(--accent-red); }
+.card.face-down { background: #2a2a5a; color: transparent; border-color: var(--accent-gold); }
+.card-placeholder { color: var(--text-muted); font-style: italic; }
+
+.pot-display {
+    font-size: 1.3rem;
+    color: var(--accent-gold);
+    margin-top: 10px;
+    font-weight: bold;
+}
+
+/* Tell */
+.tell-area {
+    grid-column: 1 / -1;
+    background: rgba(200,35,51,0.1);
+    border: 1px solid rgba(200,35,51,0.3);
+    border-radius: 8px;
+    padding: 10px 20px;
+    text-align: center;
+    font-style: italic;
+}
+
+.tell-label { color: var(--accent-red); font-weight: bold; }
+
+/* Actions */
+.actions-area {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: center;
+}
+
+.action-row { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+
+.btn {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 0.95rem;
+    font-weight: bold;
+    transition: all 0.2s;
+}
+
+.btn:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
+
+.btn-primary { background: var(--accent-gold); color: #111; }
+.btn-bet { background: var(--accent-green); color: white; }
+.btn-danger { background: var(--accent-red); color: white; }
+.btn-bluff { background: #7b3f9e; color: white; }
+.btn-fold { background: #555; color: white; }
+.btn-small { padding: 5px 12px; font-size: 0.8rem; background: var(--border); color: var(--text-primary); }
+
+/* Side panels */
+.stats-panel, .drink-menu, .event-log, .chat-panel {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 15px;
+}
+
+.stats-panel h3, .drink-menu h3, .event-log h3, .chat-panel h3 {
+    color: var(--accent-gold);
+    margin-bottom: 12px;
+    font-size: 1rem;
+}
+
+/* Stat bars */
+.stat-bar { margin-bottom: 8px; }
+.stat-bar label { display: block; font-size: 0.8rem; color: var(--text-muted); margin-bottom: 2px; }
+.bar { background: #1a1a2e; border-radius: 4px; height: 10px; overflow: hidden; }
+.bar-fill { height: 100%; border-radius: 4px; background: var(--accent-gold); transition: width 0.5s ease; }
+.bar-fill.focus { background: #3a9bdc; }
+.bar-fill.luck { background: #2d8a4e; }
+.bar-fill.charm { background: #c850c0; }
+.bar-fill.reckless { background: var(--accent-red); }
+
+/* Drink grid */
+.drink-grid { display: flex; flex-direction: column; gap: 8px; }
+
+.drink-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px;
+    background: rgba(255,255,255,0.03);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.drink-item:hover { background: rgba(212,169,51,0.1); }
+.drink-name { font-size: 0.85rem; }
+.drink-cost { color: var(--accent-gold); font-size: 0.8rem; }
+
+/* Event log */
+#event-list { max-height: 150px; overflow-y: auto; font-size: 0.8rem; margin-bottom: 10px; }
+.event-entry { padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.05); color: var(--text-muted); }
+
+/* Chat */
+#chat-log { max-height: 150px; overflow-y: auto; margin-bottom: 10px; font-size: 0.85rem; }
+.chat-entry { padding: 4px 0; }
+.chat-entry .name { color: var(--accent-gold); font-weight: bold; }
+.chat-input { display: flex; gap: 5px; }
+.chat-input select, .chat-input input { background: #1a1a2e; color: var(--text-primary); border: 1px solid var(--border); border-radius: 4px; padding: 5px; font-size: 0.8rem; }
+.chat-input input { flex: 1; }
+.chat-input button { background: var(--accent-gold); color: #111; border: none; border-radius: 4px; padding: 5px 10px; cursor: pointer; font-weight: bold; }
+
+/* Framework debug */
+.framework-debug {
+    grid-column: 1 / -1;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px;
+}
+.framework-debug summary { cursor: pointer; color: var(--text-muted); font-size: 0.85rem; }
+.framework-debug pre { font-size: 0.7rem; color: var(--text-muted); max-height: 200px; overflow: auto; margin-top: 10px; }
+
+/* Responsive */
+@media (max-width: 768px) {
+    #casino-app { grid-template-columns: 1fr; }
+}

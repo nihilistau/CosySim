@@ -53,8 +53,9 @@ _TEMPLATE_DIR = _SCENE_ROOT / "templates"
 _MEDIA_VOICE  = project_root / "content" / "simulation" / "media" / "voice"
 _MEDIA_VIDEO  = project_root / "content" / "simulation" / "media" / "video"
 _MEDIA_PHOTO  = project_root / "content" / "simulation" / "media" / "photo"
+_MEDIA_IMAGES = project_root / "content" / "simulation" / "media" / "images"
 
-for _d in [_MEDIA_VOICE, _MEDIA_VIDEO, _MEDIA_PHOTO]:
+for _d in [_MEDIA_VOICE, _MEDIA_VIDEO, _MEDIA_PHOTO, _MEDIA_IMAGES]:
     _d.mkdir(parents=True, exist_ok=True)
 
 
@@ -150,6 +151,10 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
             fw = get_framework()
             node = fw.get_scene(SCENE_ID)
             register_phone_rules(node)
+            # Wire up framework event listeners
+            fw.on("mood_contagion", lambda evt: self._on_mood_event(evt))
+            fw.on("story_beat", lambda evt: self._on_story_beat(evt))
+            self._mcp_init()
         except Exception as exc:
             logger.warning("MCP rule registration skipped: %s", exc)
         logger.info("PhoneSceneV2 started on %s:%s", self.host, self.port)
@@ -157,7 +162,28 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
 
     def stop(self) -> None:
         self._ticker_stop.set()
+        # Save framework state on graceful shutdown
+        try:
+            get_framework().save_state()
+        except Exception:
+            pass
         logger.info("PhoneSceneV2 stopped")
+
+    def _on_mood_event(self, evt) -> None:
+        """React to mood contagion events from the framework bus."""
+        if evt.payload.get("source") in self._agents:
+            try:
+                self.socketio.emit("mood_update", evt.payload)
+            except Exception:
+                pass
+
+    def _on_story_beat(self, evt) -> None:
+        """React to story beat events."""
+        if evt.payload.get("scene_id") == SCENE_ID:
+            try:
+                self.socketio.emit("story_beat", evt.payload)
+            except Exception:
+                pass
 
     def get_plugin_info(self) -> Dict[str, Any]:
         return {
@@ -587,6 +613,10 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
         def serve_photo(filename: str):
             return send_from_directory(str(_MEDIA_PHOTO), filename)
 
+        @app.route("/media/images/<filename>")
+        def serve_image(filename: str):
+            return send_from_directory(str(_MEDIA_IMAGES), filename)
+
         # ── Admin ─────────────────────────────────────────────────────────────
         @app.route("/api/admin/wipe-messages", methods=["POST"])
         def wipe_messages():
@@ -594,7 +624,7 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
                 count = self.phone_db.wipe_messages()
                 # Wipe media files
                 wiped_media = 0
-                for _dir in [_MEDIA_VOICE, _MEDIA_VIDEO, _MEDIA_PHOTO]:
+                for _dir in [_MEDIA_VOICE, _MEDIA_VIDEO, _MEDIA_PHOTO, _MEDIA_IMAGES]:
                     for f in _dir.iterdir():
                         if f.is_file():
                             try:
