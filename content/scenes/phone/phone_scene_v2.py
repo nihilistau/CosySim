@@ -192,7 +192,7 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
             "description": "iOS-style multi-contact messaging scene with MCP governor.",
             "version":     "2.0.0",
             "port":        self.port,
-            "skill_packs": [],
+            "skill_packs": ["memory", "character", "social", "narrative"],
         }
 
     # ── character seeding ────────────────────────────────────────────────────
@@ -207,6 +207,11 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
                     continue
                 self.phone_db.get_or_create_dm(char_id)
                 self._agents[char_id] = _PhoneCharacterAgent(char_id, self)
+                try:
+                    fw = get_framework()
+                    fw.get_character(char_id).enter_scene(SCENE_ID)
+                except Exception:
+                    pass
                 self._schedule_autotxt(char_id)
             logger.info("Seeded %d characters into phone scene", len(chars))
         except Exception as exc:
@@ -240,6 +245,10 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
                 due = [cid for cid, dl in self._autotxt_deadlines.items() if dl <= now]
             for char_id in due:
                 self._fire_autotxt(char_id)
+            try:
+                get_framework().tick(SCENE_ID)
+            except Exception:
+                pass
 
     def _fire_autotxt(self, char_id: str) -> None:
         """Generate and deliver an autonomous text from char_id."""
@@ -265,6 +274,13 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
                 content=text,
                 msg_type="text",
             )
+            try:
+                get_framework().emit_event("message_sent", {
+                    "scene_id": SCENE_ID, "char_id": char_id,
+                    "type": "autotxt", "thread_id": thread_id,
+                }, source=SCENE_ID)
+            except Exception:
+                pass
             self._emit("message_new", {
                 "thread_id": thread_id,
                 "message":   msg,
@@ -463,6 +479,13 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
                             msg_type="text",
                         )
                         self._emit("typing", {"thread_id": thread_id, "char_id": char_id, "active": False})
+                        try:
+                            get_framework().emit_event("message_sent", {
+                                "scene_id": SCENE_ID, "char_id": char_id,
+                                "type": "reply", "thread_id": thread_id,
+                            }, source=SCENE_ID)
+                        except Exception:
+                            pass
                         self._emit("message_new", {
                             "thread_id": thread_id,
                             "message":   ai_msg,
@@ -649,6 +672,58 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
                     "threads":  len(threads),
                     "scene_id": SCENE_ID,
                 })
+            except Exception as exc:
+                return jsonify({"ok": False, "error": str(exc)}), 500
+
+        # ── MCP Framework API ─────────────────────────────────────────
+        @app.route("/api/mcp/status")
+        def mcp_status():
+            try:
+                fw = get_framework()
+                return jsonify({"ok": True, "status": fw.get_status()})
+            except Exception as exc:
+                return jsonify({"ok": False, "error": str(exc)}), 500
+
+        @app.route("/api/mcp/agent-profiles")
+        def mcp_agent_profiles():
+            try:
+                fw = get_framework()
+                return jsonify({"ok": True, "profiles": fw.list_agent_profiles()})
+            except Exception as exc:
+                return jsonify({"ok": False, "error": str(exc)}), 500
+
+        @app.route("/api/mcp/event-log")
+        def mcp_event_log():
+            try:
+                fw = get_framework()
+                limit = int(request.args.get("limit", 50))
+                event_type = request.args.get("type", "")
+                return jsonify({"ok": True, "events": fw.get_event_log(event_type=event_type, limit=limit)})
+            except Exception as exc:
+                return jsonify({"ok": False, "error": str(exc)}), 500
+
+        @app.route("/api/mcp/timers")
+        def mcp_timers():
+            try:
+                fw = get_framework()
+                return jsonify({"ok": True, "timers": fw.list_timers()})
+            except Exception as exc:
+                return jsonify({"ok": False, "error": str(exc)}), 500
+
+        @app.route("/api/mcp/consequences")
+        def mcp_consequences():
+            try:
+                fw = get_framework()
+                return jsonify({"ok": True, "consequences": fw.get_pending_consequences(SCENE_ID)})
+            except Exception as exc:
+                return jsonify({"ok": False, "error": str(exc)}), 500
+
+        @app.route("/api/mcp/lmstudio")
+        def mcp_lmstudio():
+            try:
+                from engine.lmstudio.model_manager import get_model_manager
+                mm = get_model_manager()
+                return jsonify({"ok": True, "config": mm.get_full_config(), "status": mm.status()})
             except Exception as exc:
                 return jsonify({"ok": False, "error": str(exc)}), 500
 

@@ -19,13 +19,13 @@ from engine.skills.skill import skill
     ),
     tags=["tts", "voice", "audio", "generation"],
 )
-def generate_voice_message(
+def tts_generate_voice(
     text: str,
     character_id: str,
     max_duration: int = 60,
 ) -> str:
     """
-    Generate a voice message as a WAV file.
+    Generate a voice message as a WAV file via the Qwen3-TTS engine.
 
     Args:
         text: The text to speak (up to 50,000 chars for stories).

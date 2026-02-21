@@ -410,6 +410,16 @@ class MCPCharacterNode:
         except Exception:
             return {}
 
+    def update_state(self, data: Dict) -> None:
+        """Merge key-value pairs into this character's registry state."""
+        try:
+            from engine.mcp.character_registry import get_character_registry
+            reg = get_character_registry()
+            reg.ensure(self.character_id)
+            reg.set_state(self.character_id, **data)
+        except Exception:
+            pass
+
     def has_skill(self, skill_id: str) -> bool:
         try:
             from engine.mcp.character_registry import get_character_registry
@@ -460,6 +470,7 @@ class MCPSceneNode:
         self._fw         = framework
         self._present:   Set[str] = set()          # character IDs currently in scene
         self._event_log: List[Dict] = []
+        self._state:     Dict = {}                  # arbitrary scene-level state
         self._lock       = threading.Lock()
         self._subscribers: List[Callable[[str, Dict], None]] = []
 
@@ -518,6 +529,18 @@ class MCPSceneNode:
             )
         except Exception:
             pass
+
+    # ── State ─────────────────────────────────────────────────────────
+
+    def update_state(self, data: Dict) -> None:
+        """Merge key-value pairs into the scene's MCP state dict."""
+        with self._lock:
+            self._state.update(data)
+
+    def get_state(self) -> Dict:
+        """Return a copy of the scene's MCP state dict."""
+        with self._lock:
+            return dict(self._state)
 
     # ── Rules accessor ────────────────────────────────────────────────
 

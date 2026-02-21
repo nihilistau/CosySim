@@ -639,6 +639,40 @@ class BedroomScene(BaseScene, MCPSceneMixin, mcp_scene_id="bedroom"):
             self.agent_loop.is_running if self.agent_loop else False
         )
         self.socketio.emit("scene_state", self.scene_state)
+        self._sync_to_mcp()
+
+    def _sync_to_mcp(self, event_name: str = None, payload: dict = None):
+        """Push scene state into MCP framework and optionally emit an event."""
+        try:
+            from engine.mcp.framework import get_framework
+            fw = get_framework()
+            # Sync character stats to framework
+            for cid, profile in self.profiles.items():
+                char_node = fw.get_character(cid)
+                if char_node:
+                    char_node.update_state({
+                        "stats": profile.stats.to_dict(),
+                        "outfit": profile.outfit,
+                        "position": profile.position,
+                        "personality": profile.personality_key,
+                        "props_held": profile.props_held,
+                    })
+            # Sync scene state
+            scene_node = fw.get_scene("bedroom")
+            if scene_node:
+                scene_node.update_state({
+                    "time_of_day": self.scene_state.get("time_of_day"),
+                    "lighting": self.scene_state.get("lighting_key"),
+                    "active_scenario": self.active_scenario,
+                    "agent_loop_running": self.scene_state.get("agent_loop_running", False),
+                    "character_count": len(self.characters),
+                    "room_props": self.room_props,
+                })
+            # Emit event if requested
+            if event_name:
+                fw.emit_event(event_name, payload or {}, source="bedroom")
+        except Exception:
+            pass
 
     def _load_character(self, char_id: str, personality_key: str = None) -> Optional[Character]:
         if len(self.characters) >= 2 and char_id not in self.characters:
@@ -671,6 +705,12 @@ class BedroomScene(BaseScene, MCPSceneMixin, mcp_scene_id="bedroom"):
         if loc:
             self.scene_map.place_character(char.id, loc.id)
         self._broadcast_state()
+        try:
+            from engine.mcp.framework import get_framework
+            fw = get_framework()
+            fw.get_character(char.id).enter_scene("bedroom")
+        except Exception:
+            pass
         return char
 
     def _inject_to_loop(self, name: str, text: str, msg_type: str = "director"):
@@ -778,6 +818,7 @@ class BedroomScene(BaseScene, MCPSceneMixin, mcp_scene_id="bedroom"):
                 return jsonify({"error": "Character not found"}), 404
             self.profiles[cid].stats.adjust(**{stat: delta})
             self._broadcast_state()
+            self._sync_to_mcp("stat_adjusted", {"character_id": cid, "stat": stat, "delta": delta})
             return jsonify({"success": True, "stats": self.profiles[cid].stats.to_dict()})
 
         @self.app.route("/api/character/stats/set", methods=["POST"])
@@ -805,6 +846,7 @@ class BedroomScene(BaseScene, MCPSceneMixin, mcp_scene_id="bedroom"):
                 self.profiles[cid].stats.adjust(arousal=10, explicitness=5)
             self._inject_to_loop("(environment)", f"{self.characters[cid].name} is now wearing: {outfit}.", "environment")
             self._broadcast_state()
+            self._sync_to_mcp("outfit_changed", {"character_id": cid, "outfit": outfit})
             return jsonify({"success": True})
 
         @self.app.route("/api/character/position", methods=["POST"])
@@ -817,6 +859,7 @@ class BedroomScene(BaseScene, MCPSceneMixin, mcp_scene_id="bedroom"):
             self.profiles[cid].position = position
             self._inject_to_loop("(environment)", f"{self.characters[cid].name} is now {position}.", "environment")
             self._broadcast_state()
+            self._sync_to_mcp("position_changed", {"character_id": cid, "position": position})
             return jsonify({"success": True})
 
         @self.app.route("/api/character/personality", methods=["POST"])
@@ -850,6 +893,7 @@ class BedroomScene(BaseScene, MCPSceneMixin, mcp_scene_id="bedroom"):
             if loc_obj:
                 self._inject_to_loop("(environment)", f"{self.characters[cid].name} moves to {loc_obj.name}.", "environment")
             self._broadcast_state()
+            self._sync_to_mcp("character_moved", {"character_id": cid, "location": loc_id})
             return jsonify({"success": ok})
 
         @self.app.route("/api/locations")
@@ -980,6 +1024,7 @@ class BedroomScene(BaseScene, MCPSceneMixin, mcp_scene_id="bedroom"):
             self.scene_state["active_scenario"] = key
             self.scene_state["story_beats"] = self.story_beats[:5]
             self._broadcast_state()
+            self._sync_to_mcp("scenario_started", {"scenario": key})
             return jsonify({"success": True, "opening": sc["opening"]})
 
         @self.app.route("/api/scenario/clear", methods=["POST"])
@@ -1060,6 +1105,7 @@ class BedroomScene(BaseScene, MCPSceneMixin, mcp_scene_id="bedroom"):
             self._inject_to_loop("(environment)", msg, "environment")
             self.socketio.emit("scene_event", {"type": ev_type, "message": msg})
             self.socketio.emit("menace_event", {"type": ev_type, "message": msg})  # legacy compat
+            self._sync_to_mcp("scene_event", {"type": ev_type, "message": msg})
             return jsonify({"success": True, "message": msg})
 
         # legacy menace proxy
@@ -1182,7 +1228,64 @@ class BedroomScene(BaseScene, MCPSceneMixin, mcp_scene_id="bedroom"):
                 "scenarios": {k: {"label": v["label"], "emoji": v["emoji"]} for k, v in PREMADE_SCENARIOS.items()},
             })
 
-    # ── SocketIO ─────────────────────────────────────────────────────────
+        # ── MCP Framework API ─────────────────────────────────────────
+        @self.app.route("/api/mcp/status")
+        def mcp_status():
+            try:
+                from engine.mcp.framework import get_framework
+                fw = get_framework()
+                return jsonify({"ok": True, "status": fw.get_status()})
+            except Exception as exc:
+                return jsonify({"ok": False, "error": str(exc)}), 500
+
+        @self.app.route("/api/mcp/scene-state")
+        def mcp_scene_state():
+            try:
+                from engine.mcp.framework import get_framework
+                fw = get_framework()
+                scene_node = fw.get_scene("bedroom")
+                return jsonify({"ok": True, "state": scene_node.get_state() if scene_node else {}})
+            except Exception as exc:
+                return jsonify({"ok": False, "error": str(exc)}), 500
+
+        @self.app.route("/api/mcp/event-log")
+        def mcp_event_log():
+            try:
+                from engine.mcp.framework import get_framework
+                fw = get_framework()
+                limit = int(request.args.get("limit", 50))
+                return jsonify({"ok": True, "events": fw.get_event_log(limit=limit)})
+            except Exception as exc:
+                return jsonify({"ok": False, "error": str(exc)}), 500
+
+        @self.app.route("/api/mcp/lmstudio")
+        def mcp_lmstudio():
+            try:
+                from engine.lmstudio.model_manager import get_model_manager
+                mm = get_model_manager()
+                return jsonify({"ok": True, "config": mm.get_full_config(), "status": mm.status()})
+            except Exception as exc:
+                return jsonify({"ok": False, "error": str(exc)}), 500
+
+        @self.app.route("/api/mcp/config", methods=["GET", "POST"])
+        def mcp_config():
+            try:
+                from engine.config import get_config
+                config = get_config()
+                if request.method == "POST":
+                    updates = request.json or {}
+                    for key, value in updates.items():
+                        config.set(key, value)
+                    return jsonify({"ok": True, "message": "Config updated"})
+                return jsonify({"ok": True, "config": {
+                    "agent_profiles": config.get("agent_profiles", {}),
+                    "framework": config.get("framework", {}),
+                    "scenes.bedroom": config.get("scenes.bedroom", {}),
+                }})
+            except Exception as exc:
+                return jsonify({"ok": False, "error": str(exc)}), 500
+
+    # ── SocketIO─────────────────────────────────────────────────────────
     def _setup_socketio(self):
 
         @self.socketio.on("connect")
@@ -1240,11 +1343,21 @@ class BedroomScene(BaseScene, MCPSceneMixin, mcp_scene_id="bedroom"):
                 seed_registry_from_character(char)
             except Exception as _reg_exc:
                 logger.debug("Registry seed failed for %s: %s", cid, _reg_exc)
+            # MCP: use agent profile for model selection
+            profile_model = None
+            try:
+                from engine.mcp.framework import get_framework
+                fw = get_framework()
+                agent_profile = fw.get_agent_profile("big")  # bedroom agents use big profile
+                if agent_profile and not agent_cfg.get("model"):
+                    profile_model = agent_profile.get("model_hint")
+            except Exception:
+                pass
             agent = CharacterAgent(
                 char,
                 db=self.db,
                 skill_packs=["memory", "character"],
-                model=agent_cfg.get("model") or None,
+                model=agent_cfg.get("model") or profile_model,
             )
             # MCP: wrap every bedroom agent in the governance pipeline so all
             # 15 interceptors (CharacterRegistry, DialogDirective, PersonalityGuard,
@@ -1304,16 +1417,20 @@ class BedroomScene(BaseScene, MCPSceneMixin, mcp_scene_id="bedroom"):
                     "character_id": character_id,
                 })
         self._broadcast_state()
+        self._sync_to_mcp("agent_action", {
+            "character_id": character_id,
+            "action": action.get("action", ""),
+        })
 
-    # ── BaseScene interface ──────────────────────────────────────────────
+    # ── BaseScene interface──────────────────────────────────────────────
     def get_plugin_info(self) -> dict:
         return {
             "name": "Bedroom Scene",
             "description": "Adult multi-agent roleplay bedroom with stats, props, scenarios, and Director controls",
-            "version": "4.0.0",
+            "version": "4.1.0",
             "author": "CosySim",
             "port": self.port,
-            "tags": ["bedroom", "roleplay", "adult", "multi-agent", "spatial", "intimate"],
+            "tags": ["bedroom", "roleplay", "adult", "multi-agent", "spatial", "intimate", "mcp"],
         }
 
     def start(self) -> None:
