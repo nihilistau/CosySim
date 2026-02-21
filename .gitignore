@@ -76,6 +76,8 @@ audio_output/
 # Cache and benchmarks
 cache/
 benchmarks/
+tests/tmp/
+.pytest_cache/
 
 # Virtual environments
 .venv/

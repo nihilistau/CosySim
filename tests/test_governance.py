@@ -530,8 +530,8 @@ class TestMoodSyncInterceptor(unittest.TestCase):
         ctx = self._make_ctx("So excited![MOOD:excited intensity=0.9]")
         registry_state = {}
 
-        def mock_set_state(agent_id, state):
-            registry_state.update(state)
+        def mock_set_state(agent_id, **kwargs):
+            registry_state.update(kwargs)
 
         with patch("engine.mcp.character_registry.get_character_registry") as mock_reg:
             mr = MagicMock()

@@ -1230,6 +1230,12 @@ class BedroomScene(BaseScene, MCPSceneMixin, mcp_scene_id="bedroom"):
         )
         for cid, char in self.characters.items():
             agent_cfg = self.agent_model_config.get(cid, {})
+            # Seed the CharacterRegistry so interceptors have full profile+state
+            try:
+                from engine.mcp.character_registry import seed_registry_from_character
+                seed_registry_from_character(char)
+            except Exception as _reg_exc:
+                logger.debug("Registry seed failed for %s: %s", cid, _reg_exc)
             agent = CharacterAgent(
                 char,
                 db=self.db,

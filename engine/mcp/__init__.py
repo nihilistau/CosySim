@@ -17,6 +17,7 @@ from engine.mcp.character_registry import (
     get_character_registry,
     CharacterRegistry,
     apply_default_skills,
+    seed_registry_from_character,
 )
 
 # ─── Dialog System ─────────────────────────────────────────────────────────────

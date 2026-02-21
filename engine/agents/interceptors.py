@@ -862,24 +862,25 @@ class CharacterRegistryInterceptor(InterceptorBase):
 
             summary = reg.get_character_summary(agent_id)
             if summary:
+                mood       = summary.get("mood", "neutral")
+                intensity  = float(summary.get("mood_intensity", 0.5))
                 lines = [
-                    f"[CHARACTER IDENTITY]",
+                    "[CHARACTER IDENTITY]",
                     f"Name: {summary.get('name', agent_id)}",
                 ]
-                if summary.get("mood"):
-                    lines.append(f"Current mood: {summary['mood']} (intensity {summary.get('mood_intensity', 0.5):.0%})")
-                p = summary.get("personality", {})
-                if p:
-                    p_str = ", ".join(f"{k}={v:.0%}" for k, v in p.items())
-                    lines.append(f"Personality: {p_str}")
+                if mood:
+                    lines.append(f"Current mood: {mood} (intensity {intensity:.0%})")
+                if summary.get("top_traits"):
+                    lines.append(f"Personality: {summary['top_traits']}")
                 voice = summary.get("voice_style")
                 if voice:
                     lines.append(f"Voice style: {voice}")
                 if summary.get("restrictions"):
                     lines.append(f"Current restrictions: {', '.join(summary['restrictions'])}")
-                active_skills = [s["label"] for s in summary.get("skills", []) if s.get("trigger") == "auto"]
-                if active_skills:
-                    lines.append(f"Auto-active skills: {', '.join(active_skills)}")
+                # active_skills is a list of skill_id strings
+                auto_skills = summary.get("active_skills", [])
+                if auto_skills:
+                    lines.append(f"Active skills: {', '.join(auto_skills)}")
                 lines.append("[/CHARACTER IDENTITY]")
                 block = "\n".join(lines)
                 ctx["system_prompt"] = block + "\n\n" + ctx.get("system_prompt", "")
@@ -1081,15 +1082,25 @@ class TTSStyleInterceptor(InterceptorBase):
         voice_id = ""
         try:
             from engine.mcp.character_registry import get_character_registry
-            reg   = get_character_registry()
+            reg     = get_character_registry()
             summary = reg.get_character_summary(agent_id)
             if summary:
-                mood = (summary.get("mood") or "neutral").lower()
-                emotion  = self._MOOD_EMOTION.get(mood, "neutral")
+                mood      = str(summary.get("mood") or "neutral").lower()
+                emotion   = self._MOOD_EMOTION.get(mood, "neutral")
                 intensity = float(summary.get("mood_intensity", 0.5))
-                # Higher intensity → slightly faster
-                speed = 1.0 + (intensity - 0.5) * 0.2
+                # Higher intensity → slightly faster delivery
+                speed    = 1.0 + (intensity - 0.5) * 0.2
                 voice_id = summary.get("voice_id", "") or ""
+
+            # Fallback: if registry has no voice_id, try voices.yaml by agent_id
+            if not voice_id and agent_id:
+                try:
+                    from engine.config import get_config
+                    voices_cfg = get_config().get("voices", {})
+                    if isinstance(voices_cfg, dict) and agent_id in voices_cfg:
+                        voice_id = agent_id
+                except Exception:
+                    pass
         except Exception as exc:
             logger.debug("TTSStyleInterceptor: registry lookup failed: %s", exc)
 
@@ -1158,10 +1169,11 @@ class MoodSyncInterceptor(InterceptorBase):
 
         try:
             from engine.mcp.character_registry import get_character_registry
-            get_character_registry().set_state(agent_id, {
-                "mood":            mood_name.lower(),
-                "mood_intensity":  intensity,
-            })
+            get_character_registry().set_state(
+                agent_id,
+                mood           = mood_name.lower(),
+                mood_intensity = intensity,
+            )
             logger.debug(
                 "MoodSyncInterceptor: %s → mood=%s (%.0f%%)",
                 agent_id, mood_name, intensity * 100,

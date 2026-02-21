@@ -125,6 +125,7 @@ class CharacterProfile:
                         "subject": "she", "object": "her", "possessive": "her"
                     })
     scene_roles:   List[str]                  = field(default_factory=list)
+    voice_id:      str                        = ""   # maps to voices.yaml key (e.g. "lola", "companion_f")
     created_at:    float                      = field(default_factory=time.time)
 
     def to_dict(self) -> Dict:
@@ -510,10 +511,12 @@ class CharacterRegistry:
             "age":           p.age,
             "pronouns":      p.pronouns,
             "voice_style":   p.voice_style,
+            "voice_id":      p.voice_id,
             "appearance":    p.appearance,
             "top_traits":    trait_text,
             "backstory":     p.backstory[:300] if p.backstory else "",
-            "mood":          f"{s.mood} (intensity={s.mood_intensity:.1f})",
+            "mood":          s.mood,
+            "mood_intensity": s.mood_intensity,
             "focus":         s.focus,
             "current_role":  s.current_role,
             "energy":        s.energy,
@@ -643,6 +646,101 @@ def _bootstrap_defaults(reg: CharacterRegistry) -> None:
         backstory   = "Internal framework system character — not an agent.",
         scene_roles = [],
     )
+
+
+def seed_registry_from_character(char: Any, *, voice_id: str = "") -> None:
+    """
+    Populate the registry from a ``Character`` ORM/dataclass-style object.
+
+    Inspects the most common attribute names used across CosySim character
+    models (``Character``, ``CharacterData``, ``_Char`` stubs) and fills in
+    as much profile + state data as is available.  Safe to call multiple
+    times — successive calls update the profile and merge state.
+
+    Args:
+        char:     Any object with at least ``.id`` and ``.name`` attributes.
+        voice_id: Explicit voices.yaml key (e.g. ``"lola"``).  When omitted
+                  the registry checks if ``char.id`` matches a voices.yaml
+                  entry and uses that.
+    """
+    if char is None:
+        return
+    cid  = getattr(char, "id", None) or getattr(char, "character_id", None)
+    name = getattr(char, "name", None)
+    if not cid or not name:
+        return
+
+    # Resolve voice_id: explicit arg → char.voice_id attr → char.id as fallback
+    resolved_voice_id = (
+        voice_id
+        or getattr(char, "voice_id", "")
+        or ""
+    )
+    if not resolved_voice_id:
+        # Check if the character id itself is a valid voices.yaml key
+        try:
+            from engine.config import get_config
+            voices = get_config().get("voices", {})
+            if isinstance(voices, dict) and cid in voices:
+                resolved_voice_id = cid
+        except Exception:
+            pass
+
+    # Gather personality traits from whatever attributes exist
+    _trait_keys = [
+        "warmth", "curiosity", "assertiveness", "playfulness", "empathy",
+        "dominance", "vulnerability", "wit", "sensuality", "openness",
+        "humor", "flirtiness", "intelligence", "creativity", "formality",
+    ]
+    personality: Dict[str, float] = {}
+    for k in _trait_keys:
+        v = getattr(char, k, None)
+        if v is not None:
+            try:
+                personality[k] = float(v)
+            except (TypeError, ValueError):
+                pass
+
+    # Appearance dict — accept existing dict or build from attrs
+    appearance: Dict[str, Any] = dict(getattr(char, "appearance", {}) or {})
+    for k in ("hair", "eyes", "height", "body", "skin", "style"):
+        v = getattr(char, k, None)
+        if v is not None:
+            appearance.setdefault(k, v)
+
+    reg = get_character_registry()
+    rec = reg.register(
+        cid,
+        name        = name,
+        age         = int(getattr(char, "age", 22) or 22),
+        appearance  = appearance,
+        personality = personality,
+        backstory   = getattr(char, "backstory", "") or "",
+        voice_style = getattr(char, "voice_style", "") or getattr(char, "description", "") or "natural",
+        pronouns    = getattr(char, "pronouns", None),
+        scene_roles = list(getattr(char, "scene_roles", []) or []),
+    )
+    rec.profile.voice_id = resolved_voice_id
+
+    # Sync mutable state from character object
+    state_kwargs: Dict[str, Any] = {}
+    for k in ("mood", "focus", "current_role", "energy", "inhibition"):
+        v = getattr(char, k, None)
+        if v is not None:
+            try:
+                state_kwargs[k] = type(getattr(rec.state, k))(v)
+            except Exception:
+                state_kwargs[k] = v
+    mood_intensity = getattr(char, "mood_intensity", None)
+    if mood_intensity is not None:
+        try:
+            state_kwargs["mood_intensity"] = float(mood_intensity)
+        except Exception:
+            pass
+    if state_kwargs:
+        reg.set_state(cid, **state_kwargs)
+
+    apply_default_skills(cid)
 
 
 def apply_default_skills(character_id: str) -> None:

@@ -97,6 +97,7 @@ class LoungeScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
         self._setup_socketio()
         self._mcp_init()
         register_lounge_rules()
+        self._seed_lounge_registry()
 
         # ── Start heat timer ─────────────────────────────────────────────────
         self._start_heat_timer()
@@ -117,6 +118,100 @@ class LoungeScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
     def _ssm(self):
         from engine.mcp.scene_state import get_scene_state_manager
         return get_scene_state_manager()
+
+    # ══════════════════════════════════════════════════════════════════════════
+    #  REGISTRY SEEDING  — populate CharacterRegistry with Lola + Viktor
+    # ══════════════════════════════════════════════════════════════════════════
+
+    def _seed_lounge_registry(self) -> None:
+        """
+        Register Lola Voss and Viktor Marlowe in the CharacterRegistry so
+        CharacterRegistryInterceptor, TTSStyleInterceptor, and MoodSyncInterceptor
+        all have full profile + state data on their first call.
+
+        Profiles are defined here so the lounge scene is self-contained.
+        The DB is consulted first; these values are used as fallbacks.
+        """
+        try:
+            from engine.mcp.character_registry import get_character_registry, apply_default_skills
+
+            reg = get_character_registry()
+
+            # ── Lola Voss — singer / speakeasy owner ─────────────────────
+            lola_rec = reg.register(
+                LOLA_ID,
+                name        = "Lola Voss",
+                age         = 29,
+                appearance  = {
+                    "hair":   "dark brunette, finger-waved",
+                    "eyes":   "deep brown, lined in kohl",
+                    "height": "5'6",
+                    "style":  "1920s beaded gown, elbow gloves",
+                },
+                personality = {
+                    "warmth":          0.7,
+                    "assertiveness":   0.8,
+                    "sensuality":      0.75,
+                    "wit":             0.85,
+                    "vulnerability":   0.5,
+                    "openness":        0.65,
+                    "playfulness":     0.6,
+                    "empathy":         0.7,
+                },
+                backstory   = (
+                    "Lola Voss fled Vienna in 1919 and built The Velvet Lounge from "
+                    "nothing. She sings because it keeps her honest. She owns the room "
+                    "every night because the alternative is losing it."
+                ),
+                voice_style = (
+                    "warm, smoky contralto. Slow and deliberate. "
+                    "Intimacy over projection. Faint Eastern European consonants."
+                ),
+                scene_roles = [SCENE_ID],
+            )
+            lola_rec.profile.voice_id = LOLA_ID   # maps to voices.yaml key "lola"
+            reg.set_state(LOLA_ID, mood="calm", mood_intensity=0.6, energy=75.0)
+            apply_default_skills(LOLA_ID)
+
+            # ── Viktor Marlowe — bartender / silent guardian ─────────────
+            viktor_rec = reg.register(
+                VIKTOR_ID,
+                name        = "Viktor Marlowe",
+                age         = 38,
+                appearance  = {
+                    "hair":   "close-cropped, dark with grey at the temples",
+                    "eyes":   "pale grey, give nothing away",
+                    "height": "6'2",
+                    "style":  "white shirt, black waistcoat, rolled sleeves",
+                },
+                personality = {
+                    "assertiveness":   0.75,
+                    "warmth":          0.4,
+                    "empathy":         0.6,
+                    "wit":             0.5,
+                    "vulnerability":   0.2,
+                    "openness":        0.3,
+                    "dominance":       0.7,
+                    "playfulness":     0.2,
+                },
+                backstory   = (
+                    "Viktor Marlowe has a past he doesn't discuss. "
+                    "He came to the lounge three years ago and never left. "
+                    "He measures people the same way he measures spirits: carefully, quietly."
+                ),
+                voice_style = (
+                    "deep measured baritone. Unhurried. Short sentences. "
+                    "Eastern European accent, refined. Resonates from the chest."
+                ),
+                scene_roles = [SCENE_ID],
+            )
+            viktor_rec.profile.voice_id = VIKTOR_ID   # maps to voices.yaml key "viktor"
+            reg.set_state(VIKTOR_ID, mood="neutral", mood_intensity=0.3, energy=85.0)
+            apply_default_skills(VIKTOR_ID)
+
+            logger.info("Lounge registry seeded: Lola Voss + Viktor Marlowe")
+        except Exception as exc:
+            logger.warning("_seed_lounge_registry failed: %s", exc)
 
     @property
     def _reg(self):
@@ -614,7 +709,7 @@ class LoungeScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
                 return None
 
             class _LoungeStubbedAgent:
-                """Minimal agent with enough interface for AgentGovernor."""
+                """IAgent-compliant stub for lounge characters not in the DB."""
                 def __init__(self_, cid, name, voice_style, backstory):
                     self_.character_id = cid
                     self_.character = type("_Char", (), {
@@ -623,16 +718,18 @@ class LoungeScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
                         "_backstory": backstory,
                         "_voice_style": voice_style,
                     })()
+                    self_.capabilities = set()
 
-                def reply(self_, message, *, chain_id=None, history=None):
-                    # Fallback: return styled empty string (interceptors handle it)
+                def reply(self_, message, *, chain_id=None, history=None, **_kwargs):
+                    # Bare stub — interceptors build the full system prompt;
+                    # LLM call happens via the governor's REST path.
                     return ""
 
-                def get_system_prompt(self_):
-                    return (
-                        f"You are {profile.name}. {profile.backstory} "
-                        f"Your voice: {profile.voice_style}"
-                    )
+                def quick_query(self_, prompt: str, *, max_tokens: int = 200) -> str:
+                    return ""
+
+                def cancel(self_) -> None:
+                    pass
 
             return _LoungeStubbedAgent(
                 character_id,

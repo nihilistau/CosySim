@@ -1657,6 +1657,12 @@ class PhoneScene(BaseScene, MCPSceneMixin, mcp_scene_id="phone"):
                     if (self._phone_governor is None
                             or getattr(self._phone_governor, "_adapter_char_id", None)
                             != self.active_character.id):
+                        # Seed registry so all interceptors get full profile
+                        try:
+                            from engine.mcp.character_registry import seed_registry_from_character
+                            seed_registry_from_character(self.active_character)
+                        except Exception:
+                            pass
                         _adapter = _PhoneCharacterAgent(
                             self._generate_response,
                             self.active_character,
