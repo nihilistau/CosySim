@@ -175,11 +175,18 @@ class PhoneScene(BaseScene, MCPSceneMixin, mcp_scene_id="phone"):
         # Voice Studio app backend
         self.voice_studio = VoiceStudio(db=self.db)
 
-        # Image generation settings (ComfyUI params, in-memory)
+        # Image generation settings (ComfyUI params, persisted to disk)
+        self._image_settings_file = Path(__file__).parent.parent.parent / "data" / "phone_image_settings.json"
         self._image_settings: Dict = {
             "steps": 30, "cfg": 7.0, "denoise": 1.0,
             "sampler": "euler", "scheduler": "normal", "model": ""
         }
+        try:
+            if self._image_settings_file.exists():
+                import json as _json
+                self._image_settings.update(_json.loads(self._image_settings_file.read_text()))
+        except Exception:
+            pass
 
         # Current conversation state
         self.current_chain_id  = None
@@ -1471,6 +1478,13 @@ class PhoneScene(BaseScene, MCPSceneMixin, mcp_scene_id="phone"):
             for k, v in data.items():
                 if k in allowed:
                     self._image_settings[k] = v
+            # Persist to disk so settings survive restarts
+            try:
+                import json as _json
+                self._image_settings_file.parent.mkdir(parents=True, exist_ok=True)
+                self._image_settings_file.write_text(_json.dumps(self._image_settings, indent=2))
+            except Exception:
+                pass
             # Propagate to ComfyUI client if available
             try:
                 from content.simulation.services.comfyui_client import ComfyUIClient

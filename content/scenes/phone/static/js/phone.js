@@ -7,6 +7,9 @@ let selectedFile = null;
 let currentPhotoUrl = null;
 
 // Initialize on page load
+// Prevent browser from restoring scroll position on page load
+if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+
 document.addEventListener('DOMContentLoaded', () => {
     initializeSocket();
     loadCharacters();
@@ -703,9 +706,10 @@ async function loadMessages() {
             addMessageToUI(msg.role, msg.content, msg.timestamp, false, false);
         });
         
-        // Double-rAF so the browser has finished laying out all the new DOM nodes
-        // before we measure scrollHeight
-        requestAnimationFrame(() => requestAnimationFrame(scrollToBottom));
+        // Reset scroll position before layout, then scroll to bottom after render
+        if (container) container.scrollTop = 0;
+        // setTimeout gives time for all DOM/image layout to complete
+        setTimeout(scrollToBottom, 100);
     } catch (error) {
         console.error('Error loading messages:', error);
     }

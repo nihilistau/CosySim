@@ -1076,6 +1076,36 @@ class LoungeScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
         }
 
     # ══════════════════════════════════════════════════════════════════════════
+    #  BaseScene abstract methods
+    # ══════════════════════════════════════════════════════════════════════════
+
+    def stop(self) -> None:
+        """Gracefully stop the lounge scene."""
+        logger.info("The Velvet Lounge closing")
+        try:
+            self.socketio.stop()
+        except Exception:
+            pass
+
+    def get_plugin_info(self) -> dict:
+        """Return metadata consumed by the admin panel and launcher."""
+        return {
+            "name":        "The Velvet Lounge",
+            "description": "1920s underground jazz speakeasy — Lola Voss & Viktor Marlowe",
+            "version":     "1.0.0",
+            "author":      "CosySim",
+            "port":        LOUNGE_PORT,
+            "tags":        ["lounge", "jazz", "mcp", "multi-agent"],
+            "skill_packs": ["memory", "character", "voice"],
+            "routes": [
+                {"path": "/",               "methods": ["GET"],  "description": "Main lounge UI"},
+                {"path": "/api/chat",        "methods": ["POST"], "description": "Send message to character"},
+                {"path": "/api/state",       "methods": ["GET"],  "description": "Scene state"},
+                {"path": "/api/health",      "methods": ["GET"],  "description": "Health check"},
+            ],
+        }
+
+    # ══════════════════════════════════════════════════════════════════════════
     #  BaseScene START
     # ══════════════════════════════════════════════════════════════════════════
 

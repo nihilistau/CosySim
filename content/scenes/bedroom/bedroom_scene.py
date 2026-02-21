@@ -30,6 +30,10 @@ import sys
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 from engine.scenes.base_scene import BaseScene
 from engine.mcp.framework import MCPSceneMixin
 from engine.agents.agent_loop import AgentLoop

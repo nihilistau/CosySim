@@ -701,8 +701,12 @@ def seed_registry_from_character(char: Any, *, voice_id: str = "") -> None:
             except (TypeError, ValueError):
                 pass
 
-    # Appearance dict — accept existing dict or build from attrs
-    appearance: Dict[str, Any] = dict(getattr(char, "appearance", {}) or {})
+    # Appearance dict — accept existing dict, string description, or build from attrs
+    _raw_app = getattr(char, "appearance", {}) or {}
+    if isinstance(_raw_app, dict):
+        appearance: Dict[str, Any] = dict(_raw_app)
+    else:
+        appearance: Dict[str, Any] = {"description": str(_raw_app)} if _raw_app else {}
     for k in ("hair", "eyes", "height", "body", "skin", "style"):
         v = getattr(char, k, None)
         if v is not None:

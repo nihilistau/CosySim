@@ -434,9 +434,7 @@ class Qwen3TTSEngine:
     def _generate_placeholder(
         self, text: str, voice_design: str, sample_rate: int, max_duration: int
     ) -> tuple[Path, float]:
-        """Generate a placeholder WAV with tone patterns (for testing)."""
-        import math
-
+        """Generate a silent placeholder WAV (model not loaded)."""
         # Estimate duration: ~150 words per minute
         word_count = len(text.split())
         duration = min(max(2.0, word_count / 2.5), float(max_duration))
@@ -444,25 +442,14 @@ class Qwen3TTSEngine:
         filename = f"tts_{uuid.uuid4().hex[:8]}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.wav"
         filepath = VOICE_DIR / filename
 
-        # Generate a simple tone pattern as placeholder
+        # Generate silence — model is not loaded, no TTS available
         n_samples = int(duration * sample_rate)
-        # Low hum at 220Hz modulated by voice design hash for variety
-        freq = 220 + (hash(voice_design) % 200)
-        samples = []
-        for i in range(n_samples):
-            t = i / sample_rate
-            # Amplitude envelope: fade in/out
-            env = min(1.0, t * 4) * min(1.0, (duration - t) * 4)
-            val = env * 0.3 * math.sin(2 * math.pi * freq * t)
-            # Add some harmonics for richness
-            val += env * 0.1 * math.sin(2 * math.pi * freq * 2 * t)
-            samples.append(int(val * 32767))
 
         with wave.open(str(filepath), "wb") as wf:
             wf.setnchannels(1)
             wf.setsampwidth(2)
             wf.setframerate(sample_rate)
-            wf.writeframes(struct.pack(f"<{len(samples)}h", *samples))
+            wf.writeframes(struct.pack(f"<{n_samples}h", *([0] * n_samples)))
 
         return filepath, duration
 
