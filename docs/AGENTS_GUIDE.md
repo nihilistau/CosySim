@@ -263,15 +263,16 @@ reply = agent.reply("Hello!")
 # Legacy mode (default) — direct LMSClient calls
 agent = CharacterAgent(character, scene="bedroom")
 
-# Virtual mode — routes through VirtualAgentManager
-agent = CharacterAgent(character, scene="bedroom", use_virtual=True)
+# v2.5: CharacterAgent always creates a VirtualAgent internally
+agent = CharacterAgent(character, scene="bedroom")
 ```
 
 ### Key Files
 
 | File | Purpose |
 |------|---------|
-| `engine/agents/virtual_agent.py` | VirtualAgent + InferenceRequest/Response |
-| `engine/agents/virtual_agent_manager.py` | VirtualAgentManager singleton |
-| `engine/agents/character_agent.py` | CharacterAgent (supports `use_virtual=True`) |
-| `engine/agents/agent_loop.py` | AgentLoop (fallback routes through manager) |
+| `engine/agents/virtual_agent.py` | VirtualAgent + InferenceRequest/Response + state persistence |
+| `engine/agents/virtual_agent_manager.py` | VirtualAgentManager singleton (inference router) |
+| `engine/agents/character_agent.py` | Thin adapter — always delegates to VirtualAgent |
+| `engine/agents/agent_loop.py` | 3-phase tick: perceive → batch-decide → execute |
+| `engine/agents/scene_agent.py` | One-shot utility agent via VirtualAgentManager |

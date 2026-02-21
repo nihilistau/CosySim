@@ -196,6 +196,12 @@ class VirtualAgentManager:
         self._total_tokens_out += response.output_tokens
         self._total_latency_ms += response.latency_ms
 
+        # Auto-persist agent state after successful inference
+        if response.ok:
+            agent = self._agents.get(request.agent_id)
+            if agent:
+                agent._persist_state()
+
         # Post-hooks
         for hook in self._post_hooks:
             try:

@@ -1182,20 +1182,17 @@ class BedroomScene(BaseScene, MCPSceneMixin, mcp_scene_id="bedroom"):
         def list_models():
             models: Dict[str, Any] = {"loaded": [], "available": []}
             try:
+                from engine.agents.virtual_agent_manager import get_virtual_agent_manager
+                mgr = get_virtual_agent_manager()
+                models["agents"] = mgr.list_agents()
+                models["stats"] = mgr.get_stats()
+            except Exception:
+                pass
+            try:
                 from engine.lmstudio.lms_client import get_lms_client
                 client = get_lms_client()
                 loaded = client.get_models()
                 models["loaded"] = [{"id": m.get("id", ""), "object": m.get("object", "")} for m in loaded]
-            except Exception:
-                pass
-            try:
-                from engine.lmstudio.client import get_lmstudio_manager
-                mgr = get_lmstudio_manager()
-                available = mgr.get_available_models()
-                models["available"] = [
-                    {"id": m.get("path", m.get("id", "")), "size": m.get("size", "")}
-                    for m in (available if isinstance(available, list) else [])
-                ]
             except Exception:
                 pass
             return jsonify(models)
@@ -1392,7 +1389,6 @@ class BedroomScene(BaseScene, MCPSceneMixin, mcp_scene_id="bedroom"):
                 skill_packs=["memory", "character"],
                 model=agent_cfg.get("model") or profile_model,
                 scene="bedroom",
-                use_virtual=True,
             )
             # MCP: wrap every bedroom agent in the governance pipeline so all
             # 15 interceptors (CharacterRegistry, DialogDirective, PersonalityGuard,

@@ -748,17 +748,25 @@ def intercept_and_enhance(
       instruction='trim to under 50 words while keeping emotion intact'
     """
     try:
-        from engine.lmstudio.lms_client import get_lms_client
-        client = get_lms_client()
-        msgs = [
-            {"role": "system", "content":
-             "You are a message editor. Reshape the given message according to "
-             "the instruction. Return ONLY the rewritten message, nothing else."},
-            {"role": "user", "content":
-             f"Original:\n{original_message}\n\nInstruction:\n{instruction}"},
-        ]
-        resp = client.chat(msgs, max_tokens=300, temperature=0.7)
-        return resp.content.strip()
+        from engine.agents.virtual_agent_manager import get_virtual_agent_manager
+        from engine.agents.virtual_agent import InferenceRequest
+        mgr = get_virtual_agent_manager()
+        request = InferenceRequest(
+            agent_id="mcp_enhance",
+            messages=[
+                {"role": "system", "content":
+                 "You are a message editor. Reshape the given message according to "
+                 "the instruction. Return ONLY the rewritten message, nothing else."},
+                {"role": "user", "content":
+                 f"Original:\n{original_message}\n\nInstruction:\n{instruction}"},
+            ],
+            max_output_tokens=300,
+            temperature=0.7,
+            priority=4,
+            metadata={"type": "enhance_message"},
+        )
+        response = mgr.infer(request)
+        return (response.content or "").strip()
     except Exception as e:
         return f"Enhancement failed: {e}. Original: {original_message}"
 

@@ -191,6 +191,9 @@ class VirtualAgent:
         except Exception:
             pass
 
+        # Restore persisted state if available
+        self.load_state()
+
     @property
     def id(self) -> str:
         return self.character.id
@@ -387,12 +390,79 @@ class VirtualAgent:
         }
 
     def update_state(self, **kwargs: Any) -> None:
-        """Update agent state fields."""
+        """Update agent state fields and auto-persist."""
         self._state.update(kwargs)
         # Sync back to character object where possible
         for key in ("mood", "energy", "arousal"):
             if key in kwargs and hasattr(self.character, key):
                 setattr(self.character, key, kwargs[key])
+        self._persist_state()
+
+    def save_state(self) -> bool:
+        """Explicitly persist current state to the database."""
+        return self._persist_state()
+
+    def load_state(self) -> bool:
+        """Load persisted state from the database, merging into _state."""
+        try:
+            import sqlite3
+            db_path = self._get_state_db_path()
+            conn = sqlite3.connect(str(db_path))
+            conn.row_factory = sqlite3.Row
+            row = conn.execute(
+                "SELECT state_json FROM agent_state WHERE agent_id = ?",
+                (self.id,),
+            ).fetchone()
+            conn.close()
+            if row:
+                import json
+                stored = json.loads(row["state_json"])
+                self._state.update(stored)
+                # Sync back to character
+                for key in ("mood", "energy", "arousal"):
+                    if key in stored and hasattr(self.character, key):
+                        setattr(self.character, key, stored[key])
+                logger.debug("Loaded state for agent %s", self.name)
+                return True
+        except Exception as exc:
+            logger.debug("load_state failed for %s: %s", self.id, exc)
+        return False
+
+    def _persist_state(self) -> bool:
+        """Write current _state to SQLite (best-effort)."""
+        try:
+            import json
+            import sqlite3
+            db_path = self._get_state_db_path()
+            conn = sqlite3.connect(str(db_path))
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS agent_state (
+                    agent_id TEXT PRIMARY KEY,
+                    scene TEXT,
+                    model TEXT,
+                    state_json TEXT,
+                    updated_at REAL
+                )
+            """)
+            conn.execute("""
+                INSERT OR REPLACE INTO agent_state
+                (agent_id, scene, model, state_json, updated_at)
+                VALUES (?, ?, ?, ?, ?)
+            """, (self.id, self.scene, self.model, json.dumps(self._state), time.time()))
+            conn.commit()
+            conn.close()
+            return True
+        except Exception as exc:
+            logger.debug("_persist_state failed for %s: %s", self.id, exc)
+            return False
+
+    @staticmethod
+    def _get_state_db_path():
+        """Return the path to the agent state database."""
+        from pathlib import Path
+        data_dir = Path(__file__).parent.parent.parent / "data"
+        data_dir.mkdir(exist_ok=True)
+        return data_dir / "agent_state.db"
 
     def set_model(self, model: str) -> None:
         """Change the model this agent uses."""

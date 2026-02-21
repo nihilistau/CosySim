@@ -1,17 +1,18 @@
 """
-AgentLoop — tick-based autonomous decision cycle for multi-agent scenes.
+AgentLoop — v2.5 tick-based autonomous decision engine using VirtualAgentManager.
 
 Each tick, every character in the scene:
   1. **Perceives** — observes location, nearby characters, recent events
-  2. **Decides**  — LLM chooses an action (speak, move, interact, idle)
+  2. **Decides**  — VirtualAgentManager produces a structured JSON action
   3. **Executes** — action is applied to the scene and logged to EventChain
 
-The loop runs on a configurable interval (default 30 s) and characters
-take turns in round-robin order to avoid conflicts.
+All LLM calls are routed through VirtualAgentManager for centralised
+control over model routing, concurrency, and lifecycle.  When multiple
+agents are registered, batch inference is used for parallel decisions.
 
 Usage::
 
-    loop = AgentLoop(scene_map, db, socketio, llm_url)
+    loop = AgentLoop(scene_map, db, socketio, scene_id="bedroom")
     loop.register_character(char_a)
     loop.register_character(char_b)
     loop.start(interval=30)
@@ -27,19 +28,33 @@ from typing import Any, Callable, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
+# JSON schema for structured agent decisions
+DECISION_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "action": {
+            "type": "string",
+            "enum": ["speak", "move", "interact", "idle",
+                     "flirt", "touch", "kiss", "cuddle", "intimate"],
+        },
+        "target": {"type": "string", "description": "Target name or location"},
+        "message": {"type": "string", "description": "What you say or do"},
+    },
+    "required": ["action"],
+}
+
 
 class AgentLoop:
-    """Tick-based multi-agent decision engine.
+    """Tick-based multi-agent decision engine using VirtualAgentManager.
 
     Args:
         scene_map: :class:`engine.spatial.SceneMap` instance.
         db: Database handle for persistence.
         socketio: Flask-SocketIO for real-time UI pushes.
-        llm_url: LMStudio base URL (``http://localhost:1234/v1``).
+        llm_url: Deprecated — ignored; LMSClient is auto-configured.
         scene_id: Scene identifier for EventChain.
     """
 
-    # Actions the LLM can choose from
     VALID_ACTIONS = frozenset([
         "speak", "move", "interact", "idle",
         "flirt", "touch", "kiss", "cuddle", "intimate",
@@ -50,7 +65,7 @@ class AgentLoop:
         scene_map,
         db=None,
         socketio=None,
-        llm_url: str = "",   # deprecated — REST client is auto-configured; kept for compat
+        llm_url: str = "",
         scene_id: str = "bedroom",
     ):
         self.scene_map = scene_map
@@ -60,7 +75,7 @@ class AgentLoop:
         self.scene_id = scene_id
 
         self._characters: Dict[str, Any] = {}   # id → Character
-        self._agents: Dict[str, Any] = {}        # id → CharacterAgent
+        self._agents: Dict[str, Any] = {}        # id → CharacterAgent/VirtualAgent
         self._names: Dict[str, str] = {}         # id → display name
         self._running = False
         self._thread: Optional[threading.Thread] = None
@@ -146,25 +161,52 @@ class AgentLoop:
 
     # ── Core tick ───────────────────────────────────────────────────────
     def tick(self) -> List[Dict]:
-        """Run one full decision cycle for all characters (round-robin)."""
+        """Run one full decision cycle for all characters.
+
+        Uses batch inference when multiple characters need decisions,
+        giving the VirtualAgentManager the opportunity to parallelize.
+        """
         self._tick_count += 1
         actions = []
         char_ids = list(self._characters.keys())
-        random.shuffle(char_ids)  # randomise order each tick
+        random.shuffle(char_ids)
 
+        # Phase 1: Perceive all characters first (no LLM calls)
+        contexts: Dict[str, str] = {}
         for cid in char_ids:
-            character = self._characters.get(cid)
-            if not character:
-                continue
+            if cid in self._characters:
+                try:
+                    contexts[cid] = self._perceive(cid)
+                except Exception as e:
+                    logger.warning("Perceive error for %s: %s", cid, e)
+
+        # Phase 2: Batch decide (all characters in parallel via manager)
+        decisions: Dict[str, Dict] = {}
+        decidable = [cid for cid in char_ids if cid in contexts]
+        if len(decidable) > 1:
             try:
-                ctx = self._perceive(cid)
-                decision = self._decide(cid, ctx)
+                decisions = self._decide_batch(decidable, contexts)
+            except Exception as e:
+                logger.warning("Batch decide failed, falling back to sequential: %s", e)
+        # Sequential fallback for any missing decisions
+        for cid in decidable:
+            if cid not in decisions:
+                try:
+                    decisions[cid] = self._decide(cid, contexts[cid])
+                except Exception as e:
+                    logger.warning("Decide error for %s: %s", cid, e)
+                    decisions[cid] = {"action": "idle", "target": "", "message": ""}
+
+        # Phase 3: Execute all decisions
+        for cid in char_ids:
+            decision = decisions.get(cid, {"action": "idle", "target": "", "message": ""})
+            try:
                 result = self._execute(cid, decision)
                 actions.append(result)
                 if self._on_action:
                     self._on_action(cid, result)
             except Exception as e:
-                logger.warning("Tick error for %s: %s", cid, e)
+                logger.warning("Execute error for %s: %s", cid, e)
                 actions.append({"character_id": cid, "action": "idle", "error": str(e)})
 
         # Emit tick summary to UI
@@ -306,11 +348,10 @@ class AgentLoop:
 
     # ── Decide ──────────────────────────────────────────────────────────
     def _decide(self, character_id: str, context: str) -> Dict:
-        """Ask the LLM to choose an action. Falls back to idle on error."""
+        """Ask VirtualAgentManager for a structured action decision."""
         character = self._characters[character_id]
         agent = self._agents.get(character_id)
 
-        # Build system prompt
         system = (
             f"You are {character.name}. You are in a scene with another person. "
             f"You must decide what to do next based on your mood, the situation, "
@@ -318,38 +359,16 @@ class AgentLoop:
             f"Respond ONLY with a JSON object — no extra text."
         )
 
-        # If we have a CharacterAgent (or governor-wrapped agent), get the decision.
-        # IMPORTANT: pass skip_gov=True so the AgentGovernor bypasses its conversational
-        # interceptor pipeline (BedroomSceneInterceptor, ResponseShaperInterceptor, etc.)
-        # which would transform the JSON-action prompt into a natural-language reply,
-        # causing _parse_decision() to fall back to {"action": "idle"} every tick.
+        # Try agent.quick_query first (routes through VirtualAgentManager)
         if agent:
             try:
-                response = agent.reply(
-                    context,
-                    history=[{"role": "system", "content": system}],
-                    use_tools=False,   # Decisions are text-only JSON
-                    skip_gov=True,     # Bypass governor interceptors — need raw JSON output
-                )
-                if response:
-                    parsed = self._parse_decision(response)
-                    if parsed.get("action", "idle") != "idle":
-                        return parsed
-                    # idle might be valid, but try quick_query if message is empty
-                    if parsed.get("action") == "idle":
-                        return parsed
-            except Exception as e:
-                logger.debug("agent.reply() failed: %s, trying quick_query", e)
-            # Fallback to quick_query (also governance-free).
-            # Use a generous token budget so thinking models (Qwen3-thinking,
-            # DeepSeek-R1) have room to finish their <think> block AND emit JSON.
-            try:
                 response = agent.quick_query(system + "\n\n" + context, max_tokens=2000)
-                return self._parse_decision(response)
-            except Exception:
-                pass
+                if response:
+                    return self._parse_decision(response)
+            except Exception as e:
+                logger.debug("agent.quick_query failed: %s", e)
 
-        # Fallback: no CharacterAgent registered — route through VirtualAgentManager
+        # Fallback: use VirtualAgentManager directly with structured output
         try:
             from engine.agents.virtual_agent_manager import get_virtual_agent_manager
             from engine.agents.virtual_agent import InferenceRequest
@@ -362,6 +381,8 @@ class AgentLoop:
                 ],
                 temperature=0.9,
                 max_output_tokens=2000,
+                structured_schema=DECISION_SCHEMA,
+                schema_name="agent_decision",
                 priority=3,
                 metadata={"type": "agent_loop_decide", "scene": self.scene_id},
             )
@@ -370,10 +391,55 @@ class AgentLoop:
             if text:
                 return self._parse_decision(text)
         except Exception as e:
-            logger.debug("VirtualAgentManager fallback failed: %s", e)
+            logger.debug("VirtualAgentManager decide failed: %s", e)
 
-        # Ultimate fallback: random action
         return self._random_action(character_id)
+
+    def _decide_batch(self, char_ids: List[str], contexts: Dict[str, str]) -> Dict[str, Dict]:
+        """Batch-decide actions for multiple characters in parallel."""
+        from engine.agents.virtual_agent_manager import get_virtual_agent_manager
+        from engine.agents.virtual_agent import InferenceRequest
+        mgr = get_virtual_agent_manager()
+
+        requests = []
+        ordered_ids = []
+        for cid in char_ids:
+            character = self._characters.get(cid)
+            if not character:
+                continue
+            system = (
+                f"You are {character.name}. You are in a scene with another person. "
+                f"You must decide what to do next based on your mood, the situation, "
+                f"and your personality. Be spontaneous and natural. "
+                f"Respond ONLY with a JSON object — no extra text."
+            )
+            requests.append(InferenceRequest(
+                agent_id=cid,
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": contexts[cid]},
+                ],
+                temperature=0.9,
+                max_output_tokens=2000,
+                structured_schema=DECISION_SCHEMA,
+                schema_name="agent_decision",
+                priority=3,
+                metadata={"type": "agent_loop_batch", "scene": self.scene_id},
+            ))
+            ordered_ids.append(cid)
+
+        if not requests:
+            return {}
+
+        responses = mgr.infer_batch(requests)
+        results = {}
+        for cid, resp in zip(ordered_ids, responses):
+            text = resp.content or resp.reasoning_content or ""
+            if text:
+                results[cid] = self._parse_decision(text)
+            else:
+                results[cid] = self._random_action(cid)
+        return results
 
     def _parse_decision(self, text: str) -> Dict:
         """Extract JSON action from LLM response."""

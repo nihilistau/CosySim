@@ -830,3 +830,74 @@ responses = mgr.infer_batch(requests)
 # Stats for overlay
 stats = mgr.get_stats()
 ```
+
+---
+
+## 15. v2.5 — VirtualAgent as Primary
+
+**As of v2.5, VirtualAgent is the ONLY path for all LLM calls.**
+
+### What Changed
+
+| Component | Before (v2) | After (v2.5) |
+|-----------|-------------|--------------|
+| CharacterAgent | Full LLM client, VirtualAgent opt-in | Thin wrapper — always delegates to VirtualAgent |
+| AgentLoop._decide() | Direct `agent.reply()` or `agent.quick_query()` | `agent.quick_query()` → VirtualAgentManager; structured output schema |
+| AgentLoop.tick() | Sequential per-character | 3-phase: perceive-all → batch-decide → execute-all |
+| SceneAgent.run() | Direct `get_lms_client().chat()` | `VirtualAgentManager.infer()` |
+| State persistence | None | Auto-persist to `data/agent_state.db` after every inference |
+
+### Creating Agents (v2.5)
+
+```python
+from engine.agents import CharacterAgent
+
+# CharacterAgent always creates a VirtualAgent internally
+agent = CharacterAgent(char, scene="bedroom", skill_packs=["memory"])
+reply = agent.reply("Hello!")
+
+# Or use VirtualAgent directly
+from engine.agents import get_virtual_agent_manager
+mgr = get_virtual_agent_manager()
+agent = mgr.create_agent(char, scene="bedroom")
+reply = agent.reply("Hello!")
+```
+
+### Batch Inference
+
+```python
+# Build requests for multiple agents
+requests = [agent.build_request(context) for agent in agents]
+responses = mgr.infer_batch(requests)
+for agent, resp in zip(agents, responses):
+    agent.process_response(resp)
+```
+
+### State Persistence
+
+```python
+agent.update_state(mood="excited", energy=0.8)  # auto-persists to DB
+state = agent.get_state()  # includes all custom keys
+agent.save_state()  # explicit persist
+agent.load_state()  # explicit load (auto-called on init)
+```
+
+### Structured Output
+
+```python
+from engine.agents.virtual_agent import InferenceRequest
+
+request = InferenceRequest(
+    agent_id=agent.id,
+    messages=[...],
+    structured_schema={
+        "type": "object",
+        "properties": {"action": {"type": "string", "enum": ["speak", "move"]}},
+        "required": ["action"],
+    },
+    schema_name="agent_decision",
+)
+response = mgr.infer(request)
+import json
+decision = json.loads(response.content)
+```

@@ -705,7 +705,7 @@ class LoungeScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
             db   = Database()
             char = db.get_character(character_id)
             if char:
-                return CharacterAgent(character=char, scene="lounge", use_virtual=True)
+                return CharacterAgent(character=char, scene="lounge")
 
             # Create ephemeral agent if character not in DB
             profile = self._reg.get_profile(character_id)

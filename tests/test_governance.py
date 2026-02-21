@@ -686,9 +686,9 @@ class TestCharacterAgentProtocolCompliance(unittest.TestCase):
 
     def test_cancel_sets_cancel_event(self):
         agent = self._make_agent()
-        self.assertFalse(agent._cancel_event.is_set())
+        # v2.5: cancel delegates to the underlying VirtualAgent
         agent.cancel()
-        self.assertTrue(agent._cancel_event.is_set())
+        self.assertTrue(agent._virtual._cancel_event.is_set())
 
     def test_quick_query_returns_string(self):
         """quick_query should return a string even if LLM is unavailable."""
@@ -701,21 +701,15 @@ class TestCharacterAgentProtocolCompliance(unittest.TestCase):
 
     def test_reply_accepts_extra_kwargs(self):
         """reply() must absorb use_tools=False and any unexpected kwargs."""
-        import sys
-        import types
         from engine.agents.character_agent import CharacterAgent
 
         char  = _make_character()
         agent = CharacterAgent(char)
 
-        # Stub out the `lmstudio` package so the import inside reply() succeeds
-        fake_lms = types.ModuleType("lmstudio")
-        fake_chat_instance = MagicMock()
-        fake_lms.Chat = MagicMock(return_value=fake_chat_instance)
-
-        with patch.dict(sys.modules, {"lmstudio": fake_lms}):
-            with patch.object(agent, "_reply_via_rest", return_value="patched reply"):
-                result = agent.reply("hi", use_tools=False, unknown_kwarg="ignored")
+        # v2.5: CharacterAgent always delegates to VirtualAgent.
+        # Mock the VirtualAgent's reply to avoid needing LMStudio.
+        with patch.object(agent._virtual, "reply", return_value="patched reply"):
+            result = agent.reply("hi", use_tools=False, unknown_kwarg="ignored")
 
         self.assertEqual(result, "patched reply")
 

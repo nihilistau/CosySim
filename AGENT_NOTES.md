@@ -19,6 +19,9 @@ Generated: [2026-02-22T20:00:00Z]
 7. [Configuration & Admin](#7-configuration--admin)
 8. [Phase 2 — MCP Integration Upgrade](#8-phase-2--mcp-integration-upgrade)
 9. [Phase 3 — LMStudio v1 Native Integration & Control Overlay](#9-phase-3--lmstudio-v1-native-integration--control-overlay)
+10. [Phase 4 — v2 Framework (v1-Only Migration)](#10-phase-4--v2-framework-v1-only-migration)
+11. [Phase 5 — VirtualAgent Framework](#11-phase-5--virtualagent-framework)
+12. [Phase 6 — v2.5 Framework Push](#12-phase-6--v25-framework-push)
 
 ---
 
@@ -1405,3 +1408,107 @@ When ``use_virtual=True``:
 - **49 tests pass** (all existing tests unchanged)
 - All modified scenes compile and import correctly
 - VirtualAgent satisfies IAgent protocol (drop-in compatible)
+
+---
+
+## 12. Phase 6 — v2.5 Framework Push
+
+**Commit scope:** v2.5 — VirtualAgent as primary, legacy removal, batch inference, state persistence.
+
+### 12.1 CharacterAgent → Thin Adapter
+
+CharacterAgent is now a **thin wrapper** (~130 lines) that always creates a
+VirtualAgent internally via `get_virtual_agent_manager().create_agent(...)`.
+
+**Removed:**
+- All legacy LLM call paths: `_reply_via_rest()`, `_act()`, `_complete()`, `_get_llm()`
+- Direct `get_lms_client()` calls in CharacterAgent
+- `_cancel_event`, `_stream`, `_lock` (owned by VirtualAgent now)
+- `_build_system_prompt()`, `_search_memories()`, `_get_tools()`, `_get_event_chain()`
+  (all moved to VirtualAgent)
+- `use_virtual` parameter — always True; accepted for backward compat but ignored
+
+**New methods:** `get_state()`, `update_state()`, `set_model()`, `virtual` property.
+
+### 12.2 AgentLoop — Batch Inference & Structured Output
+
+**`_decide()`** now routes through `agent.quick_query()` (→ VirtualAgentManager) first,
+then falls back to `VirtualAgentManager.infer()` with `DECISION_SCHEMA` structured output.
+
+**`_decide_batch()`** — new method that fans out multiple agent decisions in parallel
+via `VirtualAgentManager.infer_batch()`. Used when ≥2 characters need decisions.
+
+**`tick()`** rewritten with 3-phase architecture:
+1. **Perceive** — build context for all characters (no LLM)
+2. **Decide** — batch inference via manager (parallel when >1 agent)
+3. **Execute** — apply decisions to scene
+
+### 12.3 SceneAgent → VirtualAgentManager
+
+`SceneAgent.run()` now routes through `VirtualAgentManager.infer()` with an
+`InferenceRequest` instead of calling `get_lms_client().chat()` directly.
+
+### 12.4 Agent State Persistence
+
+VirtualAgent now has `save_state()`, `load_state()`, `_persist_state()`:
+- SQLite database at `data/agent_state.db`
+- Auto-loads persisted state on `__init__`
+- Auto-persists after `update_state()` and after each successful inference
+  (via VirtualAgentManager's post-inference hook)
+- Survives process restarts
+
+### 12.5 Scene Updates
+
+| Scene | Change |
+|-------|--------|
+| **Bedroom** | Removed `use_virtual=True` (always True). Replaced `get_lmstudio_manager` model listing with manager stats. |
+| **Phone** | Already used VirtualAgentManager — no changes needed. |
+| **Casino** | Already used VirtualAgentManager — no changes needed. |
+| **Lounge** | Removed `use_virtual=True` (always True). |
+
+### 12.6 MCP Server
+
+`enhance_message()` tool now routes through VirtualAgentManager instead of
+direct `get_lms_client().chat()`.
+
+### 12.7 Call Flow (v2.5)
+
+```
+Scene / AgentLoop / User
+       │
+       ▼
+  CharacterAgent.reply()  ──(delegates)──▶  VirtualAgent.reply()
+                                                  │
+                                             build_request()
+                                                  │ InferenceRequest
+                                                  ▼
+                                        VirtualAgentManager.infer()
+                                                  │
+                                         ┌────────┴────────┐
+                                         │ _execute_request │
+                                         │   stateful path  │
+                                         │   or direct call │
+                                         └────────┬────────┘
+                                                  │
+                                       ConversationManager ──▶ LMSClient
+                                                  │               │
+                                                  │         /api/v1/chat
+                                                  │               │
+                                                  ◀───────────────┘
+                                                  │ InferenceResponse
+                                                  ▼
+                                        VirtualAgent.process_response()
+                                           │ EventChain logging
+                                           │ MCP state sync
+                                           │ ActivityBus publish
+                                           │ _persist_state()
+                                           ▼
+                                        return reply text
+```
+
+### 12.8 Test Results
+
+- **136 tests pass** (87 governance + 49 core/client)
+- Tests updated: `test_cancel_sets_cancel_event`, `test_reply_accepts_extra_kwargs`,
+  `test_reply_calls_llm`, `test_reply_uses_event_chain`
+- All tests now mock VirtualAgent internals instead of removed CharacterAgent methods

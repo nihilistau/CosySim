@@ -37,46 +37,34 @@ class TestAgentEventChain:
         char.backstory = ""
         return CharacterAgent(char, skill_packs=["memory", "character"])
 
-    @patch("engine.agents.character_agent.CharacterAgent._get_llm")
-    @patch("engine.agents.character_agent.CharacterAgent._get_event_chain")
-    def test_reply_calls_llm(self, mock_ec_fn, mock_llm_fn):
-        """Agent.reply() calls the LLM and returns a string."""
-        ec = MagicMock()
-        ec.start_chain.return_value = "chain_001"
-        mock_ec_fn.return_value = ec
-
-        llm = MagicMock()
-        # act() returns a prediction result; content attr is the text
-        result_mock = MagicMock()
-        result_mock.content = "Hey there!"
-        result_mock.__str__ = lambda s: "Hey there!"
-        llm.act.return_value = result_mock
-        llm.respond.return_value = result_mock
-        mock_llm_fn.return_value = llm
+    @patch("engine.agents.virtual_agent.VirtualAgent._get_manager")
+    def test_reply_calls_llm(self, mock_mgr_fn):
+        """Agent.reply() routes through VirtualAgentManager and returns a string."""
+        from engine.agents.virtual_agent import InferenceResponse
+        mgr = MagicMock()
+        mgr.infer.return_value = InferenceResponse(content="Hey there!", model="test")
+        mock_mgr_fn.return_value = mgr
 
         agent = self._make_agent()
         result = agent.reply("Hello!", use_tools=False)
-        # Should return a string
         assert isinstance(result, str)
+        assert result == "Hey there!"
 
-    @patch("engine.agents.character_agent.CharacterAgent._get_llm")
-    @patch("engine.agents.character_agent.CharacterAgent._get_event_chain")
-    def test_reply_uses_event_chain(self, mock_ec_fn, mock_llm_fn):
-        """Agent.reply() starts an EventChain and logs events."""
-        ec = MagicMock()
-        ec.start_chain.return_value = "chain_002"
-        mock_ec_fn.return_value = ec
-
-        llm = MagicMock()
-        result_mock = MagicMock()
-        result_mock.content = "Sure!"
-        llm.respond.return_value = result_mock
-        mock_llm_fn.return_value = llm
+    @patch("engine.agents.virtual_agent.VirtualAgent._get_manager")
+    @patch("engine.agents.virtual_agent.VirtualAgent._log_event")
+    def test_reply_uses_event_chain(self, mock_log, mock_mgr_fn):
+        """Agent.reply() logs events via VirtualAgent._log_event."""
+        from engine.agents.virtual_agent import InferenceResponse
+        mgr = MagicMock()
+        mgr.infer.return_value = InferenceResponse(
+            content="Sure!", model="test", input_tokens=10, output_tokens=5,
+        )
+        mock_mgr_fn.return_value = mgr
 
         agent = self._make_agent()
         agent.reply("Help me", use_tools=False)
-        # EventChain start_chain should be called
-        ec.start_chain.assert_called_once()
+        # VirtualAgent should log response event
+        mock_log.assert_called()
 
 
 # ═══════════════════════════════════════════════════════════════════════

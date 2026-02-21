@@ -62,16 +62,13 @@ class SceneAgent:
         max_tokens: int            = 256,
     ) -> str:
         """
-        Run a one-shot task and return the LLM output.
+        Run a one-shot task via VirtualAgentManager and return the LLM output.
 
-        Uses the LMStudio REST v1 API (``/v1/chat/completions``).
-        The model is auto-resolved from the currently loaded model list;
-        the configured ``llm.model`` is preferred if it is loaded.
+        Uses the centralised inference router for consistent model control.
 
         Args:
             task:       Instruction / prompt for the task.
-            tools:      Ignored when using the REST path.  Pass an MCP URL
-                        via ``lmstudio.cosysim_mcp_url`` in config for tool use.
+            tools:      Ignored — expose tools via CosySim MCP server instead.
             max_tokens: Soft token cap for the response.
 
         Returns:
@@ -79,29 +76,34 @@ class SceneAgent:
         """
         if tools:
             logger.debug(
-                "SceneAgent.run: local tool callables are not supported on the REST path; "
+                "SceneAgent.run: local tool callables are not supported; "
                 "expose them via the CosySim MCP server and set lmstudio.cosysim_mcp_url"
             )
         try:
-            from engine.lmstudio.lms_client import get_lms_client
-            client = get_lms_client()
-            messages = [
-                {"role": "system", "content": self.system_prompt},
-                {"role": "user", "content": task},
-            ]
-            # Build integrations if MCP URL configured
+            from engine.agents.virtual_agent_manager import get_virtual_agent_manager
+            from engine.agents.virtual_agent import InferenceRequest
+            mgr = get_virtual_agent_manager()
+
+            # Build MCP integrations if configured
             integrations = None
             mcp_url = self.config.get("lmstudio.cosysim_mcp_url", "")
             if mcp_url:
                 integrations = [{"type": "ephemeral_mcp", "server_url": mcp_url}]
 
-            resp = client.chat(
-                messages,
-                model=self.model or None,
-                max_tokens=max_tokens,
+            request = InferenceRequest(
+                agent_id=self.character_id,
+                messages=[
+                    {"role": "system", "content": self.system_prompt},
+                    {"role": "user", "content": task},
+                ],
+                model=self.model,
+                max_output_tokens=max_tokens,
                 integrations=integrations,
+                priority=4,
+                metadata={"type": "scene_agent_task", "scene": self.scene_id},
             )
-            result = resp.content.strip()
+            response = mgr.infer(request)
+            result = (response.content or "").strip()
 
             # ActivityBus: make utility calls visible in admin panel
             try:
