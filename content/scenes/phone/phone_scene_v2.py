@@ -84,7 +84,7 @@ class _PhoneCharacterAgent:
     def reply(self, message: str, *, chain_id=None, history=None, **_kwargs) -> str:
         """Direct LLM call — invoked by the governor after interceptors fire."""
         try:
-            from engine.lmstudio.client_v2 import get_lmstudio_client
+            from engine.lmstudio.lms_client import get_lms_client
             char  = self._scene.db.get_character(self.char_id)
             name  = (char or {}).get("name", "Character")
             pers  = (char or {}).get("personality", "")
@@ -96,7 +96,7 @@ class _PhoneCharacterAgent:
             for turn in (history or []):
                 msgs.append({"role": turn.get("role", "user"), "content": turn.get("content", "")})
             msgs.append({"role": "user", "content": message})
-            client = get_lmstudio_client()
+            client = get_lms_client()
             resp   = client.chat(msgs, max_tokens=2000, temperature=0.9)
             return (resp.content or resp.reasoning_content or "").strip()
         except Exception as exc:
@@ -320,7 +320,7 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
 
         # Direct LLM fallback (governor not available / interceptors failed)
         try:
-            from engine.lmstudio.client_v2 import get_lmstudio_client
+            from engine.lmstudio.lms_client import get_lms_client
             char = self.db.get_character(char_id)
             name = (char or {}).get("name", "Character")
             personality = (char or {}).get("personality", "")
@@ -328,13 +328,13 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
                 f"You are {name}. {personality}\n"
                 "Reply naturally as a real person texting. Keep messages short."
             )
-            client = get_lmstudio_client()
+            client = get_lms_client()
             resp = client.chat(
                 messages=[
                     {"role": "system", "content": system},
                     {"role": "user",   "content": user_msg},
                 ],
-                max_tokens=2000,   # thinking models need room to finish <think> block
+                max_tokens=2000,
                 temperature=0.9,
             )
             return (resp.content or resp.reasoning_content or "").strip()

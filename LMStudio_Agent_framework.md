@@ -437,24 +437,23 @@ Build system prompt + history + InferenceConfig
     ▼
 LMSClient.chat(messages, config=cfg)
     │
-    ├─── tools needed? ──▶ /v1/chat/completions (OpenAI compat)
-    │                       │
-    │                       ▼
-    │                  tool_calls in response?
-    │                       │
-    │                       ▼ yes
-    │                  Execute skills → feed results back → re-call
-    │
-    └─── no tools ──▶ /api/v1/chat (native v1)
-                          │
-                          ▼
-                     LMSResponse
-                          │
-                          ▼
-                     Governor pipeline
-                          │
-                          ▼
-                     Final response + state update
+    └─── /api/v1/chat (native v1 — ALL requests)
+              │
+              ├─── integrations: [ephemeral_mcp]
+              │         │
+              │         ▼
+              │    LLM calls skills as tools during inference
+              │         │
+              │         ▼
+              │    tool_calls? → execute → feed back → re-call
+              │
+              └─── LMSResponse
+                     │
+                     ▼
+                Governor pipeline
+                     │
+                     ▼
+                Final response + state update
 ```
 
 ### 8.2 Inference Parameters

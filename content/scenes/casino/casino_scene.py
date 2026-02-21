@@ -255,11 +255,11 @@ class CasinoScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
     def _get_agent_reply(self, character_id: str, prompt: str, role: str = "game_master") -> str:
         """Get an LLM reply using the appropriate agent profile."""
         try:
-            from engine.lmstudio.client_v2 import get_lmstudio_client
+            from engine.lmstudio.lms_client import get_lms_client
             from engine.mcp.framework import get_framework
 
             profile = get_framework().get_agent_profile(role)
-            client = get_lmstudio_client()
+            client = get_lms_client()
 
             # Build character-specific system prompt
             try:

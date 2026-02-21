@@ -1,24 +1,24 @@
 # LMStudio v1 API — CosySim Integration Reference
 
-> **Generated:** Phase 3 — LMStudio v1 Native Integration
+> **Generated:** Phase 4 — v2 Framework (v1-Only Migration)
 
 ---
 
 ## 1. Overview
 
-CosySim uses **LMStudio** as its local LLM inference backend.  Phase 3 introduced
-a dedicated client layer (`engine/lmstudio/`) that wraps **both** the native v1 REST
-API and the OpenAI-compatible endpoint, plus an optional Python SDK path.
+CosySim uses **LMStudio** as its local LLM inference backend.  The v2 framework
+uses **exclusively** the native v1 REST API (`/api/v1/*`).  OpenAI-compatible
+endpoints are no longer used.  A **ConversationManager** provides client-side
+state mirroring for stateful chats with edit/fork capabilities.
 
-### API Layers (Priority Order)
+### API Layer
 
 | Layer | Endpoint(s) | When Used |
 |-------|-------------|-----------|
-| **Native v1 REST** | `/api/v1/chat`, `/api/v1/models/*` | Default for chat, model lifecycle |
-| **OpenAI Compat** | `/v1/chat/completions`, `/v1/models` | Fallback; also when custom `tools` field is needed |
+| **Native v1 REST** | `/api/v1/chat`, `/api/v1/models/*` | All chat, model lifecycle |
 | **Python SDK** | `lmstudio` package (WebSocket) | `act()` multi-round tool loops, `complete()`, model info |
 
-The client automatically detects which API is available and routes accordingly.
+Tools are accessed via **ephemeral MCP** (`integrations` field), not a `tools` parameter.
 
 ---
 
@@ -59,7 +59,8 @@ The client automatically detects which API is available and routes accordingly.
 | `engine/lmstudio/lms_sdk.py` | `LMSSDKWrapper` — Python SDK for `act()`/`complete()` |
 | `engine/lmstudio/resource_manager.py` | `ResourceManager` — model lifecycle, GPU budget |
 | `engine/lmstudio/__init__.py` | Package exports |
-| `engine/lmstudio/client_v2.py` | Legacy OpenAI-compat client (kept for backward compat) |
+| `engine/lmstudio/client_v2.py` | **DEPRECATED** — Legacy client (emits DeprecationWarning) |
+| `engine/lmstudio/conversation.py` | `ConversationManager` — client-side state mirroring |
 | `config/default.yaml` | Default inference, load, resource manager config |
 
 ---
@@ -111,7 +112,6 @@ final = InferenceConfig.merge(base, override)
 
 # Convert to API payload
 native_fields = cfg.to_native_v1()     # for /api/v1/chat
-openai_fields = cfg.to_openai_compat() # for /v1/chat/completions
 ```
 
 ---
@@ -119,17 +119,15 @@ openai_fields = cfg.to_openai_compat() # for /v1/chat/completions
 ## 4. LMSClient (REST)
 
 The primary inference client.  Singleton access via `get_lms_client()`.
+Uses **only** native v1 (`/api/v1/chat`).
 
-### Routing Logic
+### Routing Logic (v2 Framework)
 
 ```python
-client.chat(messages, tools=[...])
-#  → tools field present → ALWAYS OpenAI compat (/v1/chat/completions)
-#    because native v1 doesn't support custom tools field
-
 client.chat(messages)
-#  → native v1 available? → /api/v1/chat
-#  → fallback → /v1/chat/completions
+#  → ALWAYS /api/v1/chat (no fallback, no OpenAI compat)
+#  → Tools: use integrations=[{"type":"ephemeral_mcp","server_url":"..."}]
+#  → Raises error if native v1 unavailable
 ```
 
 ### Core Methods
@@ -236,8 +234,8 @@ sdk.unload_model("model-id")
 | Simple chat | ✅ Preferred | Works |
 | Streaming | ✅ SSE | ✅ WebSocket |
 | Stateful chats | ✅ | ❌ |
-| Custom tools field | ✅ (OpenAI compat) | ❌ |
-| MCP integrations | ✅ | ❌ |
+| Custom tools field | ❌ (removed in v2) | ❌ |
+| MCP integrations | ✅ (ephemeral) | ❌ |
 | `act()` (multi-round) | ❌ | ✅ Preferred |
 | `complete()` (raw) | ❌ | ✅ Only option |
 | Structured output | ✅ | ❌ |
@@ -351,10 +349,10 @@ resp2 = client.chat_stateful("What was I saying?",
 - Server manages KV cache efficiently
 - Perfect for long phone conversations
 
-**Limitations:**
-- Only available via native v1 (`/api/v1/chat`)
-- State is lost when the model is unloaded
-- No way to edit/fork conversation history server-side
+**Limitations (solved by v2 framework):**
+- Only available via native v1 (`/api/v1/chat`) → **solved**: we use v1 exclusively
+- State is lost when model is unloaded → **solved**: `ConversationManager` mirrors state client-side and replays history automatically
+- No way to edit/fork server-side → **solved**: `ConversationManager.edit_message()` and `fork()` modify client-side history, then clear + replay to server
 
 ---
 
@@ -375,8 +373,7 @@ resp = client.chat(messages, integrations=[
 This lets the LLM call CosySim skills as tools during inference — without
 permanently registering MCP servers in LMStudio's config.
 
-**Note:** `integrations` field works on native v1 and is also passed through
-on OpenAI compat mode (LMStudio accepts it on both).
+**Note:** `integrations` field works on native v1 API (`/api/v1/chat`).
 
 ---
 
@@ -405,7 +402,39 @@ The model is constrained at the logit level to produce valid JSON.
 
 ---
 
-## 11. Speculative Decoding
+## 11. ConversationManager (v2 Framework)
+
+Client-side state mirror for stateful chats. Solves server state loss on model
+unload and enables edit/fork of conversation history.
+
+```python
+from engine.lmstudio import get_conversation_manager, get_lms_client
+
+mgr = get_conversation_manager()
+client = get_lms_client()
+
+# Create a conversation
+conv = mgr.create("phone-luna-1", model="gemma-3-4b")
+
+# Send (uses previous_response_id when server has state)
+resp = conv.send(client, [{"role": "user", "content": "Hey"}])
+
+# Edit message at index 2 and replay
+conv.edit_message(2, {"role": "user", "content": "Actually..."})
+
+# Fork for branching dialog
+alt = conv.fork("phone-luna-1-alt")
+
+# Model unloaded → auto-invalidated → next send() replays full history
+mgr.invalidate_model("gemma-3-4b")
+
+# Stats for overlay
+stats = mgr.stats()  # {"total": 5, "active": 3, "invalidated": 2}
+```
+
+---
+
+## 12. Speculative Decoding
 
 Use a small draft model for 2-3× throughput:
 
@@ -489,7 +518,9 @@ COSYSIM_LMSTUDIO__INFERENCE_DEFAULTS__TEMPERATURE=0.5
 | `POST` | `/api/v1/models/load` | Load a model |
 | `POST` | `/api/v1/models/unload` | Unload a model |
 
-### OpenAI Compatible Endpoints
+### Legacy OpenAI Compatible Endpoints (NOT USED in v2)
+
+> **Deprecated.** These endpoints are no longer used by CosySim.
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -548,7 +579,7 @@ When `"stream": true`, the response is a series of Server-Sent Events:
 ### Tool Factory
 
 `engine/lmstudio/tool_factory.py` — `run_with_tools()` uses `LMSClient`:
-- Default: OpenAI compat path (custom `tools` field)
+- Tools accessed via **ephemeral MCP** integrations (not `tools` field)
 - Extracts `tool_calls` from `LMSResponse.tool_calls`
 - Supports `InferenceConfig` passthrough
 

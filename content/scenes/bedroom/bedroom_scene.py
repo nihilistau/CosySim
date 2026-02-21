@@ -1182,8 +1182,8 @@ class BedroomScene(BaseScene, MCPSceneMixin, mcp_scene_id="bedroom"):
         def list_models():
             models: Dict[str, Any] = {"loaded": [], "available": []}
             try:
-                from engine.lmstudio.client_v2 import LMStudioClientV2
-                client = LMStudioClientV2()
+                from engine.lmstudio.lms_client import get_lms_client
+                client = get_lms_client()
                 loaded = client.get_models()
                 models["loaded"] = [{"id": m.get("id", ""), "object": m.get("object", "")} for m in loaded]
             except Exception:

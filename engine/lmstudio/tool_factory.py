@@ -279,12 +279,8 @@ def run_with_tools(
     """
     # Resolve client: prefer LMSClient, fall back to legacy
     if client is None:
-        try:
-            from engine.lmstudio.lms_client import get_lms_client
-            client = get_lms_client()
-        except Exception:
-            from engine.lmstudio.client_v2 import get_lmstudio_client
-            client = get_lmstudio_client()
+        from engine.lmstudio.lms_client import get_lms_client
+        client = get_lms_client()
 
     # Normalise: wrap plain callables into ToolSpec
     tool_specs: List[ToolSpec] = []
@@ -299,39 +295,22 @@ def run_with_tools(
     openai_tools = [spec.to_openai_dict() for spec in tool_specs]
     thread_messages = list(messages)
 
-    # Determine if we're using the new LMSClient or legacy
-    is_lms_client = hasattr(client, 'chat_structured')
-
     for round_num in range(max_rounds):
         try:
-            if is_lms_client:
-                from engine.lmstudio.inference_config import InferenceConfig
-                cfg = inference_config or InferenceConfig(
-                    temperature=temperature,
-                    max_output_tokens=max_tokens,
-                    model=model,
-                    integrations=integrations,
-                )
-                resp = client.chat(
-                    thread_messages,
-                    config=cfg,
-                    tools=openai_tools if openai_tools else None,
-                )
-                finish = resp.finish_reason
-                content = resp.content
-                tool_calls_data = resp.tool_calls
-            else:
-                resp = client.chat(
-                    thread_messages,
-                    model=model,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                    tools=openai_tools if openai_tools else None,
-                    integrations=integrations,
-                )
-                finish = resp.finish_reason
-                content = resp.content
-                tool_calls_data = []
+            from engine.lmstudio.inference_config import InferenceConfig
+            cfg = inference_config or InferenceConfig(
+                temperature=temperature,
+                max_output_tokens=max_tokens,
+                model=model,
+                integrations=integrations,
+            )
+            resp = client.chat(
+                thread_messages,
+                config=cfg,
+            )
+            finish = resp.finish_reason
+            content = resp.content
+            tool_calls_data = resp.tool_calls
         except Exception as exc:
             logger.error("run_with_tools chat failed on round %d: %s", round_num, exc)
             return ""

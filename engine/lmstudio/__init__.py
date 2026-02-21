@@ -1,16 +1,21 @@
-"""engine.lmstudio — LMStudio integration layer
+"""engine.lmstudio — LMStudio integration layer (v2 framework — v1 native API only)
 
 Primary API
 -----------
 ``LMSClient`` / ``get_lms_client``
     **Native v1 REST client** (``/api/v1/chat``, ``/api/v1/models/*``).
-    Primary inference path — supports stateful chats, ephemeral MCP,
-    structured output, speculative decoding, image input, full params.
-    Falls back to OpenAI-compat ``/v1/chat/completions`` automatically.
+    The **only** inference path — no OpenAI-compatible fallback.
+    Supports stateful chats, ephemeral MCP, structured output,
+    speculative decoding, image input, full params.
+
+``ConversationManager`` / ``get_conversation_manager``
+    Client-side conversation state mirror.  Tracks all messages,
+    handles ``previous_response_id`` for stateful chats, transparent
+    replay on model unload, edit/fork conversation history.
 
 ``LMStudioClient`` / ``get_lmstudio_client``
-    Legacy OpenAI-compat REST client (``/v1/chat/completions``).  Kept
-    for backward compatibility and when custom ``tools`` field is needed.
+    **Deprecated** — thin compatibility wrapper that redirects to
+    ``LMSClient``.  Use ``get_lms_client()`` directly.
 
 ``LMSSDKWrapper`` / ``get_lms_sdk``
     Python SDK wrapper: ``respond()``, ``act()`` (multi-round tools),
@@ -60,16 +65,23 @@ Quick start::
     # Stateful chat:
     resp = client.chat_stateful("Hello!", system="You are helpful.")
     resp2 = client.chat_stateful("What did I say?", previous_response_id=resp.response_id)
+
+    # Conversation manager (recommended for scenes):
+    from engine.lmstudio import get_conversation_manager
+    conv = get_conversation_manager().create("aria_chat", system="You are Aria.")
+    resp = conv.send("Hello!")
 """
-# Native v1 client (primary)
+# Native v1 client (primary — the only inference path)
 from .lms_client       import LMSClient, get_lms_client, LMSResponse, LMSStreamEvent, LMSModelInfo
+# Conversation state management
+from .conversation     import ConversationManager, get_conversation_manager, Conversation
 # Config dataclasses
 from .inference_config import InferenceConfig, LoadConfig, json_schema_format, json_object_format
 # SDK wrapper
 from .lms_sdk          import LMSSDKWrapper, get_lms_sdk
 # Resource manager
 from .resource_manager import ResourceManager, get_resource_manager, Strategy
-# Legacy OpenAI-compat client
+# Legacy OpenAI-compat client (deprecated — redirects to LMSClient)
 from .client_v2        import LMStudioClient, get_lmstudio_client, MCP
 # CLI lifecycle management
 from .client           import LMStudioManager, get_lmstudio_manager
@@ -81,15 +93,17 @@ from .concurrency      import ConcurrentExecutor, get_executor, ConcurrentResult
 from .tool_factory     import ToolSpec, tool, from_callable, run_with_tools
 
 __all__ = [
-    # Native v1 (primary inference path)
+    # Native v1 (the only inference path)
     "LMSClient", "get_lms_client", "LMSResponse", "LMSStreamEvent", "LMSModelInfo",
+    # Conversation state
+    "ConversationManager", "get_conversation_manager", "Conversation",
     # Config
     "InferenceConfig", "LoadConfig", "json_schema_format", "json_object_format",
     # SDK
     "LMSSDKWrapper", "get_lms_sdk",
     # Resource manager
     "ResourceManager", "get_resource_manager", "Strategy",
-    # Legacy REST (OpenAI compat)
+    # Legacy REST (deprecated)
     "LMStudioClient", "get_lmstudio_client", "MCP",
     # CLI lifecycle
     "LMStudioManager", "get_lmstudio_manager",

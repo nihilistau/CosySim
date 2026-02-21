@@ -83,8 +83,8 @@ class SceneAgent:
                 "expose them via the CosySim MCP server and set lmstudio.cosysim_mcp_url"
             )
         try:
-            from engine.lmstudio.client_v2 import get_lmstudio_client
-            client = get_lmstudio_client()
+            from engine.lmstudio.lms_client import get_lms_client
+            client = get_lms_client()
             messages = [
                 {"role": "system", "content": self.system_prompt},
                 {"role": "user", "content": task},
@@ -93,8 +93,7 @@ class SceneAgent:
             integrations = None
             mcp_url = self.config.get("lmstudio.cosysim_mcp_url", "")
             if mcp_url:
-                from engine.lmstudio.client_v2 import MCP
-                integrations = [MCP.ephemeral(mcp_url)]
+                integrations = [{"type": "ephemeral_mcp", "server_url": mcp_url}]
 
             resp = client.chat(
                 messages,

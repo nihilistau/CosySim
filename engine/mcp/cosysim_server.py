@@ -748,8 +748,8 @@ def intercept_and_enhance(
       instruction='trim to under 50 words while keeping emotion intact'
     """
     try:
-        from engine.lmstudio import get_lmstudio_client
-        client = get_lmstudio_client()
+        from engine.lmstudio.lms_client import get_lms_client
+        client = get_lms_client()
         msgs = [
             {"role": "system", "content":
              "You are a message editor. Reshape the given message according to "

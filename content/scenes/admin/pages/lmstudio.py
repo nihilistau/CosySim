@@ -10,8 +10,8 @@ import streamlit as st
 # ── Helpers ────────────────────────────────────────────────────────────
 
 def _client():
-    from engine.lmstudio import get_lmstudio_client
-    return get_lmstudio_client()
+    from engine.lmstudio import get_lms_client
+    return get_lms_client()
 
 
 def _manager():

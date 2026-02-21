@@ -1,40 +1,12 @@
 """
-LMStudio REST Client v2 — Direct HTTP integration with ``integrations`` support
+LMStudio REST Client v2 — **DEPRECATED**
 
-This client talks to LMStudio's REST API (``/v1/chat/completions``) instead of
-the WebSocket-based Python SDK.  This is necessary for:
+.. deprecated:: 2.0
+   Use ``engine.lmstudio.lms_client.LMSClient`` / ``get_lms_client()`` instead.
+   This module is kept only for backward compatibility.  All inference now goes
+   through the native ``/api/v1/chat`` endpoint via ``LMSClient``.
 
-* **Per-request MCP** — the ``integrations`` field lets us attach MCP servers
-  (plugins or ephemeral) to individual requests
-* **SSE streaming** — server-sent events for real-time token delivery
-* **Abort** — close the HTTP connection to stop generation and free VRAM
-* **Token counting** — track input/output tokens per call
-
-The original ``LMStudioManager`` (client.py) is kept for CLI model lifecycle
-(load/unload/estimate VRAM).  This v2 client handles all inference calls.
-
-Usage::
-
-    from engine.lmstudio.client_v2 import LMStudioClient, MCP
-
-    client = LMStudioClient()
-
-    # Simple chat
-    reply = client.chat([
-        {"role": "system", "content": "You are helpful."},
-        {"role": "user", "content": "Hello!"},
-    ])
-    print(reply.content)
-
-    # Chat with MCP tools
-    reply = client.chat(messages, integrations=[
-        MCP.plugin("mcp/cosysim"),
-        MCP.ephemeral("http://localhost:8600/mcp/sse"),
-    ])
-
-    # Streaming
-    for chunk in client.chat_stream(messages):
-        print(chunk.delta, end="", flush=True)
+The ``MCP`` helper class is still valid and re-exported from here for convenience.
 """
 from __future__ import annotations
 
@@ -700,7 +672,16 @@ _client_instance: Optional[LMStudioClient] = None
 
 
 def get_lmstudio_client(**kwargs) -> LMStudioClient:
-    """Return the global LMStudioClient singleton."""
+    """Return the global LMStudioClient singleton.
+
+    .. deprecated:: 2.0
+       Use ``get_lms_client()`` from ``engine.lmstudio.lms_client`` instead.
+    """
+    import warnings
+    warnings.warn(
+        "get_lmstudio_client() is deprecated — use get_lms_client() instead",
+        DeprecationWarning, stacklevel=2,
+    )
     global _client_instance
     if _client_instance is None:
         _client_instance = LMStudioClient(**kwargs)

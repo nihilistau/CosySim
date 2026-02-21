@@ -1,6 +1,6 @@
 # CosySim — Agent Notes & System Architecture
 
-Generated: [2026-02-22T14:00:00Z]
+Generated: [2026-02-22T18:00:00Z]
 
 > Complete structural summary of the CosySim AI simulation framework.
 > Covers file dependencies, game loop, MCP skill system, scene architecture,  
@@ -1061,7 +1061,7 @@ The bedroom scene (`content/scenes/bedroom/bedroom_scene.py`) now:
 |--------|------|---------|
 | **InferenceConfig** | `engine/lmstudio/inference_config.py` | Typed dataclass for all inference params (temperature, top_p, top_k, min_p, repeat_penalty, max_output_tokens, reasoning, structured output, draft_model, stateful chat, image input, MCP integrations) |
 | **LoadConfig** | `engine/lmstudio/inference_config.py` | Typed dataclass for model loading (context_length, gpu_offload, flash_attention, eval_batch_size, kv_cache, num_experts, ttl) |
-| **LMSClient** | `engine/lmstudio/lms_client.py` | Primary REST client. Routes to native `/api/v1/chat` first, falls back to `/v1/chat/completions`. Stateful chats, structured output, streaming, MCP integrations. Singleton via `get_lms_client()` |
+| **LMSClient** | `engine/lmstudio/lms_client.py` | Primary REST client. Uses **only** native `/api/v1/chat` (v2 framework — OpenAI compat removed). Stateful chats, structured output, streaming, MCP integrations. Singleton via `get_lms_client()` |
 | **LMSSDKWrapper** | `engine/lmstudio/lms_sdk.py` | Python SDK wrapper: `respond()`, `act()` (multi-round tools), `complete()` (raw completion), model info. Singleton via `get_lms_sdk()` |
 | **ResourceManager** | `engine/lmstudio/resource_manager.py` | 6-strategy model lifecycle manager: SINGLE_BIG, CONCURRENT, MULTI_SMALL, JIT_SWAP, SPECULATIVE, HYBRID. GPU budget tracking, TTL reaper, background task queue. Singleton via `get_resource_manager()` |
 | **Control Overlay** | `engine/overlay/overlay_bp.py` | Flask Blueprint with ~20 API endpoints + inline HTML/CSS/JS panel. 8 tabs: Status, Agents, Models, Config, Skills, Events, Act, Inference. Mountable on any scene via `mount_overlay(app, socketio)` |
@@ -1074,13 +1074,13 @@ config/default.yaml → InferenceConfig.from_yaml()
 AgentProfile → InferenceConfig.from_agent_profile()
 Per-request overrides → InferenceConfig(temperature=0.3)
 Merge chain → InferenceConfig.merge(base, override)
-Serialise → .to_native_v1() or .to_openai_compat()
+Serialise → .to_native_v1()
 ```
 
-**LMSClient Routing:**
-- Custom `tools` field → always OpenAI compat (native v1 doesn't support it)
-- No tools, native available → `/api/v1/chat`
-- Fallback → `/v1/chat/completions`
+**LMSClient Routing (v2 framework):**
+- **All requests** → native `/api/v1/chat` (OpenAI compat removed)
+- Tools → ephemeral MCP via `integrations` field (not `tools` param)
+- No fallback — if native v1 unavailable, raises error
 
 **Stateful Chats:** Server-managed context via `previous_response_id`. Send only new messages instead of full history. Massive token savings for long conversations.
 
@@ -1160,3 +1160,89 @@ All scenes at `/overlay/`. API under `/overlay/api/`. Key endpoints:
 - `POST /overlay/api/agents/<id>/message` — Act as agent
 - `GET/POST /overlay/api/config` — View/edit config
 - `GET /overlay/api/events/stream` — SSE live stream
+
+---
+
+## 10. Phase 4 — v2 Framework (v1-Only Migration)
+
+### 10.1 Overview
+
+Phase 4 removed all OpenAI-compatible API usage from the inference pipeline and
+migrated exclusively to LMStudio's **native v1 REST API** (`/api/v1/chat`).
+A new **ConversationManager** provides client-side state mirroring to solve
+the three limitations of stateful chats: state loss on model unload, no
+server-side edit/fork, and v1-only availability.
+
+### 10.2 Key Changes
+
+| Change | Detail |
+|--------|--------|
+| **OpenAI compat removed** | `_chat_openai_compat()` and `_stream_openai_compat()` deleted from `LMSClient`. No fallback to `/v1/chat/completions`. |
+| **v1-only API** | `is_available()` and `get_models()` now use `/api/v1/models`. `_native_available` tracking removed. |
+| **Tools via MCP only** | `tools` parameter removed from `chat()`. All tool access via ephemeral MCP `integrations` field. |
+| **ConversationManager** | New `engine/lmstudio/conversation.py` — client-side conversation state mirror with send/edit/fork/truncate/invalidate. |
+| **Auto-invalidation** | `unload_model()` calls `_on_model_unloaded()` → `ConversationManager.invalidate_model()` to flag all affected conversations for history replay. |
+| **client_v2 deprecated** | `LMStudioClientV2` still works but emits `DeprecationWarning`. All production code uses `get_lms_client()`. |
+| **Method rename** | `_parse_openai_response()` → `_parse_choices_response()` (parses choices-shaped JSON, not an endpoint change). |
+
+### 10.3 ConversationManager
+
+**File:** `engine/lmstudio/conversation.py` (~340 lines)
+
+```python
+from engine.lmstudio import get_conversation_manager
+
+mgr = get_conversation_manager()
+
+# Create a conversation for a phone thread
+conv = mgr.create("phone-luna-thread-1", model="gemma-3-4b")
+
+# Send messages — uses stateful fast-path (previous_response_id)
+resp = conv.send(client, [{"role": "user", "content": "Hey Luna"}])
+
+# Edit a message and replay from that point
+conv.edit_message(2, {"role": "user", "content": "Actually, hello!"})
+
+# Fork a conversation for branching dialog
+fork = conv.fork("phone-luna-thread-1-alt")
+
+# Model unloaded → all conversations auto-invalidated
+# Next send() transparently replays full history
+```
+
+**Two-path strategy:**
+1. **Fast path** — server has state → send only new message + `previous_response_id`
+2. **Replay path** — server lost state → send full message history
+
+### 10.4 Migrated Consumers
+
+| File | Change |
+|------|--------|
+| `engine/agents/scene_agent.py` | `get_lmstudio_client` → `get_lms_client` |
+| `engine/lmstudio/concurrency.py` | `get_lmstudio_client` → `get_lms_client` |
+| `engine/lmstudio/tool_factory.py` | Removed client_v2 fallback, MCP-only tools |
+| `engine/mcp/cosysim_server.py` | `get_lmstudio_client` → `get_lms_client` |
+| `content/scenes/phone/phone_scene_v2.py` | 2 references migrated |
+| `content/scenes/bedroom/bedroom_scene.py` | `LMStudioClientV2` → `get_lms_client` |
+| `content/scenes/casino/casino_scene.py` | `_get_agent_reply()` migrated |
+| `content/scenes/admin/pages/lmstudio.py` | `_client()` helper migrated |
+
+### 10.5 Exports
+
+```python
+from engine.lmstudio import (
+    LMSClient, get_lms_client,           # Primary v1 client
+    ConversationManager,                   # State manager
+    get_conversation_manager,              # Singleton accessor
+    Conversation,                          # Individual conversation
+    LMSSDKWrapper, get_lms_sdk,           # SDK wrapper
+    ResourceManager, get_resource_manager, # Resource lifecycle
+    InferenceConfig, LoadConfig,          # Config dataclasses
+)
+```
+
+### 10.6 Test Results
+
+- **49 tests pass** (23 core + 26 client_v2 backward compat)
+- **12,568 Python files compile** with 0 failures
+- All scenes compile and import correctly

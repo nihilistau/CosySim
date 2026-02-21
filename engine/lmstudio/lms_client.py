@@ -1,20 +1,20 @@
 """
-LMSClient — Native LMStudio v1 REST API client
+LMSClient v2 — Native LMStudio v1 REST API client (v1-only, no OpenAI compat)
 
-Primary inference client for CosySim.  Uses the **native** ``/api/v1/*``
-endpoints (not the OpenAI-compatible ``/v1/chat/completions``).  Benefits:
+**CosySim Framework v2** — all inference goes through ``/api/v1/chat``.
+No OpenAI-compatible fallback.  This gives us full access to:
 
-* **Stateful chats** — server stores context; send ``previous_response_id``
-  instead of full history.  Dramatically reduces token usage.
-* **Ephemeral MCP** — per-request ``integrations`` for MCP tools
+* **Stateful chats** — ``previous_response_id`` for server-managed context
+* **Ephemeral MCP** — per-request ``integrations`` for tool calling
 * **Full param control** — top_k, min_p, repeat_penalty, reasoning mode
 * **Typed streaming events** — model_load, prompt_processing, tool_call, etc.
-* **Structured output** — JSON schema enforcement
+* **Structured output** — JSON schema enforcement at logit level
 * **Image input** — VLM support via content parts
 * **Speculative decoding** — draft model for 2-3x throughput
 
-Falls back to OpenAI-compat ``/v1/chat/completions`` (via client_v2) when
-the native API is unavailable or when custom ``tools`` field is needed.
+Tools are exposed through ephemeral MCP integrations (not the ``tools``
+field).  This is cleaner and gives the model access to the full CosySim
+skill registry.
 
 Usage::
 
@@ -24,6 +24,12 @@ Usage::
     resp = client.chat(messages)
     resp = client.chat(messages, config=InferenceConfig(temperature=0.3))
     resp = client.chat_stateful("Hello!", previous_response_id=prev_id)
+
+    # With MCP tools
+    resp = client.chat_with_mcp(messages)
+
+    # Structured output
+    resp = client.chat_structured(messages, {"type": "object", ...})
 
     # Load/unload via REST
     client.load_model("model-id", config=LoadConfig(context_length=8192))
@@ -102,15 +108,16 @@ class LMSModelInfo:
 
 class LMSClient:
     """
-    Native LMStudio v1 REST API client.
+    Native LMStudio v1 REST API client (v2 framework — v1-only).
 
     Endpoints used:
-    - ``/api/v1/chat``          — Inference (native protocol)
+    - ``/api/v1/chat``          — All inference (stateful + stateless)
     - ``/api/v1/models``        — List loaded models
     - ``/api/v1/models/load``   — Load a model
     - ``/api/v1/models/unload`` — Unload a model
-    - ``/v1/chat/completions``  — Fallback (OpenAI compat)
-    - ``/v1/models``            — Model listing (OpenAI compat)
+
+    Tools are accessed via ephemeral MCP ``integrations``, not the
+    ``tools`` field.  Set ``lmstudio.cosysim_mcp_url`` in config.
     """
 
     def __init__(
@@ -154,39 +161,29 @@ class LMSClient:
         self._resolved_model: Optional[str] = None
         self._resolved_at: float = 0.0
 
-        # Track whether native v1 API is available
-        self._native_available: Optional[bool] = None
-
     def close(self) -> None:
         self._client.close()
 
     # ── Health & Model Info ─────────────────────────────────────────
 
     def is_available(self) -> bool:
-        """Check if LMStudio is responding."""
+        """Check if LMStudio is responding on the native v1 API."""
         try:
-            r = self._client.get(f"{self.base_url}/v1/models", timeout=3.0)
+            r = self._client.get(f"{self.base_url}/api/v1/models", timeout=3.0)
             return r.status_code == 200
         except Exception:
             return False
 
-    def is_native_available(self) -> bool:
-        """Check if native /api/v1 endpoints are available."""
-        if self._native_available is not None:
-            return self._native_available
-        try:
-            r = self._client.get(f"{self.base_url}/api/v1/models", timeout=3.0)
-            self._native_available = (r.status_code == 200)
-        except Exception:
-            self._native_available = False
-        return self._native_available
-
     def get_models(self) -> List[Dict[str, Any]]:
-        """List loaded models."""
+        """List loaded models via native v1 API."""
         try:
-            r = self._client.get(f"{self.base_url}/v1/models", timeout=5.0)
+            r = self._client.get(f"{self.base_url}/api/v1/models", timeout=5.0)
             r.raise_for_status()
-            return r.json().get("data", [])
+            data = r.json()
+            # Native v1 may return {"data": [...]} or just a list
+            if isinstance(data, list):
+                return data
+            return data.get("data", data.get("models", []))
         except Exception as exc:
             logger.debug("get_models failed: %s", exc)
             return []
@@ -238,7 +235,6 @@ class LMSClient:
     def invalidate_model_cache(self) -> None:
         self._resolved_at = 0.0
         self._resolved_model = None
-        self._native_available = None
 
     # ── Chat (non-streaming) ────────────────────────────────────────
 
@@ -253,13 +249,12 @@ class LMSClient:
         max_tokens: Optional[int] = None,
         integrations: Optional[List[Dict]] = None,
         response_format: Optional[Dict] = None,
-        tools: Optional[List[Dict]] = None,
     ) -> LMSResponse:
         """
-        Send a chat completion request.
+        Send a chat completion via native ``/api/v1/chat``.
 
-        Uses native ``/api/v1/chat`` when available and no custom ``tools`` field
-        is needed.  Falls back to ``/v1/chat/completions`` otherwise.
+        All inference goes through the v1 API.  For tool calling, attach
+        MCP servers via ``integrations`` (ephemeral or plugin).
         """
         # Build effective config
         effective = self._build_config(config, temperature=temperature,
@@ -271,13 +266,7 @@ class LMSClient:
         request_id = str(uuid.uuid4())[:8]
         t0 = time.perf_counter()
 
-        # Route: custom tools → OpenAI compat (native v1 doesn't support tools field)
-        if tools:
-            resp = self._chat_openai_compat(messages, effective, tools=tools)
-        elif self.is_native_available():
-            resp = self._chat_native(messages, effective)
-        else:
-            resp = self._chat_openai_compat(messages, effective)
+        resp = self._chat_native(messages, effective)
 
         resp.latency_ms = (time.perf_counter() - t0) * 1000
         resp.request_id = request_id
@@ -309,9 +298,7 @@ class LMSClient:
         if previous_response_id:
             effective.previous_response_id = previous_response_id
 
-        if self.is_native_available():
-            return self._chat_native(messages, effective)
-        return self._chat_openai_compat(messages, effective)
+        return self._chat_native(messages, effective)
 
     # ── Chat (streaming) ────────────────────────────────────────────
 
@@ -324,19 +311,16 @@ class LMSClient:
         on_event: Optional[Callable[[LMSStreamEvent], None]] = None,
     ) -> Generator[str, None, LMSResponse]:
         """
-        Stream a chat response.  Yields content strings.
+        Stream a chat response via native ``/api/v1/chat``.
 
-        Optional ``on_event`` callback receives typed events (model_load,
-        prompt_processing, tool_call, etc.) for UI integration.
+        Yields content strings.  Optional ``on_event`` callback receives
+        typed events (model_load, prompt_processing, tool_call, etc.).
 
         The generator's return value is an LMSResponse with full stats.
         """
         effective = self._build_config(config, model=model)
         resolved_model = self.resolve_model(effective.model)
-
-        if self.is_native_available():
-            return self._stream_native(messages, effective, resolved_model, on_event)
-        return self._stream_openai_compat(messages, effective, resolved_model)
+        return self._stream_native(messages, effective, resolved_model, on_event)
 
     # ── Convenience wrappers ────────────────────────────────────────
 
@@ -427,22 +411,6 @@ class LMSClient:
             logger.error("REST load failed: %s", exc)
             return False
 
-    def unload_model(self, model_id: str) -> bool:
-        """Unload a model via ``POST /api/v1/models/unload``."""
-        try:
-            r = self._client.post(
-                f"{self.base_url}/api/v1/models/unload",
-                json={"model": model_id},
-                timeout=30.0,
-            )
-            r.raise_for_status()
-            self.invalidate_model_cache()
-            logger.info("Model unloaded via REST: %s", model_id)
-            return True
-        except Exception as exc:
-            logger.error("REST unload failed: %s", exc)
-            return False
-
     # ── Token counting ──────────────────────────────────────────────
 
     def count_tokens(self, text: str, model: Optional[str] = None) -> int:
@@ -471,7 +439,7 @@ class LMSClient:
     # ── Internal: native v1 ─────────────────────────────────────────
 
     def _chat_native(self, messages: List[Dict], config: InferenceConfig) -> LMSResponse:
-        """Call ``POST /api/v1/chat`` (native protocol)."""
+        """Call ``POST /api/v1/chat`` (native protocol, the only path)."""
         resolved = self.resolve_model(config.model)
         payload: Dict[str, Any] = {
             "model": resolved,
@@ -488,48 +456,19 @@ class LMSClient:
             )
             r.raise_for_status()
             data = r.json()
-        except httpx.HTTPStatusError as exc:
-            # If native fails, fallback to OpenAI compat
-            logger.warning("Native v1 returned %d, falling back to OpenAI compat", exc.response.status_code)
-            return self._chat_openai_compat(messages, config)
         except httpx.ConnectError:
             raise ConnectionError(f"Cannot connect to LMStudio at {self.base_url}")
-
-        return self._parse_native_response(data, resolved)
-
-    def _chat_openai_compat(
-        self,
-        messages: List[Dict],
-        config: InferenceConfig,
-        *,
-        tools: Optional[List[Dict]] = None,
-    ) -> LMSResponse:
-        """Fallback: call ``/v1/chat/completions`` (OpenAI compat)."""
-        resolved = self.resolve_model(config.model)
-        payload: Dict[str, Any] = {
-            "model": resolved,
-            "messages": messages,
-            "stream": False,
-        }
-        payload.update(config.to_openai_compat())
-        if tools:
-            payload["tools"] = tools
-
-        try:
-            r = self._client.post(
-                f"{self.base_url}/v1/chat/completions",
-                json=payload,
-                timeout=self.timeout,
-            )
-            r.raise_for_status()
-            data = r.json()
         except httpx.HTTPStatusError as exc:
-            logger.error("OpenAI compat HTTP %d: %s", exc.response.status_code, exc.response.text[:200])
+            logger.error("Native v1 HTTP %d: %s", exc.response.status_code, exc.response.text[:200])
             raise
-        except httpx.ConnectError:
-            raise ConnectionError(f"Cannot connect to LMStudio at {self.base_url}")
 
-        return self._parse_openai_response(data, resolved)
+        resp = self._parse_native_response(data, resolved)
+
+        # Notify ConversationManager on model unload events
+        if resp.finish_reason == "model_unloaded":
+            self._on_model_unloaded(resolved)
+
+        return resp
 
     def _stream_native(
         self,
@@ -583,69 +522,19 @@ class LMSClient:
         result.latency_ms = (time.perf_counter() - t0) * 1000
         return result
 
-    def _stream_openai_compat(
-        self,
-        messages: List[Dict],
-        config: InferenceConfig,
-        model: str,
-    ) -> Generator[str, None, LMSResponse]:
-        """Fallback streaming via ``/v1/chat/completions``."""
-        payload: Dict[str, Any] = {
-            "model": model,
-            "messages": messages,
-            "stream": True,
-        }
-        payload.update(config.to_openai_compat())
-
-        result = LMSResponse(model=model)
-        t0 = time.perf_counter()
-
-        with self._client.stream(
-            "POST",
-            f"{self.base_url}/v1/chat/completions",
-            json=payload,
-            timeout=None,
-        ) as response:
-            response.raise_for_status()
-            for line in response.iter_lines():
-                if not line or not line.startswith("data: "):
-                    continue
-                data_str = line[6:]
-                if data_str.strip() == "[DONE]":
-                    break
-
-                try:
-                    data = json.loads(data_str)
-                except json.JSONDecodeError:
-                    continue
-
-                choice = data.get("choices", [{}])[0]
-                delta = choice.get("delta", {})
-                content = delta.get("content", "")
-
-                if content:
-                    result.content += content
-                    result.output_tokens += 1
-                    yield content
-
-                if choice.get("finish_reason"):
-                    result.finish_reason = choice["finish_reason"]
-                    break
-
-        result.latency_ms = (time.perf_counter() - t0) * 1000
-        return result
-
     # ── Response parsing ────────────────────────────────────────────
 
     def _parse_native_response(self, data: Dict, model: str) -> LMSResponse:
-        """Parse a native ``/api/v1/chat`` response."""
-        # Native v1 may use different response shapes depending on version
-        # Attempt standard shape first, then OpenAI compat shape
+        """Parse a native ``/api/v1/chat`` response.
+
+        LMStudio v1 may return either a flat shape ({content, response_id, ...})
+        or a choices-based shape ({choices: [...]}). We handle both.
+        """
         choices = data.get("choices", [])
         if choices:
-            return self._parse_openai_response(data, model)
+            return self._parse_choices_response(data, model)
 
-        # Native shape: {content, response_id, stats, ...}
+        # Flat native shape: {content, response_id, stats, ...}
         content = data.get("content", "")
         reasoning = data.get("reasoning_content", "")
         response_id = data.get("response_id", data.get("id", ""))
@@ -665,8 +554,8 @@ class LMSClient:
             tool_calls=tool_calls,
         )
 
-    def _parse_openai_response(self, data: Dict, model: str) -> LMSResponse:
-        """Parse an OpenAI-compat ``/v1/chat/completions`` response."""
+    def _parse_choices_response(self, data: Dict, model: str) -> LMSResponse:
+        """Parse a choices-based response (v1 sometimes uses this shape)."""
         choice = data.get("choices", [{}])[0]
         usage = data.get("usage", {})
         msg = choice.get("message", {})
@@ -786,9 +675,37 @@ class LMSClient:
         except Exception:
             pass
 
+    # ── Conversation state management ──────────────────────────────────
+
+    def _on_model_unloaded(self, model_id: str) -> None:
+        """Called when server indicates model was unloaded — invalidate conversations."""
+        try:
+            from engine.lmstudio.conversation import get_conversation_manager
+            get_conversation_manager().invalidate_model(model_id)
+        except Exception:
+            pass
+        self.invalidate_model_cache()
+
+    def unload_model(self, model_id: str) -> bool:
+        """Unload a model via ``POST /api/v1/models/unload``."""
+        try:
+            r = self._client.post(
+                f"{self.base_url}/api/v1/models/unload",
+                json={"model": model_id},
+                timeout=30.0,
+            )
+            r.raise_for_status()
+            self.invalidate_model_cache()
+            # Invalidate all conversations using this model
+            self._on_model_unloaded(model_id)
+            logger.info("Model unloaded via REST: %s", model_id)
+            return True
+        except Exception as exc:
+            logger.error("REST unload failed: %s", exc)
+            return False
+
     def __repr__(self) -> str:
-        native = "native" if self._native_available else "compat"
-        return f"<LMSClient url={self.base_url} api={native} mcp={self._mcp_enabled}>"
+        return f"<LMSClient url={self.base_url} api=native_v1 mcp={self._mcp_enabled}>"
 
     def __del__(self):
         try:
