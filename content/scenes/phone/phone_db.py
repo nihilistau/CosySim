@@ -192,7 +192,11 @@ class PhoneDB:
                     "name": t["name"],
                     "pinned": bool(t["pinned"]),
                     "members": [m for m in members if m != "user"],
-                    "last_message": dict(last_msg) if last_msg else None,
+                    # Return last message content as plain string so the JS
+                    # thread-list preview renders correctly (not [object Object]).
+                    "last_message": (
+                        last_msg["content"] if last_msg else None
+                    ),
                     "unread": unread,
                     "updated_at": t["updated_at"],
                 })

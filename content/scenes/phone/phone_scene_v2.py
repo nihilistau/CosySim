@@ -63,8 +63,12 @@ for _d in [_MEDIA_VOICE, _MEDIA_VIDEO, _MEDIA_PHOTO]:
 class _PhoneCharacterAgent:
     """
     Minimal duck-type that satisfies AgentGovernor.
-    Keeps a direct reference to the scene's _generate_reply method so the
-    15 MCP interceptors fire on every phone response.
+
+    **IMPORTANT — no recursion rule:**  ``reply()`` must call the LLM
+    *directly* via ``get_lmstudio_client()``.  It must NOT call back into
+    ``PhoneSceneV2._generate_reply()``; that method already wraps us in a
+    governor, so calling it again would create an infinite loop:
+        _generate_reply → gov.reply() → agent.reply() → _generate_reply → …
     """
 
     def __init__(self, char_id: str, scene: "PhoneSceneV2"):
@@ -77,10 +81,29 @@ class _PhoneCharacterAgent:
         self.character = self._scene.db.get_character(self.char_id)
 
     def reply(self, message: str, *, chain_id=None, history=None, **_kwargs) -> str:
-        return self._scene._generate_reply(self.char_id, message)
+        """Direct LLM call — invoked by the governor after interceptors fire."""
+        try:
+            from engine.lmstudio.client_v2 import get_lmstudio_client
+            char  = self._scene.db.get_character(self.char_id)
+            name  = (char or {}).get("name", "Character")
+            pers  = (char or {}).get("personality", "")
+            system = (
+                f"You are {name}. {pers}\n"
+                "Reply naturally as a real person texting. Keep messages short and conversational."
+            )
+            msgs = [{"role": "system", "content": system}]
+            for turn in (history or []):
+                msgs.append({"role": turn.get("role", "user"), "content": turn.get("content", "")})
+            msgs.append({"role": "user", "content": message})
+            client = get_lmstudio_client()
+            resp   = client.chat(msgs, max_tokens=2000, temperature=0.9)
+            return (resp.content or resp.reasoning_content or "").strip()
+        except Exception as exc:
+            logger.debug("_PhoneCharacterAgent.reply LLM call failed: %s", exc)
+            return ""
 
     def quick_query(self, prompt: str) -> str:
-        return self._scene._generate_reply(self.char_id, prompt)
+        return self.reply(prompt)
 
 
 # ── Main scene class ──────────────────────────────────────────────────────────
@@ -231,7 +254,11 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
 
     def _generate_reply(self, char_id: str, user_msg: str, *,
                         system_override: Optional[str] = None) -> str:
-        """Run the governor pipeline (or fall back to direct LLM) and return reply text."""
+        """Run the governor pipeline (or fall back to direct LLM) and return reply text.
+
+        The governor calls _PhoneCharacterAgent.reply() which calls the LLM
+        directly — there is NO recursion back into this method.
+        """
         try:
             from engine.mcp.comms_framework import get_governor
             agent = self._agents.get(char_id)
@@ -243,10 +270,11 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
             gov = get_governor(agent, scene=SCENE_ID)
             return gov.reply(user_msg, chain_id=None, history=None)
         except Exception as exc:
-            logger.debug("Governor unavailable (%s), falling back to LLM", exc)
+            logger.debug("Governor unavailable (%s), using direct LLM", exc)
 
-        # Direct LLM fallback
+        # Direct LLM fallback (governor not available / interceptors failed)
         try:
+            from engine.lmstudio.client_v2 import get_lmstudio_client
             char = self.db.get_character(char_id)
             name = (char or {}).get("name", "Character")
             personality = (char or {}).get("personality", "")
@@ -254,11 +282,16 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
                 f"You are {name}. {personality}\n"
                 "Reply naturally as a real person texting. Keep messages short."
             )
-            return self.llm.get_response(
-                system_prompt=system,
-                user_message=user_msg,
-                max_tokens=200,
+            client = get_lmstudio_client()
+            resp = client.chat(
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user",   "content": user_msg},
+                ],
+                max_tokens=2000,   # thinking models need room to finish <think> block
+                temperature=0.9,
             )
+            return (resp.content or resp.reasoning_content or "").strip()
         except Exception as exc:
             logger.error("LLM reply failed: %s", exc)
             return ""
@@ -300,6 +333,18 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
         def get_threads():
             try:
                 threads = self.phone_db.list_threads()
+                # Enrich each thread with character name + avatar from main DB
+                for t in threads:
+                    members = t.get("members", [])
+                    if t.get("type") == "dm" and members:
+                        char_id   = members[0]
+                        char_row  = self.db.get_character(char_id)
+                        if char_row:
+                            t["name"]        = t.get("name") or char_row.get("name", char_id)
+                            t["char_name"]   = char_row.get("name", char_id)
+                            t["char_avatar"] = (char_row.get("avatar_url")
+                                                or char_row.get("image_url") or "")
+                            t["char_id"]     = char_id
                 return jsonify({"ok": True, "threads": threads})
             except Exception as exc:
                 logger.error("list_threads: %s", exc)
