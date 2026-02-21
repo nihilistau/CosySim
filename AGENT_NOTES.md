@@ -17,6 +17,8 @@ Generated: [2026-02-22T14:00:00Z]
 5. [Bus System & Integration Layer](#5-bus-system--integration-layer)
 6. [LMStudio Integration](#6-lmstudio-integration)
 7. [Configuration & Admin](#7-configuration--admin)
+8. [Phase 2 — MCP Integration Upgrade](#8-phase-2--mcp-integration-upgrade)
+9. [Phase 3 — LMStudio v1 Native Integration & Control Overlay](#9-phase-3--lmstudio-v1-native-integration--control-overlay)
 
 ---
 
@@ -847,61 +849,6 @@ agent_profiles:
     temperature: 0.5
 ```
 
----
-
-## 8. Phase 2 — MCP Integration Upgrade
-
-### What Changed (Phone Scene)
-
-The phone scene (`content/scenes/phone/phone_scene_v2.py`) now:
-
-1. **MCP state sync**: Characters are registered with the framework via `enter_scene()` on load
-2. **Event bus integration**: Every message (user reply and autotxt) emits a `message_sent` event through the framework event bus
-3. **Framework tick**: The ticker loop calls `fw.tick(SCENE_ID)` each cycle to process MCP timers and consequences
-4. **MCP admin API**: 6 new endpoints under `/api/mcp/*` expose framework status, agent profiles, event logs, timers, consequences, and LMStudio config
-5. **Skill packs**: Plugin info now declares `["memory", "character", "social", "narrative"]` skill packs
-
-### What Changed (Bedroom Scene)
-
-The bedroom scene (`content/scenes/bedroom/bedroom_scene.py`) now:
-
-1. **`_sync_to_mcp()` method**: Every `_broadcast_state()` call also pushes character stats, outfit, position, personality, and scene state into the MCP framework
-2. **Typed events**: Key actions emit named events through the framework bus:
-   - `stat_adjusted`, `outfit_changed`, `position_changed`, `character_moved`
-   - `scenario_started`, `scene_event`, `agent_action`
-3. **Agent profiles**: Agent loop creation checks MCP agent profiles for model hints
-4. **MCP admin API**: 5 new endpoints for framework status, scene state, event log, LMStudio, and runtime config
-5. **Version bumped to 4.1.0** with `"mcp"` tag
-
-### What Changed (MCPFramework Core)
-
-`engine/mcp/framework.py` additions:
-
-1. **`MCPSceneNode.update_state(data)`** — Merge arbitrary key-value pairs into scene-level MCP state
-2. **`MCPSceneNode.get_state()`** — Return the scene's MCP state dict
-3. **`MCPCharacterNode.update_state(data)`** — Push state updates to the CharacterRegistry
-
-### Duplicate Skill Fix
-
-`tts_skills.py:generate_voice_message` renamed to `tts_generate_voice` to avoid Python-level collision with `voice_skills.py:generate_voice_message`. Both skills are still registered in their respective packs ("tts" and "voice").
-
-### MCP API Endpoints (Available on All Scenes)
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/mcp/status` | GET | Framework status (turn, scenes, characters, timers, consequences) |
-| `/api/mcp/scene-state` | GET | Scene's MCP state dict |
-| `/api/mcp/event-log` | GET | Recent framework events (filterable by type, limit) |
-| `/api/mcp/timers` | GET | Active MCP timers |
-| `/api/mcp/consequences` | GET | Pending consequences for this scene |
-| `/api/mcp/lmstudio` | GET | LMStudio connection config and status |
-| `/api/mcp/config` | GET/POST | Read/update runtime config (agent_profiles, framework, scene settings) |
-    model: "qwen3-30b-a3b"
-    context_length: 12288
-    max_tokens: 3072
-    temperature: 0.75
-```
-
 ### 6.4 Context Window Management
 
 The system ensures each agent has enough context by:
@@ -1056,9 +1003,59 @@ Test coverage:
 
 ---
 
-## 8. Phase 3 — LMStudio v1 Native Integration & Control Overlay
+## 8. Phase 2 — MCP Integration Upgrade
 
-### 8.1 New Modules
+### What Changed (Phone Scene)
+
+The phone scene (`content/scenes/phone/phone_scene_v2.py`) now:
+
+1. **MCP state sync**: Characters are registered with the framework via `enter_scene()` on load
+2. **Event bus integration**: Every message (user reply and autotxt) emits a `message_sent` event through the framework event bus
+3. **Framework tick**: The ticker loop calls `fw.tick(SCENE_ID)` each cycle to process MCP timers and consequences
+4. **MCP admin API**: 6 new endpoints under `/api/mcp/*` expose framework status, agent profiles, event logs, timers, consequences, and LMStudio config
+5. **Skill packs**: Plugin info now declares `["memory", "character", "social", "narrative"]` skill packs
+
+### What Changed (Bedroom Scene)
+
+The bedroom scene (`content/scenes/bedroom/bedroom_scene.py`) now:
+
+1. **`_sync_to_mcp()` method**: Every `_broadcast_state()` call also pushes character stats, outfit, position, personality, and scene state into the MCP framework
+2. **Typed events**: Key actions emit named events through the framework bus:
+   - `stat_adjusted`, `outfit_changed`, `position_changed`, `character_moved`
+   - `scenario_started`, `scene_event`, `agent_action`
+3. **Agent profiles**: Agent loop creation checks MCP agent profiles for model hints
+4. **MCP admin API**: 5 new endpoints for framework status, scene state, event log, LMStudio, and runtime config
+5. **Version bumped to 4.1.0** with `"mcp"` tag
+
+### What Changed (MCPFramework Core)
+
+`engine/mcp/framework.py` additions:
+
+1. **`MCPSceneNode.update_state(data)`** — Merge arbitrary key-value pairs into scene-level MCP state
+2. **`MCPSceneNode.get_state()`** — Return the scene's MCP state dict
+3. **`MCPCharacterNode.update_state(data)`** — Push state updates to the CharacterRegistry
+
+### Duplicate Skill Fix
+
+`tts_skills.py:generate_voice_message` renamed to `tts_generate_voice` to avoid Python-level collision with `voice_skills.py:generate_voice_message`. Both skills are still registered in their respective packs ("tts" and "voice").
+
+### MCP API Endpoints (Available on All Scenes)
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/mcp/status` | GET | Framework status (turn, scenes, characters, timers, consequences) |
+| `/api/mcp/scene-state` | GET | Scene's MCP state dict |
+| `/api/mcp/event-log` | GET | Recent framework events (filterable by type, limit) |
+| `/api/mcp/timers` | GET | Active MCP timers |
+| `/api/mcp/consequences` | GET | Pending consequences for this scene |
+| `/api/mcp/lmstudio` | GET | LMStudio connection config and status |
+| `/api/mcp/config` | GET/POST | Read/update runtime config (agent_profiles, framework, scene settings) |
+
+---
+
+## 9. Phase 3 — LMStudio v1 Native Integration & Control Overlay
+
+### 9.1 New Modules
 
 | Module | File | Purpose |
 |--------|------|---------|
@@ -1069,7 +1066,7 @@ Test coverage:
 | **ResourceManager** | `engine/lmstudio/resource_manager.py` | 6-strategy model lifecycle manager: SINGLE_BIG, CONCURRENT, MULTI_SMALL, JIT_SWAP, SPECULATIVE, HYBRID. GPU budget tracking, TTL reaper, background task queue. Singleton via `get_resource_manager()` |
 | **Control Overlay** | `engine/overlay/overlay_bp.py` | Flask Blueprint with ~20 API endpoints + inline HTML/CSS/JS panel. 8 tabs: Status, Agents, Models, Config, Skills, Events, Act, Inference. Mountable on any scene via `mount_overlay(app, socketio)` |
 
-### 8.2 Key Concepts
+### 9.2 Key Concepts
 
 **InferenceConfig Flow:**
 ```
@@ -1098,7 +1095,7 @@ Serialise → .to_native_v1() or .to_openai_compat()
 | SPECULATIVE | ~5.5 GB | Main + draft for 2-3× speed |
 | HYBRID | GPU ~5 + RAM ~8 | GPU interactive + CPU background |
 
-### 8.3 Modified Files
+### 9.3 Modified Files
 
 | File | Changes |
 |------|---------|
@@ -1112,7 +1109,7 @@ Serialise → .to_native_v1() or .to_openai_compat()
 | `content/scenes/lounge/lounge_scene.py` | Overlay mount |
 | `config/default.yaml` | Added ~35 lines: resource_manager, inference_defaults, load_defaults, speculative sections |
 
-### 8.4 Config Additions (default.yaml)
+### 9.4 Config Additions (default.yaml)
 
 ```yaml
 lmstudio:
@@ -1140,7 +1137,7 @@ lmstudio:
     draft_model: ""
 ```
 
-### 8.5 Updated Singletons
+### 9.5 Updated Singletons
 
 | Singleton | Module | Accessor |
 |-----------|--------|----------|
@@ -1148,14 +1145,14 @@ lmstudio:
 | LMSSDKWrapper | engine.lmstudio.lms_sdk | `get_lms_sdk()` |
 | ResourceManager | engine.lmstudio.resource_manager | `get_resource_manager()` |
 
-### 8.6 Documentation
+### 9.6 Documentation
 
 | Document | Purpose |
 |----------|---------|
 | `LMStudio_v1.md` | API reference: endpoints, config, examples, feature matrix |
 | `LMStudio_Agent_framework.md` | Agent/developer guide: architecture, scenes, skills, patterns |
 
-### 8.7 Control Overlay Access
+### 9.7 Control Overlay Access
 
 All scenes at `/overlay/`. API under `/overlay/api/`. Key endpoints:
 - `GET /overlay/api/status` — System overview

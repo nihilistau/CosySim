@@ -1,4 +1,4 @@
 """Phone scene module"""
-from .phone_scene import PhoneScene
+from .phone_scene_v2 import PhoneSceneV2
 
-__all__ = ['PhoneScene']
+__all__ = ['PhoneSceneV2']
