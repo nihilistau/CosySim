@@ -414,6 +414,57 @@ function makeTextSprite(text, scale) {
     return sp;
 }
 
+function makeBubbleSprite(text) {
+    const maxLen = 44;
+    const display = text.length > maxLen ? text.slice(0, maxLen - 1) + '…' : text;
+    const canvas = document.createElement('canvas');
+    canvas.width = 512; canvas.height = 80;
+    const ctx = canvas.getContext('2d');
+    // Rounded background
+    const r = 14;
+    ctx.fillStyle = 'rgba(20, 20, 30, 0.82)';
+    ctx.beginPath();
+    ctx.moveTo(r, 0); ctx.lineTo(canvas.width - r, 0);
+    ctx.arcTo(canvas.width, 0, canvas.width, r, r);
+    ctx.lineTo(canvas.width, canvas.height - r);
+    ctx.arcTo(canvas.width, canvas.height, canvas.width - r, canvas.height, r);
+    ctx.lineTo(r, canvas.height);
+    ctx.arcTo(0, canvas.height, 0, canvas.height - r, r);
+    ctx.lineTo(0, r);
+    ctx.arcTo(0, 0, r, 0, r);
+    ctx.closePath();
+    ctx.fill();
+    // Text
+    ctx.font = 'bold 26px sans-serif';
+    ctx.fillStyle = '#f0f0f0';
+    ctx.textAlign = 'center';
+    ctx.fillText(display, canvas.width / 2, 50);
+    const tex = new THREE.CanvasTexture(canvas);
+    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
+    const sp = new THREE.Sprite(mat);
+    sp.scale.set(2.4, 0.48, 1);
+    return sp;
+}
+
+function showSpeechBubble(charId, text, durationMs) {
+    const s = charSprites[charId];
+    if (!s) return;
+    // Remove any existing bubble
+    if (s.bubble) { s.group.remove(s.bubble); s.bubble.material.map.dispose(); s.bubble.material.dispose(); s.bubble = null; }
+    const sprite = makeBubbleSprite(text);
+    sprite.position.y = 2.85;
+    s.group.add(sprite);
+    s.bubble = sprite;
+    setTimeout(() => {
+        if (s && s.bubble === sprite) {
+            s.group.remove(sprite);
+            sprite.material.map.dispose();
+            sprite.material.dispose();
+            s.bubble = null;
+        }
+    }, durationMs || 5000);
+}
+
 // ═══════════════════════════════════════════════════════════════════════
 //  CHARACTER SPRITES
 // ═══════════════════════════════════════════════════════════════════════
@@ -471,6 +522,7 @@ function ensureCharSprite(charId, name, colorIdx) {
     charSprites[charId] = {
         group, ring, targetPos: new THREE.Vector3(0, 0, 0),
         currentPos: new THREE.Vector3(0, 0, 0),
+        bubble: null,
     };
     return charSprites[charId];
 }
@@ -575,7 +627,12 @@ function connectSocket() {
             b.classList.toggle('active', b.dataset.key === data.time));
     });
 
-    socket.on('agent_action', (data) => addFeedEntry(data));
+    socket.on('agent_action', (data) => {
+        addFeedEntry(data);
+        if (data.action === 'speak' && data.message && data.character_id) {
+            showSpeechBubble(data.character_id, data.message, 5000);
+        }
+    });
     socket.on('agent_tick', (data) => {
         if (data.actions) data.actions.forEach(a => addFeedEntry(a));
     });

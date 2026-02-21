@@ -312,19 +312,29 @@ class AgentLoop:
             f"Respond ONLY with a JSON object — no extra text."
         )
 
-        # If we have a CharacterAgent, use reply() for full skill/MCP support
+        # If we have a CharacterAgent (or governor-wrapped agent), get the decision.
+        # IMPORTANT: pass skip_gov=True so the AgentGovernor bypasses its conversational
+        # interceptor pipeline (BedroomSceneInterceptor, ResponseShaperInterceptor, etc.)
+        # which would transform the JSON-action prompt into a natural-language reply,
+        # causing _parse_decision() to fall back to {"action": "idle"} every tick.
         if agent:
             try:
                 response = agent.reply(
                     context,
                     history=[{"role": "system", "content": system}],
-                    use_tools=False,  # Decisions are text-only JSON
+                    use_tools=False,   # Decisions are text-only JSON
+                    skip_gov=True,     # Bypass governor interceptors — need raw JSON output
                 )
                 if response:
-                    return self._parse_decision(response)
+                    parsed = self._parse_decision(response)
+                    if parsed.get("action", "idle") != "idle":
+                        return parsed
+                    # idle might be valid, but try quick_query if message is empty
+                    if parsed.get("action") == "idle":
+                        return parsed
             except Exception as e:
-                logger.debug("CharacterAgent.reply() failed: %s, trying quick_query", e)
-            # Fallback to quick_query
+                logger.debug("agent.reply() failed: %s, trying quick_query", e)
+            # Fallback to quick_query (also governance-free)
             try:
                 response = agent.quick_query(system + "\n\n" + context)
                 return self._parse_decision(response)

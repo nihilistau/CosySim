@@ -1294,6 +1294,15 @@ class BedroomScene(BaseScene, MCPSceneMixin, mcp_scene_id="bedroom"):
             }
             if action_type in stat_drifts:
                 self.profiles[character_id].stats.adjust(**stat_drifts[action_type])
+            # Forward speech to the chat panel so dialogue shows as chat bubbles
+            if action_type == "speak" and action.get("message"):
+                char = self.characters.get(character_id)
+                self.socketio.emit("chat_message", {
+                    "name":      char.name if char else character_id,
+                    "message":   action["message"],
+                    "timestamp": action.get("timestamp", ""),
+                    "character_id": character_id,
+                })
         self._broadcast_state()
 
     # ── BaseScene interface ──────────────────────────────────────────────
