@@ -255,7 +255,7 @@ def launch_all():
 
     # Flask scenes in threads
     for path, name in [
-        ("content.scenes.phone.phone_scene.PhoneScene", "Phone Scene (:5555)"),
+        ("content.scenes.phone.phone_scene_v2.PhoneSceneV2", "Phone Scene (:5555)"),
         ("content.scenes.bedroom.bedroom_scene.BedroomScene", "Bedroom Scene (:5556)"),
     ]:
         t = threading.Thread(target=_run_flask, args=(path, name), daemon=True)
@@ -392,8 +392,8 @@ For more information, see: ONBOARDING.md
     if args.mode in mode_map:
         mode_map[args.mode]()
     elif args.mode == "phone":
-        from content.scenes.phone.phone_scene import PhoneScene
-        PhoneScene().start()
+        from content.scenes.phone.phone_scene_v2 import PhoneSceneV2
+        PhoneSceneV2().start()
     elif args.mode == "bedroom":
         from content.scenes.bedroom.bedroom_scene import BedroomScene
         BedroomScene().start()

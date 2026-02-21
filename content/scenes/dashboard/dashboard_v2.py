@@ -608,9 +608,9 @@ elif page == "🚀 Deploy":
             if st.button("Launch Phone Scene", type="primary"):
                 st.info(f"To launch the phone scene, run:\n\n```\npython launcher.py --mode phone\n```")
                 st.code(f"""
-from content.scenes.phone.phone_scene import PhoneScene
+from content.scenes.phone.phone_scene_v2 import PhoneSceneV2
 
-scene = PhoneScene(port={port})
+scene = PhoneSceneV2(port={port})
 scene.start()
                 """, language="python")
     else:
