@@ -211,16 +211,22 @@ class AgentLoop:
             f"  {e.get('name','?')}: {e.get('text','')}" for e in recent
         ) if recent else "(silence)"
 
-        # Other character states
+        # All other characters — with their current locations so the model
+        # understands the full scene, not just who is physically next to them.
         nearby = self.scene_map.get_nearby_characters(character_id)
         others_info = []
-        for oid in nearby:
-            other = self._characters.get(oid)
-            if other:
-                others_info.append(
-                    f"{other.name}: mood={other.mood}, "
-                    f"arousal={getattr(other, 'arousal', 0.0):.0%}"
-                )
+        for oid, other in self._characters.items():
+            if oid == character_id:
+                continue
+            other_loc = self.scene_map.get_character_location(oid)
+            loc_label = other_loc.name if other_loc else "unknown location"
+            mood_str = getattr(other, 'mood', 'neutral')
+            arousal_str = getattr(other, 'arousal', 0.0)
+            closeness = "(nearby)" if oid in nearby else f"(at {loc_label})"
+            others_info.append(
+                f"{other.name} {closeness}: mood={mood_str}, "
+                f"arousal={arousal_str:.0%}"
+            )
 
         mood = getattr(character, 'mood', 'neutral')
         arousal = getattr(character, 'arousal', 0.0)
@@ -235,7 +241,7 @@ class AgentLoop:
             f"## Your State\n"
             f"Mood: {mood}, Arousal: {arousal:.0%}, Energy: {energy:.0%}\n"
             f"\n## Location\n{loc_ctx}\n"
-            f"\n## Nearby People\n{chr(10).join(others_info) if others_info else 'You are alone.'}\n"
+            f"\n## People in Scene\n{chr(10).join(others_info) if others_info else 'You are alone in the scene.'}\n"
             f"\n## Recent Conversation\n{convo}\n"
             f"\n## Available Locations\n{', '.join(all_locs)}\n"
             f"\n## Location Activities\n"
@@ -334,9 +340,11 @@ class AgentLoop:
                         return parsed
             except Exception as e:
                 logger.debug("agent.reply() failed: %s, trying quick_query", e)
-            # Fallback to quick_query (also governance-free)
+            # Fallback to quick_query (also governance-free).
+            # Use a generous token budget so thinking models (Qwen3-thinking,
+            # DeepSeek-R1) have room to finish their <think> block AND emit JSON.
             try:
-                response = agent.quick_query(system + "\n\n" + context)
+                response = agent.quick_query(system + "\n\n" + context, max_tokens=2000)
                 return self._parse_decision(response)
             except Exception:
                 pass
@@ -351,10 +359,11 @@ class AgentLoop:
                     {"role": "user", "content": context},
                 ],
                 temperature=0.9,
-                max_tokens=200,
+                max_tokens=2000,   # 200 was too low — thinking models burn all on <think>
             )
-            if resp.content:
-                return self._parse_decision(resp.content)
+            text = resp.content or resp.reasoning_content or ""
+            if text:
+                return self._parse_decision(text)
         except Exception as e:
             logger.debug("LLM call failed: %s", e)
 

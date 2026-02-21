@@ -328,7 +328,7 @@ class CharacterAgent:
                 except Exception:
                     logger.debug("Stream cancel failed", exc_info=True)
 
-    def quick_query(self, prompt: str, *, max_tokens: int = 200) -> str:
+    def quick_query(self, prompt: str, *, max_tokens: int = 2000) -> str:
         """
         Lightweight single-shot text completion — no tools, no events, no RAG.
 
@@ -338,7 +338,8 @@ class CharacterAgent:
 
         Args:
             prompt:     The full prompt string (system + context combined).
-            max_tokens: Soft token cap (default 200 — faster for JSON actions).
+            max_tokens: Soft token cap (default 2000 — thinking models need room
+                        to finish reasoning before producing JSON output).
 
         Returns:
             Reply text string, or empty string on failure.
@@ -355,7 +356,9 @@ class CharacterAgent:
                 max_tokens=max_tokens,
                 temperature=0.9,
             )
-            return resp.content.strip()
+            # Thinking models (e.g. Qwen3-thinking) put output in reasoning_content
+            # when they hit the token limit mid-think; surface that as fallback.
+            return (resp.content or resp.reasoning_content or "").strip()
         except Exception as exc:
             logger.debug("CharacterAgent.quick_query failed: %s", exc)
             return ""
@@ -508,7 +511,10 @@ class CharacterAgent:
                 except Exception:
                     logger.debug("EventChain MCP log failed", exc_info=True)
 
-            return resp.content
+            # Thinking models may produce empty content with all output in
+            # reasoning_content when they hit the token limit during thinking.
+            # Fall back to reasoning_content so the caller still gets a response.
+            return resp.content or resp.reasoning_content or ""
 
         except ConnectionError:
             logger.warning("REST client failed, falling back to SDK")

@@ -73,6 +73,9 @@ class ChatResponse:
     total_tokens: int = 0
     latency_ms: float = 0.0
     request_id: str = ""
+    # Populated for thinking/reasoning models (e.g. Qwen3-thinking) that
+    # emit internal chain-of-thought in a separate field instead of content.
+    reasoning_content: str = ""
 
     @property
     def tokens_per_second(self) -> float:
@@ -325,9 +328,18 @@ class LMStudioClient:
 
         choice = data.get("choices", [{}])[0]
         usage = data.get("usage", {})
+        msg = choice.get("message", {})
+
+        # Thinking models (Qwen3-thinking, DeepSeek-R1, etc.) emit their
+        # chain-of-thought in `reasoning_content` and the actual reply in
+        # `content`.  When the token budget is exhausted mid-think, `content`
+        # is empty — surface `reasoning_content` so callers can still parse it.
+        raw_content    = msg.get("content") or ""
+        raw_reasoning  = msg.get("reasoning_content") or ""
 
         resp = ChatResponse(
-            content=choice.get("message", {}).get("content", ""),
+            content=raw_content,
+            reasoning_content=raw_reasoning,
             model=data.get("model", ""),
             finish_reason=choice.get("finish_reason", ""),
             input_tokens=usage.get("prompt_tokens", 0),
