@@ -349,17 +349,20 @@ class AgentLoop:
             except Exception:
                 pass
 
-        # Fallback: no CharacterAgent registered — call REST v1 directly
+        # Fallback: no CharacterAgent registered — call LMSClient directly
         try:
-            from engine.lmstudio.client_v2 import get_lmstudio_client
-            client = get_lmstudio_client()
+            from engine.lmstudio.lms_client import get_lms_client
+            from engine.lmstudio.inference_config import InferenceConfig
+            client = get_lms_client()
             resp = client.chat(
                 messages=[
                     {"role": "system", "content": system},
                     {"role": "user", "content": context},
                 ],
-                temperature=0.9,
-                max_tokens=2000,   # 200 was too low — thinking models burn all on <think>
+                config=InferenceConfig(
+                    temperature=0.9,
+                    max_output_tokens=2000,
+                ),
             )
             text = resp.content or resp.reasoning_content or ""
             if text:

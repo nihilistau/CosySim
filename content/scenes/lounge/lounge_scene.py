@@ -76,6 +76,10 @@ class LoungeScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
         CORS(self.app)
         self.socketio = SocketIO(self.app, cors_allowed_origins="*", manage_session=False)
 
+        # Mount control overlay
+        from engine.overlay import mount_overlay
+        mount_overlay(self.app, self.socketio)
+
         # ── Lounge state (thin — framework owns the rest) ────────────────────
         self.turn_count        : int             = 0
         self.heat_level        : int             = 0      # 0-100; police danger

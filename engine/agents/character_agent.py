@@ -78,6 +78,7 @@ class CharacterAgent:
         use_mcp:     bool                = False,
         mcp_servers: Optional[List[Dict]] = None,
         scene:       Optional[str]       = None,
+        inference_config: Optional[Any]  = None,
     ) -> None:
         self.character            = character
         self.db                   = db
@@ -87,6 +88,7 @@ class CharacterAgent:
         self.use_mcp              = use_mcp
         self.mcp_servers          = mcp_servers or []
         self.scene                = scene  # used by AgentGovernor for skill manifest lookup
+        self._inference_config    = inference_config  # InferenceConfig override
 
         # Declared capabilities — inspected by AgentLoop and AgentRouter
         self.capabilities: Set[AgentCapability] = {AgentCapability.TEXT, AgentCapability.MEMORY}
@@ -345,16 +347,24 @@ class CharacterAgent:
             Reply text string, or empty string on failure.
         """
         try:
-            from engine.lmstudio.client_v2 import get_lmstudio_client
-            client = get_lmstudio_client()
+            from engine.lmstudio.lms_client import get_lms_client
+            from engine.lmstudio.inference_config import InferenceConfig
+            client = get_lms_client()
+
+            cfg = InferenceConfig(
+                temperature=0.9,
+                max_output_tokens=max_tokens,
+                model=self.model or None,
+            )
+            if self._inference_config:
+                cfg = InferenceConfig.merge(cfg, self._inference_config)
+
             resp = client.chat(
                 messages=[
                     {"role": "system", "content": self._build_system_prompt([])},
                     {"role": "user", "content": prompt},
                 ],
-                model=self.model,
-                max_tokens=max_tokens,
-                temperature=0.9,
+                config=cfg,
             )
             # Thinking models (e.g. Qwen3-thinking) put output in reasoning_content
             # when they hit the token limit mid-think; surface that as fallback.
@@ -458,14 +468,15 @@ class CharacterAgent:
         chain_id: Optional[str],
     ) -> str:
         """
-        Reply using the REST v2 client with MCP integrations.
+        Reply using the native v1 LMS client with MCP integrations.
 
         Falls back to SDK path on connection failure.
         """
-        from engine.lmstudio.client_v2 import get_lmstudio_client, MCP
+        from engine.lmstudio.lms_client import get_lms_client
+        from engine.lmstudio.inference_config import InferenceConfig
 
         ec = self._get_event_chain()
-        client = get_lmstudio_client()
+        client = get_lms_client()
 
         # Build messages array
         messages = [{"role": "system", "content": system_prompt}]
@@ -478,17 +489,20 @@ class CharacterAgent:
 
         # Build integrations list
         integrations = list(self.mcp_servers) if self.mcp_servers else []
-        # Auto-add CosySim MCP server if configured
         cosysim_mcp_url = self.config.get("lmstudio.cosysim_mcp_url", "")
         if cosysim_mcp_url:
-            integrations.append(MCP.ephemeral(cosysim_mcp_url))
+            integrations.append({"type": "ephemeral_mcp", "server_url": cosysim_mcp_url})
+
+        # Build inference config
+        cfg = InferenceConfig(
+            model=self.model or None,
+            integrations=integrations if integrations else None,
+        )
+        if self._inference_config:
+            cfg = InferenceConfig.merge(cfg, self._inference_config)
 
         try:
-            resp = client.chat(
-                messages,
-                model=self.model,
-                integrations=integrations if integrations else None,
-            )
+            resp = client.chat(messages, config=cfg)
 
             # Log token stats
             if ec and chain_id:
@@ -503,6 +517,7 @@ class CharacterAgent:
                             "tokens_per_sec": resp.tokens_per_second,
                             "model": resp.model,
                             "mcp_servers": len(integrations),
+                            "response_id": resp.response_id,
                         },
                         summary=resp.content[:120],
                         chain_id=chain_id,
@@ -511,13 +526,10 @@ class CharacterAgent:
                 except Exception:
                     logger.debug("EventChain MCP log failed", exc_info=True)
 
-            # Thinking models may produce empty content with all output in
-            # reasoning_content when they hit the token limit during thinking.
-            # Fall back to reasoning_content so the caller still gets a response.
             return resp.content or resp.reasoning_content or ""
 
         except ConnectionError:
-            logger.warning("REST client failed, falling back to SDK")
+            logger.warning("LMS client failed, falling back to SDK")
             llm_handle = self._get_llm()
             import lmstudio as lms
             chat = lms.Chat(system_prompt)

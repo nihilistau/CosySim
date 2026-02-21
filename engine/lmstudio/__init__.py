@@ -2,83 +2,101 @@
 
 Primary API
 -----------
+``LMSClient`` / ``get_lms_client``
+    **Native v1 REST client** (``/api/v1/chat``, ``/api/v1/models/*``).
+    Primary inference path — supports stateful chats, ephemeral MCP,
+    structured output, speculative decoding, image input, full params.
+    Falls back to OpenAI-compat ``/v1/chat/completions`` automatically.
+
 ``LMStudioClient`` / ``get_lmstudio_client``
-    REST v1 client (``/v1/chat/completions``).  This is the primary path
-    for all LLM inference — use it directly or via CharacterAgent/SceneAgent.
-    Supports MCP ``integrations``, streaming, token counting, and auto
-    model-resolution (picks the first loaded model if none is configured).
+    Legacy OpenAI-compat REST client (``/v1/chat/completions``).  Kept
+    for backward compatibility and when custom ``tools`` field is needed.
+
+``LMSSDKWrapper`` / ``get_lms_sdk``
+    Python SDK wrapper: ``respond()``, ``act()`` (multi-round tools),
+    ``complete()`` (raw completion), model info, cancellation.
+
+``InferenceConfig`` / ``LoadConfig``
+    Typed dataclasses for all inference and model-load parameters.
+    Factories: ``from_agent_profile()``, ``from_yaml()``, ``merge()``.
+
+``ResourceManager`` / ``get_resource_manager``
+    Intelligent model lifecycle with 6 strategies (SINGLE_BIG, CONCURRENT,
+    MULTI_SMALL, JIT_SWAP, SPECULATIVE, HYBRID).  GPU budget tracking,
+    background task queue, TTL-based eviction.
 
 ``LMStudioManager`` / ``get_lmstudio_manager``
-    CLI-based model lifecycle (load, unload, VRAM estimation).  Used for
-    model management in the admin panel, not for inference.
+    CLI-based model lifecycle (load, unload, VRAM estimation).
 
 ``MCP``
     Factory helpers for MCP integration payloads::
 
-        MCP.plugin("mcp/cosysim")                      # registered plugin
-        MCP.ephemeral("http://localhost:8600/mcp/sse") # ephemeral URL
+        MCP.plugin("mcp/cosysim")
+        MCP.ephemeral("http://localhost:8600/mcp/sse")
 
 ``ModelManager`` / ``get_model_manager``
     Three-mode model lifecycle controller (CONCURRENT / JIT / JIT_TTL).
-    Handles automated load/unload via ``lms`` CLI with optional TTL reaping.
 
 ``ConcurrentExecutor`` / ``get_executor``
     Thread-pool fan-out for parallel LMStudio requests.
-    Use ``scatter()`` for same prompt → N models, or ``parallel_tasks()``
-    for different prompts in parallel (e.g. multi-agent ticks).
 
 ``ToolFactory`` / ``tool`` / ``from_callable`` / ``run_with_tools``
-    Ephemeral in-process function-calling tools.  Convert any Python
-    callable into an OpenAI function spec and run the full tool-call loop.
+    Ephemeral in-process function-calling tools.
 
 Quick start::
 
-    from engine.lmstudio import get_lmstudio_client, MCP
+    from engine.lmstudio import get_lms_client, InferenceConfig
 
-    client = get_lmstudio_client()
+    client = get_lms_client()
     reply = client.quick_reply("Hello!")
 
-    # With CosySim MCP tools:
-    from engine.config import get_config
-    mcp_url = get_config().get("lmstudio.cosysim_mcp_url", "")
-    reply = client.quick_reply("Search my memories for 'beach'",
-                               integrations=[MCP.ephemeral(mcp_url)])
+    # With full config control:
+    cfg = InferenceConfig(temperature=0.3, max_output_tokens=1000)
+    resp = client.chat(messages, config=cfg)
 
-    # Ephemeral tools:
-    from engine.lmstudio import tool, run_with_tools
+    # Structured output:
+    resp = client.chat_structured(messages, {"type": "object", ...})
 
-    @tool
-    def mood_score(character: str) -> str:
-        \"\"\"Return mood score for a character.\"\"\"
-        return "happy (8/10)"
-
-    reply = run_with_tools(messages, tools=[mood_score])
+    # Stateful chat:
+    resp = client.chat_stateful("Hello!", system="You are helpful.")
+    resp2 = client.chat_stateful("What did I say?", previous_response_id=resp.response_id)
 """
-from .client      import LMStudioManager, get_lmstudio_manager
-from .client_v2   import LMStudioClient, get_lmstudio_client, MCP
-from .model_manager import ModelManager, get_model_manager, LoadMode
-from .concurrency   import ConcurrentExecutor, get_executor, ConcurrentResult
-from .tool_factory  import ToolSpec, tool, from_callable, run_with_tools
+# Native v1 client (primary)
+from .lms_client       import LMSClient, get_lms_client, LMSResponse, LMSStreamEvent, LMSModelInfo
+# Config dataclasses
+from .inference_config import InferenceConfig, LoadConfig, json_schema_format, json_object_format
+# SDK wrapper
+from .lms_sdk          import LMSSDKWrapper, get_lms_sdk
+# Resource manager
+from .resource_manager import ResourceManager, get_resource_manager, Strategy
+# Legacy OpenAI-compat client
+from .client_v2        import LMStudioClient, get_lmstudio_client, MCP
+# CLI lifecycle management
+from .client           import LMStudioManager, get_lmstudio_manager
+# Model lifecycle modes
+from .model_manager    import ModelManager, get_model_manager, LoadMode
+# Concurrency
+from .concurrency      import ConcurrentExecutor, get_executor, ConcurrentResult
+# Ephemeral tools / function-calling
+from .tool_factory     import ToolSpec, tool, from_callable, run_with_tools
 
 __all__ = [
-    # REST v1 (primary inference path)
-    "LMStudioClient",
-    "get_lmstudio_client",
-    "MCP",
-    # CLI lifecycle management
-    "LMStudioManager",
-    "get_lmstudio_manager",
+    # Native v1 (primary inference path)
+    "LMSClient", "get_lms_client", "LMSResponse", "LMSStreamEvent", "LMSModelInfo",
+    # Config
+    "InferenceConfig", "LoadConfig", "json_schema_format", "json_object_format",
+    # SDK
+    "LMSSDKWrapper", "get_lms_sdk",
+    # Resource manager
+    "ResourceManager", "get_resource_manager", "Strategy",
+    # Legacy REST (OpenAI compat)
+    "LMStudioClient", "get_lmstudio_client", "MCP",
+    # CLI lifecycle
+    "LMStudioManager", "get_lmstudio_manager",
     # Model lifecycle modes
-    "ModelManager",
-    "get_model_manager",
-    "LoadMode",
+    "ModelManager", "get_model_manager", "LoadMode",
     # Concurrency
-    "ConcurrentExecutor",
-    "get_executor",
-    "ConcurrentResult",
-    # Ephemeral tools / function-calling
-    "ToolSpec",
-    "tool",
-    "from_callable",
-    "run_with_tools",
+    "ConcurrentExecutor", "get_executor", "ConcurrentResult",
+    # Ephemeral tools
+    "ToolSpec", "tool", "from_callable", "run_with_tools",
 ]

@@ -85,6 +85,10 @@ class CasinoScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
         CORS(self.app)
         self.socketio = SocketIO(self.app, cors_allowed_origins="*", manage_session=False)
 
+        # Mount control overlay
+        from engine.overlay import mount_overlay
+        mount_overlay(self.app, self.socketio)
+
         # ── Game state ───────────────────────────────────────────────
         self.player_chips:     int              = 500
         self.player_hand:      List[str]        = []

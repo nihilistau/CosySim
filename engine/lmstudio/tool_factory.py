@@ -250,14 +250,17 @@ def run_with_tools(
     max_rounds: int = 6,
     integrations: Optional[List[Dict]] = None,
     client=None,
+    inference_config=None,
 ) -> str:
     """
-    Run a multi-turn chat with tool-calling support against LMStudio REST v1.
+    Run a multi-turn chat with tool-calling support against LMStudio.
 
     Handles the full loop:
       1. Send request with tool specs attached
       2. If model asks to call a tool → execute it, append result, repeat
       3. When model produces a final text response → return it
+
+    Uses LMSClient (native v1) by default, falls back to legacy client.
 
     Args:
         messages:      Initial message list (system + user).
@@ -268,14 +271,20 @@ def run_with_tools(
         max_tokens:    Max tokens per generation step.
         max_rounds:    Max tool-call rounds to prevent loops (default 6).
         integrations:  Additional MCP integrations (combined with tools).
-        client:        ``LMStudioClient`` to use (default: global singleton).
+        client:        ``LMSClient`` or ``LMStudioClient`` to use (default: LMSClient singleton).
+        inference_config: ``InferenceConfig`` for full parameter control.
 
     Returns:
         Final text reply from the model, or empty string on failure.
     """
+    # Resolve client: prefer LMSClient, fall back to legacy
     if client is None:
-        from engine.lmstudio.client_v2 import get_lmstudio_client
-        client = get_lmstudio_client()
+        try:
+            from engine.lmstudio.lms_client import get_lms_client
+            client = get_lms_client()
+        except Exception:
+            from engine.lmstudio.client_v2 import get_lmstudio_client
+            client = get_lmstudio_client()
 
     # Normalise: wrap plain callables into ToolSpec
     tool_specs: List[ToolSpec] = []
@@ -290,57 +299,79 @@ def run_with_tools(
     openai_tools = [spec.to_openai_dict() for spec in tool_specs]
     thread_messages = list(messages)
 
+    # Determine if we're using the new LMSClient or legacy
+    is_lms_client = hasattr(client, 'chat_structured')
+
     for round_num in range(max_rounds):
         try:
-            resp = client.chat(
-                thread_messages,
-                model=model,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                tools=openai_tools if openai_tools else None,
-                integrations=integrations,
-            )
+            if is_lms_client:
+                from engine.lmstudio.inference_config import InferenceConfig
+                cfg = inference_config or InferenceConfig(
+                    temperature=temperature,
+                    max_output_tokens=max_tokens,
+                    model=model,
+                    integrations=integrations,
+                )
+                resp = client.chat(
+                    thread_messages,
+                    config=cfg,
+                    tools=openai_tools if openai_tools else None,
+                )
+                finish = resp.finish_reason
+                content = resp.content
+                tool_calls_data = resp.tool_calls
+            else:
+                resp = client.chat(
+                    thread_messages,
+                    model=model,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    tools=openai_tools if openai_tools else None,
+                    integrations=integrations,
+                )
+                finish = resp.finish_reason
+                content = resp.content
+                tool_calls_data = []
         except Exception as exc:
             logger.error("run_with_tools chat failed on round %d: %s", round_num, exc)
             return ""
 
-        finish = resp.finish_reason
-
         # Terminal: model gave a text answer
         if finish in ("stop", "length", "") or not finish:
-            return resp.content.strip()
+            return (content or "").strip()
 
         # Model wants to call tools
         if finish == "tool_calls":
-            # We need the raw response to get tool_calls — re-request raw
-            raw = _raw_chat(client, thread_messages, openai_tools, model, temperature, max_tokens, integrations)
-            if raw is None:
-                return resp.content.strip()
+            if not tool_calls_data:
+                # Need raw response for legacy client
+                raw = _raw_chat(client, thread_messages, openai_tools, model, temperature, max_tokens, integrations)
+                if raw is None:
+                    return (content or "").strip()
+                tool_calls_data = (
+                    raw.get("choices", [{}])[0]
+                    .get("message", {})
+                    .get("tool_calls", [])
+                )
 
-            tool_calls_payload = (
-                raw.get("choices", [{}])[0]
-                .get("message", {})
-                .get("tool_calls", [])
-            )
-            if not tool_calls_payload:
-                return resp.content.strip()
+            if not tool_calls_data:
+                return (content or "").strip()
 
             # Append assistant message with tool_calls
             thread_messages.append({
                 "role": "assistant",
                 "content": None,
-                "tool_calls": tool_calls_payload,
+                "tool_calls": tool_calls_data,
             })
 
             # Execute and append tool results
-            result_msgs = execute_tool_calls(tool_calls_payload, tool_specs)
+            result_msgs = execute_tool_calls(tool_calls_data, tool_specs)
             thread_messages.extend(result_msgs)
-            logger.debug("round %d: executed %d tool calls", round_num, len(tool_calls_payload))
+            logger.debug("round %d: executed %d tool calls", round_num, len(tool_calls_data))
             continue
 
         # Unexpected finish reason — return whatever content we have
         logger.debug("Unexpected finish_reason %r on round %d", finish, round_num)
-        return resp.content.strip()
+        return (content or "").strip()
 
     logger.warning("run_with_tools hit max_rounds=%d without a final answer", max_rounds)
     return ""

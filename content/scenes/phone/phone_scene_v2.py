@@ -141,6 +141,10 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
         self.app.secret_key = os.urandom(24)
         self.socketio = SocketIO(self.app, cors_allowed_origins="*", async_mode="threading")
 
+        # Mount control overlay
+        from engine.overlay import mount_overlay
+        mount_overlay(self.app, self.socketio)
+
         self._register_routes()
         self._register_socketio()
 
@@ -724,6 +728,35 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
                 from engine.lmstudio.model_manager import get_model_manager
                 mm = get_model_manager()
                 return jsonify({"ok": True, "config": mm.get_full_config(), "status": mm.status()})
+            except Exception as exc:
+                return jsonify({"ok": False, "error": str(exc)}), 500
+
+        @app.route("/api/mcp/resources")
+        def mcp_resources():
+            try:
+                from engine.lmstudio.resource_manager import get_resource_manager
+                rm = get_resource_manager()
+                return jsonify({"ok": True, "resources": rm.get_status()})
+            except Exception as exc:
+                return jsonify({"ok": False, "error": str(exc)}), 500
+
+        @app.route("/api/mcp/resources/config", methods=["POST"])
+        def mcp_resources_config():
+            try:
+                from engine.lmstudio.resource_manager import get_resource_manager
+                rm = get_resource_manager()
+                data = request.get_json(force=True)
+                result = rm.update_config(**data)
+                return jsonify({"ok": True, "resources": result})
+            except Exception as exc:
+                return jsonify({"ok": False, "error": str(exc)}), 500
+
+        @app.route("/api/mcp/inference-defaults")
+        def mcp_inference_defaults():
+            try:
+                from engine.lmstudio.inference_config import InferenceConfig
+                defaults = InferenceConfig.from_yaml()
+                return jsonify({"ok": True, "defaults": defaults.to_dict()})
             except Exception as exc:
                 return jsonify({"ok": False, "error": str(exc)}), 500
 

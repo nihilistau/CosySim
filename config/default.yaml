@@ -111,6 +111,41 @@ lmstudio:
   concurrent_model: ""        # pin a model for concurrent mode (empty = auto-resolve)
   jit_ttl_seconds: 300        # idle TTL for jit_ttl mode (seconds)
 
+  # ── Resource Manager (Phase 3) ──────────────────────────────────
+  resource_manager:
+    # Strategy: single_big | concurrent | multi_small | jit_swap | speculative | hybrid
+    strategy: "concurrent"
+    default_ttl: 300            # seconds before idle models are evicted (0 = never)
+    bg_workers: 2               # background task thread pool size
+
+  # ── Inference defaults (merged into every request unless overridden) ──
+  inference_defaults:
+    temperature: 0.7
+    top_p: 0.9
+    top_k: 40
+    min_p: 0.05
+    repeat_penalty: 1.1
+    max_output_tokens: 2000
+    reasoning: false            # enable thinking/reasoning mode
+    # draft_model: ""           # speculative decoding draft model
+    # stop_strings: []
+
+  # ── Load defaults (applied when loading models via REST / CLI) ──
+  load_defaults:
+    context_length: 4096
+    gpu_offload: 0.9            # fraction (0.0-1.0) or "max" or "off"
+    flash_attention: true
+    eval_batch_size: 512
+    keep_kv_cache_on_gpu: true
+    # num_experts: null          # for MoE models
+    ttl: 3600
+
+  # ── Speculative decoding ──
+  speculative:
+    enabled: false
+    draft_model: ""             # small fast model for draft tokens
+    # main_model: ""            # override main model for spec decode
+
 # Hardware profile (used by LMStudioManager for VRAM estimation)
 hardware:
   gpu_name: "NVIDIA GeForce RTX 2060"

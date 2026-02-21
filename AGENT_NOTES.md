@@ -1,8 +1,8 @@
 # CosySim — Agent Notes & System Architecture
 
-Generated: 2026-02-21T18:45:09Z
+Generated: [2026-02-22T14:00:00Z]
 
-> Complete structural summary of the CosySim AI simulation framework.  
+> Complete structural summary of the CosySim AI simulation framework.
 > Covers file dependencies, game loop, MCP skill system, scene architecture,  
 > bus/integration layer, and LMStudio integration.
 
@@ -1053,3 +1053,113 @@ Test coverage:
 | AgentRouter | engine.mcp.comms_framework | `get_router()` |
 | GameState | engine.mcp.comms_framework | `get_game_state()` |
 | ConcurrentExecutor | engine.lmstudio.concurrency | `get_executor()` |
+
+---
+
+## 8. Phase 3 — LMStudio v1 Native Integration & Control Overlay
+
+### 8.1 New Modules
+
+| Module | File | Purpose |
+|--------|------|---------|
+| **InferenceConfig** | `engine/lmstudio/inference_config.py` | Typed dataclass for all inference params (temperature, top_p, top_k, min_p, repeat_penalty, max_output_tokens, reasoning, structured output, draft_model, stateful chat, image input, MCP integrations) |
+| **LoadConfig** | `engine/lmstudio/inference_config.py` | Typed dataclass for model loading (context_length, gpu_offload, flash_attention, eval_batch_size, kv_cache, num_experts, ttl) |
+| **LMSClient** | `engine/lmstudio/lms_client.py` | Primary REST client. Routes to native `/api/v1/chat` first, falls back to `/v1/chat/completions`. Stateful chats, structured output, streaming, MCP integrations. Singleton via `get_lms_client()` |
+| **LMSSDKWrapper** | `engine/lmstudio/lms_sdk.py` | Python SDK wrapper: `respond()`, `act()` (multi-round tools), `complete()` (raw completion), model info. Singleton via `get_lms_sdk()` |
+| **ResourceManager** | `engine/lmstudio/resource_manager.py` | 6-strategy model lifecycle manager: SINGLE_BIG, CONCURRENT, MULTI_SMALL, JIT_SWAP, SPECULATIVE, HYBRID. GPU budget tracking, TTL reaper, background task queue. Singleton via `get_resource_manager()` |
+| **Control Overlay** | `engine/overlay/overlay_bp.py` | Flask Blueprint with ~20 API endpoints + inline HTML/CSS/JS panel. 8 tabs: Status, Agents, Models, Config, Skills, Events, Act, Inference. Mountable on any scene via `mount_overlay(app, socketio)` |
+
+### 8.2 Key Concepts
+
+**InferenceConfig Flow:**
+```
+config/default.yaml → InferenceConfig.from_yaml()
+AgentProfile → InferenceConfig.from_agent_profile()
+Per-request overrides → InferenceConfig(temperature=0.3)
+Merge chain → InferenceConfig.merge(base, override)
+Serialise → .to_native_v1() or .to_openai_compat()
+```
+
+**LMSClient Routing:**
+- Custom `tools` field → always OpenAI compat (native v1 doesn't support it)
+- No tools, native available → `/api/v1/chat`
+- Fallback → `/v1/chat/completions`
+
+**Stateful Chats:** Server-managed context via `previous_response_id`. Send only new messages instead of full history. Massive token savings for long conversations.
+
+**Resource Strategies:**
+
+| Strategy | VRAM | Use Case |
+|----------|------|----------|
+| SINGLE_BIG | ~8 GB | One large model, deep conversation |
+| CONCURRENT | ~5 GB | One model, multiple parallel agents |
+| MULTI_SMALL | ~6 GB | 2-3 specialist models |
+| JIT_SWAP | Variable | Load/unload per request |
+| SPECULATIVE | ~5.5 GB | Main + draft for 2-3× speed |
+| HYBRID | GPU ~5 + RAM ~8 | GPU interactive + CPU background |
+
+### 8.3 Modified Files
+
+| File | Changes |
+|------|---------|
+| `engine/lmstudio/__init__.py` | Complete rewrite — exports all new modules |
+| `engine/agents/character_agent.py` | Uses `LMSClient` + `InferenceConfig` for all LLM calls |
+| `engine/lmstudio/tool_factory.py` | `run_with_tools()` uses `LMSClient`, handles `LMSResponse.tool_calls` |
+| `engine/agents/agent_loop.py` | `_decide()` fallback uses `LMSClient` + `InferenceConfig` |
+| `content/scenes/phone/phone_scene_v2.py` | Overlay mount + 3 admin routes (resources, config, inference-defaults) |
+| `content/scenes/bedroom/bedroom_scene.py` | Overlay mount + 3 admin routes |
+| `content/scenes/casino/casino_scene.py` | Overlay mount |
+| `content/scenes/lounge/lounge_scene.py` | Overlay mount |
+| `config/default.yaml` | Added ~35 lines: resource_manager, inference_defaults, load_defaults, speculative sections |
+
+### 8.4 Config Additions (default.yaml)
+
+```yaml
+lmstudio:
+  resource_manager:
+    strategy: "concurrent"
+    default_ttl: 300
+    bg_workers: 2
+  inference_defaults:
+    temperature: 0.7
+    top_p: 0.9
+    top_k: 40
+    min_p: 0.05
+    repeat_penalty: 1.1
+    max_output_tokens: 2000
+    reasoning: false
+  load_defaults:
+    context_length: 4096
+    gpu_offload: 0.9
+    flash_attention: true
+    eval_batch_size: 512
+    keep_kv_cache_on_gpu: true
+    ttl: 3600
+  speculative:
+    enabled: false
+    draft_model: ""
+```
+
+### 8.5 Updated Singletons
+
+| Singleton | Module | Accessor |
+|-----------|--------|----------|
+| LMSClient | engine.lmstudio.lms_client | `get_lms_client()` |
+| LMSSDKWrapper | engine.lmstudio.lms_sdk | `get_lms_sdk()` |
+| ResourceManager | engine.lmstudio.resource_manager | `get_resource_manager()` |
+
+### 8.6 Documentation
+
+| Document | Purpose |
+|----------|---------|
+| `LMStudio_v1.md` | API reference: endpoints, config, examples, feature matrix |
+| `LMStudio_Agent_framework.md` | Agent/developer guide: architecture, scenes, skills, patterns |
+
+### 8.7 Control Overlay Access
+
+All scenes at `/overlay/`. API under `/overlay/api/`. Key endpoints:
+- `GET /overlay/api/status` — System overview
+- `GET /overlay/api/agents` — Agent states
+- `POST /overlay/api/agents/<id>/message` — Act as agent
+- `GET/POST /overlay/api/config` — View/edit config
+- `GET /overlay/api/events/stream` — SSE live stream
