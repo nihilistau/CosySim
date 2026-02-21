@@ -760,3 +760,73 @@ rm.queue_background_task(
     device="cpu",
 )
 ```
+
+---
+
+## 14. VirtualAgent Framework
+
+### 14.1 Concept: Separating Agent Identity from LLM Execution
+
+CosySim's VirtualAgent framework decouples the *concept* of an agent (identity,
+state, conversation, prompt building) from the *execution* of LLM inference.
+
+**Our agents act like LLM agents, but we control every call to LMStudio.**
+
+```
+┌────────────────────┐     InferenceRequest     ┌──────────────────────────┐
+│  VirtualAgent      │ ──────────────────────▶  │  VirtualAgentManager     │
+│  - character data  │                          │  - model routing         │
+│  - state (mood,    │                          │  - concurrency control   │
+│    energy, etc.)   │  InferenceResponse       │  - JIT load/unload       │
+│  - RAG memories    │ ◀──────────────────────  │  - conversation state    │
+│  - prompt building │                          │  - batch inference       │
+│  - IAgent protocol │                          │  - hooks (pre/post)      │
+└────────────────────┘                          └──────────────────────────┘
+                                                          │
+                                                    ┌─────┴─────┐
+                                                    │ LMSClient │
+                                                    │ /api/v1   │
+                                                    └───────────┘
+```
+
+### 14.2 Key Classes
+
+**VirtualAgent** (`engine/agents/virtual_agent.py`):
+- Implements `IAgent` protocol (drop-in replacement for CharacterAgent)
+- Manages local state: mood, energy, arousal, custom keys
+- Builds system prompts with persona, RAG memories, MCP brief
+- Produces `InferenceRequest` objects
+- Processes `InferenceResponse` objects (logs events, updates state)
+- Never calls LMSClient directly
+
+**VirtualAgentManager** (`engine/agents/virtual_agent_manager.py`):
+- Singleton: `get_virtual_agent_manager()`
+- Creates/registers/unregisters agents
+- Routes `InferenceRequest` → LMSClient via ConversationManager
+- `infer()` — single request
+- `infer_batch()` — parallel requests via ConcurrentExecutor
+- Pre/post hooks for logging, monitoring, custom logic
+
+**InferenceRequest** / **InferenceResponse** — typed dataclasses for the
+request/response contract between agents and the manager.
+
+### 14.3 Using VirtualAgent in a Scene
+
+```python
+from engine.agents.virtual_agent_manager import get_virtual_agent_manager
+
+mgr = get_virtual_agent_manager()
+
+# Create agent (auto-registers + sets up ConversationManager)
+agent = mgr.create_agent(character, scene="bedroom", model="gemma-3-4b")
+
+# Interactive reply — goes through manager → ConversationManager → LMSClient
+reply = agent.reply("Hey, what are you thinking about?")
+
+# Batch decisions for multiple agents
+requests = [a.build_request(context) for a in agents]
+responses = mgr.infer_batch(requests)
+
+# Stats for overlay
+stats = mgr.get_stats()
+```

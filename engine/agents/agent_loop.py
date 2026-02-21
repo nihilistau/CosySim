@@ -349,26 +349,28 @@ class AgentLoop:
             except Exception:
                 pass
 
-        # Fallback: no CharacterAgent registered — call LMSClient directly
+        # Fallback: no CharacterAgent registered — route through VirtualAgentManager
         try:
-            from engine.lmstudio.lms_client import get_lms_client
-            from engine.lmstudio.inference_config import InferenceConfig
-            client = get_lms_client()
-            resp = client.chat(
+            from engine.agents.virtual_agent_manager import get_virtual_agent_manager
+            from engine.agents.virtual_agent import InferenceRequest
+            mgr = get_virtual_agent_manager()
+            request = InferenceRequest(
+                agent_id=character_id,
                 messages=[
                     {"role": "system", "content": system},
                     {"role": "user", "content": context},
                 ],
-                config=InferenceConfig(
-                    temperature=0.9,
-                    max_output_tokens=2000,
-                ),
+                temperature=0.9,
+                max_output_tokens=2000,
+                priority=3,
+                metadata={"type": "agent_loop_decide", "scene": self.scene_id},
             )
-            text = resp.content or resp.reasoning_content or ""
+            response = mgr.infer(request)
+            text = response.content or response.reasoning_content or ""
             if text:
                 return self._parse_decision(text)
         except Exception as e:
-            logger.debug("LLM call failed: %s", e)
+            logger.debug("VirtualAgentManager fallback failed: %s", e)
 
         # Ultimate fallback: random action
         return self._random_action(character_id)

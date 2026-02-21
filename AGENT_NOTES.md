@@ -1,6 +1,6 @@
 # CosySim — Agent Notes & System Architecture
 
-Generated: [2026-02-22T18:00:00Z]
+Generated: [2026-02-22T20:00:00Z]
 
 > Complete structural summary of the CosySim AI simulation framework.
 > Covers file dependencies, game loop, MCP skill system, scene architecture,  
@@ -1246,3 +1246,162 @@ from engine.lmstudio import (
 - **49 tests pass** (23 core + 26 client_v2 backward compat)
 - **12,568 Python files compile** with 0 failures
 - All scenes compile and import correctly
+
+---
+
+## 11. Phase 5 — VirtualAgent Framework
+
+### 11.1 Overview
+
+Phase 5 introduces a decoupled agent architecture that separates **agent
+identity/state** from **LLM inference execution**.  All LLM calls are now
+routed through a centralised ``VirtualAgentManager`` which controls model
+routing, concurrency, JIT loading, and lifecycle.
+
+**Key insight:** Our agents *act like* LLM agents, but we control every call
+to LMStudio.  The VirtualAgent produces ``InferenceRequest`` objects; the
+manager decides how/when to execute them against the LLM backend.
+
+### 11.2 Architecture
+
+```
+Scene / AgentLoop / Governor
+       │
+       ▼
+  VirtualAgent           ─── Identity, State, Prompt, RAG, Conversation
+       │
+       │  InferenceRequest
+       ▼
+  VirtualAgentManager    ─── Routing, Concurrency, Model Control, Hooks
+       │
+       ├── ConversationManager  (stateful fast-path / history replay)
+       ├── LMSClient            (/api/v1/chat — v1 native only)
+       └── ConcurrentExecutor   (parallel batch inference)
+       │
+       │  InferenceResponse
+       ▼
+  VirtualAgent.process_response()  ─── State update, EventChain, ActivityBus
+```
+
+### 11.3 New Modules
+
+| Module | File | Purpose |
+|--------|------|---------|
+| **VirtualAgent** | `engine/agents/virtual_agent.py` | Decoupled agent: identity, state, prompt building, RAG, conversation. Implements `IAgent`. |
+| **VirtualAgentManager** | `engine/agents/virtual_agent_manager.py` | Centralised inference router. Creates agents, routes requests, batch inference, model control, hooks. Singleton via `get_virtual_agent_manager()`. |
+| **InferenceRequest** | `engine/agents/virtual_agent.py` | Typed request dataclass: messages, model, config, conversation_id, structured_schema, priority. |
+| **InferenceResponse** | `engine/agents/virtual_agent.py` | Typed response dataclass: content, tokens, latency, tool_calls, error. Converts from LMSResponse. |
+
+### 11.4 VirtualAgent
+
+```python
+from engine.agents.virtual_agent import VirtualAgent
+from engine.agents.virtual_agent_manager import get_virtual_agent_manager
+
+mgr = get_virtual_agent_manager()
+
+# Create an agent (auto-registers with manager + ConversationManager)
+agent = mgr.create_agent(character, scene="bedroom", model="gemma-3-4b")
+
+# Use like any IAgent — but all calls go through the manager
+reply = agent.reply("Hey, what are you up to?")
+decision = agent.quick_query("Choose an action: speak, move, idle")
+
+# State management
+agent.update_state(mood="excited", energy=0.8)
+state = agent.get_state()  # {agent_id, name, scene, mood, energy, ...}
+
+# Change model at runtime
+agent.set_model("qwen3-8b")
+
+# Build request without sending (useful for batch)
+request = agent.build_request("Hello!", use_tools=True)
+```
+
+### 11.5 VirtualAgentManager
+
+```python
+from engine.agents.virtual_agent_manager import get_virtual_agent_manager
+
+mgr = get_virtual_agent_manager()
+
+# Create and register agents
+agent_a = mgr.create_agent(char_a, scene="bedroom")
+agent_b = mgr.create_agent(char_b, scene="bedroom")
+
+# Single inference (routed through ConversationManager → LMSClient)
+response = mgr.infer(request)
+
+# Batch inference (parallel via ConcurrentExecutor)
+responses = mgr.infer_batch([req_a, req_b, req_c])
+
+# High-level convenience
+reply = mgr.reply("char-uuid", "Hello!")
+answer = mgr.quick_query("char-uuid", "What should I do?")
+
+# Model control
+mgr.set_all_models("gemma-3-4b")
+mgr.load_model("qwen3-8b", context_length=8192)
+mgr.unload_model("gemma-3-4b")
+
+# Stats for overlay
+stats = mgr.get_stats()  # {agents, total_requests, tokens_in/out, errors, avg_latency}
+
+# Hooks (called before/after every inference)
+mgr.add_pre_hook(lambda req: print(f"Inferring for {req.agent_id}"))
+mgr.add_post_hook(lambda req, resp: log_to_db(req, resp))
+```
+
+### 11.6 CharacterAgent Integration
+
+``CharacterAgent`` supports a ``use_virtual=True`` flag:
+
+```python
+agent = CharacterAgent(
+    character, db=db, scene="bedroom",
+    use_virtual=True,  # ← routes through VirtualAgentManager
+)
+reply = agent.reply("Hello!")  # transparently delegates to VirtualAgent
+```
+
+When ``use_virtual=True``:
+- A ``VirtualAgent`` is created and registered with the global manager
+- ``reply()``, ``quick_query()``, ``cancel()`` all delegate to the VirtualAgent
+- The governance pipeline (AgentGovernor) wraps as normal — it doesn't know
+  the underlying agent changed
+
+### 11.7 Migrated Scenes
+
+| Scene | Change |
+|-------|--------|
+| **Bedroom** | `CharacterAgent(use_virtual=True, scene="bedroom")` — all agents route through manager |
+| **Phone** | `_PhoneCharacterAgent.reply()` → `VirtualAgentManager.infer()` (was direct LMSClient) |
+| **Casino** | `_get_agent_reply()` → `VirtualAgentManager.infer()` (was direct LMSClient) |
+| **Lounge** | `CharacterAgent(use_virtual=True, scene="lounge")` |
+| **AgentLoop** | Fallback `_decide()` → `VirtualAgentManager.infer()` (was direct LMSClient) |
+
+### 11.8 Inference Request Flow
+
+```
+1. VirtualAgent.reply("Hello!")
+2.   → build_request()
+3.     → _search_memories() (RAG)
+4.     → _build_system_prompt() (persona + memories + MCP brief)
+5.     → InferenceRequest(messages, model, conversation_id, ...)
+6.   → manager.infer(request)
+7.     → _execute_request()
+8.       → ConversationManager stateful path (previous_response_id)
+9.       → or direct LMSClient.chat() (full history)
+10.    → InferenceResponse
+11.  → process_response()
+12.    → EventChain logging
+13.    → MCP state update
+14.    → ActivityBus publish
+15.  → return reply text
+```
+
+### 11.9 Test Results
+
+- **49 tests pass** (all existing tests unchanged)
+- All modified scenes compile and import correctly
+- VirtualAgent satisfies IAgent protocol (drop-in compatible)

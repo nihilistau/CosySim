@@ -66,7 +66,7 @@ class _PhoneCharacterAgent:
     Minimal duck-type that satisfies AgentGovernor.
 
     **IMPORTANT — no recursion rule:**  ``reply()`` must call the LLM
-    *directly* via ``get_lmstudio_client()``.  It must NOT call back into
+    *directly* via ``VirtualAgentManager``.  It must NOT call back into
     ``PhoneSceneV2._generate_reply()``; that method already wraps us in a
     governor, so calling it again would create an infinite loop:
         _generate_reply → gov.reply() → agent.reply() → _generate_reply → …
@@ -82,9 +82,10 @@ class _PhoneCharacterAgent:
         self.character = self._scene.db.get_character(self.char_id)
 
     def reply(self, message: str, *, chain_id=None, history=None, **_kwargs) -> str:
-        """Direct LLM call — invoked by the governor after interceptors fire."""
+        """Route through VirtualAgentManager — invoked by the governor after interceptors fire."""
         try:
-            from engine.lmstudio.lms_client import get_lms_client
+            from engine.agents.virtual_agent_manager import get_virtual_agent_manager
+            from engine.agents.virtual_agent import InferenceRequest
             char  = self._scene.db.get_character(self.char_id)
             name  = (char or {}).get("name", "Character")
             pers  = (char or {}).get("personality", "")
@@ -96,11 +97,19 @@ class _PhoneCharacterAgent:
             for turn in (history or []):
                 msgs.append({"role": turn.get("role", "user"), "content": turn.get("content", "")})
             msgs.append({"role": "user", "content": message})
-            client = get_lms_client()
-            resp   = client.chat(msgs, max_tokens=2000, temperature=0.9)
-            return (resp.content or resp.reasoning_content or "").strip()
+            mgr = get_virtual_agent_manager()
+            request = InferenceRequest(
+                agent_id=self.char_id,
+                messages=msgs,
+                temperature=0.9,
+                max_output_tokens=2000,
+                conversation_id=f"phone_{self.char_id}",
+                metadata={"scene": "phone", "character_name": name},
+            )
+            response = mgr.infer(request)
+            return (response.content or response.reasoning_content or "").strip()
         except Exception as exc:
-            logger.debug("_PhoneCharacterAgent.reply LLM call failed: %s", exc)
+            logger.debug("_PhoneCharacterAgent.reply failed: %s", exc)
             return ""
 
     def quick_query(self, prompt: str) -> str:
@@ -318,9 +327,10 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
         except Exception as exc:
             logger.debug("Governor unavailable (%s), using direct LLM", exc)
 
-        # Direct LLM fallback (governor not available / interceptors failed)
+        # Direct fallback via VirtualAgentManager (governor not available / interceptors failed)
         try:
-            from engine.lmstudio.lms_client import get_lms_client
+            from engine.agents.virtual_agent_manager import get_virtual_agent_manager
+            from engine.agents.virtual_agent import InferenceRequest
             char = self.db.get_character(char_id)
             name = (char or {}).get("name", "Character")
             personality = (char or {}).get("personality", "")
@@ -328,18 +338,22 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
                 f"You are {name}. {personality}\n"
                 "Reply naturally as a real person texting. Keep messages short."
             )
-            client = get_lms_client()
-            resp = client.chat(
+            mgr = get_virtual_agent_manager()
+            request = InferenceRequest(
+                agent_id=char_id,
                 messages=[
                     {"role": "system", "content": system},
                     {"role": "user",   "content": user_msg},
                 ],
-                max_tokens=2000,
                 temperature=0.9,
+                max_output_tokens=2000,
+                conversation_id=f"phone_{char_id}",
+                metadata={"scene": "phone", "character_name": name},
             )
-            return (resp.content or resp.reasoning_content or "").strip()
+            response = mgr.infer(request)
+            return (response.content or response.reasoning_content or "").strip()
         except Exception as exc:
-            logger.error("LLM reply failed: %s", exc)
+            logger.error("VirtualAgentManager reply failed: %s", exc)
             return ""
 
     # ── Socket.IO ────────────────────────────────────────────────────────────

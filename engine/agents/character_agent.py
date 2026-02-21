@@ -49,6 +49,13 @@ class CharacterAgent:
     """
     Conversational agent that wraps a ``Character`` object with LMStudio SDK calls.
 
+    Can be created in two modes:
+
+    1. **Legacy mode** (default) — directly calls LMSClient for inference.
+    2. **Virtual mode** (``use_virtual=True``) — delegates to a ``VirtualAgent``
+       which routes all calls through ``VirtualAgentManager``.  This gives
+       centralised control over model routing, concurrency, and lifecycle.
+
     Parameters
     ----------
     character : Character
@@ -64,6 +71,9 @@ class CharacterAgent:
         LMStudio model key to use.  Defaults to the currently loaded model.
     max_context_memories : int
         Number of RAG memories to inject into the prompt (default 5).
+    use_virtual : bool
+        If True, create a VirtualAgent internally and route all calls
+        through VirtualAgentManager.  Default False for backward compat.
     """
 
     def __init__(
@@ -79,6 +89,7 @@ class CharacterAgent:
         mcp_servers: Optional[List[Dict]] = None,
         scene:       Optional[str]       = None,
         inference_config: Optional[Any]  = None,
+        use_virtual: bool                = False,
     ) -> None:
         self.character            = character
         self.db                   = db
@@ -127,6 +138,28 @@ class CharacterAgent:
         except Exception as _mcp_exc:
             logger.debug("CharacterAgent: MCP registration failed: %s", _mcp_exc)
 
+        # Virtual agent delegation
+        self._virtual: Any = None
+        if use_virtual:
+            try:
+                from engine.agents.virtual_agent_manager import get_virtual_agent_manager
+                mgr = get_virtual_agent_manager()
+                self._virtual = mgr.create_agent(
+                    character,
+                    db=db,
+                    config=config,
+                    scene=scene,
+                    model=model,
+                    skill_packs=skill_packs,
+                    use_mcp=self.use_mcp,
+                    mcp_servers=mcp_servers,
+                    inference_config=inference_config,
+                    max_context_memories=max_context_memories,
+                )
+            except Exception as exc:
+                logger.warning("VirtualAgent creation failed, using legacy path: %s", exc)
+                self._virtual = None
+
     # ──────────────────────────────────────────────────── public API ──
 
     def reply(
@@ -161,6 +194,15 @@ class CharacterAgent:
             Reply text string (empty string on cancellation or error).
         """
         self._cancel_event.clear()
+
+        # ── VirtualAgent delegation ──────────────────────────────────
+        if self._virtual is not None:
+            return self._virtual.reply(
+                user_message,
+                chain_id=chain_id,
+                history=history,
+                use_tools=use_tools,
+            )
 
         # ── Governance note ──────────────────────────────────────────
         # CharacterAgent does NOT self-wrap in a governor.  Governance is
@@ -323,6 +365,8 @@ class CharacterAgent:
         a live stream is present.  Safe to call from any thread.
         """
         self._cancel_event.set()
+        if self._virtual is not None:
+            self._virtual.cancel()
         with self._lock:
             if self._stream is not None:
                 try:
@@ -346,6 +390,10 @@ class CharacterAgent:
         Returns:
             Reply text string, or empty string on failure.
         """
+        # VirtualAgent delegation
+        if self._virtual is not None:
+            return self._virtual.quick_query(prompt, max_tokens=max_tokens)
+
         try:
             from engine.lmstudio.lms_client import get_lms_client
             from engine.lmstudio.inference_config import InferenceConfig

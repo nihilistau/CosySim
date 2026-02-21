@@ -231,3 +231,47 @@ python -m pytest tests/ -v --tb=short
 ---
 
 *Last updated after Phase 8. 75 tests passing. 4 commits on master.*
+
+---
+
+## 10. VirtualAgent Framework
+
+**Phase 5** introduced a decoupled agent architecture.
+
+### Agent vs LLM Execution
+
+| Component | Role |
+|-----------|------|
+| **VirtualAgent** | Agent identity, state, prompt building, RAG. Implements `IAgent`. |
+| **VirtualAgentManager** | Centralized LLM call router. Controls concurrency, model lifecycle, hooks. |
+| **InferenceRequest** | Typed request from agent to manager |
+| **InferenceResponse** | Typed response from manager to agent |
+
+### Quick Start
+
+```python
+from engine.agents.virtual_agent_manager import get_virtual_agent_manager
+
+mgr = get_virtual_agent_manager()
+agent = mgr.create_agent(character, scene="bedroom")
+reply = agent.reply("Hello!")
+```
+
+### CharacterAgent Backward Compat
+
+```python
+# Legacy mode (default) — direct LMSClient calls
+agent = CharacterAgent(character, scene="bedroom")
+
+# Virtual mode — routes through VirtualAgentManager
+agent = CharacterAgent(character, scene="bedroom", use_virtual=True)
+```
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `engine/agents/virtual_agent.py` | VirtualAgent + InferenceRequest/Response |
+| `engine/agents/virtual_agent_manager.py` | VirtualAgentManager singleton |
+| `engine/agents/character_agent.py` | CharacterAgent (supports `use_virtual=True`) |
+| `engine/agents/agent_loop.py` | AgentLoop (fallback routes through manager) |

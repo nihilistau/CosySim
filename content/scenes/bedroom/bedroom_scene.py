@@ -1391,6 +1391,8 @@ class BedroomScene(BaseScene, MCPSceneMixin, mcp_scene_id="bedroom"):
                 db=self.db,
                 skill_packs=["memory", "character"],
                 model=agent_cfg.get("model") or profile_model,
+                scene="bedroom",
+                use_virtual=True,
             )
             # MCP: wrap every bedroom agent in the governance pipeline so all
             # 15 interceptors (CharacterRegistry, DialogDirective, PersonalityGuard,

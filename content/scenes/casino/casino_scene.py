@@ -253,13 +253,14 @@ class CasinoScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
     # ══════════════════════════════════════════════════════════════════
 
     def _get_agent_reply(self, character_id: str, prompt: str, role: str = "game_master") -> str:
-        """Get an LLM reply using the appropriate agent profile."""
+        """Get an LLM reply using the appropriate agent profile via VirtualAgentManager."""
         try:
-            from engine.lmstudio.lms_client import get_lms_client
+            from engine.agents.virtual_agent_manager import get_virtual_agent_manager
+            from engine.agents.virtual_agent import InferenceRequest
             from engine.mcp.framework import get_framework
 
             profile = get_framework().get_agent_profile(role)
-            client = get_lms_client()
+            mgr = get_virtual_agent_manager()
 
             # Build character-specific system prompt
             try:
@@ -280,16 +281,19 @@ class CasinoScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
             except Exception:
                 system = "You are a casino character. Keep responses short."
 
-            msgs = [
-                {"role": "system", "content": system},
-                {"role": "user", "content": prompt},
-            ]
-            resp = client.chat(
-                msgs,
-                max_tokens=profile.max_tokens,
+            request = InferenceRequest(
+                agent_id=character_id,
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": prompt},
+                ],
                 temperature=profile.temperature,
+                max_output_tokens=profile.max_tokens,
+                conversation_id=f"casino_{character_id}",
+                metadata={"scene": "casino", "role": role},
             )
-            return (resp.content or resp.reasoning_content or "").strip()
+            response = mgr.infer(request)
+            return (response.content or response.reasoning_content or "").strip()
         except Exception as exc:
             logger.debug("Casino agent reply failed: %s", exc)
             return ""
