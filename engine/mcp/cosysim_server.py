@@ -4044,6 +4044,120 @@ def fork_conversation(conversation_id: str, turn: int = -1) -> str:
         return json.dumps({"error": str(e)})
 
 
+@mcp.tool()
+def get_conversation_heat_level(conversation_id: str) -> str:
+    """
+    Get the current heat level (0-100) for a conversation.
+    Heat increases with flirty/intimate content and decays over time.
+    Returns JSON with the heat level and current directive.
+    """
+    try:
+        from engine.mcp.scene_rules_engine import get_conversation_heat
+        heat = get_conversation_heat()
+        level = heat.get(conversation_id)
+        directive = heat.get_directive(conversation_id)
+        return json.dumps({
+            "conversation_id": conversation_id,
+            "heat": round(level, 1),
+            "directive": directive or "normal",
+            "thresholds": {"warm": 30, "hot": 60, "intense": 80},
+        })
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def bump_conversation_heat(
+    conversation_id: str,
+    amount: float = 10,
+    reason: str = "",
+) -> str:
+    """
+    Manually increase conversation heat level.
+    Use during flirty, intimate, or emotionally charged exchanges.
+    Returns the new heat level.
+    """
+    try:
+        from engine.mcp.scene_rules_engine import get_conversation_heat
+        heat = get_conversation_heat()
+        new_level = heat.bump(conversation_id, amount, reason)
+        return json.dumps({
+            "conversation_id": conversation_id,
+            "heat": round(new_level, 1),
+            "bumped_by": amount,
+            "reason": reason,
+        })
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def check_conversation_history(
+    conversation_id: str,
+    last_n: int = 5,
+) -> str:
+    """
+    Review recent conversation messages for a thread.
+    Useful for the agent to check context before responding.
+    Returns the last N messages with metadata.
+    """
+    try:
+        from engine.lmstudio.conversation import get_conversation_manager
+        cm = get_conversation_manager()
+        conv = cm.get(conversation_id)
+        if not conv:
+            return json.dumps({"error": f"No conversation '{conversation_id}'"})
+        messages = conv.messages[-last_n:] if conv.messages else []
+        return json.dumps({
+            "conversation_id": conversation_id,
+            "total_messages": len(conv.messages),
+            "recent": [
+                {"role": m.get("role", "?"), "content": m.get("content", "")[:200]}
+                for m in messages
+            ],
+        }, indent=2)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def suggest_activity(scene_id: str = "phone") -> str:
+    """
+    Suggest a scene-appropriate activity based on current context.
+    Returns a list of suggested activities with descriptions.
+    """
+    activities = {
+        "phone": [
+            {"name": "Truth or Dare", "desc": "Start a game with 🎮 Play button", "heat_min": 0},
+            {"name": "Photo sharing", "desc": "Ask for a selfie or share one", "heat_min": 20},
+            {"name": "Voice note", "desc": "Send a voice message", "heat_min": 0},
+            {"name": "Deep conversation", "desc": "Ask about dreams, fears, desires", "heat_min": 10},
+            {"name": "Roleplay", "desc": "Suggest a fun scenario to act out", "heat_min": 40},
+            {"name": "Flirting game", "desc": "See who can be more creative with compliments", "heat_min": 30},
+        ],
+        "bedroom": [
+            {"name": "Set the mood", "desc": "Change lighting, music, atmosphere", "heat_min": 0},
+            {"name": "Wardrobe change", "desc": "Try on different outfits", "heat_min": 10},
+            {"name": "Dance", "desc": "Put on music and dance together", "heat_min": 20},
+            {"name": "Massage", "desc": "Offer or receive a massage", "heat_min": 40},
+            {"name": "Story time", "desc": "Share personal stories or fantasies", "heat_min": 30},
+            {"name": "Pillow fight", "desc": "Playful physical activity", "heat_min": 10},
+        ],
+        "lounge": [
+            {"name": "Order drinks", "desc": "Try the cocktail menu", "heat_min": 0},
+            {"name": "Karaoke", "desc": "Sing a song together", "heat_min": 0},
+            {"name": "People watch", "desc": "Comment on other patrons", "heat_min": 0},
+            {"name": "Dance floor", "desc": "Hit the dance floor", "heat_min": 20},
+            {"name": "VIP room", "desc": "Move to a more private area", "heat_min": 40},
+        ],
+    }
+    scene_activities = activities.get(scene_id, activities["phone"])
+    return json.dumps({
+        "scene": scene_id,
+        "suggestions": scene_activities,
+    }, indent=2)
+
+
 @mcp.resource("benchmark://summary")
 def resource_benchmarks() -> str:
     """Performance benchmark summary with timing KPIs."""

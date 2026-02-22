@@ -1,6 +1,6 @@
 # CosySim — Agent Notes & System Architecture
 
-Generated: [2026-02-24T12:00:00Z] — v2.7.2
+Generated: [2026-02-24T12:00:00Z] — v2.8.0
 
 > Complete structural summary of the CosySim AI simulation framework.
 > Covers file dependencies, game loop, MCP skill system, scene architecture,  
@@ -1630,6 +1630,152 @@ Fixed in `engine/lmstudio/lms_client.py` `_messages_to_v1_input()`.
 - Added `import_media_folder()` method for bulk file import
 - Deterministic IDs via path hash (idempotent reimport)
 - Auto-detects type from extension: image/video/audio
+
+---
+
+## 14. Phase 8 — v2.8 Stateful-First Conversations & Framework Upgrade
+
+### Overview
+
+v2.8 rewires CosySim so that **stateful conversations are the default**.  Prior
+versions built the infrastructure (ConversationManager, StreamProcessor, SSE parsing,
+response_id tracking) but no scene actually used it — every call rebuilt full
+message history.  v2.8 activates all of it.
+
+### Key Changes
+
+#### Token Artifact Stripping
+- `strip_token_artifacts()` in `engine/agents/stream_processor.py`
+- Regex removes `<|begin_of_text|>`, `<|end_of_text|>`, `<|eot_id|>`, etc.
+- Applied in: StreamProcessor.result(), ResponseShaperInterceptor.post_call(),
+  PhoneCharacterAgent.reply(), _generate_reply()
+
+#### Personality Loading (CharacterRegistryInterceptor)
+- `_load_personality_profile()` loads full personality from simulation DB
+- Injects backstory, speech patterns, traits, quirks, interests
+- Combined with CharacterRegistry mood/identity info at priority 8
+
+#### ConversationVarietyInterceptor (priority 55)
+- Tracks last 5 response summaries per character
+- Injects anti-repetition guidance when similarity detected
+- Adds emoji, expressiveness, adult content instructions
+- Integrates **ConversationHeat** directives
+
+#### Conversation Repair
+- `VirtualAgentManager._is_garbage_response()` — detects empty, too-short,
+  or artifact-only responses
+- `_retry_with_repair()` — retries with lower temperature (max 2 attempts)
+- Works on both stateful and direct paths
+
+#### ConversationManager Smart Updates
+- `Conversation.update_system_if_changed()` — MD5 hash diff
+- Only invalidates when system prompt actually changes
+- Prevents unnecessary server replays from interceptor rebuilds
+
+#### Conversation Heat System
+- `ConversationHeat` class in `engine/mcp/scene_rules_engine.py`
+- 0–100 scale with keyword detection and time-based decay
+- Thresholds: <30 normal, 30-60 warm/flirty, 60-80 hot/explicit, 80+ intense
+- Auto-analyzed on every response via ConversationVarietyInterceptor
+- Directives injected into system prompts based on heat level
+- MCP tools: `get_conversation_heat_level`, `bump_conversation_heat`
+
+#### Response_ID Persistence
+- Phone DB messages table now has `response_id` and `conversation_id` columns
+- `get_last_response_id(thread_id)` for stateful conversation resumption
+- Migration: ALTER TABLE for existing databases
+
+### Five Creative Uses of Conversation Branching
+
+1. **Personality Exploration** — Fork at last good turn, try different personality
+   injection, pick the more engaging branch
+2. **Response Quality Gate** — Fork before reply, generate 2 variants at
+   different temperatures, return the better one
+3. **Mood Pivot Recovery** — Branch back before an offense, inject different
+   emotional directive, character "takes a different stance"
+4. **Conversation Repair** — Branch to last valid response_id on garbage output,
+   retry with adjusted parameters
+5. **Game Decision Trees** — Fork at choice points, enable undo/what-if exploration
+
+### New MCP Tools (v2.8)
+
+| Tool | Purpose |
+|------|---------|
+| `get_conversation_heat_level` | Query heat level + directive for a conversation |
+| `bump_conversation_heat` | Manually increase heat during intimate exchanges |
+| `check_conversation_history` | Let agent review recent messages before responding |
+| `suggest_activity` | Scene-appropriate activity suggestions based on context |
+
+### Interceptor Pipeline (Updated)
+
+```
+ 8  CharacterRegistryInterceptor  ← loads full personality from DB
+10  RouterMessageInjector
+12  DialogDirectiveInterceptor
+15  BedroomSceneInterceptor / PhoneSceneInterceptor / LoungeSceneInterceptor
+20  AutoResultInjector
+30  SkillAwarenessInterceptor
+35  GameSessionInterceptor
+40  GameRulesInterceptor
+50  PersonalityGuardInterceptor
+55  ConversationVarietyInterceptor  ← anti-repetition + heat directives
+60  PolicyEnforcerInterceptor
+70  MemoryEnhancerInterceptor
+80  ResponseShaperInterceptor  ← strips token artifacts
+85  TTSStyleInterceptor
+90  ActivityLoggerInterceptor
+92  MoodSyncInterceptor
+```
+
+### Architecture: Stateful Conversation Flow (v2.8)
+
+```
+User message → AgentGovernor (interceptors inject context)
+  → VirtualAgent.reply(governance_context=...)
+    → VirtualAgentManager._execute_request()
+      → ConversationManager.send() [stateful-first]
+        → LMSClient.chat_stream_stateful() [SSE stream]
+          ← event: message.delta → accumulate content
+          ← event: tool_call.start → MCP tool executing
+          ← event: reasoning.delta → thinking visible
+          ← event: chat.end → stats, response_id
+        → StreamProcessor.process(events)
+          → extract structured response (text + images + json)
+          → extract mood/stat tags in real-time
+          → strip token artifacts
+        → ProcessedResponse (content, mood_tags, image_requests, stats)
+      → InferenceResponse with response_id for chain tracking
+    → post-call interceptors (heat update, mood sync, logging)
+  → return to scene (text + optional media attachments)
+```
+
+### Token Savings
+
+Stateful conversations save ~80% tokens on subsequent messages.
+A 20-message history that sends 4000 tokens per call becomes ~200 tokens
+(just the new message + previous_response_id).
+
+### Configuration
+
+```yaml
+# config/default.yaml
+lmstudio:
+  inference_defaults:
+    store: true              # default to stateful
+    reasoning: "off"
+    max_output_tokens: 4000
+    temperature: 0.85
+```
+
+### Test Coverage
+
+491 tests passing. Key test files:
+- `tests/test_lms_client_v27.py` — 45 tests for SSE, branching, stateful
+- `tests/test_stream_processor.py` — StreamProcessor tag extraction
+- `tests/test_virtual_agent_v27.py` — VirtualAgent + interceptor pipeline
+- `tests/test_skills.py` — MCP skill registration and execution
+- `tests/test_config.py` — Config loading and override
+- `tests/test_event_chain.py` — EventChain propagation
 - 975 assets registered (784 audio, 145 image, 42 video, 4 other)
 
 ### 14.5 Database Seeding
