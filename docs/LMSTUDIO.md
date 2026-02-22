@@ -5,54 +5,83 @@ CosySim integrates deeply with LMStudio for local LLM inference. This guide cove
 ## Architecture
 
 ```
-┌──────────────┐     REST /v1/chat/completions     ┌──────────────┐
+┌──────────────┐     REST /api/v1/chat              ┌──────────────┐
 │  CosySim     │ ──────────────────────────────────▶│  LMStudio    │
-│  client_v2   │◀────────────── SSE stream ─────────│  Server      │
+│  LMSClient   │◀────────────── SSE stream ─────────│  Server      │
 ├──────────────┤                                    ├──────────────┤
 │  MCP Server  │◀─── tool calls (integrations) ─────│  MCP Host    │
 │  (FastMCP)   │ ──── tool results ────────────────▶│              │
 └──────────────┘                                    └──────────────┘
 ```
 
-## Client v2 (REST)
+## LMSClient (v1 Native API)
 
-The REST client (`engine/lmstudio/client_v2.py`) talks directly to LMStudio's `/v1/chat/completions` endpoint:
+The main client (`engine/lmstudio/lms_client.py`) uses LMStudio's native `/api/v1/chat` endpoint:
 
 ```python
-from engine.lmstudio.client_v2 import LMStudioClient, MCP
+from engine.lmstudio.lms_client import LMSClient
 
-client = LMStudioClient()
+client = LMSClient()
 
-# Simple chat
-reply = client.chat([
-    {"role": "system", "content": "You are helpful."},
-    {"role": "user", "content": "Hello!"},
-])
-print(reply.content)       # "Hi there!"
-print(reply.tokens_per_second)  # 42.5
-print(reply.latency_ms)         # 350.2
+# Stateful chat (server-side KV cache)
+result = client.chat_stateful(
+    messages=[{"role": "user", "content": "Hello!"}],
+    system_prompt="You are helpful.",
+    store=True,  # persist conversation server-side
+)
+print(result.text)
+print(result.response_id)       # for threading
+print(result.stats)             # tokens, timing
 
-# Chat with MCP tools attached
-reply = client.chat(messages, integrations=[
-    MCP.plugin("mcp/cosysim"),               # pre-registered in mcp.json
-    MCP.ephemeral("http://localhost:8600/mcp/sse"),  # on-the-fly
-])
+# Stateless one-off query
+result = client.send_stateless(
+    messages=[{"role": "user", "content": "What is 2+2?"}],
+    system_prompt="Answer briefly.",
+)
 
-# Streaming
-for chunk in client.chat_stream(messages):
-    print(chunk.delta, end="", flush=True)
+# Streaming with SSE events
+for event in client.chat_stream(messages, system_prompt="..."):
+    if event.type == "message.delta":
+        print(event.data.get("content", ""), end="")
 ```
 
-### Why REST instead of SDK?
+### v1 API Format
 
-The LMStudio Python SDK (`lmstudio` package) uses WebSockets and does **not** support the `integrations` field needed for per-request MCP. The REST client gives us:
+LMStudio v1 uses `input` + `system_prompt`, NOT OpenAI's `messages` array:
 
-- **Per-request MCP** via `integrations` field
-- **SSE streaming** with first-token timing
-- **Abort support** (close connection → stop generation)
-- **Token counting** in responses
+```json
+{
+  "input": "Hello!",
+  "system_prompt": "You are helpful.",
+  "model": "loaded-model-id",
+  "store": true,
+  "previous_response_id": "resp_abc123"
+}
+```
 
-The original `LMStudioManager` (SDK-based) is still used for model lifecycle (load/unload/VRAM).
+The client handles conversion from standard `messages` format to v1 `input` automatically.
+
+### Stateful Conversations
+
+```python
+from engine.lmstudio.conversation import Conversation
+
+conv = Conversation(client)
+
+# First message
+resp1 = conv.send("Hello!")
+# resp1.response_id is tracked automatically
+
+# Continuation (uses previous_response_id for KV cache reuse)
+resp2 = conv.send("Tell me more.")
+
+# Branch at a previous turn
+conv.branch_at(turn=1)  # fork from resp1
+resp3 = conv.send("Actually, tell me something different.")
+
+# Stateless side-query (doesn't affect conversation history)
+result = conv.send_stateless("Quick question: what time is it?")
+```
 
 ## MCP Server
 
@@ -116,27 +145,20 @@ python launcher.py --mode bridge  # port 8601
 
 ## CharacterAgent MCP Mode
 
-The `CharacterAgent` supports dual-path inference:
+The `CharacterAgent` routes all inference through `VirtualAgentManager`, which
+uses `LMSClient` (v1 native API) with MCP tool integration:
 
 ```python
 from engine.agents.character_agent import CharacterAgent
 
-# SDK path (default)
 agent = CharacterAgent(character)
-
-# REST + MCP path
-agent = CharacterAgent(
-    character,
-    use_mcp=True,
-    mcp_servers=[MCP.plugin("mcp/cosysim")],
-)
+reply = agent.reply("Hello!")
+# → VirtualAgentManager → LMSClient.chat_stateful() → LMStudio /api/v1/chat
 ```
 
-When `use_mcp=True`:
-- Uses REST client v2 instead of SDK
-- Attaches MCP integrations to each request
-- Logs `mcp_tool_call` events to EventChain
-- Falls back to SDK on connection failure
+Skills are attached as tools automatically based on the agent's skill packs.
+The `AgentGovernor` wraps inference with pre/post interceptors for content
+filtering, mood sync, and stat updates.
 
 ## Configuration
 

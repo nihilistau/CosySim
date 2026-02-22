@@ -1,116 +1,132 @@
-# CosySim Skills System
+# CosySim Skills System — v3.1
 
-Skills are Python callables that an LLM agent can invoke as **tools** during a
-conversation turn.  The `@skill` decorator registers them into the global
-`SKILL_REGISTRY`.  The agent pulls the relevant skills out of the registry and
-passes them to `llm.act()` (LMStudio SDK) or uses them for direct invocation.
-
----
-
-## Architecture Overview
-
-```
-@skill                            engine/skills/skill.py
-  └─► SKILL_REGISTRY              engine/skills/registry.py
-        ├─ get_pack_tools(pack)   → [callable, …]
-        ├─ all_tools(tags=[…])    → [callable, …]
-        └─ mcp_skill_pack(…)      → MCP integration payload dict
-
-CharacterAgent.reply()            engine/agents/character_agent.py
-  └─► _get_tools()                reads SKILL_REGISTRY for character's packs
-        └─► llm.act(chat, tools)  LMStudio SDK agentic call
-```
+Skills are Python callables that an LLM agent invokes as **tools** during inference.
+The `@skill` decorator registers them into the global `SKILL_REGISTRY`. LMStudio
+calls skills via MCP tool use during `/api/v1/chat` responses.
 
 ---
 
-## Built-in Skill Packs
+## Architecture
+
+```
+@skill decorator               engine/skills/skill.py
+  └─► SKILL_REGISTRY           engine/skills/registry.py
+        ├─ get_pack_tools(pack)  → [callable, …]
+        ├─ get_pack_metas(pack)  → [SkillMeta, …]
+        ├─ all_tools(tags=[…])   → [callable, …]
+        └─ mcp_skill_pack(…)     → MCP integration payload
+
+VirtualAgentManager.infer()     engine/agents/virtual_agent_manager.py
+  └─► LMSClient.chat_stateful(messages, tools=[skill_callables])
+        └─► LMStudio /api/v1/chat → tool_call → skill function → result
+```
+
+---
+
+## All Skill Packs
+
+### Core Packs (engine/skills/builtin/)
 
 | Pack | Module | Skills |
-|---|---|---|
-| `memory` | `engine/skills/builtin/memory_skills.py` | `search_memory`, `store_memory`, `get_event_chain_summary`, `summarize_chain` |
-| `character` | `engine/skills/builtin/character_skills.py` | `get_character_state`, `adjust_trait`, `set_mood`, `adjust_relationship` |
-| `comfyui` | `engine/skills/builtin/comfyui_skills.py` | `generate_image`, `generate_character_portrait`, `list_comfyui_workflows` |
-| `voice` | `engine/skills/builtin/voice_skills.py` | `generate_voice_message`, `list_voice_messages` |
+|------|--------|--------|
+| `memory` | memory_skills.py | `search_memory`, `store_memory`, `get_event_chain_summary`, `summarize_chain` |
+| `character` | character_skills.py | `get_character_state`, `adjust_trait`, `set_mood`, `adjust_relationship` |
+| `comfyui` | comfyui_skills.py | `generate_image`, `generate_character_portrait`, `list_comfyui_workflows` |
+| `voice` | voice_skills.py | `generate_voice_message`, `list_voice_messages` |
+| `tts` | tts_skills.py | `generate_voice_message`, `cast_voice`, `list_voice_presets`, `list_voicemails` |
+| `social` | social_skills.py | Social interaction skills |
+| `boards` | board_skills.py | Shared board game mechanics |
+
+### Scene Packs (content/scenes/{name}/{name}_skills.py)
+
+| Pack | Module | Skills | Count |
+|------|--------|--------|-------|
+| `realm` | realm_skills.py | inventory CRUD, stat checks, director control, murder mystery, fourth-wall, desperation dice | 11 |
+| `neoncity` | neoncity_skills.py | player status, movement, combat, hacking, storm queries, events, end turn | 8 |
+| `coders` | coders_skills.py | room status, agent info, add feature, feature list, run code, tick | 6 |
 
 ---
 
-## Writing a Custom Skill
+## Writing a Skill
 
-### Minimal example
+### Minimal
 
 ```python
-# my_extension/skills.py
 from engine.skills import skill
 
 @skill
 def greet_user(name: str) -> str:
-    """
-    Say hello to a user by name.
-
-    Args:
-        name: The user's display name.
-
-    Returns:
-        A greeting string.
-    """
+    """Say hello to a user by name."""
     return f"Hello, {name}! 👋"
 ```
 
-The `@skill` decorator with no arguments:
-- Sets `name` = function name (`"greet_user"`)
-- Sets `pack` = `"default"`
-- Sets `description` = first line of docstring
-
----
-
-### Full decorator syntax
+### Full Decorator
 
 ```python
+from engine.skills import skill, SkillCategory
+
 @skill(
-    name="send_email",          # override registry key
-    pack="notifications",       # group skills into packs
-    description="Send an e-mail to the user via SMTP.",
-    tags=["email", "notify"],   # used for filtering in SKILL_REGISTRY.all_tools(tags=[…])
+    name="send_alert",
+    pack="notifications",
+    description="Send an alert notification.",
+    tags=["notify", "urgent"],
+    category=SkillCategory.SYSTEM,
+    cooldown=10.0,          # seconds between calls
 )
-def send_email(to: str, subject: str, body: str) -> str:
-    """Send an email and return a confirmation string."""
-    ...
-    return f"Email sent to {to}"
+def send_alert(message: str, priority: int = 1) -> str:
+    """Send a system alert with priority level."""
+    return f"Alert sent: {message} (priority={priority})"
+```
+
+### Decorator Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `name` | str | function name | Registry key |
+| `pack` | str | `"default"` | Group name for filtering |
+| `description` | str | docstring first line | Tool description for LLM |
+| `tags` | list[str] | `[]` | Filtering tags |
+| `category` | SkillCategory | `GENERAL` | Category enum |
+| `cooldown` | float | `0.0` | Min seconds between invocations |
+
+### SkillCategory Values
+
+```python
+from engine.skills import SkillCategory
+
+SkillCategory.GENERAL      # Default
+SkillCategory.GAME         # Game mechanics
+SkillCategory.NARRATIVE    # Story/dialog
+SkillCategory.SYSTEM       # System operations
+SkillCategory.ENVIRONMENT  # Environment queries
+SkillCategory.SOCIAL       # Social interactions
+SkillCategory.MEDIA        # Media generation
 ```
 
 ---
 
-### Type annotations matter
+## Scene-Specific Skills
 
-The LMStudio SDK infers the JSON schema for the tool from Python type hints.
-Always annotate every parameter and the return type.
-
-Supported parameter types:
-
-| Python type | JSON schema |
-|---|---|
-| `str` | `string` |
-| `int` | `integer` |
-| `float` | `number` |
-| `bool` | `boolean` |
-| `List[str]` | `array` of `string` |
-| `Optional[str]` | `string` with `nullable: true` |
-
----
-
-## Registering Skills
-
-Skills are auto-registered when the decorated function is **imported**.  Load
-all built-in packs from your `__init__` or module setup:
+Scene skills live in `content/scenes/{name}/{name}_skills.py` and use
+`get_active_scene()` to access the running scene instance:
 
 ```python
-import engine.skills.builtin  # triggers all @skill decorators
+from engine.skills import skill, SkillCategory
+from engine.scenes.base_scene import get_active_scene
+
+@skill(pack="my_scene", tags=["game"], category=SkillCategory.GAME)
+def get_score(player_id: str) -> str:
+    """Get a player's current score."""
+    scene = get_active_scene("my_scene")
+    if not scene or not hasattr(scene, "state"):
+        return "Scene not running"
+    return str(scene.state.get_score(player_id))
 ```
 
-Or import a specific pack:
-
+**Registration:** Import the skills module in the scene's `__init__.py`:
 ```python
-from engine.skills.builtin import memory_skills  # only memory pack
+# content/scenes/my_scene/__init__.py
+from . import my_scene_skills  # triggers @skill decorators
 ```
 
 ---
@@ -120,14 +136,18 @@ from engine.skills.builtin import memory_skills  # only memory pack
 ```python
 from engine.skills import SKILL_REGISTRY
 
-# List all skill packs
-for pack in SKILL_REGISTRY.all_packs():
-    print(pack)
+# List all packs
+SKILL_REGISTRY.all_packs()           # → ["memory", "realm", ...]
 
-# Get callables for one pack (pass to llm.act)
+# Get callables for a pack (pass to LMSClient tools=[...])
 tools = SKILL_REGISTRY.get_pack_tools("memory")
 
-# Get all skills tagged "image"
+# Get metadata for a pack
+metas = SKILL_REGISTRY.get_pack_metas("realm")
+for m in metas:
+    print(f"{m.name}: {m.description} (cooldown={m.cooldown_secs}s)")
+
+# Filter by tags
 image_tools = SKILL_REGISTRY.all_tools(tags=["image"])
 
 # Human-readable summary
@@ -138,8 +158,7 @@ print(SKILL_REGISTRY.describe())
 
 ## MCP Integration
 
-`mcp_skill_pack()` produces a payload dict for the MCP (Model Context Protocol)
-tools API so skills can be exposed to any MCP-compatible client:
+Skills are exposed to LMStudio as MCP tools via the skills server:
 
 ```python
 from engine.skills import mcp_skill_pack
@@ -149,50 +168,41 @@ payload = mcp_skill_pack(
     allowed_tools=["generate_image", "search_memory"],
     name="cosysim-tools",
 )
-# pass payload to your MCP server registration code
+```
+
+The `engine/mcp/skills_server.py` runs a FastMCP server that
+automatically exposes all registered skill packs as MCP tools.
+
+---
+
+## Governance Integration
+
+Skills participate in the AgentGovernor pipeline:
+
+1. **Pre-call interceptors** can modify the tool list before inference
+2. **The LLM** calls skills via MCP tool_call during SSE streaming
+3. **StreamProcessor** tracks tool call lifecycle (start → args → result)
+4. **Post-call interceptors** see tool_calls in the ResponseContext
+
+```python
+# In a custom interceptor
+class MyInterceptor(InterceptorBase):
+    def post_call(self, context):
+        for tc in context.get("tool_calls", []):
+            print(f"Agent called: {tc.name}({tc.arguments})")
 ```
 
 ---
 
-## HTTP API (Phone Scene)
+## Tips
 
-| Endpoint | Method | Description |
-|---|---|---|
-| `/api/skills/list` | GET | List all registered skills.  Optional `?pack=memory` or `?tag=image` filter. |
-| `/api/skills/run` | POST | Execute a skill.  Body: `{"skill": "search_memory", "kwargs": {"query": "beach"}}` |
-
-Example:
-
-```bash
-curl http://localhost:5555/api/skills/list?pack=memory
-curl -X POST http://localhost:5555/api/skills/run \
-     -H "Content-Type: application/json" \
-     -d '{"skill": "search_memory", "kwargs": {"query": "birthday"}}'
-```
-
----
-
-## Tips & Best Practices
-
-1. **Keep skills small and single-purpose** — the LLM reasons about what to
-   call based on the function name and docstring.  Vague names lead to hallucination.
-
-2. **Return human-readable strings** — skills return `str` in CosySim.  The
-   SDK wraps the result as a `tool_result` message.
-
-3. **Avoid side-effects in parameter defaults** — defaults are evaluated at
-   import time; use `None` guards for mutable defaults.
-
-4. **Use the `tags` field** — tags make filtering cheap.  Tag image skills with
-   `"image"`, memory skills with `"memory"`, etc.
-
-5. **Test skills in isolation** first — a skill is just a Python function.
-   Call it directly before wiring it to an agent.
+1. **Keep skills small and single-purpose** — the LLM picks tools by name + docstring
+2. **Return human-readable strings** — results are fed back to the LLM as tool_result
+3. **Type-annotate everything** — LMStudio infers JSON schema from Python type hints
+4. **Use cooldown for expensive ops** — prevents rapid repeated image generation
+5. **Test skills directly** — they're just Python functions:
 
 ```python
 from engine.skills.builtin.memory_skills import search_memory
-
-# Direct call — no LLM involved
 result = search_memory("coffee", character_id="abc123", top_k=3)
-print(result)
 ```

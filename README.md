@@ -1,365 +1,233 @@
-![CosySim Banner](https://svg-banners.vercel.app/api?type=origin&text1=CosySim&text2=Virtual%20Companion%20System&width=800&height=210)
+![CosySim Banner](https://svg-banners.vercel.app/api?type=origin&text1=CosySim&text2=AI%20Agent%20Simulation%20Framework&width=800&height=210)
 
-# CosySim - Virtual Companion Simulation System v2.0
+# CosySim — AI Agent Simulation Framework v3.1
 
-> **A professional-grade virtual companion platform with AI-driven characters, real-time voice/video interactions, and immersive interactive scenes.**
+> **A local-first AI simulation platform with pluggable scenes, MCP-driven tool use, multi-agent orchestration, and media generation — all powered by LMStudio.**
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+[![Tests: 699](https://img.shields.io/badge/tests-699%20passing-brightgreen.svg)]()
 
 ---
 
-## 🌟 What is This?
+## What Is This?
 
-An AI agent simulation framework with pluggable scenes for exploring LLM-driven characters, multi-agent interactions, media generation, and tool use — all orchestrated through **EventChain** ground truth.
+An AI agent simulation framework where every scene is a self-contained Flask app with its own agents, state, and game logic — orchestrated through a **Model Context Protocol (MCP)** pipeline that gives the LLM tools, memory, governance rules, and real-time state management.
 
-- 🎮 **Framework** — `engine/` is a reusable toolkit: agents, skills, spatial system, media standards, logging, benchmarking
-- 📱 **Phone Scene** — adult-themed chat with mood/arousal engine, NSFW selfies, autonomous messaging
-- 🛏️ **Bedroom Scene** — multi-agent spatial environment: 2 characters, 7 locations, tick-based agent loop
-- 🎛️ **Admin Panel** — 12-page diagnostic center with EventChain browser, GOD mode, RAG editor
-- 🏠 **Hub** — landing page with service health strip and scene launcher
-- 🎨 **Scene Creator** — guided wizard for scaffolding new scenes
+- **9 Flask scenes** — phone, bedroom, lounge, casino, gallery, warzone, realm, neoncity, coders
+- **MCP pipeline** — agents use tool calls for memory, media generation, game mechanics, and state mutation
+- **LMStudio v1 native API** — stateful conversations with `response_id` threading, SSE streaming, `store` control
+- **Multi-agent** — VirtualAgentManager routes inference with governance interceptors, skill packs, and conversation branching
+- **Media generation** — ComfyUI images/video, Qwen3-TTS voice, all wired as MCP tools
 
 ---
 
-## 🚀 Quick Start (< 5 minutes)
+## Quick Start
 
-### 1. Install
 ```bash
-# Clone repository
-git clone https://github.com/yourusername/CosySim.git
+# Install
 cd CosySim
-
-# Install dependencies
 pip install -e .
 
-# TTS models are symlinked (no download needed if you have them)
+# Launch (hub is the default entry point)
+python launcher.py                # Hub → http://localhost:8500
+
+# Or launch a specific scene
+python launcher.py --mode phone   # Phone → http://localhost:5555
+python launcher.py --mode realm   # The Realm → http://localhost:5562
 ```
 
-### 2. Launch
-```bash
-# Launch central hub (recommended)
-python launcher.py
-
-# Select option 1: Central Hub
-# Navigate to: http://localhost:8500
-```
-
-### 3. Explore
-- **Phone Scene** → Voice/video calls, messaging, photo sharing
-- **Bedroom Scene** → 3D environment, character interactions
-- **Admin Panel** → Character creation, system management
+**Prerequisites:** Python 3.10+, LMStudio running on port 1234 with a model loaded. ComfyUI (port 8188) optional for image generation.
 
 ---
 
-## 📱 Features
+## Scenes
 
-### 🎭 AI Character System
-- **Expressive Characters** with distinct personalities (warmth, formality, humor, flirtiness, intelligence, creativity)
-- **Role System** with goals, constraints, and capabilities
-- **RAG Memory** via ChromaDB for long-term episodic context
-- **Autonomous Messaging** — characters message you proactively on a configurable schedule
-- **EventChain diagnostics** — every LLM call, tool use, and autonomous trigger fully logged
+### Flask Scenes (interactive)
 
-### 🤖 Agent Framework
-| Component | Module | Description |
-|---|---|---|
-| **CharacterAgent** | `engine/agents/character_agent.py` | Persona + RAG + tools + MCP + EventChain |
-| **SceneAgent** | `engine/agents/scene_agent.py` | Quick one-shot tasks (title, summarise, classify) |
-| **LMStudioManager** | `engine/lmstudio/client.py` | LM Studio server + model management via SDK & CLI |
-| **LMStudioClient** | `engine/lmstudio/client_v2.py` | REST client with MCP integrations + SSE streaming |
-| **SkillRegistry** | `engine/skills/registry.py` | `@skill` decorator registry, pack tools, MCP bridge |
+| Scene | Port | Mode | Description |
+|-------|------|------|-------------|
+| **Phone** | 5555 | `phone` | Messaging app with mood/arousal engine, selfies, voice messages |
+| **Bedroom** | 5556 | `bedroom` | Multi-agent spatial environment, 7 locations, tick-based agent loop |
+| **Lounge** | 5557 | `lounge` | Social scene with ambient characters |
+| **Casino** | 5559 | `casino` | Blackjack, poker, slots with MCP game sessions |
+| **Gallery** | 5560 | `gallery` | Art evaluation, structured critique, image generation |
+| **Warzone** | 5561 | `warzone` | Turn-based tactical combat |
+| **Realm** | 5562 | `realm` | Director-guided LitRPG with dual-agent orchestration |
+| **NeonCity** | 5563 | `neoncity` | Cyberpunk strategy board game with procedural city |
+| **Coders** | 5564 | `coders` | AI agent idle sim — agents write real code in sandboxed Python |
 
-### 🔧 Built-in Skill Packs
-| Pack | Skills |
-|---|---|
-| `memory` | `search_memory`, `store_memory`, `get_event_chain_summary`, `summarize_chain` |
-| `character` | `get_character_state`, `adjust_trait`, `set_mood`, `adjust_relationship` |
-| `comfyui` | `generate_image`, `generate_character_portrait`, `list_comfyui_workflows` |
-| `voice` | `generate_voice_message`, `list_voice_messages` |
-| `tts` | `generate_voice_message`, `cast_voice`, `list_voice_presets`, `list_voicemails` |
+### Streamlit Apps (management)
 
-### 📞 Communication Features
-| Feature | Description | Status |
-|---|---|---|
-| **Voice Calls** | Real-time voice with CosyVoice TTS | ✅ Working |
-| **Video Calls** | Live video with generated faces | ✅ Working |
-| **Voice Messages** | Async audio messages + gallery | ✅ Working |
-| **Video Messages** | Short video clips + gallery | ✅ Working |
-| **Text Messaging** | Rich text chat | ✅ Working |
-| **Photo Sharing** | AI-generated selfies via ComfyUI | ✅ Working |
+| App | Port | Mode | Description |
+|-----|------|------|-------------|
+| **Hub** | 8500 | `hub` | Landing page, service health, scene launcher |
+| **Dashboard** | 8501 | `dashboard` | System metrics overview |
+| **Admin** | 8502 | `admin` | 13-page diagnostic center with GOD mode |
+| **Assets** | 8503 | `assets` | Asset generator |
+| **Creator** | 8504 | `creator` | Scene scaffolding wizard |
 
-### 🏗️ System Architecture
-```
-engine/                  # Reusable framework
-├── agents/             # CharacterAgent + AgentLoop (tick-based)
-├── assets/             # Asset management system
-├── config.py           # YAML config with env var overrides
-├── config_validator.py # Schema-based config validation
-├── logging/            # CosyLogger, @timed + LLM KPIs, SystemMonitor
-├── lmstudio/           # LMStudio SDK (client.py) + REST v2 (client_v2.py)
-├── mcp/                # CosySim MCP server + FastAPI web bridge
-├── media/              # MediaConfig singleton (image/video/audio standards)
-├── scenes/             # BaseScene, SceneRegistry (auto-discover)
-├── services/           # @retry, CircuitBreaker
-├── skills/             # @skill decorator, packs (memory, character, comfyui, tts)
-├── spatial/            # Location, SceneMap (capacity, occupancy, nearby)
-└── tts/                # Qwen3-TTS server + VoiceDesigner
+### Services
 
-content/                # Example scenes (customize freely)
-├── scenes/
-│   ├── phone/          # Port 5555 — adult phone scene
-│   ├── bedroom/        # Port 5556 — multi-agent spatial
-│   ├── admin/          # Port 8502 — 13-page admin panel (+ KPI Dashboard)
-│   ├── hub/            # Port 8500 — landing page + scene creator
-│   └── dashboard/      # Port 8501 — metrics
-└── simulation/
-    ├── database/       # SQLite (10 tables) + ChromaDB + EventChain
-    ├── character_system/
-    └── services/       # ComfyUI client, media gen, voice/video
-
-config/                 # YAML configuration files
-tests/                  # 281 tests
-```
-
----
-
-## 🎯 Usage
-
-### Launch Modes
+| Service | Port | Mode | Description |
+|---------|------|------|-------------|
+| **TTS** | 8600 | `tts` | Qwen3-TTS voice generation (FastAPI + MCP) |
+| **Bridge** | 8601 | `bridge` | MCP web bridge (SSE proxy, file upload) |
 
 ```bash
-python launcher.py                # Hub (default, port 8500)
-python launcher.py --mode phone   # Phone Scene (port 5555)
-python launcher.py --mode bedroom # Bedroom Scene (port 5556)
-python launcher.py --mode admin   # Admin Panel (port 8502)
-python launcher.py --mode creator # Scene Creator (port 8504)
-python launcher.py --mode test    # Run 315+ tests
-python launcher.py --status       # System status check
+python launcher.py --mode all      # Launch phone + bedroom + hub + tts + bridge
+python launcher.py --status        # Check service health
+python launcher.py --mode test     # Run 699 tests
 ```
 
 ---
 
-## 🎨 The 5 Characters
+## Architecture
 
-| Character | Personality | Best For | Messaging Frequency |
-|-----------|-------------|----------|---------------------|
-| **Maya** | Playful & Affectionate | Romantic interactions, fun conversations | Every 3 min |
-| **Luna** | Mysterious & Creative | Deep discussions, artistic topics | Every 7 min |
-| **Dr. Sophia Reed** | Professional & Intelligent | Intellectual debates, sophisticated chat | Every 10 min |
-| **Jade Harper** | Adventurous & Energetic | Outdoor activities, fitness challenges | Every 4 min |
-| **Emma Rose** | Nurturing & Caring | Emotional support, comfort | Every 5 min |
+```
+engine/                    # Reusable framework (stable)
+├── agents/               # CharacterAgent, SceneAgent, VirtualAgent, VirtualAgentManager
+├── lmstudio/             # LMSClient (v1 native API), LMStudioManager (model lifecycle)
+│   └── conversation.py   # Stateful threading: response_id, branching, fork
+├── mcp/                  # MCP Framework (governance, dialog, state, game sessions)
+│   ├── framework.py      # MCPFramework, MCPSceneMixin, MCPCharacterNode
+│   ├── governance.py     # AgentGovernor, InterceptorPipeline
+│   ├── dialog.py         # DialogSystem, DialogTree, ConversationState
+│   ├── game_mcp.py       # MCPGameSession, MCPGameNode, rules engine
+│   ├── cosysim_server.py # FastMCP server (9 tools + 5 resources)
+│   └── skills_server.py  # MCP skills server for ephemeral tool exposure
+├── skills/               # @skill decorator, SKILL_REGISTRY, pack system
+│   └── builtin/          # 7 core packs: memory, character, comfyui, voice, tts, social, boards
+├── scenes/               # BaseScene, SceneRegistry, get_active_scene()
+├── logging/              # CosyLogger, @timed, BenchmarkStore, SystemMonitor
+├── services/             # @retry, CircuitBreaker
+├── spatial/              # Location, SceneMap
+├── media/                # MediaConfig (image/video/audio standards)
+└── tts/                  # Qwen3-TTS server + VoiceDesigner
 
-Each character has:
-- ✅ Unique personality (6 parameters)
-- ✅ Full physical description
-- ✅ Background story
-- ✅ Custom voice settings
-- ✅ Behavioral traits
+content/                   # Game content (customize freely)
+├── scenes/               # 9 Flask scenes + 5 Streamlit apps
+│   ├── phone/            # + apps/, static/, templates/
+│   ├── realm/            # + realm_skills.py (11 MCP skills)
+│   ├── neoncity/         # + neoncity_skills.py (8 MCP skills)
+│   ├── coders/           # + coders_skills.py (6 MCP skills)
+│   └── ...
+└── simulation/           # Database, RAG, character system, media services
 
----
-
-## 🛠️ Admin Panel (port 8502)
-
-| Page | Features |
-|------|----------|
-| 📊 **Dashboard** | Service health (LMStudio/ComfyUI/DB), system metrics (CPU/RAM/GPU), benchmark table |
-| 📋 **Logs** | Ring buffer + file logs, level/search filters, export |
-| 🔗 **EventChain** | Chain browser with tree view, scene/character/type filters |
-| ⚙️ **Config Editor** | Type-aware inputs, validation, save & apply to YAML |
-| ✏️ **RAG Editor** | Edit conversations/memories with logic guards |
-| 🔴 **GOD Mode** | Raw SQL, event injection, force character state, danger zone |
-| 👤 **Characters** | Character CRUD with personality traits |
-| 🎬 **Scenes** | Scene registry, status monitoring |
-| 🖼️ **Media** | Gallery browser |
-| 🧠 **LMStudio** | Model management |
-| 💾 **Backup** | Backup & restore |
-| 🗂️ **Assets** | Browser, search, personality library |
-
----
-
-## 📚 Documentation
-
-| Doc | Description |
-|-----|-------------|
-| [THREE_PILLARS.md](docs/THREE_PILLARS.md) | Architecture: CosySim + LMStudio + ComfyUI |
-| [STRUCTURE_GUIDE.md](docs/STRUCTURE_GUIDE.md) | Three-layer architecture, file map |
-| [API.md](docs/API.md) | REST API reference for all scenes |
-| [SKILLS.md](docs/SKILLS.md) | Skill authoring guide |
-| [COMFYUI.md](docs/COMFYUI.md) | ComfyUI integration + PromptBuilder tiers |
-| [LMSTUDIO.md](docs/LMSTUDIO.md) | LMStudio v2 client, MCP server, streaming |
-| [TTS.md](docs/TTS.md) | Qwen3-TTS server, voice designer, casting |
-| [KPI.md](docs/KPI.md) | Benchmarking, LLM KPIs, system monitoring |
-| [LOGGING.md](docs/LOGGING.md) | @timed, SystemMonitor, ring buffer |
-| [ADMIN_GUIDE.md](docs/ADMIN_GUIDE.md) | Admin panel usage + GOD mode |
-| [AGENTS_GUIDE.md](AGENTS_GUIDE.md) | Agent handoff guide |
+config/                    # YAML configuration (tune without code)
+tests/                     # 699 tests across 27 files
+```
 
 ---
 
-## 🧪 Testing
+## MCP Pipeline
+
+The core innovation: agents don't just generate text — they call **tools** during inference via LMStudio's MCP integration.
+
+```
+User message → AgentGovernor → InterceptorPipeline → VirtualAgentManager
+  → LMSClient.chat_stateful(messages, tools=[...])
+    → LMStudio /api/v1/chat (SSE stream)
+      → LMStudio calls MCP tool: search_memory("birthday")
+        → CosySim skill → ChromaDB → result
+      → LMStudio generates response using tool result
+    ← StreamProcessor extracts [MOOD:], [IMAGE:], [ACTION:] tags
+  → AgentGovernor post-call interceptors (mood sync, stat updates)
+← Response to UI
+```
+
+**Key features:**
+- **Stateful conversations** — `response_id` + `previous_response_id` for server-side KV cache reuse
+- **Governance** — interceptors can modify prompts, block responses, inject context pre/post inference
+- **Streaming** — real-time SSE with inline tag extraction and stat updates
+- **Tool calls** — skills execute as Python functions, results fed back to the LLM mid-turn
+
+---
+
+## Skill Packs
+
+| Pack | Skills | Scope |
+|------|--------|-------|
+| `memory` | search_memory, store_memory, get_event_chain_summary, summarize_chain | Core |
+| `character` | get_character_state, adjust_trait, set_mood, adjust_relationship | Core |
+| `comfyui` | generate_image, generate_character_portrait, list_comfyui_workflows | Core |
+| `voice` | generate_voice_message, list_voice_messages | Core |
+| `tts` | generate_voice_message, cast_voice, list_voice_presets, list_voicemails | Core |
+| `social` | Social interaction skills | Core |
+| `boards` | Shared board game mechanics | Core |
+| `realm` | 11 skills: inventory, stats, skill checks, director, murder mystery | Scene |
+| `neoncity` | 8 skills: movement, combat, hacking, storm, events | Scene |
+| `coders` | 6 skills: feature queue, pipeline, sandbox execution | Scene |
+
+```python
+from engine.skills import skill, SkillCategory
+
+@skill(pack="my_pack", tags=["custom"], category=SkillCategory.GAME, cooldown=5.0)
+def my_tool(param: str) -> str:
+    """Do something useful."""
+    return f"Result: {param}"
+```
+
+---
+
+## Testing
 
 ```bash
-# Run all 281 tests
-python -m pytest tests/ -v --tb=short
-
-# Run specific suite
-python -m pytest tests/test_database.py -v
-python -m pytest tests/test_spatial.py -v
-```
-
-**Coverage:** Database (66 tests), EventChain (20), Skills (18), Spatial (30), AgentLoop (18), MediaConfig (16), PromptBuilder (17)
-
----
-
-## 🔧 Configuration
-
-Edit `config/default.yaml` or set environment variables:
-
-```bash
-# Environment
-export ENVIRONMENT=production
-
-# Database
-export DATABASE_PATH=/path/to/database.db
-
-# Ports
-export PHONE_PORT=5555
-export ADMIN_PORT=8502
-export HUB_PORT=8500
-
-# Security
-export SECRET_KEY=your-secret-key
-
-# LLM
-export LLM_API_BASE=http://localhost:1234/v1
-export LLM_MODEL=your-model-name
+python -m pytest tests/ -v --tb=short --ignore=tests/test_agent_loop.py --ignore=tests/live_wire_test.py
+# 699 tests passing
 ```
 
 ---
 
-## 🚢 Deployment
+## Configuration
 
-### Docker (Recommended)
+Edit `config/default.yaml` or use environment variables:
 
-```bash
-# Build image
-docker-compose build
+```yaml
+lmstudio:
+  host: "127.0.0.1"
+  port: 1234
+  api_version: "v1"
+  mcp_enabled: true
 
-# Start services
-docker-compose up -d
-
-# View logs
-docker-compose logs -f
+scenes:
+  phone: { port: 5555 }
+  bedroom: { port: 5556 }
+  realm: { port: 5562 }
+  # ...
 ```
 
-### Systemd (Linux)
-
-```bash
-# Copy service files
-sudo cp deployment/systemd/*.service /etc/systemd/system/
-
-# Enable and start
-sudo systemctl enable cosyvoice-hub
-sudo systemctl start cosyvoice-hub
-```
-
-### Manual
-
-```bash
-# Set environment
-export ENVIRONMENT=production
-
-# Start services (use screen or tmux)
-python content/simulation/scenes/hub/hub_scene.py &
-python content/simulation/scenes/phone/phone_scene.py &
-python content/simulation/scenes/bedroom/bedroom_scene.py &
+```python
+from engine.config import get_config
+config = get_config()
+port = config.get("scenes.phone.port", 5555)
 ```
 
 ---
 
-## 🤝 Contributing
+## Documentation
 
-We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
----
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
----
-
-## 🙏 Credits
-
-- **CosyVoice** - Text-to-Speech engine
-- **ChromaDB** - Vector database for RAG memory
-- **Three.js** - 3D rendering
-- **Flask** - Backend framework
-- **Streamlit** - Admin/Hub interfaces
+| Doc | Contents |
+|-----|----------|
+| [`AGENT_NOTES.md`](AGENT_NOTES.md) | Comprehensive system reference (2500+ lines) |
+| [`QUICK_START.md`](QUICK_START.md) | 5-minute setup guide |
+| [`CHEATSHEET.md`](CHEATSHEET.md) | Quick reference card |
+| [`docs/SKILLS.md`](docs/SKILLS.md) | Skill authoring guide |
+| [`docs/LMSTUDIO.md`](docs/LMSTUDIO.md) | LMStudio integration (v1 API, MCP, streaming) |
+| [`docs/THREE_PILLARS.md`](docs/THREE_PILLARS.md) | Architecture overview |
+| [`docs/API.md`](docs/API.md) | REST API reference |
+| [`docs/TTS.md`](docs/TTS.md) | Voice generation & voice designer |
+| [`docs/STRUCTURE_GUIDE.md`](docs/STRUCTURE_GUIDE.md) | Project structure walkthrough |
+| [`docs/MCP_FRAMEWORK.md`](docs/MCP_FRAMEWORK.md) | MCP framework developer guide |
+| [`docs/MCP_ARCHITECTURE.md`](docs/MCP_ARCHITECTURE.md) | MCP architecture deep dive |
+| [`CHANGELOG.md`](CHANGELOG.md) | Full version history |
 
 ---
 
-## 📞 Support
+## License
 
-- 📧 **Email**: support@example.com
-- 💬 **Discord**: [Join our server](https://discord.gg/example)
-- 🐛 **Issues**: [GitHub Issues](https://github.com/yourusername/CosySim/issues)
-- 📖 **Docs**: [Full Documentation](docs/)
+MIT — see [LICENSE](LICENSE).
 
 ---
 
-## 🗺️ Roadmap
-
-### Completed ✅
-- [x] EventChain ground truth system (chain_id/parent_id causal trees, 16+ event types)
-- [x] LMStudio SDK integration (load/unload models, VRAM management)
-- [x] Skills system (`@skill` decorator, pack registry, MCP bridge)
-- [x] CharacterAgent with RAG + tools + EventChain logging
-- [x] Multi-agent bedroom scene (AgentLoop, spatial system, 7 locations)
-- [x] Phone scene: mood engine, arousal engine, 5 NSFW tiers, autonomous messaging
-- [x] Media standards: MediaConfig singleton, PromptBuilder with escalation tiers
-- [x] Logging/benchmarking/monitoring (`@timed`, SystemMonitor, ring buffer)
-- [x] Admin panel: 12-page diagnostic center with GOD mode, RAG editor, chain browser
-- [x] Config validation, retry/circuit breaker, scene registry
-- [x] Per-pair relationship table (character_relationships with canonical ordering)
-- [x] 315+ tests covering all framework components
-- [x] Scene Creator wizard with 4 templates
-- [x] LMStudio Deep Integration: REST v2 client, per-request MCP, SSE streaming
-- [x] FastMCP server: 9 tools + 5 resources exposing CosySim to LMStudio
-- [x] FastAPI web bridge with SSE streaming proxy
-- [x] Qwen3-TTS voice generation server (real inference + placeholder fallback)
-- [x] Voice Designer with CASTING_OFFICE, 6 presets, zero-shot support
-- [x] KPI dashboard: LLM timing, token throughput, system monitor, chain analytics
-- [x] CharacterAgent wired into all scenes with skill packs
-- [x] AgentLoop with location-aware perception and enriched idle actions
-- [x] Voice message pipeline: AutonomousMessenger → TTS server → WAV
-- [x] End-to-end integration tests across all three pillars
-
-### Upcoming
-- [ ] Real-time EventChain streaming via WebSocket
-- [ ] Plugin system for community skill packs
-- [ ] Additional TTS models (CosyVoice, StyleTTS2)
-- [ ] Video generation via ComfyUI AnimateDiff workflows
-
----
-
-## ⭐ Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=yourusername/CosySim&type=Date)](https://star-history.com/#yourusername/CosySim&Date)
-
----
-
-<p align="center">
-  <strong>Built with ❤️ by the CosySim Team</strong>
-</p>
-
-<p align="center">
-  <sub>If you find this project helpful, please consider giving it a ⭐️</sub>
-</p>
+<p align="center"><strong>Built with ❤️ — GodSpeed! 🚀</strong></p>

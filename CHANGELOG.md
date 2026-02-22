@@ -2,6 +2,78 @@
 
 All notable changes to CosySim are documented here.
 
+## [3.1.0] — 2026-02-22
+
+### Showcase Scenes (v3.x Framework Demos)
+- **The Realm** (port 5562) — Director-guided LitRPG with dual-agent orchestration (Director + Assistant), inventory/stats system, Murder Mystery sub-module, Memory Echoes, Desperation Dice, Fourth-Wall Inventory, Mutiny Mode
+- **NeonCity** (port 5563) — Cyberpunk strategy board game with procedural city grid, Glitch Storm mechanic, 5 prefab nodes (AI Corp, Implant Shop, Mr. Wong's, Black Market, Noodle Stand), movement/combat/hacking phases
+- **The Coders Room** (port 5564) — AI agent idle simulation where agents write real Python code in sandboxed environments, 3 roles (Writer, Reviewer, QA), feature request pipeline, live code output
+
+### MCP Skills for Showcase Scenes
+- **realm_skills.py** — 11 @skill functions: inventory CRUD, stat checks, director control, murder mystery management, fourth-wall mechanics, desperation dice
+- **neoncity_skills.py** — 8 @skill functions: player status, movement, combat, hacking, storm queries, event triggers, turn management
+- **coders_skills.py** — 6 @skill functions: feature queue, pipeline control, sandbox execution, agent status, tick advancement
+
+### Framework Enhancements
+- **BaseScene `_ACTIVE_SCENES` registry** — Module-level dict + `get_active_scene(name)` for in-process scene→skill bridge
+- **Error hardening** — Realm `_director_infer()` wrapped in try/except with graceful fallback narration; NeonCity `_narrate()` logs failures
+- **NeonCity state helpers** — `get_player()`, `is_in_storm()` methods on NeonCityState
+- **29 Flask route integration tests** — Index renders, scene_info, error states, /api/health, skill registration verification
+
+### Testing
+- **699 tests passing** across 27 test files (up from 670)
+- New: test_realm.py (35), test_neoncity.py (26), test_coders.py (22), test_scene_routes.py (29), test_pipeline_smoke.py (4)
+
+## [3.0.0] — 2026-02-22
+
+### MCP Framework v2 — Complete Rewrite
+- **MCPFramework** — Central orchestrator: scene registration, character nodes, event bus, cross-scene messaging
+- **MCPSceneMixin** — Drop-in mixin for Flask scenes: auto-registers with framework, provides state manager, rules engine
+- **MCPCharacterNode** — Per-character state container: mood, energy, relationship, conversation history, streaming state
+- **AgentGovernor** — Pre/post inference interceptors: content filtering, mood sync, stat injection
+- **InterceptorPipeline** — Ordered chain of InterceptorBase subclasses for prompt/response modification
+- **DialogSystem** — DialogTree with DialogNode branching, ConversationState tracking, SpeechEnhancer
+- **MCPGameSession** — Turn-based game state: MCPGameNode, GameSessionInterceptor, rules engine integration
+- **SceneRulesEngine** — Permission matrix, conversation heat tracking, threshold rules
+- **AgentRouter** — Multi-agent routing with priority, load balancing, fallback chains
+- **CharacterRegistry** — CharacterProfile + CharacterState + CharacterRecord persistence
+- **SceneStateManager** — NarrativeLog, StatsSnapshot, state persistence
+- **SharedBoardManager** — Cross-agent shared state for board games
+- **InteractionTrees** — Branching interaction flows with conditions
+
+### MCP Skills Server
+- **skills_server.py** — FastMCP server exposing SKILL_REGISTRY packs as MCP tools
+- **game_mcp.py** — Game-specific MCP tools for session management
+
+### Scenes Added
+- **Warzone** (port 5561) — Turn-based tactical combat with MCP game sessions
+- **Gallery** (port 5560) — Art evaluation showcase with structured JSON critique and image generation
+
+### Pipeline Consolidation
+- **Unified inference path** — All agents route through VirtualAgentManager → LMSClient
+- **Evaluator system** — Post-inference quality evaluation with configurable thresholds
+- **Content router** — Automatic routing of responses to appropriate handlers
+
+## [2.9.0] — 2026-02-22
+
+### Pipeline Consolidation
+- **VirtualAgentManager** — Single inference router: request building, model selection, conversation management
+- **InferenceRequest / InferenceResponse** — Typed dataclasses for all inference calls
+- **ConversationManager** — Manages Conversation objects per agent, auto-creates on first use
+- **Evaluator** — Post-inference response quality checks
+
+### Agent Governance
+- **AgentGovernor** — Wraps VirtualAgentManager with interceptor pipeline
+- **Pre-call interceptors** — Modify system prompt, inject context, enforce rules
+- **Post-call interceptors** — Extract mood tags, validate content, update stats
+
+## [2.8.0] — 2026-02-22
+
+### Stateful Conversations
+- **ConversationManager** — Thread management with response_id tracking
+- **Conversation** — `branch_at()`, `fork()`, `send_stateless()` for conversation branching
+- **Pipeline fixes** — Corrected governance_context flow, fixed interceptor ordering
+
 ## [2.7.1] — 2026-02-24
 
 ### Scene Upgrades

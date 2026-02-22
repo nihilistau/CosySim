@@ -117,7 +117,7 @@ The admin panel includes a 4-tab KPI dashboard at **📈 KPI Dashboard**:
 
 | Operation | Module | Description |
 |-----------|--------|-------------|
-| `lmstudio_chat` | client_v2.py | REST API chat completion |
+| `lmstudio_chat` | lms_client.py | v1 API chat completion |
 | `llm.complete` | character_agent.py | SDK text completion |
 | `llm.act` | character_agent.py | SDK agentic loop |
 | `llm.rest_mcp` | character_agent.py | REST + MCP completion |

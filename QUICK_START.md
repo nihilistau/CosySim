@@ -23,8 +23,8 @@ Or use the install script:
 ## ✅ Verify Setup
 
 ```bash
-# Run all 315 tests
-python -m pytest tests/ -v
+# Run all 699 tests
+python -m pytest tests/ -v --tb=short --ignore=tests/test_agent_loop.py --ignore=tests/live_wire_test.py
 
 # Check system status
 python launcher.py --status
@@ -33,11 +33,16 @@ python launcher.py --status
 ## 🎯 Launch Modes
 
 ```bash
-python launcher.py                # Hub (default, port 8500)
-python launcher.py --mode phone   # Phone Scene (port 5555)
-python launcher.py --mode bedroom # Bedroom Scene (port 5556)
-python launcher.py --mode admin   # Admin Panel (port 8502)
-python launcher.py --mode creator # Scene Creator (port 8504)
+python launcher.py                   # Hub (default, port 8500)
+python launcher.py --mode phone      # Phone Scene (port 5555)
+python launcher.py --mode bedroom    # Bedroom Scene (port 5556)
+python launcher.py --mode realm      # The Realm — LitRPG (port 5562)
+python launcher.py --mode neoncity   # NeonCity — strategy (port 5563)
+python launcher.py --mode coders     # Coders Room — AI code sim (port 5564)
+python launcher.py --mode casino     # Midnight Casino (port 5559)
+python launcher.py --mode warzone    # Global Strike (port 5561)
+python launcher.py --mode admin      # Admin Panel (port 8502)
+python launcher.py --mode all        # Phone + Bedroom + Hub + TTS + Bridge
 ```
 
 ### Start All Servers
@@ -62,37 +67,46 @@ python launcher.py --mode creator # Scene Creator (port 8504)
 3. Watch two agents interact autonomously across 7 locations
 4. Agents move, speak, flirt, and exhibit emergent behavior
 
+## ⚔️ The Realm (Dual-Agent LitRPG)
+
+1. Launch: `python launcher.py --mode realm`
+2. Open: `http://localhost:5562`
+3. A Director agent runs the story, an Assistant agent helps (and heckles)
+4. Inventory, stats, skill checks, and Murder Mystery sub-module
+
 ## 🔧 Three Pillars
 
 CosySim runs on three services:
 
 | Service | Port | Purpose |
 |---------|------|---------|
-| **LMStudio** | 1234 | LLM inference, MCP host |
+| **LMStudio** | 1234 | LLM inference via v1 native API, MCP host |
 | **ComfyUI** | 8188 | Image/video generation |
 | **TTS Server** | 8600 | Voice generation (optional) |
 
 Start the TTS server:
 ```bash
-python -m engine.tts.qwen3_server --port 8600
+python launcher.py --mode tts
 ```
 
 ## 📊 Admin Panel
 
 Launch: `python launcher.py --mode admin` → `http://localhost:8502`
 
-12 pages: Characters, RAG Editor, Event Chain Browser, Config Editor, KPI Dashboard, System Monitor, and more. Use GOD mode for full override access.
+13 pages: Characters, RAG Editor, Event Chain Browser, Config Editor, KPI Dashboard, System Monitor, GOD mode, and more.
 
 ## 📖 Documentation
 
 | Doc | Contents |
 |-----|----------|
+| `AGENT_NOTES.md` | Complete system reference (2500+ lines) |
+| `docs/SKILLS.md` | Skill system, MCP tools, scene packs |
+| `docs/LMSTUDIO.md` | LMStudio v1 API, MCP, streaming |
 | `docs/THREE_PILLARS.md` | Architecture overview |
-| `docs/LMSTUDIO.md` | LMStudio integration guide |
+| `docs/MCP_FRAMEWORK.md` | MCP framework developer guide |
+| `docs/API.md` | REST API reference |
 | `docs/TTS.md` | Voice generation & voice designer |
-| `docs/KPI.md` | Benchmarking & metrics |
 | `docs/STRUCTURE_GUIDE.md` | Project structure |
-| `docs/SKILLS.md` | Skill system & MCP tools |
 | `CHANGELOG.md` | Full version history |
 
 ## 🎉 You're Ready!

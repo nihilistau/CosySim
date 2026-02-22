@@ -83,10 +83,10 @@ Local LLM inference at `http://localhost:1234`. Two integration modes:
 | Mode | Used For | File |
 |------|----------|------|
 | **SDK (`lmstudio`)** | Tool-calling agents (skills as tools) | `engine/agents/character_agent.py` |
-| **REST `client_v2`** | MCPs, streaming, autonomous decisions | `engine/lmstudio/client_v2.py` |
+| **v1 Native API** | Stateful chat, MCPs, streaming | `engine/lmstudio/lms_client.py` |
 
-> **Critical:** The SDK path and the REST path behave differently.
-> SDK gives you structured tool calls. REST gives you raw text completions.
+> **Note:** All inference now routes through `LMSClient` (v1 native API).
+> The SDK path (`lmstudio` package) is used only for model lifecycle management.
 > `AgentLoop._decide()` uses REST via `client_v2` — it needs raw JSON, not tool calls.
 
 ### Pillar 3 — ComfyUI (the Artist)
@@ -1424,7 +1424,7 @@ every LLM response is guarded: `(response or "").strip()`.
 Adding a new column to a SQLite table with existing data. ALTER TABLE ADD
 COLUMN with defaults was fine, but forgetting to handle the migration in
 existing test fixtures caused cascading failures. Now: always add columns
-with safe defaults, always test against existing fixture data, see `MIGRATION.md`.
+with safe defaults, always test against existing fixture data.
 
 ---
 
@@ -1519,7 +1519,7 @@ breaks. Show me what chain_id value is at each step.
 | Config | `engine/config.py` |
 | BaseScene | `engine/scenes/base_scene.py` |
 | SceneMap | `engine/spatial/scene_map.py` |
-| LMStudio REST | `engine/lmstudio/client_v2.py` |
+| LMStudio Client | `engine/lmstudio/lms_client.py` |
 | Benchmarks | `engine/logging/benchmark.py` |
 | Bedroom scene (Python) | `content/scenes/bedroom/bedroom_scene.py` |
 | Bedroom scene (JS) | `content/scenes/bedroom/static/js/bedroom.js` |

@@ -425,3 +425,48 @@ recent = ec.get_recent_chains(scene_id="phone", limit=20)
 | `character_state_update` | agent | Trait/mood/relationship changed |
 | `error` | system | Exception caught in any service |
 | `debug` | system | Developer trace event |
+
+---
+
+## Showcase Scene APIs (v3.1)
+
+All showcase scenes share a common base pattern via `BaseScene`:
+
+### Common Endpoints (all Flask scenes)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/` | Scene index page (HTML) |
+| GET | `/api/health` | Scene health + uptime |
+| GET | `/api/scene_info` | Scene metadata (name, port, version, features) |
+
+### The Realm (port 5562)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/scene_info` | Realm state, current story, active agents |
+| POST | `/api/game/new` | Start new game (director personality, story seed) |
+| POST | `/api/game/action` | Player action → Director processes → response |
+| GET | `/api/game/state` | Full game state (inventory, stats, story progress) |
+| POST | `/api/game/mystery/start` | Start Murder Mystery sub-module |
+
+### NeonCity (port 5563)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/scene_info` | City grid, players, storm state |
+| POST | `/api/game/new` | Generate new city + spawn players |
+| POST | `/api/game/move` | Move player on grid |
+| POST | `/api/game/action` | Combat, hack, or interact |
+| POST | `/api/game/end_turn` | Advance turn (storm progresses) |
+| GET | `/api/game/state` | Full board state |
+
+### The Coders Room (port 5564)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/scene_info` | Pipeline state, agent assignments |
+| POST | `/api/pipeline/feature` | Add feature request to queue |
+| POST | `/api/pipeline/tick` | Advance pipeline one step |
+| GET | `/api/pipeline/state` | Current pipeline + code output |
+| POST | `/api/sandbox/run` | Execute code in sandbox |

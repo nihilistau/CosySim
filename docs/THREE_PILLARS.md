@@ -12,11 +12,11 @@ CosySim is built on three pillars that work together bidirectionally.
 │  ├── spatial/     │   ├── bedroom/   └── development.yaml       │
 │  ├── media/       │   ├── hub/                                  │
 │  ├── logging/     │   ├── admin/     tests/                     │
-│  ├── lmstudio/    │   └── dashboard/ └── 281 tests              │
-│  ├── mcp/         ├── simulation/                               │
-│  ├── tts/         │   ├── database/                             │
-│  └── config.py    │   └── services/                             │
-│                   └── characters/                               │
+│  ├── lmstudio/    │   ├── casino/    └── 699 tests              │
+│  ├── mcp/         │   ├── realm/                                │
+│  ├── tts/         │   ├── neoncity/                             │
+│  └── config.py    │   ├── coders/                               │
+│                   │   └── warzone/                              │
 ├─────────────────────┬───────────────────────────────────────────┤
 │  LMStudio (Pillar 2) │       ComfyUI (Pillar 3)                │
 │                       │                                         │
@@ -32,10 +32,12 @@ CosySim is built on three pillars that work together bidirectionally.
 ## How They Connect
 
 ### Framework → LMStudio
-- **client_v2.py**: REST client sends chat messages, receives completions
-- **CharacterAgent**: Dual-path — SDK for tools, REST for MCP
+- **LMSClient** (`lms_client.py`): Native v1 API client — `/api/v1/chat` with `input` + `system_prompt`
+- **Stateful conversations**: `response_id` / `previous_response_id` for server-side KV cache
+- **SSE streaming**: Typed event parsing (chat.start/end, message.delta, tool_call.*, reasoning.delta)
 - **MCP integrations**: Framework attaches tools per-request via `integrations` field
 - **Model management**: LMStudioManager loads/unloads models via CLI
+- **Store control**: `store=True` for stateful, `store=False` for one-off queries
 
 ### LMStudio → Framework
 - **MCP tools**: LMStudio calls CosySim tools (search_memory, adjust_relationship, etc.)
@@ -74,9 +76,17 @@ CosySim is built on three pillars that work together bidirectionally.
 | Hub | 8500 | `--mode hub` | Central dashboard |
 | Dashboard | 8501 | `--mode dashboard` | Streamlit dashboard |
 | Admin | 8502 | `--mode admin` | Admin panel (13 pages) |
+| Assets | 8503 | `--mode assets` | Asset generator |
 | Scene Creator | 8504 | `--mode creator` | Scene wizard |
 | Phone Scene | 5555 | `--mode phone` | Flask phone simulator |
 | Bedroom Scene | 5556 | `--mode bedroom` | Flask multi-agent |
+| Lounge | 5557 | `--mode lounge` | Flask social scene |
+| Casino | 5559 | `--mode casino` | Flask card games |
+| Gallery | 5560 | `--mode gallery` | Flask art evaluation |
+| Warzone | 5561 | `--mode warzone` | Flask tactical combat |
+| Realm | 5562 | `--mode realm` | Flask LitRPG |
+| NeonCity | 5563 | `--mode neoncity` | Flask cyberpunk strategy |
+| Coders | 5564 | `--mode coders` | Flask AI code sim |
 | TTS Server | 8600 | `--mode tts` | Voice generation |
 | Web Bridge | 8601 | `--mode bridge` | FastAPI + MCP |
 | LMStudio | 1234 | External | LLM inference |
