@@ -373,6 +373,50 @@ def api_skills():
         return jsonify({"ok": False, "error": str(exc)}), 500
 
 
+# ── Shared Boards ───────────────────────────────────────────────────
+
+@overlay_bp.route("/api/boards")
+def api_boards():
+    """List all shared boards (highscores + message boards)."""
+    try:
+        from engine.mcp.shared_boards import get_shared_boards
+        boards = get_shared_boards().list_boards()
+        return jsonify({"ok": True, "boards": boards})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+@overlay_bp.route("/api/boards/<board_id>/scores")
+def api_board_scores(board_id: str):
+    """Get highscores for a board."""
+    try:
+        from engine.mcp.shared_boards import get_shared_boards
+        limit = int(request.args.get("limit", 10))
+        scores = get_shared_boards().get_highscores(board_id, limit)
+        return jsonify({"ok": True, "scores": scores})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+@overlay_bp.route("/api/boards/<board_id>/messages", methods=["GET", "POST"])
+def api_board_messages(board_id: str):
+    """Get or post messages to a shared board."""
+    try:
+        from engine.mcp.shared_boards import get_shared_boards
+        boards = get_shared_boards()
+        if request.method == "POST":
+            data = request.get_json(force=True)
+            result = boards.post_message(
+                board_id, data.get("author_id", "anonymous"),
+                data["content"], data.get("author_name"))
+            return jsonify({"ok": True, "message": result})
+        messages = boards.get_messages(
+            board_id, int(request.args.get("limit", 50)))
+        return jsonify({"ok": True, "messages": messages})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
 # ── Streaming / v2.7 ────────────────────────────────────────────────────
 
 @overlay_bp.route("/api/streaming")

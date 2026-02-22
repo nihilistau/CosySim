@@ -327,7 +327,7 @@ For more information, see: ONBOARDING.md
     
     parser.add_argument(
         "--mode",
-        choices=["hub", "phone", "bedroom", "lounge", "casino", "gallery", "dashboard", "admin", "assets", "creator", "tts", "bridge", "all", "test"],
+        choices=["hub", "phone", "bedroom", "lounge", "casino", "gallery", "warzone", "dashboard", "admin", "assets", "creator", "tts", "bridge", "all", "test"],
         default="hub",
         help="Launch mode (default: hub). 'all' starts hub + phone + bedroom + tts in one terminal."
     )
@@ -411,6 +411,10 @@ For more information, see: ONBOARDING.md
         from content.scenes.gallery.gallery_scene import GalleryScene
         print("\n🎨 Launching The Gallery on http://localhost:5560")
         GalleryScene().start()
+    elif args.mode == "warzone":
+        from content.scenes.warzone.warzone_scene import WarzoneScene
+        print("\n🎯 Launching Global Strike on http://localhost:5561")
+        WarzoneScene().start()
     elif args.mode == "test":
         launch_test_mode()
     elif args.mode == "tts":

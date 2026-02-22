@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Global Strike — CosySim</title>
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<style>
+:root {
+  --bg: #0a0e1a; --panel: rgba(12,16,30,0.95); --accent: #4af; --accent2: #f64;
+  --gold: #ffd700; --text: #d0d4e0; --dim: #556; --border: rgba(80,100,140,0.25);
+  --hp-player: #4caf50; --hp-ai: #f44336; --success: #4caf50; --warn: #ff9800;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:'Segoe UI',system-ui,sans-serif; background:var(--bg); color:var(--text); overflow:hidden; height:100vh; display:flex; flex-direction:column; }
+
+/* ── Top bar ── */
+#top-bar { display:flex; align-items:center; justify-content:space-between; padding:8px 16px; background:var(--panel); border-bottom:1px solid var(--border); z-index:10; }
+#top-bar .title { font-size:18px; font-weight:700; color:var(--accent); }
+#top-bar .turn-info { font-size:14px; color:var(--dim); }
+#top-bar .weather { font-size:14px; }
+.resources { display:flex; gap:12px; font-size:14px; font-weight:600; }
+.resources span { display:flex; align-items:center; gap:3px; }
+.res-credits { color:var(--gold); } .res-power { color:#4af; } .res-intel { color:#f0f; }
+
+/* ── Viewport ── */
+#viewport { flex:1; position:relative; min-height:200px; }
+#viewport canvas { display:block; width:100% !important; height:100% !important; }
+
+/* ── HP bars ── */
+#hp-bars { position:absolute; top:8px; left:16px; right:16px; display:flex; justify-content:space-between; pointer-events:none; z-index:5; }
+.hp-bar { width:35%; }
+.hp-bar .label { font-size:11px; margin-bottom:2px; }
+.hp-bar .bar { height:12px; background:rgba(255,255,255,0.1); border-radius:6px; overflow:hidden; }
+.hp-bar .fill { height:100%; border-radius:6px; transition:width 0.5s; }
+.hp-bar.player .fill { background:var(--hp-player); }
+.hp-bar.ai .fill { background:var(--hp-ai); }
+
+/* ── Bottom panel ── */
+#bottom { display:flex; height:220px; border-top:1px solid var(--border); background:var(--panel); z-index:10; }
+
+/* Actions panel */
+#actions { flex:1; padding:10px 14px; overflow-y:auto; border-right:1px solid var(--border); }
+#actions h3 { font-size:12px; color:var(--accent); text-transform:uppercase; margin:8px 0 4px; letter-spacing:0.5px; }
+.action-grid { display:flex; flex-wrap:wrap; gap:4px; }
+.btn { padding:6px 12px; border-radius:6px; border:1px solid var(--border); background:rgba(74,170,255,0.12); color:var(--accent); cursor:pointer; font-size:12px; white-space:nowrap; transition:all 0.15s; }
+.btn:hover { background:rgba(74,170,255,0.25); }
+.btn:disabled { opacity:0.3; cursor:not-allowed; }
+.btn.attack { border-color:rgba(255,100,60,0.4); color:var(--accent2); background:rgba(255,100,60,0.1); }
+.btn.attack:hover { background:rgba(255,100,60,0.25); }
+.btn.special { border-color:rgba(255,215,0,0.3); color:var(--gold); background:rgba(255,215,0,0.08); }
+
+/* Log panel */
+#log-panel { width:340px; display:flex; flex-direction:column; }
+#log-panel h3 { font-size:12px; color:var(--accent); padding:8px 12px 4px; text-transform:uppercase; letter-spacing:0.5px; }
+#log-content { flex:1; overflow-y:auto; padding:4px 12px; font-size:11px; }
+.log-entry { padding:2px 0; border-bottom:1px solid rgba(255,255,255,0.03); }
+.log-combat { color:var(--accent2); } .log-build { color:var(--success); }
+.log-upgrade { color:var(--accent); } .log-event { color:var(--gold); }
+.log-special { color:#f0f; } .log-income { color:var(--dim); }
+.log-weather { color:#8cf; } .log-victory { color:var(--gold); font-weight:700; }
+#ai-chat { padding:8px 12px; border-top:1px solid var(--border); font-size:12px; font-style:italic; color:var(--dim); min-height:36px; }
+#ai-chat .name { color:var(--accent2); font-style:normal; font-weight:600; }
+
+/* ── Start screen ── */
+#start-screen { position:fixed; inset:0; background:rgba(5,8,18,0.95); display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:100; }
+#start-screen h1 { font-size:48px; color:var(--accent); margin-bottom:8px; text-shadow:0 0 40px rgba(74,170,255,0.3); }
+#start-screen .sub { color:var(--dim); font-size:16px; margin-bottom:32px; }
+#start-screen .start-btn { padding:14px 48px; font-size:18px; border-radius:12px; border:2px solid var(--accent); background:rgba(74,170,255,0.15); color:var(--accent); cursor:pointer; transition:all 0.2s; }
+#start-screen .start-btn:hover { background:rgba(74,170,255,0.3); transform:scale(1.05); }
+#start-screen .scores-btn { margin-top:16px; padding:8px 24px; border:1px solid var(--border); border-radius:8px; background:none; color:var(--dim); cursor:pointer; font-size:13px; }
+
+/* ── Game over ── */
+#game-over { position:fixed; inset:0; background:rgba(5,8,18,0.9); display:none; flex-direction:column; align-items:center; justify-content:center; z-index:100; }
+#game-over h1 { font-size:42px; margin-bottom:8px; }
+#game-over .score { font-size:20px; color:var(--gold); margin-bottom:24px; }
+#game-over .replay-btn { padding:12px 36px; font-size:16px; border-radius:10px; border:2px solid var(--accent); background:rgba(74,170,255,0.15); color:var(--accent); cursor:pointer; }
+
+/* ── Highscore modal ── */
+#hs-modal { position:fixed; inset:0; background:rgba(5,8,18,0.9); display:none; align-items:center; justify-content:center; z-index:200; }
+#hs-modal .card { background:var(--panel); border:1px solid var(--border); border-radius:16px; padding:24px; width:400px; max-height:70vh; overflow-y:auto; }
+#hs-modal h2 { color:var(--gold); margin-bottom:12px; }
+#hs-modal .row { display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid rgba(255,255,255,0.04); }
+#hs-modal .rank { color:var(--dim); width:30px; } #hs-modal .name { flex:1; } #hs-modal .pts { color:var(--gold); font-weight:600; }
+#hs-modal .close { margin-top:12px; width:100%; padding:8px; border:1px solid var(--border); border-radius:8px; background:none; color:var(--dim); cursor:pointer; }
+
+/* ── Info bar ── */
+#info-bar { display:flex; justify-content:space-between; padding:4px 16px; font-size:11px; color:var(--dim); }
+</style>
+</head>
+<body>
+
+<!-- Top bar -->
+<div id="top-bar">
+  <div class="title">🎯 Global Strike</div>
+  <div class="resources">
+    <span class="res-credits">💰 <b id="r-credits">500</b></span>
+    <span class="res-power">⚡ <b id="r-power">0</b></span>
+    <span class="res-intel">🔍 <b id="r-intel">0</b></span>
+  </div>
+  <div class="turn-info">Turn <b id="turn-num">1</b></div>
+  <div class="weather" id="weather">☀️ Clear Skies</div>
+  <button class="btn" onclick="showHS()" style="font-size:11px">🏆 Scores</button>
+</div>
+
+<!-- 3D Viewport -->
+<div id="viewport">
+  <div id="hp-bars">
+    <div class="hp-bar player">
+      <div class="label">🛡️ Commander — <span id="hp-player-text">500/500</span></div>
+      <div class="bar"><div class="fill" id="hp-player-fill" style="width:100%"></div></div>
+    </div>
+    <div class="hp-bar ai">
+      <div class="label"><span id="hp-ai-text">500/500</span> — General Ironside 🎖️</div>
+      <div class="bar"><div class="fill" id="hp-ai-fill" style="width:100%"></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- Info bar -->
+<div id="info-bar">
+  <span>⚔️ Weapon: <b id="info-weapon">Artillery</b> (Lv<b id="info-wlvl">1</b>)</span>
+  <span>🛡️ Defense: <b id="info-defense">Sandbags</b> (Lv<b id="info-dlvl">1</b>)</span>
+  <span>🏗️ Buildings: <b id="info-buildings">0</b>/3</span>
+  <span>📈 Escalation: <b id="info-esc">1.0</b>×</span>
+</div>
+
+<!-- Bottom panel -->
+<div id="bottom">
+  <div id="actions">
+    <h3>⚔️ Attack</h3>
+    <div class="action-grid">
+      <button class="btn attack" onclick="doAction('attack','base')">🎯 Attack Base</button>
+      <button class="btn attack" onclick="doAction('attack','building')">🏗️ Attack Building</button>
+    </div>
+    <h3>🏗️ Build</h3>
+    <div class="action-grid">
+      <button class="btn" onclick="doAction('build_factory')">Factory (200💰)</button>
+      <button class="btn" onclick="doAction('build_powerplant')">Power Plant (300💰)</button>
+      <button class="btn" onclick="doAction('build_intel')">Intel Center (400💰)</button>
+    </div>
+    <h3>⬆️ Upgrade</h3>
+    <div class="action-grid">
+      <button class="btn" onclick="doAction('upgrade_weapon')" id="btn-upw">Weapon ⬆️</button>
+      <button class="btn" onclick="doAction('upgrade_defense')" id="btn-upd">Defense ⬆️</button>
+    </div>
+    <h3>✨ Specials</h3>
+    <div class="action-grid">
+      <button class="btn special" onclick="doAction('special_spy_satellite')">🛰️ Spy (2🔍)</button>
+      <button class="btn special" onclick="doAction('special_emp_burst')">💫 EMP (3⚡)</button>
+      <button class="btn special" onclick="doAction('special_sabotage')">🕵️ Sabotage (2🔍+1⚡)</button>
+      <button class="btn special" onclick="doAction('special_shield_overcharge')">🔋 Shield++ (4⚡)</button>
+      <button class="btn special" onclick="doAction('special_taunt')">📢 Taunt (1🔍)</button>
+    </div>
+  </div>
+
+  <div id="log-panel">
+    <h3>📜 Battle Log</h3>
+    <div id="log-content"></div>
+    <div id="ai-chat"><span class="name">General Ironside:</span> Awaiting your move...</div>
+  </div>
+</div>
+
+<!-- Start screen -->
+<div id="start-screen">
+  <h1>🎯 Global Strike</h1>
+  <div class="sub">Modern Artillery Strategy — Player vs AI</div>
+  <button class="start-btn" onclick="startGame()">⚔️ Launch Game</button>
+  <button class="scores-btn" onclick="showHS()">🏆 Highscores</button>
+</div>
+
+<!-- Game over -->
+<div id="game-over">
+  <h1 id="go-title">Victory!</h1>
+  <div class="score" id="go-score"></div>
+  <button class="replay-btn" onclick="location.reload()">🔄 Play Again</button>
+</div>
+
+<!-- Highscore modal -->
+<div id="hs-modal" onclick="if(event.target===this)this.style.display='none'">
+  <div class="card">
+    <h2>🏆 Global Strike — Highscores</h2>
+    <div id="hs-list">Loading...</div>
+    <button class="close" onclick="document.getElementById('hs-modal').style.display='none'">Close</button>
+  </div>
+</div>
+
+<script>
+// ── State ──
+let GS = null;
+let myTurn = false;
+const socket = io();
+
+// ── Three.js Setup ──
+const viewport = document.getElementById('viewport');
+const scene3 = new THREE.Scene();
+const renderer = new THREE.WebGLRenderer({antialias: true, alpha: false});
+renderer.setClearColor(0x0a1628);
+viewport.appendChild(renderer.domElement);
+
+const camera = new THREE.OrthographicCamera(-55, 55, 30, -8, 1, 1000);
+camera.position.set(50, 15, 80);
+camera.lookAt(50, 12, 0);
+
+// Lighting
+scene3.add(new THREE.AmbientLight(0x445566, 0.6));
+const sun = new THREE.DirectionalLight(0xffeedd, 0.8);
+sun.position.set(50, 40, 30);
+scene3.add(sun);
+
+// Groups
+const terrainGroup = new THREE.Group();
+const playerBaseGroup = new THREE.Group();
+const aiBaseGroup = new THREE.Group();
+const projectileGroup = new THREE.Group();
+scene3.add(terrainGroup, playerBaseGroup, aiBaseGroup, projectileGroup);
+
+// ── Terrain ──
+function terrainH(x, seed) {
+  const s = seed * 0.001;
+  let h = Math.sin(x*0.08+s)*4 + Math.sin(x*0.15+s*2)*2 + Math.sin(x*0.3+s*3)*1 + 10;
+  if (x < 18) h = 8 + (h-8)*Math.max(0,(x-8)/10);
+  if (x > 82) h = 8 + (h-8)*Math.max(0,(92-x)/10);
+  if (x < 8) h = 8;
+  if (x > 92) h = 8;
+  return h;
+}
+
+function buildTerrain(seed) {
+  terrainGroup.clear();
+  const shape = new THREE.Shape();
+  shape.moveTo(0, 0);
+  for (let x = 0; x <= 100; x += 0.5) shape.lineTo(x, terrainH(x, seed));
+  shape.lineTo(100, 0);
+  shape.closePath();
+  const geo = new THREE.ShapeGeometry(shape);
+  const mat = new THREE.MeshPhongMaterial({color: 0x2d5a1e, side: THREE.DoubleSide});
+  terrainGroup.add(new THREE.Mesh(geo, mat));
+  // Grass highlight
+  const shape2 = new THREE.Shape();
+  shape2.moveTo(0, 0);
+  for (let x = 0; x <= 100; x += 0.5) shape2.lineTo(x, terrainH(x, seed) + 0.15);
+  shape2.lineTo(100, terrainH(100, seed));
+  for (let x = 100; x >= 0; x -= 0.5) shape2.lineTo(x, terrainH(x, seed));
+  shape2.closePath();
+  const geo2 = new THREE.ShapeGeometry(shape2);
+  const mat2 = new THREE.MeshPhongMaterial({color: 0x4a8c2a, side: THREE.DoubleSide});
+  terrainGroup.add(new THREE.Mesh(geo2, mat2));
+}
+
+// ── Bases ──
+function box(w, h, color) {
+  return new THREE.Mesh(new THREE.BoxGeometry(w, h, 2), new THREE.MeshPhongMaterial({color}));
+}
+
+function buildBases(state) {
+  playerBaseGroup.clear();
+  aiBaseGroup.clear();
+  if (!state) return;
+  const seed = state.terrain_seed;
+  const py = terrainH(10, seed);
+  const ay = terrainH(90, seed);
+
+  // Player base
+  const pcc = box(5, 4, 0x2266bb); pcc.position.set(10, py+2, 0); playerBaseGroup.add(pcc);
+  const pw = box(1.5, 2.5, 0x44aaff); pw.position.set(10, py+5.25, 0); playerBaseGroup.add(pw);
+  const pd = box(7, 1.5, 0x336699); pd.position.set(14, py+0.75, 0); playerBaseGroup.add(pd);
+  // Player buildings
+  (state.player.buildings || []).forEach((b, i) => {
+    const c = b.type === 'factory' ? 0x8B4513 : b.type === 'powerplant' ? 0xDAA520 : 0x6A5ACD;
+    const bm = box(2, 2.5, c); bm.position.set(5 + i*3, py+1.25, 0); playerBaseGroup.add(bm);
+  });
+
+  // AI base
+  const acc = box(5, 4, 0xbb2222); acc.position.set(90, ay+2, 0); aiBaseGroup.add(acc);
+  const aw = box(1.5, 2.5, 0xff4444); aw.position.set(90, ay+5.25, 0); aiBaseGroup.add(aw);
+  const ad = box(7, 1.5, 0x993333); ad.position.set(86, ay+0.75, 0); aiBaseGroup.add(ad);
+  (state.ai.buildings || []).forEach((b, i) => {
+    const c = b.type === 'factory' ? 0x8B4513 : b.type === 'powerplant' ? 0xDAA520 : 0x6A5ACD;
+    const bm = box(2, 2.5, c); bm.position.set(95 - i*3, ay+1.25, 0); aiBaseGroup.add(bm);
+  });
+}
+
+// ── Projectile animation ──
+function animateProjectile(fromX, toX, seed, onDone) {
+  const startY = terrainH(fromX, seed) + 6;
+  const endY = terrainH(toX, seed) + 2;
+  const geo = new THREE.SphereGeometry(0.6, 8, 8);
+  const mat = new THREE.MeshBasicMaterial({color: 0xff6600});
+  const missile = new THREE.Mesh(geo, mat);
+  scene3.add(missile);
+  // Trail
+  const trailPts = [];
+  let frame = 0;
+  const dur = 50;
+  function step() {
+    const t = frame / dur;
+    missile.position.x = fromX + (toX - fromX) * t;
+    missile.position.y = startY + (endY - startY) * t + Math.sin(t * Math.PI) * 18;
+    missile.position.z = 0;
+    // Trail dot
+    const dot = new THREE.Mesh(new THREE.SphereGeometry(0.2, 4, 4), new THREE.MeshBasicMaterial({color: 0xff4400, transparent: true, opacity: 0.5}));
+    dot.position.copy(missile.position);
+    scene3.add(dot);
+    trailPts.push(dot);
+    frame++;
+    if (frame <= dur) {
+      requestAnimationFrame(step);
+    } else {
+      scene3.remove(missile);
+      setTimeout(() => trailPts.forEach(d => scene3.remove(d)), 800);
+      if (onDone) onDone(toX, endY);
+    }
+  }
+  step();
+}
+
+// ── Explosion ──
+function explode(x, y) {
+  const parts = [];
+  for (let i = 0; i < 25; i++) {
+    const g = new THREE.SphereGeometry(0.25 + Math.random()*0.3, 4, 4);
+    const m = new THREE.MeshBasicMaterial({color: new THREE.Color().setHSL(0.06 + Math.random()*0.06, 1, 0.5 + Math.random()*0.3)});
+    const p = new THREE.Mesh(g, m);
+    p.position.set(x, y, 0);
+    p.userData.vel = new THREE.Vector3((Math.random()-0.5)*1.8, Math.random()*2, (Math.random()-0.5)*0.5);
+    scene3.add(p);
+    parts.push(p);
+  }
+  // Flash
+  const flash = new THREE.Mesh(new THREE.SphereGeometry(3, 8, 8), new THREE.MeshBasicMaterial({color: 0xffaa00, transparent: true, opacity: 0.8}));
+  flash.position.set(x, y, 0);
+  scene3.add(flash);
+  let f = 0;
+  function anim() {
+    f++;
+    parts.forEach(p => {
+      p.position.add(p.userData.vel);
+      p.userData.vel.y -= 0.06;
+      p.scale.multiplyScalar(0.96);
+    });
+    flash.scale.multiplyScalar(1.08);
+    flash.material.opacity *= 0.9;
+    if (f < 35) requestAnimationFrame(anim);
+    else { parts.forEach(p => scene3.remove(p)); scene3.remove(flash); }
+  }
+  anim();
+}
+
+// ── Resize ──
+function onResize() {
+  const w = viewport.clientWidth, h = viewport.clientHeight;
+  renderer.setSize(w, h);
+  const aspect = w / h;
+  camera.left = -55 * aspect / 1.5;
+  camera.right = 55 * aspect / 1.5;
+  camera.updateProjectionMatrix();
+}
+window.addEventListener('resize', onResize);
+onResize();
+
+// ── Render loop ──
+function render() {
+  requestAnimationFrame(render);
+  renderer.render(scene3, camera);
+}
+render();
+
+// ── UI Updates ──
+function updateUI(s) {
+  if (!s) return;
+  GS = s;
+  myTurn = s.phase === 'player_turn';
+  document.getElementById('turn-num').textContent = s.turn;
+  document.getElementById('weather').textContent = s.weather_label;
+  document.getElementById('r-credits').textContent = s.player.credits;
+  document.getElementById('r-power').textContent = s.player.power;
+  document.getElementById('r-intel').textContent = s.player.intel;
+  // HP
+  const pp = Math.max(0, s.player.base_hp / s.player.max_hp * 100);
+  const ap = Math.max(0, (s.ai.base_hp||0) / (s.ai.max_hp||500) * 100);
+  document.getElementById('hp-player-fill').style.width = pp + '%';
+  document.getElementById('hp-player-text').textContent = s.player.base_hp + '/' + s.player.max_hp;
+  document.getElementById('hp-ai-fill').style.width = ap + '%';
+  document.getElementById('hp-ai-text').textContent = (s.ai.base_hp ?? '???') + '/' + (s.ai.max_hp || 500);
+  // Info bar
+  document.getElementById('info-weapon').textContent = s.player.weapon_name;
+  document.getElementById('info-wlvl').textContent = s.player.weapon_level;
+  document.getElementById('info-defense').textContent = s.player.defense_name;
+  document.getElementById('info-dlvl').textContent = s.player.defense_level;
+  document.getElementById('info-buildings').textContent = s.player.buildings.length;
+  document.getElementById('info-esc').textContent = s.escalation.toFixed(1);
+  // Buttons
+  document.querySelectorAll('#actions .btn').forEach(b => b.disabled = !myTurn);
+  // Log
+  const logEl = document.getElementById('log-content');
+  logEl.innerHTML = '';
+  (s.log || []).forEach(l => {
+    const d = document.createElement('div');
+    d.className = 'log-entry log-' + l.type;
+    d.textContent = 'T' + l.turn + ': ' + l.msg;
+    logEl.appendChild(d);
+  });
+  logEl.scrollTop = logEl.scrollHeight;
+  // Rebuild bases
+  buildBases(s);
+  // Game over check
+  if (s.phase === 'game_over') showGameOver(s);
+}
+
+// ── Socket.IO ──
+socket.on('game_state', updateUI);
+
+socket.on('action_result', data => {
+  const r = data.result;
+  if (r.type === 'attack' && GS) {
+    const seed = GS.terrain_seed;
+    const fromX = data.side === 'player' ? 14 : 86;
+    const toX = data.side === 'player' ? 90 : 10;
+    animateProjectile(fromX, toX, seed, (x, y) => {
+      if (r.total_damage > 0) explode(x, y);
+    });
+  }
+});
+
+socket.on('ai_comment', data => {
+  document.getElementById('ai-chat').innerHTML = '<span class="name">General Ironside:</span> ' + data.text;
+});
+
+socket.on('error', data => {
+  document.getElementById('ai-chat').innerHTML = '<span style="color:var(--warn)">⚠️ ' + data.msg + '</span>';
+});
+
+socket.on('highscore_submitted', data => {
+  document.getElementById('go-score').textContent = '🏆 Score: ' + data.score;
+});
+
+// ── Actions ──
+function doAction(action, target) {
+  if (!myTurn) return;
+  myTurn = false;
+  document.querySelectorAll('#actions .btn').forEach(b => b.disabled = true);
+  socket.emit('player_action', {action, target: target || 'base'});
+}
+
+function startGame() {
+  document.getElementById('start-screen').style.display = 'none';
+  socket.emit('start_game');
+}
+
+function showGameOver(s) {
+  const go = document.getElementById('game-over');
+  go.style.display = 'flex';
+  const won = s.winner === 'player';
+  document.getElementById('go-title').textContent = won ? '🏆 VICTORY!' : '💀 DEFEATED';
+  document.getElementById('go-title').style.color = won ? 'var(--gold)' : 'var(--hp-ai)';
+}
+
+// ── Highscores ──
+async function showHS() {
+  document.getElementById('hs-modal').style.display = 'flex';
+  try {
+    const r = await fetch('/api/highscores');
+    const d = await r.json();
+    const list = document.getElementById('hs-list');
+    if (!d.scores || !d.scores.length) { list.innerHTML = '<div style="color:var(--dim)">No scores yet. Be the first!</div>'; return; }
+    list.innerHTML = d.scores.map(s =>
+      `<div class="row"><span class="rank">#${s.rank}</span><span class="name">${s.player_name}</span><span class="pts">${s.score}</span></div>`
+    ).join('');
+  } catch(e) { document.getElementById('hs-list').innerHTML = 'Error loading scores'; }
+}
+
+// ── Build initial terrain on load (before game starts) ──
+buildTerrain(12345);
+</script>
+</body>
+</html>

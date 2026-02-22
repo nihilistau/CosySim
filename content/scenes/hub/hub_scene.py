@@ -42,6 +42,7 @@ def _render_health_strip():
         ("Lounge", "http://localhost:5557/api/health"),
         ("Casino", "http://localhost:5559/api/health"),
         ("Gallery", "http://localhost:5560/api/health"),
+        ("Warzone", "http://localhost:5561/api/health"),
         ("Admin", "http://localhost:8502"),
     ]
     cols = st.columns(len(services))
@@ -342,6 +343,14 @@ def show_scene_launcher():
             "port": 5560,
             "launch_args": ["--mode", "gallery"],
             "color": "#8b5cf6",
+        },
+        {
+            "name": "Global Strike",
+            "icon": "🎯",
+            "description": "Artillery strategy — Three.js, AI agent, highscores, streaming",
+            "port": 5561,
+            "launch_args": ["--mode", "warzone"],
+            "color": "#059669",
         },
     ]
 
