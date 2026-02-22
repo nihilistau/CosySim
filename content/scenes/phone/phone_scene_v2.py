@@ -363,7 +363,7 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
             except Exception as exc:
                 logger.debug("Could not load history for %s: %s", thread_id, exc)
 
-        result = {"text": "", "mood": None, "image_requests": [], "action_tags": [], "voice_style": None}
+        result = {"text": "", "mood": None, "image_requests": [], "action_tags": [], "voice_style": None, "response_id": None}
         try:
             from engine.mcp.comms_framework import get_governor
             agent = self._agents.get(char_id)
@@ -386,6 +386,7 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
                 result["image_requests"] = list(proc.image_requests)
                 result["action_tags"] = list(proc.action_tags)
                 result["voice_style"] = proc.voice_style
+                result["response_id"] = proc.response_id or None
                 # Update character mood in framework
                 if result["mood"]:
                     try:
@@ -433,6 +434,7 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
             result["image_requests"] = list(proc.image_requests)
             result["action_tags"] = list(proc.action_tags)
             result["voice_style"] = proc.voice_style
+            result["response_id"] = proc.response_id or None
             return result
         except Exception as exc:
             logger.error("VirtualAgentManager reply failed: %s", exc)
@@ -586,6 +588,8 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
                             content=reply_text,
                             msg_type="text",
                             metadata=metadata if metadata else None,
+                            response_id=reply.get("response_id"),
+                            conversation_id=f"phone_{char_id}",
                         )
                         self._emit("typing", {"thread_id": thread_id, "char_id": char_id, "active": False})
 

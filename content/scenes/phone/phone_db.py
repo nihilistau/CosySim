@@ -70,15 +70,17 @@ class PhoneDB:
                 );
 
                 CREATE TABLE IF NOT EXISTS phone_messages (
-                    id         TEXT PRIMARY KEY,
-                    thread_id  TEXT NOT NULL,
-                    sender_id  TEXT NOT NULL,
-                    content    TEXT NOT NULL,
-                    msg_type   TEXT NOT NULL DEFAULT 'text',
-                    media_path TEXT,
-                    status     TEXT NOT NULL DEFAULT 'sent',
-                    created_at TEXT NOT NULL,
-                    metadata   TEXT DEFAULT '{}',
+                    id              TEXT PRIMARY KEY,
+                    thread_id       TEXT NOT NULL,
+                    sender_id       TEXT NOT NULL,
+                    content         TEXT NOT NULL,
+                    msg_type        TEXT NOT NULL DEFAULT 'text',
+                    media_path      TEXT,
+                    status          TEXT NOT NULL DEFAULT 'sent',
+                    created_at      TEXT NOT NULL,
+                    metadata        TEXT DEFAULT '{}',
+                    response_id     TEXT,
+                    conversation_id TEXT,
                     FOREIGN KEY (thread_id) REFERENCES phone_threads(id)
                 );
 
@@ -103,6 +105,17 @@ class PhoneDB:
                     updated_at   TEXT NOT NULL
                 );
             """)
+
+        # ── Migrations: add columns to existing DBs ─────────────────────
+        with self.conn() as c:
+            try:
+                c.execute("ALTER TABLE phone_messages ADD COLUMN response_id TEXT")
+            except Exception:
+                pass  # Already exists
+            try:
+                c.execute("ALTER TABLE phone_messages ADD COLUMN conversation_id TEXT")
+            except Exception:
+                pass  # Already exists
 
     # ─── thread helpers ──────────────────────────────────────────────
 
@@ -218,16 +231,20 @@ class PhoneDB:
         self, thread_id: str, sender_id: str, content: str,
         msg_type: str = "text", media_path: Optional[str] = None,
         metadata: Optional[Dict] = None,
+        response_id: Optional[str] = None,
+        conversation_id: Optional[str] = None,
     ) -> Dict:
         msg_id = str(uuid.uuid4())
         now = datetime.utcnow().isoformat()
         with self.conn() as c:
             c.execute(
                 """INSERT INTO phone_messages
-                   (id, thread_id, sender_id, content, msg_type, media_path, status, created_at, metadata)
-                   VALUES (?,?,?,?,?,?,?,?,?)""",
+                   (id, thread_id, sender_id, content, msg_type, media_path,
+                    status, created_at, metadata, response_id, conversation_id)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
                 (msg_id, thread_id, sender_id, content, msg_type,
-                 media_path, "sent", now, json.dumps(metadata or {})),
+                 media_path, "sent", now, json.dumps(metadata or {}),
+                 response_id, conversation_id),
             )
             c.execute(
                 "UPDATE phone_threads SET updated_at=? WHERE id=?",
@@ -235,7 +252,8 @@ class PhoneDB:
             )
         return {"id": msg_id, "thread_id": thread_id, "sender_id": sender_id,
                 "content": content, "msg_type": msg_type, "media_path": media_path,
-                "status": "sent", "created_at": now, "metadata": metadata or {}}
+                "status": "sent", "created_at": now, "metadata": metadata or {},
+                "response_id": response_id, "conversation_id": conversation_id}
 
     def get_messages(
         self, thread_id: str, limit: int = 50, before: Optional[str] = None
@@ -260,6 +278,17 @@ class PhoneDB:
             except Exception:
                 m["metadata"] = {}
         return msgs
+
+    def get_last_response_id(self, thread_id: str) -> Optional[str]:
+        """Get the last response_id for a thread (for stateful conversation resumption)."""
+        with self.conn() as c:
+            row = c.execute(
+                """SELECT response_id FROM phone_messages
+                   WHERE thread_id=? AND response_id IS NOT NULL
+                   ORDER BY created_at DESC LIMIT 1""",
+                (thread_id,),
+            ).fetchone()
+        return row["response_id"] if row else None
 
     def mark_read(self, thread_id: str, reader_id: str = "user") -> None:
         with self.conn() as c:

@@ -364,6 +364,17 @@ class ConversationVarietyInterceptor(InterceptorBase):
                 "Don't hold back on sexual or adult topics if appropriate."
             )
 
+        # Conversation heat directive
+        try:
+            from engine.mcp.scene_rules_engine import get_conversation_heat
+            heat = get_conversation_heat()
+            conv_key = ctx.get("conversation_id") or f"{scene}_{agent_id}"
+            directive = heat.get_directive(conv_key)
+            if directive:
+                variety_lines.append(directive)
+        except Exception:
+            pass
+
         if variety_lines:
             block = "\n".join(variety_lines)
             ctx["system_prompt"] = ctx.get("system_prompt", "") + (
@@ -371,7 +382,7 @@ class ConversationVarietyInterceptor(InterceptorBase):
             )
 
     def post_call(self, ctx: ResponseContext) -> None:
-        """Track the response for future variety checking."""
+        """Track the response for future variety checking and heat analysis."""
         agent_id = ctx.get("agent_id", "")
         reply = ctx.get("reply", "")
         if agent_id and reply:
@@ -381,6 +392,16 @@ class ConversationVarietyInterceptor(InterceptorBase):
             # Keep only last N
             if len(self._recent_responses[agent_id]) > self._MAX_TRACKED:
                 self._recent_responses[agent_id] = self._recent_responses[agent_id][-self._MAX_TRACKED:]
+
+            # Update conversation heat based on response content
+            try:
+                from engine.mcp.scene_rules_engine import get_conversation_heat
+                heat = get_conversation_heat()
+                scene = ctx.get("scene", "")
+                conv_key = ctx.get("conversation_id") or f"{scene}_{agent_id}"
+                heat.analyze_message(conv_key, reply)
+            except Exception:
+                pass
 
 
 # ══════════════════════════════════════════════════════════════════════

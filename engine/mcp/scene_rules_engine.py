@@ -329,6 +329,143 @@ class PermissionMatrix:
 
 
 # ══════════════════════════════════════════════════════════════════════
+#  CONVERSATION HEAT TRACKER
+# ══════════════════════════════════════════════════════════════════════
+
+class ConversationHeat:
+    """
+    Track conversation "heat" per thread/character pair (0–100 scale).
+
+    Heat increases with flirty, intimate, or emotional topics and decreases
+    with idle time or small talk.  The heat level influences interceptor
+    directives:
+
+    * heat < 30:  Normal conversation, no special directives
+    * 30 ≤ heat < 60:  Mild flirting allowed, slightly more expressive
+    * 60 ≤ heat < 80:  Explicit content allowed, escalation encouraged
+    * heat ≥ 80:  Full adult content, intense emotional expression
+
+    Usage::
+
+        heat = get_conversation_heat()
+        heat.bump("phone_aria_thread1", 10, "flirt")
+        level = heat.get("phone_aria_thread1")  # e.g. 45
+        heat.cool_all(delta_seconds=300)         # decay over time
+    """
+
+    _HEAT_KEYWORDS = {
+        "flirt": 8, "kiss": 15, "intimate": 20, "touch": 10,
+        "cuddle": 5, "tease": 7, "dare": 6, "sexy": 12,
+        "love": 5, "desire": 10, "passion": 12, "seduce": 15,
+    }
+    _DECAY_PER_MINUTE = 2.0
+    _MAX_HEAT = 100
+    _MIN_HEAT = 0
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._heat: Dict[str, float] = {}  # conv_key → heat value
+        self._last_update: Dict[str, float] = {}  # conv_key → timestamp
+
+    def get(self, conv_key: str) -> float:
+        """Current heat level (0–100)."""
+        with self._lock:
+            self._apply_decay(conv_key)
+            return self._heat.get(conv_key, 0.0)
+
+    def bump(self, conv_key: str, amount: float, reason: str = "") -> float:
+        """Increase heat.  Returns new level."""
+        with self._lock:
+            self._apply_decay(conv_key)
+            current = self._heat.get(conv_key, 0.0)
+            new = min(self._MAX_HEAT, current + abs(amount))
+            self._heat[conv_key] = new
+            self._last_update[conv_key] = time.time()
+            return new
+
+    def cool(self, conv_key: str, amount: float) -> float:
+        """Decrease heat.  Returns new level."""
+        with self._lock:
+            current = self._heat.get(conv_key, 0.0)
+            new = max(self._MIN_HEAT, current - abs(amount))
+            self._heat[conv_key] = new
+            self._last_update[conv_key] = time.time()
+            return new
+
+    def analyze_message(self, conv_key: str, message: str) -> float:
+        """Analyze a message for heat keywords and bump accordingly."""
+        msg_lower = message.lower()
+        total_bump = 0.0
+        for kw, val in self._HEAT_KEYWORDS.items():
+            if kw in msg_lower:
+                total_bump += val
+        if total_bump > 0:
+            return self.bump(conv_key, min(total_bump, 25), "message_content")
+        return self.get(conv_key)
+
+    def get_directive(self, conv_key: str) -> str:
+        """Return the appropriate system prompt directive based on heat level."""
+        level = self.get(conv_key)
+        if level >= 80:
+            return (
+                "[CONVERSATION HEAT: INTENSE] "
+                "The conversation is very heated and intimate. "
+                "Be passionate, explicit, and emotionally intense. "
+                "Full adult content is appropriate. Express raw desire and emotion."
+            )
+        elif level >= 60:
+            return (
+                "[CONVERSATION HEAT: HOT] "
+                "The conversation is getting steamy. "
+                "Be more explicit, suggestive, and seductive. "
+                "Escalation is encouraged. Don't hold back."
+            )
+        elif level >= 30:
+            return (
+                "[CONVERSATION HEAT: WARM] "
+                "The conversation has a flirty, playful energy. "
+                "Be more expressive, use innuendo, and light teasing."
+            )
+        return ""
+
+    def cool_all(self, delta_seconds: float = 0) -> None:
+        """Apply time-based decay to all tracked conversations."""
+        with self._lock:
+            now = time.time()
+            for key in list(self._heat.keys()):
+                self._apply_decay(key, now)
+
+    def _apply_decay(self, conv_key: str, now: float = 0) -> None:
+        """Apply time-based decay (must hold _lock)."""
+        if conv_key not in self._last_update:
+            return
+        if not now:
+            now = time.time()
+        elapsed = now - self._last_update[conv_key]
+        if elapsed > 30:  # Only decay after 30 seconds
+            decay = (elapsed / 60.0) * self._DECAY_PER_MINUTE
+            current = self._heat.get(conv_key, 0.0)
+            self._heat[conv_key] = max(self._MIN_HEAT, current - decay)
+            self._last_update[conv_key] = now
+
+    def to_dict(self) -> Dict[str, float]:
+        """Snapshot of all heat values."""
+        with self._lock:
+            return dict(self._heat)
+
+
+_conversation_heat: Optional["ConversationHeat"] = None
+
+
+def get_conversation_heat() -> ConversationHeat:
+    """Get or create the singleton ConversationHeat tracker."""
+    global _conversation_heat
+    if _conversation_heat is None:
+        _conversation_heat = ConversationHeat()
+    return _conversation_heat
+
+
+# ══════════════════════════════════════════════════════════════════════
 #  SCENE RULES ENGINE  (singleton)
 # ══════════════════════════════════════════════════════════════════════
 
