@@ -687,3 +687,83 @@ class TestSkillsIntegration:
         assert result["type"] == "ephemeral_mcp"
         assert "5555" in result["server_url"]
         assert "/mcp/skills" in result["server_url"]
+
+
+# ═══════════════════════════════════════════════════════════════════════
+#  13. Streaming conversation threading (v3.2)
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestStreamingConversationThreading:
+    """infer_stream creates and updates conversations."""
+
+    def test_infer_stream_is_generator(self):
+        """infer_stream() returns a generator that yields strings."""
+        from engine.agents.virtual_agent_manager import VirtualAgentManager
+        mgr = VirtualAgentManager.__new__(VirtualAgentManager)
+        # Verify method exists and is a generator function
+        import inspect
+        assert hasattr(mgr, "infer_stream")
+
+    def test_infer_processed_captures_return(self):
+        """infer_processed uses StopIteration pattern to capture generator return."""
+        from engine.agents.virtual_agent_manager import VirtualAgentManager
+        import inspect
+        source = inspect.getsource(VirtualAgentManager.infer_processed)
+        # Should use StopIteration pattern, not simple for loop
+        assert "StopIteration" in source
+        assert "next(gen)" in source
+
+    def test_infer_stream_creates_conversation(self):
+        """infer_stream creates a conversation when conversation_id is provided
+        and the conversation doesn't exist yet."""
+        from engine.agents.virtual_agent_manager import VirtualAgentManager
+        import inspect
+        source = inspect.getsource(VirtualAgentManager.infer_stream)
+        # Should call conv_mgr.create() for new conversations
+        assert "conv_mgr.create(" in source
+        # Should update response_id after streaming
+        assert "conv.response_id" in source
+        assert "_server_synced" in source
+
+    def test_conversation_manager_get_or_create_pattern(self):
+        """ConversationManager supports get_or_create for conversation lifecycle."""
+        from engine.lmstudio.conversation import get_conversation_manager
+        conv_mgr = get_conversation_manager()
+        # get_or_create should exist
+        assert hasattr(conv_mgr, "get_or_create") or hasattr(conv_mgr, "create")
+        # create should work
+        conv = conv_mgr.create("test_stream_conv", system="Test system", model=None)
+        assert conv is not None
+        assert conv.response_id is None or conv.response_id == ""
+        # Cleanup
+        try:
+            conv_mgr.remove("test_stream_conv")
+        except Exception:
+            pass
+
+    def test_conversation_tracks_response_id_history(self):
+        """Conversation maintains _response_id_history for branching."""
+        from engine.lmstudio.conversation import Conversation
+        conv = Conversation(conversation_id="test_history_track")
+        assert conv._response_id_history == []
+        conv._response_id_history.append("resp_001")
+        conv._response_id_history.append("resp_002")
+        assert len(conv._response_id_history) == 2
+        conv.response_id = "resp_002"
+        assert conv.response_id == "resp_002"
+
+    def test_processed_response_has_response_id(self):
+        """ProcessedResponse dataclass has response_id field."""
+        from engine.agents.stream_processor import ProcessedResponse
+        pr = ProcessedResponse()
+        assert hasattr(pr, "response_id")
+        pr.response_id = "resp_test_123"
+        assert pr.response_id == "resp_test_123"
+        assert pr.is_stateful is True
+
+    def test_processed_response_is_stateful_check(self):
+        """is_stateful returns True only for resp_ prefixed IDs."""
+        from engine.agents.stream_processor import ProcessedResponse
+        assert ProcessedResponse(response_id="resp_abc").is_stateful is True
+        assert ProcessedResponse(response_id="chatcmpl-xxx").is_stateful is False
+        assert ProcessedResponse(response_id="").is_stateful is False

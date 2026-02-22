@@ -296,6 +296,8 @@ class VirtualAgentManager:
 
         The optional ``on_event`` callback receives typed ``LMSStreamEvent``
         objects for model_load, reasoning, tool_call progress etc.
+
+        Returns the ``LMSResponse`` (available via generator return / StopIteration.value).
         """
         from engine.lmstudio.lms_client import get_lms_client
         from engine.lmstudio.inference_config import InferenceConfig
@@ -320,29 +322,94 @@ class VirtualAgentManager:
 
         event_cb = on_event or request.on_event
 
+        lms_response = None
+
         # Stateful streaming: use conversation's response_id
         if request.conversation_id and request.store is not False:
             try:
                 from engine.lmstudio.conversation import get_conversation_manager
-                conv = get_conversation_manager().get(request.conversation_id)
+                conv_mgr = get_conversation_manager()
+                conv = conv_mgr.get(request.conversation_id)
+
                 if conv and conv.is_synced:
+                    # Fast path: server has our context
+                    user_msg = request.messages[-1].get("content", "") if request.messages else ""
                     gen = client.chat_stream_stateful(
-                        request.messages[-1].get("content", "") if request.messages else "",
+                        user_msg,
                         previous_response_id=conv.response_id,
                         config=cfg,
                         on_event=event_cb,
                     )
-                    yield from gen
-                    return
+                    lms_response = yield from gen
+
+                    # Update conversation state with new response_id
+                    if lms_response and lms_response.response_id:
+                        from engine.lmstudio.conversation import ConversationMessage
+                        conv.messages.append(ConversationMessage(
+                            role="user", content=user_msg, timestamp=time.time()))
+                        conv.messages.append(ConversationMessage(
+                            role="assistant", content=lms_response.content,
+                            timestamp=time.time(),
+                            metadata={"response_id": lms_response.response_id}))
+                        conv.response_id = lms_response.response_id
+                        conv._response_id_history.append(lms_response.response_id)
+                        conv._server_synced = True
+                        conv.last_active = time.time()
+
+                    return lms_response
+
             except Exception as exc:
                 logger.debug("Stateful stream failed, falling back: %s", exc)
 
-        # Direct streaming
+        # Direct streaming (or first call with conversation_id)
         gen = client.chat_stream(
             request.messages, config=cfg, on_event=event_cb,
             store=request.store,
         )
-        yield from gen
+        lms_response = yield from gen
+
+        # If we have a conversation_id, create/update the conversation from the stream result
+        if request.conversation_id and request.store is not False and lms_response:
+            try:
+                from engine.lmstudio.conversation import get_conversation_manager
+                conv_mgr = get_conversation_manager()
+                conv = conv_mgr.get(request.conversation_id)
+                if conv is None:
+                    # Extract system prompt from messages
+                    system_msg = ""
+                    for m in request.messages:
+                        if m.get("role") == "system":
+                            system_msg = m.get("content", "")
+                            break
+                    conv = conv_mgr.create(
+                        request.conversation_id,
+                        system=system_msg,
+                        model=request.model,
+                        config=cfg,
+                    )
+                # Record the exchange and response_id
+                from engine.lmstudio.conversation import ConversationMessage
+                user_msg = ""
+                for m in reversed(request.messages):
+                    if m.get("role") == "user":
+                        user_msg = m.get("content", "")
+                        break
+                if user_msg:
+                    conv.messages.append(ConversationMessage(
+                        role="user", content=user_msg, timestamp=time.time()))
+                conv.messages.append(ConversationMessage(
+                    role="assistant", content=lms_response.content,
+                    timestamp=time.time(),
+                    metadata={"response_id": lms_response.response_id}))
+                if lms_response.response_id:
+                    conv.response_id = lms_response.response_id
+                    conv._response_id_history.append(lms_response.response_id)
+                    conv._server_synced = True
+                conv.last_active = time.time()
+            except Exception as exc:
+                logger.debug("Post-stream conversation update failed: %s", exc)
+
+        return lms_response
 
     def infer_processed(
         self,
@@ -378,11 +445,24 @@ class VirtualAgentManager:
             on_stat_delta=on_stat_delta,
         )
 
-        # Stream with the processor as the event handler
-        for _chunk in self.infer_stream(request, on_event=proc.on_event):
-            pass
+        # Stream with the processor as the event handler.
+        # Capture the generator's return value (LMSResponse) via StopIteration.
+        gen = self.infer_stream(request, on_event=proc.on_event)
+        lms_response = None
+        try:
+            while True:
+                next(gen)
+        except StopIteration as e:
+            lms_response = e.value
 
-        return proc.result()
+        result = proc.result()
+
+        # Attach LMSResponse metadata to ProcessedResponse for callers
+        if lms_response:
+            result.response_id = getattr(lms_response, "response_id", "")
+            result.model = getattr(lms_response, "model", "")
+
+        return result
 
     # ── High-level convenience ──────────────────────────────────────
 
