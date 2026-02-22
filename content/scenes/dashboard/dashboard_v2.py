@@ -622,8 +622,8 @@ elif page == "⚙️ Settings":
     st.title("⚙️ Settings")
     
     st.subheader("Database")
-    st.info(f"Database Path: simulation/simulation.db")
-    st.info(f"ChromaDB Path: simulation/chroma_db")
+    st.info(f"Database Path: data/simulation.db")
+    st.info(f"ChromaDB Path: data/chroma_db")
     
     st.subheader("Danger Zone")
     

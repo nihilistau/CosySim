@@ -372,8 +372,8 @@ class ConversationVarietyInterceptor(InterceptorBase):
             directive = heat.get_directive(conv_key)
             if directive:
                 variety_lines.append(directive)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("ConversationVarietyInterceptor: heat directive failed: %s", exc)
 
         if variety_lines:
             block = "\n".join(variety_lines)
@@ -400,8 +400,8 @@ class ConversationVarietyInterceptor(InterceptorBase):
                 scene = ctx.get("scene", "")
                 conv_key = ctx.get("conversation_id") or f"{scene}_{agent_id}"
                 heat.analyze_message(conv_key, reply)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("ConversationVarietyInterceptor: heat analysis failed: %s", exc)
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -646,8 +646,8 @@ class BedroomSceneInterceptor(InterceptorBase):
                     if rules_summary:
                         mcp_actions_block += f"\nScene rules: {rules_summary[:300]}"
                         break  # Same for all chars
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("BedroomSceneInterceptor: MCP governance failed: %s", exc)
 
             if mcp_actions_block:
                 ctx["system_prompt"] = ctx.get("system_prompt", "") + "\nMCP Governance:" + mcp_actions_block
@@ -750,8 +750,8 @@ class PhoneSceneInterceptor(InterceptorBase):
                     if available:
                         acts = ", ".join(a["id"] for a in available[:6])
                         lines.append(f"MCP-available actions: {acts}")
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("PhoneSceneInterceptor: MCP actions failed: %s", exc)
 
             if lines:
                 injection = "\n\n[PHONE SCENE CONTEXT]\n" + "\n".join(lines) + "\n[/PHONE SCENE CONTEXT]"
@@ -826,8 +826,8 @@ class LoungeSceneInterceptor(InterceptorBase):
             directive = None
             try:
                 directive = ds.get_active_directive(agent_id, SCENE_ID)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("LoungeSceneInterceptor: directive lookup failed: %s", exc)
 
             # ── Available cocktails this trust level ──────────────────
             cocktails_avail = get_all_cocktails(trust)
@@ -843,15 +843,15 @@ class LoungeSceneInterceptor(InterceptorBase):
                 stats_dict["heat_level"] = heat
                 actions = eng.get_available_actions(SCENE_ID, stats_dict)
                 available_actions = [a["id"] for a in actions[:8]]
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("LoungeSceneInterceptor: available actions failed: %s", exc)
 
             # ── Rules summary ─────────────────────────────────────────
             rules_summary = ""
             try:
                 rules_summary = eng.get_rules_summary(SCENE_ID)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("LoungeSceneInterceptor: rules summary failed: %s", exc)
 
             # ── Cross-agent inbox ─────────────────────────────────────
             cross_note = ""
@@ -863,8 +863,8 @@ class LoungeSceneInterceptor(InterceptorBase):
                     msgs = [m.get("message", "") for m in inbox[:2] if m.get("message")]
                     if msgs:
                         cross_note = "Internal message: " + " / ".join(msgs)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("LoungeSceneInterceptor: cross-scene inbox failed: %s", exc)
 
             # ── Build injection block ─────────────────────────────────
             lines: List[str] = [
@@ -1244,8 +1244,8 @@ class TTSStyleInterceptor(InterceptorBase):
                     voices_cfg = get_config().get("voices", {})
                     if isinstance(voices_cfg, dict) and agent_id in voices_cfg:
                         voice_id = agent_id
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("TTSStyleInterceptor: voice config lookup failed: %s", exc)
         except Exception as exc:
             logger.debug("TTSStyleInterceptor: registry lookup failed: %s", exc)
 

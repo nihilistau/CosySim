@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 class RAGMemory:
     """RAG-based memory system using ChromaDB"""
     
-    def __init__(self, persist_directory: str = "simulation/chroma_db", collection_name: str = "character_memories"):
+    def __init__(self, persist_directory: str = "data/chroma_db", collection_name: str = "character_memories"):
         """
         Initialize ChromaDB RAG memory system
         

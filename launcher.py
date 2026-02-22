@@ -304,7 +304,7 @@ def show_status() -> None:
 
     # Databases
     print("\n  Databases:")
-    for db_rel in ["content/simulation/simulation.db", "data/agent_state.db",
+    for db_rel in ["data/simulation.db", "data/agent_state.db",
                     "data/phone_v2.db", "asset_registry.db"]:
         db_path = PROJECT_ROOT / db_rel
         if db_path.exists():

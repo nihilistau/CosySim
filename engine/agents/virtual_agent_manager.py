@@ -87,6 +87,12 @@ class VirtualAgentManager:
         self._total_tokens_out = 0
         self._total_errors = 0
         self._total_latency_ms = 0.0
+        # v2.9: granular pipeline metrics
+        self._stateless_requests = 0
+        self._stateful_requests = 0
+        self._repair_attempts = 0
+        self._repair_successes = 0
+        self._quality_gate_calls = 0
 
         # Request hooks — called before/after every inference
         self._pre_hooks: List[Callable] = []
@@ -485,6 +491,15 @@ class VirtualAgentManager:
                 self._total_latency_ms / self._total_requests
                 if self._total_requests > 0 else 0
             ),
+            "stateless_requests": self._stateless_requests,
+            "stateful_requests": self._stateful_requests,
+            "repair_attempts": self._repair_attempts,
+            "repair_successes": self._repair_successes,
+            "quality_gate_calls": self._quality_gate_calls,
+            "token_savings_pct": (
+                round(100 * self._stateful_requests / self._total_requests, 1)
+                if self._total_requests > 0 else 0
+            ),
         }
 
     # ── Internal: execute a single request ──────────────────────────
@@ -535,17 +550,21 @@ class VirtualAgentManager:
 
         # Stateless one-off: skip conversation entirely
         if request.store is False:
+            self._stateless_requests += 1
             resp = client.chat(request.messages, config=cfg, store=False)
             return InferenceResponse.from_lms_response(resp)
 
         # Stateful path (primary): use ConversationManager
         if request.conversation_id:
+            self._stateful_requests += 1
             try:
                 response = self._infer_stateful(request, cfg)
                 # Conversation repair: retry garbage responses
                 if self._is_garbage_response(response):
+                    self._repair_attempts += 1
                     repaired = self._retry_with_repair(request, cfg, attempt=0)
                     if repaired and not self._is_garbage_response(repaired):
+                        self._repair_successes += 1
                         return repaired
                 return response
             except Exception as exc:
@@ -560,8 +579,10 @@ class VirtualAgentManager:
 
         # Conversation repair for direct calls too
         if self._is_garbage_response(response):
+            self._repair_attempts += 1
             repaired = self._retry_with_repair(request, cfg, attempt=0)
             if repaired and not self._is_garbage_response(repaired):
+                self._repair_successes += 1
                 return repaired
 
         return response
@@ -675,6 +696,7 @@ class VirtualAgentManager:
             personality_keywords: Keywords for personality scoring.
             recent_messages: Recent messages for variety scoring.
         """
+        self._quality_gate_calls += 1
         from engine.agents.evaluator import TextEvaluator
         from engine.lmstudio.inference_config import InferenceConfig
 
@@ -686,8 +708,12 @@ class VirtualAgentManager:
 
         for i, temp in enumerate(temps):
             try:
-                cfg = InferenceConfig.from_request(request)
-                cfg = InferenceConfig.merge(cfg, InferenceConfig(temperature=temp))
+                cfg = InferenceConfig(
+                    model=request.model,
+                    temperature=temp,
+                    max_output_tokens=request.max_output_tokens,
+                    store=False,
+                )
 
                 # Force stateless for variant generation
                 variant_request = InferenceRequest(

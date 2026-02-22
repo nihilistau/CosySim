@@ -3,6 +3,12 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# Runtime data (databases, vector stores)
+/simulation/
+data/*.db
+data/chroma_db/
+data/uploads/
+
 # Visual Studio Code files
 .vscode
 .vs

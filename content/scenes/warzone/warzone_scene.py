@@ -24,6 +24,7 @@ from flask import Flask, render_template, jsonify, request
 from flask_socketio import SocketIO, emit
 
 from engine.scenes.base_scene import BaseScene
+from engine.mcp.framework import MCPSceneMixin
 
 logger = logging.getLogger(__name__)
 
@@ -376,7 +377,7 @@ class GameState:
 
 # ── Scene class ──────────────────────────────────────────────────────
 
-class WarzoneScene(BaseScene):
+class WarzoneScene(BaseScene, MCPSceneMixin, mcp_scene_id="warzone"):
     def __init__(self):
         super().__init__("warzone", port=5561)
         tpl = str(Path(__file__).parent / "templates")
@@ -390,8 +391,8 @@ class WarzoneScene(BaseScene):
         try:
             from engine.mcp.framework import get_framework
             self._fw = get_framework()
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("WarzoneScene: framework init failed: %s", exc)
         self._setup_routes()
         self._setup_sio()
 

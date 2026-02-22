@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 class Database:
     """Central SQLite database for the simulation system"""
     
-    def __init__(self, db_path: str = "simulation/simulation.db"):
+    def __init__(self, db_path: str = "data/simulation.db"):
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self.init_database()
