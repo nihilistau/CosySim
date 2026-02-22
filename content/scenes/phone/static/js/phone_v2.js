@@ -48,10 +48,13 @@
     return p.length >= 2 ? (p[0][0] + p[p.length - 1][0]).toUpperCase() : name[0].toUpperCase();
   }
 
+  function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
   function avatarHtml(name, url, cls) {
     const c = cls || 'avatar';
-    if (url) return `<div class="${c}"><img src="${url}" alt="${name}" onerror="this.parentNode.textContent='${initials(name)}'"></div>`;
-    return `<div class="${c}">${initials(name)}</div>`;
+    const safe = esc(initials(name));
+    if (url) return `<div class="${c}"><img src="${esc(url)}" alt="${esc(name)}" onerror="this.parentNode.textContent='${safe}'"></div>`;
+    return `<div class="${c}">${safe}</div>`;
   }
 
   async function api(method, path, body) {
@@ -287,7 +290,14 @@
         if (this.activeThread) CosyPhone.socket.emit('typing', { thread_id: this.activeThread.id, active: true });
       };
       inp.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (!send.disabled) this.sendMessage(); } };
-      document.addEventListener('click', () => { const p = qs('#attach-popup'); if (p) p.classList.remove('open'); });
+      if (!this._clickCleanup) {
+        this._clickCleanup = () => { const p = qs('#attach-popup'); if (p) p.classList.remove('open'); };
+        document.addEventListener('click', this._clickCleanup);
+      }
+    },
+
+    onClose() {
+      if (this._clickCleanup) { document.removeEventListener('click', this._clickCleanup); this._clickCleanup = null; }
     },
 
     async loadThreads() {
@@ -313,8 +323,8 @@
         item.innerHTML = `
           ${avatarHtml(name, av)}
           <div class="thread-info">
-            <div class="thread-name">${name}</div>
-            <div class="thread-preview">${t.last_message || '\u00a0'}</div>
+            <div class="thread-name">${esc(name)}</div>
+            <div class="thread-preview">${esc(t.last_message || '\u00a0')}</div>
           </div>
           <div class="thread-meta">
             <div class="thread-time">${fmtTime(t.updated_at)}</div>
@@ -375,14 +385,14 @@
         const file = msg.media_path.split('/').pop().split('\\').pop();
         bubbleHtml = `<div class="bubble media-bubble"><video controls src="/media/video/${file}"></video></div>`;
       } else {
-        bubbleHtml = `<div class="bubble">${this._escHtml(msg.content || '')}<span class="bubble-time">${fmtTime(msg.created_at)}</span></div>`;
+        bubbleHtml = `<div class="bubble">${esc(msg.content || '')}<span class="bubble-time">${fmtTime(msg.created_at)}</span></div>`;
       }
       row.innerHTML += bubbleHtml;
       box.appendChild(row);
       if (!batch) this._scrollBottom(true);
     },
 
-    _escHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; },
+    _basename(p) { return p ? p.split('/').pop().split('\\').pop() : ''; },
 
     _scrollBottom(smooth) {
       const box = qs('#chat-messages');
@@ -484,10 +494,10 @@
           card.innerHTML = `
             ${avatarHtml(c.name, c.avatar, 'avatar')}
             <div style="flex:1;min-width:0">
-              <div style="font-size:16px;font-weight:600">${c.name}</div>
-              <div style="font-size:13px;color:var(--label2);margin-top:2px">${c.mood || c.status || 'Available'}</div>
+              <div style="font-size:16px;font-weight:600">${esc(c.name)}</div>
+              <div style="font-size:13px;color:var(--label2);margin-top:2px">${esc(c.mood || c.status || 'Available')}</div>
             </div>
-            <button class="pill-btn pill-primary" style="font-size:13px" onclick="event.stopPropagation(); CosyPhone.apps.messages._openDM('${c.id}','${c.name}'); CosyPhone.openApp('messages')">💬 Chat</button>`;
+            <button class="pill-btn pill-primary" style="font-size:13px" onclick="event.stopPropagation(); CosyPhone.apps.messages._openDM('${esc(c.id)}','${esc(c.name)}'); CosyPhone.openApp('messages')">💬 Chat</button>`;
           list.appendChild(card);
         });
       } catch (e) { console.error('contacts', e); }
@@ -518,7 +528,7 @@
         if (!images.length) { grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1"><div class="es-icon">📷</div><h3>No photos yet</h3><p>Photos from conversations will appear here</p></div>'; return; }
         images.forEach(img => {
           const item = el('div', 'gallery-item');
-          item.innerHTML = `<img src="${img.url}" alt="${img.name || 'photo'}" loading="lazy">`;
+          item.innerHTML = `<img src="${esc(img.url)}" alt="${esc(img.name || 'photo')}" loading="lazy">`;
           item.onclick = () => { qs('#gallery-full').src = img.url; qs('#gallery-viewer').classList.add('open'); };
           grid.appendChild(item);
         });

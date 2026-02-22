@@ -790,7 +790,10 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
             """Submit an arcade game highscore to SharedBoardManager."""
             body = request.get_json(force=True, silent=True) or {}
             game = str(body.get("game", "")).strip()
-            score = int(body.get("score", 0))
+            try:
+                score = int(body.get("score", 0))
+            except (ValueError, TypeError):
+                return jsonify({"ok": False, "error": "score must be integer"}), 400
             if not game:
                 return jsonify({"ok": False, "error": "game required"}), 400
             try:
