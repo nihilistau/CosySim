@@ -236,6 +236,8 @@ class Database:
 
         # Apply column migrations for existing databases
         self._migrate_schema()
+        # Ensure default characters exist
+        self.seed_default_characters()
     
     def _migrate_schema(self):
         """
@@ -369,6 +371,58 @@ class Database:
                 characters.append(char)
             
             return characters
+
+    def seed_default_characters(self) -> int:
+        """Seed the database with well-known characters if they don't exist.
+
+        Returns the number of characters inserted.
+        """
+        defaults = [
+            {"id": "lola",    "name": "Lola Voss",       "age": 29, "sex": "female",
+             "hair_color": "dark brunette", "eye_color": "deep brown", "height": "5'6",
+             "personality_id": None, "tags": ["lounge", "singer"],
+             "metadata": {"backstory": "Fled Vienna in 1919, built The Velvet Lounge from nothing."}},
+            {"id": "viktor",  "name": "Viktor Marlowe",  "age": 38, "sex": "male",
+             "hair_color": "dark with grey", "eye_color": "pale grey", "height": "6'2",
+             "personality_id": None, "tags": ["lounge", "bartender"],
+             "metadata": {"backstory": "A past he doesn't discuss. Measures people like spirits."}},
+            {"id": "aria",    "name": "Aria",             "age": 22, "sex": "female",
+             "hair_color": "platinum blonde", "eye_color": "blue", "height": "5'4",
+             "personality_id": None, "tags": ["phone", "companion"],
+             "metadata": {"backstory": "Your playful, flirty companion on CosyPhone."}},
+            {"id": "frankie", "name": "Frankie DeLuca",   "age": 45, "sex": "male",
+             "hair_color": "slicked black", "eye_color": "dark", "height": "5'11",
+             "personality_id": None, "tags": ["casino", "dealer"],
+             "metadata": {"backstory": "The Midnight Casino's head dealer. Smooth operator."}},
+            {"id": "mira",    "name": "Mira Vex",         "age": 28, "sex": "female",
+             "hair_color": "red", "eye_color": "green", "height": "5'7",
+             "personality_id": None, "tags": ["casino", "hustler"],
+             "metadata": {"backstory": "Card shark and confidence artist. Never loses twice."}},
+        ]
+        inserted = 0
+        for ch in defaults:
+            if self.get_character(ch["id"]) is not None:
+                continue
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                ts = datetime.now().isoformat()
+                cursor.execute("""
+                    INSERT INTO characters
+                    (id, name, age, sex, hair_color, eye_color, height, body_type,
+                     personality_id, tags, metadata, nsfw_enabled, created_at, updated_at)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    (ch["id"], ch["name"], ch.get("age"), ch.get("sex"),
+                     ch.get("hair_color"), ch.get("eye_color"), ch.get("height"), None,
+                     ch.get("personality_id"), json.dumps(ch.get("tags", [])),
+                     json.dumps(ch.get("metadata", {})), 0, ts, ts))
+                # Seed character state
+                cursor.execute("""
+                    INSERT OR IGNORE INTO character_states
+                    (id, character_id, warmth, formality, humor, flirtiness, intelligence, creativity, updated_at)
+                    VALUES (?,?,?,?,?,?,?,?,?)""",
+                    (str(uuid.uuid4()), ch["id"], 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, ts))
+            inserted += 1
+        return inserted
     
     def update_character(self, char_id: str, **kwargs) -> bool:
         """Update character attributes"""

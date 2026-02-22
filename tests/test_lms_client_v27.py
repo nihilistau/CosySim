@@ -483,7 +483,7 @@ class TestMessagesToV1Input:
         assert sys == "Sys"
         assert isinstance(inp, list)
         assert len(inp) == 3
-        assert inp[1]["content"] == "[assistant]: A1"
+        assert inp[1]["text"] == "[assistant]: A1"
 
     def test_multiple_system_messages_joined(self):
         sys, inp = LMSClient._messages_to_v1_input([
@@ -502,6 +502,6 @@ class TestMessagesToV1Input:
             ]},
         ])
         assert isinstance(inp, list)
-        assert inp[0]["type"] == "message"
+        assert inp[0]["type"] == "text"
         assert inp[1]["type"] == "image"
         assert inp[1]["data_url"] == "data:image/png;base64,abc123"

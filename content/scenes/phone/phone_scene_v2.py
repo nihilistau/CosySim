@@ -326,12 +326,27 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
     # ── LLM reply ────────────────────────────────────────────────────────────
 
     def _generate_reply(self, char_id: str, user_msg: str, *,
+                        thread_id: Optional[str] = None,
                         system_override: Optional[str] = None) -> Dict[str, Any]:
         """Run the governor pipeline and return a rich reply dict.
 
         Returns dict with keys: text, mood, image_requests, action_tags, voice_style.
         The governor calls _PhoneCharacterAgent.reply() which uses infer_processed().
         """
+        # Build conversation history from phone_db (last 20 msgs for context)
+        history: List[Dict[str, str]] = []
+        if thread_id:
+            try:
+                recent = self.phone_db.get_messages(thread_id, limit=20)
+                for m in recent:
+                    role = "assistant" if m.get("sender_id") != "user" else "user"
+                    history.append({"role": role, "content": m.get("content", "")})
+                # Remove the last entry if it matches current user_msg (already appended)
+                if history and history[-1].get("content") == user_msg and history[-1].get("role") == "user":
+                    history.pop()
+            except Exception as exc:
+                logger.debug("Could not load history for %s: %s", thread_id, exc)
+
         result = {"text": "", "mood": None, "image_requests": [], "action_tags": [], "voice_style": None}
         try:
             from engine.mcp.comms_framework import get_governor
@@ -343,7 +358,7 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
             agent._last_processed = None
 
             gov = get_governor(agent, scene=SCENE_ID)
-            text = gov.reply(user_msg, chain_id=None, history=None)
+            text = gov.reply(user_msg, chain_id=None, history=history or None)
             result["text"] = text
 
             # Extract rich metadata from processed response
@@ -378,13 +393,15 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
                 "Reply naturally as a real person texting. Keep messages short.\n"
                 "Express mood with [MOOD:emotion] tags. Send selfies with [IMAGE:desc]."
             )
+            msgs = [{"role": "system", "content": system}]
+            # Include conversation history
+            for turn in history:
+                msgs.append({"role": turn.get("role", "user"), "content": turn.get("content", "")})
+            msgs.append({"role": "user", "content": user_msg})
             mgr = get_virtual_agent_manager()
             req = InferenceRequest(
                 agent_id=char_id,
-                messages=[
-                    {"role": "system", "content": system},
-                    {"role": "user",   "content": user_msg},
-                ],
+                messages=msgs,
                 temperature=0.9,
                 max_output_tokens=4000,
                 conversation_id=f"phone_{char_id}",
@@ -531,7 +548,7 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
                         self._emit("typing", {"thread_id": thread_id, "char_id": char_id, "active": True})
                         time.sleep(random.uniform(0.5, 2.0))
 
-                        reply = self._generate_reply(char_id, content)
+                        reply = self._generate_reply(char_id, content, thread_id=thread_id)
                         reply_text = reply.get("text", "").strip()
                         if not reply_text:
                             continue
@@ -781,6 +798,20 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
                         if f.is_file() and f.suffix.lower() in (".mp4", ".webm", ".mov"):
                             messages.append({"filename": f.name, "sender": f.stem.split("_")[0] if "_" in f.stem else "Unknown", "created_at": f.stat().st_mtime})
                 return jsonify({"ok": True, "messages": messages})
+            except Exception as exc:
+                return jsonify({"ok": False, "error": str(exc)}), 500
+
+        # ── Voice Studio premade voices ──────────────────────────────────
+        @app.route("/api/voice-studio/premade")
+        def voice_studio_premade():
+            """Return premade voice collection."""
+            try:
+                from content.scenes.phone.apps.voice_studio import PREMADE_VOICES
+                voices = []
+                for key, v in PREMADE_VOICES.items():
+                    voices.append({"id": key, "name": v["name"], "description": v["description"],
+                                   "model_size": v.get("model_size", "1.7b"), "tags": v.get("tags", [])})
+                return jsonify({"ok": True, "voices": voices})
             except Exception as exc:
                 return jsonify({"ok": False, "error": str(exc)}), 500
 

@@ -56,10 +56,12 @@ def api_status():
     try:
         from engine.lmstudio.lms_client import get_lms_client
         client = get_lms_client()
+        available = client.is_available()
+        models = client.get_models() if available else []
         result["lmstudio"] = {
-            "available": client.is_available(),
-            "native_api": client.is_native_available(),
-            "models": client.get_models(),
+            "available": available,
+            "native_api": available,  # v1 API is always native
+            "models": models,
         }
     except Exception as exc:
         result["lmstudio"] = {"available": False, "error": str(exc)}
@@ -98,12 +100,14 @@ def api_agents():
         from engine.mcp.character_registry import get_character_registry
         registry = get_character_registry()
         agents = []
-        for cid, info in registry._characters.items():
+        for cid in registry.list_characters():
+            profile = registry.get_profile(cid)
+            state = registry.get_state(cid)
             agents.append({
                 "id": cid,
-                "name": info.get("display_name", cid),
-                "state": info.get("state", {}),
-                "scene": info.get("scene", ""),
+                "name": profile.name if profile else cid,
+                "state": state,
+                "scene": profile.scene_roles[0] if profile and profile.scene_roles else "",
             })
         return jsonify({"ok": True, "agents": agents})
     except Exception as exc:
@@ -119,10 +123,10 @@ def api_agent_detail(agent_id: str):
 
         if request.method == "POST":
             data = request.get_json(force=True)
-            registry.set_state(agent_id, data.get("state", {}))
+            registry.set_state(agent_id, **data.get("state", {}))
             return jsonify({"ok": True})
 
-        info = registry._characters.get(agent_id, {})
+        info = registry.get_profile(agent_id)
 
         # Get MCP framework node info
         mcp_info = {}
@@ -141,8 +145,8 @@ def api_agent_detail(agent_id: str):
             "ok": True,
             "agent": {
                 "id": agent_id,
-                "name": info.get("display_name", agent_id),
-                "state": info.get("state", {}),
+                "name": info.name if info else agent_id,
+                "state": registry.get_state(agent_id),
                 "mcp": mcp_info,
             },
         })
@@ -508,8 +512,37 @@ def mount_overlay(app, socketio=None) -> None:
         mount_overlay(app, socketio)
 
     Then access the overlay at ``http://host:port/overlay/``
+    A toggle button is injected into every page via after_request.
     """
     app.register_blueprint(overlay_bp)
+
+    @app.after_request
+    def _inject_overlay_toggle(response):
+        """Inject a floating overlay toggle button into HTML responses."""
+        if (response.content_type
+                and "text/html" in response.content_type
+                and response.status_code == 200
+                and "/overlay" not in (getattr(request, 'path', '') or '')):
+            try:
+                data = response.get_data(as_text=True)
+                if "</body>" in data and "overlay-toggle-btn" not in data:
+                    snippet = (
+                        '<div id="overlay-toggle-btn" onclick="document.getElementById(\'overlay-frame-wrap\').style.display='
+                        "document.getElementById('overlay-frame-wrap').style.display==='none'?'block':'none'"
+                        '" style="position:fixed;bottom:12px;right:12px;z-index:99999;width:40px;height:40px;'
+                        'border-radius:50%;background:#1a1a2e;border:1px solid #4aa0ff;color:#4aa0ff;'
+                        'font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;'
+                        'box-shadow:0 2px 8px rgba(0,0,0,0.4);">⚙</div>'
+                        '<div id="overlay-frame-wrap" style="display:none;position:fixed;top:0;right:0;'
+                        'width:420px;height:100vh;z-index:99998;box-shadow:-4px 0 20px rgba(0,0,0,0.5);">'
+                        '<iframe src="/overlay/" style="width:100%;height:100%;border:none;"></iframe></div>'
+                    )
+                    data = data.replace("</body>", snippet + "</body>")
+                    response.set_data(data)
+            except Exception:
+                pass
+        return response
+
     logger.info("Control overlay mounted at /overlay/")
 
 

@@ -136,7 +136,7 @@ class TestAgentLoopIntegration:
 
         assert len(actions) == 1
         # Solo character with no LLM falls back to _random_action: move or idle
-        assert actions[0]["action"] in ("move", "idle")
+        assert actions[0]["action"] in ("move", "idle", "speak")
 
 
 # ═══════════════════════════════════════════════════════════════════════

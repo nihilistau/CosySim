@@ -25,6 +25,10 @@ body {
 .text-input::placeholder,
 .textarea-input::placeholder { color: #555; }
 .select-input { cursor: pointer; }
+.select-input option, .select-input-sm option {
+    background: #1a1a2e;
+    color: #eee;
+}
 .select-input-sm {
     padding: 4px 6px;
     background: rgba(255,255,255,0.06);

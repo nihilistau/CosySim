@@ -429,6 +429,9 @@ socket.on('ai_comment', data => {
 
 socket.on('error', data => {
   document.getElementById('ai-chat').innerHTML = '<span style="color:var(--warn)">⚠️ ' + data.msg + '</span>';
+  // Re-enable controls — still the player's turn after an error
+  myTurn = true;
+  document.querySelectorAll('#actions .btn').forEach(b => b.disabled = false);
 });
 
 socket.on('highscore_submitted', data => {

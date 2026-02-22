@@ -605,7 +605,7 @@ class LMSClient:
 
         LMStudio native v1 ``/api/v1/chat`` uses:
         - ``system_prompt``: string (extracted from system messages)
-        - ``input``: string | array of ``{type: "message", content: "..."}``
+        - ``input``: string | array of ``{type: "text", text: "..."}``
 
         Returns ``(system_prompt_or_None, input_value)``.
         """
@@ -626,7 +626,7 @@ class LMSClient:
                 # Multi-part content (text + images for VLMs)
                 for part in content:
                     if part.get("type") == "text":
-                        input_items.append({"type": "message", "content": part["text"]})
+                        input_items.append({"type": "text", "text": part["text"]})
                     elif part.get("type") == "image_url":
                         url = part.get("image_url", {}).get("url", "")
                         input_items.append({"type": "image", "data_url": url})
@@ -634,17 +634,17 @@ class LMSClient:
                 # Prefix assistant messages so the model understands the turn
                 if role == "assistant":
                     input_items.append({
-                        "type": "message",
-                        "content": f"[assistant]: {content}",
+                        "type": "text",
+                        "text": f"[assistant]: {content}",
                     })
                 else:
-                    input_items.append({"type": "message", "content": content})
+                    input_items.append({"type": "text", "text": content})
 
         system_prompt = "\n\n".join(system_parts) if system_parts else None
 
         # Simplify: single text item → plain string
-        if len(input_items) == 1 and input_items[0].get("type") == "message":
-            return system_prompt, input_items[0]["content"]
+        if len(input_items) == 1 and input_items[0].get("type") == "text":
+            return system_prompt, input_items[0]["text"]
         if not input_items:
             return system_prompt, ""
 
@@ -832,7 +832,7 @@ class LMSClient:
             {
               "model_instance_id": "...",
               "output": [
-                {"type": "message", "content": "..."},
+                {"type": "text", "text": "..."},
                 {"type": "reasoning", "content": "..."},
                 {"type": "tool_call", "tool": "...", "arguments": {...}, "output": "..."}
               ],

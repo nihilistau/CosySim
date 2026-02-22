@@ -47,9 +47,10 @@ class TestCharacters:
         assert char["age"] == 22
 
     def test_get_all(self, db):
+        baseline = len(db.get_all_characters())  # seeded characters
         _make_character(db, "A")
         _make_character(db, "B")
-        assert len(db.get_all_characters()) == 2
+        assert len(db.get_all_characters()) == baseline + 2
 
     def test_update(self, db):
         cid = _make_character(db)
@@ -73,13 +74,16 @@ class TestCharacters:
     def test_search(self, db):
         _make_character(db, "Luna Star")
         _make_character(db, "Nova Ray")
-        assert len(db.search_characters("luna")) == 1
-        assert len(db.search_characters("a")) == 2  # both contain 'a'
+        results_luna = db.search_characters("luna")
+        assert any(c["name"] == "Luna Star" for c in results_luna)
+        results_a = db.search_characters("a")
+        # At least the 2 we created (both contain 'a'), plus any seeded chars with 'a'
+        assert len(results_a) >= 2
 
     def test_count(self, db):
-        assert db.count_characters() == 0
+        baseline = db.count_characters()  # seeded characters
         _make_character(db)
-        assert db.count_characters() == 1
+        assert db.count_characters() == baseline + 1
 
     def test_personality_seeds_state(self, db):
         pid = _make_personality(db, "Warm")

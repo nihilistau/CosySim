@@ -510,13 +510,25 @@
 
   CosyPhone.registerApp('gallery', {
     name: 'Gallery', icon: '🖼️', color: '#FF9F0A',
+    _images: [], _idx: 0,
 
     render(body) {
       body.innerHTML = `
         <div class="section-header">Photos</div>
         <div class="gallery-grid" id="gallery-grid"></div>
-        <div id="gallery-viewer"><button class="close-btn" onclick="qs('#gallery-viewer').classList.remove('open')">✕</button><img id="gallery-full" src=""></div>`;
+        <div id="gallery-viewer">
+          <button class="close-btn" onclick="qs('#gallery-viewer').classList.remove('open')">✕</button>
+          <div class="nav-btn nav-prev" onclick="CosyPhone._apps.gallery._nav(-1)">‹</div>
+          <img id="gallery-full" src="">
+          <div class="nav-btn nav-next" onclick="CosyPhone._apps.gallery._nav(1)">›</div>
+        </div>`;
       this._load();
+    },
+
+    _nav(dir) {
+      if (!this._images.length) return;
+      this._idx = (this._idx + dir + this._images.length) % this._images.length;
+      qs('#gallery-full').src = this._images[this._idx].url;
     },
 
     async _load() {
@@ -524,12 +536,12 @@
       if (!grid) return;
       try {
         const data = await api('GET', '/api/gallery');
-        const images = data.images || [];
-        if (!images.length) { grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1"><div class="es-icon">📷</div><h3>No photos yet</h3><p>Photos from conversations will appear here</p></div>'; return; }
-        images.forEach(img => {
+        this._images = data.images || [];
+        if (!this._images.length) { grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1"><div class="es-icon">📷</div><h3>No photos yet</h3><p>Photos from conversations will appear here</p></div>'; return; }
+        this._images.forEach((img, i) => {
           const item = el('div', 'gallery-item');
           item.innerHTML = `<img src="${esc(img.url)}" alt="${esc(img.name || 'photo')}" loading="lazy">`;
-          item.onclick = () => { qs('#gallery-full').src = img.url; qs('#gallery-viewer').classList.add('open'); };
+          item.onclick = () => { this._idx = i; qs('#gallery-full').src = img.url; qs('#gallery-viewer').classList.add('open'); };
           grid.appendChild(item);
         });
       } catch (e) { grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1"><div class="es-icon">📷</div><h3>No photos yet</h3></div>'; }
@@ -616,12 +628,38 @@
         <div class="section-sub">Create and manage voice profiles</div>
         <div class="list-group">
           <div class="list-row" onclick="toast('Voice design studio coming soon')"><span class="list-icon">✨</span><span class="list-label">New Voice Design</span><span class="list-chevron">›</span></div>
-          <div class="list-row" onclick="toast('Browse premade voices')"><span class="list-icon">🗃️</span><span class="list-label">Premade Voices</span><span class="list-value">8 voices</span><span class="list-chevron">›</span></div>
+          <div class="list-row" onclick="CosyPhone.apps.voice_studio._showPremade()"><span class="list-icon">🗃️</span><span class="list-label">Premade Voices</span><span class="list-value">8 voices</span><span class="list-chevron">›</span></div>
           <div class="list-row" onclick="toast('Recording studio coming soon')"><span class="list-icon">⏺️</span><span class="list-label">Record Sample</span><span class="list-chevron">›</span></div>
         </div>
-        <div class="section-sub" style="margin-top:16px">My Voice Designs</div>
-        <div id="voice-designs-list"></div>`;
+        <div id="voice-studio-content">
+          <div class="section-sub" style="margin-top:16px">My Voice Designs</div>
+          <div id="voice-designs-list"></div>
+        </div>`;
       this._loadDesigns();
+    },
+
+    async _showPremade() {
+      const content = qs('#voice-studio-content');
+      if (!content) return;
+      content.innerHTML = '<div class="section-sub" style="margin-top:12px">Loading premade voices…</div>';
+      try {
+        const data = await api('GET', '/api/voice-studio/premade');
+        if (!data.ok || !data.voices || data.voices.length === 0) {
+          content.innerHTML = '<div class="empty-state"><div class="es-icon">🗃️</div><h3>No premade voices</h3></div>';
+          return;
+        }
+        let html = '<div class="section-sub" style="margin-top:12px">Premade Voices</div>';
+        data.voices.forEach(v => {
+          const tags = (v.tags||[]).map(t => `<span style="background:rgba(255,255,255,0.1);border-radius:8px;padding:2px 8px;font-size:10px;margin-right:4px">${esc(t)}</span>`).join('');
+          html += `<div class="list-row" style="flex-direction:column;align-items:flex-start;padding:10px 14px;gap:4px">
+            <div style="display:flex;justify-content:space-between;width:100%"><strong>${esc(v.name)}</strong><span style="font-size:10px;color:#888">${esc(v.model_size)}</span></div>
+            <div style="font-size:11px;color:#aaa">${esc(v.description).substring(0,120)}…</div>
+            <div style="margin-top:4px">${tags}</div></div>`;
+        });
+        content.innerHTML = html;
+      } catch(e) {
+        content.innerHTML = '<div class="section-sub" style="color:#f44">Failed to load voices</div>';
+      }
     },
 
     async _loadDesigns() {

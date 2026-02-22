@@ -379,8 +379,8 @@ def show_character_manager():
                                                     index=["female","male","non-binary","other"].index(char.gender or "female"))
                             e_hair = st.text_input("Hair Color", value=char.hair_color or "")
                             e_eye  = st.text_input("Eye Color",  value=char.eye_color or "")
-                            _freq_opts = ["rare", "occasional", "frequent"]
-                            _cur_freq = char.messaging_frequency if char.messaging_frequency in _freq_opts else "occasional"
+                            _freq_opts = ["low", "medium", "high"]
+                            _cur_freq = char.messaging_frequency if char.messaging_frequency in _freq_opts else "medium"
                             e_freq = st.selectbox("Messaging Frequency", _freq_opts,
                                                   index=_freq_opts.index(_cur_freq))
                             e_auto = st.slider("Autonomy Level", 0.0, 1.0,
@@ -419,6 +419,8 @@ def show_character_manager():
     
     with tab2:
         st.subheader("Create New Character")
+        if st.session_state.pop("_char_created", None):
+            st.success(f"✅ Character created successfully!")
         
         with st.form("create_character"):
             col1, col2 = st.columns(2)
@@ -456,7 +458,7 @@ def show_character_manager():
                             tags=tag_list
                         )
                         st.session_state.asset_manager.save(char)
-                        st.success(f"✅ Created character: {name}")
+                        st.session_state["_char_created"] = name
                         st.rerun()
                     except Exception as e:
                         st.error(f"Error: {e}")
