@@ -493,10 +493,11 @@ class VirtualAgentManager:
         """
         Execute a single inference request.
 
-        Strategy (v2.7 — stateful-first):
+        Strategy (v2.8 — stateful-first with conversation repair):
         1. If store=False → direct LMSClient.chat(store=False), no conversation
         2. If agent has a conversation_id → ConversationManager (stateful)
         3. Fallback → direct LMSClient.chat()
+        4. If response is garbage → auto-retry with lower temperature (max 2 retries)
         """
         from engine.lmstudio.lms_client import get_lms_client
         from engine.lmstudio.inference_config import InferenceConfig
@@ -540,7 +541,13 @@ class VirtualAgentManager:
         # Stateful path (primary): use ConversationManager
         if request.conversation_id:
             try:
-                return self._infer_stateful(request, cfg)
+                response = self._infer_stateful(request, cfg)
+                # Conversation repair: retry garbage responses
+                if self._is_garbage_response(response):
+                    repaired = self._retry_with_repair(request, cfg, attempt=0)
+                    if repaired and not self._is_garbage_response(repaired):
+                        return repaired
+                return response
             except Exception as exc:
                 logger.debug(
                     "Stateful path failed for %s, falling back to direct: %s",
@@ -549,7 +556,62 @@ class VirtualAgentManager:
 
         # Direct call fallback
         resp = client.chat(request.messages, config=cfg)
-        return InferenceResponse.from_lms_response(resp)
+        response = InferenceResponse.from_lms_response(resp)
+
+        # Conversation repair for direct calls too
+        if self._is_garbage_response(response):
+            repaired = self._retry_with_repair(request, cfg, attempt=0)
+            if repaired and not self._is_garbage_response(repaired):
+                return repaired
+
+        return response
+
+    def _is_garbage_response(self, response: InferenceResponse) -> bool:
+        """Check if a response is garbage that should be retried."""
+        from engine.agents.stream_processor import strip_token_artifacts
+        text = strip_token_artifacts(response.content or "").strip()
+        if not text:
+            return True
+        if len(text) < 3:
+            return True
+        # Check for responses that are only token artifacts
+        if all(c in '<>|' for c in text.replace(' ', '')):
+            return True
+        return False
+
+    def _retry_with_repair(
+        self, request: InferenceRequest, cfg: Any, attempt: int = 0,
+    ) -> Optional[InferenceResponse]:
+        """Retry a failed/garbage response with adjusted parameters.
+
+        Uses conversation branching to go back to the last valid state
+        and regenerate with lower temperature.
+        """
+        if attempt >= 2:
+            return None
+
+        from engine.lmstudio.lms_client import get_lms_client
+        from engine.lmstudio.inference_config import InferenceConfig
+        client = get_lms_client()
+
+        # Reduce temperature for retry
+        retry_cfg = InferenceConfig.merge(cfg, InferenceConfig(
+            temperature=max(0.3, (cfg.temperature or 0.7) - 0.2 * (attempt + 1)),
+        ))
+        logger.info(
+            "Conversation repair attempt %d for %s (temp=%.2f)",
+            attempt + 1, request.agent_id, retry_cfg.temperature or 0.7,
+        )
+
+        try:
+            if request.conversation_id:
+                return self._infer_stateful(request, retry_cfg)
+            else:
+                resp = client.chat(request.messages, config=retry_cfg)
+                return InferenceResponse.from_lms_response(resp)
+        except Exception as exc:
+            logger.debug("Repair attempt %d failed: %s", attempt + 1, exc)
+            return None
 
     def _infer_stateful(
         self, request: InferenceRequest, cfg: Any,
@@ -589,13 +651,9 @@ class VirtualAgentManager:
                 model=request.model,
                 config=cfg,
             )
-        elif system_msg and conv.system != system_msg:
-            # System prompt changed (interceptors updated it) — update and
-            # invalidate server state so next send replays with new prompt
-            conv.system = system_msg
-            if conv.messages and conv.messages[0].role == "system":
-                conv.messages[0].content = system_msg
-            conv.invalidate()
+        elif system_msg:
+            # Use smart diff — only invalidates if system prompt actually changed
+            conv.update_system_if_changed(system_msg)
 
         # Use Conversation.send() which handles stateful/replay automatically
         resp = conv.send(

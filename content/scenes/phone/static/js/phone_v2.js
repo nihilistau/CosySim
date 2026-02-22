@@ -519,13 +519,21 @@
       body.innerHTML = `
         <div class="section-header">Photos</div>
         <div class="gallery-grid" id="gallery-grid"></div>
-        <div id="gallery-viewer">
-          <button class="close-btn" onclick="qs('#gallery-viewer').classList.remove('open')">✕</button>
-          <div class="nav-btn nav-prev" onclick="CosyPhone._apps.gallery._nav(-1)">‹</div>
-          <img id="gallery-full" src="">
-          <div class="nav-btn nav-next" onclick="CosyPhone._apps.gallery._nav(1)">›</div>
+        <div id="gallery-viewer" class="gallery-view-overlay" style="display:none">
+          <button class="gallery-close-btn" onclick="qs('#gallery-viewer').style.display='none'">✕</button>
+          <div class="gallery-nav-prev" onclick="CosyPhone._apps.gallery._nav(-1)">‹</div>
+          <img id="gallery-full" src="" style="max-width:80%;max-height:80vh;object-fit:contain;border-radius:12px">
+          <div class="gallery-nav-next" onclick="CosyPhone._apps.gallery._nav(1)">›</div>
         </div>`;
       this._load();
+      // Keyboard navigation
+      document.addEventListener('keydown', (e) => {
+        if (qs('#gallery-viewer')?.style.display !== 'none') {
+          if (e.key === 'ArrowLeft') this._nav(-1);
+          else if (e.key === 'ArrowRight') this._nav(1);
+          else if (e.key === 'Escape') qs('#gallery-viewer').style.display = 'none';
+        }
+      });
     },
 
     _nav(dir) {
@@ -542,9 +550,9 @@
         this._images = data.images || [];
         if (!this._images.length) { grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1"><div class="es-icon">📷</div><h3>No photos yet</h3><p>Photos from conversations will appear here</p></div>'; return; }
         this._images.forEach((img, i) => {
-          const item = el('div', 'gallery-item');
+          const item = el('div', 'gallery-thumbnail');
           item.innerHTML = `<img src="${esc(img.url)}" alt="${esc(img.name || 'photo')}" loading="lazy">`;
-          item.onclick = () => { this._idx = i; qs('#gallery-full').src = img.url; qs('#gallery-viewer').classList.add('open'); };
+          item.onclick = () => { this._idx = i; qs('#gallery-full').src = img.url; qs('#gallery-viewer').style.display = 'flex'; };
           grid.appendChild(item);
         });
       } catch (e) { grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1"><div class="es-icon">📷</div><h3>No photos yet</h3></div>'; }

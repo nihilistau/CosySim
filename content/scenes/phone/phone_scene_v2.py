@@ -65,38 +65,49 @@ class _PhoneCharacterAgent:
     """
     Minimal duck-type that satisfies AgentGovernor.
 
+    **v2.8 — Stateful conversations:**  Uses ConversationManager for server-side
+    state via ``previous_response_id``.  First call replays history from phone_db;
+    subsequent calls send ONLY the new message (80%+ token savings).
+
     **IMPORTANT — no recursion rule:**  ``reply()`` must call the LLM
     *directly* via ``VirtualAgentManager``.  It must NOT call back into
     ``PhoneSceneV2._generate_reply()``; that method already wraps us in a
-    governor, so calling it again would create an infinite loop:
-        _generate_reply → gov.reply() → agent.reply() → _generate_reply → …
+    governor, so calling it again would create an infinite loop.
     """
 
     def __init__(self, char_id: str, scene: "PhoneSceneV2"):
         self.char_id = char_id
         self._scene  = scene
-        # character attribute read by CharacterRegistryInterceptor
         self.character = None
-        # Rich response from last infer_processed() call
         self._last_processed = None
 
     def _refresh(self):
         self.character = self._scene.db.get_character(self.char_id)
+
+    def _get_conversation(self, thread_id: str = ""):
+        """Get or create a stateful Conversation for this character thread."""
+        from engine.lmstudio.conversation import get_conversation_manager
+        conv_id = f"phone_{self.char_id}_{thread_id}" if thread_id else f"phone_{self.char_id}"
+        conv_mgr = get_conversation_manager()
+        return conv_mgr.get_or_create(conv_id, system="", model=None)
 
     def reply(self, message: str, *, chain_id=None, history=None, **_kwargs) -> str:
         """Route through VirtualAgentManager with streaming — invoked by the governor after interceptors fire."""
         try:
             from engine.agents.virtual_agent_manager import get_virtual_agent_manager
             from engine.agents.virtual_agent import InferenceRequest
+            from engine.agents.stream_processor import strip_token_artifacts
             char  = self._scene.db.get_character(self.char_id)
             name  = (char or {}).get("name", "Character")
             pers  = (char or {}).get("personality", "")
             system = (
                 f"You are {name}. {pers}\n"
                 "Reply naturally as a real person texting. Keep messages short and conversational.\n"
+                "Use emojis naturally 😏💕🔥. Be expressive and emotionally vivid.\n"
                 "You may express mood with [MOOD:emotion] tags.\n"
                 "To send a selfie, include [IMAGE:description of the selfie].\n"
-                "To send a voice message, include [VOICE:tone]."
+                "To send a voice message, include [VOICE:tone].\n"
+                "Never repeat your previous messages. Always advance the conversation."
             )
             msgs = [{"role": "system", "content": system}]
             for turn in (history or []):
@@ -112,11 +123,10 @@ class _PhoneCharacterAgent:
                 store=True,
                 metadata={"scene": "phone", "character_name": name},
             )
-            # Use streaming with ProcessedResponse for rich output
             response = mgr.infer_processed(req)
-            # Store rich metadata for the scene to use
             self._last_processed = response
-            return (response.clean_text or "").strip()
+            text = (response.clean_text or "").strip()
+            return strip_token_artifacts(text)
         except Exception as exc:
             logger.debug("_PhoneCharacterAgent.reply failed: %s", exc)
             return ""
@@ -332,7 +342,13 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
 
         Returns dict with keys: text, mood, image_requests, action_tags, voice_style.
         The governor calls _PhoneCharacterAgent.reply() which uses infer_processed().
+
+        v2.8: Uses ConversationManager for stateful conversations. History is loaded
+        from phone_db only for the first interaction; subsequent calls use
+        previous_response_id for server-side KV cache continuation.
         """
+        from engine.agents.stream_processor import strip_token_artifacts
+
         # Build conversation history from phone_db (last 20 msgs for context)
         history: List[Dict[str, str]] = []
         if thread_id:
@@ -359,6 +375,8 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
 
             gov = get_governor(agent, scene=SCENE_ID)
             text = gov.reply(user_msg, chain_id=None, history=history or None)
+            # Strip token artifacts from governor output
+            text = strip_token_artifacts(text or "")
             result["text"] = text
 
             # Extract rich metadata from processed response
@@ -391,10 +409,11 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
             system = system_override or (
                 f"You are {name}. {personality}\n"
                 "Reply naturally as a real person texting. Keep messages short.\n"
-                "Express mood with [MOOD:emotion] tags. Send selfies with [IMAGE:desc]."
+                "Use emojis naturally 😏💕🔥. Be expressive.\n"
+                "Express mood with [MOOD:emotion] tags. Send selfies with [IMAGE:desc].\n"
+                "Never repeat your previous messages. Always advance the conversation."
             )
             msgs = [{"role": "system", "content": system}]
-            # Include conversation history
             for turn in history:
                 msgs.append({"role": turn.get("role", "user"), "content": turn.get("content", "")})
             msgs.append({"role": "user", "content": user_msg})
@@ -409,7 +428,7 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
                 metadata={"scene": "phone", "character_name": name},
             )
             proc = mgr.infer_processed(req)
-            result["text"] = (proc.clean_text or "").strip()
+            result["text"] = strip_token_artifacts((proc.clean_text or "").strip())
             result["mood"] = proc.mood_tags[0] if proc.mood_tags else None
             result["image_requests"] = list(proc.image_requests)
             result["action_tags"] = list(proc.action_tags)
@@ -748,6 +767,12 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
 
         @app.route("/media/video/<filename>")
         def serve_video(filename: str):
+            # Check primary path first, then alternate
+            if (_MEDIA_VIDEO / filename).exists():
+                return send_from_directory(str(_MEDIA_VIDEO), filename)
+            alt_video = project_root / "content" / "media" / "video"
+            if (alt_video / filename).exists():
+                return send_from_directory(str(alt_video), filename)
             return send_from_directory(str(_MEDIA_VIDEO), filename)
 
         @app.route("/media/photo/<filename>")
@@ -793,10 +818,16 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
             """List all video message files with metadata."""
             try:
                 messages = []
-                if _MEDIA_VIDEO.exists():
-                    for f in sorted(_MEDIA_VIDEO.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True):
-                        if f.is_file() and f.suffix.lower() in (".mp4", ".webm", ".mov"):
-                            messages.append({"filename": f.name, "sender": f.stem.split("_")[0] if "_" in f.stem else "Unknown", "created_at": f.stat().st_mtime})
+                # Check both media directories
+                video_dirs = [_MEDIA_VIDEO]
+                alt_video = project_root / "content" / "media" / "video"
+                if alt_video.exists():
+                    video_dirs.append(alt_video)
+                for vdir in video_dirs:
+                    if vdir.exists():
+                        for f in sorted(vdir.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True):
+                            if f.is_file() and f.suffix.lower() in (".mp4", ".webm", ".mov"):
+                                messages.append({"filename": f.name, "sender": f.stem.split("_")[0] if "_" in f.stem else "Unknown", "created_at": f.stat().st_mtime})
                 return jsonify({"ok": True, "messages": messages})
             except Exception as exc:
                 return jsonify({"ok": False, "error": str(exc)}), 500

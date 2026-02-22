@@ -134,6 +134,30 @@ class Conversation:
         """Whether the server has our conversation state."""
         return self._server_synced and self.response_id is not None
 
+    def update_system_if_changed(self, new_system: str) -> bool:
+        """Update system prompt only if it actually changed.
+
+        Returns True if the system was updated (and server state invalidated).
+        Prevents unnecessary replays when interceptors inject the same context.
+        """
+        import hashlib
+        old_hash = hashlib.md5(self.system.encode()).hexdigest()
+        new_hash = hashlib.md5(new_system.encode()).hexdigest()
+        if old_hash != new_hash:
+            self.system = new_system
+            # Update the system message in our message list
+            if self.messages and self.messages[0].role == "system":
+                self.messages[0] = ConversationMessage(
+                    role="system", content=new_system, timestamp=time.time()
+                )
+            else:
+                self.messages.insert(0, ConversationMessage(
+                    role="system", content=new_system, timestamp=time.time()
+                ))
+            self.invalidate()
+            return True
+        return False
+
     def send(
         self,
         user_message: str,

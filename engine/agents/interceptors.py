@@ -311,6 +311,79 @@ class PersonalityGuardInterceptor(InterceptorBase):
 
 
 # ══════════════════════════════════════════════════════════════════════
+#  ConversationVarietyInterceptor  (priority 55)
+# ══════════════════════════════════════════════════════════════════════
+
+class ConversationVarietyInterceptor(InterceptorBase):
+    """
+    Pre-call: prevents conversation loops by tracking recent responses
+    per character and injecting anti-repetition guidance.
+
+    Also injects expressiveness instructions (emoji, adult content,
+    conversation continuation) based on scene context.
+    """
+    name     = "conversation_variety"
+    priority = 55
+
+    # Per-agent recent response tracking (class-level shared cache)
+    _recent_responses: Dict[str, List[str]] = {}  # agent_id → last N summaries
+    _MAX_TRACKED = 5
+
+    def pre_call(self, ctx: ResponseContext) -> None:
+        agent_id = ctx.get("agent_id", "")
+        if not agent_id:
+            return
+
+        variety_lines: List[str] = []
+
+        # Check recent responses for repetition
+        recent = self._recent_responses.get(agent_id, [])
+        if len(recent) >= 2:
+            topics = ", ".join(f'"{r[:50]}"' for r in recent[-3:])
+            variety_lines.append(
+                f"IMPORTANT: Your recent messages covered these topics: {topics}. "
+                "Do NOT repeat these ideas. Bring up something completely new, "
+                "ask a question, share a personal story, or react emotionally to "
+                "what the other person said."
+            )
+
+        # Expressiveness guidance
+        scene = ctx.get("scene", "")
+        variety_lines.append(
+            "Express yourself naturally with emojis 😏💕🔥, "
+            "slang, and casual texting style. "
+            "Be vivid and emotionally expressive. "
+            "Always advance the conversation — never just agree or repeat. "
+            "Reference earlier parts of the conversation to show you remember."
+        )
+
+        if scene in ("bedroom", "phone"):
+            variety_lines.append(
+                "You may be flirty, seductive, suggestive, or vulgar "
+                "when the conversation naturally leads there. "
+                "Don't hold back on sexual or adult topics if appropriate."
+            )
+
+        if variety_lines:
+            block = "\n".join(variety_lines)
+            ctx["system_prompt"] = ctx.get("system_prompt", "") + (
+                f"\n\n[CONVERSATION VARIETY]\n{block}\n[/CONVERSATION VARIETY]"
+            )
+
+    def post_call(self, ctx: ResponseContext) -> None:
+        """Track the response for future variety checking."""
+        agent_id = ctx.get("agent_id", "")
+        reply = ctx.get("reply", "")
+        if agent_id and reply:
+            if agent_id not in self._recent_responses:
+                self._recent_responses[agent_id] = []
+            self._recent_responses[agent_id].append(reply[:80])
+            # Keep only last N
+            if len(self._recent_responses[agent_id]) > self._MAX_TRACKED:
+                self._recent_responses[agent_id] = self._recent_responses[agent_id][-self._MAX_TRACKED:]
+
+
+# ══════════════════════════════════════════════════════════════════════
 #  PolicyEnforcerInterceptor  (priority 60)
 # ══════════════════════════════════════════════════════════════════════
 
@@ -381,8 +454,8 @@ class MemoryEnhancerInterceptor(InterceptorBase):
 
 class ResponseShaperInterceptor(InterceptorBase):
     """
-    Post-call: trim excessively long replies and strip any leaked system
-    instructions that sometimes appear at the end of responses.
+    Post-call: trim excessively long replies, strip leaked system
+    instructions and LLM token artifacts.
     """
     name     = "response_shaper"
     priority = 80
@@ -403,6 +476,10 @@ class ResponseShaperInterceptor(InterceptorBase):
         for marker in self._LEAK_MARKERS:
             if marker in reply:
                 reply = reply[:reply.index(marker)].rstrip()
+
+        # Strip LLM special token artifacts (<|begin_of_text|> etc.)
+        from engine.agents.stream_processor import strip_token_artifacts
+        reply = strip_token_artifacts(reply)
 
         ctx["reply"] = reply.strip()
 
@@ -836,7 +913,9 @@ class CharacterRegistryInterceptor(InterceptorBase):
        if not found).
     2. Injects a compact character-summary block into the system prompt so the
        LLM always knows its own name, mood, personality, and active skills.
-    3. Checks the DialogSystem for a ``force_response`` directive — if one is
+    3. Loads the full personality profile from the simulation DB for rich
+       backstory, speech patterns, and behavioral traits.
+    4. Checks the DialogSystem for a ``force_response`` directive — if one is
        active it short-circuits the LLM call by writing the forced reply
        directly into ctx["reply"] and setting ctx["skip_llm"] = True.
 
@@ -844,6 +923,46 @@ class CharacterRegistryInterceptor(InterceptorBase):
     """
     name     = "character_registry"
     priority = 8
+
+    @staticmethod
+    def _load_personality_profile(agent_id: str) -> str:
+        """Load full personality profile from simulation DB."""
+        try:
+            from content.simulation.database.db import Database
+            db = Database()
+            # Try to find character in DB
+            char = db.get_character(agent_id)
+            if not char:
+                return ""
+
+            parts = []
+            personality_id = char.get("personality_id") or char.get("personality")
+            if personality_id:
+                profile = db.get_personality(personality_id)
+                if profile:
+                    if profile.get("backstory"):
+                        parts.append(f"Backstory: {profile['backstory'][:300]}")
+                    if profile.get("speech_patterns"):
+                        parts.append(f"Speech style: {profile['speech_patterns']}")
+                    if profile.get("traits"):
+                        traits = profile["traits"] if isinstance(profile["traits"], str) else ", ".join(profile["traits"])
+                        parts.append(f"Core traits: {traits}")
+                    if profile.get("quirks"):
+                        parts.append(f"Quirks: {profile['quirks']}")
+                    if profile.get("interests"):
+                        parts.append(f"Interests: {profile['interests']}")
+
+            # Character-level overrides
+            if char.get("backstory") and not any("Backstory" in p for p in parts):
+                parts.append(f"Backstory: {char['backstory'][:300]}")
+            if char.get("description"):
+                parts.append(f"Description: {char['description'][:200]}")
+
+            if parts:
+                return "--- Personality Profile ---\n" + "\n".join(parts)
+        except Exception as exc:
+            logger.debug("_load_personality_profile failed for %s: %s", agent_id, exc)
+        return ""
 
     def pre_call(self, ctx: ResponseContext) -> None:
         agent_id = ctx.get("agent_id", "")
@@ -877,10 +996,15 @@ class CharacterRegistryInterceptor(InterceptorBase):
                     lines.append(f"Voice style: {voice}")
                 if summary.get("restrictions"):
                     lines.append(f"Current restrictions: {', '.join(summary['restrictions'])}")
-                # active_skills is a list of skill_id strings
                 auto_skills = summary.get("active_skills", [])
                 if auto_skills:
                     lines.append(f"Active skills: {', '.join(auto_skills)}")
+
+                # Load full personality profile from simulation DB
+                personality_block = self._load_personality_profile(agent_id)
+                if personality_block:
+                    lines.append(personality_block)
+
                 lines.append("[/CHARACTER IDENTITY]")
                 block = "\n".join(lines)
                 ctx["system_prompt"] = block + "\n\n" + ctx.get("system_prompt", "")

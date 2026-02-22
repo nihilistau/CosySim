@@ -63,6 +63,20 @@ _RE_ALL_TAGS = re.compile(
     re.IGNORECASE,
 )
 
+# LLM special token artifacts that leak into output
+_RE_TOKEN_ARTIFACTS = re.compile(
+    r"<\|(?:begin_of_text|end_of_text|eot_id|start_header_id|end_header_id|"
+    r"im_start|im_end|pad|unk|endoftext|system|user|assistant)\|>",
+    re.IGNORECASE,
+)
+
+
+def strip_token_artifacts(text: str) -> str:
+    """Remove LLM special token artifacts that leak into output."""
+    if not text:
+        return text
+    return _RE_TOKEN_ARTIFACTS.sub("", text).strip()
+
 
 # ── Data classes ────────────────────────────────────────────────────────
 
@@ -336,6 +350,9 @@ class StreamProcessor:
 
         # Strip tags to produce clean text
         clean_text = _RE_ALL_TAGS.sub("", raw_text).strip()
+        # Strip leaked LLM token artifacts
+        clean_text = strip_token_artifacts(clean_text)
+        raw_text = strip_token_artifacts(raw_text)
 
         # Extract stats from chat.end
         stats = self._stats

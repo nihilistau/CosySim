@@ -731,6 +731,7 @@ def _build_default_pipeline() -> InterceptorPipeline:
         GameSessionInterceptor,
         GameRulesInterceptor,
         PersonalityGuardInterceptor,
+        ConversationVarietyInterceptor,
         PolicyEnforcerInterceptor,
         MemoryEnhancerInterceptor,
         ResponseShaperInterceptor,
@@ -750,6 +751,7 @@ def _build_default_pipeline() -> InterceptorPipeline:
     pipeline.add(GameSessionInterceptor())       # 35
     pipeline.add(GameRulesInterceptor())         # 40
     pipeline.add(PersonalityGuardInterceptor())  # 50
+    pipeline.add(ConversationVarietyInterceptor()) # 55
     pipeline.add(PolicyEnforcerInterceptor())    # 60
     pipeline.add(MemoryEnhancerInterceptor())    # 70
     pipeline.add(ResponseShaperInterceptor())    # 80
