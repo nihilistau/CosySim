@@ -374,6 +374,10 @@
         row.innerHTML += avatarHtml(contact.name || '?', contact.avatar || '', 'avatar avatar-xs');
       }
 
+      // Strip LLM token artifacts
+      let content = msg.content || '';
+      content = content.replace(/<\|(?:begin|end|start|eot|pad)_of_text\|>/gi, '').replace(/<\|(?:im_start|im_end|endoftext)\|>/gi, '').trim();
+
       let bubbleHtml = '';
       if (msg.msg_type === 'voice' && msg.media_path) {
         const file = msg.media_path.split('/').pop().split('\\').pop();
@@ -385,7 +389,7 @@
         const file = msg.media_path.split('/').pop().split('\\').pop();
         bubbleHtml = `<div class="bubble media-bubble"><video controls src="/media/video/${file}"></video></div>`;
       } else {
-        bubbleHtml = `<div class="bubble">${esc(msg.content || '')}<span class="bubble-time">${fmtTime(msg.created_at)}</span></div>`;
+        bubbleHtml = `<div class="bubble">${esc(content)}<span class="bubble-time">${fmtTime(msg.created_at)}</span></div>`;
       }
       row.innerHTML += bubbleHtml;
       box.appendChild(row);
@@ -414,12 +418,26 @@
         await CosyPhone._loadContacts();
       }
       if (!CosyPhone.contacts.length) { toast('No contacts available'); return; }
-      const names = CosyPhone.contacts.map(c => c.name);
-      const name = prompt(`Start conversation with:\n${names.join(', ')}\n\nType a name:`);
-      if (!name) return;
-      const c = CosyPhone.contacts.find(c => c.name.toLowerCase() === name.toLowerCase().trim());
-      if (!c) { toast('Contact not found'); return; }
-      this._openDM(c.id, c.name);
+      // Show contact picker overlay
+      const box = qs('#chat-messages') ? qs('#chat-messages').parentElement : qs('#msg-thread-list');
+      if (!box) return;
+      const picker = el('div', { style: { position:'absolute',inset:'0',background:'var(--bg)',zIndex:'30',display:'flex',flexDirection:'column' } });
+      picker.innerHTML = `
+        <div style="padding:12px 16px;display:flex;align-items:center;gap:8px;border-bottom:.5px solid var(--sep)">
+          <button class="pill-btn pill-secondary" id="compose-cancel">Cancel</button>
+          <div style="flex:1;text-align:center;font-weight:600">New Message</div>
+        </div>
+        <div class="thread-list" id="compose-contacts"></div>`;
+      const appBody = qs('#app-body');
+      appBody.appendChild(picker);
+      qs('#compose-cancel').onclick = () => picker.remove();
+      const list = qs('#compose-contacts');
+      CosyPhone.contacts.forEach(c => {
+        const row = el('div', 'thread-item');
+        row.innerHTML = `${avatarHtml(c.name, c.avatar)}<div class="thread-info"><div class="thread-name">${esc(c.name)}</div><div class="thread-preview">${esc(c.mood || c.status || 'Available')}</div></div>`;
+        row.onclick = () => { picker.remove(); this._openDM(c.id, c.name); };
+        list.appendChild(row);
+      });
     },
 
     async _openDM(charId, charName) {
@@ -519,27 +537,52 @@
       body.innerHTML = `
         <div class="section-header">Photos</div>
         <div class="gallery-grid" id="gallery-grid"></div>
-        <div id="gallery-viewer" class="gallery-view-overlay" style="display:none">
-          <button class="gallery-close-btn" onclick="qs('#gallery-viewer').style.display='none'">✕</button>
-          <div class="gallery-nav-prev" onclick="CosyPhone._apps.gallery._nav(-1)">‹</div>
-          <img id="gallery-full" src="" style="max-width:80%;max-height:80vh;object-fit:contain;border-radius:12px">
-          <div class="gallery-nav-next" onclick="CosyPhone._apps.gallery._nav(1)">›</div>
+        <div id="gallery-viewer" style="display:none">
+          <button class="close-btn" onclick="qs('#gallery-viewer').style.display='none'">✕</button>
+          <button class="nav-btn nav-prev" onclick="CosyPhone.apps.gallery._nav(-1)">‹</button>
+          <img id="gallery-full" src="">
+          <button class="nav-btn nav-next" onclick="CosyPhone.apps.gallery._nav(1)">›</button>
+          <div style="position:absolute;bottom:20px;display:flex;gap:12px">
+            <button class="pill-btn pill-danger" onclick="CosyPhone.apps.gallery._delete()">🗑️ Delete</button>
+          </div>
         </div>`;
       this._load();
-      // Keyboard navigation
-      document.addEventListener('keydown', (e) => {
+      this._keyNav = (e) => {
         if (qs('#gallery-viewer')?.style.display !== 'none') {
           if (e.key === 'ArrowLeft') this._nav(-1);
           else if (e.key === 'ArrowRight') this._nav(1);
           else if (e.key === 'Escape') qs('#gallery-viewer').style.display = 'none';
         }
-      });
+      };
+      document.addEventListener('keydown', this._keyNav);
     },
+
+    onClose() { if (this._keyNav) { document.removeEventListener('keydown', this._keyNav); this._keyNav = null; } },
 
     _nav(dir) {
       if (!this._images.length) return;
       this._idx = (this._idx + dir + this._images.length) % this._images.length;
       qs('#gallery-full').src = this._images[this._idx].url;
+    },
+
+    async _delete() {
+      if (!this._images.length) return;
+      const img = this._images[this._idx];
+      if (!confirm('Delete this photo?')) return;
+      try { await api('DELETE', `/api/gallery/${img.id || img.name}`); } catch (e) {}
+      this._images.splice(this._idx, 1);
+      if (!this._images.length) { qs('#gallery-viewer').style.display = 'none'; this._load(); return; }
+      this._idx = Math.min(this._idx, this._images.length - 1);
+      qs('#gallery-full').src = this._images[this._idx].url;
+      const grid = qs('#gallery-grid');
+      if (grid) { grid.innerHTML = ''; this._images.forEach((im, i) => grid.appendChild(this._makeThumb(im, i))); }
+    },
+
+    _makeThumb(img, i) {
+      const item = el('div', 'gallery-item');
+      item.innerHTML = `<img src="${esc(img.url)}" alt="${esc(img.name || 'photo')}" loading="lazy">`;
+      item.onclick = () => { this._idx = i; qs('#gallery-full').src = img.url; qs('#gallery-viewer').style.display = 'flex'; };
+      return item;
     },
 
     async _load() {
@@ -549,12 +592,8 @@
         const data = await api('GET', '/api/gallery');
         this._images = data.images || [];
         if (!this._images.length) { grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1"><div class="es-icon">📷</div><h3>No photos yet</h3><p>Photos from conversations will appear here</p></div>'; return; }
-        this._images.forEach((img, i) => {
-          const item = el('div', 'gallery-thumbnail');
-          item.innerHTML = `<img src="${esc(img.url)}" alt="${esc(img.name || 'photo')}" loading="lazy">`;
-          item.onclick = () => { this._idx = i; qs('#gallery-full').src = img.url; qs('#gallery-viewer').style.display = 'flex'; };
-          grid.appendChild(item);
-        });
+        grid.innerHTML = '';
+        this._images.forEach((img, i) => grid.appendChild(this._makeThumb(img, i)));
       } catch (e) { grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1"><div class="es-icon">📷</div><h3>No photos yet</h3></div>'; }
     },
   });

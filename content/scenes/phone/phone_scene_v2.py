@@ -811,8 +811,21 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
                     if media_dir.exists():
                         for f in sorted(media_dir.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True):
                             if f.is_file() and f.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp", ".gif"):
-                                images.append({"url": prefix + f.name, "name": f.stem, "created_at": f.stat().st_mtime})
+                                images.append({"id": f.name, "url": prefix + f.name, "name": f.stem, "created_at": f.stat().st_mtime})
                 return jsonify({"ok": True, "images": images})
+            except Exception as exc:
+                return jsonify({"ok": False, "error": str(exc)}), 500
+
+        @app.route("/api/gallery/<filename>", methods=["DELETE"])
+        def delete_gallery_image(filename: str):
+            """Delete an image from the gallery."""
+            try:
+                for media_dir in [_MEDIA_PHOTO, _MEDIA_IMAGES]:
+                    target = media_dir / filename
+                    if target.exists() and target.is_file():
+                        target.unlink()
+                        return jsonify({"ok": True})
+                return jsonify({"ok": False, "error": "not found"}), 404
             except Exception as exc:
                 return jsonify({"ok": False, "error": str(exc)}), 500
 

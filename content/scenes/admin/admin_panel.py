@@ -438,25 +438,30 @@ def show_character_manager():
                 if not name:
                     st.error("Name is required!")
                 else:
-                    try:
-                        tag_list = [t.strip() for t in tags.split(",")] if tags else []
-                        char = CharacterAsset.create(
-                            name=name,
-                            description=description,
-                            age=age,
-                            gender=gender,
-                            hair_color=hair_color,
-                            eye_color=eye_color,
-                            messaging_frequency=messaging_freq,
-                            autonomy_level=autonomy,
-                            nsfw_enabled=nsfw,
-                            tags=tag_list
-                        )
-                        st.session_state.asset_manager.save(char)
-                        st.session_state["_char_created"] = name
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Error: {e}")
+                    # Check for duplicate name
+                    existing = st.session_state.asset_manager.search(asset_type="character")
+                    if any(c.name.lower() == name.lower() for c in existing):
+                        st.error(f"Character '{name}' already exists!")
+                    else:
+                        try:
+                            tag_list = [t.strip() for t in tags.split(",")] if tags else []
+                            char = CharacterAsset.create(
+                                name=name,
+                                description=description,
+                                age=age,
+                                gender=gender,
+                                hair_color=hair_color,
+                                eye_color=eye_color,
+                                messaging_frequency=messaging_freq,
+                                autonomy_level=autonomy,
+                                nsfw_enabled=nsfw,
+                                tags=tag_list
+                            )
+                            st.session_state.asset_manager.save(char)
+                            st.session_state["_char_created"] = name
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Error: {e}")
 
 
 def show_scene_manager():

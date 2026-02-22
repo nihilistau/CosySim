@@ -538,8 +538,9 @@ def mount_overlay(app, socketio=None) -> None:
                 data = response.get_data(as_text=True)
                 if "</body>" in data and "overlay-toggle-btn" not in data:
                     snippet = (
-                        '<div id="overlay-toggle-btn" onclick="document.getElementById(\'overlay-frame-wrap\').style.display='
-                        "document.getElementById('overlay-frame-wrap').style.display==='none'?'block':'none'"
+                        '<div id="overlay-toggle-btn" onclick="'
+                        "var e=document.getElementById('overlay-frame-wrap');"
+                        "e.style.display=e.style.display==='none'?'block':'none';"
                         '" style="position:fixed;bottom:12px;right:12px;z-index:99999;width:40px;height:40px;'
                         'border-radius:50%;background:#1a1a2e;border:1px solid #4aa0ff;color:#4aa0ff;'
                         'font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;'
