@@ -741,6 +741,87 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
         def serve_image(filename: str):
             return send_from_directory(str(_MEDIA_IMAGES), filename)
 
+        # ── Gallery API ───────────────────────────────────────────────────────
+        @app.route("/api/gallery")
+        def get_gallery():
+            """Return all images from photo + generated image directories."""
+            try:
+                images = []
+                for media_dir, prefix in [(_MEDIA_PHOTO, "/media/photo/"), (_MEDIA_IMAGES, "/media/images/")]:
+                    if media_dir.exists():
+                        for f in sorted(media_dir.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True):
+                            if f.is_file() and f.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp", ".gif"):
+                                images.append({"url": prefix + f.name, "name": f.stem, "created_at": f.stat().st_mtime})
+                return jsonify({"ok": True, "images": images})
+            except Exception as exc:
+                return jsonify({"ok": False, "error": str(exc)}), 500
+
+        # ── Voice messages list ──────────────────────────────────────────────
+        @app.route("/api/voice-messages")
+        def get_voice_messages():
+            """List all voice message files with metadata."""
+            try:
+                messages = []
+                if _MEDIA_VOICE.exists():
+                    for f in sorted(_MEDIA_VOICE.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True):
+                        if f.is_file() and f.suffix.lower() in (".mp3", ".wav", ".ogg", ".webm"):
+                            messages.append({"filename": f.name, "sender": f.stem.split("_")[0] if "_" in f.stem else "Unknown", "created_at": f.stat().st_mtime, "duration": "0:00"})
+                return jsonify({"ok": True, "messages": messages})
+            except Exception as exc:
+                return jsonify({"ok": False, "error": str(exc)}), 500
+
+        # ── Video messages list ──────────────────────────────────────────────
+        @app.route("/api/video-messages")
+        def get_video_messages():
+            """List all video message files with metadata."""
+            try:
+                messages = []
+                if _MEDIA_VIDEO.exists():
+                    for f in sorted(_MEDIA_VIDEO.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True):
+                        if f.is_file() and f.suffix.lower() in (".mp4", ".webm", ".mov"):
+                            messages.append({"filename": f.name, "sender": f.stem.split("_")[0] if "_" in f.stem else "Unknown", "created_at": f.stat().st_mtime})
+                return jsonify({"ok": True, "messages": messages})
+            except Exception as exc:
+                return jsonify({"ok": False, "error": str(exc)}), 500
+
+        # ── Arcade highscores ────────────────────────────────────────────────
+        @app.route("/api/arcade/highscore", methods=["POST"])
+        def arcade_highscore():
+            """Submit an arcade game highscore to SharedBoardManager."""
+            body = request.get_json(force=True, silent=True) or {}
+            game = str(body.get("game", "")).strip()
+            score = int(body.get("score", 0))
+            if not game:
+                return jsonify({"ok": False, "error": "game required"}), 400
+            try:
+                from engine.mcp.shared_boards import get_shared_boards
+                boards = get_shared_boards()
+                board_id = f"arcade_{game}"
+                boards.submit_score(board_id, "player", score, metadata={"game": game, "scene": "phone"})
+                return jsonify({"ok": True, "game": game, "score": score})
+            except Exception as exc:
+                logger.debug("Arcade highscore submit: %s", exc)
+                return jsonify({"ok": True, "game": game, "score": score})
+
+        # ── Image generation ─────────────────────────────────────────────────
+        @app.route("/api/generate-image", methods=["POST"])
+        def generate_image():
+            """Generate an image via ComfyUI."""
+            body = request.get_json(force=True, silent=True) or {}
+            prompt = str(body.get("prompt", "")).strip()
+            if not prompt:
+                return jsonify({"ok": False, "error": "prompt required"}), 400
+            try:
+                from content.simulation.services.comfyui_client import get_comfyui_client
+                comfy = get_comfyui_client()
+                image_path = comfy.generate_image(prompt=prompt, character_name="user")
+                if image_path:
+                    filename = Path(image_path).name
+                    return jsonify({"ok": True, "image_url": f"/media/images/{filename}"})
+                return jsonify({"ok": False, "error": "Generation failed"}), 500
+            except Exception as exc:
+                return jsonify({"ok": False, "error": str(exc)}), 500
+
         # ── Admin ─────────────────────────────────────────────────────────────
         @app.route("/api/admin/wipe-messages", methods=["POST"])
         def wipe_messages():
