@@ -156,36 +156,45 @@ class RealmScene(BaseScene):
         if not self.state:
             return {"narration": "No active game.", "choices": []}
 
-        from engine.lmstudio.lms_client import get_lms_client
-        client = get_lms_client()
+        try:
+            from engine.lmstudio.lms_client import get_lms_client
+            client = get_lms_client()
 
-        system_prompt = _director_system_prompt(self.state)
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_message},
-        ]
+            system_prompt = _director_system_prompt(self.state)
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message},
+            ]
 
-        # Use stateful conversation threading
-        kwargs: Dict[str, Any] = {"store": True}
-        if self._director_conv_id:
-            # Continue existing conversation
-            try:
-                resp = client.chat_stateful(
-                    user_msg=user_message,
-                    previous_response_id=self._director_conv_id,
-                    config={"temperature": 0.85, "max_output_tokens": 1500},
-                )
-            except Exception:
+            # Use stateful conversation threading
+            kwargs: Dict[str, Any] = {"store": True}
+            if self._director_conv_id:
+                try:
+                    resp = client.chat_stateful(
+                        user_msg=user_message,
+                        previous_response_id=self._director_conv_id,
+                        config={"temperature": 0.85, "max_output_tokens": 1500},
+                    )
+                except Exception:
+                    resp = client.chat(messages, temperature=0.85, max_tokens=1500, **kwargs)
+            else:
                 resp = client.chat(messages, temperature=0.85, max_tokens=1500, **kwargs)
-        else:
-            resp = client.chat(messages, temperature=0.85, max_tokens=1500, **kwargs)
 
-        # Track conversation thread
-        if hasattr(resp, "response_id") and resp.response_id:
-            self._director_conv_id = resp.response_id
+            # Track conversation thread
+            if hasattr(resp, "response_id") and resp.response_id:
+                self._director_conv_id = resp.response_id
 
-        raw = resp.content if hasattr(resp, "content") else str(resp)
-        return self._parse_director_response(raw)
+            raw = resp.content if hasattr(resp, "content") else str(resp)
+            return self._parse_director_response(raw)
+
+        except Exception as e:
+            logger.warning("Director inference failed: %s", e)
+            return {
+                "narration": "The Director pauses, gathering thoughts... (LLM unavailable)",
+                "choices": [{"id": "a", "text": "Wait patiently"}, {"id": "b", "text": "Try again"}],
+                "stat_changes": {}, "items_gained": [], "items_lost": [],
+                "xp": 0, "damage": 0, "skill_check": None,
+            }
 
     def _assistant_infer(self, context: str) -> str:
         """Get a short quip from the Assistant (stateless)."""

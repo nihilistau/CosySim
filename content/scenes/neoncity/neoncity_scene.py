@@ -67,7 +67,8 @@ class NeonCityScene(BaseScene):
             ]
             resp = client.chat(messages, temperature=0.9, max_tokens=100, store=False)
             return resp.content if hasattr(resp, "content") else str(resp)
-        except Exception:
+        except Exception as e:
+            logger.warning("NeonCity narration failed: %s", e)
             return ""
 
     def _sync_to_mcp(self) -> None:

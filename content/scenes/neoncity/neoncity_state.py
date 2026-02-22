@@ -235,6 +235,16 @@ class NeonCityGameState:
             return None
         return self.players[self.current_player_idx]
 
+    def get_player(self, player_id: str) -> Optional[NeonPlayer]:
+        """Look up a player by ID."""
+        return next((p for p in self.players if p.id == player_id), None)
+
+    def is_in_storm(self, x: int, y: int) -> bool:
+        """Return True if the given cell is inside the Glitch Storm."""
+        if 0 <= y < self.grid_size and 0 <= x < self.grid_size:
+            return self.grid[y][x].in_storm
+        return True
+
     # ── Turn management ──
 
     def start_game(self) -> Dict[str, Any]:

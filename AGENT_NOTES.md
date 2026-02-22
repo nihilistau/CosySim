@@ -1,6 +1,6 @@
 # CosySim — Agent Notes & System Architecture
 
-Generated: [2026-02-24T12:00:00Z] — v2.8.0
+Generated: [2026-02-22T23:00:00Z] — v3.1.0
 
 > Complete structural summary of the CosySim AI simulation framework.
 > Covers file dependencies, game loop, MCP skill system, scene architecture,  
@@ -23,6 +23,7 @@ Generated: [2026-02-24T12:00:00Z] — v2.8.0
 11. [Phase 5 — VirtualAgent Framework](#11-phase-5--virtualagent-framework)
 12. [Phase 6 — v2.5 Framework Push](#12-phase-6--v25-framework-push)
 13. [Phase 7 — v2.7 LMStudio Native Upgrade](#13-phase-7--v27-lmstudio-native-upgrade)
+14. [Phase 10 — v3.1 Showcase Scenes & MCP Skills Expansion](#16-phase-10--v31-showcase-scenes--mcp-skills-expansion)
 
 ---
 
@@ -2374,3 +2375,150 @@ Auto-attached to inference via `get_skills_integration()` in VirtualAgentManager
 - `engine/scenes/base_scene.py` — +mount_skills_server()
 - `engine/overlay/overlay_bp.py` — Auto-mount skills_bp
 - `tests/test_pipeline_smoke.py` — +25 v3.1 tests (576 total)
+
+---
+
+## 16. Phase 10 — v3.1 Showcase Scenes & MCP Skills Expansion
+
+**Version:** 3.1.0 | **Tests:** 699 passing | **Scenes:** 9 total
+
+### 16.1 Overview
+
+Three flagship showcase scenes added to demonstrate the full v3.x MCP pipeline:
+
+1. **The Realm** — AI-directed LitRPG visual novel with dual-agent orchestration
+2. **NeonCity** — Cyberpunk strategy board game with procedural grid and Glitch Storm
+3. **The Coders Room** — AI agent idle simulation producing real Python code
+
+Each scene follows the `BaseScene` pattern, registers MCP skills via `@skill` decorators,
+syncs state to `MCPFramework`, and uses `get_lms_client()` for all LLM calls.
+
+### 16.2 The Realm — Dual-Agent LitRPG
+
+**Files:** `content/scenes/realm/` (realm_scene.py, realm_state.py, realm_skills.py, realm_ui.html)
+**Port:** 5562 | **Skills pack:** `realm` (11 skills)
+
+**Architecture:**
+- **Director (Agent 1):** Stateful conversation via `chat_stateful()` + `previous_response_id`.
+  Generates narration, choices, stat changes, skill checks. System prompt includes personality,
+  patience meter, player stats, memory echoes, murder mystery brief.
+- **Assistant (Agent 2):** Stateless (`store=False`). Fourth-wall-breaking speech bubbles.
+  Reacts to Director narration, warns player at low patience, can trigger mutiny.
+- **Response parsing:** Regex extracts JSON from Director output with graceful fallback.
+
+**Game Mechanics (MCP-backed):**
+- Inventory system with add/remove/use_item routes
+- D20 skill check system (9 skills, stat bonuses, DC modifiers, director personality mod)
+- Director patience meter (decays per turn, personality-specific rates)
+- Memory echoes — past death records provide "deja vu" hints
+- Desperation dice — sacrifice permanent max HP to reset Director context
+- Fourth-wall steal — Assistant materialises UI elements as inventory items
+- Mutiny mode — Assistant takes over narration for 120s at low patience
+
+**Murder Mystery Sub-Module:**
+- 5 NPCs with random role assignment (murderer, victim)
+- Phase 1: Party (5 min) → Phase 2: Investigation (15 min)
+- 3 accusation attempts (suspect + weapon + room)
+- Director-guided interrogation with NPC-specific lying logic
+
+### 16.3 NeonCity — Cyberpunk Strategy Board Game
+
+**Files:** `content/scenes/neoncity/` (neoncity_scene.py, neoncity_state.py, neoncity_skills.py, neoncity_ui.html)
+**Port:** 5563 | **Skills pack:** `neoncity` (8 skills)
+
+**Architecture:**
+- 12×12 procedural grid (street/building/alley terrain, random layout per game)
+- AI target at center with 3-layer firewall
+- Up to 3 AI opponents with simple heuristic AI (move toward target, 40% attack chance)
+- LLM narration is stateless flavor text only (`store=False`, max 100 tokens)
+
+**Game Mechanics:**
+- Turn structure: Movement → Action (attack/hack/loot) → End turn
+- Glitch Storm: outer radius shrinks each round, damages players in storm zone (+5 dmg/round)
+- 5 prefab loot locations (first-come, first-serve):
+  AI Research → hacking programs, Implant Shop → stat boosts, Wong's → armor/shields,
+  Black Market → weapons + permanent debuff, Noodle Stand → HP restore + intel
+- Hacking: d20 + hack stat vs DC to breach firewall layers
+- Events: random global effects (blackout, drone strike, data leak, virus rain)
+
+### 16.4 The Coders Room — AI Agent Idle Simulation
+
+**Files:** `content/scenes/coders/` (coders_scene.py, coders_state.py, coders_skills.py, coders_ui.html)
+**Port:** 5564 | **Skills pack:** `coders` (6 skills)
+
+**Architecture:**
+- 4 agents: Ada (reviewer), Linus (writer), Grace (writer), Alan (QA)
+- Background tick loop (configurable interval, default 15s)
+- All LLM calls stateless (`store=False`), extract code from markdown blocks
+
+**Pipeline Phases:**
+1. FEATURE → seed from pool or custom request
+2. DESIGN → reviewer writes technical spec
+3. CODING → writer produces Python implementation
+4. REVIEW → reviewer provides code review notes
+5. TESTING → QA writes pytest tests, executes in subprocess sandbox (10s timeout)
+6. COMPLETE or FAILED → auto-queues next feature
+
+### 16.5 MCP Skills Expansion
+
+25 new scene-specific skills added across 3 packs:
+
+**realm (11 skills):**
+`realm_inventory`, `realm_add_item`, `realm_remove_item`, `realm_stats`,
+`realm_skill_check`, `realm_adjust_hp`, `realm_director_status`,
+`realm_fourth_wall_steal`, `realm_desperation_dice`, `realm_murder_status`,
+`realm_murder_accuse`
+
+**neoncity (8 skills):**
+`neoncity_status`, `neoncity_player_info`, `neoncity_move`, `neoncity_attack`,
+`neoncity_hack`, `neoncity_storm_status`, `neoncity_trigger_event`, `neoncity_end_turn`
+
+**coders (6 skills):**
+`coders_status`, `coders_agent_info`, `coders_add_feature`, `coders_feature_list`,
+`coders_run_code`, `coders_tick`
+
+Skills use `get_active_scene()` from `engine.scenes.base_scene` to access the
+running scene instance in-process. Skills are registered at import time via the
+scene's `__init__.py` importing the skills module.
+
+### 16.6 Infrastructure Additions
+
+- `engine/scenes/base_scene.py` — Added `_ACTIVE_SCENES` dict + `get_active_scene()`
+  for in-process scene instance lookup. Scenes auto-register on `__init__`, auto-deregister
+  on `_mcp_deregister_scene()`.
+- `content/scenes/bedroom/__init__.py` — Created (was missing)
+- Error hardening: Realm `_director_infer()` wrapped in try/except with fallback narration;
+  NeonCity `_narrate()` now logs failures instead of silent swallow.
+
+### 16.7 Port Assignments (Complete)
+
+| Scene | Port | Module |
+|-------|------|--------|
+| CosyPhone OS | 5555 | `content.scenes.phone.phone_scene_v2.PhoneSceneV2` |
+| The Bedroom | 5556 | `content.scenes.bedroom.bedroom_scene.BedroomScene` |
+| Velvet Lounge | 5557 | `content.scenes.lounge.lounge_scene.LoungeScene` |
+| Midnight Casino | 5559 | `content.scenes.casino.casino_scene.CasinoScene` |
+| The Gallery | 5560 | `content.scenes.gallery.gallery_scene.GalleryScene` |
+| Global Strike | 5561 | `content.scenes.warzone.warzone_scene.WarzoneScene` |
+| **The Realm** | **5562** | `content.scenes.realm.realm_scene.RealmScene` |
+| **NeonCity** | **5563** | `content.scenes.neoncity.neoncity_scene.NeonCityScene` |
+| **The Coders Room** | **5564** | `content.scenes.coders.coders_scene.CodersRoomScene` |
+| Hub | 8500 | Hub dashboard |
+| Dashboard | 8501 | Streamlit dashboard |
+| Admin | 8502 | Admin panel |
+| Assets | 8503 | Asset manager |
+| Creator | 8504 | Character creator |
+
+### 16.8 File Changes
+
+- `content/scenes/realm/` — NEW: realm_scene.py, realm_state.py, realm_skills.py, templates/realm_ui.html
+- `content/scenes/neoncity/` — NEW: neoncity_scene.py, neoncity_state.py, neoncity_skills.py, templates/neoncity_ui.html
+- `content/scenes/coders/` — NEW: coders_scene.py, coders_state.py, coders_skills.py, templates/coders_ui.html
+- `engine/scenes/base_scene.py` — +_ACTIVE_SCENES, +get_active_scene()
+- `engine/scenes/scene_manager.py` — +realm, neoncity, coders in KNOWN_SCENES
+- `launcher.py` — +realm (5562), neoncity (5563), coders (5564)
+- `config/default.yaml` — +realm, neoncity, coders scene sections
+- `tests/test_realm.py` — 35 unit tests (state, skills, murder mystery)
+- `tests/test_neoncity.py` — 26 unit tests (player, grid, storm, combat)
+- `tests/test_coders.py` — 22 unit tests (agents, pipeline, sandbox)
+- `tests/test_scene_routes.py` — 29 integration tests (Flask routes, skill registration)

@@ -36,6 +36,16 @@ from engine.assets import AssetManager, CharacterAsset, SceneAsset
 import logging as _logging
 _bslogger = _logging.getLogger(__name__)
 
+# ── In-process scene instance registry ──
+# Skills and other subsystems can look up the running scene instance via
+# ``get_active_scene("realm")`` without needing a singleton pattern.
+_ACTIVE_SCENES: Dict[str, "BaseScene"] = {}
+
+
+def get_active_scene(scene_name: str) -> Optional["BaseScene"]:
+    """Return the running scene instance for *scene_name*, or ``None``."""
+    return _ACTIVE_SCENES.get(scene_name)
+
 
 class BaseScene(ABC):
     """
@@ -85,6 +95,9 @@ class BaseScene(ABC):
 
         # Register this scene with MCPFramework (best-effort)
         self._mcp_register_scene()
+
+        # Register in the in-process lookup table
+        _ACTIVE_SCENES[scene_name] = self
     
     def load_character(self, character_id: str) -> CharacterAsset:
         """
@@ -368,6 +381,8 @@ class BaseScene(ABC):
 
     def _mcp_deregister_scene(self) -> None:
         """Broadcast scene stop to ActivityBus.  Call from subclass stop()."""
+        # Remove from in-process lookup
+        _ACTIVE_SCENES.pop(self.scene_name, None)
         try:
             from engine.services.activity_bus import get_activity_bus
             get_activity_bus().publish(
