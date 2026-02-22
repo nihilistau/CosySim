@@ -1374,6 +1374,189 @@ When ``use_virtual=True``:
 - The governance pipeline (AgentGovernor) wraps as normal — it doesn't know
   the underlying agent changed
 
+---
+
+## Phase 8: v2.7.1 Streaming Framework Rework
+
+### 12.1 StreamProcessor
+
+**File:** `engine/agents/stream_processor.py`
+
+The StreamProcessor is the core v2.7.1 addition — it sits between the SSE stream and the
+application, extracting structured data from the raw token flow in real-time.
+
+**Architecture:**
+```
+LMSClient.chat_stream_stateful()
+  → SSE events (message.delta, reasoning.delta, tool_call.*, chat.end)
+    → StreamProcessor.on_event(LMSStreamEvent)
+      → accumulates content/reasoning text
+      → extracts inline tags via regex: [MOOD:x], [IMAGE:prompt], [ACTION:x], [STAT:name±val], [VOICE:style]
+      → tracks tool call lifecycle (start → arguments → success/failure)
+      → fires real-time callbacks (on_delta, on_mood, on_tool_call, etc.)
+    → StreamProcessor.result() → ProcessedResponse
+```
+
+**Key Classes:**
+- `ProcessedResponse` — dataclass with: clean_text, raw_text, reasoning_text, mood_tags,
+  image_requests, action_tags, voice_style, tool_calls, stat_deltas, stats (tokens, tps, response_id)
+- `ToolCallRecord` — name, arguments (dict), result (str), success (bool)
+- `StatDelta` — stat_name, delta (float), parsed from `[STAT:trust+5]`
+
+**Inline Tags:**
+Characters (LLMs) can embed structured data in their text responses:
+```
+[MOOD:playful] Hey! Check this out [IMAGE:a cute selfie with peace sign]
+I'm feeling generous today [STAT:trust+10] [ACTION:sends_gift]
+```
+The StreamProcessor strips these from `clean_text` but preserves them in `raw_text`.
+
+### 12.2 VirtualAgentManager.infer_processed()
+
+```python
+response = await manager.infer_processed(
+    agent_id="bedroom_luna",
+    prompt="Take a selfie for me",
+    callbacks={
+        "on_mood": lambda mood: update_ui_mood(mood),
+        "on_image_request": lambda prompt: queue_comfyui(prompt),
+        "on_delta": lambda text: stream_to_websocket(text),
+    }
+)
+# response.processed.mood_tags → ["playful"]
+# response.processed.image_requests → ["cute selfie with peace sign"]
+# response.processed.clean_text → "Hey! Check this out\nI'm feeling generous today"
+```
+
+### 12.3 Governor Context Bridge (v2.7.1 Enhancement)
+
+After `agent.reply()`, the AgentGovernor reads `_last_response` from the VirtualAgent
+and populates the ResponseContext with rich metadata:
+
+```python
+# Available in post-call interceptors:
+ctx["mood_tags"]       # ["playful", "happy"]
+ctx["image_requests"]  # ["cute selfie with peace sign"]
+ctx["action_tags"]     # ["sends_gift"]
+ctx["processed"]       # Full ProcessedResponse object
+ctx["reasoning"]       # LLM reasoning text (if reasoning enabled)
+ctx["tool_calls"]      # [ToolCallRecord(...), ...]
+```
+
+This means interceptors can react to mood changes, trigger image generation,
+log actions, or modify responses based on the full stream context.
+
+### 12.4 SceneAgent v2.7.1
+
+SceneAgent now has three modes:
+```python
+# 1. Standard (unchanged) — fire-and-forget text response
+text = scene_agent.run("What do you see?")
+
+# 2. Structured — JSON schema output
+result = scene_agent.run_structured(
+    "Describe the room",
+    schema={"type": "object", "properties": {"mood": {"type": "string"}, "items": {"type": "array"}}}
+)
+
+# 3. Streaming — real-time with ProcessedResponse
+processed = scene_agent.run_stream(
+    "Tell me a story",
+    callbacks={"on_delta": lambda t: print(t, end="")}
+)
+
+# 4. Decision — structured choice (returns dict)
+choice = scene_agent.decide(
+    "Should Luna send a selfie or a text?",
+    options=["selfie", "text", "voice_message"],
+    context="Player asked for a picture"
+)
+```
+
+All SceneAgent calls use `store=False` by default — they don't pollute the
+main conversation history.
+
+### 12.5 MessagesApp Rewrite
+
+The MessagesApp is now a full agent-integrated messaging system:
+
+```python
+# Thread management
+messages = MessagesApp(char_id="luna", db=db, scene_name="phone")
+messages.switch_thread("alex")  # activates phone_luna_alex conversation
+
+# Send with agent integration
+result = messages.send("Hey, how are you?")
+# result.reply_text = "I'm great! [MOOD:happy]"
+# result.image_url = None | "path/to/selfie.png"
+# result.mood = "happy"
+
+# Character-initiated message
+messages.receive_unsolicited(
+    contact_id="alex",
+    system_context="Alex is bored and wants attention"
+)
+```
+
+### 12.6 New MCP Tools
+
+Five new tools available to the LLM via the CosySim MCP server:
+
+| Tool | Purpose | store |
+|------|---------|-------|
+| `send_selfie(prompt, char_id)` | ComfyUI image gen → structured response | False |
+| `send_voice_message(text, char_id)` | TTS gen → audio path | False |
+| `query_stateless(prompt)` | Disposable utility query | False |
+| `get_conversation_info(conv_id)` | State + forkable response_ids | — |
+| `fork_conversation(conv_id, turn)` | Branch at specific turn | — |
+
+### 12.7 Dialog System Branching
+
+```python
+# Try multiple response approaches, pick best
+alternatives = dialog.try_alternatives(
+    agent_id="bedroom_luna",
+    prompt="Player confessed feelings",
+    num_alternatives=3,
+    scoring_fn=lambda text: score_emotional_depth(text)
+)
+best = alternatives[0]  # sorted by score
+
+# Fork conversation at a decision point
+branch_id = dialog.get_branch_point("bedroom_luna")
+# Returns response_id that can be used with fork_conversation()
+```
+
+### 12.8 Rules Engine Streaming Integration
+
+```python
+# Mid-stream stat updates
+engine.apply_stream_deltas(
+    char_id="luna",
+    deltas=[StatDelta("trust", 5.0), StatDelta("arousal", -3.0)]
+)
+
+# Check threshold rules after stat changes
+triggered = engine.evaluate_threshold_rules("luna")
+# Returns list of rules whose conditions are now met
+```
+
+### 12.9 Framework Events
+
+```python
+# MCPCharacterNode streaming lifecycle
+node.start_stream()   # marks node as streaming
+node.end_stream(token_count=150, mood="playful")
+info = node.stream_info()  # {"is_streaming": False, "stream_tokens": 150, ...}
+
+# MCPFramework emits real-time events
+framework.emit_stream_event(
+    char_id="luna",
+    event_type="mood_change",
+    data={"mood": "playful", "previous": "neutral"}
+)
+```
+
 ### 11.7 Migrated Scenes
 
 | Scene | Change |

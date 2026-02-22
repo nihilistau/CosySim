@@ -2,6 +2,59 @@
 
 All notable changes to CosySim are documented here.
 
+## [2.7.1] — 2026-02-24
+
+### StreamProcessor — Real-Time Response Processing
+- **New `engine/agents/stream_processor.py`** — Consumes LMSStreamEvent objects in real-time
+- **Inline tag extraction** — `[MOOD:x]`, `[IMAGE:prompt]`, `[ACTION:x]`, `[STAT:name±val]`, `[VOICE:style]`
+- **ProcessedResponse dataclass** — Rich response with clean_text, mood_tags, image_requests, action_tags, tool_calls, reasoning
+- **Real-time callbacks** — on_delta, on_mood, on_tool_call, on_image_request, on_action, on_stat_delta
+- **Tool call lifecycle tracking** — start → arguments → success/failure with ToolCallRecord
+
+### VirtualAgentManager Streaming Integration
+- **`infer_processed()`** — Combines `infer_stream()` + StreamProcessor for rich responses
+- **InferenceResponse v2.7.1** — `from_processed()` factory, mood_tags/image_requests/action_tags fields
+- **VirtualAgent `_last_response`** — Stored for governor access to rich metadata
+- **AgentGovernor context bridge** — Post-call interceptors get mood_tags, image_requests, action_tags, processed, reasoning, tool_calls
+
+### SceneAgent v2.7.1
+- **`run_structured()`** — JSON schema enforcement via structured output, store=False
+- **`run_stream()`** — Streaming with StreamProcessor, returns ProcessedResponse
+- **`decide()`** — Structured decision-making for game/narrative choices
+- **Store=False default** — All SceneAgent calls are stateless by default
+
+### MessagesApp Rewrite
+- **ConversationManager-backed threads** — Each DM thread = stateful conversation
+- **Rich messages** — MessageEntry with image_url, voice_url, mood, actions, response_id
+- **Agent-integrated send()** — Routes through AgentGovernor or VirtualAgentManager with streaming
+- **Unsolicited messages** — Characters can initiate messages via `receive_unsolicited()`
+
+### CosySim MCP Server — New Tools
+- **`send_selfie()`** — ComfyUI image generation with structured JSON + display_hint
+- **`send_voice_message()`** — TTS generation with structured response
+- **`query_stateless()`** — Disposable store=False utility queries
+- **`get_conversation_info()`** — Conversation state + forkable response_ids
+- **`fork_conversation()`** — Create conversation branch at specific turn
+
+### Dialog System Branching
+- **ConversationState** — Tracks response_ids and mood_history
+- **`try_alternatives()`** — Generates multiple store=False responses, scores them
+- **`branch_point()`** — Fork conversation at decision points
+
+### Game MCP Structured Turns
+- **`process_turn_structured()`** — JSON schema output for game decisions
+- **Response ID tracking** — Game turn replay/undo via recorded response_ids
+
+### Rules Engine Streaming
+- **`apply_stream_deltas()`** — Real-time stat updates from StreamProcessor StatDelta objects
+- **`evaluate_threshold_rules()`** — Check triggered rules after mid-stream stat changes
+
+### Framework Events & Scene Lifecycle
+- **MCPCharacterNode streaming state** — is_streaming, stream_tokens, last_mood
+- **`emit_stream_event()`** — Real-time UI events via MCPFramework
+- **BaseScene streaming** — streaming_enabled toggle, active_streams/total_stream_tokens in health
+- **466 tests pass** (up from 424)
+
 ## [2.7.0] — 2026-02-23
 
 ### LMStudio v1 Native API (Full Support)
