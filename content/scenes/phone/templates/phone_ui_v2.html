@@ -137,7 +137,7 @@
     /* ══════════════════════════════════════════════════════════
        MESSAGES APP
     ══════════════════════════════════════════════════════════ */
-    .thread-list{padding:0}
+    .thread-list{padding:0;overflow-y:auto;max-height:calc(100vh - var(--status-h) - var(--bar-h) - 20px);-webkit-overflow-scrolling:touch}
     .thread-item{display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--bg2);border-bottom:.5px solid var(--sep);cursor:pointer;transition:background .15s}
     .thread-item:active{background:var(--bg3)}
     .avatar{width:52px;height:52px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;color:#fff;font-size:20px;font-weight:600;flex-shrink:0;overflow:hidden}

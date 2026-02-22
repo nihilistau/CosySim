@@ -31,16 +31,26 @@ MEDIA_DIRS = {
     "images": _PROJECT_ROOT / "content" / "simulation" / "media" / "images",
     "video": _PROJECT_ROOT / "content" / "simulation" / "media" / "video",
     "voice": _PROJECT_ROOT / "content" / "simulation" / "media" / "voice",
+    # Also scan the top-level content/media tree
+    "images2": _PROJECT_ROOT / "content" / "media" / "images",
+    "video2": _PROJECT_ROOT / "content" / "media" / "video",
+    "voice2": _PROJECT_ROOT / "content" / "media" / "voice",
 }
 
 SUPPORTED_EXTENSIONS = {
     "images": {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".tiff"},
     "video": {".mp4", ".webm", ".avi", ".mov", ".mkv"},
     "voice": {".wav", ".mp3", ".ogg", ".flac", ".m4a"},
+    "images2": {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".tiff"},
+    "video2": {".mp4", ".webm", ".avi", ".mov", ".mkv"},
+    "voice2": {".wav", ".mp3", ".ogg", ".flac", ".m4a"},
 }
 
 # Map folder type → DB media type
-FOLDER_TO_TYPE = {"images": "image", "video": "video", "voice": "voice"}
+FOLDER_TO_TYPE = {
+    "images": "image", "video": "video", "voice": "voice",
+    "images2": "image", "video2": "video", "voice2": "voice",
+}
 
 
 class HousekeepingService:
@@ -73,6 +83,34 @@ class HousekeepingService:
         except Exception as e:
             logger.error("Cannot connect to DB for ingest: %s", e)
             return ingested
+
+        # Resolve character_id — must exist in characters table (FK constraint)
+        try:
+            with db.get_connection() as conn:
+                cursor = conn.cursor()
+                # Try to find the requested character first
+                cursor.execute("SELECT id FROM characters WHERE id = ? OR name = ?",
+                               (character_id, character_id))
+                row = cursor.fetchone()
+                if row:
+                    character_id = row[0]
+                else:
+                    # Fallback: use first character in DB
+                    cursor.execute("SELECT id FROM characters LIMIT 1")
+                    row = cursor.fetchone()
+                    if row:
+                        character_id = row[0]
+                    else:
+                        # No characters — create a system character
+                        import uuid as _uuid
+                        character_id = str(_uuid.uuid4())
+                        cursor.execute(
+                            "INSERT INTO characters (id, name, personality_id, created_at) "
+                            "VALUES (?, 'System', NULL, ?)",
+                            (character_id, datetime.now().isoformat()))
+                        conn.commit()
+        except Exception as e:
+            logger.warning("Could not resolve character_id: %s", e)
 
         # Get all known filepaths from DB
         known_paths = set()

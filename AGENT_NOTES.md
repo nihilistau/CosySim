@@ -1,6 +1,6 @@
 # CosySim — Agent Notes & System Architecture
 
-Generated: [2026-02-24T10:00:00Z] — v2.7.1
+Generated: [2026-02-24T12:00:00Z] — v2.7.2
 
 > Complete structural summary of the CosySim AI simulation framework.
 > Covers file dependencies, game loop, MCP skill system, scene architecture,  
@@ -1575,6 +1575,82 @@ framework.emit_stream_event(
 - `_decide()` uses `infer_processed()` for mood/stat extraction
 - Mood tags from stream update character state via `_update_character_mood()`
 - Decision queries use `store=False` (stateless — no conversation pollution)
+
+---
+
+## Phase 8: Bug Fixes & Media Infrastructure (v2.7.2)
+
+### 14.1 Critical: LMStudio v1 API Input Format
+
+The v1 `/api/v1/chat` `input` field was fixed **twice**:
+
+1. **Type fix**: `"type": "message"` → `"type": "text"` (discriminator error)
+2. **Field fix**: `"text": "..."` → `"content": "..."` (unrecognized key error)
+
+**Correct v1 input format:**
+```json
+{"type": "text", "content": "Hello world"}
+```
+**v1 output format is different (asymmetric):**
+```json
+{"type": "message", "content": "Response text"}
+```
+
+Fixed in `engine/lmstudio/lms_client.py` `_messages_to_v1_input()`.
+
+### 14.2 Overlay Fixes
+
+- `CharacterRegistry` uses `_chars` internally, not `_characters`
+- Rewrote `overlay_bp.py` to use public APIs: `list_characters()`, `get_profile()`, `get_state()`
+- `set_state()` takes `**kwargs` not a positional dict
+- Added `is_native_available()` method fallback
+- Overlay opens as iframe panel within scene, not a new page
+
+### 14.3 Phone Message History
+
+- `_generate_reply()` now fetches last 20 messages from `phone_db` via `thread_id`
+- Conversation history passed to both governor and VirtualAgentManager paths
+- Contacts reload on compose if list is empty (race condition fix)
+- Thread list scrolling: `overflow-y: auto` on `.thread-list`
+
+### 14.4 Media Infrastructure
+
+**ComfyUI Monitor** (`engine/services/comfyui_monitor.py`):
+- Background thread polls ComfyUI output dir every 2 seconds
+- File naming convention: `TAG_detail_timestamp.ext` (PHOTO/SELFIE/VIDEO/VOICE/AVATAR)
+- Moves files to `content/simulation/media/{photo,video,voice}/`
+- Registers assets in `asset_registry.db`
+
+**Housekeeping** (`engine/services/housekeeping.py`):
+- Scans both `content/simulation/media/` and `content/media/` directories
+- Resolves character FK by querying first valid character from DB
+- Runs via `python launcher.py --housekeep` or `--housekeep --watch`
+
+**AssetManager** (`engine/assets/manager.py`):
+- Added `import_media_folder()` method for bulk file import
+- Deterministic IDs via path hash (idempotent reimport)
+- Auto-detects type from extension: image/video/audio
+- 975 assets registered (784 audio, 145 image, 42 video, 4 other)
+
+### 14.5 Database Seeding
+
+- 5 default characters auto-inserted on DB init (lola, viktor, aria, frankie, mira)
+- 6 default personalities auto-inserted (Bold Dominant, Shy Submissive, Playful Tease, etc.)
+- Scene auto-registration via `seed_default_scenes()` in SceneManager
+- All idempotent — safe to run multiple times
+
+### 14.6 Admin Panel Robustness
+
+- All 17 page handlers wrapped in try/except with full traceback display
+- Create character shows feedback and prevents duplicate creation
+- Edit character fields aligned with create fields
+
+### 14.7 Test Suite
+
+- **491 tests, 0 failures** (up from 404)
+- Tests updated for seeded baseline data (characters, personalities)
+- v1 API format assertions corrected to `{"type": "text", "content": "..."}`
+- Run: `python -m pytest tests/ -v --tb=short --ignore=tests/test_agent_loop.py --ignore=tests/live_wire_test.py`
 - Extra action tags captured in decision dict for scene processing
 
 ### 13.3 Gallery Scene (NEW — v2.7 Framework Showcase)

@@ -238,6 +238,8 @@ class Database:
         self._migrate_schema()
         # Ensure default characters exist
         self.seed_default_characters()
+        # Ensure default personalities exist
+        self.seed_default_personalities()
     
     def _migrate_schema(self):
         """
@@ -422,6 +424,49 @@ class Database:
                     VALUES (?,?,?,?,?,?,?,?,?)""",
                     (str(uuid.uuid4()), ch["id"], 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, ts))
             inserted += 1
+        return inserted
+
+    def seed_default_personalities(self) -> int:
+        """Seed the database with default personality profiles if missing.
+
+        Returns the number of personalities inserted.
+        """
+        defaults = [
+            {"name": "Bold Dominant",     "traits": ["confident","dominant","direct","bold"],
+             "prompt": "You are confident and assertive. You take charge in conversations.",
+             "warmth": 0.5, "flirtiness": 0.7, "humor": 0.4},
+            {"name": "Shy Submissive",    "traits": ["shy","sweet","submissive","responsive"],
+             "prompt": "You are gentle and easily flustered. You prefer to follow rather than lead.",
+             "warmth": 0.8, "flirtiness": 0.4, "humor": 0.3},
+            {"name": "Playful Tease",     "traits": ["flirtatious","teasing","witty","mischievous"],
+             "prompt": "You are playful and flirtatious. You love wordplay and keeping people guessing.",
+             "warmth": 0.7, "flirtiness": 0.8, "humor": 0.8},
+            {"name": "Romantic Idealist",  "traits": ["tender","romantic","attentive","passionate"],
+             "prompt": "You are deeply romantic and emotionally attentive. You cherish meaningful connection.",
+             "warmth": 0.9, "flirtiness": 0.5, "humor": 0.4},
+            {"name": "Wild Party",         "traits": ["uninhibited","adventurous","spontaneous"],
+             "prompt": "You are free-spirited and love excitement. Rules bore you.",
+             "warmth": 0.6, "flirtiness": 0.7, "humor": 0.7},
+            {"name": "Mysterious Dark",    "traits": ["enigmatic","intense","guarded","seductive"],
+             "prompt": "You are mysterious and intense. You reveal little but demand attention.",
+             "warmth": 0.3, "flirtiness": 0.6, "humor": 0.2},
+        ]
+        inserted = 0
+        for p in defaults:
+            existing = self.get_personality_by_name(p["name"])
+            if existing:
+                continue
+            try:
+                self.create_personality(
+                    name=p["name"], system_prompt=p["prompt"],
+                    traits=p["traits"],
+                    warmth=p.get("warmth", 0.5),
+                    flirtiness=p.get("flirtiness", 0.5),
+                    humor=p.get("humor", 0.5),
+                )
+                inserted += 1
+            except Exception:
+                pass
         return inserted
     
     def update_character(self, char_id: str, **kwargs) -> bool:

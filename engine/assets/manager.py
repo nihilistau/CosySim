@@ -555,3 +555,63 @@ class AssetManager:
             
         finally:
             conn.close()
+
+    def import_media_folder(self, folder: str, asset_type: str = "media",
+                            tags: Optional[List[str]] = None) -> int:
+        """Scan a folder and register all media files as assets.
+
+        Returns the number of newly imported assets.
+        """
+        import hashlib
+        root = Path(folder)
+        if not root.exists():
+            return 0
+
+        IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}
+        VIDEO_EXTS = {".mp4", ".webm", ".mov", ".avi"}
+        AUDIO_EXTS = {".wav", ".mp3", ".ogg", ".flac"}
+        ALL_EXTS = IMAGE_EXTS | VIDEO_EXTS | AUDIO_EXTS
+
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        count = 0
+        now = datetime.now().isoformat()
+        tag_list = tags or []
+
+        try:
+            for p in root.rglob("*"):
+                if not p.is_file() or p.suffix.lower() not in ALL_EXTS:
+                    continue
+                path_hash = hashlib.sha256(str(p.resolve()).encode()).hexdigest()[:16]
+                asset_id = f"media_{path_hash}"
+                cursor.execute("SELECT id FROM assets WHERE id = ?", (asset_id,))
+                if cursor.fetchone():
+                    continue
+                ext = p.suffix.lower()
+                if ext in IMAGE_EXTS:
+                    atype = "image"
+                elif ext in VIDEO_EXTS:
+                    atype = "video"
+                elif ext in AUDIO_EXTS:
+                    atype = "audio"
+                else:
+                    atype = asset_type
+
+                data = json.dumps({"path": str(p.resolve()), "filename": p.name,
+                                   "extension": ext, "size": p.stat().st_size})
+                meta = json.dumps({"source": "import", "folder": str(root)})
+                checksum = hashlib.md5(p.read_bytes()[:4096]).hexdigest()
+                cursor.execute(
+                    "INSERT INTO assets (id, type, data, metadata, checksum, created_at, updated_at)"
+                    " VALUES (?,?,?,?,?,?,?)",
+                    (asset_id, atype, data, meta, checksum, now, now))
+                for tag in [atype] + tag_list:
+                    cursor.execute(
+                        "INSERT OR IGNORE INTO asset_tags (asset_id, tag) VALUES (?,?)",
+                        (asset_id, tag))
+                count += 1
+            conn.commit()
+        finally:
+            conn.close()
+        logger.info("Imported %d media assets from %s", count, folder)
+        return count

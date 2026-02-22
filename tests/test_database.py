@@ -110,9 +110,10 @@ class TestPersonalities:
         assert p is not None
 
     def test_get_all(self, db):
+        baseline = len(db.get_all_personalities())  # seeded personalities
         _make_personality(db, "A")
         _make_personality(db, "B")
-        assert len(db.get_all_personalities()) == 2
+        assert len(db.get_all_personalities()) == baseline + 2
 
     def test_update(self, db):
         pid = _make_personality(db)

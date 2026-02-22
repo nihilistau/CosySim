@@ -605,7 +605,7 @@ class LMSClient:
 
         LMStudio native v1 ``/api/v1/chat`` uses:
         - ``system_prompt``: string (extracted from system messages)
-        - ``input``: string | array of ``{type: "text", text: "..."}``
+        - ``input``: string | array of ``{type: "text", content: "..."}``
 
         Returns ``(system_prompt_or_None, input_value)``.
         """
@@ -626,7 +626,7 @@ class LMSClient:
                 # Multi-part content (text + images for VLMs)
                 for part in content:
                     if part.get("type") == "text":
-                        input_items.append({"type": "text", "text": part["text"]})
+                        input_items.append({"type": "text", "content": part["text"]})
                     elif part.get("type") == "image_url":
                         url = part.get("image_url", {}).get("url", "")
                         input_items.append({"type": "image", "data_url": url})
@@ -635,16 +635,16 @@ class LMSClient:
                 if role == "assistant":
                     input_items.append({
                         "type": "text",
-                        "text": f"[assistant]: {content}",
+                        "content": f"[assistant]: {content}",
                     })
                 else:
-                    input_items.append({"type": "text", "text": content})
+                    input_items.append({"type": "text", "content": content})
 
         system_prompt = "\n\n".join(system_parts) if system_parts else None
 
         # Simplify: single text item → plain string
         if len(input_items) == 1 and input_items[0].get("type") == "text":
-            return system_prompt, input_items[0]["text"]
+            return system_prompt, input_items[0]["content"]
         if not input_items:
             return system_prompt, ""
 

@@ -26,6 +26,35 @@ class SceneManager:
     def register_scene_type(self, name: str, scene_class: Type[BaseScene]) -> None:
         """Register a scene type"""
         self.scene_registry[name] = scene_class
+
+    def seed_default_scenes(self) -> int:
+        """Auto-register all known Flask scenes from the launcher catalogue.
+
+        Returns the number of scenes registered.
+        """
+        KNOWN_SCENES = {
+            "phone":   {"cls": "content.scenes.phone.phone_scene_v2.PhoneSceneV2",   "port": 5555, "label": "CosyPhone OS"},
+            "bedroom": {"cls": "content.scenes.bedroom.bedroom_scene.BedroomScene",   "port": 5556, "label": "The Bedroom"},
+            "lounge":  {"cls": "content.scenes.lounge.lounge_scene.LoungeScene",       "port": 5557, "label": "The Velvet Lounge"},
+            "casino":  {"cls": "content.scenes.casino.casino_scene.CasinoScene",       "port": 5559, "label": "Midnight Casino"},
+            "gallery": {"cls": "content.scenes.gallery.gallery_scene.GalleryScene",    "port": 5560, "label": "The Gallery"},
+            "warzone": {"cls": "content.scenes.warzone.warzone_scene.WarzoneScene",    "port": 5561, "label": "Global Strike"},
+        }
+        count = 0
+        for name, info in KNOWN_SCENES.items():
+            if name in self.scene_registry:
+                continue
+            try:
+                mod_path, cls_name = info["cls"].rsplit(".", 1)
+                import importlib
+                mod = importlib.import_module(mod_path)
+                cls = getattr(mod, cls_name)
+                self.scene_registry[name] = cls
+                count += 1
+                logger.debug("SceneManager: auto-registered '%s'", name)
+            except Exception as exc:
+                logger.debug("SceneManager: failed to register '%s': %s", name, exc)
+        return count
     
     def create_scene(self, scene_type: str, scene_name: str, **kwargs) -> BaseScene:
         """

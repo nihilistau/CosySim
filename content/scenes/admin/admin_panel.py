@@ -128,40 +128,35 @@ def main():
         st.markdown(f"**Time**: {datetime.now().strftime('%H:%M:%S')}")
     
     # Main content based on page selection
-    if page == "📊 Dashboard":
-        show_dashboard()
-    elif page == "🗂️ Asset Browser":
-        show_asset_browser()
-    elif page == "👥 Character Manager":
-        show_character_manager()
-    elif page == "🎭 Scene Manager":
-        show_scene_manager()
-    elif page == "🧠 Personality Library":
-        show_personality_library()
-    elif page == "⚙️ Configuration":
-        show_configuration()
-    elif page == "💾 Database":
-        show_database()
-    elif page == "🔍 Search & Filter":
-        show_search()
-    elif page == "🖼️ Media Gallery":
-        show_media_gallery()
-    elif page == "🔗 Dependency Graph":
-        show_dependency_graph()
-    elif page == "🎨 Asset Generator":
-        show_asset_generator()
-    elif page == "📜 Log Viewer":
-        show_log_viewer()
-    elif page == "⛓️ Event Chains":
-        show_event_chains()
-    elif page == "🤖 LM Studio":
-        show_lmstudio()
-    elif page == "📈 Performance Monitor":
-        show_performance_monitor()
-    elif page == "🗄️ Backup & Restore":
-        show_backup_restore()
-    elif page == "🎮 MCP Monitor":
-        show_mcp_monitor()
+    PAGE_MAP = {
+        "📊 Dashboard":         show_dashboard,
+        "🗂️ Asset Browser":     show_asset_browser,
+        "👥 Character Manager":  show_character_manager,
+        "🎭 Scene Manager":      show_scene_manager,
+        "🧠 Personality Library": show_personality_library,
+        "⚙️ Configuration":      show_configuration,
+        "💾 Database":           show_database,
+        "🔍 Search & Filter":    show_search,
+        "🖼️ Media Gallery":      show_media_gallery,
+        "🔗 Dependency Graph":   show_dependency_graph,
+        "🎨 Asset Generator":    show_asset_generator,
+        "📜 Log Viewer":         show_log_viewer,
+        "⛓️ Event Chains":       show_event_chains,
+        "🤖 LM Studio":          show_lmstudio,
+        "📈 Performance Monitor": show_performance_monitor,
+        "🗄️ Backup & Restore":   show_backup_restore,
+        "🎮 MCP Monitor":        show_mcp_monitor,
+    }
+    handler = PAGE_MAP.get(page)
+    if handler:
+        try:
+            handler()
+        except Exception as exc:
+            st.error(f"⚠️ Error loading **{page}**: {exc}")
+            import traceback
+            st.code(traceback.format_exc(), language="python")
+    else:
+        st.warning(f"Unknown page: {page}")
 
 
 def show_dashboard():

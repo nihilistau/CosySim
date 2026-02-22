@@ -157,6 +157,7 @@ hardware:
 comfyui:
   enabled: false
   base_url: "http://localhost:8188"
+  output_dir: "C:/ComfyUI/output"
   timeout: 500
   generation:
     steps: 30

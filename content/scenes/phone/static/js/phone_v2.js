@@ -409,7 +409,10 @@
       catch (e) { toast('Failed to send'); }
     },
 
-    showCompose() {
+    async showCompose() {
+      if (!CosyPhone.contacts.length) {
+        await CosyPhone._loadContacts();
+      }
       if (!CosyPhone.contacts.length) { toast('No contacts available'); return; }
       const names = CosyPhone.contacts.map(c => c.name);
       const name = prompt(`Start conversation with:\n${names.join(', ')}\n\nType a name:`);
