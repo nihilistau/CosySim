@@ -608,20 +608,32 @@ class GameSessionInterceptor:
         if session is None:
             return
 
-        reply = ctx.get("reply", "")
-        # Detect common shorthand game event markers in agent reply
-        markers = {
-            "[GAME_COMPLETE]":       ("round_complete", "Round completed"),
-            "[DARE_COMPLETE]":       ("dare_completed", "Dare completed"),
-            "[TRUTH_COMPLETE]":      ("truth_answered", "Truth answered"),
-            "[CLUE_FOUND]":          ("clue_found",     "Clue discovered"),
-            "[GAME_WIN]":            ("game_won",        "Game won"),
-            "[MYSTERY_SOLVED]":      ("game_won",        "Mystery solved"),
+        # Use pre-parsed data if available
+        parsed = ctx.get("parsed")
+        if parsed is None:
+            from engine.agents.content_router import ContentRouter
+            reply = ctx.get("reply", "")
+            parsed = ContentRouter.parse_full(reply)
+            ctx["parsed"] = parsed
+
+        # Map game events to session event types
+        event_map = {
+            "GAME_COMPLETE":       ("round_complete", "Round completed"),
+            "DARE_COMPLETE":       ("dare_completed", "Dare completed"),
+            "TRUTH_COMPLETE":      ("truth_answered", "Truth answered"),
+            "CLUE_FOUND":          ("clue_found",     "Clue discovered"),
+            "GAME_WIN":            ("game_won",        "Game won"),
+            "MYSTERY_SOLVED":      ("game_won",        "Mystery solved"),
+            "TRUTH_REVEALED":      ("truth_answered", "Truth revealed"),
+            "ROUND_END":           ("round_complete", "Round ended"),
+            "CHALLENGE_COMPLETE":  ("round_complete", "Challenge completed"),
         }
-        for marker, (event_type, description) in markers.items():
-            if marker in reply:
+        for event_name in parsed.game_events:
+            key = event_name.upper()
+            if key in event_map:
+                event_type, description = event_map[key]
                 session.log_event(event_type, description, actor="character")
                 logger.debug(
-                    "GameSessionInterceptor: detected marker %s → event %s",
-                    marker, event_type,
+                    "GameSessionInterceptor: detected event %s → %s",
+                    key, event_type,
                 )

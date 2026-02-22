@@ -376,3 +376,96 @@ class TestInferenceResponse:
         assert resp.model == "qwen3-8b"
         assert resp.input_tokens == 100
         assert resp.is_stateful is True
+
+
+# ═══════════════════════════════════════════════════════════════════════
+#  7. ParsedResponse — unified single-pass parsing (v3.1)
+# ═══════════════════════════════════════════════════════════════════════
+
+from engine.agents.content_router import ParsedResponse
+
+
+class TestParsedResponse:
+    """ContentRouter.parse_full() single-pass extraction."""
+
+    def test_empty_text(self):
+        parsed = ContentRouter.parse_full("")
+        assert parsed.content == ""
+        assert parsed.mood is None
+        assert parsed.tags == {}
+
+    def test_plain_text(self):
+        parsed = ContentRouter.parse_full("Just chatting here.")
+        assert parsed.content == "Just chatting here."
+        assert parsed.mood is None
+        assert not parsed.has_images
+
+    def test_mood_extraction(self):
+        parsed = ContentRouter.parse_full("I feel great! [MOOD:happy]")
+        assert parsed.mood == "happy"
+        assert "MOOD" in parsed.tags
+        assert "I feel great!" in parsed.content
+        assert "[MOOD:" not in parsed.content
+
+    def test_mood_with_intensity(self):
+        parsed = ContentRouter.parse_full("Oh my... [MOOD:excited intensity=0.9]")
+        assert parsed.mood == "excited"
+        assert parsed.mood_intensity == 0.9
+
+    def test_image_request(self):
+        parsed = ContentRouter.parse_full("Here! [IMAGE:sunset over ocean]")
+        assert parsed.has_images
+        assert "sunset over ocean" in parsed.image_requests
+
+    def test_multiple_tags(self):
+        text = "[MOOD:flirty] Check this out [IMAGE:a cat] and [ACTION:wink]"
+        parsed = ContentRouter.parse_full(text)
+        assert parsed.mood == "flirty"
+        assert len(parsed.image_requests) == 1
+        assert len(parsed.actions) == 1
+
+    def test_game_events(self):
+        parsed = ContentRouter.parse_full("You did it! [GAME_EVENT:round_won]")
+        assert parsed.has_game_events
+        assert "round_won" in parsed.game_events
+
+    def test_legacy_game_markers(self):
+        parsed = ContentRouter.parse_full("Truth time! [DARE_COMPLETE]")
+        assert "DARE_COMPLETE" in parsed.game_events
+
+    def test_json_extraction(self):
+        text = 'Decision: {"action": "speak", "target": "player"}'
+        parsed = ContentRouter.parse_full(text)
+        assert parsed.json_data is not None
+        assert parsed.json_data["action"] == "speak"
+
+    def test_voice_hints(self):
+        parsed = ContentRouter.parse_full("Whisper to me [VOICE:sultry]")
+        assert "sultry" in parsed.voice_hints
+
+    def test_stat_updates(self):
+        parsed = ContentRouter.parse_full("Nice! [STAT:trust=+5]")
+        assert "trust=+5" in parsed.stat_updates
+
+    def test_token_artifacts_stripped(self):
+        parsed = ContentRouter.parse_full("<|begin_of_text|>Hello world<|end_of_text|>")
+        assert parsed.content == "Hello world"
+        assert "<|" not in parsed.content
+
+    def test_combined_complex(self):
+        text = (
+            "<|im_start|>Sure thing! [MOOD:happy intensity=0.7] "
+            "Let me draw that for you. [IMAGE:a sunset] "
+            "[ACTION:reaches for pen] [VOICE:cheerful] "
+            "[DARE_COMPLETE]"
+        )
+        parsed = ContentRouter.parse_full(text)
+        assert parsed.mood == "happy"
+        assert parsed.mood_intensity == 0.7
+        assert len(parsed.image_requests) == 1
+        assert len(parsed.actions) == 1
+        assert len(parsed.voice_hints) == 1
+        assert "DARE_COMPLETE" in parsed.game_events
+        assert "[MOOD:" not in parsed.content
+        assert "[IMAGE:" not in parsed.content
+        assert "<|im_start|>" not in parsed.content

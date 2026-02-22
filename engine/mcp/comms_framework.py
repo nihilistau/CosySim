@@ -271,9 +271,13 @@ class InterceptorBase(abc.ABC):
     Override ``post_call`` to modify the reply AFTER the LLM.
 
     Both methods receive the mutable ``ResponseContext``.
+
+    Set ``applicable_scenes`` to a set of scene IDs to restrict this
+    interceptor to specific scenes.  ``None`` means run everywhere.
     """
     name: str = "base"
     priority: int = 50  # lower runs first
+    applicable_scenes: Optional[Set[str]] = None  # None = all scenes
 
     def pre_call(self, ctx: ResponseContext) -> None:  # noqa: B027
         """Run before the LLM call.  Modify ctx['system_prompt'] or ctx['messages']."""
@@ -288,6 +292,9 @@ class InterceptorPipeline:
 
     Interceptors added via ``add()`` are sorted by ``priority`` (ascending).
     Any interceptor can set ``ctx['abort'] = True`` to stop the chain.
+
+    Scene-aware (v3.1): interceptors with ``applicable_scenes`` set are
+    skipped when ``ctx['scene']`` doesn't match.
     """
 
     def __init__(self) -> None:
@@ -301,10 +308,19 @@ class InterceptorPipeline:
     def remove(self, name: str) -> None:
         self._interceptors = [i for i in self._interceptors if i.name != name]
 
+    def _is_applicable(self, interceptor: InterceptorBase, ctx: ResponseContext) -> bool:
+        """Check if an interceptor should run for the current scene."""
+        if interceptor.applicable_scenes is None:
+            return True
+        scene = ctx.get("scene", "")
+        return scene in interceptor.applicable_scenes
+
     def run_pre(self, ctx: ResponseContext) -> None:
         for interceptor in self._interceptors:
             if ctx.get("abort"):
                 break
+            if not self._is_applicable(interceptor, ctx):
+                continue
             try:
                 interceptor.pre_call(ctx)
             except Exception as exc:
@@ -314,6 +330,8 @@ class InterceptorPipeline:
         for interceptor in self._interceptors:
             if ctx.get("abort"):
                 break
+            if not self._is_applicable(interceptor, ctx):
+                continue
             try:
                 interceptor.post_call(ctx)
             except Exception as exc:
@@ -624,7 +642,13 @@ class AgentGovernor:
                 logger.error("AgentGovernor LLM call failed: %s", exc)
                 ctx["reply"] = ""
 
-        # ── 5. Post-call pipeline ────────────────────────────────────
+        # ── 5. Parse response (single pass — v3.1) ─────────────────────
+        reply = ctx.get("reply", "")
+        if reply:
+            from engine.agents.content_router import ContentRouter
+            ctx["parsed"] = ContentRouter.parse_full(reply)
+
+        # ── 6. Post-call pipeline ────────────────────────────────────
         self.pipeline.run_post(ctx)
 
         return ctx.get("reply", "")

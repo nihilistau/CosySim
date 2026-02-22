@@ -196,6 +196,13 @@ class StreamProcessor:
         self._tool_calls: List[ToolCallRecord] = []
         self._current_tool: Optional[ToolCallRecord] = None
 
+        # Tag accumulation (v3.1 — single pass, no re-scan in result())
+        self._mood_tags: List[str] = []
+        self._image_requests: List[str] = []
+        self._action_tags: List[str] = []
+        self._stat_deltas: List[StatDelta] = []
+        self._voice_styles: List[str] = []
+
         # Stats captured from events
         self._response_id: str = ""
         self._model: str = ""
@@ -299,28 +306,36 @@ class StreamProcessor:
     # ── Tag scanning ────────────────────────────────────────────────
 
     def _scan_for_tags(self, text: str) -> None:
-        """Scan a content delta for inline tags and fire callbacks."""
+        """Scan a content delta for inline tags, accumulate and fire callbacks."""
         for match in _RE_MOOD.finditer(text):
             moods = [m.strip() for m in match.group(1).split(",")]
             for mood in moods:
+                self._mood_tags.append(mood)
                 if self._on_mood:
                     self._on_mood(mood)
 
         for match in _RE_IMAGE.finditer(text):
             prompt = match.group(1).strip()
+            self._image_requests.append(prompt)
             if self._on_image_request:
                 self._on_image_request(prompt)
 
         for match in _RE_ACTION.finditer(text):
             action = match.group(1).strip()
+            self._action_tags.append(action)
             if self._on_action:
                 self._on_action(action)
 
         for match in _RE_STAT.finditer(text):
             stat = match.group(1)
             delta = int(match.group(2))
+            sd = StatDelta(stat=stat, delta=delta)
+            self._stat_deltas.append(sd)
             if self._on_stat_delta:
-                self._on_stat_delta(StatDelta(stat=stat, delta=delta))
+                self._on_stat_delta(sd)
+
+        for match in _RE_VOICE.finditer(text):
+            self._voice_styles.append(match.group(1).strip())
 
     # ── Result assembly ─────────────────────────────────────────────
 
@@ -328,25 +343,14 @@ class StreamProcessor:
         """
         Assemble the final ProcessedResponse from all accumulated data.
 
+        v3.1: Tags are accumulated during streaming — no re-scan needed.
         Call this after the stream completes (after iterating the generator).
         """
         raw_text = "".join(self._content_parts)
         reasoning = "".join(self._reasoning_parts)
 
-        # Extract all tags from the full raw text
-        mood_tags = []
-        for m in _RE_MOOD.finditer(raw_text):
-            mood_tags.extend(t.strip() for t in m.group(1).split(","))
-
-        image_requests = [m.group(1).strip() for m in _RE_IMAGE.finditer(raw_text)]
-        action_tags = [m.group(1).strip() for m in _RE_ACTION.finditer(raw_text)]
-
-        stat_deltas = []
-        for m in _RE_STAT.finditer(raw_text):
-            stat_deltas.append(StatDelta(stat=m.group(1), delta=int(m.group(2))))
-
-        voice_matches = _RE_VOICE.findall(raw_text)
-        voice_style = voice_matches[-1].strip() if voice_matches else ""
+        # Use pre-accumulated tags (no re-scan)
+        voice_style = self._voice_styles[-1] if self._voice_styles else ""
 
         # Strip tags to produce clean text
         clean_text = _RE_ALL_TAGS.sub("", raw_text).strip()
@@ -370,10 +374,10 @@ class StreamProcessor:
             raw_text=raw_text,
             clean_text=clean_text,
             reasoning_content=reasoning,
-            mood_tags=mood_tags,
-            image_requests=image_requests,
-            action_tags=action_tags,
-            stat_deltas=stat_deltas,
+            mood_tags=list(self._mood_tags),
+            image_requests=list(self._image_requests),
+            action_tags=list(self._action_tags),
+            stat_deltas=list(self._stat_deltas),
             voice_style=voice_style,
             tool_calls=list(self._tool_calls),
             response_id=self._response_id,

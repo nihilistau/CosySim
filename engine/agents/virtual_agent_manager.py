@@ -548,6 +548,16 @@ class VirtualAgentManager:
                 },
             ))
 
+        # v3.1: Attach MCP skills server integration if available
+        if cfg.integrations is None:
+            try:
+                from engine.mcp.skills_server import get_skills_integration
+                integration = get_skills_integration()
+                if integration:
+                    cfg.integrations = [integration]
+            except Exception:
+                pass
+
         # Stateless one-off: skip conversation entirely
         if request.store is False:
             self._stateless_requests += 1

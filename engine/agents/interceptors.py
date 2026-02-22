@@ -40,7 +40,9 @@ from __future__ import annotations
 
 import logging
 import json
-from typing import Any, Dict, List, Optional
+import time
+import threading
+from typing import Any, Dict, List, Optional, Tuple
 
 from engine.mcp.comms_framework import (
     InterceptorBase,
@@ -50,6 +52,59 @@ from engine.mcp.comms_framework import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  Interceptor TTL cache (v3.1)
+# ══════════════════════════════════════════════════════════════════════
+
+class _InterceptorCache:
+    """Thread-safe TTL cache for interceptor pre-computed outputs.
+
+    Keyed by ``(agent_id, interceptor_name)``.  Interceptors that produce
+    the same output across multiple calls (e.g. character identity, skill
+    list, personality reminders) can cache here to avoid re-computation.
+    """
+
+    def __init__(self, default_ttl: float = 60.0) -> None:
+        self._lock = threading.Lock()
+        self._store: Dict[Tuple[str, str], Tuple[float, str]] = {}
+        self._default_ttl = default_ttl
+
+    def get(self, agent_id: str, key: str) -> Optional[str]:
+        with self._lock:
+            entry = self._store.get((agent_id, key))
+            if entry is None:
+                return None
+            expiry, value = entry
+            if time.time() > expiry:
+                del self._store[(agent_id, key)]
+                return None
+            return value
+
+    def set(self, agent_id: str, key: str, value: str, ttl: Optional[float] = None) -> None:
+        with self._lock:
+            self._store[(agent_id, key)] = (
+                time.time() + (ttl or self._default_ttl),
+                value,
+            )
+
+    def invalidate(self, agent_id: str, key: Optional[str] = None) -> None:
+        """Invalidate cache for an agent. If key is None, invalidate all."""
+        with self._lock:
+            if key:
+                self._store.pop((agent_id, key), None)
+            else:
+                self._store = {
+                    k: v for k, v in self._store.items() if k[0] != agent_id
+                }
+
+    def clear(self) -> None:
+        with self._lock:
+            self._store.clear()
+
+
+INTERCEPTOR_CACHE = _InterceptorCache(default_ttl=60.0)
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -176,52 +231,25 @@ class SkillAwarenessInterceptor(InterceptorBase):
 #  GameSessionInterceptor  (priority 35)
 # ══════════════════════════════════════════════════════════════════════
 
-class GameSessionInterceptor(InterceptorBase):
+class GameInterceptor(InterceptorBase):
     """
-    Priority 35 — injected between SkillAwarenessInterceptor and
-    GameRulesInterceptor.
+    Unified game interceptor (v3.1 — merges GameSessionInterceptor + GameRulesInterceptor).
+
+    Priority 35.
 
     Pre-call
     --------
-    Detects any active ``MCPGameSession`` for the current character and adds:
-    - Full game type, turn, score, and state snapshot
-    - Recent 10-turn history summary
-    - Type-specific available actions hint
+    1. Checks for active ``MCPGameSession`` → injects session state + history
+    2. Checks for active game rules → injects rules + current state
 
     Post-call
     ---------
-    Scans the reply for shorthand game event markers such as
-    ``[DARE_COMPLETE]``, ``[GAME_WIN]``, etc. and fires the corresponding
-    MCPGameSession events automatically.
+    Reads ``ctx["parsed"].game_events`` to detect events and fire
+    MCPGameSession log entries.
     """
-    name     = "game_session"
+    name     = "game"
     priority = 35
 
-    def pre_call(self, ctx: ResponseContext) -> None:
-        from engine.mcp.game_mcp import get_active_session, GameSessionInterceptor as _GSI
-        # Delegate to MCPGameNode-based implementation in game_mcp.py
-        _GSI().pre_call(ctx)
-
-    def post_call(self, ctx: ResponseContext) -> None:
-        from engine.mcp.game_mcp import GameSessionInterceptor as _GSI
-        _GSI().post_call(ctx)
-
-
-# ══════════════════════════════════════════════════════════════════════
-#  GameRulesInterceptor  (priority 40)
-# ══════════════════════════════════════════════════════════════════════
-
-class GameRulesInterceptor(InterceptorBase):
-    """
-    Pre-call: if a game is active in the current scene, inject its rules
-    and current state into the system prompt.
-
-    Post-call: check if the reply triggers any game state transitions.
-    """
-    name     = "game_rules"
-    priority = 40
-
-    # Game definitions  ─────────────────────────────────────────────
     GAME_RULES: Dict[str, str] = {
         "truth_or_dare": (
             "You are playing Truth or Dare! Rules:\n"
@@ -247,29 +275,51 @@ class GameRulesInterceptor(InterceptorBase):
     }
 
     def pre_call(self, ctx: ResponseContext) -> None:
-        from engine.mcp.comms_framework import get_game_state
-        gs = get_game_state()
-        scene = ctx.get("scene", "")
+        # Part 1: MCP game session context
+        try:
+            from engine.mcp.game_mcp import GameSessionInterceptor as _GSI
+            _GSI().pre_call(ctx)
+        except Exception as exc:
+            logger.debug("GameInterceptor session pre_call: %s", exc)
 
-        # Find active game for this scene
-        game_id = None
-        for gid in gs.all_games():
-            if gs.get(gid, "scene") == scene and gs.get(gid, "active"):
-                game_id = gid
-                break
+        # Part 2: Game rules injection
+        try:
+            from engine.mcp.comms_framework import get_game_state
+            gs = get_game_state()
+            scene = ctx.get("scene", "")
 
-        if game_id is None:
-            return
+            game_id = None
+            for gid in gs.all_games():
+                if gs.get(gid, "scene") == scene and gs.get(gid, "active"):
+                    game_id = gid
+                    break
 
-        rules = self.GAME_RULES.get(game_id, "")
-        state = gs.get_all(game_id)
-        ctx["game_state"] = state
+            if game_id is None:
+                return
 
-        ctx["system_prompt"] = ctx.get("system_prompt", "") + (
-            f"\n\n--- GAME: {game_id.upper()} ---\n"
-            f"{rules}\n"
-            f"Current state: {json.dumps(state, indent=2)}\n---"
-        )
+            rules = self.GAME_RULES.get(game_id, "")
+            state = gs.get_all(game_id)
+            ctx["game_state"] = state
+
+            ctx["system_prompt"] = ctx.get("system_prompt", "") + (
+                f"\n\n--- GAME: {game_id.upper()} ---\n"
+                f"{rules}\n"
+                f"Current state: {json.dumps(state, indent=2)}\n---"
+            )
+        except Exception as exc:
+            logger.debug("GameInterceptor rules pre_call: %s", exc)
+
+    def post_call(self, ctx: ResponseContext) -> None:
+        try:
+            from engine.mcp.game_mcp import GameSessionInterceptor as _GSI
+            _GSI().post_call(ctx)
+        except Exception as exc:
+            logger.debug("GameInterceptor post_call: %s", exc)
+
+
+# Keep old names as aliases for backward compatibility
+GameSessionInterceptor = GameInterceptor
+GameRulesInterceptor = GameInterceptor
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -498,9 +548,9 @@ class ResponseShaperInterceptor(InterceptorBase):
             if marker in reply:
                 reply = reply[:reply.index(marker)].rstrip()
 
-        # Strip LLM special token artifacts (<|begin_of_text|> etc.)
-        from engine.agents.stream_processor import strip_token_artifacts
-        reply = strip_token_artifacts(reply)
+        # Strip LLM special token artifacts
+        from engine.agents.content_router import _RE_TOKEN_ARTIFACTS
+        reply = _RE_TOKEN_ARTIFACTS.sub("", reply)
 
         ctx["reply"] = reply.strip()
 
@@ -560,12 +610,10 @@ class BedroomSceneInterceptor(InterceptorBase):
     """
     name     = "bedroom_scene"
     priority = 15
+    applicable_scenes = {"bedroom"}
 
     # ------------------------------------------------------------------ pre
     def pre_call(self, ctx: ResponseContext) -> None:  # noqa: D401
-        scene = ctx.get("scene", "")
-        if scene != "bedroom":
-            return
 
         agent_id  = ctx.get("agent_id", "")
         scene_id  = ctx.get("scene_id") or ctx.get("room_id") or "bedroom"
@@ -684,6 +732,7 @@ class PhoneSceneInterceptor(InterceptorBase):
     """
     name     = "phone_scene"
     priority = 15
+    applicable_scenes = {"phone"}
 
     # Vibe hints keyed by (arousal_bucket, openness_bucket)
     _VIBE_HINTS: Dict[tuple, str] = {
@@ -707,10 +756,6 @@ class PhoneSceneInterceptor(InterceptorBase):
         return "low"
 
     def pre_call(self, ctx: ResponseContext) -> None:
-        scene = ctx.get("scene", "")
-        if scene != "phone":
-            return
-
         agent_id = ctx.get("agent_id", "")
         scene_id = ctx.get("scene_id") or ctx.get("room_id") or "phone"
 
@@ -784,12 +829,9 @@ class LoungeSceneInterceptor(InterceptorBase):
     """
     name     = "lounge_scene"
     priority = 15
+    applicable_scenes = {"lounge"}
 
     def pre_call(self, ctx: ResponseContext) -> None:
-        scene = ctx.get("scene", "") or ctx.get("scene_id", "")
-        if scene != "lounge":
-            return
-
         agent_id = ctx.get("agent_id", "")
 
         try:
@@ -1021,10 +1063,14 @@ class CharacterRegistryInterceptor(InterceptorBase):
                 if auto_skills:
                     lines.append(f"Active skills: {', '.join(auto_skills)}")
 
-                # Load full personality profile from simulation DB
-                personality_block = self._load_personality_profile(agent_id)
-                if personality_block:
-                    lines.append(personality_block)
+                # Load full personality profile from simulation DB (cached)
+                cached_profile = INTERCEPTOR_CACHE.get(agent_id, "personality_profile")
+                if cached_profile is None:
+                    cached_profile = self._load_personality_profile(agent_id)
+                    if cached_profile:
+                        INTERCEPTOR_CACHE.set(agent_id, "personality_profile", cached_profile, ttl=300.0)
+                if cached_profile:
+                    lines.append(cached_profile)
 
                 lines.append("[/CHARACTER IDENTITY]")
                 block = "\n".join(lines)
@@ -1276,24 +1322,16 @@ class TTSStyleInterceptor(InterceptorBase):
 
 class MoodSyncInterceptor(InterceptorBase):
     """
-    Post-call: parse the reply for explicit ``[MOOD:xxx]`` annotations or
-    detect mood-indicative phrases and push back to the CharacterRegistry.
+    Post-call: read mood data from ``ctx["parsed"]`` (a ``ParsedResponse``)
+    and push back to the CharacterRegistry.
 
-    Characters can signal a mood shift by including ``[MOOD:happy]`` anywhere
-    in their reply.  The annotation is stripped from the final text before it
-    reaches the user.
+    If ``ctx["parsed"]`` is not populated (legacy path), falls back to
+    ``ContentRouter.parse_full()`` on the raw reply.
 
-    Examples::
-
-        [MOOD:sad]
-        [MOOD:excited]
-        [MOOD:flirty intensity=0.8]
+    The mood tag is already stripped from ``parsed.content``.
     """
     name     = "mood_sync"
     priority = 92
-
-    import re as _re
-    _MOOD_TAG = _re.compile(r"\[MOOD:(\w+)(?:\s+intensity=([\d.]+))?\]", _re.IGNORECASE)
 
     def post_call(self, ctx: ResponseContext) -> None:
         agent_id = ctx.get("agent_id", "")
@@ -1301,27 +1339,31 @@ class MoodSyncInterceptor(InterceptorBase):
         if not reply or not agent_id:
             return
 
-        matches = self._MOOD_TAG.findall(reply)
-        if not matches:
+        # Use pre-parsed data if available, otherwise parse now
+        parsed = ctx.get("parsed")
+        if parsed is None:
+            from engine.agents.content_router import ContentRouter
+            parsed = ContentRouter.parse_full(reply)
+            ctx["parsed"] = parsed
+
+        if not parsed.mood:
             return
 
-        # Strip all mood tags from the reply
-        cleaned = self._MOOD_TAG.sub("", reply).strip()
-        ctx["reply"] = cleaned
+        # Update reply with clean text (tags already stripped)
+        ctx["reply"] = parsed.content
 
-        mood_name, intensity_str = matches[-1]   # use last tag if multiple
-        intensity = float(intensity_str) if intensity_str else 0.6
+        intensity = parsed.mood_intensity if parsed.mood_intensity is not None else 0.6
 
         try:
             from engine.mcp.character_registry import get_character_registry
             get_character_registry().set_state(
                 agent_id,
-                mood           = mood_name.lower(),
+                mood           = parsed.mood,
                 mood_intensity = intensity,
             )
             logger.debug(
                 "MoodSyncInterceptor: %s → mood=%s (%.0f%%)",
-                agent_id, mood_name, intensity * 100,
+                agent_id, parsed.mood, intensity * 100,
             )
         except Exception as exc:
             logger.debug("MoodSyncInterceptor: registry update failed: %s", exc)
@@ -1341,8 +1383,9 @@ __all__ = [
     "LoungeSceneInterceptor",          # 15
     "AutoResultInjector",              # 20
     "SkillAwarenessInterceptor",       # 30
-    "GameSessionInterceptor",          # 35
-    "GameRulesInterceptor",            # 40
+    "GameInterceptor",                 # 35 (merged session + rules)
+    "GameSessionInterceptor",          # alias → GameInterceptor
+    "GameRulesInterceptor",            # alias → GameInterceptor
     "PersonalityGuardInterceptor",     # 50
     "PolicyEnforcerInterceptor",       # 60
     "MemoryEnhancerInterceptor",       # 70
@@ -1350,6 +1393,8 @@ __all__ = [
     "TTSStyleInterceptor",             # 85
     "ActivityLoggerInterceptor",       # 90
     "MoodSyncInterceptor",             # 92
+    # v3.1 utilities
+    "INTERCEPTOR_CACHE",
     # Constant for scene ID
     "BEDROOM_SCENE_ID",
 ]

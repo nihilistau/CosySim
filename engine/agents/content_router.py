@@ -1,9 +1,14 @@
 """
-ContentRouter v2.9 — Unified content pipeline for all LLM response types.
+ContentRouter v3.1 — Unified content pipeline for all LLM response types.
 
 Provides robust JSON extraction (brace-counting parser that handles nested
 objects, markdown fences, and text wrappers), inline tag extraction, and
 content classification for routing to downstream handlers.
+
+**v3.1** adds ``ParsedResponse`` and ``ContentRouter.parse_full()`` — a single
+parse pass that extracts all structured data from LLM output.  All downstream
+code (interceptors, stream processor, agent loop) should read from this object
+instead of running independent regex scans.
 
 Usage::
 
@@ -20,6 +25,13 @@ Usage::
     print(result.json_data)     # parsed dict or None
     print(result.tags)          # {"MOOD": ["happy"], "IMAGE": [...]}
     print(result.clean_text)    # text with JSON/tags stripped
+
+    # One-pass parsed response (v3.1)
+    parsed = ContentRouter.parse_full(llm_text)
+    print(parsed.content)         # clean dialog text
+    print(parsed.mood)            # "happy" or None
+    print(parsed.image_requests)  # ["sunset over ocean"]
+    print(parsed.json_data)       # parsed dict or None
 
     # Agent decision parsing (replaces _parse_decision)
     decision = ContentRouter.parse_decision(llm_text, valid_actions)
@@ -174,6 +186,76 @@ class ClassifiedContent:
         return bool(self.tags)
 
 
+# ── Parsed Response (v3.1) ──────────────────────────────────────────────
+
+@dataclass
+class ParsedResponse:
+    """Single-pass extraction of all structured data from LLM output.
+
+    Produced by ``ContentRouter.parse_full()`` — every downstream consumer
+    (interceptors, stream processor, agent loop) reads from this instead of
+    running independent regex scans.
+    """
+    content: str = ""
+    """Clean dialog text with all tags, JSON, and artifacts stripped."""
+
+    mood: Optional[str] = None
+    """Extracted ``[MOOD:xxx]`` value (first occurrence)."""
+
+    mood_intensity: Optional[float] = None
+    """Optional intensity from ``[MOOD:happy intensity=0.8]``."""
+
+    actions: List[str] = field(default_factory=list)
+    """All ``[ACTION:xxx]`` values."""
+
+    image_requests: List[str] = field(default_factory=list)
+    """All ``[IMAGE:prompt]`` values."""
+
+    voice_hints: List[str] = field(default_factory=list)
+    """All ``[VOICE:tone]`` values."""
+
+    game_events: List[str] = field(default_factory=list)
+    """All ``[GAME_EVENT:xxx]`` or legacy markers like ``[DARE_COMPLETE]``."""
+
+    stat_updates: List[str] = field(default_factory=list)
+    """All ``[STAT:key=value]`` values."""
+
+    json_data: Optional[Dict[str, Any]] = None
+    """First valid JSON object found in the text."""
+
+    tags: Dict[str, List[str]] = field(default_factory=dict)
+    """All ``[TAG:value]`` pairs (superset — includes mood, action, etc.)."""
+
+    raw_text: str = ""
+    """Original unmodified text."""
+
+    @property
+    def has_images(self) -> bool:
+        return bool(self.image_requests)
+
+    @property
+    def has_game_events(self) -> bool:
+        return bool(self.game_events)
+
+    @property
+    def has_actions(self) -> bool:
+        return bool(self.actions)
+
+
+# ── Legacy game-event markers ──────────────────────────────────────────
+
+_RE_LEGACY_GAME_EVENT = re.compile(
+    r"\[(DARE_COMPLETE|GAME_WIN|GAME_LOSE|TRUTH_REVEALED|ROUND_END|"
+    r"MYSTERY_SOLVED|CHALLENGE_COMPLETE)\]",
+    re.IGNORECASE,
+)
+
+_RE_MOOD_INTENSITY = re.compile(
+    r"\[MOOD:(\w+)(?:\s+intensity=([\d.]+))?\]",
+    re.IGNORECASE,
+)
+
+
 class ContentRouter:
     """Unified content pipeline for LLM responses."""
 
@@ -257,3 +339,64 @@ class ContentRouter:
     def strip_tags(text: str) -> str:
         """Remove all inline tags from text."""
         return _RE_INLINE_TAG.sub("", text).strip()
+
+    @staticmethod
+    def parse_full(text: str) -> ParsedResponse:
+        """Single-pass extraction of all structured data from LLM output.
+
+        This is the **canonical** way to process LLM responses in v3.1+.
+        All interceptors, stream processors, and agent loops should call
+        this once and read the result — never re-scan with custom regex.
+
+        Returns a ``ParsedResponse`` with clean text, mood, actions,
+        image requests, voice hints, game events, JSON data, and raw tags.
+        """
+        if not text:
+            return ParsedResponse()
+
+        parsed = ParsedResponse(raw_text=text)
+        cleaned = _RE_TOKEN_ARTIFACTS.sub("", text).strip()
+
+        # ── JSON extraction ─────────────────────────────────────────
+        parsed.json_data = extract_json(cleaned)
+
+        # ── Tag extraction (single pass) ────────────────────────────
+        for match in _RE_INLINE_TAG.finditer(cleaned):
+            tag_name = match.group(1).upper()
+            tag_value = match.group(2).strip()
+            if tag_name not in parsed.tags:
+                parsed.tags[tag_name] = []
+            parsed.tags[tag_name].append(tag_value)
+
+        # ── Semantic routing from tags ──────────────────────────────
+        # Mood (with intensity support)
+        mood_match = _RE_MOOD_INTENSITY.search(cleaned)
+        if mood_match:
+            parsed.mood = mood_match.group(1).lower()
+            if mood_match.group(2):
+                try:
+                    parsed.mood_intensity = float(mood_match.group(2))
+                except ValueError:
+                    pass
+        elif "MOOD" in parsed.tags:
+            parsed.mood = parsed.tags["MOOD"][0].lower()
+
+        parsed.actions = parsed.tags.get("ACTION", [])
+        parsed.image_requests = parsed.tags.get("IMAGE", [])
+        parsed.voice_hints = parsed.tags.get("VOICE", [])
+        parsed.stat_updates = parsed.tags.get("STAT", [])
+        parsed.game_events = parsed.tags.get("GAME_EVENT", [])
+
+        # ── Legacy game markers (e.g. [DARE_COMPLETE]) ─────────────
+        for legacy in _RE_LEGACY_GAME_EVENT.finditer(cleaned):
+            event = legacy.group(1).upper()
+            if event not in parsed.game_events:
+                parsed.game_events.append(event)
+
+        # ── Clean text (strip all tags, JSON, artifacts) ────────────
+        clean = _RE_INLINE_TAG.sub("", cleaned)
+        clean = _RE_LEGACY_GAME_EVENT.sub("", clean)
+        clean = _RE_MARKDOWN_FENCE.sub("", clean)
+        parsed.content = clean.strip()
+
+        return parsed
