@@ -1,9 +1,9 @@
 """
-ConversationManager — Client-side conversation state for LMStudio v1 stateful chats
+ConversationManager v2.7 — Client-side conversation state for LMStudio v1 stateful chats
 
 LMStudio's native v1 API supports stateful conversations where the server
-maintains KV cache and context via ``previous_response_id``.  This works
-beautifully — until the model is unloaded (VRAM eviction, TTL, manual swap).
+maintains KV cache and context via ``previous_response_id``.  Every response
+returns a unique ``response_id`` starting with ``resp_``.
 
 ConversationManager solves the three negatives of server-side state:
 
@@ -11,8 +11,11 @@ ConversationManager solves the three negatives of server-side state:
    the server loses state, we transparently replay the history.
 2. **No edit/fork** — to edit history, we keep the canonical copy here,
    modify it, then start a fresh server thread with the altered messages.
-3. **Single source of truth** — the governor, scenes, and overlay all
-   read/write through this manager, so conversation state is consistent.
+3. **Conversation branching** — every ``response_id`` is recorded.  Fork
+   at any historical turn and the new branch uses ``previous_response_id``
+   from that point, leveraging LMStudio's native branching.
+4. **Stateless queries** — ``send_stateless()`` sends ``store: false`` for
+   one-off queries that don't affect the conversation.
 
 Architecture::
 
@@ -22,10 +25,8 @@ Architecture::
     │  │ Conversation            │  │
     │  │  messages: List[Dict]   │  │
     │  │  response_id: str       │  │
+    │  │  _response_id_history   │  │
     │  │  model: str             │  │
-    │  └─────────────────────────┘  │
-    │  ┌─────────────────────────┐  │
-    │  │ Conversation ...        │  │
     │  └─────────────────────────┘  │
     └───────────────────────────────┘
               │
@@ -34,6 +35,7 @@ Architecture::
     │  LMSClient (v1 native only)  │
     │  /api/v1/chat                 │
     │  previous_response_id ────────┤─→ Server KV cache
+    │  store: true/false ───────────┤─→ Server state
     └───────────────────────────────┘
 
 Usage::
@@ -45,16 +47,18 @@ Usage::
     # Start a new conversation
     conv = mgr.create("aria_phone", system="You are Aria...")
 
-    # Send a message (returns LMSResponse)
+    # Send a message (returns LMSResponse with response_id)
     resp = conv.send("Hello!")
     resp2 = conv.send("What did I just say?")  # uses previous_response_id
 
     # Edit history (clears server state, replays modified history)
     conv.edit_message(1, "Actually, goodbye!")
-    resp3 = conv.send("Continue from here")
 
-    # Fork a conversation at a specific point
-    forked = conv.fork(at_turn=2, new_id="aria_phone_alt")
+    # Branch at turn 2 (uses recorded response_id for server-side branching)
+    branch = conv.branch_at(2, new_id="aria_phone_alt")
+
+    # Stateless one-off query (store: false, no state change)
+    summary = conv.send_stateless("Summarise our conversation")
 """
 from __future__ import annotations
 
@@ -108,6 +112,7 @@ class Conversation:
 
         self.messages: List[ConversationMessage] = []
         self.response_id: Optional[str] = None  # latest server response_id
+        self._response_id_history: List[str] = []  # all response_ids for branching
         self._server_synced = False  # True = server has our context
         self._lock = threading.Lock()
         self.created_at = time.time()
@@ -189,6 +194,7 @@ class Conversation:
             # Update state tracking
             if resp.response_id:
                 self.response_id = resp.response_id
+                self._response_id_history.append(resp.response_id)
                 self._server_synced = True
             self.last_active = time.time()
 
@@ -248,13 +254,21 @@ class Conversation:
             self.messages = system_msgs + kept
             self._invalidate_server_state()
 
-    def fork(self, at_turn: Optional[int] = None, new_id: Optional[str] = None) -> "Conversation":
+    def fork(
+        self,
+        at_turn: Optional[int] = None,
+        new_id: Optional[str] = None,
+        branch_response_id: Optional[str] = None,
+    ) -> "Conversation":
         """
         Fork this conversation into a new one.
 
         Args:
             at_turn: Fork after this many turns (None = copy everything).
             new_id: ID for the new conversation (auto-generated if None).
+            branch_response_id: If provided, the new conversation starts with
+                this ``response_id`` as its server state — enabling true
+                conversation branching via LMStudio's ``previous_response_id``.
 
         Returns:
             New Conversation with copied messages up to the fork point.
@@ -286,15 +300,77 @@ class Conversation:
                         break
                 new_conv.messages = kept
 
-            # Fork always starts with no server state
-            new_conv._server_synced = False
-            new_conv.response_id = None
+            # Use branch_response_id for true server-side branching
+            if branch_response_id and branch_response_id.startswith("resp_"):
+                new_conv.response_id = branch_response_id
+                new_conv._server_synced = True
+            else:
+                new_conv._server_synced = False
+                new_conv.response_id = None
+
             return new_conv
 
     def invalidate(self) -> None:
         """Force full history replay on next send (e.g., model was unloaded)."""
         with self._lock:
             self._invalidate_server_state()
+
+    def branch_at(self, turn_index: int, new_id: Optional[str] = None) -> "Conversation":
+        """
+        Branch the conversation at a specific turn using the response_id recorded
+        at that point.  This leverages LMStudio's native conversation branching.
+
+        The new conversation can send messages using ``previous_response_id``
+        from the branch point, avoiding full history replay.
+        """
+        with self._lock:
+            # Find the response_id at the given turn
+            turn_count = 0
+            branch_rid: Optional[str] = None
+            msg_index = 0
+            for i, msg in enumerate(self.messages):
+                if msg.role == "assistant":
+                    turn_count += 1
+                    rid = msg.metadata.get("response_id", "")
+                    if turn_count == turn_index and rid:
+                        branch_rid = rid
+                        msg_index = i
+                        break
+
+        return self.fork(
+            at_turn=turn_index,
+            new_id=new_id,
+            branch_response_id=branch_rid,
+        )
+
+    def send_stateless(
+        self,
+        user_message: str,
+        *,
+        system_override: Optional[str] = None,
+    ) -> Any:
+        """
+        Send a one-off query using this conversation's config but without
+        storing it on the server (``store: false``).  Does not modify
+        this conversation's state or history.
+
+        Useful for sidebar queries, summaries, or any fire-and-forget LLM call.
+        """
+        from engine.lmstudio.lms_client import get_lms_client
+        from engine.lmstudio.inference_config import InferenceConfig
+
+        client = get_lms_client()
+        cfg = self.config or InferenceConfig()
+        if self.model:
+            cfg = InferenceConfig.merge(cfg, InferenceConfig(model=self.model))
+
+        messages = []
+        sys_content = system_override or self.system
+        if sys_content:
+            messages.append({"role": "system", "content": sys_content})
+        messages.append({"role": "user", "content": user_message})
+
+        return client.chat(messages, config=cfg, store=False)
 
     def get_history(self) -> List[Dict[str, Any]]:
         """Return conversation as a list of message dicts."""
@@ -308,6 +384,7 @@ class Conversation:
             "model": self.model,
             "synced": self.is_synced,
             "response_id": self.response_id,
+            "response_id_count": len(self._response_id_history),
             "created_at": self.created_at,
             "last_active": self.last_active,
             "message_count": len(self.messages),

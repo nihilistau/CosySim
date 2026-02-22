@@ -1,20 +1,24 @@
 """
-LMSClient v2 — Native LMStudio v1 REST API client (v1-only, no OpenAI compat)
+LMSClient v2.7 — Native LMStudio v1 REST API client (v1-only)
 
-**CosySim Framework v2** — all inference goes through ``/api/v1/chat``.
-No OpenAI-compatible fallback.  This gives us full access to:
+**CosySim Framework v2.7** — all inference through ``/api/v1/chat``.
 
-* **Stateful chats** — ``previous_response_id`` for server-managed context
-* **Ephemeral MCP** — per-request ``integrations`` for tool calling
-* **Full param control** — top_k, min_p, repeat_penalty, reasoning mode
-* **Typed streaming events** — model_load, prompt_processing, tool_call, etc.
-* **Structured output** — JSON schema enforcement at logit level
-* **Image input** — VLM support via content parts
-* **Speculative decoding** — draft model for 2-3x throughput
+Features:
 
-Tools are exposed through ephemeral MCP integrations (not the ``tools``
-field).  This is cleaner and gives the model access to the full CosySim
-skill registry.
+* **Stateful chats** — ``previous_response_id`` / ``response_id`` for
+  server-managed context; conversation branching by reusing any historical
+  response_id.
+* **Store / no-store** — ``store: false`` for stateless one-off requests;
+  ``store: true`` (default) returns a ``response_id`` for continuations.
+* **Typed SSE streaming** — proper event parsing for chat.start,
+  model_load.*, prompt_processing.*, reasoning.*, tool_call.*,
+  message.*, error, chat.end (full aggregated result).
+* **Ephemeral MCP** — per-request ``integrations`` for tool calling.
+* **Full param control** — top_k, min_p, repeat_penalty, reasoning mode,
+  context_length override per request.
+* **Structured output** — JSON schema enforcement at logit level.
+* **Image input** — VLM support via ``{type: "image", data_url: "..."}``.
+* **Speculative decoding** — draft model for 2-3x throughput.
 
 Usage::
 
@@ -22,18 +26,17 @@ Usage::
 
     client = get_lms_client()
     resp = client.chat(messages)
-    resp = client.chat(messages, config=InferenceConfig(temperature=0.3))
     resp = client.chat_stateful("Hello!", previous_response_id=prev_id)
 
-    # With MCP tools
-    resp = client.chat_with_mcp(messages)
+    # Streaming with typed events
+    for chunk in client.chat_stream(messages, on_event=my_handler):
+        print(chunk, end="")
 
-    # Structured output
-    resp = client.chat_structured(messages, {"type": "object", ...})
+    # Stateless one-shot (no server-side storage)
+    resp = client.chat(messages, store=False)
 
-    # Load/unload via REST
-    client.load_model("model-id", config=LoadConfig(context_length=8192))
-    client.unload_model("model-id")
+    # Conversation branching
+    resp2 = client.chat_stateful("Branch here", previous_response_id=old_resp_id)
 """
 from __future__ import annotations
 
@@ -67,12 +70,20 @@ class LMSResponse:
     total_tokens: int = 0
     latency_ms: float = 0.0
     request_id: str = ""
-    response_id: str = ""          # for stateful chats
+    response_id: str = ""          # for stateful chats (starts with "resp_")
     reasoning_content: str = ""    # thinking model CoT
+    reasoning_tokens: int = 0      # tokens spent on reasoning
     tool_calls: List[Dict] = field(default_factory=list)
+    # Native v1 stats (from chat.end or non-streaming response)
+    server_tps: float = 0.0               # tokens_per_second from server
+    time_to_first_token_s: float = 0.0    # time_to_first_token_seconds
+    model_load_time_s: float = 0.0        # model_load_time_seconds (0 if already loaded)
 
     @property
     def tokens_per_second(self) -> float:
+        """Use server-reported TPS if available, else estimate from latency."""
+        if self.server_tps > 0:
+            return self.server_tps
         if self.latency_ms > 0 and self.output_tokens > 0:
             return self.output_tokens / (self.latency_ms / 1000.0)
         return 0.0
@@ -81,14 +92,57 @@ class LMSResponse:
     def has_tool_calls(self) -> bool:
         return len(self.tool_calls) > 0
 
+    @property
+    def is_stateful(self) -> bool:
+        """Whether this response has a response_id for continuations."""
+        return bool(self.response_id and self.response_id.startswith("resp_"))
+
+    def _apply_v1_stats(self, stats: Dict) -> None:
+        """Apply native v1 stats dict to this response."""
+        self.input_tokens = stats.get("input_tokens", self.input_tokens)
+        self.output_tokens = stats.get("total_output_tokens", self.output_tokens)
+        self.reasoning_tokens = stats.get("reasoning_output_tokens", self.reasoning_tokens)
+        self.total_tokens = self.input_tokens + self.output_tokens
+        self.server_tps = stats.get("tokens_per_second", 0.0)
+        self.time_to_first_token_s = stats.get("time_to_first_token_seconds", 0.0)
+        self.model_load_time_s = stats.get("model_load_time_seconds", 0.0) or 0.0
+
 
 @dataclass
 class LMSStreamEvent:
-    """A single event from the native v1 SSE stream."""
-    event_type: str = ""   # model_load, prompt_processing, content, tool_call, done, error
+    """A single typed event from the native v1 SSE stream.
+
+    LMStudio v1 streaming sends ``event: <type>\\ndata: <json>`` pairs.
+    Event types (in order they may appear):
+
+    - chat.start, chat.end
+    - model_load.start, model_load.progress, model_load.end
+    - prompt_processing.start, prompt_processing.progress, prompt_processing.end
+    - reasoning.start, reasoning.delta, reasoning.end
+    - tool_call.start, tool_call.arguments, tool_call.success, tool_call.failure
+    - message.start, message.delta, message.end
+    - error
+    """
+    event_type: str = ""
+    # Content deltas (message.delta, reasoning.delta)
     content: str = ""
-    tool_call: Optional[Dict] = None
+    # Progress (model_load.progress, prompt_processing.progress) — 0.0 to 1.0
+    progress: float = 0.0
+    # Model info (chat.start, model_load.*)
+    model_instance_id: str = ""
+    load_time_seconds: float = 0.0  # model_load.end
+    # Tool call fields
+    tool_name: str = ""
+    tool_arguments: Optional[Dict] = None
+    tool_output: str = ""
+    tool_provider: Optional[Dict] = None
+    # Error fields
+    error: Optional[Dict] = None
+    # chat.end aggregated result
     stats: Optional[Dict] = None
+    result: Optional[Dict] = None
+    response_id: str = ""
+    # Terminal flag
     is_done: bool = False
 
 
@@ -284,12 +338,17 @@ class LMSClient:
         max_tokens: Optional[int] = None,
         integrations: Optional[List[Dict]] = None,
         response_format: Optional[Dict] = None,
+        store: Optional[bool] = None,
     ) -> LMSResponse:
         """
         Send a chat completion via native ``/api/v1/chat``.
 
         All inference goes through the v1 API.  For tool calling, attach
         MCP servers via ``integrations`` (ephemeral or plugin).
+
+        Args:
+            store: If False, server won't store the conversation (no response_id
+                   returned).  Default None means server default (True).
         """
         # Build effective config
         effective = self._build_config(config, temperature=temperature,
@@ -297,6 +356,8 @@ class LMSClient:
                                         integrations=integrations,
                                         response_format=response_format,
                                         model=model)
+        if store is not None:
+            effective.store = store
 
         request_id = str(uuid.uuid4())[:8]
         t0 = time.perf_counter()
@@ -367,18 +428,58 @@ class LMSClient:
         config: Optional[InferenceConfig] = None,
         model: Optional[str] = None,
         on_event: Optional[Callable[[LMSStreamEvent], None]] = None,
+        store: Optional[bool] = None,
     ) -> Generator[str, None, LMSResponse]:
         """
-        Stream a chat response via native ``/api/v1/chat``.
+        Stream a chat response via native ``/api/v1/chat`` with typed SSE events.
 
-        Yields content strings.  Optional ``on_event`` callback receives
-        typed events (model_load, prompt_processing, tool_call, etc.).
+        Yields content strings (message deltas).  Optional ``on_event``
+        callback receives **every** typed event (model_load, prompt_processing,
+        reasoning, tool_call, message, error, etc.).
 
-        The generator's return value is an LMSResponse with full stats.
+        The generator's return value is an LMSResponse with full stats
+        extracted from the ``chat.end`` event.
         """
         effective = self._build_config(config, model=model)
+        if store is not None:
+            effective.store = store
         resolved_model = self.resolve_model(effective.model)
         return self._stream_native(messages, effective, resolved_model, on_event)
+
+    def chat_stream_stateful(
+        self,
+        user_message: str,
+        *,
+        previous_response_id: Optional[str] = None,
+        system: Optional[str] = None,
+        config: Optional[InferenceConfig] = None,
+        model: Optional[str] = None,
+        on_event: Optional[Callable[[LMSStreamEvent], None]] = None,
+    ) -> Generator[str, None, LMSResponse]:
+        """
+        Stream a stateful chat — server keeps context, you just send new message.
+
+        Combines ``chat_stateful()`` semantics with ``chat_stream()`` streaming.
+        Always stores (``store: true``) so a ``response_id`` is returned.
+        """
+        effective = self._build_config(config, model=model)
+        if previous_response_id:
+            effective.previous_response_id = previous_response_id
+        effective.store = True
+
+        resolved = self.resolve_model(effective.model)
+
+        payload: Dict[str, Any] = {
+            "model": resolved,
+            "input": user_message,
+            "stream": True,
+            "store": True,
+        }
+        if system and not previous_response_id:
+            payload["system_prompt"] = system
+        payload.update(effective.to_native_v1())
+
+        return self._stream_v1_raw(payload, resolved, on_event)
 
     # ── Convenience wrappers ────────────────────────────────────────
 
@@ -592,7 +693,18 @@ class LMSClient:
         model: str,
         on_event: Optional[Callable] = None,
     ) -> Generator[str, None, LMSResponse]:
-        """Stream via ``POST /api/v1/chat`` with typed events."""
+        """Stream via ``POST /api/v1/chat`` with typed SSE events.
+
+        LMStudio v1 streaming uses Server-Sent Events with the format::
+
+            event: message.delta
+            data: {"type": "message.delta", "content": "Hello"}
+
+        Events arrive in order: chat.start → model_load.* →
+        prompt_processing.* → reasoning.* → tool_call.* → message.* →
+        chat.end.  The ``chat.end`` event contains the full aggregated
+        response (stats, response_id, output array).
+        """
         system_prompt, v1_input = self._messages_to_v1_input(messages)
 
         payload: Dict[str, Any] = {
@@ -604,41 +716,110 @@ class LMSClient:
             payload["system_prompt"] = system_prompt
         payload.update(config.to_native_v1())
 
+        return self._stream_v1_raw(payload, model, on_event)
+
+    def _stream_v1_raw(
+        self,
+        payload: Dict[str, Any],
+        model: str,
+        on_event: Optional[Callable] = None,
+    ) -> Generator[str, None, LMSResponse]:
+        """Low-level v1 SSE stream consumer.
+
+        Parses the ``event:`` / ``data:`` SSE pairs emitted by
+        ``POST /api/v1/chat`` with ``stream: true``.
+
+        Yields message content deltas.  Accumulates reasoning content,
+        tool call results, and stats internally.  The generator's return
+        value is the fully-populated LMSResponse.
+        """
         result = LMSResponse(model=model)
         t0 = time.perf_counter()
+        current_event_type: Optional[str] = None
 
-        with self._client.stream(
-            "POST",
-            f"{self.base_url}/api/v1/chat",
-            json=payload,
-            timeout=None,
-        ) as response:
-            response.raise_for_status()
-            for line in response.iter_lines():
-                if not line or not line.startswith("data: "):
-                    continue
-                data_str = line[6:]
-                if data_str.strip() == "[DONE]":
-                    break
+        try:
+            with self._client.stream(
+                "POST",
+                f"{self.base_url}/api/v1/chat",
+                json=payload,
+                timeout=None,
+            ) as response:
+                response.raise_for_status()
 
-                try:
-                    data = json.loads(data_str)
-                except json.JSONDecodeError:
-                    continue
+                for line in response.iter_lines():
+                    if not line:
+                        # Blank line = end of event block, reset
+                        current_event_type = None
+                        continue
 
-                event = self._parse_stream_event(data)
-                if on_event:
-                    on_event(event)
+                    # SSE "event:" line — sets the type for the next data line
+                    if line.startswith("event: "):
+                        current_event_type = line[7:].strip()
+                        continue
 
-                if event.content:
-                    result.content += event.content
-                    result.output_tokens += 1
-                    yield event.content
+                    # SSE "data:" line — contains the JSON payload
+                    if not line.startswith("data: "):
+                        continue
+                    data_str = line[6:]
+                    if data_str.strip() == "[DONE]":
+                        break
 
-                if event.is_done:
-                    break
+                    try:
+                        data = json.loads(data_str)
+                    except json.JSONDecodeError:
+                        continue
+
+                    event = self._parse_v1_stream_event(data, current_event_type)
+                    if on_event:
+                        try:
+                            on_event(event)
+                        except Exception:
+                            pass
+
+                    # Yield message content deltas to the caller
+                    if event.event_type == "message.delta" and event.content:
+                        result.content += event.content
+                        yield event.content
+
+                    # Accumulate reasoning content
+                    elif event.event_type == "reasoning.delta" and event.content:
+                        result.reasoning_content += event.content
+
+                    # Track completed tool calls
+                    elif event.event_type == "tool_call.success":
+                        result.tool_calls.append({
+                            "tool": event.tool_name,
+                            "arguments": event.tool_arguments,
+                            "output": event.tool_output,
+                            "provider_info": event.tool_provider,
+                        })
+
+                    # Log tool call failures
+                    elif event.event_type == "tool_call.failure":
+                        logger.warning("Stream tool_call.failure: %s", event.error)
+
+                    # Log errors (stream continues — chat.end still arrives)
+                    elif event.event_type == "error":
+                        logger.warning("Stream error: %s", event.error)
+
+                    # Extract final stats + response_id from chat.end
+                    elif event.event_type == "chat.end" and event.result:
+                        result.response_id = event.result.get("response_id", "")
+                        result.model = event.result.get("model_instance_id", model)
+                        result.finish_reason = "stop"
+                        stats = event.result.get("stats", {})
+                        result._apply_v1_stats(stats)
+                        break
+
+        except httpx.ConnectError:
+            raise ConnectionError(f"Cannot connect to LMStudio at {self.base_url}")
+        except httpx.HTTPStatusError as exc:
+            logger.error("Stream HTTP %d: %s", exc.response.status_code, exc.response.text[:200])
+            raise
 
         result.latency_ms = (time.perf_counter() - t0) * 1000
+        if not result.total_tokens:
+            result.total_tokens = result.input_tokens + result.output_tokens
         return result
 
     # ── Response parsing ────────────────────────────────────────────
@@ -723,23 +904,16 @@ class LMSClient:
                                item.get("metadata", {}).get("tool_name", "?"),
                                item.get("reason", "unknown"))
 
-        content = "\n".join(content_parts)
-        reasoning = "\n".join(reasoning_parts)
-        input_tokens = stats.get("input_tokens", 0)
-        output_tokens = stats.get("total_output_tokens", 0)
-
-        return LMSResponse(
-            content=content,
-            reasoning_content=reasoning,
+        resp = LMSResponse(
+            content="\n".join(content_parts),
+            reasoning_content="\n".join(reasoning_parts),
             model=data.get("model_instance_id", model),
             finish_reason="stop",
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
-            total_tokens=input_tokens + output_tokens,
-            latency_ms=0.0,
             response_id=response_id,
             tool_calls=tool_calls,
         )
+        resp._apply_v1_stats(stats)
+        return resp
 
     def _parse_choices_response(self, data: Dict, model: str) -> LMSResponse:
         """Parse a choices-based response (legacy/compat fallback)."""
@@ -763,35 +937,60 @@ class LMSClient:
             tool_calls=tool_calls,
         )
 
-    def _parse_stream_event(self, data: Dict) -> LMSStreamEvent:
-        """Parse a single SSE event from native v1 streaming."""
+    def _parse_v1_stream_event(
+        self, data: Dict, event_hint: Optional[str] = None,
+    ) -> LMSStreamEvent:
+        """Parse a single typed SSE event from native v1 streaming.
+
+        The event type comes from either the ``type`` field in the JSON data
+        or the ``event:`` SSE line (passed as *event_hint*).
+        """
         event = LMSStreamEvent()
+        event.event_type = data.get("type", event_hint or "")
 
-        # Detect event type from various possible shapes
-        if "type" in data:
-            event.event_type = data["type"]
-        elif "choices" in data:
-            event.event_type = "content"
+        et = event.event_type
 
-        # Extract content
-        choices = data.get("choices", [])
-        if choices:
-            delta = choices[0].get("delta", {})
-            event.content = delta.get("content", "")
-            if choices[0].get("finish_reason"):
-                event.is_done = True
+        # ── Content deltas ──────────────────────────────────────
+        if et in ("message.delta", "reasoning.delta"):
+            event.content = data.get("content", "")
 
-        if data.get("content"):
-            event.content = data["content"]
+        # ── Progress events ─────────────────────────────────────
+        elif et in ("model_load.progress", "prompt_processing.progress"):
+            event.progress = data.get("progress", 0.0)
 
-        # Tool calls in stream
-        if data.get("tool_calls"):
-            event.event_type = "tool_call"
-            event.tool_call = data["tool_calls"]
+        # ── Model events ────────────────────────────────────────
+        elif et in ("chat.start", "model_load.start", "model_load.end"):
+            event.model_instance_id = data.get("model_instance_id", "")
+            if et == "model_load.end":
+                event.load_time_seconds = data.get("load_time_seconds", 0.0)
 
-        if data.get("done") or data.get("type") == "done":
+        # ── Tool call events ────────────────────────────────────
+        elif et.startswith("tool_call."):
+            event.tool_name = data.get("tool", "")
+            event.tool_arguments = data.get("arguments")
+            event.tool_output = data.get("output", "")
+            event.tool_provider = data.get("provider_info")
+            if et == "tool_call.failure":
+                event.error = {
+                    "reason": data.get("reason", ""),
+                    "metadata": data.get("metadata", {}),
+                }
+
+        # ── Error event ─────────────────────────────────────────
+        elif et == "error":
+            event.error = data.get("error", data)
+
+        # ── Final aggregated result ─────────────────────────────
+        elif et == "chat.end":
+            event.result = data.get("result", {})
+            event.stats = event.result.get("stats")
+            event.response_id = event.result.get("response_id", "")
+            event.model_instance_id = event.result.get("model_instance_id", "")
             event.is_done = True
-            event.stats = data.get("stats")
+
+        # Terminal states
+        if et in ("chat.end", "error"):
+            event.is_done = True
 
         return event
 
@@ -841,10 +1040,13 @@ class LMSClient:
                     "model": resp.model,
                     "input_tokens": resp.input_tokens,
                     "output_tokens": resp.output_tokens,
+                    "reasoning_tokens": resp.reasoning_tokens,
                     "latency_ms": resp.latency_ms,
                     "request_id": resp.request_id,
                     "response_id": resp.response_id,
                     "tps": round(resp.tokens_per_second, 1),
+                    "ttft_s": round(resp.time_to_first_token_s, 3),
+                    "stateful": resp.is_stateful,
                 },
             )
         except Exception:
