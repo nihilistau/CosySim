@@ -516,6 +516,17 @@ def mount_overlay(app, socketio=None) -> None:
     """
     app.register_blueprint(overlay_bp)
 
+    # Auto-mount MCP skills server alongside overlay
+    try:
+        from engine.mcp.skills_server import skills_bp, set_skills_server_port
+        app.register_blueprint(skills_bp)
+        # Infer port from app config or default
+        port = app.config.get("SERVER_PORT") or 5000
+        set_skills_server_port(port)
+        logger.info("MCP skills server mounted at /mcp/skills/")
+    except Exception as _exc:
+        logger.debug("Skills server auto-mount skipped: %s", _exc)
+
     @app.after_request
     def _inject_overlay_toggle(response):
         """Inject a floating overlay toggle button into HTML responses."""

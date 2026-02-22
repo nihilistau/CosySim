@@ -469,3 +469,221 @@ class TestParsedResponse:
         assert "[MOOD:" not in parsed.content
         assert "[IMAGE:" not in parsed.content
         assert "<|im_start|>" not in parsed.content
+
+
+# ═══════════════════════════════════════════════════════════════════════
+#  8. Scene-aware interceptor filtering (v3.1)
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestSceneAwareFiltering:
+    """InterceptorPipeline respects applicable_scenes."""
+
+    def test_interceptor_base_has_applicable_scenes(self):
+        from engine.mcp.comms_framework import InterceptorBase
+        base = InterceptorBase()
+        assert base.applicable_scenes is None  # None = run everywhere
+
+    def test_applicable_scenes_set_on_bedroom(self):
+        from engine.agents.interceptors import BedroomSceneInterceptor
+        b = BedroomSceneInterceptor()
+        assert b.applicable_scenes == {"bedroom"}
+
+    def test_applicable_scenes_set_on_phone(self):
+        from engine.agents.interceptors import PhoneSceneInterceptor
+        p = PhoneSceneInterceptor()
+        assert p.applicable_scenes == {"phone"}
+
+    def test_applicable_scenes_set_on_lounge(self):
+        from engine.agents.interceptors import LoungeSceneInterceptor
+        lg = LoungeSceneInterceptor()
+        assert lg.applicable_scenes == {"lounge"}
+
+    def test_global_interceptor_has_none(self):
+        from engine.agents.interceptors import MoodSyncInterceptor
+        m = MoodSyncInterceptor()
+        assert m.applicable_scenes is None
+
+    def test_pipeline_skips_wrong_scene(self):
+        """BedroomSceneInterceptor should not run in phone scene."""
+        from engine.mcp.comms_framework import InterceptorPipeline
+        from engine.agents.interceptors import BedroomSceneInterceptor
+        pipeline = InterceptorPipeline()
+        bedroom = BedroomSceneInterceptor()
+        pipeline.add(bedroom)
+        # Should be skippable
+        assert pipeline._is_applicable(bedroom, {"scene": "phone"}) is False
+
+    def test_pipeline_runs_matching_scene(self):
+        from engine.mcp.comms_framework import InterceptorPipeline
+        from engine.agents.interceptors import BedroomSceneInterceptor
+        pipeline = InterceptorPipeline()
+        bedroom = BedroomSceneInterceptor()
+        pipeline.add(bedroom)
+        assert pipeline._is_applicable(bedroom, {"scene": "bedroom"}) is True
+
+    def test_pipeline_runs_global_interceptor_anywhere(self):
+        from engine.mcp.comms_framework import InterceptorPipeline
+        from engine.agents.interceptors import MoodSyncInterceptor
+        pipeline = InterceptorPipeline()
+        mood = MoodSyncInterceptor()
+        pipeline.add(mood)
+        assert pipeline._is_applicable(mood, {"scene": "bedroom"}) is True
+        assert pipeline._is_applicable(mood, {"scene": "phone"}) is True
+        assert pipeline._is_applicable(mood, {}) is True
+
+
+# ═══════════════════════════════════════════════════════════════════════
+#  9. Interceptor cache (v3.1)
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestInterceptorCache:
+    """_InterceptorCache TTL behavior."""
+
+    def test_get_set_basic(self):
+        from engine.agents.interceptors import INTERCEPTOR_CACHE
+        INTERCEPTOR_CACHE.clear()
+        INTERCEPTOR_CACHE.set("agent1", "test_key", "test_value", ttl=60.0)
+        assert INTERCEPTOR_CACHE.get("agent1", "test_key") == "test_value"
+        INTERCEPTOR_CACHE.clear()
+
+    def test_get_missing_returns_none(self):
+        from engine.agents.interceptors import INTERCEPTOR_CACHE
+        INTERCEPTOR_CACHE.clear()
+        assert INTERCEPTOR_CACHE.get("nonexistent", "nope") is None
+
+    def test_invalidate(self):
+        from engine.agents.interceptors import INTERCEPTOR_CACHE
+        INTERCEPTOR_CACHE.clear()
+        INTERCEPTOR_CACHE.set("agent1", "key1", "val1")
+        INTERCEPTOR_CACHE.invalidate("agent1", "key1")
+        assert INTERCEPTOR_CACHE.get("agent1", "key1") is None
+        INTERCEPTOR_CACHE.clear()
+
+    def test_clear(self):
+        from engine.agents.interceptors import INTERCEPTOR_CACHE
+        INTERCEPTOR_CACHE.set("a", "k", "v")
+        INTERCEPTOR_CACHE.set("b", "k", "v")
+        INTERCEPTOR_CACHE.clear()
+        assert INTERCEPTOR_CACHE.get("a", "k") is None
+
+    def test_ttl_expiry(self):
+        import time
+        from engine.agents.interceptors import INTERCEPTOR_CACHE
+        INTERCEPTOR_CACHE.clear()
+        INTERCEPTOR_CACHE.set("agent1", "fast", "value", ttl=0.1)
+        assert INTERCEPTOR_CACHE.get("agent1", "fast") == "value"
+        time.sleep(0.15)
+        assert INTERCEPTOR_CACHE.get("agent1", "fast") is None
+        INTERCEPTOR_CACHE.clear()
+
+
+# ═══════════════════════════════════════════════════════════════════════
+#  10. GameInterceptor merge (v3.1)
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestGameInterceptorMerge:
+    """GameInterceptor is the merged class; aliases exist."""
+
+    def test_merged_class_exists(self):
+        from engine.agents.interceptors import GameInterceptor
+        gi = GameInterceptor()
+        assert gi.name == "game"
+        assert gi.priority == 35
+
+    def test_backward_compat_aliases(self):
+        from engine.agents.interceptors import (
+            GameSessionInterceptor, GameRulesInterceptor, GameInterceptor
+        )
+        assert GameSessionInterceptor is GameInterceptor
+        assert GameRulesInterceptor is GameInterceptor
+
+    def test_game_interceptor_has_pre_and_post(self):
+        from engine.agents.interceptors import GameInterceptor
+        gi = GameInterceptor()
+        assert hasattr(gi, "pre_call")
+        assert hasattr(gi, "post_call")
+
+
+# ═══════════════════════════════════════════════════════════════════════
+#  11. MCP Skills Server routes (v3.1)
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestSkillsServer:
+    """Skills server blueprint routes."""
+
+    @pytest.fixture
+    def client(self):
+        from flask import Flask
+        from engine.mcp.skills_server import skills_bp
+        app = Flask(__name__)
+        app.register_blueprint(skills_bp)
+        app.config["TESTING"] = True
+        return app.test_client()
+
+    def test_health(self, client):
+        resp = client.get("/mcp/skills/health")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["status"] == "ok"
+
+    def test_list_tools(self, client):
+        resp = client.get("/mcp/skills/tools")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert "tools" in data
+        assert isinstance(data["tools"], list)
+
+    def test_list_packs(self, client):
+        resp = client.get("/mcp/skills/packs")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert "packs" in data
+
+    def test_call_missing_name(self, client):
+        resp = client.post("/mcp/skills/call",
+                           json={"arguments": {}},
+                           content_type="application/json")
+        assert resp.status_code == 400
+
+    def test_call_unknown_tool(self, client):
+        resp = client.post("/mcp/skills/call",
+                           json={"name": "nonexistent_tool_xyz", "arguments": {}},
+                           content_type="application/json")
+        assert resp.status_code == 404
+
+    def test_manifest(self, client):
+        resp = client.get("/mcp/skills/manifest")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert "skills" in data
+
+    def test_pipeline_stats(self, client):
+        resp = client.get("/mcp/skills/pipeline/stats")
+        # May return 200 or 500 depending on VirtualAgentManager init,
+        # but should not 404
+        assert resp.status_code in (200, 500)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+#  12. Skills server integration helper (v3.1)
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestSkillsIntegration:
+    """get_skills_integration() returns correct format."""
+
+    def test_returns_none_without_port(self):
+        from engine.mcp.skills_server import get_skills_integration, set_skills_server_port
+        import engine.mcp.skills_server as ss
+        old = ss._skills_server_port
+        ss._skills_server_port = None
+        assert get_skills_integration() is None
+        ss._skills_server_port = old
+
+    def test_returns_dict_with_port(self):
+        from engine.mcp.skills_server import get_skills_integration, set_skills_server_port
+        set_skills_server_port(5555)
+        result = get_skills_integration()
+        assert result is not None
+        assert result["type"] == "ephemeral_mcp"
+        assert "5555" in result["server_url"]
+        assert "/mcp/skills" in result["server_url"]

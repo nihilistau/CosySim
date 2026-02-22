@@ -332,6 +332,20 @@ class BaseScene(ABC):
             mount_overlay(app, socketio)
         except Exception as _exc:
             _bslogger.debug("BaseScene.mount_overlay failed: %s", _exc)
+
+    def mount_skills_server(self, app) -> None:
+        """Mount the MCP skills server blueprint on a Flask app.
+
+        Exposes ``/mcp/skills/*`` routes for tool discovery and execution.
+        Also records the app port so ``get_skills_integration()`` works.
+        """
+        try:
+            from engine.mcp.skills_server import skills_bp, set_skills_server_port
+            app.register_blueprint(skills_bp)
+            set_skills_server_port(self.port)
+            _bslogger.debug("BaseScene: skills server mounted on port %d", self.port)
+        except Exception as _exc:
+            _bslogger.debug("BaseScene.mount_skills_server failed: %s", _exc)
     
     # ============= LIFECYCLE HOOKS =============
     # Override these in subclasses to react to scene events.
