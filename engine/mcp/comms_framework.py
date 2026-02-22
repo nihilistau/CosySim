@@ -581,10 +581,13 @@ class AgentGovernor:
         # ── 4. LLM call ──────────────────────────────────────────────
         with bus.activity("llm_call", f"{agent_name}: generating reply", agent_id=agent_id, scene=self.scene):
             try:
+                # Pass interceptor-built context to the agent
+                gov_ctx = ctx.get("system_prompt", "").strip() or None
                 reply = self.agent.reply(
                     user_message,
                     chain_id = ctx.get("chain_id"),
                     history  = ctx.get("history"),
+                    governance_context = gov_ctx,
                 )
                 ctx["reply"] = reply
                 # v2.7: populate response metadata for post-call interceptors

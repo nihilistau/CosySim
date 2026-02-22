@@ -231,9 +231,18 @@ class VirtualAgent:
         chain_id: Optional[str] = None,
         history: Optional[List[Dict]] = None,
         use_tools: bool = True,
+        governance_context: Optional[str] = None,
         **kwargs,
     ) -> str:
-        """Generate a reply by routing through VirtualAgentManager."""
+        """Generate a reply by routing through VirtualAgentManager.
+
+        Parameters
+        ----------
+        governance_context : str, optional
+            Supplementary system-prompt text injected by the interceptor
+            pipeline (scene state, game rules, skills, etc.).  Appended
+            after the agent's own system prompt.
+        """
         self._cancel_event.clear()
         mgr = self._get_manager()
 
@@ -243,6 +252,7 @@ class VirtualAgent:
             history=history,
             use_tools=use_tools,
             chain_id=chain_id,
+            governance_context=governance_context,
         )
 
         # Route through manager
@@ -289,13 +299,18 @@ class VirtualAgent:
         history: Optional[List[Dict]] = None,
         use_tools: bool = True,
         chain_id: Optional[str] = None,
+        governance_context: Optional[str] = None,
     ) -> InferenceRequest:
         """Build an InferenceRequest from a user message."""
         # RAG memories
         memories = self._search_memories(user_message)
 
-        # System prompt
+        # System prompt (base from character + memories)
         system_prompt = self._build_system_prompt(memories)
+
+        # Append governance context (interceptor pipeline injections)
+        if governance_context:
+            system_prompt = system_prompt + "\n\n" + governance_context
 
         # Build messages
         messages: List[Dict[str, str]] = [

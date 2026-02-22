@@ -115,6 +115,7 @@ class CharacterAgent:
         chain_id:  Optional[str]        = None,
         history:   Optional[List[Dict]] = None,
         use_tools: bool                 = True,
+        governance_context: Optional[str] = None,
         **kwargs,
     ) -> str:
         """Generate a reply by delegating to the underlying VirtualAgent."""
@@ -123,6 +124,7 @@ class CharacterAgent:
             chain_id=chain_id,
             history=history,
             use_tools=use_tools,
+            governance_context=governance_context,
             **kwargs,
         )
 
