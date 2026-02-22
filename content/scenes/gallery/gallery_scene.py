@@ -218,7 +218,7 @@ class GalleryScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
             "name": "Gallery",
             "scene_id": SCENE_ID,
             "description": "Interactive art gallery — v2.7 streaming framework showcase.",
-            "version": "2.7.1",
+            "version": "3.1.0",
             "port": self.port,
             "skill_packs": ["narrative", "memory", "character"],
             "features": ["streaming", "structured_output", "branching", "image_gen"],

@@ -3,7 +3,7 @@
 
 system:
   name: "CosySim AI Playground"
-  version: "2.0.0"
+  version: "3.1.0"
   environment: "default"
 
 # Paths configuration
@@ -55,6 +55,36 @@ scenes:
     host: "localhost"
     port: 5559
     debug: false
+
+  gallery:
+    host: "localhost"
+    port: 5560
+    debug: false
+
+  warzone:
+    host: "localhost"
+    port: 5561
+    debug: false
+
+  hub:
+    host: "localhost"
+    port: 8500
+    type: "streamlit"
+
+  admin:
+    host: "localhost"
+    port: 8502
+    type: "streamlit"
+
+  assets:
+    host: "localhost"
+    port: 8503
+    type: "streamlit"
+
+  creator:
+    host: "localhost"
+    port: 8504
+    type: "streamlit"
 
 # TTS configuration
 tts:

@@ -1378,8 +1378,8 @@
 
         <div class="section-sub">About</div>
         <div class="list-group">
-          <div class="list-row" style="cursor:default"><span class="list-icon">📱</span><span class="list-label">CosyPhone OS</span><span class="list-value">v3.0</span></div>
-          <div class="list-row" style="cursor:default"><span class="list-icon">⚡</span><span class="list-label">Framework</span><span class="list-value">v2.7</span></div>
+          <div class="list-row" style="cursor:default"><span class="list-icon">📱</span><span class="list-label">CosyPhone OS</span><span class="list-value">v3.1</span></div>
+          <div class="list-row" style="cursor:default"><span class="list-icon">⚡</span><span class="list-label">Framework</span><span class="list-value">v3.1</span></div>
         </div>
         <div style="height:32px"></div>
 
