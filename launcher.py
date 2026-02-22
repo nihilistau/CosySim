@@ -359,7 +359,7 @@ For more information, see: ONBOARDING.md
     parser.add_argument(
         "--version",
         action="version",
-        version="CosySim v2.0.0"
+        version="CosySim v2.7.1"
     )
     
     args = parser.parse_args()

@@ -1,6 +1,6 @@
 # CosySim — Agent Notes & System Architecture
 
-Generated: [2026-02-23T10:00:00Z]
+Generated: [2026-02-24T10:00:00Z] — v2.7.1
 
 > Complete structural summary of the CosySim AI simulation framework.
 > Covers file dependencies, game loop, MCP skill system, scene architecture,  
@@ -1525,6 +1525,81 @@ best = alternatives[0]  # sorted by score
 # Fork conversation at a decision point
 branch_id = dialog.get_branch_point("bedroom_luna")
 # Returns response_id that can be used with fork_conversation()
+```
+
+### 12.8 Rules Engine Streaming Integration
+
+```python
+# Mid-stream stat updates
+engine.apply_stream_deltas(
+    char_id="luna",
+    deltas=[StatDelta("trust", 5.0), StatDelta("arousal", -3.0)]
+)
+
+# Check threshold rules after stat changes
+triggered = engine.evaluate_threshold_rules("luna")
+# Returns list of rules whose conditions are now met
+```
+
+### 12.9 Framework Events
+
+```python
+# MCPCharacterNode streaming lifecycle
+node.start_stream()   # marks node as streaming
+node.end_stream(token_count=150, mood="playful")
+info = node.stream_info()  # {"is_streaming": False, "stream_tokens": 150, ...}
+
+# MCPFramework emits real-time events
+framework.emit_stream_event(
+    char_id="luna",
+    event_type="mood_change",
+    data={"mood": "playful", "previous": "neutral"}
+)
+```
+
+---
+
+## Phase 9: Scene Upgrades & Gallery Showcase
+
+### 13.1 Phone Scene v2.7.1 Upgrades
+
+- `_PhoneCharacterAgent.reply()` now uses `infer_processed()` with streaming
+- System prompt teaches agents `[MOOD:]`, `[IMAGE:]`, `[VOICE:]` inline tags
+- `_generate_reply()` returns rich dict: `{text, mood, image_requests, action_tags, voice_style}`
+- Reply worker processes `image_requests` → ComfyUI image generation as separate photo messages
+- Mood tags update character state in MCP framework
+- Autonomous text messages include rich metadata (mood, image_requests)
+
+### 13.2 Agent Loop v2.7.1 Upgrades
+
+- `_decide()` uses `infer_processed()` for mood/stat extraction
+- Mood tags from stream update character state via `_update_character_mood()`
+- Decision queries use `store=False` (stateless — no conversation pollution)
+- Extra action tags captured in decision dict for scene processing
+
+### 13.3 Gallery Scene (NEW — v2.7 Framework Showcase)
+
+**Port:** 5560 | **File:** `content/scenes/gallery/gallery_scene.py`
+
+An interactive art gallery demonstrating every v2.7 streaming framework feature:
+
+| Feature | API Endpoint | Framework Feature Showcased |
+|---------|-------------|---------------------------|
+| Art Evaluation | `POST /api/evaluate` | `infer_processed()` streaming with SocketIO deltas |
+| Structured Critique | `POST /api/critique` | `SceneAgent.run_structured()` JSON schema output |
+| Art Debate | `POST /api/debate` | Multiple alternatives / branching interpretations |
+| Art Creation | `POST /api/artwork/create` | `[IMAGE:]` tag extraction + ComfyUI generation |
+| Exhibition Setup | `POST /api/exhibition/set` | Scene state management + MCP framework events |
+
+**Characters:** curator, critic, artist, visitor — each with distinct evaluation perspectives.
+
+**Rooms:** main_hall, modern_wing, sculpture_garden, dark_room, private_collection.
+
+**Exhibitions:** dreams_unveiled (surrealist), neon_futures (cyberpunk), raw_emotions (abstract).
+
+```python
+# Launch gallery
+python launcher.py --mode gallery  # http://localhost:5560
 ```
 
 ### 12.8 Rules Engine Streaming Integration

@@ -4,6 +4,11 @@ All notable changes to CosySim are documented here.
 
 ## [2.7.1] — 2026-02-24
 
+### Scene Upgrades
+- **Phone scene** — `infer_processed()` streaming, rich responses (mood/image/voice tags), ComfyUI image gen on `[IMAGE:]` tags
+- **Agent loop** — `infer_processed()` for mood/stat extraction, `store=False`, framework mood sync
+- **Gallery scene** (NEW) — v2.7 framework showcase: streaming art evaluation, structured JSON critique, debate with branching, image generation
+
 ### StreamProcessor — Real-Time Response Processing
 - **New `engine/agents/stream_processor.py`** — Consumes LMSStreamEvent objects in real-time
 - **Inline tag extraction** — `[MOOD:x]`, `[IMAGE:prompt]`, `[ACTION:x]`, `[STAT:name±val]`, `[VOICE:style]`
