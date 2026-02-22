@@ -228,13 +228,11 @@ def framework_benchmarks():
 test("Benchmark stores", framework_benchmarks)
 
 def framework_lm_client_v2():
-    from engine.lmstudio.client_v2 import LMStudioClient, MCP
-    client = LMStudioClient()
-    result = client.chat([
-        {"role": "user", "content": "Reply with just the word 'connected'."}
-    ], max_tokens=10)
-    return f"Client v2 reply: '{result.content.strip()[:40]}' ({result.total_tokens} tokens, {result.tokens_per_second:.0f} tok/s)"
-test("LMStudio Client v2 chat", framework_lm_client_v2)
+    from engine.lmstudio.lms_client import get_lms_client, MCP
+    client = get_lms_client()
+    result = client.quick_reply("Reply with just the word 'connected'.")
+    return f"Client v1 reply: '{result.strip()[:40]}'"
+test("LMStudio Client v1 chat", framework_lm_client_v2)
 
 def framework_voice_gen():
     from content.simulation.services.voice_message import VoiceMessageGenerator

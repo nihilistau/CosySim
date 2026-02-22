@@ -164,6 +164,7 @@ class Conversation:
         *,
         integrations: Optional[List[Dict]] = None,
         response_format: Optional[Dict] = None,
+        previous_response_id_override: Optional[str] = None,
     ) -> Any:
         """
         Send a message in this conversation.
@@ -171,6 +172,11 @@ class Conversation:
         If the server has our state (``response_id`` valid), sends only the
         new message with ``previous_response_id``.  Otherwise, replays the
         full history.
+
+        Args:
+            previous_response_id_override: If provided, branch from this
+                response_id instead of the current conversation head. Used
+                for mood pivots and conversation repair.
 
         Returns:
             LMSResponse from the client.
@@ -193,11 +199,14 @@ class Conversation:
             if response_format:
                 cfg = InferenceConfig.merge(cfg, InferenceConfig(response_format=response_format))
 
-            if self._server_synced and self.response_id:
+            # Determine which response_id to use
+            prev_rid = previous_response_id_override or self.response_id
+
+            if (self._server_synced or previous_response_id_override) and prev_rid:
                 # Fast path: stateful — send only the new message
                 resp = client.chat_stateful(
                     user_message,
-                    previous_response_id=self.response_id,
+                    previous_response_id=prev_rid,
                     config=cfg,
                 )
             else:

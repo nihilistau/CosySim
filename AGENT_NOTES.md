@@ -2155,12 +2155,156 @@ Post-call interceptors can use these for branching decisions.
 | File | Status |
 |------|--------|
 | `engine/lmstudio/lms_sdk.py` | **Deleted** — Python SDK wrapper, never imported by production code |
-| `engine/lmstudio/client_v2.py` | **Deprecated** — kept for test compatibility only |
-| `engine/lmstudio/__init__.py` | Removed lms_sdk exports |
+| `engine/lmstudio/client_v2.py` | **Deleted** v2.9 — MCP class moved to lms_client.py, LMStudioClient unused |
+| `engine/lmstudio/__init__.py` | Removed lms_sdk exports, updated client_v2 → lms_client imports |
 
 ### 13.10 Test Results
 
-- **424 tests pass** (up from 359 pre-v2.7)
+- **514 tests pass** (up from 424 pre-v2.9)
 - 45 LMSClient v2.7 tests: SSE parsing, stateful chats, branching, stats
 - 20 VirtualAgent v2.7 tests: InferenceRequest/Response fields, governance_context
+- 29 ContentRouter tests: JSON extraction, classification, decision parsing
+- 20 Evaluator tests: scoring, problems, garbage detection
 - Test command: `python -m pytest tests/ -v --tb=short --ignore=tests/test_agent_loop.py --ignore=tests/live_wire_test.py`
+
+---
+
+## 15. Phase 9 — v2.9 Unified Pipeline & System Consolidation
+
+Generated: 2026-02-23
+
+### 15.1 Summary
+
+v2.9 consolidates the framework: unified content pipeline, robust JSON parsing,
+text/image evaluators, bedroom stateful dialog split, quality gate, mood pivot,
+game session stateful turns, and dead code removal.
+
+### 15.2 New Modules
+
+| Module | Purpose |
+|--------|---------|
+| `engine/agents/content_router.py` | Robust JSON extraction (brace-counting parser), content classification, inline tag extraction |
+| `engine/agents/evaluator.py` | `TextEvaluator` (heuristic scorer), `ImageEvaluator` (VLM-based), `ResponseScore` / `ImageScore` dataclasses |
+
+### 15.3 ContentRouter — Robust JSON Parsing
+
+Replaces the brittle `{`/`}` search in `agent_loop._parse_decision()`.
+
+```python
+from engine.agents.content_router import ContentRouter, extract_json
+
+# Extract JSON from any LLM output format
+obj = extract_json('Here is my answer: {"action": "speak"} done.')
+# → {"action": "speak"}
+
+# Also handles: markdown fences, nested objects, trailing commas, token artifacts
+
+# Agent decision parsing (validates against VALID_ACTIONS)
+decision = ContentRouter.parse_decision(text, valid_actions={"speak", "move", "idle"})
+# → {"action": "speak", "target": "", "message": ""}
+
+# Content classification
+result = ContentRouter.classify("[MOOD:happy] Hello! [IMAGE:sunset]")
+# result.content_type = "tagged_text"
+# result.tags = {"MOOD": ["happy"], "IMAGE": ["sunset"]}
+# result.clean_text = "Hello!"
+```
+
+### 15.4 TextEvaluator — Response Quality Scoring
+
+Heuristic scorer that checks response quality without making LLM calls:
+
+- **Length score** (0-1): penalizes too short (<3 words) or too long (>200 words)
+- **Variety score** (0-1): Jaccard similarity vs last 5 messages, flags repetition
+- **Engagement score** (0-1): questions, exclamations, action tags, conversation callbacks
+- **Personality score** (0-1): keyword density from character profile
+- **Expressiveness** (0-1): emoji, ellipsis, emphasis, action tags
+
+```python
+from engine.agents.evaluator import TextEvaluator
+
+evaluator = TextEvaluator(personality_keywords={"bold", "rebel"})
+score = evaluator.score_heuristic(text, recent_messages=recent)
+print(score.total)          # 0.0 - 1.0
+print(score.is_acceptable)  # True if total >= 0.35 and no critical problems
+print(score.problems)       # ["repetitive", "too_short", "token_artifacts"]
+```
+
+### 15.5 ImageEvaluator — VLM Quality Gate
+
+Uses `LMSClient.chat_with_images()` with `store=false` to evaluate generated images:
+
+```python
+from engine.agents.evaluator import ImageEvaluator
+
+evaluator = ImageEvaluator()
+score = evaluator.evaluate(image_data_url, prompt="cute selfie")
+# score.quality = 0.8, score.relevance = 0.7, score.total = 0.74
+
+description = evaluator.describe(image_data_url)
+# → "A young woman taking a selfie in a bedroom"
+```
+
+### 15.6 Bedroom Stateful Dialog Split
+
+Agent loop now splits decision and dialog into two separate LLM calls:
+
+1. **Decision** (store=false, JSON schema): `{"action": "speak", "target": "user"}`
+2. **Dialog** (store=true, stateful): Actual speech with conversation memory
+
+```
+AgentLoop.tick()
+  → _decide(char_id, context)             ← store=false, structured JSON
+  → _execute(char_id, decision)
+    → _generate_dialog(char_id, decision)  ← store=true, stateful conv
+    → result["message"] = dialog text
+```
+
+Each character gets a persistent conversation: `{scene_id}_dialog_{char_id}`.
+The decision call determines WHAT to do; the dialog call determines WHAT TO SAY.
+
+### 15.7 Quality Gate — Dual-Generate
+
+`VirtualAgentManager.infer_quality_gate()` generates multiple response variants
+and picks the best one:
+
+- Generates 2-4 variants at different temperatures (0.7, 1.1, 0.9, 0.5)
+- All variants use `store=false` (disposable)
+- TextEvaluator scores each variant
+- Returns highest-scoring response
+
+### 15.8 Mood Pivot — Conversation Branching Recovery
+
+`DialogSystem.mood_pivot()` recovers from mood drops by branching back:
+
+- Branches 2 turns back via `Conversation.send(previous_response_id_override=...)`
+- Injects new mood directive at the branch point
+- Regenerates response with different emotional framing
+
+### 15.9 Game Session Stateful Turns
+
+`MCPGameSession` now supports stateful game dialog with undo via
+`process_turn_stateful()` and `undo_last_turn()`.
+
+### 15.10 Dead Code Removed
+
+| File | Action |
+|------|--------|
+| `engine/lmstudio/client_v2.py` | **Deleted** — `MCP` class moved to `lms_client.py` |
+| `tests/test_client_v2.py` | **Deleted** — tested deprecated client |
+| `phone_ui_v2 - Copy.html` | **Deleted** — accidental backup |
+
+### 15.11 Architecture: v2.9 Pipeline Flow
+
+```
+User message → AgentGovernor (interceptors inject personality + heat)
+  → ContentRouter.classify(input)           ← detect JSON/tags/text
+  → VirtualAgentManager._execute_request()
+    → ConversationManager.send()            ← stateful-first
+      → LMSClient.chat_stateful()           ← SSE stream
+      → StreamProcessor → ProcessedResponse  ← mood/image/action tags
+    → TextEvaluator.score_heuristic()        ← quality check
+    → if garbage: _retry_with_repair()       ← conversation branching
+  → Governor.post_call() → strip tokens, shape response
+  → return to scene
+```

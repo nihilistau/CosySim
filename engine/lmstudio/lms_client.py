@@ -1103,6 +1103,22 @@ class LMSClient:
             pass
 
 
+# ── MCP integration helpers ─────────────────────────────────────────────
+
+class MCP:
+    """Factory for MCP integration payloads (v1 API ``integrations`` field)."""
+
+    @staticmethod
+    def plugin(plugin_id: str) -> Dict[str, str]:
+        """Reference an MCP server registered in LMStudio's mcp.json."""
+        return {"type": "plugin", "id": plugin_id}
+
+    @staticmethod
+    def ephemeral(server_url: str) -> Dict[str, str]:
+        """Reference an MCP server by URL (not pre-registered)."""
+        return {"type": "ephemeral_mcp", "server_url": server_url}
+
+
 # ── Module-level singleton ──────────────────────────────────────────────
 
 _lms_instance: Optional[LMSClient] = None

@@ -283,15 +283,30 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
                 pass
 
     def _fire_autotxt(self, char_id: str) -> None:
-        """Generate and deliver an autonomous text from char_id."""
+        """Generate and deliver an autonomous text from char_id.
+
+        v2.9: Uses store=false decision query to determine IF and WHAT to text,
+        then store=true stateful call for the actual message content.
+        """
         try:
             thread_id = self.phone_db.get_or_create_dm(char_id)
             char      = self.db.get_character(char_id)
+            char_name = (char or {}).get("name", char_id)
+
+            # Determine conversation mode from recent history
             conv_mode = "neutral"
             try:
-                thread_msgs = self.phone_db.get_messages(thread_id, limit=5)
-                if any(m.get("content", "") for m in thread_msgs):
-                    conv_mode = "warm"
+                from engine.mcp.scene_rules_engine import get_conversation_heat
+                heat = get_conversation_heat()
+                heat_level = heat.get_level(f"phone_{char_id}")
+                if heat_level in ("hot", "intense"):
+                    conv_mode = "intimate"
+                elif heat_level == "warm":
+                    conv_mode = "flirty"
+                else:
+                    thread_msgs = self.phone_db.get_messages(thread_id, limit=5)
+                    if any(m.get("content", "") for m in thread_msgs):
+                        conv_mode = "warm"
             except Exception:
                 pass
 
@@ -301,7 +316,6 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
             if not text:
                 return
 
-            # Build message metadata from rich response
             metadata = {}
             if reply.get("mood"):
                 metadata["mood"] = reply["mood"]
@@ -325,7 +339,7 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
             self._emit("message_new", {
                 "thread_id": thread_id,
                 "message":   msg,
-                "char_name": (char or {}).get("name", char_id),
+                "char_name": char_name,
             })
             self._emit("thread_updated", {"thread_id": thread_id})
         except Exception as exc:

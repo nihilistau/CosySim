@@ -828,6 +828,68 @@ class DialogSystem:
             return 1.0
         return 0.7
 
+    def mood_pivot(
+        self,
+        character_id: str,
+        scene: str,
+        *,
+        target_mood: str = "neutral",
+        directive_text: str = "",
+    ) -> Optional[str]:
+        """Recover from a mood drop by branching to a previous conversation state.
+
+        When mood drops sharply (e.g., user offended the character), this:
+        1. Finds the response_id from 2 turns ago (before the drop)
+        2. Branches the conversation from that point
+        3. Injects a new emotional directive
+        4. Regenerates with the new mood framing
+
+        Returns the new response text, or None if branching unavailable.
+        """
+        convo = self._get_convo(character_id, scene)
+
+        # Need at least 2 response IDs to branch back
+        if len(convo.response_ids) < 2:
+            logger.debug("mood_pivot: not enough history to branch for %s", character_id)
+            return None
+
+        branch_id = convo.branch_point(-2)  # 2 turns ago
+        if not branch_id:
+            return None
+
+        try:
+            from engine.lmstudio.conversation import get_conversation_manager
+
+            conv_mgr = get_conversation_manager()
+            conv_id = f"{scene}_dialog_{character_id}"
+            conv = conv_mgr.get(conv_id)
+
+            if conv is None:
+                return None
+
+            # Branch at the earlier point
+            mood_directive = directive_text or (
+                f"[Your mood shifts to {target_mood}. "
+                f"Respond naturally with this emotional state. "
+                f"Don't reference what just happened — start fresh from here.]"
+            )
+
+            resp = conv.send(
+                mood_directive,
+                previous_response_id_override=branch_id,
+            )
+
+            if resp and resp.content:
+                from engine.agents.stream_processor import strip_token_artifacts
+                text = strip_token_artifacts(resp.content).strip()
+                convo.record_response(resp.response_id or "", target_mood)
+                return text
+
+        except Exception as exc:
+            logger.debug("mood_pivot failed for %s: %s", character_id, exc)
+
+        return None
+
     # ── Internal helpers ──────────────────────────────────────────────
 
     def _get_convo(self, character_id: str, scene: str) -> ConversationState:

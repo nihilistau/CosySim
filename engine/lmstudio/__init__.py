@@ -68,15 +68,13 @@ Quick start::
     resp = conv.send("Hello!")
 """
 # Native v1 client (primary — the only inference path)
-from .lms_client       import LMSClient, get_lms_client, LMSResponse, LMSStreamEvent, LMSModelInfo
+from .lms_client       import LMSClient, get_lms_client, LMSResponse, LMSStreamEvent, LMSModelInfo, MCP
 # Conversation state management
 from .conversation     import ConversationManager, get_conversation_manager, Conversation
 # Config dataclasses
 from .inference_config import InferenceConfig, LoadConfig, json_schema_format, json_object_format
 # Resource manager
 from .resource_manager import ResourceManager, get_resource_manager, Strategy
-# Legacy OpenAI-compat client (deprecated — redirects to LMSClient)
-from .client_v2        import LMStudioClient, get_lmstudio_client, MCP
 # CLI lifecycle management
 from .client           import LMStudioManager, get_lmstudio_manager
 # Model lifecycle modes
@@ -88,15 +86,13 @@ from .tool_factory     import ToolSpec, tool, from_callable, run_with_tools
 
 __all__ = [
     # Native v1 (the only inference path)
-    "LMSClient", "get_lms_client", "LMSResponse", "LMSStreamEvent", "LMSModelInfo",
+    "LMSClient", "get_lms_client", "LMSResponse", "LMSStreamEvent", "LMSModelInfo", "MCP",
     # Conversation state
     "ConversationManager", "get_conversation_manager", "Conversation",
     # Config
     "InferenceConfig", "LoadConfig", "json_schema_format", "json_object_format",
     # Resource manager
     "ResourceManager", "get_resource_manager", "Strategy",
-    # Legacy REST (deprecated)
-    "LMStudioClient", "get_lmstudio_client", "MCP",
     # CLI lifecycle
     "LMStudioManager", "get_lmstudio_manager",
     # Model lifecycle modes

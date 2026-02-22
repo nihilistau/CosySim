@@ -130,7 +130,7 @@ class TestAgentLoopIntegration:
         sm.place_character("c1", "room")
 
         # Block the live LMStudio client so the loop genuinely has no LLM
-        with patch("engine.lmstudio.client_v2.get_lmstudio_client",
+        with patch("engine.agents.virtual_agent_manager.get_virtual_agent_manager",
                    side_effect=Exception("LMStudio offline")):
             actions = loop.tick()
 
@@ -250,13 +250,13 @@ class TestRESTClientIntegration:
     """LMStudio REST client with MCP integrations field."""
 
     def test_mcp_plugin_format(self):
-        from engine.lmstudio.client_v2 import MCP
+        from engine.lmstudio.lms_client import MCP
         plugin = MCP.plugin("mcp/cosysim")
         assert plugin["type"] == "plugin"
         assert plugin["id"] == "mcp/cosysim"
 
     def test_mcp_ephemeral_format(self):
-        from engine.lmstudio.client_v2 import MCP
+        from engine.lmstudio.lms_client import MCP
         eph = MCP.ephemeral("http://localhost:8600/mcp")
         assert eph["type"] == "ephemeral_mcp"
         assert eph["server_url"] == "http://localhost:8600/mcp"

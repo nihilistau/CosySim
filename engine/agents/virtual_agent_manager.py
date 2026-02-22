@@ -568,16 +568,9 @@ class VirtualAgentManager:
 
     def _is_garbage_response(self, response: InferenceResponse) -> bool:
         """Check if a response is garbage that should be retried."""
-        from engine.agents.stream_processor import strip_token_artifacts
-        text = strip_token_artifacts(response.content or "").strip()
-        if not text:
-            return True
-        if len(text) < 3:
-            return True
-        # Check for responses that are only token artifacts
-        if all(c in '<>|' for c in text.replace(' ', '')):
-            return True
-        return False
+        from engine.agents.evaluator import get_text_evaluator
+        evaluator = get_text_evaluator()
+        return evaluator.is_garbage(response.content or "")
 
     def _retry_with_repair(
         self, request: InferenceRequest, cfg: Any, attempt: int = 0,
@@ -662,6 +655,77 @@ class VirtualAgentManager:
             response_format=cfg.response_format if hasattr(cfg, "response_format") else None,
         )
         return InferenceResponse.from_lms_response(resp)
+
+    def infer_quality_gate(
+        self,
+        request: InferenceRequest,
+        *,
+        variants: int = 2,
+        personality_keywords: Optional[set] = None,
+        recent_messages: Optional[list] = None,
+    ) -> InferenceResponse:
+        """Generate multiple response variants and return the best one.
+
+        Uses store=false for all variants (disposable), then scores each
+        with the TextEvaluator and returns the highest-scoring response.
+
+        Args:
+            request: The inference request.
+            variants: Number of variants to generate (2-4).
+            personality_keywords: Keywords for personality scoring.
+            recent_messages: Recent messages for variety scoring.
+        """
+        from engine.agents.evaluator import TextEvaluator
+        from engine.lmstudio.inference_config import InferenceConfig
+
+        evaluator = TextEvaluator(personality_keywords=personality_keywords or set())
+        variants = max(2, min(4, variants))
+
+        candidates = []
+        temps = [0.7, 1.1, 0.9, 0.5][:variants]
+
+        for i, temp in enumerate(temps):
+            try:
+                cfg = InferenceConfig.from_request(request)
+                cfg = InferenceConfig.merge(cfg, InferenceConfig(temperature=temp))
+
+                # Force stateless for variant generation
+                variant_request = InferenceRequest(
+                    agent_id=request.agent_id,
+                    messages=request.messages,
+                    temperature=temp,
+                    max_output_tokens=request.max_output_tokens,
+                    store=False,
+                    priority=request.priority,
+                    metadata={**(request.metadata or {}), "quality_gate_variant": i},
+                )
+
+                from engine.lmstudio.lms_client import get_lms_client
+                client = get_lms_client()
+                resp = client.chat(variant_request.messages, config=cfg)
+                inf_resp = InferenceResponse.from_lms_response(resp)
+
+                text = inf_resp.content or ""
+                score = evaluator.score_heuristic(
+                    text,
+                    recent_messages=recent_messages,
+                    personality_keywords=personality_keywords,
+                )
+                candidates.append((inf_resp, score.total))
+                logger.debug(
+                    "Quality gate variant %d (temp=%.1f): score=%.2f, len=%d",
+                    i, temp, score.total, len(text),
+                )
+            except Exception as exc:
+                logger.debug("Quality gate variant %d failed: %s", i, exc)
+
+        if not candidates:
+            # Fallback to normal inference
+            return self.infer(request)
+
+        # Return highest scoring
+        candidates.sort(key=lambda x: x[1], reverse=True)
+        return candidates[0][0]
 
     def __repr__(self) -> str:
         return (

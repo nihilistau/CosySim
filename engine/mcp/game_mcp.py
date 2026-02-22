@@ -246,6 +246,85 @@ class MCPGameSession:
         """Get all tracked response_ids for branching."""
         return list(self._response_ids)
 
+    def process_turn_stateful(
+        self,
+        user_message: str,
+        *,
+        system_prompt: Optional[str] = None,
+    ) -> Optional[str]:
+        """Process a game turn using stateful conversation (store=true).
+
+        Maintains conversation history so the game "remembers" previous turns.
+        Tracks response_ids for undo/branch support.
+        """
+        try:
+            from engine.lmstudio.conversation import get_conversation_manager
+
+            conv_mgr = get_conversation_manager()
+            conv_id = f"game_{self.game_id}"
+            conv = conv_mgr.get(conv_id)
+
+            if conv is None:
+                system = system_prompt or (
+                    f"You are the game master for a {self.session_type} game. "
+                    f"Player: {self.character_id}. "
+                    f"Keep responses fun, engaging, and appropriate for the game. "
+                    f"Track the game state and progress."
+                )
+                conv = conv_mgr.create(conv_id, system=system)
+
+            resp = conv.send(user_message)
+            text = (resp.content or "").strip()
+
+            if resp.response_id:
+                self.record_response_id(resp.response_id)
+
+            if text:
+                self.log_event(
+                    "stateful_turn",
+                    f"Turn {self._turn}: {text[:80]}",
+                    {"text": text, "response_id": resp.response_id or ""},
+                )
+
+            return text
+
+        except Exception as exc:
+            logger.error("Stateful game turn failed: %s", exc)
+            return None
+
+    def undo_last_turn(self) -> Optional[str]:
+        """Undo the last game turn by branching back to the previous response_id."""
+        if len(self._response_ids) < 2:
+            return None
+
+        try:
+            from engine.lmstudio.conversation import get_conversation_manager
+
+            conv_mgr = get_conversation_manager()
+            conv_id = f"game_{self.game_id}"
+            conv = conv_mgr.get(conv_id)
+
+            if conv is None:
+                return None
+
+            # Branch back to 2 turns ago
+            branch_rid = self._response_ids[-2]
+            resp = conv.send(
+                "[Undo last turn — continue from here with a different approach]",
+                previous_response_id_override=branch_rid,
+            )
+
+            text = (resp.content or "").strip()
+            if resp.response_id:
+                self._response_ids.pop()  # Remove the undone turn
+                self.record_response_id(resp.response_id)
+
+            return text
+
+        except Exception as exc:
+            logger.error("Game undo failed: %s", exc)
+            return None
+
     # ── State helpers ─────────────────────────────────────────────────
 
     def get(self, key: str, default: Any = None) -> Any:

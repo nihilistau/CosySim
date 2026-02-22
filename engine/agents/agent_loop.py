@@ -87,6 +87,9 @@ class AgentLoop:
         self._shared_log_max = 200
         self._log_lock = threading.Lock()
 
+        # Stateful dialog conversation IDs per character
+        self._dialog_conv_ids: Dict[str, str] = {}
+
         # Callbacks
         self._on_action: Optional[Callable] = None
 
@@ -462,25 +465,9 @@ class AgentLoop:
         return results
 
     def _parse_decision(self, text: str) -> Dict:
-        """Extract JSON action from LLM response."""
-        text = text.strip()
-        # Find JSON in the response
-        start = text.find("{")
-        end = text.rfind("}") + 1
-        if start >= 0 and end > start:
-            try:
-                data = json.loads(text[start:end])
-                action = data.get("action", "idle").lower()
-                if action not in self.VALID_ACTIONS:
-                    action = "idle"
-                return {
-                    "action": action,
-                    "target": data.get("target", ""),
-                    "message": data.get("message", ""),
-                }
-            except json.JSONDecodeError:
-                pass
-        return {"action": "idle", "target": "", "message": ""}
+        """Extract JSON action from LLM response (robust brace-counting parser)."""
+        from engine.agents.content_router import ContentRouter
+        return ContentRouter.parse_decision(text, self.VALID_ACTIONS)
 
     def _random_action(self, character_id: str) -> Dict:
         """Generate a plausible random action (fallback when LLM unavailable)."""
@@ -553,6 +540,11 @@ class AgentLoop:
                 result["description"] = f"{character.name} doesn't know where '{target}' is."
 
         elif action == "speak":
+            # Stateful dialog: generate actual speech with conversation memory
+            dialog = self._generate_dialog(character_id, decision)
+            if dialog:
+                message = dialog
+                result["message"] = dialog
             with self._log_lock:
                 self.shared_log.append({
                     "name": character.name, "text": message,
@@ -666,3 +658,78 @@ class AgentLoop:
             )
         except Exception:
             pass
+
+    def _generate_dialog(self, character_id: str, decision: Dict) -> Optional[str]:
+        """Generate stateful dialog for a character's speech action.
+
+        Uses a stateful conversation (store=true) so the character remembers
+        what was said previously. The decision call (store=false) determines
+        *what* to do; this call determines *what to say*.
+        """
+        character = self._characters.get(character_id)
+        if not character:
+            return decision.get("message", "")
+
+        try:
+            from engine.agents.virtual_agent_manager import get_virtual_agent_manager
+            from engine.agents.virtual_agent import InferenceRequest
+            from engine.agents.stream_processor import strip_token_artifacts
+
+            mgr = get_virtual_agent_manager()
+
+            conv_id = self._dialog_conv_ids.get(character_id)
+            if not conv_id:
+                conv_id = f"{self.scene_id}_dialog_{character_id}"
+                self._dialog_conv_ids[character_id] = conv_id
+
+            # Build context hint from the decision
+            action = decision.get("action", "speak")
+            target = decision.get("target", "someone")
+            hint = decision.get("message", "")
+
+            context_prompt = f"[You decided to {action}"
+            if target:
+                context_prompt += f" to {target}"
+            context_prompt += "]"
+            if hint:
+                context_prompt += f" Intent: {hint}"
+
+            # Recent shared log for context
+            recent_log = []
+            with self._log_lock:
+                recent_log = self.shared_log[-5:]
+            log_lines = [f"  {e.get('name', '?')}: {e.get('text', '')}" for e in recent_log]
+            if log_lines:
+                context_prompt += "\nRecent conversation:\n" + "\n".join(log_lines)
+
+            request = InferenceRequest(
+                agent_id=character_id,
+                messages=[
+                    {"role": "user", "content": context_prompt},
+                ],
+                conversation_id=conv_id,
+                temperature=0.9,
+                max_output_tokens=300,
+                store=True,
+                priority=2,
+                metadata={
+                    "type": "agent_loop_dialog",
+                    "scene": self.scene_id,
+                    "action": action,
+                },
+            )
+
+            proc = mgr.infer_processed(request)
+            text = strip_token_artifacts(proc.clean_text or proc.raw_text or "")
+
+            if text and len(text) > 3:
+                # Update mood if extracted from dialog
+                if proc.mood_tags:
+                    self._update_character_mood(character_id, proc.mood_tags[0])
+                return text
+
+        except Exception as exc:
+            logger.debug("Stateful dialog generation failed for %s: %s", character_id, exc)
+
+        # Fallback to decision message
+        return decision.get("message", "")
