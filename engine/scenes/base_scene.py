@@ -77,6 +77,11 @@ class BaseScene(ABC):
         
         # Scene asset ID (if loaded from asset)
         self.scene_asset_id: Optional[str] = None
+        
+        # v2.7: streaming support
+        self.streaming_enabled: bool = True
+        self._active_streams: int = 0
+        self._total_stream_tokens: int = 0
 
         # Register this scene with MCPFramework (best-effort)
         self._mcp_register_scene()
@@ -287,6 +292,9 @@ class BaseScene(ABC):
             "scene": self.scene_name,
             "port": self.port,
             "characters": len(self.active_characters),
+            "streaming_enabled": self.streaming_enabled,
+            "active_streams": self._active_streams,
+            "total_stream_tokens": self._total_stream_tokens,
         }
         try:
             from engine.logging import get_system_monitor

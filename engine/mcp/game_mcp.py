@@ -160,6 +160,8 @@ class MCPGameSession:
 
         # Broadcast start event
         self._emit("game_start", f"Game '{session_type}' started for {character_id}", {})
+        # v2.7: response_id tracking for game turn replay/undo
+        self._response_ids: List[str] = []
         logger.info(
             "MCPGameSession created: %s type=%s char=%s scene=%s",
             game_id, session_type, character_id, scene_id,
@@ -200,6 +202,49 @@ class MCPGameSession:
         if not recent:
             return "No game history yet."
         return "\n".join(e.summary() for e in recent)
+
+    # ── v2.7: structured turns and branching ─────────────────────────
+
+    def process_turn_structured(
+        self,
+        prompt: str,
+        schema: Dict,
+        *,
+        schema_name: str = "game_turn",
+    ) -> Optional[Dict]:
+        """
+        Process a game turn using structured JSON output.
+
+        Uses SceneAgent.run_structured() with store=False for reliable
+        game decision parsing (dare content, truth questions, clues, etc.)
+
+        Args:
+            prompt:      The game turn prompt.
+            schema:      JSON schema for the expected response.
+            schema_name: Name for the schema.
+
+        Returns:
+            Parsed JSON dict, or None on failure.
+        """
+        try:
+            from engine.agents.scene_agent import get_scene_agent
+            agent = get_scene_agent()
+            result = agent.run_structured(prompt, schema, schema_name=schema_name)
+            if result:
+                self.log_event("structured_turn", f"Structured: {str(result)[:80]}", result)
+            return result
+        except Exception as exc:
+            logger.error("Structured turn failed: %s", exc)
+            return None
+
+    def record_response_id(self, response_id: str) -> None:
+        """Track a response_id for potential game undo/replay."""
+        if response_id:
+            self._response_ids.append(response_id)
+
+    def get_response_ids(self) -> List[str]:
+        """Get all tracked response_ids for branching."""
+        return list(self._response_ids)
 
     # ── State helpers ─────────────────────────────────────────────────
 

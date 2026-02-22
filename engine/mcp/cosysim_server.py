@@ -3895,6 +3895,155 @@ def resource_config() -> str:
         return f"Config unavailable: {e}"
 
 
+# ═══════════════════════════════════════════════════════════════════════
+#  v2.7 STREAMING-AWARE TOOLS
+# ═══════════════════════════════════════════════════════════════════════
+
+@mcp.tool()
+def send_selfie(
+    prompt: str,
+    character_id: Optional[str] = None,
+    width: int = 512,
+    height: int = 768,
+) -> str:
+    """
+    Generate a selfie/photo and return the image path for inline display.
+    Use this when the character wants to send a picture of themselves.
+    Provide a detailed prompt describing the selfie (pose, expression, setting).
+    Returns JSON with the image path and metadata.
+    """
+    try:
+        from content.simulation.services.comfyui_client import ComfyUIClient
+        from engine.config import get_config
+        config = get_config()
+        url = config.get("comfyui.base_url", "http://127.0.0.1:8188")
+        client = ComfyUIClient(base_url=url)
+        result = client.generate_image(prompt=prompt, width=width, height=height)
+        if result:
+            return json.dumps({
+                "success": True,
+                "image_path": str(result),
+                "prompt": prompt,
+                "character_id": character_id or "unknown",
+                "display_hint": "inline_image",
+            })
+        return json.dumps({"success": False, "error": "Generation returned no result"})
+    except Exception as e:
+        return json.dumps({"success": False, "error": str(e)})
+
+
+@mcp.tool()
+def send_voice_message(
+    text: str,
+    character_id: Optional[str] = None,
+    emotion: str = "neutral",
+) -> str:
+    """
+    Generate a voice message via TTS and return the audio path.
+    Use this when the character wants to send a voice note.
+    Provide the text to speak and optional emotion tag.
+    Returns JSON with the audio path.
+    """
+    try:
+        from content.simulation.services.voice_message import generate_voice_message
+        result = generate_voice_message(
+            text=text,
+            character_id=character_id or "default",
+            emotion=emotion,
+        )
+        if result:
+            return json.dumps({
+                "success": True,
+                "audio_path": str(result),
+                "text": text,
+                "emotion": emotion,
+                "display_hint": "audio_player",
+            })
+        return json.dumps({"success": False, "error": "TTS generation failed"})
+    except Exception as e:
+        return json.dumps({"success": False, "error": str(e)})
+
+
+@mcp.tool()
+def query_stateless(prompt: str, system: str = "") -> str:
+    """
+    Make a disposable one-off LLM query (store=false).
+    Use this for quick decisions, classifications, or utility tasks
+    that shouldn't affect the conversation state.
+    Returns the raw response text.
+    """
+    try:
+        from engine.agents.scene_agent import get_scene_agent
+        agent = get_scene_agent()
+        if system:
+            agent.system_prompt = system
+        return agent.run(prompt, max_tokens=500, store=False)
+    except Exception as e:
+        return f"Stateless query failed: {e}"
+
+
+@mcp.tool()
+def get_conversation_info(conversation_id: str) -> str:
+    """
+    Get information about a conversation including response history
+    and available branch points.
+    Returns JSON with conversation state and forkable response IDs.
+    """
+    try:
+        from engine.lmstudio.conversation import get_conversation_manager
+        cm = get_conversation_manager()
+        conv = cm.get(conversation_id)
+        if not conv:
+            return json.dumps({"error": f"No conversation '{conversation_id}'"})
+        history = getattr(conv, "_response_id_history", [])
+        return json.dumps({
+            "conversation_id": conversation_id,
+            "model": conv.model or "default",
+            "is_synced": conv.is_synced,
+            "response_id": conv.response_id or "",
+            "message_count": len(conv.messages),
+            "response_history": history,
+            "can_branch": len(history) > 0,
+        }, indent=2)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def fork_conversation(conversation_id: str, turn: int = -1) -> str:
+    """
+    Create a conversation branch from a specific turn.
+    Use this to try alternative approaches or undo to a previous point.
+    Turn -1 means branch from the latest point.
+    Returns the new forked conversation ID.
+    """
+    try:
+        from engine.lmstudio.conversation import get_conversation_manager
+        cm = get_conversation_manager()
+        conv = cm.get(conversation_id)
+        if not conv:
+            return json.dumps({"error": f"No conversation '{conversation_id}'"})
+
+        if turn >= 0 and hasattr(conv, "branch_at"):
+            forked = conv.branch_at(turn)
+        elif hasattr(conv, "fork"):
+            forked = conv.fork()
+        else:
+            return json.dumps({"error": "Conversation does not support branching"})
+
+        new_id = f"{conversation_id}_fork_{turn}"
+        cm._conversations[new_id] = forked
+        return json.dumps({
+            "success": True,
+            "original_id": conversation_id,
+            "forked_id": new_id,
+            "branch_turn": turn,
+            "message_count": len(forked.messages),
+        })
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
 @mcp.resource("benchmark://summary")
 def resource_benchmarks() -> str:
     """Performance benchmark summary with timing KPIs."""

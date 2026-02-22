@@ -247,6 +247,10 @@ class ResponseContext(dict):
     * ``is_stateful``     — whether response has a valid response_id
     * ``reasoning``       — reasoning content from thinking models
     * ``tool_calls``      — list of tool calls made during inference
+    * ``mood_tags``       — extracted [MOOD:x] tags from response
+    * ``image_requests``  — extracted [IMAGE:x] tags from response
+    * ``action_tags``     — extracted [ACTION:x] tags from response
+    * ``processed``       — full ProcessedResponse (when streaming used)
     """
 
     def require(self, key: str) -> Any:
@@ -592,17 +596,30 @@ class AgentGovernor:
                 ctx["reply"] = reply
                 # v2.7: populate response metadata for post-call interceptors
                 agent_state = {}
+                last_response = None
                 try:
                     if hasattr(self.agent, "get_state"):
                         agent_state = self.agent.get_state()
                     elif hasattr(self.agent, "_virtual_agent"):
                         agent_state = self.agent._virtual_agent.get_state()
+                    # Get the last InferenceResponse if available
+                    va = getattr(self.agent, "_virtual_agent", None)
+                    if va:
+                        last_response = getattr(va, "_last_response", None)
                 except Exception:
                     pass
                 ctx["response_id"] = agent_state.get("last_response_id", "")
                 ctx["is_stateful"] = bool(
                     ctx["response_id"] and ctx["response_id"].startswith("resp_")
                 )
+                # v2.7: populate extracted tags from InferenceResponse
+                if last_response:
+                    ctx["mood_tags"] = getattr(last_response, "mood_tags", [])
+                    ctx["image_requests"] = getattr(last_response, "image_requests", [])
+                    ctx["action_tags"] = getattr(last_response, "action_tags", [])
+                    ctx["processed"] = getattr(last_response, "processed", None)
+                    ctx["reasoning"] = getattr(last_response, "reasoning_content", "")
+                    ctx["tool_calls"] = getattr(last_response, "tool_calls", [])
             except Exception as exc:
                 logger.error("AgentGovernor LLM call failed: %s", exc)
                 ctx["reply"] = ""

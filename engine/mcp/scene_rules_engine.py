@@ -565,6 +565,83 @@ class SceneRulesEngine:
             "actions":   actions,
         }
 
+    # ── v2.7: streaming stat updates from ProcessedResponse ─────────
+
+    def apply_stream_deltas(
+        self,
+        scene: str,
+        character_id: str,
+        stat_deltas: List,
+        mood_tags: Optional[List[str]] = None,
+    ) -> Dict:
+        """
+        Apply stat deltas extracted from a streamed response.
+
+        ``stat_deltas`` is a list of ``StatDelta`` objects from
+        ``StreamProcessor`` (each has ``.stat`` and ``.delta``).
+        ``mood_tags`` are extracted ``[MOOD:x]`` tags.
+
+        This bridges the gap between real-time stream parsing and the
+        rules engine — as tags are extracted mid-stream, they can be
+        applied immediately to scene state.
+
+        Returns a dict summarizing what was applied.
+        """
+        applied = []
+        try:
+            from engine.mcp.scene_state import get_scene_state_manager
+            ssm = get_scene_state_manager()
+            for sd in stat_deltas:
+                stat_name = getattr(sd, "stat", "")
+                delta_val = getattr(sd, "delta", 0)
+                if stat_name and delta_val:
+                    ssm.update_stats(character_id, **{stat_name: delta_val})
+                    applied.append({"stat": stat_name, "delta": delta_val})
+
+            if mood_tags:
+                primary_mood = mood_tags[0] if mood_tags else ""
+                if primary_mood:
+                    ssm.update_stats(character_id, mood=primary_mood)
+                    applied.append({"mood": primary_mood})
+
+        except Exception as exc:
+            logger.debug("apply_stream_deltas failed: %s", exc)
+
+        return {"scene": scene, "character_id": character_id, "applied": applied}
+
+    def evaluate_threshold_rules(
+        self,
+        scene: str,
+        character_id: str,
+        stats: Optional[Dict] = None,
+    ) -> List[Dict]:
+        """
+        Evaluate triggered rules against current stats.
+
+        Returns a list of rule_ids that should fire based on current
+        stat thresholds. Called after apply_stream_deltas to check
+        if any rules now trigger.
+        """
+        triggered = []
+        rules = self.get_rules(scene, rule_type="triggered")
+        for rule in rules:
+            # Check conditions
+            all_met = True
+            for cond in rule.conditions:
+                if stats:
+                    val = stats.get(cond.stat, 0)
+                    if cond.operator == ">=" and val < cond.threshold:
+                        all_met = False
+                    elif cond.operator == "<=" and val > cond.threshold:
+                        all_met = False
+                    elif cond.operator == "==" and val != cond.threshold:
+                        all_met = False
+                else:
+                    all_met = False
+            if all_met:
+                triggered.append({"rule_id": rule.rule_id, "label": rule.label})
+        return triggered
+
     # ── Internal effect executor ──────────────────────────────────────
 
     def _execute_effect(

@@ -5,13 +5,16 @@ Used for utility LLM calls that don't need the full character persona:
 - Generating a title for a video/voice message
 - Summarizing a conversation
 - Routing / classification
+- Structured JSON output (game decisions, schema-enforced responses)
 
-``SceneAgent`` is intentionally stateless: each ``run()`` call is independent.
+``SceneAgent`` is intentionally stateless: every call uses ``store=False``
+so it never pollutes LMStudio's server conversation state.
 """
 from __future__ import annotations
 
+import json
 import logging
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +22,9 @@ logger = logging.getLogger(__name__)
 class SceneAgent:
     """
     Minimal LMStudio agent for one-shot utility tasks.
+
+    All calls use ``store=False`` (stateless) by default. No conversation
+    state is created or consumed — this is for fire-and-forget queries.
 
     Parameters
     ----------
@@ -60,16 +66,18 @@ class SceneAgent:
         *,
         tools:      Optional[List] = None,
         max_tokens: int            = 256,
+        store:      bool           = False,
     ) -> str:
         """
         Run a one-shot task via VirtualAgentManager and return the LLM output.
 
-        Uses the centralised inference router for consistent model control.
+        Uses ``store=False`` by default — stateless, disposable query.
 
         Args:
             task:       Instruction / prompt for the task.
             tools:      Ignored — expose tools via CosySim MCP server instead.
             max_tokens: Soft token cap for the response.
+            store:      Whether to store this in LMStudio state (default: False).
 
         Returns:
             Response text, or empty string on failure.
@@ -99,6 +107,7 @@ class SceneAgent:
                 model=self.model,
                 max_output_tokens=max_tokens,
                 integrations=integrations,
+                store=store,
                 priority=4,
                 metadata={"type": "scene_agent_task", "scene": self.scene_id},
             )
@@ -124,19 +133,115 @@ class SceneAgent:
             logger.error("SceneAgent.run failed: %s", exc)
             return ""
 
+    def run_structured(
+        self,
+        task: str,
+        schema: Dict[str, Any],
+        *,
+        schema_name: str = "output",
+        max_tokens: int  = 512,
+    ) -> Optional[Dict]:
+        """
+        Run a one-shot task with JSON schema enforcement.
+
+        LMStudio v1 ``response_format.json_schema`` guarantees the response
+        matches the provided schema. Uses ``store=False`` (stateless).
+
+        Args:
+            task:        Instruction / prompt.
+            schema:      JSON Schema dict for the response format.
+            schema_name: Name for the schema (for LMStudio).
+            max_tokens:  Soft token cap.
+
+        Returns:
+            Parsed JSON dict, or None on failure.
+        """
+        try:
+            from engine.agents.virtual_agent_manager import get_virtual_agent_manager
+            from engine.agents.virtual_agent import InferenceRequest
+            mgr = get_virtual_agent_manager()
+
+            request = InferenceRequest(
+                agent_id=self.character_id,
+                messages=[
+                    {"role": "system", "content": self.system_prompt},
+                    {"role": "user", "content": task},
+                ],
+                model=self.model,
+                max_output_tokens=max_tokens,
+                store=False,
+                structured_schema=schema,
+                schema_name=schema_name,
+                priority=4,
+                metadata={"type": "scene_agent_structured", "scene": self.scene_id},
+            )
+            response = mgr.infer(request)
+            raw = (response.content or "").strip()
+            return json.loads(raw) if raw else None
+        except json.JSONDecodeError as exc:
+            logger.warning("SceneAgent structured parse failed: %s", exc)
+            return None
+        except Exception as exc:
+            logger.error("SceneAgent.run_structured failed: %s", exc)
+            return None
+
+    def run_stream(
+        self,
+        task: str,
+        *,
+        max_tokens: int = 512,
+        on_delta=None,
+        on_tool_call=None,
+        on_mood=None,
+    ) -> "ProcessedResponse":
+        """
+        Run a one-shot task with streaming via StreamProcessor.
+
+        Uses ``store=False`` (stateless). Returns a rich ProcessedResponse.
+
+        Args:
+            task:         Instruction / prompt.
+            max_tokens:   Soft token cap.
+            on_delta:     Callback for each content delta (for UI streaming).
+            on_tool_call: Callback when a tool call completes.
+            on_mood:      Callback when a mood tag is detected.
+
+        Returns:
+            ProcessedResponse with full metadata.
+        """
+        try:
+            from engine.agents.virtual_agent_manager import get_virtual_agent_manager
+            from engine.agents.virtual_agent import InferenceRequest
+            mgr = get_virtual_agent_manager()
+
+            request = InferenceRequest(
+                agent_id=self.character_id,
+                messages=[
+                    {"role": "system", "content": self.system_prompt},
+                    {"role": "user", "content": task},
+                ],
+                model=self.model,
+                max_output_tokens=max_tokens,
+                store=False,
+                stream=True,
+                priority=4,
+                metadata={"type": "scene_agent_stream", "scene": self.scene_id},
+            )
+            return mgr.infer_processed(
+                request,
+                on_delta=on_delta,
+                on_tool_call=on_tool_call,
+                on_mood=on_mood,
+            )
+        except Exception as exc:
+            logger.error("SceneAgent.run_stream failed: %s", exc)
+            from engine.agents.stream_processor import ProcessedResponse
+            return ProcessedResponse()
+
     # ────────────────────────────────── convenience helpers ──────────
 
     def generate_title(self, content: str, max_words: int = 6) -> str:
-        """
-        Generate a short descriptive title for media content.
-
-        Args:
-            content:   Text / transcript to summarise as a title.
-            max_words: Approximate max title length in words.
-
-        Returns:
-            Title string (may be empty on LLM failure).
-        """
+        """Generate a short descriptive title for media content."""
         task = (
             f"Write a title of {max_words} words or fewer for this message transcript. "
             f"Reply with only the title, no quotes or punctuation:\n\n{content[:600]}"
@@ -144,16 +249,7 @@ class SceneAgent:
         return self.run(task, max_tokens=40)
 
     def summarize(self, text: str, max_sentences: int = 3) -> str:
-        """
-        Summarize *text* into at most *max_sentences* sentences.
-
-        Args:
-            text:          The text to summarize.
-            max_sentences: Target summary length.
-
-        Returns:
-            Summary string.
-        """
+        """Summarize *text* into at most *max_sentences* sentences."""
         task = (
             f"Summarise the following text in {max_sentences} sentences or fewer. "
             f"Be concise and factual:\n\n{text[:2000]}"
@@ -161,28 +257,46 @@ class SceneAgent:
         return self.run(task, max_tokens=200)
 
     def classify(self, text: str, labels: List[str]) -> str:
-        """
-        Classify *text* into one of the provided *labels*.
-
-        Args:
-            text:   The text to classify.
-            labels: Possible category labels.
-
-        Returns:
-            The best-matching label string, or empty string on failure.
-        """
+        """Classify *text* into one of the provided *labels*."""
         labels_str = ", ".join(f'"{lb}"' for lb in labels)
         task = (
             f"Classify the following text into exactly one of these categories: {labels_str}. "
             f"Reply with only the category name:\n\n{text[:800]}"
         )
         result = self.run(task, max_tokens=20)
-        # Normalise to closest label
         result_lower = result.lower()
         for lb in labels:
             if lb.lower() in result_lower:
                 return lb
-        return result  # Return raw if no match
+        return result
+
+    def decide(
+        self,
+        situation: str,
+        options: List[str],
+        criteria: str = "",
+    ) -> Optional[Dict]:
+        """
+        Make a game/narrative decision using structured output.
+
+        Returns dict with 'choice' (index), 'option' (text), 'reasoning'.
+        """
+        opts_str = "\n".join(f"{i+1}. {o}" for i, o in enumerate(options))
+        task = (
+            f"Situation: {situation}\n\nOptions:\n{opts_str}\n\n"
+            f"{'Criteria: ' + criteria + chr(10) if criteria else ''}"
+            f"Pick the best option."
+        )
+        schema = {
+            "type": "object",
+            "properties": {
+                "choice": {"type": "integer", "description": "1-based option index"},
+                "option": {"type": "string", "description": "The chosen option text"},
+                "reasoning": {"type": "string", "description": "Brief reasoning"},
+            },
+            "required": ["choice", "option", "reasoning"],
+        }
+        return self.run_structured(task, schema, schema_name="decision")
 
 
 # ──────────────────────────────────────────────────── singleton ──

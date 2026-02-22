@@ -332,6 +332,8 @@ class ConversationState:
     - active response directive (if any)
     - style lock
     - turn counter
+    - v2.7: response_id history for conversation branching
+    - v2.7: mood history from stream processing
     """
 
     def __init__(self) -> None:
@@ -342,6 +344,9 @@ class ConversationState:
         self.directive:   Optional[ResponseDirective] = None
         self.style_lock:  Optional[str]             = None
         self.style_turns: int                       = 0
+        # v2.7: response_id tracking for branching
+        self.response_ids: List[str]                = []
+        self.mood_history: List[str]                = []
 
     def add_topics(self, tags: List[str]) -> None:
         with self._lock:
@@ -396,6 +401,38 @@ class ConversationState:
     def tick(self) -> None:
         with self._lock:
             self.turn += 1
+
+    # v2.7: response_id + mood tracking
+
+    def record_response(self, response_id: str, mood: str = "") -> None:
+        """Record a response_id for branching and optional mood."""
+        with self._lock:
+            if response_id:
+                self.response_ids.append(response_id)
+                if len(self.response_ids) > 50:
+                    self.response_ids = self.response_ids[-50:]
+            if mood:
+                self.mood_history.append(mood)
+                if len(self.mood_history) > 20:
+                    self.mood_history = self.mood_history[-20:]
+
+    @property
+    def last_response_id(self) -> str:
+        return self.response_ids[-1] if self.response_ids else ""
+
+    @property
+    def recent_mood(self) -> str:
+        return self.mood_history[-1] if self.mood_history else ""
+
+    def branch_point(self, turn: int = -1) -> str:
+        """Get the response_id at a specific turn for branching."""
+        with self._lock:
+            if not self.response_ids:
+                return ""
+            idx = turn if turn >= 0 else len(self.response_ids) + turn
+            if 0 <= idx < len(self.response_ids):
+                return self.response_ids[idx]
+            return ""
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -708,6 +745,88 @@ class DialogSystem:
             return ""
         joined = "; ".join(m.strip().rstrip(".") for m in memories[:5])
         return f"You remember from past conversations with {character_name}: {joined}."
+
+    # ── v2.7: response tracking and branching ────────────────────────
+
+    def record_response(
+        self,
+        character_id: str,
+        scene: str,
+        response_id: str,
+        mood: str = "",
+    ) -> None:
+        """Record a response_id and mood after an LLM call."""
+        cstate = self._get_convo(character_id, scene)
+        cstate.record_response(response_id, mood)
+
+    def get_branch_point(
+        self,
+        character_id: str,
+        scene: str,
+        turn: int = -1,
+    ) -> str:
+        """Get a response_id for conversation branching at a specific turn."""
+        return self._get_convo(character_id, scene).branch_point(turn)
+
+    def try_alternatives(
+        self,
+        character_id: str,
+        scene: str,
+        prompt: str,
+        *,
+        count: int = 3,
+        score_fn=None,
+    ) -> List[Dict[str, Any]]:
+        """
+        Generate multiple response alternatives using store=False queries.
+
+        Uses stateless calls to generate `count` different responses,
+        scores them, and returns sorted by quality. The caller can then
+        pick the best one.
+
+        Args:
+            character_id: Character generating responses.
+            scene:        Current scene.
+            prompt:       The prompt to respond to.
+            count:        Number of alternatives to generate (2-5).
+            score_fn:     Optional scoring function(text) → float.
+                         Higher = better. Default scores by length variety.
+
+        Returns:
+            List of dicts with 'text', 'score', 'index' sorted by score desc.
+        """
+        count = max(2, min(5, count))
+        alternatives: List[Dict[str, Any]] = []
+
+        try:
+            from engine.agents.scene_agent import get_scene_agent
+            agent = get_scene_agent()
+
+            for i in range(count):
+                # Each call is store=False (disposable)
+                text = agent.run(prompt, max_tokens=500, store=False)
+                if text:
+                    score = score_fn(text) if score_fn else self._default_score(text, i)
+                    alternatives.append({"text": text, "score": score, "index": i})
+
+        except Exception as exc:
+            logger.error("try_alternatives failed: %s", exc)
+
+        alternatives.sort(key=lambda x: x["score"], reverse=True)
+        return alternatives
+
+    @staticmethod
+    def _default_score(text: str, index: int) -> float:
+        """Simple quality heuristic: prefer moderate length, penalize very short/long."""
+        length = len(text)
+        if length < 20:
+            return 0.3
+        if length > 1000:
+            return 0.5
+        # Sweet spot: 50-300 chars
+        if 50 <= length <= 300:
+            return 1.0
+        return 0.7
 
     # ── Internal helpers ──────────────────────────────────────────────
 

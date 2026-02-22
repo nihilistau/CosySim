@@ -338,6 +338,46 @@ class VirtualAgentManager:
         )
         yield from gen
 
+    def infer_processed(
+        self,
+        request: InferenceRequest,
+        *,
+        on_delta: Optional[Callable[[str], None]] = None,
+        on_tool_call: Optional[Callable] = None,
+        on_mood: Optional[Callable[[str], None]] = None,
+        on_image_request: Optional[Callable[[str], None]] = None,
+        on_action: Optional[Callable[[str], None]] = None,
+        on_stat_delta: Optional[Callable] = None,
+    ) -> "ProcessedResponse":
+        """
+        Stream an inference request and return a rich ProcessedResponse.
+
+        Combines ``infer_stream()`` with ``StreamProcessor`` to provide:
+        - Clean text (inline tags stripped)
+        - Extracted mood/image/action/stat tags
+        - Tool call records
+        - Reasoning content
+        - Full v1 stats
+
+        Real-time callbacks fire as events arrive during streaming.
+        """
+        from engine.agents.stream_processor import StreamProcessor
+
+        proc = StreamProcessor(
+            on_delta=on_delta,
+            on_tool_call=on_tool_call,
+            on_mood=on_mood,
+            on_image_request=on_image_request,
+            on_action=on_action,
+            on_stat_delta=on_stat_delta,
+        )
+
+        # Stream with the processor as the event handler
+        for _chunk in self.infer_stream(request, on_event=proc.on_event):
+            pass
+
+        return proc.result()
+
     # ── High-level convenience ──────────────────────────────────────
 
     def reply(

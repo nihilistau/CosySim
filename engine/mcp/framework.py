@@ -337,6 +337,11 @@ class MCPCharacterNode:
         self.current_scene: Optional[str] = None
         self._inbox:        List[CrossSceneMessage] = []
         self._inbox_lock    = threading.Lock()
+        # v2.7: streaming state
+        self.is_streaming:  bool  = False
+        self.stream_tokens: int   = 0
+        self.stream_started: float = 0.0
+        self.last_mood:     str   = ""
 
     # ── Scene membership ─────────────────────────────────────────────
 
@@ -433,7 +438,32 @@ class MCPCharacterNode:
         mood = s.get("mood", "?")
         scene = self.current_scene or "no scene"
         unread = len([m for m in self._inbox if not m.read])
-        return f"{self.character_id}@{scene} mood={mood} inbox={unread}"
+        streaming = " [streaming]" if self.is_streaming else ""
+        return f"{self.character_id}@{scene} mood={mood} inbox={unread}{streaming}"
+
+    # ── v2.7: streaming lifecycle ────────────────────────────────────
+
+    def start_stream(self) -> None:
+        """Mark this character as currently streaming a response."""
+        self.is_streaming = True
+        self.stream_tokens = 0
+        self.stream_started = time.time()
+
+    def end_stream(self, tokens: int = 0, mood: str = "") -> None:
+        """Mark streaming complete, record stats."""
+        self.is_streaming = False
+        self.stream_tokens = tokens
+        if mood:
+            self.last_mood = mood
+
+    def stream_info(self) -> Dict:
+        """Return streaming status for admin/overlay."""
+        return {
+            "is_streaming": self.is_streaming,
+            "stream_tokens": self.stream_tokens,
+            "stream_elapsed": time.time() - self.stream_started if self.stream_started else 0,
+            "last_mood": self.last_mood,
+        }
 
     def __repr__(self) -> str:
         return f"MCPCharacterNode({self.brief()})"
@@ -1082,6 +1112,23 @@ class MCPFramework:
         if event_type:
             events = [e for e in events if e.event_type == event_type]
         return [e.to_dict() for e in events[-limit:]]
+
+    def emit_stream_event(
+        self,
+        character_id: str,
+        event_subtype: str,
+        data: Optional[Dict] = None,
+    ) -> FrameworkEvent:
+        """
+        Emit a streaming event for real-time UI updates.
+
+        event_subtype: 'start', 'delta', 'tool_call', 'mood', 'end'
+        """
+        return self.emit_event(
+            f"stream.{event_subtype}",
+            payload={"character_id": character_id, **(data or {})},
+            source=character_id,
+        )
 
     # ── Lifecycle hooks ───────────────────────────────────────────────
 

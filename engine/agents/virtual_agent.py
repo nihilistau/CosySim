@@ -84,6 +84,12 @@ class InferenceResponse:
     server_tps: float = 0.0
     time_to_first_token_s: float = 0.0
     model_load_time_s: float = 0.0
+    # v2.7: rich processed response (set when streaming with StreamProcessor)
+    processed: Optional[Any] = None   # ProcessedResponse (avoid circular import)
+    # v2.7: extracted inline tags (from ProcessedResponse or direct parsing)
+    mood_tags: List[str] = field(default_factory=list)
+    image_requests: List[str] = field(default_factory=list)
+    action_tags: List[str] = field(default_factory=list)
 
     @property
     def ok(self) -> bool:
@@ -118,6 +124,32 @@ class InferenceResponse:
             server_tps=getattr(resp, "server_tps", 0.0),
             time_to_first_token_s=getattr(resp, "time_to_first_token_s", 0.0),
             model_load_time_s=getattr(resp, "model_load_time_s", 0.0),
+        )
+
+    @classmethod
+    def from_processed(cls, proc: Any) -> "InferenceResponse":
+        """Create from a StreamProcessor ProcessedResponse."""
+        return cls(
+            content=proc.clean_text,
+            reasoning_content=proc.reasoning_content,
+            model=proc.model,
+            response_id=proc.response_id,
+            input_tokens=proc.input_tokens,
+            output_tokens=proc.output_tokens,
+            reasoning_tokens=proc.reasoning_tokens,
+            latency_ms=proc.latency_ms,
+            tool_calls=[
+                {"name": tc.name, "arguments": tc.arguments,
+                 "output": tc.output, "success": tc.success}
+                for tc in proc.tool_calls
+            ],
+            server_tps=proc.server_tps,
+            time_to_first_token_s=proc.time_to_first_token_s,
+            model_load_time_s=proc.model_load_time_s,
+            processed=proc,
+            mood_tags=proc.mood_tags,
+            image_requests=proc.image_requests,
+            action_tags=proc.action_tags,
         )
 
     @classmethod
@@ -189,6 +221,8 @@ class VirtualAgent:
         # Cancellation
         self._cancel_event = threading.Event()
         self._lock = threading.Lock()
+        # Last InferenceResponse (for governor access to rich metadata)
+        self._last_response: Optional[InferenceResponse] = None
 
         # RAG memory (lazy)
         self._rag: Any = None
@@ -361,6 +395,9 @@ class VirtualAgent:
         chain_id: Optional[str] = None,
     ) -> str:
         """Process an InferenceResponse: update state, log events, return text."""
+        # Store for governor access to rich metadata
+        self._last_response = response
+
         if response.error:
             logger.warning("Agent %s got error: %s", self.name, response.error)
             self._log_event("llm_error", chain_id, {"error": response.error})
