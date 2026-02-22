@@ -58,6 +58,10 @@ class InferenceRequest:
     structured_schema: Optional[Dict] = None
     schema_name: Optional[str] = None
     previous_response_id: Optional[str] = None
+    # v2.7: store/stateless control
+    store: Optional[bool] = None          # None=server default (True), False=stateless
+    stream: bool = False                  # Request streaming response
+    on_event: Optional[Any] = None        # Callback for streaming events
     priority: int = 5  # 0=highest, 9=lowest
     metadata: Dict[str, Any] = field(default_factory=dict)
     created_at: float = field(default_factory=time.time)
@@ -72,16 +76,28 @@ class InferenceResponse:
     response_id: str = ""
     input_tokens: int = 0
     output_tokens: int = 0
+    reasoning_tokens: int = 0
     latency_ms: float = 0.0
     tool_calls: List[Dict] = field(default_factory=list)
     error: Optional[str] = None
+    # v2.7: native v1 stats
+    server_tps: float = 0.0
+    time_to_first_token_s: float = 0.0
+    model_load_time_s: float = 0.0
 
     @property
     def ok(self) -> bool:
         return self.error is None
 
     @property
+    def is_stateful(self) -> bool:
+        """Whether the server stored this response for continuations."""
+        return bool(self.response_id and self.response_id.startswith("resp_"))
+
+    @property
     def tokens_per_second(self) -> float:
+        if self.server_tps > 0:
+            return self.server_tps
         if self.latency_ms > 0 and self.output_tokens > 0:
             return self.output_tokens / (self.latency_ms / 1000.0)
         return 0.0
@@ -96,8 +112,12 @@ class InferenceResponse:
             response_id=getattr(resp, "response_id", ""),
             input_tokens=getattr(resp, "input_tokens", 0),
             output_tokens=getattr(resp, "output_tokens", 0),
+            reasoning_tokens=getattr(resp, "reasoning_tokens", 0),
             latency_ms=getattr(resp, "latency_ms", 0.0),
             tool_calls=getattr(resp, "tool_calls", []) or [],
+            server_tps=getattr(resp, "server_tps", 0.0),
+            time_to_first_token_s=getattr(resp, "time_to_first_token_s", 0.0),
+            model_load_time_s=getattr(resp, "model_load_time_s", 0.0),
         )
 
     @classmethod
@@ -233,7 +253,11 @@ class VirtualAgent:
         return reply_text
 
     def quick_query(self, prompt: str, *, max_tokens: int = 2000) -> str:
-        """Lightweight single-shot — no tools, no RAG, no events."""
+        """Lightweight single-shot — no tools, no RAG, no events.
+
+        Uses ``store=False`` so the query doesn't pollute the server's
+        conversation state or return a response_id.
+        """
         mgr = self._get_manager()
         system = self._build_system_prompt([])
         request = InferenceRequest(
@@ -245,6 +269,7 @@ class VirtualAgent:
             model=self.model,
             temperature=0.9,
             max_output_tokens=max_tokens,
+            store=False,
             priority=3,
             metadata={"type": "quick_query"},
         )
@@ -328,13 +353,19 @@ class VirtualAgent:
 
         reply_text = response.content or response.reasoning_content or ""
 
+        # Track response_id for conversation branching
+        if response.response_id:
+            self._state["last_response_id"] = response.response_id
+
         # Log to EventChain
         self._log_event("llm_response", chain_id, {
             "input_tokens": response.input_tokens,
             "output_tokens": response.output_tokens,
+            "reasoning_tokens": response.reasoning_tokens,
             "latency_ms": response.latency_ms,
             "model": response.model,
             "response_id": response.response_id,
+            "tps": round(response.tokens_per_second, 1),
             "preview": reply_text[:120],
         })
 

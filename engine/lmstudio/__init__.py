@@ -17,10 +17,6 @@ Primary API
     **Deprecated** — thin compatibility wrapper that redirects to
     ``LMSClient``.  Use ``get_lms_client()`` directly.
 
-``LMSSDKWrapper`` / ``get_lms_sdk``
-    Python SDK wrapper: ``respond()``, ``act()`` (multi-round tools),
-    ``complete()`` (raw completion), model info, cancellation.
-
 ``InferenceConfig`` / ``LoadConfig``
     Typed dataclasses for all inference and model-load parameters.
     Factories: ``from_agent_profile()``, ``from_yaml()``, ``merge()``.
@@ -77,8 +73,6 @@ from .lms_client       import LMSClient, get_lms_client, LMSResponse, LMSStreamE
 from .conversation     import ConversationManager, get_conversation_manager, Conversation
 # Config dataclasses
 from .inference_config import InferenceConfig, LoadConfig, json_schema_format, json_object_format
-# SDK wrapper
-from .lms_sdk          import LMSSDKWrapper, get_lms_sdk
 # Resource manager
 from .resource_manager import ResourceManager, get_resource_manager, Strategy
 # Legacy OpenAI-compat client (deprecated — redirects to LMSClient)
@@ -99,8 +93,6 @@ __all__ = [
     "ConversationManager", "get_conversation_manager", "Conversation",
     # Config
     "InferenceConfig", "LoadConfig", "json_schema_format", "json_object_format",
-    # SDK
-    "LMSSDKWrapper", "get_lms_sdk",
     # Resource manager
     "ResourceManager", "get_resource_manager", "Strategy",
     # Legacy REST (deprecated)

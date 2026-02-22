@@ -1,5 +1,5 @@
 """
-VirtualAgentManager — Centralised agent call server for CosySim.
+VirtualAgentManager v2.7 — Centralised agent call server for CosySim.
 
 All VirtualAgent LLM calls are routed through this manager, giving us full
 control over:
@@ -8,8 +8,14 @@ control over:
 * **Concurrency** — multiple agents can share a single loaded model
 * **JIT loading** — load a model on demand, unload after TTL
 * **Stateful chats** — conversation state via ConversationManager
+  (stateful-first: conversations are the primary path, not a fallback)
+* **Store / stateless** — ``store=False`` for one-off queries that don't
+  pollute the server's conversation state
+* **Streaming** — ``infer_stream()`` yields content deltas with typed
+  SSE event callbacks (model_load, reasoning, tool_call, etc.)
 * **Structured output** — JSON schema enforcement per request
 * **Batch inference** — fan-out multiple agent decisions in parallel
+* **Logging / observability** — every request/response tracked
 * **Logging / observability** — every request/response tracked
 
 Architecture::
@@ -39,6 +45,10 @@ Usage::
 
     # Batch decisions for multiple agents
     responses = mgr.infer_batch([req1, req2, req3])
+
+    # Streaming with typed events
+    for chunk in mgr.infer_stream(request, on_event=my_handler):
+        print(chunk, end="")
 
     # Stats for overlay
     stats = mgr.get_stats()
@@ -264,6 +274,70 @@ class VirtualAgentManager:
             logger.error("Batch inference failed: %s", exc)
             return [InferenceResponse.from_error(str(exc)) for _ in requests]
 
+    # ── Streaming inference ────────────────────────────────────────
+
+    def infer_stream(
+        self,
+        request: InferenceRequest,
+        *,
+        on_event: Optional[Callable] = None,
+    ):
+        """
+        Stream a single inference request, yielding content deltas.
+
+        Uses ``LMSClient.chat_stream()`` or ``chat_stream_stateful()``
+        depending on whether the agent has an active conversation.
+
+        The optional ``on_event`` callback receives typed ``LMSStreamEvent``
+        objects for model_load, reasoning, tool_call progress etc.
+        """
+        from engine.lmstudio.lms_client import get_lms_client
+        from engine.lmstudio.inference_config import InferenceConfig
+
+        self._total_requests += 1
+        t0 = time.perf_counter()
+        client = get_lms_client()
+
+        cfg = InferenceConfig(
+            model=request.model,
+            temperature=request.temperature,
+            max_output_tokens=request.max_output_tokens,
+            integrations=request.integrations,
+            store=request.store,
+        )
+
+        agent = self._agents.get(request.agent_id)
+        if agent and agent._inference_config:
+            cfg = InferenceConfig.merge(cfg, agent._inference_config)
+            if request.store is not None:
+                cfg.store = request.store
+
+        event_cb = on_event or request.on_event
+
+        # Stateful streaming: use conversation's response_id
+        if request.conversation_id and request.store is not False:
+            try:
+                from engine.lmstudio.conversation import get_conversation_manager
+                conv = get_conversation_manager().get(request.conversation_id)
+                if conv and conv.is_synced:
+                    gen = client.chat_stream_stateful(
+                        request.messages[-1].get("content", "") if request.messages else "",
+                        previous_response_id=conv.response_id,
+                        config=cfg,
+                        on_event=event_cb,
+                    )
+                    yield from gen
+                    return
+            except Exception as exc:
+                logger.debug("Stateful stream failed, falling back: %s", exc)
+
+        # Direct streaming
+        gen = client.chat_stream(
+            request.messages, config=cfg, on_event=event_cb,
+            store=request.store,
+        )
+        yield from gen
+
     # ── High-level convenience ──────────────────────────────────────
 
     def reply(
@@ -379,9 +453,10 @@ class VirtualAgentManager:
         """
         Execute a single inference request.
 
-        Strategy:
-        1. If agent has a conversation → use ConversationManager (stateful)
-        2. Otherwise → direct LMSClient.chat() call
+        Strategy (v2.7 — stateful-first):
+        1. If store=False → direct LMSClient.chat(store=False), no conversation
+        2. If agent has a conversation_id → ConversationManager (stateful)
+        3. Fallback → direct LMSClient.chat()
         """
         from engine.lmstudio.lms_client import get_lms_client
         from engine.lmstudio.inference_config import InferenceConfig
@@ -394,12 +469,16 @@ class VirtualAgentManager:
             temperature=request.temperature,
             max_output_tokens=request.max_output_tokens,
             integrations=request.integrations,
+            store=request.store,
         )
 
         # Merge with agent-level inference config if available
         agent = self._agents.get(request.agent_id)
         if agent and agent._inference_config:
             cfg = InferenceConfig.merge(cfg, agent._inference_config)
+            # Re-apply request-level store override (merge might clobber)
+            if request.store is not None:
+                cfg.store = request.store
 
         # Structured output
         if request.structured_schema:
@@ -413,7 +492,12 @@ class VirtualAgentManager:
                 },
             ))
 
-        # Try stateful conversation path
+        # Stateless one-off: skip conversation entirely
+        if request.store is False:
+            resp = client.chat(request.messages, config=cfg, store=False)
+            return InferenceResponse.from_lms_response(resp)
+
+        # Stateful path (primary): use ConversationManager
         if request.conversation_id:
             try:
                 return self._infer_stateful(request, cfg)
@@ -423,36 +507,33 @@ class VirtualAgentManager:
                     request.agent_id, exc,
                 )
 
-        # Direct call path
+        # Direct call fallback
         resp = client.chat(request.messages, config=cfg)
         return InferenceResponse.from_lms_response(resp)
 
     def _infer_stateful(
         self, request: InferenceRequest, cfg: Any,
     ) -> InferenceResponse:
-        """Use ConversationManager for stateful inference."""
+        """Use ConversationManager for stateful inference.
+
+        The ConversationManager handles:
+        - First call: creates a new server conversation
+        - Subsequent: sends only the new user message with previous_response_id
+        - Model unload: transparently replays full history
+        - System prompt changes: invalidates server state (forces replay)
+        """
         from engine.lmstudio.conversation import get_conversation_manager
-        from engine.lmstudio.lms_client import get_lms_client
         from engine.lmstudio.inference_config import InferenceConfig
 
         conv_mgr = get_conversation_manager()
         conv = conv_mgr.get(request.conversation_id or "")
 
-        if conv is None:
-            # Create conversation from the request messages
-            system_msg = ""
-            for m in request.messages:
-                if m.get("role") == "system":
-                    system_msg = m.get("content", "")
-                    break
-            conv = conv_mgr.create(
-                request.conversation_id or f"auto_{request.agent_id}",
-                system=system_msg,
-                model=request.model,
-            )
-
-        # Extract the last user message
+        # Extract system prompt and user message from request
+        system_msg = ""
         user_message = ""
+        for m in request.messages:
+            if m.get("role") == "system":
+                system_msg = m.get("content", "")
         for m in reversed(request.messages):
             if m.get("role") == "user":
                 user_message = m.get("content", "")
@@ -460,6 +541,21 @@ class VirtualAgentManager:
 
         if not user_message:
             raise ValueError("No user message in request")
+
+        if conv is None:
+            conv = conv_mgr.create(
+                request.conversation_id or f"auto_{request.agent_id}",
+                system=system_msg,
+                model=request.model,
+                config=cfg,
+            )
+        elif system_msg and conv.system != system_msg:
+            # System prompt changed (interceptors updated it) — update and
+            # invalidate server state so next send replays with new prompt
+            conv.system = system_msg
+            if conv.messages and conv.messages[0].role == "system":
+                conv.messages[0].content = system_msg
+            conv.invalidate()
 
         # Use Conversation.send() which handles stateful/replay automatically
         resp = conv.send(

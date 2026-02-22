@@ -239,6 +239,14 @@ class ResponseContext(dict):
     * ``skip_llm``        — set True to bypass the LLM (interceptor provides reply)
     * ``auto_results``    — results from auto-triggered skills
     * ``extra``           — arbitrary pass-through data
+
+    **v2.7 keys** (set after LLM call):
+
+    * ``response_id``     — server response_id for conversation branching
+    * ``store``           — whether this call was stored (True/False/None)
+    * ``is_stateful``     — whether response has a valid response_id
+    * ``reasoning``       — reasoning content from thinking models
+    * ``tool_calls``      — list of tool calls made during inference
     """
 
     def require(self, key: str) -> Any:
@@ -579,6 +587,19 @@ class AgentGovernor:
                     history  = ctx.get("history"),
                 )
                 ctx["reply"] = reply
+                # v2.7: populate response metadata for post-call interceptors
+                agent_state = {}
+                try:
+                    if hasattr(self.agent, "get_state"):
+                        agent_state = self.agent.get_state()
+                    elif hasattr(self.agent, "_virtual_agent"):
+                        agent_state = self.agent._virtual_agent.get_state()
+                except Exception:
+                    pass
+                ctx["response_id"] = agent_state.get("last_response_id", "")
+                ctx["is_stateful"] = bool(
+                    ctx["response_id"] and ctx["response_id"].startswith("resp_")
+                )
             except Exception as exc:
                 logger.error("AgentGovernor LLM call failed: %s", exc)
                 ctx["reply"] = ""
