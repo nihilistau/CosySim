@@ -37,7 +37,7 @@ for _stream in (sys.stdout, sys.stderr):
 PROJECT_ROOT = Path(__file__).parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-VERSION = "2.7.2"
+VERSION = "3.1.0"
 
 # ── Scene catalogue (class-path → metadata) ─────────────────────────────
 # SceneRegistry auto-discovers these, but we keep a manual catalogue as

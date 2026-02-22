@@ -2308,3 +2308,69 @@ User message → AgentGovernor (interceptors inject personality + heat)
   → Governor.post_call() → strip tokens, shape response
   → return to scene
 ```
+
+---
+
+## 14. Phase 8 — v3.1 Pipeline Consolidation & Tool-First Architecture
+
+Generated: [2026-02-24] — v3.1
+
+### 14.1 Overview
+
+v3.1 consolidates the interceptor pipeline, introduces unified response parsing,
+and establishes a tool-first architecture via an in-process MCP skills server.
+
+**Key metrics:**
+- Interceptors: 18 → functionally 12 active (scene-aware filtering skips irrelevant ones)
+- Parsing paths: 3 → 1 (single-pass `ParsedResponse`)
+- Stream scan: 2 passes → 1 pass (tag accumulation during SSE)
+- Tests: 551 → 576
+
+### 14.2 ParsedResponse — Unified Parsing
+
+All response parsing now goes through `ContentRouter.parse_full(text)` returning a
+`ParsedResponse` dataclass with: content, mood, mood_intensity, actions, image_requests,
+voice_hints, game_events, stat_updates, json_data, tags, raw_text.
+
+**Single parse point:** `ctx["parsed"]` is populated once in `AgentGovernor.reply()`
+before post-call interceptors run. All interceptors read from it — no duplicate regex.
+
+### 14.3 Scene-Aware Interceptor Pipeline
+
+Each interceptor declares `applicable_scenes: Optional[Set[str]]`:
+- `None` → runs in all scenes (default)
+- `{"bedroom"}` → only runs in bedroom scene
+
+Applied to: BedroomSceneInterceptor, PhoneSceneInterceptor, LoungeSceneInterceptor.
+
+### 14.4 GameInterceptor Merge
+
+`GameSessionInterceptor` + `GameRulesInterceptor` merged into `GameInterceptor` (priority 35).
+Backward-compatible aliases maintained.
+
+### 14.5 Single-Pass Stream Processing
+
+`StreamProcessor._scan_for_tags()` accumulates into buffers during SSE.
+`result()` uses pre-accumulated data — no post-scan regex pass.
+
+### 14.6 Interceptor Cache
+
+`INTERCEPTOR_CACHE` — thread-safe TTL cache for expensive interceptor lookups.
+Applied to CharacterRegistryInterceptor personality DB query (300s TTL).
+
+### 14.7 MCP Skills Server
+
+Flask blueprint at `/mcp/skills` auto-mounted via `mount_overlay()`.
+Routes: /health, /tools, /call, /packs, /manifest, /pipeline/stats.
+Auto-attached to inference via `get_skills_integration()` in VirtualAgentManager.
+
+### 14.8 File Changes
+
+- `engine/agents/content_router.py` — +ParsedResponse, +parse_full()
+- `engine/agents/interceptors.py` — +InterceptorCache, merged GameInterceptor, scene filtering
+- `engine/agents/stream_processor.py` — Single-pass tag accumulation
+- `engine/mcp/comms_framework.py` — +applicable_scenes, +ctx["parsed"]
+- `engine/mcp/skills_server.py` — NEW MCP skills server blueprint
+- `engine/scenes/base_scene.py` — +mount_skills_server()
+- `engine/overlay/overlay_bp.py` — Auto-mount skills_bp
+- `tests/test_pipeline_smoke.py` — +25 v3.1 tests (576 total)
