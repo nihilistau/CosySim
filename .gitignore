@@ -93,6 +93,12 @@ build/
 dist/
 *.egg-info/
 
+# Generated media (large binary files)
+content/simulation/media/images/
+content/simulation/media/voice/
+content/simulation/media/video/
+*.har
+
 # Python bytecode
 *.pyc
 __pycache__/
