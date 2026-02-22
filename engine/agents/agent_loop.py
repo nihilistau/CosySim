@@ -348,7 +348,7 @@ class AgentLoop:
 
     # ── Decide ──────────────────────────────────────────────────────────
     def _decide(self, character_id: str, context: str) -> Dict:
-        """Ask VirtualAgentManager for a structured action decision."""
+        """Ask VirtualAgentManager for a structured action decision with mood/stat extraction."""
         character = self._characters[character_id]
         agent = self._agents.get(character_id)
 
@@ -356,7 +356,8 @@ class AgentLoop:
             f"You are {character.name}. You are in a scene with another person. "
             f"You must decide what to do next based on your mood, the situation, "
             f"and your personality. Be spontaneous and natural. "
-            f"Respond ONLY with a JSON object — no extra text."
+            f"Respond ONLY with a JSON object — no extra text.\n"
+            f"You may include [MOOD:emotion] to express your current feeling."
         )
 
         # Try agent.quick_query first (routes through VirtualAgentManager)
@@ -368,7 +369,7 @@ class AgentLoop:
             except Exception as e:
                 logger.debug("agent.quick_query failed: %s", e)
 
-        # Fallback: use VirtualAgentManager directly with structured output
+        # Use VirtualAgentManager with infer_processed for rich response
         try:
             from engine.agents.virtual_agent_manager import get_virtual_agent_manager
             from engine.agents.virtual_agent import InferenceRequest
@@ -383,17 +384,36 @@ class AgentLoop:
                 max_output_tokens=2000,
                 structured_schema=DECISION_SCHEMA,
                 schema_name="agent_decision",
+                store=False,
                 priority=3,
                 metadata={"type": "agent_loop_decide", "scene": self.scene_id},
             )
-            response = mgr.infer(request)
-            text = response.content or response.reasoning_content or ""
+            proc = mgr.infer_processed(request)
+            text = proc.clean_text or proc.raw_text or ""
             if text:
-                return self._parse_decision(text)
+                decision = self._parse_decision(text)
+                # Enrich decision with mood from stream
+                if proc.mood_tags:
+                    decision["mood"] = proc.mood_tags[0]
+                    self._update_character_mood(character_id, proc.mood_tags[0])
+                if proc.action_tags:
+                    decision["extra_actions"] = list(proc.action_tags)
+                return decision
         except Exception as e:
             logger.debug("VirtualAgentManager decide failed: %s", e)
 
         return self._random_action(character_id)
+
+    def _update_character_mood(self, character_id: str, mood: str) -> None:
+        """Update character mood in MCP framework from stream-extracted tag."""
+        try:
+            from engine.mcp.framework import get_framework
+            fw = get_framework()
+            char_node = fw.get_character(character_id)
+            if char_node:
+                char_node.update_state({"mood": mood, "last_mood_source": "agent_loop"})
+        except Exception:
+            pass
 
     def _decide_batch(self, char_ids: List[str], contexts: Dict[str, str]) -> Dict[str, Dict]:
         """Batch-decide actions for multiple characters in parallel."""

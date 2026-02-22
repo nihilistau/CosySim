@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CosySim Gallery — v2.7 Showcase</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Georgia', serif;
+            background: #1a1a2e;
+            color: #e0d6c8;
+            min-height: 100vh;
+        }
+        .header {
+            background: linear-gradient(135deg, #16213e 0%, #0f3460 100%);
+            padding: 20px 30px;
+            border-bottom: 2px solid #e94560;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .header h1 { font-size: 1.8em; color: #fff; letter-spacing: 2px; }
+        .header .badge {
+            background: #e94560;
+            color: #fff;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.8em;
+            font-family: monospace;
+        }
+        .main {
+            display: grid;
+            grid-template-columns: 280px 1fr 300px;
+            height: calc(100vh - 70px);
+        }
+        .sidebar {
+            background: #16213e;
+            padding: 15px;
+            overflow-y: auto;
+            border-right: 1px solid #333;
+        }
+        .sidebar h3 {
+            color: #e94560;
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 10px;
+        }
+        .content { padding: 20px; overflow-y: auto; }
+        .right-panel {
+            background: #16213e;
+            padding: 15px;
+            overflow-y: auto;
+            border-left: 1px solid #333;
+        }
+        .card {
+            background: #1a1a2e;
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 10px;
+            transition: border-color 0.3s;
+        }
+        .card:hover { border-color: #e94560; }
+        .card h4 { color: #fff; margin-bottom: 6px; }
+        .card p { font-size: 0.85em; color: #aaa; }
+        .card .role {
+            display: inline-block;
+            background: #e94560;
+            color: #fff;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 0.75em;
+            margin-bottom: 6px;
+        }
+        .card .mood {
+            display: inline-block;
+            background: #0f3460;
+            color: #53d8fb;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 0.75em;
+        }
+        .btn {
+            background: #e94560;
+            color: #fff;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.85em;
+            transition: background 0.3s;
+        }
+        .btn:hover { background: #d63050; }
+        .btn.secondary {
+            background: #0f3460;
+        }
+        .btn.secondary:hover { background: #1a4a7a; }
+        .artwork-card {
+            background: #0f0f23;
+            border: 1px solid #444;
+            border-radius: 10px;
+            padding: 16px;
+            margin-bottom: 15px;
+        }
+        .artwork-card h3 { color: #e94560; margin-bottom: 8px; }
+        .artwork-card .style-tag {
+            display: inline-block;
+            background: #1a1a2e;
+            border: 1px solid #e94560;
+            color: #e94560;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 0.75em;
+            margin-bottom: 8px;
+        }
+        .artwork-card .description { color: #ccc; font-style: italic; margin-bottom: 10px; }
+        .artwork-card .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+        .evaluation {
+            background: #16213e;
+            border-left: 3px solid #53d8fb;
+            padding: 10px;
+            margin-top: 10px;
+            border-radius: 0 6px 6px 0;
+        }
+        .evaluation .speaker { color: #e94560; font-weight: bold; }
+        .log-entry {
+            padding: 6px 0;
+            border-bottom: 1px solid #222;
+            font-size: 0.85em;
+        }
+        .log-entry .time { color: #666; font-size: 0.8em; }
+        .exhibition-btn {
+            display: block;
+            width: 100%;
+            text-align: left;
+            background: #1a1a2e;
+            border: 1px solid #333;
+            color: #e0d6c8;
+            padding: 10px;
+            margin-bottom: 6px;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+        .exhibition-btn:hover { border-color: #e94560; }
+        .exhibition-btn .emoji { font-size: 1.4em; margin-right: 8px; }
+        .streaming-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            background: #53d8fb;
+            border-radius: 50%;
+            animation: pulse 1s infinite;
+            margin-right: 6px;
+        }
+        @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+        #evaluation-stream {
+            background: #0a0a1a;
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 12px;
+            min-height: 80px;
+            font-family: 'Georgia', serif;
+            white-space: pre-wrap;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .debate-entry { margin-bottom: 12px; }
+        .debate-entry .speaker { color: #e94560; font-weight: bold; }
+        .debate-entry .text { color: #ccc; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🎨 CosySim Gallery</h1>
+        <div>
+            <span class="badge">v2.7 Showcase</span>
+            <span class="badge" id="streaming-badge" style="background:#0f3460">
+                <span class="streaming-indicator"></span> Streaming
+            </span>
+        </div>
+    </div>
+
+    <div class="main">
+        <!-- Left Sidebar: Characters & Exhibitions -->
+        <div class="sidebar">
+            <h3>Characters</h3>
+            <div id="characters-list"></div>
+
+            <h3 style="margin-top:20px">Exhibitions</h3>
+            <div id="exhibitions-list"></div>
+
+            <h3 style="margin-top:20px">Create Art</h3>
+            <input type="text" id="art-theme" placeholder="Theme (optional)"
+                   style="width:100%;padding:8px;background:#1a1a2e;border:1px solid #333;color:#fff;border-radius:6px;margin-bottom:8px">
+            <button class="btn" onclick="createArtwork()">🎨 Generate Artwork</button>
+        </div>
+
+        <!-- Center: Artworks -->
+        <div class="content">
+            <h2 style="margin-bottom:15px;color:#fff" id="exhibition-title">Gallery</h2>
+            <div id="artworks-container"></div>
+
+            <!-- Streaming evaluation display -->
+            <div id="evaluation-panel" style="display:none;margin-top:20px">
+                <h3 style="color:#53d8fb;margin-bottom:8px">
+                    <span class="streaming-indicator"></span> Live Evaluation
+                </h3>
+                <div id="evaluation-stream"></div>
+            </div>
+        </div>
+
+        <!-- Right Panel: Log & Debate -->
+        <div class="right-panel">
+            <h3>Gallery Log</h3>
+            <div id="gallery-log" style="margin-bottom:20px"></div>
+
+            <h3>Debate</h3>
+            <div id="debate-panel"></div>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+        let state = {};
+
+        socket.on('gallery_state', (data) => {
+            state = data;
+            renderAll();
+        });
+
+        socket.on('gallery_log', (entry) => {
+            addLogEntry(entry);
+        });
+
+        socket.on('evaluation_delta', (data) => {
+            const panel = document.getElementById('evaluation-panel');
+            const stream = document.getElementById('evaluation-stream');
+            panel.style.display = 'block';
+            stream.textContent += data.text;
+            stream.scrollTop = stream.scrollHeight;
+        });
+
+        socket.on('evaluation_complete', (data) => {
+            if (data.text) {
+                const stream = document.getElementById('evaluation-stream');
+                stream.textContent = '';
+                document.getElementById('evaluation-panel').style.display = 'none';
+            }
+            fetchState();
+        });
+
+        socket.on('mood_change', (data) => {
+            const el = document.getElementById(`mood-${data.char_id}`);
+            if (el) el.textContent = data.mood;
+        });
+
+        socket.on('debate', (data) => {
+            renderDebate(data);
+        });
+
+        socket.on('artwork_created', () => fetchState());
+
+        function fetchState() {
+            fetch('/api/state').then(r => r.json()).then(data => {
+                if (data.ok) { state = data; renderAll(); }
+            });
+        }
+
+        function renderAll() {
+            renderCharacters();
+            renderExhibitions();
+            renderArtworks();
+        }
+
+        function renderCharacters() {
+            const container = document.getElementById('characters-list');
+            container.innerHTML = '';
+            for (const [id, c] of Object.entries(state.characters || {})) {
+                container.innerHTML += `
+                    <div class="card">
+                        <h4>${c.name}</h4>
+                        <span class="role">${c.role}</span>
+                        <span class="mood" id="mood-${id}">${c.mood}</span>
+                        <p>📍 ${(state.rooms || {})[c.current_room]?.name || c.current_room}</p>
+                        <p style="font-size:0.8em;color:#888">Evaluated: ${c.artworks_evaluated}</p>
+                    </div>`;
+            }
+        }
+
+        function renderExhibitions() {
+            const container = document.getElementById('exhibitions-list');
+            fetch('/api/exhibitions').then(r => r.json()).then(data => {
+                container.innerHTML = '';
+                for (const [key, ex] of Object.entries(data.exhibitions || {})) {
+                    const active = state.active_exhibition === key ? 'border-color:#e94560' : '';
+                    container.innerHTML += `
+                        <button class="exhibition-btn" style="${active}" onclick="setExhibition('${key}')">
+                            <span class="emoji">${ex.emoji}</span>
+                            <strong>${ex.label}</strong><br>
+                            <small style="color:#888">${ex.theme}</small>
+                        </button>`;
+                }
+            });
+        }
+
+        function renderArtworks() {
+            const container = document.getElementById('artworks-container');
+            const title = document.getElementById('exhibition-title');
+            const info = state.exhibition_info || {};
+            title.textContent = info.label ? `${info.emoji || ''} ${info.label}` : 'Gallery';
+
+            container.innerHTML = '';
+            for (const [id, art] of Object.entries(state.artworks || {})) {
+                const evals = (art.evaluations || []).map(e =>
+                    `<div class="evaluation">
+                        <span class="speaker">${e.evaluator}</span> (${e.role})
+                        ${e.mood ? `<span class="mood">${e.mood}</span>` : ''}
+                        <p style="margin-top:4px">${e.text}</p>
+                    </div>`
+                ).join('');
+
+                const charOptions = Object.entries(state.characters || {})
+                    .map(([cid, c]) => `<option value="${cid}">${c.name} (${c.role})</option>`)
+                    .join('');
+
+                container.innerHTML += `
+                    <div class="artwork-card">
+                        <h3>${art.title}</h3>
+                        <span class="style-tag">${art.style}</span>
+                        ${art.room ? `<span class="style-tag">📍 ${art.room}</span>` : ''}
+                        <div class="description">${art.description}</div>
+                        ${art.image_path ? `<img src="${art.image_path}" style="max-width:300px;border-radius:8px;margin-bottom:10px">` : ''}
+                        <div class="actions">
+                            <select id="eval-char-${id}" style="background:#1a1a2e;color:#fff;border:1px solid #333;padding:6px;border-radius:6px">
+                                ${charOptions}
+                            </select>
+                            <button class="btn" onclick="evaluateArt('${id}')">🎭 Evaluate (Stream)</button>
+                            <button class="btn secondary" onclick="critiqueArt('${id}')">📊 Critique (JSON)</button>
+                            <button class="btn secondary" onclick="debateArt('${id}')">💬 Debate</button>
+                        </div>
+                        ${evals}
+                    </div>`;
+            }
+        }
+
+        function renderDebate(data) {
+            const panel = document.getElementById('debate-panel');
+            panel.innerHTML = `<h4 style="color:#fff;margin-bottom:8px">${data.artwork_title || ''}</h4>`;
+            for (const entry of (data.debate || [])) {
+                panel.innerHTML += `
+                    <div class="debate-entry">
+                        <span class="speaker">${entry.speaker}</span>
+                        <span style="color:#666;font-size:0.8em">(${entry.role})</span>
+                        <p class="text">${entry.text}</p>
+                    </div>`;
+            }
+        }
+
+        function addLogEntry(entry) {
+            const log = document.getElementById('gallery-log');
+            const time = new Date(entry.timestamp).toLocaleTimeString();
+            log.innerHTML = `<div class="log-entry"><span class="time">${time}</span> ${entry.text}</div>` + log.innerHTML;
+            while (log.children.length > 50) log.removeChild(log.lastChild);
+        }
+
+        // Actions
+        function setExhibition(key) {
+            fetch('/api/exhibition/set', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({exhibition: key})
+            }).then(() => fetchState());
+        }
+
+        function createArtwork() {
+            const theme = document.getElementById('art-theme').value;
+            fetch('/api/artwork/create', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({theme})
+            }).then(() => fetchState());
+        }
+
+        function evaluateArt(artworkId) {
+            const charId = document.getElementById(`eval-char-${artworkId}`).value;
+            document.getElementById('evaluation-stream').textContent = '';
+            document.getElementById('evaluation-panel').style.display = 'block';
+            fetch('/api/evaluate', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({artwork_id: artworkId, character_id: charId})
+            }).then(r => r.json()).then(() => fetchState());
+        }
+
+        function critiqueArt(artworkId) {
+            const charId = document.getElementById(`eval-char-${artworkId}`).value;
+            fetch('/api/critique', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({artwork_id: artworkId, character_id: charId})
+            }).then(r => r.json()).then(data => {
+                if (data.ok) alert(JSON.stringify(data.critique, null, 2));
+            });
+        }
+
+        function debateArt(artworkId) {
+            fetch('/api/debate', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({artwork_id: artworkId})
+            });
+        }
+
+        // Initial load
+        fetchState();
+    </script>
+</body>
+</html>

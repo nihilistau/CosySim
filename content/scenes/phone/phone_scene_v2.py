@@ -77,12 +77,14 @@ class _PhoneCharacterAgent:
         self._scene  = scene
         # character attribute read by CharacterRegistryInterceptor
         self.character = None
+        # Rich response from last infer_processed() call
+        self._last_processed = None
 
     def _refresh(self):
         self.character = self._scene.db.get_character(self.char_id)
 
     def reply(self, message: str, *, chain_id=None, history=None, **_kwargs) -> str:
-        """Route through VirtualAgentManager — invoked by the governor after interceptors fire."""
+        """Route through VirtualAgentManager with streaming — invoked by the governor after interceptors fire."""
         try:
             from engine.agents.virtual_agent_manager import get_virtual_agent_manager
             from engine.agents.virtual_agent import InferenceRequest
@@ -91,23 +93,30 @@ class _PhoneCharacterAgent:
             pers  = (char or {}).get("personality", "")
             system = (
                 f"You are {name}. {pers}\n"
-                "Reply naturally as a real person texting. Keep messages short and conversational."
+                "Reply naturally as a real person texting. Keep messages short and conversational.\n"
+                "You may express mood with [MOOD:emotion] tags.\n"
+                "To send a selfie, include [IMAGE:description of the selfie].\n"
+                "To send a voice message, include [VOICE:tone]."
             )
             msgs = [{"role": "system", "content": system}]
             for turn in (history or []):
                 msgs.append({"role": turn.get("role", "user"), "content": turn.get("content", "")})
             msgs.append({"role": "user", "content": message})
             mgr = get_virtual_agent_manager()
-            request = InferenceRequest(
+            req = InferenceRequest(
                 agent_id=self.char_id,
                 messages=msgs,
                 temperature=0.9,
                 max_output_tokens=4000,
                 conversation_id=f"phone_{self.char_id}",
+                store=True,
                 metadata={"scene": "phone", "character_name": name},
             )
-            response = mgr.infer(request)
-            return (response.content or response.reasoning_content or "").strip()
+            # Use streaming with ProcessedResponse for rich output
+            response = mgr.infer_processed(req)
+            # Store rich metadata for the scene to use
+            self._last_processed = response
+            return (response.clean_text or "").strip()
         except Exception as exc:
             logger.debug("_PhoneCharacterAgent.reply failed: %s", exc)
             return ""
@@ -277,15 +286,24 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
                 pass
 
             prompt = autotxt_prompt(conv_mode)
-            text   = self._generate_reply(char_id, prompt, system_override=prompt)
-            if not text.strip():
+            reply  = self._generate_reply(char_id, prompt, system_override=prompt)
+            text   = reply.get("text", "").strip()
+            if not text:
                 return
+
+            # Build message metadata from rich response
+            metadata = {}
+            if reply.get("mood"):
+                metadata["mood"] = reply["mood"]
+            if reply.get("image_requests"):
+                metadata["image_requests"] = reply["image_requests"]
 
             msg = self.phone_db.save_message(
                 thread_id=thread_id,
                 sender_id=char_id,
                 content=text,
                 msg_type="text",
+                metadata=metadata if metadata else None,
             )
             try:
                 get_framework().emit_event("message_sent", {
@@ -308,12 +326,13 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
     # ── LLM reply ────────────────────────────────────────────────────────────
 
     def _generate_reply(self, char_id: str, user_msg: str, *,
-                        system_override: Optional[str] = None) -> str:
-        """Run the governor pipeline (or fall back to direct LLM) and return reply text.
+                        system_override: Optional[str] = None) -> Dict[str, Any]:
+        """Run the governor pipeline and return a rich reply dict.
 
-        The governor calls _PhoneCharacterAgent.reply() which calls the LLM
-        directly — there is NO recursion back into this method.
+        Returns dict with keys: text, mood, image_requests, action_tags, voice_style.
+        The governor calls _PhoneCharacterAgent.reply() which uses infer_processed().
         """
+        result = {"text": "", "mood": None, "image_requests": [], "action_tags": [], "voice_style": None}
         try:
             from engine.mcp.comms_framework import get_governor
             agent = self._agents.get(char_id)
@@ -321,13 +340,33 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
                 agent = _PhoneCharacterAgent(char_id, self)
                 self._agents[char_id] = agent
             agent._refresh()
+            agent._last_processed = None
 
             gov = get_governor(agent, scene=SCENE_ID)
-            return gov.reply(user_msg, chain_id=None, history=None)
+            text = gov.reply(user_msg, chain_id=None, history=None)
+            result["text"] = text
+
+            # Extract rich metadata from processed response
+            proc = getattr(agent, "_last_processed", None)
+            if proc:
+                result["mood"] = proc.mood_tags[0] if proc.mood_tags else None
+                result["image_requests"] = list(proc.image_requests)
+                result["action_tags"] = list(proc.action_tags)
+                result["voice_style"] = proc.voice_style
+                # Update character mood in framework
+                if result["mood"]:
+                    try:
+                        fw = get_framework()
+                        char_node = fw.get_character(char_id)
+                        if char_node:
+                            char_node.update_state({"mood": result["mood"]})
+                    except Exception:
+                        pass
+            return result
         except Exception as exc:
             logger.debug("Governor unavailable (%s), using direct LLM", exc)
 
-        # Direct fallback via VirtualAgentManager (governor not available / interceptors failed)
+        # Direct fallback via VirtualAgentManager
         try:
             from engine.agents.virtual_agent_manager import get_virtual_agent_manager
             from engine.agents.virtual_agent import InferenceRequest
@@ -336,10 +375,11 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
             personality = (char or {}).get("personality", "")
             system = system_override or (
                 f"You are {name}. {personality}\n"
-                "Reply naturally as a real person texting. Keep messages short."
+                "Reply naturally as a real person texting. Keep messages short.\n"
+                "Express mood with [MOOD:emotion] tags. Send selfies with [IMAGE:desc]."
             )
             mgr = get_virtual_agent_manager()
-            request = InferenceRequest(
+            req = InferenceRequest(
                 agent_id=char_id,
                 messages=[
                     {"role": "system", "content": system},
@@ -348,13 +388,19 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
                 temperature=0.9,
                 max_output_tokens=4000,
                 conversation_id=f"phone_{char_id}",
+                store=True,
                 metadata={"scene": "phone", "character_name": name},
             )
-            response = mgr.infer(request)
-            return (response.content or response.reasoning_content or "").strip()
+            proc = mgr.infer_processed(req)
+            result["text"] = (proc.clean_text or "").strip()
+            result["mood"] = proc.mood_tags[0] if proc.mood_tags else None
+            result["image_requests"] = list(proc.image_requests)
+            result["action_tags"] = list(proc.action_tags)
+            result["voice_style"] = proc.voice_style
+            return result
         except Exception as exc:
             logger.error("VirtualAgentManager reply failed: %s", exc)
-            return ""
+            return result
 
     # ── Socket.IO ────────────────────────────────────────────────────────────
 
@@ -485,29 +531,66 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
                         self._emit("typing", {"thread_id": thread_id, "char_id": char_id, "active": True})
                         time.sleep(random.uniform(0.5, 2.0))
 
-                        reply_text = self._generate_reply(char_id, content)
-                        if not reply_text.strip():
+                        reply = self._generate_reply(char_id, content)
+                        reply_text = reply.get("text", "").strip()
+                        if not reply_text:
                             continue
 
                         char = self.db.get_character(char_id)
+                        char_name = (char or {}).get("name", char_id)
+
+                        # Build message metadata from rich response
+                        metadata = {}
+                        if reply.get("mood"):
+                            metadata["mood"] = reply["mood"]
+
                         ai_msg = self.phone_db.save_message(
                             thread_id=thread_id,
                             sender_id=char_id,
                             content=reply_text,
                             msg_type="text",
+                            metadata=metadata if metadata else None,
                         )
                         self._emit("typing", {"thread_id": thread_id, "char_id": char_id, "active": False})
+
+                        # Handle image requests — generate and send as separate message
+                        for img_prompt in reply.get("image_requests", []):
+                            try:
+                                from content.simulation.services.comfyui_client import get_comfyui_client
+                                comfy = get_comfyui_client()
+                                image_path = comfy.generate_image(
+                                    prompt=f"{char_name} selfie: {img_prompt}",
+                                    character_name=char_name,
+                                )
+                                if image_path:
+                                    img_msg = self.phone_db.save_message(
+                                        thread_id=thread_id,
+                                        sender_id=char_id,
+                                        content=img_prompt,
+                                        msg_type="photo",
+                                        metadata={"image_path": str(image_path), "generated": True},
+                                    )
+                                    self._emit("message_new", {
+                                        "thread_id": thread_id,
+                                        "message": img_msg,
+                                        "char_name": char_name,
+                                    })
+                            except Exception as img_exc:
+                                logger.debug("Image generation failed: %s", img_exc)
+
                         try:
                             get_framework().emit_event("message_sent", {
                                 "scene_id": SCENE_ID, "char_id": char_id,
                                 "type": "reply", "thread_id": thread_id,
+                                "mood": reply.get("mood"),
                             }, source=SCENE_ID)
                         except Exception:
                             pass
                         self._emit("message_new", {
                             "thread_id": thread_id,
                             "message":   ai_msg,
-                            "char_name": (char or {}).get("name", char_id),
+                            "char_name": char_name,
+                            "mood":      reply.get("mood"),
                         })
                         self._emit("thread_updated", {"thread_id": thread_id})
                     except Exception as exc:

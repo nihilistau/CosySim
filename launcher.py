@@ -327,7 +327,7 @@ For more information, see: ONBOARDING.md
     
     parser.add_argument(
         "--mode",
-        choices=["hub", "phone", "bedroom", "lounge", "casino", "dashboard", "admin", "assets", "creator", "tts", "bridge", "all", "test"],
+        choices=["hub", "phone", "bedroom", "lounge", "casino", "gallery", "dashboard", "admin", "assets", "creator", "tts", "bridge", "all", "test"],
         default="hub",
         help="Launch mode (default: hub). 'all' starts hub + phone + bedroom + tts in one terminal."
     )
@@ -407,6 +407,10 @@ For more information, see: ONBOARDING.md
         from content.scenes.casino.casino_scene import CasinoScene
         print("\n🎰 Launching The Midnight Casino on http://localhost:5559")
         CasinoScene().start()
+    elif args.mode == "gallery":
+        from content.scenes.gallery.gallery_scene import GalleryScene
+        print("\n🎨 Launching The Gallery on http://localhost:5560")
+        GalleryScene().start()
     elif args.mode == "test":
         launch_test_mode()
     elif args.mode == "tts":
