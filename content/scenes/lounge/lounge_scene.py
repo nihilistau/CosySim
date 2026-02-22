@@ -657,15 +657,19 @@ class LoungeScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
         character_id   : str,
         user_message   : str,
         history        : Optional[List] = None,
-    ) -> str:
-        """Get a governed reply from Lola or Viktor using the MCP pipeline."""
+    ) -> Dict[str, Any]:
+        """Get a governed reply from Lola or Viktor with rich metadata.
+
+        Returns dict with: text, mood, image_requests, action_tags.
+        """
+        result = {"text": "", "mood": None, "image_requests": [], "action_tags": []}
         try:
             from engine.mcp.comms_framework import get_governor, InteractionPolicy
 
-            # Lazily create a character agent stub if we don't have a real one
             agent = self._get_or_create_agent(character_id)
             if agent is None:
-                return self._fallback_reply(character_id, user_message)
+                result["text"] = self._fallback_reply(character_id, user_message)
+                return result
 
             policy = InteractionPolicy(
                 max_reply_tokens     = 350,
@@ -677,12 +681,37 @@ class LoungeScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
                 ),
             )
 
+            # Reset processed metadata on agent before call
+            if hasattr(agent, '_last_processed'):
+                agent._last_processed = None
+
             gov = get_governor(agent, scene=SCENE_ID, policy=policy)
-            return gov.reply(user_message, history=history or [])
+            text = gov.reply(user_message, history=history or [])
+            result["text"] = text
+
+            # Extract rich metadata if the agent used infer_processed()
+            proc = getattr(agent, '_last_processed', None)
+            if proc:
+                result["mood"] = proc.mood_tags[0] if proc.mood_tags else None
+                result["image_requests"] = list(proc.image_requests)
+                result["action_tags"] = list(proc.action_tags)
+                if result["mood"]:
+                    self._update_character_mood(character_id, result["mood"])
+            return result
 
         except Exception as exc:
             logger.warning("_get_agent_reply(%s) failed: %s", character_id, exc)
-            return self._fallback_reply(character_id, user_message)
+            result["text"] = self._fallback_reply(character_id, user_message)
+            return result
+
+    def _update_character_mood(self, character_id: str, mood: str) -> None:
+        """Push mood update to MCP framework."""
+        try:
+            char_node = self._fw.get_character(character_id)
+            if char_node:
+                char_node.update_state({"mood": mood, "last_mood_source": "lounge_reply"})
+        except Exception:
+            pass
 
     def _get_or_create_agent(self, character_id: str):
         """Return existing agent or create a minimal stub."""
@@ -723,14 +752,42 @@ class LoungeScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
                         "_voice_style": voice_style,
                     })()
                     self_.capabilities = set()
+                    self_._last_processed = None
 
                 def reply(self_, message, *, chain_id=None, history=None, **_kwargs):
-                    # Bare stub — interceptors build the full system prompt;
-                    # LLM call happens via the governor's REST path.
-                    return ""
+                    """Use infer_processed() for rich streaming response."""
+                    try:
+                        from engine.agents.virtual_agent_manager import get_virtual_agent_manager
+                        from engine.agents.virtual_agent import InferenceRequest
+                        mgr = get_virtual_agent_manager()
+                        system = (
+                            f"You are {self_.character.name}. {self_.character._backstory}\n"
+                            "You work at The Velvet Lounge, a 1920s speakeasy.\n"
+                            "Stay in character. Express mood with [MOOD:emotion] tags.\n"
+                            "If describing something visual, use [IMAGE:description].\n"
+                            "Use [ACTION:description] for physical actions."
+                        )
+                        msgs = [{"role": "system", "content": system}]
+                        for turn in (history or []):
+                            msgs.append({"role": turn.get("role", "user"), "content": turn.get("content", "")})
+                        msgs.append({"role": "user", "content": message})
+                        req = InferenceRequest(
+                            agent_id=self_.character_id,
+                            messages=msgs,
+                            temperature=0.85,
+                            max_output_tokens=350,
+                            conversation_id=f"lounge_{self_.character_id}",
+                            store=True,
+                            metadata={"scene": "lounge", "character_name": self_.character.name},
+                        )
+                        proc = mgr.infer_processed(req)
+                        self_._last_processed = proc
+                        return (proc.clean_text or "").strip()
+                    except Exception:
+                        return ""
 
                 def quick_query(self_, prompt: str, *, max_tokens: int = 200) -> str:
-                    return ""
+                    return self_.reply(prompt)
 
                 def cancel(self_) -> None:
                     pass
@@ -887,7 +944,8 @@ class LoungeScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
             ctx_note = self._build_context_note(rand_event)
             augmented = f"{message}\n\n[SCENE CONTEXT]{ctx_note}[/SCENE CONTEXT]" if ctx_note else message
 
-            reply = self._get_agent_reply(target, augmented, history=history)
+            reply_data = self._get_agent_reply(target, augmented, history=history)
+            reply = reply_data.get("text", "")
 
             self._log_event(
                 f"Guest → {target}: \"{message[:60]}...\"",
@@ -896,11 +954,13 @@ class LoungeScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
             self._log_event(
                 f"{target}: \"{reply[:80]}...\"",
                 event_type="reply",
+                mood=reply_data.get("mood"),
             )
 
             return jsonify({
                 "reply"       : reply,
                 "from"        : target,
+                "mood"        : reply_data.get("mood"),
                 "trust"       : self.guest_trust,
                 "heat"        : self.heat_level,
                 "turn"        : self.turn_count,

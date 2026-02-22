@@ -252,8 +252,12 @@ class CasinoScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
     #  AGENT HELPERS
     # ══════════════════════════════════════════════════════════════════
 
-    def _get_agent_reply(self, character_id: str, prompt: str, role: str = "game_master") -> str:
-        """Get an LLM reply using the appropriate agent profile via VirtualAgentManager."""
+    def _get_agent_reply(self, character_id: str, prompt: str, role: str = "game_master") -> Dict[str, Any]:
+        """Get an LLM reply with rich metadata via infer_processed().
+
+        Returns dict with: text, mood, image_requests, action_tags.
+        """
+        result = {"text": "", "mood": None, "image_requests": [], "action_tags": []}
         try:
             from engine.agents.virtual_agent_manager import get_virtual_agent_manager
             from engine.agents.virtual_agent import InferenceRequest
@@ -274,12 +278,13 @@ class CasinoScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
                         f"You are {name}. {backstory}\n"
                         f"Voice style: {voice}\n"
                         f"Stay in character. Keep responses under 3 sentences. "
-                        f"You are at a poker table in an underground casino."
+                        f"You are at a poker table in an underground casino.\n"
+                        f"Express mood with [MOOD:emotion]. Use [ACTION:desc] for actions."
                     )
                 else:
-                    system = "You are a casino character. Keep responses short."
+                    system = "You are a casino character. Keep responses short. Use [MOOD:emotion] tags."
             except Exception:
-                system = "You are a casino character. Keep responses short."
+                system = "You are a casino character. Keep responses short. Use [MOOD:emotion] tags."
 
             request = InferenceRequest(
                 agent_id=character_id,
@@ -290,17 +295,36 @@ class CasinoScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
                 temperature=profile.temperature,
                 max_output_tokens=profile.max_tokens,
                 conversation_id=f"casino_{character_id}",
+                store=False,
                 metadata={"scene": "casino", "role": role},
             )
-            response = mgr.infer(request)
-            return (response.content or response.reasoning_content or "").strip()
+            proc = mgr.infer_processed(request)
+            result["text"] = (proc.clean_text or "").strip()
+            result["mood"] = proc.mood_tags[0] if proc.mood_tags else None
+            result["image_requests"] = list(proc.image_requests)
+            result["action_tags"] = list(proc.action_tags)
+
+            # Sync mood to framework
+            if result["mood"]:
+                try:
+                    char_node = get_framework().get_character(character_id)
+                    if char_node:
+                        char_node.update_state({"mood": result["mood"]})
+                except Exception:
+                    pass
+
+            return result
         except Exception as exc:
             logger.debug("Casino agent reply failed: %s", exc)
-            return ""
+            return result
 
     # ══════════════════════════════════════════════════════════════════
     #  GAME ENGINE
     # ══════════════════════════════════════════════════════════════════
+
+    def _agent_text(self, character_id: str, prompt: str, role: str = "game_master") -> str:
+        """Convenience wrapper — returns just the text from _get_agent_reply()."""
+        return self._get_agent_reply(character_id, prompt, role).get("text", "")
 
     def _start_new_hand(self) -> Dict:
         """Deal a new poker hand."""
@@ -340,14 +364,14 @@ class CasinoScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
         )
 
         # Get character comments
-        self.dealer_comment = self._get_agent_reply(
+        self.dealer_comment = self._agent_text(
             DEALER_ID,
             f"You're dealing round {self.round_number}. The pot is {self.pot} chips. "
             f"Announce the deal briefly.",
             role="game_master",
         ) or f"Round {self.round_number}. Cards are out. Ante is {ante}."
 
-        self.mira_comment = self._get_agent_reply(
+        self.mira_comment = self._agent_text(
             HUSTLER_ID,
             f"You've been dealt your cards in round {self.round_number}. "
             f"You have {self.mira_chips} chips. React briefly.",
@@ -403,7 +427,7 @@ class CasinoScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
         }, source=SCENE_ID)
 
         # Comments
-        self.dealer_comment = self._get_agent_reply(
+        self.dealer_comment = self._agent_text(
             DEALER_ID,
             f"The player bet {amount} chips. Mira {mira_action}s"
             + (f" with {mira_bet}" if mira_bet else "") + f". Pot is now {self.pot}. Comment briefly.",
@@ -413,7 +437,7 @@ class CasinoScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
         if mira_action == "fold":
             self.mira_comment = "I know when to walk away... this time."
         else:
-            self.mira_comment = self._get_agent_reply(
+            self.mira_comment = self._agent_text(
                 HUSTLER_ID,
                 f"You {mira_action} the player's bet of {amount}. "
                 f"You have {self.mira_chips} chips left. React.",
@@ -455,7 +479,7 @@ class CasinoScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
 
         self._ssm.add_narrative(SCENE_ID, narrative, entry_type="game")
 
-        self.mira_comment = self._get_agent_reply(
+        self.mira_comment = self._agent_text(
             HUSTLER_ID,
             f"The player tried to bluff. {'You fell for it and folded.' if success else 'You saw through it and called.'} React.",
             role="small",
@@ -510,14 +534,14 @@ class CasinoScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
                 pass
 
         # Agent comments
-        self.dealer_comment = self._get_agent_reply(
+        self.dealer_comment = self._agent_text(
             DEALER_ID,
             f"Showdown: Player has {player_eval['rank']}, Mira has {mira_eval['rank']}. "
             f"{'Player' if winner == 'player' else 'Mira'} wins the pot. Announce the result.",
             role="game_master",
         ) or f"{'Player' if winner == 'player' else 'Mira'} takes the pot."
 
-        self.mira_comment = self._get_agent_reply(
+        self.mira_comment = self._agent_text(
             HUSTLER_ID,
             f"Showdown result: you {'lost' if winner == 'player' else 'won'}. "
             f"Your hand: {mira_eval['rank']}. You have {self.mira_chips} chips. React.",
@@ -699,10 +723,11 @@ class CasinoScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
             if not msg:
                 return
             target = data.get("target", DEALER_ID)
-            reply = self._get_agent_reply(target, msg, role="game_master")
+            reply_data = self._get_agent_reply(target, msg, role="game_master")
             emit("chat_reply", {
                 "character": target,
-                "message": reply or "...",
+                "message": reply_data.get("text") or "...",
+                "mood": reply_data.get("mood"),
             })
 
     # ══════════════════════════════════════════════════════════════════

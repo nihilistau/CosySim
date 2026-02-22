@@ -40,6 +40,8 @@ def _render_health_strip():
         ("Phone", "http://localhost:5555/api/health"),
         ("Bedroom", "http://localhost:5556/api/health"),
         ("Lounge", "http://localhost:5557/api/health"),
+        ("Casino", "http://localhost:5559/api/health"),
+        ("Gallery", "http://localhost:5560/api/health"),
         ("Admin", "http://localhost:8502"),
     ]
     cols = st.columns(len(services))
@@ -324,6 +326,22 @@ def show_scene_launcher():
             "port": 8601,
             "launch_args": ["--mode", "bridge"],
             "color": "#f59e0b",
+        },
+        {
+            "name": "Casino Royale",
+            "icon": "🎰",
+            "description": "Poker game with Mira the card hustler — bluffs, bets, moods",
+            "port": 5559,
+            "launch_args": ["--mode", "casino"],
+            "color": "#dc2626",
+        },
+        {
+            "name": "Art Gallery",
+            "icon": "🖼️",
+            "description": "v2.7 showcase — streaming critique, branching debate, image gen",
+            "port": 5560,
+            "launch_args": ["--mode", "gallery"],
+            "color": "#8b5cf6",
         },
     ]
 

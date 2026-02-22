@@ -320,6 +320,18 @@ class BaseScene(ABC):
                 _json.dumps(self.get_health()),
                 mimetype="application/json",
             )
+
+    def mount_overlay(self, app, socketio=None) -> None:
+        """Auto-mount the control overlay Blueprint on a Flask scene.
+
+        Call in ``start()`` after creating the Flask app, or let
+        ``register_health_route`` do it automatically.
+        """
+        try:
+            from engine.overlay import mount_overlay
+            mount_overlay(app, socketio)
+        except Exception as _exc:
+            _bslogger.debug("BaseScene.mount_overlay failed: %s", _exc)
     
     # ============= LIFECYCLE HOOKS =============
     # Override these in subclasses to react to scene events.

@@ -373,6 +373,56 @@ def api_skills():
         return jsonify({"ok": False, "error": str(exc)}), 500
 
 
+# ── Streaming / v2.7 ────────────────────────────────────────────────────
+
+@overlay_bp.route("/api/streaming")
+def api_streaming():
+    """v2.7 streaming stats: active streams, processed tokens, conversation branches."""
+    result: Dict[str, Any] = {"ok": True}
+    # VirtualAgentManager streaming stats
+    try:
+        from engine.agents.virtual_agent_manager import get_virtual_agent_manager
+        mgr = get_virtual_agent_manager()
+        result["manager"] = {
+            "total_calls": getattr(mgr, "_total_calls", 0),
+            "active_agents": len(getattr(mgr, "_agents", {})),
+        }
+    except Exception as exc:
+        result["manager"] = {"error": str(exc)}
+
+    # Conversation branches
+    try:
+        from engine.lmstudio.conversation import ConversationManager
+        cm = ConversationManager.instance()
+        convos = cm.list_conversations() if hasattr(cm, "list_conversations") else []
+        result["conversations"] = {
+            "count": len(convos),
+            "conversations": [
+                {
+                    "id": c.conversation_id,
+                    "turns": len(c._history),
+                    "branches": len(getattr(c, "_response_id_history", [])),
+                }
+                for c in (convos if isinstance(convos, list) else [])
+            ][:20],
+        }
+    except Exception as exc:
+        result["conversations"] = {"error": str(exc)}
+
+    # StreamProcessor stats (from recent calls)
+    try:
+        from engine.agents.stream_processor import StreamProcessor
+        result["stream_processor"] = {
+            "available": True,
+            "tag_patterns": list(StreamProcessor.DEFAULT_TAG_PATTERNS.keys())
+            if hasattr(StreamProcessor, "DEFAULT_TAG_PATTERNS") else [],
+        }
+    except Exception:
+        result["stream_processor"] = {"available": False}
+
+    return jsonify(result)
+
+
 # ── Inference Config ────────────────────────────────────────────────────
 
 @overlay_bp.route("/api/inference", methods=["GET", "POST"])
@@ -635,6 +685,7 @@ input, select, textarea {
     <div class="tab" data-panel="config">Config</div>
     <div class="tab" data-panel="skills">Skills</div>
     <div class="tab" data-panel="events">Events</div>
+    <div class="tab" data-panel="streaming">Streaming</div>
     <div class="tab" data-panel="act">Act</div>
     <div class="tab" data-panel="inference">Inference</div>
   </div>
@@ -679,6 +730,18 @@ input, select, textarea {
     <!-- Events Panel -->
     <div class="panel" id="p-events">
       <div id="events-content" style="max-height: 400px; overflow-y: auto;">Connecting...</div>
+    </div>
+
+    <!-- Streaming Panel -->
+    <div class="panel" id="p-streaming">
+      <div class="card">
+        <h3>v2.7 Streaming</h3>
+        <div id="streaming-content">Loading...</div>
+      </div>
+      <div class="card">
+        <h3>Active Conversations</h3>
+        <div id="conversations-content">Loading...</div>
+      </div>
     </div>
 
     <!-- Act Panel -->
@@ -787,6 +850,7 @@ async function refresh() {
   else if (active === 'models') await refreshModels();
   else if (active === 'config') await refreshConfig();
   else if (active === 'skills') await refreshSkills();
+  else if (active === 'streaming') await refreshStreaming();
   else if (active === 'inference') await refreshInference();
 }
 
@@ -882,6 +946,28 @@ async function refreshInference() {
   });
   html += '<div style="margin-top:8px"><button class="btn" onclick="editInference()">Edit</button></div>';
   document.getElementById('inference-content').innerHTML = html;
+}
+
+// ── Streaming ──
+async function refreshStreaming() {
+  const d = await api('/streaming');
+  if (!d.ok) { document.getElementById('streaming-content').innerHTML = 'Error'; return; }
+  let html = '';
+  const mgr = d.manager || {};
+  html += `<div class="stat-row"><span class="stat-label">Total Calls</span><span class="stat-value">${mgr.total_calls || 0}</span></div>`;
+  html += `<div class="stat-row"><span class="stat-label">Active Agents</span><span class="stat-value">${mgr.active_agents || 0}</span></div>`;
+  const sp = d.stream_processor || {};
+  html += `<div class="stat-row"><span class="stat-label">StreamProcessor</span><span class="stat-value ${sp.available ? 'ok' : 'warn'}">${sp.available ? 'Available' : 'N/A'}</span></div>`;
+  if (sp.tag_patterns) html += `<div class="stat-row"><span class="stat-label">Tag Patterns</span><span class="stat-value">${sp.tag_patterns.join(', ')}</span></div>`;
+  document.getElementById('streaming-content').innerHTML = html;
+
+  // Conversations
+  const convos = d.conversations || {};
+  let chtml = `<div class="stat-row"><span class="stat-label">Total</span><span class="stat-value">${convos.count || 0}</span></div>`;
+  (convos.conversations || []).forEach(c => {
+    chtml += `<div class="stat-row"><span class="stat-label">${c.id}</span><span class="stat-value">${c.turns} turns, ${c.branches} branches</span></div>`;
+  });
+  document.getElementById('conversations-content').innerHTML = chtml;
 }
 
 // ── Actions ──

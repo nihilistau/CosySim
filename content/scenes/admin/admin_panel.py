@@ -504,7 +504,7 @@ def show_scene_manager():
             with col1:
                 name = st.text_input("Name*", placeholder="My Scene")
                 description = st.text_area("Description", placeholder="Scene description")
-                scene_type = st.selectbox("Scene Type", ["phone", "dashboard", "bedroom", "custom"])
+                scene_type = st.selectbox("Scene Type", ["phone", "dashboard", "bedroom", "lounge", "casino", "gallery", "custom"])
                 port = st.number_input("Port", min_value=5000, max_value=9000, value=5557)
             
             with col2:
@@ -1628,6 +1628,7 @@ def show_mcp_monitor():
         "📬 Agent Router",
         "⚡ Channel Actions",
         "🧑 Character Registry",
+        "📡 Streaming",
     ])
 
     # ── Tab 1: MCPFramework Status ────────────────────────────────────
@@ -1949,6 +1950,51 @@ def show_mcp_monitor():
                             pass
         except Exception as exc:
             st.warning(f"Character registry unavailable: {exc}")
+
+    # ── Tab 7: Streaming Stats ────────────────────────────────────────
+    with tabs[6]:
+        st.subheader("v2.7 Streaming & Conversations")
+
+        try:
+            from engine.agents.virtual_agent_manager import get_virtual_agent_manager
+            mgr = get_virtual_agent_manager()
+            col1, col2 = st.columns(2)
+            col1.metric("Active Agents", len(getattr(mgr, "_agents", {})))
+            col2.metric("Total Calls", getattr(mgr, "_total_calls", 0))
+        except Exception as exc:
+            st.caption(f"VirtualAgentManager: {exc}")
+
+        st.divider()
+        st.markdown("**Active Conversations**")
+        try:
+            from engine.lmstudio.conversation import ConversationManager
+            cm = ConversationManager.instance()
+            convos = cm.list_conversations() if hasattr(cm, "list_conversations") else []
+            if convos:
+                for c in convos[:20]:
+                    turns = len(c._history)
+                    branches = len(getattr(c, "_response_id_history", []))
+                    with st.expander(f"💬 {c.conversation_id} — {turns} turns, {branches} branch points"):
+                        st.json({
+                            "conversation_id": c.conversation_id,
+                            "turns": turns,
+                            "branches": branches,
+                            "last_response_id": getattr(c, "_last_response_id", None),
+                        })
+            else:
+                st.info("No active conversations.")
+        except Exception as exc:
+            st.caption(f"ConversationManager: {exc}")
+
+        st.divider()
+        st.markdown("**StreamProcessor**")
+        try:
+            from engine.agents.stream_processor import StreamProcessor
+            st.success("StreamProcessor available")
+            if hasattr(StreamProcessor, "DEFAULT_TAG_PATTERNS"):
+                st.caption(f"Tag patterns: {', '.join(StreamProcessor.DEFAULT_TAG_PATTERNS.keys())}")
+        except Exception:
+            st.warning("StreamProcessor not available")
 
 
 if __name__ == "__main__":
