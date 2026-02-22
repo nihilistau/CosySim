@@ -1191,8 +1191,19 @@ class BedroomScene(BaseScene, MCPSceneMixin, mcp_scene_id="bedroom"):
             try:
                 from engine.lmstudio.lms_client import get_lms_client
                 client = get_lms_client()
-                loaded = client.get_models()
-                models["loaded"] = [{"id": m.get("id", ""), "object": m.get("object", "")} for m in loaded]
+                loaded = client.get_models(loaded_only=True)
+                models["loaded"] = [
+                    {"id": m["id"], "display_name": m.get("display_name", m["id"]),
+                     "params": m.get("params", ""), "context_length": m.get("context_length", 0)}
+                    for m in loaded
+                ]
+                all_models = client.get_models(loaded_only=False)
+                loaded_ids = {m["id"] for m in loaded}
+                models["available"] = [
+                    {"id": m["id"], "display_name": m.get("display_name", m["id"]),
+                     "params": m.get("params", "")}
+                    for m in all_models if m["id"] not in loaded_ids
+                ]
             except Exception:
                 pass
             return jsonify(models)

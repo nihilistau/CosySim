@@ -174,16 +174,51 @@ class LMSClient:
         except Exception:
             return False
 
-    def get_models(self) -> List[Dict[str, Any]]:
-        """List loaded models via native v1 API."""
+    def get_models(self, loaded_only: bool = True) -> List[Dict[str, Any]]:
+        """List models via native v1 API.
+
+        Args:
+            loaded_only: If True (default), return only currently loaded models.
+                         If False, return all downloaded models.
+
+        Returns list of dicts. For loaded models, ``id`` is taken from the
+        first ``loaded_instances[].id`` so it can be passed to ``/api/v1/chat``.
+        """
         try:
             r = self._client.get(f"{self.base_url}/api/v1/models", timeout=5.0)
             r.raise_for_status()
             data = r.json()
-            # Native v1 may return {"data": [...]} or just a list
-            if isinstance(data, list):
-                return data
-            return data.get("data", data.get("models", []))
+
+            # v1 returns {"models": [...]} with rich metadata
+            raw_models = data.get("models", data.get("data", data if isinstance(data, list) else []))
+
+            results: List[Dict[str, Any]] = []
+            for m in raw_models:
+                instances = m.get("loaded_instances", [])
+                is_loaded = len(instances) > 0
+
+                if loaded_only and not is_loaded:
+                    continue
+
+                entry: Dict[str, Any] = {
+                    "key": m.get("key", ""),
+                    "display_name": m.get("display_name", m.get("key", "")),
+                    "type": m.get("type", "llm"),
+                    "architecture": m.get("architecture", ""),
+                    "params": m.get("params_string", ""),
+                    "loaded": is_loaded,
+                }
+                # Use instance id for loaded models (this is what /api/v1/chat wants)
+                if instances:
+                    entry["id"] = instances[0].get("id", m.get("key", ""))
+                    entry["config"] = instances[0].get("config", {})
+                    entry["context_length"] = instances[0].get("config", {}).get("context_length", 0)
+                else:
+                    entry["id"] = m.get("key", "")
+
+                results.append(entry)
+
+            return results
         except Exception as exc:
             logger.debug("get_models failed: %s", exc)
             return []

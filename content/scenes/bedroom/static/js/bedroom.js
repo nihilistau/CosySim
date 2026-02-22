@@ -957,10 +957,10 @@ async function refreshModels() {
         const r = await fetch('/api/models/available');
         const data = await r.json();
         availableModels = [
-            ...(data.loaded  || []).map(m => ({ id: m.id, label: m.id + ' (loaded)' })),
+            ...(data.loaded  || []).map(m => ({ id: m.id, label: (m.display_name || m.id) + ' (loaded)' })),
             ...(data.available || [])
                 .filter(m => !(data.loaded || []).find(l => l.id === m.id))
-                .map(m => ({ id: m.id, label: m.id })),
+                .map(m => ({ id: m.id, label: m.display_name || m.id })),
         ];
     } catch { availableModels = []; }
     renderModelConfig();

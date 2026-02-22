@@ -102,7 +102,7 @@ class _PhoneCharacterAgent:
                 agent_id=self.char_id,
                 messages=msgs,
                 temperature=0.9,
-                max_output_tokens=2000,
+                max_output_tokens=4000,
                 conversation_id=f"phone_{self.char_id}",
                 metadata={"scene": "phone", "character_name": name},
             )
@@ -346,7 +346,7 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
                     {"role": "user",   "content": user_msg},
                 ],
                 temperature=0.9,
-                max_output_tokens=2000,
+                max_output_tokens=4000,
                 conversation_id=f"phone_{char_id}",
                 metadata={"scene": "phone", "character_name": name},
             )
