@@ -1,6 +1,6 @@
 # CosySim — Agent Notes & System Architecture
 
-Generated: [2026-02-22T20:00:00Z]
+Generated: [2026-02-23T10:00:00Z]
 
 > Complete structural summary of the CosySim AI simulation framework.
 > Covers file dependencies, game loop, MCP skill system, scene architecture,  
@@ -22,6 +22,7 @@ Generated: [2026-02-22T20:00:00Z]
 10. [Phase 4 — v2 Framework (v1-Only Migration)](#10-phase-4--v2-framework-v1-only-migration)
 11. [Phase 5 — VirtualAgent Framework](#11-phase-5--virtualagent-framework)
 12. [Phase 6 — v2.5 Framework Push](#12-phase-6--v25-framework-push)
+13. [Phase 7 — v2.7 LMStudio Native Upgrade](#13-phase-7--v27-lmstudio-native-upgrade)
 
 ---
 
@@ -1512,3 +1513,174 @@ Scene / AgentLoop / User
 - Tests updated: `test_cancel_sets_cancel_event`, `test_reply_accepts_extra_kwargs`,
   `test_reply_calls_llm`, `test_reply_uses_event_chain`
 - All tests now mock VirtualAgent internals instead of removed CharacterAgent methods
+
+---
+
+## 13. Phase 7 — v2.7 LMStudio Native Upgrade
+
+**Version:** 2.7.0  
+**Commits:** `d3cbb81`, `482a12b`, `a3873d5`, `76166c3`, `6f2cbba`, `ffdaca3`, `18d3d5a`
+
+### 13.1 LMStudio v1 Native API — Full Support
+
+The LMStudio native REST API (`/api/v1/chat`) replaces all OpenAI-compatible
+fallbacks as the **only** inference path. Key differences from the OpenAI format:
+
+| Feature | OpenAI compat (`/v1/chat/completions`) | Native v1 (`/api/v1/chat`) |
+|---------|---------------------------------------|----------------------------|
+| Request body | `messages[]` array | `input` (string\|array) + `system_prompt` |
+| Streaming | `data: {...}` lines | `event: <type>\ndata: <json>` pairs |
+| State tracking | None | `response_id` + `previous_response_id` |
+| Store control | None | `store: true/false` |
+| Context replay | Must resend all history | Server KV cache (fast path) |
+
+**Payload conversion:** `LMSClient._messages_to_v1_input()` converts OpenAI
+`messages[]` → v1 `input` + `system_prompt`. Assistant messages become
+`[assistant]: content` prefixed user items (v1 does not support assistant role
+in `input`).
+
+### 13.2 Typed SSE Streaming
+
+`_stream_v1_raw()` is a shared generator that parses v1 SSE events:
+```
+event: chat.start
+data: {"model": "qwen-3-4b"}
+
+event: message.delta
+data: {"contentDelta": "Hello"}
+
+event: chat.end
+data: {"stats": {...}}
+```
+
+Each event becomes a typed `LMSStreamEvent(event_type, data, content_delta,
+reasoning_delta)`. All 18 v1 event types are handled:
+- `chat.start/end`, `model_load.start/end`
+- `prompt_processing.progress`, `reasoning.delta`
+- `message.delta/start/end`, `tool_call.*`
+
+### 13.3 Stateful Conversations
+
+**ConversationManager** tracks server-side state:
+- Each `Conversation` stores `_response_id_history` (all response_ids)
+- `send()` uses fast path: only the new user message + `previous_response_id`
+- Model unload → `invalidate()` → next `send()` replays full history
+
+**Conversation branching:**
+- `branch_at(turn_index)` — fork from any historical turn
+- `fork(branch_response_id=)` — fork using a specific response_id
+- `send_stateless(message)` — one-off query with `store=False`
+
+### 13.4 Stateful-First Routing
+
+`VirtualAgentManager._execute_request()` routing strategy:
+
+```
+InferenceRequest
+  │
+  ├── store=False? ──► LMSClient.chat(store=False) [no state]
+  │
+  ├── has conversation_id? ──► _infer_stateful()
+  │     │
+  │     ├── Conversation exists + system_prompt unchanged ──► conv.send() [fast path]
+  │     ├── System prompt changed ──► conv.invalidate() + conv.send() [replay]
+  │     └── No conversation yet ──► conv_mgr.create() + conv.send()
+  │
+  └── fallback ──► LMSClient.chat() [direct, no state]
+```
+
+**System prompt evolution:** When interceptors change the system prompt
+(via governance_context), `_infer_stateful()` compares `conv.system` with
+the incoming prompt. On mismatch, it updates the conversation and calls
+`conv.invalidate()` to force full replay, ensuring the server always has
+the current system prompt.
+
+### 13.5 Governance Context Bridge (Critical Fix)
+
+**Problem:** The interceptor pipeline built `ctx["system_prompt"]` with scene
+state, game rules, skills awareness, personality guards, etc. — but the
+governor called `agent.reply(user_message)` without passing this context.
+VirtualAgent.build_request() rebuilt its own system prompt from character data,
+silently discarding all interceptor injections.
+
+**Fix:** New `governance_context` parameter flows through the entire chain:
+
+```
+AgentGovernor.reply()
+  │ ctx["system_prompt"] ← interceptor pipeline
+  │
+  ▼ agent.reply(msg, governance_context=ctx["system_prompt"])
+  │
+  ▼ CharacterAgent.reply(msg, governance_context=...)
+  │
+  ▼ VirtualAgent.reply(msg, governance_context=...)
+  │
+  ▼ VirtualAgent.build_request(msg, governance_context=...)
+     │ system = _build_system_prompt(memories)   ← base prompt
+     │ system += "\n\n" + governance_context      ← interceptor overlay
+     ▼
+     InferenceRequest(messages=[{role: system, content: merged}], ...)
+```
+
+This means the full "sandwich" control now works:
+1. **Pre-call interceptors** inject scene/game/rules context
+2. **Agent base prompt** provides character identity
+3. **Combined prompt** goes to LMStudio
+4. **Post-call interceptors** process/filter the reply
+
+### 13.6 InferenceRequest / InferenceResponse v2.7
+
+**New InferenceRequest fields:**
+| Field | Type | Purpose |
+|-------|------|---------|
+| `store` | `Optional[bool]` | `None`=server default, `False`=stateless |
+| `stream` | `bool` | Request streaming response |
+| `on_event` | `Callable` | Callback for typed streaming events |
+
+**New InferenceResponse fields:**
+| Field | Type | Purpose |
+|-------|------|---------|
+| `reasoning_tokens` | `int` | Tokens used in reasoning (thinking models) |
+| `server_tps` | `float` | Server-reported tokens/sec |
+| `time_to_first_token_s` | `float` | Time to first token |
+| `model_load_time_s` | `float` | Model load time (JIT) |
+| `is_stateful` | property | Whether response_id starts with `resp_` |
+
+### 13.7 ResponseContext v2.7 Keys
+
+After the LLM call, the governor populates:
+- `response_id` — server response_id (for branching)
+- `is_stateful` — whether the response has a valid resp_ id
+- `store` — whether the call was stored
+- `reasoning` — reasoning content from thinking models
+- `tool_calls` — list of tool calls
+
+Post-call interceptors can use these for branching decisions.
+
+### 13.8 Key Architecture Decisions
+
+1. **ConversationManager is primary path** — direct LMSClient.chat() is
+   fallback only for requests without a conversation_id
+2. **store=False skips ConversationManager entirely** — no state tracking
+   for one-off queries (quick_query, game decisions)
+3. **Response_id tracked at two levels** — Conversation._response_id_history
+   (for branching) and VirtualAgent._state["last_response_id"] (for agent logic)
+4. **`_stream_v1_raw()` shared SSE consumer** — used by both `_stream_native()`
+   and `chat_stream_stateful()`
+5. **Thinking model workaround** — max_output_tokens=4000+, reasoning="off"
+   unless explicitly wanted (Qwen3 consumes all tokens on reasoning otherwise)
+
+### 13.9 Deleted / Deprecated
+
+| File | Status |
+|------|--------|
+| `engine/lmstudio/lms_sdk.py` | **Deleted** — Python SDK wrapper, never imported by production code |
+| `engine/lmstudio/client_v2.py` | **Deprecated** — kept for test compatibility only |
+| `engine/lmstudio/__init__.py` | Removed lms_sdk exports |
+
+### 13.10 Test Results
+
+- **424 tests pass** (up from 359 pre-v2.7)
+- 45 LMSClient v2.7 tests: SSE parsing, stateful chats, branching, stats
+- 20 VirtualAgent v2.7 tests: InferenceRequest/Response fields, governance_context
+- Test command: `python -m pytest tests/ -v --tb=short --ignore=tests/test_agent_loop.py --ignore=tests/live_wire_test.py`

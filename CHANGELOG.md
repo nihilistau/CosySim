@@ -2,6 +2,33 @@
 
 All notable changes to CosySim are documented here.
 
+## [2.7.0] — 2026-02-23
+
+### LMStudio v1 Native API (Full Support)
+- **Native v1 protocol** — All inference via `/api/v1/chat` (input + system_prompt format)
+- **Typed SSE streaming** — `event: <type>\ndata: <json>` parsing for all 18 v1 event types
+- **Stateful conversations** — `response_id` / `previous_response_id` for server-side KV cache
+- **Conversation branching** — `branch_at()`, `fork()`, `send_stateless()` on Conversation
+- **Store control** — `store=False` for one-off queries, `store=True` for stateful chats
+- **System prompt evolution** — Automatic detection and replay on system prompt changes
+
+### Agent Stack v2.7
+- **Stateful-first routing** — VirtualAgentManager routes through ConversationManager as primary path
+- **Streaming inference** — `infer_stream()` with typed `LMSStreamEvent` callbacks
+- **Response tracking** — `response_id` tracked in VirtualAgent._state and Conversation._response_id_history
+- **InferenceRequest** — New fields: `store`, `stream`, `on_event`
+- **InferenceResponse** — New fields: `reasoning_tokens`, `server_tps`, `time_to_first_token_s`, `is_stateful`
+
+### Governance Context Bridge (Critical Fix)
+- **Interceptor → Agent prompt flow** — `governance_context` kwarg passes interceptor pipeline output to VirtualAgent.build_request()
+- **ResponseContext v2.7 keys** — `response_id`, `is_stateful`, `store`, `reasoning`, `tool_calls`
+- **Governor populates response metadata** — Post-call interceptors can make branching decisions
+
+### Cleanup
+- **Deleted** `engine/lmstudio/lms_sdk.py` (unused Python SDK wrapper)
+- **Deprecated** `engine/lmstudio/client_v2.py` (test-only)
+- **424 tests pass** (up from 359)
+
 ## [2.0.0] — 2026-02-20
 
 ### Three Pillars Architecture
