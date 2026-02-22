@@ -39,6 +39,9 @@ class SceneManager:
             "casino":  {"cls": "content.scenes.casino.casino_scene.CasinoScene",       "port": 5559, "label": "Midnight Casino"},
             "gallery": {"cls": "content.scenes.gallery.gallery_scene.GalleryScene",    "port": 5560, "label": "The Gallery"},
             "warzone": {"cls": "content.scenes.warzone.warzone_scene.WarzoneScene",    "port": 5561, "label": "Global Strike"},
+            "realm":   {"cls": "content.scenes.realm.realm_scene.RealmScene",          "port": 5562, "label": "The Realm"},
+            "neoncity": {"cls": "content.scenes.neoncity.neoncity_scene.NeonCityScene", "port": 5563, "label": "NeonCity"},
+            "coders":  {"cls": "content.scenes.coders.coders_scene.CodersRoomScene",   "port": 5564, "label": "The Coders Room"},
         }
         count = 0
         for name, info in KNOWN_SCENES.items():

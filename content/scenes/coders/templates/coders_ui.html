@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Coders Room — CosySim</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.4/socket.io.min.js"></script>
+<style>
+:root {
+  --bg:#0f1117; --panel:#1a1d28; --panel2:#222639; --accent:#22d3ee;
+  --green:#4ade80; --red:#f87171; --yellow:#fbbf24; --purple:#a78bfa;
+  --text:#e4e4e7; --muted:#71717a; --border:#2e2e44;
+  --font:'Segoe UI',system-ui,sans-serif; --mono:'Cascadia Code','Fira Code',monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:var(--font);height:100vh;overflow:hidden}
+
+.coders-app{display:grid;grid-template-columns:1fr 320px;grid-template-rows:auto 1fr auto;height:100vh}
+.top-bar{grid-column:1/-1;background:var(--panel);padding:8px 16px;display:flex;align-items:center;gap:16px;border-bottom:1px solid var(--border)}
+.top-bar h1{font-size:1.1rem;color:var(--accent)}
+.top-bar .stat{font-size:0.8rem;color:var(--muted)}
+.top-bar .stat b{color:var(--accent);font-family:var(--mono)}
+
+/* MAIN: Office view + terminal */
+.main-area{display:flex;flex-direction:column;overflow:hidden}
+
+/* Office visualization */
+.office{height:180px;background:var(--panel);border-bottom:1px solid var(--border);display:flex;align-items:flex-end;justify-content:center;gap:24px;padding:16px}
+.desk{display:flex;flex-direction:column;align-items:center;gap:4px;width:100px;transition:all 0.3s}
+.desk .avatar{width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.5rem;border:2px solid var(--border);transition:border-color 0.3s}
+.desk .avatar.working{border-color:var(--accent);box-shadow:0 0 12px var(--accent)}
+.desk .avatar.coding{border-color:var(--green);box-shadow:0 0 12px var(--green)}
+.desk .avatar.reviewing{border-color:var(--yellow);box-shadow:0 0 12px var(--yellow)}
+.desk .avatar.testing{border-color:var(--purple);box-shadow:0 0 12px var(--purple)}
+.desk .name{font-size:0.7rem;font-weight:bold;color:var(--text)}
+.desk .role{font-size:0.6rem;color:var(--muted);text-transform:uppercase}
+.desk .desk-status{font-size:0.6rem;color:var(--accent);height:14px}
+.desk-surface{width:80px;height:24px;background:var(--panel2);border-radius:4px 4px 0 0;border:1px solid var(--border);border-bottom:none;display:flex;align-items:center;justify-content:center}
+.desk-surface .screen{width:20px;height:12px;background:#111;border:1px solid var(--border);border-radius:1px}
+.desk-surface .screen.on{background:var(--accent);opacity:0.5}
+
+/* Terminal + Chat split */
+.work-area{flex:1;display:grid;grid-template-columns:1fr 1fr;overflow:hidden}
+.terminal-panel{background:#0a0a0f;border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
+.terminal-panel h3{padding:8px 12px;font-size:0.75rem;color:var(--green);text-transform:uppercase;letter-spacing:2px;border-bottom:1px solid var(--border)}
+.terminal-output{flex:1;overflow-y:auto;padding:8px 12px;font-family:var(--mono);font-size:0.75rem;line-height:1.5;white-space:pre-wrap;color:var(--green)}
+.terminal-output .line{opacity:0;animation:typein 0.3s ease forwards}
+@keyframes typein{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.chat-panel{display:flex;flex-direction:column;overflow:hidden}
+.chat-panel h3{padding:8px 12px;font-size:0.75rem;color:var(--accent);text-transform:uppercase;letter-spacing:2px;border-bottom:1px solid var(--border)}
+.chat-messages{flex:1;overflow-y:auto;padding:8px}
+.chat-msg{padding:6px 10px;margin:4px 0;border-radius:8px;font-size:0.8rem;line-height:1.4;background:var(--panel2)}
+.chat-msg .agent-name{font-weight:bold;font-size:0.7rem;margin-bottom:2px}
+.chat-msg .agent-name.Ada{color:var(--yellow)}
+.chat-msg .agent-name.Linus{color:var(--green)}
+.chat-msg .agent-name.Grace{color:var(--accent)}
+.chat-msg .agent-name.Alan{color:var(--purple)}
+.chat-msg .agent-name.System{color:var(--red)}
+
+/* RIGHT: Pipeline + Controls */
+.sidebar{background:var(--panel);border-left:1px solid var(--border);overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px}
+.sidebar h3{font-size:0.75rem;text-transform:uppercase;color:var(--accent);letter-spacing:2px}
+.pipeline-card{background:var(--panel2);border-radius:8px;padding:10px;border-left:3px solid var(--border)}
+.pipeline-card.feature{border-color:var(--muted)}
+.pipeline-card.design{border-color:var(--yellow)}
+.pipeline-card.coding{border-color:var(--green)}
+.pipeline-card.review{border-color:var(--accent)}
+.pipeline-card.testing{border-color:var(--purple)}
+.pipeline-card.complete{border-color:var(--green);opacity:0.6}
+.pipeline-card .title{font-size:0.85rem;font-weight:bold;margin-bottom:4px}
+.pipeline-card .phase{font-size:0.65rem;text-transform:uppercase;color:var(--muted)}
+.pipeline-card .desc{font-size:0.7rem;color:var(--muted);margin-top:4px}
+.ctrl-btn{width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;cursor:pointer;font-size:0.8rem;transition:all 0.15s}
+.ctrl-btn:hover{border-color:var(--accent);color:var(--accent)}
+.ctrl-btn.primary{border-color:var(--accent);color:var(--accent)}
+.ctrl-btn.danger{border-color:var(--red);color:var(--red)}
+
+/* Start screen */
+.start-overlay{position:absolute;inset:0;background:rgba(15,17,23,0.95);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;z-index:10}
+.start-overlay h2{font-size:2rem;color:var(--accent)}
+.start-overlay p{color:var(--muted);max-width:450px;text-align:center;line-height:1.5}
+.start-btn{padding:12px 32px;background:transparent;border:2px solid var(--accent);color:var(--accent);font-size:1rem;border-radius:8px;cursor:pointer}
+.start-btn:hover{background:var(--accent);color:var(--bg)}
+
+/* Bottom bar */
+.bottom-bar{grid-column:1/-1;background:var(--panel);padding:6px 16px;display:flex;align-items:center;gap:16px;border-top:1px solid var(--border);font-size:0.75rem;color:var(--muted)}
+.bottom-bar .indicator{width:8px;height:8px;border-radius:50%;background:var(--red)}
+.bottom-bar .indicator.active{background:var(--green);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+</style>
+</head>
+<body>
+<div class="coders-app" id="app">
+  <div class="top-bar">
+    <h1>💻 The Coders Room</h1>
+    <span class="stat">Ticks: <b id="tick-count">0</b></span>
+    <span class="stat">Lines: <b id="total-lines">0</b></span>
+    <span class="stat">Tests: <b id="total-tests">0</b></span>
+    <span class="stat">Completed: <b id="completed">0</b></span>
+  </div>
+
+  <div class="main-area" style="position:relative;">
+    <div class="start-overlay" id="start-overlay">
+      <h2>💻 The Coders Room</h2>
+      <p>Watch AI agents collaborate to write, review, and test real Python code. An idle simulation of a software development team powered by LLM agents.</p>
+      <button class="start-btn" onclick="Coders.start()">▶ Start Simulation</button>
+    </div>
+
+    <div class="office" id="office">
+      <div class="desk" id="desk-0">
+        <div class="avatar" id="avatar-0">👩‍💻</div>
+        <div class="name">Ada</div>
+        <div class="role">Reviewer</div>
+        <div class="desk-status" id="status-0">idle</div>
+        <div class="desk-surface"><div class="screen" id="screen-0"></div></div>
+      </div>
+      <div class="desk" id="desk-1">
+        <div class="avatar" id="avatar-1">🧑‍💻</div>
+        <div class="name">Linus</div>
+        <div class="role">Writer</div>
+        <div class="desk-status" id="status-1">idle</div>
+        <div class="desk-surface"><div class="screen" id="screen-1"></div></div>
+      </div>
+      <div class="desk" id="desk-2">
+        <div class="avatar" id="avatar-2">👩‍🔬</div>
+        <div class="name">Grace</div>
+        <div class="role">Writer</div>
+        <div class="desk-status" id="status-2">idle</div>
+        <div class="desk-surface"><div class="screen" id="screen-2"></div></div>
+      </div>
+      <div class="desk" id="desk-3">
+        <div class="avatar" id="avatar-3">🧪</div>
+        <div class="name">Alan</div>
+        <div class="role">QA</div>
+        <div class="desk-status" id="status-3">idle</div>
+        <div class="desk-surface"><div class="screen" id="screen-3"></div></div>
+      </div>
+    </div>
+
+    <div class="work-area">
+      <div class="terminal-panel">
+        <h3>📟 Terminal</h3>
+        <div class="terminal-output" id="terminal"></div>
+      </div>
+      <div class="chat-panel">
+        <h3>💬 Team Chat</h3>
+        <div class="chat-messages" id="chat"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sidebar">
+    <h3>📋 Pipeline</h3>
+    <div id="pipeline-list"></div>
+
+    <h3 style="margin-top:8px">Controls</h3>
+    <button class="ctrl-btn" onclick="Coders.addFeature()">➕ Add Feature</button>
+    <button class="ctrl-btn" onclick="Coders.manualTick()">⏭️ Manual Tick</button>
+    <button class="ctrl-btn danger" onclick="Coders.stop()">⏹ Stop</button>
+  </div>
+
+  <div class="bottom-bar">
+    <div class="indicator" id="sim-indicator"></div>
+    <span id="sim-status">Idle</span>
+  </div>
+</div>
+
+<script>
+const socket = io();
+const Coders = {
+  state: null,
+
+  async start() {
+    const res = await fetch('/api/start', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({interval:15})});
+    const data = await res.json();
+    if (data.success) {
+      document.getElementById('start-overlay').style.display='none';
+      document.getElementById('sim-indicator').classList.add('active');
+      document.getElementById('sim-status').textContent='Running';
+    }
+  },
+
+  async stop() {
+    await fetch('/api/stop', {method:'POST'});
+    document.getElementById('sim-indicator').classList.remove('active');
+    document.getElementById('sim-status').textContent='Stopped';
+  },
+
+  async addFeature() {
+    const title = prompt('Feature title (or leave blank for random):');
+    const body = title ? {title, description: prompt('Description:') || title} : {};
+    await fetch('/api/feature/add', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+  },
+
+  async manualTick() {
+    const res = await fetch('/api/tick', {method:'POST'});
+    const data = await res.json();
+    if (data.agents) this.updateState(data);
+  },
+
+  updateState(s) {
+    this.state = s;
+    document.getElementById('tick-count').textContent = s.tick_count||0;
+    document.getElementById('total-lines').textContent = s.total_lines||0;
+    document.getElementById('total-tests').textContent = s.total_tests||0;
+    document.getElementById('completed').textContent = s.completed||0;
+
+    // Update agents
+    (s.agents||[]).forEach(a => {
+      const slot = a.desk_slot;
+      const avatar = document.getElementById(`avatar-${slot}`);
+      const statusEl = document.getElementById(`status-${slot}`);
+      const screen = document.getElementById(`screen-${slot}`);
+      if (avatar) {
+        avatar.className = `avatar ${a.status}`;
+      }
+      if (statusEl) statusEl.textContent = a.status;
+      if (screen) screen.className = `screen ${a.status!=='idle'?'on':''}`;
+    });
+
+    // Pipeline
+    const pl = document.getElementById('pipeline-list');
+    pl.innerHTML = '';
+    (s.features||[]).forEach(f => {
+      const card = document.createElement('div');
+      card.className = `pipeline-card ${f.phase}`;
+      card.innerHTML = `<div class="title">${f.title}</div><div class="phase">${f.phase}</div>`;
+      pl.appendChild(card);
+    });
+    if (s.completed > 0) {
+      const done = document.createElement('div');
+      done.className = 'pipeline-card complete';
+      done.innerHTML = `<div class="title">✅ ${s.completed} Completed</div>`;
+      pl.appendChild(done);
+    }
+  },
+
+  addChat(agent, message) {
+    const el = document.getElementById('chat');
+    const div = document.createElement('div');
+    div.className = 'chat-msg';
+    div.innerHTML = `<div class="agent-name ${agent}">${agent}</div><div>${this.escapeHtml(message)}</div>`;
+    el.appendChild(div);
+    el.scrollTop = el.scrollHeight;
+  },
+
+  addTerminal(agent, output) {
+    const el = document.getElementById('terminal');
+    const lines = output.split('\n');
+    lines.forEach((line, i) => {
+      const div = document.createElement('div');
+      div.className = 'line';
+      div.style.animationDelay = `${i * 0.05}s`;
+      div.textContent = `[${agent}] ${line}`;
+      el.appendChild(div);
+    });
+    el.scrollTop = el.scrollHeight;
+  },
+
+  escapeHtml(text) {
+    const d = document.createElement('div');
+    d.textContent = text;
+    return d.innerHTML;
+  }
+};
+
+socket.on('state_update', d => { if(d) Coders.updateState(d); });
+socket.on('agent_chat', d => { Coders.addChat(d.agent, d.message); });
+socket.on('terminal_output', d => { Coders.addTerminal(d.agent, d.output); });
+</script>
+</body>
+</html>

@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Realm — CosySim</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.4/socket.io.min.js"></script>
+<style>
+:root {
+  --bg: #0d0d0d; --panel: #1a1a2e; --panel2: #16213e; --accent: #e94560;
+  --gold: #f5c842; --green: #2ecc71; --blue: #3498db; --red: #e74c3c;
+  --text: #eee; --muted: #888; --border: #333;
+  --font: 'Segoe UI', system-ui, sans-serif;
+  --mono: 'Cascadia Code', 'Fira Code', monospace;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background: var(--bg); color: var(--text); font-family: var(--font); height:100vh; overflow:hidden; }
+
+.realm-app { display:grid; grid-template-columns: 280px 1fr 260px; grid-template-rows: auto 1fr; height:100vh; gap:0; }
+.top-bar { grid-column: 1/-1; background: var(--panel); padding:8px 16px; display:flex; align-items:center; gap:16px; border-bottom:1px solid var(--border); }
+.top-bar h1 { font-size:1.2rem; color:var(--gold); }
+.top-bar .patience-bar { flex:1; max-width:200px; height:12px; background:#333; border-radius:6px; overflow:hidden; }
+.top-bar .patience-fill { height:100%; background:var(--accent); transition: width 0.5s; }
+.top-bar .timer { font-family:var(--mono); color:var(--accent); font-size:0.9rem; }
+
+/* LEFT: Stats + Inventory */
+.sidebar-left { background:var(--panel); border-right:1px solid var(--border); overflow-y:auto; padding:12px; }
+.stat-group { margin-bottom:16px; }
+.stat-group h3 { font-size:0.8rem; text-transform:uppercase; color:var(--muted); margin-bottom:8px; letter-spacing:1px; }
+.stat-row { display:flex; justify-content:space-between; padding:3px 0; font-size:0.85rem; }
+.stat-row .val { color:var(--gold); font-family:var(--mono); }
+.hp-bar, .mp-bar { height:8px; background:#333; border-radius:4px; margin:4px 0; overflow:hidden; }
+.hp-bar .fill { height:100%; background:var(--red); transition:width 0.3s; }
+.mp-bar .fill { height:100%; background:var(--blue); transition:width 0.3s; }
+.inventory-list { list-style:none; }
+.inventory-list li { padding:6px 8px; border-radius:4px; margin:2px 0; background:var(--panel2); font-size:0.8rem; cursor:pointer; display:flex; justify-content:space-between; }
+.inventory-list li:hover { background:var(--accent); }
+.inventory-list li .type { color:var(--muted); font-size:0.7rem; }
+
+/* CENTER: Visual + Story */
+.main-area { display:flex; flex-direction:column; overflow:hidden; }
+.visual-panel { height:40%; background:#111; display:flex; align-items:center; justify-content:center; position:relative; border-bottom:1px solid var(--border); }
+.visual-panel img { max-width:100%; max-height:100%; object-fit:contain; }
+.visual-panel .placeholder { color:var(--muted); font-size:1.2rem; }
+.story-panel { flex:1; overflow-y:auto; padding:16px; }
+.narration-text { font-size:1rem; line-height:1.7; white-space:pre-wrap; margin-bottom:16px; }
+.choices-area { display:flex; flex-direction:column; gap:8px; padding:0 16px 16px; }
+.choice-btn { padding:10px 16px; background:var(--panel2); border:1px solid var(--border); color:var(--text); border-radius:8px; cursor:pointer; text-align:left; font-size:0.9rem; transition:all 0.2s; }
+.choice-btn:hover { background:var(--accent); border-color:var(--accent); transform:translateX(4px); }
+.custom-input-row { display:flex; gap:8px; padding:0 16px 12px; }
+.custom-input-row input { flex:1; padding:8px 12px; background:var(--panel); border:1px solid var(--border); color:var(--text); border-radius:6px; font-size:0.9rem; }
+.custom-input-row button { padding:8px 16px; background:var(--accent); border:none; color:#fff; border-radius:6px; cursor:pointer; }
+
+/* RIGHT: Assistant + Controls */
+.sidebar-right { background:var(--panel); border-left:1px solid var(--border); overflow-y:auto; padding:12px; display:flex; flex-direction:column; gap:12px; }
+.assistant-bubble { background:var(--panel2); padding:10px; border-radius:12px 12px 12px 0; font-size:0.85rem; line-height:1.5; border-left:3px solid var(--gold); }
+.assistant-label { font-size:0.7rem; color:var(--gold); text-transform:uppercase; margin-bottom:4px; }
+.control-section { border-top:1px solid var(--border); padding-top:12px; }
+.control-section h3 { font-size:0.8rem; text-transform:uppercase; color:var(--muted); margin-bottom:8px; }
+.ctrl-btn { width:100%; padding:8px; margin:3px 0; background:var(--panel2); border:1px solid var(--border); color:var(--text); border-radius:6px; cursor:pointer; font-size:0.8rem; }
+.ctrl-btn:hover { background:var(--accent); }
+.ctrl-btn.danger { border-color:var(--red); color:var(--red); }
+.ctrl-btn.danger:hover { background:var(--red); color:#fff; }
+
+/* Start screen */
+.start-screen { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:20px; padding:40px; text-align:center; }
+.start-screen h2 { font-size:2rem; color:var(--gold); }
+.start-screen p { color:var(--muted); max-width:500px; }
+.personality-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(140px,1fr)); gap:8px; width:100%; max-width:600px; }
+.personality-card { padding:12px; background:var(--panel2); border:2px solid var(--border); border-radius:8px; cursor:pointer; text-align:center; transition:all 0.2s; }
+.personality-card:hover, .personality-card.selected { border-color:var(--accent); background:var(--accent); }
+.personality-card .name { font-weight:bold; font-size:0.9rem; }
+.personality-card .desc { font-size:0.7rem; color:var(--muted); margin-top:4px; }
+.start-btn { padding:12px 32px; background:var(--accent); border:none; color:#fff; font-size:1rem; border-radius:8px; cursor:pointer; margin-top:12px; }
+.start-btn:hover { filter:brightness(1.2); }
+
+/* Skill check popup */
+.skill-popup { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); background:var(--panel); border:2px solid var(--gold); border-radius:12px; padding:24px; z-index:100; text-align:center; min-width:300px; display:none; }
+.skill-popup .dice { font-size:3rem; margin:12px 0; }
+.skill-popup .result { font-size:1.2rem; margin:8px 0; }
+.skill-popup .success { color:var(--green); }
+.skill-popup .failure { color:var(--red); }
+
+/* Murder panel */
+.murder-panel { background:var(--panel2); border:1px solid var(--red); border-radius:8px; padding:10px; }
+.murder-panel h4 { color:var(--red); font-size:0.8rem; margin-bottom:6px; }
+.murder-info { font-size:0.75rem; line-height:1.4; }
+
+/* Scrollbar */
+::-webkit-scrollbar { width:6px; }
+::-webkit-scrollbar-track { background:var(--bg); }
+::-webkit-scrollbar-thumb { background:var(--border); border-radius:3px; }
+
+/* Animations */
+@keyframes fadeIn { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:none} }
+.narration-text { animation: fadeIn 0.5s ease; }
+.mutiny-flash { animation: mutinyPulse 0.5s infinite; }
+@keyframes mutinyPulse { 0%,100%{background:var(--panel)} 50%{background:#3d0a1e} }
+</style>
+</head>
+<body>
+<div class="realm-app" id="app">
+  <!-- TOP BAR -->
+  <div class="top-bar">
+    <h1>⚔️ The Realm</h1>
+    <div style="display:flex;align-items:center;gap:6px;"><span style="font-size:0.8rem;color:var(--muted);">Director Patience</span>
+      <div class="patience-bar"><div class="patience-fill" id="patience-fill" style="width:100%"></div></div>
+      <span id="patience-val" style="font-size:0.8rem;color:var(--accent);">100</span>
+    </div>
+    <div class="timer" id="timer">--:--</div>
+    <span id="turn-counter" style="font-size:0.8rem;color:var(--muted);">Turn 0</span>
+  </div>
+
+  <!-- LEFT SIDEBAR: Stats + Inventory -->
+  <div class="sidebar-left" id="sidebar-left" style="display:none;">
+    <div class="stat-group">
+      <h3>Vitals</h3>
+      <div class="stat-row"><span>HP</span><span class="val" id="stat-hp">100/100</span></div>
+      <div class="hp-bar"><div class="fill" id="hp-fill" style="width:100%"></div></div>
+      <div class="stat-row"><span>MP</span><span class="val" id="stat-mp">50/50</span></div>
+      <div class="mp-bar"><div class="fill" id="mp-fill" style="width:100%"></div></div>
+    </div>
+    <div class="stat-group">
+      <h3>Attributes</h3>
+      <div class="stat-row"><span>STR</span><span class="val" id="stat-str">10</span></div>
+      <div class="stat-row"><span>AGI</span><span class="val" id="stat-agi">10</span></div>
+      <div class="stat-row"><span>INT</span><span class="val" id="stat-int">10</span></div>
+      <div class="stat-row"><span>CHA</span><span class="val" id="stat-cha">10</span></div>
+      <div class="stat-row"><span>LCK</span><span class="val" id="stat-lck">5</span></div>
+    </div>
+    <div class="stat-group">
+      <h3>Progress</h3>
+      <div class="stat-row"><span>Level</span><span class="val" id="stat-level">1</span></div>
+      <div class="stat-row"><span>XP</span><span class="val" id="stat-xp">0/100</span></div>
+    </div>
+    <div class="stat-group">
+      <h3>🎒 Inventory</h3>
+      <ul class="inventory-list" id="inventory-list"></ul>
+    </div>
+  </div>
+
+  <!-- CENTER: Visual + Story (or Start Screen) -->
+  <div class="main-area">
+    <div id="start-screen" class="start-screen">
+      <h2>⚔️ The Realm</h2>
+      <p>An AI-directed LitRPG visual novel. The Director narrates your fate. The Assistant mocks your choices. Try not to die.</p>
+      <h3 style="color:var(--muted);font-size:0.9rem;">Choose your Director:</h3>
+      <div class="personality-grid" id="personality-grid"></div>
+      <div style="display:flex;gap:12px;">
+        <button class="start-btn" onclick="Realm.startGame()">⚔️ Begin Adventure</button>
+        <button class="start-btn" style="background:var(--red);" onclick="Realm.startMurder()">🔪 Murder Mystery</button>
+      </div>
+    </div>
+
+    <div id="game-view" style="display:none;">
+      <div class="visual-panel" id="visual-panel">
+        <span class="placeholder">🏰 The Realm awaits...</span>
+      </div>
+      <div class="story-panel" id="story-panel"></div>
+      <div class="choices-area" id="choices-area"></div>
+      <div class="custom-input-row">
+        <input id="custom-input" placeholder="Or type your own action..." onkeydown="if(event.key==='Enter')Realm.customAction()">
+        <button onclick="Realm.customAction()">⚡ Act</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT SIDEBAR: Assistant + Controls -->
+  <div class="sidebar-right" id="sidebar-right" style="display:none;">
+    <div>
+      <div class="assistant-label">🤖 The Assistant</div>
+      <div class="assistant-bubble" id="assistant-bubble">Waiting for the game to start...</div>
+    </div>
+
+    <div class="control-section">
+      <h3>Special Actions</h3>
+      <button class="ctrl-btn" onclick="Realm.desperation()">🎲 Desperation Dice (-10 Max HP)</button>
+      <button class="ctrl-btn danger" id="mutiny-btn" onclick="Realm.mutiny()" disabled>⚡ Trigger Mutiny</button>
+      <button class="ctrl-btn" onclick="Realm.steal()">🖐️ Assistant Steal</button>
+    </div>
+
+    <div class="control-section" id="murder-controls" style="display:none;">
+      <h3>🔪 Murder Mystery</h3>
+      <div class="murder-panel" id="murder-panel">
+        <div class="murder-info" id="murder-info">Not started</div>
+      </div>
+      <button class="ctrl-btn" onclick="Realm.investigate()">🔍 Investigate</button>
+      <select id="npc-select" style="width:100%;padding:6px;margin:4px 0;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:4px;"></select>
+      <button class="ctrl-btn" onclick="Realm.interrogate()">❓ Interrogate NPC</button>
+      <button class="ctrl-btn danger" onclick="Realm.showAccuse()">⚖️ Make Accusation</button>
+    </div>
+
+    <div class="control-section">
+      <h3>Game</h3>
+      <button class="ctrl-btn" onclick="Realm.endGame()">🏳️ Surrender</button>
+    </div>
+  </div>
+</div>
+
+<!-- Skill Check Popup -->
+<div class="skill-popup" id="skill-popup">
+  <div class="dice" id="skill-dice">🎲</div>
+  <div class="result" id="skill-result"></div>
+  <button class="ctrl-btn" onclick="document.getElementById('skill-popup').style.display='none'">OK</button>
+</div>
+
+<script>
+const socket = io();
+const Realm = {
+  state: null,
+  selectedPersonality: 'random',
+
+  init() {
+    // Build personality grid
+    const grid = document.getElementById('personality-grid');
+    const personalities = {{ personalities | tojson }};
+    for (const [key, info] of Object.entries(personalities)) {
+      const card = document.createElement('div');
+      card.className = 'personality-card' + (key === 'random' ? ' selected' : '');
+      card.innerHTML = `<div class="name">${info.label}</div><div class="desc">${info.style.substring(0, 60)}...</div>`;
+      card.onclick = () => {
+        grid.querySelectorAll('.personality-card').forEach(c => c.classList.remove('selected'));
+        card.classList.add('selected');
+        Realm.selectedPersonality = key;
+      };
+      grid.appendChild(card);
+    }
+  },
+
+  async startGame() {
+    const res = await fetch('/api/game/new', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({personality: this.selectedPersonality, time_limit: 1800})});
+    const data = await res.json();
+    if (data.success) {
+      document.getElementById('start-screen').style.display = 'none';
+      document.getElementById('game-view').style.display = 'flex';
+      document.getElementById('sidebar-left').style.display = 'block';
+      document.getElementById('sidebar-right').style.display = 'flex';
+      this.updateFromResponse(data);
+    }
+  },
+
+  async startMurder() {
+    await this.startGame();
+    const res = await fetch('/api/murder/start', {method:'POST', headers:{'Content-Type':'application/json'}});
+    const data = await res.json();
+    document.getElementById('murder-controls').style.display = 'block';
+    if (data.narration) this.appendNarration(data.narration);
+  },
+
+  async makeChoice(choiceId) {
+    const res = await fetch('/api/game/choice', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({choice_id: choiceId})});
+    const data = await res.json();
+    if (data.game_over) { this.showGameOver(data.outcome); return; }
+    this.updateFromResponse(data);
+  },
+
+  async customAction() {
+    const input = document.getElementById('custom-input');
+    const text = input.value.trim();
+    if (!text) return;
+    input.value = '';
+    const res = await fetch('/api/game/choice', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({custom_text: text})});
+    const data = await res.json();
+    if (data.game_over) { this.showGameOver(data.outcome); return; }
+    this.updateFromResponse(data);
+  },
+
+  async desperation() {
+    const res = await fetch('/api/game/desperation', {method:'POST'});
+    const data = await res.json();
+    if (data.success) {
+      this.appendNarration('⚡ DESPERATION DICE — You sacrifice part of your life force! The Director\'s memory is wiped.');
+      document.getElementById('assistant-bubble').textContent = 'You absolute MADLAD. That\'s going to leave a mark.';
+    } else {
+      document.getElementById('assistant-bubble').textContent = data.reason || 'Can\'t do that.';
+    }
+  },
+
+  async mutiny() {
+    const res = await fetch('/api/game/mutiny', {method:'POST'});
+    const data = await res.json();
+    if (data.success) {
+      document.querySelector('.realm-app').classList.add('mutiny-flash');
+      this.appendNarration('⚡⚡⚡ MUTINY MODE ACTIVATED ⚡⚡⚡\nThe Assistant has seized control!');
+      setTimeout(() => document.querySelector('.realm-app').classList.remove('mutiny-flash'), 120000);
+    }
+  },
+
+  async steal() {
+    const name = prompt('What should the Assistant steal from the UI?') || 'Settings Gear Icon';
+    const res = await fetch('/api/game/steal', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({item_name: name})});
+    const data = await res.json();
+    document.getElementById('assistant-bubble').textContent = `*reaches through the screen and grabs "${name}"* Here, catch!`;
+    if (this.state) this.updateInventory(this.state.inventory || []);
+  },
+
+  async investigate() {
+    const target = prompt('What do you investigate?') || 'the room';
+    const res = await fetch('/api/murder/investigate', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({target})});
+    const data = await res.json();
+    if (data.narration) this.appendNarration(data.narration);
+    if (data.murder) this.updateMurder(data.murder);
+  },
+
+  async interrogate() {
+    const sel = document.getElementById('npc-select');
+    const npcId = sel.value;
+    const question = prompt('What do you ask?') || 'Where were you at the time of the murder?';
+    const res = await fetch('/api/murder/interrogate', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({npc_id: npcId, question})});
+    const data = await res.json();
+    if (data.narration) this.appendNarration(`🗣️ ${data.npc}: ${data.narration}`);
+  },
+
+  showAccuse() {
+    const suspect = document.getElementById('npc-select').value;
+    const weapon = prompt('Murder weapon? (Options: {{ weapons | join(", ") }})');
+    const room = prompt('Murder room? (Options: {{ rooms | join(", ") }})');
+    if (!weapon || !room) return;
+    fetch('/api/murder/accuse', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({suspect_id: suspect, weapon, room})})
+    .then(r=>r.json()).then(data => {
+      const msg = data.won ? '🎉 CORRECT! You solved the murder!' : `❌ Wrong! ${data.remaining} attempts left.`;
+      this.appendNarration(msg);
+      if (data.narration) this.appendNarration(data.narration);
+    });
+  },
+
+  endGame() {
+    if (confirm('Surrender this run?')) {
+      fetch('/api/game/choice', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({custom_text: 'I surrender.'})});
+      this.showGameOver('surrender');
+    }
+  },
+
+  updateFromResponse(data) {
+    if (data.narration) this.appendNarration(data.narration);
+    if (data.choices) this.renderChoices(data.choices);
+    if (data.assistant) document.getElementById('assistant-bubble').textContent = data.assistant;
+    if (data.state) this.updateState(data.state);
+  },
+
+  appendNarration(text) {
+    const panel = document.getElementById('story-panel');
+    const div = document.createElement('div');
+    div.className = 'narration-text';
+    div.textContent = text;
+    panel.appendChild(div);
+    panel.scrollTop = panel.scrollHeight;
+  },
+
+  renderChoices(choices) {
+    const area = document.getElementById('choices-area');
+    area.innerHTML = '';
+    (choices || []).forEach(c => {
+      const btn = document.createElement('button');
+      btn.className = 'choice-btn';
+      btn.textContent = `${c.id ? c.id.toUpperCase() + '. ' : ''}${c.text}`;
+      btn.onclick = () => this.makeChoice(c.id);
+      area.appendChild(btn);
+    });
+  },
+
+  updateState(s) {
+    this.state = s;
+    const ps = s.player_stats || {};
+    document.getElementById('stat-hp').textContent = `${ps.hp}/${ps.max_hp}`;
+    document.getElementById('hp-fill').style.width = `${(ps.hp/ps.max_hp)*100}%`;
+    document.getElementById('stat-mp').textContent = `${ps.mp}/${ps.max_mp}`;
+    document.getElementById('mp-fill').style.width = `${(ps.mp/ps.max_mp)*100}%`;
+    document.getElementById('stat-str').textContent = ps.strength;
+    document.getElementById('stat-agi').textContent = ps.agility;
+    document.getElementById('stat-int').textContent = ps.intellect;
+    document.getElementById('stat-cha').textContent = ps.charisma;
+    document.getElementById('stat-lck').textContent = ps.luck;
+    document.getElementById('stat-level').textContent = ps.level;
+    document.getElementById('stat-xp').textContent = `${ps.xp}/${ps.xp_next || 100}`;
+    // Patience
+    document.getElementById('patience-fill').style.width = `${s.director_patience || 0}%`;
+    document.getElementById('patience-val').textContent = Math.round(s.director_patience || 0);
+    // Mutiny btn
+    document.getElementById('mutiny-btn').disabled = (s.director_patience || 100) > 20;
+    // Timer
+    const tr = s.time_remaining || 0;
+    if (tr > 0) { const m=Math.floor(tr/60), sec=Math.floor(tr%60); document.getElementById('timer').textContent = `${m}:${String(sec).padStart(2,'0')}`; }
+    // Turn
+    document.getElementById('turn-counter').textContent = `Turn ${s.turn_number || 0}`;
+    // Inventory
+    this.updateInventory(s.inventory || []);
+    // Murder
+    if (s.murder) this.updateMurder(s.murder);
+  },
+
+  updateInventory(items) {
+    const list = document.getElementById('inventory-list');
+    list.innerHTML = '';
+    items.forEach(item => {
+      const li = document.createElement('li');
+      li.innerHTML = `<span>${item.name}</span><span class="type">${item.type || ''}</span>`;
+      li.onclick = () => {
+        if (confirm(`Use ${item.name}?`)) {
+          fetch('/api/game/use_item', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({item_id: item.id})})
+          .then(r=>r.json()).then(d => { if(d.narration) this.appendNarration(d.narration); if(d.state) this.updateState(d.state); });
+        }
+      };
+      list.appendChild(li);
+    });
+  },
+
+  updateMurder(m) {
+    const info = document.getElementById('murder-info');
+    info.innerHTML = `Phase: ${m.phase}<br>Time: ${Math.floor(m.phase_time_remaining||0)}s<br>Clues: ${m.clues_found}<br>Interrogations: ${m.interrogations}<br>Accusations left: ${m.accusations_remaining}`;
+    // Populate NPC select
+    const sel = document.getElementById('npc-select');
+    if (m.npcs && sel.options.length <= 1) {
+      sel.innerHTML = '';
+      m.npcs.forEach(n => { const o = document.createElement('option'); o.value = n.id; o.textContent = n.name; sel.appendChild(o); });
+    }
+  },
+
+  showGameOver(outcome) {
+    this.appendNarration(`\n\n═══ GAME OVER: ${outcome.toUpperCase()} ═══`);
+    document.getElementById('choices-area').innerHTML = '<button class="choice-btn" onclick="location.reload()">🔄 Play Again</button>';
+  }
+};
+
+socket.on('skill_check', data => {
+  const popup = document.getElementById('skill-popup');
+  document.getElementById('skill-dice').textContent = `🎲 ${data.roll}`;
+  const cls = data.success ? 'success' : 'failure';
+  document.getElementById('skill-result').innerHTML = `<span class="${cls}">${data.success?'SUCCESS':'FAILURE'}</span><br>${data.skill} check: ${data.total} vs DC ${data.dc}`;
+  popup.style.display = 'block';
+});
+socket.on('level_up', data => { Realm.appendNarration(`🎉 LEVEL UP! You are now level ${data.level}!`); });
+socket.on('player_death', data => { Realm.showGameOver('death'); });
+socket.on('game_state', data => { if(data) Realm.updateState(data); });
+socket.on('turn_update', data => { if(data) Realm.updateState(data); });
+socket.on('mutiny_started', () => { Realm.appendNarration('⚡ MUTINY MODE — The Assistant takes the reins!'); });
+
+Realm.init();
+</script>
+</body>
+</html>

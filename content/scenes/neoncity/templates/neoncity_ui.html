@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NeonCity — CosySim</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.4/socket.io.min.js"></script>
+<style>
+:root {
+  --bg: #0a0a0f; --panel: #12121f; --accent: #00fff7; --pink: #ff2d95;
+  --purple: #a855f7; --green: #22c55e; --red: #ef4444; --yellow: #facc15;
+  --text: #e0e0e0; --muted: #666; --border: #1e1e3f; --cell: 40px;
+  --font: 'Segoe UI', system-ui, sans-serif; --mono: 'Cascadia Code', monospace;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:var(--bg); color:var(--text); font-family:var(--font); height:100vh; overflow:hidden; }
+
+.neon-app { display:grid; grid-template-columns:260px 1fr 240px; grid-template-rows:auto 1fr; height:100vh; }
+.top-bar { grid-column:1/-1; background:var(--panel); padding:8px 16px; display:flex; align-items:center; gap:16px; border-bottom:2px solid var(--accent); }
+.top-bar h1 { font-size:1.2rem; color:var(--accent); text-shadow:0 0 10px var(--accent); }
+.top-bar .info { font-size:0.8rem; color:var(--muted); }
+.top-bar .turn { color:var(--yellow); font-family:var(--mono); }
+
+/* LEFT: Player stats */
+.sidebar { background:var(--panel); border-right:1px solid var(--border); overflow-y:auto; padding:12px; }
+.sidebar h3 { font-size:0.75rem; text-transform:uppercase; color:var(--accent); letter-spacing:2px; margin:12px 0 6px; }
+.stat-row { display:flex; justify-content:space-between; font-size:0.8rem; padding:2px 0; }
+.stat-row .v { color:var(--accent); font-family:var(--mono); }
+.hp-bar { height:6px; background:#222; border-radius:3px; margin:4px 0; }
+.hp-bar .fill { height:100%; background: linear-gradient(90deg, var(--red), var(--pink)); border-radius:3px; transition:width 0.3s; }
+.item-list { list-style:none; }
+.item-list li { font-size:0.75rem; padding:3px 6px; background:var(--bg); margin:2px 0; border-radius:3px; border-left:2px solid var(--accent); }
+
+/* CENTER: Grid */
+.grid-area { display:flex; flex-direction:column; align-items:center; justify-content:center; overflow:auto; position:relative; }
+.grid-container { display:grid; gap:1px; background:var(--border); padding:1px; border-radius:4px; }
+.cell { width:var(--cell); height:var(--cell); display:flex; align-items:center; justify-content:center; font-size:0.7rem; cursor:pointer; position:relative; transition:all 0.15s; border-radius:2px; }
+.cell.street { background:#111122; }
+.cell.building { background:#1a1a2e; cursor:default; }
+.cell.alley { background:#0d0d1a; }
+.cell.target { background:#1a0a2e; border:1px solid var(--purple); animation:targetPulse 2s infinite; }
+.cell.storm { background:#200a0a; opacity:0.5; }
+.cell:hover:not(.building):not(.storm) { outline:1px solid var(--accent); z-index:1; }
+.cell .prefab { position:absolute; font-size:0.9rem; }
+.cell .player { position:absolute; font-size:1rem; font-weight:bold; text-shadow:0 0 8px currentColor; }
+.cell .player.human { color:var(--accent); }
+.cell .player.ai { color:var(--pink); }
+@keyframes targetPulse { 0%,100%{box-shadow:0 0 5px var(--purple)} 50%{box-shadow:0 0 15px var(--purple)} }
+
+/* RIGHT: Log + Controls */
+.right-panel { background:var(--panel); border-left:1px solid var(--border); overflow-y:auto; padding:12px; display:flex; flex-direction:column; gap:8px; }
+.event-log { flex:1; overflow-y:auto; font-size:0.75rem; line-height:1.5; }
+.event-log .entry { padding:4px; border-bottom:1px solid #1a1a2e; }
+.event-log .entry.combat { color:var(--red); }
+.event-log .entry.loot { color:var(--green); }
+.event-log .entry.event { color:var(--yellow); }
+.event-log .entry.narration { color:var(--purple); font-style:italic; }
+.ctrl-btn { width:100%; padding:8px; background:var(--bg); border:1px solid var(--border); color:var(--text); border-radius:4px; cursor:pointer; font-size:0.8rem; transition:all 0.15s; }
+.ctrl-btn:hover { border-color:var(--accent); color:var(--accent); }
+.ctrl-btn.primary { border-color:var(--accent); color:var(--accent); }
+.ctrl-btn.danger { border-color:var(--red); color:var(--red); }
+.target-select { width:100%; padding:6px; background:var(--bg); color:var(--text); border:1px solid var(--border); border-radius:4px; font-size:0.8rem; }
+
+/* Start screen */
+.start-screen { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; }
+.start-screen h2 { font-size:2.5rem; color:var(--accent); text-shadow:0 0 30px var(--accent); }
+.start-screen p { color:var(--muted); max-width:400px; text-align:center; }
+.start-btn { padding:14px 40px; background:transparent; border:2px solid var(--accent); color:var(--accent); font-size:1.1rem; border-radius:8px; cursor:pointer; transition:all 0.2s; }
+.start-btn:hover { background:var(--accent); color:var(--bg); box-shadow:0 0 20px var(--accent); }
+
+/* Scrollbar */
+::-webkit-scrollbar { width:4px; }
+::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
+
+.storm-indicator { display:inline-block; width:8px; height:8px; background:var(--red); border-radius:50%; animation:blink 1s infinite; margin-right:4px; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+</style>
+</head>
+<body>
+<div class="neon-app" id="app">
+  <div class="top-bar">
+    <h1>🌃 NEONCITY</h1>
+    <span class="turn" id="turn-info">Turn 0</span>
+    <span class="info" id="phase-info">Setup</span>
+    <span class="info"><span class="storm-indicator"></span>Storm: <span id="storm-info">--</span></span>
+    <span class="info" id="firewall-info">Firewall: --</span>
+  </div>
+
+  <div class="sidebar" id="sidebar" style="display:none;">
+    <h3>🏃 Runner</h3>
+    <div class="stat-row"><span>HP</span><span class="v" id="p-hp">100/100</span></div>
+    <div class="hp-bar"><div class="fill" id="p-hp-fill" style="width:100%"></div></div>
+    <div class="stat-row"><span>Credits</span><span class="v" id="p-credits">50</span></div>
+    <div class="stat-row"><span>Move</span><span class="v" id="p-move">3</span></div>
+    <div class="stat-row"><span>ATK</span><span class="v" id="p-atk">10</span></div>
+    <div class="stat-row"><span>DEF</span><span class="v" id="p-def">5</span></div>
+    <div class="stat-row"><span>Hack</span><span class="v" id="p-hack">5</span></div>
+    <div class="stat-row"><span>AGI</span><span class="v" id="p-agi">5</span></div>
+
+    <h3>🔫 Weapons</h3>
+    <ul class="item-list" id="weapon-list"></ul>
+    <h3>💾 Programs</h3>
+    <ul class="item-list" id="program-list"></ul>
+    <h3>🦾 Implants</h3>
+    <ul class="item-list" id="implant-list"></ul>
+
+    <h3>👥 Opponents</h3>
+    <div id="opponent-list"></div>
+  </div>
+
+  <div class="grid-area" id="grid-area">
+    <div id="start-screen" class="start-screen">
+      <h2>NEONCITY</h2>
+      <p>A rogue AI has spawned in the city center. Race through the neon-lit streets, gear up, and breach its firewalls before your rivals — or the Glitch Storm — consume you.</p>
+      <button class="start-btn" onclick="Neon.startGame()">⚡ JACK IN</button>
+    </div>
+    <div id="grid-container" class="grid-container" style="display:none;"></div>
+  </div>
+
+  <div class="right-panel" id="right-panel" style="display:none;">
+    <h3 style="color:var(--accent);font-size:0.75rem;letter-spacing:2px;">ACTIONS</h3>
+    <select class="target-select" id="attack-target"></select>
+    <button class="ctrl-btn danger" onclick="Neon.attack()">⚔️ Attack</button>
+    <button class="ctrl-btn" onclick="Neon.hack()">🔓 Hack Target</button>
+    <button class="ctrl-btn primary" onclick="Neon.endTurn()">⏭️ End Turn</button>
+
+    <h3 style="color:var(--accent);font-size:0.75rem;letter-spacing:2px;margin-top:12px;">EVENT LOG</h3>
+    <div class="event-log" id="event-log"></div>
+  </div>
+</div>
+
+<script>
+const socket = io();
+const Neon = {
+  state: null,
+  grid: null,
+
+  async startGame() {
+    const res = await fetch('/api/game/new', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ai_players:3})});
+    const data = await res.json();
+    if (data.success) {
+      document.getElementById('start-screen').style.display='none';
+      document.getElementById('grid-container').style.display='grid';
+      document.getElementById('sidebar').style.display='block';
+      document.getElementById('right-panel').style.display='flex';
+      this.state = data.state;
+      this.loadGrid();
+      this.updateUI();
+      if (data.narration) this.log(data.narration, 'narration');
+    }
+  },
+
+  async loadGrid() {
+    const res = await fetch('/api/game/grid');
+    const data = await res.json();
+    this.grid = data.grid;
+    this.renderGrid();
+  },
+
+  renderGrid() {
+    const container = document.getElementById('grid-container');
+    const size = this.state?.grid_size || 12;
+    container.style.gridTemplateColumns = `repeat(${size}, var(--cell))`;
+    container.innerHTML = '';
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const cell = this.grid?.[y]?.[x] || {};
+        const div = document.createElement('div');
+        div.className = `cell ${cell.terrain || 'street'}${cell.in_storm ? ' storm' : ''}`;
+        div.dataset.x = x;
+        div.dataset.y = y;
+        // Prefab
+        if (cell.prefab && !cell.prefab_looted) {
+          const prefabs = {{ prefabs | tojson }};
+          const info = prefabs[cell.prefab];
+          if (info) { const s = document.createElement('span'); s.className='prefab'; s.textContent=info.icon; s.title=info.label; div.appendChild(s); }
+        }
+        div.onclick = () => this.onCellClick(x, y);
+        container.appendChild(div);
+      }
+    }
+    this.renderPlayers();
+  },
+
+  renderPlayers() {
+    // Clear existing player markers
+    document.querySelectorAll('.cell .player').forEach(e=>e.remove());
+    if (!this.state) return;
+    (this.state.players||[]).forEach(p => {
+      if (!p.alive) return;
+      const idx = p.y * this.state.grid_size + p.x;
+      const cells = document.querySelectorAll('.cell');
+      if (cells[idx]) {
+        const s = document.createElement('span');
+        s.className = `player ${p.is_ai?'ai':'human'}`;
+        s.textContent = p.is_ai ? '◆' : '◉';
+        s.title = p.name;
+        cells[idx].appendChild(s);
+      }
+    });
+  },
+
+  async onCellClick(x, y) {
+    if (!this.state || this.state.ended) return;
+    const cp = this.state.players?.find(p=>p.id===this.state.current_player);
+    if (!cp || cp.is_ai) return;
+    const res = await fetch('/api/game/move', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({x,y})});
+    const data = await res.json();
+    if (data.error) { this.log(`⚠️ ${data.error}`, 'combat'); return; }
+    this.log(`Moved to (${x},${y})`, 'loot');
+    if (data.loot) this.log(`📦 Loot: ${data.loot.type} — ${JSON.stringify(data.loot.item||data.loot.effect||'')}`, 'loot');
+    if (data.narration) this.log(data.narration, 'narration');
+    if (data.state) { this.state = data.state; this.updateUI(); }
+    await this.loadGrid();
+  },
+
+  async attack() {
+    const sel = document.getElementById('attack-target');
+    if (!sel.value) return;
+    const res = await fetch('/api/game/attack', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({target_id:sel.value, weapon_idx:0})});
+    const data = await res.json();
+    if (data.error) { this.log(`⚠️ ${data.error}`, 'combat'); return; }
+    this.log(data.hit ? `💥 Hit ${sel.value} for ${data.damage} dmg${data.killed?' — ELIMINATED!':''}` : `💨 Missed ${sel.value}!`, 'combat');
+    if (data.narration) this.log(data.narration, 'narration');
+  },
+
+  async hack() {
+    const res = await fetch('/api/game/hack', {method:'POST'});
+    const data = await res.json();
+    if (data.error) { this.log(`⚠️ ${data.error}`, 'combat'); return; }
+    this.log(data.success ? `🔓 Firewall breached! ${data.firewall_remaining||0} remaining` : `❌ Hack failed (${data.roll} vs DC ${data.dc})`, data.breached?'loot':'combat');
+    if (data.narration) this.log(data.narration, 'narration');
+    if (data.breached) this.log('🎉 YOU WIN! The AI yields to your will.', 'loot');
+  },
+
+  async endTurn() {
+    const res = await fetch('/api/game/end_turn', {method:'POST'});
+    const data = await res.json();
+    // Log AI actions
+    (data.ai_actions||[]).forEach(ai => {
+      ai.actions.forEach(a => {
+        if (a.action==='move') this.log(`${ai.name} moves`, 'event');
+        if (a.action==='attack') this.log(`${ai.name} attacks! ${a.hit?`Hit for ${a.damage}`:'Missed'}`, 'combat');
+        if (a.action==='hack') this.log(`${ai.name} hacks: ${a.success?'Success':'Failed'}`, 'event');
+      });
+    });
+    if (data.event) this.log(`⚡ ${data.event.event.label}: ${data.event.event.description}`, 'event');
+    if (data.narration) this.log(data.narration, 'narration');
+    if (data.state) { this.state = data.state; this.updateUI(); }
+    await this.loadGrid();
+    if (this.state?.ended) this.log(`🏆 GAME OVER — Winner: ${this.state.winner||'None'}`, 'loot');
+  },
+
+  updateUI() {
+    if (!this.state) return;
+    const p = this.state.players?.find(p=>p.id==='player');
+    if (p) {
+      document.getElementById('p-hp').textContent = `${p.hp}/${p.max_hp}`;
+      document.getElementById('p-hp-fill').style.width = `${(p.hp/p.max_hp)*100}%`;
+      document.getElementById('p-credits').textContent = p.credits;
+      document.getElementById('p-move').textContent = p.movement_points;
+      document.getElementById('p-atk').textContent = p.attack;
+      document.getElementById('p-def').textContent = p.defense;
+      document.getElementById('p-hack').textContent = p.hacking;
+      document.getElementById('p-agi').textContent = p.agility;
+      // Weapons
+      const wl = document.getElementById('weapon-list');
+      wl.innerHTML = (p.weapons||[]).map(w=>`<li>${w.name} (${w.damage}dmg)</li>`).join('');
+      document.getElementById('program-list').innerHTML = (p.programs||[]).map(pr=>`<li>${pr.name}</li>`).join('');
+      document.getElementById('implant-list').innerHTML = (p.implants||[]).map(i=>`<li>${i}</li>`).join('');
+    }
+    // Opponents
+    const ol = document.getElementById('opponent-list');
+    const sel = document.getElementById('attack-target');
+    ol.innerHTML = '';
+    sel.innerHTML = '';
+    (this.state.players||[]).filter(p=>p.id!=='player'&&p.alive).forEach(op => {
+      ol.innerHTML += `<div class="stat-row"><span style="color:var(--pink)">${op.name}</span><span class="v">${op.hp}HP</span></div>`;
+      const o = document.createElement('option'); o.value=op.id; o.textContent=op.name; sel.appendChild(o);
+    });
+    // Top bar
+    document.getElementById('turn-info').textContent = `Turn ${this.state.turn_number}`;
+    document.getElementById('phase-info').textContent = this.state.current_player === 'player' ? 'Your Turn' : 'AI Turn';
+    document.getElementById('storm-info').textContent = `R${this.state.storm_radius}`;
+    document.getElementById('firewall-info').textContent = `Firewall: ${this.state.target?.firewall||0}`;
+    this.renderPlayers();
+  },
+
+  log(msg, type='') {
+    const el = document.getElementById('event-log');
+    const div = document.createElement('div');
+    div.className = `entry ${type}`;
+    div.textContent = msg;
+    el.appendChild(div);
+    el.scrollTop = el.scrollHeight;
+  }
+};
+
+socket.on('game_state', d => { if(d) { Neon.state=d; Neon.updateUI(); } });
+socket.on('turn_update', d => { if(d) { Neon.state=d; Neon.updateUI(); } });
+socket.on('game_won', d => { Neon.log(`🏆 ${d.winner} wins NeonCity!`, 'loot'); });
+</script>
+</body>
+</html>

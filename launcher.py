@@ -55,6 +55,12 @@ FLASK_SCENES: Dict[str, Dict[str, Any]] = {
                 "port": 5560, "label": "The Gallery"},
     "warzone": {"cls": "content.scenes.warzone.warzone_scene.WarzoneScene",
                 "port": 5561, "label": "Global Strike"},
+    "realm":   {"cls": "content.scenes.realm.realm_scene.RealmScene",
+                "port": 5562, "label": "The Realm"},
+    "neoncity": {"cls": "content.scenes.neoncity.neoncity_scene.NeonCityScene",
+                 "port": 5563, "label": "NeonCity"},
+    "coders":  {"cls": "content.scenes.coders.coders_scene.CodersRoomScene",
+                "port": 5564, "label": "The Coders Room"},
 }
 
 STREAMLIT_APPS: Dict[str, Dict[str, Any]] = {

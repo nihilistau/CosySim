@@ -1,0 +1,353 @@
+"""
+The Coders Room — AI Agent Idle Code Simulation
+================================================
+
+A 2D office where AI agents write, review, and test real Python code.
+Showcases the v3.x pipeline with multi-agent collaboration through
+stateful and stateless LMS calls, sandboxed code execution, and
+live terminal output.
+"""
+from __future__ import annotations
+
+import json
+import logging
+import random
+import threading
+import time
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+from flask import Flask, jsonify, render_template, request
+from flask_cors import CORS
+from flask_socketio import SocketIO
+
+from engine.scenes.base_scene import BaseScene
+
+from .coders_state import (
+    AgentRole,
+    CodersRoomState,
+    FEATURE_SEEDS,
+    PipelinePhase,
+)
+
+logger = logging.getLogger(__name__)
+
+SCENE_ID = "coders"
+DEFAULT_PORT = 5564
+
+
+class CodersRoomScene(BaseScene):
+    """The Coders Room — AI Agent Idle Code Simulation."""
+
+    def __init__(self, host: str = "0.0.0.0", port: int = DEFAULT_PORT):
+        super().__init__(scene_name=SCENE_ID, host=host, port=port)
+
+        self.app = Flask(
+            __name__,
+            template_folder=str(Path(__file__).parent / "templates"),
+            static_folder=str(Path(__file__).parent / "static"),
+        )
+        self.app.config["SECRET_KEY"] = "coders_room_v3"
+        CORS(self.app)
+        self.socketio = SocketIO(self.app, cors_allowed_origins="*")
+
+        self.mount_overlay(self.app, self.socketio)
+        self.mount_skills_server(self.app)
+        self.register_health_route(self.app)
+
+        self.state: Optional[CodersRoomState] = None
+        self._tick_thread: Optional[threading.Thread] = None
+        self._running = False
+
+        self._setup_routes()
+        self._setup_socketio()
+
+    def _llm_call(self, system: str, user: str, max_tokens: int = 1500) -> str:
+        """Stateless LLM call for agent work."""
+        try:
+            from engine.lmstudio.lms_client import get_lms_client
+            client = get_lms_client()
+            messages = [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ]
+            resp = client.chat(messages, temperature=0.7, max_tokens=max_tokens, store=False)
+            return resp.content if hasattr(resp, "content") else str(resp)
+        except Exception as e:
+            logger.warning("Coders LLM call failed: %s", e)
+            return ""
+
+    def _extract_code(self, text: str) -> str:
+        """Extract Python code from markdown code blocks."""
+        import re
+        match = re.search(r'```python\s*(.*?)```', text, re.DOTALL)
+        if match:
+            return match.group(1).strip()
+        match = re.search(r'```\s*(.*?)```', text, re.DOTALL)
+        if match:
+            return match.group(1).strip()
+        # Fallback: lines that look like code
+        lines = [l for l in text.split("\n") if l.strip() and not l.startswith("#") and not l.startswith("*")]
+        return "\n".join(lines)
+
+    def _tick(self) -> None:
+        """One pipeline tick — advance the current feature through phases."""
+        if not self.state or not self.state.active:
+            return
+        self.state.tick_count += 1
+        feature = self.state.get_current_feature()
+
+        # Auto-queue new features when idle
+        if not feature:
+            feature = self.state.add_feature()
+            self._emit_chat("System", f"📋 New feature request: {feature.title}")
+
+        # Phase machine
+        if feature.phase == PipelinePhase.FEATURE:
+            self._phase_design(feature)
+        elif feature.phase == PipelinePhase.DESIGN:
+            self._phase_code(feature)
+        elif feature.phase == PipelinePhase.CODING:
+            self._phase_review(feature)
+        elif feature.phase == PipelinePhase.REVIEW:
+            self._phase_test(feature)
+        elif feature.phase == PipelinePhase.TESTING:
+            self._phase_finalize(feature)
+
+        self._sync_to_mcp()
+        self.socketio.emit("state_update", self.state.to_dict())
+
+    def _phase_design(self, feature) -> None:
+        """Reviewer drafts design spec."""
+        agent = self.state.get_idle_agent(AgentRole.REVIEWER)
+        if not agent:
+            return
+        agent.status = "working"
+        agent.current_task = feature.id
+        self._emit_chat(agent.name, f"I'll draft specs for '{feature.title}'...")
+
+        spec = self._llm_call(
+            f"You are {agent.name}, a senior code reviewer. Write a brief technical spec (max 200 words). Include: function signatures, edge cases, expected behavior.",
+            f"Feature: {feature.title}\nDescription: {feature.description}\nWrite the spec.",
+        )
+        feature.spec = spec
+        feature.assigned_reviewer = agent.id
+        feature.phase = PipelinePhase.DESIGN
+        feature.conversation_log.append({"agent": agent.name, "message": f"Spec drafted:\n{spec[:300]}"})
+        agent.reviews_done += 1
+        agent.status = "idle"
+        agent.current_task = ""
+        self._emit_chat(agent.name, f"✅ Spec ready. Handing off to a writer.")
+        self.socketio.emit("terminal_output", {"agent": agent.name, "output": spec})
+
+    def _phase_code(self, feature) -> None:
+        """Writer produces Python code."""
+        agent = self.state.get_idle_agent(AgentRole.WRITER)
+        if not agent:
+            return
+        agent.status = "coding"
+        agent.current_task = feature.id
+        self._emit_chat(agent.name, f"Writing code for '{feature.title}'...")
+
+        code = self._llm_call(
+            f"You are {agent.name}, a Python developer. Write clean, working Python code. Return ONLY the code in a ```python``` block. No explanations.",
+            f"Feature: {feature.title}\nSpec:\n{feature.spec}\n\nWrite the Python implementation.",
+        )
+        extracted = self._extract_code(code)
+        feature.code = extracted
+        feature.assigned_writer = agent.id
+        feature.phase = PipelinePhase.CODING
+        feature.conversation_log.append({"agent": agent.name, "message": f"Code written ({len(extracted.splitlines())} lines)"})
+        agent.lines_written += len(extracted.splitlines())
+        self.state.total_lines += len(extracted.splitlines())
+        agent.status = "idle"
+        agent.current_task = ""
+        self._emit_chat(agent.name, f"✅ {len(extracted.splitlines())} lines written. Ready for review.")
+        self.socketio.emit("terminal_output", {"agent": agent.name, "output": extracted})
+
+    def _phase_review(self, feature) -> None:
+        """Reviewer reviews the code."""
+        agent = self.state.get_idle_agent(AgentRole.REVIEWER)
+        if not agent:
+            return
+        agent.status = "reviewing"
+        agent.current_task = feature.id
+        self._emit_chat(agent.name, f"Reviewing code for '{feature.title}'...")
+
+        review = self._llm_call(
+            f"You are {agent.name}, a meticulous code reviewer. Review this Python code. Comment on correctness, edge cases, style. Be direct. Max 150 words.",
+            f"Feature: {feature.title}\nSpec:\n{feature.spec[:200]}\n\nCode:\n```python\n{feature.code}\n```\n\nReview it.",
+        )
+        feature.review_notes = review
+        feature.phase = PipelinePhase.REVIEW
+        feature.conversation_log.append({"agent": agent.name, "message": f"Review: {review[:300]}"})
+        agent.reviews_done += 1
+        agent.status = "idle"
+        agent.current_task = ""
+
+        # Simulate reviewer banter with writer
+        writer = self.state.get_agent(feature.assigned_writer)
+        writer_name = writer.name if writer else "the writer"
+        self._emit_chat(agent.name, f"Code review done. Notes for {writer_name}: {review[:150]}...")
+        self.socketio.emit("terminal_output", {"agent": agent.name, "output": review})
+
+    def _phase_test(self, feature) -> None:
+        """QA agent writes and runs tests."""
+        agent = self.state.get_idle_agent(AgentRole.QA)
+        if not agent:
+            return
+        agent.status = "testing"
+        agent.current_task = feature.id
+        self._emit_chat(agent.name, f"Writing tests for '{feature.title}'...")
+
+        test_code = self._llm_call(
+            f"You are {agent.name}, a QA engineer. Write pytest-style test functions for this code. Use assert statements. Return ONLY the test code in a ```python``` block. Include the imports needed.",
+            f"Feature: {feature.title}\nCode:\n```python\n{feature.code}\n```\n\nWrite 3-5 test functions.",
+        )
+        extracted_tests = self._extract_code(test_code)
+        feature.test_code = extracted_tests
+        feature.assigned_qa = agent.id
+        feature.phase = PipelinePhase.TESTING
+
+        # Execute in sandbox
+        self._emit_chat(agent.name, "Running tests...")
+        exec_result = self.state.execute_code(feature.code, extracted_tests)
+        feature.test_output = exec_result.get("stdout", "") + exec_result.get("stderr", "")
+        feature.test_passed = exec_result.get("success", False)
+
+        agent.tests_run += 1
+        self.state.total_tests += 1
+        agent.status = "idle"
+        agent.current_task = ""
+
+        status = "✅ PASSED" if feature.test_passed else "❌ FAILED"
+        self._emit_chat(agent.name, f"Tests {status}. Output: {feature.test_output[:200]}")
+        self.socketio.emit("terminal_output", {
+            "agent": agent.name,
+            "output": f"=== TEST RESULT: {status} ===\n{feature.test_output[:500]}",
+        })
+
+    def _phase_finalize(self, feature) -> None:
+        """Complete or fail the feature."""
+        if feature.test_passed:
+            self.state.complete_feature(feature)
+            self._emit_chat("System", f"🎉 Feature '{feature.title}' completed successfully!")
+        else:
+            # Mark failed — will auto-retry or queue new
+            feature.phase = PipelinePhase.FAILED
+            self._emit_chat("System", f"⚠️ Feature '{feature.title}' failed tests. Moving on.")
+            self.state.features.remove(feature)
+
+    def _emit_chat(self, agent_name: str, message: str) -> None:
+        self.socketio.emit("agent_chat", {
+            "agent": agent_name,
+            "message": message,
+            "timestamp": time.time(),
+        })
+
+    def _tick_loop(self, interval: float) -> None:
+        while self._running:
+            try:
+                self._tick()
+            except Exception as e:
+                logger.error("Coders tick error: %s", e)
+            time.sleep(interval)
+
+    def _sync_to_mcp(self) -> None:
+        if not self.state:
+            return
+        try:
+            from engine.mcp.framework import get_framework
+            fw = get_framework()
+            scene_node = fw.get_scene(SCENE_ID)
+            if scene_node:
+                scene_node.update_state(self.state.to_dict())
+        except Exception:
+            pass
+
+    def _setup_routes(self):
+
+        @self.app.route("/")
+        def index():
+            return render_template("coders_ui.html", feature_seeds=FEATURE_SEEDS)
+
+        @self.app.route("/api/scene/info")
+        def scene_info():
+            return jsonify(self.get_plugin_info())
+
+        @self.app.route("/api/state")
+        def get_state():
+            if not self.state:
+                return jsonify({"active": False})
+            return jsonify({"active": True, **self.state.to_dict()})
+
+        @self.app.route("/api/start", methods=["POST"])
+        def start_sim():
+            data = request.json or {}
+            interval = data.get("interval", 15)
+            self.state = CodersRoomState()
+            self.state.active = True
+            # Queue initial feature
+            self.state.add_feature()
+            self._running = True
+            self._tick_thread = threading.Thread(target=self._tick_loop, args=(interval,), daemon=True)
+            self._tick_thread.start()
+            self.socketio.emit("state_update", self.state.to_dict())
+            return jsonify({"success": True, "session_id": self.state.session_id})
+
+        @self.app.route("/api/stop", methods=["POST"])
+        def stop_sim():
+            self._running = False
+            if self.state:
+                self.state.active = False
+            return jsonify({"success": True})
+
+        @self.app.route("/api/feature/add", methods=["POST"])
+        def add_feature():
+            if not self.state:
+                return jsonify({"error": "Not started"}), 400
+            data = request.json or {}
+            feature = self.state.add_feature(data.get("title"), data.get("description"))
+            return jsonify({"success": True, "feature": feature.to_dict()})
+
+        @self.app.route("/api/tick", methods=["POST"])
+        def manual_tick():
+            if not self.state:
+                return jsonify({"error": "Not started"}), 400
+            self._tick()
+            return jsonify(self.state.to_dict())
+
+    def _setup_socketio(self):
+        @self.socketio.on("connect")
+        def on_connect():
+            if self.state:
+                self.socketio.emit("state_update", self.state.to_dict())
+
+    # ── BaseScene contract ──
+
+    def start(self) -> None:
+        logger.info("The Coders Room v3.1 starting on port %d", self.port)
+        self.socketio.run(self.app, host=self.host, port=self.port, debug=False, allow_unsafe_werkzeug=True)
+
+    def stop(self) -> None:
+        self._running = False
+        self._mcp_deregister_scene()
+
+    def get_plugin_info(self) -> Dict[str, Any]:
+        return {
+            "name": "The Coders Room",
+            "scene_id": SCENE_ID,
+            "description": "AI agent idle simulation where agents write, review, and test real Python code.",
+            "version": "3.1.0",
+            "port": self.port,
+            "author": "CosySim",
+            "tags": ["coding", "agents", "idle_sim", "sandbox", "showcase"],
+            "skill_packs": ["memory"],
+            "routes": [
+                {"path": "/api/start",       "methods": ["POST"], "description": "Start simulation"},
+                {"path": "/api/stop",        "methods": ["POST"], "description": "Stop simulation"},
+                {"path": "/api/state",       "methods": ["GET"],  "description": "Get state"},
+                {"path": "/api/feature/add", "methods": ["POST"], "description": "Add feature request"},
+                {"path": "/api/tick",        "methods": ["POST"], "description": "Manual tick"},
+            ],
+        }

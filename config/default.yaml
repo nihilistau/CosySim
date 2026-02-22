@@ -66,6 +66,21 @@ scenes:
     port: 5561
     debug: false
 
+  realm:
+    host: "localhost"
+    port: 5562
+    debug: false
+
+  neoncity:
+    host: "localhost"
+    port: 5563
+    debug: false
+
+  coders:
+    host: "localhost"
+    port: 5564
+    debug: false
+
   hub:
     host: "localhost"
     port: 8500
