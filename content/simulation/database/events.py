@@ -237,23 +237,28 @@ class EventChain:
                 return e
             return None
 
-    def get_chain(self, chain_id: str) -> List[Dict]:
+    def get_chain(self, chain_id: str, limit: Optional[int] = None) -> List[Dict]:
         """
         Return all events in a chain as a flat list ordered by timestamp (oldest first).
         This is the raw unfiltered record — nothing is omitted.
         """
         with self.db.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute(
-                'SELECT * FROM events WHERE chain_id = ? ORDER BY timestamp ASC',
-                (chain_id,),
-            )
+            sql = 'SELECT * FROM events WHERE chain_id = ? ORDER BY timestamp ASC'
+            if limit:
+                sql += f' LIMIT {int(limit)}'
+            cursor.execute(sql, (chain_id,))
             events = []
             for row in cursor.fetchall():
                 e = dict(row)
                 e['payload'] = json.loads(e['payload']) if e['payload'] else {}
                 events.append(e)
             return events
+
+    # Alias used by admin panel, MCP server, etc.
+    def get_chain_events(self, chain_id: str, limit: Optional[int] = None) -> List[Dict]:
+        """Alias for :meth:`get_chain` — returns events in a chain."""
+        return self.get_chain(chain_id, limit=limit)
 
     def get_chain_as_tree(self, chain_id: str) -> Dict:
         """

@@ -288,17 +288,40 @@ class LMSClient:
 
         First call: omit ``previous_response_id`` → server creates new thread.
         Subsequent: pass the ``response_id`` from the previous response.
-        """
-        messages = []
-        if system and not previous_response_id:
-            messages.append({"role": "system", "content": system})
-        messages.append({"role": "user", "content": user_message})
 
+        Uses native v1 format: ``input`` + ``system_prompt`` + ``store: true``.
+        """
         effective = self._build_config(config, model=model)
         if previous_response_id:
             effective.previous_response_id = previous_response_id
 
-        return self._chat_native(messages, effective)
+        resolved = self.resolve_model(effective.model)
+
+        payload: Dict[str, Any] = {
+            "model": resolved,
+            "input": user_message,
+            "stream": False,
+            "store": True,
+        }
+        if system and not previous_response_id:
+            payload["system_prompt"] = system
+        payload.update(effective.to_native_v1())
+
+        try:
+            r = self._client.post(
+                f"{self.base_url}/api/v1/chat",
+                json=payload,
+                timeout=self.timeout,
+            )
+            r.raise_for_status()
+            data = r.json()
+        except httpx.ConnectError:
+            raise ConnectionError(f"Cannot connect to LMStudio at {self.base_url}")
+        except httpx.HTTPStatusError as exc:
+            logger.error("Native v1 HTTP %d: %s", exc.response.status_code, exc.response.text[:200])
+            raise
+
+        return self._parse_native_response(data, resolved)
 
     # ── Chat (streaming) ────────────────────────────────────────────
 
@@ -370,14 +393,16 @@ class LMSClient:
         system: str = "You are a helpful assistant with vision capabilities.",
         **kwargs,
     ) -> LMSResponse:
-        """Chat with image input for vision-language models."""
-        content_parts: List[Dict] = [{"type": "text", "text": text}]
-        for url in image_urls:
-            content_parts.append({"type": "image_url", "image_url": {"url": url}})
+        """Chat with image input for vision-language models.
 
+        Uses native v1 input format with ``{type: "image", data_url: "..."}`` items.
+        """
         messages = [
             {"role": "system", "content": system},
-            {"role": "user", "content": content_parts},
+            {"role": "user", "content": [
+                {"type": "text", "text": text},
+                *[{"type": "image_url", "image_url": {"url": url}} for url in image_urls],
+            ]},
         ]
         return self.chat(messages, **kwargs)
 
@@ -438,14 +463,69 @@ class LMSClient:
 
     # ── Internal: native v1 ─────────────────────────────────────────
 
+    @staticmethod
+    def _messages_to_v1_input(messages: List[Dict]) -> tuple:
+        """Convert OpenAI-style messages to v1 native ``input`` + ``system_prompt``.
+
+        LMStudio native v1 ``/api/v1/chat`` uses:
+        - ``system_prompt``: string (extracted from system messages)
+        - ``input``: string | array of ``{type: "message", content: "..."}``
+
+        Returns ``(system_prompt_or_None, input_value)``.
+        """
+        system_parts: List[str] = []
+        input_items: List[Dict[str, Any]] = []
+
+        for msg in messages:
+            role = msg.get("role", "user")
+            content = msg.get("content", "")
+
+            if role == "system":
+                if isinstance(content, str):
+                    system_parts.append(content)
+                continue
+
+            # For user/assistant messages → input items
+            if isinstance(content, list):
+                # Multi-part content (text + images for VLMs)
+                for part in content:
+                    if part.get("type") == "text":
+                        input_items.append({"type": "message", "content": part["text"]})
+                    elif part.get("type") == "image_url":
+                        url = part.get("image_url", {}).get("url", "")
+                        input_items.append({"type": "image", "data_url": url})
+            else:
+                # Prefix assistant messages so the model understands the turn
+                if role == "assistant":
+                    input_items.append({
+                        "type": "message",
+                        "content": f"[assistant]: {content}",
+                    })
+                else:
+                    input_items.append({"type": "message", "content": content})
+
+        system_prompt = "\n\n".join(system_parts) if system_parts else None
+
+        # Simplify: single text item → plain string
+        if len(input_items) == 1 and input_items[0].get("type") == "message":
+            return system_prompt, input_items[0]["content"]
+        if not input_items:
+            return system_prompt, ""
+
+        return system_prompt, input_items
+
     def _chat_native(self, messages: List[Dict], config: InferenceConfig) -> LMSResponse:
         """Call ``POST /api/v1/chat`` (native protocol, the only path)."""
         resolved = self.resolve_model(config.model)
+        system_prompt, v1_input = self._messages_to_v1_input(messages)
+
         payload: Dict[str, Any] = {
             "model": resolved,
-            "messages": messages,
+            "input": v1_input,
             "stream": False,
         }
+        if system_prompt:
+            payload["system_prompt"] = system_prompt
         payload.update(config.to_native_v1())
 
         try:
@@ -478,11 +558,15 @@ class LMSClient:
         on_event: Optional[Callable] = None,
     ) -> Generator[str, None, LMSResponse]:
         """Stream via ``POST /api/v1/chat`` with typed events."""
+        system_prompt, v1_input = self._messages_to_v1_input(messages)
+
         payload: Dict[str, Any] = {
             "model": model,
-            "messages": messages,
+            "input": v1_input,
             "stream": True,
         }
+        if system_prompt:
+            payload["system_prompt"] = system_prompt
         payload.update(config.to_native_v1())
 
         result = LMSResponse(model=model)
@@ -527,35 +611,103 @@ class LMSClient:
     def _parse_native_response(self, data: Dict, model: str) -> LMSResponse:
         """Parse a native ``/api/v1/chat`` response.
 
-        LMStudio v1 may return either a flat shape ({content, response_id, ...})
-        or a choices-based shape ({choices: [...]}). We handle both.
+        LMStudio native v1 returns::
+
+            {
+              "model_instance_id": "...",
+              "output": [
+                {"type": "message", "content": "..."},
+                {"type": "reasoning", "content": "..."},
+                {"type": "tool_call", "tool": "...", "arguments": {...}, "output": "..."}
+              ],
+              "stats": {
+                "input_tokens": 100,
+                "total_output_tokens": 50,
+                "reasoning_output_tokens": 0,
+                "tokens_per_second": 42.5,
+                "time_to_first_token_seconds": 0.3,
+                "model_load_time_seconds": null
+              },
+              "response_id": "resp_..."
+            }
         """
+        # Try native v1 format first (output array)
+        output_items = data.get("output")
+        if output_items is not None:
+            return self._parse_v1_output(data, model)
+
+        # Legacy fallback: choices-based shape (OpenAI compat)
         choices = data.get("choices", [])
         if choices:
             return self._parse_choices_response(data, model)
 
-        # Flat native shape: {content, response_id, stats, ...}
+        # Flat shape fallback: {content, response_id, stats, ...}
         content = data.get("content", "")
         reasoning = data.get("reasoning_content", "")
         response_id = data.get("response_id", data.get("id", ""))
         stats = data.get("stats", data.get("usage", {}))
-
         tool_calls = data.get("tool_calls", [])
 
         return LMSResponse(
             content=content or reasoning,
             reasoning_content=reasoning,
-            model=data.get("model", model),
+            model=data.get("model", data.get("model_instance_id", model)),
             finish_reason=data.get("finish_reason", "stop"),
-            input_tokens=stats.get("prompt_tokens", stats.get("input_tokens", 0)),
-            output_tokens=stats.get("completion_tokens", stats.get("output_tokens", 0)),
-            total_tokens=stats.get("total_tokens", 0),
+            input_tokens=stats.get("input_tokens", stats.get("prompt_tokens", 0)),
+            output_tokens=stats.get("total_output_tokens", stats.get("completion_tokens", 0)),
+            total_tokens=stats.get("input_tokens", 0) + stats.get("total_output_tokens", 0),
+            response_id=response_id,
+            tool_calls=tool_calls,
+        )
+
+    def _parse_v1_output(self, data: Dict, model: str) -> LMSResponse:
+        """Parse the native v1 ``output`` array response format."""
+        output_items = data.get("output", [])
+        stats = data.get("stats", {})
+        response_id = data.get("response_id", "")
+
+        content_parts: List[str] = []
+        reasoning_parts: List[str] = []
+        tool_calls: List[Dict] = []
+
+        for item in output_items:
+            item_type = item.get("type", "")
+            if item_type == "message":
+                content_parts.append(item.get("content", ""))
+            elif item_type == "reasoning":
+                reasoning_parts.append(item.get("content", ""))
+            elif item_type == "tool_call":
+                tool_calls.append({
+                    "tool": item.get("tool", ""),
+                    "arguments": item.get("arguments", {}),
+                    "output": item.get("output", ""),
+                    "provider_info": item.get("provider_info"),
+                })
+            elif item_type == "invalid_tool_call":
+                logger.warning("Invalid tool call: %s — %s",
+                               item.get("metadata", {}).get("tool_name", "?"),
+                               item.get("reason", "unknown"))
+
+        content = "\n".join(content_parts)
+        reasoning = "\n".join(reasoning_parts)
+        input_tokens = stats.get("input_tokens", 0)
+        output_tokens = stats.get("total_output_tokens", 0)
+
+        return LMSResponse(
+            content=content,
+            reasoning_content=reasoning,
+            model=data.get("model_instance_id", model),
+            finish_reason="stop",
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            total_tokens=input_tokens + output_tokens,
+            latency_ms=0.0,
             response_id=response_id,
             tool_calls=tool_calls,
         )
 
     def _parse_choices_response(self, data: Dict, model: str) -> LMSResponse:
-        """Parse a choices-based response (v1 sometimes uses this shape)."""
+        """Parse a choices-based response (legacy/compat fallback)."""
         choice = data.get("choices", [{}])[0]
         usage = data.get("usage", {})
         msg = choice.get("message", {})

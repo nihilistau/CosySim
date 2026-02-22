@@ -48,8 +48,9 @@ class InferenceConfig:
     # Output limits
     max_output_tokens: Optional[int] = None
 
-    # Reasoning (for thinking models like Qwen3, DeepSeek-R1)
-    reasoning: Optional[bool] = None
+    # Reasoning — native v1 accepts: "off" | "low" | "medium" | "high" | "on"
+    # Also accepts bool for convenience (True → "on", False → "off")
+    reasoning: Optional[Any] = None
 
     # Stop sequences
     stop_strings: Optional[List[str]] = None
@@ -65,6 +66,12 @@ class InferenceConfig:
 
     # Stateful chat: chain responses without resending full history
     previous_response_id: Optional[str] = None
+
+    # Whether to store the chat for stateful continuations (default True)
+    store: Optional[bool] = None
+
+    # Context length override for this request
+    context_length: Optional[int] = None
 
     # Image input for VLMs: list of base64 data URIs or URLs
     images: Optional[List[str]] = None
@@ -122,7 +129,11 @@ class InferenceConfig:
     # ── Conversion to API payloads ──────────────────────────────────
 
     def to_native_v1(self) -> Dict[str, Any]:
-        """Build the fields dict for LMStudio native ``/api/v1/chat``."""
+        """Build the fields dict for LMStudio native ``/api/v1/chat``.
+
+        Note: ``model``, ``input``, ``system_prompt``, and ``stream`` are
+        set by the caller (LMSClient) — this only returns optional params.
+        """
         d: Dict[str, Any] = {}
         if self.temperature is not None:
             d["temperature"] = self.temperature
@@ -137,7 +148,11 @@ class InferenceConfig:
         if self.max_output_tokens is not None:
             d["max_output_tokens"] = self.max_output_tokens
         if self.reasoning is not None:
-            d["reasoning"] = self.reasoning
+            # Convert bool → string enum for native v1
+            if isinstance(self.reasoning, bool):
+                d["reasoning"] = "on" if self.reasoning else "off"
+            else:
+                d["reasoning"] = str(self.reasoning)
         if self.stop_strings:
             d["stop"] = self.stop_strings
         if self.response_format:
@@ -146,6 +161,10 @@ class InferenceConfig:
             d["integrations"] = self.integrations
         if self.previous_response_id:
             d["previous_response_id"] = self.previous_response_id
+        if self.store is not None:
+            d["store"] = self.store
+        if self.context_length is not None:
+            d["context_length"] = self.context_length
         return d
 
     def to_openai_compat(self) -> Dict[str, Any]:
