@@ -103,7 +103,16 @@
             border: 1px solid #444;
             border-radius: 10px;
             padding: 16px;
-            margin-bottom: 15px;
+        }
+        .artwork-card img {
+            width: 100%;
+            height: auto;
+            border-radius: 6px;
+        }
+        #artworks-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 16px;
         }
         .artwork-card h3 { color: #e94560; margin-bottom: 8px; }
         .artwork-card .style-tag {

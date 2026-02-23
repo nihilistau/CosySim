@@ -793,6 +793,16 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
                 return send_from_directory(str(alt_video), filename)
             return send_from_directory(str(_MEDIA_VIDEO), filename)
 
+        @app.route("/api/video-message/download/<filename>")
+        def download_video(filename: str):
+            """Alias for video serving — used by video_messages app."""
+            if (_MEDIA_VIDEO / filename).exists():
+                return send_from_directory(str(_MEDIA_VIDEO), filename)
+            alt_video = project_root / "content" / "media" / "video"
+            if (alt_video / filename).exists():
+                return send_from_directory(str(alt_video), filename)
+            return send_from_directory(str(_MEDIA_VIDEO), filename)
+
         @app.route("/media/photo/<filename>")
         def serve_photo(filename: str):
             return send_from_directory(str(_MEDIA_PHOTO), filename)

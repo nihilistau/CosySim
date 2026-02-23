@@ -1,13 +1,12 @@
 """
-Central Hub - Main Launcher Scene
+Central Hub — Main Launcher & Navigation
+=========================================
 
-The central hub is the main entry point for the CosySim system.
-Features:
-- Scene launcher with previews
-- Asset browser
-- Tutorial system
-- Quick access to admin panel
-- System status monitoring
+The central hub for the CosySim system.  Provides:
+- Scene launcher with live status indicators
+- Categorized scenes (Core · Showcase · Tools)
+- Quick system health monitoring
+- Asset browser, tutorials, and settings
 """
 
 import streamlit as st
@@ -30,26 +29,14 @@ def _service_up(url: str, timeout: float = 1.0) -> bool:
         return False
 
 
-def _render_health_strip():
-    """Render a horizontal service-health indicator bar for all three pillars."""
-    services = [
-        ("LMStudio", "http://localhost:1234/v1/models"),
-        ("ComfyUI", "http://localhost:8188/system_stats"),
-        ("TTS", "http://localhost:8600/status"),
-        ("MCP Bridge", "http://localhost:8601/health"),
-        ("Phone", "http://localhost:5555/api/health"),
-        ("Bedroom", "http://localhost:5556/api/health"),
-        ("Lounge", "http://localhost:5557/api/health"),
-        ("Casino", "http://localhost:5559/api/health"),
-        ("Gallery", "http://localhost:5560/api/health"),
-        ("Warzone", "http://localhost:5561/api/health"),
-        ("Admin", "http://localhost:8502"),
-    ]
-    cols = st.columns(len(services))
-    for col, (name, url) in zip(cols, services):
-        up = _service_up(url)
-        dot = "🟢" if up else "🔴"
-        col.markdown(f"**{dot} {name}**")
+def _port_open(port: int) -> bool:
+    """Check if a TCP port is listening on localhost."""
+    try:
+        with socket.create_connection(("127.0.0.1", port), timeout=0.5):
+            return True
+    except OSError:
+        return False
+
 
 # Add project root to path
 project_root = Path(__file__).parent.parent.parent.parent
@@ -66,7 +53,7 @@ st.set_page_config(
     page_title="CosySim Hub",
     page_icon="🏠",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded",
 )
 
 # Dark theme + custom CSS
@@ -75,519 +62,413 @@ inject_dark_theme()
 st.markdown("""
 <style>
     .main-header {
-        font-size: 3.5rem;
-        font-weight: bold;
-        background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+        font-size: 3rem;
+        font-weight: 800;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
-        margin-bottom: 1rem;
+        margin-bottom: 0.2rem;
         text-align: center;
+        letter-spacing: -1px;
     }
     .subtitle {
-        font-size: 1.3rem;
-        color: #a0a0a0;
+        font-size: 1.1rem;
+        color: #888;
         text-align: center;
-        margin-bottom: 3rem;
+        margin-bottom: 2rem;
+    }
+    .version-badge {
+        display: inline-block;
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        color: white;
+        padding: 2px 10px;
+        border-radius: 12px;
+        font-size: 0.75rem;
+        font-family: monospace;
+        vertical-align: middle;
+    }
+    .category-header {
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: #ccc;
+        text-transform: uppercase;
+        letter-spacing: 2px;
+        margin: 1.5rem 0 0.8rem 0;
+        padding-bottom: 0.4rem;
+        border-bottom: 2px solid #333;
     }
     .scene-card {
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        padding: 2rem;
-        border-radius: 15px;
+        padding: 1.4rem;
+        border-radius: 14px;
         color: white;
         text-align: center;
-        cursor: pointer;
-        transition: transform 0.3s;
-        height: 250px;
+        transition: transform 0.2s, box-shadow 0.2s;
+        min-height: 180px;
         display: flex;
         flex-direction: column;
         justify-content: center;
+        position: relative;
+        overflow: hidden;
     }
-    .scene-card:hover {
-        transform: translateY(-5px);
+    .scene-card::before {
+        content: '';
+        position: absolute;
+        top: -50%;
+        left: -50%;
+        width: 200%;
+        height: 200%;
+        background: radial-gradient(circle, rgba(255,255,255,0.05) 0%, transparent 60%);
+        pointer-events: none;
     }
-    .scene-icon {
-        font-size: 4rem;
-        margin-bottom: 1rem;
-    }
-    .scene-name {
-        font-size: 1.5rem;
-        font-weight: bold;
-        margin-bottom: 0.5rem;
-    }
-    .scene-desc {
-        font-size: 0.9rem;
+    .scene-card:hover { transform: translateY(-3px); box-shadow: 0 8px 25px rgba(0,0,0,0.4); }
+    .scene-icon { font-size: 2.8rem; margin-bottom: 0.5rem; }
+    .scene-name { font-size: 1.2rem; font-weight: 700; margin-bottom: 0.3rem; }
+    .scene-desc { font-size: 0.8rem; opacity: 0.85; line-height: 1.3; }
+    .scene-status {
+        margin-top: 0.5rem;
+        font-size: 0.75rem;
         opacity: 0.9;
     }
-    .tutorial-card {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        padding: 1.5rem;
+    .quick-stat {
+        background: #1a1a2e;
+        padding: 0.8rem 1rem;
         border-radius: 10px;
-        color: white;
+        border-left: 3px solid #667eea;
+        margin-bottom: 0.4rem;
+        color: #e0e0e0;
+        font-size: 0.9rem;
+    }
+    .health-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
         margin-bottom: 1rem;
     }
-    .quick-stat {
-        background: #1a1a1a;
-        padding: 1rem;
+    .health-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        background: #1a1a2e;
+        border: 1px solid #333;
+        border-radius: 20px;
+        padding: 4px 12px;
+        font-size: 0.78rem;
+        color: #ccc;
+    }
+    .tutorial-card {
+        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+        border: 1px solid #333;
+        padding: 1.2rem;
         border-radius: 10px;
-        border-left: 4px solid #667eea;
-        margin-bottom: 0.5rem;
-        color: #f0f0f0;
+        color: #e0e0e0;
+        margin-bottom: 0.8rem;
     }
 </style>
 """, unsafe_allow_html=True)
 
 
+# ── Scene Definitions ────────────────────────────────────────────────
+
+SCENE_CATEGORIES = {
+    "core": {
+        "label": "🎮 Core Scenes",
+        "scenes": [
+            {"name": "Phone",         "icon": "📱", "port": 5555, "mode": "phone",
+             "desc": "Simulated Android — texting, photos, galleries, voice messages, apps",
+             "color": "#667eea"},
+            {"name": "Bedroom",       "icon": "🛏️", "port": 5556, "mode": "bedroom",
+             "desc": "Multi-agent roleplay — characters, outfits, moods, director scenarios",
+             "color": "#f093fb"},
+            {"name": "Velvet Lounge", "icon": "🎷", "port": 5557, "mode": "lounge",
+             "desc": "1920s jazz speakeasy — Lola & Viktor, heat/trust, MCP dialog",
+             "color": "#c9a84c"},
+            {"name": "Casino Royale", "icon": "🎰", "port": 5559, "mode": "casino",
+             "desc": "Texas Hold'em with AI bluffing, moods, bets, and card counting",
+             "color": "#dc2626"},
+            {"name": "Art Gallery",   "icon": "🖼️", "port": 5560, "mode": "gallery",
+             "desc": "Streaming art critique, branching debate, image generation",
+             "color": "#8b5cf6"},
+            {"name": "Global Strike", "icon": "🎯", "port": 5561, "mode": "warzone",
+             "desc": "Artillery strategy — Three.js map, AI opponent, highscores",
+             "color": "#059669"},
+        ],
+    },
+    "showcase": {
+        "label": "⚡ v3.2 Showcase",
+        "scenes": [
+            {"name": "The Realm",       "icon": "⚔️", "port": 5562, "mode": "realm",
+             "desc": "AI-directed LitRPG — dual-agent Director + Assistant, murder mystery, inventory, fourth-wall mechanics",
+             "color": "#e94560"},
+            {"name": "NeonCity",        "icon": "🌃", "port": 5563, "mode": "neoncity",
+             "desc": "Cyberpunk strategy board — procedural grid, Glitch Storm, loot nodes, AI opponents",
+             "color": "#00d4ff"},
+            {"name": "Coders Room",     "icon": "💻", "port": 5564, "mode": "coders",
+             "desc": "AI agent idle sim — agents write real Python, review, test in sandboxed pipelines",
+             "color": "#10b981"},
+        ],
+    },
+    "tools": {
+        "label": "🛠️ Tools & Services",
+        "scenes": [
+            {"name": "Dashboard",       "icon": "📊", "port": 8501, "mode": "dashboard",
+             "desc": "Character stats, relationship levels, activity feed",
+             "color": "#764ba2"},
+            {"name": "Admin Panel",     "icon": "🎛️", "port": 8502, "mode": "admin",
+             "desc": "Character editor, asset manager, conversation explorer, model config",
+             "color": "#f5576c"},
+            {"name": "Asset Generator", "icon": "🎨", "port": 8503, "mode": "assets",
+             "desc": "Generate images, videos, voices and stories via ComfyUI / TTS",
+             "color": "#0ea5e9"},
+            {"name": "TTS Server",      "icon": "🎙️", "port": 8600, "mode": "tts",
+             "desc": "Voice generation — voicemails, narration, character voices",
+             "color": "#10b981"},
+            {"name": "MCP Bridge",      "icon": "🔌", "port": 8601, "mode": "bridge",
+             "desc": "LMStudio ↔ CosySim bridge — SSE streaming, MCP tools",
+             "color": "#f59e0b"},
+        ],
+    },
+}
+
+HEALTH_SERVICES = [
+    ("LMStudio",  "http://localhost:1234/v1/models"),
+    ("ComfyUI",   "http://localhost:8188/system_stats"),
+    ("TTS",       "http://localhost:8600/status"),
+    ("MCP",       "http://localhost:8601/health"),
+    ("Phone",     "http://localhost:5555/api/health"),
+    ("Bedroom",   "http://localhost:5556/api/health"),
+    ("Lounge",    "http://localhost:5557/api/health"),
+    ("Casino",    "http://localhost:5559/api/health"),
+    ("Gallery",   "http://localhost:5560/api/health"),
+    ("Warzone",   "http://localhost:5561/api/health"),
+    ("Realm",     "http://localhost:5562/api/health"),
+    ("NeonCity",  "http://localhost:5563/api/health"),
+    ("Coders",    "http://localhost:5564/api/health"),
+    ("Admin",     "http://localhost:8502"),
+]
+
+
+# ── Init ─────────────────────────────────────────────────────────────
+
 def init_session_state():
-    """Initialize session state"""
     if 'asset_manager' not in st.session_state:
         st.session_state.asset_manager = AssetManager()
     if 'config' not in st.session_state:
         st.session_state.config = ConfigManager()
-    if 'show_tutorial' not in st.session_state:
-        st.session_state.show_tutorial = True
-    if 'tutorial_step' not in st.session_state:
-        st.session_state.tutorial_step = 0
 
+
+# ── Main ─────────────────────────────────────────────────────────────
 
 def main():
-    """Main hub interface"""
     init_session_state()
-    
+
     # Header
     st.markdown('<h1 class="main-header">🏠 CosySim Hub</h1>', unsafe_allow_html=True)
-    st.markdown('<p class="subtitle">Your gateway to the virtual companion system</p>', unsafe_allow_html=True)
-    
+    st.markdown(
+        '<p class="subtitle">Your gateway to the virtual companion system '
+        '<span class="version-badge">v3.2</span></p>',
+        unsafe_allow_html=True,
+    )
+
     # Sidebar
     with st.sidebar:
-        st.markdown("## 🎯 Quick Access")
-        
+        st.markdown("### ⚡ Quick Actions")
         if st.button("🎛️ Admin Panel", use_container_width=True):
-            st.info("Run: `python launcher.py --mode admin`")
-        
-        if st.button("📚 Documentation", use_container_width=True):
-            st.info("Check docs/ folder for guides")
-        
-        if st.button("🧪 Run Tests", use_container_width=True):
-            st.info("Run: `python launcher.py --mode test`")
-        
+            st.markdown("[Open Admin](http://localhost:8502)")
+        if st.button("📱 Phone Scene", use_container_width=True):
+            st.markdown("[Open Phone](http://localhost:5555)")
+        if st.button("🛏️ Bedroom", use_container_width=True):
+            st.markdown("[Open Bedroom](http://localhost:5556)")
+
         st.markdown("---")
-        st.markdown("## 📊 System Stats")
-        
+        st.markdown("### 📊 System")
         stats = st.session_state.asset_manager.get_stats()
         st.markdown(f"""
-        <div class="quick-stat">
-            <strong>Total Assets:</strong> {stats['total_assets']}
-        </div>
-        <div class="quick-stat">
-            <strong>Characters:</strong> {stats['by_type'].get('character', 0)}
-        </div>
-        <div class="quick-stat">
-            <strong>Scenes:</strong> {stats['by_type'].get('scene', 0)}
-        </div>
+        <div class="quick-stat">🗃️ <strong>{stats['total_assets']}</strong> assets</div>
+        <div class="quick-stat">👤 <strong>{stats['by_type'].get('character', 0)}</strong> characters</div>
+        <div class="quick-stat">🖼️ <strong>{stats['by_type'].get('image', 0)}</strong> images</div>
         """, unsafe_allow_html=True)
-        
+
         st.markdown("---")
-        st.markdown("**Status:** 🟢 Online")
-        st.markdown(f"**Time:** {datetime.now().strftime('%H:%M:%S')}")
-        
+        running_count = sum(1 for _, s in HEALTH_SERVICES if _service_up(s))
+        st.markdown(f"**🟢 {running_count}/{len(HEALTH_SERVICES)}** services online")
+        st.caption(datetime.now().strftime("%H:%M:%S"))
         if st.button("🔄 Refresh", use_container_width=True):
             st.rerun()
-    
-    # Service health strip
-    _render_health_strip()
 
-    # Three Pillars quick status
-    with st.expander("🏛️ Three Pillars Status", expanded=False):
-        p1, p2, p3 = st.columns(3)
-        with p1:
-            lm_up = _service_up("http://localhost:1234/v1/models")
-            st.markdown(f"### {'🟢' if lm_up else '🔴'} LMStudio")
-            if lm_up:
-                try:
-                    r = requests.get("http://localhost:1234/v1/models", timeout=2)
-                    models = r.json().get("data", [])
-                    if models:
-                        st.caption(f"Model: {models[0].get('id', 'unknown')}")
-                    else:
-                        st.caption("No model loaded")
-                except Exception:
-                    st.caption("Connected")
-            else:
-                st.caption("Not running — start LMStudio")
-        with p2:
-            comfy_up = _service_up("http://localhost:8188/system_stats")
-            st.markdown(f"### {'🟢' if comfy_up else '🔴'} ComfyUI")
-            if comfy_up:
-                st.caption("Image/video generation ready")
-            else:
-                st.caption("Not running — start ComfyUI")
-        with p3:
-            tts_up = _service_up("http://localhost:8600/status")
-            st.markdown(f"### {'🟢' if tts_up else '🔴'} TTS Server")
-            if tts_up:
-                try:
-                    r = requests.get("http://localhost:8600/status", timeout=2)
-                    mode = r.json().get("mode", "unknown")
-                    st.caption(f"Mode: {mode}")
-                except Exception:
-                    st.caption("Connected")
-            else:
-                st.caption("Run: python launcher.py --mode tts")
+    # Health strip
+    chips_html = ""
+    for name, url in HEALTH_SERVICES:
+        up = _service_up(url)
+        dot = "🟢" if up else "⚫"
+        chips_html += f'<span class="health-chip">{dot} {name}</span>'
+    st.markdown(f'<div class="health-row">{chips_html}</div>', unsafe_allow_html=True)
 
-    # Main content tabs
-    tab1, tab2, tab3, tab4 = st.tabs(["🎮 Launch Scenes", "📖 Tutorials", "🗂️ Assets", "⚙️ Settings"])
-    
+    # Tabs
+    tab1, tab2, tab3, tab4 = st.tabs(["🎮 Scenes", "📖 Tutorials", "🗂️ Assets", "⚙️ Settings"])
+
     with tab1:
-        show_scene_launcher()
-    
+        _show_scenes()
     with tab2:
-        show_tutorials()
-    
+        _show_tutorials()
     with tab3:
-        show_asset_quick_view()
-    
+        _show_assets()
     with tab4:
-        show_settings()
+        _show_settings()
 
 
-def _port_open(port: int) -> bool:
-    """Check if a TCP port is listening on localhost."""
-    try:
-        with socket.create_connection(("127.0.0.1", port), timeout=0.5):
-            return True
-    except OSError:
-        return False
+# ── Scene Launcher ───────────────────────────────────────────────────
+
+def _show_scenes():
+    project_root_path = Path(__file__).parent.parent.parent.parent
+
+    for cat_key, cat in SCENE_CATEGORIES.items():
+        st.markdown(f'<div class="category-header">{cat["label"]}</div>', unsafe_allow_html=True)
+
+        cols_per_row = 3
+        scenes = cat["scenes"]
+        for row_start in range(0, len(scenes), cols_per_row):
+            row_scenes = scenes[row_start:row_start + cols_per_row]
+            cols = st.columns(cols_per_row)
+            for col, scene in zip(cols, row_scenes):
+                with col:
+                    running = _port_open(scene["port"])
+                    status = "🟢 Running" if running else "⚫ Stopped"
+                    url = f"http://localhost:{scene['port']}"
+
+                    st.markdown(
+                        f"""<div class="scene-card" style="background:linear-gradient(135deg, {scene['color']} 0%, {scene['color']}99 100%);">
+                            <div class="scene-icon">{scene['icon']}</div>
+                            <div class="scene-name">{scene['name']}</div>
+                            <div class="scene-desc">{scene['desc']}</div>
+                            <div class="scene-status">{status} · :{scene['port']}</div>
+                        </div>""",
+                        unsafe_allow_html=True,
+                    )
+
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        if running:
+                            if st.button("🔗 Open", key=f"o_{scene['mode']}", use_container_width=True):
+                                st.markdown(f"**[→ {scene['name']}]({url})**")
+                        else:
+                            if st.button("🚀 Launch", key=f"l_{scene['mode']}", use_container_width=True):
+                                try:
+                                    subprocess.Popen(
+                                        [sys.executable, str(project_root_path / "launcher.py"),
+                                         "--mode", scene["mode"]],
+                                        cwd=str(project_root_path),
+                                        creationflags=subprocess.CREATE_NEW_CONSOLE if sys.platform == "win32" else 0,
+                                    )
+                                    st.success(f"Launching {scene['name']}...")
+                                except Exception as e:
+                                    st.error(f"Launch failed: {e}")
+                    with c2:
+                        if running:
+                            st.markdown(f"[🔗 {url}]({url})")
 
 
-def show_scene_launcher():
-    """Scene launcher with live status cards"""
-    st.header("🎮 Available Scenes")
+# ── Tutorials ────────────────────────────────────────────────────────
 
-    scenes = [
-        {
-            "name": "Phone Scene",
-            "icon": "📱",
-            "description": "Simulated Android phone — texting, photos, autonomous messages",
-            "port": 5555,
-            "launch_args": ["--mode", "phone"],
-            "color": "#667eea",
-        },
-        {
-            "name": "Bedroom Scene",
-            "icon": "🛏️",
-            "description": "Private penthouse environment with character interactions",
-            "port": 5556,
-            "launch_args": ["--mode", "bedroom"],
-            "color": "#f093fb",
-        },
-        {
-            "name": "The Velvet Lounge",
-            "icon": "🎷",
-            "description": "1920s underground jazz speakeasy — Lola Voss, Viktor Marlowe, MCP heat/trust system",
-            "port": 5557,
-            "launch_args": ["--mode", "lounge"],
-            "color": "#c9a84c",
-        },
-        {
-            "name": "Dashboard",
-            "icon": "📊",
-            "description": "Character stats, relationship levels, activity feed",
-            "port": 8501,
-            "launch_args": ["--mode", "dashboard"],
-            "color": "#764ba2",
-        },
-        {
-            "name": "Admin Panel",
-            "icon": "🎛️",
-            "description": "Character editor, asset manager, running log",
-            "port": 8502,
-            "launch_args": ["--mode", "admin"],
-            "color": "#f5576c",
-        },
-        {
-            "name": "Asset Generator",
-            "icon": "🎨",
-            "description": "Generate images, videos, voices and stories via ComfyUI / TTS",
-            "port": 8503,
-            "launch_args": ["--mode", "assets"],
-            "color": "#0ea5e9",
-        },
-        {
-            "name": "TTS Server",
-            "icon": "🎙️",
-            "description": "Qwen3-TTS voice generation — voicemails, stories, character voices",
-            "port": 8600,
-            "launch_args": ["--mode", "tts"],
-            "color": "#10b981",
-        },
-        {
-            "name": "MCP Bridge",
-            "icon": "🔌",
-            "description": "LMStudio ↔ CosySim bridge — SSE streaming, MCP tools, file upload",
-            "port": 8601,
-            "launch_args": ["--mode", "bridge"],
-            "color": "#f59e0b",
-        },
-        {
-            "name": "Casino Royale",
-            "icon": "🎰",
-            "description": "Poker game with Mira the card hustler — bluffs, bets, moods",
-            "port": 5559,
-            "launch_args": ["--mode", "casino"],
-            "color": "#dc2626",
-        },
-        {
-            "name": "Art Gallery",
-            "icon": "🖼️",
-            "description": "v2.7 showcase — streaming critique, branching debate, image gen",
-            "port": 5560,
-            "launch_args": ["--mode", "gallery"],
-            "color": "#8b5cf6",
-        },
-        {
-            "name": "Global Strike",
-            "icon": "🎯",
-            "description": "Artillery strategy — Three.js, AI agent, highscores, streaming",
-            "port": 5561,
-            "launch_args": ["--mode", "warzone"],
-            "color": "#059669",
-        },
-    ]
+def _show_tutorials():
+    st.header("📖 Tutorials")
 
-    cols = st.columns(2)
-    project_root_path = Path(__file__).parent.parent.parent
-
-    for i, scene in enumerate(scenes):
-        with cols[i % 2]:
-            running = _port_open(scene["port"])
-            status_badge = "🟢 Running" if running else "⚫ Stopped"
-            url = f"http://localhost:{scene['port']}"
-
-            st.markdown(
-                f"""
-                <div class="scene-card" style="background: linear-gradient(135deg, {scene['color']} 0%, {scene['color']}cc 100%);">
-                    <div class="scene-icon">{scene['icon']}</div>
-                    <div class="scene-name">{scene['name']}</div>
-                    <div class="scene-desc">{scene['description']}</div>
-                    <div style="margin-top:0.6rem;font-size:0.85rem;">{status_badge} &bull; Port {scene['port']}</div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-            c1, c2 = st.columns(2)
-            with c1:
-                if running:
-                    if st.button(f"🔗 Open", key=f"open_{i}", use_container_width=True):
-                        st.markdown(f"**[Open {scene['name']}]({url})**")
-                else:
-                    if st.button(f"🚀 Launch", key=f"launch_{i}", use_container_width=True):
-                        try:
-                            subprocess.Popen(
-                                [sys.executable, str(project_root_path / "launcher.py")] + scene["launch_args"],
-                                cwd=str(project_root_path),
-                                creationflags=subprocess.CREATE_NEW_CONSOLE if sys.platform == "win32" else 0,
-                            )
-                            st.success(f"Launching {scene['name']}...")
-                        except Exception as e:
-                            st.error(f"Launch failed: {e}")
-            with c2:
-                if running:
-                    st.markdown(f"[🔗 {url}]({url})")
-
-            st.markdown("<br>", unsafe_allow_html=True)
-
-    st.markdown("---")
-    st.subheader("➕ Create New Scene")
-    st.markdown("Use the **Scene Creator** wizard for guided scene scaffolding.")
-    if st.button("🎨 Open Scene Creator", use_container_width=True):
-        st.info("Run: `python launcher.py --mode creator`  (port 8504)")
-
-
-def show_tutorials():
-    """Interactive tutorials"""
-    st.header("📖 Interactive Tutorials")
-    
     tutorials = [
-        {
-            "title": "🚀 Getting Started",
-            "description": "Learn the basics of CosySim",
-            "steps": [
-                "Launch a scene from the Scene Launcher",
-                "Create your first character in Admin Panel",
-                "Test text messaging in Phone Scene",
-                "Try voice/video calls"
-            ]
-        },
-        {
-            "title": "👥 Character Creation",
-            "description": "Create and customize characters",
-            "steps": [
-                "Open Admin Panel (port 8502)",
-                "Navigate to Character Manager",
-                "Fill in character details (name, age, appearance)",
-                "Set behavior settings (autonomy, messaging frequency)",
-                "Save character to asset system"
-            ]
-        },
-        {
-            "title": "🗂️ Asset Management",
-            "description": "Manage your assets",
-            "steps": [
-                "Open Admin Panel → Asset Browser",
-                "Filter assets by type or tag",
-                "View asset details and dependencies",
-                "Export/import assets as JSON",
-                "Clean up orphaned assets"
-            ]
-        },
-        {
-            "title": "🎨 Scene Customization",
-            "description": "Create custom scenes",
-            "steps": [
-                "Use Scene Launcher → Create New Scene",
-                "Configure scene type and port",
-                "Assign characters to scene",
-                "Set scene-specific configuration",
-                "Launch your custom scene"
-            ]
-        },
-        {
-            "title": "🔧 Advanced Configuration",
-            "description": "Configure the system",
-            "steps": [
-                "Edit config/default.yaml for base settings",
-                "Use config/development.yaml for dev overrides",
-                "Set environment variables for runtime config",
-                "View configuration in Admin Panel",
-                "Test changes with launcher dev mode"
-            ]
-        }
+        ("🚀 Getting Started",
+         ["Launch any scene from the Scenes tab",
+          "Create characters in Admin Panel (port 8502)",
+          "Load them into Phone or Bedroom scenes",
+          "Chat, generate images, make voice/video calls"]),
+        ("⚔️ The Realm — LitRPG",
+         ["Launch The Realm (port 5562)",
+          "Pick a Director personality and start a new game",
+          "Make choices — the Director narrates, the Assistant quips",
+          "Try the Murder Mystery sub-module, Desperation Dice, Mutiny Mode"]),
+        ("🌃 NeonCity — Strategy",
+         ["Launch NeonCity (port 5563)",
+          "Start a new game with 1-3 AI opponents",
+          "Move, loot prefab nodes, attack/hack other runners",
+          "Race to the center before the Glitch Storm closes in"]),
+        ("💻 Coders Room — Idle Sim",
+         ["Launch Coders Room (port 5564)",
+          "Start the simulation — watch agents collaborate on features",
+          "Add custom feature requests via the API",
+          "Watch live code, reviews, and test results on the terminal"]),
+        ("🔧 MCP Framework",
+         ["Skills register via @skill decorator, callable by LLM agents",
+          "State flows through MCPSceneNode → get_framework().get_scene()",
+          "Cross-scene messaging via framework.cross_scene_send()",
+          "Consequences queue deferred effects with schedule_consequence()"]),
     ]
-    
-    for tutorial in tutorials:
-        with st.expander(f"{tutorial['title']} - {tutorial['description']}"):
-            st.markdown(f"**{tutorial['title']}**")
-            st.markdown(tutorial['description'])
-            st.markdown("")
-            st.markdown("**Steps:**")
-            for i, step in enumerate(tutorial['steps'], 1):
-                st.markdown(f"{i}. {step}")
-    
-    # Quick start guide
+
+    for title, steps in tutorials:
+        with st.expander(title):
+            for i, step in enumerate(steps, 1):
+                st.markdown(f"**{i}.** {step}")
+
     st.markdown("---")
     st.subheader("⚡ Quick Start")
-    
     st.code("""
-# 1. Launch admin panel to create a character
-python launcher.py --mode admin
+# Launch everything
+python launcher.py --mode all
 
-# 2. Launch phone scene to interact
-python launcher.py --mode play
-# Then select option 1 (Phone Scene)
+# Or launch individual scenes
+python launcher.py --mode phone
+python launcher.py --mode bedroom
+python launcher.py --mode realm
 
-# 3. Run tests to verify everything works
+# Run tests (744 passing)
 python launcher.py --mode test
     """, language="bash")
 
 
-def show_asset_quick_view():
-    """Quick asset overview"""
-    st.header("🗂️ Asset Overview")
-    
+# ── Assets ───────────────────────────────────────────────────────────
+
+def _show_assets():
+    st.header("🗂️ Assets")
     stats = st.session_state.asset_manager.get_stats()
-    
-    # Asset type breakdown
-    st.subheader("📦 Asset Breakdown")
-    
+
     if stats['by_type']:
-        cols = st.columns(4)
-        asset_types = list(stats['by_type'].items())
-        
-        for i, (asset_type, count) in enumerate(asset_types):
-            with cols[i % 4]:
-                st.metric(asset_type.title(), count)
+        cols = st.columns(min(len(stats['by_type']), 5))
+        for i, (atype, count) in enumerate(stats['by_type'].items()):
+            with cols[i % len(cols)]:
+                st.metric(atype.title(), count)
     else:
-        st.info("No assets yet. Create some in the Admin Panel!")
-    
-    # Recent assets
+        st.info("No assets yet — create some in the Admin Panel.")
+
     st.markdown("---")
-    st.subheader("🕒 Recent Assets")
-    
+    st.subheader("🕒 Recent")
     recent = st.session_state.asset_manager.search(limit=5)
-    
     if recent:
         for asset in recent:
-            with st.expander(f"{asset['type'].title()}: {asset['id'][:16]}..."):
+            with st.expander(f"{asset.get('type', '?').title()}: {asset.get('id', '?')[:20]}"):
                 st.json(asset)
     else:
-        st.info("No recent assets")
-    
-    # Quick actions
-    st.markdown("---")
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        if st.button("🎛️ Open Admin Panel", use_container_width=True):
-            st.info("Run: `python launcher.py --mode admin`")
-    
-    with col2:
-        if st.button("📊 Export Stats", use_container_width=True):
-            st.download_button(
-                "Download JSON",
-                data=json.dumps(stats, indent=2),
-                file_name=f"stats_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
-                mime="application/json",
-                use_container_width=True
-            )
-    
-    with col3:
-        if st.button("🧹 Clean Orphans", use_container_width=True):
-            orphans = st.session_state.asset_manager.find_orphans()
-            if orphans:
-                st.warning(f"Found {len(orphans)} orphaned assets")
-            else:
-                st.success("No orphans found!")
+        st.caption("No assets")
 
 
-def show_settings():
-    """System settings"""
+# ── Settings ─────────────────────────────────────────────────────────
+
+def _show_settings():
     st.header("⚙️ Settings")
-    
     config = st.session_state.config
-    
-    # Display configuration
-    st.subheader("Current Configuration")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown("**System Info**")
+
+    c1, c2 = st.columns(2)
+    with c1:
+        st.markdown("**System**")
         st.json({
-            "version": "1.0.0",
-            "environment": config.get("system.environment", "development"),
-            "name": config.get("system.name", "CosySim")
+            "version": "3.2.0",
+            "environment": config.get("system.environment", "default"),
+            "name": config.get("system.name", "CosySim"),
         })
-    
-    with col2:
+    with c2:
         st.markdown("**Paths**")
         st.json({
-            "root": config.get("paths.root", "."),
-            "data": config.get("paths.data", "./data"),
-            "models": config.get("paths.models", "./pretrained_models")
+            "root": config.get("paths.project_root", "."),
+            "data": config.get("paths.data_dir", "./data"),
+            "models": config.get("paths.models_dir", "./pretrained_models"),
         })
-    
-    # Database info
-    st.markdown("---")
-    st.subheader("💾 Database")
-    
-    st.json({
-        "type": config.get("database.type", "sqlite"),
-        "path": config.get("database.path", "./data/simulation.db"),
-        "chroma_path": config.get("database.chroma_path", "./data/chroma")
-    })
-    
-    # Full config
+
     st.markdown("---")
     if st.checkbox("Show Full Configuration"):
         st.json(dict(config._config))
