@@ -8,7 +8,7 @@ python launcher.py --mode phone     # Phone → http://localhost:5555
 python launcher.py --mode realm     # The Realm → http://localhost:5562
 python launcher.py --mode all       # Phone + Bedroom + Hub + TTS + Bridge
 python launcher.py --status         # Service health check
-python launcher.py --mode test      # Run 699 tests
+python launcher.py --mode test      # Run 734 tests
 ```
 
 ## All Scenes & Ports
@@ -48,7 +48,7 @@ content/         ← Game content (customize freely)
   scenes/        ← 9 Flask scenes + 5 Streamlit apps
   simulation/    ← Database, RAG, characters, media services
 config/          ← YAML settings (tune without code)
-tests/           ← 699 tests, 27 files
+tests/           ← 734 tests, 28 files
 ```
 
 ## Skill Packs

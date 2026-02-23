@@ -77,7 +77,7 @@ python launcher.py --mode realm   # The Realm → http://localhost:5562
 ```bash
 python launcher.py --mode all      # Launch phone + bedroom + hub + tts + bridge
 python launcher.py --status        # Check service health
-python launcher.py --mode test     # Run 699 tests
+python launcher.py --mode test     # Run 734 tests
 ```
 
 ---
@@ -115,7 +115,7 @@ content/                   # Game content (customize freely)
 └── simulation/           # Database, RAG, character system, media services
 
 config/                    # YAML configuration (tune without code)
-tests/                     # 699 tests across 27 files
+tests/                     # 734 tests across 28 files
 ```
 
 ---
@@ -174,7 +174,7 @@ def my_tool(param: str) -> str:
 
 ```bash
 python -m pytest tests/ -v --tb=short --ignore=tests/test_agent_loop.py --ignore=tests/live_wire_test.py
-# 699 tests passing
+# 734 tests passing
 ```
 
 ---

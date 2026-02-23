@@ -424,9 +424,9 @@ class ResourceManager:
             if self._default_ttl > 0:
                 load_config.ttl = self._default_ttl
 
-            success = client.load_model(model_id, config=load_config)
+            result = client.load_model(model_id, config=load_config)
 
-            if success:
+            if result.status == "loaded":
                 ctx = load_config.context_length or 4096
                 vram = self._estimate_vram(model_id) if device == "gpu" else 0
                 with self._lock:

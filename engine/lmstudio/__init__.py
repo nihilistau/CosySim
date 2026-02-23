@@ -68,7 +68,11 @@ Quick start::
     resp = conv.send("Hello!")
 """
 # Native v1 client (primary — the only inference path)
-from .lms_client       import LMSClient, get_lms_client, LMSResponse, LMSStreamEvent, LMSModelInfo, MCP
+from .lms_client       import (
+    LMSClient, get_lms_client, LMSResponse, LMSStreamEvent, LMSModelInfo,
+    LMSModel, LMSModelInstance, LMSQuantization, LMSCapabilities,
+    LMSLoadResult, LMSDownloadJob, LMSDownloadStatus, MCP,
+)
 # Conversation state management
 from .conversation     import ConversationManager, get_conversation_manager, Conversation
 # Config dataclasses
@@ -86,7 +90,9 @@ from .tool_factory     import ToolSpec, tool, from_callable, run_with_tools
 
 __all__ = [
     # Native v1 (the only inference path)
-    "LMSClient", "get_lms_client", "LMSResponse", "LMSStreamEvent", "LMSModelInfo", "MCP",
+    "LMSClient", "get_lms_client", "LMSResponse", "LMSStreamEvent", "LMSModelInfo",
+    "LMSModel", "LMSModelInstance", "LMSQuantization", "LMSCapabilities",
+    "LMSLoadResult", "LMSDownloadJob", "LMSDownloadStatus", "MCP",
     # Conversation state
     "ConversationManager", "get_conversation_manager", "Conversation",
     # Config

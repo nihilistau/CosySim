@@ -1,5 +1,6 @@
 """
-Tests for LMSClient v2.7 — native v1 API streaming, stateful chats, conversation branching.
+Tests for LMSClient — native v1 API streaming, stateful chats, conversation branching,
+API-complete features (auth, rich models, download, speculative decoding).
 
 Tests cover:
 - LMSResponse v1 stats fields
@@ -19,8 +20,16 @@ from engine.lmstudio.lms_client import (
     LMSClient,
     LMSResponse,
     LMSStreamEvent,
+    LMSModel,
+    LMSModelInstance,
+    LMSQuantization,
+    LMSCapabilities,
+    LMSLoadResult,
+    LMSDownloadJob,
+    LMSDownloadStatus,
+    MCP,
 )
-from engine.lmstudio.inference_config import InferenceConfig
+from engine.lmstudio.inference_config import InferenceConfig, LoadConfig
 from engine.lmstudio.conversation import (
     Conversation,
     ConversationManager,
@@ -505,3 +514,373 @@ class TestMessagesToV1Input:
         assert inp[0]["type"] == "text"
         assert inp[1]["type"] == "image"
         assert inp[1]["data_url"] == "data:image/png;base64,abc123"
+
+
+# ══════════════════════════════════════════════════════════════════════
+# API-Complete Tests (v3.2)
+# ══════════════════════════════════════════════════════════════════════
+
+
+class TestAuthentication:
+    """Phase 1: Bearer token auth."""
+
+    def test_auth_header_injected_when_token_set(self):
+        with patch("engine.lmstudio.lms_client.InferenceConfig.from_yaml", return_value=InferenceConfig()):
+            cfg = MockConfig()
+            client = LMSClient(base_url="http://localhost:1234", config=cfg, api_token="sk-test-123")
+        assert client._api_token == "sk-test-123"
+        assert client._client.headers.get("authorization") == "Bearer sk-test-123"
+
+    def test_no_auth_header_when_no_token(self):
+        with patch("engine.lmstudio.lms_client.InferenceConfig.from_yaml", return_value=InferenceConfig()):
+            client = LMSClient(base_url="http://localhost:1234", config=MockConfig())
+        assert client._api_token is None
+        assert "authorization" not in client._client.headers
+
+    def test_repr_shows_auth_status(self):
+        with patch("engine.lmstudio.lms_client.InferenceConfig.from_yaml", return_value=InferenceConfig()):
+            authed = LMSClient(base_url="http://localhost:1234", config=MockConfig(), api_token="tok")
+            unauthed = LMSClient(base_url="http://localhost:1234", config=MockConfig())
+        assert "auth" in repr(authed)
+        assert "no-auth" in repr(unauthed)
+
+
+class TestLMSModel:
+    """Phase 2: Rich model listing."""
+
+    SAMPLE_MODEL = {
+        "type": "llm",
+        "publisher": "qwen",
+        "key": "qwen/qwen2.5-7b-instruct",
+        "display_name": "Qwen 2.5 7B Instruct",
+        "architecture": "qwen2",
+        "quantization": {"name": "Q4_K_M", "bits_per_weight": 4.85},
+        "size_bytes": 4_370_000_000,
+        "params_string": "7B",
+        "loaded_instances": [
+            {"id": "qwen/qwen2.5-7b-instruct", "config": {"context_length": 8192, "flash_attention": True}}
+        ],
+        "max_context_length": 131072,
+        "format": "gguf",
+        "capabilities": {"vision": False, "trained_for_tool_use": True},
+        "description": "Qwen 2.5 7B Instruct GGUF",
+    }
+
+    def test_from_api_parses_all_fields(self):
+        m = LMSModel.from_api(self.SAMPLE_MODEL)
+        assert m.type == "llm"
+        assert m.publisher == "qwen"
+        assert m.key == "qwen/qwen2.5-7b-instruct"
+        assert m.display_name == "Qwen 2.5 7B Instruct"
+        assert m.architecture == "qwen2"
+        assert m.size_bytes == 4_370_000_000
+        assert m.params_string == "7B"
+        assert m.max_context_length == 131072
+        assert m.format == "gguf"
+        assert m.description == "Qwen 2.5 7B Instruct GGUF"
+
+    def test_quantization_parsed(self):
+        m = LMSModel.from_api(self.SAMPLE_MODEL)
+        assert m.quantization is not None
+        assert m.quantization.name == "Q4_K_M"
+        assert m.quantization.bits_per_weight == 4.85
+
+    def test_capabilities_parsed(self):
+        m = LMSModel.from_api(self.SAMPLE_MODEL)
+        assert m.capabilities is not None
+        assert m.capabilities.vision is False
+        assert m.capabilities.trained_for_tool_use is True
+
+    def test_loaded_instances_parsed(self):
+        m = LMSModel.from_api(self.SAMPLE_MODEL)
+        assert len(m.loaded_instances) == 1
+        inst = m.loaded_instances[0]
+        assert inst.id == "qwen/qwen2.5-7b-instruct"
+        assert inst.context_length == 8192
+        assert inst.flash_attention is True
+
+    def test_is_loaded_property(self):
+        m = LMSModel.from_api(self.SAMPLE_MODEL)
+        assert m.is_loaded is True
+
+        unloaded = LMSModel.from_api({**self.SAMPLE_MODEL, "loaded_instances": []})
+        assert unloaded.is_loaded is False
+
+    def test_instance_id_uses_first_loaded(self):
+        m = LMSModel.from_api(self.SAMPLE_MODEL)
+        assert m.instance_id == "qwen/qwen2.5-7b-instruct"
+
+    def test_instance_id_falls_back_to_key(self):
+        unloaded = LMSModel.from_api({**self.SAMPLE_MODEL, "loaded_instances": []})
+        assert unloaded.instance_id == "qwen/qwen2.5-7b-instruct"
+
+    def test_from_api_missing_optional_fields(self):
+        minimal = {"key": "test/model"}
+        m = LMSModel.from_api(minimal)
+        assert m.key == "test/model"
+        assert m.quantization is None
+        assert m.capabilities is None
+        assert m.loaded_instances == []
+
+    def test_get_models_returns_lms_model_objects(self, client):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"models": [self.SAMPLE_MODEL]}
+        mock_response.raise_for_status = MagicMock()
+
+        with patch.object(client._client, "get", return_value=mock_response):
+            models = client.get_models()
+        assert len(models) == 1
+        assert isinstance(models[0], LMSModel)
+        assert models[0].publisher == "qwen"
+
+    def test_get_models_raw_mode(self, client):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"models": [self.SAMPLE_MODEL]}
+        mock_response.raise_for_status = MagicMock()
+
+        with patch.object(client._client, "get", return_value=mock_response):
+            raw = client.get_models(raw=True)
+        assert isinstance(raw[0], dict)
+        assert raw[0]["key"] == "qwen/qwen2.5-7b-instruct"
+
+
+class TestLMSLoadResult:
+    """Phase 3: Model load response parsing."""
+
+    def test_load_model_returns_result(self, client):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "type": "llm",
+            "instance_id": "test/model-7b",
+            "load_time_seconds": 5.2,
+            "status": "loaded",
+            "load_config": {"context_length": 8192, "flash_attention": True},
+        }
+        mock_response.raise_for_status = MagicMock()
+
+        with patch.object(client._client, "post", return_value=mock_response):
+            result = client.load_model("test/model-7b", echo_load_config=True)
+        assert isinstance(result, LMSLoadResult)
+        assert result.type == "llm"
+        assert result.instance_id == "test/model-7b"
+        assert result.load_time_seconds == 5.2
+        assert result.status == "loaded"
+        assert result.load_config["context_length"] == 8192
+
+    def test_load_model_error_returns_error_result(self, client):
+        with patch.object(client._client, "post", side_effect=Exception("connection refused")):
+            result = client.load_model("bad/model")
+        assert result.status == "error"
+        assert result.instance_id == "bad/model"
+
+    def test_echo_load_config_sent(self, client):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"status": "loaded", "instance_id": "m"}
+        mock_response.raise_for_status = MagicMock()
+
+        with patch.object(client._client, "post", return_value=mock_response) as mock_post:
+            client.load_model("test/model", echo_load_config=True)
+        body = mock_post.call_args.kwargs["json"]
+        assert body["echo_load_config"] is True
+
+
+class TestLoadConfigFix:
+    """Phase 3: LoadConfig field name fix."""
+
+    def test_offload_kv_cache_field_name(self):
+        lc = LoadConfig(keep_kv_cache_on_gpu=True)
+        body = lc.to_rest_body()
+        assert "offload_kv_cache_to_gpu" in body
+        assert "keep_model_in_memory" not in body
+        assert body["offload_kv_cache_to_gpu"] is True
+
+
+class TestUnloadFix:
+    """Phase 4: Unload uses instance_id."""
+
+    def test_unload_sends_instance_id(self, client):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"instance_id": "test/model"}
+        mock_response.raise_for_status = MagicMock()
+
+        with patch.object(client._client, "post", return_value=mock_response) as mock_post:
+            client.unload_model("test/model")
+        body = mock_post.call_args.kwargs["json"]
+        assert body == {"instance_id": "test/model"}
+        assert "model" not in body
+
+
+class TestModelDownload:
+    """Phases 5+6: Download endpoint."""
+
+    def test_download_model(self, client):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "job_id": "dl_abc123",
+            "status": "downloading",
+            "total_size_bytes": 4_370_000_000,
+            "started_at": "2024-01-01T00:00:00Z",
+        }
+        mock_response.raise_for_status = MagicMock()
+
+        with patch.object(client._client, "post", return_value=mock_response) as mock_post:
+            job = client.download_model("ibm/granite-4-micro", quantization="Q4_K_M")
+        assert isinstance(job, LMSDownloadJob)
+        assert job.job_id == "dl_abc123"
+        assert job.status == "downloading"
+        body = mock_post.call_args.kwargs["json"]
+        assert body["model"] == "ibm/granite-4-micro"
+        assert body["quantization"] == "Q4_K_M"
+
+    def test_download_already_downloaded(self, client):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"status": "already_downloaded"}
+        mock_response.raise_for_status = MagicMock()
+
+        with patch.object(client._client, "post", return_value=mock_response):
+            job = client.download_model("ibm/granite-4-micro")
+        assert job.status == "already_downloaded"
+        assert job.job_id is None
+
+    def test_download_status(self, client):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "job_id": "dl_abc123",
+            "status": "downloading",
+            "bytes_per_second": 50_000_000,
+            "total_size_bytes": 4_370_000_000,
+            "downloaded_bytes": 2_000_000_000,
+            "started_at": "2024-01-01T00:00:00Z",
+        }
+        mock_response.raise_for_status = MagicMock()
+
+        with patch.object(client._client, "get", return_value=mock_response):
+            status = client.download_status("dl_abc123")
+        assert isinstance(status, LMSDownloadStatus)
+        assert status.status == "downloading"
+        assert status.bytes_per_second == 50_000_000
+        assert 0.45 < status.progress < 0.46
+
+    def test_download_status_progress_complete(self):
+        s = LMSDownloadStatus(status="completed")
+        assert s.progress == 1.0
+
+    def test_download_error_returns_failed(self, client):
+        with patch.object(client._client, "post", side_effect=Exception("timeout")):
+            job = client.download_model("bad/model")
+        assert job.status == "failed"
+
+
+class TestMCPHelpers:
+    """Phase 7: MCP integration completeness."""
+
+    def test_plugin_basic(self):
+        p = MCP.plugin("mcp/cosysim")
+        assert p == {"type": "plugin", "id": "mcp/cosysim"}
+
+    def test_plugin_with_allowed_tools(self):
+        p = MCP.plugin("mcp/playwright", allowed_tools=["navigate", "click"])
+        assert p["allowed_tools"] == ["navigate", "click"]
+
+    def test_ephemeral_basic(self):
+        e = MCP.ephemeral("http://localhost:8700/mcp/sse")
+        assert e["type"] == "ephemeral_mcp"
+        assert e["server_url"] == "http://localhost:8700/mcp/sse"
+        assert "server_label" in e
+
+    def test_ephemeral_with_label(self):
+        e = MCP.ephemeral("http://localhost:8700/mcp/sse", server_label="cosysim")
+        assert e["server_label"] == "cosysim"
+
+    def test_ephemeral_with_allowed_tools(self):
+        e = MCP.ephemeral("http://localhost:8700/mcp/sse", allowed_tools=["get_state"])
+        assert e["allowed_tools"] == ["get_state"]
+
+    def test_ephemeral_with_headers(self):
+        e = MCP.ephemeral("http://localhost:8700/mcp/sse", headers={"X-Api-Key": "secret"})
+        assert e["headers"] == {"X-Api-Key": "secret"}
+
+    def test_ephemeral_all_params(self):
+        e = MCP.ephemeral(
+            "http://localhost:8700/mcp/sse",
+            server_label="skills",
+            allowed_tools=["a", "b"],
+            headers={"Authorization": "Bearer tok"},
+        )
+        assert e["server_label"] == "skills"
+        assert e["allowed_tools"] == ["a", "b"]
+        assert e["headers"]["Authorization"] == "Bearer tok"
+
+
+class TestSpeculativeDecoding:
+    """Phase 8: Speculative decoding."""
+
+    def test_draft_model_in_native_v1_payload(self):
+        cfg = InferenceConfig(draft_model="qwen2.5-0.5b-instruct")
+        payload = cfg.to_native_v1()
+        assert payload["draft_model"] == "qwen2.5-0.5b-instruct"
+
+    def test_no_draft_model_when_none(self):
+        cfg = InferenceConfig()
+        payload = cfg.to_native_v1()
+        assert "draft_model" not in payload
+
+    def test_enable_speculative_loads_both(self, client):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "type": "llm", "instance_id": "m", "load_time_seconds": 1.0, "status": "loaded"
+        }
+        mock_response.raise_for_status = MagicMock()
+
+        with patch.object(client._client, "post", return_value=mock_response) as mock_post:
+            main_r, draft_r = client.enable_speculative("qwen/7b", "qwen/0.5b")
+        assert main_r.status == "loaded"
+        assert draft_r.status == "loaded"
+        assert mock_post.call_count == 2
+
+    def test_disable_speculative_unloads_draft(self, client):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"instance_id": "qwen/0.5b"}
+        mock_response.raise_for_status = MagicMock()
+
+        with patch.object(client._client, "post", return_value=mock_response):
+            ok = client.disable_speculative("qwen/0.5b")
+        assert ok is True
+
+
+class TestInvalidToolCallParsing:
+    """Phase 8: invalid_tool_call in output array."""
+
+    def test_invalid_tool_call_logged_not_crash(self, client):
+        data = {
+            "model_instance_id": "test",
+            "output": [
+                {"type": "message", "content": "I tried but failed."},
+                {
+                    "type": "invalid_tool_call",
+                    "reason": "Tool not found",
+                    "metadata": {
+                        "type": "invalid_name",
+                        "tool_name": "nonexistent_tool",
+                    },
+                },
+            ],
+            "stats": {"input_tokens": 10, "total_output_tokens": 5, "reasoning_output_tokens": 0,
+                       "tokens_per_second": 30.0, "time_to_first_token_seconds": 0.1},
+            "response_id": "resp_xyz",
+        }
+        resp = client._parse_v1_output(data, "test")
+        assert resp.content == "I tried but failed."
+        assert resp.response_id == "resp_xyz"
+        # invalid_tool_call should not be in tool_calls list
+        assert len(resp.tool_calls) == 0

@@ -2,6 +2,28 @@
 
 All notable changes to CosySim are documented here.
 
+## [3.2.0] — 2026-02-23
+
+### API-Complete LMStudio v1 REST Client
+- **Authentication** — Optional Bearer token support (`lmstudio.api_token` in config); injected into all HTTP requests
+- **Rich model listing** — `LMSModel` dataclass with full API fields: publisher, quantization (name, bits_per_weight), size_bytes, format, capabilities (vision, trained_for_tool_use), description, max_context_length
+- **Model load response** — `LMSLoadResult` with instance_id, load_time_seconds, status, optional echoed load_config
+- **Model download** — `download_model()` for catalog/HuggingFace downloads; `download_status()` for progress tracking
+- **Unload fix** — Now sends `instance_id` field per API spec (was `model`)
+- **LoadConfig fix** — Correct field name `offload_kv_cache_to_gpu` (was `keep_model_in_memory`)
+- **MCP completeness** — `allowed_tools` and `headers` support on `MCP.ephemeral()` and `MCP.plugin()` helpers
+- **Speculative decoding** — `enable_speculative(main, draft)` / `disable_speculative(draft)` convenience methods; `draft_model` wired through to chat payload via `InferenceConfig.to_native_v1()`
+- **invalid_tool_call** — Properly parsed from output array (logged as warning, not appended to tool_calls)
+
+### New Dataclasses
+- `LMSModel`, `LMSModelInstance`, `LMSQuantization`, `LMSCapabilities` — Rich model metadata
+- `LMSLoadResult` — Structured load response (replaces bool)
+- `LMSDownloadJob`, `LMSDownloadStatus` — Download lifecycle tracking
+
+### Testing
+- **734 tests passing** across 28 test files (up from 699)
+- 35 new tests covering: auth injection, rich model parsing, load result parsing, unload fix, download endpoints, MCP helpers, speculative decoding, invalid_tool_call parsing
+
 ## [3.1.0] — 2026-02-22
 
 ### Showcase Scenes (v3.x Framework Demos)

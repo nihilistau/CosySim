@@ -23,7 +23,7 @@ Or use the install script:
 ## ✅ Verify Setup
 
 ```bash
-# Run all 699 tests
+# Run all 734 tests
 python -m pytest tests/ -v --tb=short --ignore=tests/test_agent_loop.py --ignore=tests/live_wire_test.py
 
 # Check system status

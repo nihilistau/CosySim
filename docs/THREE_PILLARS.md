@@ -12,7 +12,7 @@ CosySim is built on three pillars that work together bidirectionally.
 │  ├── spatial/     │   ├── bedroom/   └── development.yaml       │
 │  ├── media/       │   ├── hub/                                  │
 │  ├── logging/     │   ├── admin/     tests/                     │
-│  ├── lmstudio/    │   ├── casino/    └── 699 tests              │
+│  ├── lmstudio/    │   ├── casino/    └── 734 tests              │
 │  ├── mcp/         │   ├── realm/                                │
 │  ├── tts/         │   ├── neoncity/                             │
 │  └── config.py    │   ├── coders/                               │

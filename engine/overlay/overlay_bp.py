@@ -235,8 +235,8 @@ def api_models_load():
             flash_attention=data.get("flash_attention"),
             ttl=data.get("ttl"),
         )
-        success = client.load_model(model_id, config=load_config)
-        return jsonify({"ok": success})
+        result = client.load_model(model_id, config=load_config)
+        return jsonify({"ok": result.status == "loaded"})
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 500
 

@@ -1,24 +1,39 @@
 """
-LMSClient v2.7 — Native LMStudio v1 REST API client (v1-only)
+LMSClient v3.2 — API-Complete LMStudio v1 REST API client
 
-**CosySim Framework v2.7** — all inference through ``/api/v1/chat``.
+**CosySim Framework v3.2** — all inference through ``/api/v1/chat``.
+
+Implements every endpoint in the LMStudio v1 REST API:
+
+* ``POST /api/v1/chat``                     — Inference (stateful + stateless)
+* ``GET  /api/v1/models``                   — List models (rich metadata)
+* ``POST /api/v1/models/load``              — Load model (with config echo)
+* ``POST /api/v1/models/unload``            — Unload model
+* ``POST /api/v1/models/download``          — Download model from catalog
+* ``GET  /api/v1/models/download/status``   — Download progress tracking
 
 Features:
 
+* **Authentication** — Optional Bearer token for secured LMStudio servers.
 * **Stateful chats** — ``previous_response_id`` / ``response_id`` for
   server-managed context; conversation branching by reusing any historical
   response_id.
 * **Store / no-store** — ``store: false`` for stateless one-off requests;
   ``store: true`` (default) returns a ``response_id`` for continuations.
-* **Typed SSE streaming** — proper event parsing for chat.start,
-  model_load.*, prompt_processing.*, reasoning.*, tool_call.*,
-  message.*, error, chat.end (full aggregated result).
-* **Ephemeral MCP** — per-request ``integrations`` for tool calling.
+* **Typed SSE streaming** — proper event parsing for all 19 event types:
+  chat.start, model_load.*, prompt_processing.*, reasoning.*,
+  tool_call.*, message.*, error, chat.end.
+* **Ephemeral MCP** — per-request ``integrations`` for tool calling
+  with ``allowed_tools`` and ``headers`` support.
 * **Full param control** — top_k, min_p, repeat_penalty, reasoning mode,
   context_length override per request.
 * **Structured output** — JSON schema enforcement at logit level.
 * **Image input** — VLM support via ``{type: "image", data_url: "..."}``.
-* **Speculative decoding** — draft model for 2-3x throughput.
+* **Speculative decoding** — ``enable_speculative()`` loads main + draft
+  model pair; ``draft_model`` passed through to chat payload.
+* **Rich model objects** — ``LMSModel`` with full metadata (capabilities,
+  quantization, format, publisher, description).
+* **Model download** — Download models by catalog ID or Hugging Face URL.
 
 Usage::
 
@@ -32,11 +47,17 @@ Usage::
     for chunk in client.chat_stream(messages, on_event=my_handler):
         print(chunk, end="")
 
-    # Stateless one-shot (no server-side storage)
-    resp = client.chat(messages, store=False)
+    # Rich model listing
+    models = client.get_models()  # List[LMSModel]
+    for m in models:
+        print(m.display_name, m.capabilities, m.quantization)
 
-    # Conversation branching
-    resp2 = client.chat_stateful("Branch here", previous_response_id=old_resp_id)
+    # Download + load
+    job = client.download_model("ibm/granite-4-micro")
+    result = client.load_model("ibm/granite-4-micro", echo_load_config=True)
+
+    # Speculative decoding
+    client.enable_speculative("qwen2.5-7b-instruct", "qwen2.5-0.5b-instruct")
 """
 from __future__ import annotations
 
@@ -153,25 +174,178 @@ class LMSModelInfo:
     architecture: str = ""
     parameters: str = ""
     context_length: int = 0
+    max_context_length: int = 0
     supports_vision: bool = False
     supports_tool_use: bool = False
     quantization: str = ""
+
+
+@dataclass
+class LMSModelInstance:
+    """A loaded instance of a model (from ``loaded_instances[]``)."""
+    id: str = ""
+    config: Dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def context_length(self) -> int:
+        return self.config.get("context_length", 0)
+
+    @property
+    def eval_batch_size(self) -> Optional[int]:
+        return self.config.get("eval_batch_size")
+
+    @property
+    def flash_attention(self) -> Optional[bool]:
+        return self.config.get("flash_attention")
+
+    @property
+    def num_experts(self) -> Optional[int]:
+        return self.config.get("num_experts")
+
+    @property
+    def offload_kv_cache_to_gpu(self) -> Optional[bool]:
+        return self.config.get("offload_kv_cache_to_gpu")
+
+
+@dataclass
+class LMSQuantization:
+    """Quantization info for a model."""
+    name: Optional[str] = None
+    bits_per_weight: Optional[float] = None
+
+
+@dataclass
+class LMSCapabilities:
+    """Model capabilities."""
+    vision: bool = False
+    trained_for_tool_use: bool = False
+
+
+@dataclass
+class LMSModel:
+    """Full model metadata from ``GET /api/v1/models``.
+
+    Maps every field from the LMStudio v1 response schema.
+    """
+    type: str = "llm"
+    publisher: str = ""
+    key: str = ""
+    display_name: str = ""
+    architecture: Optional[str] = None
+    quantization: Optional[LMSQuantization] = None
+    size_bytes: int = 0
+    params_string: Optional[str] = None
+    loaded_instances: List[LMSModelInstance] = field(default_factory=list)
+    max_context_length: int = 0
+    format: Optional[str] = None
+    capabilities: Optional[LMSCapabilities] = None
+    description: Optional[str] = None
+
+    @property
+    def is_loaded(self) -> bool:
+        return len(self.loaded_instances) > 0
+
+    @property
+    def instance_id(self) -> str:
+        """The ID to use for ``/api/v1/chat`` model field."""
+        if self.loaded_instances:
+            return self.loaded_instances[0].id
+        return self.key
+
+    @classmethod
+    def from_api(cls, data: Dict[str, Any]) -> "LMSModel":
+        """Parse from a single model entry in ``GET /api/v1/models`` response."""
+        quant_data = data.get("quantization")
+        quant = None
+        if quant_data and isinstance(quant_data, dict):
+            quant = LMSQuantization(
+                name=quant_data.get("name"),
+                bits_per_weight=quant_data.get("bits_per_weight"),
+            )
+        cap_data = data.get("capabilities")
+        caps = None
+        if cap_data and isinstance(cap_data, dict):
+            caps = LMSCapabilities(
+                vision=cap_data.get("vision", False),
+                trained_for_tool_use=cap_data.get("trained_for_tool_use", False),
+            )
+        instances = [
+            LMSModelInstance(id=inst.get("id", ""), config=inst.get("config", {}))
+            for inst in data.get("loaded_instances", [])
+        ]
+        return cls(
+            type=data.get("type", "llm"),
+            publisher=data.get("publisher", ""),
+            key=data.get("key", ""),
+            display_name=data.get("display_name", data.get("key", "")),
+            architecture=data.get("architecture"),
+            quantization=quant,
+            size_bytes=data.get("size_bytes", 0),
+            params_string=data.get("params_string"),
+            loaded_instances=instances,
+            max_context_length=data.get("max_context_length", 0),
+            format=data.get("format"),
+            capabilities=caps,
+            description=data.get("description"),
+        )
+
+
+@dataclass
+class LMSLoadResult:
+    """Response from ``POST /api/v1/models/load``."""
+    type: str = "llm"
+    instance_id: str = ""
+    load_time_seconds: float = 0.0
+    status: str = ""
+    load_config: Optional[Dict[str, Any]] = None
+
+
+@dataclass
+class LMSDownloadJob:
+    """Response from ``POST /api/v1/models/download``."""
+    job_id: Optional[str] = None
+    status: str = ""
+    total_size_bytes: Optional[int] = None
+    started_at: Optional[str] = None
+    completed_at: Optional[str] = None
+
+
+@dataclass
+class LMSDownloadStatus:
+    """Response from ``GET /api/v1/models/download/status/:job_id``."""
+    job_id: str = ""
+    status: str = ""
+    bytes_per_second: Optional[float] = None
+    estimated_completion: Optional[str] = None
+    completed_at: Optional[str] = None
+    total_size_bytes: Optional[int] = None
+    downloaded_bytes: Optional[int] = None
+    started_at: Optional[str] = None
+
+    @property
+    def progress(self) -> float:
+        """Download progress as 0.0–1.0."""
+        if self.total_size_bytes and self.downloaded_bytes:
+            return self.downloaded_bytes / self.total_size_bytes
+        return 0.0 if self.status == "downloading" else 1.0
 
 
 # ── Main client ─────────────────────────────────────────────────────────
 
 class LMSClient:
     """
-    Native LMStudio v1 REST API client (v2 framework — v1-only).
+    API-complete LMStudio v1 REST client.
 
-    Endpoints used:
-    - ``/api/v1/chat``          — All inference (stateful + stateless)
-    - ``/api/v1/models``        — List loaded models
-    - ``/api/v1/models/load``   — Load a model
-    - ``/api/v1/models/unload`` — Unload a model
+    Endpoints:
+    - ``POST /api/v1/chat``                    — All inference
+    - ``GET  /api/v1/models``                  — List models (rich metadata)
+    - ``POST /api/v1/models/load``             — Load model
+    - ``POST /api/v1/models/unload``           — Unload model
+    - ``POST /api/v1/models/download``         — Download model
+    - ``GET  /api/v1/models/download/status``  — Download progress
 
-    Tools are accessed via ephemeral MCP ``integrations``, not the
-    ``tools`` field.  Set ``lmstudio.cosysim_mcp_url`` in config.
+    Authentication via ``api_token`` (Bearer header) is optional.
+    Tools are accessed via ephemeral MCP ``integrations``.
     """
 
     def __init__(
@@ -180,6 +354,7 @@ class LMSClient:
         *,
         timeout: float = 120.0,
         config=None,
+        api_token: Optional[str] = None,
     ) -> None:
         if config is None:
             try:
@@ -200,6 +375,13 @@ class LMSClient:
         self.timeout = timeout
         self._config = config
 
+        # Authentication
+        self._api_token: Optional[str] = (
+            api_token
+            or (config.get("lmstudio.api_token", "") if config else "")
+            or None
+        )
+
         # Defaults from config
         self._default_model = (config.get("llm.model", "") if config else "")
         self._mcp_enabled = bool(config.get("lmstudio.mcp_enabled", True) if config else True)
@@ -208,8 +390,11 @@ class LMSClient:
         # Inference defaults from config
         self._inference_defaults = InferenceConfig.from_yaml() if config else InferenceConfig()
 
-        # HTTP client with connection pooling
-        self._client = httpx.Client(timeout=timeout)
+        # HTTP client with connection pooling and auth headers
+        headers: Dict[str, str] = {}
+        if self._api_token:
+            headers["Authorization"] = f"Bearer {self._api_token}"
+        self._client = httpx.Client(timeout=timeout, headers=headers)
 
         # Model cache
         self._resolved_model: Optional[str] = None
@@ -228,75 +413,91 @@ class LMSClient:
         except Exception:
             return False
 
-    def get_models(self, loaded_only: bool = True) -> List[Dict[str, Any]]:
+    def get_models(
+        self,
+        loaded_only: bool = True,
+        *,
+        raw: bool = False,
+    ) -> List[Any]:
         """List models via native v1 API.
 
         Args:
             loaded_only: If True (default), return only currently loaded models.
-                         If False, return all downloaded models.
+            raw: If True, return legacy dict format for backward compatibility.
 
-        Returns list of dicts. For loaded models, ``id`` is taken from the
-        first ``loaded_instances[].id`` so it can be passed to ``/api/v1/chat``.
+        Returns:
+            List of ``LMSModel`` objects (or dicts if ``raw=True``).
         """
         try:
             r = self._client.get(f"{self.base_url}/api/v1/models", timeout=5.0)
             r.raise_for_status()
             data = r.json()
 
-            # v1 returns {"models": [...]} with rich metadata
             raw_models = data.get("models", data.get("data", data if isinstance(data, list) else []))
+            models: List[LMSModel] = []
 
-            results: List[Dict[str, Any]] = []
             for m in raw_models:
-                instances = m.get("loaded_instances", [])
-                is_loaded = len(instances) > 0
-
-                if loaded_only and not is_loaded:
+                model = LMSModel.from_api(m)
+                if loaded_only and not model.is_loaded:
                     continue
+                models.append(model)
 
-                entry: Dict[str, Any] = {
-                    "key": m.get("key", ""),
-                    "display_name": m.get("display_name", m.get("key", "")),
-                    "type": m.get("type", "llm"),
-                    "architecture": m.get("architecture", ""),
-                    "params": m.get("params_string", ""),
-                    "loaded": is_loaded,
-                }
-                # Use instance id for loaded models (this is what /api/v1/chat wants)
-                if instances:
-                    entry["id"] = instances[0].get("id", m.get("key", ""))
-                    entry["config"] = instances[0].get("config", {})
-                    entry["context_length"] = instances[0].get("config", {}).get("context_length", 0)
-                else:
-                    entry["id"] = m.get("key", "")
+            if raw:
+                # Backward-compat dict format
+                results: List[Dict[str, Any]] = []
+                for model in models:
+                    entry: Dict[str, Any] = {
+                        "key": model.key,
+                        "display_name": model.display_name,
+                        "type": model.type,
+                        "architecture": model.architecture or "",
+                        "params": model.params_string or "",
+                        "loaded": model.is_loaded,
+                        "id": model.instance_id,
+                    }
+                    if model.loaded_instances:
+                        entry["config"] = model.loaded_instances[0].config
+                        entry["context_length"] = model.loaded_instances[0].context_length
+                    results.append(entry)
+                return results
 
-                results.append(entry)
-
-            return results
+            return models
         except Exception as exc:
             logger.debug("get_models failed: %s", exc)
             return []
 
     def get_model_info(self, model_id: Optional[str] = None) -> LMSModelInfo:
-        """Get detailed info about a model via SDK."""
-        info = LMSModelInfo(model_id=model_id or self.resolve_model())
+        """Get detailed info about a model (REST-first, SDK fallback)."""
+        resolved = model_id or self.resolve_model()
+        info = LMSModelInfo(model_id=resolved)
+
+        # Try REST API first — has all fields since v1
         try:
-            import lmstudio as lms
-            handle = lms.llm(info.model_id) if info.model_id else lms.llm()
-            mi = handle.get_model_info()
-            info.architecture = getattr(mi, "architecture", "")
-            info.parameters = getattr(mi, "parameters", "")
-            info.context_length = handle.get_context_length()
-            info.supports_vision = getattr(mi, "vision", False)
-            info.supports_tool_use = getattr(mi, "tool_use", False)
+            models = self.get_models(loaded_only=False)
+            for m in models:
+                if isinstance(m, LMSModel) and (m.key == resolved or m.instance_id == resolved):
+                    info.architecture = m.architecture or ""
+                    info.parameters = m.params_string or ""
+                    info.max_context_length = m.max_context_length
+                    if m.loaded_instances:
+                        info.context_length = m.loaded_instances[0].context_length
+                    else:
+                        info.context_length = m.max_context_length
+                    if m.capabilities:
+                        info.supports_vision = m.capabilities.vision
+                        info.supports_tool_use = m.capabilities.trained_for_tool_use
+                    if m.quantization and m.quantization.name:
+                        info.quantization = m.quantization.name
+                    return info
         except Exception as exc:
-            logger.debug("get_model_info failed: %s", exc)
-            # Fallback context length
-            if not info.context_length:
-                info.context_length = int(
-                    self._config.get("lmstudio.default_load_opts.context_length", 4096)
-                    if self._config else 4096
-                )
+            logger.debug("REST get_model_info failed: %s", exc)
+
+        # Fallback context length
+        if not info.context_length:
+            info.context_length = int(
+                self._config.get("lmstudio.default_load_opts.context_length", 4096)
+                if self._config else 4096
+            )
         return info
 
     def resolve_model(self, hint: Optional[str] = None) -> str:
@@ -307,7 +508,7 @@ class LMSClient:
         if self._resolved_model and (now - self._resolved_at) < _MODEL_CACHE_TTL:
             return self._resolved_model
 
-        models = self.get_models()
+        models = self.get_models(raw=True)
         model_ids = [m.get("id", "") for m in models if m.get("id")]
 
         if self._default_model and self._default_model in model_ids:
@@ -549,11 +750,18 @@ class LMSClient:
         model_id: str,
         *,
         config: Optional[LoadConfig] = None,
-    ) -> bool:
-        """Load a model via ``POST /api/v1/models/load``."""
+        echo_load_config: bool = False,
+    ) -> LMSLoadResult:
+        """Load a model via ``POST /api/v1/models/load``.
+
+        Returns an ``LMSLoadResult`` with instance ID, load time, and
+        optionally the final load config applied by LMStudio.
+        """
         body: Dict[str, Any] = {"model": model_id}
         if config:
             body.update(config.to_rest_body())
+        if echo_load_config:
+            body["echo_load_config"] = True
 
         try:
             r = self._client.post(
@@ -562,15 +770,124 @@ class LMSClient:
                 timeout=300.0,
             )
             r.raise_for_status()
+            data = r.json()
             self.invalidate_model_cache()
             logger.info("Model loaded via REST: %s", model_id)
-            return True
+
+            return LMSLoadResult(
+                type=data.get("type", "llm"),
+                instance_id=data.get("instance_id", model_id),
+                load_time_seconds=data.get("load_time_seconds", 0.0),
+                status=data.get("status", "loaded"),
+                load_config=data.get("load_config"),
+            )
         except httpx.HTTPStatusError as exc:
             logger.error("REST load failed (%d): %s", exc.response.status_code, exc.response.text[:200])
-            return False
+            return LMSLoadResult(status="error", instance_id=model_id)
         except Exception as exc:
             logger.error("REST load failed: %s", exc)
-            return False
+            return LMSLoadResult(status="error", instance_id=model_id)
+
+    # ── Model download (REST) ──────────────────────────────────────
+
+    def download_model(
+        self,
+        model: str,
+        *,
+        quantization: Optional[str] = None,
+    ) -> LMSDownloadJob:
+        """Download a model via ``POST /api/v1/models/download``.
+
+        Args:
+            model: Model catalog ID (e.g. ``"ibm/granite-4-micro"``)
+                   or Hugging Face URL.
+            quantization: Quantization level (e.g. ``"Q4_K_M"``).
+                          Only supported for Hugging Face links.
+
+        Returns ``LMSDownloadJob`` with ``job_id`` for tracking progress.
+        """
+        body: Dict[str, Any] = {"model": model}
+        if quantization:
+            body["quantization"] = quantization
+
+        try:
+            r = self._client.post(
+                f"{self.base_url}/api/v1/models/download",
+                json=body,
+                timeout=30.0,
+            )
+            r.raise_for_status()
+            data = r.json()
+            return LMSDownloadJob(
+                job_id=data.get("job_id"),
+                status=data.get("status", ""),
+                total_size_bytes=data.get("total_size_bytes"),
+                started_at=data.get("started_at"),
+                completed_at=data.get("completed_at"),
+            )
+        except httpx.HTTPStatusError as exc:
+            logger.error("Download failed (%d): %s", exc.response.status_code, exc.response.text[:200])
+            return LMSDownloadJob(status="failed")
+        except Exception as exc:
+            logger.error("Download failed: %s", exc)
+            return LMSDownloadJob(status="failed")
+
+    def download_status(self, job_id: str) -> LMSDownloadStatus:
+        """Check download progress via ``GET /api/v1/models/download/status/:job_id``."""
+        try:
+            r = self._client.get(
+                f"{self.base_url}/api/v1/models/download/status/{job_id}",
+                timeout=10.0,
+            )
+            r.raise_for_status()
+            data = r.json()
+            return LMSDownloadStatus(
+                job_id=data.get("job_id", job_id),
+                status=data.get("status", ""),
+                bytes_per_second=data.get("bytes_per_second"),
+                estimated_completion=data.get("estimated_completion"),
+                completed_at=data.get("completed_at"),
+                total_size_bytes=data.get("total_size_bytes"),
+                downloaded_bytes=data.get("downloaded_bytes"),
+                started_at=data.get("started_at"),
+            )
+        except httpx.HTTPStatusError as exc:
+            logger.error("Download status failed (%d): %s", exc.response.status_code, exc.response.text[:200])
+            return LMSDownloadStatus(job_id=job_id, status="error")
+        except Exception as exc:
+            logger.error("Download status failed: %s", exc)
+            return LMSDownloadStatus(job_id=job_id, status="error")
+
+    # ── Speculative decoding ───────────────────────────────────────
+
+    def enable_speculative(
+        self,
+        main_model: str,
+        draft_model: str,
+        *,
+        main_config: Optional[LoadConfig] = None,
+        draft_config: Optional[LoadConfig] = None,
+    ) -> tuple:
+        """Load both main and draft models for speculative decoding.
+
+        LMStudio activates speculative decoding automatically when a
+        compatible draft model is loaded alongside the main model.
+
+        Returns ``(main_result, draft_result)`` tuple of ``LMSLoadResult``.
+        """
+        main_result = self.load_model(main_model, config=main_config)
+        draft_result = self.load_model(draft_model, config=draft_config)
+        if main_result.status == "loaded" and draft_result.status == "loaded":
+            logger.info("Speculative decoding enabled: main=%s draft=%s",
+                        main_model, draft_model)
+        else:
+            logger.warning("Speculative decoding setup incomplete: main=%s draft=%s",
+                           main_result.status, draft_result.status)
+        return main_result, draft_result
+
+    def disable_speculative(self, draft_model: str) -> bool:
+        """Unload the draft model to disable speculative decoding."""
+        return self.unload_model(draft_model)
 
     # ── Token counting ──────────────────────────────────────────────
 
@@ -1076,11 +1393,14 @@ class LMSClient:
         self.invalidate_model_cache()
 
     def unload_model(self, model_id: str) -> bool:
-        """Unload a model via ``POST /api/v1/models/unload``."""
+        """Unload a model via ``POST /api/v1/models/unload``.
+
+        Per API spec, sends ``{"instance_id": ...}``.
+        """
         try:
             r = self._client.post(
                 f"{self.base_url}/api/v1/models/unload",
-                json={"model": model_id},
+                json={"instance_id": model_id},
                 timeout=30.0,
             )
             r.raise_for_status()
@@ -1094,7 +1414,8 @@ class LMSClient:
             return False
 
     def __repr__(self) -> str:
-        return f"<LMSClient url={self.base_url} api=native_v1 mcp={self._mcp_enabled}>"
+        auth = "auth" if self._api_token else "no-auth"
+        return f"<LMSClient url={self.base_url} api=native_v1 mcp={self._mcp_enabled} {auth}>"
 
     def __del__(self):
         try:
@@ -1106,17 +1427,55 @@ class LMSClient:
 # ── MCP integration helpers ─────────────────────────────────────────────
 
 class MCP:
-    """Factory for MCP integration payloads (v1 API ``integrations`` field)."""
+    """Factory for MCP integration payloads (v1 API ``integrations`` field).
+
+    Supports ``allowed_tools`` to restrict which tools a server exposes,
+    and ``headers`` for authenticated ephemeral servers.
+    """
 
     @staticmethod
-    def plugin(plugin_id: str) -> Dict[str, str]:
-        """Reference an MCP server registered in LMStudio's mcp.json."""
-        return {"type": "plugin", "id": plugin_id}
+    def plugin(
+        plugin_id: str,
+        *,
+        allowed_tools: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        """Reference an MCP server registered in LMStudio's mcp.json.
+
+        Args:
+            plugin_id: e.g. ``"mcp/playwright"``
+            allowed_tools: Restrict to these tool names only.
+        """
+        d: Dict[str, Any] = {"type": "plugin", "id": plugin_id}
+        if allowed_tools:
+            d["allowed_tools"] = allowed_tools
+        return d
 
     @staticmethod
-    def ephemeral(server_url: str) -> Dict[str, str]:
-        """Reference an MCP server by URL (not pre-registered)."""
-        return {"type": "ephemeral_mcp", "server_url": server_url}
+    def ephemeral(
+        server_url: str,
+        *,
+        server_label: Optional[str] = None,
+        allowed_tools: Optional[List[str]] = None,
+        headers: Optional[Dict[str, str]] = None,
+    ) -> Dict[str, Any]:
+        """Reference an MCP server by URL (not pre-registered).
+
+        Args:
+            server_url: The SSE endpoint URL.
+            server_label: Human-readable label (defaults to URL).
+            allowed_tools: Restrict to these tool names only.
+            headers: Custom HTTP headers for the MCP server connection.
+        """
+        d: Dict[str, Any] = {
+            "type": "ephemeral_mcp",
+            "server_label": server_label or server_url,
+            "server_url": server_url,
+        }
+        if allowed_tools:
+            d["allowed_tools"] = allowed_tools
+        if headers:
+            d["headers"] = headers
+        return d
 
 
 # ── Module-level singleton ──────────────────────────────────────────────

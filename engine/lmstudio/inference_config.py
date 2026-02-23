@@ -62,7 +62,7 @@ class InferenceConfig:
     draft_model: Optional[str] = None
 
     # MCP integrations: [{"type": "ephemeral_mcp", "server_url": "..."}, ...]
-    integrations: Optional[List[Dict[str, str]]] = None
+    integrations: Optional[List[Dict[str, Any]]] = None
 
     # Stateful chat: chain responses without resending full history
     previous_response_id: Optional[str] = None
@@ -165,6 +165,8 @@ class InferenceConfig:
             d["store"] = self.store
         if self.context_length is not None:
             d["context_length"] = self.context_length
+        if self.draft_model:
+            d["draft_model"] = self.draft_model
         return d
 
     def to_openai_compat(self) -> Dict[str, Any]:
@@ -243,7 +245,10 @@ class LoadConfig:
         )
 
     def to_rest_body(self) -> Dict[str, Any]:
-        """Build the JSON body for ``POST /api/v1/models/load``."""
+        """Build the JSON body for ``POST /api/v1/models/load``.
+
+        Field names match the LMStudio v1 API spec exactly.
+        """
         d: Dict[str, Any] = {}
         if self.context_length is not None:
             d["context_length"] = self.context_length
@@ -254,7 +259,7 @@ class LoadConfig:
         if self.eval_batch_size is not None:
             d["eval_batch_size"] = self.eval_batch_size
         if self.keep_kv_cache_on_gpu is not None:
-            d["keep_model_in_memory"] = self.keep_kv_cache_on_gpu
+            d["offload_kv_cache_to_gpu"] = self.keep_kv_cache_on_gpu
         if self.num_experts is not None:
             d["num_experts"] = self.num_experts
         return d

@@ -132,6 +132,9 @@ lmstudio:
   host: "127.0.0.1"
   port: 1234
   base_url: "http://127.0.0.1:1234"
+  # API authentication (optional — LMStudio defaults to no auth)
+  # Generate a token in LMStudio → Developer → Server Settings → Manage Tokens
+  api_token: ""                 # Bearer token for authenticated requests
   # API version: "v1" = legacy OpenAI-compat, "api_v1" = new LMStudio protocol
   api_version: "v1"
   # Default model-load options (tuned for RTX 2060 12 GB)

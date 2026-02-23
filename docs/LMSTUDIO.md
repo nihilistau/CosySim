@@ -1,6 +1,6 @@
 # LMStudio Integration Guide
 
-CosySim integrates deeply with LMStudio for local LLM inference. This guide covers the REST client, MCP bridge, streaming, and configuration.
+CosySim implements the **complete LMStudio v1 REST API** for local LLM inference. This guide covers all endpoints, MCP integration, streaming, speculative decoding, and configuration.
 
 ## Architecture
 
@@ -14,74 +14,154 @@ CosySim integrates deeply with LMStudio for local LLM inference. This guide cove
 └──────────────┘                                    └──────────────┘
 ```
 
+## API Coverage
+
+| Endpoint | Method | Client Method |
+|---|---|---|
+| `/api/v1/chat` | POST | `chat()`, `chat_stateful()`, `chat_stream()`, `chat_stream_stateful()` |
+| `/api/v1/models` | GET | `get_models()` → `List[LMSModel]` |
+| `/api/v1/models/load` | POST | `load_model()` → `LMSLoadResult` |
+| `/api/v1/models/unload` | POST | `unload_model()` |
+| `/api/v1/models/download` | POST | `download_model()` → `LMSDownloadJob` |
+| `/api/v1/models/download/status` | GET | `download_status()` → `LMSDownloadStatus` |
+
 ## LMSClient (v1 Native API)
 
-The main client (`engine/lmstudio/lms_client.py`) uses LMStudio's native `/api/v1/chat` endpoint:
+The main client (`engine/lmstudio/lms_client.py`) uses LMStudio's native v1 endpoints:
 
 ```python
-from engine.lmstudio.lms_client import LMSClient
+from engine.lmstudio import get_lms_client, InferenceConfig, MCP
 
-client = LMSClient()
+client = get_lms_client()
 
-# Stateful chat (server-side KV cache)
-result = client.chat_stateful(
-    messages=[{"role": "user", "content": "Hello!"}],
-    system_prompt="You are helpful.",
-    store=True,  # persist conversation server-side
-)
-print(result.text)
-print(result.response_id)       # for threading
-print(result.stats)             # tokens, timing
+# Simple chat
+resp = client.quick_reply("Hello!")
 
-# Stateless one-off query
-result = client.send_stateless(
-    messages=[{"role": "user", "content": "What is 2+2?"}],
-    system_prompt="Answer briefly.",
-)
+# With full config control
+cfg = InferenceConfig(temperature=0.3, max_output_tokens=2000, reasoning="on")
+resp = client.chat(messages, config=cfg)
 
-# Streaming with SSE events
-for event in client.chat_stream(messages, system_prompt="..."):
-    if event.type == "message.delta":
-        print(event.data.get("content", ""), end="")
+# Structured JSON output
+resp = client.chat_structured(messages, {"type": "object", "properties": {...}})
+
+# Streaming with typed events
+for chunk in client.chat_stream(messages, on_event=my_handler):
+    print(chunk, end="")
 ```
 
-### v1 API Format
+### Authentication
 
-LMStudio v1 uses `input` + `system_prompt`, NOT OpenAI's `messages` array:
+```python
+# Via config (config/default.yaml → lmstudio.api_token)
+client = get_lms_client()  # reads token from config
 
-```json
-{
-  "input": "Hello!",
-  "system_prompt": "You are helpful.",
-  "model": "loaded-model-id",
-  "store": true,
-  "previous_response_id": "resp_abc123"
-}
+# Or explicit
+client = LMSClient(api_token="lms-abc123...")
 ```
 
-The client handles conversion from standard `messages` format to v1 `input` automatically.
+Bearer token is injected into all HTTP requests automatically.
 
 ### Stateful Conversations
 
 ```python
-from engine.lmstudio.conversation import Conversation
+# Direct stateful API
+resp1 = client.chat_stateful("Hello!", system="You are helpful.")
+resp2 = client.chat_stateful("Tell me more.", previous_response_id=resp1.response_id)
 
-conv = Conversation(client)
-
-# First message
-resp1 = conv.send("Hello!")
-# resp1.response_id is tracked automatically
-
-# Continuation (uses previous_response_id for KV cache reuse)
-resp2 = conv.send("Tell me more.")
+# Via ConversationManager (recommended for scenes)
+from engine.lmstudio import get_conversation_manager
+conv = get_conversation_manager().create("aria_chat", system="You are Aria.")
+resp = conv.send("Hello!")           # auto-tracks response_id
+resp2 = conv.send("Tell me more.")   # reuses KV cache
 
 # Branch at a previous turn
-conv.branch_at(turn=1)  # fork from resp1
+conv.branch_at(turn=1)
 resp3 = conv.send("Actually, tell me something different.")
-
-# Stateless side-query (doesn't affect conversation history)
-result = conv.send_stateless("Quick question: what time is it?")
 ```
+
+### Rich Model Listing
+
+```python
+models = client.get_models()  # List[LMSModel]
+for m in models:
+    print(f"{m.display_name} ({m.params_string})")
+    print(f"  Publisher: {m.publisher}, Format: {m.format}")
+    print(f"  Quantization: {m.quantization.name} ({m.quantization.bits_per_weight} bpw)")
+    print(f"  Vision: {m.capabilities.vision}, Tool Use: {m.capabilities.trained_for_tool_use}")
+    print(f"  Max context: {m.max_context_length}, Size: {m.size_bytes / 1e9:.1f} GB")
+
+# Backward-compatible dict format
+raw = client.get_models(raw=True)
+```
+
+### Model Lifecycle
+
+```python
+# Load with config
+from engine.lmstudio import LoadConfig
+result = client.load_model("qwen/qwen2.5-7b-instruct",
+    config=LoadConfig(context_length=8192, flash_attention=True),
+    echo_load_config=True)
+print(f"Loaded in {result.load_time_seconds}s, config: {result.load_config}")
+
+# Unload
+client.unload_model("qwen/qwen2.5-7b-instruct")
+
+# Download from catalog
+job = client.download_model("ibm/granite-4-micro")
+status = client.download_status(job.job_id)
+print(f"Progress: {status.progress:.0%}, Speed: {status.bytes_per_second / 1e6:.1f} MB/s")
+```
+
+### Speculative Decoding
+
+Load a main + draft model pair for 2-3x throughput:
+
+```python
+# Enable (loads both models)
+main_r, draft_r = client.enable_speculative("qwen2.5-7b-instruct", "qwen2.5-0.5b-instruct")
+
+# All subsequent chat calls automatically benefit from speculative decoding
+resp = client.chat(messages)
+
+# Or pass draft_model per-request via InferenceConfig
+cfg = InferenceConfig(draft_model="qwen2.5-0.5b-instruct")
+resp = client.chat(messages, config=cfg)
+
+# Disable
+client.disable_speculative("qwen2.5-0.5b-instruct")
+```
+
+### MCP Integrations
+
+```python
+# Ephemeral MCP server (defined per-request)
+resp = client.chat(messages, integrations=[
+    MCP.ephemeral("http://localhost:8700/mcp/sse",
+        server_label="cosysim",
+        allowed_tools=["get_state", "update_state"],
+        headers={"X-Api-Key": "secret"}),
+])
+
+# Plugin from mcp.json
+resp = client.chat(messages, integrations=[
+    MCP.plugin("mcp/playwright", allowed_tools=["navigate", "click"]),
+])
+```
+
+### Streaming Events
+
+All 19 SSE event types are parsed:
+
+| Category | Events |
+|---|---|
+| Chat lifecycle | `chat.start`, `chat.end` |
+| Model loading | `model_load.start`, `model_load.progress`, `model_load.end` |
+| Prompt processing | `prompt_processing.start`, `prompt_processing.progress`, `prompt_processing.end` |
+| Reasoning | `reasoning.start`, `reasoning.delta`, `reasoning.end` |
+| Tool calls | `tool_call.start`, `tool_call.arguments`, `tool_call.success`, `tool_call.failure` |
+| Messages | `message.start`, `message.delta`, `message.end` |
+| Errors | `error` |
 
 ## MCP Server
 
@@ -111,55 +191,6 @@ CosySim exposes its capabilities as an MCP server (`engine/mcp/cosysim_server.py
 | `chain://{chain_id}` | EventChain tree |
 | `scene://{name}/status` | Scene health |
 
-### Running the MCP Server
-
-```bash
-# Stdio mode (for mcp.json registration)
-python -m engine.mcp.cosysim_server
-
-# HTTP/SSE mode (for web bridge)
-python -m engine.mcp.cosysim_server --http
-```
-
-## Web Bridge
-
-The web bridge (`engine/mcp/web_bridge.py`) is a FastAPI server that:
-
-1. **Proxies** LMStudio chat requests with SSE streaming
-2. **Mounts** the CosySim MCP server at `/mcp`
-3. Handles **file uploads** for MCP resource exposure
-4. Supports **abort** (client disconnect stops generation)
-
-```bash
-python launcher.py --mode bridge  # port 8601
-```
-
-### Endpoints
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/health` | Bridge + LMStudio status |
-| POST | `/api/chat` | Non-streaming proxy |
-| POST | `/api/chat/stream` | SSE streaming proxy |
-| POST | `/api/upload` | File upload |
-
-## CharacterAgent MCP Mode
-
-The `CharacterAgent` routes all inference through `VirtualAgentManager`, which
-uses `LMSClient` (v1 native API) with MCP tool integration:
-
-```python
-from engine.agents.character_agent import CharacterAgent
-
-agent = CharacterAgent(character)
-reply = agent.reply("Hello!")
-# → VirtualAgentManager → LMSClient.chat_stateful() → LMStudio /api/v1/chat
-```
-
-Skills are attached as tools automatically based on the agent's skill packs.
-The `AgentGovernor` wraps inference with pre/post interceptors for content
-filtering, mood sync, and stat updates.
-
 ## Configuration
 
 In `config/default.yaml`:
@@ -168,10 +199,30 @@ In `config/default.yaml`:
 lmstudio:
   host: "127.0.0.1"
   port: 1234
-  api_version: "v1"
-  mcp_enabled: false          # Enable per-request MCP
-  cosysim_mcp_url: ""         # CosySim MCP server URL
-  mcp_json_path: ""           # LMStudio mcp.json path
+  api_token: ""               # Bearer token (optional)
+  mcp_enabled: true
+  cosysim_mcp_url: "http://localhost:8700/mcp/sse"
+
+  inference_defaults:
+    temperature: 0.7
+    top_p: 0.9
+    top_k: 40
+    min_p: 0.05
+    repeat_penalty: 1.1
+    max_output_tokens: 4000
+    reasoning: false
+    # draft_model: ""         # speculative decoding
+
+  load_defaults:
+    context_length: 4096
+    gpu_offload: 0.9
+    flash_attention: true
+    eval_batch_size: 512
+    keep_kv_cache_on_gpu: true
+
+  speculative:
+    enabled: false
+    draft_model: ""           # small fast model for draft tokens
 ```
 
 ### LMStudio Settings Required
