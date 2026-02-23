@@ -30,6 +30,7 @@ from flask_cors import CORS
 from flask_socketio import SocketIO
 
 from engine.scenes.base_scene import BaseScene
+from engine.mcp.framework import MCPSceneMixin, get_framework
 
 from .realm_state import (
     DIRECTOR_PERSONALITIES,
@@ -113,11 +114,12 @@ Keep responses SHORT. You're a speech bubble, not a novel. Use humor, sarcasm, p
 #  REALM SCENE
 # ═══════════════════════════════════════════════════════════════
 
-class RealmScene(BaseScene):
+class RealmScene(BaseScene, MCPSceneMixin, mcp_scene_id="realm"):
     """The Realm — AI-Directed LitRPG / Visual Novel."""
 
     def __init__(self, host: str = "0.0.0.0", port: int = DEFAULT_PORT):
         super().__init__(scene_name=SCENE_ID, host=host, port=port)
+        self._mcp_init()
 
         # Flask + SocketIO
         self.app = Flask(
@@ -296,15 +298,11 @@ class RealmScene(BaseScene):
         self.state.advance_turn(result.get("narration", ""), result.get("choices", []))
 
     def _sync_to_mcp(self) -> None:
-        """Push game state to MCP framework."""
+        """Push game state to MCP framework via scene node."""
         if not self.state:
             return
         try:
-            from engine.mcp.framework import get_framework
-            fw = get_framework()
-            scene_node = fw.get_scene(SCENE_ID)
-            if scene_node:
-                scene_node.update_state(self.state.to_dict())
+            self.mcp.update_state(self.state.to_dict())
         except Exception:
             pass
 
@@ -344,6 +342,10 @@ class RealmScene(BaseScene):
             self.state.started_at = time.time()
             self._director_conv_id = None
             self._assistant_conv_id = None
+
+            # Register timers in MCP framework
+            fw = get_framework()
+            fw.start_timer(f"realm_game_{self.state.session_id}", time_limit)
 
             # Get opening narration from Director
             opening_prompt = (
@@ -489,6 +491,14 @@ class RealmScene(BaseScene):
                 return jsonify({"error": "No active game"}), 400
             self.state.murder = MurderMysteryState()
             result = self.state.murder.start_party_phase()
+
+            # Framework timer for murder mystery phases
+            fw = get_framework()
+            fw.start_timer("murder_party_phase", 300)   # 5 min party
+            fw.schedule_consequence(
+                SCENE_ID, "system", "murder_investigation",
+                {"victim": result["victim"]}, turn_delay=5,
+            )
             opening = self._director_infer(
                 "A MURDER MYSTERY PARTY begins! You're at an elegant mansion. "
                 f"The victim, {result['victim']}, will be found dead soon. "
@@ -565,7 +575,7 @@ class RealmScene(BaseScene):
     # ── BaseScene contract ──
 
     def start(self) -> None:
-        logger.info("The Realm v3.1 — LitRPG Visual Novel starting on port %d", self.port)
+        logger.info("The Realm v3.2 — LitRPG Visual Novel starting on port %d", self.port)
         self.socketio.run(self.app, host=self.host, port=self.port, debug=False, allow_unsafe_werkzeug=True)
 
     def stop(self) -> None:
@@ -576,7 +586,7 @@ class RealmScene(BaseScene):
             "name": "The Realm",
             "scene_id": SCENE_ID,
             "description": "AI-Directed LitRPG Visual Novel with dual-agent pipeline, murder mystery, and fourth-wall mechanics.",
-            "version": "3.1.0",
+            "version": "3.2.0",
             "port": self.port,
             "author": "CosySim",
             "tags": ["litrpg", "visual_novel", "dual_agent", "murder_mystery", "showcase"],

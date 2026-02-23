@@ -22,6 +22,7 @@ from flask_cors import CORS
 from flask_socketio import SocketIO
 
 from engine.scenes.base_scene import BaseScene
+from engine.mcp.framework import MCPSceneMixin, get_framework
 
 from .coders_state import (
     AgentRole,
@@ -36,11 +37,12 @@ SCENE_ID = "coders"
 DEFAULT_PORT = 5564
 
 
-class CodersRoomScene(BaseScene):
+class CodersRoomScene(BaseScene, MCPSceneMixin, mcp_scene_id="coders"):
     """The Coders Room — AI Agent Idle Code Simulation."""
 
     def __init__(self, host: str = "0.0.0.0", port: int = DEFAULT_PORT):
         super().__init__(scene_name=SCENE_ID, host=host, port=port)
+        self._mcp_init()
 
         self.app = Flask(
             __name__,
@@ -95,6 +97,10 @@ class CodersRoomScene(BaseScene):
         if not self.state or not self.state.active:
             return
         self.state.tick_count += 1
+
+        # Tick MCP framework for consequences
+        get_framework().tick(SCENE_ID)
+
         feature = self.state.get_current_feature()
 
         # Auto-queue new features when idle
@@ -257,11 +263,7 @@ class CodersRoomScene(BaseScene):
         if not self.state:
             return
         try:
-            from engine.mcp.framework import get_framework
-            fw = get_framework()
-            scene_node = fw.get_scene(SCENE_ID)
-            if scene_node:
-                scene_node.update_state(self.state.to_dict())
+            self.mcp.update_state(self.state.to_dict())
         except Exception:
             pass
 
@@ -326,7 +328,7 @@ class CodersRoomScene(BaseScene):
     # ── BaseScene contract ──
 
     def start(self) -> None:
-        logger.info("The Coders Room v3.1 starting on port %d", self.port)
+        logger.info("The Coders Room v3.2 starting on port %d", self.port)
         self.socketio.run(self.app, host=self.host, port=self.port, debug=False, allow_unsafe_werkzeug=True)
 
     def stop(self) -> None:
@@ -338,7 +340,7 @@ class CodersRoomScene(BaseScene):
             "name": "The Coders Room",
             "scene_id": SCENE_ID,
             "description": "AI agent idle simulation where agents write, review, and test real Python code.",
-            "version": "3.1.0",
+            "version": "3.2.0",
             "port": self.port,
             "author": "CosySim",
             "tags": ["coding", "agents", "idle_sim", "sandbox", "showcase"],

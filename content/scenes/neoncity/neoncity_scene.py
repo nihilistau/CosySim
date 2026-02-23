@@ -20,6 +20,7 @@ from flask_cors import CORS
 from flask_socketio import SocketIO
 
 from engine.scenes.base_scene import BaseScene
+from engine.mcp.framework import MCPSceneMixin, get_framework
 
 from .neoncity_state import (
     EVENT_POOL,
@@ -33,11 +34,12 @@ SCENE_ID = "neoncity"
 DEFAULT_PORT = 5563
 
 
-class NeonCityScene(BaseScene):
+class NeonCityScene(BaseScene, MCPSceneMixin, mcp_scene_id="neoncity"):
     """NeonCity — Cyberpunk Strategy Board Game."""
 
     def __init__(self, host: str = "0.0.0.0", port: int = DEFAULT_PORT):
         super().__init__(scene_name=SCENE_ID, host=host, port=port)
+        self._mcp_init()
 
         self.app = Flask(
             __name__,
@@ -75,11 +77,7 @@ class NeonCityScene(BaseScene):
         if not self.state:
             return
         try:
-            from engine.mcp.framework import get_framework
-            fw = get_framework()
-            scene_node = fw.get_scene(SCENE_ID)
-            if scene_node:
-                scene_node.update_state(self.state.to_dict())
+            self.mcp.update_state(self.state.to_dict())
         except Exception:
             pass
 
@@ -113,6 +111,15 @@ class NeonCityScene(BaseScene):
             num_ai = data.get("ai_players", 3)
             self.state = NeonCityGameState(num_ai_players=num_ai)
             result = self.state.start_game()
+
+            # Framework timer for Glitch Storm progression
+            fw = get_framework()
+            fw.start_timer("neoncity_glitch_storm", 600)
+            fw.schedule_consequence(
+                SCENE_ID, "system", "glitch_storm_advance",
+                {"round": 1}, turn_delay=3,
+            )
+
             narration = self._narrate("A new race begins in NeonCity. Runners spawn at the grid edges. A rogue AI program pulses at the city center.")
             self._sync_to_mcp()
             self.socketio.emit("game_started", self.state.to_dict())
@@ -189,6 +196,10 @@ class NeonCityScene(BaseScene):
             if random.random() < 0.3 and not self.state.ended:
                 event_result = self.state.trigger_event()
 
+            # Tick MCP framework — fire due consequences
+            fw = get_framework()
+            fw.tick(SCENE_ID)
+
             self._sync_to_mcp()
             state = self.state.to_dict()
             self.socketio.emit("turn_update", state)
@@ -213,7 +224,7 @@ class NeonCityScene(BaseScene):
     # ── BaseScene contract ──
 
     def start(self) -> None:
-        logger.info("NeonCity v3.1 — Cyberpunk Board Game starting on port %d", self.port)
+        logger.info("NeonCity v3.2 — Cyberpunk Board Game starting on port %d", self.port)
         self.socketio.run(self.app, host=self.host, port=self.port, debug=False, allow_unsafe_werkzeug=True)
 
     def stop(self) -> None:
@@ -224,7 +235,7 @@ class NeonCityScene(BaseScene):
             "name": "NeonCity",
             "scene_id": SCENE_ID,
             "description": "Cyberpunk strategy board game with procedural grid, Glitch Storm, and AI opponents.",
-            "version": "3.1.0",
+            "version": "3.2.0",
             "port": self.port,
             "author": "CosySim",
             "tags": ["strategy", "cyberpunk", "board_game", "procedural", "showcase"],

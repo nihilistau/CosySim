@@ -27,7 +27,7 @@ class TestRealmRoutes:
         assert resp.status_code == 200
         data = resp.get_json()
         assert data["scene_id"] == "realm"
-        assert data["version"] == "3.1.0"
+        assert data["version"] == "3.2.0"
         assert "routes" in data
 
     def test_game_state_no_game(self):
@@ -197,3 +197,91 @@ class TestSkillRegistration:
         assert "coders_run_code" in names
         assert "coders_add_feature" in names
         assert len(metas) >= 5
+
+
+# ═══════════════════════════════════════════════════════════════
+#  MCP FRAMEWORK INTEGRATION — verify scenes wire to framework
+# ═══════════════════════════════════════════════════════════════
+
+class TestMCPFrameworkIntegration:
+    """Verify all showcase scenes properly integrate with MCPSceneMixin."""
+
+    def test_realm_has_mcp_mixin(self):
+        from content.scenes.realm.realm_scene import RealmScene
+        from engine.mcp.framework import MCPSceneMixin
+        assert issubclass(RealmScene, MCPSceneMixin)
+        assert RealmScene._mcp_scene_id == "realm"
+
+    def test_neoncity_has_mcp_mixin(self):
+        from content.scenes.neoncity.neoncity_scene import NeonCityScene
+        from engine.mcp.framework import MCPSceneMixin
+        assert issubclass(NeonCityScene, MCPSceneMixin)
+        assert NeonCityScene._mcp_scene_id == "neoncity"
+
+    def test_coders_has_mcp_mixin(self):
+        from content.scenes.coders.coders_scene import CodersRoomScene
+        from engine.mcp.framework import MCPSceneMixin
+        assert issubclass(CodersRoomScene, MCPSceneMixin)
+        assert CodersRoomScene._mcp_scene_id == "coders"
+
+    def test_realm_mcp_node_created(self):
+        from content.scenes.realm.realm_scene import RealmScene
+        scene = RealmScene(port=15570)
+        assert hasattr(scene, "mcp")
+        assert scene.mcp.scene_id == "realm"
+
+    def test_neoncity_mcp_node_created(self):
+        from content.scenes.neoncity.neoncity_scene import NeonCityScene
+        scene = NeonCityScene(port=15571)
+        assert hasattr(scene, "mcp")
+        assert scene.mcp.scene_id == "neoncity"
+
+    def test_coders_mcp_node_created(self):
+        from content.scenes.coders.coders_scene import CodersRoomScene
+        scene = CodersRoomScene(port=15572)
+        assert hasattr(scene, "mcp")
+        assert scene.mcp.scene_id == "coders"
+
+    def test_framework_knows_all_scenes(self):
+        """After instantiating scenes, framework should track all of them."""
+        from engine.mcp.framework import get_framework
+        from content.scenes.realm.realm_scene import RealmScene
+        from content.scenes.neoncity.neoncity_scene import NeonCityScene
+        from content.scenes.coders.coders_scene import CodersRoomScene
+        RealmScene(port=15573)
+        NeonCityScene(port=15574)
+        CodersRoomScene(port=15575)
+        fw = get_framework()
+        scene_ids = set(fw._scenes.keys())
+        assert "realm" in scene_ids
+        assert "neoncity" in scene_ids
+        assert "coders" in scene_ids
+
+    def test_realm_state_sync(self):
+        """RealmScene._sync_to_mcp() should push state to framework node."""
+        from content.scenes.realm.realm_scene import RealmScene
+        from content.scenes.realm.realm_state import RealmGameState
+        scene = RealmScene(port=15576)
+        scene.state = RealmGameState()
+        scene._sync_to_mcp()
+        node_state = scene.mcp.get_state()
+        assert "player_stats" in node_state
+        assert "session_id" in node_state
+
+    def test_neoncity_state_sync(self):
+        from content.scenes.neoncity.neoncity_scene import NeonCityScene
+        from content.scenes.neoncity.neoncity_state import NeonCityGameState
+        scene = NeonCityScene(port=15577)
+        scene.state = NeonCityGameState()
+        scene._sync_to_mcp()
+        node_state = scene.mcp.get_state()
+        assert isinstance(node_state, dict)
+
+    def test_coders_state_sync(self):
+        from content.scenes.coders.coders_scene import CodersRoomScene
+        from content.scenes.coders.coders_state import CodersRoomState
+        scene = CodersRoomScene(port=15578)
+        scene.state = CodersRoomState()
+        scene._sync_to_mcp()
+        node_state = scene.mcp.get_state()
+        assert isinstance(node_state, dict)
