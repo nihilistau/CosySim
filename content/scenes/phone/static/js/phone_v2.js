@@ -387,7 +387,7 @@
         bubbleHtml = `<div class="bubble media-bubble"><img src="/media/photo/${file}" alt="photo"></div>`;
       } else if (msg.msg_type === 'video' && msg.media_path) {
         const file = msg.media_path.split('/').pop().split('\\').pop();
-        bubbleHtml = `<div class="bubble media-bubble"><video controls src="/media/video/${file}"></video></div>`;
+        bubbleHtml = `<div class="bubble media-bubble"><video controls preload="metadata" src="/media/video/${file}"></video></div>`;
       } else {
         bubbleHtml = `<div class="bubble">${esc(content)}<span class="bubble-time">${fmtTime(msg.created_at)}</span></div>`;
       }
@@ -535,12 +535,12 @@
 
     render(body) {
       body.innerHTML = `
-        <div class="section-header">Photos</div>
+        <div class="section-header">Photos &amp; Videos</div>
         <div class="gallery-grid" id="gallery-grid"></div>
         <div id="gallery-viewer" style="display:none">
-          <button class="close-btn" onclick="qs('#gallery-viewer').style.display='none'">✕</button>
+          <button class="close-btn" onclick="CosyPhone.apps.gallery._closeViewer()">✕</button>
           <button class="nav-btn nav-prev" onclick="CosyPhone.apps.gallery._nav(-1)">‹</button>
-          <img id="gallery-full" src="">
+          <div id="gallery-media-wrap" style="display:flex;align-items:center;justify-content:center;max-width:100%;max-height:80%"></div>
           <button class="nav-btn nav-next" onclick="CosyPhone.apps.gallery._nav(1)">›</button>
           <div style="position:absolute;bottom:20px;display:flex;gap:12px">
             <button class="pill-btn pill-danger" onclick="CosyPhone.apps.gallery._delete()">🗑️ Delete</button>
@@ -551,7 +551,7 @@
         if (qs('#gallery-viewer')?.style.display !== 'none') {
           if (e.key === 'ArrowLeft') this._nav(-1);
           else if (e.key === 'ArrowRight') this._nav(1);
-          else if (e.key === 'Escape') qs('#gallery-viewer').style.display = 'none';
+          else if (e.key === 'Escape') this._closeViewer();
         }
       };
       document.addEventListener('keydown', this._keyNav);
@@ -559,30 +559,53 @@
 
     onClose() { if (this._keyNav) { document.removeEventListener('keydown', this._keyNav); this._keyNav = null; } },
 
+    _closeViewer() {
+      const wrap = qs('#gallery-media-wrap');
+      if (wrap) { const v = wrap.querySelector('video'); if (v) v.pause(); }
+      qs('#gallery-viewer').style.display = 'none';
+    },
+
+    _showMedia() {
+      const wrap = qs('#gallery-media-wrap');
+      if (!wrap || !this._images.length) return;
+      const item = this._images[this._idx];
+      if (item.type === 'video') {
+        wrap.innerHTML = `<video controls autoplay preload="auto" src="${esc(item.url)}" style="max-width:100%;max-height:80vh;border-radius:8px"></video>`;
+      } else {
+        wrap.innerHTML = `<img src="${esc(item.url)}" style="max-width:100%;max-height:80vh;border-radius:8px">`;
+      }
+    },
+
     _nav(dir) {
       if (!this._images.length) return;
+      const wrap = qs('#gallery-media-wrap');
+      if (wrap) { const v = wrap.querySelector('video'); if (v) v.pause(); }
       this._idx = (this._idx + dir + this._images.length) % this._images.length;
-      qs('#gallery-full').src = this._images[this._idx].url;
+      this._showMedia();
     },
 
     async _delete() {
       if (!this._images.length) return;
       const img = this._images[this._idx];
-      if (!confirm('Delete this photo?')) return;
+      if (!confirm('Delete this media?')) return;
       try { await api('DELETE', `/api/gallery/${img.id || img.name}`); } catch (e) {}
       this._images.splice(this._idx, 1);
-      if (!this._images.length) { qs('#gallery-viewer').style.display = 'none'; this._load(); return; }
+      if (!this._images.length) { this._closeViewer(); this._load(); return; }
       this._idx = Math.min(this._idx, this._images.length - 1);
-      qs('#gallery-full').src = this._images[this._idx].url;
+      this._showMedia();
       const grid = qs('#gallery-grid');
       if (grid) { grid.innerHTML = ''; this._images.forEach((im, i) => grid.appendChild(this._makeThumb(im, i))); }
     },
 
-    _makeThumb(img, i) {
-      const item = el('div', 'gallery-item');
-      item.innerHTML = `<img src="${esc(img.url)}" alt="${esc(img.name || 'photo')}" loading="lazy">`;
-      item.onclick = () => { this._idx = i; qs('#gallery-full').src = img.url; qs('#gallery-viewer').style.display = 'flex'; };
-      return item;
+    _makeThumb(item, i) {
+      const div = el('div', 'gallery-item');
+      if (item.type === 'video') {
+        div.innerHTML = `<video src="${esc(item.url)}" preload="metadata" muted></video><span class="vid-badge">▶ VID</span>`;
+      } else {
+        div.innerHTML = `<img src="${esc(item.url)}" alt="${esc(item.name || 'photo')}" loading="lazy">`;
+      }
+      div.onclick = () => { this._idx = i; this._showMedia(); qs('#gallery-viewer').style.display = 'flex'; };
+      return div;
     },
 
     async _load() {
@@ -591,7 +614,7 @@
       try {
         const data = await api('GET', '/api/gallery');
         this._images = data.images || [];
-        if (!this._images.length) { grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1"><div class="es-icon">📷</div><h3>No photos yet</h3><p>Photos from conversations will appear here</p></div>'; return; }
+        if (!this._images.length) { grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1"><div class="es-icon">📷</div><h3>No media yet</h3><p>Photos and videos will appear here</p></div>'; return; }
         grid.innerHTML = '';
         this._images.forEach((img, i) => grid.appendChild(this._makeThumb(img, i)));
       } catch (e) { grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1"><div class="es-icon">📷</div><h3>No photos yet</h3></div>'; }
@@ -642,8 +665,14 @@
     name: 'Videos', icon: '🎬', color: '#5E5CE6',
 
     render(body) {
-      body.innerHTML = '<div class="section-header">Video Messages</div><div id="video-list"></div>';
+      body.innerHTML = '<div class="section-header">Video Messages</div><div id="video-list"></div><div id="video-player-modal" style="display:none;position:absolute;inset:0;background:rgba(0,0,0,.95);z-index:30;flex-direction:column;align-items:center;justify-content:center"><button onclick="CosyPhone.apps.video_msgs._closePlayer()" style="position:absolute;top:60px;right:16px;width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,.2);color:#fff;font-size:18px;display:flex;align-items:center;justify-content:center;z-index:2">✕</button><video id="video-player-full" controls autoplay style="max-width:100%;max-height:80%;border-radius:8px"></video></div>';
       this._load();
+    },
+
+    _closePlayer() {
+      const v = qs('#video-player-full');
+      if (v) v.pause();
+      qs('#video-player-modal').style.display = 'none';
     },
 
     async _load() {
@@ -656,9 +685,13 @@
         msgs.forEach(m => {
           const item = el('div', 'list-row');
           item.innerHTML = `
-            <div class="video-thumb"><video src="/media/video/${m.filename}"></video><div class="play-overlay">▶</div></div>
+            <div class="video-thumb"><video src="/media/video/${m.filename}" preload="metadata" muted></video><div class="play-overlay">▶</div></div>
             <div style="flex:1"><div style="font-weight:600">${m.sender || 'Unknown'}</div><div style="font-size:13px;color:var(--label2);margin-top:2px">${fmtTime(m.created_at)}</div></div>`;
-          item.onclick = () => { const v = item.querySelector('video'); v.requestFullscreen && v.requestFullscreen(); v.play(); };
+          item.onclick = () => {
+            const player = qs('#video-player-full');
+            if (player) { player.src = '/media/video/' + m.filename; }
+            qs('#video-player-modal').style.display = 'flex';
+          };
           list.appendChild(item);
         });
       } catch (e) { list.innerHTML = '<div class="empty-state"><div class="es-icon">🎬</div><h3>No videos yet</h3></div>'; }

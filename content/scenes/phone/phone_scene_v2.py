@@ -814,23 +814,46 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
         # ── Gallery API ───────────────────────────────────────────────────────
         @app.route("/api/gallery")
         def get_gallery():
-            """Return all images from photo + generated image directories."""
+            """Return all media (images + videos) from media directories."""
             try:
                 images = []
+                img_exts = (".png", ".jpg", ".jpeg", ".webp", ".gif")
+                vid_exts = (".mp4", ".webm", ".mov")
+                # Images
                 for media_dir, prefix in [(_MEDIA_PHOTO, "/media/photo/"), (_MEDIA_IMAGES, "/media/images/")]:
                     if media_dir.exists():
                         for f in sorted(media_dir.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True):
-                            if f.is_file() and f.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp", ".gif"):
-                                images.append({"id": f.name, "url": prefix + f.name, "name": f.stem, "created_at": f.stat().st_mtime})
+                            if f.is_file() and f.suffix.lower() in img_exts:
+                                images.append({"id": f.name, "url": prefix + f.name, "name": f.stem,
+                                               "type": "image", "created_at": f.stat().st_mtime})
+                # Videos
+                video_dirs = [_MEDIA_VIDEO]
+                alt_video = project_root / "content" / "media" / "video"
+                if alt_video.exists():
+                    video_dirs.append(alt_video)
+                seen = set()
+                for vdir in video_dirs:
+                    if vdir.exists():
+                        for f in sorted(vdir.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True):
+                            if f.is_file() and f.suffix.lower() in vid_exts and f.name not in seen and f.stat().st_size > 100:
+                                seen.add(f.name)
+                                images.append({"id": f.name, "url": "/media/video/" + f.name, "name": f.stem,
+                                               "type": "video", "created_at": f.stat().st_mtime})
+                # Sort all by date descending
+                images.sort(key=lambda x: x.get("created_at", 0), reverse=True)
                 return jsonify({"ok": True, "images": images})
             except Exception as exc:
                 return jsonify({"ok": False, "error": str(exc)}), 500
 
         @app.route("/api/gallery/<filename>", methods=["DELETE"])
         def delete_gallery_image(filename: str):
-            """Delete an image from the gallery."""
+            """Delete an image or video from the gallery."""
             try:
-                for media_dir in [_MEDIA_PHOTO, _MEDIA_IMAGES]:
+                search_dirs = [_MEDIA_PHOTO, _MEDIA_IMAGES, _MEDIA_VIDEO]
+                alt_video = project_root / "content" / "media" / "video"
+                if alt_video.exists():
+                    search_dirs.append(alt_video)
+                for media_dir in search_dirs:
                     target = media_dir / filename
                     if target.exists() and target.is_file():
                         target.unlink()
