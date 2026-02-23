@@ -332,46 +332,53 @@ class RealmScene(BaseScene, MCPSceneMixin, mcp_scene_id="realm"):
 
         @self.app.route("/api/game/new", methods=["POST"])
         def new_game():
-            data = request.json or {}
-            personality = data.get("personality", "random")
-            time_limit = data.get("time_limit", 1800)
+            try:
+                data = request.json or {}
+                personality = data.get("personality", "random")
+                time_limit = data.get("time_limit", 1800)
 
-            self.state = RealmGameState()
-            self.state.set_director(personality)
-            self.state.time_limit_s = float(time_limit)
-            self.state.started_at = time.time()
-            self._director_conv_id = None
-            self._assistant_conv_id = None
+                self.state = RealmGameState()
+                self.state.set_director(personality)
+                self.state.time_limit_s = float(time_limit)
+                self.state.started_at = time.time()
+                self._director_conv_id = None
+                self._assistant_conv_id = None
 
-            # Register timers in MCP framework
-            fw = get_framework()
-            fw.start_timer(f"realm_game_{self.state.session_id}", time_limit)
+                # Register timers in MCP framework
+                try:
+                    fw = get_framework()
+                    fw.start_timer(f"realm_game_{self.state.session_id}", time_limit)
+                except Exception:
+                    pass
 
-            # Get opening narration from Director
-            opening_prompt = (
-                "Begin a new LitRPG adventure. The player has just arrived in a mysterious realm. "
-                "Set the scene dramatically and present their first choices. "
-                "Keep it to 2-3 paragraphs."
-            )
-            result = self._director_infer(opening_prompt)
-            self._apply_director_result(result)
+                # Get opening narration from Director
+                opening_prompt = (
+                    "Begin a new LitRPG adventure. The player has just arrived in a mysterious realm. "
+                    "Set the scene dramatically and present their first choices. "
+                    "Keep it to 2-3 paragraphs."
+                )
+                result = self._director_infer(opening_prompt)
+                self._apply_director_result(result)
 
-            # Assistant quip
-            assistant_msg = self._assistant_infer(
-                f"A new game just started. The Director chose '{personality}' personality. Comment on this."
-            )
+                # Assistant quip
+                assistant_msg = self._assistant_infer(
+                    f"A new game just started. The Director chose '{personality}' personality. Comment on this."
+                )
 
-            self._sync_to_mcp()
-            self.socketio.emit("game_started", self.state.to_dict())
+                self._sync_to_mcp()
+                self.socketio.emit("game_started", self.state.to_dict())
 
-            return jsonify({
-                "success": True,
-                "session_id": self.state.session_id,
-                "narration": result.get("narration", ""),
-                "choices": result.get("choices", []),
-                "assistant": assistant_msg,
-                "state": self.state.to_dict(),
-            })
+                return jsonify({
+                    "success": True,
+                    "session_id": self.state.session_id,
+                    "narration": result.get("narration", ""),
+                    "choices": result.get("choices", []),
+                    "assistant": assistant_msg,
+                    "state": self.state.to_dict(),
+                })
+            except Exception as exc:
+                logger.error("new_game failed: %s", exc, exc_info=True)
+                return jsonify({"error": str(exc)}), 500
 
         # ── PLAYER CHOICE ──
 
@@ -489,24 +496,32 @@ class RealmScene(BaseScene, MCPSceneMixin, mcp_scene_id="realm"):
         def start_murder():
             if not self.state:
                 return jsonify({"error": "No active game"}), 400
-            self.state.murder = MurderMysteryState()
-            result = self.state.murder.start_party_phase()
+            try:
+                self.state.murder = MurderMysteryState()
+                result = self.state.murder.start_party_phase()
 
-            # Framework timer for murder mystery phases
-            fw = get_framework()
-            fw.start_timer("murder_party_phase", 300)   # 5 min party
-            fw.schedule_consequence(
-                SCENE_ID, "system", "murder_investigation",
-                {"victim": result["victim"]}, turn_delay=5,
-            )
-            opening = self._director_infer(
-                "A MURDER MYSTERY PARTY begins! You're at an elegant mansion. "
-                f"The victim, {result['victim']}, will be found dead soon. "
-                "Set the party scene. Introduce the NPCs socializing."
-            )
-            self._apply_director_result(opening)
-            self.socketio.emit("murder_started", {**result, "narration": opening.get("narration", "")})
-            return jsonify({**result, "narration": opening.get("narration", "")})
+                # Framework timer for murder mystery phases
+                try:
+                    fw = get_framework()
+                    fw.start_timer("murder_party_phase", 300)   # 5 min party
+                    fw.schedule_consequence(
+                        SCENE_ID, "system", "murder_investigation",
+                        {"victim": result["victim"]}, turn_delay=5,
+                    )
+                except Exception:
+                    pass
+
+                opening = self._director_infer(
+                    "A MURDER MYSTERY PARTY begins! You're at an elegant mansion. "
+                    f"The victim, {result['victim']}, will be found dead soon. "
+                    "Set the party scene. Introduce the NPCs socializing."
+                )
+                self._apply_director_result(opening)
+                self.socketio.emit("murder_started", {**result, "narration": opening.get("narration", "")})
+                return jsonify({**result, "narration": opening.get("narration", "")})
+            except Exception as exc:
+                logger.error("start_murder failed: %s", exc, exc_info=True)
+                return jsonify({"error": str(exc)}), 500
 
         @self.app.route("/api/murder/investigate", methods=["POST"])
         def investigate():

@@ -107,23 +107,30 @@ class NeonCityScene(BaseScene, MCPSceneMixin, mcp_scene_id="neoncity"):
 
         @self.app.route("/api/game/new", methods=["POST"])
         def new_game():
-            data = request.json or {}
-            num_ai = data.get("ai_players", 3)
-            self.state = NeonCityGameState(num_ai_players=num_ai)
-            result = self.state.start_game()
+            try:
+                data = request.json or {}
+                num_ai = data.get("ai_players", 3)
+                self.state = NeonCityGameState(num_ai_players=num_ai)
+                result = self.state.start_game()
 
-            # Framework timer for Glitch Storm progression
-            fw = get_framework()
-            fw.start_timer("neoncity_glitch_storm", 600)
-            fw.schedule_consequence(
-                SCENE_ID, "system", "glitch_storm_advance",
-                {"round": 1}, turn_delay=3,
-            )
+                # Framework timer for Glitch Storm progression
+                try:
+                    fw = get_framework()
+                    fw.start_timer("neoncity_glitch_storm", 600)
+                    fw.schedule_consequence(
+                        SCENE_ID, "system", "glitch_storm_advance",
+                        {"round": 1}, turn_delay=3,
+                    )
+                except Exception:
+                    pass
 
-            narration = self._narrate("A new race begins in NeonCity. Runners spawn at the grid edges. A rogue AI program pulses at the city center.")
-            self._sync_to_mcp()
-            self.socketio.emit("game_started", self.state.to_dict())
-            return jsonify({"success": True, **result, "narration": narration, "state": self.state.to_dict()})
+                narration = self._narrate("A new race begins in NeonCity. Runners spawn at the grid edges. A rogue AI program pulses at the city center.")
+                self._sync_to_mcp()
+                self.socketio.emit("game_started", self.state.to_dict())
+                return jsonify({"success": True, **result, "narration": narration, "state": self.state.to_dict()})
+            except Exception as exc:
+                logger.error("new_game failed: %s", exc, exc_info=True)
+                return jsonify({"error": str(exc)}), 500
 
         # ── MOVE ──
 
@@ -179,41 +186,48 @@ class NeonCityScene(BaseScene, MCPSceneMixin, mcp_scene_id="neoncity"):
         def end_turn():
             if not self.state or self.state.ended:
                 return jsonify({"error": "No active game"}), 400
-            # Process AI turns
-            ai_actions = []
-            while True:
-                advance = self.state.advance_turn()
-                cp = self.state.get_current_player()
-                if not cp or not cp.is_ai:
-                    break
-                actions = self.state.ai_turn(cp.id)
-                ai_actions.append({"player": cp.id, "name": cp.name, "actions": actions})
-                if self.state.ended:
-                    break
+            try:
+                # Process AI turns
+                ai_actions = []
+                while True:
+                    advance = self.state.advance_turn()
+                    cp = self.state.get_current_player()
+                    if not cp or not cp.is_ai:
+                        break
+                    actions = self.state.ai_turn(cp.id)
+                    ai_actions.append({"player": cp.id, "name": cp.name, "actions": actions})
+                    if self.state.ended:
+                        break
 
-            # Random event chance (30%)
-            event_result = None
-            if random.random() < 0.3 and not self.state.ended:
-                event_result = self.state.trigger_event()
+                # Random event chance (30%)
+                event_result = None
+                if random.random() < 0.3 and not self.state.ended:
+                    event_result = self.state.trigger_event()
 
-            # Tick MCP framework — fire due consequences
-            fw = get_framework()
-            fw.tick(SCENE_ID)
+                # Tick MCP framework — fire due consequences
+                try:
+                    fw = get_framework()
+                    fw.tick(SCENE_ID)
+                except Exception:
+                    pass
 
-            self._sync_to_mcp()
-            state = self.state.to_dict()
-            self.socketio.emit("turn_update", state)
+                self._sync_to_mcp()
+                state = self.state.to_dict()
+                self.socketio.emit("turn_update", state)
 
-            narration = ""
-            if event_result:
-                narration = self._narrate(f"Event: {event_result['event']['label']} — {event_result['event']['description']}")
+                narration = ""
+                if event_result:
+                    narration = self._narrate(f"Event: {event_result['event']['label']} — {event_result['event']['description']}")
 
-            return jsonify({
-                "ai_actions": ai_actions,
-                "event": event_result,
-                "narration": narration,
-                "state": state,
-            })
+                return jsonify({
+                    "ai_actions": ai_actions,
+                    "event": event_result,
+                    "narration": narration,
+                    "state": state,
+                })
+            except Exception as exc:
+                logger.error("end_turn failed: %s", exc, exc_info=True)
+                return jsonify({"error": str(exc)}), 500
 
     def _setup_socketio(self):
         @self.socketio.on("connect")
