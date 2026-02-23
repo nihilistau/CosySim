@@ -84,7 +84,7 @@ def api_status():
     # Skills
     try:
         from engine.skills.registry import SKILL_REGISTRY
-        result["skills_count"] = len(SKILL_REGISTRY._skills)
+        result["skills_count"] = sum(len(v) for v in SKILL_REGISTRY._skills.values())
     except Exception:
         result["skills_count"] = 0
 
@@ -363,15 +363,16 @@ def api_skills():
     try:
         from engine.skills.registry import SKILL_REGISTRY
         skills = []
-        for name, meta in SKILL_REGISTRY._skills.items():
-            skills.append({
-                "name": name,
-                "pack": meta.pack,
-                "description": meta.description,
-                "tags": meta.tags,
-                "category": getattr(meta, "category", ""),
-                "cooldown": getattr(meta, "cooldown", 0),
-            })
+        for pack, metas in SKILL_REGISTRY._skills.items():
+            for meta in metas:
+                skills.append({
+                    "name": meta.name,
+                    "pack": pack,
+                    "description": meta.description,
+                    "tags": meta.tags,
+                    "category": getattr(meta, "category", ""),
+                    "cooldown": getattr(meta, "cooldown", 0),
+                })
         return jsonify({"ok": True, "skills": skills})
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 500
@@ -440,8 +441,8 @@ def api_streaming():
 
     # Conversation branches
     try:
-        from engine.lmstudio.conversation import ConversationManager
-        cm = ConversationManager.instance()
+        from engine.lmstudio.conversation import get_conversation_manager
+        cm = get_conversation_manager()
         convos = cm.list_conversations() if hasattr(cm, "list_conversations") else []
         result["conversations"] = {
             "count": len(convos),
@@ -762,6 +763,7 @@ input, select, textarea {
   <div id="header">
     <span>🎮 CosySim Control</span>
     <div class="controls">
+      <a href="http://localhost:8500" title="Back to Hub" style="color:inherit;text-decoration:none;font-size:16px;padding:2px 6px;">🏠</a>
       <button onclick="refresh()" title="Refresh">🔄</button>
       <button onclick="toggleMinimize()" title="Minimize">➖</button>
     </div>

@@ -440,7 +440,7 @@ def show_character_manager():
                 else:
                     # Check for duplicate name
                     existing = st.session_state.asset_manager.search(asset_type="character")
-                    if any(c.name.lower() == name.lower() for c in existing):
+                    if any(c.get("name", "").lower() == name.lower() for c in existing):
                         st.error(f"Character '{name}' already exists!")
                     else:
                         try:
@@ -1969,8 +1969,8 @@ def show_mcp_monitor():
         st.divider()
         st.markdown("**Active Conversations**")
         try:
-            from engine.lmstudio.conversation import ConversationManager
-            cm = ConversationManager.instance()
+            from engine.lmstudio.conversation import get_conversation_manager
+            cm = get_conversation_manager()
             convos = cm.list_conversations() if hasattr(cm, "list_conversations") else []
             if convos:
                 for c in convos[:20]:

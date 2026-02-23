@@ -77,7 +77,7 @@ class AssetMetadata:
     def from_dict(cls, data: Dict[str, Any]) -> 'AssetMetadata':
         """Import metadata from dictionary."""
         return cls(
-            asset_id=data["asset_id"],
+            asset_id=data.get("asset_id") or data["id"],
             asset_type=data["asset_type"],
             created_at=data["created_at"],
             updated_at=data["updated_at"],

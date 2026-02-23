@@ -774,25 +774,33 @@ class BedroomScene(BaseScene, MCPSceneMixin, mcp_scene_id="bedroom"):
         # ── Characters ──────────────────────────────────────────────
         @self.app.route("/api/characters/list")
         def list_characters():
-            db_chars = self.db.get_all_characters()
-            for c in db_chars:
-                c["source"] = "database"
-                c["loaded"] = c["id"] in self.characters
-            return jsonify({"characters": db_chars})
+            try:
+                db_chars = self.db.get_all_characters()
+                for c in db_chars:
+                    c["source"] = "database"
+                    c["loaded"] = c["id"] in self.characters
+                return jsonify({"characters": db_chars})
+            except Exception as exc:
+                logger.error("list_characters failed: %s", exc, exc_info=True)
+                return jsonify({"error": str(exc)}), 500
 
         @self.app.route("/api/character/load", methods=["POST"])
         def load_character():
-            data = request.json or {}
-            cid = data.get("character_id")
-            personality = data.get("personality")
-            if not cid:
-                return jsonify({"error": "No character_id"}), 400
-            if len(self.characters) >= 2 and cid not in self.characters:
-                return jsonify({"error": "Maximum 2 characters in bedroom"}), 400
-            char = self._load_character(cid, personality)
-            if not char:
-                return jsonify({"error": "Character not found"}), 404
-            return jsonify({"success": True, "character": {"id": char.id, "name": char.name}})
+            try:
+                data = request.json or {}
+                cid = data.get("character_id")
+                personality = data.get("personality")
+                if not cid:
+                    return jsonify({"error": "No character_id"}), 400
+                if len(self.characters) >= 2 and cid not in self.characters:
+                    return jsonify({"error": "Maximum 2 characters in bedroom"}), 400
+                char = self._load_character(cid, personality)
+                if not char:
+                    return jsonify({"error": "Character not found"}), 404
+                return jsonify({"success": True, "character": {"id": char.id, "name": char.name}})
+            except Exception as exc:
+                logger.error("load_character failed: %s", exc, exc_info=True)
+                return jsonify({"error": str(exc)}), 500
 
         @self.app.route("/api/character/remove", methods=["POST"])
         def remove_character():
