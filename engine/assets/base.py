@@ -76,11 +76,12 @@ class AssetMetadata:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'AssetMetadata':
         """Import metadata from dictionary."""
+        aid = data.get("asset_id") or data.get("id") or "unknown"
         return cls(
-            asset_id=data.get("asset_id") or data["id"],
-            asset_type=data["asset_type"],
-            created_at=data["created_at"],
-            updated_at=data["updated_at"],
+            asset_id=aid,
+            asset_type=data.get("asset_type", "unknown"),
+            created_at=data.get("created_at", ""),
+            updated_at=data.get("updated_at", ""),
             version=data.get("version", 1),
             tags=data.get("tags", []),
             custom=data.get("custom", {})
