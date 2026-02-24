@@ -369,6 +369,68 @@ agent_profiles:
     context_length: 1024
     max_tokens: 200
     temperature: 0.3
+
+# Pipeline configuration — VirtualPipeline parallel stream architecture
+pipeline:
+  enabled: true
+  watcher:
+    enabled: true
+    model_key: ""                  # Set to Gemma 270M key when available
+    trigger_tokens: 8              # Tokens before first watcher classification
+    batch_size: 16                 # Tokens per subsequent batch check
+  kill_switch:
+    enabled: true
+    threshold: 0.3                 # Acceptability below this → kill
+    max_retries: 2                 # Retries before accepting best attempt
+    repetition_limit: 3            # Same phrase N times → kill
+  token_ahead:
+    enabled: true
+    pre_warm_timeout: 5.0          # Seconds to wait for pre-warmed tools
+  conversation:
+    max_branches: 10               # Max active branches per conversation
+    branch_ttl: 300                # Seconds before pruning unused branches
+
+# Observability — metrics collection and alerting
+observability:
+  metrics_db: "data/metrics.db"
+  system_tick_interval: 1.0        # Seconds between system snapshots
+  retention_hours: 24              # Prune system_metrics older than this
+  alerts:
+    gpu_vram_pct:
+      yellow: 80
+      red: 95
+    queue_depth:
+      yellow: 5
+      red: 15
+    avg_latency_ms:
+      yellow: 500
+      red: 2000
+    kill_rate:
+      yellow: 0.1
+      red: 0.3
+    error_rate:
+      yellow: 0.05
+      red: 0.15
+
+# Training data pipeline
+training:
+  auto_capture: true               # Capture training data from pipeline
+  min_quality: 0.7                 # Minimum quality score for capture
+  auto_train:
+    enabled: false                 # Opt-in automated retraining
+    min_examples: 100              # Examples needed before auto-train
+    schedule: "daily"
+  datasets:
+    tag_extraction:
+      threshold: 100
+    tool_routing:
+      threshold: 50
+    priority_classify:
+      threshold: 50
+    decision_classify:
+      threshold: 50
+    response_validate:
+      threshold: 50
     top_p: 0.9
     description: "Intent classifier — low tokens, deterministic"
   narrator:
