@@ -23,6 +23,7 @@ from flask_socketio import SocketIO
 
 from engine.scenes.base_scene import BaseScene
 from engine.mcp.framework import MCPSceneMixin, get_framework
+from engine.mcp.scene_state import get_scene_state_manager
 
 from .coders_state import (
     AgentRole,
@@ -58,6 +59,7 @@ class CodersRoomScene(BaseScene, MCPSceneMixin, mcp_scene_id="coders"):
         self.register_health_route(self.app)
 
         self.state: Optional[CodersRoomState] = None
+        self._state_mgr = get_scene_state_manager()
         self._tick_thread: Optional[threading.Thread] = None
         self._running = False
 
@@ -264,6 +266,12 @@ class CodersRoomScene(BaseScene, MCPSceneMixin, mcp_scene_id="coders"):
             return
         try:
             self.mcp.update_state(self.state.to_dict())
+        except Exception:
+            pass
+        # Sync agent stats to SceneStateManager for cross-system visibility
+        try:
+            for agent in (self.state.agents or []):
+                self._state_mgr.add_narrative(SCENE_ID, f"{agent.name}: {agent.status}")
         except Exception:
             pass
 

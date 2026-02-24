@@ -632,6 +632,44 @@ def api_conversation_heat():
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 500
 
+
+@overlay_bp.route("/api/scenes/summary", methods=["GET"])
+def api_scene_summary():
+    """
+    Cross-scene narrative summary — what's happening across ALL scenes right now.
+
+    Returns per-scene narrative entries, active characters, and heat levels
+    in a single unified response for dashboards and cross-scene consumers.
+    """
+    try:
+        from engine.mcp.scene_state import get_scene_state_manager
+        ssm = get_scene_state_manager()
+        from engine.mcp.framework import get_framework
+        fw = get_framework()
+
+        summary = {}
+        for scene_id in fw.list_scenes():
+            entries = ssm.get_narrative_entries(scene_id, limit=5)
+            scene_data = {"narrative": entries}
+            # Include heat for scene conversations if available
+            try:
+                from engine.mcp.scene_rules_engine import get_conversation_heat
+                heat = get_conversation_heat()
+                with heat._lock:
+                    scene_heat = {
+                        k: round(v, 1) for k, v in heat._heat.items()
+                        if k.startswith(f"{scene_id}_")
+                    }
+                if scene_heat:
+                    scene_data["heat"] = scene_heat
+            except Exception:
+                pass
+            summary[scene_id] = scene_data
+
+        return jsonify({"ok": True, "scenes": summary})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
 def _register_socketio_events(socketio) -> None:
     """Register Socket.IO event handlers for overlay real-time updates."""
     from flask_socketio import emit
