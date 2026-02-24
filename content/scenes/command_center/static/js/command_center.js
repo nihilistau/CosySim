@@ -9,6 +9,9 @@ const CC = (function () {
     let socket = null;
     let paused = false;
     let startTime = Date.now();
+    let sceneData = [];          // Cached scene summaries
+    let selectedScene = null;    // Currently focused scene ID
+    let sceneIndex = -1;         // -1 = show all
 
     // ── Helpers ─────────────────────────────────────────────
     const $ = (sel) => document.querySelector(sel);
@@ -218,6 +221,196 @@ const CC = (function () {
         updateTraining(data.training);
     }
 
+    // ── Scene Monitor ─────────────────────────────────────────
+    function updateSceneCards(scenes) {
+        sceneData = scenes || [];
+        const container = $("#scene-cards");
+        if (!container) return;
+
+        if (sceneData.length === 0) {
+            container.innerHTML = '<div class="muted">No scenes running</div>';
+            return;
+        }
+
+        container.innerHTML = sceneData.map(s => {
+            const phase = (s.state && s.state.phase) || (s.state && s.state.game_phase) || "-";
+            const heat = s.heat != null ? s.heat : "-";
+            const chars = s.character_count || 0;
+            const heatClass = heat >= 80 ? "crit" : heat >= 50 ? "warn" : "";
+            return `<div class="scene-card" onclick="CC.selectScene('${s.id}')">
+                <div class="scene-card-title">${s.title || s.id}</div>
+                <div class="scene-card-meta">
+                    <span title="Port">:${s.port || "?"}</span>
+                    <span title="Characters">👤 ${chars}</span>
+                    <span title="Heat" class="${heatClass}">🔥 ${heat}</span>
+                </div>
+                <div class="scene-card-phase">${phase}</div>
+            </div>`;
+        }).join("");
+    }
+
+    function selectScene(sceneId) {
+        selectedScene = sceneId;
+        sceneIndex = sceneData.findIndex(s => s.id === sceneId);
+
+        // Show detail panel, hide cards
+        const cards = $("#panel-scenes");
+        const detail = $("#panel-scene-detail");
+        if (cards) cards.style.display = "none";
+        if (detail) detail.style.display = "";
+
+        setText("detail-title", sceneData[sceneIndex]?.title || sceneId);
+
+        // Load detail info
+        const s = sceneData[sceneIndex] || {};
+        const info = $("#detail-info");
+        if (info) {
+            const state = s.state || {};
+            let stateHtml = Object.entries(state).map(([k, v]) =>
+                `<div class="detail-stat"><span>${k}</span><span>${v}</span></div>`
+            ).join("");
+            info.innerHTML = `
+                <div class="detail-stat"><span>Port</span><span>${s.port || "?"}</span></div>
+                <div class="detail-stat"><span>Genre</span><span>${s.genre || "?"}</span></div>
+                <div class="detail-stat"><span>Characters</span><span>${s.character_count || 0}</span></div>
+                <div class="detail-stat"><span>Heat</span><span>${s.heat || "-"}</span></div>
+                ${stateHtml}
+            `;
+        }
+
+        // Load chat feed
+        fetch(`/api/scenes/${sceneId}/feed?limit=20`)
+            .then(r => r.json())
+            .then(msgs => {
+                const list = $("#detail-feed-list");
+                if (!list) return;
+                if (!msgs || msgs.length === 0) {
+                    list.innerHTML = '<div class="muted">No messages</div>';
+                    return;
+                }
+                list.innerHTML = msgs.map(m =>
+                    `<div class="feed-item compact">
+                        <span class="feed-type scene">${m.speaker || "?"}</span>
+                        <span class="feed-msg">${m.text || ""}</span>
+                    </div>`
+                ).join("");
+            })
+            .catch(() => {});
+
+        // Load characters
+        fetch(`/api/scenes/${sceneId}/characters`)
+            .then(r => r.json())
+            .then(chars => {
+                const list = $("#detail-char-list");
+                if (!list) return;
+                if (!chars || chars.length === 0) {
+                    list.innerHTML = '<div class="muted">No characters</div>';
+                    return;
+                }
+                list.innerHTML = chars.map(c => `
+                    <div class="char-card" onclick="CC.viewCharacter('${c.id}')">
+                        <div class="char-name">${c.name || c.id}</div>
+                        <div class="char-stats">
+                            <span>😊 ${c.mood || "?"}</span>
+                            <span>⚡ ${c.energy || "?"}</span>
+                            ${c.arousal != null ? `<span>💗 ${c.arousal}</span>` : ""}
+                        </div>
+                    </div>
+                `).join("");
+            })
+            .catch(() => {});
+    }
+
+    function showAllScenes() {
+        selectedScene = null;
+        sceneIndex = -1;
+        const cards = $("#panel-scenes");
+        const detail = $("#panel-scene-detail");
+        if (cards) cards.style.display = "";
+        if (detail) detail.style.display = "none";
+        setText("scene-nav-label", "All Scenes");
+    }
+
+    function prevScene() {
+        if (sceneData.length === 0) return;
+        sceneIndex = (sceneIndex - 1 + sceneData.length) % sceneData.length;
+        selectScene(sceneData[sceneIndex].id);
+    }
+
+    function nextScene() {
+        if (sceneData.length === 0) return;
+        sceneIndex = (sceneIndex + 1) % sceneData.length;
+        selectScene(sceneData[sceneIndex].id);
+    }
+
+    function viewCharacter(charId) {
+        fetch(`/api/characters/${charId}`)
+            .then(r => r.json())
+            .then(data => {
+                const info = $("#detail-chars");
+                if (!info) return;
+                let html = `<h3>${data.name || charId}</h3>`;
+                html += `<div class="char-detail">`;
+                for (const [k, v] of Object.entries(data)) {
+                    if (k === "id" || k === "relationships" || k === "stats" || k === "flags") continue;
+                    html += `<div class="detail-stat"><span>${k}</span><span>${v}</span></div>`;
+                }
+                if (data.relationships) {
+                    html += `<h4>Relationships</h4>`;
+                    for (const r of data.relationships) {
+                        html += `<div class="detail-stat"><span>→ ${r.target}</span><span>trust:${r.trust} attr:${r.attraction}</span></div>`;
+                    }
+                }
+                html += `</div>`;
+                html += `<button class="cc-btn small" onclick="CC.viewConversations('${charId}')">📜 Conversations</button>`;
+                info.innerHTML = html;
+            })
+            .catch(() => {});
+    }
+
+    function viewConversations(charId) {
+        fetch(`/api/characters/${charId}/conversations?limit=20`)
+            .then(r => r.json())
+            .then(convs => {
+                const feed = $("#detail-feed-list");
+                if (!feed) return;
+                if (!convs || convs.length === 0) {
+                    feed.innerHTML = '<div class="muted">No conversations</div>';
+                    return;
+                }
+                feed.innerHTML = convs.map(c =>
+                    `<div class="feed-item compact">
+                        <span class="feed-type ${c.role === 'assistant' ? 'pipeline' : 'system'}">${c.role}</span>
+                        <span class="feed-msg">${c.content || ""}</span>
+                    </div>`
+                ).join("");
+            })
+            .catch(() => {});
+    }
+
+    function injectEvent() {
+        if (!selectedScene) return;
+        const content = prompt("Enter event/directive text:");
+        if (!content) return;
+        const type = prompt("Type: narrative, directive, or broadcast", "narrative");
+        if (!type) return;
+
+        fetch(`/api/scenes/${selectedScene}/inject`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ content, type }),
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                addFeedItem("alert", `Inject failed: ${data.error}`);
+            } else {
+                addFeedItem("system", `Injected ${type} into ${selectedScene}`);
+            }
+        })
+        .catch(e => addFeedItem("alert", `Inject error: ${e.message}`));
+    }
+
     // ── Socket.IO ───────────────────────────────────────────
     function connect() {
         socket = io({ transports: ["websocket", "polling"] });
@@ -268,6 +461,14 @@ const CC = (function () {
                 );
             }
         });
+
+        socket.on("scene_updates", (data) => {
+            if (!selectedScene) {
+                updateSceneCards(data);
+            } else {
+                sceneData = data || [];
+            }
+        });
     }
 
     // ── Public API ──────────────────────────────────────────
@@ -308,6 +509,12 @@ const CC = (function () {
             if (el) el.textContent = elapsed();
         }, 1000);
 
+        // Initial scene load
+        fetch("/api/scenes")
+            .then(r => r.json())
+            .then(updateSceneCards)
+            .catch(() => {});
+
         // Fallback: poll REST if socket is slow
         setTimeout(() => {
             fetch("/api/dashboard")
@@ -319,5 +526,9 @@ const CC = (function () {
 
     document.addEventListener("DOMContentLoaded", init);
 
-    return { togglePause, clearFeed, exportTraining };
+    return {
+        togglePause, clearFeed, exportTraining,
+        selectScene, showAllScenes, prevScene, nextScene,
+        viewCharacter, viewConversations, injectEvent,
+    };
 })();

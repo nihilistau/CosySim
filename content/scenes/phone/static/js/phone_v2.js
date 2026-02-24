@@ -1564,6 +1564,119 @@
   });
 
   /* ══════════════════════════════════════════════════════════
+     HACKER APP — Spy on any character's state, messages, personality
+  ══════════════════════════════════════════════════════════ */
+
+  CosyPhone.registerApp('hacker', {
+    name: 'Hacker', icon: '🔓', color: 'linear-gradient(135deg, #FF3B30, #8B0000)',
+    _target: null,
+
+    render(body) {
+      body.innerHTML = `
+        <div class="section-header" style="color:#FF3B30">⚡ Hacker Terminal</div>
+        <div class="section-sub">Select a target to infiltrate</div>
+        <div id="hk-targets" style="padding:0 16px"><div class="news-loading"><div class="spinner"></div>Scanning...</div></div>
+        <div id="hk-profile" style="display:none;padding:0 16px"></div>`;
+      this._loadTargets();
+    },
+
+    async _loadTargets() {
+      try {
+        const data = await api('GET', '/api/hacker/targets');
+        const el = qs('#hk-targets');
+        if (!data.ok || !data.targets.length) { el.innerHTML = '<div style="color:var(--label2)">No targets found</div>'; return; }
+        el.innerHTML = data.targets.map(t => `
+          <div class="contact-row" onclick="CosyPhone.apps.hacker._hack('${t.id}')" style="cursor:pointer;border-left:3px solid ${t.mood==='happy'?'#30D158':t.mood==='angry'?'#FF3B30':'#8E8E93'}">
+            <div style="font-size:28px;margin-right:12px">👤</div>
+            <div style="flex:1">
+              <div style="font-weight:600">${t.name}</div>
+              <div style="font-size:12px;color:var(--label2)">Mood: ${t.mood} | Energy: ${Math.round(t.energy)} | 💕${Math.round(t.relationship)}</div>
+            </div>
+            <div style="color:#FF3B30;font-size:14px">HACK →</div>
+          </div>`).join('');
+      } catch(e) { qs('#hk-targets').innerHTML = '<div style="color:var(--red)">Scan failed</div>'; }
+    },
+
+    async _hack(charId) {
+      this._target = charId;
+      qs('#hk-targets').style.display = 'none';
+      const prof = qs('#hk-profile');
+      prof.style.display = 'block';
+      prof.innerHTML = '<div class="news-loading"><div class="spinner"></div>Hacking...</div>';
+
+      try {
+        const [profileData, msgData] = await Promise.all([
+          api('GET', `/api/hacker/${charId}/profile`),
+          api('GET', `/api/hacker/${charId}/messages?limit=50`)
+        ]);
+        const p = profileData.profile || {};
+        const state = p.state || {};
+        const personality = p.personality || {};
+        const msgs = (msgData.messages || []).slice(-30);
+
+        prof.innerHTML = `
+          <div style="display:flex;align-items:center;margin-bottom:12px">
+            <button class="pill-btn" onclick="CosyPhone.apps.hacker._back()" style="margin-right:8px">← Back</button>
+            <span style="font-weight:700;color:#FF3B30;font-size:18px">TARGET: ${charId.replace(/_/g,' ').toUpperCase()}</span>
+          </div>
+
+          <div style="background:var(--bg2);border-radius:var(--radius);padding:12px;margin-bottom:12px">
+            <div style="font-weight:600;color:#FF3B30;margin-bottom:8px">📊 STATE DUMP</div>
+            <div style="font-size:13px;color:var(--label)">
+              <div>Mood: <b>${state.mood||'?'}</b> | Energy: <b>${Math.round(state.energy||50)}</b></div>
+              <div>Arousal: <b>${Math.round(state.arousal||50)}</b> | Relationship: <b>${Math.round(state.relationship||50)}</b></div>
+              <div>Heat: <b>${Math.round(p.heat||0)}</b>/100</div>
+              ${state.tiredness!==undefined?`<div>Tiredness: <b>${Math.round(state.tiredness)}</b></div>`:''}
+            </div>
+          </div>
+
+          ${personality.backstory ? `<div style="background:var(--bg2);border-radius:var(--radius);padding:12px;margin-bottom:12px">
+            <div style="font-weight:600;color:#FF3B30;margin-bottom:8px">🧠 PERSONALITY DATA</div>
+            <div style="font-size:12px;color:var(--label2);max-height:80px;overflow-y:auto">${personality.backstory}</div>
+            ${(personality.traits||[]).length?`<div style="margin-top:6px;font-size:12px">Traits: ${personality.traits.join(', ')}</div>`:''}
+            ${(personality.quirks||[]).length?`<div style="font-size:12px">Quirks: ${personality.quirks.join(', ')}</div>`:''}
+          </div>` : ''}
+
+          <div style="background:var(--bg2);border-radius:var(--radius);padding:12px;margin-bottom:12px">
+            <div style="font-weight:600;color:#FF3B30;margin-bottom:8px">💬 INTERCEPTED MESSAGES (${msgs.length})</div>
+            <div style="max-height:200px;overflow-y:auto;font-size:13px">
+              ${msgs.length ? msgs.map(m => `
+                <div style="padding:4px 0;border-bottom:1px solid var(--sep)">
+                  <span style="color:${m.sender_id==='user'?'#0A84FF':'#FF3B30'};font-weight:600">${m.sender_id==='user'?'YOU':charId}:</span>
+                  <span style="color:var(--label)">${(m.content||'').substring(0,120)}</span>
+                </div>`).join('') : '<div style="color:var(--label2)">No messages intercepted</div>'}
+            </div>
+          </div>
+
+          <div style="margin-bottom:12px">
+            <div style="font-weight:600;color:#FF3B30;margin-bottom:6px">💉 INJECT DIRECTIVE</div>
+            <textarea id="hk-directive" style="width:100%;height:50px;background:var(--bg2);border:1px solid #FF3B30;border-radius:var(--radius);padding:8px;font-size:13px;color:var(--label);resize:none" placeholder="Inject a system directive into this character's mind..."></textarea>
+            <button class="pill-btn" style="background:#FF3B30;color:#fff;width:100%;justify-content:center;margin-top:4px" onclick="CosyPhone.apps.hacker._inject()">⚡ Inject</button>
+          </div>`;
+      } catch(e) {
+        prof.innerHTML = `<button class="pill-btn" onclick="CosyPhone.apps.hacker._back()">← Back</button><div style="color:var(--red);margin-top:12px">Hack failed: ${e.message}</div>`;
+      }
+    },
+
+    _back() {
+      this._target = null;
+      qs('#hk-profile').style.display = 'none';
+      qs('#hk-targets').style.display = 'block';
+      this._loadTargets();
+    },
+
+    async _inject() {
+      const dir = qs('#hk-directive').value.trim();
+      if (!dir) { toast('Enter a directive'); return; }
+      try {
+        await api('POST', `/api/hacker/${this._target}/intercept`, { directive: dir });
+        toast('Directive injected ✓');
+        qs('#hk-directive').value = '';
+      } catch(e) { toast('Injection failed: ' + e.message); }
+    },
+  });
+
+  /* ══════════════════════════════════════════════════════════
      BOOT
   ══════════════════════════════════════════════════════════ */
 

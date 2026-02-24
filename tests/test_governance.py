@@ -788,6 +788,67 @@ class TestInteractionPolicy(unittest.TestCase):
         self.assertTrue(p.allow_explicit)
 
 
+class TestBuildGovernanceContext(unittest.TestCase):
+    """Tests for the build_governance_context() convenience function."""
+
+    def test_import(self):
+        from engine.mcp.comms_framework import build_governance_context
+        self.assertTrue(callable(build_governance_context))
+
+    def test_returns_string(self):
+        from engine.mcp.comms_framework import build_governance_context
+        result = build_governance_context("test_agent", "test_scene", "hello")
+        self.assertIsInstance(result, str)
+
+    def test_with_empty_user_message(self):
+        from engine.mcp.comms_framework import build_governance_context
+        result = build_governance_context("agent_x", "phone")
+        self.assertIsInstance(result, str)
+
+    def test_with_history(self):
+        from engine.mcp.comms_framework import build_governance_context
+        history = [{"role": "user", "content": "hi"}, {"role": "assistant", "content": "hello"}]
+        result = build_governance_context("agent_x", "phone", "test", history=history)
+        self.assertIsInstance(result, str)
+
+    def test_different_scenes_produce_context(self):
+        """Different scenes should work without error."""
+        from engine.mcp.comms_framework import build_governance_context
+        for scene in ["phone", "bedroom", "warzone", "gallery", "realm", "neoncity", "coders"]:
+            result = build_governance_context("test_agent", scene, "hello")
+            self.assertIsInstance(result, str, f"Failed for scene: {scene}")
+
+
+class TestRulesRegistration(unittest.TestCase):
+    """Tests that all scene rules files register without error."""
+
+    def test_warzone_rules(self):
+        from content.scenes.warzone.warzone_rules import register_warzone_rules
+        register_warzone_rules()
+
+    def test_neoncity_rules(self):
+        from content.scenes.neoncity.neoncity_rules import register_neoncity_rules
+        register_neoncity_rules()
+
+    def test_realm_rules(self):
+        from content.scenes.realm.realm_rules import register_realm_rules
+        register_realm_rules()
+
+    def test_gallery_rules(self):
+        from content.scenes.gallery.gallery_rules import register_gallery_rules
+        register_gallery_rules()
+
+    def test_coders_rules(self):
+        from content.scenes.coders.coders_rules import register_coders_rules
+        register_coders_rules()
+
+    def test_idempotent_registration(self):
+        """Calling register twice should not raise."""
+        from content.scenes.warzone.warzone_rules import register_warzone_rules
+        register_warzone_rules()
+        register_warzone_rules()
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 #  Entry point
 # ══════════════════════════════════════════════════════════════════════════════

@@ -40,6 +40,7 @@ from content.simulation.database.db import Database
 from content.shared import register_shared_assets
 from engine.mcp.scene_state import get_scene_state_manager
 from engine.mcp.tag_registry import TagRegistry
+from content.scenes.gallery.gallery_rules import register_gallery_rules
 
 logger = logging.getLogger(__name__)
 
@@ -260,6 +261,7 @@ class GalleryScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
         self._seed_characters()
         try:
             self._mcp_init()
+            register_gallery_rules()
             fw = get_framework()
             fw.on("artwork_created", lambda evt: self._on_art_event(evt))
         except Exception as exc:

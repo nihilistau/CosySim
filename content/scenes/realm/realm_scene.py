@@ -43,6 +43,7 @@ from .realm_state import (
 from content.shared import register_shared_assets
 from engine.mcp.scene_state import get_scene_state_manager
 from engine.mcp.tag_registry import TagRegistry
+from content.scenes.realm.realm_rules import register_realm_rules
 
 logger = logging.getLogger(__name__)
 
@@ -163,6 +164,9 @@ class RealmScene(BaseScene, MCPSceneMixin, mcp_scene_id="realm"):
         self._state_mgr = get_scene_state_manager()
         self._tag_registry = TagRegistry.get()
 
+        # MCP rules
+        register_realm_rules()
+
     # ── Agent helpers ──
 
     def _get_manager(self):
@@ -170,15 +174,19 @@ class RealmScene(BaseScene, MCPSceneMixin, mcp_scene_id="realm"):
         return get_virtual_agent_manager()
 
     def _director_infer(self, user_message: str) -> Dict[str, Any]:
-        """Send a message through the Director pipeline (stateful)."""
+        """Send a message through the Director pipeline (stateful) with governance."""
         if not self.state:
             return {"narration": "No active game.", "choices": []}
 
         try:
             from engine.lmstudio.lms_client import get_lms_client
+            from engine.mcp.comms_framework import build_governance_context
             client = get_lms_client()
 
             system_prompt = _director_system_prompt(self.state)
+            gov_ctx = build_governance_context("realm_director", "realm", user_message)
+            if gov_ctx:
+                system_prompt = f"{system_prompt}\n\n{gov_ctx}"
             messages = [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_message},
@@ -215,14 +223,18 @@ class RealmScene(BaseScene, MCPSceneMixin, mcp_scene_id="realm"):
             }
 
     def _assistant_infer(self, context: str) -> str:
-        """Get a short quip from the Assistant (stateless)."""
+        """Get a short quip from the Assistant with governance context."""
         if not self.state:
             return ""
 
         from engine.lmstudio.lms_client import get_lms_client
+        from engine.mcp.comms_framework import build_governance_context
         client = get_lms_client()
 
         system_prompt = _assistant_system_prompt(self.state)
+        gov_ctx = build_governance_context("realm_assistant", "realm", context)
+        if gov_ctx:
+            system_prompt = f"{system_prompt}\n\n{gov_ctx}"
         messages = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": context},

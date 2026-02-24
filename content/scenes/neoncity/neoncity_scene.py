@@ -24,6 +24,7 @@ from engine.mcp.framework import MCPSceneMixin, get_framework
 from engine.mcp.scene_state import get_scene_state_manager
 from engine.mcp.tag_registry import TagRegistry, TagDef
 from content.shared import register_shared_assets
+from content.scenes.neoncity.neoncity_rules import register_neoncity_rules
 
 from .neoncity_state import (
     EVENT_POOL,
@@ -79,13 +80,21 @@ class NeonCityScene(BaseScene, MCPSceneMixin, mcp_scene_id="neoncity"):
             handler=None, strip_from_output=True, pre_warm_intent="neoncity_hack"
         ))
 
+        # MCP rules
+        register_neoncity_rules()
+
     def _narrate(self, context: str) -> str:
-        """Get a cyberpunk flavor narration from LMS (stateless)."""
+        """Get a cyberpunk flavor narration from LMS with governance context."""
         try:
             from engine.lmstudio.lms_client import get_lms_client
+            from engine.mcp.comms_framework import build_governance_context
             client = get_lms_client()
+            system = "You are a cyberpunk narrator for a board game called NeonCity. Give short, punchy, neon-drenched descriptions in 1-2 sentences. Use cyberpunk slang."
+            gov_ctx = build_governance_context("neoncity_narrator", "neoncity", context)
+            if gov_ctx:
+                system = f"{system}\n\n{gov_ctx}"
             messages = [
-                {"role": "system", "content": "You are a cyberpunk narrator for a board game called NeonCity. Give short, punchy, neon-drenched descriptions in 1-2 sentences. Use cyberpunk slang."},
+                {"role": "system", "content": system},
                 {"role": "user", "content": context},
             ]
             resp = client.chat(messages, temperature=0.9, max_tokens=100, store=False)

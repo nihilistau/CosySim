@@ -1081,6 +1081,94 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
             except Exception as exc:
                 return jsonify({"ok": False, "error": str(exc)}), 500
 
+        # ── Hacker App Routes ────────────────────────────────────────
+
+        @app.route("/api/hacker/targets")
+        def hacker_targets():
+            """List all characters with their current state summary."""
+            targets = []
+            try:
+                from engine.mcp.state_coordinator import get_coordinator
+                coord = get_coordinator()
+                for char_id in (self.characters or {}):
+                    state = coord.get_full_state(char_id) or {}
+                    targets.append({
+                        "id": char_id,
+                        "name": char_id.replace("_", " ").title(),
+                        "mood": state.get("mood", "unknown"),
+                        "energy": state.get("energy", 50),
+                        "arousal": state.get("arousal", 50),
+                        "relationship": state.get("relationship", 50),
+                        "scene": state.get("scene", "phone"),
+                    })
+            except Exception:
+                for char_id in (self.characters or {}):
+                    targets.append({"id": char_id, "name": char_id.replace("_", " ").title(),
+                                    "mood": "unknown", "energy": 50, "arousal": 50,
+                                    "relationship": 50, "scene": "phone"})
+            return jsonify({"ok": True, "targets": targets})
+
+        @app.route("/api/hacker/<char_id>/profile")
+        def hacker_profile(char_id):
+            """Get full character state, personality, and system data."""
+            result = {"id": char_id}
+            try:
+                from engine.mcp.state_coordinator import get_coordinator
+                result["state"] = get_coordinator().get_full_state(char_id) or {}
+            except Exception:
+                result["state"] = {}
+            try:
+                from content.simulation.database.db import Database
+                db = Database()
+                char = db.get_character(char_id)
+                if char:
+                    result["personality"] = {
+                        "backstory": getattr(char, "backstory", ""),
+                        "traits": getattr(char, "traits", []),
+                        "speech_patterns": getattr(char, "speech_patterns", []),
+                        "quirks": getattr(char, "quirks", []),
+                        "interests": getattr(char, "interests", []),
+                    }
+            except Exception:
+                result["personality"] = {}
+            try:
+                from engine.mcp.scene_rules_engine import get_conversation_heat
+                heat = get_conversation_heat()
+                heat_val = heat.get(f"phone_{char_id}") if hasattr(heat, "get") else 0
+                result["heat"] = heat_val or 0
+            except Exception:
+                result["heat"] = 0
+            return jsonify({"ok": True, "profile": result})
+
+        @app.route("/api/hacker/<char_id>/messages")
+        def hacker_messages(char_id):
+            """Get all messages from a character's DM thread."""
+            limit = request.args.get("limit", 100, type=int)
+            try:
+                thread = self.db.get_or_create_dm(char_id)
+                messages = self.db.get_messages(thread["id"], limit=limit)
+                return jsonify({"ok": True, "thread_id": thread["id"], "messages": messages})
+            except Exception as exc:
+                return jsonify({"ok": False, "error": str(exc)}), 500
+
+        @app.route("/api/hacker/<char_id>/intercept", methods=["POST"])
+        def hacker_intercept(char_id):
+            """Inject a system-level directive into a character's state."""
+            data = request.get_json(silent=True) or {}
+            directive = data.get("directive", "")
+            if not directive:
+                return jsonify({"ok": False, "error": "directive required"}), 400
+            try:
+                from engine.mcp.state_coordinator import get_coordinator
+                coord = get_coordinator()
+                state = coord.get_full_state(char_id) or {}
+                coord.update(char_id, mood=state.get("mood", "neutral"),
+                             source="hacker_inject", scene="phone",
+                             metadata={"injected_directive": directive})
+                return jsonify({"ok": True, "injected": directive})
+            except Exception as exc:
+                return jsonify({"ok": False, "error": str(exc)}), 500
+
 
 # ── Module entry point ────────────────────────────────────────────────────────
 

@@ -25,6 +25,7 @@ from engine.scenes.base_scene import BaseScene
 from engine.mcp.framework import MCPSceneMixin, get_framework
 from engine.mcp.scene_state import get_scene_state_manager
 from engine.mcp.tag_registry import TagRegistry, TagDef
+from content.scenes.coders.coders_rules import register_coders_rules
 
 from .coders_state import (
     AgentRole,
@@ -75,19 +76,23 @@ class CodersRoomScene(BaseScene, MCPSceneMixin, mcp_scene_id="coders"):
             name="CODE", pattern=r"\[CODE:([^\]]+)\]",
             handler=None, strip_from_output=True, pre_warm_intent="coders_code"
         ))
+        register_coders_rules()
         self._tick_thread: Optional[threading.Thread] = None
         self._running = False
 
         self._setup_routes()
         self._setup_socketio()
 
-    def _llm_call(self, system: str, user: str, max_tokens: int = 1500) -> str:
-        """Stateless LLM call for agent work."""
+    def _llm_call(self, system: str, user: str, max_tokens: int = 1500, agent_id: str = "coders_agent") -> str:
+        """Stateless LLM call with governance context."""
         try:
             from engine.lmstudio.lms_client import get_lms_client
+            from engine.mcp.comms_framework import build_governance_context
             client = get_lms_client()
+            gov_ctx = build_governance_context(agent_id, "coders", user)
+            full_system = f"{system}\n\n{gov_ctx}" if gov_ctx else system
             messages = [
-                {"role": "system", "content": system},
+                {"role": "system", "content": full_system},
                 {"role": "user", "content": user},
             ]
             resp = client.chat(messages, temperature=0.7, max_tokens=max_tokens, store=False)

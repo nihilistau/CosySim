@@ -836,3 +836,45 @@ def get_router() -> AgentRouter:
 def get_governor(agent, *, scene: str = "phone", **kwargs) -> AgentGovernor:
     """Convenience factory: wrap an agent in a governor for a given scene."""
     return AgentGovernor(agent, scene=scene, **kwargs)
+
+
+def build_governance_context(
+    agent_id: str,
+    scene: str,
+    user_message: str = "",
+    *,
+    history: Optional[List] = None,
+) -> str:
+    """
+    Build governance context (interceptor directives) without a full governor.
+
+    Use this in scenes that call VAM/LMS directly (streaming, special pipelines)
+    but still want interceptor-generated directives appended to the system prompt.
+
+    Returns a multi-line string of interceptor injections (mood, heat, personality,
+    scene rules, etc.) that should be appended to the agent's system prompt.
+    """
+    pipeline = _build_default_pipeline()
+    manifest = get_skill_manifest().get(scene)
+    ctx = ResponseContext(
+        scene=scene,
+        agent_id=agent_id,
+        agent_name=agent_id,
+        user_message=user_message,
+        system_prompt="",
+        messages=[],
+        reply="",
+        skill_manifest=manifest,
+        policy=InteractionPolicy(),
+        game_state={},
+        auto_results={},
+        abort=False,
+        skip_llm=False,
+        history=history or [],
+        chain_id=None,
+    )
+    try:
+        pipeline.run_pre(ctx)
+    except Exception as exc:
+        logger.debug("build_governance_context pipeline error: %s", exc)
+    return ctx.get("system_prompt", "").strip()

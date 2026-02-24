@@ -21,6 +21,46 @@
     </header>
 
     <main class="cc-grid">
+        <!-- LIVE SCENE MONITOR — New primary panel -->
+        <section class="cc-panel cc-wide" id="panel-scenes">
+            <div class="panel-header-row">
+                <h2>Live Scene Monitor</h2>
+                <div class="scene-nav">
+                    <button class="cc-btn small" onclick="CC.prevScene()">◀</button>
+                    <span id="scene-nav-label">All Scenes</span>
+                    <button class="cc-btn small" onclick="CC.nextScene()">▶</button>
+                    <button class="cc-btn small" onclick="CC.showAllScenes()">⊞ All</button>
+                </div>
+            </div>
+            <div id="scene-cards" class="scene-card-grid">
+                <div class="muted">Loading scenes...</div>
+            </div>
+        </section>
+
+        <!-- Scene Detail View (shown when a scene is selected) -->
+        <section class="cc-panel cc-wide" id="panel-scene-detail" style="display:none">
+            <div class="panel-header-row">
+                <h2 id="detail-title">Scene Detail</h2>
+                <div>
+                    <button class="cc-btn small" onclick="CC.showAllScenes()">← Back</button>
+                    <button class="cc-btn small" onclick="CC.injectEvent()">💉 Inject</button>
+                </div>
+            </div>
+            <div class="scene-detail-grid">
+                <div class="scene-detail-info" id="detail-info">
+                    <div class="muted">Select a scene</div>
+                </div>
+                <div class="scene-detail-feed" id="detail-feed">
+                    <h3>Chat Feed</h3>
+                    <div id="detail-feed-list" class="feed-list compact"></div>
+                </div>
+                <div class="scene-detail-chars" id="detail-chars">
+                    <h3>Characters</h3>
+                    <div id="detail-char-list"></div>
+                </div>
+            </div>
+        </section>
+
         <!-- System Resources Panel -->
         <section class="cc-panel" id="panel-system">
             <h2>System Resources</h2>

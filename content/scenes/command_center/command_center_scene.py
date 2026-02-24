@@ -8,6 +8,8 @@ Displays:
 - Activity bus (current + recent history)
 - Training data capture stats
 - Live event feed
+- **Live scene monitor** — cycle through all scenes, see chats/state/turns
+- **Scene controls** — pause, resume, inject events, broadcast directives
 """
 
 from __future__ import annotations
@@ -22,8 +24,8 @@ from flask import Flask, jsonify, render_template, request
 from flask_cors import CORS
 from flask_socketio import SocketIO, emit
 
-from engine.scenes.base_scene import BaseScene
-from engine.mcp.framework import MCPSceneMixin
+from engine.scenes.base_scene import BaseScene, get_all_active_scenes, get_active_scene
+from engine.mcp.framework import MCPSceneMixin, get_framework
 from content.shared import register_shared_assets
 from engine.mcp.scene_state import get_scene_state_manager
 from engine.mcp.tag_registry import TagRegistry
@@ -35,16 +37,17 @@ DEFAULT_PORT = 5566
 
 
 class CommandCenterScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
-    """Real-time system observatory dashboard."""
+    """Real-time system observatory dashboard with live scene monitoring and control."""
 
     SCENE_METADATA = {
         "title": "Command Center",
         "description": "System observatory dashboard showing real-time metrics, pipeline status, "
-                       "and cross-scene activity.",
+                       "cross-scene activity, live scene monitoring, and remote scene control.",
         "genre": "system_monitoring",
         "max_characters": 0,
         "features": ["metrics_dashboard", "pipeline_monitoring", "cross_scene_view",
-                     "alert_system", "event_feed"],
+                     "alert_system", "event_feed", "scene_monitor", "scene_control",
+                     "character_viewer"],
     }
 
     def __init__(self, host: str = "127.0.0.1", port: int = DEFAULT_PORT):
@@ -70,6 +73,7 @@ class CommandCenterScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
         self._tick_interval = 1.0
 
         self._register_routes()
+        self._register_scene_routes()
         self._register_socketio()
 
         # Framework integration
@@ -313,8 +317,288 @@ class CommandCenterScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
                 return jsonify({"error": str(exc)}), 500
 
     # ------------------------------------------------------------------
-    # SocketIO
+    # Scene Monitoring + Control Routes
     # ------------------------------------------------------------------
+
+    def _get_scene_summary(self, scene_id: str, scene_obj) -> Dict[str, Any]:
+        """Build a compact status summary for a scene."""
+        info: Dict[str, Any] = {
+            "id": scene_id,
+            "running": True,
+            "port": getattr(scene_obj, "port", None),
+        }
+
+        # Metadata
+        meta = getattr(scene_obj, "SCENE_METADATA", None)
+        if meta:
+            info["title"] = meta.get("title", scene_id)
+            info["genre"] = meta.get("genre", "unknown")
+        else:
+            info["title"] = scene_id
+            info["genre"] = "unknown"
+
+        # Characters
+        chars = []
+        if hasattr(scene_obj, "characters"):
+            chars = list(scene_obj.characters.keys()) if isinstance(scene_obj.characters, dict) else []
+        elif hasattr(scene_obj, "_characters"):
+            c = scene_obj._characters
+            chars = list(c.keys()) if isinstance(c, dict) else []
+        info["characters"] = chars
+        info["character_count"] = len(chars)
+
+        # State snapshot — extract key stats from scene state
+        state_snap = {}
+        state = getattr(scene_obj, "state", None) or getattr(scene_obj, "_state", None)
+        if state:
+            for attr in ("phase", "current_phase", "heat", "round_num", "turn",
+                         "game_phase", "escalation_level", "score", "suspicion"):
+                val = getattr(state, attr, None)
+                if val is not None:
+                    state_snap[attr] = val
+            # Dict-like state
+            if hasattr(state, "to_dict"):
+                try:
+                    d = state.to_dict()
+                    for k in ("phase", "heat", "round", "turn", "score"):
+                        if k in d and k not in state_snap:
+                            state_snap[k] = d[k]
+                except Exception:
+                    pass
+        info["state"] = state_snap
+
+        # Heat from framework
+        try:
+            fw = get_framework()
+            heat_data = fw.get_state(scene_id, "conversation_heat")
+            if heat_data:
+                info["heat"] = heat_data.get("level", 0)
+        except Exception:
+            pass
+
+        # Last activity
+        info["last_activity"] = time.time()
+        return info
+
+    def _get_scene_chat_feed(self, scene_id: str, limit: int = 10) -> List[Dict]:
+        """Get recent chat messages from a scene via MCP framework narratives."""
+        messages = []
+        try:
+            fw = get_framework()
+            narratives = fw.get_state(scene_id, "narratives")
+            if narratives and isinstance(narratives, list):
+                for n in narratives[-limit:]:
+                    messages.append({
+                        "speaker": n.get("speaker", "system"),
+                        "text": n.get("text", "")[:200],
+                        "ts": n.get("ts", 0),
+                    })
+        except Exception:
+            pass
+
+        # Try EventChain as fallback
+        if not messages:
+            try:
+                from content.simulation.database.events import get_event_chain
+                ec = get_event_chain()
+                events = ec.get_events(scene_id=scene_id, limit=limit)
+                for e in events:
+                    messages.append({
+                        "speaker": e.get("actor", "system"),
+                        "text": e.get("description", "")[:200],
+                        "ts": e.get("timestamp", 0),
+                    })
+            except Exception:
+                pass
+
+        return messages
+
+    def _get_character_details(self, char_id: str) -> Dict[str, Any]:
+        """Get detailed character state from registry + database."""
+        details: Dict[str, Any] = {"id": char_id}
+
+        # From CharacterRegistry (live state)
+        try:
+            from engine.mcp.framework import get_framework
+            fw = get_framework()
+            char_state = fw.get_character_state(char_id)
+            if char_state:
+                details["mood"] = char_state.get("mood", "neutral")
+                details["energy"] = char_state.get("energy", 100)
+                details["stats"] = char_state.get("stats", {})
+                details["flags"] = char_state.get("flags", [])
+        except Exception:
+            pass
+
+        # From Database (persistent data)
+        try:
+            from content.simulation.database.db import Database
+            db = Database()
+            char = db.get_character(char_id)
+            if char:
+                details["name"] = char.get("name", char_id)
+                details["age"] = char.get("age")
+                details["sex"] = char.get("sex")
+                details["personality_id"] = char.get("personality_id")
+        except Exception:
+            pass
+
+        # From CharacterStateCoordinator
+        try:
+            from engine.mcp.character_state_coordinator import get_coordinator
+            coord = get_coordinator()
+            state = coord.get_state(char_id)
+            if state:
+                details.update({
+                    "mood": state.get("mood", details.get("mood", "neutral")),
+                    "energy": state.get("energy", details.get("energy", 100)),
+                    "arousal": state.get("arousal", 0),
+                    "inhibition": state.get("inhibition", 50),
+                })
+        except Exception:
+            pass
+
+        # Relationships
+        try:
+            from content.simulation.database.db import Database
+            db = Database()
+            rels = db.get_relationships(char_id)
+            if rels:
+                details["relationships"] = [
+                    {"target": r.get("target_id"), "trust": r.get("trust", 0),
+                     "attraction": r.get("attraction", 0)}
+                    for r in rels[:10]
+                ]
+        except Exception:
+            pass
+
+        return details
+
+    def _register_scene_routes(self):
+        app = self.app
+
+        @app.route("/api/scenes")
+        def api_scenes():
+            """List all active scenes with status summaries."""
+            scenes = get_all_active_scenes()
+            result = []
+            for sid, sobj in scenes.items():
+                if sid == SCENE_ID:
+                    continue  # Skip self
+                try:
+                    result.append(self._get_scene_summary(sid, sobj))
+                except Exception as exc:
+                    result.append({"id": sid, "running": True, "error": str(exc)})
+            return jsonify(result)
+
+        @app.route("/api/scenes/<scene_id>")
+        def api_scene_detail(scene_id: str):
+            """Get detailed state for a specific scene."""
+            scene = get_active_scene(scene_id)
+            if not scene:
+                return jsonify({"error": f"Scene '{scene_id}' not active"}), 404
+            return jsonify(self._get_scene_summary(scene_id, scene))
+
+        @app.route("/api/scenes/<scene_id>/feed")
+        def api_scene_feed(scene_id: str):
+            """Get recent chat messages from a scene."""
+            limit = request.args.get("limit", 20, type=int)
+            return jsonify(self._get_scene_chat_feed(scene_id, limit=limit))
+
+        @app.route("/api/scenes/<scene_id>/characters")
+        def api_scene_characters(scene_id: str):
+            """Get character details for all characters in a scene."""
+            scene = get_active_scene(scene_id)
+            if not scene:
+                return jsonify({"error": f"Scene '{scene_id}' not active"}), 404
+
+            chars = []
+            char_ids = []
+            if hasattr(scene, "characters") and isinstance(scene.characters, dict):
+                char_ids = list(scene.characters.keys())
+            elif hasattr(scene, "_characters") and isinstance(scene._characters, dict):
+                char_ids = list(scene._characters.keys())
+
+            for cid in char_ids:
+                chars.append(self._get_character_details(cid))
+            return jsonify(chars)
+
+        @app.route("/api/characters/<char_id>")
+        def api_character_detail(char_id: str):
+            """Get detailed state for a specific character."""
+            return jsonify(self._get_character_details(char_id))
+
+        @app.route("/api/characters/<char_id>/conversations")
+        def api_character_conversations(char_id: str):
+            """Get conversation history for a character."""
+            limit = request.args.get("limit", 30, type=int)
+            conversations = []
+            try:
+                from content.simulation.database.db import Database
+                db = Database()
+                convs = db.get_conversations(char_id, limit=limit)
+                for c in (convs or []):
+                    conversations.append({
+                        "role": c.get("role", "unknown"),
+                        "content": c.get("content", "")[:300],
+                        "ts": c.get("timestamp", 0),
+                    })
+            except Exception:
+                pass
+            return jsonify(conversations)
+
+        @app.route("/api/scenes/<scene_id>/inject", methods=["POST"])
+        def api_scene_inject(scene_id: str):
+            """Inject a narrative event or directive into a scene."""
+            scene = get_active_scene(scene_id)
+            if not scene:
+                return jsonify({"error": f"Scene '{scene_id}' not active"}), 404
+
+            data = request.get_json(silent=True) or {}
+            event_type = data.get("type", "narrative")
+            content = data.get("content", "")
+
+            if not content:
+                return jsonify({"error": "Missing 'content' field"}), 400
+
+            try:
+                fw = get_framework()
+                if event_type == "narrative":
+                    fw.emit_event(scene_id, "director_injection", {
+                        "text": content, "source": "command_center"
+                    })
+                elif event_type == "directive":
+                    from engine.mcp.dialog_system import get_dialog_system
+                    ds = get_dialog_system()
+                    ds.add_directive(scene_id, content, priority=10, ttl=60)
+                elif event_type == "broadcast":
+                    fw.emit_event(scene_id, "system_broadcast", {
+                        "text": content, "source": "command_center"
+                    })
+                else:
+                    return jsonify({"error": f"Unknown event type: {event_type}"}), 400
+
+                log.info("Injected %s into %s: %s", event_type, scene_id, content[:80])
+                return jsonify({"ok": True, "type": event_type, "scene": scene_id})
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @app.route("/api/characters/<char_id>/edit_stats", methods=["POST"])
+        def api_edit_character_stats(char_id: str):
+            """Live-edit character stats."""
+            data = request.get_json(silent=True) or {}
+            if not data:
+                return jsonify({"error": "No stats provided"}), 400
+
+            try:
+                from engine.mcp.character_state_coordinator import get_coordinator
+                coord = get_coordinator()
+                for key, value in data.items():
+                    coord.update(char_id, key, value, persist=True)
+                log.info("Edited stats for %s: %s", char_id, data)
+                return jsonify({"ok": True, "char_id": char_id, "updated": data})
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
 
     def _register_socketio(self):
         @self.socketio.on("connect")
@@ -346,6 +630,7 @@ class CommandCenterScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
 
     def _tick_loop(self):
         """Broadcast metrics every tick_interval seconds."""
+        tick_count = 0
         while self._running:
             try:
                 self.socketio.emit("metric_system", self._system_snapshot())
@@ -357,6 +642,23 @@ class CommandCenterScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
                     try:
                         snap = bus.snapshot()
                         self.socketio.emit("metric_activity", snap)
+                    except Exception:
+                        pass
+
+                # Broadcast scene summaries every 3 ticks
+                tick_count += 1
+                if tick_count % 3 == 0:
+                    try:
+                        scenes = get_all_active_scenes()
+                        summaries = []
+                        for sid, sobj in scenes.items():
+                            if sid == SCENE_ID:
+                                continue
+                            try:
+                                summaries.append(self._get_scene_summary(sid, sobj))
+                            except Exception:
+                                summaries.append({"id": sid, "running": True})
+                        self.socketio.emit("scene_updates", summaries)
                     except Exception:
                         pass
 
@@ -394,10 +696,12 @@ class CommandCenterScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
     def get_plugin_info(self) -> Dict[str, Any]:
         return {
             "name": "Command Center",
-            "description": "Real-time system observatory — metrics, pipeline, alerts, training",
-            "version": "1.0.0",
+            "description": "Real-time system observatory — metrics, pipeline, alerts, "
+                           "scene monitoring, character viewer, live control",
+            "version": "2.0.0",
             "author": "CosySim",
             "port": self.port,
-            "tags": ["dashboard", "metrics", "observatory", "training"],
-            "skill_packs": [],
+            "tags": ["dashboard", "metrics", "observatory", "training",
+                     "scene_monitor", "scene_control", "character_viewer"],
+            "skill_packs": ["command_center"],
         }

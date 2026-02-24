@@ -28,6 +28,7 @@ from engine.mcp.framework import MCPSceneMixin
 from content.shared import register_shared_assets
 from engine.mcp.scene_state import get_scene_state_manager
 from engine.mcp.tag_registry import TagRegistry, TagDef
+from content.scenes.warzone.warzone_rules import register_warzone_rules
 
 logger = logging.getLogger(__name__)
 
@@ -420,6 +421,9 @@ class WarzoneScene(BaseScene, MCPSceneMixin, mcp_scene_id="warzone"):
             handler=None, strip_from_output=True, pre_warm_intent="warzone_order"
         ))
 
+        # MCP rules
+        register_warzone_rules()
+
     # ── BaseScene interface ──────────────────────────────────────────
 
     def start(self):
@@ -562,13 +566,20 @@ class WarzoneScene(BaseScene, MCPSceneMixin, mcp_scene_id="warzone"):
         )
         try:
             from engine.agents.virtual_agent_manager import get_virtual_agent_manager
+            from engine.mcp.comms_framework import build_governance_context
             mgr = get_virtual_agent_manager()
+            gov_ctx = build_governance_context(
+                f"warzone_ai_{game.game_id}", "warzone", prompt
+            )
+            system = (
+                "You are General Ironside, a cunning AI military commander in Global Strike. "
+                "Be strategic, competitive, and entertaining. Keep responses SHORT."
+            )
+            if gov_ctx:
+                system = f"{system}\n\n{gov_ctx}"
             result = mgr.infer_processed(
                 agent_id=f"warzone_ai_{game.game_id}",
-                system_prompt=(
-                    "You are General Ironside, a cunning AI military commander in Global Strike. "
-                    "Be strategic, competitive, and entertaining. Keep responses SHORT."
-                ),
+                system_prompt=system,
                 user_prompt=prompt,
                 store=False,
             )

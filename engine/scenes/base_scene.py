@@ -48,6 +48,11 @@ def get_active_scene(scene_name: str) -> Optional["BaseScene"]:
     return _ACTIVE_SCENES.get(scene_name)
 
 
+def get_all_active_scenes() -> Dict[str, "BaseScene"]:
+    """Return a snapshot of all currently registered scene instances."""
+    return dict(_ACTIVE_SCENES)
+
+
 class BaseScene(ABC):
     """
     Abstract base class for all scenes
