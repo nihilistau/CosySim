@@ -24,6 +24,7 @@ DOCS_DIR: Path     = ROOT / "docs"
 TESTS_DIR: Path    = ROOT / "tests"
 TRAINING_DIR: Path = ROOT / "training"
 DEPLOY_DIR: Path   = ROOT / "deployment"
+LOGS_DIR: Path     = ROOT / "logs"
 
 # ── Content sub-trees ────────────────────────────────────────────────
 SCENES_DIR: Path      = CONTENT_DIR / "scenes"
@@ -35,6 +36,7 @@ MEDIA_DIR: Path       = CONTENT_DIR / "simulation" / "media"
 IMAGES_DIR: Path      = MEDIA_DIR / "images"
 VIDEO_DIR: Path       = MEDIA_DIR / "video"
 VOICE_DIR: Path       = MEDIA_DIR / "voice"
+PHOTO_DIR: Path       = MEDIA_DIR / "photo"
 
 # Alt media location (content/media/)
 MEDIA_ALT_DIR: Path   = CONTENT_DIR / "media"
@@ -59,15 +61,18 @@ BACKUPS_DIR: Path = ROOT / "backups"
 
 def ensure_dirs() -> None:
     """Create required directories if they don't exist."""
-    for d in (DATA_DIR, IMAGES_DIR, VIDEO_DIR, VOICE_DIR, UPLOADS_DIR,
+    for d in (DATA_DIR, IMAGES_DIR, VIDEO_DIR, VOICE_DIR, PHOTO_DIR,
+              PHOTO_DIR / "avatars", UPLOADS_DIR, DB_CHROMA_DIR, LOGS_DIR,
               MEDIA_ALT_DIR / "images", MEDIA_ALT_DIR / "video",
               MEDIA_ALT_DIR / "voice", BACKUPS_DIR, DEPLOY_DIR):
         d.mkdir(parents=True, exist_ok=True)
 
 
-# Convenience alias
+# Convenience alias — immutable namespace
 class _Paths:
-    """Attribute-style access to all project paths."""
+    """Attribute-style access to all project paths (read-only)."""
+    __slots__ = ()  # prevent instance attributes
+
     root            = ROOT
     config          = CONFIG_DIR
     data            = DATA_DIR
@@ -77,6 +82,7 @@ class _Paths:
     tests           = TESTS_DIR
     training        = TRAINING_DIR
     deploy          = DEPLOY_DIR
+    logs            = LOGS_DIR
     scenes          = SCENES_DIR
     characters      = CHARACTERS_DIR
     shared          = SHARED_DIR
@@ -84,6 +90,7 @@ class _Paths:
     images          = IMAGES_DIR
     video           = VIDEO_DIR
     voice           = VOICE_DIR
+    photo           = PHOTO_DIR
     media_alt       = MEDIA_ALT_DIR
     asset           = ASSET_DIR
     voices_config   = VOICES_CONFIG

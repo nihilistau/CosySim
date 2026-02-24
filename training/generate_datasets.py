@@ -121,11 +121,11 @@ def _random_tags(min_tags: int = 1, max_tags: int = 4) -> tuple[str, dict]:
         elif tt == "image":
             p = random.choice(IMAGE_PROMPTS)
             tags_str += f" [IMAGE:{p}]"
-            extracted["image"] = p
+            extracted.setdefault("images", []).append(p)
         elif tt == "selfie":
             p = random.choice(IMAGE_PROMPTS)
             tags_str += f" [SELFIE:{p}]"
-            extracted["selfie"] = p
+            extracted.setdefault("images", []).append(p)
         elif tt == "stat":
             stat_name, (lo, hi) = random.choice(STATS)
             val = random.randint(lo, hi)

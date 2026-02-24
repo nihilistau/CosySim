@@ -99,6 +99,8 @@ class LMSResponse:
     server_tps: float = 0.0               # tokens_per_second from server
     time_to_first_token_s: float = 0.0    # time_to_first_token_seconds
     model_load_time_s: float = 0.0        # model_load_time_seconds (0 if already loaded)
+    # Extra metadata (spec decode stats, etc.)
+    metadata: Dict = field(default_factory=dict)
 
     @property
     def tokens_per_second(self) -> float:

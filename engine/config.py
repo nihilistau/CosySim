@@ -35,7 +35,8 @@ class ConfigManager:
                         If None, uses COSYVOICE_ENV environment variable or "default"
         """
         self.environment = environment or os.getenv("COSYSIM_ENV") or os.getenv("COSYVOICE_ENV", "default")
-        self.config_dir = Path(__file__).parent.parent / "config"
+        from engine.paths import CONFIG_DIR
+        self.config_dir = CONFIG_DIR
         self._config: Dict[str, Any] = {}
         
         self._load_config()

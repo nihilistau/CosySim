@@ -185,8 +185,9 @@ class InferenceRouter:
         self._wait_times: List[float] = []
         self._latency_times: List[float] = []
 
-        # Slot tracking: agent_id → tier (for affinity)
+        # Slot tracking: agent_id → tier (for affinity), bounded LRU
         self._agent_affinity: Dict[str, Tier] = {}
+        _MAX_AFFINITY = 256  # evict oldest when exceeded
 
         # Worker thread
         self._running = False
@@ -415,9 +416,13 @@ class InferenceRouter:
                 sum(self._latency_times) / len(self._latency_times)
                 if self._latency_times else 0.0
             )
-            # Record agent affinity for KV cache warmth
+            # Record agent affinity for KV cache warmth (bounded)
             if request.agent_id:
                 self._agent_affinity[request.agent_id] = tier
+                if len(self._agent_affinity) > self._MAX_AFFINITY:
+                    # Evict oldest entry (first key in insertion-order dict)
+                    oldest = next(iter(self._agent_affinity))
+                    del self._agent_affinity[oldest]
 
     def _execute_via_sdk(self, request: InferenceRequest, model_key: Optional[str]) -> Any:
         """Execute via the SDK client."""

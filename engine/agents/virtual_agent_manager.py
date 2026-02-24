@@ -102,6 +102,8 @@ class VirtualAgentManager:
         # v3.3: SDK router integration
         self._router = None           # lazy-init InferenceRouter
         self._router_enabled = False  # controlled by config
+        self._router_init_attempted = False
+        self._router_lock = threading.Lock()
 
         # Request hooks — called before/after every inference
         self._pre_hooks: List[Callable] = []
@@ -117,78 +119,84 @@ class VirtualAgentManager:
         """
         if self._router is not None:
             return self._router
-        if self._router_enabled is False and self._router is None:
-            # Already attempted and failed, or disabled — don't retry every call
-            if hasattr(self, "_router_init_attempted"):
+        if self._router_init_attempted:
+            return None
+
+        with self._router_lock:
+            # Double-check after acquiring lock
+            if self._router is not None:
+                return self._router
+            if self._router_init_attempted:
                 return None
-        try:
             self._router_init_attempted = True
-            from engine.lmstudio.router import InferenceRouter, TierConfig, Tier
-            from engine.config import get_config
-            cfg = get_config()
-            lms_cfg = cfg.get("lmstudio", {})
-            router_cfg = lms_cfg.get("router", {})
-            models_cfg = lms_cfg.get("models", {})
 
-            if not router_cfg.get("enabled", False):
-                return None
+            try:
+                from engine.lmstudio.router import InferenceRouter, TierConfig, Tier
+                from engine.config import get_config
+                cfg = get_config()
+                lms_cfg = cfg.get("lmstudio", {})
+                router_cfg = lms_cfg.get("router", {})
+                models_cfg = lms_cfg.get("models", {})
 
-            # Need at least one model key configured
-            has_any_model = any(
-                models_cfg.get(t, {}).get("key")
-                for t in ("primary", "utility", "router")
-            )
-            if not has_any_model:
-                return None
+                if not router_cfg.get("enabled", False):
+                    return None
 
-            tiers = {}
-            for tier_name, tier_enum in [
-                ("primary", Tier.GPU_PRIMARY),
-                ("utility", Tier.CPU_UTILITY),
-                ("router", Tier.CPU_ROUTER),
-            ]:
-                mcfg = models_cfg.get(tier_name, {})
-                tiers[tier_enum] = TierConfig(
-                    tier=tier_enum,
-                    model_key=mcfg.get("key", ""),
-                    max_slots=mcfg.get("slots", 1),
-                    device=mcfg.get("device", "cpu"),
-                    enabled=mcfg.get("enabled", True) and bool(mcfg.get("key")),
+                # Need at least one model key configured
+                has_any_model = any(
+                    models_cfg.get(t, {}).get("key")
+                    for t in ("primary", "utility", "router")
+                )
+                if not has_any_model:
+                    return None
+
+                tiers = {}
+                for tier_name, tier_enum in [
+                    ("primary", Tier.GPU_PRIMARY),
+                    ("utility", Tier.CPU_UTILITY),
+                    ("router", Tier.CPU_ROUTER),
+                ]:
+                    mcfg = models_cfg.get(tier_name, {})
+                    tiers[tier_enum] = TierConfig(
+                        tier=tier_enum,
+                        model_key=mcfg.get("key", ""),
+                        max_slots=mcfg.get("slots", 1),
+                        device=mcfg.get("device", "cpu"),
+                        enabled=mcfg.get("enabled", True) and bool(mcfg.get("key")),
+                    )
+
+                self._router = InferenceRouter(
+                    tiers=tiers,
+                    max_queue_depth=router_cfg.get("max_queue_depth", 20),
                 )
 
-            self._router = InferenceRouter(
-                tiers=tiers,
-                max_queue_depth=router_cfg.get("max_queue_depth", 20),
-            )
-
-            # Wire SDK + REST clients (non-blocking)
-            has_backend = False
-            try:
-                from engine.lmstudio.sdk_client import get_sdk_client, SDK_AVAILABLE
-                if SDK_AVAILABLE and lms_cfg.get("sdk", {}).get("enabled", False):
-                    self._router._sdk_client = get_sdk_client()
+                # Wire SDK + REST clients (non-blocking)
+                has_backend = False
+                try:
+                    from engine.lmstudio.sdk_client import get_sdk_client, SDK_AVAILABLE
+                    if SDK_AVAILABLE and lms_cfg.get("sdk", {}).get("enabled", False):
+                        self._router._sdk_client = get_sdk_client()
+                        has_backend = True
+                except Exception:
+                    pass
+                try:
+                    from engine.lmstudio.lms_client import get_lms_client
+                    self._router._rest_client = get_lms_client()
                     has_backend = True
-            except Exception:
-                pass
-            try:
-                from engine.lmstudio.lms_client import get_lms_client
-                self._router._rest_client = get_lms_client()
-                has_backend = True
-            except Exception:
-                pass
+                except Exception:
+                    pass
 
-            if not has_backend:
-                self._router = None
+                if not has_backend:
+                    self._router = None
+                    return None
+
+                self._router.start()
+                self._router_enabled = True
+                logger.info("InferenceRouter started with %d tiers", len(tiers))
+                return self._router
+
+            except Exception as exc:
+                logger.debug("Router init failed (will use direct client): %s", exc)
                 return None
-
-            self._router.start()
-            self._router_enabled = True
-            logger.info("InferenceRouter started with %d tiers", len(tiers))
-            return self._router
-
-        except Exception as exc:
-            logger.debug("Router init failed (will use direct client): %s", exc)
-            return None
 
     def shutdown_router(self):
         """Stop the background router worker."""

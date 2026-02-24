@@ -37,8 +37,9 @@ logger = logging.getLogger(__name__)
 class Database:
     """Central SQLite database for the simulation system"""
     
-    def __init__(self, db_path: str = "data/simulation.db"):
-        self.db_path = Path(db_path)
+    def __init__(self, db_path: str = None):
+        from engine.paths import DB_SIMULATION
+        self.db_path = Path(db_path) if db_path else DB_SIMULATION
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self.init_database()
     

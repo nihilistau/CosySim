@@ -17,7 +17,7 @@ services:
     volumes:
       - ./config:/app/config:ro
       - ./logs:/app/logs
-      - asset_data:/app/asset_registry.db
+      - asset_data:/app/data/asset_registry.db
     command: streamlit run content/simulation/scenes/hub/hub_scene.py --server.port 8500
     restart: unless-stopped
     networks:
@@ -38,8 +38,8 @@ services:
       - ./config:/app/config:ro
       - ./logs:/app/logs
       - ./content/simulation/media:/app/content/simulation/media
-      - asset_data:/app/asset_registry.db
-      - db_data:/app/simulation/simulation.db
+      - asset_data:/app/data/asset_registry.db
+      - db_data:/app/data/simulation.db
     command: python content/simulation/scenes/phone/phone_scene.py
     restart: unless-stopped
     networks:
@@ -60,8 +60,8 @@ services:
     volumes:
       - ./config:/app/config:ro
       - ./logs:/app/logs
-      - asset_data:/app/asset_registry.db
-      - db_data:/app/simulation/simulation.db
+      - asset_data:/app/data/asset_registry.db
+      - db_data:/app/data/simulation.db
     command: python content/simulation/scenes/bedroom/bedroom_scene.py
     restart: unless-stopped
     networks:
@@ -83,8 +83,8 @@ services:
     volumes:
       - ./config:/app/config:ro
       - ./logs:/app/logs
-      - asset_data:/app/asset_registry.db
-      - db_data:/app/simulation/simulation.db
+      - asset_data:/app/data/asset_registry.db
+      - db_data:/app/data/simulation.db
       - ./content/simulation/media:/app/content/simulation/media
     command: streamlit run content/simulation/scenes/admin/admin_panel.py --server.port 8502
     restart: unless-stopped
