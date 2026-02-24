@@ -272,6 +272,23 @@ class RealmScene(BaseScene, MCPSceneMixin, mcp_scene_id="realm"):
         for stat, delta in result.get("stat_changes", {}).items():
             self.state.adjust_stat(stat, int(delta))
 
+        # Sync significant changes to Coordinator for cross-system visibility
+        stat_changes = result.get("stat_changes", {})
+        if stat_changes:
+            try:
+                from engine.mcp.state_coordinator import get_coordinator
+                coord = get_coordinator()
+                mapped = {}
+                if "hp" in stat_changes:
+                    mapped["energy"] = stat_changes["hp"]
+                coord.update("realm_player", source="realm_director", scene="realm", **mapped)
+            except Exception:
+                pass
+            try:
+                self._state_mgr.add_narrative("realm", f"Stats changed: {stat_changes}")
+            except Exception:
+                pass
+
         # Items
         for item in result.get("items_gained", []):
             if isinstance(item, str):

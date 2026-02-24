@@ -200,6 +200,49 @@ class GalleryScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
         # Framework integration
         self._state_mgr = get_scene_state_manager()
         self._tag_registry = TagRegistry.get()
+        self._governors: Dict[str, Any] = {}  # char_id → governor
+
+    def _get_governor_context(self, char_id: str) -> str:
+        """
+        Gather framework context for a character (mood drift, heat, personality,
+        coordinator state) without routing through the full governor pipeline.
+
+        Gallery uses VAM streaming directly, so we can't use governor.tell().
+        Instead we build the same context the interceptors would inject.
+        """
+        lines: List[str] = []
+        try:
+            from engine.mcp.state_coordinator import get_coordinator
+            state = get_coordinator().get_full_state(char_id)
+            if state:
+                mood = state.get("mood", "neutral")
+                energy = state.get("energy", 50)
+                lines.append(f"Current mood: {mood} | Energy: {energy:.0f}")
+                # Apply natural drift (same as NaturalMoodDriftInterceptor)
+                arousal = state.get("arousal", 50)
+                if arousal > 70:
+                    lines.append("Inner feeling: The intensity is fading slightly — still present, but settling.")
+                tiredness = state.get("tiredness", 30)
+                if tiredness > 60:
+                    lines.append("Inner feeling: A gentle wave of tiredness washes over you.")
+        except Exception:
+            pass
+        try:
+            from engine.mcp.scene_rules_engine import get_conversation_heat
+            heat = get_conversation_heat()
+            heat_val = heat.get(f"gallery_{char_id}") if hasattr(heat, "get") else 0
+            if heat_val and heat_val > 20:
+                lines.append(f"Engagement heat: {heat_val:.0f}/100")
+        except Exception:
+            pass
+        try:
+            narrative = self._state_mgr.get_narrative_entries(SCENE_ID, limit=3)
+            if narrative:
+                recent = " | ".join(e.get("event", "") for e in narrative[-3:])
+                lines.append(f"Recent gallery events: {recent}")
+        except Exception:
+            pass
+        return "\n".join(lines)
 
     # ── Lifecycle ───────────────────────────────────────────────────────────
 
@@ -299,6 +342,10 @@ class GalleryScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
             f"If you take an action, use [ACTION:description].\n"
             f"Be vivid, opinionated, and authentic."
         )
+        # Enrich with framework state (mood, heat, narrative)
+        gov_ctx = self._get_governor_context(char_id)
+        if gov_ctx:
+            system = f"{system}\n\n{gov_ctx}"
         prompt = (
             f"You are viewing: \"{artwork.title}\"\n"
             f"Style: {artwork.style}\n"
@@ -360,9 +407,18 @@ class GalleryScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
             if result["mood"]:
                 gc.mood = result["mood"]
                 try:
+                    from engine.mcp.state_coordinator import get_coordinator
+                    get_coordinator().update(
+                        char_id,
+                        mood=result["mood"],
+                        source="gallery_evaluation",
+                        scene=SCENE_ID,
+                    )
+                except Exception:
+                    pass
+                try:
                     fw = get_framework()
                     fw.get_character(char_id).update_state({
-                        "mood": result["mood"],
                         "artworks_evaluated": gc.artworks_evaluated,
                     })
                 except Exception:
@@ -507,6 +563,10 @@ class GalleryScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
                 f"Theme: {theme or exhibition.get('theme', 'express yourself freely')}\n"
                 f"Include [MOOD:emotion] for how creating this makes you feel."
             )
+            # Enrich with framework state
+            gov_ctx = self._get_governor_context(char_id)
+            if gov_ctx:
+                system = f"{system}\n\n{gov_ctx}"
 
             req = InferenceRequest(
                 agent_id=char_id,

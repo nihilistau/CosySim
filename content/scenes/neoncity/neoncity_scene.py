@@ -94,10 +94,10 @@ class NeonCityScene(BaseScene, MCPSceneMixin, mcp_scene_id="neoncity"):
             pass
         try:
             d = self.state.to_dict()
-            self._state_mgr.update_stats(SCENE_ID,
-                                          turn=d.get("turn", 0),
-                                          round=d.get("round", 0),
-                                          storm_radius=d.get("storm_radius", 0))
+            self._state_mgr.add_narrative(
+                SCENE_ID,
+                f"Turn {d.get('turn', 0)}, Round {d.get('round', 0)}, Storm: {d.get('storm_radius', 0)}",
+            )
         except Exception:
             pass
 

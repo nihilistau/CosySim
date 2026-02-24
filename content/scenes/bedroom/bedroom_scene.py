@@ -1487,6 +1487,24 @@ class BedroomScene(BaseScene, MCPSceneMixin, mcp_scene_id="bedroom"):
                     "timestamp": action.get("timestamp", ""),
                     "character_id": character_id,
                 })
+            # Log physical interactions as InteractionRecords for framework tracking
+            _INTERACTION_TYPES = {"flirt", "kiss", "intimate", "cuddle", "touch"}
+            if action_type in _INTERACTION_TYPES:
+                try:
+                    import uuid as _uuid
+                    from engine.mcp.scene_state import get_scene_state_manager, InteractionRecord
+                    ssm = get_scene_state_manager()
+                    rec = InteractionRecord(
+                        interaction_id=str(_uuid.uuid4())[:8],
+                        scene_id="bedroom",
+                        interaction_type=action_type,
+                        initiator_id=character_id,
+                        description=action.get("message", action_type),
+                        stat_effects=stat_drifts.get(action_type, {}),
+                    )
+                    ssm.log_interaction("bedroom", rec)
+                except Exception:
+                    pass
         self._broadcast_state()
         self._sync_to_mcp("agent_action", {
             "character_id": character_id,

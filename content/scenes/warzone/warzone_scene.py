@@ -560,6 +560,17 @@ class WarzoneScene(BaseScene, MCPSceneMixin, mcp_scene_id="warzone"):
                 user_prompt=prompt,
                 store=False,
             )
+            # Sync mood from AI's response to Coordinator
+            mood = result.get("mood_tags", [None])[0] if result.get("mood_tags") else None
+            if mood:
+                try:
+                    from engine.mcp.state_coordinator import get_coordinator
+                    get_coordinator().update(
+                        f"warzone_ai_{game.game_id}",
+                        mood=mood, source="warzone_ai", scene="warzone",
+                    )
+                except Exception:
+                    pass
             action = "attack"
             target = "base"
             for tag in result.get("action_tags", []):

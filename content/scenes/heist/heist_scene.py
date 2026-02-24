@@ -317,6 +317,17 @@ class HeistScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
             image = proc.image_requests[0] if proc.image_requests else None
             actions = list(proc.action_tags) if proc.action_tags else []
 
+            # Sync mood to Coordinator for cross-system visibility
+            if mood:
+                try:
+                    from engine.mcp.state_coordinator import get_coordinator
+                    get_coordinator().update(
+                        char_id, mood=mood,
+                        source="heist_reply", scene="heist",
+                    )
+                except Exception:
+                    pass
+
             if text:
                 self.socketio.emit("crew_message", {
                     "character_id": char_id,
