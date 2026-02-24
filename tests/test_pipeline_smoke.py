@@ -880,3 +880,85 @@ class TestCrossSceneSummaryEndpoint:
         """api_scene_summary function should exist in overlay_bp."""
         from engine.overlay.overlay_bp import api_scene_summary
         assert callable(api_scene_summary)
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  Sprint 3 — Scene migration: Coordinator + narrative wiring
+# ══════════════════════════════════════════════════════════════════════
+
+class TestGalleryGovernorContext:
+    """Gallery scene should enrich prompts with framework state."""
+
+    def test_gallery_has_governor_context_helper(self):
+        import inspect, importlib
+        mod = importlib.import_module("content.scenes.gallery.gallery_scene")
+        cls = getattr(mod, "GalleryScene")
+        assert hasattr(cls, "_get_governor_context")
+        source = inspect.getsource(cls._get_governor_context)
+        assert "get_coordinator" in source or "get_character_registry" in source
+
+    def test_gallery_evaluate_references_framework(self):
+        import inspect, importlib
+        mod = importlib.import_module("content.scenes.gallery.gallery_scene")
+        cls = getattr(mod, "GalleryScene")
+        source = inspect.getsource(cls._evaluate_artwork)
+        assert "governor_context" in source or "_get_governor_context" in source
+
+
+class TestWarzoneCoordinatorSync:
+    """Warzone should sync mood through Coordinator."""
+
+    def test_warzone_ai_decide_references_coordinator(self):
+        import inspect, importlib
+        mod = importlib.import_module("content.scenes.warzone.warzone_scene")
+        cls = getattr(mod, "WarzoneScene")
+        source = inspect.getsource(cls._ai_decide)
+        assert "get_coordinator" in source or "state_coordinator" in source
+
+
+class TestRealmCoordinatorSync:
+    """Realm should sync stats through Coordinator."""
+
+    def test_realm_references_coordinator(self):
+        import inspect, importlib
+        mod = importlib.import_module("content.scenes.realm.realm_scene")
+        cls = getattr(mod, "RealmScene")
+        # Check any method that handles stat changes
+        source = inspect.getsource(cls)
+        assert "get_coordinator" in source or "state_coordinator" in source
+
+
+class TestNeonCityNarrativeFix:
+    """NeonCity should use add_narrative, not update_stats with scene_id."""
+
+    def test_sync_to_mcp_uses_narrative(self):
+        import inspect, importlib
+        mod = importlib.import_module("content.scenes.neoncity.neoncity_scene")
+        cls = getattr(mod, "NeonCityScene")
+        source = inspect.getsource(cls._sync_to_mcp)
+        assert "add_narrative" in source
+        # Should NOT use update_stats with SCENE_ID
+        assert "update_stats(SCENE_ID" not in source
+
+
+class TestHeistCoordinatorSync:
+    """Heist should sync mood through Coordinator."""
+
+    def test_heist_references_coordinator(self):
+        import inspect, importlib
+        mod = importlib.import_module("content.scenes.heist.heist_scene")
+        cls = getattr(mod, "HeistScene")
+        source = inspect.getsource(cls)
+        assert "get_coordinator" in source or "state_coordinator" in source
+
+
+class TestBedroomInteractionRecords:
+    """Bedroom should log InteractionRecords for physical interactions."""
+
+    def test_bedroom_logs_interactions(self):
+        import inspect, importlib
+        mod = importlib.import_module("content.scenes.bedroom.bedroom_scene")
+        cls = getattr(mod, "BedroomScene")
+        source = inspect.getsource(cls)
+        assert "log_interaction" in source
+        assert "InteractionRecord" in source

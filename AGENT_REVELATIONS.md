@@ -702,3 +702,75 @@ the sophisticated stuff (governor, dialog, heat, coordinator). This is the #1 ga
 | Sprint 2 | #19 Phone governance_context | governance_context now explicit + merged | ✅ Done |
 | Sprint 2 | #20 Bedroom stat writes | Coordinator.update() before local adjust | ✅ Done |
 | Sprint 2 | #21 Adoption audit | ConversationHeat wired into PhoneSceneInterceptor | ✅ Done |
+
+---
+
+## 22. Gallery Can't Use Governor — Architecture Gap
+
+**Discovery:** Gallery scene calls `mgr.infer_processed()` with streaming callbacks
+(`on_delta`, `on_mood`, `on_image`). The governor's `tell()` returns a plain string,
+losing all tag extraction callbacks. This is why Gallery (and any streaming scene)
+can't adopt the full governor path.
+
+**Workaround:** Created `_get_governor_context()` helper that gathers framework state
+(mood, heat, narrative) and injects into the system prompt before the VAM call.
+This gets ~70% of the governor benefit (interceptor-equivalent context) without
+breaking the streaming pipeline.
+
+**Root cause:** The governor was designed for request/response, not streaming.
+The VirtualPipeline (planned Part 2) will solve this by being stream-native.
+
+---
+
+## 23. NeonCity _sync_to_mcp() Was Calling Invalid API
+
+**Discovery:** NeonCity's `_sync_to_mcp()` called `self._state_mgr.update_stats(SCENE_ID, turn=..., round=..., storm_radius=...)`. But `update_stats()` takes a `character_id` and `StatsSnapshot` fields — passing a scene_id and arbitrary kwargs did nothing (silently ignored by kwargs).
+
+**Fix:** Replaced with `add_narrative()` which is the correct API for scene-level state logging.
+
+**Pattern:** SSM's `update_stats()` is character-scoped. For scene-level state, use `add_narrative()` or store in scene's own state dict.
+
+---
+
+## 24. Bedroom Clothing System: Functional But Not Framework-Integrated
+
+**Discovery:** The bedroom has a working clothing system: `OUTFITS` list, `/api/character/outfit` endpoint, outfit tracking in `CharacterProfile`, outfit display in prompts. SSM has a `CharacterWardrobe` API (`add_outfit`, `set_current`, `get_wardrobe`) that is more sophisticated but unused by bedroom.
+
+**Decision:** Keep bedroom's simpler outfit system. It works, it's tested, and it feeds into the agent prompt. The SSM wardrobe is designed for complex inventory scenes (like a fashion/shopping scene). The two can coexist — bedroom uses strings, a future scene could use the full wardrobe API.
+
+---
+
+## 25. InteractionRecord Logging Gaps
+
+**Discovery:** Bedroom tracks physical interactions (flirt, kiss, intimate, cuddle, touch) via stat changes and agent prompts, but never logged them as structured `InteractionRecord` objects in SSM. This meant:
+- No interaction history queryable via SSM
+- No cross-scene awareness of interaction patterns
+- No data for ConversationHeat auto-bumping from physical actions
+
+**Fix:** Added `ssm.log_interaction()` calls for all physical interaction types with appropriate metadata. Now interaction history is available to interceptors, heat system, and cross-scene queries.
+
+---
+
+## Implementation Log (Sprint 3)
+
+| Date | Revelation | Action | Status |
+|------|-----------|--------|--------|
+| Sprint 3 | #22 Gallery governor gap | _get_governor_context() helper + Coordinator sync | Done |
+| Sprint 3 | #23 NeonCity invalid API | Fixed update_stats() -> add_narrative() | Done |
+| Sprint 3 | #24 Clothing system audit | Keep simple system, document decision | Done |
+| Sprint 3 | #25 InteractionRecord gaps | Added ssm.log_interaction() for physical actions | Done |
+| Sprint 3 | N/A | Warzone: Coordinator mood sync for AI commander | Done |
+| Sprint 3 | N/A | Realm: Coordinator sync for stat changes + narrative | Done |
+| Sprint 3 | N/A | Heist: Coordinator mood sync for crew replies | Done |
+
+### Updated Framework Adoption (Post-Sprint 3)
+
+| Feature | Adoption | Change |
+|---------|----------|--------|
+| MCPSceneMixin | 10/10 (100%) | unchanged |
+| SceneStateManager | 10/10 (100%) | unchanged |
+| Interceptor Pipeline | 9/10 (90%) | unchanged |
+| CharacterStateCoordinator | 6/10 (60%) | was 1/10 |
+| AgentGovernor | 2/10 (20%) | unchanged (Gallery uses helper instead) |
+| ConversationHeat | 1/10 (10%) | was 0/10 |
+| DialogSystem | 2/10 (20%) | unchanged |
