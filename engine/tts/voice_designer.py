@@ -29,8 +29,7 @@ import yaml
 
 logger = logging.getLogger(__name__)
 
-_PROJECT_ROOT = Path(__file__).parent.parent.parent
-_VOICES_FILE = _PROJECT_ROOT / "config" / "voices.yaml"
+from engine.paths import VOICES_CONFIG as _VOICES_FILE
 
 
 @dataclass

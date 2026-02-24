@@ -19,6 +19,7 @@ import wave
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
+from engine.paths import VOICE_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -156,9 +157,7 @@ class VoiceStudio:
     def __init__(self, db, voice_dir: Optional[str] = None, tts_url: str = "http://localhost:8600"):
         self.db = db
         self.tts_url = tts_url.rstrip("/")
-        self.voice_dir = Path(voice_dir) if voice_dir else (
-            Path(__file__).parent.parent.parent.parent / "simulation" / "media" / "voice"
-        )
+        self.voice_dir = Path(voice_dir) if voice_dir else VOICE_DIR
         self.voice_dir.mkdir(parents=True, exist_ok=True)
         self.recordings_dir = self.voice_dir / "recordings"
         self.recordings_dir.mkdir(exist_ok=True)

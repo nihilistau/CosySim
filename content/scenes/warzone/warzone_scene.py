@@ -613,7 +613,8 @@ class WarzoneScene(BaseScene, MCPSceneMixin, mcp_scene_id="warzone"):
 
 def main():
     import sys
-    sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
+    from engine.paths import ROOT
+    sys.path.insert(0, str(ROOT))
     scene = WarzoneScene()
     scene.start()
 

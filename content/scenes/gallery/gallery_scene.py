@@ -31,7 +31,7 @@ from typing import Any, Dict, List, Optional
 from flask import Flask, jsonify, request, render_template
 from flask_socketio import SocketIO, emit
 
-project_root = Path(__file__).parent.parent.parent.parent
+from engine.paths import ROOT as project_root
 import sys; sys.path.insert(0, str(project_root))
 
 from engine.scenes.base_scene import BaseScene

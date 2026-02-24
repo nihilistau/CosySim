@@ -39,7 +39,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 # Ensure project root is importable
-_root = Path(__file__).parent.parent.parent
+from engine.paths import ROOT as _root
 if str(_root) not in sys.path:
     sys.path.insert(0, str(_root))
 

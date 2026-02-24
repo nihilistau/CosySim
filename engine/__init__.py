@@ -9,7 +9,11 @@ Public API::
     from engine import MediaConfig, get_media_config
     from engine import install_logger, timed, get_system_monitor
     from engine import SceneRegistry
+    from engine.paths import paths, ROOT
 """
+
+# Paths (must be first — other modules may import during their init)
+from engine.paths import paths, ROOT  # noqa: F401
 
 # Config
 from engine.config import get_config  # noqa: F401
@@ -37,6 +41,7 @@ from engine.media.media_config import MediaConfig, get_media_config  # noqa: F40
 from engine.logging import install_logger, timed, get_system_monitor  # noqa: F401
 
 __all__ = [
+    "paths", "ROOT",
     "get_config",
     "BaseScene", "SceneRegistry",
     "CharacterAgent", "AgentLoop",

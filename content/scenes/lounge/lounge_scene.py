@@ -33,7 +33,7 @@ from flask_socketio import SocketIO, emit
 from flask_cors import CORS
 
 import sys
-_root = Path(__file__).parent.parent.parent.parent
+from engine.paths import ROOT as _root
 sys.path.insert(0, str(_root))
 
 from engine.scenes.base_scene import BaseScene

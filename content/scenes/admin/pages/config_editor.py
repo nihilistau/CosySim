@@ -3,6 +3,7 @@ import streamlit as st
 import json
 import os
 from pathlib import Path
+from engine.paths import CONFIG_DIR
 
 
 def render():
@@ -33,7 +34,7 @@ def _render_edit():
     """Interactive config editor with validation."""
     st.subheader("Edit Configuration")
 
-    config_path = Path(__file__).parent.parent.parent.parent.parent / "config" / "default.yaml"
+    config_path = CONFIG_DIR / "default.yaml"
 
     if not config_path.exists():
         st.error(f"Config file not found: {config_path}")

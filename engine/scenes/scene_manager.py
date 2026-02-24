@@ -4,7 +4,8 @@ from typing import Dict, Optional, Type
 from pathlib import Path
 
 import sys
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from engine.paths import ROOT as _proj_root
+sys.path.insert(0, str(_proj_root))
 
 from engine.scenes.base_scene import BaseScene
 from engine.assets import AssetManager

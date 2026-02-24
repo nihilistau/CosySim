@@ -310,9 +310,10 @@ def show_status() -> None:
 
     # Databases
     print("\n  Databases:")
-    for db_rel in ["data/simulation.db", "data/agent_state.db",
-                    "data/phone_v2.db", "asset_registry.db"]:
-        db_path = PROJECT_ROOT / db_rel
+    from engine.paths import (DB_SIMULATION, DB_AGENT_STATE, DB_PHONE,
+                              DB_ASSET_REGISTRY)
+    for db_path in [DB_SIMULATION, DB_AGENT_STATE, DB_PHONE, DB_ASSET_REGISTRY]:
+        db_rel = db_path.relative_to(PROJECT_ROOT)
         if db_path.exists():
             size = db_path.stat().st_size / 1024
             print(f"    ✓ {db_rel} ({size:.0f} KB)")

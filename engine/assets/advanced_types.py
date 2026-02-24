@@ -143,8 +143,8 @@ class CharacterAsset(BaseAsset):
             A live Character instance backed by the simulation database.
         """
         import sys
-        from pathlib import Path
-        sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+        from engine.paths import ROOT as _proj_root
+        sys.path.insert(0, str(_proj_root))
         from content.simulation.database.db import Database as _Database
         from content.simulation.character_system.character import Character
 

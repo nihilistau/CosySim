@@ -39,7 +39,7 @@ def _port_open(port: int) -> bool:
 
 
 # Add project root to path
-project_root = Path(__file__).parent.parent.parent.parent
+from engine.paths import ROOT as project_root
 sys.path.insert(0, str(project_root))
 import os
 os.chdir(project_root)
@@ -320,7 +320,7 @@ def main():
 # ── Scene Launcher ───────────────────────────────────────────────────
 
 def _show_scenes():
-    project_root_path = Path(__file__).parent.parent.parent.parent
+    project_root_path = project_root
 
     for cat_key, cat in SCENE_CATEGORIES.items():
         st.markdown(f'<div class="category-header">{cat["label"]}</div>', unsafe_allow_html=True)

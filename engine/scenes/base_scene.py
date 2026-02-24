@@ -29,7 +29,8 @@ if TYPE_CHECKING:
     from content.simulation.character_system.character import Character
 
 import sys
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from engine.paths import ROOT as _proj_root
+sys.path.insert(0, str(_proj_root))
 
 from engine.assets import AssetManager, CharacterAsset, SceneAsset
 

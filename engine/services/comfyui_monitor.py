@@ -92,15 +92,14 @@ class ComfyUIMonitor:
         self.watch_dir = Path(
             watch_dir or cfg.get("comfyui.output_dir", "C:/ComfyUI/output")
         )
-        self.media_root = Path(
-            media_root
-            or str(Path(__file__).parent.parent.parent / "content" / "simulation" / "media")
-        )
+        from engine.paths import MEDIA_DIR
+        self.media_root = Path(media_root or str(MEDIA_DIR))
         self.poll_interval = poll_interval
         self._stop = Event()
         self._thread: Optional[Thread] = None
         self._seen: set = set()
-        self._db_path = Path(__file__).parent.parent.parent / "asset_registry.db"
+        from engine.paths import DB_ASSET_REGISTRY
+        self._db_path = DB_ASSET_REGISTRY
 
     # ── public API ────────────────────────────────────────────────────
 

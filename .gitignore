@@ -3,11 +3,9 @@ __pycache__/
 *.py[cod]
 *$py.class
 
-# Runtime data (databases, vector stores)
-/simulation/
-data/*.db
-data/chroma_db/
-data/uploads/
+# Runtime data (databases, vector stores, backups)
+data/
+backups/
 
 # Visual Studio Code files
 .vscode
@@ -38,7 +36,6 @@ data/uploads/
 .DS_Store
 
 exp
-data
 raw_wav
 tensorboard
 **/*build*

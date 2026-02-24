@@ -25,7 +25,7 @@ from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
-_DB_PATH = Path(__file__).parent.parent.parent / "data" / "shared_boards.db"
+from engine.paths import DB_SHARED_BOARDS as _DB_PATH
 
 
 class SharedBoardManager:

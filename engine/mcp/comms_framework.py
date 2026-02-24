@@ -156,7 +156,8 @@ class SkillManifest:
 
     def _load(self) -> None:
         """Load from YAML file; fall back to defaults."""
-        yaml_path = Path(__file__).parent.parent.parent / "config" / "skill_manifests.yaml"
+        from engine.paths import CONFIG_DIR
+        yaml_path = CONFIG_DIR / "skill_manifests.yaml"
         try:
             if yaml_path.exists():
                 mtime = yaml_path.stat().st_mtime

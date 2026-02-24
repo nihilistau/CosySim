@@ -57,7 +57,8 @@ class AssetManager:
         Args:
             db_path: Path to asset registry database
         """
-        self.db_path = db_path or "asset_registry.db"
+        from engine.paths import DB_ASSET_REGISTRY
+        self.db_path = db_path or str(DB_ASSET_REGISTRY)
         self._init_database()
     
     def _init_database(self) -> None:

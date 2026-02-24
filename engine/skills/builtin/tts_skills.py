@@ -142,8 +142,8 @@ def list_voicemails(character_id: str, limit: int = 10) -> str:
     """
     try:
         import json
-        from pathlib import Path
-        voice_dir = Path(__file__).parent.parent.parent / "content" / "simulation" / "media" / "voice"
+        from engine.paths import VOICE_DIR
+        voice_dir = VOICE_DIR
         if not voice_dir.exists():
             return "No voice messages directory found."
 

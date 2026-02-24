@@ -36,8 +36,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 logger = logging.getLogger(__name__)
 
 # ── Directories ────────────────────────────────────────────────────────
-_PROJECT_ROOT = Path(__file__).parent.parent.parent
-UPLOAD_DIR = _PROJECT_ROOT / "data" / "uploads"
+from engine.paths import UPLOADS_DIR as UPLOAD_DIR, ROOT as _PROJECT_ROOT
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 

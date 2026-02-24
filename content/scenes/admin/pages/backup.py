@@ -3,13 +3,14 @@ import streamlit as st
 import shutil
 from pathlib import Path
 from datetime import datetime
+from engine.paths import BACKUPS_DIR, CONFIG_DIR, ROOT
 
 
 def render():
     st.header("💾 Backup & Restore")
 
     tab1, tab2 = st.tabs(["📤 Backup", "📥 Restore"])
-    backup_dir = Path(__file__).parent.parent.parent.parent.parent / "backups"
+    backup_dir = BACKUPS_DIR
 
     with tab1:
         backup_name = st.text_input(
@@ -31,12 +32,12 @@ def render():
                     shutil.copy2(db_path, backup_path / "assets.db")
 
                 # Backup simulation DB
-                sim_db = Path(__file__).parent.parent.parent.parent / "simulation" / "database" / "cosysim.db"
+                sim_db = ROOT / "content" / "simulation" / "database" / "cosysim.db"
                 if sim_db.exists():
                     shutil.copy2(sim_db, backup_path / "cosysim.db")
 
                 # Backup config
-                config_dir = Path(__file__).parent.parent.parent.parent.parent / "config"
+                config_dir = CONFIG_DIR
                 if config_dir.exists():
                     shutil.copytree(config_dir, backup_path / "config", dirs_exist_ok=True)
 
@@ -70,7 +71,7 @@ def render():
                     # Restore simulation DB
                     sim_backup = bp / "cosysim.db"
                     if sim_backup.exists():
-                        sim_db = Path(__file__).parent.parent.parent.parent / "simulation" / "database" / "cosysim.db"
+                        sim_db = ROOT / "content" / "simulation" / "database" / "cosysim.db"
                         shutil.copy2(sim_backup, sim_db)
 
                     st.success("✅ Restored!")

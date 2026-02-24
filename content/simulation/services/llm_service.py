@@ -20,7 +20,7 @@ from typing import Optional, Dict, List, Generator
 from pathlib import Path
 import sys
 
-project_root = Path(__file__).parent.parent.parent.parent
+from engine.paths import ROOT as project_root
 sys.path.insert(0, str(project_root))
 
 try:

@@ -6,6 +6,7 @@ import os
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Optional
+from engine.paths import MEDIA_ALT_DIR
 
 
 class Gallery:
@@ -15,7 +16,7 @@ class Gallery:
         self.db = db
         
         if media_dir is None:
-            self.media_dir = Path(__file__).parent.parent.parent.parent / "media"
+            self.media_dir = MEDIA_ALT_DIR
         else:
             self.media_dir = Path(media_dir)
         

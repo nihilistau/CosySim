@@ -24,17 +24,18 @@ from typing import Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
-_PROJECT_ROOT = Path(__file__).parent.parent.parent
+from engine.paths import (ROOT as _PROJECT_ROOT, IMAGES_DIR, VIDEO_DIR,
+                         VOICE_DIR, MEDIA_ALT_DIR)
 
 # Directories to watch for new media files
 MEDIA_DIRS = {
-    "images": _PROJECT_ROOT / "content" / "simulation" / "media" / "images",
-    "video": _PROJECT_ROOT / "content" / "simulation" / "media" / "video",
-    "voice": _PROJECT_ROOT / "content" / "simulation" / "media" / "voice",
+    "images": IMAGES_DIR,
+    "video": VIDEO_DIR,
+    "voice": VOICE_DIR,
     # Also scan the top-level content/media tree
-    "images2": _PROJECT_ROOT / "content" / "media" / "images",
-    "video2": _PROJECT_ROOT / "content" / "media" / "video",
-    "voice2": _PROJECT_ROOT / "content" / "media" / "voice",
+    "images2": MEDIA_ALT_DIR / "images",
+    "video2": MEDIA_ALT_DIR / "video",
+    "voice2": MEDIA_ALT_DIR / "voice",
 }
 
 SUPPORTED_EXTENSIONS = {

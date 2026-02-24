@@ -1,6 +1,7 @@
 """Log Viewer — dropdown sources, level filter, live tail, benchmark summary."""
 import streamlit as st
 from pathlib import Path
+from engine.paths import ROOT
 
 
 def render():
@@ -18,7 +19,7 @@ def render():
 
 def _render_file_logs():
     """Log files from disk."""
-    log_dir = Path(__file__).parent.parent.parent.parent.parent / "logs"
+    log_dir = ROOT / "logs"
 
     col1, col2, col3 = st.columns(3)
     with col1:

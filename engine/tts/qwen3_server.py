@@ -42,8 +42,7 @@ from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
-_PROJECT_ROOT = Path(__file__).parent.parent.parent
-VOICE_DIR = _PROJECT_ROOT / "content" / "simulation" / "media" / "voice"
+from engine.paths import VOICE_DIR, PRETRAINED_MODELS as _PRETRAINED_DIR
 VOICE_DIR.mkdir(parents=True, exist_ok=True)
 
 
@@ -149,7 +148,7 @@ class Qwen3TTSEngine:
         env = os.environ.get("COSYSIM_TTS_MODEL_DIR")
         if env:
             search_dirs.append(Path(env))
-        search_dirs.append(_PROJECT_ROOT / "pretrained_models")
+        search_dirs.append(_PRETRAINED_DIR)
 
         try:
             import torch

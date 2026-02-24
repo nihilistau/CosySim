@@ -542,10 +542,9 @@ class VirtualAgent:
     @staticmethod
     def _get_state_db_path():
         """Return the path to the agent state database."""
-        from pathlib import Path
-        data_dir = Path(__file__).parent.parent.parent / "data"
-        data_dir.mkdir(exist_ok=True)
-        return data_dir / "agent_state.db"
+        from engine.paths import DB_AGENT_STATE, DATA_DIR
+        DATA_DIR.mkdir(exist_ok=True)
+        return DB_AGENT_STATE
 
     def set_model(self, model: str) -> None:
         """Change the model this agent uses."""

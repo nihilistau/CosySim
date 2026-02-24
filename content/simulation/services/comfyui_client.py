@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Optional, Dict, List, Tuple, Any
 import sys
 
-project_root = Path(__file__).parent.parent.parent.parent
+from engine.paths import ROOT as project_root
 
 try:
     from engine.logging import timed

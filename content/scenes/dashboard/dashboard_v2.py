@@ -11,7 +11,7 @@ import json
 
 # Add project root to path
 # content/scenes/dashboard/dashboard_v2.py -> content -> CosySim (3 parents)
-project_root = Path(__file__).parent.parent.parent.parent
+from engine.paths import ROOT as project_root
 sys.path.insert(0, str(project_root))
 
 from content.simulation.database.db import Database

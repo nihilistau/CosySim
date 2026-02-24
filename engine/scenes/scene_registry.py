@@ -46,7 +46,8 @@ class SceneRegistry:
 
     def __init__(self, scenes_dir: Optional[Path] = None):
         if scenes_dir is None:
-            scenes_dir = Path(__file__).parent.parent.parent / "content" / "scenes"
+            from engine.paths import SCENES_DIR
+            scenes_dir = SCENES_DIR
         self.scenes_dir = scenes_dir
         self._scenes: Dict[str, SceneInfo] = {}
 

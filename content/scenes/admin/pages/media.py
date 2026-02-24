@@ -1,12 +1,13 @@
 """Media Gallery page — browse generated images, videos, audio."""
 import streamlit as st
 from pathlib import Path
+from engine.paths import MEDIA_DIR
 
 
 def render():
     st.header("🖼️ Media Gallery")
 
-    media_dir = Path(__file__).parent.parent.parent.parent / "simulation" / "media"
+    media_dir = MEDIA_DIR
 
     tab1, tab2, tab3 = st.tabs(["🖼️ Images", "🎬 Videos", "🎵 Audio"])
 
