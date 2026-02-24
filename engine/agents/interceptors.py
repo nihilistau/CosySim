@@ -1983,16 +1983,19 @@ class NaturalMoodDriftInterceptor(InterceptorBase):
     """
     name     = "natural_mood_drift"
     priority = 5
-    applicable_scenes = {"bedroom", "phone", "lounge", "gallery"}
+    applicable_scenes = {"bedroom", "phone", "lounge", "gallery", "warzone",
+                         "casino", "heist", "realm", "neoncity", "coders"}
 
     # Per-stat drift rates (delta per call, toward baseline)
+    # Kept deliberately slow — emotions should shift gradually, not abruptly
     _DRIFT = {
-        "arousal":      -2.0,   # slowly cools
-        "tiredness":     1.0,   # slowly accumulates
-        "happiness":    -0.5,   # mild regression to mean (~50)
-        "anger":        -3.0,   # anger fades faster
-        "fear":         -2.0,   # fear dissipates
-        "drunkenness":  -1.0,   # slowly sobers up
+        "arousal":      -1.0,   # slowly cools (was -2.0)
+        "tiredness":     0.5,   # slowly accumulates (was 1.0)
+        "happiness":    -0.3,   # mild regression to mean (was -0.5)
+        "anger":        -1.5,   # anger fades (was -3.0)
+        "fear":         -1.0,   # fear dissipates (was -2.0)
+        "drunkenness":  -0.5,   # slowly sobers up (was -1.0)
+        "affection":    -0.2,   # affection barely drifts
     }
 
     _INNER_THOUGHTS = {

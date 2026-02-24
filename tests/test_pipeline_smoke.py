@@ -789,7 +789,8 @@ class TestNaturalMoodDriftInterceptor:
         assert "phone" in d.applicable_scenes
         assert "lounge" in d.applicable_scenes
         assert "gallery" in d.applicable_scenes
-        assert "warzone" not in d.applicable_scenes
+        assert "warzone" in d.applicable_scenes
+        assert "realm" in d.applicable_scenes
 
     def test_drift_rates_defined(self):
         from engine.agents.interceptors import NaturalMoodDriftInterceptor

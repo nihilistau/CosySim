@@ -63,8 +63,8 @@ from __future__ import annotations
 import logging
 import threading
 import time
-from dataclasses import asdict
-from typing import Any, Dict, Optional, Set
+from dataclasses import asdict, dataclass, field
+from typing import Any, Dict, List, Optional, Set
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +79,7 @@ STATS_FIELDS: Set[str] = {
     "arousal", "horniness", "pleasure", "happiness",
     "anger", "fear", "drunkenness", "tiredness",
     "explicitness", "openness", "affection", "dominance",
+    "relationship", "attraction", "trust",
 }
 
 # Fields that are restriction operations (special handling)
@@ -94,16 +95,17 @@ class CharacterStateCoordinator:
     """
 
     def __init__(self) -> None:
-        self._char_locks: Dict[str, threading.Lock] = {}
+        self._char_locks: Dict[str, threading.RLock] = {}
         self._global_lock = threading.Lock()  # protects _char_locks dict
         self._listeners: list = []
+        self._buffs: Dict[str, Dict[str, RelationshipBuff]] = {}  # char_id → {buff_id → Buff}
 
-    def _get_char_lock(self, character_id: str) -> threading.Lock:
-        """Get or create a per-character lock."""
+    def _get_char_lock(self, character_id: str) -> threading.RLock:
+        """Get or create a per-character reentrant lock."""
         if character_id not in self._char_locks:
             with self._global_lock:
                 if character_id not in self._char_locks:
-                    self._char_locks[character_id] = threading.Lock()
+                    self._char_locks[character_id] = threading.RLock()
         return self._char_locks[character_id]
 
     # ── Main API ──────────────────────────────────────────────────────
@@ -338,6 +340,110 @@ class CharacterStateCoordinator:
         except Exception as exc:
             logger.debug("StateCoordinator: DB persist failed for %s: %s",
                          character_id, exc)
+
+    # ── Relationship Buff/Debuff System ──────────────────────────────
+
+    def add_buff(
+        self,
+        character_id: str,
+        buff_id: str,
+        stat_deltas: Dict[str, float],
+        duration_secs: float = 300.0,
+        source: str = "",
+    ) -> None:
+        """
+        Apply a temporary buff/debuff to a character.
+
+        Buffs modify stats for a limited time, then automatically expire.
+        Use negative values for debuffs.
+        """
+        lock = self._get_char_lock(character_id)
+        with lock:
+            if character_id not in self._buffs:
+                self._buffs[character_id] = {}
+            self._buffs[character_id][buff_id] = RelationshipBuff(
+                buff_id=buff_id,
+                stat_deltas=stat_deltas,
+                expires_at=time.time() + duration_secs,
+                source=source,
+            )
+            # Apply the buff immediately
+            self.update(character_id, source=f"buff:{buff_id}", **stat_deltas)
+
+    def remove_expired_buffs(self, character_id: str) -> List[str]:
+        """Remove expired buffs and reverse their stat effects. Returns removed buff IDs."""
+        lock = self._get_char_lock(character_id)
+        now = time.time()
+        removed = []
+        with lock:
+            buffs = self._buffs.get(character_id, {})
+            expired = {bid: b for bid, b in buffs.items() if b.expires_at <= now}
+            for bid, buff in expired.items():
+                # Reverse the buff effects
+                reverse = {k: -v for k, v in buff.stat_deltas.items()}
+                self.update(character_id, source=f"buff_expire:{bid}", **reverse)
+                del buffs[bid]
+                removed.append(bid)
+        return removed
+
+    def get_active_buffs(self, character_id: str) -> Dict[str, Dict]:
+        """Get all active buffs for a character."""
+        now = time.time()
+        buffs = self._buffs.get(character_id, {})
+        return {
+            bid: {"deltas": b.stat_deltas, "remaining_secs": max(0, b.expires_at - now),
+                  "source": b.source}
+            for bid, b in buffs.items() if b.expires_at > now
+        }
+
+    # ── Attraction Model ─────────────────────────────────────────────
+
+    def calculate_attraction(
+        self,
+        char_a: str,
+        char_b: str,
+    ) -> float:
+        """
+        Calculate attraction score (0-100) between two characters.
+
+        Factors: personality compatibility, relationship level, mood alignment,
+        affection, shared interactions (trust).
+        """
+        state_a = self.get_full_state(char_a)
+        state_b = self.get_full_state(char_b)
+
+        score = 50.0  # baseline
+
+        # Affection component (direct — up to ±20)
+        affection_a = state_a.get("affection", 50)
+        score += (affection_a - 50) * 0.4  # ±20
+
+        # Trust component (up to ±15)
+        trust = state_a.get("trust", 50)
+        score += (trust - 50) * 0.3  # ±15
+
+        # Mood alignment bonus (same mood → +5, opposite → -5)
+        mood_a = state_a.get("mood", "neutral")
+        mood_b = state_b.get("mood", "neutral")
+        if mood_a == mood_b and mood_a != "neutral":
+            score += 5
+        elif mood_a in ("angry", "fearful") and mood_b in ("happy", "playful"):
+            score -= 5
+
+        # Relationship level (up to ±10)
+        rel = state_a.get("relationship", 50)
+        score += (rel - 50) * 0.2  # ±10
+
+        return max(0, min(100, score))
+
+
+@dataclass
+class RelationshipBuff:
+    """A temporary stat modifier applied to a character."""
+    buff_id: str
+    stat_deltas: Dict[str, float]
+    expires_at: float
+    source: str = ""
 
 
 # ══════════════════════════════════════════════════════════════════════

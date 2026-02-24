@@ -350,8 +350,66 @@ class TestFieldClassification:
         assert "arousal" in STATS_FIELDS
         assert "happiness" in STATS_FIELDS
         assert "dominance" in STATS_FIELDS
-        assert len(STATS_FIELDS) == 12
+        assert "relationship" in STATS_FIELDS
+        assert "attraction" in STATS_FIELDS
+        assert "trust" in STATS_FIELDS
+        assert len(STATS_FIELDS) == 15
 
     def test_no_overlap_between_registry_and_stats(self):
         from engine.mcp.state_coordinator import REGISTRY_FIELDS, STATS_FIELDS
         assert not REGISTRY_FIELDS.intersection(STATS_FIELDS)
+
+
+class TestRelationshipBuffSystem:
+    """Tests for the buff/debuff system on CharacterStateCoordinator."""
+
+    def _fresh_coord(self):
+        from engine.mcp.state_coordinator import CharacterStateCoordinator
+        return CharacterStateCoordinator()
+
+    def test_add_buff(self):
+        coord = self._fresh_coord()
+        coord.add_buff("lola", "flirt_bonus", {"affection": 10}, duration_secs=60)
+        buffs = coord.get_active_buffs("lola")
+        assert "flirt_bonus" in buffs
+        assert buffs["flirt_bonus"]["deltas"]["affection"] == 10
+        assert buffs["flirt_bonus"]["remaining_secs"] > 0
+
+    def test_expired_buff_removed(self):
+        coord = self._fresh_coord()
+        coord.add_buff("lola", "temp_debuff", {"happiness": -5}, duration_secs=0.01)
+        time.sleep(0.02)
+        removed = coord.remove_expired_buffs("lola")
+        assert "temp_debuff" in removed
+        buffs = coord.get_active_buffs("lola")
+        assert "temp_debuff" not in buffs
+
+    def test_no_buffs_returns_empty(self):
+        coord = self._fresh_coord()
+        buffs = coord.get_active_buffs("unknown_char")
+        assert buffs == {}
+
+    def test_multiple_buffs(self):
+        coord = self._fresh_coord()
+        coord.add_buff("lola", "buff_a", {"arousal": 5}, duration_secs=60)
+        coord.add_buff("lola", "buff_b", {"happiness": 10}, duration_secs=60)
+        buffs = coord.get_active_buffs("lola")
+        assert len(buffs) == 2
+
+
+class TestAttractionModel:
+    """Tests for the attraction calculation."""
+
+    def test_baseline_attraction(self):
+        from engine.mcp.state_coordinator import CharacterStateCoordinator
+        coord = CharacterStateCoordinator()
+        score = coord.calculate_attraction("char_a", "char_b")
+        assert isinstance(score, float)
+        assert 0 <= score <= 100
+
+    def test_attraction_in_valid_range(self):
+        from engine.mcp.state_coordinator import CharacterStateCoordinator
+        coord = CharacterStateCoordinator()
+        for _ in range(10):
+            score = coord.calculate_attraction("x", "y")
+            assert 0 <= score <= 100
