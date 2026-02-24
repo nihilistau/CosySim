@@ -624,6 +624,101 @@ class RealmScene(BaseScene, MCPSceneMixin, mcp_scene_id="realm"):
             self.socketio.emit("accusation_result", result)
             return jsonify({**result, "narration": narration.get("narration", ""), "murder": self.state.murder.to_dict()})
 
+        # ── Combat Routes ──
+
+        @self.app.route("/api/combat/start", methods=["POST"])
+        def combat_start():
+            if not self.state:
+                return jsonify({"error": "No active game"}), 400
+            data = flask_request.get_json(silent=True) or {}
+            enemy_key = data.get("enemy")
+            result = self.state.start_combat(enemy_key)
+            if "error" in result:
+                return jsonify(result), 400
+            # Director narrates the encounter start
+            narration = self._director_infer(
+                f"A {result['enemy_name']} appears! It has {result['enemy_hp']} HP. "
+                "Narrate the dramatic encounter beginning. Give the player combat choices: attack, flee, or use an item."
+            )
+            self._apply_director_result(narration)
+            self.socketio.emit("combat_started", result)
+            return jsonify({**result, "narration": narration.get("narration", "")})
+
+        @self.app.route("/api/combat/attack", methods=["POST"])
+        def combat_attack():
+            if not self.state or not self.state.combat:
+                return jsonify({"error": "Not in combat"}), 400
+            result = self.state.combat_attack()
+            if result.get("defeated"):
+                narration = self._director_infer(
+                    f"The player defeated the {self.state.combat.enemy_name if self.state.combat else 'enemy'}! "
+                    f"{'CRITICAL HIT! ' if result.get('crit') else ''}"
+                    f"They dealt {result['player_damage']} damage. "
+                    f"XP gained: {result.get('xp_gained', 0)}. "
+                    f"{'Loot found: ' + result['loot']['name'] + '!' if result.get('loot') else 'No loot this time.'} "
+                    "Narrate the victory and suggest what to do next."
+                )
+            else:
+                narration = self._director_infer(
+                    f"Combat turn: Player {'MISSED!' if result.get('miss') else 'dealt ' + str(result.get('player_damage', 0)) + ' damage'}. "
+                    f"Enemy has {result['enemy_hp']} HP remaining. "
+                    f"Enemy strikes back for {result['enemy_damage']} damage. "
+                    f"Player HP: {result['player_hp']}. "
+                    "Narrate the exchange and present combat choices."
+                )
+            self._apply_director_result(narration)
+            event = "combat_victory" if result.get("defeated") else "combat_turn"
+            self.socketio.emit(event, result)
+            return jsonify({**result, "narration": narration.get("narration", "")})
+
+        @self.app.route("/api/combat/flee", methods=["POST"])
+        def combat_flee():
+            if not self.state or not self.state.combat:
+                return jsonify({"error": "Not in combat"}), 400
+            result = self.state.combat_flee()
+            if result.get("fled"):
+                narration = self._director_infer("The player successfully fled from combat! Narrate their escape.")
+            else:
+                narration = self._director_infer(
+                    f"The player tried to flee but failed! The enemy struck them for {result.get('enemy_damage', 0)} damage. "
+                    f"Player HP: {result.get('player_hp', '?')}. Continue the combat."
+                )
+            self._apply_director_result(narration)
+            self.socketio.emit("combat_flee", result)
+            return jsonify({**result, "narration": narration.get("narration", "")})
+
+        # ── Quest Routes ──
+
+        @self.app.route("/api/quests")
+        def quest_list():
+            if not self.state:
+                return jsonify({"error": "No active game"}), 400
+            return jsonify({
+                "available": self.state.get_available_quests(),
+                "active": self.state.active_quests,
+                "completed": self.state.completed_quests,
+            })
+
+        @self.app.route("/api/quests/accept", methods=["POST"])
+        def quest_accept():
+            if not self.state:
+                return jsonify({"error": "No active game"}), 400
+            data = flask_request.get_json(silent=True) or {}
+            quest_key = data.get("quest")
+            if not quest_key:
+                return jsonify({"error": "quest key required"}), 400
+            result = self.state.accept_quest(quest_key)
+            if "error" in result:
+                return jsonify(result), 400
+            quest = result["quest"]
+            narration = self._director_infer(
+                f"The player accepts the quest: '{quest['title']}' — {quest['description']}. "
+                "Narrate the quest-giver and set the scene."
+            )
+            self._apply_director_result(narration)
+            self.socketio.emit("quest_accepted", quest)
+            return jsonify({**result, "narration": narration.get("narration", "")})
+
     # ── SocketIO ──
 
     def _setup_socketio(self):
@@ -645,17 +740,22 @@ class RealmScene(BaseScene, MCPSceneMixin, mcp_scene_id="realm"):
         return {
             "name": "The Realm",
             "scene_id": SCENE_ID,
-            "description": "AI-Directed LitRPG Visual Novel with dual-agent pipeline, murder mystery, and fourth-wall mechanics.",
-            "version": "3.2.0",
+            "description": "AI-Directed LitRPG Visual Novel with combat, quests, murder mystery, and dual-agent pipeline.",
+            "version": "3.3.0",
             "port": self.port,
             "author": "CosySim",
-            "tags": ["litrpg", "visual_novel", "dual_agent", "murder_mystery", "showcase"],
+            "tags": ["litrpg", "visual_novel", "dual_agent", "combat", "quests", "murder_mystery"],
             "skill_packs": ["memory", "narrative", "character"],
             "routes": [
-                {"path": "/api/game/new",      "methods": ["POST"], "description": "Start new game"},
-                {"path": "/api/game/choice",    "methods": ["POST"], "description": "Make player choice"},
-                {"path": "/api/game/state",     "methods": ["GET"],  "description": "Get game state"},
-                {"path": "/api/murder/start",   "methods": ["POST"], "description": "Start murder mystery"},
-                {"path": "/api/murder/accuse",  "methods": ["POST"], "description": "Accuse in murder mystery"},
+                {"path": "/api/game/new",       "methods": ["POST"], "description": "Start new game"},
+                {"path": "/api/game/choice",     "methods": ["POST"], "description": "Make player choice"},
+                {"path": "/api/game/state",      "methods": ["GET"],  "description": "Get game state"},
+                {"path": "/api/combat/start",    "methods": ["POST"], "description": "Start combat encounter"},
+                {"path": "/api/combat/attack",   "methods": ["POST"], "description": "Attack in combat"},
+                {"path": "/api/combat/flee",     "methods": ["POST"], "description": "Flee from combat"},
+                {"path": "/api/quests",          "methods": ["GET"],  "description": "List quests"},
+                {"path": "/api/quests/accept",   "methods": ["POST"], "description": "Accept a quest"},
+                {"path": "/api/murder/start",    "methods": ["POST"], "description": "Start murder mystery"},
+                {"path": "/api/murder/accuse",   "methods": ["POST"], "description": "Accuse in murder mystery"},
             ],
         }

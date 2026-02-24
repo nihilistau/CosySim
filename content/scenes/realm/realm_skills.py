@@ -250,3 +250,135 @@ def realm_murder_accuse(suspect_id: str, weapon: str, room: str) -> str:
         parts.append("❌ Wrong room")
     verdict = "🎉 CASE SOLVED!" if result["won"] else f"Wrong! {result['remaining']} attempts left."
     return f"Accusation: {' | '.join(parts)}\n{verdict}"
+
+
+# ── Combat ────────────────────────────────────────────────────
+
+@skill(
+    pack="realm",
+    tags=["game", "combat"],
+    category=SkillCategory.GAME,
+    description="Start a combat encounter with an enemy in The Realm.",
+    cooldown=5,
+)
+def realm_start_combat(enemy: str = "") -> str:
+    """Start a combat encounter. Optionally specify enemy type."""
+    scene = _get_realm_scene()
+    if not scene or not scene.state:
+        return "No active Realm game."
+    result = scene.state.start_combat(enemy or None)
+    if "error" in result:
+        return result["error"]
+    return f"⚔️ COMBAT! A {result['enemy_name']} appears! HP: {result['enemy_hp']}/{result['enemy_max_hp']}"
+
+
+@skill(
+    pack="realm",
+    tags=["game", "combat"],
+    category=SkillCategory.GAME,
+    description="Attack the current enemy in combat.",
+    cooldown=2,
+)
+def realm_combat_attack() -> str:
+    """Attack the enemy in the current combat encounter."""
+    scene = _get_realm_scene()
+    if not scene or not scene.state:
+        return "No active Realm game."
+    result = scene.state.combat_attack()
+    if "error" in result:
+        return result["error"]
+    lines = []
+    if result.get("miss"):
+        lines.append(f"❌ MISS! You swing wide with {result['weapon']}.")
+    elif result.get("crit"):
+        lines.append(f"💥 CRITICAL HIT with {result['weapon']}! {result['player_damage']} damage!")
+    else:
+        lines.append(f"🗡️ Hit with {result['weapon']} for {result['player_damage']} damage.")
+    if result.get("enemy_damage", 0) > 0:
+        lines.append(f"Enemy strikes back for {result['enemy_damage']} damage!")
+    lines.append(f"Enemy HP: {result['enemy_hp']} | Your HP: {result['player_hp']}")
+    if result.get("defeated"):
+        lines.append(f"🏆 VICTORY! +{result.get('xp_gained', 0)} XP")
+        if result.get("loot"):
+            lines.append(f"💰 Loot: {result['loot']['name']}")
+        if result.get("quest_updates"):
+            for qu in result["quest_updates"]:
+                if qu.get("completed"):
+                    lines.append(f"🎯 Quest '{qu['quest']}' COMPLETE!")
+                else:
+                    lines.append(f"📋 Quest progress: {qu['progress']}/{qu['target']}")
+    return "\n".join(lines)
+
+
+@skill(
+    pack="realm",
+    tags=["game", "combat"],
+    category=SkillCategory.GAME,
+    description="Attempt to flee from combat.",
+    cooldown=3,
+)
+def realm_combat_flee() -> str:
+    """Try to run from the current combat encounter."""
+    scene = _get_realm_scene()
+    if not scene or not scene.state:
+        return "No active Realm game."
+    result = scene.state.combat_flee()
+    if "error" in result:
+        return result["error"]
+    if result.get("fled"):
+        return "🏃 You escaped! The enemy fades behind you."
+    return f"❌ Failed to flee! Enemy hits for {result.get('enemy_damage', 0)} damage. HP: {result.get('player_hp', '?')}"
+
+
+# ── Quests ────────────────────────────────────────────────────
+
+@skill(
+    pack="realm",
+    tags=["game", "quest"],
+    category=SkillCategory.GAME,
+    description="View available, active, and completed quests in The Realm.",
+    cooldown=2,
+)
+def realm_quests() -> str:
+    """View quest status: available, active, and completed."""
+    scene = _get_realm_scene()
+    if not scene or not scene.state:
+        return "No active Realm game."
+    avail = scene.state.get_available_quests()
+    active = scene.state.active_quests
+    completed = scene.state.completed_quests
+    lines = ["📜 QUEST LOG"]
+    if active:
+        lines.append("— Active:")
+        for q in active:
+            lines.append(f"  [{q['progress']}/{q['target']}] {q['title']}: {q['objective']}")
+    if avail:
+        lines.append("— Available:")
+        for q in avail:
+            lines.append(f"  🆕 {q['title']}: {q['description']}")
+    if completed:
+        lines.append(f"— Completed: {', '.join(completed)}")
+    if not active and not avail:
+        lines.append("No quests available.")
+    return "\n".join(lines)
+
+
+@skill(
+    pack="realm",
+    tags=["game", "quest"],
+    category=SkillCategory.GAME,
+    description="Accept a quest by its key name.",
+    cooldown=3,
+)
+def realm_accept_quest(quest_key: str = "") -> str:
+    """Accept a quest. Provide the quest key (e.g., 'rats_in_cellar')."""
+    scene = _get_realm_scene()
+    if not scene or not scene.state:
+        return "No active Realm game."
+    if not quest_key:
+        return "Provide a quest key. Use realm_quests() to see available quests."
+    result = scene.state.accept_quest(quest_key)
+    if "error" in result:
+        return result["error"]
+    q = result["quest"]
+    return f"✅ Quest accepted: '{q['title']}' — {q['objective']}"

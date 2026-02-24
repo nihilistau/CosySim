@@ -27,7 +27,7 @@ class TestRealmRoutes:
         assert resp.status_code == 200
         data = resp.get_json()
         assert data["scene_id"] == "realm"
-        assert data["version"] == "3.2.0"
+        assert data["version"] == "3.3.0"
         assert "routes" in data
 
     def test_game_state_no_game(self):
@@ -66,6 +66,30 @@ class TestRealmRoutes:
     def test_health_endpoint(self):
         resp = self.client.get("/api/health")
         assert resp.status_code == 200
+
+    # ── Combat routes (no game) ──
+
+    def test_combat_start_without_game(self):
+        resp = self.client.post("/api/combat/start")
+        assert resp.status_code == 400
+
+    def test_combat_attack_without_game(self):
+        resp = self.client.post("/api/combat/attack")
+        assert resp.status_code == 400
+
+    def test_combat_flee_without_game(self):
+        resp = self.client.post("/api/combat/flee")
+        assert resp.status_code == 400
+
+    # ── Quest routes (no game) ──
+
+    def test_quests_without_game(self):
+        resp = self.client.get("/api/quests")
+        assert resp.status_code == 400
+
+    def test_quest_accept_without_game(self):
+        resp = self.client.post("/api/quests/accept", json={"quest": "rats_in_cellar"})
+        assert resp.status_code == 400
 
 
 # ═══════════════════════════════════════════════════════════════

@@ -4,12 +4,15 @@ import time
 
 from content.scenes.realm.realm_state import (
     DIRECTOR_PERSONALITIES,
+    ENEMY_TEMPLATES,
     MURDER_NPCS,
     MURDER_ROOMS,
     MURDER_WEAPONS,
     MurderMysteryState,
+    QUEST_TEMPLATES,
     RealmGameState,
     SKILL_TREE,
+    CombatEncounter,
 )
 
 
@@ -251,3 +254,143 @@ class TestDirectorPersonalities:
         result = state.skill_check("persuasion")
         # Passive has -1 difficulty mod
         assert result["dc"] == 11  # 12 - 1
+
+
+# ══════════════════════════════════════════════════════════════
+#  COMBAT ENCOUNTER TESTS
+# ══════════════════════════════════════════════════════════════
+
+class TestCombatEncounter:
+    def setup_method(self):
+        self.state = RealmGameState("test_combat")
+
+    def test_start_combat(self):
+        result = self.state.start_combat("goblin")
+        assert result["enemy_name"] == "Goblin"
+        assert result["enemy_hp"] == 20
+        assert self.state.combat is not None
+        assert self.state.combat.active
+
+    def test_start_random_combat(self):
+        result = self.state.start_combat()
+        assert "enemy_name" in result
+        assert result["enemy_hp"] > 0
+
+    def test_cannot_double_combat(self):
+        self.state.start_combat("goblin")
+        result = self.state.start_combat("skeleton")
+        assert "error" in result
+
+    def test_combat_attack(self):
+        self.state.start_combat("goblin")
+        result = self.state.combat_attack()
+        assert "roll" in result
+        assert "player_damage" in result
+        assert "enemy_hp" in result
+
+    def test_combat_defeat_enemy(self):
+        self.state.start_combat("goblin")
+        # Force low HP so we can kill it quickly
+        self.state.combat.enemy_hp = 1
+        result = self.state.combat_attack()
+        assert result["defeated"]
+        assert result.get("xp_gained", 0) > 0
+        assert self.state.total_kills >= 1
+        assert self.state.combat is None
+
+    def test_combat_flee_possible(self):
+        self.state.start_combat("goblin")
+        result = self.state.combat_flee()
+        assert "fled" in result or "error" in result
+
+    def test_combat_not_in_combat(self):
+        result = self.state.combat_attack()
+        assert "error" in result
+
+    def test_combat_loot_drops(self):
+        """Over many runs, loot should sometimes drop."""
+        drops = 0
+        for _ in range(50):
+            state = RealmGameState()
+            state.start_combat("dark_mage")
+            state.combat.enemy_hp = 1
+            result = state.combat_attack()
+            if result.get("loot"):
+                drops += 1
+        assert drops > 0  # at least 1 drop in 50 kills
+
+    def test_to_dict_includes_combat(self):
+        self.state.start_combat("skeleton")
+        d = self.state.to_dict()
+        assert d["combat"] is not None
+        assert d["combat"]["enemy_name"] == "Skeleton"
+
+
+# ══════════════════════════════════════════════════════════════
+#  QUEST SYSTEM TESTS
+# ══════════════════════════════════════════════════════════════
+
+class TestQuestSystem:
+    def setup_method(self):
+        self.state = RealmGameState("test_quests")
+
+    def test_get_available_quests(self):
+        quests = self.state.get_available_quests()
+        assert len(quests) == 5  # 5 quest templates
+        assert all("key" in q for q in quests)
+
+    def test_accept_quest(self):
+        result = self.state.accept_quest("rats_in_cellar")
+        assert result["accepted"]
+        assert len(self.state.active_quests) == 1
+        assert self.state.active_quests[0]["key"] == "rats_in_cellar"
+
+    def test_accept_unknown_quest(self):
+        result = self.state.accept_quest("nonexistent")
+        assert "error" in result
+
+    def test_cannot_accept_twice(self):
+        self.state.accept_quest("rats_in_cellar")
+        result = self.state.accept_quest("rats_in_cellar")
+        assert "error" in result
+
+    def test_quest_progress_on_kill(self):
+        self.state.accept_quest("rats_in_cellar")
+        updates = self.state._check_quest_progress("kill")
+        assert len(updates) >= 1
+        assert self.state.active_quests[0]["progress"] == 1
+
+    def test_quest_completion(self):
+        self.state.accept_quest("rats_in_cellar")
+        # Kill 3 enemies to complete
+        for _ in range(3):
+            self.state._check_quest_progress("kill")
+        assert "rats_in_cellar" in self.state.completed_quests
+        assert len(self.state.active_quests) == 0
+
+    def test_quest_reward_item(self):
+        self.state.accept_quest("rats_in_cellar")
+        initial_count = len(self.state.inventory)
+        for _ in range(3):
+            self.state._check_quest_progress("kill")
+        assert len(self.state.inventory) > initial_count
+
+    def test_turn_based_quest(self):
+        self.state.accept_quest("missing_scholar")
+        for _ in range(5):
+            self.state.check_turn_quests()
+        assert "missing_scholar" in self.state.completed_quests
+
+    def test_to_dict_includes_quests(self):
+        self.state.accept_quest("bounty_hunter")
+        d = self.state.to_dict()
+        assert len(d["active_quests"]) == 1
+        assert d["active_quests"][0]["key"] == "bounty_hunter"
+
+    def test_completed_quest_not_available(self):
+        self.state.accept_quest("rats_in_cellar")
+        for _ in range(3):
+            self.state._check_quest_progress("kill")
+        avail = self.state.get_available_quests()
+        keys = [q["key"] for q in avail]
+        assert "rats_in_cellar" not in keys

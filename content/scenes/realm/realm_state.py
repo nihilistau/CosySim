@@ -61,6 +61,79 @@ STARTER_ITEMS = [
     {"id": "torch",        "name": "Torch",         "type": "utility",  "description": "Illuminates dark areas. Burns for 30 minutes."},
 ]
 
+# ═══════════════════════════════════════════════════════════════
+#  COMBAT: ENEMY TEMPLATES
+# ═══════════════════════════════════════════════════════════════
+
+ENEMY_TEMPLATES = {
+    "goblin":       {"name": "Goblin",       "hp": 20,  "attack": 4,  "defense": 1, "xp": 15,  "loot_chance": 0.4},
+    "skeleton":     {"name": "Skeleton",     "hp": 30,  "attack": 6,  "defense": 2, "xp": 25,  "loot_chance": 0.3},
+    "bandit":       {"name": "Bandit",       "hp": 35,  "attack": 7,  "defense": 3, "xp": 30,  "loot_chance": 0.5},
+    "dire_wolf":    {"name": "Dire Wolf",    "hp": 40,  "attack": 8,  "defense": 2, "xp": 35,  "loot_chance": 0.2},
+    "dark_mage":    {"name": "Dark Mage",    "hp": 25,  "attack": 10, "defense": 1, "xp": 40,  "loot_chance": 0.6},
+    "troll":        {"name": "Cave Troll",   "hp": 60,  "attack": 9,  "defense": 5, "xp": 50,  "loot_chance": 0.4},
+    "wraith":       {"name": "Wraith",       "hp": 45,  "attack": 11, "defense": 3, "xp": 55,  "loot_chance": 0.5},
+    "dragon_wyrmling": {"name": "Dragon Wyrmling", "hp": 80, "attack": 14, "defense": 6, "xp": 100, "loot_chance": 0.7},
+}
+
+COMBAT_LOOT_TABLE = [
+    {"id": "iron_sword",    "name": "Iron Sword",     "type": "weapon",     "damage": 8,  "description": "A proper blade."},
+    {"id": "silver_dagger", "name": "Silver Dagger",  "type": "weapon",     "damage": 6,  "description": "Extra damage to undead."},
+    {"id": "health_potion", "name": "Health Potion",  "type": "consumable", "heal": 25,   "description": "Cherry cough syrup."},
+    {"id": "mana_potion",   "name": "Mana Potion",    "type": "consumable", "heal_mp": 20, "description": "Tastes like blueberries."},
+    {"id": "shield_charm",  "name": "Shield Charm",   "type": "utility",    "description": "Blocks one attack."},
+    {"id": "fire_scroll",   "name": "Fire Scroll",    "type": "consumable", "damage": 15, "description": "Single-use fireball."},
+    {"id": "gold_ring",     "name": "Gold Ring",      "type": "treasure",   "value": 50,  "description": "Worth a pretty penny."},
+]
+
+# ═══════════════════════════════════════════════════════════════
+#  QUESTS
+# ═══════════════════════════════════════════════════════════════
+
+QUEST_TEMPLATES = {
+    "rats_in_cellar": {
+        "title": "Rats in the Cellar",
+        "description": "The innkeeper needs you to clear giant rats from the basement.",
+        "objective": "Defeat 3 enemies",
+        "target_kills": 3,
+        "xp_reward": 50,
+        "item_reward": {"id": "iron_sword", "name": "Iron Sword", "type": "weapon", "damage": 8, "description": "A proper blade."},
+    },
+    "missing_scholar": {
+        "title": "The Missing Scholar",
+        "description": "Professor Blackwood's colleague vanished near the old ruins.",
+        "objective": "Explore 5 rooms and find the scholar",
+        "target_turns": 5,
+        "xp_reward": 75,
+        "item_reward": {"id": "arcane_tome", "name": "Arcane Tome", "type": "utility", "description": "Grants +2 INT when carried."},
+    },
+    "bounty_hunter": {
+        "title": "Bounty: The Shadow",
+        "description": "A wanted criminal lurks in the dark quarters. Bring them in.",
+        "objective": "Defeat the bounty target",
+        "target_kills": 1,
+        "xp_reward": 100,
+        "item_reward": {"id": "bounty_badge", "name": "Bounty Badge", "type": "treasure", "value": 100, "description": "Proof of your prowess."},
+    },
+    "ancient_artifact": {
+        "title": "The Ancient Artifact",
+        "description": "Legend speaks of a powerful relic hidden in the deepest chamber.",
+        "objective": "Survive 8 turns and find the artifact",
+        "target_turns": 8,
+        "xp_reward": 150,
+        "item_reward": {"id": "ancient_amulet", "name": "Ancient Amulet", "type": "utility", "description": "Glows with mysterious power. +3 all stats."},
+    },
+    "dragon_slayer": {
+        "title": "Slay the Dragon",
+        "description": "A dragon wyrmling terrorizes the village. Only a hero can stop it.",
+        "objective": "Defeat the dragon wyrmling",
+        "target_kills": 1,
+        "target_enemy": "dragon_wyrmling",
+        "xp_reward": 200,
+        "item_reward": {"id": "dragon_scale", "name": "Dragon Scale", "type": "treasure", "value": 500, "description": "A trophy of ultimate victory."},
+    },
+}
+
 # Murder Mystery constants
 MURDER_WEAPONS = ["Candlestick", "Dagger", "Poison Vial", "Silk Rope", "Crystal Shard"]
 MURDER_ROOMS   = ["Library", "Ballroom", "Kitchen", "Garden", "Study"]
@@ -84,7 +157,7 @@ class RealmGameState:
 
     def __init__(self, session_id: str | None = None):
         self.session_id = session_id or f"realm_{uuid.uuid4().hex[:8]}"
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
 
         # ── Core state ──
         self.player_stats: Dict[str, int | float] = dict(DEFAULT_STATS)
@@ -118,6 +191,14 @@ class RealmGameState:
         self.assistant_mood: str = "sarcastic"
         self.assistant_stolen_items: List[str] = []  # fourth-wall inventory
 
+        # ── Combat ──
+        self.combat: Optional[CombatEncounter] = None
+        self.total_kills: int = 0
+
+        # ── Quests ──
+        self.active_quests: List[Dict[str, Any]] = []
+        self.completed_quests: List[str] = []
+
     # ── Accessors ──
 
     def to_dict(self) -> Dict[str, Any]:
@@ -138,6 +219,10 @@ class RealmGameState:
                 "story_log_length": len(self.story_log),
                 "current_choices": self.current_choices,
                 "assistant_mood": self.assistant_mood,
+                "combat": self.combat.to_dict() if self.combat else None,
+                "total_kills": self.total_kills,
+                "active_quests": list(self.active_quests),
+                "completed_quests": list(self.completed_quests),
                 "murder": self.murder.to_dict() if self.murder else None,
             }
 
@@ -313,6 +398,206 @@ class RealmGameState:
             self.ended = True
             self.outcome = outcome
             return {"outcome": outcome, "turns": self.turn_number, "stats": dict(self.player_stats)}
+
+    # ── Combat Encounters ──
+
+    def start_combat(self, enemy_key: str | None = None) -> Dict[str, Any]:
+        """Initiate a turn-based combat encounter."""
+        if self.combat and self.combat.active:
+            return {"error": "Already in combat"}
+        if enemy_key and enemy_key in ENEMY_TEMPLATES:
+            template = ENEMY_TEMPLATES[enemy_key]
+        else:
+            level = self.player_stats.get("level", 1)
+            pool = list(ENEMY_TEMPLATES.keys())
+            if level < 3:
+                pool = [k for k in pool if ENEMY_TEMPLATES[k]["hp"] <= 40]
+            enemy_key = random.choice(pool or list(ENEMY_TEMPLATES.keys()))
+            template = ENEMY_TEMPLATES[enemy_key]
+        self.combat = CombatEncounter(enemy_key, dict(template))
+        return self.combat.to_dict()
+
+    def combat_attack(self) -> Dict[str, Any]:
+        """Player attacks the enemy."""
+        if not self.combat or not self.combat.active:
+            return {"error": "Not in combat"}
+        weapon = next((i for i in self.inventory if i.get("type") == "weapon"), None)
+        base_dmg = weapon.get("damage", 3) if weapon else 3
+        str_mod = (self.player_stats.get("strength", 10) - 10) // 2
+        roll = random.randint(1, 20)
+        crit = roll == 20
+        miss = roll == 1
+        if miss:
+            player_dmg = 0
+        else:
+            player_dmg = base_dmg + str_mod + (base_dmg if crit else 0)
+        self.combat.enemy_hp = max(0, self.combat.enemy_hp - player_dmg)
+        enemy_dmg = 0
+        if self.combat.enemy_hp > 0:
+            enemy_roll = random.randint(1, 20)
+            agi_mod = (self.player_stats.get("agility", 10) - 10) // 2
+            dodge = enemy_roll <= max(1, 2 + agi_mod)
+            if not dodge:
+                raw = self.combat.template.get("attack", 5)
+                defense = 0  # can be expanded with armor
+                enemy_dmg = max(1, raw - defense)
+                self.take_damage(enemy_dmg)
+        defeated = self.combat.enemy_hp <= 0
+        result = {
+            "roll": roll, "crit": crit, "miss": miss,
+            "player_damage": player_dmg, "enemy_damage": enemy_dmg,
+            "enemy_hp": self.combat.enemy_hp,
+            "player_hp": self.player_stats["hp"],
+            "defeated": defeated,
+            "weapon": weapon.get("name", "Fists") if weapon else "Fists",
+        }
+        if defeated:
+            result.update(self._resolve_combat_victory())
+        return result
+
+    def combat_flee(self) -> Dict[str, Any]:
+        """Attempt to flee combat."""
+        if not self.combat or not self.combat.active:
+            return {"error": "Not in combat"}
+        agi = self.player_stats.get("agility", 10)
+        roll = random.randint(1, 20) + (agi - 10) // 2
+        success = roll >= 12
+        if success:
+            self.combat.active = False
+            self.combat = None
+            return {"fled": True, "roll": roll}
+        # Failed — enemy gets a free hit
+        enemy_atk = self.combat.template.get("attack", 5)
+        dmg = max(1, enemy_atk)
+        self.take_damage(dmg)
+        return {"fled": False, "roll": roll, "enemy_damage": dmg, "player_hp": self.player_stats["hp"]}
+
+    def _resolve_combat_victory(self) -> Dict[str, Any]:
+        """Handle XP, loot, and quest progress after defeating an enemy."""
+        if not self.combat:
+            return {}
+        self.combat.active = False
+        xp = self.combat.template.get("xp", 10)
+        xp_result = self.gain_xp(xp)
+        self.total_kills += 1
+        result = {"xp_gained": xp, **xp_result}
+        # Loot roll
+        loot_chance = self.combat.template.get("loot_chance", 0.3)
+        luck_bonus = (self.player_stats.get("luck", 5) - 5) * 0.02
+        if random.random() < loot_chance + luck_bonus:
+            loot = dict(random.choice(COMBAT_LOOT_TABLE))
+            loot["id"] = f"{loot['id']}_{uuid.uuid4().hex[:4]}"
+            self.add_item(loot)
+            result["loot"] = loot
+        # Check quest progress
+        quest_updates = self._check_quest_progress("kill", self.combat.enemy_key)
+        if quest_updates:
+            result["quest_updates"] = quest_updates
+        enemy_key = self.combat.enemy_key
+        self.combat = None
+        result["enemy_defeated"] = enemy_key
+        return result
+
+    # ── Quest System ──
+
+    def accept_quest(self, quest_key: str) -> Dict[str, Any]:
+        """Accept a quest from the available quest templates."""
+        if quest_key not in QUEST_TEMPLATES:
+            return {"error": "Unknown quest"}
+        if quest_key in self.completed_quests:
+            return {"error": "Quest already completed"}
+        if any(q["key"] == quest_key for q in self.active_quests):
+            return {"error": "Quest already active"}
+        template = QUEST_TEMPLATES[quest_key]
+        quest = {
+            "key": quest_key,
+            "title": template["title"],
+            "description": template["description"],
+            "objective": template["objective"],
+            "progress": 0,
+            "target": template.get("target_kills", template.get("target_turns", 1)),
+            "accepted_turn": self.turn_number,
+        }
+        with self._lock:
+            self.active_quests.append(quest)
+        return {"accepted": True, "quest": quest}
+
+    def _check_quest_progress(self, event_type: str, detail: str = "") -> List[Dict]:
+        """Check and advance quest progress based on game events."""
+        updates = []
+        with self._lock:
+            for quest in self.active_quests:
+                template = QUEST_TEMPLATES.get(quest["key"], {})
+                if event_type == "kill":
+                    target_enemy = template.get("target_enemy")
+                    if target_enemy and detail != target_enemy:
+                        continue
+                    if "target_kills" in template:
+                        quest["progress"] = min(quest["progress"] + 1, quest["target"])
+                        updates.append({"quest": quest["key"], "progress": quest["progress"], "target": quest["target"]})
+                elif event_type == "turn":
+                    if "target_turns" in template:
+                        quest["progress"] = min(quest["progress"] + 1, quest["target"])
+                        updates.append({"quest": quest["key"], "progress": quest["progress"], "target": quest["target"]})
+                # Check completion
+                if quest["progress"] >= quest["target"]:
+                    self._complete_quest(quest["key"])
+                    updates.append({"quest": quest["key"], "completed": True})
+        return updates
+
+    def _complete_quest(self, quest_key: str) -> None:
+        """Complete a quest: grant rewards, move to completed list."""
+        template = QUEST_TEMPLATES.get(quest_key, {})
+        self.active_quests = [q for q in self.active_quests if q["key"] != quest_key]
+        self.completed_quests.append(quest_key)
+        xp = template.get("xp_reward", 0)
+        if xp:
+            self.gain_xp(xp)
+        reward_item = template.get("item_reward")
+        if reward_item:
+            item = dict(reward_item)
+            item["id"] = f"{item['id']}_{uuid.uuid4().hex[:4]}"
+            self.add_item(item)
+
+    def check_turn_quests(self) -> List[Dict]:
+        """Called each turn to advance turn-based quest progress."""
+        return self._check_quest_progress("turn")
+
+    def get_available_quests(self) -> List[Dict[str, str]]:
+        """Get quests the player can accept."""
+        active_keys = {q["key"] for q in self.active_quests}
+        return [
+            {"key": k, "title": t["title"], "description": t["description"]}
+            for k, t in QUEST_TEMPLATES.items()
+            if k not in self.completed_quests and k not in active_keys
+        ]
+
+
+# ═══════════════════════════════════════════════════════════════
+#  COMBAT ENCOUNTER
+# ═══════════════════════════════════════════════════════════════
+
+class CombatEncounter:
+    """Tracks state for a single turn-based combat encounter."""
+
+    def __init__(self, enemy_key: str, template: Dict[str, Any]):
+        self.enemy_key = enemy_key
+        self.template = template
+        self.enemy_name = template.get("name", "Unknown")
+        self.enemy_hp = template.get("hp", 20)
+        self.enemy_max_hp = self.enemy_hp
+        self.active = True
+        self.turn = 0
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "enemy_key": self.enemy_key,
+            "enemy_name": self.enemy_name,
+            "enemy_hp": self.enemy_hp,
+            "enemy_max_hp": self.enemy_max_hp,
+            "active": self.active,
+            "turn": self.turn,
+        }
 
 
 # ═══════════════════════════════════════════════════════════════
