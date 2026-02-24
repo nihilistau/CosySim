@@ -24,6 +24,9 @@ from flask_socketio import SocketIO, emit
 
 from engine.scenes.base_scene import BaseScene
 from engine.mcp.framework import MCPSceneMixin
+from content.shared import register_shared_assets
+from engine.mcp.scene_state import get_scene_state_manager
+from engine.mcp.tag_registry import TagRegistry
 
 log = logging.getLogger(__name__)
 
@@ -41,6 +44,7 @@ class CommandCenterScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
             template_folder=str(scene_dir / "templates"),
             static_folder=str(scene_dir / "static"),
         )
+        register_shared_assets(self.app)
         CORS(self.app)
         self.socketio = SocketIO(
             self.app, cors_allowed_origins="*", async_mode="threading"
@@ -57,6 +61,10 @@ class CommandCenterScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
 
         self._register_routes()
         self._register_socketio()
+
+        # Framework integration
+        self._state_mgr = get_scene_state_manager()
+        self._tag_registry = TagRegistry.get()
 
     # ------------------------------------------------------------------
     # Lazy accessors for singletons

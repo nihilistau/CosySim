@@ -45,6 +45,9 @@ from content.scenes.lounge.lounge_mcp import (
     get_cocktail, get_all_cocktails, get_song_by_mood,
     get_available_secrets, pick_random_event,
 )
+from content.shared import register_shared_assets
+from engine.mcp.scene_state import get_scene_state_manager
+from engine.mcp.tag_registry import TagRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +75,7 @@ class LoungeScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
             template_folder=str(Path(__file__).parent / "templates"),
             static_folder=str(Path(__file__).parent / "static"),
         )
+        register_shared_assets(self.app)
         self.app.config["SECRET_KEY"] = "velvet_lounge_secret_1920s"
         CORS(self.app)
         self.socketio = SocketIO(self.app, cors_allowed_origins="*", manage_session=False)
@@ -102,6 +106,10 @@ class LoungeScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
         self._mcp_init()
         register_lounge_rules()
         self._seed_lounge_registry()
+
+        # Framework integration
+        self._state_mgr = get_scene_state_manager()
+        self._tag_registry = TagRegistry.get()
 
         # ── Start heat timer ─────────────────────────────────────────────────
         self._start_heat_timer()

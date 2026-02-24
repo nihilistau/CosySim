@@ -43,6 +43,9 @@ from engine.spatial.location import Location
 from engine.spatial.scene_map import SceneMap
 from content.simulation.database.db import Database
 from content.simulation.character_system.character import Character
+from content.shared import register_shared_assets
+from engine.mcp.scene_state import get_scene_state_manager
+from engine.mcp.tag_registry import TagRegistry
 
 # ══════════════════════════════════════════════════════════════════════
 #  CONSTANTS
@@ -583,6 +586,7 @@ class BedroomScene(BaseScene, MCPSceneMixin, mcp_scene_id="bedroom"):
             template_folder=str(Path(__file__).parent / "templates"),
             static_folder=str(Path(__file__).parent / "static"),
         )
+        register_shared_assets(self.app)
         self.app.config["SECRET_KEY"] = "bedroom_v4_roleplay_secret"
         CORS(self.app)
         self.socketio = SocketIO(self.app, cors_allowed_origins="*", manage_session=False)
@@ -595,6 +599,12 @@ class BedroomScene(BaseScene, MCPSceneMixin, mcp_scene_id="bedroom"):
         self._setup_socketio()
         self._mcp_init()
         register_bedroom_rules()
+
+        # SceneStateManager — bridge bedroom state to MCP framework
+        self._state_mgr = get_scene_state_manager()
+
+        # TagRegistry — register bedroom-specific custom tag
+        self._tag_registry = TagRegistry.get()
 
     # ── Helpers ──────────────────────────────────────────────────────────
 
@@ -661,6 +671,8 @@ class BedroomScene(BaseScene, MCPSceneMixin, mcp_scene_id="bedroom"):
                         "personality": profile.personality_key,
                         "props_held": profile.props_held,
                     })
+                # Also sync to SceneStateManager
+                self._state_mgr.update_stats(cid, **profile.stats.to_dict())
             # Sync scene state
             scene_node = fw.get_scene("bedroom")
             if scene_node:
@@ -672,8 +684,9 @@ class BedroomScene(BaseScene, MCPSceneMixin, mcp_scene_id="bedroom"):
                     "character_count": len(self.characters),
                     "room_props": self.room_props,
                 })
-            # Emit event if requested
+            # Narrative log via SceneStateManager
             if event_name:
+                self._state_mgr.add_narrative("bedroom", event_name)
                 fw.emit_event(event_name, payload or {}, source="bedroom")
         except Exception:
             pass

@@ -37,6 +37,9 @@ import sys; sys.path.insert(0, str(project_root))
 from engine.scenes.base_scene import BaseScene
 from engine.mcp.framework import MCPSceneMixin, get_framework
 from content.simulation.database.db import Database
+from content.shared import register_shared_assets
+from engine.mcp.scene_state import get_scene_state_manager
+from engine.mcp.tag_registry import TagRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -181,6 +184,7 @@ class GalleryScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
             template_folder=str(_SCENE_ROOT / "templates"),
             static_folder=str(_SCENE_ROOT / "static"),
         )
+        register_shared_assets(self.app)
         self.app.secret_key = os.urandom(24)
         self.socketio = SocketIO(self.app, cors_allowed_origins="*", async_mode="threading")
 
@@ -192,6 +196,10 @@ class GalleryScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
 
         self._register_routes()
         self._register_socketio()
+
+        # Framework integration
+        self._state_mgr = get_scene_state_manager()
+        self._tag_registry = TagRegistry.get()
 
     # ── Lifecycle ───────────────────────────────────────────────────────────
 

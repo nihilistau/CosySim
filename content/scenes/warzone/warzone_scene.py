@@ -25,6 +25,9 @@ from flask_socketio import SocketIO, emit
 
 from engine.scenes.base_scene import BaseScene
 from engine.mcp.framework import MCPSceneMixin
+from content.shared import register_shared_assets
+from engine.mcp.scene_state import get_scene_state_manager
+from engine.mcp.tag_registry import TagRegistry, TagDef
 
 logger = logging.getLogger(__name__)
 
@@ -382,6 +385,7 @@ class WarzoneScene(BaseScene, MCPSceneMixin, mcp_scene_id="warzone"):
         super().__init__("warzone", port=5561)
         tpl = str(Path(__file__).parent / "templates")
         self.app = Flask(__name__, template_folder=tpl)
+        register_shared_assets(self.app)
         self.app.config["SECRET_KEY"] = "globalstrike"
         self.socketio = SocketIO(self.app, cors_allowed_origins="*",
                                  async_mode="threading")
@@ -395,6 +399,14 @@ class WarzoneScene(BaseScene, MCPSceneMixin, mcp_scene_id="warzone"):
             logger.debug("WarzoneScene: framework init failed: %s", exc)
         self._setup_routes()
         self._setup_sio()
+
+        # Framework integration
+        self._state_mgr = get_scene_state_manager()
+        self._tag_registry = TagRegistry.get()
+        self._tag_registry.register(TagDef(
+            name="ORDER", pattern=r"\[ORDER:([^\]]+)\]",
+            handler=None, strip_from_output=True, pre_warm_intent="warzone_order"
+        ))
 
     # ── BaseScene interface ──────────────────────────────────────────
 

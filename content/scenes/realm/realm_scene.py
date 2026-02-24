@@ -40,6 +40,9 @@ from .realm_state import (
     RealmGameState,
     SKILL_TREE,
 )
+from content.shared import register_shared_assets
+from engine.mcp.scene_state import get_scene_state_manager
+from engine.mcp.tag_registry import TagRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -127,6 +130,7 @@ class RealmScene(BaseScene, MCPSceneMixin, mcp_scene_id="realm"):
             template_folder=str(Path(__file__).parent / "templates"),
             static_folder=str(Path(__file__).parent / "static"),
         )
+        register_shared_assets(self.app)
         self.app.config["SECRET_KEY"] = "realm_v3_showcase"
         CORS(self.app)
         self.socketio = SocketIO(self.app, cors_allowed_origins="*")
@@ -146,6 +150,10 @@ class RealmScene(BaseScene, MCPSceneMixin, mcp_scene_id="realm"):
         # Setup routes + sockets
         self._setup_routes()
         self._setup_socketio()
+
+        # Framework integration
+        self._state_mgr = get_scene_state_manager()
+        self._tag_registry = TagRegistry.get()
 
     # ── Agent helpers ──
 

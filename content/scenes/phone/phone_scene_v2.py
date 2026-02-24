@@ -43,6 +43,9 @@ from content.scenes.phone.phone_rules_v2 import (
 )
 from content.simulation.database.db import Database
 from content.simulation.services.llm_service import get_llm_service
+from content.shared import register_shared_assets
+from engine.mcp.scene_state import get_scene_state_manager
+from engine.mcp.tag_registry import TagRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -174,6 +177,7 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
             template_folder=str(_TEMPLATE_DIR),
             static_folder=str(_STATIC_DIR),
         )
+        register_shared_assets(self.app)
         self.app.secret_key = os.urandom(24)
         self.socketio = SocketIO(self.app, cors_allowed_origins="*", async_mode="threading")
 
@@ -183,6 +187,10 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
 
         self._register_routes()
         self._register_socketio()
+
+        # Framework integration
+        self._state_mgr = get_scene_state_manager()
+        self._tag_registry = TagRegistry.get()
 
     def start(self) -> None:
         self._seed_characters()

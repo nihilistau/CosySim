@@ -54,6 +54,9 @@ from content.scenes.casino.casino_mcp import (
     CASINO_DRINKS, RANDOM_EVENTS, TELL_DESCRIPTIONS,
     deal_hand, evaluate_hand_simple, pick_random_event,
 )
+from content.shared import register_shared_assets
+from engine.mcp.scene_state import get_scene_state_manager
+from engine.mcp.tag_registry import TagRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +84,7 @@ class CasinoScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
             template_folder=str(Path(__file__).parent / "templates"),
             static_folder=str(Path(__file__).parent / "static"),
         )
+        register_shared_assets(self.app)
         self.app.config["SECRET_KEY"] = "midnight_casino_noir_2026"
         CORS(self.app)
         self.socketio = SocketIO(self.app, cors_allowed_origins="*", manage_session=False)
@@ -122,6 +126,10 @@ class CasinoScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
         register_casino_rules()
         self._seed_casino_registry()
         self._wire_event_bus()
+
+        # Framework integration
+        self._state_mgr = get_scene_state_manager()
+        self._tag_registry = TagRegistry.get()
 
     # ══════════════════════════════════════════════════════════════════
     #  FRAMEWORK INTEGRATION

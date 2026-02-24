@@ -37,6 +37,9 @@ from content.scenes.heist.heist_game import (
 )
 from content.scenes.heist.heist_rules import register_heist_rules
 from content.simulation.database.db import Database
+from content.shared import register_shared_assets
+from engine.mcp.scene_state import get_scene_state_manager
+from engine.mcp.tag_registry import TagRegistry, TagDef
 
 logger = logging.getLogger(__name__)
 
@@ -99,6 +102,7 @@ class HeistScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
             template_folder=str(scene_dir / "templates"),
             static_folder=str(scene_dir / "static"),
         )
+        register_shared_assets(self.app)
         CORS(self.app)
         self.socketio = SocketIO(self.app, cors_allowed_origins="*", async_mode="threading")
 
@@ -114,6 +118,14 @@ class HeistScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
         register_heist_rules()
         self._register_routes()
         self._register_socketio()
+
+        # Framework integration
+        self._state_mgr = get_scene_state_manager()
+        self._tag_registry = TagRegistry.get()
+        self._tag_registry.register(TagDef(
+            name="PLAN", pattern=r"\[PLAN:([^\]]+)\]",
+            handler=None, strip_from_output=True, pre_warm_intent="heist_plan"
+        ))
 
     # ── Routes ───────────────────────────────────────────────────────────
 
