@@ -377,6 +377,7 @@ class ConversationVarietyInterceptor(InterceptorBase):
 
     # Per-agent recent response tracking (class-level shared cache)
     _recent_responses: Dict[str, List[str]] = {}  # agent_id → last N summaries
+    _recent_lock = threading.Lock()
     _MAX_TRACKED = 5
 
     def pre_call(self, ctx: ResponseContext) -> None:
@@ -387,7 +388,8 @@ class ConversationVarietyInterceptor(InterceptorBase):
         variety_lines: List[str] = []
 
         # Check recent responses for repetition
-        recent = self._recent_responses.get(agent_id, [])
+        with self._recent_lock:
+            recent = list(self._recent_responses.get(agent_id, []))
         if len(recent) >= 2:
             topics = ", ".join(f'"{r[:50]}"' for r in recent[-3:])
             variety_lines.append(
@@ -436,12 +438,13 @@ class ConversationVarietyInterceptor(InterceptorBase):
         agent_id = ctx.get("agent_id", "")
         reply = ctx.get("reply", "")
         if agent_id and reply:
-            if agent_id not in self._recent_responses:
-                self._recent_responses[agent_id] = []
-            self._recent_responses[agent_id].append(reply[:80])
-            # Keep only last N
-            if len(self._recent_responses[agent_id]) > self._MAX_TRACKED:
-                self._recent_responses[agent_id] = self._recent_responses[agent_id][-self._MAX_TRACKED:]
+            with self._recent_lock:
+                if agent_id not in self._recent_responses:
+                    self._recent_responses[agent_id] = []
+                self._recent_responses[agent_id].append(reply[:80])
+                # Keep only last N
+                if len(self._recent_responses[agent_id]) > self._MAX_TRACKED:
+                    self._recent_responses[agent_id] = self._recent_responses[agent_id][-self._MAX_TRACKED:]
 
             # Update conversation heat based on response content
             try:
@@ -1325,6 +1328,11 @@ class MoodSyncInterceptor(InterceptorBase):
     Post-call: read mood data from ``ctx["parsed"]`` (a ``ParsedResponse``)
     and push back to the CharacterRegistry.
 
+    After syncing mood, evaluates threshold rules in the SceneRulesEngine.
+    If any triggered rules have stat thresholds now met, their effects
+    auto-fire (stat adjustments, directives, narrative entries, etc.).
+    This activates the rules engine as an autonomous behavioral governor.
+
     If ``ctx["parsed"]`` is not populated (legacy path), falls back to
     ``ContentRouter.parse_full()`` on the raw reply.
 
@@ -1367,6 +1375,66 @@ class MoodSyncInterceptor(InterceptorBase):
             )
         except Exception as exc:
             logger.debug("MoodSyncInterceptor: registry update failed: %s", exc)
+
+        # ── Auto-evaluate threshold rules ──────────────────────────
+        scene = ctx.get("scene", "")
+        if scene:
+            self._evaluate_threshold_rules(scene, agent_id, ctx)
+
+    def _evaluate_threshold_rules(
+        self, scene: str, agent_id: str, ctx: ResponseContext,
+    ) -> None:
+        """
+        Check if any triggered rules now have their stat thresholds met.
+        If so, auto-fire their effects via the SceneRulesEngine.
+
+        This is the bridge that turns passive rules into active governors —
+        whenever mood/stats change, we check if that change crosses a
+        threshold that should trigger a rule.
+        """
+        try:
+            from engine.mcp.scene_rules_engine import get_rules_engine
+            from engine.mcp.scene_state import get_scene_state_manager
+            eng = get_rules_engine()
+            ssm = get_scene_state_manager()
+
+            # Gather current stats for this character
+            stats = ssm.get_stats(agent_id) or {}
+
+            # Also include mood/energy from registry for hybrid checks
+            try:
+                from engine.mcp.character_registry import get_character_registry
+                reg = get_character_registry()
+                rec = reg.get_character(agent_id)
+                if rec and rec.state:
+                    stats.setdefault("mood_intensity", rec.state.mood_intensity or 0)
+                    stats.setdefault("energy", rec.state.energy or 50)
+                    stats.setdefault("inhibition", rec.state.inhibition or 50)
+            except Exception:
+                pass
+
+            if not stats:
+                return
+
+            triggered = eng.evaluate_threshold_rules(scene, agent_id, stats)
+            for rule_info in triggered:
+                rule_id = rule_info["rule_id"]
+                result = eng.apply_rule(
+                    scene, rule_id,
+                    target_ids=[agent_id],
+                    issuer="threshold_auto",
+                    ctx=dict(ctx) if ctx else None,
+                )
+                if result.get("ok"):
+                    logger.info(
+                        "MoodSyncInterceptor: auto-fired rule '%s' for %s in %s "
+                        "(stats: %s)",
+                        rule_id, agent_id, scene,
+                        {k: v for k, v in stats.items()
+                         if isinstance(v, (int, float))},
+                    )
+        except Exception as exc:
+            logger.debug("MoodSyncInterceptor: threshold eval failed: %s", exc)
 
 
 # ══════════════════════════════════════════════════════════════════════
