@@ -194,6 +194,50 @@ lmstudio:
     draft_model: ""             # small fast model for draft tokens
     # main_model: ""            # override main model for spec decode
 
+  # ── SDK Client (WebSocket connection to LMStudio SDK) ──
+  sdk:
+    enabled: true               # enable SDK alongside REST
+    timeout: 60                 # seconds — SDK call timeout
+    auto_connect: true          # connect on startup
+
+  # ── Inference Router (three-tier priority queue) ──
+  router:
+    enabled: true
+    max_queue_depth: 20         # reject new requests when queue exceeds this
+    preempt_on_priority: true   # allow REALTIME to preempt BATCH
+    worker_poll_interval: 0.05  # seconds between queue checks
+
+  # ── Multi-Model Setup ──
+  models:
+    primary:
+      key: ""                   # e.g. "qwen3-8b" — leave empty to auto-resolve
+      device: "gpu"
+      slots: 2
+      context_length: 8192
+      channel: "sdk"            # sdk | rest — preferred channel
+    utility:
+      key: ""                   # e.g. "ministral-3b"
+      device: "cpu"
+      slots: 1
+      context_length: 4096
+      channel: "sdk"
+      enabled: false            # enable when utility model is loaded
+    router:
+      key: ""                   # e.g. "cosysim-gemma-270m-router"
+      device: "cpu"
+      slots: 1
+      context_length: 2048
+      channel: "sdk"
+      enabled: false            # enable after fine-tuning
+    draft:
+      key: ""                   # same as router for dual-purpose
+      use_as_draft_for: "primary"
+      enabled: false
+    embedding:
+      key: ""                   # e.g. "text-embedding-nomic-embed-text-v1.5"
+      device: "cpu"
+      enabled: false
+
 # Hardware profile (used by LMStudioManager for VRAM estimation)
 hardware:
   gpu_name: "NVIDIA GeForce RTX 2060"

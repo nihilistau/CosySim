@@ -87,6 +87,15 @@ from .model_manager    import ModelManager, get_model_manager, LoadMode
 from .concurrency      import ConcurrentExecutor, get_executor, ConcurrentResult
 # Ephemeral tools / function-calling
 from .tool_factory     import ToolSpec, tool, from_callable, run_with_tools
+# SDK client (WebSocket-based, optional)
+from .sdk_client       import SDKClient, get_sdk_client, SDK_AVAILABLE
+# Inference router (three-tier priority queue)
+from .router           import InferenceRouter, Priority, Tier, Channel
+# Tool registry (MCP ↔ SDK bridge)
+from .tool_registry    import (
+    ToolRegistry as SDKToolRegistry, ToolScope,
+    get_tool_registry, reset_tool_registry,
+)
 
 __all__ = [
     # Native v1 (the only inference path)
@@ -107,4 +116,10 @@ __all__ = [
     "ConcurrentExecutor", "get_executor", "ConcurrentResult",
     # Ephemeral tools
     "ToolSpec", "tool", "from_callable", "run_with_tools",
+    # SDK client (WebSocket)
+    "SDKClient", "get_sdk_client", "SDK_AVAILABLE",
+    # Inference router
+    "InferenceRouter", "Priority", "Tier", "Channel",
+    # Tool registry
+    "SDKToolRegistry", "ToolScope", "get_tool_registry", "reset_tool_registry",
 ]

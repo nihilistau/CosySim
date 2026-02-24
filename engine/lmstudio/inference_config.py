@@ -173,6 +173,34 @@ class InferenceConfig:
             d["draft_model"] = self.draft_model
         return d
 
+    def to_sdk_config(self) -> Dict[str, Any]:
+        """Build a dict suitable for the LMStudio Python SDK ``LlmPredictionConfig``.
+
+        Used by ``SDKClient`` to translate CosySim inference settings
+        into the SDK's native config format.  Field names differ from the
+        REST API — the SDK uses ``top_p_sampling``, ``top_k_sampling``, etc.
+        """
+        d: Dict[str, Any] = {}
+        if self.temperature is not None:
+            d["temperature"] = self.temperature
+        if self.top_p is not None:
+            d["top_p_sampling"] = self.top_p
+        if self.top_k is not None:
+            d["top_k_sampling"] = self.top_k
+        if self.min_p is not None:
+            d["min_p_sampling"] = self.min_p
+        if self.repeat_penalty is not None:
+            d["repeat_penalty"] = self.repeat_penalty
+        if self.max_output_tokens is not None:
+            d["max_tokens"] = self.max_output_tokens
+        if self.stop_strings:
+            d["stop_strings"] = self.stop_strings
+        if self.draft_model:
+            d["draft_model"] = self.draft_model
+        if self.response_format:
+            d["structured"] = self.response_format
+        return d
+
     def to_openai_compat(self) -> Dict[str, Any]:
         """Build the fields dict for OpenAI-compatible ``/v1/chat/completions``."""
         d: Dict[str, Any] = {}
