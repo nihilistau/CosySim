@@ -14,6 +14,43 @@
 </head>
 <body>
 
+<!-- ── Adult Content Warning Overlay ─────────────────────────────────── -->
+<div id="contentWarning" style="
+    position:fixed; inset:0; z-index:9999; background:rgba(0,0,0,0.95);
+    display:flex; align-items:center; justify-content:center; flex-direction:column;
+    color:#fff; font-family:system-ui,sans-serif; text-align:center; padding:2rem;
+">
+    <div style="max-width:480px;">
+        <h1 style="font-size:2rem; margin-bottom:1rem; color:#ff4444;">⚠️ Adult Content Warning</h1>
+        <p style="font-size:1.1rem; line-height:1.6; margin-bottom:1.5rem; color:#ccc;">
+            The <strong>Bedroom Scene</strong> contains <strong>explicit sexual content</strong>,
+            graphic language, and adult themes. Characters in this space are designed to be
+            sexually expressive, vulgar, and uninhibited.
+        </p>
+        <p style="font-size:0.95rem; color:#999; margin-bottom:2rem;">
+            By entering, you confirm you are of legal age in your jurisdiction
+            and consent to viewing explicit adult content.
+        </p>
+        <div style="display:flex; gap:1rem; justify-content:center;">
+            <button onclick="document.getElementById('contentWarning').style.display='none'; sessionStorage.setItem('bedroom_warned','1');"
+                style="padding:0.8rem 2rem; font-size:1rem; background:#ff4444; color:#fff; border:none;
+                       border-radius:8px; cursor:pointer; font-weight:bold;">
+                Enter — I'm an adult
+            </button>
+            <button onclick="window.location.href='/'"
+                style="padding:0.8rem 2rem; font-size:1rem; background:#333; color:#aaa; border:1px solid #555;
+                       border-radius:8px; cursor:pointer;">
+                Leave
+            </button>
+        </div>
+    </div>
+</div>
+<script>
+    if (sessionStorage.getItem('bedroom_warned') === '1') {
+        document.getElementById('contentWarning').style.display = 'none';
+    }
+</script>
+
 <!-- ── Header ───────────────────────────────────────────────────────── -->
 <header class="scene-header">
     <a href="/" class="back-btn">← Back</a>
@@ -326,6 +363,7 @@
     </span>
 </div>
 
-<script src="{{ url_for('static', filename='js/bedroom.js') }}?v=3.2"></script>
+<script src="{{ url_for('static', filename='js/character_models.js') }}?v=1.0"></script>
+<script src="{{ url_for('static', filename='js/bedroom.js') }}?v=4.0"></script>
 </body>
 </html>

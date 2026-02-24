@@ -451,8 +451,8 @@ function showSpeechBubble(charId, text, durationMs) {
     if (!s) return;
     // Remove any existing bubble
     if (s.bubble) { s.group.remove(s.bubble); s.bubble.material.map.dispose(); s.bubble.material.dispose(); s.bubble = null; }
-    const sprite = makeBubbleSprite(text);
-    sprite.position.y = 2.85;
+    const sprite = CharModels.makeBubble(text, s.charColor || '#ff6b9d');
+    sprite.position.y = s.bubbleY || 2.2;
     s.group.add(sprite);
     s.bubble = sprite;
     setTimeout(() => {
@@ -462,67 +462,34 @@ function showSpeechBubble(charId, text, durationMs) {
             sprite.material.dispose();
             s.bubble = null;
         }
-    }, durationMs || 5000);
+    }, durationMs || 6000);
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-//  CHARACTER SPRITES
+//  CHARACTER MODELS (detailed humanoids via CharModels API)
 // ═══════════════════════════════════════════════════════════════════════
-function ensureCharSprite(charId, name, colorIdx) {
+function ensureCharSprite(charId, name, colorIdx, info) {
     if (charSprites[charId]) return charSprites[charId];
 
-    const color = new THREE.Color(CHAR_COLORS[colorIdx % CHAR_COLORS.length]);
-    const group = new THREE.Group();
+    const color = CHAR_COLORS[colorIdx % CHAR_COLORS.length];
+    const gender = (info && info.gender) ? info.gender : undefined;
+    const model = CharModels.create({
+        name: name,
+        charColor: color,
+        gender: gender,
+    });
 
-    // Body — tapered cylinder with emissive outline
-    const bodyGeo = new THREE.CylinderGeometry(0.22, 0.3, 1.3, 16);
-    const bodyMat = new THREE.MeshStandardMaterial({ color, roughness: 0.4, metalness: 0.1 });
-    const body = new THREE.Mesh(bodyGeo, bodyMat);
-    body.position.y = 0.65;
-    body.castShadow = true;
-    group.add(body);
+    // Apply initial outfit
+    const outfit = (info && info.outfit) ? info.outfit : 'casual';
+    CharModels.updateOutfit(model, outfit);
 
-    // Shoulders
-    const shoulderGeo = new THREE.SphereGeometry(0.28, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2);
-    const shoulderMat = new THREE.MeshStandardMaterial({ color, roughness: 0.5 });
-    const shoulders = new THREE.Mesh(shoulderGeo, shoulderMat);
-    shoulders.position.y = 1.3;
-    group.add(shoulders);
-
-    // Head
-    const headGeo = new THREE.SphereGeometry(0.22, 16, 16);
-    const headMat = new THREE.MeshStandardMaterial({ color: 0xffd5b4, roughness: 0.6 });
-    const head = new THREE.Mesh(headGeo, headMat);
-    head.position.y = 1.6;
-    head.castShadow = true;
-    group.add(head);
-
-    // Hair (half-sphere on top)
-    const hairGeo = new THREE.SphereGeometry(0.24, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2);
-    const hairColor = colorIdx === 0 ? 0x2a1a0a : 0x4a3020;
-    const hairMat = new THREE.MeshStandardMaterial({ color: hairColor, roughness: 0.8 });
-    const hair = new THREE.Mesh(hairGeo, hairMat);
-    hair.position.y = 1.68;
-    group.add(hair);
-
-    // Glow ring at feet (subtle)
-    const ringGeo = new THREE.RingGeometry(0.35, 0.5, 32);
-    const ringMat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.3, side: THREE.DoubleSide });
-    const ring = new THREE.Mesh(ringGeo, ringMat);
-    ring.rotation.x = -Math.PI / 2;
-    ring.position.y = 0.02;
-    group.add(ring);
-
-    // Name label
-    const label = makeTextSprite(name, 0.5);
-    label.position.y = 2.2;
-    group.add(label);
-
-    scene.add(group);
+    scene.add(model.group);
     charSprites[charId] = {
-        group, ring, targetPos: new THREE.Vector3(0, 0, 0),
+        ...model,
+        targetPos: new THREE.Vector3(0, 0, 0),
         currentPos: new THREE.Vector3(0, 0, 0),
         bubble: null,
+        currentOutfit: outfit,
     };
     return charSprites[charId];
 }
@@ -547,16 +514,30 @@ function updateCharPositions(characters, locations) {
 
     let colorIdx = 0;
     for (const [cid, info] of Object.entries(characters)) {
-        const sprite = ensureCharSprite(cid, info.name, colorIdx);
+        const sprite = ensureCharSprite(cid, info.name, colorIdx, info);
         colorIdx++;
+
+        // Update outfit if changed
+        const outfit = info.outfit || 'casual';
+        if (sprite.currentOutfit !== outfit) {
+            CharModels.updateOutfit(sprite, outfit);
+            sprite.currentOutfit = outfit;
+        }
+
+        // Update facial expression from mood/feeling
+        CharModels.setExpression(sprite, info.feeling || info.mood || 'neutral');
 
         const locId = info.location_id;
         if (!locId || !locations[locId]) continue;
         const pos = locations[locId].pos || { x: 0, y: 0, z: 0 };
 
-        // Offset for multiple occupants
-        const idx = (occupantIndex[locId] || []).indexOf(cid);
-        const off = (idx === 0) ? -0.6 : 0.6;
+        // Offset for multiple occupants (spread up to 3)
+        const occ = occupantIndex[locId] || [];
+        const idx = occ.indexOf(cid);
+        const count = occ.length;
+        let off = 0;
+        if (count === 2) off = (idx === 0) ? -0.6 : 0.6;
+        else if (count >= 3) off = (idx - 1) * 0.7;
 
         sprite.targetPos.set(pos.x + off, 0, pos.z);
     }
@@ -576,10 +557,12 @@ function animate() {
     controls.update();
     const t = clock.elapsedTime;
 
-    // Smooth character movement + glow pulse
+    // Smooth character movement + glow pulse + detailed animation
     for (const s of Object.values(charSprites)) {
         s.group.position.lerp(s.targetPos, Math.min(1, dt * 3));
         if (s.ring) s.ring.material.opacity = 0.2 + 0.15 * Math.sin(t * 3);
+        // Detailed humanoid animation (breathing, sway)
+        if (s.bodyGroup) CharModels.animate(s, t);
     }
 
     // Pulse location markers
