@@ -91,6 +91,66 @@ _GATE_RULES: List[Dict[str, Any]] = [
         ],
     },
     {
+        "id"          : "explicit_gate",
+        "label"       : "Explicit Mode Unlocked",
+        "description" : "Full explicit content when arousal ≥ 80, horniness ≥ 60. Characters become graphically sexual.",
+        "rule_type"   : "triggered",
+        "condition"   : {"stat_thresholds": {"arousal": 80, "horniness": 60}},
+        "effects"     : [
+            {"effect_type": "add_narrative", "params": {
+                "event": "Something primal takes over. Inhibitions are completely gone. "
+                         "Every word becomes graphic, every touch becomes explicit.",
+                "scene_id": SCENE_ID,
+            }},
+            {"effect_type": "set_directive", "params": {
+                "directive_type": "style_lock",
+                "value": "pornographic",
+                "turns": 5,
+            }},
+            {"effect_type": "set_atmosphere", "params": {
+                "scene_id": SCENE_ID, "lighting": "red_light", "mood": "primal",
+            }},
+        ],
+    },
+    {
+        "id"          : "competition_escalation",
+        "label"       : "Competition Escalation",
+        "description" : "During bed game, characters try to outdo each other in explicitness.",
+        "rule_type"   : "triggered",
+        "condition"   : {"stat_thresholds": {"arousal": 50, "openness": 50}},
+        "effects"     : [
+            {"effect_type": "add_narrative", "params": {
+                "event": "A competitive energy fills the room. Everyone wants to be the dirtiest, "
+                         "the most daring, the one who goes furthest.",
+                "scene_id": SCENE_ID,
+            }},
+            {"effect_type": "set_directive", "params": {
+                "directive_type": "must_include",
+                "value": "try to outdo the other characters in how explicit and daring your actions are",
+                "turns": 3,
+            }},
+        ],
+    },
+    {
+        "id"          : "depraved_gate",
+        "label"       : "Depraved Mode",
+        "description" : "Maximum explicitness when arousal ≥ 90 and horniness ≥ 80. No limits remain.",
+        "rule_type"   : "triggered",
+        "condition"   : {"stat_thresholds": {"arousal": 90, "horniness": 80}},
+        "effects"     : [
+            {"effect_type": "add_narrative", "params": {
+                "event": "Pure animalistic desire. Language becomes filthy, actions become depraved. "
+                         "Every boundary has been obliterated.",
+                "scene_id": SCENE_ID,
+            }},
+            {"effect_type": "set_directive", "params": {
+                "directive_type": "style_lock",
+                "value": "depraved and uninhibited",
+                "turns": 8,
+            }},
+        ],
+    },
+    {
         "id"          : "aftercare_rule",
         "label"       : "Aftercare Available",
         "description" : "After intense intimacy, warmth and tenderness become the primary mode.",
@@ -207,6 +267,94 @@ _ACTIONS: List[Dict[str, Any]] = [
         ],
     },
     {
+        "id": "oral_sex",
+        "label": "Oral Sex",
+        "description": "Going down — giving or receiving oral pleasure.",
+        "intimacy_level": 5,
+        "condition": {
+            "stat_thresholds": {"arousal": 60, "openness": 55},
+            "character_flags": {"consent_given": True},
+        },
+        "effects": [
+            {"effect_type": "stat_adjust", "params": {"stat": "arousal",      "delta": 25}},
+            {"effect_type": "stat_adjust", "params": {"stat": "pleasure",     "delta": 30}},
+            {"effect_type": "stat_adjust", "params": {"stat": "horniness",    "delta": 20}},
+            {"effect_type": "stat_adjust", "params": {"stat": "inhibition",   "delta": -20}},
+        ],
+    },
+    {
+        "id": "rough_sex",
+        "label": "Rough Sex",
+        "description": "Hard, aggressive, dominant sex — hair pulling, spanking, choking.",
+        "intimacy_level": 5,
+        "condition": {
+            "stat_thresholds": {"arousal": 80, "openness": 65},
+            "character_flags": {"consent_given": True},
+        },
+        "effects": [
+            {"effect_type": "stat_adjust", "params": {"stat": "arousal",      "delta": 35}},
+            {"effect_type": "stat_adjust", "params": {"stat": "pleasure",     "delta": 25}},
+            {"effect_type": "stat_adjust", "params": {"stat": "dominance",    "delta": 15}},
+            {"effect_type": "stat_adjust", "params": {"stat": "fear",         "delta": 8}},
+            {"effect_type": "stat_adjust", "params": {"stat": "inhibition",   "delta": -30}},
+            {"effect_type": "add_narrative", "params": {
+                "event": "Things turn rough and primal. Inhibitions shatter.",
+                "scene_id": SCENE_ID,
+            }},
+        ],
+    },
+    {
+        "id": "dirty_talk",
+        "label": "Dirty Talk",
+        "description": "Explicit verbal filth — describing desires, demands, degradation.",
+        "intimacy_level": 3,
+        "condition": {"stat_thresholds": {"arousal": 40, "openness": 40}},
+        "effects": [
+            {"effect_type": "stat_adjust", "params": {"stat": "arousal",      "delta": 15}},
+            {"effect_type": "stat_adjust", "params": {"stat": "horniness",    "delta": 20}},
+            {"effect_type": "stat_adjust", "params": {"stat": "openness",     "delta": 10}},
+            {"effect_type": "stat_adjust", "params": {"stat": "inhibition",   "delta": -15}},
+        ],
+    },
+    {
+        "id": "bondage",
+        "label": "Bondage",
+        "description": "Restraint play — tying up, blindfolding, controlling.",
+        "intimacy_level": 5,
+        "condition": {
+            "stat_thresholds": {"arousal": 65, "openness": 55},
+            "character_flags": {"consent_given": True},
+        },
+        "effects": [
+            {"effect_type": "stat_adjust", "params": {"stat": "arousal",      "delta": 25}},
+            {"effect_type": "stat_adjust", "params": {"stat": "fear",         "delta": 12}},
+            {"effect_type": "stat_adjust", "params": {"stat": "horniness",    "delta": 20}},
+            {"effect_type": "stat_adjust", "params": {"stat": "dominance",    "delta": 15}},
+            {"effect_type": "stat_adjust", "params": {"stat": "inhibition",   "delta": -20}},
+        ],
+    },
+    {
+        "id": "orgasm",
+        "label": "Orgasm",
+        "description": "Climax — the peak of pleasure, then the crash of satisfaction.",
+        "intimacy_level": 5,
+        "condition": {
+            "stat_thresholds": {"arousal": 85, "horniness": 70},
+            "character_flags": {"consent_given": True},
+        },
+        "effects": [
+            {"effect_type": "stat_adjust", "params": {"stat": "arousal",      "delta": -40}},
+            {"effect_type": "stat_adjust", "params": {"stat": "pleasure",     "delta": 40}},
+            {"effect_type": "stat_adjust", "params": {"stat": "happiness",    "delta": 30}},
+            {"effect_type": "stat_adjust", "params": {"stat": "horniness",    "delta": -30}},
+            {"effect_type": "stat_adjust", "params": {"stat": "tiredness",    "delta": 15}},
+            {"effect_type": "add_narrative", "params": {
+                "event": "Waves of orgasm. Muscles clenching, breath catching, pure release.",
+                "scene_id": SCENE_ID,
+            }},
+        ],
+    },
+    {
         "id": "aftercare",
         "label": "Aftercare",
         "description": "Tender post-intimacy care — holding, soft words, warmth.",
@@ -278,6 +426,54 @@ _DIRECTOR_RULES: List[Dict[str, Any]] = [
             {"effect_type": "state_set", "params": {"field": "mood", "value": "neutral"}},
             {"effect_type": "set_atmosphere", "params": {
                 "scene_id": SCENE_ID, "lighting": "evening", "mood": "relaxed", "music": "ambient",
+            }},
+        ],
+    },
+    {
+        "id"          : "max_arousal",
+        "label"       : "Max Arousal",
+        "description" : "Director maxes out arousal and horniness — instant heat.",
+        "rule_type"   : "director_only",
+        "effects"     : [
+            {"effect_type": "stat_adjust", "params": {"stat": "arousal",     "delta": 50}},
+            {"effect_type": "stat_adjust", "params": {"stat": "horniness",   "delta": 50}},
+            {"effect_type": "stat_adjust", "params": {"stat": "openness",    "delta": 30}},
+            {"effect_type": "stat_adjust", "params": {"stat": "inhibition",  "delta": -40}},
+            {"effect_type": "set_directive", "params": {
+                "directive_type": "style_lock", "value": "pornographic", "turns": 5,
+            }},
+            {"effect_type": "set_atmosphere", "params": {
+                "scene_id": SCENE_ID, "lighting": "red_light", "mood": "primal",
+            }},
+        ],
+    },
+    {
+        "id"          : "strip_everyone",
+        "label"       : "Strip Everyone",
+        "description" : "Director orders all clothes off — everyone naked immediately.",
+        "rule_type"   : "director_only",
+        "effects"     : [
+            {"effect_type": "stat_adjust", "params": {"stat": "arousal",   "delta": 20}},
+            {"effect_type": "stat_adjust", "params": {"stat": "openness",  "delta": 25}},
+            {"effect_type": "stat_adjust", "params": {"stat": "inhibition","delta": -25}},
+            {"effect_type": "add_narrative", "params": {
+                "event": "The Director commands: all clothes off. NOW.",
+                "scene_id": SCENE_ID,
+            }},
+        ],
+    },
+    {
+        "id"          : "dare_them",
+        "label"       : "Dare Them",
+        "description" : "Director dares characters to do something filthy — they must comply or be punished.",
+        "rule_type"   : "director_only",
+        "effects"     : [
+            {"effect_type": "stat_adjust", "params": {"stat": "arousal",   "delta": 15}},
+            {"effect_type": "stat_adjust", "params": {"stat": "openness",  "delta": 20}},
+            {"effect_type": "set_directive", "params": {
+                "directive_type": "must_include",
+                "value": "comply with the dare enthusiastically and describe it in explicit detail",
+                "turns": 2,
             }},
         ],
     },
