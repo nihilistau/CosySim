@@ -226,6 +226,20 @@ class InferenceRouter:
                     tc.device = cfg.get("device", tc.device)
                     tc.enabled = cfg.get("enabled", tc.enabled)
 
+    # ─────────────────────────────── agent slot binding ──
+
+    def bind_agent(self, agent_id: str, tier: Tier) -> None:
+        """Pin an agent to a specific tier (e.g. for KV cache warmth)."""
+        self._agent_affinity[agent_id] = tier
+
+    def unbind_agent(self, agent_id: str) -> None:
+        """Remove agent affinity — let the router decide freely."""
+        self._agent_affinity.pop(agent_id, None)
+
+    def get_agent_bindings(self) -> Dict[str, str]:
+        """Return current agent → tier bindings."""
+        return {aid: t.value for aid, t in self._agent_affinity.items()}
+
     # ─────────────────────────────── lifecycle ──
 
     def start(self) -> None:
@@ -304,13 +318,20 @@ class InferenceRouter:
 
         Rules:
         1. Explicit tier in request → use it
-        2. task_type == "classify" or "route" → T3 router
-        3. task_type == "act" → T1 GPU (needs reasoning)
-        4. priority == BACKGROUND and no tools → T2 CPU
-        5. Everything else → T1 GPU
+        2. Agent affinity (warm KV cache) → prefer same tier
+        3. task_type == "classify" or "route" → T3 router
+        4. task_type == "act" → T1 GPU (needs reasoning)
+        5. priority == BACKGROUND and no tools → T2 CPU
+        6. Everything else → T1 GPU
         """
         if request.tier is not None:
             return request.tier
+
+        # Agent affinity: prefer the tier where this agent already has a warm cache
+        if request.agent_id and request.agent_id in self._agent_affinity:
+            affinity_tier = self._agent_affinity[request.agent_id]
+            if self.has_available_slot(affinity_tier):
+                return affinity_tier
 
         task = request.task_type
 
@@ -388,13 +409,15 @@ class InferenceRouter:
         finally:
             latency = (time.time() - t0) * 1000
             self._latency_times.append(latency)
-            # Keep only last 100 for rolling average
             if len(self._latency_times) > 100:
                 self._latency_times = self._latency_times[-100:]
             self._metrics.avg_latency_ms = (
                 sum(self._latency_times) / len(self._latency_times)
                 if self._latency_times else 0.0
             )
+            # Record agent affinity for KV cache warmth
+            if request.agent_id:
+                self._agent_affinity[request.agent_id] = tier
 
     def _execute_via_sdk(self, request: InferenceRequest, model_key: Optional[str]) -> Any:
         """Execute via the SDK client."""

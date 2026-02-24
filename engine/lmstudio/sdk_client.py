@@ -338,7 +338,22 @@ class SDKClient:
             latency_ms = (time.time() - t0) * 1000
 
             stats = result.stats
-            return LMSResponse(
+            spec_decode_stats = {}
+            if stats:
+                accepted = getattr(stats, "accepted_draft_tokens_count", 0)
+                rejected = getattr(stats, "rejected_draft_tokens_count", 0)
+                total_draft = getattr(stats, "total_draft_tokens_count", 0)
+                draft_model = getattr(stats, "used_draft_model_key", "")
+                if total_draft > 0:
+                    spec_decode_stats = {
+                        "accepted": accepted,
+                        "rejected": rejected,
+                        "total_draft": total_draft,
+                        "acceptance_ratio": accepted / total_draft if total_draft else 0,
+                        "draft_model": draft_model,
+                    }
+
+            resp = LMSResponse(
                 content=result.content,
                 model=getattr(result.model_info, "display_name", model_key or ""),
                 finish_reason=getattr(stats, "stop_reason", "stop") if stats else "stop",
@@ -350,6 +365,10 @@ class SDKClient:
                 time_to_first_token_s=getattr(stats, "time_to_first_token_sec", 0.0) if stats else 0.0,
                 reasoning_content=getattr(result, "reasoning_content", ""),
             )
+            # Attach spec decode stats as extra attribute (not in dataclass)
+            if spec_decode_stats:
+                resp.spec_decode_stats = spec_decode_stats
+            return resp
         except Exception as exc:
             logger.error("SDK respond failed: %s", exc)
             return LMSResponse(content=f"[SDK Error] {exc}", latency_ms=(time.time() - t0) * 1000)
