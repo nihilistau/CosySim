@@ -29,6 +29,7 @@ Execution order (by priority):
   85  TTSStyleInterceptor          — inject TTS voice style tags
   90  ActivityLoggerInterceptor    — post-call: log final reply to EventChain
   92  MoodSyncInterceptor          — post-call: sync mood/actions to framework state
+  93  RelationshipEventInterceptor — post-call: auto-apply buffs from interactions
 
 Adding your own::
 
@@ -2031,6 +2032,9 @@ class NaturalMoodDriftInterceptor(InterceptorBase):
             if drifts_applied:
                 coord.update(agent_id, source="mood_drift", **drifts_applied)
 
+            # Sweep expired buffs (piggyback on drift — runs every call)
+            coord.sweep_all_expired_buffs()
+
             # Pick the most relevant inner thought
             thought = None
             arousal = state.get("arousal", 50)
@@ -2140,6 +2144,100 @@ class ConversationRecapInterceptor(InterceptorBase):
 #  MoodSyncInterceptor  (priority 92)
 
 # ══════════════════════════════════════════════════════════════════════
+#  RelationshipEventInterceptor  (priority 93)
+#  Post-call: detects relationship-significant interactions in the LLM
+#  output (physical touch, compliments, arguments, sexual acts) and
+#  auto-applies temporary buffs/debuffs via CharacterStateCoordinator.
+#  This makes interactions leave lasting emotional residue — a cuddle
+#  creates warmth that fades, an argument creates tension that heals.
+# ══════════════════════════════════════════════════════════════════════
+
+class RelationshipEventInterceptor(InterceptorBase):
+    """
+    Post-call interceptor that detects relationship-significant events
+    in agent replies and applies temporary buffs via the StateCoordinator.
+
+    Buffs stack, expire independently, and reverse cleanly.
+    """
+    name     = "relationship_event"
+    priority = 93
+
+    # Keyword → buff definition: (buff_id_suffix, stat_deltas, duration_secs)
+    _INTERACTION_BUFFS: Dict[str, tuple] = {
+        # Affectionate
+        "cuddle":    ("warmth",   {"affection": 8, "arousal": 3, "trust": 2}, 300),
+        "hug":       ("warmth",   {"affection": 5, "trust": 2}, 180),
+        "kiss":      ("kiss",     {"affection": 10, "arousal": 8, "trust": 3}, 240),
+        "caress":    ("caress",   {"affection": 6, "arousal": 10}, 200),
+        "massage":   ("massage",  {"arousal": 12, "affection": 4}, 300),
+        # Intimate
+        "moan":      ("pleasure", {"arousal": 15, "affection": 5}, 180),
+        "orgasm":    ("climax",   {"arousal": 20, "affection": 12, "trust": 5}, 300),
+        "thrust":    ("sex_act",  {"arousal": 18, "affection": 3}, 180),
+        "lick":      ("oral",     {"arousal": 14, "affection": 4}, 180),
+        "suck":      ("oral",     {"arousal": 16, "affection": 3}, 180),
+        "penetrat":  ("sex_act",  {"arousal": 20, "affection": 5, "trust": 3}, 240),
+        "ride":      ("sex_act",  {"arousal": 18, "affection": 5}, 200),
+        "spank":     ("rough",    {"arousal": 12, "affection": -2}, 120),
+        # Social
+        "compliment":("flattered",{"affection": 4, "trust": 3}, 120),
+        "laugh":     ("joy",      {"affection": 3}, 90),
+        "flirt":     ("flirty",   {"arousal": 5, "affection": 4}, 120),
+        "tease":     ("teased",   {"arousal": 4, "affection": 2}, 90),
+        "wink":      ("flirty",   {"arousal": 3, "affection": 2}, 60),
+        # Negative
+        "argue":     ("tension",  {"affection": -6, "trust": -4, "anger": 10}, 300),
+        "insult":    ("hurt",     {"affection": -10, "trust": -8, "anger": 15}, 600),
+        "yell":      ("shaken",   {"affection": -5, "trust": -3, "anger": 12}, 240),
+        "cry":       ("sympathy", {"affection": 3, "trust": 2}, 180),
+        "apologize": ("mending",  {"affection": 4, "trust": 5, "anger": -8}, 300),
+    }
+
+    # Don't fire more than once per interaction cycle for the same buff type
+    _COOLDOWN_SECS = 10.0
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self._last_fired: Dict[str, float] = {}  # "agent:buff_id" → timestamp
+
+    def post_call(self, ctx: ResponseContext) -> None:
+        agent_id = ctx.get("agent_id", "")
+        reply = ctx.get("reply", "")
+        if not reply or not agent_id:
+            return
+
+        reply_lower = reply.lower()
+        now = time.time()
+        applied = []
+
+        for keyword, (buff_suffix, deltas, duration) in self._INTERACTION_BUFFS.items():
+            if keyword in reply_lower:
+                cooldown_key = f"{agent_id}:{buff_suffix}"
+                last = self._last_fired.get(cooldown_key, 0)
+                if now - last < self._COOLDOWN_SECS:
+                    continue
+
+                try:
+                    from engine.mcp.state_coordinator import get_coordinator
+                    coord = get_coordinator()
+                    buff_id = f"rel_{buff_suffix}_{int(now) % 10000}"
+                    coord.add_buff(
+                        agent_id, buff_id, dict(deltas), duration,
+                        source=f"relationship_event:{keyword}",
+                    )
+                    self._last_fired[cooldown_key] = now
+                    applied.append(f"{keyword}→{buff_suffix}")
+                except Exception as exc:
+                    logger.debug("RelationshipEventInterceptor: buff failed: %s", exc)
+
+        if applied:
+            logger.info(
+                "RelationshipEventInterceptor: %s buffs applied to %s: %s",
+                len(applied), agent_id, ", ".join(applied[:5]),
+            )
+
+
+# ══════════════════════════════════════════════════════════════════════
 #  Module exports
 # ══════════════════════════════════════════════════════════════════════
 
@@ -2168,6 +2266,7 @@ __all__ = [
     "TTSStyleInterceptor",             # 85
     "ActivityLoggerInterceptor",       # 90
     "MoodSyncInterceptor",             # 92
+    "RelationshipEventInterceptor",    # 93
     # v3.1 utilities
     "INTERCEPTOR_CACHE",
     # Constant for scene ID

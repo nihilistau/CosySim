@@ -396,6 +396,14 @@ class CharacterStateCoordinator:
             for bid, b in buffs.items() if b.expires_at > now
         }
 
+    def sweep_all_expired_buffs(self) -> int:
+        """Sweep expired buffs for ALL characters. Returns total removed count."""
+        total = 0
+        for char_id in list(self._buffs.keys()):
+            removed = self.remove_expired_buffs(char_id)
+            total += len(removed)
+        return total
+
     # ── Attraction Model ─────────────────────────────────────────────
 
     def calculate_attraction(

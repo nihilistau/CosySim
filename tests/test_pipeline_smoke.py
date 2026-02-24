@@ -1048,10 +1048,10 @@ class TestActionBasedHeatBumping:
         assert hasattr(ms, "_bump_heat_from_actions")
 
     def test_pipeline_interceptor_count(self):
-        """Pipeline should have 22 interceptors (added Universal + Ambient in Sprint 6)."""
+        """Pipeline should have 24 interceptors (added RelationshipEvent in Sprint 11)."""
         from engine.mcp.comms_framework import _build_default_pipeline
         pipeline = _build_default_pipeline()
-        assert len(pipeline._interceptors) == 23
+        assert len(pipeline._interceptors) == 24
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -1520,8 +1520,70 @@ class TestConversationRecapInterceptor:
         # Should contain recent ones
         assert "msg_4" in prompt or "reply_4" in prompt
 
-    def test_pipeline_count_is_23(self):
-        """Verify pipeline now has 23 interceptors."""
+    def test_pipeline_count_is_24(self):
+        """Verify pipeline now has 24 interceptors (added RelationshipEvent)."""
         from engine.mcp.comms_framework import _build_default_pipeline
         pipeline = _build_default_pipeline()
-        assert len(pipeline._interceptors) == 23
+        assert len(pipeline._interceptors) == 24
+
+
+# ── RelationshipEventInterceptor Tests ────────────────────────────
+
+class TestRelationshipEventInterceptor:
+    """Tests for the RelationshipEventInterceptor (priority 93)."""
+
+    def _make_interceptor(self):
+        from engine.agents.interceptors import RelationshipEventInterceptor
+        return RelationshipEventInterceptor()
+
+    def test_exists_in_pipeline(self):
+        from engine.mcp.comms_framework import _build_default_pipeline
+        pipeline = _build_default_pipeline()
+        names = [i.name for i in pipeline._interceptors]
+        assert "relationship_event" in names
+
+    def test_priority_93(self):
+        i = self._make_interceptor()
+        assert i.priority == 93
+
+    def test_detects_cuddle_keyword(self):
+        """Post-call with 'cuddle' in reply should attempt buff application."""
+        i = self._make_interceptor()
+        ctx = {"agent_id": "test_char", "reply": "She cuddled up close and sighed"}
+        i.post_call(ctx)
+
+    def test_detects_multiple_keywords(self):
+        """Multiple keywords in one reply should attempt multiple buffs."""
+        i = self._make_interceptor()
+        ctx = {"agent_id": "test_char", "reply": "She kissed him then started to moan"}
+        i.post_call(ctx)
+
+    def test_no_agent_id_skips(self):
+        """Should skip gracefully when no agent_id."""
+        i = self._make_interceptor()
+        ctx = {"reply": "cuddle time"}
+        i.post_call(ctx)
+
+    def test_no_reply_skips(self):
+        """Should skip gracefully when no reply."""
+        i = self._make_interceptor()
+        ctx = {"agent_id": "test_char"}
+        i.post_call(ctx)
+
+    def test_cooldown_prevents_rapid_fire(self):
+        """Same buff type shouldn't fire twice rapidly."""
+        i = self._make_interceptor()
+        ctx = {"agent_id": "test_char", "reply": "cuddle cuddle cuddle"}
+        i.post_call(ctx)
+        assert any("warmth" in k for k in i._last_fired)
+
+    def test_negative_keywords_detected(self):
+        """Negative interactions should also be detected."""
+        i = self._make_interceptor()
+        ctx = {"agent_id": "test_char", "reply": "She started to argue loudly"}
+        i.post_call(ctx)
+
+    def test_has_interaction_buffs_dict(self):
+        """Should have a populated _INTERACTION_BUFFS dict."""
+        i = self._make_interceptor()
+        assert len(i._INTERACTION_BUFFS) > 20

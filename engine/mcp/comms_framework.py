@@ -768,6 +768,7 @@ def _build_default_pipeline() -> InterceptorPipeline:
         TTSStyleInterceptor,
         ActivityLoggerInterceptor,
         MoodSyncInterceptor,
+        RelationshipEventInterceptor,
     )
     pipeline = InterceptorPipeline()
     pipeline.add(NaturalMoodDriftInterceptor())  #  5
@@ -793,6 +794,7 @@ def _build_default_pipeline() -> InterceptorPipeline:
     pipeline.add(TTSStyleInterceptor())          # 85
     pipeline.add(ActivityLoggerInterceptor())    # 90
     pipeline.add(MoodSyncInterceptor())          # 92
+    pipeline.add(RelationshipEventInterceptor()) # 93
     return pipeline
 
 

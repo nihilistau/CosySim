@@ -1220,3 +1220,106 @@ light_touch → kiss → caress → striptease → intimate → explicit → dep
 | Sprint 10 | N/A | BedroomSceneInterceptor adult mode header | Done |
 | Sprint 10 | N/A | Stronger heat-level directives | Done |
 | Sprint 10 | N/A | 1245 tests passing | Done |
+
+---
+
+## Revelation #44: Governance Context Without Full Governor
+
+**Finding:** Scenes that use VAM streaming or raw LMS calls can't use the full
+AgentGovernor pipeline (which wraps the agent's reply method). But they still
+benefit from interceptor-generated directives (mood, personality, heat, scene rules).
+
+**Solution implemented:** `build_governance_context(agent_id, scene, user_message)`
+in comms_framework.py. Runs the full interceptor pipeline PRE phase, extracts
+the generated system prompt directives, and returns them as a string. Scenes
+append this to their own system prompts. Now used by Warzone, NeonCity, Realm,
+Coders, and Gallery.
+
+**Design pattern:** Two paths to governance:
+1. **Full governor** (Phone, Bedroom, Lounge, Casino): wraps agent, runs pre+post
+2. **Context-only** (Gallery, Warzone, Realm, NeonCity, Coders): calls build_governance_context(),
+   appends to system prompt, makes own LLM call
+
+---
+
+## Revelation #45: Character Emotions Were Drifting Too Fast
+
+**Finding:** NaturalMoodDriftInterceptor was applying -2.0 arousal, +1.0 tiredness
+per call. With characters responding every few seconds, stats would swing
+dramatically within a minute. Characters would go from aroused to bored in 5 turns.
+
+**Solution:** Halved all drift rates (arousal: -2→-1, anger: -3→-1.5, etc.).
+Added affection drift (-0.2/call — barely moves). Also expanded from 4 scenes
+to ALL 10 scenes.
+
+**Design insight:** Emotional inertia matters. Real emotions don't snap instantly.
+Slow drift makes characters feel more human. Fast changes should only come from
+explicit events (not passive decay).
+
+---
+
+## Revelation #46: All Scenes Now Have MCP Rules
+
+**Finding:** 5 of 11 scenes had no rules file at all. Rules define the game's
+boundaries and atmosphere. Without rules, the agent has no framework constraints
+and can go off-rails.
+
+**Solution:** Created rules files for all remaining scenes:
+- warzone_rules.py (8 rules, 5 actions)
+- neoncity_rules.py (10 rules, 5 actions)
+- realm_rules.py (14 rules, 7 actions)
+- gallery_rules.py (7 rules, 5 actions)
+- coders_rules.py (8 rules, 4 actions)
+
+**Compliance status:** 11/11 scenes now have rules files. Command Center is the
+only scene without one (intentional — it's a monitoring dashboard, not a game).
+
+---
+
+## Revelation #47: InteractionTree Was Defined But Never Wired
+
+**Finding:** engine/mcp/interaction_trees.py had 830 lines of rich interaction
+data (6 bedroom types, 6 phone types, phases, stat effects, intensity gating)
+but zero consumers. The bedroom scene's director_interact route just did
+string concatenation.
+
+**Solution:** Wired InteractionTree into bedroom's director_interact. Now maps
+common keywords to tree types, resolves phases + fragments, applies stat effects
+via StateCoordinator, and generates phase-aware directives for agents.
+
+**Impact:** Director interactions now have narrative flow (phases), stat consequences,
+and intensity gating based on character state.
+
+---
+
+## Revelation #48: Relationship Buffs Enable Temporal Dynamics
+
+**Idea:** Interactions should leave lasting but temporary effects on characters.
+A good conversation should give a "warmth buff" that slowly fades. A fight
+should apply a "tension debuff" that wears off over minutes. This creates
+relationship dynamics that feel organic — you need to maintain relationships,
+not just set stats once.
+
+**Implemented:** RelationshipBuff system in CharacterStateCoordinator:
+- add_buff(char, id, deltas, duration) — temporary stat modifiers
+- remove_expired_buffs() — auto-reverses effects
+- get_active_buffs() — query active modifiers
+- Buffs stack, expire independently, reverse cleanly
+
+**Next:** Wire buff application into scene events (cuddle → warmth buff,
+argument → tension debuff, sex → intimacy buff). Timer-based expiry sweep.
+
+---
+
+## Implementation Log (Sprint 11 — Scene AAA Upgrade)
+
+| Sprint | Revelation | Action | Status |
+|--------|-----------|--------|--------|
+| Sprint 11 | #44 | build_governance_context() + wired 5 scenes | Done |
+| Sprint 11 | #45 | Halved drift rates, expanded to all scenes | Done |
+| Sprint 11 | #46 | Created 5 new rules files (11/11 scenes covered) | Done |
+| Sprint 11 | #47 | Wired InteractionTree into bedroom director_interact | Done |
+| Sprint 11 | #48 | RelationshipBuff system + attraction model | Done |
+| Sprint 11 | N/A | Command Center: 8 routes, 6 skills, live monitor | Done |
+| Sprint 11 | N/A | Phone Hacker App (targets, profile, messages, inject) | Done |
+| Sprint 11 | N/A | 1262 tests passing (was 1245) | Done |
