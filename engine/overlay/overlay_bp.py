@@ -459,7 +459,7 @@ def api_streaming():
             "conversations": [
                 {
                     "id": c.conversation_id,
-                    "turns": len(c._history),
+                    "turns": getattr(c, "turn_count", 0),
                     "branches": len(getattr(c, "_response_id_history", [])),
                 }
                 for c in (convos if isinstance(convos, list) else [])
@@ -512,14 +512,33 @@ def api_inference():
         return jsonify({"ok": False, "error": str(exc)}), 500
 
 
-@overlay_bp.route("/api/router", methods=["GET"])
+@overlay_bp.route("/api/router", methods=["GET", "POST"])
 def api_router():
-    """Get InferenceRouter metrics — queue depth, tier slots, throughput."""
+    """Get InferenceRouter metrics or update router config live."""
     try:
         from engine.lmstudio.router import get_router
         router = get_router()
         if router is None:
             return jsonify({"ok": False, "error": "Router not initialised"}), 503
+
+        if request.method == "POST":
+            data = request.get_json(force=True)
+            if "max_queue_depth" in data:
+                router._max_queue_depth = int(data["max_queue_depth"])
+            if "preempt_on_priority" in data:
+                router._preempt = bool(data["preempt_on_priority"])
+            # Per-tier slot adjustments
+            tier_updates = data.get("tiers", {})
+            for tier, tc in router._tiers.items():
+                tier_name = tier.value if hasattr(tier, "value") else str(tier)
+                if tier_name in tier_updates:
+                    tc_data = tier_updates[tier_name]
+                    if "max_slots" in tc_data:
+                        tc.max_slots = int(tc_data["max_slots"])
+                    if "enabled" in tc_data:
+                        tc.enabled = bool(tc_data["enabled"])
+            return jsonify({"ok": True, "applied": data})
+
         metrics = router.get_metrics()
         return jsonify({"ok": True, **metrics})
     except Exception as exc:

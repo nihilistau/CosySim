@@ -2,6 +2,32 @@
 
 All notable changes to CosySim are documented here.
 
+## [4.0.1] — 2026-02-24
+
+### TagRegistry — Extensible Tag System
+- **TagRegistry singleton** (`engine/mcp/tag_registry.py`) — thread-safe, extensible tag definitions
+- **9 built-in tags**: MOOD, IMAGE, ACTION, STAT, VOICE (original) + SEND, EVENT, MEMORY, THINK (routing)
+- **Scene-specific tags**: Heist `[PLAN:]`, Warzone `[ORDER:]`, NeonCity `[HACK:]`
+- **Consumer refactoring**: StreamProcessor, StreamWatcher, TokenRouter all use TagRegistry for strip patterns and intent maps
+- **52 new tests** for TagRegistry (detection, stripping, custom tags, dispatch, integration)
+
+### Scene Framework Upgrades (all 10 scenes)
+- **Shared frontend assets** — `register_shared_assets()` Blueprint serving `/shared/css/` and `/shared/js/`
+- **SceneStateManager** wired into all scenes for unified state bridge to MCP skills/interceptors
+- **TagRegistry** initialized in all scene `__init__` methods
+- **Casino** — state sync bridge (chips, pot, round, phase) to SceneStateManager
+- **NeonCity** — upgraded with TagRegistry, shared assets, SceneStateManager, custom [HACK:] tag
+
+### Overlay Router Monitoring
+- **`/overlay/api/router`** (GET) — live queue depth, tier counts, priority distribution, slot usage
+- **`/overlay/api/router`** (POST) — live config changes: queue depth, preemption, per-tier slot/enabled
+- **`/overlay/api/router/tiers`** (GET) — per-tier model key, device, max/busy/available slots
+- **Conversation overlay bugfix** — fixed `_history` attribute error (now uses `turn_count` property)
+
+### Testing
+- **1143 tests passing** across 40 test files (up from 1084)
+- New: `test_tag_registry.py` (52 tests), `test_overlay_router.py` (7 tests)
+
 ## [3.2.0] — 2026-02-23
 
 ### API-Complete LMStudio v1 REST Client

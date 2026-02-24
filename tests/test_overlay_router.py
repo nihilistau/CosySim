@@ -60,6 +60,31 @@ class TestRouterOverlayEndpoint:
         assert data["ok"] is False
         assert "boom" in data["error"]
 
+    def test_router_config_post(self, client):
+        """POST /overlay/api/router updates live config."""
+        from engine.lmstudio.router import InferenceRouter, Tier, TierConfig
+
+        router = InferenceRouter(
+            tiers={
+                Tier.GPU_PRIMARY: TierConfig(tier=Tier.GPU_PRIMARY, model_key="test",
+                                              max_slots=2, device="gpu"),
+            },
+            max_queue_depth=50,
+        )
+
+        import engine.lmstudio.router as router_mod
+        with patch.object(router_mod, "get_router", return_value=router):
+            resp = client.post("/overlay/api/router", json={
+                "max_queue_depth": 100,
+                "tiers": {"gpu_primary": {"max_slots": 4}},
+            })
+
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["ok"] is True
+        assert router._max_queue_depth == 100
+        assert router._tiers[Tier.GPU_PRIMARY].max_slots == 4
+
 
 class TestRouterTiersEndpoint:
     """Tests for /overlay/api/router/tiers — per-tier slot info."""
