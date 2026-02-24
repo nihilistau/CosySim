@@ -573,6 +573,19 @@ class CasinoScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
             entry_type="game",
         )
 
+        # Submit to casino leaderboard
+        if winner == "player":
+            try:
+                from engine.mcp.shared_boards import get_shared_boards
+                boards = get_shared_boards()
+                boards.submit_score(
+                    "casino_highrollers", "Director",
+                    self.player_chips,
+                    metadata={"round": self.round_number, "hand": player_eval["rank"]},
+                )
+            except Exception:
+                pass
+
         return self._get_game_state()
 
     def _order_drink(self, drink_id: str) -> Dict:

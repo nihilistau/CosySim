@@ -206,6 +206,20 @@ class HeistScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
                 return jsonify({"error": "No active game"}), 400
             new_phase = self.game.advance_phase()
             self._broadcast_state()
+            # Submit to leaderboard on heist completion
+            if new_phase == Phase.COMPLETE and self.game.loot_collected > 0:
+                try:
+                    from engine.mcp.shared_boards import get_shared_boards
+                    get_shared_boards().submit_score(
+                        "heist_legends", "Mastermind",
+                        self.game.loot_collected,
+                        metadata={
+                            "venue": self.game.venue.get("name", "unknown"),
+                            "suspicion": self.game.suspicion,
+                        },
+                    )
+                except Exception:
+                    pass
             return jsonify({"phase": new_phase.value})
 
         @app.route("/api/game/loot", methods=["POST"])
@@ -420,11 +434,21 @@ class HeistScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
             f"{personality}\n\n"
             f"CURRENT SITUATION:\n{situation}\n\n"
             f"{phase_guide}\n\n"
+            f"{self._get_governance_context(member.character_id)}"
             "You may use [MOOD:emotion] to express how you're feeling.\n"
             "You may use [ACTION:action_name] to perform a heist action.\n"
             "You may use [IMAGE:description] to generate a visual.\n"
             "Keep responses under 3 sentences. Stay in character."
         )
+
+    def _get_governance_context(self, agent_id: str) -> str:
+        """Get governance directives from the interceptor pipeline."""
+        try:
+            from engine.mcp.comms_framework import build_governance_context
+            ctx = build_governance_context(agent_id, "heist", "")
+            return f"{ctx}\n\n" if ctx else ""
+        except Exception:
+            return ""
 
     def _build_tick_prompt(self, member: CrewMember) -> str:
         """Build a prompt for autonomous crew tick."""
