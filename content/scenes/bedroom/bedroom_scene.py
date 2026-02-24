@@ -46,6 +46,7 @@ from content.simulation.character_system.character import Character
 from content.shared import register_shared_assets
 from engine.mcp.scene_state import get_scene_state_manager
 from engine.mcp.tag_registry import TagRegistry
+from engine.mcp.interaction_trees import BEDROOM_INTERACTIONS, get_interaction_result
 
 # ══════════════════════════════════════════════════════════════════════
 #  CONSTANTS
@@ -1596,10 +1597,64 @@ class BedroomScene(BaseScene, MCPSceneMixin, mcp_scene_id="bedroom"):
                 return jsonify({"error": "No interaction specified"}), 400
             actor_name = self.characters[actor_id].name if actor_id in self.characters else self.director_name
             target_name = self.characters[target_id].name if target_id in self.characters else "the room"
-            self._inject_to_loop("(environment)", f"{actor_name} {interaction} {target_name}.", "environment")
-            self.socketio.emit("scene_event", {"type": "interaction", "message": f"{actor_name} {interaction} {target_name}"})
+
+            # Try to resolve via InteractionTree for richer directives
+            tree_result = None
+            interaction_lower = interaction.lower().strip()
+            # Map common interaction words to tree types
+            tree_map = {
+                "cuddle": "cuddle", "spoon": "cuddle", "hold": "cuddle",
+                "kiss": "kiss", "make out": "kiss",
+                "touch": "touch", "caress": "touch", "fondle": "touch",
+                "massage": "massage", "rub": "massage",
+                "talk": "deep_talk", "pillow talk": "deep_talk", "whisper": "deep_talk",
+                "sex": "penetration", "fuck": "penetration", "ride": "penetration",
+                "penetration": "penetration",
+            }
+            matched_type = None
+            for keyword, tree_type in tree_map.items():
+                if keyword in interaction_lower:
+                    matched_type = tree_type
+                    break
+
+            if matched_type:
+                actor_stats = {}
+                try:
+                    from engine.mcp.state_coordinator import get_coordinator
+                    actor_stats = get_coordinator().get_full_state(actor_id or "director") or {}
+                except Exception:
+                    pass
+                tree_result = get_interaction_result(
+                    matched_type, scene="bedroom", initiator_stats=actor_stats
+                )
+
+            # Build directive with phases and fragments if available
+            if tree_result and not tree_result.get("error"):
+                phases = tree_result.get("phases", [])
+                fragments = tree_result.get("fragments", [])
+                phase_hint = f" Phases: {' → '.join(phases)}." if phases else ""
+                fragment_hint = f' Inspiration: "{fragments[0]}"' if fragments else ""
+                directive = f"{actor_name} initiates {tree_result['label']} with {target_name}.{phase_hint}{fragment_hint}"
+                # Apply stat effects
+                if tree_result.get("stat_effects") and actor_id:
+                    try:
+                        from engine.mcp.state_coordinator import get_coordinator
+                        get_coordinator().update(actor_id, source="interaction_tree", **tree_result["stat_effects"])
+                    except Exception:
+                        pass
+            else:
+                directive = f"{actor_name} {interaction} {target_name}."
+
+            self._inject_to_loop("(environment)", directive, "environment")
+            self.socketio.emit("scene_event", {"type": "interaction", "message": directive})
             self._broadcast_state()
             return jsonify({"success": True})
+
+        @self.app.route("/api/interactions")
+        def list_interactions():
+            """List available interaction types with stat requirements."""
+            from engine.mcp.interaction_trees import list_interaction_types
+            return jsonify({"ok": True, "interactions": list_interaction_types("bedroom")})
 
         # ── Bed Sex Game ───────────────────────────────────────────────
         @self.app.route("/api/bedgame/start", methods=["POST"])
