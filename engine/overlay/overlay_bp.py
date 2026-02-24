@@ -684,8 +684,8 @@ def api_scene_summary():
     """
     Cross-scene narrative summary — what's happening across ALL scenes right now.
 
-    Returns per-scene narrative entries, active characters, and heat levels
-    in a single unified response for dashboards and cross-scene consumers.
+    Returns per-scene narrative entries, active characters, heat levels,
+    character states, and active buffs in a single unified response.
     """
     try:
         from engine.mcp.scene_state import get_scene_state_manager
@@ -718,9 +718,79 @@ def api_scene_summary():
                     scene_data["heat"] = scene_heat
             except Exception:
                 pass
+            # Include character states for the scene
+            try:
+                from engine.mcp.state_coordinator import get_coordinator
+                coord = get_coordinator()
+                chars = ssm.get_stats(scene_id) or {}
+                char_ids = chars.get("characters", [])
+                if char_ids:
+                    char_states = {}
+                    for cid in char_ids[:10]:
+                        state = coord.get_full_state(cid)
+                        if state:
+                            char_states[cid] = {
+                                "mood": state.get("mood", "neutral"),
+                                "energy": round(state.get("energy", 50)),
+                                "arousal": round(state.get("arousal", 50)),
+                                "affection": round(state.get("affection", 50)),
+                            }
+                            buffs = coord.get_active_buffs(cid)
+                            if buffs:
+                                char_states[cid]["active_buffs"] = len(buffs)
+                    if char_states:
+                        scene_data["characters"] = char_states
+            except Exception:
+                pass
             summary[scene_id] = scene_data
 
         return jsonify({"ok": True, "scenes": summary})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+@overlay_bp.route("/api/characters/<char_id>/buffs")
+def api_character_buffs(char_id):
+    """Get active buffs for a character."""
+    try:
+        from engine.mcp.state_coordinator import get_coordinator
+        coord = get_coordinator()
+        buffs = coord.get_active_buffs(char_id)
+        return jsonify({"ok": True, "character": char_id, "buffs": buffs})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+@overlay_bp.route("/api/characters/<char_id>/buffs", methods=["POST"])
+def api_add_character_buff(char_id):
+    """Manually add a buff to a character (admin/debug)."""
+    try:
+        from engine.mcp.state_coordinator import get_coordinator
+        data = request.get_json(silent=True) or {}
+        buff_id = data.get("buff_id", f"manual_{int(time.time()) % 10000}")
+        deltas = data.get("deltas", {})
+        duration = data.get("duration", 300)
+        if not deltas:
+            return jsonify({"ok": False, "error": "deltas required"}), 400
+        coord = get_coordinator()
+        coord.add_buff(char_id, buff_id, deltas, duration, source="admin_manual")
+        return jsonify({"ok": True, "buff_id": buff_id})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+@overlay_bp.route("/api/characters/<char_id>/attraction/<other_id>")
+def api_character_attraction(char_id, other_id):
+    """Calculate attraction between two characters."""
+    try:
+        from engine.mcp.state_coordinator import get_coordinator
+        coord = get_coordinator()
+        score = coord.calculate_attraction(char_id, other_id)
+        return jsonify({
+            "ok": True,
+            "from": char_id, "to": other_id,
+            "attraction": round(score, 1),
+        })
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 500
 
