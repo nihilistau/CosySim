@@ -1,6 +1,6 @@
 # CosySim — Agent Notes & System Architecture
 
-Generated: [2026-02-22T23:00:00Z] — v3.1.0
+Generated: [2026-07-25T00:00:00Z] — v4.0.0
 
 > Complete structural summary of the CosySim AI simulation framework.
 > Covers file dependencies, game loop, MCP skill system, scene architecture,  
@@ -23,7 +23,15 @@ Generated: [2026-02-22T23:00:00Z] — v3.1.0
 11. [Phase 5 — VirtualAgent Framework](#11-phase-5--virtualagent-framework)
 12. [Phase 6 — v2.5 Framework Push](#12-phase-6--v25-framework-push)
 13. [Phase 7 — v2.7 LMStudio Native Upgrade](#13-phase-7--v27-lmstudio-native-upgrade)
-14. [Phase 10 — v3.1 Showcase Scenes & MCP Skills Expansion](#16-phase-10--v31-showcase-scenes--mcp-skills-expansion)
+14. [Phase 8 — v2.8 Stateful-First Conversations](#14-phase-8--v28-stateful-first-conversations--framework-upgrade)
+15. [Phase 9 — v2.9 Unified Pipeline & System Consolidation](#15-phase-9--v29-unified-pipeline--system-consolidation)
+16. [Phase 10 — v3.1 Showcase Scenes & MCP Skills Expansion](#16-phase-10--v31-showcase-scenes--mcp-skills-expansion)
+17. [Phase 11 — v4.0 VirtualPipeline Architecture](#17-phase-11--v40-virtualpipeline-architecture)
+18. [Phase 12 — Observability & Command Center](#18-phase-12--observability--command-center)
+19. [Phase 13 — Training Data Pipeline](#19-phase-13--training-data-pipeline)
+20. [Phase 14 — Frontend Improvements](#20-phase-14--frontend-improvements)
+21. [Complete Scene Registry (v4.0)](#21-complete-scene-registry-v40)
+22. [Test Coverage (v4.0)](#22-test-coverage-v40)
 
 ---
 
@@ -2522,3 +2530,233 @@ scene's `__init__.py` importing the skills module.
 - `tests/test_neoncity.py` — 26 unit tests (player, grid, storm, combat)
 - `tests/test_coders.py` — 22 unit tests (agents, pipeline, sandbox)
 - `tests/test_scene_routes.py` — 29 integration tests (Flask routes, skill registration)
+
+---
+
+
+---
+
+## 17. Phase 11 — v4.0 VirtualPipeline Architecture
+
+**Version:** 4.0.0  
+**Test count:** 1084 tests, 0 failures
+
+### 19.1 Architecture Overview
+
+The VirtualPipeline introduces parallel stream processing to CosySim. Instead of
+the old sequential flow (Scene → Agent → VAM → LMStudio → wait → Response), the
+new architecture runs a StreamWatcher alongside the main generation.
+
+While the primary LLM generates tokens, a StreamWatcher running on CPU analyzes
+them in real time. By token 3-5 the watcher knows the intent. By the time the
+primary LLM finishes, MCP tool results are already waiting. If the generation
+goes off-rails, we kill it mid-stream and retry.
+
+### 19.2 Key Files
+
+| File | Purpose |
+|------|---------|
+| `engine/pipeline/__init__.py` | Package exports |
+| `engine/pipeline/pipeline_result.py` | PipelineResult, PipelineConfig, WatcherAnalysis |
+| `engine/pipeline/virtual_pipeline.py` | Core orchestrator: execute() + execute_stream() |
+| `engine/pipeline/stream_watcher.py` | Rule-based + model-based stream analysis |
+| `engine/pipeline/kill_switch.py` | Quality gate: repetition, budget, acceptability |
+| `engine/pipeline/token_router.py` | Token-ahead MCP tool pre-warming |
+
+### 17.3 PipelineResult
+
+`PipelineResult` extends the existing `ProcessedResponse` with pipeline metadata:
+
+- `response_id` / `branch_id` — KV cache reuse + conversation branching
+- `watcher_analysis` — intent, acceptability score, signals
+- `pre_warmed_results` — tool results ready before generation ended
+- `generation_killed` — whether kill switch fired
+- `retry_count` — how many retry attempts
+- `pipeline_latency_ms` — total pipeline overhead
+
+### 17.4 StreamWatcher (Two Speeds)
+
+1. **Rule-based (instant, no model):** Repetition detection, token budget, forbidden
+   word scan. Always runs even without a router model.
+2. **Model-based (~50ms):** Intent classification, acceptability scoring. Uses
+   fine-tuned Gemma 270M on CPU when available. Degrades gracefully.
+
+### 17.5 Kill Switch
+
+Triggers generation cancellation when:
+- Acceptability below threshold (default 0.3)
+- Repetition detected (same phrase 3+ times)
+- Token budget exceeded
+- Rule violation (forbidden content)
+
+Retry strategy: lower temperature, add explicit constraint, max 2 retries.
+
+### 17.6 Token-Ahead Router
+
+When the watcher detects intent (e.g., "image generation"), the router starts
+MCP tool calls immediately — while tokens are still generating. By the time the
+LLM finishes, tool results are already waiting. Zero-latency tool execution.
+
+### 17.7 VAM Integration
+
+`VirtualAgentManager` gains:
+- `get_pipeline()` — lazy-init with double-check locking
+- `infer_with_pipeline(request)` — composes pipeline with existing infer_stream()
+- Falls back to `infer_processed()` when pipeline unavailable
+- Pipeline stats exposed via `get_stats()`
+
+### 17.8 Scene Integration
+
+All major scenes upgraded to prefer pipeline:
+- **Bedroom** (via AgentLoop `_infer()` helper)
+- **Phone** (both `_PhoneCharacterAgent.reply()` and `_generate_reply()`)
+- **Heist** (new scene, built pipeline-native)
+
+### 17.9 Configuration
+
+```yaml
+pipeline:
+  enabled: true
+  watcher:
+    enabled: true
+    model_key: "cosysim-gemma-270m-router"
+    trigger_tokens: 8
+  kill_switch:
+    enabled: true
+    threshold: 0.3
+    max_retries: 2
+    repetition_limit: 3
+  token_ahead:
+    enabled: true
+    pre_warm_timeout: 5.0
+```
+
+---
+
+## 18. Phase 12 — Observability & Command Center
+
+### 20.1 Observability Stack
+
+| Component | File | Purpose |
+|-----------|------|---------|
+| MetricsCollector | `engine/observability/metrics_collector.py` | Background daemon, hooks all components |
+| MetricsDB | `engine/observability/metrics_db.py` | SQLite time-series storage |
+| AlertEngine | `engine/observability/alerts.py` | Threshold-based alerting (green/yellow/red) |
+| TrainingCapture | `engine/observability/training_capture.py` | Auto-captures training data from pipeline |
+
+MetricsDB tables:
+- `system_metrics` — periodic CPU/RAM/GPU snapshots (pruned to 24h)
+- `pipeline_metrics` — per-request latency, TPS, TTFT, watcher signal, kills
+- `alerts` — alert state change history
+- `training_candidates` — ML training data with quality scoring
+
+### 20.2 Command Center Scene
+
+**Port:** 5563, **Location:** `content/scenes/command_center/`
+
+War-room dashboard showing the entire CosySim system in real-time:
+- System Resources (CPU/RAM/GPU meters)
+- Pipeline Metrics (queue, latency, TPS, kills, pre-warms)
+- Alert Status (per-node green/yellow/red)
+- Activity Bus (current + recent history)
+- LLM Performance (TPS, TTFT, P95)
+- Training Capture (per-dataset counts + export)
+- Live Event Feed (real-time scrolling log)
+
+All panels update via Socket.IO (1-second tick).
+
+---
+
+## 19. Phase 13 — Training Data Pipeline
+
+### 19.1 Training Files
+
+| File | Purpose |
+|------|---------|
+| `training/generate_datasets.py` | Generate synthetic training data |
+| `training/prepare_from_live.py` | Export live-captured candidates to JSONL |
+| `training/finetune_local.py` | Local QLoRA fine-tuning with Unsloth |
+| `training/auto_train.py` | Automated training loop (threshold-based) |
+| `training/gemma_router_finetune.ipynb` | Google Colab notebook |
+| `training/datasets/*.jsonl` | Training data (5 datasets x train/val/live) |
+
+### 19.2 Usage
+
+```bash
+python -m training.generate_datasets           # Generate synthetic data
+python -m training.prepare_from_live --stats    # Show dataset stats
+python -m training.finetune_local check         # Check dependencies
+python -m training.finetune_local train --dataset tag_extraction
+python -m training.auto_train --dry-run         # Check without training
+```
+
+---
+
+## 20. Phase 14 — Frontend Improvements
+
+### 20.1 Overlay SSE to Socket.IO (F1)
+
+Overlay event stream now uses Socket.IO when available (sub-100ms updates)
+with SSE fallback. `mount_overlay(app, socketio)` stores the SocketIO reference.
+
+### 20.2 Shared JS Utilities (F2)
+
+**File:** `content/shared/static/js/cosysim-core.js`
+
+- `CosySim.fetch(url)` / `CosySim.post(url, body)` — fetch wrappers
+- `CosySim.socket(opts)` — Socket.IO with reconnection
+- `CosySim.toast(msg, type)` — toast notifications
+- `CosySim.$(sel)` / `CosySim.$$(sel)` — DOM queries
+- `CosySim.el(tag, attrs)` — element creation
+- `CosySim.debounce(fn, ms)` / `CosySim.throttle(fn, ms)`
+
+### 20.3 Pipeline Stream Consumer (F3)
+
+**File:** `content/shared/static/js/cosysim-stream.js`
+
+Socket.IO consumer for VirtualPipeline streaming events.
+
+### 20.4 Design Tokens (F4)
+
+**File:** `content/shared/static/css/design_tokens.css`
+
+Centralized CSS custom properties for colors, spacing, typography, borders,
+shadows, transitions, z-index, and utility classes.
+
+---
+
+## 21. Complete Scene Registry (v4.0)
+
+| Scene | Port | Type | Key Features |
+|-------|------|------|-------------|
+| Bedroom | 5550 | Flask+SocketIO | 3D Three.js, AgentLoop, wardrobe, stats |
+| Phone | 5555 | Flask+SocketIO | iOS-style OS, messages, contacts, photo |
+| Admin | 8501 | Streamlit | Database, characters, config, KPIs |
+| Hub | 8502 | Streamlit | Scene launcher, system status |
+| Casino | 5558 | Flask+SocketIO | Card games, chips, NPC dealer |
+| Gallery | 5560 | Flask+SocketIO | Image generation showcase |
+| Lounge | 5559 | Flask+SocketIO | Multi-character social space |
+| Warzone | 5561 | Flask+SocketIO | Turn-based strategy, squads |
+| Heist | 5562 | Flask+SocketIO | Cooperative crew, phases |
+| Command Center | 5563 | Flask+SocketIO | Metrics dashboard, training |
+| Realm | -- | Flask+SocketIO | Fantasy RPG exploration |
+
+---
+
+## 22. Test Coverage (v4.0)
+
+**Total: 1084 tests, 0 failures**
+
+```
+python -m pytest tests/ -v --tb=short \
+    --ignore=tests/test_agent_loop.py \
+    --ignore=tests/live_wire_test.py
+```
+
+Key test files added in v4.0:
+- `tests/test_virtual_pipeline.py` — pipeline orchestrator, watcher, kill switch
+- `tests/test_vam_pipeline_integration.py` — VAM pipeline integration (9 tests)
+- `tests/test_heist.py` — heist game logic (43 tests)
+- `tests/test_command_center.py` — command center scene + training prep (32 tests)
+- `tests/test_training_pipeline.py` — finetune_local + auto_train (15 tests)
+- `tests/test_observability.py` — MetricsDB, MetricsCollector, AlertEngine

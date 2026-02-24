@@ -1,0 +1,148 @@
+/*
+ * CosySim Design Tokens
+ * =====================
+ * Centralized CSS custom properties for consistent theming across all scenes.
+ * Import via: @import url('/shared/static/css/design_tokens.css');
+ * Or link:   <link rel="stylesheet" href="/shared/static/css/design_tokens.css">
+ */
+
+:root {
+    /* ── Color Palette ──────────────────────────────────────── */
+
+    /* Backgrounds */
+    --cs-bg-deepest:    #060a12;
+    --cs-bg-dark:       #0a0e17;
+    --cs-bg-panel:      #111827;
+    --cs-bg-card:       #14141e;
+    --cs-bg-elevated:   #1a2332;
+    --cs-bg-hover:      #1f2937;
+    --cs-bg-active:     #374151;
+
+    /* Text */
+    --cs-text-primary:  #e5e7eb;
+    --cs-text-secondary:#9ca3af;
+    --cs-text-muted:    #6b7280;
+    --cs-text-dim:      #4b5563;
+
+    /* Accent colors */
+    --cs-accent:        #3b82f6;
+    --cs-accent-hover:  #2563eb;
+    --cs-accent-soft:   rgba(59, 130, 246, 0.15);
+
+    /* Semantic colors */
+    --cs-green:         #22c55e;
+    --cs-green-soft:    rgba(34, 197, 94, 0.15);
+    --cs-yellow:        #eab308;
+    --cs-yellow-soft:   rgba(234, 179, 8, 0.15);
+    --cs-red:           #ef4444;
+    --cs-red-soft:      rgba(239, 68, 68, 0.15);
+    --cs-orange:        #f97316;
+    --cs-orange-soft:   rgba(249, 115, 22, 0.15);
+    --cs-purple:        #a855f7;
+    --cs-purple-soft:   rgba(168, 85, 247, 0.15);
+    --cs-pink:          #ec4899;
+    --cs-pink-soft:     rgba(236, 72, 153, 0.15);
+
+    /* Scene-specific (override in scene CSS) */
+    --cs-scene-accent:  var(--cs-accent);
+    --cs-scene-bg:      var(--cs-bg-dark);
+
+    /* ── Borders ────────────────────────────────────────────── */
+    --cs-border:        #1f2937;
+    --cs-border-light:  #374151;
+    --cs-border-focus:  var(--cs-accent);
+
+    /* ── Spacing Scale ──────────────────────────────────────── */
+    --cs-space-xs:      4px;
+    --cs-space-sm:      8px;
+    --cs-space-md:      12px;
+    --cs-space-lg:      16px;
+    --cs-space-xl:      24px;
+    --cs-space-2xl:     32px;
+    --cs-space-3xl:     48px;
+
+    /* ── Typography ─────────────────────────────────────────── */
+    --cs-font-mono:     'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+    --cs-font-sans:     -apple-system, 'Segoe UI', system-ui, sans-serif;
+    --cs-font-display:  'Inter', var(--cs-font-sans);
+
+    --cs-text-xs:       10px;
+    --cs-text-sm:       12px;
+    --cs-text-base:     14px;
+    --cs-text-lg:       16px;
+    --cs-text-xl:       20px;
+    --cs-text-2xl:      24px;
+    --cs-text-3xl:      32px;
+
+    --cs-weight-normal: 400;
+    --cs-weight-medium: 500;
+    --cs-weight-bold:   700;
+
+    --cs-leading-tight: 1.2;
+    --cs-leading-normal:1.5;
+    --cs-leading-loose: 1.8;
+
+    /* ── Border Radius ──────────────────────────────────────── */
+    --cs-radius-sm:     4px;
+    --cs-radius-md:     6px;
+    --cs-radius-lg:     8px;
+    --cs-radius-xl:     12px;
+    --cs-radius-full:   9999px;
+
+    /* ── Shadows ────────────────────────────────────────────── */
+    --cs-shadow-sm:     0 1px 3px rgba(0, 0, 0, 0.3);
+    --cs-shadow-md:     0 4px 12px rgba(0, 0, 0, 0.4);
+    --cs-shadow-lg:     0 8px 24px rgba(0, 0, 0, 0.5);
+    --cs-shadow-glow:   0 0 12px rgba(59, 130, 246, 0.3);
+
+    /* ── Transitions ────────────────────────────────────────── */
+    --cs-duration-fast: 150ms;
+    --cs-duration-base: 250ms;
+    --cs-duration-slow: 500ms;
+    --cs-ease:          cubic-bezier(0.4, 0, 0.2, 1);
+
+    /* ── Z-Index Scale ──────────────────────────────────────── */
+    --cs-z-base:        0;
+    --cs-z-dropdown:    100;
+    --cs-z-sticky:      200;
+    --cs-z-overlay:     300;
+    --cs-z-modal:       400;
+    --cs-z-toast:       500;
+
+    /* ── Status Indicators ──────────────────────────────────── */
+    --cs-status-green:  var(--cs-green);
+    --cs-status-yellow: var(--cs-yellow);
+    --cs-status-red:    var(--cs-red);
+}
+
+/* ── Utility Classes ────────────────────────────────────────── */
+
+.cs-text-muted { color: var(--cs-text-muted); }
+.cs-text-accent { color: var(--cs-accent); }
+.cs-text-green { color: var(--cs-green); }
+.cs-text-yellow { color: var(--cs-yellow); }
+.cs-text-red { color: var(--cs-red); }
+
+.cs-bg-panel { background: var(--cs-bg-panel); }
+.cs-bg-card { background: var(--cs-bg-card); }
+.cs-bg-elevated { background: var(--cs-bg-elevated); }
+
+.cs-border { border: 1px solid var(--cs-border); }
+.cs-rounded { border-radius: var(--cs-radius-md); }
+.cs-shadow { box-shadow: var(--cs-shadow-md); }
+
+/* Status dots */
+.cs-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+}
+.cs-dot-green { background: var(--cs-green); box-shadow: 0 0 6px var(--cs-green); }
+.cs-dot-yellow { background: var(--cs-yellow); box-shadow: 0 0 6px var(--cs-yellow); }
+.cs-dot-red { background: var(--cs-red); box-shadow: 0 0 6px var(--cs-red); }
+
+/* Scrollbar (webkit) */
+.cs-scrollbar::-webkit-scrollbar { width: 6px; }
+.cs-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.cs-scrollbar::-webkit-scrollbar-thumb { background: var(--cs-bg-active); border-radius: 3px; }
+.cs-scrollbar::-webkit-scrollbar-thumb:hover { background: var(--cs-text-dim); }

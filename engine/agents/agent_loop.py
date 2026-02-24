@@ -130,6 +130,23 @@ class AgentLoop:
         """Set a callback ``fn(character_id, action_dict)`` fired after every action."""
         self._on_action = fn
 
+    # ── Pipeline-aware inference helper ──────────────────────────────────
+
+    def _infer(self, request):
+        """Run inference through pipeline (preferred) or infer_processed (fallback).
+
+        Returns a ProcessedResponse or PipelineResult.
+        """
+        from engine.agents.virtual_agent_manager import get_virtual_agent_manager
+        mgr = get_virtual_agent_manager()
+        # Prefer pipeline path for watcher + kill switch + token-ahead routing
+        if hasattr(mgr, "infer_with_pipeline"):
+            try:
+                return mgr.infer_with_pipeline(request)
+            except Exception:
+                pass
+        return mgr.infer_processed(request)
+
     # ── Loop control ────────────────────────────────────────────────────
     def start(self, interval: float = 30.0) -> None:
         """Start the autonomous tick loop in a background thread."""
@@ -372,11 +389,9 @@ class AgentLoop:
             except Exception as e:
                 logger.debug("agent.quick_query failed: %s", e)
 
-        # Use VirtualAgentManager with infer_processed for rich response
+        # Use VirtualAgentManager with pipeline for rich response
         try:
-            from engine.agents.virtual_agent_manager import get_virtual_agent_manager
             from engine.agents.virtual_agent import InferenceRequest
-            mgr = get_virtual_agent_manager()
             request = InferenceRequest(
                 agent_id=character_id,
                 messages=[
@@ -391,7 +406,7 @@ class AgentLoop:
                 priority=3,
                 metadata={"type": "agent_loop_decide", "scene": self.scene_id},
             )
-            proc = mgr.infer_processed(request)
+            proc = self._infer(request)
             text = proc.clean_text or proc.raw_text or ""
             if text:
                 decision = self._parse_decision(text)
@@ -671,11 +686,8 @@ class AgentLoop:
             return decision.get("message", "")
 
         try:
-            from engine.agents.virtual_agent_manager import get_virtual_agent_manager
             from engine.agents.virtual_agent import InferenceRequest
             from engine.agents.stream_processor import strip_token_artifacts
-
-            mgr = get_virtual_agent_manager()
 
             conv_id = self._dialog_conv_ids.get(character_id)
             if not conv_id:
@@ -719,7 +731,7 @@ class AgentLoop:
                 },
             )
 
-            proc = mgr.infer_processed(request)
+            proc = self._infer(request)
             text = strip_token_artifacts(proc.clean_text or proc.raw_text or "")
 
             if text and len(text) > 3:

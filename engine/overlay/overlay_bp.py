@@ -36,6 +36,14 @@ logger = logging.getLogger(__name__)
 
 overlay_bp = Blueprint("overlay", __name__, url_prefix="/overlay")
 
+# Module-level socketio reference (set by mount_overlay)
+_overlay_socketio = None
+
+
+def get_overlay_socketio():
+    """Access the overlay SocketIO instance (if mounted)."""
+    return _overlay_socketio
+
 
 # ── Main panel HTML ─────────────────────────────────────────────────────
 
@@ -502,6 +510,45 @@ def api_inference():
         return jsonify({"ok": False, "error": str(exc)}), 500
 
 
+# ── Socket.IO overlay events ───────────────────────────────────────────
+
+def _register_socketio_events(socketio) -> None:
+    """Register Socket.IO event handlers for overlay real-time updates."""
+    from flask_socketio import emit
+
+    @socketio.on("connect", namespace="/overlay")
+    def on_overlay_connect():
+        """Send current state on connect."""
+        try:
+            from engine.services.activity_bus import get_activity_bus
+            bus = get_activity_bus()
+            snap = bus.snapshot()
+            emit("overlay_activity", snap)
+        except Exception:
+            pass
+
+    @socketio.on("overlay_refresh", namespace="/overlay")
+    def on_overlay_refresh():
+        """Client requests a full refresh."""
+        try:
+            from engine.services.activity_bus import get_activity_bus
+            bus = get_activity_bus()
+            snap = bus.snapshot()
+            emit("overlay_activity", snap)
+        except Exception:
+            pass
+
+
+def overlay_emit(event: str, data: dict) -> None:
+    """Broadcast an event via Socket.IO if available, else no-op."""
+    sio = _overlay_socketio
+    if sio is not None:
+        try:
+            sio.emit(event, data, namespace="/overlay")
+        except Exception:
+            pass
+
+
 # ── Mount helper ────────────────────────────────────────────────────────
 
 def mount_overlay(app, socketio=None) -> None:
@@ -514,8 +561,18 @@ def mount_overlay(app, socketio=None) -> None:
 
     Then access the overlay at ``http://host:port/overlay/``
     A toggle button is injected into every page via after_request.
+
+    If socketio is provided, overlay events are broadcast via Socket.IO
+    instead of SSE polling (much faster, sub-100ms).
     """
+    global _overlay_socketio
+    _overlay_socketio = socketio
+
     app.register_blueprint(overlay_bp)
+
+    # Register Socket.IO event handlers if available
+    if socketio is not None:
+        _register_socketio_events(socketio)
 
     # Auto-mount MCP skills server alongside overlay
     try:
@@ -1094,21 +1151,43 @@ function editInference() {
   }).then(refresh);
 }
 
-// ── Events SSE ──
+// ── Events — Socket.IO (preferred) with SSE fallback ──
 function connectEvents() {
-  const evtSource = new EventSource(BASE + '/events');
   const container = document.getElementById('events-content');
   container.innerHTML = '';
-  evtSource.onmessage = (e) => {
+
+  function appendEvent(d) {
+    const div = document.createElement('div');
+    div.className = 'event-item';
+    div.innerHTML = `<span class="event-type">${d.activity_type || d.type || '?'}</span> <span>${(d.description || '').substring(0,60)}</span> <span class="event-time">${d.agent_id || ''}</span>`;
+    container.prepend(div);
+    while (container.children.length > 100) container.removeChild(container.lastChild);
+  }
+
+  // Try Socket.IO first (sub-100ms updates)
+  if (typeof io !== 'undefined') {
     try {
-      const d = JSON.parse(e.data);
-      const div = document.createElement('div');
-      div.className = 'event-item';
-      div.innerHTML = `<span class="event-type">${d.activity_type || d.type || '?'}</span> <span>${(d.description || '').substring(0,60)}</span> <span class="event-time">${d.agent_id || ''}</span>`;
-      container.prepend(div);
-      // Keep max 100 events in DOM
-      while (container.children.length > 100) container.removeChild(container.lastChild);
-    } catch(err) {}
+      const sock = io({ path: '/socket.io', transports: ['websocket', 'polling'] });
+      sock.on('connect', () => {
+        container.innerHTML = '<div class="stat-value ok">Connected via Socket.IO ⚡</div>';
+      });
+      sock.on('overlay_activity', (data) => {
+        if (data && data.history) {
+          data.history.slice(0, 5).forEach(h => appendEvent(h));
+        }
+      });
+      sock.on('overlay_event', (d) => { appendEvent(d); });
+      sock.on('disconnect', () => {
+        container.innerHTML = '<div class="stat-value warn">Socket disconnected. Reconnecting...</div>';
+      });
+      return;  // Socket.IO connected, skip SSE
+    } catch(e) { /* fall through to SSE */ }
+  }
+
+  // Fallback: SSE polling (1-second updates)
+  const evtSource = new EventSource(BASE + '/events');
+  evtSource.onmessage = (e) => {
+    try { appendEvent(JSON.parse(e.data)); } catch(err) {}
   };
   evtSource.onerror = () => {
     container.innerHTML = '<div class="stat-value warn">Event stream disconnected. Retrying...</div>';

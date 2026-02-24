@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CosySim Command Center</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/command_center.css') }}">
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+</head>
+<body>
+    <header class="cc-header">
+        <h1>⚡ COSYSIM COMMAND CENTER</h1>
+        <div class="cc-header-status">
+            <span id="ws-status" class="status-dot green" title="WebSocket"></span>
+            <span id="worst-alert" class="alert-badge green">ALL CLEAR</span>
+            <span id="uptime" class="cc-uptime">--:--:--</span>
+        </div>
+    </header>
+
+    <main class="cc-grid">
+        <!-- System Resources Panel -->
+        <section class="cc-panel" id="panel-system">
+            <h2>System Resources</h2>
+            <div class="meter-group">
+                <div class="meter-row">
+                    <label>CPU</label>
+                    <div class="meter"><div class="meter-fill" id="cpu-fill"></div></div>
+                    <span class="meter-value" id="cpu-val">--%</span>
+                </div>
+                <div class="meter-row">
+                    <label>RAM</label>
+                    <div class="meter"><div class="meter-fill" id="ram-fill"></div></div>
+                    <span class="meter-value" id="ram-val">--%</span>
+                </div>
+                <div class="meter-row">
+                    <label>GPU VRAM</label>
+                    <div class="meter"><div class="meter-fill" id="gpu-fill"></div></div>
+                    <span class="meter-value" id="gpu-val">--%</span>
+                </div>
+                <div class="meter-row">
+                    <label>GPU Temp</label>
+                    <div class="meter"><div class="meter-fill" id="temp-fill"></div></div>
+                    <span class="meter-value" id="temp-val">--°C</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Pipeline Metrics Panel -->
+        <section class="cc-panel" id="panel-pipeline">
+            <h2>Pipeline</h2>
+            <div class="stat-grid">
+                <div class="stat-card">
+                    <div class="stat-value" id="pipe-queue">0</div>
+                    <div class="stat-label">Queue Depth</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="pipe-active">0</div>
+                    <div class="stat-label">Active</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="pipe-latency">--</div>
+                    <div class="stat-label">Avg Latency</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="pipe-tps">--</div>
+                    <div class="stat-label">TPS</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="pipe-kills">0</div>
+                    <div class="stat-label">Kills</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="pipe-prewarm">0</div>
+                    <div class="stat-label">Pre-warms</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Alert Status Panel -->
+        <section class="cc-panel" id="panel-alerts">
+            <h2>Alert Status</h2>
+            <div id="alert-nodes" class="alert-node-grid">
+                <!-- Populated dynamically -->
+            </div>
+            <h3>Recent Alerts</h3>
+            <ul id="alert-history" class="alert-list">
+                <li class="muted">No alerts</li>
+            </ul>
+        </section>
+
+        <!-- Activity Bus Panel -->
+        <section class="cc-panel" id="panel-activity">
+            <h2>Activity Bus</h2>
+            <div id="current-activities" class="activity-current">
+                <em class="muted">Idle</em>
+            </div>
+            <h3>Recent</h3>
+            <ul id="activity-history" class="activity-list">
+                <li class="muted">No recent activity</li>
+            </ul>
+        </section>
+
+        <!-- Benchmarks Panel -->
+        <section class="cc-panel" id="panel-benchmarks">
+            <h2>LLM Performance</h2>
+            <div class="stat-grid" id="llm-kpi-grid">
+                <div class="stat-card">
+                    <div class="stat-value" id="llm-avg-tps">--</div>
+                    <div class="stat-label">Avg TPS</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="llm-avg-ttft">--</div>
+                    <div class="stat-label">Avg TTFT</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="llm-p95-latency">--</div>
+                    <div class="stat-label">P95 Latency</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="llm-total-calls">0</div>
+                    <div class="stat-label">Total Calls</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Training Data Panel -->
+        <section class="cc-panel" id="panel-training">
+            <h2>Training Capture</h2>
+            <div id="training-stats" class="training-stats">
+                <em class="muted">No data yet</em>
+            </div>
+            <button id="btn-export" class="cc-btn" onclick="CC.exportTraining()">
+                Export JSONL
+            </button>
+        </section>
+    </main>
+
+    <!-- Live Event Feed -->
+    <section class="cc-feed" id="panel-feed">
+        <div class="feed-header">
+            <h2>Live Event Feed</h2>
+            <div class="feed-controls">
+                <button id="btn-pause" class="cc-btn small" onclick="CC.togglePause()">⏸ Pause</button>
+                <button class="cc-btn small" onclick="CC.clearFeed()">🗑 Clear</button>
+            </div>
+        </div>
+        <div id="feed-list" class="feed-list">
+            <div class="feed-item muted">Waiting for events...</div>
+        </div>
+    </section>
+
+    <script src="{{ url_for('static', filename='js/command_center.js') }}"></script>
+</body>
+</html>

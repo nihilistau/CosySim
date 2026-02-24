@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Heist — CosySim</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/heist.css') }}">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+</head>
+<body>
+    <div id="app">
+        <!-- Top bar -->
+        <header class="top-bar">
+            <h1>🎯 THE HEIST</h1>
+            <div class="meters">
+                <div class="meter" id="suspicion-meter">
+                    <label>Suspicion</label>
+                    <div class="bar"><div class="fill" id="suspicion-fill"></div></div>
+                    <span id="suspicion-val">0</span>
+                </div>
+                <div class="meter" id="loot-meter">
+                    <label>Loot</label>
+                    <div class="bar"><div class="fill loot" id="loot-fill"></div></div>
+                    <span id="loot-val">$0</span>
+                </div>
+                <div class="phase-badge" id="phase-badge">PLANNING</div>
+            </div>
+        </header>
+
+        <!-- Main layout -->
+        <div class="main-layout">
+            <!-- Left: Crew panel -->
+            <div class="crew-panel">
+                <h2>Crew</h2>
+                <div id="crew-list"></div>
+                <button class="btn" id="btn-tick">🎲 Crew Tick</button>
+            </div>
+
+            <!-- Center: Chat / Events -->
+            <div class="center-panel">
+                <div class="chat-area" id="chat-area"></div>
+                <div class="input-area">
+                    <select id="target-crew">
+                        <option value="">Select crew member...</option>
+                    </select>
+                    <input type="text" id="chat-input" placeholder="Message your crew..." />
+                    <button class="btn send" id="btn-send">Send</button>
+                </div>
+            </div>
+
+            <!-- Right: Game state -->
+            <div class="state-panel">
+                <h2>Obstacles</h2>
+                <div id="obstacles-list"></div>
+                <h2>Events</h2>
+                <div id="events-list"></div>
+                <div class="actions">
+                    <button class="btn phase" id="btn-advance">⏭ Advance Phase</button>
+                    <button class="btn loot" id="btn-loot">💰 Grab Loot</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Setup modal -->
+        <div class="modal" id="setup-modal">
+            <div class="modal-content">
+                <h2>🎯 Plan Your Heist</h2>
+                <div class="venue-grid" id="venue-grid"></div>
+                <button class="btn start" id="btn-start">Start Heist</button>
+            </div>
+        </div>
+    </div>
+    <script src="{{ url_for('static', filename='js/heist.js') }}"></script>
+</body>
+</html>

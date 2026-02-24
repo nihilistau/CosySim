@@ -11,6 +11,6 @@ Usage::
     # In any scene's Flask app setup:
     mount_overlay(app, socketio)  # registers /overlay/* routes
 """
-from .overlay_bp import overlay_bp, mount_overlay
+from .overlay_bp import overlay_bp, mount_overlay, overlay_emit, get_overlay_socketio
 
-__all__ = ["overlay_bp", "mount_overlay"]
+__all__ = ["overlay_bp", "mount_overlay", "overlay_emit", "get_overlay_socketio"]

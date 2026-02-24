@@ -123,7 +123,14 @@ class _PhoneCharacterAgent:
                 store=True,
                 metadata={"scene": "phone", "character_name": name},
             )
-            response = mgr.infer_processed(req)
+            # Prefer pipeline path for watcher + kill switch
+            if hasattr(mgr, "infer_with_pipeline"):
+                try:
+                    response = mgr.infer_with_pipeline(req)
+                except Exception:
+                    response = mgr.infer_processed(req)
+            else:
+                response = mgr.infer_processed(req)
             self._last_processed = response
             text = (response.clean_text or "").strip()
             return strip_token_artifacts(text)
@@ -445,7 +452,14 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
                 store=True,
                 metadata={"scene": "phone", "character_name": name},
             )
-            proc = mgr.infer_processed(req)
+            # Prefer pipeline path for watcher + kill switch
+            if hasattr(mgr, "infer_with_pipeline"):
+                try:
+                    proc = mgr.infer_with_pipeline(req)
+                except Exception:
+                    proc = mgr.infer_processed(req)
+            else:
+                proc = mgr.infer_processed(req)
             result["text"] = strip_token_artifacts((proc.clean_text or "").strip())
             result["mood"] = proc.mood_tags[0] if proc.mood_tags else None
             result["image_requests"] = list(proc.image_requests)

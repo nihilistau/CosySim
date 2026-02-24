@@ -73,7 +73,7 @@ class PipelineConfig:
         token = d.get("token_ahead", {})
         conv = d.get("conversation", {})
 
-        cfg.watcher_enabled = d.get("enabled", cfg.watcher_enabled)
+        cfg.watcher_enabled = watcher.get("enabled", d.get("enabled", cfg.watcher_enabled))
         cfg.watcher_model_key = watcher.get("model_key", cfg.watcher_model_key)
         cfg.watcher_trigger_tokens = watcher.get("trigger_tokens", cfg.watcher_trigger_tokens)
         cfg.watcher_batch_size = watcher.get("batch_size", cfg.watcher_batch_size)

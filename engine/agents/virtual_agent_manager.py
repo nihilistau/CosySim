@@ -104,6 +104,10 @@ class VirtualAgentManager:
         self._router_enabled = False  # controlled by config
         self._router_init_attempted = False
         self._router_lock = threading.Lock()
+        # v4.0: VirtualPipeline integration
+        self._pipeline = None
+        self._pipeline_init_attempted = False
+        self._pipeline_lock = threading.Lock()
 
         # Request hooks — called before/after every inference
         self._pre_hooks: List[Callable] = []
@@ -204,6 +208,132 @@ class VirtualAgentManager:
             self._router.stop()
             self._router = None
             self._router_enabled = False
+
+    # ── Pipeline integration (v4.0) ─────────────────────────────────
+
+    def get_pipeline(self):
+        """Return the VirtualPipeline (lazy-init from config).
+
+        Returns None if the pipeline is disabled or if init fails.
+        The pipeline provides: StreamWatcher, KillSwitch, TokenAheadRouter,
+        and MetricsCollector integration on top of the existing streaming.
+        """
+        if self._pipeline is not None:
+            return self._pipeline
+        if self._pipeline_init_attempted:
+            return None
+
+        with self._pipeline_lock:
+            if self._pipeline is not None:
+                return self._pipeline
+            if self._pipeline_init_attempted:
+                return None
+            self._pipeline_init_attempted = True
+
+            try:
+                from engine.config import get_config
+                from engine.pipeline import VirtualPipeline, PipelineConfig
+
+                cfg = get_config()
+                pipe_cfg = cfg.get("pipeline", {})
+                if not pipe_cfg.get("enabled", False):
+                    return None
+
+                config = PipelineConfig.from_dict(pipe_cfg)
+
+                # Optional: metrics callback
+                on_metrics = None
+                try:
+                    from engine.observability.metrics_collector import get_metrics_collector
+                    collector = get_metrics_collector()
+                    on_metrics = collector.on_pipeline_result
+                except Exception:
+                    pass
+
+                # Optional: tool executor for pre-warming
+                tool_executor = None
+                try:
+                    from engine.mcp.skills_server import get_skill_registry
+                    registry = get_skill_registry()
+                    if registry:
+                        tool_executor = lambda name, ctx: registry.invoke(name, **ctx)
+                except Exception:
+                    pass
+
+                self._pipeline = VirtualPipeline(
+                    vam=self,
+                    config=config,
+                    tool_executor=tool_executor,
+                    on_metrics=on_metrics,
+                )
+                logger.info("VirtualPipeline initialized (watcher=%s, kill=%s)",
+                            config.watcher_enabled, config.kill_switch_enabled)
+                return self._pipeline
+
+            except Exception as exc:
+                logger.debug("Pipeline init failed (will use standard path): %s", exc)
+                return None
+
+    def infer_with_pipeline(
+        self,
+        request: InferenceRequest,
+        *,
+        on_delta: Optional[Callable[[str], None]] = None,
+        on_tool_call: Optional[Callable] = None,
+        on_mood: Optional[Callable[[str], None]] = None,
+        on_image_request: Optional[Callable[[str], None]] = None,
+        on_action: Optional[Callable[[str], None]] = None,
+        on_stat_delta: Optional[Callable] = None,
+    ):
+        """
+        Pipeline-enhanced inference: stream + watch + pre-warm + kill switch.
+
+        Falls back to infer_processed() if pipeline is unavailable.
+        Returns PipelineResult (superset of ProcessedResponse).
+        """
+        pipeline = self.get_pipeline()
+        if not pipeline:
+            # Fallback to standard streaming path
+            result = self.infer_processed(
+                request,
+                on_delta=on_delta,
+                on_tool_call=on_tool_call,
+                on_mood=on_mood,
+                on_image_request=on_image_request,
+                on_action=on_action,
+                on_stat_delta=on_stat_delta,
+            )
+            from engine.pipeline.pipeline_result import PipelineResult
+            return PipelineResult.from_processed_response(result)
+
+        # Build a stream function that uses our existing infer_stream
+        from engine.agents.stream_processor import StreamProcessor
+
+        proc = StreamProcessor(
+            on_delta=on_delta,
+            on_tool_call=on_tool_call,
+            on_mood=on_mood,
+            on_image_request=on_image_request,
+            on_action=on_action,
+            on_stat_delta=on_stat_delta,
+        )
+
+        def stream_fn():
+            """Yields content deltas from infer_stream."""
+            gen = self.infer_stream(request, on_event=proc.on_event)
+            try:
+                while True:
+                    chunk = next(gen)
+                    if chunk:
+                        yield chunk
+            except StopIteration:
+                pass
+
+        result = pipeline.execute(request, stream_fn=stream_fn)
+
+        # Merge StreamProcessor's callbacks-triggered data with pipeline result
+        # (tags detected by callbacks are already in proc, pipeline also detects)
+        return result
 
     # ── Agent lifecycle ─────────────────────────────────────────────
 
@@ -688,9 +818,16 @@ class VirtualAgentManager:
                 if self._total_requests > 0 else 0
             ),
             "router_enabled": self._router_enabled,
+            "pipeline_enabled": self._pipeline is not None,
         }
         if self._router:
             stats["router"] = self._router.get_metrics()
+        if self._pipeline:
+            stats["pipeline"] = {
+                "watcher_enabled": self._pipeline.config.watcher_enabled,
+                "kill_switch_enabled": self._pipeline.config.kill_switch_enabled,
+                "pre_warm_enabled": self._pipeline.config.pre_warm_enabled,
+            }
         return stats
 
     # ── Internal: execute a single request ──────────────────────────
