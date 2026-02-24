@@ -6,20 +6,28 @@ Concrete interceptors for the ``InterceptorPipeline``.  Each one focuses on
 a single concern and composes cleanly with the others.
 
 Execution order (by priority):
+   5  NaturalMoodDriftInterceptor  — natural mood drift between events
    8  CharacterRegistryInterceptor — inject character identity/mood; handle force_response
   10  RouterMessageInjector        — inject inbox messages from other agents
   12  DialogDirectiveInterceptor   — inject must_include/style_lock; post-call verification
   15  BedroomSceneInterceptor      — inject wardrobe/stats/narrative for bedroom scene
   15  PhoneSceneInterceptor        — inject conversation heat/stats for phone scene
+  15  LoungeSceneInterceptor       — inject lounge state/cocktails/rules for lounge scene
+  15  GallerySceneInterceptor      — inject artwork/exhibition state for gallery scene
+  16  UniversalSceneInterceptor    — catch-all for scenes without dedicated interceptors
+  17  AmbientEventInterceptor      — random micro-events to make scenes feel alive
   20  AutoResultInjector           — inject auto-skill results into system prompt
   30  SkillAwarenessInterceptor    — build the "available skills" list for the LLM
   35  GameSessionInterceptor       — inject MCPGameSession history + actions when a game is active
   40  GameRulesInterceptor         — inject game-specific rules and required tools
   50  PersonalityGuardInterceptor  — add in-character reminders and tone guidance
+  55  ConversationVarietyInterceptor — anti-repetition and variety enforcement
   60  PolicyEnforcerInterceptor    — enforce reply length, forbidden topics
   70  MemoryEnhancerInterceptor    — augment context with extra RAG results
   80  ResponseShaperInterceptor    — post-call: trim/reshape reply to match policy
+  85  TTSStyleInterceptor          — inject TTS voice style tags
   90  ActivityLoggerInterceptor    — post-call: log final reply to EventChain
+  92  MoodSyncInterceptor          — post-call: sync mood/actions to framework state
 
 Adding your own::
 
@@ -1102,6 +1110,247 @@ class GallerySceneInterceptor(InterceptorBase):
 
 
 # ══════════════════════════════════════════════════════════════════════
+#  UniversalSceneInterceptor  (priority 16)
+# ══════════════════════════════════════════════════════════════════════
+
+# Scenes with their own dedicated interceptors (skip these)
+_SCENES_WITH_DEDICATED_INTERCEPTOR = {"bedroom", "phone", "lounge", "gallery"}
+
+
+class UniversalSceneInterceptor(InterceptorBase):
+    """
+    Catch-all scene interceptor for scenes without a dedicated one
+    (Casino, Warzone, Realm, NeonCity, Coders Room, Heist).
+
+    Injects: character mood/state, scene narrative, ConversationHeat pacing,
+    available MCP actions, and player journey context.  Runs at priority 16
+    (just after the dedicated scene interceptors at 15) so it doesn't
+    conflict with scenes that already have their own.
+
+    This raises scene-specific interceptor coverage from 4/10 to 10/10.
+    """
+    name     = "universal_scene"
+    priority = 16
+
+    def pre_call(self, ctx: ResponseContext) -> None:
+        scene = ctx.get("scene", "")
+        if not scene or scene in _SCENES_WITH_DEDICATED_INTERCEPTOR:
+            return
+
+        agent_id = ctx.get("agent_id", "")
+        lines: List[str] = []
+
+        # ── Character mood/state via Coordinator ──────────────────
+        try:
+            from engine.mcp.state_coordinator import get_coordinator
+            coord = get_coordinator()
+            snapshot = coord.get_full_state(agent_id)
+            if snapshot:
+                mood = snapshot.get("mood", "neutral")
+                energy = snapshot.get("energy", 50)
+                lines.append(f"Your current mood: {mood} (energy: {energy}%)")
+                extra_fields = []
+                for k in ("arousal", "inhibition", "trust"):
+                    v = snapshot.get(k)
+                    if v is not None:
+                        extra_fields.append(f"{k}={v}")
+                if extra_fields:
+                    lines.append(f"State: {', '.join(extra_fields)}")
+        except Exception:
+            pass
+
+        # ── Scene narrative ───────────────────────────────────────
+        try:
+            from engine.mcp.scene_state import get_scene_state_manager
+            ssm = get_scene_state_manager()
+            narrative = ssm.get_narrative_entries(scene, limit=5)
+            if narrative:
+                events = [e["event"] for e in narrative]
+                lines.append("Recent events: " + " | ".join(events[-3:]))
+        except Exception:
+            pass
+
+        # ── Scene atmosphere ──────────────────────────────────────
+        try:
+            from engine.mcp.scene_state import get_scene_state_manager
+            ssm = get_scene_state_manager()
+            atm = ssm.get_atmosphere(scene) or {}
+            atm_str = " · ".join(str(v) for v in atm.values() if v)
+            if atm_str:
+                lines.append(f"Atmosphere: {atm_str}")
+        except Exception:
+            pass
+
+        # ── ConversationHeat pacing ───────────────────────────────
+        try:
+            from engine.mcp.scene_rules_engine import get_conversation_heat
+            heat = get_conversation_heat()
+            conv_key = ctx.get("conversation_id") or f"{scene}_{agent_id}"
+            directive = heat.get_directive(conv_key)
+            if directive:
+                lines.append(f"[Conversation pacing] {directive}")
+        except Exception:
+            pass
+
+        # ── Available MCP actions ─────────────────────────────────
+        try:
+            from engine.mcp.scene_rules_engine import get_rules_engine
+            eng = get_rules_engine()
+            from engine.mcp.scene_state import get_scene_state_manager
+            ssm = get_scene_state_manager()
+            stats = ssm.get_stats(agent_id)
+            stats_dict = stats.__dict__ if stats and hasattr(stats, "__dict__") else {}
+            actions = eng.get_available_actions(scene, stats_dict)
+            if actions:
+                action_names = [a["id"] for a in actions[:6]]
+                lines.append(f"Available actions: {', '.join(action_names)}")
+        except Exception:
+            pass
+
+        if lines:
+            tag = scene.upper().replace("_", " ")
+            injection = f"\n\n[{tag} CONTEXT]\n" + "\n".join(lines) + f"\n[/{tag} CONTEXT]"
+            ctx["system_prompt"] = ctx.get("system_prompt", "") + injection
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  AmbientEventInterceptor  (priority 17)
+# ══════════════════════════════════════════════════════════════════════
+
+class AmbientEventInterceptor(InterceptorBase):
+    """
+    Pre-call: with a configurable probability, injects a random ambient
+    micro-event into the system prompt.  This makes scenes feel alive —
+    NPCs do things, environments change, small things happen between
+    player actions.
+
+    Events are scene-aware: a casino might have "a slot machine pays out
+    nearby", while a warzone might have "distant gunfire echoes".
+
+    The interceptor tracks recently used events per scene to avoid
+    repetition within a configurable window.
+    """
+    name     = "ambient_events"
+    priority = 17
+
+    # Probability of injecting an ambient event per call (0.0–1.0)
+    EVENT_CHANCE = 0.25
+
+    # Per-scene ambient event pools
+    _SCENE_EVENTS: Dict[str, List[str]] = {
+        "bedroom": [
+            "A soft notification chimes on the nightstand phone.",
+            "Moonlight shifts through the curtains, casting new shadows.",
+            "Music from a neighbor's apartment drifts faintly through the wall.",
+            "The scent of the candle changes subtly as it burns lower.",
+            "A car passes outside, headlights briefly sweeping across the ceiling.",
+        ],
+        "phone": [
+            "A new trending topic appears in the social feed.",
+            "The battery indicator drops a percentage.",
+            "A push notification from an unrelated app appears briefly.",
+            "The screen brightness auto-adjusts to the ambient light.",
+        ],
+        "lounge": [
+            "A jazz record crackles as it switches to a new track.",
+            "Someone at a distant table laughs quietly.",
+            "The bartender polishes a glass with practiced ease.",
+            "Cigarette smoke curls through the amber light.",
+            "A new patron slips through the velvet curtain.",
+        ],
+        "gallery": [
+            "A spotlight flickers briefly on a nearby painting.",
+            "Another visitor pauses at an adjacent exhibit, murmuring appreciation.",
+            "The gallery's ambient music transitions to a new piece.",
+            "Footsteps echo from the adjacent wing.",
+        ],
+        "casino": [
+            "A slot machine nearby erupts in flashing lights and coins.",
+            "The roulette wheel in the corner spins with a satisfying hum.",
+            "A dealer at the next table shuffles cards with a crisp snap.",
+            "Someone at the bar orders champagne with a confident wave.",
+            "The pit boss strolls past, eyes scanning the floor.",
+        ],
+        "warzone": [
+            "Distant artillery rumbles like thunder on the horizon.",
+            "A radio crackles with a garbled transmission from another squad.",
+            "Wind carries the acrid smell of smoke across the position.",
+            "A stray dog trots through the rubble, pausing to sniff.",
+            "Overhead, a drone buzzes faintly before disappearing from sight.",
+        ],
+        "realm": [
+            "A bird of prey circles high above the treeline.",
+            "The wind carries a faint melody from a distant village.",
+            "Leaves rustle as something small scurries through the underbrush.",
+            "Storm clouds gather on the far horizon.",
+            "A merchant's cart creaks along a nearby path.",
+        ],
+        "neon_city": [
+            "A holographic billboard flickers and changes to a new ad.",
+            "A delivery drone whirs past at street level.",
+            "Neon puddles ripple as someone splashes through them.",
+            "A street vendor calls out, hawking synthetic food.",
+            "The hum of the city's power grid surges momentarily.",
+        ],
+        "coders_room": [
+            "A compile notification pings on a nearby monitor.",
+            "The server rack fans spin up briefly then settle.",
+            "Someone's mechanical keyboard clacks rhythmically in the background.",
+            "A coffee machine gurgles to life in the corner.",
+        ],
+        "heist": [
+            "A security camera rotates to a new angle.",
+            "Footsteps echo in the corridor — a guard on patrol.",
+            "The building's ventilation system hums steadily.",
+            "A radio transmission crackles from the security office.",
+            "An elevator dings on a floor above.",
+        ],
+    }
+
+    # Generic fallback events for unknown scenes
+    _GENERIC_EVENTS = [
+        "The ambient lighting shifts subtly.",
+        "A faint sound carries from somewhere nearby.",
+        "The atmosphere seems to change imperceptibly.",
+        "Time passes quietly for a moment.",
+    ]
+
+    def __init__(self) -> None:
+        self._recent: Dict[str, List[str]] = {}  # scene -> recent events
+        self._recent_limit = 3
+        import random
+        self._rng = random
+
+    def pre_call(self, ctx: ResponseContext) -> None:
+        if self._rng.random() > self.EVENT_CHANCE:
+            return
+
+        scene = ctx.get("scene", "")
+        if not scene:
+            return
+
+        pool = self._SCENE_EVENTS.get(scene, self._GENERIC_EVENTS)
+        recent = self._recent.get(scene, [])
+        available = [e for e in pool if e not in recent]
+        if not available:
+            self._recent[scene] = []
+            available = pool
+
+        if not available:
+            return
+
+        event = self._rng.choice(available)
+        recent.append(event)
+        if len(recent) > self._recent_limit:
+            recent.pop(0)
+        self._recent[scene] = recent
+
+        ctx["system_prompt"] = ctx.get("system_prompt", "") + (
+            f"\n\n[AMBIENT] {event} [/AMBIENT]"
+        )
+
+
+# ══════════════════════════════════════════════════════════════════════
 #  CharacterRegistryInterceptor  (priority 8)
 # ══════════════════════════════════════════════════════════════════════
 
@@ -1729,6 +1978,8 @@ __all__ = [
     "PhoneSceneInterceptor",           # 15
     "LoungeSceneInterceptor",          # 15
     "GallerySceneInterceptor",         # 15
+    "UniversalSceneInterceptor",       # 16
+    "AmbientEventInterceptor",         # 17
     "AutoResultInjector",              # 20
     "SkillAwarenessInterceptor",       # 30
     "GameInterceptor",                 # 35 (merged session + rules)

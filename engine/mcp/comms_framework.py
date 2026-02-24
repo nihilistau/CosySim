@@ -753,6 +753,8 @@ def _build_default_pipeline() -> InterceptorPipeline:
         PhoneSceneInterceptor,
         LoungeSceneInterceptor,
         GallerySceneInterceptor,
+        UniversalSceneInterceptor,
+        AmbientEventInterceptor,
         AutoResultInjector,
         SkillAwarenessInterceptor,
         GameSessionInterceptor,
@@ -775,6 +777,8 @@ def _build_default_pipeline() -> InterceptorPipeline:
     pipeline.add(PhoneSceneInterceptor())        # 15
     pipeline.add(LoungeSceneInterceptor())       # 15
     pipeline.add(GallerySceneInterceptor())      # 15
+    pipeline.add(UniversalSceneInterceptor())    # 16
+    pipeline.add(AmbientEventInterceptor())      # 17
     pipeline.add(AutoResultInjector())           # 20
     pipeline.add(SkillAwarenessInterceptor())    # 30
     pipeline.add(GameSessionInterceptor())       # 35

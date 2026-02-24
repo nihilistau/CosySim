@@ -895,3 +895,84 @@ The codebase is well-maintained. No cleanup needed.
 | DialogSystem | 2/10 (20%) | already wired via DialogDirectiveInterceptor |
 | Registry Persistence | 10/10 (100%) | unchanged |
 | Scene Transition Tracking | 10/10 (100%) | NEW: auto via MCPSceneMixin |
+
+---
+
+## 31. Six Scenes Have Zero Scene-Specific Interceptors
+
+**Discovery:** Framework audit revealed that Casino, Warzone, Realm, NeonCity,
+Coders Room, and Heist had NO scene-specific interceptors. The pipeline ran all
+generic interceptors (CharacterRegistry, PersonalityGuard, etc.) but no scene
+context was injected — no mood, no narrative, no ConversationHeat, no atmosphere.
+
+**Design decision:** Rather than creating 6 individual interceptors (each ~80 lines
+of near-identical code), created a **UniversalSceneInterceptor** (priority 16) that
+acts as a catch-all. It skips scenes with dedicated interceptors (bedroom, phone,
+lounge, gallery) and injects Coordinator mood, scene narrative, atmosphere,
+ConversationHeat, and available MCP actions for all other scenes.
+
+**Impact:** Scene-specific interceptor coverage went from 4/10 to 10/10.
+ConversationHeat coverage went from 4/10 to 10/10. All in one 100-line class.
+
+**Pattern:** This is the "universal catch-all" pattern — write dedicated interceptors
+for complex scenes, use the universal one for everything else. New scenes get
+framework context for free without writing any interceptor code.
+
+---
+
+## 32. Scenes Need Ambient Life — The "Dead World" Problem
+
+**Discovery:** Between player actions, scenes feel static. Nothing happens unless
+the player does something. Real environments have ambient activity — sounds, NPC
+movements, environmental changes. Without these, the AI agents describe a dead world.
+
+**Fix:** Created **AmbientEventInterceptor** (priority 17) that injects random
+micro-events with configurable probability (default 25%). Events are scene-specific:
+- Casino: slot machines, card shuffling, champagne orders
+- Warzone: distant artillery, radio crackle, stray dogs
+- Bedroom: shifting moonlight, distant music, candle scent
+
+The interceptor tracks recent events per scene to avoid repetition within a sliding
+window. Agents naturally weave these ambient details into their responses, creating
+a living world without any scene code changes.
+
+---
+
+## 33. The Universal Pattern Scales Better
+
+**Insight:** The per-scene interceptor pattern doesn't scale. Each new scene needs a
+dedicated interceptor class, registration in `_build_default_pipeline()`, import line,
+`__all__` entry, and tests. The UniversalSceneInterceptor proved that one catch-all
+handles 6 scenes with better consistency than 6 individual implementations would.
+
+**Recommendation for new scenes:** Only create a dedicated interceptor if the scene
+has unique context needs (cocktail menus, artwork metadata, etc.). Otherwise, rely
+on the universal interceptor + Coordinator + SSM narrative.
+
+---
+
+## Implementation Log (Sprint 6)
+
+| Date | Revelation | Action | Status |
+|------|-----------|--------|--------|
+| Sprint 6 | #31 Six scenes missing interceptors | Created UniversalSceneInterceptor (priority 16) | Done |
+| Sprint 6 | #32 Dead world problem | Created AmbientEventInterceptor (priority 17) | Done |
+| Sprint 6 | #33 Universal pattern scales | Design insight documented | Done |
+| Sprint 6 | N/A | Pipeline count 20 → 22 | Done |
+| Sprint 6 | N/A | 15 new tests (1223 total) | Done |
+
+### Updated Framework Adoption (Post-Sprint 6)
+
+| Feature | Adoption | Change |
+|---------|----------|--------|
+| MCPSceneMixin | 10/10 (100%) | unchanged |
+| SceneStateManager | 10/10 (100%) | unchanged |
+| Interceptor Pipeline | 10/10 (100%) | now 22 interceptors |
+| Scene-Specific Context | 10/10 (100%) | was 4/10 — UniversalSceneInterceptor covers rest |
+| CharacterStateCoordinator | 10/10 (100%) | was 6/10 — Universal injects for all |
+| AgentGovernor | 2/10 (20%) | unchanged |
+| ConversationHeat | 10/10 (100%) | was 4/10 — Universal injects for all |
+| DialogSystem | 2/10 (20%) | already wired via DialogDirectiveInterceptor |
+| Registry Persistence | 10/10 (100%) | unchanged |
+| Scene Transition Tracking | 10/10 (100%) | unchanged |
+| Ambient Events | 10/10 (100%) | NEW: all scenes get micro-events |

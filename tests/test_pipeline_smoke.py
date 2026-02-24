@@ -1047,10 +1047,10 @@ class TestActionBasedHeatBumping:
         assert hasattr(ms, "_bump_heat_from_actions")
 
     def test_pipeline_interceptor_count(self):
-        """Pipeline should now have 20 interceptors (was 19, added Gallery)."""
+        """Pipeline should have 22 interceptors (added Universal + Ambient in Sprint 6)."""
         from engine.mcp.comms_framework import _build_default_pipeline
         pipeline = _build_default_pipeline()
-        assert len(pipeline._interceptors) == 20
+        assert len(pipeline._interceptors) == 22
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -1104,3 +1104,133 @@ class TestRouterMessageJourneyInjection:
         source = inspect.getsource(RouterMessageInjector.pre_call)
         assert "get_previous_scene" in source
         assert "player just came from" in source
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  Sprint 6 — UniversalSceneInterceptor + AmbientEventInterceptor
+# ══════════════════════════════════════════════════════════════════════
+
+class TestUniversalSceneInterceptor:
+    """UniversalSceneInterceptor should cover scenes without dedicated interceptors."""
+
+    def test_import(self):
+        from engine.agents.interceptors import UniversalSceneInterceptor
+        i = UniversalSceneInterceptor()
+        assert i.name == "universal_scene"
+        assert i.priority == 16
+
+    def test_skips_dedicated_scenes(self):
+        from engine.agents.interceptors import UniversalSceneInterceptor
+        i = UniversalSceneInterceptor()
+        for scene in ("bedroom", "phone", "lounge", "gallery"):
+            ctx = {"scene": scene, "agent_id": "test", "system_prompt": ""}
+            i.pre_call(ctx)
+            assert "CONTEXT]" not in ctx["system_prompt"], f"Should skip {scene}"
+
+    def test_injects_for_casino(self):
+        from engine.agents.interceptors import UniversalSceneInterceptor
+        i = UniversalSceneInterceptor()
+        ctx = {"scene": "casino", "agent_id": "dealer", "system_prompt": "You are a dealer."}
+        i.pre_call(ctx)
+        assert "[CASINO CONTEXT]" in ctx["system_prompt"]
+
+    def test_injects_for_warzone(self):
+        from engine.agents.interceptors import UniversalSceneInterceptor
+        i = UniversalSceneInterceptor()
+        ctx = {"scene": "warzone", "agent_id": "commander", "system_prompt": ""}
+        i.pre_call(ctx)
+        assert "[WARZONE CONTEXT]" in ctx["system_prompt"]
+
+    def test_injects_for_realm(self):
+        from engine.agents.interceptors import UniversalSceneInterceptor
+        i = UniversalSceneInterceptor()
+        ctx = {"scene": "realm", "agent_id": "npc", "system_prompt": ""}
+        i.pre_call(ctx)
+        assert "[REALM CONTEXT]" in ctx["system_prompt"]
+
+    def test_injects_for_neon_city(self):
+        from engine.agents.interceptors import UniversalSceneInterceptor
+        i = UniversalSceneInterceptor()
+        ctx = {"scene": "neon_city", "agent_id": "hacker", "system_prompt": ""}
+        i.pre_call(ctx)
+        assert "[NEON CITY CONTEXT]" in ctx["system_prompt"]
+
+    def test_injects_for_heist(self):
+        from engine.agents.interceptors import UniversalSceneInterceptor
+        i = UniversalSceneInterceptor()
+        ctx = {"scene": "heist", "agent_id": "planner", "system_prompt": ""}
+        i.pre_call(ctx)
+        assert "[HEIST CONTEXT]" in ctx["system_prompt"]
+
+    def test_injects_for_coders_room(self):
+        from engine.agents.interceptors import UniversalSceneInterceptor
+        i = UniversalSceneInterceptor()
+        ctx = {"scene": "coders_room", "agent_id": "dev", "system_prompt": ""}
+        i.pre_call(ctx)
+        assert "[CODERS ROOM CONTEXT]" in ctx["system_prompt"]
+
+
+class TestAmbientEventInterceptor:
+    """AmbientEventInterceptor should inject random micro-events."""
+
+    def test_import(self):
+        from engine.agents.interceptors import AmbientEventInterceptor
+        i = AmbientEventInterceptor()
+        assert i.name == "ambient_events"
+        assert i.priority == 17
+
+    def test_injects_ambient_event(self):
+        from engine.agents.interceptors import AmbientEventInterceptor
+        i = AmbientEventInterceptor()
+        i.EVENT_CHANCE = 1.0  # Force injection
+        ctx = {"scene": "casino", "system_prompt": "Base prompt."}
+        i.pre_call(ctx)
+        assert "[AMBIENT]" in ctx["system_prompt"]
+        assert "[/AMBIENT]" in ctx["system_prompt"]
+
+    def test_no_event_when_chance_zero(self):
+        from engine.agents.interceptors import AmbientEventInterceptor
+        i = AmbientEventInterceptor()
+        i.EVENT_CHANCE = 0.0  # Never inject
+        ctx = {"scene": "casino", "system_prompt": "Base prompt."}
+        i.pre_call(ctx)
+        assert "[AMBIENT]" not in ctx["system_prompt"]
+
+    def test_scene_specific_events(self):
+        from engine.agents.interceptors import AmbientEventInterceptor
+        i = AmbientEventInterceptor()
+        i.EVENT_CHANCE = 1.0
+        ctx = {"scene": "warzone", "system_prompt": ""}
+        i.pre_call(ctx)
+        # Warzone events should be warzone-themed
+        prompt = ctx["system_prompt"]
+        assert "[AMBIENT]" in prompt
+
+    def test_avoids_repetition(self):
+        from engine.agents.interceptors import AmbientEventInterceptor
+        i = AmbientEventInterceptor()
+        i.EVENT_CHANCE = 1.0
+        events_seen = set()
+        for _ in range(10):
+            ctx = {"scene": "casino", "system_prompt": ""}
+            i.pre_call(ctx)
+            event = ctx["system_prompt"].split("[AMBIENT]")[1].split("[/AMBIENT]")[0].strip()
+            events_seen.add(event)
+        # Should have used at least 2 different events in 10 calls
+        assert len(events_seen) >= 2
+
+    def test_skips_when_no_scene(self):
+        from engine.agents.interceptors import AmbientEventInterceptor
+        i = AmbientEventInterceptor()
+        i.EVENT_CHANCE = 1.0
+        ctx = {"scene": "", "system_prompt": ""}
+        i.pre_call(ctx)
+        assert "[AMBIENT]" not in ctx["system_prompt"]
+
+    def test_generic_fallback_for_unknown_scene(self):
+        from engine.agents.interceptors import AmbientEventInterceptor
+        i = AmbientEventInterceptor()
+        i.EVENT_CHANCE = 1.0
+        ctx = {"scene": "unknown_scene_xyz", "system_prompt": ""}
+        i.pre_call(ctx)
+        assert "[AMBIENT]" in ctx["system_prompt"]

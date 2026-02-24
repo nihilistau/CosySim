@@ -783,13 +783,19 @@ The following cross-cutting changes were made in Sprint 2:
 - **PhoneSceneInterceptor** now integrates **ConversationHeat** — phone conversations respond to heat tier directives just like bedroom scenes.
 - **Phone agent** now accepts `governance_context` — interceptor injections (directives, memory, personality guards) are no longer silently discarded by the phone agent.
 - **Bedroom stat changes** now route through **CharacterStateCoordinator** — all bedroom stat mutations use `get_coordinator().update()` for cross-system sync instead of direct `SceneStateManager` calls.
-- **Pipeline size** increased from 18 to **20 interceptors** (priority 5 → 92) with the additions of `NaturalMoodDriftInterceptor` (Sprint 2) and `GallerySceneInterceptor` (Sprint 4).
+- **Pipeline size** increased from 18 to **22 interceptors** (priority 5 → 92) across Sprints 2–6.
 
 ### Sprint 3-5 Updates
 
 - **Sprint 3:** Migrated remaining 6 scenes to CharacterStateCoordinator (Gallery, Warzone, Realm, NeonCity, Heist, Bedroom). Fixed NeonCity invalid `update_stats()` API call. Added InteractionRecord logging for bedroom physical interactions.
 - **Sprint 4:** Added `GallerySceneInterceptor` (pipeline now 20 interceptors). Action-based heat bumping in MoodSyncInterceptor — physical actions auto-bump ConversationHeat. `CharacterRegistry.persist_to_db()` writes runtime state to DB. `BaseScene.stop()` auto-persists. ConversationHeat wired into Lounge interceptor.
 - **Sprint 5:** Scene transition tracking — MCPFramework tracks player journey. `RouterMessageInjector` tells agents where the player came from. Dead code audit confirmed codebase is clean.
+
+### Sprint 6 Updates
+
+- **UniversalSceneInterceptor** (priority 16): Catch-all interceptor for scenes without dedicated ones (Casino, Warzone, Realm, NeonCity, Coders Room, Heist). Injects Coordinator mood, scene narrative, atmosphere, ConversationHeat, and available MCP actions. Scene-specific context coverage: 4/10 → 10/10.
+- **AmbientEventInterceptor** (priority 17): Randomly injects scene-specific micro-events (25% chance per call). Events include environmental changes, NPC actions, and ambient activity. Tracks recent events to avoid repetition. Makes scenes feel alive without any scene code changes.
+- Pipeline now has **22 interceptors** (was 20).
 
 ---
 
