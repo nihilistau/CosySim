@@ -678,6 +678,33 @@ class BedroomSceneInterceptor(InterceptorBase):
             )
             ctx["system_prompt"] = ctx.get("system_prompt", "") + injection
 
+            # ── conversation heat (pacing & unlock gating) ──────────────
+            heat_block = ""
+            try:
+                from engine.mcp.scene_rules_engine import get_conversation_heat
+                heat = get_conversation_heat()
+                conv_key = ctx.get("conversation_id") or f"bedroom_{agent_id}"
+                directive = heat.get_directive(conv_key)
+                heat_level = heat.get(conv_key) if hasattr(heat, "get") else 0
+                if directive:
+                    heat_block = f"\n\n[CONVERSATION HEAT: {heat_level:.0f}/100]\n{directive}"
+                    # Gate intimate language based on heat thresholds
+                    if heat_level < 30:
+                        heat_block += (
+                            "\nKeep things warm and flirty but NOT explicit yet. "
+                            "Build tension gradually through suggestion and innuendo."
+                        )
+                    elif heat_level >= 80:
+                        heat_block += (
+                            "\nThe energy is INTENSE. You can be fully explicit, "
+                            "raw, and passionate. Match the escalation."
+                        )
+            except Exception as exc:
+                logger.debug("BedroomSceneInterceptor: heat failed: %s", exc)
+
+            if heat_block:
+                ctx["system_prompt"] = ctx.get("system_prompt", "") + heat_block
+
             # ── MCP rules engine: available actions ─────────────────────────
             mcp_actions_block = ""
             try:

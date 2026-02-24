@@ -567,6 +567,71 @@ def api_router_tiers():
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 500
 
+
+@overlay_bp.route("/api/character/<character_id>/state", methods=["GET"])
+def api_character_state(character_id):
+    """
+    Get unified character state via CharacterStateCoordinator.
+
+    Merges CharacterRegistry (mood, energy, inhibition) with
+    SceneStateManager (arousal, happiness, etc.) into one response.
+    """
+    try:
+        from engine.mcp.state_coordinator import get_coordinator
+        state = get_coordinator().get_full_state(character_id)
+        return jsonify({"ok": True, **state})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+@overlay_bp.route("/api/character/<character_id>/state", methods=["POST"])
+def api_character_state_update(character_id):
+    """
+    Update character state via CharacterStateCoordinator.
+
+    Accepts JSON body with any combination of Registry fields (mood, energy,
+    inhibition, focus) and Stats fields (arousal, happiness, etc.).
+    Supports ``mode`` ("delta" or "set") and ``source`` for audit trail.
+    """
+    try:
+        from engine.mcp.state_coordinator import get_coordinator
+        data = request.get_json(force=True)
+        mode = data.pop("mode", "delta")
+        source = data.pop("source", "overlay_api")
+        scene = data.pop("scene", "")
+        persist = data.pop("persist", False)
+        snapshot = get_coordinator().update(
+            character_id, mode=mode, source=source, scene=scene,
+            persist=persist, **data,
+        )
+        return jsonify({"ok": True, **snapshot})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+@overlay_bp.route("/api/heat", methods=["GET"])
+def api_conversation_heat():
+    """
+    Get conversation heat levels for all active conversations.
+
+    Query params:
+      - ``key``: specific conversation key (optional, returns all if omitted)
+    """
+    try:
+        from engine.mcp.scene_rules_engine import get_conversation_heat
+        heat = get_conversation_heat()
+        key = request.args.get("key")
+        if key:
+            level = heat.get(key)
+            directive = heat.get_directive(key)
+            return jsonify({"ok": True, "key": key, "heat": level, "directive": directive})
+        # Return all tracked conversations
+        with heat._lock:
+            all_heat = {k: round(v, 1) for k, v in heat._heat.items()}
+        return jsonify({"ok": True, "conversations": all_heat})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
 def _register_socketio_events(socketio) -> None:
     """Register Socket.IO event handlers for overlay real-time updates."""
     from flask_socketio import emit

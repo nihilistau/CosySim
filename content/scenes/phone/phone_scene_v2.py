@@ -430,53 +430,8 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
                         pass
             return result
         except Exception as exc:
-            logger.debug("Governor unavailable (%s), using direct LLM", exc)
-
-        # Direct fallback via VirtualAgentManager
-        try:
-            from engine.agents.virtual_agent_manager import get_virtual_agent_manager
-            from engine.agents.virtual_agent import InferenceRequest
-            char = self.db.get_character(char_id)
-            name = (char or {}).get("name", "Character")
-            personality = (char or {}).get("personality", "")
-            system = system_override or (
-                f"You are {name}. {personality}\n"
-                "Reply naturally as a real person texting. Keep messages short.\n"
-                "Use emojis naturally 😏💕🔥. Be expressive.\n"
-                "Express mood with [MOOD:emotion] tags. Send selfies with [IMAGE:desc].\n"
-                "Never repeat your previous messages. Always advance the conversation."
-            )
-            msgs = [{"role": "system", "content": system}]
-            for turn in history:
-                msgs.append({"role": turn.get("role", "user"), "content": turn.get("content", "")})
-            msgs.append({"role": "user", "content": user_msg})
-            mgr = get_virtual_agent_manager()
-            req = InferenceRequest(
-                agent_id=char_id,
-                messages=msgs,
-                temperature=0.9,
-                max_output_tokens=4000,
-                conversation_id=f"phone_{char_id}",
-                store=True,
-                metadata={"scene": "phone", "character_name": name},
-            )
-            # Prefer pipeline path for watcher + kill switch
-            if hasattr(mgr, "infer_with_pipeline"):
-                try:
-                    proc = mgr.infer_with_pipeline(req)
-                except Exception:
-                    proc = mgr.infer_processed(req)
-            else:
-                proc = mgr.infer_processed(req)
-            result["text"] = strip_token_artifacts((proc.clean_text or "").strip())
-            result["mood"] = proc.mood_tags[0] if proc.mood_tags else None
-            result["image_requests"] = list(proc.image_requests)
-            result["action_tags"] = list(proc.action_tags)
-            result["voice_style"] = proc.voice_style
-            result["response_id"] = proc.response_id or None
-            return result
-        except Exception as exc:
-            logger.error("VirtualAgentManager reply failed: %s", exc)
+            logger.error("Governor reply failed for %s: %s", char_id, exc)
+            result["text"] = "(I'm having trouble replying right now. Try again in a moment.)"
             return result
 
     # ── Socket.IO ────────────────────────────────────────────────────────────
