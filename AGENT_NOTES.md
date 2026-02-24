@@ -31,6 +31,8 @@ Generated: [2026-07-25T00:00:00Z] — v4.0.0
 19. [Phase 13 — Training Data Pipeline](#19-phase-13--training-data-pipeline)
 20. [Phase 14 — Frontend Improvements](#20-phase-14--frontend-improvements)
 21. [Complete Scene Registry (v4.0)](#21-complete-scene-registry-v40)
+22a. [TagRegistry — Extensible Tag System](#22a-tagregistry--extensible-tag-system-v401)
+22b. [Scene Framework Adoption](#22b-scene-framework-adoption-v401)
 22. [Test Coverage (v4.0)](#22-test-coverage-v40)
 
 ---
@@ -2743,9 +2745,80 @@ shadows, transitions, z-index, and utility classes.
 
 ---
 
+
+## 22a. TagRegistry — Extensible Tag System (v4.0.1)
+
+**File:** `engine/mcp/tag_registry.py`
+
+The TagRegistry is a thread-safe singleton that centralizes all inline tag definitions,
+replacing hardcoded regex patterns scattered across StreamProcessor, StreamWatcher, and TokenRouter.
+
+### Built-in Tags (9 total)
+
+| Tag | Pattern | Purpose | Strip? | Pre-warm |
+|-----|---------|---------|--------|----------|
+| MOOD | `[MOOD:x]` | Character emotion | Yes | — |
+| IMAGE | `[IMAGE:x]` | Image generation | Yes | generate_image |
+| ACTION | `[ACTION:x]` | Character action | Yes | — |
+| STAT | `[STAT:name+/-val]` | Stat delta | Yes | — |
+| VOICE | `[VOICE:x]` | Voice style hint | Yes | — |
+| SEND | `[SEND:target:msg]` | Route message to target | Yes | send_message |
+| EVENT | `[EVENT:x]` | Fire event bus event | Yes | fire_event |
+| MEMORY | `[MEMORY:x]` | Store in memory | Yes | store_memory |
+| THINK | `<think>...</think>` | CoT (internal) | Yes | — |
+
+### Scene-Specific Tags
+
+Scenes can register custom tags at startup:
+- **Heist:** `[PLAN:x]` — heist planning directives
+- **Warzone:** `[ORDER:x]` — military orders
+
+### Consumer Integration
+
+| Consumer | How it uses TagRegistry |
+|----------|----------------------|
+| StreamProcessor | Strip pattern from `get_strip_pattern()`, routing tag fields |
+| StreamWatcher | `detect_tags()` delegates to registry (hardcoded fallback) |
+| TokenRouter | Intent map from `get_intent_map()` for pre-warming |
+
+### API
+
+- `TagRegistry.get()` — singleton access
+- `register(TagDef)` / `unregister(name)` — add/remove tags
+- `detect_all(text)` — returns `Dict[str, List[TagMatch]]`
+- `strip_tags(text)` — removes all tag patterns
+- `dispatch(text, context)` — detect + call handlers
+- `get_intent_map()` — for TokenRouter pre-warming
+
+## 22b. Scene Framework Adoption (v4.0.1)
+
+All 9 scenes now share a consistent framework integration pattern:
+
+### Shared Infrastructure (all scenes)
+
+- `register_shared_assets(app)` — shared CSS/JS Blueprint
+- `SceneStateManager` — unified state bridge
+- `TagRegistry` — extensible tag system
+- `MCPSceneMixin` — MCP skill server
+- Socket.IO — real-time bidirectional communication
+
+### Per-Scene Framework Usage
+
+| Scene | Governor | Pipeline | Custom Tags | State Sync |
+|-------|----------|----------|-------------|------------|
+| Bedroom | via AgentLoop | — | — | Full (stats, narrative) |
+| Phone | AgentGovernor | VirtualPipeline | — | Contacts, messages |
+| Casino | — | — | — | Chips, hands |
+| Lounge | — | — | — | Heat, trust |
+| Gallery | — | — | — | Gallery state |
+| Warzone | — | — | [ORDER:] | Military state |
+| Heist | — | VirtualPipeline | [PLAN:] | Phase tracking |
+| Realm | — | — | — | Quest state |
+| Command Center | — | — | — | System metrics |
+
 ## 22. Test Coverage (v4.0)
 
-**Total: 1084 tests, 0 failures**
+**Total: 1136 tests, 0 failures**
 
 ```
 python -m pytest tests/ -v --tb=short \
@@ -2759,4 +2832,5 @@ Key test files added in v4.0:
 - `tests/test_heist.py` — heist game logic (43 tests)
 - `tests/test_command_center.py` — command center scene + training prep (32 tests)
 - `tests/test_training_pipeline.py` — finetune_local + auto_train (15 tests)
-- `tests/test_observability.py` — MetricsDB, MetricsCollector, AlertEngine
+- `tests/test_observability.py`
+- `tests/test_tag_registry.py` — TagRegistry singleton, builtins, detection, custom tags (52 tests) — MetricsDB, MetricsCollector, AlertEngine
