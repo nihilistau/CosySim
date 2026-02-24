@@ -962,3 +962,92 @@ class TestBedroomInteractionRecords:
         source = inspect.getsource(cls)
         assert "log_interaction" in source
         assert "InteractionRecord" in source
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  Sprint 4 — Registry persistence, heat expansion, new interceptors
+# ══════════════════════════════════════════════════════════════════════
+
+class TestRegistryPersistence:
+    """CharacterRegistry should support persisting state to DB."""
+
+    def test_persist_method_exists(self):
+        from engine.mcp.character_registry import get_character_registry
+        reg = get_character_registry()
+        assert hasattr(reg, "persist_to_db")
+        assert callable(reg.persist_to_db)
+
+    def test_persist_returns_count(self):
+        from engine.mcp.character_registry import get_character_registry
+        reg = get_character_registry()
+        # Should return int (may be 0 if no matching DB records)
+        result = reg.persist_to_db()
+        assert isinstance(result, int)
+        assert result >= 0
+
+
+class TestBaseSceneStopPersists:
+    """BaseScene.stop() should call persist_to_db."""
+
+    def test_base_scene_stop_references_persist(self):
+        import inspect
+        from engine.scenes.base_scene import BaseScene
+        source = inspect.getsource(BaseScene.stop)
+        assert "persist_to_db" in source
+
+
+class TestGallerySceneInterceptor:
+    """GallerySceneInterceptor should exist and be in the pipeline."""
+
+    def test_instantiation(self):
+        from engine.agents.interceptors import GallerySceneInterceptor
+        g = GallerySceneInterceptor()
+        assert g.name == "gallery_scene"
+        assert g.priority == 15
+        assert "gallery" in g.applicable_scenes
+
+    def test_in_default_pipeline(self):
+        from engine.mcp.comms_framework import _build_default_pipeline
+        pipeline = _build_default_pipeline()
+        names = [i.name for i in pipeline._interceptors]
+        assert "gallery_scene" in names
+
+    def test_pre_call_no_agent_is_noop(self):
+        from engine.agents.interceptors import GallerySceneInterceptor
+        g = GallerySceneInterceptor()
+        ctx = {"system_prompt": "hello"}
+        g.pre_call(ctx)
+        assert ctx["system_prompt"] == "hello"
+
+
+class TestLoungeHeatExpansion:
+    """LoungeSceneInterceptor should use ConversationHeat."""
+
+    def test_lounge_interceptor_references_heat(self):
+        import inspect
+        from engine.agents.interceptors import LoungeSceneInterceptor
+        source = inspect.getsource(LoungeSceneInterceptor.pre_call)
+        assert "get_conversation_heat" in source
+
+
+class TestActionBasedHeatBumping:
+    """MoodSyncInterceptor should bump heat from action tags."""
+
+    def test_action_heat_map_defined(self):
+        from engine.agents.interceptors import MoodSyncInterceptor
+        ms = MoodSyncInterceptor()
+        assert "kiss" in ms._ACTION_HEAT
+        assert "touch" in ms._ACTION_HEAT
+        assert "flirt" in ms._ACTION_HEAT
+        assert ms._ACTION_HEAT["kiss"] > ms._ACTION_HEAT["flirt"]
+
+    def test_bump_method_exists(self):
+        from engine.agents.interceptors import MoodSyncInterceptor
+        ms = MoodSyncInterceptor()
+        assert hasattr(ms, "_bump_heat_from_actions")
+
+    def test_pipeline_interceptor_count(self):
+        """Pipeline should now have 20 interceptors (was 19, added Gallery)."""
+        from engine.mcp.comms_framework import _build_default_pipeline
+        pipeline = _build_default_pipeline()
+        assert len(pipeline._interceptors) == 20

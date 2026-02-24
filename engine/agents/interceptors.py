@@ -998,6 +998,17 @@ class LoungeSceneInterceptor(InterceptorBase):
             elif heat >= 40:
                 lines.append("Heat is elevated. Stay measured.")
 
+            # ── ConversationHeat (framework pacing system) ────────
+            try:
+                from engine.mcp.scene_rules_engine import get_conversation_heat
+                conv_heat = get_conversation_heat()
+                conv_key = ctx.get("conversation_id") or f"lounge_{agent_id}"
+                conv_directive = conv_heat.get_directive(conv_key)
+                if conv_directive:
+                    lines.append(f"[Conversation pacing] {conv_directive}")
+            except Exception:
+                pass
+
             injection = "\n\n[LOUNGE MCP CONTEXT]\n" + "\n".join(lines) + "\n[/LOUNGE MCP CONTEXT]"
             ctx["system_prompt"] = ctx.get("system_prompt", "") + injection
 
@@ -1012,6 +1023,69 @@ class LoungeSceneInterceptor(InterceptorBase):
 
         except Exception as exc:
             logger.debug("LoungeSceneInterceptor pre_call failed: %s", exc)
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  GallerySceneInterceptor  (priority 15)
+# ══════════════════════════════════════════════════════════════════════
+
+class GallerySceneInterceptor(InterceptorBase):
+    """
+    Pre-call: enriches the gallery curator agent's prompt with artwork context,
+    exhibition state, ConversationHeat pacing, and Coordinator mood data.
+
+    The gallery scene uses infer_processed() with streaming callbacks rather
+    than the governor path. This interceptor provides the same framework
+    context that governor-wrapped scenes get automatically.
+    """
+    name     = "gallery_scene"
+    priority = 15
+    applicable_scenes = {"gallery"}
+
+    def pre_call(self, ctx: ResponseContext) -> None:
+        agent_id = ctx.get("agent_id", "")
+        if not agent_id:
+            return
+
+        lines: List[str] = []
+
+        try:
+            # ── Character mood/state ──────────────────────────────
+            from engine.mcp.state_coordinator import get_coordinator
+            coord = get_coordinator()
+            snapshot = coord.get_full_state(agent_id)
+            if snapshot:
+                mood = snapshot.get("mood", "neutral")
+                energy = snapshot.get("energy", 50)
+                lines.append(f"Your current mood: {mood} (energy: {energy}%)")
+        except Exception:
+            pass
+
+        try:
+            # ── Scene narrative ────────────────────────────────────
+            from engine.mcp.scene_state import get_scene_state_manager
+            ssm = get_scene_state_manager()
+            narrative = ssm.get_narrative_entries("gallery", limit=5)
+            if narrative:
+                events = [e["event"] for e in narrative]
+                lines.append("Recent gallery events: " + " | ".join(events[-3:]))
+        except Exception:
+            pass
+
+        try:
+            # ── ConversationHeat pacing ────────────────────────────
+            from engine.mcp.scene_rules_engine import get_conversation_heat
+            heat = get_conversation_heat()
+            conv_key = ctx.get("conversation_id") or f"gallery_{agent_id}"
+            directive = heat.get_directive(conv_key)
+            if directive:
+                lines.append(f"[Conversation pacing] {directive}")
+        except Exception:
+            pass
+
+        if lines:
+            injection = "\n\n[GALLERY CONTEXT]\n" + "\n".join(lines) + "\n[/GALLERY CONTEXT]"
+            ctx["system_prompt"] = ctx.get("system_prompt", "") + injection
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -1432,6 +1506,49 @@ class MoodSyncInterceptor(InterceptorBase):
         if scene:
             self._evaluate_threshold_rules(scene, agent_id, ctx)
 
+        # ── Action-based heat bumping ─────────────────────────────
+        # Physical/emotional actions detected in tags auto-bump conversation heat
+        self._bump_heat_from_actions(parsed, ctx)
+
+    # Heat bump amounts per action keyword
+    _ACTION_HEAT: Dict[str, int] = {
+        "kiss": 15, "deep_kiss": 20, "neck_kiss": 18,
+        "touch": 10, "caress": 12, "cuddle": 8,
+        "flirt": 6, "wink": 4, "tease": 7,
+        "dance": 5, "whisper": 6, "embrace": 10,
+        "undress": 20, "strip": 18, "intimate": 25,
+    }
+
+    def _bump_heat_from_actions(
+        self, parsed: Any, ctx: ResponseContext,
+    ) -> None:
+        """Bump ConversationHeat when action tags indicate physical/emotional escalation."""
+        actions = getattr(parsed, "actions", None) or []
+        if not actions:
+            return
+        total_bump = 0
+        for action in actions:
+            action_lower = action.lower().strip()
+            for keyword, bump in self._ACTION_HEAT.items():
+                if keyword in action_lower:
+                    total_bump += bump
+                    break
+        if total_bump == 0:
+            return
+        try:
+            from engine.mcp.scene_rules_engine import get_conversation_heat
+            heat = get_conversation_heat()
+            agent_id = ctx.get("agent_id", "")
+            scene = ctx.get("scene", "")
+            conv_key = ctx.get("conversation_id") or f"{scene}_{agent_id}"
+            heat.bump(conv_key, total_bump)
+            logger.debug(
+                "MoodSyncInterceptor: action heat bump +%d for %s (actions: %s)",
+                total_bump, conv_key, actions,
+            )
+        except Exception as exc:
+            logger.debug("MoodSyncInterceptor: action heat bump failed: %s", exc)
+
     def _evaluate_threshold_rules(
         self, scene: str, agent_id: str, ctx: ResponseContext,
     ) -> None:
@@ -1598,6 +1715,7 @@ __all__ = [
     "BedroomSceneInterceptor",         # 15
     "PhoneSceneInterceptor",           # 15
     "LoungeSceneInterceptor",          # 15
+    "GallerySceneInterceptor",         # 15
     "AutoResultInjector",              # 20
     "SkillAwarenessInterceptor",       # 30
     "GameInterceptor",                 # 35 (merged session + rules)

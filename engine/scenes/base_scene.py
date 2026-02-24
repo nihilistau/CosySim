@@ -248,8 +248,12 @@ class BaseScene(ABC):
 
     @abstractmethod
     def stop(self) -> None:
-        """Stop the scene and cleanup"""
-        pass
+        """Stop the scene and persist character state to database."""
+        try:
+            from engine.mcp.character_registry import get_character_registry
+            get_character_registry().persist_to_db()
+        except Exception:
+            pass
 
     @abstractmethod
     def get_plugin_info(self) -> Dict[str, Any]:

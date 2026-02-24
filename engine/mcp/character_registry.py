@@ -83,11 +83,14 @@ Quick start::
 """
 from __future__ import annotations
 
+import logging
 import threading
 import time
 import uuid
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Set
+
+logger = logging.getLogger(__name__)
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -565,6 +568,46 @@ class CharacterRegistry:
                 priority   = sk_data.get("priority", 50),
             )
         return rec
+
+    # ── Persistence ──────────────────────────────────────────────────
+
+    def persist_to_db(self, character_id: Optional[str] = None) -> int:
+        """
+        Write runtime state back to the database for persistence across restarts.
+
+        If *character_id* is given, persists that character only.
+        If omitted, persists ALL registered characters.
+
+        Returns the number of characters successfully persisted.
+        """
+        try:
+            from content.simulation.database.db import Database
+            db = Database()
+        except Exception as exc:
+            logger.warning("persist_to_db: cannot access DB: %s", exc)
+            return 0
+
+        ids = [character_id] if character_id else list(self.list_characters())
+        persisted = 0
+        for cid in ids:
+            rec = self.get_record(cid)
+            if rec is None:
+                continue
+            state = rec.state
+            try:
+                db.update_character_state(
+                    cid,
+                    mood=state.mood,
+                    energy=state.energy,
+                    arousal=getattr(state, "arousal", 0.0) or state.flags.get("arousal", 0.0),
+                    metadata={"inhibition": state.inhibition, "flags": state.flags},
+                )
+                persisted += 1
+            except Exception as exc:
+                logger.debug("persist_to_db(%s): %s", cid, exc)
+        if persisted:
+            logger.info("persist_to_db: saved %d/%d characters to DB", persisted, len(ids))
+        return persisted
 
 
 # ══════════════════════════════════════════════════════════════════════

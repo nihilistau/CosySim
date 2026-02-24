@@ -774,3 +774,69 @@ The VirtualPipeline (planned Part 2) will solve this by being stream-native.
 | AgentGovernor | 2/10 (20%) | unchanged (Gallery uses helper instead) |
 | ConversationHeat | 1/10 (10%) | was 0/10 |
 | DialogSystem | 2/10 (20%) | unchanged |
+
+---
+
+## 26. Action-Based Heat Bumping: A Missing Feedback Loop
+
+**Discovery:** ConversationHeat was only bumped by analyzing text content in
+`ConversationVarietyInterceptor.post_call()`. Physical interactions (kiss, touch,
+dance, etc.) detected in `[ACTION:xxx]` tags never affected heat. This meant the
+pacing system was blind to the most significant escalation signals.
+
+**Fix:** Added `_ACTION_HEAT` map and `_bump_heat_from_actions()` to
+MoodSyncInterceptor. Now when parsed responses contain action tags matching
+physical keywords, heat auto-bumps (e.g., kiss=+15, touch=+10, flirt=+6).
+
+**Impact:** ConversationHeat now captures both verbal (text analysis) and
+non-verbal (action tags) escalation. Pacing directives become much more
+responsive to actual scene dynamics.
+
+---
+
+## 27. Gallery Had No Scene Interceptor
+
+**Discovery:** Gallery was the only scene with framework adoption (MCPSceneMixin,
+SSM) but no scene-specific interceptor. This meant gallery curator agents never
+received framework context (mood, narrative, heat) in their prompts.
+
+**Fix:** Created GallerySceneInterceptor (priority 15) that injects Coordinator
+mood state, scene narrative, and ConversationHeat pacing into gallery agent prompts.
+Pipeline now has 20 interceptors (was 19).
+
+---
+
+## 28. Registry State Amnesia on Restart
+
+**Discovery:** CharacterRegistry is in-memory only. All runtime state (mood, energy,
+inhibition, flags, restrictions) is lost on restart. The database has a
+`character_states` table with mood, energy, arousal columns, but nothing writes to it.
+
+**Fix:** Added `persist_to_db()` method on CharacterRegistry that writes all
+registered characters' runtime state back to the database. Wired into `BaseScene.stop()`
+so persistence happens automatically when any scene shuts down.
+
+---
+
+## Implementation Log (Sprint 4)
+
+| Date | Revelation | Action | Status |
+|------|-----------|--------|--------|
+| Sprint 4 | #26 Action heat bumping | _ACTION_HEAT map + _bump_heat_from_actions() | Done |
+| Sprint 4 | #27 Gallery no interceptor | Created GallerySceneInterceptor (priority 15) | Done |
+| Sprint 4 | #28 Registry amnesia | persist_to_db() + BaseScene.stop() auto-persist | Done |
+| Sprint 4 | N/A | ConversationHeat wired into Lounge interceptor | Done |
+| Sprint 4 | N/A | Thread safety + threshold rules already implemented (verified) | Done |
+
+### Updated Framework Adoption (Post-Sprint 4)
+
+| Feature | Adoption | Change |
+|---------|----------|--------|
+| MCPSceneMixin | 10/10 (100%) | unchanged |
+| SceneStateManager | 10/10 (100%) | unchanged |
+| Interceptor Pipeline | 10/10 (100%) | Gallery now has interceptor |
+| CharacterStateCoordinator | 6/10 (60%) | unchanged |
+| AgentGovernor | 2/10 (20%) | unchanged |
+| ConversationHeat | 4/10 (40%) | Bedroom, Phone, Lounge, Gallery |
+| DialogSystem | 2/10 (20%) | unchanged |
+| Registry Persistence | 10/10 (100%) | NEW: auto-persist on scene stop |
