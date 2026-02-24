@@ -741,6 +741,49 @@ heat.to_dict()  # {"phone_aria_thread1": 45.0, ...}
 
 - **ConversationVarietyInterceptor** — uses heat directives to adjust tone
 - **BedroomSceneInterceptor** — uses heat level to gate escalation
+- **PhoneSceneInterceptor** — integrates heat level for phone conversation tone *(Sprint 2)*
+
+---
+
+## NaturalMoodDriftInterceptor
+
+> **Module:** `engine/agents/interceptors.py` · **Priority:** 5 (first in pipeline)
+
+The **NaturalMoodDriftInterceptor** applies subtle, per-interaction stat drift so characters feel emotionally alive even when nothing dramatic is happening. It is the first interceptor in the 19-interceptor pipeline (priority 5).
+
+### Drift Values (per interaction)
+
+| Stat | Delta | Rationale |
+|------|-------|-----------|
+| arousal | −2 | Cools naturally between interactions |
+| tiredness | +1 | Gradually builds over a session |
+| happiness | −0.5 | Regresses toward neutral baseline |
+| anger | −3 | Fades quickly without reinforcement |
+| fear | −2 | Dissipates when nothing scary happens |
+| drunkenness | −1 | Slowly metabolises over time |
+
+### Inner-Thought Hints
+
+After applying drift, the interceptor inspects the dominant emotional state and injects a brief "inner thought" hint into the system prompt. This gives the LLM a subtle nudge without overriding scene directives — e.g. *"She feels a lingering tiredness creeping in"* or *"A faint unease still echoes from earlier."*
+
+### Scene Scope
+
+Active only in **bedroom**, **phone**, **lounge**, and **gallery** scenes. Other scenes (casino, hub, admin) are unaffected.
+
+### Cross-System Sync
+
+All stat mutations are routed through the **CharacterStateCoordinator** (`get_coordinator().update()`), ensuring drift values propagate to the CharacterRegistry, SceneStateManager, and ActivityBus listeners in a single atomic write.
+
+---
+
+## Sprint 2 Integration Notes
+
+The following cross-cutting changes were made in Sprint 2:
+
+- **PhoneSceneInterceptor** now integrates **ConversationHeat** — phone conversations respond to heat tier directives just like bedroom scenes.
+- **Phone agent** now accepts `governance_context` — interceptor injections (directives, memory, personality guards) are no longer silently discarded by the phone agent.
+- **Bedroom stat changes** now route through **CharacterStateCoordinator** — all bedroom stat mutations use `get_coordinator().update()` for cross-system sync instead of direct `SceneStateManager` calls.
+- **Pipeline size** increased from 18 to **19 interceptors** (priority 5 → 92) with the addition of `NaturalMoodDriftInterceptor`.
 
 ---
 

@@ -144,17 +144,19 @@ print(dump["system_prompt"])
 
 | Priority | Interceptor | Phase | What it does |
 |----------|-------------|-------|--------------|
+| 5  | `NaturalMoodDriftInterceptor` | pre | Applies subtle per-interaction stat drift & inner-thought hints |
 | 8  | `CharacterRegistryInterceptor` | pre | Syncs character mood/energy to sys-prompt |
 | 10 | `RouterMessageInjector` | pre | Injects pending router messages into ctx |
 | 12 | `DialogDirectiveInterceptor` | pre | Applies scene dialog directives |
 | 15 | `BedroomSceneInterceptor` | pre | Bedroom-specific sys-prompt additions |
-| 15 | `PhoneSceneInterceptor` | pre | Phone scene sys-prompt additions |
+| 15 | `PhoneSceneInterceptor` | pre | Phone scene sys-prompt additions (+ ConversationHeat) |
 | 15 | `LoungeSceneInterceptor` | pre | Lounge scene sys-prompt additions |
 | 20 | `AutoResultInjector` | pre | Injects auto-triggered skill results |
 | 30 | `SkillAwarenessInterceptor` | pre | Lists REQUIRED / AVAILABLE tools |
 | 35 | `GameSessionInterceptor` | pre | Injects active game session state |
 | 40 | `GameRulesInterceptor` | pre | Injects game rules if game active |
 | 50 | `PersonalityGuardInterceptor` | pre | Adds forbidden topics / required tone |
+| 55 | `ConversationVarietyInterceptor` | pre | Adjusts tone using ConversationHeat directives |
 | 60 | `PolicyEnforcerInterceptor` | pre | Enforces max token prompt reminder |
 | 70 | `MemoryEnhancerInterceptor` | pre | Injects top-k semantic memories |
 | 80 | `ResponseShaperInterceptor` | post | Strips leaked skill sections, trims |
@@ -282,8 +284,8 @@ class MyScene:
         return self.agent.reply(user_message)
 ```
 
-`get_governor()` creates an `AgentGovernor` backed by the default 17-interceptor
-pipeline.  Pass `pipeline=InterceptorPipeline()` to start with a blank pipeline.
+`get_governor()` creates an `AgentGovernor` backed by the default 19-interceptor
+pipeline (priority 5–92).  Pass `pipeline=InterceptorPipeline()` to start with a blank pipeline.
 
 ---
 
