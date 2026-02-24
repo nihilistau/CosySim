@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Optional, Dict, List
 import sys
 
-project_root = Path(__file__).parent.parent.parent
+from engine.paths import CONTENT_DIR as project_root
 sys.path.insert(0, str(project_root))
 
 logger = logging.getLogger(__name__)

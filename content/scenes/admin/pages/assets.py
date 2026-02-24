@@ -7,6 +7,7 @@ import streamlit as st
 import json
 from pathlib import Path
 from datetime import datetime
+from engine.paths import IMAGES_DIR
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -259,7 +260,7 @@ def _gen_image():
                 if not client.is_available():
                     st.error("ComfyUI not reachable.")
                     return
-                save_dir = Path(__file__).parent.parent.parent / "simulation" / "media" / "images"
+                save_dir = IMAGES_DIR
                 save_dir.mkdir(parents=True, exist_ok=True)
                 path = client.generate_image(positive_prompt=pos, negative_prompt=neg, save_dir=str(save_dir))
                 if path:

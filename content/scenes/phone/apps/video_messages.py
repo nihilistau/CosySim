@@ -11,6 +11,7 @@ import json
 import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Dict, List, Optional
+from engine.paths import CONTENT_DIR as content_root, SCENES_DIR
 
 if TYPE_CHECKING:
     from content.simulation.database.db import Database
@@ -101,10 +102,9 @@ class VideoMessagesApp:
             logger.warning("VideoMessagesApp.get_list DB error: %s", exc)
 
         # Filesystem scan — pick up files dropped in the media dirs
-        content_root = Path(__file__).parent.parent.parent.parent
         scan_dirs = [
             content_root / "simulation" / "media" / "video",
-            Path(__file__).parent.parent.parent / "media" / "video",
+            SCENES_DIR / "media" / "video",
         ]
         fs_cards: List[Dict] = []
         for scan_dir in scan_dirs:

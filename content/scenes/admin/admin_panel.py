@@ -12,7 +12,7 @@ from datetime import datetime
 from typing import Dict, List, Optional
 
 # Add project root to path
-project_root = Path(__file__).parent.parent.parent.parent
+from engine.paths import ROOT as project_root, CONFIG_DIR, BACKUPS_DIR, CONTENT_DIR, IMAGES_DIR
 sys.path.insert(0, str(project_root))
 import os
 os.chdir(project_root)
@@ -646,7 +646,7 @@ def show_configuration():
 
         try:
             import yaml
-            config_path = Path(__file__).parent.parent.parent.parent / "config" / "default.yaml"
+            config_path = CONFIG_DIR / "default.yaml"
 
             def _load_yaml():
                 with open(config_path, "r", encoding="utf-8") as f:
@@ -1169,13 +1169,13 @@ def show_asset_generator():
                 try:
                     import sys
                     from pathlib import Path
-                    sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+                    sys.path.insert(0, str(CONTENT_DIR))
                     from content.simulation.services.comfyui_client import get_comfyui_client
                     client = get_comfyui_client()
                     if not client.is_available():
                         st.error("ComfyUI not reachable. Check config/default.yaml for comfyui.base_url.")
                     else:
-                        save_dir = Path(__file__).parent.parent.parent / "simulation" / "media" / "images"
+                        save_dir = IMAGES_DIR
                         save_dir.mkdir(parents=True, exist_ok=True)
                         path = client.generate_image(
                             positive_prompt=pos_prompt,
@@ -1302,7 +1302,7 @@ def show_log_viewer():
     with col2:
         max_lines = st.number_input("Max Lines", 10, 1000, 100)
     
-    log_dir = Path(__file__).parent.parent.parent.parent / "logs"
+    log_dir = project_root / "logs"
     
     if not log_dir.exists():
         st.info("No logs directory found")
@@ -1343,7 +1343,6 @@ def show_event_chains():
     try:
         import sys
         from pathlib import Path
-        project_root = Path(__file__).parent.parent.parent.parent
         sys.path.insert(0, str(project_root))
         from content.simulation.database.db import Database
         from content.simulation.database.events import EventChain
@@ -1570,7 +1569,7 @@ def show_backup_restore():
         if st.button("Create Backup"):
             try:
                 import shutil
-                backup_dir = Path(__file__).parent.parent.parent.parent / "backups"
+                backup_dir = BACKUPS_DIR
                 backup_dir.mkdir(exist_ok=True)
                 backup_path = backup_dir / backup_name
                 backup_path.mkdir(exist_ok=True)
@@ -1585,7 +1584,7 @@ def show_backup_restore():
                 st.error(f"Failed: {e}")
     
     with tab2:
-        backup_dir = Path(__file__).parent.parent.parent.parent / "backups"
+        backup_dir = BACKUPS_DIR
         if backup_dir.exists():
             backups = [d.name for d in backup_dir.iterdir() if d.is_dir()]
             if backups:

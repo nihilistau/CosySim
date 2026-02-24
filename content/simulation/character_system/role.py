@@ -7,7 +7,7 @@ from dataclasses import dataclass
 import sys
 from pathlib import Path
 
-project_root = Path(__file__).parent.parent.parent
+from engine.paths import CONTENT_DIR as project_root
 sys.path.insert(0, str(project_root))
 
 from content.simulation.database.db import Database

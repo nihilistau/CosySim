@@ -8,8 +8,7 @@ import uuid
 import sys
 from pathlib import Path
 
-# Add parent directory to path for imports
-project_root = Path(__file__).parent.parent.parent
+from engine.paths import CONTENT_DIR as project_root
 sys.path.insert(0, str(project_root))
 
 from content.simulation.database.db import Database
@@ -617,8 +616,8 @@ class Character:
             CharacterAsset populated from this Character's DB data.
         """
         import sys
-        from pathlib import Path
-        sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
+        from engine.paths import ROOT
+        sys.path.insert(0, str(ROOT))
         from engine.assets.advanced_types import CharacterAsset
 
         meta = self.metadata or {}

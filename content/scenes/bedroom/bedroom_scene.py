@@ -27,7 +27,7 @@ from datetime import datetime
 from pathlib import Path
 import sys
 
-project_root = Path(__file__).parent.parent.parent
+from engine.paths import CONTENT_DIR as project_root
 sys.path.insert(0, str(project_root))
 
 import logging
