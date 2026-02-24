@@ -1012,3 +1012,33 @@ RouterMessageInjector (priority 10) drains inbox automatically. No work needed.
 | Sprint 7 | #34 Scene descriptors | 6 thematic descriptors in UniversalSceneInterceptor | Done |
 | Sprint 7 | #35 Rev #11 outdated | Confirmed cross-scene messaging already wired | Done |
 | Sprint 7 | N/A | 11 new tests (1234 total) | Done |
+
+### Sprint 8: TickerLoop + ConversationRecapInterceptor
+
+**Revelation #12 Addressed: MCPTimer vs Manual Threading**
+
+Created `TickerLoop` utility class in `engine/mcp/framework.py`. Provides a
+framework-blessed way to run periodic callbacks with proper lifecycle:
+- `start()` / `stop()` (idempotent, safe to call multiple times)
+- Daemon thread with error resilience (callback exceptions don't crash the loop)
+- Logging on start/stop/error
+- Exported from `engine.mcp` package
+
+Scenes can now replace `threading.Thread(target=self._tick_loop, daemon=True)`
+with `TickerLoop("scene_tick", self._on_tick, interval=5.0)`.
+
+### Revelation #36: Agents Have Goldfish Memory Without Recap
+
+Without explicit conversation recap injection, agents rely entirely on LMStudio's
+stateful conversation (via `previous_response_id`) for memory. But interceptors
+that rebuild system prompts each turn don't see prior conversation content.
+The `ConversationRecapInterceptor` (priority 6) now tracks the last 4 exchanges
+per conversation and injects them into the system prompt, giving all downstream
+interceptors visibility into recent conversation flow.
+
+| Sprint | Revelation | Action | Status |
+|--------|-----------|--------|--------|
+| Sprint 8 | #12 MCPTimer vs threading | Created TickerLoop utility class | Done |
+| Sprint 8 | #36 Goldfish memory | ConversationRecapInterceptor (priority 6) | Done |
+| Sprint 8 | N/A | Pipeline 22 → 23 interceptors | Done |
+| Sprint 8 | N/A | 11 new tests (1245 total) | Done |

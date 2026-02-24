@@ -237,6 +237,77 @@ class MCPTimer:
 
 
 # ══════════════════════════════════════════════════════════════════════
+#  TICKER LOOP  ─ framework-managed periodic callback
+# ══════════════════════════════════════════════════════════════════════
+
+class TickerLoop:
+    """
+    A managed periodic callback that replaces raw ``threading.Thread`` ticker
+    patterns used by scenes.  Provides proper start/stop lifecycle and logging.
+
+    Usage::
+
+        def on_tick():
+            print("tick!")
+
+        ticker = TickerLoop("my_scene_tick", on_tick, interval=5.0)
+        ticker.start()
+        # ... later ...
+        ticker.stop()
+
+    The callback runs on a daemon thread.  ``stop()`` is idempotent and safe
+    to call multiple times (e.g., from ``BaseScene.stop()``).
+    """
+
+    def __init__(
+        self,
+        name:     str,
+        callback: Callable[[], None],
+        interval: float = 5.0,
+    ) -> None:
+        self.name     = name
+        self.callback = callback
+        self.interval = max(0.5, interval)
+        self._stop    = threading.Event()
+        self._thread:  Optional[threading.Thread] = None
+        self._started = False
+
+    @property
+    def running(self) -> bool:
+        return self._started and self._thread is not None and self._thread.is_alive()
+
+    def start(self) -> None:
+        """Start the ticker.  No-op if already running."""
+        if self.running:
+            return
+        self._stop.clear()
+        self._thread = threading.Thread(
+            target=self._loop, name=f"TickerLoop-{self.name}", daemon=True,
+        )
+        self._started = True
+        self._thread.start()
+        logger.debug("TickerLoop '%s' started (interval=%.1fs)", self.name, self.interval)
+
+    def stop(self, timeout: float = 5.0) -> None:
+        """Stop the ticker.  Idempotent — safe to call multiple times."""
+        if not self._started:
+            return
+        self._stop.set()
+        if self._thread and self._thread.is_alive():
+            self._thread.join(timeout=timeout)
+        self._started = False
+        logger.debug("TickerLoop '%s' stopped", self.name)
+
+    def _loop(self) -> None:
+        while not self._stop.is_set():
+            try:
+                self.callback()
+            except Exception as exc:
+                logger.warning("TickerLoop '%s' callback error: %s", self.name, exc)
+            self._stop.wait(self.interval)
+
+
+# ══════════════════════════════════════════════════════════════════════
 #  CONSEQUENCE CHAIN  ─ deferred effects
 # ══════════════════════════════════════════════════════════════════════
 

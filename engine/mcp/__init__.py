@@ -8,6 +8,7 @@ from engine.mcp.framework import (
     MCPSceneNode,
     MCPCharacterNode,
     MCPTimer,
+    TickerLoop,
     ScheduledConsequence,
     CrossSceneMessage,
 )
@@ -77,6 +78,7 @@ __all__ = [
     "MCPSceneNode",
     "MCPCharacterNode",
     "MCPTimer",
+    "TickerLoop",
     "ScheduledConsequence",
     "CrossSceneMessage",
     # Character Registry

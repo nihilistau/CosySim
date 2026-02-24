@@ -1050,7 +1050,7 @@ class TestActionBasedHeatBumping:
         """Pipeline should have 22 interceptors (added Universal + Ambient in Sprint 6)."""
         from engine.mcp.comms_framework import _build_default_pipeline
         pipeline = _build_default_pipeline()
-        assert len(pipeline._interceptors) == 22
+        assert len(pipeline._interceptors) == 23
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -1365,3 +1365,162 @@ class TestUniversalSceneDescriptors:
         assert context_start >= 0
         after_header = prompt[context_start + len("[CASINO CONTEXT]"):].strip()
         assert after_header.startswith("Setting:")
+
+
+# ═══════════════════════════════════════════════════════════════════════
+#  Sprint 8: TickerLoop + ConversationRecapInterceptor
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestTickerLoop:
+    """Test the TickerLoop framework utility."""
+
+    def test_start_stop(self):
+        from engine.mcp.framework import TickerLoop
+        import time
+        count = {"n": 0}
+        def tick():
+            count["n"] += 1
+        t = TickerLoop("test_tick", tick, interval=0.1)
+        assert not t.running
+        t.start()
+        assert t.running
+        time.sleep(0.55)
+        t.stop()
+        assert not t.running
+        assert count["n"] >= 2  # Should have ticked at least twice in 0.55s
+
+    def test_stop_is_idempotent(self):
+        from engine.mcp.framework import TickerLoop
+        t = TickerLoop("test_idem", lambda: None, interval=1.0)
+        t.start()
+        t.stop()
+        t.stop()  # Should not raise
+        assert not t.running
+
+    def test_start_when_running_is_noop(self):
+        from engine.mcp.framework import TickerLoop
+        t = TickerLoop("test_noop", lambda: None, interval=1.0)
+        t.start()
+        thread1 = t._thread
+        t.start()  # Should not create second thread
+        assert t._thread is thread1
+        t.stop()
+
+    def test_callback_error_doesnt_crash(self):
+        from engine.mcp.framework import TickerLoop
+        import time
+        count = {"n": 0}
+        def bad_tick():
+            count["n"] += 1
+            if count["n"] == 1:
+                raise ValueError("boom")
+        t = TickerLoop("test_err", bad_tick, interval=0.1)
+        t.start()
+        time.sleep(0.55)
+        t.stop()
+        assert count["n"] >= 2  # Continued ticking after error
+
+    def test_exported_from_package(self):
+        from engine.mcp import TickerLoop
+        assert TickerLoop is not None
+
+
+class TestConversationRecapInterceptor:
+    """Test the ConversationRecapInterceptor."""
+
+    def test_no_recap_on_first_message(self):
+        from engine.agents.interceptors import ConversationRecapInterceptor
+        i = ConversationRecapInterceptor()
+        ctx = {"scene": "test", "agent_id": "lola", "system_prompt": "",
+               "user_message": "Hello!"}
+        i.pre_call(ctx)
+        assert "CONVERSATION RECAP" not in ctx["system_prompt"]
+
+    def test_recap_appears_after_exchange(self):
+        from engine.agents.interceptors import ConversationRecapInterceptor
+        i = ConversationRecapInterceptor()
+
+        # Turn 1: user sends, agent replies
+        ctx1 = {"scene": "test", "agent_id": "lola", "system_prompt": "",
+                "user_message": "Hey there!"}
+        i.pre_call(ctx1)
+        ctx1["response"] = "Oh hi! How are you?"
+        i.post_call(ctx1)
+
+        # Turn 2: recap should appear
+        ctx2 = {"scene": "test", "agent_id": "lola", "system_prompt": "",
+                "user_message": "I'm great!"}
+        i.pre_call(ctx2)
+        assert "CONVERSATION RECAP" in ctx2["system_prompt"]
+        assert "Hey there!" in ctx2["system_prompt"]
+        assert "Oh hi!" in ctx2["system_prompt"]
+
+    def test_recap_truncates_long_messages(self):
+        from engine.agents.interceptors import ConversationRecapInterceptor
+        i = ConversationRecapInterceptor()
+
+        long_msg = "A" * 200
+        ctx1 = {"scene": "test", "agent_id": "lola", "system_prompt": "",
+                "user_message": long_msg}
+        i.pre_call(ctx1)
+        ctx1["response"] = "Short reply"
+        i.post_call(ctx1)
+
+        ctx2 = {"scene": "test", "agent_id": "lola", "system_prompt": "",
+                "user_message": "Next"}
+        i.pre_call(ctx2)
+        # Should contain truncated version, not full 200 chars
+        assert "..." in ctx2["system_prompt"]
+        assert long_msg not in ctx2["system_prompt"]
+
+    def test_separate_conversations_have_separate_recaps(self):
+        from engine.agents.interceptors import ConversationRecapInterceptor
+        i = ConversationRecapInterceptor()
+
+        # Conversation A
+        ctx_a1 = {"scene": "bedroom", "agent_id": "lola", "system_prompt": "",
+                  "user_message": "bedroom talk"}
+        i.pre_call(ctx_a1)
+        ctx_a1["response"] = "bedroom reply"
+        i.post_call(ctx_a1)
+
+        # Conversation B
+        ctx_b1 = {"scene": "casino", "agent_id": "frankie", "system_prompt": "",
+                  "user_message": "casino talk"}
+        i.pre_call(ctx_b1)
+        ctx_b1["response"] = "casino reply"
+        i.post_call(ctx_b1)
+
+        # Turn 2 of A should only have A's history
+        ctx_a2 = {"scene": "bedroom", "agent_id": "lola", "system_prompt": "",
+                  "user_message": "more bedroom"}
+        i.pre_call(ctx_a2)
+        assert "bedroom talk" in ctx_a2["system_prompt"]
+        assert "casino talk" not in ctx_a2["system_prompt"]
+
+    def test_recap_limits_to_max_turns(self):
+        from engine.agents.interceptors import ConversationRecapInterceptor
+        i = ConversationRecapInterceptor()
+        i.MAX_TURNS = 2  # Only keep 2 exchanges
+
+        for n in range(5):
+            ctx = {"scene": "test", "agent_id": "lola", "system_prompt": "",
+                   "user_message": f"msg_{n}"}
+            i.pre_call(ctx)
+            ctx["response"] = f"reply_{n}"
+            i.post_call(ctx)
+
+        final = {"scene": "test", "agent_id": "lola", "system_prompt": "",
+                 "user_message": "final"}
+        i.pre_call(final)
+        prompt = final["system_prompt"]
+        # Should NOT contain early messages
+        assert "msg_0" not in prompt
+        # Should contain recent ones
+        assert "msg_4" in prompt or "reply_4" in prompt
+
+    def test_pipeline_count_is_23(self):
+        """Verify pipeline now has 23 interceptors."""
+        from engine.mcp.comms_framework import _build_default_pipeline
+        pipeline = _build_default_pipeline()
+        assert len(pipeline._interceptors) == 23

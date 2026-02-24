@@ -746,6 +746,7 @@ def _build_default_pipeline() -> InterceptorPipeline:
     """Build the default interceptor pipeline for new governors."""
     from engine.agents.interceptors import (
         NaturalMoodDriftInterceptor,
+        ConversationRecapInterceptor,
         CharacterRegistryInterceptor,
         RouterMessageInjector,
         DialogDirectiveInterceptor,
@@ -770,6 +771,7 @@ def _build_default_pipeline() -> InterceptorPipeline:
     )
     pipeline = InterceptorPipeline()
     pipeline.add(NaturalMoodDriftInterceptor())  #  5
+    pipeline.add(ConversationRecapInterceptor()) #  6
     pipeline.add(CharacterRegistryInterceptor()) #  8
     pipeline.add(RouterMessageInjector())        # 10
     pipeline.add(DialogDirectiveInterceptor())   # 12
