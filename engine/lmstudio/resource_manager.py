@@ -439,7 +439,7 @@ class ResourceManager:
                         is_draft=is_draft,
                     )
                 self._publish_event("model_loaded", {"model": model_id, "device": device})
-            return success
+            return result.status == "loaded"
         except Exception as exc:
             logger.error("Failed to load %s: %s", model_id, exc)
             # Fallback: try ModelManager CLI

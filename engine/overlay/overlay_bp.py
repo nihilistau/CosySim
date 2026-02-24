@@ -94,7 +94,7 @@ def api_status():
     # Skills
     try:
         from engine.skills.registry import SKILL_REGISTRY
-        result["skills_count"] = sum(len(v) for v in SKILL_REGISTRY._skills.values())
+        result["skills_count"] = len(SKILL_REGISTRY.all_tools())
     except Exception:
         result["skills_count"] = 0
 
@@ -373,15 +373,15 @@ def api_skills():
     try:
         from engine.skills.registry import SKILL_REGISTRY
         skills = []
-        for pack, metas in SKILL_REGISTRY._skills.items():
-            for meta in metas:
+        for pack, metas_list in SKILL_REGISTRY.describe().items():
+            for meta_dict in metas_list:
                 skills.append({
-                    "name": meta.name,
+                    "name": meta_dict["name"],
                     "pack": pack,
-                    "description": meta.description,
-                    "tags": meta.tags,
-                    "category": getattr(meta, "category", ""),
-                    "cooldown": getattr(meta, "cooldown", 0),
+                    "description": meta_dict["description"],
+                    "tags": meta_dict.get("tags", []),
+                    "category": meta_dict.get("category", ""),
+                    "cooldown": meta_dict.get("cooldown", 0),
                 })
         return jsonify({"ok": True, "skills": skills})
     except Exception as exc:

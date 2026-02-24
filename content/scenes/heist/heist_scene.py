@@ -1,7 +1,7 @@
 """
 Heist Scene — Cooperative multi-agent planning & execution showcase.
 
-Port 5562. Flask + SocketIO.
+Port 5565. Flask + SocketIO.
 
 Demonstrates:
 - Multi-agent coordination (3–4 crew members with specialties)
@@ -44,7 +44,7 @@ from engine.mcp.tag_registry import TagRegistry, TagDef
 logger = logging.getLogger(__name__)
 
 SCENE_ID = "heist"
-DEFAULT_PORT = 5562
+DEFAULT_PORT = 5565
 
 # Crew personality templates
 CREW_TEMPLATES = {

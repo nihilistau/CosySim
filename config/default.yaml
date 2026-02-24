@@ -81,6 +81,16 @@ scenes:
     port: 5564
     debug: false
 
+  heist:
+    host: "localhost"
+    port: 5565
+    debug: false
+
+  command_center:
+    host: "localhost"
+    port: 5566
+    debug: false
+
   hub:
     host: "localhost"
     port: 8500

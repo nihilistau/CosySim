@@ -43,6 +43,8 @@ class SceneManager:
             "realm":   {"cls": "content.scenes.realm.realm_scene.RealmScene",          "port": 5562, "label": "The Realm"},
             "neoncity": {"cls": "content.scenes.neoncity.neoncity_scene.NeonCityScene", "port": 5563, "label": "NeonCity"},
             "coders":  {"cls": "content.scenes.coders.coders_scene.CodersRoomScene",   "port": 5564, "label": "The Coders Room"},
+            "heist":   {"cls": "content.scenes.heist.heist_scene.HeistScene",           "port": 5565, "label": "The Heist"},
+            "command_center": {"cls": "content.scenes.command_center.command_center_scene.CommandCenterScene", "port": 5566, "label": "Command Center"},
         }
         count = 0
         for name, info in KNOWN_SCENES.items():

@@ -20,7 +20,7 @@ import time
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +59,7 @@ class HousekeepingService:
 
     def __init__(self, config: Optional[Dict] = None):
         self.config = config or self._load_config()
-        self._results: Dict[str, any] = {}
+        self._results: Dict[str, Any] = {}
 
     @staticmethod
     def _load_config() -> Dict:

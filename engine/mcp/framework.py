@@ -362,9 +362,8 @@ class MCPCharacterNode:
                 role = rec.profile.scene_roles.get(scene_id, "")
                 if role:
                     reg.set_state(self.character_id, current_role=role)
-        except Exception:
-            pass
-        logger.debug("MCPCharacterNode: %s entered scene %s (was: %s)", self.character_id, scene_id, previous)
+        except Exception as exc:
+            logger.debug("MCPCharacterNode.enter_scene role setup: %s", exc)
 
     def leave_scene(self) -> None:
         """Leave the current scene."""
@@ -422,8 +421,8 @@ class MCPCharacterNode:
             reg = get_character_registry()
             reg.ensure(self.character_id)
             reg.set_state(self.character_id, **data)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("MCPCharacterNode.update_state: %s", exc)
 
     def has_skill(self, skill_id: str) -> bool:
         try:
@@ -534,10 +533,8 @@ class MCPSceneNode:
                 f"{character_id} is present in the scene.",
                 entry_type="system", character_id=character_id,
             )
-        except Exception:
-            pass
-
-        logger.debug("MCPSceneNode[%s]: %s entered", self.scene_id, character_id)
+        except Exception as exc:
+            logger.debug("MCPSceneNode.on_character_enter narrative: %s", exc)
 
     def on_character_leave(self, character_id: str) -> None:
         with self._lock:
@@ -557,8 +554,8 @@ class MCPSceneNode:
                 f"[Cross-scene from {msg.from_char}@{msg.from_scene}]: {msg.message[:100]}",
                 entry_type="message", character_id=msg.to_char,
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("MCPSceneNode.on_cross_scene_message: %s", exc)
 
     # ── State ─────────────────────────────────────────────────────────
 
@@ -1039,8 +1036,8 @@ class MCPFramework:
                         cseq.scene_id, cseq.description,
                         entry_type="consequence", character_id=cseq.character_id,
                     )
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("Consequence narrative log: %s", exc)
             return {
                 "consequence_id": cseq.consequence_id,
                 "type":           cseq.consequence_type,

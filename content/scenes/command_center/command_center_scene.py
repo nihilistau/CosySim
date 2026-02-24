@@ -31,7 +31,7 @@ from engine.mcp.tag_registry import TagRegistry
 log = logging.getLogger(__name__)
 
 SCENE_ID = "command_center"
-DEFAULT_PORT = 5563
+DEFAULT_PORT = 5566
 
 
 class CommandCenterScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
