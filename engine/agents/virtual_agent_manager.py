@@ -1,5 +1,5 @@
 """
-VirtualAgentManager v2.7 — Centralised agent call server for CosySim.
+VirtualAgentManager v3.3 — Centralised agent call server for CosySim.
 
 All VirtualAgent LLM calls are routed through this manager, giving us full
 control over:
@@ -16,7 +16,10 @@ control over:
 * **Structured output** — JSON schema enforcement per request
 * **Batch inference** — fan-out multiple agent decisions in parallel
 * **Logging / observability** — every request/response tracked
-* **Logging / observability** — every request/response tracked
+* **Three-tier routing** — InferenceRouter dispatches to GPU/CPU/Router
+  tiers with priority queue and slot tracking (v3.3)
+* **SDK + REST dual channel** — SDK for tool-calling/streaming,
+  REST for stateful chats (v3.3)
 
 Architecture::
 
@@ -25,8 +28,11 @@ Architecture::
          ▼  InferenceRequest
     VirtualAgentManager.infer()
          │
+         ├── InferenceRouter (v3.3: priority queue, tier selection)
+         │    ├── SDK channel (.respond, .act, .stream)
+         │    └── REST channel (/api/v1/chat, stateful)
          ├── ConversationManager (stateful fast-path / replay)
-         ├── LMSClient.chat()  (/api/v1/chat)
+         ├── LMSClient.chat()  (/api/v1/chat — fallback)
          ├── ConcurrentExecutor (parallel requests)
          └── ResourceManager (model lifecycle)
               │
@@ -50,7 +56,7 @@ Usage::
     for chunk in mgr.infer_stream(request, on_event=my_handler):
         print(chunk, end="")
 
-    # Stats for overlay
+    # Stats for overlay (now includes router metrics)
     stats = mgr.get_stats()
 """
 from __future__ import annotations
@@ -93,10 +99,103 @@ class VirtualAgentManager:
         self._repair_attempts = 0
         self._repair_successes = 0
         self._quality_gate_calls = 0
+        # v3.3: SDK router integration
+        self._router = None           # lazy-init InferenceRouter
+        self._router_enabled = False  # controlled by config
 
         # Request hooks — called before/after every inference
         self._pre_hooks: List[Callable] = []
         self._post_hooks: List[Callable] = []
+
+    # ── Router integration ─────────────────────────────────────────
+
+    def get_router(self):
+        """Return the InferenceRouter (lazy-init from config).
+
+        Returns None if the router is disabled, not configured, or
+        if no backend clients (SDK/REST) are reachable.
+        """
+        if self._router is not None:
+            return self._router
+        if self._router_enabled is False and self._router is None:
+            # Already attempted and failed, or disabled — don't retry every call
+            if hasattr(self, "_router_init_attempted"):
+                return None
+        try:
+            self._router_init_attempted = True
+            from engine.lmstudio.router import InferenceRouter, TierConfig, Tier
+            from engine.config import get_config
+            cfg = get_config()
+            lms_cfg = cfg.get("lmstudio", {})
+            router_cfg = lms_cfg.get("router", {})
+            models_cfg = lms_cfg.get("models", {})
+
+            if not router_cfg.get("enabled", False):
+                return None
+
+            # Need at least one model key configured
+            has_any_model = any(
+                models_cfg.get(t, {}).get("key")
+                for t in ("primary", "utility", "router")
+            )
+            if not has_any_model:
+                return None
+
+            tiers = {}
+            for tier_name, tier_enum in [
+                ("primary", Tier.GPU_PRIMARY),
+                ("utility", Tier.CPU_UTILITY),
+                ("router", Tier.CPU_ROUTER),
+            ]:
+                mcfg = models_cfg.get(tier_name, {})
+                tiers[tier_enum] = TierConfig(
+                    tier=tier_enum,
+                    model_key=mcfg.get("key", ""),
+                    max_slots=mcfg.get("slots", 1),
+                    device=mcfg.get("device", "cpu"),
+                    enabled=mcfg.get("enabled", True) and bool(mcfg.get("key")),
+                )
+
+            self._router = InferenceRouter(
+                tiers=tiers,
+                max_queue_depth=router_cfg.get("max_queue_depth", 20),
+            )
+
+            # Wire SDK + REST clients (non-blocking)
+            has_backend = False
+            try:
+                from engine.lmstudio.sdk_client import get_sdk_client, SDK_AVAILABLE
+                if SDK_AVAILABLE and lms_cfg.get("sdk", {}).get("enabled", False):
+                    self._router._sdk_client = get_sdk_client()
+                    has_backend = True
+            except Exception:
+                pass
+            try:
+                from engine.lmstudio.lms_client import get_lms_client
+                self._router._rest_client = get_lms_client()
+                has_backend = True
+            except Exception:
+                pass
+
+            if not has_backend:
+                self._router = None
+                return None
+
+            self._router.start()
+            self._router_enabled = True
+            logger.info("InferenceRouter started with %d tiers", len(tiers))
+            return self._router
+
+        except Exception as exc:
+            logger.debug("Router init failed (will use direct client): %s", exc)
+            return None
+
+    def shutdown_router(self):
+        """Stop the background router worker."""
+        if self._router:
+            self._router.stop()
+            self._router = None
+            self._router_enabled = False
 
     # ── Agent lifecycle ─────────────────────────────────────────────
 
@@ -561,7 +660,7 @@ class VirtualAgentManager:
 
     def get_stats(self) -> Dict[str, Any]:
         """Return aggregate stats for overlay/admin."""
-        return {
+        stats = {
             "agents": len(self._agents),
             "total_requests": self._total_requests,
             "total_tokens_in": self._total_tokens_in,
@@ -580,7 +679,11 @@ class VirtualAgentManager:
                 round(100 * self._stateful_requests / self._total_requests, 1)
                 if self._total_requests > 0 else 0
             ),
+            "router_enabled": self._router_enabled,
         }
+        if self._router:
+            stats["router"] = self._router.get_metrics()
+        return stats
 
     # ── Internal: execute a single request ──────────────────────────
 
@@ -588,7 +691,8 @@ class VirtualAgentManager:
         """
         Execute a single inference request.
 
-        Strategy (v2.8 — stateful-first with conversation repair):
+        Strategy (v3.3 — router-aware, stateful-first with conversation repair):
+        0. If InferenceRouter is active → route stateless/direct calls through it
         1. If store=False → direct LMSClient.chat(store=False), no conversation
         2. If agent has a conversation_id → ConversationManager (stateful)
         3. Fallback → direct LMSClient.chat()
@@ -612,7 +716,6 @@ class VirtualAgentManager:
         agent = self._agents.get(request.agent_id)
         if agent and agent._inference_config:
             cfg = InferenceConfig.merge(cfg, agent._inference_config)
-            # Re-apply request-level store override (merge might clobber)
             if request.store is not None:
                 cfg.store = request.store
 
@@ -638,6 +741,13 @@ class VirtualAgentManager:
             except Exception:
                 pass
 
+        # ── v3.3: Router dispatch for stateless calls ──
+        router = self.get_router()
+        if router and request.store is False and not request.conversation_id:
+            routed = self._dispatch_via_router(router, request, cfg)
+            if routed is not None:
+                return routed
+
         # Stateless one-off: skip conversation entirely
         if request.store is False:
             self._stateless_requests += 1
@@ -649,7 +759,6 @@ class VirtualAgentManager:
             self._stateful_requests += 1
             try:
                 response = self._infer_stateful(request, cfg)
-                # Conversation repair: retry garbage responses
                 if self._is_garbage_response(response):
                     self._repair_attempts += 1
                     repaired = self._retry_with_repair(request, cfg, attempt=0)
@@ -663,11 +772,15 @@ class VirtualAgentManager:
                     request.agent_id, exc,
                 )
 
-        # Direct call fallback
+        # Direct call fallback (optionally via router)
+        if router:
+            routed = self._dispatch_via_router(router, request, cfg)
+            if routed is not None:
+                return routed
+
         resp = client.chat(request.messages, config=cfg)
         response = InferenceResponse.from_lms_response(resp)
 
-        # Conversation repair for direct calls too
         if self._is_garbage_response(response):
             self._repair_attempts += 1
             repaired = self._retry_with_repair(request, cfg, attempt=0)
@@ -676,6 +789,42 @@ class VirtualAgentManager:
                 return repaired
 
         return response
+
+    def _dispatch_via_router(self, router, request, cfg) -> Optional[InferenceResponse]:
+        """Try to route a request through the InferenceRouter.
+
+        Returns an InferenceResponse on success, None if the router can't
+        handle it (caller falls back to direct client).
+        """
+        try:
+            from engine.lmstudio.router import InferenceRequest as RouterReq, Priority
+
+            priority_map = {
+                "realtime": Priority.REALTIME,
+                "interactive": Priority.INTERACTIVE,
+                "background": Priority.BACKGROUND,
+                "batch": Priority.BATCH,
+            }
+            priority = priority_map.get(
+                getattr(request, "priority", None) or "interactive",
+                Priority.INTERACTIVE,
+            )
+
+            router_req = RouterReq(
+                messages=request.messages,
+                config=cfg,
+                agent_id=request.agent_id,
+                priority=priority,
+                task_type=getattr(request, "task_type", "chat"),
+            )
+
+            future = router.submit(router_req)
+            result = future.result(timeout=90)
+            return InferenceResponse.from_lms_response(result)
+
+        except Exception as exc:
+            logger.debug("Router dispatch failed, falling back to direct: %s", exc)
+            return None
 
     def _is_garbage_response(self, response: InferenceResponse) -> bool:
         """Check if a response is garbage that should be retried."""
