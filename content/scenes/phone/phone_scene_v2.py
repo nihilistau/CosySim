@@ -104,9 +104,8 @@ class _PhoneCharacterAgent:
             name  = (char or {}).get("name", "Character")
             pers  = (char or {}).get("personality", "")
 
-            # Base identity prompt — interceptors add context via governance_context
+            # Phone-specific formatting — identity comes from interceptors via governance_context
             base_system = (
-                f"You are {name}. {pers}\n"
                 "Reply naturally as a real person texting. Keep messages short and conversational.\n"
                 "Use emojis naturally 😏💕🔥. Be expressive and emotionally vivid.\n"
                 "You may express mood with [MOOD:emotion] tags.\n"
@@ -114,11 +113,12 @@ class _PhoneCharacterAgent:
                 "To send a voice message, include [VOICE:tone].\n"
                 "Never repeat your previous messages. Always advance the conversation."
             )
-            # Merge interceptor context (personality, scene rules, heat, variety, etc.)
+            # Interceptor context (personality, scene rules, heat, variety, etc.) prepends identity
             if governance_context:
-                system = f"{base_system}\n\n{governance_context}"
+                system = f"{governance_context}\n\n{base_system}"
             else:
-                system = base_system
+                # Fallback — no governor, build minimal identity
+                system = f"You are {name}. {pers}\n{base_system}"
             msgs = [{"role": "system", "content": system}]
             for turn in (history or []):
                 msgs.append({"role": turn.get("role", "user"), "content": turn.get("content", "")})

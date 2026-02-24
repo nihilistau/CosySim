@@ -559,11 +559,17 @@ function animate() {
 
     // Smooth character movement + glow pulse + detailed animation
     for (const s of Object.values(charSprites)) {
-        s.group.position.lerp(s.targetPos, Math.min(1, dt * 3));
+        // Skip position lerp for characters in an active sex pose
+        if (!CharModels.isPoseActive()) {
+            s.group.position.lerp(s.targetPos, Math.min(1, dt * 3));
+        }
         if (s.ring) s.ring.material.opacity = 0.2 + 0.15 * Math.sin(t * 3);
-        // Detailed humanoid animation (breathing, sway)
-        if (s.bodyGroup) CharModels.animate(s, t);
+        // Detailed humanoid animation (breathing, sway) — skipped during pose (pose handles it)
+        if (s.bodyGroup && !CharModels.isPoseActive()) CharModels.animate(s, t);
     }
+
+    // Sex pose animation (overrides individual character animation when active)
+    CharModels.animatePose(dt, t);
 
     // Pulse location markers
     for (const m of Object.values(locationMarkers)) {
@@ -648,6 +654,91 @@ function connectSocket() {
             renderCharStatSheets(sceneState.characters);
         }
     });
+
+    // ── Bed game → sex pose integration ──────────────────────────────
+    socket.on('bedgame_started', (data) => {
+        console.log('[BedGame] Started:', data);
+        // Poses are applied per-action, not on start
+    });
+    socket.on('bedgame_action', (data) => {
+        console.log('[BedGame] Action:', data);
+        _applyBedGamePose(data);
+    });
+    socket.on('bedgame_ended', (data) => {
+        console.log('[BedGame] Ended');
+        CharModels.stopPose(false); // smooth return to standing
+    });
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  BED GAME → SEX POSE BRIDGE
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * Map a bedgame_action socket event to a 3D sex pose on the character models.
+ * Resolves participant models from charSprites, computes the anchor point
+ * (bed location centre), and invokes CharModels.startPose().
+ */
+function _applyBedGamePose(data) {
+    const actionName = data.action || data.description || '';
+    const playerId = data.player_id;
+    const targetId = data.target_id;
+
+    // Resolve character model objects from charSprites
+    const participants = [];
+
+    // Determine bed anchor position (from scene state locations)
+    let anchorX = 0, anchorZ = 0;
+    const locs = sceneState.locations || {};
+    if (locs.bed && locs.bed.pos) {
+        anchorX = locs.bed.pos.x || 0;
+        anchorZ = locs.bed.pos.z || 0;
+    }
+
+    // A = active player (initiator)
+    const spriteA = charSprites[playerId];
+    if (spriteA && spriteA.bodyGroup) {
+        participants.push({ model: spriteA, anchorX, anchorZ });
+    }
+
+    // B = target
+    if (targetId && targetId !== playerId) {
+        const spriteB = charSprites[targetId];
+        if (spriteB && spriteB.bodyGroup) {
+            participants.push({ model: spriteB, anchorX, anchorZ });
+        }
+    } else {
+        // If no explicit target, pick the other character in the game
+        for (const [cid, sp] of Object.entries(charSprites)) {
+            if (cid !== playerId && sp.bodyGroup && participants.length < 2) {
+                participants.push({ model: sp, anchorX, anchorZ });
+            }
+        }
+    }
+
+    // C = third participant for threesome actions (any remaining character)
+    if (actionName.startsWith('threesome')) {
+        const usedIds = new Set(participants.map(p => {
+            for (const [cid, sp] of Object.entries(charSprites)) {
+                if (sp === p.model || sp.group === p.model.group) return cid;
+            }
+            return null;
+        }));
+        for (const [cid, sp] of Object.entries(charSprites)) {
+            if (!usedIds.has(cid) && sp.bodyGroup && participants.length < 3) {
+                participants.push({ model: sp, anchorX, anchorZ });
+            }
+        }
+    }
+
+    if (participants.length >= 2) {
+        // Set expression based on mood hint from server (aroused, moaning, ecstasy, flirty)
+        const mood = data.mood_hint || 'aroused';
+        for (const p of participants) {
+            CharModels.setExpression(p.model, mood);
+        }
+        CharModels.startPose(actionName, participants);
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════

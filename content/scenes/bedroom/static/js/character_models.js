@@ -1064,8 +1064,494 @@ function animateCharacterModel(model, time) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-//  UPGRADED SPEECH BUBBLE
+//  SEX POSE / INTERACTION SYSTEM
 // ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * Pose definitions for sexual interactions.
+ * Each pose defines body part transforms for up to 3 participants:
+ *   role A = initiator/active, B = receiver, C = third participant.
+ * Values are relative offsets/rotations applied on top of the base position.
+ *
+ * Fields per role:
+ *   pos:   {x,y,z}        — world-space offset from the anchor point (bed centre)
+ *   rot:   {x,y,z}        — body group euler rotation
+ *   armL:  {rx,ry,rz}     — left arm rotations
+ *   armR:  {rx,ry,rz}     — right arm rotations
+ *   legL:  {rx,ry,rz}     — left leg rotations
+ *   legR:  {rx,ry,rz}     — right leg rotations
+ *   headTilt: number       — head group X rotation (nod)
+ *   thrust: {amp,freq}     — rhythmic hip motion (amplitude, frequency Hz)
+ *   breathMult: number     — breathing intensity multiplier
+ */
+
+const SEX_POSES = {
+    // ── Standing / standing ──────────────────────────────────────────
+    'kiss deeply': {
+        A: { pos:{x:-0.15,y:0,z:0}, rot:{x:0,y:0.3,z:0},
+             armL:{rx:0.6,ry:0,rz:0.3}, armR:{rx:0.8,ry:0,rz:-0.2},
+             legL:{rx:0,ry:0,rz:0}, legR:{rx:0,ry:0,rz:0},
+             headTilt:-0.15, thrust:null, breathMult:1.4 },
+        B: { pos:{x:0.15,y:0,z:0}, rot:{x:0,y:-0.3,z:0},
+             armL:{rx:0.5,ry:0,rz:0.2}, armR:{rx:0.7,ry:0,rz:-0.3},
+             legL:{rx:0,ry:0,rz:0}, legR:{rx:0,ry:0,rz:0},
+             headTilt:-0.12, thrust:null, breathMult:1.3 },
+    },
+    'bite neck': {
+        A: { pos:{x:-0.12,y:0,z:0.05}, rot:{x:0,y:0.4,z:0},
+             armL:{rx:0.5,ry:0,rz:0.4}, armR:{rx:0.9,ry:0.2,rz:-0.1},
+             legL:{rx:0,ry:0,rz:0}, legR:{rx:0,ry:0,rz:0},
+             headTilt:0.2, thrust:null, breathMult:1.5 },
+        B: { pos:{x:0.12,y:0,z:-0.05}, rot:{x:0,y:-0.2,z:0},
+             armL:{rx:0.3,ry:0,rz:0.1}, armR:{rx:0.4,ry:0,rz:-0.1},
+             legL:{rx:0,ry:0,rz:0}, legR:{rx:0,ry:0,rz:0},
+             headTilt:-0.3, thrust:null, breathMult:1.6 },
+    },
+    'spank': {
+        A: { pos:{x:-0.3,y:0,z:0}, rot:{x:0,y:0.2,z:0},
+             armL:{rx:0.4,ry:0,rz:0.3}, armR:{rx:-1.2,ry:0,rz:-0.2},
+             legL:{rx:0,ry:0,rz:0}, legR:{rx:0.1,ry:0,rz:0},
+             headTilt:0.05, thrust:null, breathMult:1.3 },
+        B: { pos:{x:0.3,y:-0.35,z:0}, rot:{x:1.2,y:Math.PI,z:0},
+             armL:{rx:0.3,ry:0,rz:0.2}, armR:{rx:0.3,ry:0,rz:-0.2},
+             legL:{rx:-0.6,ry:0,rz:0}, legR:{rx:-0.6,ry:0,rz:0},
+             headTilt:0.1, thrust:null, breathMult:1.5 },
+    },
+    // ── Oral ─────────────────────────────────────────────────────────
+    'oral — give': {
+        A: { pos:{x:0,y:-0.7,z:0.25}, rot:{x:0,y:0,z:0},
+             armL:{rx:0.8,ry:0,rz:0.3}, armR:{rx:0.8,ry:0,rz:-0.3},
+             legL:{rx:-1.5,ry:0,rz:0}, legR:{rx:-1.5,ry:0,rz:0},
+             headTilt:0.15, thrust:null, breathMult:1.6 },
+        B: { pos:{x:0,y:0,z:0}, rot:{x:0,y:0,z:0},
+             armL:{rx:0.3,ry:0,rz:0.3}, armR:{rx:0.3,ry:0,rz:-0.3},
+             legL:{rx:0.15,ry:0,rz:-0.15}, legR:{rx:0.15,ry:0,rz:0.15},
+             headTilt:-0.25, thrust:null, breathMult:1.8 },
+    },
+    'oral — receive': {
+        A: { pos:{x:0,y:0,z:0}, rot:{x:0,y:0,z:0},
+             armL:{rx:-0.1,ry:0,rz:0.2}, armR:{rx:-0.1,ry:0,rz:-0.2},
+             legL:{rx:0.15,ry:0,rz:-0.15}, legR:{rx:0.15,ry:0,rz:0.15},
+             headTilt:-0.3, thrust:null, breathMult:2.0 },
+        B: { pos:{x:0,y:-0.7,z:0.25}, rot:{x:0,y:0,z:0},
+             armL:{rx:0.8,ry:0,rz:0.3}, armR:{rx:0.8,ry:0,rz:-0.3},
+             legL:{rx:-1.5,ry:0,rz:0}, legR:{rx:-1.5,ry:0,rz:0},
+             headTilt:0.15, thrust:{amp:0.03,freq:1.2}, breathMult:1.5 },
+    },
+    'finger / handjob': {
+        A: { pos:{x:-0.2,y:0,z:0.1}, rot:{x:0,y:0.4,z:0},
+             armL:{rx:0.3,ry:0,rz:0.2}, armR:{rx:1.0,ry:0.3,rz:0},
+             legL:{rx:0,ry:0,rz:0}, legR:{rx:0,ry:0,rz:0},
+             headTilt:0.05, thrust:null, breathMult:1.3 },
+        B: { pos:{x:0.2,y:0,z:-0.1}, rot:{x:0,y:-0.3,z:0},
+             armL:{rx:0.1,ry:0,rz:0.1}, armR:{rx:0.1,ry:0,rz:-0.1},
+             legL:{rx:0.2,ry:0,rz:-0.2}, legR:{rx:0.2,ry:0,rz:0.2},
+             headTilt:-0.2, thrust:null, breathMult:1.8 },
+    },
+    'face sit': {
+        A: { pos:{x:0,y:0.15,z:0}, rot:{x:0,y:0,z:0},
+             armL:{rx:0.3,ry:0,rz:0.4}, armR:{rx:0.3,ry:0,rz:-0.4},
+             legL:{rx:-0.8,ry:0,rz:-0.4}, legR:{rx:-0.8,ry:0,rz:0.4},
+             headTilt:-0.2, thrust:{amp:0.04,freq:0.8}, breathMult:2.0 },
+        B: { pos:{x:0,y:-0.65,z:0}, rot:{x:-0.2,y:0,z:0},
+             armL:{rx:0.6,ry:0,rz:0.4}, armR:{rx:0.6,ry:0,rz:-0.4},
+             legL:{rx:0,ry:0,rz:0}, legR:{rx:0,ry:0,rz:0},
+             headTilt:0.3, thrust:null, breathMult:1.5 },
+    },
+    'throat fuck': {
+        A: { pos:{x:0,y:0,z:0}, rot:{x:0,y:0,z:0},
+             armL:{rx:0.6,ry:0.2,rz:0.1}, armR:{rx:0.6,ry:-0.2,rz:-0.1},
+             legL:{rx:0.1,ry:0,rz:0}, legR:{rx:0.1,ry:0,rz:0},
+             headTilt:0.1, thrust:{amp:0.06,freq:2.5}, breathMult:1.8 },
+        B: { pos:{x:0,y:-0.7,z:0.3}, rot:{x:0,y:0,z:0},
+             armL:{rx:0.5,ry:0,rz:0.2}, armR:{rx:0.5,ry:0,rz:-0.2},
+             legL:{rx:-1.5,ry:0,rz:0}, legR:{rx:-1.5,ry:0,rz:0},
+             headTilt:0.2, thrust:null, breathMult:2.2 },
+    },
+    // ── Main sex positions ───────────────────────────────────────────
+    'ride': {
+        A: { pos:{x:0,y:0.25,z:0.05}, rot:{x:-0.1,y:0,z:0},
+             armL:{rx:0.4,ry:0,rz:0.3}, armR:{rx:0.4,ry:0,rz:-0.3},
+             legL:{rx:-1.2,ry:0,rz:-0.5}, legR:{rx:-1.2,ry:0,rz:0.5},
+             headTilt:-0.25, thrust:{amp:0.08,freq:1.5}, breathMult:2.2 },
+        B: { pos:{x:0,y:-0.55,z:0}, rot:{x:-0.3,y:0,z:0},
+             armL:{rx:0.6,ry:0,rz:0.4}, armR:{rx:0.6,ry:0,rz:-0.4},
+             legL:{rx:-0.5,ry:0,rz:-0.3}, legR:{rx:-0.5,ry:0,rz:0.3},
+             headTilt:-0.15, thrust:{amp:0.04,freq:1.5}, breathMult:2.0 },
+    },
+    'fuck — missionary': {
+        A: { pos:{x:0,y:-0.1,z:0.15}, rot:{x:0.6,y:0,z:0},
+             armL:{rx:0.8,ry:0,rz:0.4}, armR:{rx:0.8,ry:0,rz:-0.4},
+             legL:{rx:-0.4,ry:0,rz:0}, legR:{rx:-0.4,ry:0,rz:0},
+             headTilt:0.15, thrust:{amp:0.07,freq:1.8}, breathMult:2.5 },
+        B: { pos:{x:0,y:-0.55,z:0}, rot:{x:-0.5,y:0,z:0},
+             armL:{rx:0.7,ry:0,rz:0.5}, armR:{rx:0.7,ry:0,rz:-0.5},
+             legL:{rx:-0.8,ry:0,rz:-0.6}, legR:{rx:-0.8,ry:0,rz:0.6},
+             headTilt:-0.2, thrust:null, breathMult:2.2 },
+    },
+    'fuck — doggy': {
+        A: { pos:{x:0,y:0,z:-0.3}, rot:{x:0.3,y:0,z:0},
+             armL:{rx:0.6,ry:0,rz:0.3}, armR:{rx:0.6,ry:0,rz:-0.3},
+             legL:{rx:-0.3,ry:0,rz:0}, legR:{rx:-0.3,ry:0,rz:0},
+             headTilt:0.1, thrust:{amp:0.09,freq:2.0}, breathMult:2.5 },
+        B: { pos:{x:0,y:-0.35,z:0.3}, rot:{x:1.0,y:Math.PI,z:0},
+             armL:{rx:0.5,ry:0,rz:0.2}, armR:{rx:0.5,ry:0,rz:-0.2},
+             legL:{rx:-0.6,ry:0,rz:-0.3}, legR:{rx:-0.6,ry:0,rz:0.3},
+             headTilt:0.2, thrust:null, breathMult:2.3 },
+    },
+    'edge': {
+        A: { pos:{x:-0.2,y:0,z:0.1}, rot:{x:0,y:0.3,z:0},
+             armL:{rx:0.3,ry:0,rz:0.2}, armR:{rx:1.1,ry:0.3,rz:0},
+             legL:{rx:0,ry:0,rz:0}, legR:{rx:0,ry:0,rz:0},
+             headTilt:0.1, thrust:null, breathMult:1.4 },
+        B: { pos:{x:0.2,y:0,z:-0.1}, rot:{x:0,y:-0.2,z:0},
+             armL:{rx:0.1,ry:0,rz:0.1}, armR:{rx:0.1,ry:0,rz:-0.1},
+             legL:{rx:0.3,ry:0,rz:-0.3}, legR:{rx:0.3,ry:0,rz:0.3},
+             headTilt:-0.35, thrust:null, breathMult:2.5 },
+    },
+    'use toy on target': {
+        A: { pos:{x:-0.25,y:0,z:0.1}, rot:{x:0,y:0.3,z:0},
+             armL:{rx:0.2,ry:0,rz:0.1}, armR:{rx:1.2,ry:0.2,rz:0},
+             legL:{rx:0,ry:0,rz:0}, legR:{rx:0,ry:0,rz:0},
+             headTilt:0.1, thrust:null, breathMult:1.3 },
+        B: { pos:{x:0.2,y:0,z:-0.1}, rot:{x:0,y:-0.2,z:0},
+             armL:{rx:0.2,ry:0,rz:0.2}, armR:{rx:0.2,ry:0,rz:-0.2},
+             legL:{rx:0.25,ry:0,rz:-0.3}, legR:{rx:0.25,ry:0,rz:0.3},
+             headTilt:-0.3, thrust:null, breathMult:2.2 },
+    },
+    // ── Climax / Finish ──────────────────────────────────────────────
+    'cum on target': {
+        A: { pos:{x:-0.15,y:0,z:0.15}, rot:{x:0,y:0.2,z:0},
+             armL:{rx:0.2,ry:0,rz:0.1}, armR:{rx:1.0,ry:0,rz:0},
+             legL:{rx:0.1,ry:0,rz:0}, legR:{rx:0.1,ry:0,rz:0},
+             headTilt:-0.3, thrust:null, breathMult:3.0 },
+        B: { pos:{x:0.15,y:-0.5,z:0}, rot:{x:-0.3,y:-0.3,z:0},
+             armL:{rx:0.3,ry:0,rz:0.2}, armR:{rx:0.3,ry:0,rz:-0.2},
+             legL:{rx:-0.4,ry:0,rz:0}, legR:{rx:-0.4,ry:0,rz:0},
+             headTilt:-0.15, thrust:null, breathMult:2.0 },
+    },
+    'orgasm together': {
+        A: { pos:{x:-0.08,y:-0.15,z:0.1}, rot:{x:0.3,y:0.15,z:0},
+             armL:{rx:0.7,ry:0,rz:0.5}, armR:{rx:0.7,ry:0,rz:-0.5},
+             legL:{rx:-0.4,ry:0,rz:0}, legR:{rx:-0.4,ry:0,rz:0},
+             headTilt:-0.35, thrust:{amp:0.1,freq:3.0}, breathMult:3.5 },
+        B: { pos:{x:0.08,y:-0.45,z:0}, rot:{x:-0.4,y:-0.15,z:0},
+             armL:{rx:0.8,ry:0,rz:0.5}, armR:{rx:0.8,ry:0,rz:-0.5},
+             legL:{rx:-0.7,ry:0,rz:-0.5}, legR:{rx:-0.7,ry:0,rz:0.5},
+             headTilt:-0.3, thrust:{amp:0.08,freq:3.0}, breathMult:3.5 },
+    },
+    'aftercare': {
+        A: { pos:{x:-0.1,y:-0.5,z:0}, rot:{x:-0.2,y:0.15,z:0.1},
+             armL:{rx:0.4,ry:0,rz:0.3}, armR:{rx:0.5,ry:0.2,rz:-0.1},
+             legL:{rx:-0.3,ry:0,rz:0}, legR:{rx:-0.4,ry:0,rz:0},
+             headTilt:-0.1, thrust:null, breathMult:0.8 },
+        B: { pos:{x:0.1,y:-0.5,z:0}, rot:{x:-0.2,y:-0.15,z:-0.1},
+             armL:{rx:0.5,ry:0.2,rz:0.1}, armR:{rx:0.4,ry:0,rz:-0.3},
+             legL:{rx:-0.4,ry:0,rz:0}, legR:{rx:-0.3,ry:0,rz:0},
+             headTilt:-0.1, thrust:null, breathMult:0.8 },
+    },
+    // ── Three-player poses ───────────────────────────────────────────
+    'threesome — spit roast': {
+        A: { pos:{x:0,y:0,z:-0.35}, rot:{x:0.3,y:0,z:0},
+             armL:{rx:0.5,ry:0,rz:0.3}, armR:{rx:0.5,ry:0,rz:-0.3},
+             legL:{rx:-0.3,ry:0,rz:0}, legR:{rx:-0.3,ry:0,rz:0},
+             headTilt:0.1, thrust:{amp:0.08,freq:1.8}, breathMult:2.3 },
+        B: { pos:{x:0,y:-0.35,z:0}, rot:{x:0.9,y:0,z:0},
+             armL:{rx:0.5,ry:0,rz:0.2}, armR:{rx:0.5,ry:0,rz:-0.2},
+             legL:{rx:-0.5,ry:0,rz:-0.3}, legR:{rx:-0.5,ry:0,rz:0.3},
+             headTilt:0.2, thrust:null, breathMult:2.5 },
+        C: { pos:{x:0,y:0,z:0.35}, rot:{x:0,y:Math.PI,z:0},
+             armL:{rx:0.4,ry:0,rz:0.2}, armR:{rx:0.4,ry:0,rz:-0.2},
+             legL:{rx:0.1,ry:0,rz:0}, legR:{rx:0.1,ry:0,rz:0},
+             headTilt:0.1, thrust:{amp:0.06,freq:2.2}, breathMult:2.0 },
+    },
+    'threesome — double oral': {
+        A: { pos:{x:-0.25,y:-0.7,z:0.2}, rot:{x:0,y:0.3,z:0},
+             armL:{rx:0.7,ry:0,rz:0.3}, armR:{rx:0.7,ry:0,rz:-0.3},
+             legL:{rx:-1.5,ry:0,rz:0}, legR:{rx:-1.5,ry:0,rz:0},
+             headTilt:0.15, thrust:null, breathMult:1.5 },
+        B: { pos:{x:0,y:0,z:0}, rot:{x:0,y:0,z:0},
+             armL:{rx:0.3,ry:0,rz:0.3}, armR:{rx:0.3,ry:0,rz:-0.3},
+             legL:{rx:0.2,ry:0,rz:-0.2}, legR:{rx:0.2,ry:0,rz:0.2},
+             headTilt:-0.3, thrust:null, breathMult:2.5 },
+        C: { pos:{x:0.25,y:-0.7,z:0.2}, rot:{x:0,y:-0.3,z:0},
+             armL:{rx:0.7,ry:0,rz:0.3}, armR:{rx:0.7,ry:0,rz:-0.3},
+             legL:{rx:-1.5,ry:0,rz:0}, legR:{rx:-1.5,ry:0,rz:0},
+             headTilt:0.15, thrust:null, breathMult:1.5 },
+    },
+    'threesome — ride and suck': {
+        A: { pos:{x:-0.2,y:0.25,z:0}, rot:{x:-0.1,y:0.2,z:0},
+             armL:{rx:0.4,ry:0,rz:0.3}, armR:{rx:0.4,ry:0,rz:-0.3},
+             legL:{rx:-1.2,ry:0,rz:-0.4}, legR:{rx:-1.2,ry:0,rz:0.4},
+             headTilt:-0.2, thrust:{amp:0.07,freq:1.4}, breathMult:2.2 },
+        B: { pos:{x:0,y:-0.55,z:0}, rot:{x:-0.3,y:0,z:0},
+             armL:{rx:0.5,ry:0,rz:0.3}, armR:{rx:0.5,ry:0,rz:-0.3},
+             legL:{rx:-0.4,ry:0,rz:-0.2}, legR:{rx:-0.4,ry:0,rz:0.2},
+             headTilt:-0.1, thrust:null, breathMult:2.5 },
+        C: { pos:{x:0.3,y:-0.6,z:0.25}, rot:{x:0,y:-0.4,z:0},
+             armL:{rx:0.7,ry:0,rz:0.2}, armR:{rx:0.7,ry:0,rz:-0.2},
+             legL:{rx:-1.5,ry:0,rz:0}, legR:{rx:-1.5,ry:0,rz:0},
+             headTilt:0.15, thrust:null, breathMult:1.5 },
+    },
+    'threesome — daisy chain': {
+        A: { pos:{x:-0.3,y:-0.5,z:-0.2}, rot:{x:-0.3,y:0.5,z:0.1},
+             armL:{rx:0.6,ry:0,rz:0.3}, armR:{rx:0.8,ry:0,rz:-0.2},
+             legL:{rx:-0.4,ry:0,rz:0}, legR:{rx:-0.5,ry:0,rz:0.3},
+             headTilt:0.15, thrust:null, breathMult:2.0 },
+        B: { pos:{x:0.3,y:-0.5,z:-0.2}, rot:{x:-0.3,y:-0.5,z:-0.1},
+             armL:{rx:0.8,ry:0,rz:0.2}, armR:{rx:0.6,ry:0,rz:-0.3},
+             legL:{rx:-0.5,ry:0,rz:-0.3}, legR:{rx:-0.4,ry:0,rz:0},
+             headTilt:0.15, thrust:null, breathMult:2.0 },
+        C: { pos:{x:0,y:-0.5,z:0.35}, rot:{x:-0.3,y:Math.PI,z:0},
+             armL:{rx:0.7,ry:0,rz:0.3}, armR:{rx:0.7,ry:0,rz:-0.3},
+             legL:{rx:-0.4,ry:0,rz:-0.2}, legR:{rx:-0.4,ry:0,rz:0.2},
+             headTilt:0.15, thrust:null, breathMult:2.0 },
+    },
+    'threesome — double penetration': {
+        A: { pos:{x:-0.1,y:-0.1,z:-0.2}, rot:{x:0.4,y:0.1,z:0},
+             armL:{rx:0.6,ry:0,rz:0.3}, armR:{rx:0.6,ry:0,rz:-0.3},
+             legL:{rx:-0.3,ry:0,rz:0}, legR:{rx:-0.3,ry:0,rz:0},
+             headTilt:0.1, thrust:{amp:0.08,freq:1.6}, breathMult:2.5 },
+        B: { pos:{x:0,y:0,z:0}, rot:{x:0,y:0,z:0},
+             armL:{rx:0.5,ry:0,rz:0.4}, armR:{rx:0.5,ry:0,rz:-0.4},
+             legL:{rx:-0.9,ry:0,rz:-0.6}, legR:{rx:-0.9,ry:0,rz:0.6},
+             headTilt:-0.3, thrust:null, breathMult:3.0 },
+        C: { pos:{x:0.1,y:-0.55,z:0.2}, rot:{x:-0.2,y:Math.PI+0.1,z:0},
+             armL:{rx:0.5,ry:0,rz:0.2}, armR:{rx:0.5,ry:0,rz:-0.2},
+             legL:{rx:-0.3,ry:0,rz:0}, legR:{rx:-0.3,ry:0,rz:0},
+             headTilt:0.1, thrust:{amp:0.07,freq:1.8}, breathMult:2.3 },
+    },
+    'threesome — one watches': {
+        A: { pos:{x:-0.15,y:-0.1,z:0.1}, rot:{x:0.5,y:0.1,z:0},
+             armL:{rx:0.7,ry:0,rz:0.4}, armR:{rx:0.7,ry:0,rz:-0.4},
+             legL:{rx:-0.3,ry:0,rz:0}, legR:{rx:-0.3,ry:0,rz:0},
+             headTilt:0.1, thrust:{amp:0.07,freq:1.8}, breathMult:2.4 },
+        B: { pos:{x:0.15,y:-0.55,z:0}, rot:{x:-0.5,y:-0.1,z:0},
+             armL:{rx:0.6,ry:0,rz:0.4}, armR:{rx:0.6,ry:0,rz:-0.4},
+             legL:{rx:-0.8,ry:0,rz:-0.5}, legR:{rx:-0.8,ry:0,rz:0.5},
+             headTilt:-0.2, thrust:null, breathMult:2.2 },
+        C: { pos:{x:1.2,y:0,z:0}, rot:{x:0,y:-0.5,z:0},
+             armL:{rx:0.2,ry:0,rz:0.1}, armR:{rx:0.8,ry:0.3,rz:0},
+             legL:{rx:0.1,ry:0,rz:-0.1}, legR:{rx:0.1,ry:0,rz:0.1},
+             headTilt:-0.1, thrust:null, breathMult:1.8 },
+    },
+};
+
+// Fallback pose for actions without a dedicated pose definition
+const _FALLBACK_POSE = {
+    A: { pos:{x:-0.15,y:0,z:0}, rot:{x:0,y:0.2,z:0},
+         armL:{rx:0.5,ry:0,rz:0.3}, armR:{rx:0.5,ry:0,rz:-0.3},
+         legL:{rx:0,ry:0,rz:0}, legR:{rx:0,ry:0,rz:0},
+         headTilt:0, thrust:null, breathMult:1.5 },
+    B: { pos:{x:0.15,y:0,z:0}, rot:{x:0,y:-0.2,z:0},
+         armL:{rx:0.3,ry:0,rz:0.2}, armR:{rx:0.3,ry:0,rz:-0.2},
+         legL:{rx:0,ry:0,rz:0}, legR:{rx:0,ry:0,rz:0},
+         headTilt:0, thrust:null, breathMult:1.5 },
+};
+
+// ── Pose interpolation state ─────────────────────────────────────────
+
+const _activePoseState = {
+    active: false,
+    actionName: null,
+    participants: [],      // [{model, role, anchorPos, targetPose, currentLerp}]
+    lerpProgress: 0,       // 0 → 1, drives the transition
+    lerpSpeed: 2.5,        // per-second interpolation speed
+    thrustPhase: 0,        // running phase for rhythmic motion
+};
+
+/**
+ * Start a sexual interaction pose.
+ * @param {string} actionName — key from BED_GAME_ACTIONS / SEX_POSES
+ * @param {Array<{model:object, anchorX:number, anchorZ:number}>} participants
+ *   Ordered: [A=initiator, B=receiver, C=third (optional)]
+ *   anchorX/Z = world-space centre point (e.g. bed position)
+ */
+function startSexPose(actionName, participants) {
+    const poseDef = SEX_POSES[actionName] || _FALLBACK_POSE;
+    const roles = ['A', 'B', 'C'];
+
+    _activePoseState.active = true;
+    _activePoseState.actionName = actionName;
+    _activePoseState.lerpProgress = 0;
+    _activePoseState.thrustPhase = 0;
+    _activePoseState.participants = [];
+
+    for (let i = 0; i < participants.length && i < 3; i++) {
+        const p = participants[i];
+        const roleKey = roles[i];
+        const target = poseDef[roleKey] || _FALLBACK_POSE.A;
+        const anchorX = p.anchorX || 0;
+        const anchorZ = p.anchorZ || 0;
+
+        // Strip to nothing for explicit poses (explicit_level >= 3)
+        if (p.model && p.model.currentOutfit !== 'nothing') {
+            updateCharacterOutfit(p.model, 'nothing');
+        }
+
+        _activePoseState.participants.push({
+            model: p.model,
+            role: roleKey,
+            anchorX, anchorZ,
+            target,
+            // Store the base (standing) transforms so we can LERP from them
+            basePos: p.model ? {
+                x: p.model.group.position.x,
+                y: p.model.group.position.y,
+                z: p.model.group.position.z
+            } : {x:0,y:0,z:0},
+        });
+    }
+}
+
+/**
+ * Stop the current sex pose and return participants to standing.
+ * @param {boolean} instant — if true, snap back immediately (no lerp)
+ */
+function stopSexPose(instant) {
+    if (!_activePoseState.active) return;
+    if (instant) {
+        // Snap everything back to neutral
+        for (const p of _activePoseState.participants) {
+            if (!p.model) continue;
+            _resetModelPose(p.model);
+            p.model.group.position.set(p.basePos.x, p.basePos.y, p.basePos.z);
+        }
+        _activePoseState.active = false;
+        _activePoseState.participants = [];
+    } else {
+        // Trigger a reverse lerp by setting a cleanup flag
+        _activePoseState._returning = true;
+        _activePoseState.lerpProgress = 1.0;
+    }
+}
+
+function _resetModelPose(model) {
+    if (!model) return;
+    model.bodyGroup.rotation.set(0, 0, 0);
+    if (model.armL) model.armL.rotation.set(0, 0, 0);
+    if (model.armR) model.armR.rotation.set(0, 0, 0);
+    if (model.legL) model.legL.rotation.set(0, 0, 0);
+    if (model.legR) model.legR.rotation.set(0, 0, 0);
+    if (model.headData && model.headData.group) model.headData.group.rotation.x = 0;
+}
+
+function _lerp(a, b, t) { return a + (b - a) * t; }
+
+/**
+ * Tick the sex pose animation — call every frame from the main animate() loop.
+ * @param {number} dt — delta time in seconds
+ * @param {number} time — total elapsed time
+ */
+function animateSexPose(dt, time) {
+    if (!_activePoseState.active) return;
+
+    // Handle returning to standing
+    if (_activePoseState._returning) {
+        _activePoseState.lerpProgress -= dt * _activePoseState.lerpSpeed;
+        if (_activePoseState.lerpProgress <= 0) {
+            stopSexPose(true);
+            _activePoseState._returning = false;
+            return;
+        }
+    } else {
+        // Advance lerp toward target
+        if (_activePoseState.lerpProgress < 1.0) {
+            _activePoseState.lerpProgress = Math.min(1.0, _activePoseState.lerpProgress + dt * _activePoseState.lerpSpeed);
+        }
+    }
+
+    const t = _activePoseState.lerpProgress;
+    _activePoseState.thrustPhase += dt;
+
+    for (const p of _activePoseState.participants) {
+        const model = p.model;
+        if (!model || !model.bodyGroup) continue;
+        const tgt = p.target;
+
+        // ── Position (world-space anchor + pose offset) ──
+        const destX = p.anchorX + tgt.pos.x;
+        const destY = tgt.pos.y;
+        const destZ = p.anchorZ + tgt.pos.z;
+        model.group.position.x = _lerp(p.basePos.x, destX, t);
+        model.group.position.y = _lerp(p.basePos.y, destY, t);
+        model.group.position.z = _lerp(p.basePos.z, destZ, t);
+
+        // ── Body rotation ──
+        model.bodyGroup.rotation.x = _lerp(0, tgt.rot.x, t);
+        model.bodyGroup.rotation.y = _lerp(0, tgt.rot.y, t);
+        model.bodyGroup.rotation.z = _lerp(0, tgt.rot.z, t);
+
+        // ── Arms ──
+        if (model.armL) {
+            model.armL.rotation.x = _lerp(0, tgt.armL.rx, t);
+            model.armL.rotation.y = _lerp(0, tgt.armL.ry, t);
+            model.armL.rotation.z = _lerp(0, tgt.armL.rz, t);
+        }
+        if (model.armR) {
+            model.armR.rotation.x = _lerp(0, tgt.armR.rx, t);
+            model.armR.rotation.y = _lerp(0, tgt.armR.ry, t);
+            model.armR.rotation.z = _lerp(0, tgt.armR.rz, t);
+        }
+
+        // ── Legs ──
+        if (model.legL) {
+            model.legL.rotation.x = _lerp(0, tgt.legL.rx, t);
+            model.legL.rotation.y = _lerp(0, tgt.legL.ry, t);
+            model.legL.rotation.z = _lerp(0, tgt.legL.rz, t);
+        }
+        if (model.legR) {
+            model.legR.rotation.x = _lerp(0, tgt.legR.rx, t);
+            model.legR.rotation.y = _lerp(0, tgt.legR.ry, t);
+            model.legR.rotation.z = _lerp(0, tgt.legR.rz, t);
+        }
+
+        // ── Head tilt ──
+        if (model.headData && model.headData.group) {
+            model.headData.group.rotation.x = _lerp(0, tgt.headTilt || 0, t);
+        }
+
+        // ── Rhythmic thrust (only at full lerp) ──
+        if (tgt.thrust && t > 0.8) {
+            const thrustT = Math.sin(_activePoseState.thrustPhase * tgt.thrust.freq * Math.PI * 2);
+            const thrustAmt = tgt.thrust.amp * thrustT * t;
+            // Apply thrust as forward/back motion relative to body facing
+            const angle = model.bodyGroup.rotation.y || 0;
+            model.group.position.z += thrustAmt * Math.cos(angle);
+            model.group.position.x += thrustAmt * Math.sin(angle);
+        }
+
+        // ── Intensified breathing ──
+        const bMul = _lerp(1.0, tgt.breathMult || 1.0, t);
+        const breathAmp = 0.012 * bMul;
+        const breathFreq = 1.2 * (0.8 + bMul * 0.4);
+        const breath = 1.0 + breathAmp * Math.sin(time * breathFreq * Math.PI * 2);
+        if (model.bodyGroup.children[0]) {
+            model.bodyGroup.children[0].scale.x = breath;
+            model.bodyGroup.children[0].scale.z = (model.dims ? model.dims.torsoScaleZ : 0.7) * breath;
+        }
+    }
+}
+
+/**
+ * Check whether a sex pose is currently active.
+ */
+function isSexPoseActive() {
+    return _activePoseState.active;
+}
+
+/**
+ * Get info about the current pose (for UI display).
+ */
+function getSexPoseInfo() {
+    if (!_activePoseState.active) return null;
+    return {
+        actionName: _activePoseState.actionName,
+        participantCount: _activePoseState.participants.length,
+        roles: _activePoseState.participants.map(p => p.role),
+        progress: _activePoseState.lerpProgress,
+    };
+}
 
 function makeDialogBubble(text, accentColor) {
     const maxLen = 48;
@@ -1142,6 +1628,13 @@ window.CharModels = {
     setExpression: setCharacterExpression,
     animate:       animateCharacterModel,
     makeBubble:    makeDialogBubble,
+    // Sex pose system
+    startPose:     startSexPose,
+    stopPose:      stopSexPose,
+    animatePose:   animateSexPose,
+    isPoseActive:  isSexPoseActive,
+    getPoseInfo:   getSexPoseInfo,
+    SEX_POSES:     SEX_POSES,
     CHAR_LOOKS:    CHAR_LOOKS,
     OUTFIT_MAP:    OUTFIT_MAP,
 };

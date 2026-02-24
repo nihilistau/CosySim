@@ -1493,6 +1493,16 @@ class BedroomScene(BaseScene, MCPSceneMixin, mcp_scene_id="bedroom"):
                               if hasattr(self.profiles[pid].stats, k)}
                     self.profiles[pid].stats.adjust(**deltas)
             # Record in history
+            explicit_level = BED_GAME_ACTIONS.get(action_id, {}).get("explicit_level", 2) if action_id else 2
+            # Derive mood hint for avatar expressions
+            if explicit_level >= 5:
+                mood_hint = "ecstasy"
+            elif explicit_level >= 4:
+                mood_hint = "moaning"
+            elif explicit_level >= 3:
+                mood_hint = "aroused"
+            else:
+                mood_hint = "flirty"
             record = {
                 "round": self.bed_game.round_number,
                 "player": current_name,
@@ -1501,6 +1511,8 @@ class BedroomScene(BaseScene, MCPSceneMixin, mcp_scene_id="bedroom"):
                 "description": action_desc,
                 "target": target_name,
                 "target_id": target_id,
+                "explicit_level": explicit_level,
+                "mood_hint": mood_hint,
             }
             self.bed_game.history.append(record)
             # Inject prompt

@@ -633,7 +633,53 @@ def api_conversation_heat():
         return jsonify({"ok": False, "error": str(exc)}), 500
 
 
-@overlay_bp.route("/api/scenes/summary", methods=["GET"])
+@overlay_bp.route("/api/directive", methods=["POST"])
+def api_set_directive():
+    """Issue a dialog directive to any character in any scene.
+
+    Body JSON::
+
+        {
+            "character_id": "lola",
+            "scene": "bedroom",
+            "type": "topic_steer",    // force_response | must_include | style_lock | topic_steer | mood_set | refuse
+            "value": "talk about your childhood dream",
+            "turns": 2               // optional, default 1
+        }
+
+    The directive is picked up by DialogDirectiveInterceptor (priority 12)
+    on the character's next LLM call.
+    """
+    try:
+        data = request.get_json(force=True)
+        char_id = data.get("character_id", "")
+        scene = data.get("scene", "")
+        dtype = data.get("type", "")
+        value = data.get("value", "")
+        turns = int(data.get("turns", 1))
+        if not char_id or not dtype or not value:
+            return jsonify({"ok": False, "error": "character_id, type, and value required"}), 400
+        from engine.mcp.dialog_system import get_dialog_system
+        ds = get_dialog_system()
+        d = ds.set_directive(char_id, scene, dtype, value, turns=turns, issued_by="admin")
+        return jsonify({"ok": True, "directive": d.to_dict() if hasattr(d, "to_dict") else str(d)})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+@overlay_bp.route("/api/directive/<character_id>", methods=["GET"])
+def api_get_directive(character_id: str):
+    """Check active directive for a character."""
+    try:
+        scene = request.args.get("scene", "")
+        from engine.mcp.dialog_system import get_dialog_system
+        ds = get_dialog_system()
+        d = ds.get_active_directive(character_id, scene)
+        if d:
+            return jsonify({"ok": True, "directive": d if isinstance(d, dict) else d.to_dict()})
+        return jsonify({"ok": True, "directive": None})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
 def api_scene_summary():
     """
     Cross-scene narrative summary — what's happening across ALL scenes right now.
