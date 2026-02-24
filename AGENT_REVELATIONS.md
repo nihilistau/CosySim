@@ -489,3 +489,35 @@ Based on impact vs effort:
 
 *This document is alive. New revelations are appended as they emerge.*
 *When revelations cluster around a theme, they get promoted to a Design section.*
+
+
+---
+
+## 16. Implementation Log
+
+### Phase B.4 — CharacterStateCoordinator: COMPLETE
+
+**File:** `engine/mcp/state_coordinator.py` (280 lines)
+
+**What it does:**
+- Single `update(char_id, **fields)` API that auto-routes fields to the right store
+- Registry fields (mood, energy, inhibition) -> CharacterRegistry.set_state()
+- Stats fields (arousal, happiness, etc.) -> SceneStateManager.update_stats() or set_stats()
+- Unknown fields -> Registry flags
+- Restrictions -> add_restriction / remove_restriction
+- Supports `mode="delta"` (default) and `mode="set"` (absolute)
+- Emits `state_changed` event to ActivityBus + registered listeners
+- Optional `persist=True` writes to database
+- Per-character threading.Lock for safe concurrent updates
+
+**Wired into:**
+- `MoodSyncInterceptor` (priority 92) — mood sync now goes through coordinator
+- `SceneRulesEngine._execute_effect()` — stat_adjust, state_set, restrictions all routed
+- `cosysim_server.py` — `_coord()` helper + update_character_scene_stats + set_character_scene_stat
+
+**Tests:** 22 new tests covering field routing, restrictions, events, full state snapshot,
+graceful degradation, thread safety, singleton, field classification.
+
+**Status:** Revelation #1 (Three State Stores) is now PARTIALLY RESOLVED.
+The coordinator exists and high-traffic paths use it. Remaining: migrate all
+scattered `set_state()` / `update_stats()` calls in scenes to use `_coord()`.

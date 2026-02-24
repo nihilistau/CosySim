@@ -898,6 +898,10 @@ def _ssm():
     from engine.mcp.scene_state import get_scene_state_manager
     return get_scene_state_manager()
 
+def _coord():
+    from engine.mcp.state_coordinator import get_coordinator
+    return get_coordinator()
+
 def _itrees():
     from engine.mcp import interaction_trees as it
     return it
@@ -1079,7 +1083,8 @@ def update_character_scene_stats(character_id: str, stat_changes: str) -> str:
         changes = json.loads(stat_changes) if isinstance(stat_changes, str) else stat_changes
     except Exception:
         return json.dumps({"error": "stat_changes must be valid JSON: {\"stat\": delta}"})
-    stats = _ssm().update_stats(character_id, **changes)
+    _coord().update(character_id, source="mcp_tool", **changes)
+    stats = _ssm().get_stats(character_id)
     return json.dumps({
         "updated": True,
         "character_id": character_id,
@@ -1098,7 +1103,8 @@ def set_character_scene_stat(character_id: str, stat: str, value: float) -> str:
     stat: arousal | horniness | pleasure | happiness | anger | fear |
           drunkenness | tiredness | explicitness | openness | affection | dominance
     """
-    stats = _ssm().set_stats(character_id, **{stat: value})
+    _coord().update(character_id, mode="set", source="mcp_tool", **{stat: value})
+    stats = _ssm().get_stats(character_id)
     return json.dumps({
         "set": True,
         "stat": stat,

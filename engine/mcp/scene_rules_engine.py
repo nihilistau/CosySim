@@ -800,30 +800,40 @@ class SceneRulesEngine:
 
         try:
             if t == "stat_adjust":
-                from engine.mcp.scene_state import get_scene_state_manager
-                ssm = get_scene_state_manager()
+                from engine.mcp.state_coordinator import get_coordinator
                 stat  = p.get("stat", "")
                 delta = p.get("delta", 0)
                 if stat and character_id != "_scene_":
-                    ssm.update_stats(character_id, **{stat: delta})
+                    get_coordinator().update(
+                        character_id, scene=scene, source="rules_engine",
+                        **{stat: delta},
+                    )
                 return f"{stat} +{delta} on {character_id}"
 
             elif t == "state_set":
-                from engine.mcp.character_registry import get_character_registry
-                reg = get_character_registry()
+                from engine.mcp.state_coordinator import get_coordinator
                 field_ = p.get("field", "")
                 value  = p.get("value", "")
-                reg.set_state(character_id, **{field_: value})
+                get_coordinator().update(
+                    character_id, mode="set", scene=scene,
+                    source="rules_engine", **{field_: value},
+                )
                 return f"{field_}={value} on {character_id}"
 
             elif t == "add_restriction":
-                from engine.mcp.character_registry import get_character_registry
-                get_character_registry().add_restriction(character_id, p.get("restriction", ""))
+                from engine.mcp.state_coordinator import get_coordinator
+                get_coordinator().update(
+                    character_id, scene=scene, source="rules_engine",
+                    add_restriction=p.get("restriction", ""),
+                )
                 return f"restriction added: {p.get('restriction')}"
 
             elif t == "remove_restriction":
-                from engine.mcp.character_registry import get_character_registry
-                get_character_registry().remove_restriction(character_id, p.get("restriction", ""))
+                from engine.mcp.state_coordinator import get_coordinator
+                get_coordinator().update(
+                    character_id, scene=scene, source="rules_engine",
+                    remove_restriction=p.get("restriction", ""),
+                )
                 return f"restriction removed: {p.get('restriction')}"
 
             elif t == "add_narrative":

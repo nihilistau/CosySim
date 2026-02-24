@@ -1363,11 +1363,13 @@ class MoodSyncInterceptor(InterceptorBase):
         intensity = parsed.mood_intensity if parsed.mood_intensity is not None else 0.6
 
         try:
-            from engine.mcp.character_registry import get_character_registry
-            get_character_registry().set_state(
+            from engine.mcp.state_coordinator import get_coordinator
+            get_coordinator().update(
                 agent_id,
-                mood           = parsed.mood,
-                mood_intensity = intensity,
+                mood=parsed.mood,
+                mood_intensity=intensity,
+                scene=ctx.get("scene", ""),
+                source="mood_sync_interceptor",
             )
             logger.debug(
                 "MoodSyncInterceptor: %s → mood=%s (%.0f%%)",
