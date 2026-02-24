@@ -14,6 +14,7 @@ Full reference for the HTTP REST API (Flask scenes) and WebSocket events
 5. [Skill Registry API](#skill-registry-api)
 6. [LMStudio Manager API](#lmstudio-manager-api)
 7. [EventChain API](#eventchain-api)
+8. [Overlay Admin API](#overlay-admin-api) — `/overlay/` prefix
 
 ---
 
@@ -470,3 +471,649 @@ All showcase scenes share a common base pattern via `BaseScene`:
 | POST | `/api/pipeline/tick` | Advance pipeline one step |
 | GET | `/api/pipeline/state` | Current pipeline + code output |
 | POST | `/api/sandbox/run` | Execute code in sandbox |
+
+---
+
+## Overlay Admin API
+
+Real-time system monitoring and interaction panel.  Mounted as a Flask
+Blueprint under the `/overlay` prefix on whichever scene app calls
+`mount_overlay(app, socketio)`.
+
+**Module:** `engine.overlay.overlay_bp`
+
+All paths below are relative to the `/overlay` prefix
+(e.g. `/overlay/api/status`).
+
+---
+
+### Panel
+
+#### `GET /overlay/`
+
+Serve the Overlay admin panel (HTML/JS/CSS single-page app).
+
+---
+
+### Status
+
+#### `GET /overlay/api/status`
+
+Combined system status snapshot.
+
+**Response**
+
+```json
+{
+  "ok": true,
+  "timestamp": 1719849600.0,
+  "lmstudio": {
+    "available": true,
+    "native_api": true,
+    "models": ["gemma-2-9b-instruct"]
+  },
+  "resources": { "gpu_free_mb": 8192, "vram_used_mb": 4096 },
+  "framework": { "characters": 3, "scenes": 2 },
+  "skills_count": 14
+}
+```
+
+---
+
+### Agents
+
+#### `GET /overlay/api/agents`
+
+List all registered agents with their state.
+
+**Response**
+
+```json
+{
+  "ok": true,
+  "agents": [
+    {
+      "id": "maya",
+      "name": "Maya",
+      "state": { "mood": "happy", "energy": 0.8 },
+      "scene": "phone"
+    }
+  ]
+}
+```
+
+#### `GET /overlay/api/agent/<agent_id>`
+
+Detailed agent info including MCP node data (inbox, current scene, tags).
+
+**Response**
+
+```json
+{
+  "ok": true,
+  "agent": {
+    "id": "maya",
+    "name": "Maya",
+    "state": { "mood": "happy", "energy": 0.8 },
+    "mcp": {
+      "inbox": [],
+      "current_scene": "phone",
+      "tags": ["main_character"]
+    }
+  }
+}
+```
+
+#### `POST /overlay/api/agent/<agent_id>`
+
+Update agent state fields.
+
+**Request body (JSON)**
+
+```json
+{
+  "state": { "mood": "excited", "energy": 1.0 }
+}
+```
+
+**Response**
+
+```json
+{ "ok": true }
+```
+
+---
+
+### Pipeline
+
+#### `GET /overlay/api/pipeline`
+
+Interceptor pipeline configuration (per-governor instance).
+
+**Response**
+
+```json
+{
+  "ok": true,
+  "pipeline": { "interceptors": [], "note": "Pipeline is per-governor instance" }
+}
+```
+
+---
+
+### Config
+
+#### `GET /overlay/api/config`
+
+Return key configuration sections: `llm`, `lmstudio`, `hardware`, `mcp`,
+`tts`, `comfyui`.
+
+**Response**
+
+```json
+{
+  "ok": true,
+  "config": {
+    "llm": { "default_model": "gemma-2-9b-instruct" },
+    "lmstudio": { "host": "localhost", "port": 1234 },
+    "hardware": {},
+    "mcp": {},
+    "tts": {},
+    "comfyui": {}
+  }
+}
+```
+
+#### `POST /overlay/api/config`
+
+Set configuration values.  Each key in the body is forwarded to
+`config.set(key, value)`.
+
+**Request body (JSON)**
+
+```json
+{
+  "llm.default_model": "gemma-2-27b-instruct",
+  "tts.enabled": true
+}
+```
+
+**Response**
+
+```json
+{ "ok": true }
+```
+
+---
+
+### Models
+
+#### `GET /overlay/api/models`
+
+List loaded models and ModelManager status.
+
+**Response**
+
+```json
+{
+  "ok": true,
+  "loaded": ["gemma-2-9b-instruct"],
+  "manager": { "active_model": "gemma-2-9b-instruct", "queue_depth": 0 }
+}
+```
+
+#### `POST /overlay/api/models/load`
+
+Load a model into LMStudio.
+
+**Request body (JSON)**
+
+```json
+{
+  "model_id": "gemma-2-9b-instruct",
+  "context_length": 4096,
+  "gpu_offload": 0.9,
+  "flash_attention": true,
+  "ttl": 3600
+}
+```
+
+All fields except `model_id` are optional.
+
+**Response**
+
+```json
+{ "ok": true }
+```
+
+#### `POST /overlay/api/models/unload`
+
+Unload a model.
+
+**Request body (JSON)**
+
+```json
+{ "model_id": "gemma-2-9b-instruct" }
+```
+
+**Response**
+
+```json
+{ "ok": true }
+```
+
+---
+
+### Resources
+
+#### `GET /overlay/api/resources`
+
+ResourceManager status (VRAM, GPU utilisation, quotas).
+
+**Response**
+
+```json
+{
+  "ok": true,
+  "resources": { "gpu_free_mb": 8192, "vram_used_mb": 4096 }
+}
+```
+
+#### `POST /overlay/api/resources`
+
+Update ResourceManager configuration.
+
+**Request body (JSON)** — fields forwarded to `resource_manager.update_config()`.
+
+**Response**
+
+```json
+{ "ok": true, "resources": { "...": "updated status" } }
+```
+
+---
+
+### Events (SSE)
+
+#### `GET /overlay/api/events`
+
+Server-Sent Events stream of real-time framework activity.  Connect with
+an `EventSource`:
+
+```js
+const es = new EventSource("/overlay/api/events");
+es.onmessage = (e) => console.log(JSON.parse(e.data));
+```
+
+Each event is a JSON object from the ActivityBus.
+
+---
+
+### Act as Agent
+
+#### `POST /overlay/api/act`
+
+Inject a message or event into the running simulation.
+
+**Request body (JSON)**
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `action` | string | `"speak"` | `"speak"` or `"inject_event"` |
+| `agent_id` | string | `""` | Agent to act as (or `"overlay_user"`) |
+| `message` | string | `""` | Message text (for `speak`) |
+| `scene` | string | `"system"` | Target scene (for `speak`) |
+| `event_type` | string | `"user_event"` | Event type (for `inject_event`) |
+| `event_data` | object | `{}` | Payload (for `inject_event`) |
+
+**Response**
+
+```json
+{ "ok": true, "injected": true }
+```
+
+---
+
+### Memory
+
+#### `GET /overlay/api/memory/<agent_id>`
+
+Browse agent memories from the RAG store.
+
+**Query params**
+
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| `q` | string | `""` | Search query (defaults to `"recent events"`) |
+| `limit` | int | `10` | Max results |
+
+**Response**
+
+```json
+{
+  "ok": true,
+  "memories": [
+    { "text": "Maya went to the park", "score": 0.92 }
+  ]
+}
+```
+
+---
+
+### Skills
+
+#### `GET /overlay/api/skills`
+
+List all registered skills from the Skill Registry.
+
+**Response**
+
+```json
+{
+  "ok": true,
+  "skills": [
+    {
+      "name": "generate_image",
+      "pack": "comfyui",
+      "description": "Generate an image via ComfyUI.",
+      "tags": ["image"],
+      "category": "media",
+      "cooldown": 30
+    }
+  ]
+}
+```
+
+---
+
+### Shared Boards
+
+#### `GET /overlay/api/boards`
+
+List all shared boards (highscores and message boards).
+
+**Response**
+
+```json
+{
+  "ok": true,
+  "boards": [
+    { "id": "highscores", "type": "score" },
+    { "id": "chat-wall", "type": "messages" }
+  ]
+}
+```
+
+#### `GET /overlay/api/boards/<board_id>/scores`
+
+Get highscores for a specific board.
+
+**Query params:** `limit` (int, default 10)
+
+**Response**
+
+```json
+{ "ok": true, "scores": [ { "agent": "maya", "score": 1500 } ] }
+```
+
+#### `GET /overlay/api/boards/<board_id>/messages`
+
+Get messages from a shared board.
+
+**Query params:** `limit` (int, default 50)
+
+**Response**
+
+```json
+{
+  "ok": true,
+  "messages": [
+    { "author": "maya", "content": "Hello world", "timestamp": "..." }
+  ]
+}
+```
+
+#### `POST /overlay/api/boards/<board_id>/messages`
+
+Post a message to a shared board.
+
+**Request body (JSON)**
+
+```json
+{
+  "author_id": "maya",
+  "author_name": "Maya",
+  "content": "Hello everyone!"
+}
+```
+
+**Response**
+
+```json
+{ "ok": true, "message": { "...": "created message" } }
+```
+
+---
+
+### Streaming
+
+#### `GET /overlay/api/streaming`
+
+Streaming statistics: active VirtualAgentManager calls, conversation
+branches, and StreamProcessor availability.
+
+**Response**
+
+```json
+{
+  "ok": true,
+  "manager": { "total_calls": 42, "active_agents": 2 },
+  "conversations": {
+    "count": 3,
+    "conversations": [
+      { "id": "conv-001", "turns": 12, "branches": 2 }
+    ]
+  },
+  "stream_processor": {
+    "available": true,
+    "tag_patterns": ["think", "action", "mood"]
+  }
+}
+```
+
+---
+
+### Inference Config
+
+#### `GET /overlay/api/inference`
+
+Get current inference defaults (temperature, top-p, etc.).
+
+**Response**
+
+```json
+{
+  "ok": true,
+  "defaults": { "temperature": 0.8, "top_p": 0.95, "max_tokens": 1024 }
+}
+```
+
+#### `POST /overlay/api/inference`
+
+Override inference defaults.  Only fields present in `InferenceConfig`
+dataclass are accepted.
+
+**Request body (JSON)**
+
+```json
+{ "temperature": 0.6, "max_tokens": 2048 }
+```
+
+**Response**
+
+```json
+{
+  "ok": true,
+  "defaults": { "temperature": 0.6, "top_p": 0.95, "max_tokens": 2048 }
+}
+```
+
+---
+
+### InferenceRouter
+
+#### `GET /overlay/api/router`
+
+InferenceRouter metrics (queue depth, throughput, tier breakdown).
+
+**Response**
+
+```json
+{
+  "ok": true,
+  "queue_depth": 2,
+  "throughput": 14.5,
+  "tiers": { "primary": { "busy": 1, "max": 2 } }
+}
+```
+
+#### `POST /overlay/api/router`
+
+Update router configuration live.
+
+**Request body (JSON)**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `max_queue_depth` | int | Maximum queued requests |
+| `preempt_on_priority` | bool | Enable priority preemption |
+| `tiers` | object | Per-tier overrides (keyed by tier name) |
+| `tiers.<name>.max_slots` | int | Max concurrent slots for this tier |
+| `tiers.<name>.enabled` | bool | Enable / disable a tier |
+
+```json
+{
+  "max_queue_depth": 10,
+  "preempt_on_priority": true,
+  "tiers": { "primary": { "max_slots": 3 } }
+}
+```
+
+**Response**
+
+```json
+{ "ok": true, "applied": { "...": "echoed input" } }
+```
+
+#### `GET /overlay/api/router/tiers`
+
+Per-tier configuration and live slot usage.
+
+**Response**
+
+```json
+{
+  "ok": true,
+  "tiers": {
+    "primary": {
+      "model_key": "gemma-2-9b-instruct",
+      "device": "gpu",
+      "max_slots": 2,
+      "busy_slots": 1,
+      "available": 1
+    }
+  }
+}
+```
+
+---
+
+### Character State
+
+#### `GET /overlay/api/character/<character_id>/state`
+
+Unified character state via `CharacterStateCoordinator`.  Merges
+CharacterRegistry fields (mood, energy, inhibition) with
+SceneStateManager fields (arousal, happiness, etc.).
+
+**Response**
+
+```json
+{
+  "ok": true,
+  "mood": "happy",
+  "energy": 0.8,
+  "inhibition": 0.3,
+  "arousal": 0.2,
+  "happiness": 0.7
+}
+```
+
+#### `POST /overlay/api/character/<character_id>/state`
+
+Update character state fields.  Accepts any combination of Registry and
+Stats fields.
+
+**Request body (JSON)**
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `mode` | string | `"delta"` | `"delta"` (additive) or `"set"` (absolute) |
+| `source` | string | `"overlay_api"` | Audit trail source identifier |
+| `scene` | string | `""` | Target scene context |
+| `persist` | bool | `false` | Persist changes to database |
+| *(others)* | any | — | State fields to update (e.g. `mood`, `energy`) |
+
+```json
+{
+  "mood": "excited",
+  "energy": 0.2,
+  "mode": "delta",
+  "source": "overlay_api",
+  "persist": true
+}
+```
+
+**Response** — returns the updated state snapshot.
+
+```json
+{
+  "ok": true,
+  "mood": "excited",
+  "energy": 1.0,
+  "inhibition": 0.3
+}
+```
+
+---
+
+### Conversation Heat
+
+#### `GET /overlay/api/heat`
+
+Get conversation heat levels for all active conversations.
+
+**Query params**
+
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| `key` | string | *(none)* | Specific conversation key (omit for all) |
+
+**Response (all conversations)**
+
+```json
+{
+  "ok": true,
+  "conversations": { "maya:phone": 3.2, "luna:bedroom": 1.0 }
+}
+```
+
+**Response (specific key — `?key=maya:phone`)**
+
+```json
+{
+  "ok": true,
+  "key": "maya:phone",
+  "heat": 3.2,
+  "directive": "allow"
+}

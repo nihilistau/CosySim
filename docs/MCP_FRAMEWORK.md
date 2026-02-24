@@ -212,6 +212,8 @@ fw.save_state("backups/state_v1.json")
 
 Persisted data: turn counter, scene membership, timers, consequences, cross-scene messages.
 
+> **Note:** For character-level state (mood, energy, stats), use the **CharacterStateCoordinator** with `persist=True` instead — see [CharacterStateCoordinator](#characterstatecoordinator).
+
 ### Status
 
 ```python
@@ -592,6 +594,278 @@ elif args.mode == "my_scene":
 | **Casino** | 5559 | Frankie, Mira | Noir poker night (showcase scene) |
 | **Hub** | 8500 | System | Central hub & dashboard |
 | **Admin** | 8502 | — | System administration |
+
+---
+
+## CharacterStateCoordinator
+
+> **Module:** `engine/mcp/state_coordinator.py`
+
+The **CharacterStateCoordinator** is the unified write-through API for all character state mutations. Before it existed, state was scattered across three stores that didn't sync:
+
+- **CharacterRegistry** — mood, energy, inhibition, focus, restrictions
+- **SceneStateManager** — arousal, happiness, clothing, narrative, stats
+- **Database** — persistent name/age/personality
+
+The coordinator provides a single `update()` method that auto-routes fields to the correct store and keeps everything in sync.
+
+### Quick Start
+
+```python
+from engine.mcp.state_coordinator import get_coordinator
+
+coord = get_coordinator()
+
+# Unified update — routes fields to the right store automatically
+coord.update("lola", mood="flirty", arousal=+10, energy=-5)
+
+# Get a unified snapshot of all state
+state = coord.get_full_state("lola")
+# {"mood": "flirty", "mood_intensity": 0.5, "energy": 75.0,
+#  "arousal": 30.0, "happiness": 60.0, ...}
+```
+
+### Delta vs Set Mode
+
+```python
+coord.update("lola", arousal=+15)              # delta (default): arousal += 15
+coord.update("lola", arousal=50, mode="set")   # absolute: arousal = 50
+```
+
+### Field Routing
+
+| Field group | Target store | Examples |
+|-------------|-------------|----------|
+| Registry fields | `CharacterRegistry.set_state()` | mood, mood_intensity, energy, inhibition, focus, current_role |
+| Stats fields | `SceneStateManager.update_stats()` / `set_stats()` | arousal, happiness, anger, fear, drunkenness, tiredness, explicitness, openness, affection, dominance |
+| Restrictions | `CharacterRegistry.add/remove_restriction()` | add_restriction, remove_restriction |
+| Unknown fields | Registry flags | Any other key |
+
+### Events & Persistence
+
+Every `update()` call emits a `state_changed` event on the **ActivityBus** with the character ID, changed fields, and a full snapshot. Register listeners directly:
+
+```python
+coord.on_state_changed(lambda event, snapshot: print(event))
+```
+
+Optional database persistence (cross-session):
+
+```python
+coord.update("lola", mood="happy", persist=True)
+```
+
+### Thread Safety
+
+Per-character `threading.Lock` ensures concurrent updates to different characters don't block each other. A global lock protects the lock-map itself.
+
+### Singleton Access
+
+```python
+from engine.mcp.state_coordinator import get_coordinator
+coord = get_coordinator()  # Thread-safe, returns the global singleton
+```
+
+### Architecture
+
+```
+coord.update(char_id, **fields)
+    ├── Registry fields → CharacterRegistry.set_state()
+    ├── Stats fields    → SceneStateManager.update_stats() or set_stats()
+    ├── ActivityBus     → emit("state_changed", {char_id, deltas, snapshot})
+    └── DB persist      → Database.update_character() (if persist=True)
+```
+
+> **Convention:** Every scene, interceptor, and MCP tool should go through the coordinator instead of calling `set_state()` / `update_stats()` directly.
+
+---
+
+## ConversationHeat
+
+> **Module:** `engine/mcp/scene_rules_engine.py` · **Class:** `ConversationHeat`
+
+A thermal conversation model that tracks "heat" per conversation key on a **0–100 scale**. Heat increases with flirty, intimate, or emotional topics and decays automatically with idle time.
+
+### Heat Tiers & Directives
+
+| Range | Tier | Directive injected into system prompt |
+|-------|------|--------------------------------------|
+| < 30 | Normal | *(none)* |
+| 30–59 | WARM | Flirty, playful energy; innuendo and light teasing |
+| 60–79 | HOT | Suggestive and seductive; escalation encouraged |
+| ≥ 80 | INTENSE | Passionate and explicit; full adult content |
+
+### Keyword Auto-Bumps
+
+Messages are scanned for keywords that automatically increase heat:
+
+| Keyword | Bump | Keyword | Bump |
+|---------|------|---------|------|
+| `flirt` | +8 | `touch` | +10 |
+| `kiss` | +15 | `sexy` | +12 |
+| `intimate` | +20 | `seduce` | +15 |
+| `tease` | +7 | `passion` | +12 |
+| `cuddle` | +5 | `desire` | +10 |
+| `dare` | +6 | `love` | +5 |
+
+Per-message bump is capped at +25.
+
+### Decay
+
+Heat decays at **−2 per minute** after 30 seconds of idle time on each conversation key.
+
+### Usage
+
+```python
+from engine.mcp.scene_rules_engine import get_conversation_heat
+
+heat = get_conversation_heat()
+
+# Analyze a message (auto-bumps from keywords)
+heat.analyze_message("phone_aria_thread1", "She leaned in to kiss him")
+
+# Manual bump/cool
+heat.bump("phone_aria_thread1", 10, "flirt")
+heat.cool("phone_aria_thread1", 5)
+
+# Get current level and directive
+level = heat.get("phone_aria_thread1")       # e.g. 45.0
+directive = heat.get_directive("phone_aria_thread1")
+# "[CONVERSATION HEAT: WARM] The conversation has a flirty, playful energy..."
+
+# Snapshot all conversations
+heat.to_dict()  # {"phone_aria_thread1": 45.0, ...}
+```
+
+### Consumers
+
+- **ConversationVarietyInterceptor** — uses heat directives to adjust tone
+- **BedroomSceneInterceptor** — uses heat level to gate escalation
+
+---
+
+## Threshold Rules
+
+> **Module:** `engine/mcp/scene_rules_engine.py` · **Method:** `SceneRulesEngine.evaluate_threshold_rules()`
+> **Wired via:** `engine/agents/interceptors.py` · **Class:** `MoodSyncInterceptor` (priority 92)
+
+Threshold rules are **triggered rules** that auto-fire when character stats cross defined thresholds. After every mood sync in the interceptor pipeline, the MoodSyncInterceptor automatically evaluates all threshold rules and applies any that match.
+
+### Flow
+
+```
+LLM response arrives
+    → MoodSyncInterceptor.post_call()  (priority 92)
+        → sync mood/energy to CharacterRegistry
+        → _evaluate_threshold_rules(scene, agent_id, ctx)
+            → gather stats from SSM + CharacterRegistry
+            → SceneRulesEngine.evaluate_threshold_rules(scene, char_id, stats)
+            → for each triggered rule: SceneRulesEngine.apply_rule()
+```
+
+### Rule Evaluation
+
+`evaluate_threshold_rules(scene, character_id, stats)` checks all rules of type `"triggered"` for the given scene. Each rule has conditions with a stat name, operator (`>=`, `<=`, `==`), and threshold. All conditions must be met for the rule to fire.
+
+```python
+from engine.mcp.scene_rules_engine import get_rules_engine
+
+eng = get_rules_engine()
+triggered = eng.evaluate_threshold_rules("bedroom", "lola", {
+    "arousal": 70, "happiness": 50
+})
+# [{"rule_id": "intimate_unlock", "label": "Unlock intimate actions"}]
+
+for rule in triggered:
+    eng.apply_rule("bedroom", rule["rule_id"], target_ids=["lola"])
+```
+
+### Stats Merging
+
+The MoodSyncInterceptor merges stats from both stores before evaluation:
+- **SceneStateManager** stats: arousal, happiness, etc.
+- **CharacterRegistry** state: mood_intensity, energy, inhibition
+
+This ensures threshold conditions can reference fields from either store.
+
+---
+
+## Overlay REST API
+
+> **Module:** `engine/overlay/overlay_bp.py`
+
+The overlay Blueprint exposes REST endpoints for direct access to the unified state layer and conversation heat system. All endpoints are under the `/overlay` prefix.
+
+### Character State
+
+#### `GET /overlay/api/character/<id>/state`
+
+Returns unified character state via the CharacterStateCoordinator. Merges CharacterRegistry fields (mood, energy, inhibition) with SceneStateManager stats (arousal, happiness, etc.) into one response.
+
+```json
+{
+  "ok": true,
+  "character_id": "lola",
+  "mood": "flirty",
+  "energy": 75.0,
+  "arousal": 30.0,
+  "happiness": 60.0
+}
+```
+
+#### `POST /overlay/api/character/<id>/state`
+
+Update character state via the CharacterStateCoordinator. Accepts any combination of Registry and Stats fields.
+
+**Request body:**
+
+```json
+{
+  "mood": "playful",
+  "arousal": 10,
+  "mode": "delta",
+  "source": "overlay_api",
+  "persist": false
+}
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `mode` | string | `"delta"` | `"delta"` adds to numeric fields; `"set"` overwrites |
+| `source` | string | `"overlay_api"` | Audit trail identifier |
+| `scene` | string | `""` | Scene context |
+| `persist` | bool | `false` | Also write to database |
+
+Returns the full state snapshot after the update.
+
+### Conversation Heat
+
+#### `GET /overlay/api/heat`
+
+Returns conversation heat levels. Optionally filter by conversation key.
+
+**Without key** — returns all tracked conversations:
+
+```json
+{
+  "ok": true,
+  "conversations": {
+    "phone_aria_thread1": 45.2,
+    "bedroom_lola": 72.0
+  }
+}
+```
+
+**With `?key=phone_aria_thread1`** — returns single conversation with directive:
+
+```json
+{
+  "ok": true,
+  "key": "phone_aria_thread1",
+  "heat": 45.2,
+  "directive": "[CONVERSATION HEAT: WARM] The conversation has a flirty, playful energy..."
+}
+```
 
 ---
 

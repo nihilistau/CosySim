@@ -35,12 +35,16 @@ engine/
 │
 ├── mcp/                     # MCP Framework (Model Context Protocol)
 │   ├── framework.py         # MCPFramework, MCPSceneMixin, MCPCharacterNode, MCPSceneNode
-│   ├── governance.py        # AgentGovernor, InterceptorPipeline, InterceptorBase
-│   ├── dialog.py            # DialogSystem, DialogTree, ConversationState, SpeechEnhancer
-│   ├── state.py             # SceneStateManager, CharacterRegistry, NarrativeLog
+│   ├── dialog_system.py     # DialogSystem, DialogTree, ConversationState, SpeechEnhancer
+│   ├── scene_state.py       # SceneStateManager, NarrativeLog
 │   ├── game_mcp.py          # MCPGameSession, MCPGameNode, GameSessionInterceptor
-│   ├── rules.py             # SceneRulesEngine, PermissionMatrix, ConversationHeat
-│   ├── interaction.py       # InteractionTrees, SharedBoardManager
+│   ├── scene_rules_engine.py # SceneRulesEngine, PermissionMatrix, ConversationHeat
+│   ├── interaction_trees.py # InteractionTrees
+│   ├── character_registry.py # CharacterProfile, CharacterState
+│   ├── comms_framework.py   # SceneManifest, SkillManifest
+│   ├── shared_boards.py     # SharedBoardManager
+│   ├── state_coordinator.py # CharacterStateCoordinator
+│   ├── tag_registry.py      # TagRegistry, TagDef, TagMatch
 │   ├── cosysim_server.py    # FastMCP server (9 tools + 5 resources)
 │   ├── skills_server.py     # MCP skills server for ephemeral tool exposure
 │   └── web_bridge.py        # FastAPI bridge (SSE proxy, CORS, file upload)
@@ -70,6 +74,7 @@ engine/
 │
 ├── config.py                # Config system (dot-notation, env overrides)
 ├── config_validator.py      # Schema-based config validation
+├── paths.py                 # Project path resolution
 │
 ├── logging/                 # Observability
 │   ├── cosy_logger.py       # Ring-buffer logger with install_logger()
@@ -86,9 +91,16 @@ engine/
 ├── services/                # Infrastructure
 │   └── resilience.py        # @retry, CircuitBreaker
 │
-└── tts/                     # Voice Generation
-    ├── qwen3_server.py      # FastAPI + FastMCP TTS server
-    └── voice_designer.py    # VoiceDesign, CASTING_OFFICE, presets
+├── tts/                     # Voice Generation
+│   ├── qwen3_server.py      # FastAPI + FastMCP TTS server
+│   └── voice_designer.py    # VoiceDesign, CASTING_OFFICE, presets
+│
+├── deployment/              # Deployment configs (runtime/)
+├── observability/           # Metrics, alerts, training capture
+├── overlay/                 # UI overlay blueprint
+├── pipeline/                # Inference pipeline (token routing, kill switch)
+├── testing/                 # Testing framework
+└── third_party/             # Third-party libs (Matcha-TTS)
 ```
 
 ---
@@ -133,6 +145,17 @@ content/
 │   │   ├── coders_skills.py # 6 MCP skills
 │   │   └── templates/       # coders.html
 │   │
+│   ├── heist/               # Port 5565 — Heist
+│   │   ├── heist_scene.py   # HeistScene
+│   │   ├── heist_game.py    # Heist game logic
+│   │   ├── heist_rules.py   # Heist rules
+│   │   ├── heist_skills.py  # MCP skills
+│   │   └── templates/       # heist.html
+│   │
+│   ├── command_center/      # Port 5566 — Command Center
+│   │   ├── command_center_scene.py  # CommandCenterScene
+│   │   └── templates/       # command_center.html
+│   │
 │   ├── hub/                 # Port 8500 — Central dashboard (Streamlit)
 │   ├── dashboard/           # Port 8501 — Metrics (Streamlit)
 │   ├── admin/               # Port 8502 — Admin panel (Streamlit, 13 pages)
@@ -140,11 +163,12 @@ content/
 │   ├── games/               # Shared game utilities
 │   └── media/               # Media utilities
 │
+├── shared/                  # Shared Streamlit theme
+│
 └── simulation/              # Simulation Engine
     ├── character_system/    # Character, Personality, Role
     ├── database/            # db.py (SQLite), rag.py (ChromaDB), events.py (EventChain)
-    ├── services/            # ComfyUI client, media gen, voice/video services
-    └── shared/              # Shared Streamlit theme
+    └── services/            # ComfyUI client, media gen, voice/video services
 ```
 
 ---
@@ -157,6 +181,20 @@ config/
 ├── development.yaml   # Dev overrides (debug mode)
 ├── production.yaml    # Production overrides
 └── voices.yaml        # Character voice designs
+```
+
+---
+
+## docs/ — Documentation
+
+```
+docs/
+├── ProjectNext/             # Future project planning
+├── STRUCTURE_GUIDE.md       # This file
+├── MCP_ARCHITECTURE.md      # MCP design & protocol docs
+├── AGENTS_GUIDE.md          # Agent system guide
+├── SKILLS.md                # Skill system reference
+└── ...                      # API, logging, TTS, admin guides
 ```
 
 ---

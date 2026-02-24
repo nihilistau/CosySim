@@ -600,3 +600,40 @@ interceptor context via `governance_context` kwarg — the agent just needs to U
 instead of constructing a fresh prompt from scratch.
 
 **Effort:** ~30 lines changed in `_PhoneCharacterAgent.reply()`
+
+
+---
+
+## 18. Sprint 1 Audit Results
+
+**Date:** 2026-02-24
+**Scope:** Full 6-subsystem audit (~51,000 lines of Python)
+
+### Bugs Found & Fixed
+- **BUG-001 (CRITICAL):** resource_manager.py returned undefined \success\ variable.
+  Every model load via ResourceManager raised NameError. Fixed: eturn result.status == 'loaded'\.
+- **BUG-002:** pipeline_result.py \pipeline_started = time.time()\ at class definition.
+  Already fixed (uses field(default_factory=time.time)).
+- **BUG-003:** config.py set() doesn't create nested dicts. Already fixed.
+
+### Port Conflicts Found & Fixed
+- Realm (5562) and Heist (5562) shared port → Heist moved to 5565
+- NeonCity (5563) and CommandCenter (5563) shared port → CmdCtr moved to 5566
+
+### Code Quality Issues Fixed
+- framework.py: 5 bare \xcept Exception: pass\ blocks → now log via logger.debug
+- housekeeping.py: Invalid type hint \ny\ → \Any- overlay_bp.py: Used private \SKILL_REGISTRY._skills\ → now uses public API
+
+### Key Insight from Audit
+**The framework-adoption gap is THE core problem.** The MCP framework provides 15+
+sophisticated subsystems. Only 4 of 11 scenes use the Governor/Interceptor pipeline.
+ALL scenes bypass DialogSystem. The gap between available features and used features
+is where all the value is locked up.
+
+### Design Document Created
+\docs/ProjectNext/Project-CozyDreamz.md\ — Complete dream architecture with:
+- 7-sprint implementation plan
+- Framework adoption matrix (every scene × every feature)
+- Target architecture diagrams
+- Component documentation
+- Scene migration plans
