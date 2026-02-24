@@ -134,7 +134,7 @@ class RuleBasedWatcher:
 
 # ── Tag detector (instant) ──────────────────────────────────────────────
 
-# Pre-compiled patterns for CosySim inline tags
+# Pre-compiled patterns for CosySim inline tags (fallback if TagRegistry unavailable)
 _TAG_PATTERNS = {
     "mood": re.compile(r"\[MOOD:([^\]]+)\]", re.IGNORECASE),
     "image": re.compile(r"\[(?:IMAGE|SELFIE|PHOTO):([^\]]+)\]", re.IGNORECASE),
@@ -144,8 +144,27 @@ _TAG_PATTERNS = {
 }
 
 
+def _get_tag_registry():
+    """Lazy import to avoid circular deps."""
+    try:
+        from engine.mcp.tag_registry import TagRegistry
+        return TagRegistry.get()
+    except Exception:
+        return None
+
+
 def detect_tags(text: str) -> Dict[str, List[str]]:
-    """Instantly detect CosySim inline tags in text."""
+    """Detect CosySim inline tags in text.
+
+    Uses TagRegistry when available (covers routing tags too),
+    falls back to hardcoded patterns.
+    """
+    registry = _get_tag_registry()
+    if registry:
+        results = registry.detect_all(text)
+        return {name: [m.value for m in matches] for name, matches in results.items()}
+
+    # Fallback: hardcoded patterns only
     found: Dict[str, List[str]] = {}
     for tag_type, pattern in _TAG_PATTERNS.items():
         matches = pattern.findall(text)

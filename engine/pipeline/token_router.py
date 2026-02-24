@@ -41,16 +41,26 @@ _DEFAULT_INTENT_MAP: Dict[str, str] = {
     "relationship": "adjust_relationship",
     "dice_roll": "roll_dice",
     "voice_message": "send_voice_message",
+    # v4.1 routing intents
+    "send_message": "send_agent_message",
+    "fire_event": "fire_scene_event",
 }
 
-# Tag type → intent mapping for instant detection
-_TAG_INTENT_MAP: Dict[str, str] = {
-    "image": "image_generation",
-    "mood": "mood_update",
-    "action": "action_execution",
-    "stat": "stat_update",
-    "voice": "voice_style",
-}
+
+def _get_tag_intent_map() -> Dict[str, str]:
+    """Get tag→intent mapping from TagRegistry when available."""
+    try:
+        from engine.mcp.tag_registry import TagRegistry
+        return TagRegistry.get().get_intent_map()
+    except Exception:
+        # Fallback to hardcoded map
+        return {
+            "image": "image_generation",
+            "mood": "mood_update",
+            "action": "action_execution",
+            "stat": "stat_update",
+            "voice": "voice_style",
+        }
 
 
 # ── TokenAheadRouter ────────────────────────────────────────────────────
@@ -128,7 +138,9 @@ class TokenAheadRouter:
 
         Returns tool name if started or already running, else None.
         """
-        intent = _TAG_INTENT_MAP.get(tag_type)
+        # Get intent from TagRegistry (dynamic) or fallback map
+        intent_map = _get_tag_intent_map()
+        intent = intent_map.get(tag_type)
         if not intent:
             return None
         return self.on_intent_detected(intent, {"value": tag_value})

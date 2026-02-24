@@ -12,7 +12,7 @@ from engine.agents.stream_processor import (
     _RE_IMAGE,
     _RE_ACTION,
     _RE_STAT,
-    _RE_ALL_TAGS,
+    _get_strip_pattern,
 )
 
 
@@ -77,7 +77,7 @@ class TestTagRegex:
 
     def test_strip_all_tags(self):
         text = "Hello [MOOD:happy] world [IMAGE:test] bye [ACTION:wave] end"
-        clean = _RE_ALL_TAGS.sub("", text).strip()
+        clean = _get_strip_pattern().sub("", text).strip()
         assert clean == "Hello world bye end"
 
 

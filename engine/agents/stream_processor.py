@@ -45,6 +45,8 @@ from typing import Any, Callable, Dict, Generator, List, Optional
 logger = logging.getLogger(__name__)
 
 # ── Inline tag patterns ─────────────────────────────────────────────────
+# These fast regexes handle the original 5 tag types directly.
+# The TagRegistry is used for new routing tags and for the strip pattern.
 
 # [MOOD:happy]  [MOOD:nervous,excited]
 _RE_MOOD = re.compile(r"\[MOOD:([^\]]+)\]", re.IGNORECASE)
@@ -57,11 +59,20 @@ _RE_STAT = re.compile(r"\[STAT:(\w+)([+-]\d+)\]", re.IGNORECASE)
 # [VOICE:whisper]  [VOICE:playful]
 _RE_VOICE = re.compile(r"\[VOICE:([^\]]+)\]", re.IGNORECASE)
 
-# Master pattern to strip ALL inline tags from final text
-_RE_ALL_TAGS = re.compile(
-    r"\[(?:MOOD|IMAGE|SELFIE|PHOTO|ACTION|STAT|VOICE):[^\]]+\]\s*",
-    re.IGNORECASE,
-)
+# ── Tag Registry integration ────────────────────────────────────────────
+# Strip pattern comes from the registry so new tags are auto-stripped.
+
+def _get_strip_pattern() -> re.Pattern:
+    """Get the tag strip pattern from TagRegistry (covers all registered tags)."""
+    try:
+        from engine.mcp.tag_registry import TagRegistry
+        return TagRegistry.get().get_strip_pattern()
+    except Exception:
+        # Fallback to hardcoded pattern if registry unavailable
+        return re.compile(
+            r"\[(?:MOOD|IMAGE|SELFIE|PHOTO|ACTION|STAT|VOICE):[^\]]+\]\s*",
+            re.IGNORECASE,
+        )
 
 # LLM special token artifacts that leak into output
 _RE_TOKEN_ARTIFACTS = re.compile(
@@ -114,6 +125,14 @@ class ProcessedResponse:
     action_tags: List[str] = field(default_factory=list)
     stat_deltas: List[StatDelta] = field(default_factory=list)
     voice_style: str = ""
+
+    # Routing tags (v4.1)
+    send_targets: List[str] = field(default_factory=list)
+    events: List[str] = field(default_factory=list)
+    memories: List[str] = field(default_factory=list)
+    think_content: List[str] = field(default_factory=list)
+    # Generic: all tags detected (name → values)
+    all_tags: Dict[str, List[str]] = field(default_factory=dict)
 
     # Tool calls (from tool_call.* events)
     tool_calls: List[ToolCallRecord] = field(default_factory=list)
@@ -182,6 +201,7 @@ class StreamProcessor:
         on_image_request: Optional[Callable[[str], None]] = None,
         on_action: Optional[Callable[[str], None]] = None,
         on_stat_delta: Optional[Callable[[StatDelta], None]] = None,
+        on_tag: Optional[Callable[[str, str], None]] = None,
     ):
         self._on_delta = on_delta
         self._on_tool_call = on_tool_call
@@ -189,6 +209,7 @@ class StreamProcessor:
         self._on_image_request = on_image_request
         self._on_action = on_action
         self._on_stat_delta = on_stat_delta
+        self._on_tag = on_tag  # Generic: (tag_name, value) for any tag
 
         # Accumulation buffers
         self._content_parts: List[str] = []
@@ -198,6 +219,17 @@ class StreamProcessor:
 
         # Tag accumulation (v3.1 — single pass, no re-scan in result())
         self._mood_tags: List[str] = []
+        self._image_requests: List[str] = []
+        self._action_tags: List[str] = []
+        self._stat_deltas: List[StatDelta] = []
+        self._voice_styles: List[str] = []
+
+        # Routing tags (v4.1)
+        self._send_targets: List[str] = []
+        self._events: List[str] = []
+        self._memories: List[str] = []
+        self._think_content: List[str] = []
+        self._all_tags: Dict[str, List[str]] = {}
         self._image_requests: List[str] = []
         self._action_tags: List[str] = []
         self._stat_deltas: List[StatDelta] = []
@@ -337,6 +369,61 @@ class StreamProcessor:
         for match in _RE_VOICE.finditer(text):
             self._voice_styles.append(match.group(1).strip())
 
+        # ── Routing tags via TagRegistry (v4.1) ─────────────────────
+        self._scan_routing_tags(text)
+
+    # Routing tag patterns (compiled once)
+    _RE_SEND = re.compile(r"\[SEND:([^\]]+)\]", re.IGNORECASE)
+    _RE_EVENT = re.compile(r"\[EVENT:([^\]]+)\]", re.IGNORECASE)
+    _RE_MEMORY = re.compile(r"\[MEMORY:([^\]]+)\]", re.IGNORECASE)
+    _RE_THINK = re.compile(r"\[THINK:([^\]]+)\]", re.IGNORECASE)
+
+    def _scan_routing_tags(self, text: str) -> None:
+        """Scan for v4.1 routing tags."""
+        for match in self._RE_SEND.finditer(text):
+            val = match.group(1).strip()
+            self._send_targets.append(val)
+            self._all_tags.setdefault("send", []).append(val)
+            if self._on_tag:
+                self._on_tag("send", val)
+
+        for match in self._RE_EVENT.finditer(text):
+            val = match.group(1).strip()
+            self._events.append(val)
+            self._all_tags.setdefault("event", []).append(val)
+            if self._on_tag:
+                self._on_tag("event", val)
+
+        for match in self._RE_MEMORY.finditer(text):
+            val = match.group(1).strip()
+            self._memories.append(val)
+            self._all_tags.setdefault("memory", []).append(val)
+            if self._on_tag:
+                self._on_tag("memory", val)
+
+        for match in self._RE_THINK.finditer(text):
+            val = match.group(1).strip()
+            self._think_content.append(val)
+            self._all_tags.setdefault("think", []).append(val)
+            # No callback for think — internal only
+
+        # Also track original tags in all_tags
+        if _RE_MOOD.search(text):
+            for m in _RE_MOOD.finditer(text):
+                self._all_tags.setdefault("mood", []).append(m.group(1).strip())
+        if _RE_IMAGE.search(text):
+            for m in _RE_IMAGE.finditer(text):
+                self._all_tags.setdefault("image", []).append(m.group(1).strip())
+        if _RE_ACTION.search(text):
+            for m in _RE_ACTION.finditer(text):
+                self._all_tags.setdefault("action", []).append(m.group(1).strip())
+        if _RE_STAT.search(text):
+            for m in _RE_STAT.finditer(text):
+                self._all_tags.setdefault("stat", []).append(f"{m.group(1)}{m.group(2)}")
+        if _RE_VOICE.search(text):
+            for m in _RE_VOICE.finditer(text):
+                self._all_tags.setdefault("voice", []).append(m.group(1).strip())
+
     # ── Result assembly ─────────────────────────────────────────────
 
     def result(self) -> ProcessedResponse:
@@ -352,8 +439,9 @@ class StreamProcessor:
         # Use pre-accumulated tags (no re-scan)
         voice_style = self._voice_styles[-1] if self._voice_styles else ""
 
-        # Strip tags to produce clean text
-        clean_text = _RE_ALL_TAGS.sub("", raw_text).strip()
+        # Strip tags to produce clean text (uses TagRegistry for full coverage)
+        strip_re = _get_strip_pattern()
+        clean_text = strip_re.sub("", raw_text).strip()
         # Strip leaked LLM token artifacts
         clean_text = strip_token_artifacts(clean_text)
         raw_text = strip_token_artifacts(raw_text)
@@ -379,6 +467,11 @@ class StreamProcessor:
             action_tags=list(self._action_tags),
             stat_deltas=list(self._stat_deltas),
             voice_style=voice_style,
+            send_targets=list(self._send_targets),
+            events=list(self._events),
+            memories=list(self._memories),
+            think_content=list(self._think_content),
+            all_tags=dict(self._all_tags),
             tool_calls=list(self._tool_calls),
             response_id=self._response_id,
             model=self._model,
