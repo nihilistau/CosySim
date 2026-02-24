@@ -1051,3 +1051,56 @@ class TestActionBasedHeatBumping:
         from engine.mcp.comms_framework import _build_default_pipeline
         pipeline = _build_default_pipeline()
         assert len(pipeline._interceptors) == 20
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  Sprint 5 — Scene transitions, journey tracking, docs sync
+# ══════════════════════════════════════════════════════════════════════
+
+class TestSceneTransitionTracking:
+    """MCPFramework should track player scene visits."""
+
+    def test_framework_has_journey_methods(self):
+        from engine.mcp.framework import get_framework
+        fw = get_framework()
+        assert hasattr(fw, "record_scene_visit")
+        assert hasattr(fw, "get_player_journey")
+        assert hasattr(fw, "get_previous_scene")
+
+    def test_record_and_retrieve(self):
+        from engine.mcp.framework import get_framework
+        fw = get_framework()
+        # Clear history
+        fw._player_scene_history.clear()
+        fw.record_scene_visit("bedroom")
+        fw.record_scene_visit("phone")
+        assert fw.get_previous_scene() == "bedroom"
+        journey = fw.get_player_journey(limit=3)
+        assert len(journey) == 2
+        assert journey[0]["scene"] == "phone"  # most recent first
+        assert journey[1]["scene"] == "bedroom"
+
+    def test_no_previous_scene_initially(self):
+        from engine.mcp.framework import get_framework
+        fw = get_framework()
+        fw._player_scene_history.clear()
+        assert fw.get_previous_scene() is None
+
+    def test_journey_limit(self):
+        from engine.mcp.framework import get_framework
+        fw = get_framework()
+        fw._player_scene_history.clear()
+        for i in range(25):
+            fw.record_scene_visit(f"scene_{i}")
+        assert len(fw._player_scene_history) <= 20
+
+
+class TestRouterMessageJourneyInjection:
+    """RouterMessageInjector should reference player journey context."""
+
+    def test_router_injector_has_journey_logic(self):
+        import inspect
+        from engine.agents.interceptors import RouterMessageInjector
+        source = inspect.getsource(RouterMessageInjector.pre_call)
+        assert "get_previous_scene" in source
+        assert "player just came from" in source

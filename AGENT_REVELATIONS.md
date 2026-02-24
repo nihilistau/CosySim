@@ -840,3 +840,58 @@ so persistence happens automatically when any scene shuts down.
 | ConversationHeat | 4/10 (40%) | Bedroom, Phone, Lounge, Gallery |
 | DialogSystem | 2/10 (20%) | unchanged |
 | Registry Persistence | 10/10 (100%) | NEW: auto-persist on scene stop |
+
+---
+
+## 29. No Cross-Scene Narrative Continuity
+
+**Discovery:** When a player moves between scenes, agents have zero awareness
+of where the player was before or what they were doing. A character in the
+bedroom has no idea the player just left the lounge after an intense conversation.
+This breaks narrative immersion.
+
+**Fix:** Added scene transition tracking to MCPFramework:
+- `record_scene_visit()` logs each scene visit with timestamp
+- `get_player_journey()` returns recent visit history
+- `get_previous_scene()` returns last scene
+- MCPSceneMixin._mcp_init() auto-records visits
+- RouterMessageInjector injects "(player just came from X scene)" into system prompts
+
+Now agents naturally know the player's journey and can reference it.
+
+---
+
+## 30. Codebase is Clean — Minimal Dead Code
+
+**Audit result:** Full dead code audit of engine/ and content/ found:
+- 0 unused/unimported files
+- 0 deprecated/legacy named files
+- Only 2 TODO/FIXME comments (triton deployment + video lip sync)
+- All __init__.py files have content
+- __pycache__ properly gitignored
+
+The codebase is well-maintained. No cleanup needed.
+
+---
+
+## Implementation Log (Sprint 5)
+
+| Date | Revelation | Action | Status |
+|------|-----------|--------|--------|
+| Sprint 5 | #29 No narrative continuity | Scene transition tracking + journey injection | Done |
+| Sprint 5 | #30 Dead code audit | Full audit — codebase clean | Done |
+| Sprint 5 | N/A | 5 new tests for journey tracking | Done |
+
+### Updated Framework Adoption (Post-Sprint 5)
+
+| Feature | Adoption | Change |
+|---------|----------|--------|
+| MCPSceneMixin | 10/10 (100%) | now auto-records scene visits |
+| SceneStateManager | 10/10 (100%) | unchanged |
+| Interceptor Pipeline | 10/10 (100%) | unchanged |
+| CharacterStateCoordinator | 6/10 (60%) | unchanged |
+| AgentGovernor | 2/10 (20%) | unchanged |
+| ConversationHeat | 4/10 (40%) | unchanged |
+| DialogSystem | 2/10 (20%) | already wired via DialogDirectiveInterceptor |
+| Registry Persistence | 10/10 (100%) | unchanged |
+| Scene Transition Tracking | 10/10 (100%) | NEW: auto via MCPSceneMixin |

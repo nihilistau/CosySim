@@ -665,7 +665,9 @@ class MCPSceneMixin:
     def _mcp_init(self) -> None:
         """Call this at the end of __init__ to wire up the mixin."""
         scene_id = self._mcp_scene_id or getattr(self, "scene_name", "unknown")
-        self._mcp_scene_node: MCPSceneNode = get_framework().get_scene(scene_id)
+        fw = get_framework()
+        self._mcp_scene_node: MCPSceneNode = fw.get_scene(scene_id)
+        fw.record_scene_visit(scene_id)
         logger.debug("MCPSceneMixin: %s wired to framework", scene_id)
 
     @property
@@ -739,6 +741,10 @@ class MCPFramework:
         # ── Agent profiles ────────────────────────────────────────────
         self._agent_profiles: Dict[str, AgentProfile] = dict(DEFAULT_AGENT_PROFILES)
         self._load_agent_profiles_from_config()
+
+        # ── Scene transition tracking ─────────────────────────────────
+        self._player_scene_history: List[Dict[str, Any]] = []
+        self._max_scene_history = 20
 
         # ── Framework ready ───────────────────────────────────────────
         self._ready = False
@@ -842,6 +848,33 @@ class MCPFramework:
         """Return (and mark as read) all unread cross-scene messages for a character."""
         node = self.get_character(character_id)
         return [m.to_dict() for m in node.get_unread_messages(mark_read=True)]
+
+    # ── Scene transition tracking ─────────────────────────────────────
+
+    def record_scene_visit(self, scene_id: str, duration_secs: float = 0) -> None:
+        """Record that the player visited a scene. Called on scene entry/exit."""
+        import time
+        with self._lock:
+            entry = {
+                "scene": scene_id,
+                "timestamp": time.time(),
+                "duration": duration_secs,
+            }
+            self._player_scene_history.append(entry)
+            if len(self._player_scene_history) > self._max_scene_history:
+                self._player_scene_history = self._player_scene_history[-self._max_scene_history:]
+
+    def get_player_journey(self, limit: int = 5) -> List[Dict[str, Any]]:
+        """Return the player's recent scene visit history (most recent first)."""
+        with self._lock:
+            return list(reversed(self._player_scene_history[-limit:]))
+
+    def get_previous_scene(self) -> Optional[str]:
+        """Return the scene_id the player was in before the current one, or None."""
+        with self._lock:
+            if len(self._player_scene_history) >= 2:
+                return self._player_scene_history[-2]["scene"]
+            return None
 
     # ── Timer system ─────────────────────────────────────────────────
 

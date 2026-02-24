@@ -141,6 +141,18 @@ class RouterMessageInjector(InterceptorBase):
         except Exception as exc:
             logger.debug("RouterMessageInjector: cross-scene inbox error: %s", exc)
 
+        # ── Player journey context (always inject, not just with messages) ──
+        try:
+            prev = get_framework().get_previous_scene()
+            if prev:
+                current = ctx.get("scene", "")
+                if prev != current:
+                    ctx["system_prompt"] = ctx.get("system_prompt", "") + (
+                        f"\n(The player just came from the {prev} scene.)"
+                    )
+        except Exception:
+            pass
+
         if not pending:
             return
         lines = [f"[incoming from {m['sender']}]: {m['message']}" for m in pending]
@@ -148,6 +160,7 @@ class RouterMessageInjector(InterceptorBase):
         ctx["system_prompt"] = ctx.get("system_prompt", "") + (
             f"\n\n--- Messages received from other agents ---\n{extra}\n---"
         )
+
         logger.debug("RouterMessageInjector: injected %d message(s) for %s", len(pending), agent_id)
 
 
