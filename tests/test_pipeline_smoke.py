@@ -767,3 +767,116 @@ class TestStreamingConversationThreading:
         assert ProcessedResponse(response_id="resp_abc").is_stateful is True
         assert ProcessedResponse(response_id="chatcmpl-xxx").is_stateful is False
         assert ProcessedResponse(response_id="").is_stateful is False
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  Sprint 2 — NaturalMoodDriftInterceptor + Phone governance tests
+# ══════════════════════════════════════════════════════════════════════
+
+class TestNaturalMoodDriftInterceptor:
+    """Tests for the NaturalMoodDriftInterceptor (priority 5)."""
+
+    def test_instantiation_and_priority(self):
+        from engine.agents.interceptors import NaturalMoodDriftInterceptor
+        d = NaturalMoodDriftInterceptor()
+        assert d.priority == 5
+        assert d.name == "natural_mood_drift"
+
+    def test_applicable_scenes(self):
+        from engine.agents.interceptors import NaturalMoodDriftInterceptor
+        d = NaturalMoodDriftInterceptor()
+        assert "bedroom" in d.applicable_scenes
+        assert "phone" in d.applicable_scenes
+        assert "lounge" in d.applicable_scenes
+        assert "gallery" in d.applicable_scenes
+        assert "warzone" not in d.applicable_scenes
+
+    def test_drift_rates_defined(self):
+        from engine.agents.interceptors import NaturalMoodDriftInterceptor
+        d = NaturalMoodDriftInterceptor()
+        assert "arousal" in d._DRIFT
+        assert "tiredness" in d._DRIFT
+        assert d._DRIFT["arousal"] < 0  # arousal cools
+        assert d._DRIFT["tiredness"] > 0  # tiredness builds
+
+    def test_inner_thoughts_defined(self):
+        from engine.agents.interceptors import NaturalMoodDriftInterceptor
+        d = NaturalMoodDriftInterceptor()
+        assert "cooling" in d._INNER_THOUGHTS
+        assert "tired" in d._INNER_THOUGHTS
+        assert "mellowing" in d._INNER_THOUGHTS
+        assert "sobering" in d._INNER_THOUGHTS
+        assert "calming" in d._INNER_THOUGHTS
+
+    def test_pre_call_no_agent_id_is_noop(self):
+        """Should gracefully do nothing when agent_id is missing."""
+        from engine.agents.interceptors import NaturalMoodDriftInterceptor
+        d = NaturalMoodDriftInterceptor()
+        ctx = {"system_prompt": "hello"}
+        d.pre_call(ctx)
+        assert ctx["system_prompt"] == "hello"
+
+    def test_in_default_pipeline(self):
+        """NaturalMoodDriftInterceptor should be in the default pipeline."""
+        from engine.mcp.comms_framework import _build_default_pipeline
+        pipeline = _build_default_pipeline()
+        names = [i.name for i in pipeline._interceptors]
+        assert "natural_mood_drift" in names
+        # Should be first (lowest priority)
+        assert names[0] == "natural_mood_drift"
+
+
+class TestPhoneGovernanceContext:
+    """Tests that Phone agent properly accepts governance_context."""
+
+    def test_phone_agent_reply_accepts_governance_context(self):
+        """_PhoneCharacterAgent.reply() should have governance_context as explicit kwarg."""
+        import inspect
+        import importlib
+        mod = importlib.import_module("content.scenes.phone.phone_scene_v2")
+        agent_cls = getattr(mod, "_PhoneCharacterAgent")
+        sig = inspect.signature(agent_cls.reply)
+        params = list(sig.parameters.keys())
+        assert "governance_context" in params, (
+            f"governance_context not in reply params: {params}"
+        )
+
+    def test_phone_interceptor_has_heat_integration(self):
+        """PhoneSceneInterceptor.pre_call should reference conversation heat."""
+        import inspect
+        from engine.agents.interceptors import PhoneSceneInterceptor
+        source = inspect.getsource(PhoneSceneInterceptor.pre_call)
+        assert "get_conversation_heat" in source
+
+    def test_phone_interceptor_vibe_hints(self):
+        """PhoneSceneInterceptor should have vibe hints for stat combinations."""
+        from engine.agents.interceptors import PhoneSceneInterceptor
+        p = PhoneSceneInterceptor()
+        assert ("high", "high") in p._VIBE_HINTS
+        assert ("low", "low") in p._VIBE_HINTS
+        assert p._bucket(80) == "high"
+        assert p._bucket(50) == "mid"
+        assert p._bucket(20) == "low"
+
+
+class TestBedroomCoordinatorIntegration:
+    """Tests that Bedroom stat changes reference the Coordinator."""
+
+    def test_bedroom_action_handler_references_coordinator(self):
+        """_on_agent_action should call get_coordinator()."""
+        import inspect
+        import importlib
+        mod = importlib.import_module("content.scenes.bedroom.bedroom_scene")
+        scene_cls = getattr(mod, "BedroomScene")
+        source = inspect.getsource(scene_cls._on_agent_action)
+        assert "get_coordinator" in source
+        assert "state_coordinator" in source
+
+
+class TestCrossSceneSummaryEndpoint:
+    """Tests for the /api/scenes/summary overlay endpoint."""
+
+    def test_endpoint_function_exists(self):
+        """api_scene_summary function should exist in overlay_bp."""
+        from engine.overlay.overlay_bp import api_scene_summary
+        assert callable(api_scene_summary)
