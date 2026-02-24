@@ -1150,3 +1150,73 @@ intelligent scene recommendations and routing.
 | Ambient Events | 10/10 (100%) | unchanged |
 | DialogSystem Admin API | ∞ (overlay) | NEW |
 | Sex Pose System | 1/10 (Bedroom) | NEW |
+
+---
+
+## 41. Truth or Dare Content Was Completely Tame
+
+**Discovery:** The Truth or Dare game in bedroom_game_skill.py had generic truths
+("What's your most embarrassing memory from childhood?") and clean dares ("Do 10
+push-ups right now."). This is an ADULT bedroom scene — the game content was wildly
+inappropriate for the context.
+
+**Fix:** Rewrote all 42 truths and dares with escalating adult sexual content:
+- Truths progress from "describe your dirtiest fantasy" to "describe in pornographic
+  detail the last time you masturbated"
+- Dares progress from "remove one piece of clothing" to "go down on the person of
+  your choice" and "let two people do whatever they want to you"
+
+---
+
+## 42. Bed Game Had No Competition/Escalation Mechanic
+
+**Discovery:** The bed game was turn-based but there was no incentive to go further.
+Players just picked actions and watched stat effects. No scoring, no competition,
+no encouragement to escalate.
+
+**Fix:** Added full escalation competition system:
+- 5 escalation tiers: Warming Up → Getting Heated → No Holds Barred → Filthy → Depraved
+- Player scoring based on explicit_level (higher = more points)
+- Streak bonuses for consecutive high-explicit actions
+- "Outdo" mechanic: prompts explicitly challenge players to go dirtier than last action
+- Leader tracking: "X is winning the filth competition!"
+- Escalation-aware prompt injection tells agents the current tier and what's expected
+- Stat effect bonuses scale with escalation level (up to +20%)
+
+**Pattern:** Game competition mechanics drive organic content escalation without
+the Director having to manually push. The system creates a feedback loop where
+agents compete to be more explicit, which raises the escalation level, which
+encourages even more explicit content.
+
+---
+
+## 43. Bedroom MCP Rules Were Missing Explicit Content Gates
+
+**Discovery:** bedroom_rules.py had intimacy gates up to "intimate_gate" (arousal 70,
+openness 60) but nothing beyond that. Once the intimate gate opened, there was no
+further state-driven content escalation.
+
+**Fix:** Added 3 new gate rules and 6 new actions:
+- explicit_gate: arousal ≥ 80, horniness ≥ 60 → style_lock "pornographic"
+- competition_escalation: arousal ≥ 50, openness ≥ 50 → must_include "outdo"
+- depraved_gate: arousal ≥ 90, horniness ≥ 80 → style_lock "depraved and uninhibited"
+- New actions: oral_sex, rough_sex, dirty_talk, bondage, orgasm
+- New director rules: max_arousal, strip_everyone, dare_them
+
+**Impact:** The MCP rules engine now drives a 5-stage content escalation:
+light_touch → kiss → caress → striptease → intimate → explicit → depraved
+
+---
+
+## Implementation Log (Sprint 10)
+
+| Sprint | Revelation | Action | Status |
+|--------|-----------|--------|--------|
+| Sprint 10 | #41 Tame Truth or Dare | Rewrote 42 truths/dares with adult content | Done |
+| Sprint 10 | #42 No escalation | 5-tier competition system + scoring + streaks | Done |
+| Sprint 10 | #43 Missing explicit gates | 3 new gates + 6 actions + 3 director rules | Done |
+| Sprint 10 | N/A | 6 new explicit scenarios | Done |
+| Sprint 10 | N/A | 14 new bed game actions (36 total) | Done |
+| Sprint 10 | N/A | BedroomSceneInterceptor adult mode header | Done |
+| Sprint 10 | N/A | Stronger heat-level directives | Done |
+| Sprint 10 | N/A | 1245 tests passing | Done |
