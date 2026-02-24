@@ -16,6 +16,8 @@ Flask Blueprint mountable on any CosySim scene.  Provides:
 * ``/overlay/api/memory`` — Browse agent memories
 * ``/overlay/api/skills`` — List all registered skills
 * ``/overlay/api/inference`` — Inference config defaults & override
+* ``/overlay/api/router`` — InferenceRouter metrics (queue, tiers, throughput)
+* ``/overlay/api/router/tiers`` — Per-tier slot configuration and live usage
 
 Mount::
 
@@ -510,7 +512,41 @@ def api_inference():
         return jsonify({"ok": False, "error": str(exc)}), 500
 
 
-# ── Socket.IO overlay events ───────────────────────────────────────────
+@overlay_bp.route("/api/router", methods=["GET"])
+def api_router():
+    """Get InferenceRouter metrics — queue depth, tier slots, throughput."""
+    try:
+        from engine.lmstudio.router import get_router
+        router = get_router()
+        if router is None:
+            return jsonify({"ok": False, "error": "Router not initialised"}), 503
+        metrics = router.get_metrics()
+        return jsonify({"ok": True, **metrics})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+@overlay_bp.route("/api/router/tiers", methods=["GET"])
+def api_router_tiers():
+    """Get per-tier configuration and live slot usage."""
+    try:
+        from engine.lmstudio.router import get_router
+        router = get_router()
+        if router is None:
+            return jsonify({"ok": False, "error": "Router not initialised"}), 503
+        tiers = {}
+        for tier, tc in router._tiers.items():
+            tier_name = tier.value if hasattr(tier, 'value') else str(tier)
+            tiers[tier_name] = {
+                "model_key": tc.model_key,
+                "device": tc.device,
+                "max_slots": tc.max_slots,
+                "busy_slots": tc._busy_slots,
+                "available": tc.max_slots - tc._busy_slots,
+            }
+        return jsonify({"ok": True, "tiers": tiers})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
 
 def _register_socketio_events(socketio) -> None:
     """Register Socket.IO event handlers for overlay real-time updates."""

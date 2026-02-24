@@ -611,7 +611,7 @@ class CasinoScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
 
     def _get_game_state(self) -> Dict:
         """Return the full game state for the frontend."""
-        return {
+        state = {
             "round": self.round_number,
             "phase": self.current_phase,
             "game_active": self.game_active,
@@ -629,6 +629,14 @@ class CasinoScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
             "hand_history": self.hand_history[-5:],
             "events": self.events_log[-5:],
         }
+        # Sync to SceneStateManager for MCP skills / interceptors
+        try:
+            self._state_mgr.update_stats("casino", chips=self.player_chips,
+                                          mira_chips=self.mira_chips, pot=self.pot,
+                                          round=self.round_number, phase=self.current_phase)
+        except Exception:
+            pass
+        return state
 
     # ══════════════════════════════════════════════════════════════════
     #  FLASK ROUTES

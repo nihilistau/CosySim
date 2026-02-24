@@ -21,6 +21,9 @@ from flask_socketio import SocketIO
 
 from engine.scenes.base_scene import BaseScene
 from engine.mcp.framework import MCPSceneMixin, get_framework
+from engine.mcp.scene_state import get_scene_state_manager
+from engine.mcp.tag_registry import TagRegistry, TagDef
+from content.shared import register_shared_assets
 
 from .neoncity_state import (
     EVENT_POOL,
@@ -49,6 +52,7 @@ class NeonCityScene(BaseScene, MCPSceneMixin, mcp_scene_id="neoncity"):
         self.app.config["SECRET_KEY"] = "neoncity_v3"
         CORS(self.app)
         self.socketio = SocketIO(self.app, cors_allowed_origins="*")
+        register_shared_assets(self.app)
 
         self.mount_overlay(self.app, self.socketio)
         self.mount_skills_server(self.app)
@@ -57,6 +61,14 @@ class NeonCityScene(BaseScene, MCPSceneMixin, mcp_scene_id="neoncity"):
         self.state: Optional[NeonCityGameState] = None
         self._setup_routes()
         self._setup_socketio()
+
+        # Framework integration
+        self._state_mgr = get_scene_state_manager()
+        self._tag_registry = TagRegistry.get()
+        self._tag_registry.register(TagDef(
+            name="HACK", pattern=r"\[HACK:([^\]]+)\]",
+            handler=None, strip_from_output=True, pre_warm_intent="neoncity_hack"
+        ))
 
     def _narrate(self, context: str) -> str:
         """Get a cyberpunk flavor narration from LMS (stateless)."""
@@ -78,6 +90,14 @@ class NeonCityScene(BaseScene, MCPSceneMixin, mcp_scene_id="neoncity"):
             return
         try:
             self.mcp.update_state(self.state.to_dict())
+        except Exception:
+            pass
+        try:
+            d = self.state.to_dict()
+            self._state_mgr.update_stats(SCENE_ID,
+                                          turn=d.get("turn", 0),
+                                          round=d.get("round", 0),
+                                          storm_radius=d.get("storm_radius", 0))
         except Exception:
             pass
 
