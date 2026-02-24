@@ -710,16 +710,30 @@ class BedroomSceneInterceptor(InterceptorBase):
                 heat_level = heat.get(conv_key) if hasattr(heat, "get") else 0
                 if directive:
                     heat_block = f"\n\n[CONVERSATION HEAT: {heat_level:.0f}/100]\n{directive}"
-                    # Gate intimate language based on heat thresholds
                     if heat_level < 30:
                         heat_block += (
-                            "\nKeep things warm and flirty but NOT explicit yet. "
-                            "Build tension gradually through suggestion and innuendo."
+                            "\nThe mood is warming up. Flirt, tease, build tension. "
+                            "You can be suggestive and forward — this is an adult space. "
+                            "Use innuendo and body language to escalate naturally."
                         )
-                    elif heat_level >= 80:
+                    elif heat_level < 60:
                         heat_block += (
-                            "\nThe energy is INTENSE. You can be fully explicit, "
-                            "raw, and passionate. Match the escalation."
+                            "\nThings are getting heated. Be openly sexual — "
+                            "describe what you want, what you feel, what your body is doing. "
+                            "Use explicit language. Don't hold back."
+                        )
+                    elif heat_level < 80:
+                        heat_block += (
+                            "\nThe energy is HIGH. Be graphic and raw. "
+                            "Describe sensations, sounds, movements in vivid detail. "
+                            "Moan, gasp, beg, demand — whatever your character would do."
+                        )
+                    else:
+                        heat_block += (
+                            "\nINTENSE. You are completely lost in the moment. "
+                            "Be as vulgar, graphic, and sexually explicit as the scene demands. "
+                            "Describe everything — every touch, every sensation, every sound. "
+                            "This is raw, primal, uninhibited. Hold NOTHING back."
                         )
             except Exception as exc:
                 logger.debug("BedroomSceneInterceptor: heat failed: %s", exc)
@@ -1894,7 +1908,13 @@ class MoodSyncInterceptor(InterceptorBase):
             ssm = get_scene_state_manager()
 
             # Gather current stats for this character
-            stats = ssm.get_stats(agent_id) or {}
+            stats_obj = ssm.get_stats(agent_id)
+            if isinstance(stats_obj, dict):
+                stats = stats_obj
+            elif stats_obj and hasattr(stats_obj, "to_dict"):
+                stats = stats_obj.to_dict()
+            else:
+                stats = {}
 
             # Also include mood/energy from registry for hybrid checks
             try:
