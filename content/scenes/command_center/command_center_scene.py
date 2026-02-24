@@ -37,6 +37,16 @@ DEFAULT_PORT = 5566
 class CommandCenterScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
     """Real-time system observatory dashboard."""
 
+    SCENE_METADATA = {
+        "title": "Command Center",
+        "description": "System observatory dashboard showing real-time metrics, pipeline status, "
+                       "and cross-scene activity.",
+        "genre": "system_monitoring",
+        "max_characters": 0,
+        "features": ["metrics_dashboard", "pipeline_monitoring", "cross_scene_view",
+                     "alert_system", "event_feed"],
+    }
+
     def __init__(self, host: str = "127.0.0.1", port: int = DEFAULT_PORT):
         scene_dir = Path(__file__).parent
         self.app = Flask(

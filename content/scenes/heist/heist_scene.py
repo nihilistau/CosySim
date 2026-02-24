@@ -90,6 +90,15 @@ CREW_TEMPLATES = {
 class HeistScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
     """Cooperative heist planning & execution scene."""
 
+    SCENE_METADATA = {
+        "title": "The Heist",
+        "description": "Cooperative heist planning and execution with specialized crew roles.",
+        "genre": "crime_coop",
+        "max_characters": 4,
+        "features": ["heist_planning", "crew_roles", "phase_system",
+                     "multi_agent_cooperation", "branched_conversations"],
+    }
+
     def __init__(
         self,
         host: str = "127.0.0.1",

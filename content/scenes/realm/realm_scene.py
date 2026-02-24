@@ -120,6 +120,14 @@ Keep responses SHORT. You're a speech bubble, not a novel. Use humor, sarcasm, p
 class RealmScene(BaseScene, MCPSceneMixin, mcp_scene_id="realm"):
     """The Realm — AI-Directed LitRPG / Visual Novel."""
 
+    SCENE_METADATA = {
+        "title": "The Realm",
+        "description": "Fantasy RPG realm with quests, exploration, and character skills.",
+        "genre": "fantasy_rpg",
+        "max_characters": 4,
+        "features": ["quests", "exploration", "skills", "fantasy_world", "npc_interaction"],
+    }
+
     def __init__(self, host: str = "0.0.0.0", port: int = DEFAULT_PORT):
         super().__init__(scene_name=SCENE_ID, host=host, port=port)
         self._mcp_init()

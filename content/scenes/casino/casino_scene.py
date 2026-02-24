@@ -75,6 +75,16 @@ class CasinoScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
     and full MCP governance.  Demonstrates all new framework features.
     """
 
+    SCENE_METADATA = {
+        "title": "Casino Floor",
+        "description": "Casino with blackjack, poker, roulette, and slots. "
+                       "AI dealers and characters with personality-driven gambling styles.",
+        "genre": "gambling_simulation",
+        "max_characters": 5,
+        "features": ["blackjack", "poker", "roulette", "slots", "chips_economy",
+                     "dealer_ai", "game_rules"],
+    }
+
     def __init__(self, host: str = "0.0.0.0", port: int = CASINO_PORT) -> None:
         super().__init__(scene_name=SCENE_ID, host=host, port=port)
 

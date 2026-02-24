@@ -843,6 +843,16 @@ def _build_bedroom_map() -> SceneMap:
 class BedroomScene(BaseScene, MCPSceneMixin, mcp_scene_id="bedroom"):
     """Adult multi-agent roleplay bedroom — v4."""
 
+    SCENE_METADATA = {
+        "title": "The Bedroom",
+        "description": "Adult roleplay scene with detailed 3D avatars, clothing system, "
+                       "bed game mechanics, and heat-gated explicit content progression.",
+        "genre": "adult_roleplay",
+        "max_characters": 3,
+        "features": ["3d_avatars", "clothing_system", "bed_game", "heat_gating",
+                      "director_mode", "mountable_furniture", "mood_expressions"],
+    }
+
     def __init__(self, host: str = "0.0.0.0", port: int = 5556):
         super().__init__(scene_name="bedroom", host=host, port=port)
         self.db = Database()

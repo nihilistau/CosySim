@@ -165,6 +165,16 @@ class GalleryCharacter:
 class GalleryScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
     """Interactive art gallery — v2.7 framework showcase."""
 
+    SCENE_METADATA = {
+        "title": "Art Gallery",
+        "description": "AI art gallery where characters evaluate and discuss generated artwork. "
+                       "Showcases image generation integration.",
+        "genre": "creative",
+        "max_characters": 5,
+        "features": ["image_generation", "art_evaluation", "gallery_curation",
+                     "character_opinions"],
+    }
+
     def __init__(self, host: str = "0.0.0.0", port: int = 5560):
         super().__init__(scene_name="gallery", host=host, port=port)
         self.db = Database()

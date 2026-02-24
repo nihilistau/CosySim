@@ -24,6 +24,7 @@ from flask_socketio import SocketIO
 from engine.scenes.base_scene import BaseScene
 from engine.mcp.framework import MCPSceneMixin, get_framework
 from engine.mcp.scene_state import get_scene_state_manager
+from engine.mcp.tag_registry import TagRegistry, TagDef
 
 from .coders_state import (
     AgentRole,
@@ -40,6 +41,15 @@ DEFAULT_PORT = 5564
 
 class CodersRoomScene(BaseScene, MCPSceneMixin, mcp_scene_id="coders"):
     """The Coders Room — AI Agent Idle Code Simulation."""
+
+    SCENE_METADATA = {
+        "title": "Coders Room",
+        "description": "AI coding room where agents collaboratively write, review, and test Python code.",
+        "genre": "coding_simulation",
+        "max_characters": 3,
+        "features": ["code_generation", "code_review", "testing", "pipeline_phases",
+                     "sandboxed_execution", "multi_agent_collab"],
+    }
 
     def __init__(self, host: str = "0.0.0.0", port: int = DEFAULT_PORT):
         super().__init__(scene_name=SCENE_ID, host=host, port=port)
@@ -60,6 +70,11 @@ class CodersRoomScene(BaseScene, MCPSceneMixin, mcp_scene_id="coders"):
 
         self.state: Optional[CodersRoomState] = None
         self._state_mgr = get_scene_state_manager()
+        self._tag_registry = TagRegistry.get()
+        self._tag_registry.register(TagDef(
+            name="CODE", pattern=r"\[CODE:([^\]]+)\]",
+            handler=None, strip_from_output=True, pre_warm_intent="coders_code"
+        ))
         self._tick_thread: Optional[threading.Thread] = None
         self._running = False
 

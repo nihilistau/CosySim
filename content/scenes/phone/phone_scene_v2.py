@@ -157,6 +157,16 @@ class _PhoneCharacterAgent:
 class PhoneSceneV2(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
     """iOS-style phone scene — multi-contact DMs, group chats, truth-or-dare."""
 
+    SCENE_METADATA = {
+        "title": "Phone",
+        "description": "iOS-style phone interface with messaging, calls, and character social media. "
+                       "Characters send autonomous texts and maintain relationships.",
+        "genre": "social_simulation",
+        "max_characters": 5,
+        "features": ["messaging", "autonomous_texts", "character_relationships", "phone_os",
+                     "contacts", "social_feed", "conversation_threads"],
+    }
+
     # ── lifecycle ───────────────────────────────────────────────────────────────
 
     def __init__(self, host: str = "0.0.0.0", port: int = 5555):

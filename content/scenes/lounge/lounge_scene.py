@@ -66,6 +66,15 @@ class LoungeScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
     state that cannot live in the framework (active_song timer object, etc.).
     """
 
+    SCENE_METADATA = {
+        "title": "The Lounge",
+        "description": "Social lounge with music, conversations, and group dynamics.",
+        "genre": "social",
+        "max_characters": 5,
+        "features": ["music_system", "group_conversations", "social_dynamics",
+                     "conversation_heat", "activity_scheduling"],
+    }
+
     def __init__(self, host: str = "0.0.0.0", port: int = LOUNGE_PORT) -> None:
         super().__init__(scene_name=SCENE_ID, host=host, port=port)
 

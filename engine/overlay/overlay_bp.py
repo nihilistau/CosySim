@@ -651,6 +651,14 @@ def api_scene_summary():
         for scene_id in fw.list_scenes():
             entries = ssm.get_narrative_entries(scene_id, limit=5)
             scene_data = {"narrative": entries}
+            # Include scene metadata from BaseScene registry
+            try:
+                from engine.scenes.base_scene import BaseScene
+                scene_obj = BaseScene.get_active_scene(scene_id)
+                if scene_obj:
+                    scene_data["metadata"] = scene_obj.scene_metadata
+            except Exception:
+                pass
             # Include heat for scene conversations if available
             try:
                 from engine.mcp.scene_rules_engine import get_conversation_heat

@@ -381,6 +381,18 @@ class GameState:
 # ── Scene class ──────────────────────────────────────────────────────
 
 class WarzoneScene(BaseScene, MCPSceneMixin, mcp_scene_id="warzone"):
+    """Global Strike — Modern artillery strategy scene."""
+
+    SCENE_METADATA = {
+        "title": "Warzone",
+        "description": "Real-time strategy scene with AI commanders managing squads, "
+                       "buildings, and combat. Features event-driven warfare mechanics.",
+        "genre": "strategy",
+        "max_characters": 4,
+        "features": ["rts_combat", "squad_management", "building_system",
+                     "ai_commander", "event_chain", "resource_management"],
+    }
+
     def __init__(self):
         super().__init__("warzone", port=5561)
         tpl = str(Path(__file__).parent / "templates")

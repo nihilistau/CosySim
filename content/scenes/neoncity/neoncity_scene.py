@@ -40,6 +40,15 @@ DEFAULT_PORT = 5563
 class NeonCityScene(BaseScene, MCPSceneMixin, mcp_scene_id="neoncity"):
     """NeonCity — Cyberpunk Strategy Board Game."""
 
+    SCENE_METADATA = {
+        "title": "Neon City",
+        "description": "Cyberpunk city simulation with hacking, factions, and street events.",
+        "genre": "cyberpunk",
+        "max_characters": 5,
+        "features": ["hacking", "factions", "street_events", "cyberpunk_world",
+                     "dynamic_events"],
+    }
+
     def __init__(self, host: str = "0.0.0.0", port: int = DEFAULT_PORT):
         super().__init__(scene_name=SCENE_ID, host=host, port=port)
         self._mcp_init()

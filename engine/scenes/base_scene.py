@@ -94,6 +94,15 @@ class BaseScene(ABC):
         self._active_streams: int = 0
         self._total_stream_tokens: int = 0
 
+        # Scene metadata — subclasses override SCENE_METADATA for rich description
+        self.scene_metadata: Dict[str, Any] = getattr(self.__class__, "SCENE_METADATA", {
+            "title": scene_name.replace("_", " ").title(),
+            "description": "",
+            "genre": "general",
+            "max_characters": 5,
+            "features": [],
+        })
+
         # Register this scene with MCPFramework (best-effort)
         self._mcp_register_scene()
 
