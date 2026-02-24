@@ -751,6 +751,37 @@ class BedroomSceneInterceptor(InterceptorBase):
             if mcp_actions_block:
                 ctx["system_prompt"] = ctx.get("system_prompt", "") + "\nMCP Governance:" + mcp_actions_block
 
+            # ── active timed action phases ───────────────────────────────
+            try:
+                active = ssm.active_timed_actions()
+                for action in active:
+                    phase = action.get("phase", "")
+                    progress = action.get("progress", 0)
+                    action_type = action.get("action_type", "")
+                    pct = int(progress * 100)
+                    phase_block = f"\n\n[ACTIVE INTERACTION: {action_type} — {pct}% complete"
+                    if phase:
+                        phase_block += f", current phase: {phase}"
+                    phase_block += "]"
+                    if pct < 30:
+                        phase_block += (
+                            "\nYou are in the early stage. Set the mood, "
+                            "build anticipation. Describe the beginning slowly."
+                        )
+                    elif pct < 70:
+                        phase_block += (
+                            "\nYou are in the middle. Deepen the moment, "
+                            "add sensory details, respond to your partner's energy."
+                        )
+                    else:
+                        phase_block += (
+                            "\nYou are approaching the climax. Bring the intensity "
+                            "to its peak, then begin the gentle transition to resolution."
+                        )
+                    ctx["system_prompt"] = ctx.get("system_prompt", "") + phase_block
+            except Exception as exc:
+                logger.debug("BedroomSceneInterceptor: timed action phase failed: %s", exc)
+
             # ── store for downstream ─────────────────────────────────────────
             extra = ctx.setdefault("extra", {})
             extra["scene_snapshot"] = {
@@ -1122,15 +1153,43 @@ class UniversalSceneInterceptor(InterceptorBase):
     Catch-all scene interceptor for scenes without a dedicated one
     (Casino, Warzone, Realm, NeonCity, Coders Room, Heist).
 
-    Injects: character mood/state, scene narrative, ConversationHeat pacing,
-    available MCP actions, and player journey context.  Runs at priority 16
-    (just after the dedicated scene interceptors at 15) so it doesn't
-    conflict with scenes that already have their own.
+    Injects: scene descriptor, character mood/state, scene narrative,
+    ConversationHeat pacing, available MCP actions, and player journey
+    context.  Runs at priority 16 (just after the dedicated scene
+    interceptors at 15) so it doesn't conflict.
 
     This raises scene-specific interceptor coverage from 4/10 to 10/10.
     """
     name     = "universal_scene"
     priority = 16
+
+    # Thematic descriptors help agents stay in-world
+    _SCENE_DESCRIPTORS: Dict[str, str] = {
+        "casino": (
+            "Setting: The Grand Casino — opulent, high-stakes gambling floor. "
+            "Glittering chandeliers, velvet tables, the rush of risk and reward."
+        ),
+        "warzone": (
+            "Setting: Active combat zone. Tactical operations, squad leadership, "
+            "survival under fire. Tension is constant, decisions are life-or-death."
+        ),
+        "realm": (
+            "Setting: Fantasy realm — medieval world of magic, quests, and adventure. "
+            "Ancient forests, mystical creatures, sword and sorcery."
+        ),
+        "neon_city": (
+            "Setting: Neon City — cyberpunk metropolis. Neon-drenched streets, "
+            "corporate intrigue, hackers, augmented reality, rain-slicked alleys."
+        ),
+        "coders_room": (
+            "Setting: The Coder's Room — a tech workspace buzzing with creativity. "
+            "Multiple monitors, whiteboards, coffee, collaborative problem-solving."
+        ),
+        "heist": (
+            "Setting: Active heist operation. Precision planning, stealth execution, "
+            "split-second decisions. Every move matters, every second counts."
+        ),
+    }
 
     def pre_call(self, ctx: ResponseContext) -> None:
         scene = ctx.get("scene", "")
@@ -1139,6 +1198,11 @@ class UniversalSceneInterceptor(InterceptorBase):
 
         agent_id = ctx.get("agent_id", "")
         lines: List[str] = []
+
+        # ── Scene descriptor (thematic context) ───────────────────
+        descriptor = self._SCENE_DESCRIPTORS.get(scene)
+        if descriptor:
+            lines.append(descriptor)
 
         # ── Character mood/state via Coordinator ──────────────────
         try:

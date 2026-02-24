@@ -1234,3 +1234,134 @@ class TestAmbientEventInterceptor:
         ctx = {"scene": "unknown_scene_xyz", "system_prompt": ""}
         i.pre_call(ctx)
         assert "[AMBIENT]" in ctx["system_prompt"]
+
+
+# ═══════════════════════════════════════════════════════════════════════
+#  Sprint 7: Timed Action Phase Injection + Scene Descriptors
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestBedroomTimedActionPhases:
+    """Test that active timed actions inject phase guidance into prompts."""
+
+    def test_early_phase_injection(self):
+        """Early phase (< 30%) injects anticipation guidance."""
+        from engine.agents.interceptors import BedroomSceneInterceptor
+        from engine.mcp.scene_state import get_scene_state_manager
+
+        ssm = get_scene_state_manager()
+        token = ssm.start_timed_action(
+            "lola", "massage", duration=100, description="sensual massage",
+            phase_labels=["setup", "deepening", "climax"],
+        )
+
+        i = BedroomSceneInterceptor()
+        ctx = {"scene": "bedroom", "agent_id": "lola", "system_prompt": "base",
+               "scene_id": "bedroom", "character_ids": ["lola"]}
+        i.pre_call(ctx)
+
+        prompt = ctx["system_prompt"]
+        assert "ACTIVE INTERACTION" in prompt
+        assert "massage" in prompt
+        assert "anticipation" in prompt.lower() or "beginning" in prompt.lower()
+
+        ssm.abort_timed_action(token)
+
+    def test_mid_phase_injection(self):
+        """Mid phase (30-70%) injects deepening guidance."""
+        from engine.agents.interceptors import BedroomSceneInterceptor
+        from engine.mcp.scene_state import get_scene_state_manager
+        import time
+
+        ssm = get_scene_state_manager()
+        # Very short duration so elapsed puts us in the middle
+        token = ssm.start_timed_action(
+            "lola", "dance", duration=0.001,
+            phase_labels=["warmup", "flow", "finale"],
+        )
+        time.sleep(0.01)  # Exceed duration → complete
+
+        i = BedroomSceneInterceptor()
+        ctx = {"scene": "bedroom", "agent_id": "lola", "system_prompt": "base",
+               "scene_id": "bedroom", "character_ids": ["lola"]}
+        i.pre_call(ctx)
+
+        # Should not inject for completed actions
+        ssm.abort_timed_action(token)
+
+    def test_no_injection_without_active_actions(self):
+        """No injection when no timed actions are active."""
+        from engine.agents.interceptors import BedroomSceneInterceptor
+
+        i = BedroomSceneInterceptor()
+        ctx = {"scene": "bedroom", "agent_id": "lola", "system_prompt": "base",
+               "scene_id": "bedroom", "character_ids": ["lola"]}
+        i.pre_call(ctx)
+        assert "ACTIVE INTERACTION" not in ctx["system_prompt"]
+
+
+class TestUniversalSceneDescriptors:
+    """Test that UniversalSceneInterceptor injects scene descriptors."""
+
+    def test_casino_descriptor(self):
+        from engine.agents.interceptors import UniversalSceneInterceptor
+        i = UniversalSceneInterceptor()
+        ctx = {"scene": "casino", "agent_id": "frankie", "system_prompt": ""}
+        i.pre_call(ctx)
+        assert "Grand Casino" in ctx["system_prompt"]
+        assert "high-stakes" in ctx["system_prompt"]
+
+    def test_warzone_descriptor(self):
+        from engine.agents.interceptors import UniversalSceneInterceptor
+        i = UniversalSceneInterceptor()
+        ctx = {"scene": "warzone", "agent_id": "viktor", "system_prompt": ""}
+        i.pre_call(ctx)
+        assert "combat zone" in ctx["system_prompt"]
+
+    def test_neon_city_descriptor(self):
+        from engine.agents.interceptors import UniversalSceneInterceptor
+        i = UniversalSceneInterceptor()
+        ctx = {"scene": "neon_city", "agent_id": "aria", "system_prompt": ""}
+        i.pre_call(ctx)
+        assert "cyberpunk" in ctx["system_prompt"]
+
+    def test_realm_descriptor(self):
+        from engine.agents.interceptors import UniversalSceneInterceptor
+        i = UniversalSceneInterceptor()
+        ctx = {"scene": "realm", "agent_id": "mira", "system_prompt": ""}
+        i.pre_call(ctx)
+        assert "Fantasy realm" in ctx["system_prompt"]
+
+    def test_heist_descriptor(self):
+        from engine.agents.interceptors import UniversalSceneInterceptor
+        i = UniversalSceneInterceptor()
+        ctx = {"scene": "heist", "agent_id": "frankie", "system_prompt": ""}
+        i.pre_call(ctx)
+        assert "heist" in ctx["system_prompt"].lower()
+
+    def test_coders_room_descriptor(self):
+        from engine.agents.interceptors import UniversalSceneInterceptor
+        i = UniversalSceneInterceptor()
+        ctx = {"scene": "coders_room", "agent_id": "aria", "system_prompt": ""}
+        i.pre_call(ctx)
+        assert "Coder" in ctx["system_prompt"]
+
+    def test_no_descriptor_for_dedicated_scenes(self):
+        """Dedicated scenes (bedroom, phone, etc.) get no descriptor."""
+        from engine.agents.interceptors import UniversalSceneInterceptor
+        i = UniversalSceneInterceptor()
+        ctx = {"scene": "bedroom", "agent_id": "lola", "system_prompt": ""}
+        i.pre_call(ctx)
+        assert ctx["system_prompt"] == ""
+
+    def test_descriptor_appears_before_mood(self):
+        """Scene descriptor should be the first line of injected context."""
+        from engine.agents.interceptors import UniversalSceneInterceptor
+        i = UniversalSceneInterceptor()
+        ctx = {"scene": "casino", "agent_id": "frankie", "system_prompt": ""}
+        i.pre_call(ctx)
+        # Find the CONTEXT block and check descriptor is first content
+        prompt = ctx["system_prompt"]
+        context_start = prompt.find("[CASINO CONTEXT]")
+        assert context_start >= 0
+        after_header = prompt[context_start + len("[CASINO CONTEXT]"):].strip()
+        assert after_header.startswith("Setting:")

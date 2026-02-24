@@ -976,3 +976,39 @@ on the universal interceptor + Coordinator + SSM narrative.
 | Registry Persistence | 10/10 (100%) | unchanged |
 | Scene Transition Tracking | 10/10 (100%) | unchanged |
 | Ambient Events | 10/10 (100%) | NEW: all scenes get micro-events |
+
+---
+
+## Sprint 7 Implementation Log
+
+### Revelation #7 Addressed: Interaction Tree Phases → Prompt Injection
+
+**Problem:** Interaction tree phases (setup → deepening → climax) existed in data
+but never reached the agent's prompt during timed interactions. The agent had no
+idea where in the arc it was.
+
+**Fix:** BedroomSceneInterceptor now checks `ssm.active_timed_actions()` and injects
+phase-aware guidance: early stage (< 30%) → "build anticipation", middle (30-70%) →
+"deepen the moment", late (> 70%) → "bring to peak, then resolve". The phase label
+from the interaction tree is included when available.
+
+### Revelation #34: Scene Descriptors Give Agents Spatial Awareness
+
+The UniversalSceneInterceptor now carries a `_SCENE_DESCRIPTORS` dict with thematic
+one-liners for each scene. Before this, agents in Casino/Warzone/Realm/NeonCity/
+Coders Room/Heist received mood and stats but no sense of *where they are*. Now
+every response starts with spatial grounding: "The Grand Casino — opulent,
+high-stakes gambling floor" etc. Simple data, outsized effect on immersion.
+
+### Revelation #35: Revelation #11 Is Outdated
+
+Cross-scene messaging was marked as a gap in revelation #11, but it was already
+fully wired by Sprint 2: Lounge sends messages via AgentRouter, and
+RouterMessageInjector (priority 10) drains inbox automatically. No work needed.
+
+| Sprint | Revelation | Action | Status |
+|--------|-----------|--------|--------|
+| Sprint 7 | #7 Narrow pipe | Phase injection in BedroomSceneInterceptor | Done |
+| Sprint 7 | #34 Scene descriptors | 6 thematic descriptors in UniversalSceneInterceptor | Done |
+| Sprint 7 | #35 Rev #11 outdated | Confirmed cross-scene messaging already wired | Done |
+| Sprint 7 | N/A | 11 new tests (1234 total) | Done |
