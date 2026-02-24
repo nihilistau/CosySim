@@ -637,3 +637,68 @@ is where all the value is locked up.
 - Target architecture diagrams
 - Component documentation
 - Scene migration plans
+
+
+---
+
+## 19. Phone Scene: governance_context Was Accepted But Ignored
+
+**Discovery:** The governor passes governance_context to every agent's 
+eply() method.
+The Phone's _PhoneCharacterAgent.reply() accepted it in **_kwargs — meaning all 17
+interceptor injections (personality, heat, variety, mood sync, etc.) were silently discarded
+on every single phone reply.
+
+**Fix:** Made governance_context an explicit kwarg, merged it with the base system prompt.
+Now the phone agent gets: base identity + interceptor injections + scene context.
+
+**Pattern:** Any scene with a custom agent class must explicitly accept and use
+governance_context. Grep for **_kwargs in reply methods to find others.
+
+---
+
+## 20. Bedroom Stats: Direct Writes Bypass Cross-System Sync
+
+**Discovery:** The bedroom's _on_agent_action() calls self.profiles[cid].stats.adjust()
+directly. This updates the local profile stats but never touches:
+- CharacterRegistry (mood, energy)
+- SceneStateManager (the global stats snapshot)
+- ActivityBus (no state_changed events)
+
+The CharacterStateCoordinator was built to solve exactly this — unified write-through
+to all stores — but the bedroom (the most stat-heavy scene) never used it.
+
+**Fix:** Added get_coordinator().update(character_id, **deltas) before the local
+adjust call. Now stat changes from agent actions propagate everywhere.
+
+**Impact:** The overlay /character_state endpoint, interceptors reading from SSM,
+and any cross-scene stat queries now see bedroom stat changes in real-time.
+
+---
+
+## 21. Framework Adoption Audit: 0/10 Scenes Use ConversationHeat
+
+**Discovery:** Full audit of all 10 scenes reveals:
+- MCPSceneMixin: 10/10 (100%) — universal
+- SceneStateManager: 9/10 (90%) — only Coders Room missing
+- Interceptor Pipeline: 9/10 (90%)
+- AgentGovernor: 2/10 (20%) — only Bedroom & Lounge
+- DialogSystem: 2/10 (20%) — only Lounge & Gallery
+- ConversationHeat: 0/10 (0%) — ZERO scenes use it
+- CharacterStateCoordinator: 0/10 (0%) — ZERO scenes use it
+
+**The adoption funnel:** Scenes adopt the easy stuff (mixin, state manager) but not
+the sophisticated stuff (governor, dialog, heat, coordinator). This is the #1 gap.
+
+**Fix path:** Wire heat into Phone interceptor (done), wire coordinator into Bedroom
+(done). Next: Gallery, Warzone, Realm need governor adoption.
+
+---
+
+## Implementation Log (Sprint 2)
+
+| Date | Revelation | Action | Status |
+|------|-----------|--------|--------|
+| Sprint 2 | #19 Phone governance_context | governance_context now explicit + merged | ✅ Done |
+| Sprint 2 | #20 Bedroom stat writes | Coordinator.update() before local adjust | ✅ Done |
+| Sprint 2 | #21 Adoption audit | ConversationHeat wired into PhoneSceneInterceptor | ✅ Done |

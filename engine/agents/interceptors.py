@@ -814,6 +814,28 @@ class PhoneSceneInterceptor(InterceptorBase):
                 narr_block = " | ".join(narrative[-4:])
                 lines.append(f"Recent conversation context: {narr_block}")
 
+            # ── conversation heat (pacing & tone gating) ─────────────────
+            try:
+                from engine.mcp.scene_rules_engine import get_conversation_heat
+                heat = get_conversation_heat()
+                conv_key = ctx.get("conversation_id") or f"phone_{agent_id}"
+                directive = heat.get_directive(conv_key)
+                heat_level = heat.get(conv_key) if hasattr(heat, "get") else 0
+                if directive:
+                    lines.append(f"[CONVERSATION HEAT: {heat_level:.0f}/100] {directive}")
+                    if heat_level < 30:
+                        lines.append(
+                            "Keep texts light and playful. Build connection through "
+                            "curiosity and warmth, not intensity."
+                        )
+                    elif heat_level >= 80:
+                        lines.append(
+                            "The texting energy is INTENSE. Be bold, direct, and "
+                            "passionate. Match the escalation in your messages."
+                        )
+            except Exception as exc:
+                logger.debug("PhoneSceneInterceptor: heat failed: %s", exc)
+
             # ── MCP available actions ─────────────────────────────────────
             try:
                 from engine.mcp.scene_rules_engine import get_rules_engine

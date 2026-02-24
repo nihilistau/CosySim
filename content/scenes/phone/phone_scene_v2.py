@@ -94,7 +94,7 @@ class _PhoneCharacterAgent:
         conv_mgr = get_conversation_manager()
         return conv_mgr.get_or_create(conv_id, system="", model=None)
 
-    def reply(self, message: str, *, chain_id=None, history=None, **_kwargs) -> str:
+    def reply(self, message: str, *, chain_id=None, history=None, governance_context=None, **_kwargs) -> str:
         """Route through VirtualAgentManager with streaming — invoked by the governor after interceptors fire."""
         try:
             from engine.agents.virtual_agent_manager import get_virtual_agent_manager
@@ -103,7 +103,9 @@ class _PhoneCharacterAgent:
             char  = self._scene.db.get_character(self.char_id)
             name  = (char or {}).get("name", "Character")
             pers  = (char or {}).get("personality", "")
-            system = (
+
+            # Base identity prompt — interceptors add context via governance_context
+            base_system = (
                 f"You are {name}. {pers}\n"
                 "Reply naturally as a real person texting. Keep messages short and conversational.\n"
                 "Use emojis naturally 😏💕🔥. Be expressive and emotionally vivid.\n"
@@ -112,6 +114,11 @@ class _PhoneCharacterAgent:
                 "To send a voice message, include [VOICE:tone].\n"
                 "Never repeat your previous messages. Always advance the conversation."
             )
+            # Merge interceptor context (personality, scene rules, heat, variety, etc.)
+            if governance_context:
+                system = f"{base_system}\n\n{governance_context}"
+            else:
+                system = base_system
             msgs = [{"role": "system", "content": system}]
             for turn in (history or []):
                 msgs.append({"role": turn.get("role", "user"), "content": turn.get("content", "")})

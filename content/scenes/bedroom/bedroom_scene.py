@@ -1469,7 +1469,15 @@ class BedroomScene(BaseScene, MCPSceneMixin, mcp_scene_id="bedroom"):
                 "touch":    {"arousal": 5, "pleasure": 4},
             }
             if action_type in stat_drifts:
-                self.profiles[character_id].stats.adjust(**stat_drifts[action_type])
+                deltas = stat_drifts[action_type]
+                # Route through Coordinator for cross-system sync
+                try:
+                    from engine.mcp.state_coordinator import get_coordinator
+                    get_coordinator().update(character_id, **deltas)
+                except Exception:
+                    pass
+                # Also update local profile stats for immediate UI feedback
+                self.profiles[character_id].stats.adjust(**deltas)
             # Forward speech to the chat panel so dialogue shows as chat bubbles
             if action_type == "speak" and action.get("message"):
                 char = self.characters.get(character_id)
