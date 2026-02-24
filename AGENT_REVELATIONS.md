@@ -1042,3 +1042,111 @@ interceptors visibility into recent conversation flow.
 | Sprint 8 | #36 Goldfish memory | ConversationRecapInterceptor (priority 6) | Done |
 | Sprint 8 | N/A | Pipeline 22 → 23 interceptors | Done |
 | Sprint 8 | N/A | 11 new tests (1245 total) | Done |
+
+---
+
+## 37. Sex Pose System: Bed Game Had No Visual Representation
+
+**Discovery:** The bed game (BED_GAME_ACTIONS, BedGameState) existed with 22 actions,
+stat effects, turn management, and agent prompt injection — but the 3D avatars just
+stood in their idle poses during the entire game. There was zero visual feedback for
+sexual interactions.
+
+**Fix:** Created a complete sex pose system in character_models.js:
+- 22 pose definitions mapping to BED_GAME_ACTIONS (kiss, oral, missionary, doggy,
+  ride, threesome positions, etc.)
+- Per-participant limb transforms: body rotation, arm/leg angles, head tilt
+- Smooth LERP transitions (configurable speed) from standing to pose
+- Rhythmic thrust animation (per-pose amplitude + frequency)
+- Intensified breathing multiplier (1.3x for kissing → 3.5x for climax)
+- Auto-clothing strip on explicit poses
+- Expression system integration (aroused → moaning → ecstasy based on explicit_level)
+- bedgame_action socket event triggers pose; bedgame_ended smoothly returns to standing
+- 3-player poses for threesome actions with role-based positioning
+
+**Pattern:** Frontend animation should always reflect server-side game state. The
+socket event bridge (`_applyBedGamePose()`) maps server-side game mechanics to
+client-side 3D transforms, keeping the two in sync.
+
+---
+
+## 38. Phone Agent System Prompt Priority Was Inverted
+
+**Discovery:** The phone's `_PhoneCharacterAgent.reply()` put its base identity prompt
+FIRST and appended governance_context (interceptor injections) AFTER. This meant the
+hardcoded "You are {name}" prompt overrode the richer CharacterRegistryInterceptor
+identity block (which includes personality profile, backstory, speech patterns, etc.).
+
+**Fix:** Flipped the order: governance_context now prepends, phone-specific formatting
+instructions append. When no governance_context exists (fallback), a minimal identity
+is used. This aligns with how interceptors are designed to work — they build the
+authoritative system prompt, and scenes add scene-specific formatting on top.
+
+**Impact:** Phone characters now get the full personality pipeline: backstory, speech
+patterns, quirks, interests, mood, and all interceptor injections — not just "You are
+{name}. {personality}."
+
+---
+
+## 39. DialogSystem Needs Admin API For Cross-Scene Character Steering
+
+**Discovery:** The DialogSystem supports powerful directives (force_response, must_include,
+style_lock, topic_steer, mood_set, refuse) and the DialogDirectiveInterceptor (priority 12)
+processes them on every agent call. But there was NO way to issue directives except
+programmatically from scene code. No admin panel, no REST API, no overlay endpoint.
+
+**Fix:** Added `POST /api/directive` and `GET /api/directive/<character_id>` to overlay_bp.py.
+Now any admin tool, dashboard, or external system can steer any character in any scene:
+```
+POST /api/directive {"character_id":"lola","scene":"bedroom","type":"topic_steer","value":"talk about your fantasy","turns":3}
+```
+
+**Impact:** Director/admin can now influence character behaviour from the dashboard without
+touching scene code. This is a key building block for the planned Command Center.
+
+---
+
+## 40. SCENE_METADATA Gives Framework Self-Awareness
+
+**Discovery:** Scenes had no machine-readable description of their capabilities, genre,
+or features. The overlay `/api/scenes/summary` endpoint returned narrative entries and
+heat levels but couldn't describe WHAT each scene is or does.
+
+**Fix:** Added `SCENE_METADATA` class-level dict pattern on BaseScene, declared by all
+10 scenes. Includes title, description, genre, max_characters, features. The overlay
+summary endpoint now includes metadata from active scene instances.
+
+**Impact:** Cross-scene systems (Command Center, overlay, AI director) can now query
+what scenes exist, what they do, and what features they support. Foundation for
+intelligent scene recommendations and routing.
+
+---
+
+## Implementation Log (Sprint 9)
+
+| Sprint | Revelation | Action | Status |
+|--------|-----------|--------|--------|
+| Sprint 9 | #37 Sex poses missing | 22 pose defs + LERP + thrust + breathing animation | Done |
+| Sprint 9 | #38 Phone prompt order | governance_context now prepends, not appends | Done |
+| Sprint 9 | #39 DialogSystem admin API | POST/GET /api/directive endpoints | Done |
+| Sprint 9 | #40 SCENE_METADATA | Added to all 10 scenes + BaseScene + overlay API | Done |
+| Sprint 9 | N/A | Coders: TagRegistry + CODE tag | Done |
+| Sprint 9 | N/A | 1245 tests passing | Done |
+
+### Updated Framework Adoption (Post-Sprint 9)
+
+| Feature | Adoption | Change |
+|---------|----------|--------|
+| MCPSceneMixin | 10/10 (100%) | unchanged |
+| SceneStateManager | 10/10 (100%) | unchanged |
+| Interceptor Pipeline | 10/10 (100%) | 23 interceptors |
+| Scene-Specific Context | 10/10 (100%) | unchanged |
+| CharacterStateCoordinator | 10/10 (100%) | unchanged |
+| ConversationHeat | 10/10 (100%) | unchanged |
+| TagRegistry | 10/10 (100%) | was 9/10 — Coders added |
+| SCENE_METADATA | 10/10 (100%) | NEW |
+| Registry Persistence | 10/10 (100%) | unchanged |
+| Scene Transition Tracking | 10/10 (100%) | unchanged |
+| Ambient Events | 10/10 (100%) | unchanged |
+| DialogSystem Admin API | ∞ (overlay) | NEW |
+| Sex Pose System | 1/10 (Bedroom) | NEW |
