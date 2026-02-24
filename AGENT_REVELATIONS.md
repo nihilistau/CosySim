@@ -24,6 +24,8 @@ into actionable system redesigns.
 13. [The Big Picture: What These Revelations Add Up To](#13-the-big-picture)
 14. [Design: The Consequence Engine](#14-design-the-consequence-engine)
 15. [Implementation Priority](#15-implementation-priority)
+16. [Implementation Log](#16-implementation-log)
+17. [_PhoneCharacterAgent Bypasses DialogSystem](#17-phonecharacteragent-bypasses-dialogsystem)
 
 ---
 
@@ -521,3 +523,80 @@ graceful degradation, thread safety, singleton, field classification.
 **Status:** Revelation #1 (Three State Stores) is now PARTIALLY RESOLVED.
 The coordinator exists and high-traffic paths use it. Remaining: migrate all
 scattered `set_state()` / `update_stats()` calls in scenes to use `_coord()`.
+
+### Phase B.8 — ConversationHeat in Bedroom: COMPLETE
+
+**File:** `engine/agents/interceptors.py` (BedroomSceneInterceptor.pre_call)
+
+**What it does:**
+- Reads ConversationHeat for the current conversation key
+- Injects heat-level directive and pacing guidance into system prompt
+- Gates content explicitness based on thresholds:
+  - <30: Suggestion and innuendo only
+  - 30-60: Mild explicit, flirting encouraged
+  - 60-80: Explicit content allowed, escalation encouraged
+  - ≥80: Fully explicit, intense emotional expression
+
+**Status:** Revelation #8 RESOLVED.
+
+### Phase B.10 — Remove Phone VAM Fallback: COMPLETE
+
+**File:** `content/scenes/phone/phone_scene_v2.py` (_generate_reply)
+
+**What was removed:** 47-line fallback block (lines 432-480) that bypassed the
+governor and all 17 interceptors when the governor threw an exception. This was
+the primary anti-pattern where phone scene calls could skip the entire framework.
+
+**What replaced it:** Clean error handler (3 lines) — logs the error and returns
+a user-friendly fallback message. All phone AI must now go through the governor.
+
+**Status:** Revelation #10 RESOLVED.
+
+### New Feature — Overlay State/Heat APIs: COMPLETE
+
+**File:** `engine/overlay/overlay_bp.py` (3 new endpoints)
+
+- `GET /api/character/<id>/state` — unified state via CharacterStateCoordinator
+- `POST /api/character/<id>/state` — update fields via coordinator (delta/set mode)
+- `GET /api/heat?key=X` — conversation heat levels (single key or all)
+
+These endpoints give admin panels, debugging tools, and external integrations
+direct access to the unified state layer and heat system without touching internals.
+
+---
+
+## 17. _PhoneCharacterAgent Bypasses DialogSystem
+
+**Severity: MEDIUM — Duplicate prompt engineering**
+
+While removing the VAM fallback (Revelation #10), I noticed that `_PhoneCharacterAgent.reply()`
+at line 106 constructs its own hardcoded system prompt:
+
+```python
+system = (
+    f"You are {name}. {pers}\n"
+    "Reply naturally as a real person texting. Keep messages short and conversational.\n"
+    "Use emojis naturally. Be expressive and emotionally vivid.\n"
+    ...
+)
+```
+
+This means the phone scene's character dialogue NEVER goes through `DialogSystem.build_prompt()`,
+which provides:
+- Personality profile loading from DB
+- Speech pattern injection from character config
+- DialogDirective-based tone/style control
+- Scene-appropriate vocabulary constraints
+- Interaction tree phase awareness
+
+**Impact:** Phone characters sound generic. They don't benefit from the personality
+system, speech patterns, or any of the interceptor-injected directives that bedroom
+characters get. The governor fires interceptors but the agent's own system prompt
+overwrites whatever the interceptors were trying to inject.
+
+**Fix:** Make `_PhoneCharacterAgent` use `DialogSystem.build_prompt()` or accept
+the governor's system prompt instead of building its own. The governor already injects
+interceptor context via `governance_context` kwarg — the agent just needs to USE it
+instead of constructing a fresh prompt from scratch.
+
+**Effort:** ~30 lines changed in `_PhoneCharacterAgent.reply()`
