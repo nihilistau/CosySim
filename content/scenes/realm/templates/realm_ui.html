@@ -17,6 +17,7 @@
 body { background: var(--bg); color: var(--text); font-family: var(--font); height:100vh; overflow:hidden; }
 
 .realm-app { display:grid; grid-template-columns: 280px 1fr 260px; grid-template-rows: auto 1fr; height:100vh; gap:0; }
+.realm-app.pregame { grid-template-columns: 1fr; }
 .top-bar { grid-column: 1/-1; background: var(--panel); padding:8px 16px; display:flex; align-items:center; gap:16px; border-bottom:1px solid var(--border); }
 .top-bar h1 { font-size:1.2rem; color:var(--gold); }
 .top-bar .patience-bar { flex:1; max-width:200px; height:12px; background:#333; border-radius:6px; overflow:hidden; }
@@ -99,7 +100,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--font); heig
 </style>
 </head>
 <body>
-<div class="realm-app" id="app">
+<div class="realm-app pregame" id="app">
   <!-- TOP BAR -->
   <div class="top-bar">
     <h1>⚔️ The Realm</h1>
@@ -231,6 +232,7 @@ const Realm = {
     const res = await fetch('/api/game/new', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({personality: this.selectedPersonality, time_limit: 1800})});
     const data = await res.json();
     if (data.success) {
+      document.getElementById('app').classList.remove('pregame');
       document.getElementById('start-screen').style.display = 'none';
       document.getElementById('game-view').style.display = 'flex';
       document.getElementById('sidebar-left').style.display = 'block';

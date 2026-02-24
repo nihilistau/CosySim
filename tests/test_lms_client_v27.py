@@ -353,13 +353,18 @@ class TestInferenceConfigV27:
 
         cfg2 = InferenceConfig(reasoning=False)
         d2 = cfg2.to_native_v1()
-        assert d2["reasoning"] == "off"
+        # reasoning=False → "off" is omitted from payload (avoids spec-decode errors)
+        assert "reasoning" not in d2
 
     def test_reasoning_string_passthrough(self):
-        for val in ("low", "medium", "high", "on", "off"):
+        for val in ("low", "medium", "high", "on"):
             cfg = InferenceConfig(reasoning=val)
             d = cfg.to_native_v1()
             assert d["reasoning"] == val
+        # "off" should be omitted
+        cfg_off = InferenceConfig(reasoning="off")
+        d_off = cfg_off.to_native_v1()
+        assert "reasoning" not in d_off
 
 
 # ── Conversation v2.7 tests ──────────────────────────────────────────

@@ -150,9 +150,13 @@ class InferenceConfig:
         if self.reasoning is not None:
             # Convert bool → string enum for native v1
             if isinstance(self.reasoning, bool):
-                d["reasoning"] = "on" if self.reasoning else "off"
+                val = "on" if self.reasoning else "off"
             else:
-                d["reasoning"] = str(self.reasoning)
+                val = str(self.reasoning)
+            # Only send reasoning if it's NOT "off" — omitting is equivalent
+            # and avoids LMStudio spec-decode errors when no draft model loaded
+            if val != "off":
+                d["reasoning"] = val
         if self.stop_strings:
             d["stop"] = self.stop_strings
         if self.response_format:

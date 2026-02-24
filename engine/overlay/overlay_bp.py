@@ -1118,7 +1118,7 @@ function connectEvents() {
 // ── Init ──
 refreshStatus();
 connectEvents();
-autoRefreshInterval = setInterval(refresh, 5000);
+autoRefreshInterval = setInterval(refresh, 15000);
 </script>
 </body>
 </html>"""

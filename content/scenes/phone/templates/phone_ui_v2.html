@@ -192,6 +192,10 @@
     #attach-popup.open{display:block}
     .attach-item{display:flex;align-items:center;gap:12px;padding:10px 16px;font-size:15px;cursor:pointer}
     .attach-item:active{background:var(--bg3)}
+    .input-emoji{width:32px;height:32px;border-radius:50%;background:none;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;cursor:pointer;border:none;padding:0}
+    .emoji-picker{display:flex;flex-wrap:wrap;gap:4px;padding:8px 12px;background:var(--bg2);border-top:.5px solid var(--sep);max-height:120px;overflow-y:auto}
+    .emoji-btn{font-size:24px;cursor:pointer;padding:4px;border-radius:8px;transition:background .1s}
+    .emoji-btn:hover{background:var(--bg3)}
 
     .fab{position:absolute;bottom:16px;right:16px;width:52px;height:52px;border-radius:50%;background:var(--accent);color:#fff;font-size:26px;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(10,132,255,.4);z-index:5;cursor:pointer}
     .fab:active{opacity:.8}
@@ -392,6 +396,6 @@
 </div>
 
 <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
-<script src="/static/js/phone_v2.js?v=3.2"></script>
+<script src="/static/js/phone_v2.js?v=3.2.1"></script>
 </body>
 </html>

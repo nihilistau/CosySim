@@ -224,7 +224,8 @@ class TestMCPSkillsIntegration:
                 {"content": "Luna likes coffee", "score": 0.9}
             ]
             from engine.mcp.cosysim_server import search_memory
-            result = search_memory("coffee", character_id="luna_01")
+            fn = getattr(search_memory, 'fn', search_memory)
+            result = fn("coffee", character_id="luna_01")
             assert "coffee" in result.lower()
 
     def test_mcp_get_character_state_returns_json(self):
@@ -236,7 +237,8 @@ class TestMCPSkillsIntegration:
                 "relationship_level": 0.7, "arousal": 0.3,
             }
             from engine.mcp.cosysim_server import get_character_state
-            result = get_character_state("luna_01")
+            fn = getattr(get_character_state, 'fn', get_character_state)
+            result = fn("luna_01")
             # Returns a JSON string — verify it's parseable
             assert isinstance(result, str)
             assert len(result) > 0

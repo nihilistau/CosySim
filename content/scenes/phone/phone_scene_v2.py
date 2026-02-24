@@ -155,6 +155,7 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
         # Autonomous-texting timer state  {char_id: deadline_epoch}
         self._autotxt_deadlines: Dict[str, float] = {}
         self._autotxt_lock = threading.Lock()
+        self._autotxt_muted = False  # Global mute for autonomous messages
 
         # Background ticker
         self._ticker_stop = threading.Event()
@@ -272,6 +273,8 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
 
     def _ticker_loop(self) -> None:
         while not self._ticker_stop.wait(10):
+            if self._autotxt_muted:
+                continue
             now = time.time()
             with self._autotxt_lock:
                 due = [cid for cid, dl in self._autotxt_deadlines.items() if dl <= now]
@@ -952,6 +955,23 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
                 return jsonify({"ok": False, "error": str(exc)}), 500
 
         # ── Admin ─────────────────────────────────────────────────────────────
+        @app.route("/api/admin/autotxt-mute", methods=["POST"])
+        def autotxt_mute():
+            """Toggle or set autonomous messaging mute."""
+            try:
+                data = request.get_json(force=True) if request.data else {}
+                if "muted" in data:
+                    self._autotxt_muted = bool(data["muted"])
+                else:
+                    self._autotxt_muted = not self._autotxt_muted
+                return jsonify({"ok": True, "muted": self._autotxt_muted})
+            except Exception as exc:
+                return jsonify({"ok": False, "error": str(exc)}), 500
+
+        @app.route("/api/admin/autotxt-mute")
+        def autotxt_mute_status():
+            return jsonify({"ok": True, "muted": self._autotxt_muted})
+
         @app.route("/api/admin/wipe-messages", methods=["POST"])
         def wipe_messages():
             try:

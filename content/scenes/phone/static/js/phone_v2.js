@@ -74,7 +74,7 @@
     apps: {},
     activeApp: null,
     contacts: [],
-    settings: { theme: 'dark', wallpaper: 0, notifications: true, sounds: true, autoReply: true },
+    settings: { theme: 'dark', wallpaper: 0, notifications: true, sounds: true, autoReply: true, messaging: true },
     socket: null,
 
     /* ── Boot ─────────────────────────────────────────── */
@@ -271,9 +271,11 @@
           </div>
           <div id="chat-input-bar">
             <button class="input-plus" id="btn-attach" onclick="qs('#attach-popup').classList.toggle('open')">＋</button>
+            <button class="input-emoji" id="btn-emoji" onclick="CosyPhone.apps.messages._toggleEmoji()">😊</button>
             <div id="chat-input-wrap"><textarea id="chat-text-input" rows="1" placeholder="Message"></textarea></div>
             <button id="chat-send" disabled onclick="CosyPhone.apps.messages.sendMessage()">↑</button>
           </div>
+          <div id="emoji-picker" class="emoji-picker" style="display:none"></div>
         </div>`;
       this._initInput();
       this.loadThreads();
@@ -298,6 +300,33 @@
 
     onClose() {
       if (this._clickCleanup) { document.removeEventListener('click', this._clickCleanup); this._clickCleanup = null; }
+    },
+
+    _toggleEmoji() {
+      const picker = qs('#emoji-picker');
+      if (!picker) return;
+      if (picker.style.display === 'none') {
+        if (!picker.innerHTML) {
+          const emojis = ['😊','😂','❤️','🔥','👍','😍','🥺','😭','😘','🤗',
+            '😏','🙄','😴','🤔','💀','👀','🎉','💕','✨','🌙',
+            '🍑','💋','😈','🥰','😳','🤭','💦','🫦','😜','🤤',
+            '💖','🦋','🌹','🎶','💫','😇','🥵','💘','🫣','😉'];
+          picker.innerHTML = emojis.map(e => `<span class="emoji-btn" onclick="CosyPhone.apps.messages._insertEmoji('${e}')">${e}</span>`).join('');
+        }
+        picker.style.display = 'flex';
+      } else {
+        picker.style.display = 'none';
+      }
+    },
+
+    _insertEmoji(emoji) {
+      const inp = qs('#chat-text-input');
+      if (!inp) return;
+      const start = inp.selectionStart, end = inp.selectionEnd;
+      inp.value = inp.value.substring(0, start) + emoji + inp.value.substring(end);
+      inp.selectionStart = inp.selectionEnd = start + emoji.length;
+      inp.focus();
+      inp.dispatchEvent(new Event('input'));
     },
 
     async loadThreads() {
@@ -1390,6 +1419,10 @@
 
         <div class="section-sub">AI Behavior</div>
         <div class="list-group">
+          <div class="list-row" onclick="CosyPhone.apps.settings._toggleMessaging()">
+            <span class="list-icon">💬</span><span class="list-label">Autonomous Messages</span>
+            <div class="setting-toggle ${s.messaging ? 'on' : ''}" id="toggle-messaging"></div>
+          </div>
           <div class="list-row" onclick="CosyPhone.apps.settings._toggle('autoReply','toggle-autoreply')">
             <span class="list-icon">🤖</span><span class="list-label">Auto Reply</span>
             <div class="setting-toggle ${s.autoReply ? 'on' : ''}" id="toggle-autoreply"></div>
@@ -1411,8 +1444,8 @@
 
         <div class="section-sub">About</div>
         <div class="list-group">
-          <div class="list-row" style="cursor:default"><span class="list-icon">📱</span><span class="list-label">CosyPhone OS</span><span class="list-value">v3.1</span></div>
-          <div class="list-row" style="cursor:default"><span class="list-icon">⚡</span><span class="list-label">Framework</span><span class="list-value">v3.1</span></div>
+          <div class="list-row" style="cursor:default"><span class="list-icon">📱</span><span class="list-label">CosyPhone OS</span><span class="list-value">v3.2</span></div>
+          <div class="list-row" style="cursor:default"><span class="list-icon">⚡</span><span class="list-label">Framework</span><span class="list-value">v3.2</span></div>
         </div>
         <div style="height:32px"></div>
 
@@ -1435,6 +1468,24 @@
       CosyPhone._saveSettings();
       const t = qs(`#${id}`);
       if (t) t.classList.toggle('on');
+    },
+
+    async _toggleMessaging() {
+      const newVal = !CosyPhone.settings.messaging;
+      try {
+        const r = await fetch('/api/admin/autotxt-mute', {
+          method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ muted: !newVal })
+        });
+        const j = await r.json();
+        if (j.ok) {
+          CosyPhone.settings.messaging = newVal;
+          CosyPhone._saveSettings();
+          const t = qs('#toggle-messaging');
+          if (t) t.classList.toggle('on');
+          toast(newVal ? 'Messages ON' : 'Messages OFF');
+        }
+      } catch (e) { toast('Failed to toggle'); }
     },
 
     _showWallpapers() {
