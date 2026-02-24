@@ -1489,11 +1489,109 @@ class MoodSyncInterceptor(InterceptorBase):
 
 
 # ══════════════════════════════════════════════════════════════════════
+#  NaturalMoodDriftInterceptor  (priority 5)
+#  Pre-call: reads current stats from the Coordinator and injects
+#  subtle behavioral nudges that make the character feel alive between
+#  explicit events. Stats naturally decay/drift toward personality
+#  baselines, and the agent is nudged to reflect those micro-shifts.
+# ══════════════════════════════════════════════════════════════════════
+
+class NaturalMoodDriftInterceptor(InterceptorBase):
+    """
+    Pre-call: apply natural stat drift and inject micro-behavioral cues.
+
+    Instead of characters having static moods until an event changes them,
+    this interceptor models natural emotional drift:
+    - High arousal decays slowly toward baseline
+    - Tiredness accumulates with each interaction
+    - Happiness regresses toward a personality-specific mean
+    - The agent receives a one-line "inner thought" that reflects these shifts
+
+    Runs at priority 5 (before CharacterRegistry at 8) so the drift
+    is visible to all downstream interceptors.
+    """
+    name     = "natural_mood_drift"
+    priority = 5
+    applicable_scenes = {"bedroom", "phone", "lounge", "gallery"}
+
+    # Per-stat drift rates (delta per call, toward baseline)
+    _DRIFT = {
+        "arousal":      -2.0,   # slowly cools
+        "tiredness":     1.0,   # slowly accumulates
+        "happiness":    -0.5,   # mild regression to mean (~50)
+        "anger":        -3.0,   # anger fades faster
+        "fear":         -2.0,   # fear dissipates
+        "drunkenness":  -1.0,   # slowly sobers up
+    }
+
+    _INNER_THOUGHTS = {
+        "cooling":    "You feel the intensity fading a little — still present, but settling.",
+        "tired":      "A gentle wave of tiredness washes over you.",
+        "mellowing":  "Your mood softens slightly, evening out.",
+        "sobering":   "The buzz is wearing off, edges sharpening.",
+        "calming":    "The tension eases. Your breathing slows.",
+    }
+
+    def pre_call(self, ctx: ResponseContext) -> None:
+        agent_id = ctx.get("agent_id", "")
+        if not agent_id:
+            return
+
+        try:
+            from engine.mcp.state_coordinator import get_coordinator
+            coord = get_coordinator()
+            state = coord.get_full_state(agent_id)
+            if not state:
+                return
+
+            # Apply drift — only nudge stats that are away from baseline
+            drifts_applied = {}
+            for stat, rate in self._DRIFT.items():
+                val = state.get(stat, 50.0)
+                if stat == "tiredness":
+                    if val < 90:
+                        drifts_applied[stat] = rate
+                elif val > 55 or val < 45:  # outside neutral zone
+                    drifts_applied[stat] = rate
+
+            if drifts_applied:
+                coord.update(agent_id, source="mood_drift", **drifts_applied)
+
+            # Pick the most relevant inner thought
+            thought = None
+            arousal = state.get("arousal", 50)
+            tiredness = state.get("tiredness", 30)
+            anger = state.get("anger", 0)
+            drunkenness = state.get("drunkenness", 0)
+
+            if arousal > 70:
+                thought = self._INNER_THOUGHTS["cooling"]
+            elif anger > 40:
+                thought = self._INNER_THOUGHTS["calming"]
+            elif tiredness > 60:
+                thought = self._INNER_THOUGHTS["tired"]
+            elif drunkenness > 30:
+                thought = self._INNER_THOUGHTS["sobering"]
+            elif any(v > 60 for k, v in state.items() if k in self._DRIFT and isinstance(v, (int, float))):
+                thought = self._INNER_THOUGHTS["mellowing"]
+
+            if thought:
+                ctx["system_prompt"] = ctx.get("system_prompt", "") + f"\n\n[Inner feeling: {thought}]"
+
+        except Exception as exc:
+            logger.debug("NaturalMoodDriftInterceptor: %s", exc)
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  MoodSyncInterceptor  (priority 92)
+
+# ══════════════════════════════════════════════════════════════════════
 #  Module exports
 # ══════════════════════════════════════════════════════════════════════
 
 __all__ = [
     # Priority order
+    "NaturalMoodDriftInterceptor",     #  5
     "CharacterRegistryInterceptor",    #  8
     "RouterMessageInjector",           # 10
     "DialogDirectiveInterceptor",      # 12

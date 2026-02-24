@@ -745,6 +745,7 @@ def _invoke_mcp_tool(tool_name: str, args: Dict, ctx: ResponseContext) -> Any:
 def _build_default_pipeline() -> InterceptorPipeline:
     """Build the default interceptor pipeline for new governors."""
     from engine.agents.interceptors import (
+        NaturalMoodDriftInterceptor,
         CharacterRegistryInterceptor,
         RouterMessageInjector,
         DialogDirectiveInterceptor,
@@ -765,6 +766,7 @@ def _build_default_pipeline() -> InterceptorPipeline:
         MoodSyncInterceptor,
     )
     pipeline = InterceptorPipeline()
+    pipeline.add(NaturalMoodDriftInterceptor())  #  5
     pipeline.add(CharacterRegistryInterceptor()) #  8
     pipeline.add(RouterMessageInjector())        # 10
     pipeline.add(DialogDirectiveInterceptor())   # 12
