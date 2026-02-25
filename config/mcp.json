@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "cosysim": {
+      "command": "python",
+      "args": ["-m", "engine.mcp.cosysim_server"]
+    },
+    "notebooklm": {
+      "command": "npx",
+      "args": ["@nicobailon/notebooklm-mcp"],
+      "env": {}
+    }
+  }
+}
