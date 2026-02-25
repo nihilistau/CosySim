@@ -493,3 +493,153 @@ def realm_accept_quest(quest_key: str = "") -> str:
         return result["error"]
     q = result["quest"]
     return f"✅ Quest accepted: '{q['title']}' — {q['objective']}"
+
+
+# ── Advanced Mechanics (v0.50b) ────────────────────────────────
+
+@skill(
+    pack="realm",
+    tags=["game", "stats"],
+    category=SkillCategory.GAME,
+    description="View skill mastery progress. Skills improve with use.",
+)
+def realm_skill_mastery() -> str:
+    """Show all skill proficiencies and mastery progress."""
+    scene = _get_realm_scene()
+    if not scene or not scene.state:
+        return "No active Realm game."
+    st = scene.state
+    # Track skill uses if not already tracked
+    if not hasattr(st, 'skill_uses'):
+        st.skill_uses = {s: 0 for s in st.skills}
+
+    lines = ["📚 SKILL MASTERY:"]
+    for skill_name, base_mod in st.skills.items():
+        uses = st.skill_uses.get(skill_name, 0)
+        mastery_bonus = uses // 10  # +1 per 10 uses
+        total = base_mod + mastery_bonus
+        rank = (
+            "Novice" if uses < 10 else
+            "Apprentice" if uses < 25 else
+            "Journeyman" if uses < 50 else
+            "Expert" if uses < 100 else
+            "Master"
+        )
+        lines.append(f"  {skill_name}: +{total} ({rank}, {uses} uses, +{mastery_bonus} mastery)")
+    return "\n".join(lines)
+
+
+@skill(
+    pack="realm",
+    tags=["game", "social", "npc"],
+    category=SkillCategory.SOCIAL,
+    description="Talk to an NPC to build relationship, gather clues, or trade.",
+    cooldown=5,
+)
+def realm_npc_talk(npc_id: str = "", topic: str = "greeting") -> str:
+    """Interact with NPCs. Topics: greeting, rumors, trade, interrogate."""
+    scene = _get_realm_scene()
+    if not scene or not scene.state:
+        return "No active Realm game."
+    st = scene.state
+
+    # Initialize NPC relationships if needed
+    if not hasattr(st, 'npc_relationships'):
+        st.npc_relationships = {}
+
+    # Get NPCs at current location
+    available_npcs = []
+    if st.murder and hasattr(st.murder, 'suspects'):
+        available_npcs = list(st.murder.suspects.keys())
+    if not npc_id:
+        if available_npcs:
+            return f"Who do you want to talk to? Available: {', '.join(available_npcs)}"
+        return "No NPCs nearby to talk to."
+
+    # Track relationship
+    if npc_id not in st.npc_relationships:
+        st.npc_relationships[npc_id] = {"trust": 0, "interactions": 0, "known_topics": []}
+    rel = st.npc_relationships[npc_id]
+    rel["interactions"] += 1
+
+    if topic == "greeting":
+        rel["trust"] = min(100, rel["trust"] + 5)
+        return (
+            f"🗣️ You greet {npc_id}. They warm up to you.\n"
+            f"Trust: {rel['trust']}/100 | Interactions: {rel['interactions']}"
+        )
+    elif topic == "rumors":
+        if rel["trust"] < 20:
+            return f"{npc_id} doesn't trust you enough to share rumors. Trust: {rel['trust']}/100"
+        rel["trust"] = min(100, rel["trust"] + 2)
+        import random
+        rumors = [
+            "There's been strange sounds from the dark forest at night...",
+            "The merchant guild is hiding something in the castle vault.",
+            "A traveling scholar was seen near the ancient ruins.",
+            "The tavern keeper knows more than they let on.",
+            "Something valuable is hidden in the temple's lower chambers.",
+        ]
+        rumor = random.choice(rumors)
+        return f"🗣️ {npc_id} leans in: \"{rumor}\""
+    elif topic == "trade":
+        return f"🗣️ {npc_id} shows their wares. (Use realm_add_item to acquire items)"
+    elif topic == "interrogate":
+        if not st.murder:
+            return "No murder mystery active — interrogation unavailable."
+        if rel["trust"] < 30:
+            return f"{npc_id} clams up. Build trust first. Trust: {rel['trust']}/100"
+        rel["trust"] = max(0, rel["trust"] - 5)
+        # Check if NPC is a murder suspect
+        if npc_id in getattr(st.murder, 'suspects', {}):
+            suspect = st.murder.suspects[npc_id]
+            clue = suspect.get("alibi", "No alibi given.")
+            if npc_id not in [c.get("source") for c in st.murder.clues_found]:
+                st.murder.clues_found.append({"type": "testimony", "source": npc_id, "detail": clue})
+            return (
+                f"🔍 Interrogation of {npc_id}:\n"
+                f"\"{clue}\"\n"
+                f"Trust: {rel['trust']}/100 (interrogation lowers trust)"
+            )
+        return f"🔍 {npc_id} has no relevant information about the case."
+    return "Topics: greeting, rumors, trade, interrogate."
+
+
+@skill(
+    pack="realm",
+    tags=["game", "exploration"],
+    category=SkillCategory.GAME,
+    description="Check the time remaining and urgency of the current situation.",
+)
+def realm_time_check() -> str:
+    """Show time pressure, turn count, and urgency warnings."""
+    scene = _get_realm_scene()
+    if not scene or not scene.state:
+        return "No active Realm game."
+    st = scene.state
+
+    lines = [f"⏰ Turn {st.turn_number}"]
+
+    # Director patience
+    lines.append(f"Director patience: {st.director_patience:.0f}/100 ({st.director_personality})")
+    if st.director_patience < 30:
+        lines.append("  ⚠️ Director is getting impatient! Bad things may happen soon...")
+    elif st.director_patience < 60:
+        lines.append("  ⏳ Director is watching closely...")
+
+    # Murder mystery time
+    if st.murder and hasattr(st.murder, 'phase_time_remaining'):
+        remaining = st.murder.phase_time_remaining()
+        lines.append(f"Mystery time: {remaining:.0f}s remaining in phase '{st.murder.phase}'")
+        if remaining < 60:
+            lines.append("  🚨 TIME RUNNING OUT!")
+
+    # Quest deadlines (if any active)
+    if st.active_quests:
+        lines.append(f"Active quests: {len(st.active_quests)}")
+
+    # Mutiny check
+    if st.is_mutiny_active():
+        lines.append("⚡ MUTINY ACTIVE — The Director has gone rogue!")
+
+    return "\n".join(lines)

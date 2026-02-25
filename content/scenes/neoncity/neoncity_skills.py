@@ -207,3 +207,141 @@ def neoncity_end_turn() -> str:
     if ai_actions:
         msg += "AI actions:\n  " + "\n  ".join(ai_actions)
     return msg
+
+
+# ── Tactical Intelligence (v0.50b) ────────────────────────────
+
+@skill(
+    pack="neoncity",
+    tags=["game", "strategy", "recon"],
+    category=SkillCategory.GAME,
+    description="Scan the area around the player for cover, enemies, loot, and hazards.",
+)
+def neoncity_scan(radius: int = 2) -> str:
+    """Scan surrounding cells for tactical intelligence."""
+    scene = _get_neoncity_scene()
+    if not scene or not scene.state:
+        return "No active NeonCity game."
+    st = scene.state
+    p = st.get_player("player")
+    if not p or not p.alive:
+        return "Player is not alive."
+
+    radius = max(1, min(3, radius))
+    enemies_nearby = []
+    cover_cells = []
+    loot_cells = []
+
+    for dx in range(-radius, radius + 1):
+        for dy in range(-radius, radius + 1):
+            cx, cy = p.x + dx, p.y + dy
+            if cx < 0 or cy < 0 or cx >= st.grid_size or cy >= st.grid_size:
+                continue
+            cell = st.grid[cy][cx] if hasattr(st, 'grid') and cy < len(st.grid) and cx < len(st.grid[0]) else None
+            if cell:
+                if cell.get("type") == "building":
+                    cover_cells.append(f"({cx},{cy}) building")
+                elif cell.get("type") == "alley":
+                    cover_cells.append(f"({cx},{cy}) alley")
+                if cell.get("loot"):
+                    loot_cells.append(f"({cx},{cy})")
+
+            # Check for enemies
+            for other in st.players:
+                if other.id != "player" and other.alive and other.x == cx and other.y == cy:
+                    dist = abs(dx) + abs(dy)
+                    enemies_nearby.append(f"{other.name} at ({cx},{cy}) dist:{dist} HP:{other.hp}")
+
+    lines = [f"🔍 SCAN — Radius {radius} from ({p.x},{p.y}):"]
+    if enemies_nearby:
+        lines.append(f"  ⚠️ Enemies: {', '.join(enemies_nearby)}")
+    else:
+        lines.append("  ✅ No enemies detected.")
+    if cover_cells:
+        lines.append(f"  🏗️ Cover: {', '.join(cover_cells[:5])}")
+    if loot_cells:
+        lines.append(f"  💎 Loot at: {', '.join(loot_cells[:5])}")
+
+    # Storm check
+    if st.is_in_storm(p.x, p.y):
+        lines.append("  ⚡ WARNING: You are in the Glitch Storm!")
+    return "\n".join(lines)
+
+
+@skill(
+    pack="neoncity",
+    tags=["game", "strategy", "hacking"],
+    category=SkillCategory.GAME,
+    description="Check the current alarm level and security response status.",
+)
+def neoncity_alarm_status() -> str:
+    """Show the alarm level and its consequences."""
+    scene = _get_neoncity_scene()
+    if not scene or not scene.state:
+        return "No active NeonCity game."
+    st = scene.state
+
+    # Track alarm as state attribute
+    alarm = getattr(st, 'alarm_level', 0)
+    lines = [f"🚨 ALARM LEVEL: {alarm}/5"]
+
+    thresholds = [
+        (0, "All clear — no security presence."),
+        (1, "Security on standby — occasional patrols."),
+        (2, "Heightened alert — security drones active."),
+        (3, "Active pursuit — aggressive search patterns."),
+        (4, "Lockdown — all exits monitored, reinforcements called."),
+        (5, "MAXIMUM ALERT — lethal force authorized!"),
+    ]
+    for level, desc in thresholds:
+        marker = "→" if level == alarm else " "
+        lines.append(f"  {marker} [{level}] {desc}")
+
+    # Failed hack tracking
+    failed = getattr(st, 'failed_hacks', 0)
+    if failed > 0:
+        lines.append(f"\n  Failed hacks: {failed} (each raises alarm by 1)")
+
+    return "\n".join(lines)
+
+
+@skill(
+    pack="neoncity",
+    tags=["game", "strategy", "economy"],
+    category=SkillCategory.GAME,
+    description="Use credits to buy items: medkit (heal 30HP), EMP grenade (stun), hack_boost (+5 hacking).",
+    cooldown=5,
+)
+def neoncity_buy(item: str = "medkit") -> str:
+    """Purchase tactical equipment with credits."""
+    scene = _get_neoncity_scene()
+    if not scene or not scene.state:
+        return "No active NeonCity game."
+    p = scene.state.get_player("player")
+    if not p or not p.alive:
+        return "Player is not alive."
+
+    shop = {
+        "medkit": {"cost": 30, "desc": "Heal 30 HP", "effect": "heal"},
+        "emp_grenade": {"cost": 50, "desc": "Stun enemies in area", "effect": "stun"},
+        "hack_boost": {"cost": 40, "desc": "+5 hacking skill", "effect": "hack"},
+        "armor_patch": {"cost": 35, "desc": "+3 defense", "effect": "defense"},
+    }
+
+    if item not in shop:
+        items = ", ".join(f"{k} ({v['cost']}💰)" for k, v in shop.items())
+        return f"Unknown item. Available: {items}"
+
+    info = shop[item]
+    if p.credits < info["cost"]:
+        return f"Need {info['cost']} credits, have {p.credits}."
+
+    p.credits -= info["cost"]
+    if info["effect"] == "heal":
+        p.hp = min(p.max_hp, p.hp + 30)
+    elif info["effect"] == "hack":
+        p.hacking += 5
+    elif info["effect"] == "defense":
+        p.defense += 3
+
+    return f"🛒 Purchased {item}: {info['desc']}. Credits: {p.credits}"

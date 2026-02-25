@@ -317,3 +317,138 @@ def gallery_patron_interact(action: str = "greet") -> str:
         gs["prestige"] = min(100, gs["prestige"] + 5)
         return f"✨ Your passionate speech about art inspires the crowd! Prestige +5 → {gs['prestige']}/100."
     return "Actions: greet, tour, inspire."
+
+
+# ── Advanced Mechanics (v0.50b) ────────────────────────────────
+
+@skill(
+    pack="gallery",
+    tags=["game", "gallery", "time"],
+    category=SkillCategory.GAME,
+    description="Advance time in the gallery. Mood decays, visitors change, events may trigger.",
+    cooldown=10,
+)
+def gallery_time_passes() -> str:
+    """Advance gallery time — mood decays, visitors fluctuate, events fire."""
+    gs = _gs()
+    events = []
+
+    # Mood decay (−3 per tick, floor 20)
+    old_mood = gs["patron_mood"]
+    gs["patron_mood"] = max(20, gs["patron_mood"] - 3)
+    if gs["patron_mood"] < 40:
+        events.append("😐 Patrons are getting restless.")
+
+    # Visitor flux
+    delta = random.randint(-2, 4)
+    gs["visitor_count"] = max(0, gs["visitor_count"] + delta)
+
+    # Random events
+    roll = random.randint(1, 100)
+    if roll <= 10 and gs["artworks"]:
+        # Controversy: random artwork gets a harsh re-evaluation
+        target = random.choice(gs["artworks"])
+        penalty = random.randint(1, 3)
+        target["avg_score"] = max(1, target.get("avg_score", 5) - penalty)
+        events.append(f"📰 CONTROVERSY! Critics question '{target['title']}' (score −{penalty}).")
+        gs["prestige"] = max(0, gs["prestige"] - 2)
+    elif roll <= 20:
+        # VIP visitor
+        gs["patron_mood"] = min(100, gs["patron_mood"] + 15)
+        gs["visitor_count"] += 3
+        events.append("🎩 A VIP patron arrives with their entourage!")
+    elif roll <= 30 and gs["prestige"] >= 60:
+        # Press coverage
+        gs["prestige"] = min(100, gs["prestige"] + 5)
+        events.append("📸 Press coverage! The gallery is featured in Art Weekly. Prestige +5.")
+
+    lines = [
+        f"⏳ Time passes in the gallery...",
+        f"Mood: {old_mood} → {gs['patron_mood']}/100",
+        f"Visitors: {gs['visitor_count']}",
+    ]
+    if events:
+        lines.extend(events)
+    return "\n".join(lines)
+
+
+@skill(
+    pack="gallery",
+    tags=["game", "gallery", "social"],
+    category=SkillCategory.SOCIAL,
+    description="Characters gossip about art, sharing opinions and building rivalries.",
+    cooldown=15,
+)
+def gallery_gossip(about: str = "") -> str:
+    """Characters gossip and form opinions. Can spark debates or shift mood."""
+    gs = _gs()
+    if not gs["artworks"]:
+        return "Nothing to gossip about — the gallery is empty."
+
+    target_art = None
+    if about:
+        target_art = next((a for a in gs["artworks"] if a["title"].lower() == about.lower()), None)
+    if not target_art:
+        target_art = random.choice(gs["artworks"])
+
+    # Track character opinions
+    if "opinions" not in gs:
+        gs["opinions"] = {}
+    art_key = target_art["title"]
+    if art_key not in gs["opinions"]:
+        gs["opinions"][art_key] = []
+
+    # Generate a fresh opinion
+    sentiments = ["admires", "questions", "is intrigued by", "dismisses", "is moved by", "finds overrated"]
+    aspects = ["technique", "emotional depth", "originality", "composition", "colour palette", "message"]
+    sentiment = random.choice(sentiments)
+    aspect = random.choice(aspects)
+    gs["opinions"][art_key].append({"sentiment": sentiment, "aspect": aspect, "time": time.time()})
+
+    # Check for conflict (opposing opinions)
+    conflict = False
+    if len(gs["opinions"][art_key]) >= 2:
+        positive = ["admires", "is intrigued by", "is moved by"]
+        negative = ["questions", "dismisses", "finds overrated"]
+        has_pos = any(o["sentiment"] in positive for o in gs["opinions"][art_key])
+        has_neg = any(o["sentiment"] in negative for o in gs["opinions"][art_key])
+        conflict = has_pos and has_neg
+
+    lines = [f"🗣️ Gallery gossip about '{target_art['title']}':"]
+    lines.append(f"  A patron {sentiment} the {aspect}.")
+    if conflict:
+        lines.append(f"  ⚡ DIVIDED OPINIONS! A heated debate is brewing...")
+        gs["patron_mood"] = min(100, gs["patron_mood"] + 5)  # controversy draws attention
+        gs["prestige"] = min(100, gs["prestige"] + 1)
+    else:
+        lines.append(f"  The crowd nods thoughtfully.")
+    return "\n".join(lines)
+
+
+@skill(
+    pack="gallery",
+    tags=["game", "gallery", "prestige"],
+    category=SkillCategory.GAME,
+    description="Check gallery milestones and prestige perks unlocked.",
+)
+def gallery_milestones() -> str:
+    """Show prestige milestones and what's unlocked."""
+    gs = _gs()
+    milestones = [
+        (25, "🥉 Emerging Gallery", "Style variety bonus active"),
+        (50, "🥈 Established Gallery", "VIP patrons may visit"),
+        (75, "🥇 Renowned Gallery", "Private Collection unlocked"),
+        (90, "🏆 World-Class Gallery", "Press coverage events enabled"),
+        (100, "👑 Legendary Gallery", "Exhibition complete — you've made history!"),
+    ]
+    lines = [f"🏛️ Gallery Milestones (Prestige: {gs['prestige']}/100):"]
+    for threshold, title, desc in milestones:
+        marker = "✅" if gs["prestige"] >= threshold else "⬜"
+        lines.append(f"  {marker} [{threshold}] {title} — {desc}")
+
+    # Win condition check
+    if gs["prestige"] >= 100:
+        lines.append("\n🎉 CONGRATULATIONS! Your gallery has achieved legendary status!")
+    elif gs["prestige"] >= 75:
+        lines.append(f"\n🎯 {100 - gs['prestige']} prestige to legendary status!")
+    return "\n".join(lines)

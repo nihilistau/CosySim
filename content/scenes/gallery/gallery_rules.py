@@ -35,10 +35,35 @@ _EXHIBITION_RULES: List[Dict[str, Any]] = [
     {
         "id": "style_variety",
         "label": "Style Variety Bonus",
-        "description": "Using a different art style than the last piece earns a creativity bonus.",
+        "description": "Using a different art style than the last piece earns +3 prestige creativity bonus.",
         "rule_type": "always_on",
         "condition": {},
-        "effects": [],
+        "effects": [{"effect_type": "add_narrative", "params": {
+            "directive": "Reward artistic diversity. If the new piece uses a different style than the last, acknowledge the creative range.",
+            "scene_id": SCENE_ID,
+        }}],
+    },
+    {
+        "id": "mood_decay",
+        "label": "Patron Mood Decay",
+        "description": "Patron mood decays by 3 each time period. Below 40 patrons become restless.",
+        "rule_type": "always_on",
+        "condition": {},
+        "effects": [{"effect_type": "add_narrative", "params": {
+            "directive": "Track patron energy levels. If mood is low, patrons become disengaged and critical.",
+            "scene_id": SCENE_ID,
+        }}],
+    },
+    {
+        "id": "critique_conflict",
+        "label": "Critique Conflict",
+        "description": "When character opinions on artwork are divided (positive vs negative), a heated debate triggers.",
+        "rule_type": "triggered",
+        "condition": {"stat_thresholds": {"opinion_divergence": 1}},
+        "effects": [{"effect_type": "add_narrative", "params": {
+            "event": "Critics clash! Opposing views on the artwork spark a heated debate.",
+            "scene_id": SCENE_ID,
+        }}],
     },
 ]
 
@@ -87,9 +112,9 @@ _ROOM_RULES: List[Dict[str, Any]] = [
     {
         "id": "private_collection_gate",
         "label": "Private Collection Access",
-        "description": "The Private Collection room requires trust ≥ 60 to enter.",
+        "description": "The Private Collection room requires prestige ≥ 75 to enter.",
         "rule_type": "triggered",
-        "condition": {"stat_thresholds": {"trust": 60}},
+        "condition": {"stat_thresholds": {"prestige": 75}},
         "effects": [{"effect_type": "add_narrative", "params": {
             "event": "The curator nods — the private collection is now open to you.",
             "scene_id": SCENE_ID,

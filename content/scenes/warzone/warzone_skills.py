@@ -254,3 +254,108 @@ def warzone_end_turn() -> str:
         f"Your HP: {game.player.base_hp} | Enemy HP: {game.ai.base_hp}",
     ]
     return "\n".join(lines)
+
+
+# ── Strategic Analysis (v0.50b) ────────────────────────────────
+
+@skill(
+    pack="warzone",
+    tags=["game", "warzone", "strategy", "analysis"],
+    category=SkillCategory.GAME,
+    description="Assess the tactical situation: threat level, resource advantage, recommended actions.",
+)
+def warzone_strategy() -> str:
+    """Analyze the battlefield and recommend tactical actions."""
+    game = _get_game()
+    if not game:
+        return "No active warzone game."
+    p, a = game.player, game.ai
+
+    # HP advantage
+    hp_ratio = p.base_hp / max(1, a.base_hp)
+    if hp_ratio > 1.5:
+        hp_assess = "DOMINANT — Press the attack!"
+    elif hp_ratio > 1.0:
+        hp_assess = "ADVANTAGE — Keep pressure on."
+    elif hp_ratio > 0.7:
+        hp_assess = "EVEN — Play smart."
+    elif hp_ratio > 0.4:
+        hp_assess = "DISADVANTAGE — Shore up defenses."
+    else:
+        hp_assess = "CRITICAL — Emergency measures needed!"
+
+    # Resource assessment
+    resource_score = p.credits + p.power * 2 + p.intel * 3
+    ai_resource = a.credits + a.power * 2 + a.intel * 3
+    econ_status = "AHEAD" if resource_score > ai_resource * 1.2 else (
+        "BEHIND" if resource_score < ai_resource * 0.8 else "EVEN"
+    )
+
+    # Recommend actions
+    recs = []
+    if p.base_hp < p.max_hp * 0.3:
+        recs.append("🛡️ Build defenses — HP critical!")
+    if not p.buildings:
+        recs.append("🏗️ Build a factory for income")
+    elif len(p.buildings) < 3 and p.credits >= 50:
+        recs.append(f"🏗️ Build more ({len(p.buildings)}/4 slots used)")
+    if a.emp_turns > 0:
+        recs.append("🎯 Attack now — enemy defenses are EMP'd!")
+    if p.intel >= 30 and a.spy_turns == 0:
+        recs.append("🔍 Deploy spy satellite for intel")
+    if p.weapon_level < a.defense_level:
+        recs.append("⬆️ Upgrade weapon to match enemy defense")
+    if not recs:
+        recs.append("⚔️ Press the attack — all systems go!")
+
+    lines = [
+        f"📊 TACTICAL ASSESSMENT — Turn {game.turn}",
+        f"HP Status: {hp_assess} (You: {p.base_hp}/{p.max_hp} vs AI: {a.base_hp}/{a.max_hp})",
+        f"Economy: {econ_status} (You: {resource_score} vs AI: {ai_resource})",
+        f"Escalation: ×{game.escalation:.1f} | Weather: {game.weather}",
+        "",
+        "Recommendations:",
+    ]
+    for r in recs:
+        lines.append(f"  {r}")
+    return "\n".join(lines)
+
+
+@skill(
+    pack="warzone",
+    tags=["game", "warzone", "repair"],
+    category=SkillCategory.GAME,
+    description="Spend credits to repair your base or a damaged building.",
+    cooldown=8,
+)
+def warzone_repair(target: str = "base") -> str:
+    """Repair base HP or a building. Costs 20 credits per repair."""
+    game = _get_game()
+    if not game:
+        return "No active warzone game."
+    p = game.player
+    cost = 20
+
+    if p.credits < cost:
+        return f"Not enough credits for repairs. Need {cost}, have {p.credits}."
+
+    if target == "base":
+        if p.base_hp >= p.max_hp:
+            return "Base is already at full HP."
+        heal = min(25, p.max_hp - p.base_hp)
+        p.base_hp += heal
+        p.credits -= cost
+        return f"🔧 Base repaired: +{heal} HP → {p.base_hp}/{p.max_hp} (−{cost}💰)"
+    else:
+        # Try to repair a building
+        bldg = next((b for b in p.buildings if b["type"] == target or b["name"].lower() == target.lower()), None)
+        if not bldg:
+            names = ", ".join(b["name"] for b in p.buildings) if p.buildings else "none"
+            return f"Building not found. Your buildings: {names}"
+        max_b_hp = bldg.get("max_hp", 50)
+        if bldg.get("hp", max_b_hp) >= max_b_hp:
+            return f"{bldg['name']} is already at full HP."
+        heal = min(20, max_b_hp - bldg.get("hp", 0))
+        bldg["hp"] = bldg.get("hp", 0) + heal
+        p.credits -= cost
+        return f"🔧 {bldg['name']} repaired: +{heal} HP → {bldg['hp']}/{max_b_hp} (−{cost}💰)"
