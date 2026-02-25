@@ -80,6 +80,13 @@ class CommandCenterScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
         self._state_mgr = get_scene_state_manager()
         self._tag_registry = TagRegistry.get()
 
+        # Register monitoring rules
+        try:
+            from content.scenes.command_center.command_center_rules import register_command_center_rules
+            register_command_center_rules()
+        except Exception as exc:
+            log.warning("Failed to register command center rules: %s", exc)
+
     # ------------------------------------------------------------------
     # Lazy accessors for singletons
     # ------------------------------------------------------------------

@@ -1381,3 +1381,42 @@ They form the **public API** of each scene.
 - Coders: 5 skills (simulation, features, agents)
 - NeonCity: 5 skills (district, factions, contracts)
 - CommandCenter: 6 skills (system status, monitoring)
+
+---
+
+## Sprint 12.2 Implementation Log
+
+### Character Tags System (Commit 8fb9b85)
+- **StateCoordinator tags**: `_tags` dict, `add_tag()`, `get_tags()`, `get_top_tags()`, `decay_tags()`, `sweep_all_tags()`
+- Tags are soft behavioral labels (strength 0-1, default decay 0.01/tick)
+- Reinforcing existing tags uses diminishing returns: `+strength * 0.5`, caps at 1.0
+- **RelationshipEventInterceptor wired**: 20 keyword→tag mappings (e.g. kiss→romantic, argue→confrontational)
+- **NaturalMoodDriftInterceptor wired**: `sweep_all_tags()` piggybacks on every drift tick
+- **CharacterRegistryInterceptor wired**: Top 5 tags injected into CHARACTER IDENTITY system prompt
+- **Overlay API**: GET/POST `/api/characters/<id>/tags`
+- 10 new tests, 1310 total passing
+
+---
+
+## Revelation #51: Behavioral Tags Complete the Character Loop
+
+**Discovery:** Buffs are great for temporary stat changes from interactions, but they
+expire and leave no trace. Tags solve the long-term identity drift problem: repeated
+behavior patterns gradually shape who a character *becomes*.
+
+**The Loop:**
+1. Character interacts → RelationshipEventInterceptor applies buff (temporary) AND tag (persistent)
+2. Tag strength grows with repeated reinforcement (diminishing returns)
+3. Tags decay slowly (0.01/tick) — unused behaviors fade
+4. Top 5 tags injected into CHARACTER IDENTITY block by CharacterRegistryInterceptor
+5. LLM reads tags → generates behavior consistent with accumulated identity
+6. That behavior triggers new interactions → goto 1
+
+**Why this matters:** A character who has been "affectionate" and "daring" across many
+interactions will naturally gravitate toward those behaviors, even without explicit
+mood manipulation. The tags are emergent personality that forms from actual play, not
+pre-authored scripts. This is CosySim's version of long-term character memory.
+
+**Design decision:** Tags use a separate dict from stats/buffs intentionally. Stats are
+numerical (0-100), buffs are temporary modifiers, tags are behavioral labels. Three
+orthogonal systems that compose cleanly in the interceptor pipeline.

@@ -493,3 +493,32 @@ class TestCharacterTags:
         # Access internal storage for decay_rate — get_tags only returns strength
         info = coord._tags["lola"]["witty"]
         assert info["decay_rate"] == 0.01, "Default decay is slow (0.01)"
+
+    def test_permanent_tag_after_max_reinforcement(self):
+        coord = self._make_coord()
+        # Reinforce to max 5+ times → should become permanent
+        for _ in range(10):
+            coord.add_tag("lola", "bold", strength=0.9)
+        info = coord._tags["lola"]["bold"]
+        assert info["permanent"] is True, "Tag should become permanent after 5 max hits"
+        assert info["decay_rate"] == 0.0, "Permanent tags don't decay"
+
+    def test_permanent_tag_survives_decay(self):
+        coord = self._make_coord()
+        for _ in range(10):
+            coord.add_tag("lola", "loyal", strength=0.9)
+        # Force many decay cycles
+        for _ in range(100):
+            coord.decay_tags("lola")
+        tags = coord.get_tags("lola")
+        assert "loyal" in tags, "Permanent tag should survive all decay cycles"
+        assert tags["loyal"] == 1.0, "Permanent tag stays at full strength"
+
+    def test_get_permanent_tags(self):
+        coord = self._make_coord()
+        coord.add_tag("lola", "shy", strength=0.3)
+        for _ in range(10):
+            coord.add_tag("lola", "passionate", strength=0.9)
+        perms = coord.get_permanent_tags("lola")
+        assert "passionate" in perms
+        assert "shy" not in perms

@@ -304,6 +304,8 @@ class RealmGameState:
                 self.player_stats["max_mp"] += 5
                 self.player_stats["mp"] = self.player_stats["max_mp"]
                 leveled = True
+            if leveled:
+                self._submit_leaderboard("realm_levels", "Player", self.player_stats["level"])
             return {"level": self.player_stats["level"], "leveled_up": leveled, "xp": self.player_stats["xp"]}
 
     # ── Skill checks ──
@@ -558,6 +560,10 @@ class RealmGameState:
             item = dict(reward_item)
             item["id"] = f"{item['id']}_{uuid.uuid4().hex[:4]}"
             self.add_item(item)
+        # Post quest completion to shared boards
+        title = template.get("title", quest_key)
+        self._post_board_message("realm_quests", "Player", f"Completed quest: {title}")
+        self._submit_leaderboard("realm_quests_completed", "Player", len(self.completed_quests))
 
     def check_turn_quests(self) -> List[Dict]:
         """Called each turn to advance turn-based quest progress."""
@@ -571,6 +577,28 @@ class RealmGameState:
             for k, t in QUEST_TEMPLATES.items()
             if k not in self.completed_quests and k not in active_keys
         ]
+
+    # ── SharedBoard helpers ──
+
+    @staticmethod
+    def _submit_leaderboard(board_id: str, player: str, score: int) -> None:
+        """Submit to SharedBoard leaderboard (fire-and-forget)."""
+        try:
+            from engine.mcp.shared_boards import SharedBoardManager
+            mgr = SharedBoardManager.instance()
+            mgr.submit_score(board_id, player, score)
+        except Exception:
+            pass
+
+    @staticmethod
+    def _post_board_message(board_id: str, author: str, content: str) -> None:
+        """Post to SharedBoard message board (fire-and-forget)."""
+        try:
+            from engine.mcp.shared_boards import SharedBoardManager
+            mgr = SharedBoardManager.instance()
+            mgr.post_message(board_id, author, content, author_name=author)
+        except Exception:
+            pass
 
 
 # ═══════════════════════════════════════════════════════════════

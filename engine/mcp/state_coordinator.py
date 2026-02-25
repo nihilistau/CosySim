@@ -459,6 +459,7 @@ class CharacterStateCoordinator:
 
         Tags are soft labels that reflect accumulated behavior patterns.
         They decay slowly over time — if not reinforced, they fade.
+        Tags reinforced to max strength 5+ times become permanent (zero decay).
 
         Parameters
         ----------
@@ -475,7 +476,14 @@ class CharacterStateCoordinator:
                 self._tags[character_id] = {}
             existing = self._tags[character_id].get(tag)
             if existing:
-                existing["strength"] = min(1.0, existing["strength"] + strength * 0.5)
+                new_strength = min(1.0, existing["strength"] + strength * 0.5)
+                # Track reinforcements at max strength → permanent trait
+                if new_strength >= 1.0:
+                    existing["max_hits"] = existing.get("max_hits", 0) + 1
+                    if existing["max_hits"] >= 5 and existing["decay_rate"] > 0:
+                        existing["decay_rate"] = 0.0
+                        existing["permanent"] = True
+                existing["strength"] = new_strength
                 existing["reinforced"] = time.time()
             else:
                 self._tags[character_id][tag] = {
@@ -483,6 +491,8 @@ class CharacterStateCoordinator:
                     "decay_rate": decay_rate,
                     "created": time.time(),
                     "reinforced": time.time(),
+                    "max_hits": 0,
+                    "permanent": False,
                 }
 
     def get_tags(self, character_id: str, min_strength: float = 0.1) -> Dict[str, float]:
@@ -499,6 +509,11 @@ class CharacterStateCoordinator:
         tags = self.get_tags(character_id, min_strength=0.05)
         sorted_tags = sorted(tags.items(), key=lambda x: -x[1])
         return [tag for tag, _ in sorted_tags[:n]]
+
+    def get_permanent_tags(self, character_id: str) -> List[str]:
+        """Get tags that have become permanent traits for a character."""
+        tags = self._tags.get(character_id, {})
+        return [tag for tag, info in tags.items() if info.get("permanent", False)]
 
     def decay_tags(self, character_id: str) -> int:
         """Decay all tags for a character. Called by drift interceptor. Returns removed count."""
