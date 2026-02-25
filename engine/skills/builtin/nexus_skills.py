@@ -1,8 +1,8 @@
 """
 Nexus Knowledge System skills for CosySim agents.
 
-v0.50a: Expanded from 4→11 skills. Now covers knowledge CRUD, sessions,
-prompts, rules, experiments, ideas, and changelog tracking.
+v0.50b: Expanded from 11→16 skills. Added smart Q&A, research sessions,
+YouTube transcript import, research conversation, and research completion.
 """
 import json
 
@@ -126,3 +126,65 @@ def nexus_changelog(version: str = "", limit: int = 10) -> str:
     results = [{"title": e.get("title"), "content": e.get("content", "")[:200],
                 "created_at": e.get("created_at")} for e in entries]
     return json.dumps(results)
+
+
+# ── Smart Q&A (v0.50b) ───────────────────────────────────────
+
+@skill(pack="nexus", description="Smart Q&A — cache → knowledge → NLM research",
+       tags=["nexus", "qa", "research", "ask"], category=SkillCategory.SYSTEM)
+def nexus_ask(question: str, depth: str = "auto",
+              category: str = "") -> str:
+    """Ask a question. Searches Q&A cache, knowledge base, then NLM if needed.
+    
+    depth: 'shallow' (cache + FTS only), 'deep' (includes NLM), 'auto'.
+    Returns answer, source, confidence, and references.
+    """
+    result = _client().ask(question, depth=depth, category=category)
+    return json.dumps(result)
+
+
+# ── Research Sessions (v0.50b) ────────────────────────────────
+
+@skill(pack="nexus", description="Start a deep research session via NotebookLM",
+       tags=["nexus", "research", "nlm", "notebook"], category=SkillCategory.SYSTEM,
+       cooldown=15)
+def nexus_research(question: str, notebook_id: str = "") -> str:
+    """Start a deep research session. Creates/uses a notebook, asks the question,
+    stores everything. Returns research_id for follow-up conversations.
+    """
+    result = _client().research(question, notebook_id=notebook_id)
+    return json.dumps(result)
+
+
+@skill(pack="nexus", description="Continue a research conversation",
+       tags=["nexus", "research", "conversation"], category=SkillCategory.SYSTEM,
+       cooldown=5)
+def nexus_converse(research_id: str, message: str) -> str:
+    """Continue an existing research session with a follow-up question."""
+    result = _client().converse(research_id, message)
+    return json.dumps(result)
+
+
+@skill(pack="nexus", description="Complete research and distill Q&A pairs",
+       tags=["nexus", "research", "finish"], category=SkillCategory.SYSTEM,
+       cooldown=10)
+def nexus_finish_research(research_id: str) -> str:
+    """Complete a research session. Distills Q&A pairs, stores artifacts,
+    marks session complete. Knowledge becomes available for future queries.
+    """
+    result = _client().finish_research(research_id)
+    return json.dumps(result)
+
+
+# ── YouTube Import (v0.50b) ──────────────────────────────────
+
+@skill(pack="nexus", description="Import YouTube video transcript into Nexus",
+       tags=["nexus", "youtube", "transcript", "import"], category=SkillCategory.SYSTEM,
+       cooldown=30)
+def nexus_youtube(url: str, category: str = "youtube") -> str:
+    """Import a YouTube video transcript with metadata, timestamps, and concepts.
+    
+    Stores full transcript in ground truth + searchable entry in knowledge base.
+    """
+    result = _client().import_youtube(url, category=category)
+    return json.dumps(result)

@@ -228,6 +228,97 @@ class NexusClient:
             return result.get("ok", False)
         except Exception:
             return False
+
+    # ─── Q&A System (v0.50b) ─────────────────────────────────
+
+    def ask(self, question: str, depth: str = "auto",
+            category: str = "") -> Dict:
+        """Smart Q&A — searches cache, knowledge, then NLM if needed."""
+        payload = {"question": question, "depth": depth}
+        if category:
+            payload["category"] = category
+        result = self._post("/api/research/ask", payload)
+        return result.get("data", {}) if result.get("ok") else {}
+
+    def find_qa(self, question: str, limit: int = 5) -> List[Dict]:
+        """Search the Q&A cache for existing answers."""
+        result = self._get(f"/api/qa/ask?q={question}&limit={limit}")
+        return result.get("data", []) if result.get("ok") else []
+
+    def add_qa(self, question: str, answer: str,
+               category: str = "", tags: list = None,
+               quality_score: float = 0.5) -> Optional[str]:
+        """Store a Q&A pair."""
+        result = self._post("/api/qa", {
+            "question": question, "answer": answer,
+            "category": category, "tags": tags or [],
+            "quality_score": quality_score,
+        })
+        return result.get("data", {}).get("id") if result.get("ok") else None
+
+    # ─── Research Sessions (v0.50b) ──────────────────────────
+
+    def research(self, question: str, notebook_id: str = "",
+                 sources: list = None) -> Dict:
+        """Start a deep NLM research session."""
+        payload = {"question": question}
+        if notebook_id:
+            payload["notebook_id"] = notebook_id
+        if sources:
+            payload["sources"] = sources
+        result = self._post("/api/research/deep", payload)
+        return result.get("data", {}) if result.get("ok") else {}
+
+    def converse(self, research_id: str, message: str) -> Dict:
+        """Continue a research conversation."""
+        result = self._post(f"/api/research/{research_id}/converse",
+                           {"message": message})
+        return result.get("data", {}) if result.get("ok") else {}
+
+    def finish_research(self, research_id: str) -> Dict:
+        """Complete a research session and distill Q&A."""
+        result = self._post(f"/api/research/{research_id}/finish", {})
+        return result.get("data", {}) if result.get("ok") else {}
+
+    def list_research(self, status: str = "", limit: int = 20) -> List[Dict]:
+        """List research sessions."""
+        params = [f"limit={limit}"]
+        if status:
+            params.append(f"status={status}")
+        result = self._get(f"/api/research?{'&'.join(params)}")
+        return result.get("data", []) if result.get("ok") else []
+
+    # ─── YouTube Import (v0.50b) ─────────────────────────────
+
+    def import_youtube(self, url: str, category: str = "youtube",
+                       tags: list = None) -> Dict:
+        """Import a YouTube transcript into Nexus."""
+        result = self._post("/api/import/youtube", {
+            "url": url, "category": category, "tags": tags or [],
+        })
+        return result.get("data", {}) if result.get("ok") else {}
+
+    # ─── Plugins (v0.50b) ────────────────────────────────────
+
+    def list_plugins(self, scope: str = "",
+                     hook_type: str = "") -> List[Dict]:
+        """List registered Nexus plugins."""
+        params = []
+        if scope: params.append(f"scope={scope}")
+        if hook_type: params.append(f"hook_type={hook_type}")
+        qs = f"?{'&'.join(params)}" if params else ""
+        result = self._get(f"/api/plugins{qs}")
+        return result.get("data", []) if result.get("ok") else []
+
+    def add_plugin(self, name: str, hook_type: str,
+                   scope: str = "global",
+                   config: dict = None) -> Optional[str]:
+        """Register a new plugin."""
+        result = self._post("/api/plugins", {
+            "name": name, "hook_type": hook_type,
+            "scope": scope, "config": config or {},
+        })
+        return result.get("data", {}).get("id") if result.get("ok") else None
     
     # ─── HTTP Helpers (with retry) ────────────────────────────
     
