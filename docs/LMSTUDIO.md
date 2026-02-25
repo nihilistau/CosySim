@@ -2,6 +2,8 @@
 
 CosySim implements the **complete LMStudio v1 REST API** for local LLM inference. This guide covers all endpoints, MCP integration, streaming, speculative decoding, and configuration.
 
+> **Input/output format asymmetry:** LMStudio v1 accepts `input` + `system_prompt` (not OpenAI-style messages array) but returns standard `output[]` message objects. CosySim's `LMSClient` handles this translation — callers pass standard `messages` lists and `InferenceConfig.to_native_v1()` converts them automatically.
+
 ## Architecture
 
 ```
@@ -165,7 +167,7 @@ All 19 SSE event types are parsed:
 
 ## MCP Server
 
-CosySim exposes its capabilities as an MCP server (`engine/mcp/cosysim_server.py`):
+CosySim exposes its capabilities as an MCP server. Tool logic lives in `engine/mcp/tools/` (8 domain modules, 67 functions); wrappers in `engine/mcp/cosysim_server.py`:
 
 ### Tools (actions the LLM can execute)
 
@@ -175,8 +177,26 @@ CosySim exposes its capabilities as an MCP server (`engine/mcp/cosysim_server.py
 | `store_memory` | Persist text to ChromaDB |
 | `get_character_state` | Get mood, energy, relationships |
 | `adjust_relationship` | Modify trust/attraction between characters |
+| `list_characters` | List all characters with IDs |
 | `get_chain_events` | Browse EventChain events |
 | `log_event` | Inject an event into a chain |
+| `get_benchmark_stats` | Get timing KPIs |
+| `generate_image_request` | Proxy to ComfyUI |
+| `send_selfie` | ComfyUI image generation with display_hint |
+| `send_voice_message` | TTS generation with structured response |
+| `query_stateless` | Disposable store=False utility queries |
+| `get_conversation_info` | Conversation state + forkable response_ids |
+| `fork_conversation` | Create conversation branch at specific turn |
+
+### Resources (data the LLM can read)
+
+| URI | Description |
+|-----|-------------|
+| `config://cosysim` | Current YAML config snapshot |
+| `benchmark://summary` | Timing KPIs as JSON |
+| `character://{id}` | Full character profile + state |
+| `chain://{chain_id}` | EventChain tree |
+| `scene://{name}/status` | Scene health |
 
 ## Model Manager
 
@@ -241,19 +261,28 @@ client.enable_speculative("qwen3-8b", "qwen3-0.5b")
 ```
 
 Monitor acceptance ratio via pipeline metrics: `accepted_draft_tokens_count` / `rejected_draft_tokens_count`.
-| `list_characters` | List all characters with IDs |
-| `get_benchmark_stats` | Get timing KPIs |
-| `generate_image_request` | Proxy to ComfyUI |
 
-### Resources (data the LLM can read)
+## Conversation Branching
 
-| URI | Description |
-|-----|-------------|
-| `config://cosysim` | Current YAML config snapshot |
-| `benchmark://summary` | Timing KPIs as JSON |
-| `character://{id}` | Full character profile + state |
-| `chain://{chain_id}` | EventChain tree |
-| `scene://{name}/status` | Scene health |
+Response IDs enable server-side KV cache reuse and conversation branching:
+
+```python
+conv = get_conversation_manager().create("chat", system="You are helpful.")
+resp1 = conv.send("Hello!")           # response_id = "r1"
+resp2 = conv.send("Tell me more.")    # previous_response_id = "r1", response_id = "r2"
+
+# Branch at turn 1 (reuses KV cache up to "r1")
+conv.branch_at(turn=1)
+resp3 = conv.send("Something else.")  # previous_response_id = "r1", new branch
+
+# Fork creates an independent conversation copy
+forked = conv.fork()
+
+# Stateless query (no response_id tracking, store=False)
+resp = conv.send_stateless("Quick question?")
+```
+
+Each `response_id` is tracked in `Conversation._response_id_history` for replay and undo.
 
 ## Configuration
 

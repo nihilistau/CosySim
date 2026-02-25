@@ -29,12 +29,14 @@ python launcher.py --status
 
 ```
 engine/          Reusable framework (DO NOT put scene-specific logic here)
+  mcp/tools/     MCP tool modules (8 domain files, 67 functions)
 content/         Example scenes + simulation services
-  scenes/        Phone, bedroom, hub, dashboard, admin
+  scenes/        Phone, bedroom, hub, casino, realm, neoncity, coders, heist, warzone, gallery, lounge
   simulation/    Database, RAG, character system, services
   shared/        Shared CSS/themes used by all scenes
 config/          YAML settings (ports, URLs, thresholds)
-tests/           Pytest test suite (75 tests)
+training/        Training pipeline (merge_adapters, dataset generation)
+tests/           Pytest test suite (1,756 tests)
 docs/            Documentation
 ```
 
@@ -55,15 +57,12 @@ docs/            Documentation
 
 All tests live in `tests/`. Run with `python -m pytest tests/ -v --tb=short`.
 
-| File | Tests | Coverage |
-|------|:-----:|----------|
-| test_event_chain.py | 12 | Chain creation, logging, tree view |
-| test_config.py | 5 | Dot-notation, env override |
-| test_skills.py | 6 | Decorator, packs, chain context |
-| test_database.py | 52 | Full CRUD for all 8 data tables |
+**1,756 tests** across 40+ test files.
 
-### Writing Tests
+### Test Requirements
 
+- **Every new module needs tests.** No exceptions — skills, interceptors, tools, scenes.
+- **Mock external dependencies** (LMStudio, ComfyUI, TTS) — never call live services in tests.
 - Use `tmp_path` fixture for temp databases
 - Use `conftest.py` fixtures (`temp_db`, `event_chain`, `mock_config`)
 - Test the happy path + at least one error case
@@ -73,22 +72,81 @@ All tests live in `tests/`. Run with `python -m pytest tests/ -v --tb=short`.
 
 ## Adding a New Scene
 
-1. Create `content/scenes/<name>/<name>_scene.py`
-2. Inherit from `BaseScene`
+Each scene lives in its own directory with a standard structure:
+
+```
+content/scenes/<name>/
+├── <name>_scene.py      # Flask app inheriting BaseScene + MCPSceneMixin
+├── <name>_skills.py     # @skill functions grouped into a SkillPack
+├── <name>_rules.py      # SceneRulesEngine config (permissions, thresholds)
+├── __init__.py           # Exports scene class
+├── templates/            # Jinja2 templates
+└── static/               # Scene-specific CSS/JS
+```
+
+1. Create the directory and files above
+2. Inherit from `BaseScene` and mix in `MCPSceneMixin`
 3. Implement: `start()`, `stop()`, `get_plugin_info()`
-4. Add route to `launcher.py` mode_map
-5. Add tests in `tests/`
-6. Document in `docs/`
+4. Wire `build_governance_context()` + `StateCoordinator` in scene init
+5. Add route to `launcher.py` mode_map
+6. Add tests in `tests/` (see Test Requirements below)
+7. Document in `docs/`
 
 ---
 
 ## Adding a New Skill
 
-1. Decorate with `@skill(name="...", description="...")`
+1. Decorate with `@skill(name="...", description="...", pack="<pack_name>")`
+   - The `pack` parameter groups skills for registration (e.g. `"realm"`, `"casino"`)
 2. Read chain context: `from engine.skills.chain_context import get_chain_context`
 3. Log to EventChain: both `skill_called` and `skill_result`
 4. Return a string (LLM reads this)
-5. Add to a `SkillPack`, register in scene init
+5. Register the pack in the scene's `__init__` or `start()` method:
+   ```python
+   from engine.skills import SkillPack
+   pack = SkillPack("my_scene", [my_skill_func, ...])
+   pack.register(self.skill_registry)
+   ```
+
+---
+
+## Writing an Interceptor
+
+Interceptors modify prompts before inference (pre-call) or process responses after (post-call).
+
+1. Extend `InterceptorBase` from `engine/mcp/comms_framework.py`
+2. Override `pre_call()` and/or `post_call()`
+3. Set `priority` (lower runs first — e.g. content filter at 10, mood sync at 50)
+4. Register in the interceptor pipeline via `comms_framework.py`:
+   ```python
+   from engine.mcp.comms_framework import InterceptorBase
+   
+   class MyInterceptor(InterceptorBase):
+       priority = 20
+       def pre_call(self, context): ...
+       def post_call(self, context, response): ...
+   ```
+
+---
+
+## Adding an MCP Tool
+
+MCP tools are split across domain modules in `engine/mcp/tools/`:
+
+| Module | Domain |
+|--------|--------|
+| `character_tools.py` | Character state, relationships |
+| `dialog_tools.py` | Dialog trees, conversation state |
+| `game_tools.py` | Game sessions, turns |
+| `media_tools.py` | Image/voice generation |
+| `memory_tools.py` | RAG memory search/store |
+| `scene_tools.py` | Scene state, lifecycle |
+| `utility_tools.py` | Config, benchmarks, misc |
+| `wardrobe_tools.py` | Wardrobe/appearance |
+
+1. Add the function logic in the appropriate `engine/mcp/tools/<domain>_tools.py`
+2. Add the MCP wrapper in `engine/mcp/cosysim_server.py` to expose it as an MCP tool
+3. Add tests for the tool logic
 
 ---
 
@@ -118,7 +176,10 @@ SQLite at `simulation/simulation.db`. 9 tables with full CRUD.
 
 - Write clear commit messages describing what changed and why
 - Run tests before committing: `python -m pytest tests/ -v --tb=short`
-- Include `Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>` trailer if AI-assisted
+- Always include the Co-authored-by trailer for AI-assisted commits:
+  ```
+  Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+  ```
 
 ---
 
@@ -126,6 +187,4 @@ SQLite at `simulation/simulation.db`. 9 tables with full CRUD.
 
 - Voice/video call UI buttons are disabled (placeholder — "coming soon")
 - Scene export/import raises `NotImplementedError`
-- No inter-scene messaging (pub/sub)
 - Migration system is add-only (no rollback, no version table)
-- Qwen3-TTS not yet integrated (user wants this as next feature)

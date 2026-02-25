@@ -1,1119 +1,705 @@
 # CosySim API Reference
 
-Full reference for the HTTP REST API (Flask scenes) and WebSocket events
-(Socket.IO), plus the Python Agent API and Skill Registry interface.
+Comprehensive REST API reference for all CosySim scene servers, the
+Overlay admin panel, the TTS service, and Socket.IO real-time events.
 
 ---
 
 ## Table of Contents
 
-1. [Phone Scene REST API](#phone-scene-rest-api) — port 5555
-2. [Bedroom Scene REST API](#bedroom-scene-rest-api) — port 5556
-3. [Socket.IO Events](#socketio-events)
-4. [Python Agent API](#python-agent-api)
-5. [Skill Registry API](#skill-registry-api)
-6. [LMStudio Manager API](#lmstudio-manager-api)
-7. [EventChain API](#eventchain-api)
-8. [Overlay Admin API](#overlay-admin-api) — `/overlay/` prefix
+1. [Overview](#overview)
+2. [Common Patterns](#common-patterns)
+3. [Phone Scene API (port 5555)](#phone-scene-api-port-5555)
+4. [Bedroom Scene API (port 5556)](#bedroom-scene-api-port-5556)
+5. [Casino Scene API (port 5559)](#casino-scene-api-port-5559)
+6. [Realm Scene API (port 5562)](#realm-scene-api-port-5562)
+7. [Command Center API (port 5566)](#command-center-api-port-5566)
+8. [Overlay Admin API](#overlay-admin-api)
+9. [TTS API (port 8600)](#tts-api-port-8600)
+10. [Socket.IO Events](#socketio-events)
+11. [MCP Tools](#mcp-tools)
 
 ---
 
-## Phone Scene REST API
+## Overview
+
+Every CosySim scene runs as a Flask + Flask-SocketIO server on a
+dedicated port. The TTS server uses FastAPI. All servers expose REST
+endpoints for state management and actions, plus Socket.IO (or WebSocket)
+channels for real-time updates.
+
+| Service | Port | Framework |
+|---------|------|-----------|
+| Phone | 5555 | Flask + SocketIO |
+| Bedroom | 5556 | Flask + SocketIO |
+| Casino | 5559 | Flask + SocketIO |
+| Realm | 5562 | Flask + SocketIO |
+| NeonCity | 5563 | Flask + SocketIO |
+| Coders Room | 5564 | Flask + SocketIO |
+| Heist | 5565 | Flask + SocketIO |
+| Command Center | 5566 | Flask + SocketIO |
+| TTS Server | 8600 | FastAPI |
+| Overlay | `/overlay/` prefix on any scene | Flask Blueprint |
+
+---
+
+## Common Patterns
+
+**Response envelope** — most endpoints return:
+
+```json
+{"ok": true, ...}
+```
+
+**Error format:**
+
+```json
+{"ok": false, "error": "human-readable message"}
+```
+
+Some older Bedroom endpoints use `{"success": true}` / `{"error": "..."}`.
+
+**Base URL:** `http://localhost:<port>`
+
+**Content-Type:** All POST bodies are `application/json`.
+
+---
+
+## Phone Scene API (port 5555)
 
 Base URL: `http://localhost:5555`
 
-### Chat
+### Threads & Messaging
 
-#### `POST /api/chat`
+| Method | Endpoint | Description | Body / Params |
+|--------|----------|-------------|---------------|
+| GET | `/api/threads` | List all conversation threads | — |
+| POST | `/api/threads/dm` | Open or get a DM thread with a character | `{character_id}` |
+| POST | `/api/threads/group` | Create a group chat thread | `{name, member_ids[]}` |
+| GET | `/api/thread/<thread_id>/messages` | Get messages in a thread | `?limit=50&before=<msg_id>` |
+| POST | `/api/thread/<thread_id>/send` | Send a message (triggers AI reply) | `{content, type?}` |
 
-Send a user message and receive a character reply.
+### Contacts
 
-**Request body (JSON)**
+| Method | Endpoint | Description | Body / Params |
+|--------|----------|-------------|---------------|
+| GET | `/api/contacts` | List all characters as phone contacts | — |
 
-```json
-{
-  "message": "Hey, how are you?",
-  "character_id": "optional-override-id"
-}
-```
+### Gallery & Media
 
-**Response**
+| Method | Endpoint | Description | Body / Params |
+|--------|----------|-------------|---------------|
+| GET | `/api/gallery` | List all images + videos from media dirs | — |
+| DELETE | `/api/gallery/<filename>` | Delete an image or video | — |
+| GET | `/api/voice-messages` | List voice message files | — |
+| GET | `/api/video-messages` | List video message files | — |
+| GET | `/api/video-message/download/<filename>` | Download a video file | — |
+| GET | `/media/voice/<filename>` | Serve a voice file | — |
+| GET | `/media/video/<filename>` | Serve a video file | — |
+| GET | `/media/photo/<filename>` | Serve a photo file | — |
+| GET | `/media/images/<filename>` | Serve a generated image | — |
 
-```json
-{
-  "response": "I'm doing great! 😊",
-  "type": "text",
-  "character": "Maya",
-  "timestamp": "2025-01-01T12:00:00"
-}
-```
+### Image Generation
 
----
+| Method | Endpoint | Description | Body / Params |
+|--------|----------|-------------|---------------|
+| POST | `/api/generate-image` | Generate image via ComfyUI | `{prompt}` |
 
-### Character
+### Games (Truth or Dare)
 
-#### `GET /api/character`
+| Method | Endpoint | Description | Body / Params |
+|--------|----------|-------------|---------------|
+| POST | `/api/games/start` | Start a game session in a thread | `{thread_id, character_id}` |
+| POST | `/api/games/action` | Pick truth or dare | `{thread_id, choice: "truth"\|"dare"}` |
+| POST | `/api/games/end` | End an active game | `{thread_id}` |
 
-Return info about the active character.
+### Hacker App
 
-**Response**
+| Method | Endpoint | Description | Body / Params |
+|--------|----------|-------------|---------------|
+| GET | `/api/hacker/targets` | List all characters with state summary | — |
+| GET | `/api/hacker/<char_id>/profile` | Full character state + personality data | — |
+| GET | `/api/hacker/<char_id>/messages` | Get DM messages for a character | `?limit=100` |
+| POST | `/api/hacker/<char_id>/intercept` | Inject a directive into character state | `{directive}` |
 
-```json
-{
-  "id": "abc123",
-  "name": "Maya",
-  "mood": "happy",
-  "relationship_level": 0.65,
-  "avatar_url": "/api/character/avatar"
-}
-```
+### Research (NotebookLM)
 
-#### `GET /api/characters`
+| Method | Endpoint | Description | Body / Params |
+|--------|----------|-------------|---------------|
+| POST | `/api/research/search` | Ask a question to NotebookLM | `{question, notebook_id?}` |
+| POST | `/api/research/add_source` | Add a source to a notebook | `{notebook_id, source_type, source_value}` |
+| POST | `/api/research/audio` | Generate audio overview for notebook | `{notebook_id, customization?}` |
+| GET | `/api/research/notebooks` | List all notebooks | — |
 
-List all characters in the database.
+### Voice Studio
 
----
+| Method | Endpoint | Description | Body / Params |
+|--------|----------|-------------|---------------|
+| GET | `/api/voice-studio/premade` | List premade voice designs | — |
 
-### Messages / History
+### Arcade
 
-#### `GET /api/history`
+| Method | Endpoint | Description | Body / Params |
+|--------|----------|-------------|---------------|
+| POST | `/api/arcade/highscore` | Submit an arcade game score | `{game, score}` |
 
-Query params: `limit` (int, default 50)
+### Admin
 
-Returns recent conversation history for the active character.
+| Method | Endpoint | Description | Body / Params |
+|--------|----------|-------------|---------------|
+| POST | `/api/admin/autotxt-mute` | Toggle autonomous messaging mute | `{muted?}` |
+| GET | `/api/admin/autotxt-mute` | Check autonomous messaging mute status | — |
+| POST | `/api/admin/wipe-messages` | Delete all messages + media files | — |
+| GET | `/api/admin/stats` | Get unread count, thread count | — |
 
----
+### MCP Framework (Phone)
 
-### Voice
-
-#### `POST /api/voice/message`
-
-Generate a voice message.
-
-**Body**: `{"text": "Hello!", "mood": "happy", "speed": 1.0}`
-
-**Response**: `{"filename": "voice_abc.wav", "url": "/api/voice/download/voice_abc.wav"}`
-
-#### `GET /api/voice/download/<filename>`
-
-Stream a voice audio file.
-
-#### `GET /api/voice-messages/list`
-
-Query: `?limit=50`
-
-Returns voice message cards for the gallery screen.
-
----
-
-### Video
-
-#### `GET /api/video-messages/list`
-
-Query: `?limit=50`
-
-Returns video message cards for the gallery screen.
-
----
-
-### Gallery (Images)
-
-#### `GET /api/gallery/list`
-
-Query: `?character_id=...&limit=50`
-
-Returns image gallery cards.
+| Method | Endpoint | Description | Body / Params |
+|--------|----------|-------------|---------------|
+| GET | `/api/mcp/status` | MCP framework status | — |
+| GET | `/api/mcp/agent-profiles` | List all agent profiles | — |
+| GET | `/api/mcp/event-log` | Recent MCP events | `?limit=50&type=<event_type>` |
+| GET | `/api/mcp/timers` | Active framework timers | — |
+| GET | `/api/mcp/consequences` | Pending consequences for phone scene | — |
+| GET | `/api/mcp/lmstudio` | LMStudio config & status | — |
+| GET | `/api/mcp/resources` | Resource manager status | — |
+| POST | `/api/mcp/resources/config` | Update resource manager config | `{...config}` |
+| GET | `/api/mcp/inference-defaults` | Inference config defaults | — |
 
 ---
 
-### Skills
-
-#### `GET /api/skills/list`
-
-Query params: `pack` (str), `tag` (str)
-
-Returns all registered skills filtered by pack or tag.
-
-**Response**
-
-```json
-{
-  "skills": [
-    {
-      "name": "search_memory",
-      "pack": "memory",
-      "description": "Search the character's episodic memory.",
-      "tags": ["memory", "rag"]
-    }
-  ],
-  "count": 1
-}
-```
-
-#### `POST /api/skills/run`
-
-Execute a skill by name.
-
-**Body**
-
-```json
-{
-  "skill": "generate_image",
-  "kwargs": {
-    "prompt": "A sunlit beach at sunset",
-    "width": 512,
-    "height": 512
-  }
-}
-```
-
-**Response**
-
-```json
-{ "result": "/media/images/output_abc123.png" }
-```
-
----
-
-### Anonymous Character
-
-#### `GET /api/anon/info`
-
-#### `POST /api/anon/message`
-
-Body: `{"message": "Hello"}`
-
-#### `GET /api/anon/history`
-
----
-
-### Status
-
-#### `GET /api/status`
-
-Returns scene health, active character, and service availability.
-
----
-
-## Bedroom Scene REST API
+## Bedroom Scene API (port 5556)
 
 Base URL: `http://localhost:5556`
 
-### Character
+### Scene State
 
-#### `GET /api/character`
+| Method | Endpoint | Description | Body / Params |
+|--------|----------|-------------|---------------|
+| GET | `/api/scene/state` | Full scene state snapshot | — |
+| POST | `/api/scene/time` | Set time of day + lighting | `{time: "evening"\|"night"\|...}` |
+| GET | `/api/scene/lighting_presets` | Available lighting presets | — |
 
-Returns active character JSON.
+### Characters
 
-#### `POST /api/character/load`
+| Method | Endpoint | Description | Body / Params |
+|--------|----------|-------------|---------------|
+| GET | `/api/characters/list` | List all characters (DB + loaded status) | — |
+| POST | `/api/character/load` | Load a character into the scene (max 2) | `{character_id, personality?}` |
+| POST | `/api/character/remove` | Remove a character from the scene | `{character_id}` |
+| GET | `/api/characters/loaded` | Get currently loaded characters' state | — |
 
-Body: `{"character_id": "abc123"}`
+### Character Stats & Appearance
 
----
+| Method | Endpoint | Description | Body / Params |
+|--------|----------|-------------|---------------|
+| POST | `/api/character/stats/adjust` | Adjust a stat by delta | `{character_id, stat, delta}` |
+| POST | `/api/character/stats/set` | Set a stat to absolute value | `{character_id, stat, value}` |
+| POST | `/api/character/outfit` | Change character's outfit | `{character_id, outfit}` |
+| POST | `/api/character/position` | Change character's position | `{character_id, position}` |
+| POST | `/api/character/personality` | Swap personality profile | `{character_id, personality_key}` |
 
-### Animation
+### Spatial & Props
 
-#### `POST /api/character/animation`
+| Method | Endpoint | Description | Body / Params |
+|--------|----------|-------------|---------------|
+| POST | `/api/location/move` | Move character to a location | `{character_id, location_id\|location}` |
+| GET | `/api/locations` | List all locations and positions | — |
+| GET | `/api/props/list` | Available props + props in room | — |
+| POST | `/api/props/add` | Add a prop to the room | `{prop_id}` |
+| POST | `/api/props/remove` | Remove a prop from the room | `{prop_id}` |
+| POST | `/api/props/give` | Give a prop to a character | `{character_id, prop_id}` |
 
-Body: `{"animation": "wave"}` — triggers a real-time animation via Socket.IO.
+### Director Controls
 
----
+| Method | Endpoint | Description | Body / Params |
+|--------|----------|-------------|---------------|
+| POST | `/api/director/whisper` | Whisper instruction to a character | `{character_id, message}` |
+| POST | `/api/director/give_line` | Feed a scripted line to a character | `{character_id, line}` |
+| POST | `/api/director/give_action` | Direct an action for a character | `{character_id?, action}` |
+| POST | `/api/director/broadcast` | Broadcast a director message to all | `{message}` |
+| POST | `/api/director/enter_scene` | Director enters/exits the scene | `{in_scene, name?}` |
+| POST | `/api/director/mount` | Mount character at position/location | `{character_id, position?, location_id?}` |
+| POST | `/api/director/interact` | Initiate interaction between characters | `{actor_id, target_id, interaction}` |
+| GET | `/api/interactions` | List available interaction types | — |
 
-## Socket.IO Events
+### Bed Game
 
-All scenes use [Flask-SocketIO](https://flask-socketio.readthedocs.io/).
-Connect with: `const socket = io('http://localhost:5555');`
+| Method | Endpoint | Description | Body / Params |
+|--------|----------|-------------|---------------|
+| POST | `/api/bedgame/start` | Start the bed game (2-3 players) | `{players[], max_rounds?}` |
+| POST | `/api/bedgame/action` | Perform a game action | `{action, target?, custom?, player_id?}` |
+| POST | `/api/bedgame/end` | End the bed game | `{reason?}` |
+| GET | `/api/bedgame/state` | Current bed game state | — |
+| GET | `/api/bedgame/actions` | List available game actions | — |
 
-### Phone Scene (port 5555)
+### Scenarios & Story
 
-| Event | Direction | Payload | Description |
-|---|---|---|---|
-| `connect` | Client→Server | — | Establish connection |
-| `message` | Client→Server | `{content, character_id}` | Send a chat message |
-| `response` | Server→Client | `{content, character, type, timestamp}` | Character reply |
-| `typing` | Server→Client | `{character, is_typing}` | Typing indicator |
-| `autonomous_message` | Server→Client | `{content, type, media_url, autonomous: true}` | Autonomous character message |
-| `call_started` | Server→Client | `{call_id, character, type}` | Voice/video call initiated |
-| `call_ended` | Server→Client | `{call_id, duration}` | Call ended |
-| `error` | Server→Client | `{message}` | Error notification |
+| Method | Endpoint | Description | Body / Params |
+|--------|----------|-------------|---------------|
+| GET | `/api/scenario/list` | List premade scenarios | — |
+| POST | `/api/scenario/set` | Activate a premade scenario | `{scenario_key}` |
+| POST | `/api/scenario/clear` | Clear active scenario | — |
+| POST | `/api/story/beat` | Add a story beat | `{beat}` |
+| GET | `/api/story/beats` | Get current story beats | — |
+| POST | `/api/story/clear_beat` | Remove a story beat by index | `{index}` |
 
-### Bedroom Scene (port 5556)
+### Conversation & Events
 
-| Event | Direction | Payload | Description |
-|---|---|---|---|
-| `connect` | Client→Server | — | Establish connection |
-| `chat` | Client→Server | `{message}` | Chat with character |
-| `chat_response` | Server→Client | `{message, character}` | Character reply |
-| `character_animation` | Server→Client | `{animation, type}` | Trigger 3D animation |
-| `character_loaded` | Server→Client | `{character}` | Character loaded into scene |
+| Method | Endpoint | Description | Body / Params |
+|--------|----------|-------------|---------------|
+| POST | `/api/conversation/start` | Start a themed conversation | `{type: "flirt"\|"dare"\|"fantasy"\|...}` |
+| POST | `/api/event/fire` | Fire a scene event | `{type, custom?}` |
+| POST | `/api/menace` | Legacy event injection (alias) | `{type}` |
 
----
+### Agent Loop
 
-## Python Agent API
+| Method | Endpoint | Description | Body / Params |
+|--------|----------|-------------|---------------|
+| POST | `/api/agents/start` | Start autonomous agent loop | `{interval?}` |
+| POST | `/api/agents/stop` | Stop agent loop | — |
+| POST | `/api/agents/tick` | Manual single-tick agent step | — |
+| POST | `/api/agents/whisper` | Legacy whisper endpoint | `{character_id, message}` |
+| POST | `/api/agents/model` | Set model for a character | `{character_id, model, mode?}` |
+| GET | `/api/agents/model` | Get model config per character | — |
 
-### `CharacterAgent`
+### Models & Misc
 
-**Module:** `engine.agents.character_agent`
+| Method | Endpoint | Description | Body / Params |
+|--------|----------|-------------|---------------|
+| GET | `/api/models/available` | List loaded + available LLM models | — |
+| POST | `/api/mode` | Set scene mode | `{mode: "observe"\|...}` |
+| GET | `/api/history` | Agent loop conversation history | — |
+| GET | `/api/ambient/tracks` | List ambient audio tracks | — |
+| GET | `/api/meta/constants` | All constants (positions, outfits, props, etc.) | — |
 
-```python
-from engine.agents import CharacterAgent
-from content.simulation.database.db import Database
-from content.simulation.character_system.character import Character
+### MCP Framework (Bedroom)
 
-db   = Database()
-char = Character.load("character-id", db)
-
-agent = CharacterAgent(
-    char,
-    db=db,
-    skill_packs=["memory", "comfyui"],  # skills available to this agent
-    model=None,                          # None = use default loaded model
-    max_context_memories=5,
-)
-```
-
-#### `CharacterAgent.reply(user_message, *, chain_id=None, history=None, use_tools=True) → str`
-
-Generate a character reply.
-
-- `user_message` — the user's text
-- `chain_id` — attach to an existing EventChain; a new chain is created if `None`
-- `history` — list of `{"role": "user"/"assistant", "content": "..."}` dicts
-- `use_tools` — if `True` and the character has skill packs, uses `llm.act()` (tool calls enabled)
-
-Returns the character's reply string.
-
-#### `CharacterAgent.cancel()`
-
-Cancel an in-progress `reply()` call (sets a cancel flag and calls `stream.cancel()`).
-
----
-
-### `SceneAgent`
-
-**Module:** `engine.agents.scene_agent`
-
-Lightweight one-shot agent for utility tasks (title generation, classification).
-
-```python
-from engine.agents import SceneAgent
-
-agent = SceneAgent()
-
-title    = agent.generate_title("She smiled and handed him the letter.", max_words=6)
-summary  = agent.summarize(long_text, max_sentences=3)
-label    = agent.classify("Is this message happy?", labels=["happy", "sad", "neutral"])
-```
-
-#### `get_scene_agent(model=None) → SceneAgent`
-
-Returns the module-level singleton `SceneAgent`.
-
----
-
-## Skill Registry API
-
-**Module:** `engine.skills`
-
-```python
-from engine.skills import SKILL_REGISTRY, get_skills, get_pack_tools, mcp_skill_pack
-
-# All packs
-SKILL_REGISTRY.all_packs()           # → ["memory", "comfyui", ...]
-
-# All skills, optionally filtered by tag
-SKILL_REGISTRY.all_tools(tags=["image"])
-
-# Callables for one pack (pass to lms.act)
-tools = get_pack_tools("memory")      # → [search_memory, store_memory, ...]
-
-# Get SkillMeta by name
-meta = SKILL_REGISTRY.get_skill("generate_image")
-print(meta.description)
-
-# Human-readable summary
-print(SKILL_REGISTRY.describe())
-
-# MCP integration payload
-payload = mcp_skill_pack(
-    server_url="http://localhost:9000",
-    allowed_tools=["generate_image"],
-)
-```
+| Method | Endpoint | Description | Body / Params |
+|--------|----------|-------------|---------------|
+| GET | `/api/mcp/status` | Framework status | — |
+| GET | `/api/mcp/scene-state` | Bedroom MCP scene node state | — |
+| GET | `/api/mcp/event-log` | Recent events | `?limit=50` |
+| GET | `/api/mcp/lmstudio` | LMStudio config & status | — |
+| GET | `/api/mcp/resources` | Resource manager status | — |
+| POST | `/api/mcp/resources/config` | Update resource manager config | `{...config}` |
+| GET | `/api/mcp/inference-defaults` | Inference defaults | — |
+| GET/POST | `/api/mcp/config` | Read or update MCP config | `{key: value, ...}` (POST) |
 
 ---
 
-## LMStudio Manager API
+## Casino Scene API (port 5559)
 
-**Module:** `engine.lmstudio`
+Base URL: `http://localhost:5559`
 
-```python
-from engine.lmstudio import get_lmstudio_manager
-
-mgr = get_lmstudio_manager()
-
-# Server check
-mgr.is_server_running()              # → bool
-
-# Model management
-mgr.list_loaded_models()             # → list[dict]
-mgr.get_available_models()           # → list of model path strings
-mgr.load_model("gemma-2-9b-instruct", gpu=0.9, ttl=3600, context_length=4096)
-mgr.unload_model()
-
-# SDK client (lmstudio package)
-client = mgr.get_client()            # → lmstudio.LMStudio
-llm    = mgr.get_llm()               # → lmstudio.LLMDynamicHandle
-
-# VRAM estimation (CLI)
-estimated_mb = mgr.estimate_vram_needed("gemma-2-9b-instruct")
-```
+| Method | Endpoint | Description | Body / Params |
+|--------|----------|-------------|---------------|
+| GET | `/api/health` | Scene health check | — |
+| GET | `/api/state` | Full game state (hands, chips, pot, stats) | — |
+| POST | `/api/new-hand` | Deal a new hand | — |
+| POST | `/api/bet` | Place a bet | `{amount}` |
+| POST | `/api/bluff` | Attempt to bluff | — |
+| POST | `/api/showdown` | Reveal cards and resolve | — |
+| POST | `/api/fold` | Fold current hand | — |
+| POST | `/api/drink` | Order a cocktail (stat effects) | `{drink_id}` |
+| POST | `/api/random-event` | Trigger a random casino event | — |
+| GET | `/api/framework-status` | Full MCP framework introspection | — |
 
 ---
 
-## EventChain API
+## Realm Scene API (port 5562)
 
-**Module:** `content.simulation.database.events`
+Base URL: `http://localhost:5562`
 
-```python
-from content.simulation.database.events import EventChain
-from content.simulation.database.db import Database
+### Game Core
 
-ec = EventChain(Database())
+| Method | Endpoint | Description | Body / Params |
+|--------|----------|-------------|---------------|
+| GET | `/api/scene/info` | Scene metadata + plugin info | — |
+| GET | `/api/game/state` | Full game state (stats, inventory, story) | — |
+| POST | `/api/game/new` | Start a new adventure | `{personality?, time_limit?}` |
+| POST | `/api/game/choice` | Make a player choice | `{choice_id?\|custom_text?}` |
+| POST | `/api/game/desperation` | Roll the desperation dice | — |
+| POST | `/api/game/mutiny` | Trigger assistant mutiny (requires low patience) | — |
+| POST | `/api/game/steal` | Assistant steals a fourth-wall item | `{item_name?}` |
+| POST | `/api/game/use_item` | Use an inventory item | `{item_id}` |
 
-# Start a new chain
-chain_id = ec.start_chain(scene_id="phone", character_id="abc", summary="User turn")
+### Murder Mystery
 
-# Log an event
-ev_id = ec.log(
-    event_type="llm_request",
-    actor="agent",
-    payload={"model": "gemma-2-9b", "prompt_len": 512},
-    summary="LLM call",
-    chain_id=chain_id,
-    scene_id="phone",
-    character_id="abc",
-)
+| Method | Endpoint | Description | Body / Params |
+|--------|----------|-------------|---------------|
+| POST | `/api/murder/start` | Start a murder mystery party | — |
+| POST | `/api/murder/investigate` | Investigate a target/room | `{target}` |
+| POST | `/api/murder/interrogate` | Interrogate an NPC | `{npc_id, question?}` |
+| POST | `/api/murder/accuse` | Accuse a suspect | `{suspect_id, weapon, room}` |
 
-# Log an error
-ec.log_error(exception, chain_id=chain_id, scene_id="phone")
+### Combat
 
-# Retrieve
-events = ec.get_chain_events(chain_id)          # all events in chain
-chain  = ec.get_chain_summary(chain_id)         # aggregated stats
-recent = ec.get_recent_chains(scene_id="phone", limit=20)
-```
+| Method | Endpoint | Description | Body / Params |
+|--------|----------|-------------|---------------|
+| POST | `/api/combat/start` | Start combat with an enemy | `{enemy?}` |
+| POST | `/api/combat/attack` | Attack the enemy | — |
+| POST | `/api/combat/flee` | Attempt to flee | — |
+| POST | `/api/combat/defend` | Defend / brace for attack | — |
+| POST | `/api/combat/use_item` | Use an item in combat | `{item_id}` |
 
-### Event Types
+### Location & Travel
 
-| Type | Actor | Description |
-|---|---|---|
-| `scene_state_change` | system | Chain root event |
-| `message_in` | user | User message received |
-| `message_out` | agent | Character message sent |
-| `llm_request` | agent/llm | LLM inference started |
-| `llm_response` | agent | LLM reply received |
-| `llm_cancelled` | agent | Stream cancelled mid-generation |
-| `rag_result` | agent | RAG memory retrieval result |
-| `tool_call` | agent | Skill function invoked |
-| `tool_result` | skill | Skill function returned |
-| `autonomous_trigger` | system | Autonomous messenger cycle fired |
-| `image_generated` | comfyui | Image generation completed |
-| `voice_generated` | tts | Voice synthesis completed |
-| `video_generated` | video | Video generation completed |
-| `memory_stored` | system | Memory written to RAG |
-| `memory_compacted` | system | Chain summarised → stored in RAG |
-| `character_state_update` | agent | Trait/mood/relationship changed |
-| `error` | system | Exception caught in any service |
-| `debug` | system | Developer trace event |
+| Method | Endpoint | Description | Body / Params |
+|--------|----------|-------------|---------------|
+| GET | `/api/location/current` | Current location info | — |
+| POST | `/api/location/move` | Travel to a destination | `{destination}` |
+
+### Quests
+
+| Method | Endpoint | Description | Body / Params |
+|--------|----------|-------------|---------------|
+| GET | `/api/quests` | List available, active, completed quests | — |
+| POST | `/api/quests/accept` | Accept a quest | `{quest}` |
+
+### Equipment & Inventory
+
+| Method | Endpoint | Description | Body / Params |
+|--------|----------|-------------|---------------|
+| GET | `/api/equipment` | Current equipment + total stats | — |
+| POST | `/api/equipment/equip` | Equip an item from inventory | `{item_id}` |
+| POST | `/api/equipment/unequip` | Unequip a slot | `{slot}` |
+| GET | `/api/inventory` | Full inventory + gold | — |
+
+### Shop & Economy
+
+| Method | Endpoint | Description | Body / Params |
+|--------|----------|-------------|---------------|
+| GET | `/api/shop/catalog` | Browse shop catalog | — |
+| POST | `/api/shop/buy` | Buy an item | `{item_id}` |
+| POST | `/api/shop/sell` | Sell an item | `{item_id}` |
 
 ---
 
-## Showcase Scene APIs (v3.1)
+## Command Center API (port 5566)
 
-All showcase scenes share a common base pattern via `BaseScene`:
+Base URL: `http://localhost:5566`
 
-### Common Endpoints (all Flask scenes)
+### Dashboard & System
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/` | Scene index page (HTML) |
-| GET | `/api/health` | Scene health + uptime |
-| GET | `/api/scene_info` | Scene metadata (name, port, version, features) |
+| Method | Endpoint | Description | Body / Params |
+|--------|----------|-------------|---------------|
+| GET | `/api/dashboard` | Full dashboard snapshot | — |
+| GET | `/api/system` | System snapshot (CPU, memory, GPU) | — |
+| GET | `/api/pipeline` | Inference pipeline snapshot | — |
+| GET | `/api/alerts` | Alert status + history | — |
+| GET | `/api/activity` | Activity snapshot | — |
+| GET | `/api/pipeline/history` | Pipeline history over time | `?seconds=60&limit=100` |
+| GET | `/api/system/history` | System metrics history | `?seconds=60` |
+| GET | `/api/benchmarks` | Benchmark statistics | — |
 
-### The Realm (port 5562)
+### Training
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/scene_info` | Realm state, current story, active agents |
-| POST | `/api/game/new` | Start new game (director personality, story seed) |
-| POST | `/api/game/action` | Player action → Director processes → response |
-| GET | `/api/game/state` | Full game state (inventory, stats, story progress) |
-| POST | `/api/game/mystery/start` | Start Murder Mystery sub-module |
+| Method | Endpoint | Description | Body / Params |
+|--------|----------|-------------|---------------|
+| GET | `/api/training` | Training stats | — |
+| GET | `/api/training/candidates` | List training candidates | `?dataset=&min_quality=0.0&limit=50` |
+| POST | `/api/training/export` | Export training candidates to JSONL | `{dataset, min_quality?}` |
 
-### NeonCity (port 5563)
+### Scene Monitoring (Cross-Scene)
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/scene_info` | City grid, players, storm state |
-| POST | `/api/game/new` | Generate new city + spawn players |
-| POST | `/api/game/move` | Move player on grid |
-| POST | `/api/game/action` | Combat, hack, or interact |
-| POST | `/api/game/end_turn` | Advance turn (storm progresses) |
-| GET | `/api/game/state` | Full board state |
+| Method | Endpoint | Description | Body / Params |
+|--------|----------|-------------|---------------|
+| GET | `/api/scenes` | List all active scenes with summaries | — |
+| GET | `/api/scenes/<scene_id>` | Detailed state for a scene | — |
+| GET | `/api/scenes/<scene_id>/feed` | Recent messages/events from a scene | `?limit=20` |
+| GET | `/api/scenes/<scene_id>/characters` | Characters in a scene with state | — |
+| GET | `/api/characters/<char_id>` | Detailed character state | — |
+| GET | `/api/characters/<char_id>/conversations` | Conversation history | `?limit=30` |
+| POST | `/api/scenes/<scene_id>/inject` | Inject event into a scene | `{type: "narrative"\|"directive"\|"broadcast", content}` |
+| POST | `/api/characters/<char_id>/edit_stats` | Live-edit character stats | `{stat_key: value, ...}` |
 
-### The Coders Room (port 5564)
+### Live Feed
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/scene_info` | Pipeline state, agent assignments |
-| POST | `/api/pipeline/feature` | Add feature request to queue |
-| POST | `/api/pipeline/tick` | Advance pipeline one step |
-| GET | `/api/pipeline/state` | Current pipeline + code output |
-| POST | `/api/sandbox/run` | Execute code in sandbox |
+| Method | Endpoint | Description | Body / Params |
+|--------|----------|-------------|---------------|
+| GET | `/api/live_feed` | List running scenes for feed selector | — |
+| GET | `/api/live_feed/<scene_name>` | Recent messages from a scene feed | `?limit=20` |
+
+### Scene Status
+
+| Method | Endpoint | Description | Body / Params |
+|--------|----------|-------------|---------------|
+| GET | `/api/scene_status` | Status cards for all active scenes | — |
+
+### Character State Viewer
+
+| Method | Endpoint | Description | Body / Params |
+|--------|----------|-------------|---------------|
+| GET | `/api/character_state/<character_id>` | Stats, buffs, tags, relationships, scene | — |
+
+### System Metrics
+
+| Method | Endpoint | Description | Body / Params |
+|--------|----------|-------------|---------------|
+| GET | `/api/system_metrics` | Framework status, totals, memory estimates | — |
+
+### Scene Control
+
+| Method | Endpoint | Description | Body / Params |
+|--------|----------|-------------|---------------|
+| POST | `/api/scene_control/directive` | Inject dialog directive into a character | `{scene_id, character_id, directive, turns?}` |
+| POST | `/api/scene_control/broadcast` | Broadcast message to all characters in a scene | `{scene_id, message, sender?}` |
+| GET | `/api/scene_control/characters/<scene_name>` | List characters in a scene with state | — |
+| POST | `/api/scene_control/transfer` | Transfer a character between scenes | `{character_id, from_scene, to_scene}` |
 
 ---
 
 ## Overlay Admin API
 
-Real-time system monitoring and interaction panel.  Mounted as a Flask
-Blueprint under the `/overlay` prefix on whichever scene app calls
+Real-time system monitoring and control panel. Mounted as a Flask
+Blueprint under the `/overlay/` prefix on whichever scene app calls
 `mount_overlay(app, socketio)`.
 
 **Module:** `engine.overlay.overlay_bp`
 
-All paths below are relative to the `/overlay` prefix
-(e.g. `/overlay/api/status`).
+All paths below are relative to the Overlay host
+(e.g. `http://localhost:5555/overlay/api/status`).
 
----
+### Core
 
-### Panel
-
-#### `GET /overlay/`
-
-Serve the Overlay admin panel (HTML/JS/CSS single-page app).
-
----
-
-### Status
-
-#### `GET /overlay/api/status`
-
-Combined system status snapshot.
-
-**Response**
-
-```json
-{
-  "ok": true,
-  "timestamp": 1719849600.0,
-  "lmstudio": {
-    "available": true,
-    "native_api": true,
-    "models": ["gemma-2-9b-instruct"]
-  },
-  "resources": { "gpu_free_mb": 8192, "vram_used_mb": 4096 },
-  "framework": { "characters": 3, "scenes": 2 },
-  "skills_count": 14
-}
-```
-
----
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/overlay/` | Admin panel SPA (HTML/JS/CSS) |
+| GET | `/overlay/api/status` | Combined system status (LMStudio, VRAM, framework, skills) |
+| GET | `/overlay/api/events` | SSE stream of real-time ActivityBus events |
 
 ### Agents
 
-#### `GET /overlay/api/agents`
-
-List all registered agents with their state.
-
-**Response**
-
-```json
-{
-  "ok": true,
-  "agents": [
-    {
-      "id": "maya",
-      "name": "Maya",
-      "state": { "mood": "happy", "energy": 0.8 },
-      "scene": "phone"
-    }
-  ]
-}
-```
-
-#### `GET /overlay/api/agent/<agent_id>`
-
-Detailed agent info including MCP node data (inbox, current scene, tags).
-
-**Response**
-
-```json
-{
-  "ok": true,
-  "agent": {
-    "id": "maya",
-    "name": "Maya",
-    "state": { "mood": "happy", "energy": 0.8 },
-    "mcp": {
-      "inbox": [],
-      "current_scene": "phone",
-      "tags": ["main_character"]
-    }
-  }
-}
-```
-
-#### `POST /overlay/api/agent/<agent_id>`
-
-Update agent state fields.
-
-**Request body (JSON)**
-
-```json
-{
-  "state": { "mood": "excited", "energy": 1.0 }
-}
-```
-
-**Response**
-
-```json
-{ "ok": true }
-```
-
----
-
-### Pipeline
-
-#### `GET /overlay/api/pipeline`
-
-Interceptor pipeline configuration (per-governor instance).
-
-**Response**
-
-```json
-{
-  "ok": true,
-  "pipeline": { "interceptors": [], "note": "Pipeline is per-governor instance" }
-}
-```
-
----
-
-### Config
-
-#### `GET /overlay/api/config`
-
-Return key configuration sections: `llm`, `lmstudio`, `hardware`, `mcp`,
-`tts`, `comfyui`.
-
-**Response**
-
-```json
-{
-  "ok": true,
-  "config": {
-    "llm": { "default_model": "gemma-2-9b-instruct" },
-    "lmstudio": { "host": "localhost", "port": 1234 },
-    "hardware": {},
-    "mcp": {},
-    "tts": {},
-    "comfyui": {}
-  }
-}
-```
-
-#### `POST /overlay/api/config`
-
-Set configuration values.  Each key in the body is forwarded to
-`config.set(key, value)`.
-
-**Request body (JSON)**
-
-```json
-{
-  "llm.default_model": "gemma-2-27b-instruct",
-  "tts.enabled": true
-}
-```
-
-**Response**
-
-```json
-{ "ok": true }
-```
-
----
-
-### Models
-
-#### `GET /overlay/api/models`
-
-List loaded models and ModelManager status.
-
-**Response**
-
-```json
-{
-  "ok": true,
-  "loaded": ["gemma-2-9b-instruct"],
-  "manager": { "active_model": "gemma-2-9b-instruct", "queue_depth": 0 }
-}
-```
-
-#### `POST /overlay/api/models/load`
-
-Load a model into LMStudio.
-
-**Request body (JSON)**
-
-```json
-{
-  "model_id": "gemma-2-9b-instruct",
-  "context_length": 4096,
-  "gpu_offload": 0.9,
-  "flash_attention": true,
-  "ttl": 3600
-}
-```
-
-All fields except `model_id` are optional.
-
-**Response**
-
-```json
-{ "ok": true }
-```
-
-#### `POST /overlay/api/models/unload`
-
-Unload a model.
-
-**Request body (JSON)**
-
-```json
-{ "model_id": "gemma-2-9b-instruct" }
-```
-
-**Response**
-
-```json
-{ "ok": true }
-```
-
----
-
-### Resources
-
-#### `GET /overlay/api/resources`
-
-ResourceManager status (VRAM, GPU utilisation, quotas).
-
-**Response**
-
-```json
-{
-  "ok": true,
-  "resources": { "gpu_free_mb": 8192, "vram_used_mb": 4096 }
-}
-```
-
-#### `POST /overlay/api/resources`
-
-Update ResourceManager configuration.
-
-**Request body (JSON)** — fields forwarded to `resource_manager.update_config()`.
-
-**Response**
-
-```json
-{ "ok": true, "resources": { "...": "updated status" } }
-```
-
----
-
-### Events (SSE)
-
-#### `GET /overlay/api/events`
-
-Server-Sent Events stream of real-time framework activity.  Connect with
-an `EventSource`:
-
-```js
-const es = new EventSource("/overlay/api/events");
-es.onmessage = (e) => console.log(JSON.parse(e.data));
-```
-
-Each event is a JSON object from the ActivityBus.
-
----
-
-### Act as Agent
-
-#### `POST /overlay/api/act`
-
-Inject a message or event into the running simulation.
-
-**Request body (JSON)**
-
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `action` | string | `"speak"` | `"speak"` or `"inject_event"` |
-| `agent_id` | string | `""` | Agent to act as (or `"overlay_user"`) |
-| `message` | string | `""` | Message text (for `speak`) |
-| `scene` | string | `"system"` | Target scene (for `speak`) |
-| `event_type` | string | `"user_event"` | Event type (for `inject_event`) |
-| `event_data` | object | `{}` | Payload (for `inject_event`) |
-
-**Response**
-
-```json
-{ "ok": true, "injected": true }
-```
-
----
-
-### Memory
-
-#### `GET /overlay/api/memory/<agent_id>`
-
-Browse agent memories from the RAG store.
-
-**Query params**
-
-| Param | Type | Default | Description |
-|-------|------|---------|-------------|
-| `q` | string | `""` | Search query (defaults to `"recent events"`) |
-| `limit` | int | `10` | Max results |
-
-**Response**
-
-```json
-{
-  "ok": true,
-  "memories": [
-    { "text": "Maya went to the park", "score": 0.92 }
-  ]
-}
-```
-
----
-
-### Skills
-
-#### `GET /overlay/api/skills`
-
-List all registered skills from the Skill Registry.
-
-**Response**
-
-```json
-{
-  "ok": true,
-  "skills": [
-    {
-      "name": "generate_image",
-      "pack": "comfyui",
-      "description": "Generate an image via ComfyUI.",
-      "tags": ["image"],
-      "category": "media",
-      "cooldown": 30
-    }
-  ]
-}
-```
-
----
-
-### Shared Boards
-
-#### `GET /overlay/api/boards`
-
-List all shared boards (highscores and message boards).
-
-**Response**
-
-```json
-{
-  "ok": true,
-  "boards": [
-    { "id": "highscores", "type": "score" },
-    { "id": "chat-wall", "type": "messages" }
-  ]
-}
-```
-
-#### `GET /overlay/api/boards/<board_id>/scores`
-
-Get highscores for a specific board.
-
-**Query params:** `limit` (int, default 10)
-
-**Response**
-
-```json
-{ "ok": true, "scores": [ { "agent": "maya", "score": 1500 } ] }
-```
-
-#### `GET /overlay/api/boards/<board_id>/messages`
-
-Get messages from a shared board.
-
-**Query params:** `limit` (int, default 50)
-
-**Response**
-
-```json
-{
-  "ok": true,
-  "messages": [
-    { "author": "maya", "content": "Hello world", "timestamp": "..." }
-  ]
-}
-```
-
-#### `POST /overlay/api/boards/<board_id>/messages`
-
-Post a message to a shared board.
-
-**Request body (JSON)**
-
-```json
-{
-  "author_id": "maya",
-  "author_name": "Maya",
-  "content": "Hello everyone!"
-}
-```
-
-**Response**
-
-```json
-{ "ok": true, "message": { "...": "created message" } }
-```
-
----
-
-### Streaming
-
-#### `GET /overlay/api/streaming`
-
-Streaming statistics: active VirtualAgentManager calls, conversation
-branches, and StreamProcessor availability.
-
-**Response**
-
-```json
-{
-  "ok": true,
-  "manager": { "total_calls": 42, "active_agents": 2 },
-  "conversations": {
-    "count": 3,
-    "conversations": [
-      { "id": "conv-001", "turns": 12, "branches": 2 }
-    ]
-  },
-  "stream_processor": {
-    "available": true,
-    "tag_patterns": ["think", "action", "mood"]
-  }
-}
-```
-
----
-
-### Inference Config
-
-#### `GET /overlay/api/inference`
-
-Get current inference defaults (temperature, top-p, etc.).
-
-**Response**
-
-```json
-{
-  "ok": true,
-  "defaults": { "temperature": 0.8, "top_p": 0.95, "max_tokens": 1024 }
-}
-```
-
-#### `POST /overlay/api/inference`
-
-Override inference defaults.  Only fields present in `InferenceConfig`
-dataclass are accepted.
-
-**Request body (JSON)**
-
-```json
-{ "temperature": 0.6, "max_tokens": 2048 }
-```
-
-**Response**
-
-```json
-{
-  "ok": true,
-  "defaults": { "temperature": 0.6, "top_p": 0.95, "max_tokens": 2048 }
-}
-```
-
----
-
-### InferenceRouter
-
-#### `GET /overlay/api/router`
-
-InferenceRouter metrics (queue depth, throughput, tier breakdown).
-
-**Response**
-
-```json
-{
-  "ok": true,
-  "queue_depth": 2,
-  "throughput": 14.5,
-  "tiers": { "primary": { "busy": 1, "max": 2 } }
-}
-```
-
-#### `POST /overlay/api/router`
-
-Update router configuration live.
-
-**Request body (JSON)**
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `max_queue_depth` | int | Maximum queued requests |
-| `preempt_on_priority` | bool | Enable priority preemption |
-| `tiers` | object | Per-tier overrides (keyed by tier name) |
-| `tiers.<name>.max_slots` | int | Max concurrent slots for this tier |
-| `tiers.<name>.enabled` | bool | Enable / disable a tier |
-
-```json
-{
-  "max_queue_depth": 10,
-  "preempt_on_priority": true,
-  "tiers": { "primary": { "max_slots": 3 } }
-}
-```
-
-**Response**
-
-```json
-{ "ok": true, "applied": { "...": "echoed input" } }
-```
-
-#### `GET /overlay/api/router/tiers`
-
-Per-tier configuration and live slot usage.
-
-**Response**
-
-```json
-{
-  "ok": true,
-  "tiers": {
-    "primary": {
-      "model_key": "gemma-2-9b-instruct",
-      "device": "gpu",
-      "max_slots": 2,
-      "busy_slots": 1,
-      "available": 1
-    }
-  }
-}
-```
-
----
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/overlay/api/agents` | List all registered agents |
+| GET | `/overlay/api/agent/<id>` | Agent detail + MCP node data |
+| POST | `/overlay/api/agent/<id>` | Update agent state — body: `{state: {...}}` |
+
+### Config & Models
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/overlay/api/config` | Config sections (llm, lmstudio, hardware, mcp, tts, comfyui) |
+| POST | `/overlay/api/config` | Set config values — body: `{"key.path": value}` |
+| GET | `/overlay/api/models` | Loaded models + ModelManager status |
+| POST | `/overlay/api/models/load` | Load a model — body: `{model_id, context_length?, gpu_offload?, ttl?}` |
+| POST | `/overlay/api/models/unload` | Unload a model — body: `{model_id}` |
+| GET | `/overlay/api/pipeline` | Interceptor pipeline configuration |
+
+### Resources & Inference
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/overlay/api/resources` | VRAM, GPU utilisation, quotas |
+| POST | `/overlay/api/resources` | Update resource manager config |
+| GET | `/overlay/api/inference` | Inference defaults (temperature, top_p, max_tokens) |
+| POST | `/overlay/api/inference` | Override inference defaults — body: `{temperature?, max_tokens?}` |
+| GET | `/overlay/api/router` | InferenceRouter metrics (queue, throughput, tiers) |
+| POST | `/overlay/api/router` | Update router config — body: `{max_queue_depth?, tiers?}` |
+| GET | `/overlay/api/router/tiers` | Per-tier config and live slot usage |
+| GET | `/overlay/api/streaming` | Streaming stats (active agents, conversations, StreamProcessor) |
 
 ### Character State
 
-#### `GET /overlay/api/character/<character_id>/state`
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/overlay/api/character/<id>/state` | Unified state (mood, energy, inhibition, arousal, happiness) |
+| POST | `/overlay/api/character/<id>/state` | Update state — body: `{mood?, energy?, mode?, source?, persist?}` |
+| GET | `/overlay/api/characters/<id>/buffs` | Active buffs for a character |
+| POST | `/overlay/api/characters/<id>/buffs` | Add a buff — body: `{buff_id?, deltas, duration?}` |
+| GET | `/overlay/api/characters/<id>/attraction/<other_id>` | Calculate attraction between two characters |
+| GET | `/overlay/api/characters/<id>/tags` | Get behavioral tags + top tags |
+| POST | `/overlay/api/characters/<id>/tags` | Add/reinforce a tag — body: `{tag, strength?}` |
 
-Unified character state via `CharacterStateCoordinator`.  Merges
-CharacterRegistry fields (mood, energy, inhibition) with
-SceneStateManager fields (arousal, happiness, etc.).
+### Conversation & Directives
 
-**Response**
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/overlay/api/heat` | Conversation heat levels — query: `?key=<conv_key>` |
+| POST | `/overlay/api/directive` | Issue a dialog directive — body: `{character_id, scene, type, value, turns?}` |
+| GET | `/overlay/api/directive/<character_id>` | Check active directive — query: `?scene=` |
 
-```json
-{
-  "ok": true,
-  "mood": "happy",
-  "energy": 0.8,
-  "inhibition": 0.3,
-  "arousal": 0.2,
-  "happiness": 0.7
-}
-```
+Directive types: `force_response`, `must_include`, `style_lock`,
+`topic_steer`, `mood_set`, `refuse`.
 
-#### `POST /overlay/api/character/<character_id>/state`
+### Simulation Interaction
 
-Update character state fields.  Accepts any combination of Registry and
-Stats fields.
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/overlay/api/act` | Inject message or event — body: `{action, agent_id, message, scene, ...}` |
+| GET | `/overlay/api/memory/<agent_id>` | Browse RAG memories — query: `?q=&limit=10` |
+| GET | `/overlay/api/skills` | List all registered skills |
 
-**Request body (JSON)**
+### Shared Boards
 
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `mode` | string | `"delta"` | `"delta"` (additive) or `"set"` (absolute) |
-| `source` | string | `"overlay_api"` | Audit trail source identifier |
-| `scene` | string | `""` | Target scene context |
-| `persist` | bool | `false` | Persist changes to database |
-| *(others)* | any | — | State fields to update (e.g. `mood`, `energy`) |
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/overlay/api/boards` | List all shared boards |
+| GET | `/overlay/api/boards/<id>/scores` | Get highscores — query: `?limit=10` |
+| GET | `/overlay/api/boards/<id>/messages` | Get board messages — query: `?limit=50` |
+| POST | `/overlay/api/boards/<id>/messages` | Post to a board — body: `{author_id, author_name, content}` |
 
-```json
-{
-  "mood": "excited",
-  "energy": 0.2,
-  "mode": "delta",
-  "source": "overlay_api",
-  "persist": true
-}
-```
+### Training & NotebookLM
 
-**Response** — returns the updated state snapshot.
-
-```json
-{
-  "ok": true,
-  "mood": "excited",
-  "energy": 1.0,
-  "inhibition": 0.3
-}
-```
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/overlay/api/training/config` | Training pipeline configuration |
+| GET | `/overlay/api/training/status` | Training jobs status |
+| GET | `/overlay/api/training/datasets` | List dataset files with sizes |
+| GET | `/overlay/api/notebooklm/status` | NotebookLM proxy status + config |
 
 ---
 
-### Conversation Heat
+## TTS API (port 8600)
 
-#### `GET /overlay/api/heat`
+Base URL: `http://localhost:8600`
 
-Get conversation heat levels for all active conversations.
+FastAPI server using Qwen3-TTS models (0.6B fast, 1.7B complex/emotional).
 
-**Query params**
+### Generation
 
-| Param | Type | Default | Description |
-|-------|------|---------|-------------|
-| `key` | string | *(none)* | Specific conversation key (omit for all) |
+| Method | Endpoint | Description | Body / Params |
+|--------|----------|-------------|---------------|
+| POST | `/generate` | Generate speech from text | `{text, voice_design?, character_id?, model_size?, sample_rate?, max_duration?}` |
+| POST | `/generate_stream` | Stream audio as SSE (base64 WAV chunks) | `{text, voice_design?, character_id?, model_size?, sample_rate?, max_duration?}` |
+| WS | `/ws/stream` | Real-time audio push over WebSocket | Send JSON: `{text, voice_design?, character_id?, model_size?}` |
+| POST | `/batch` | Multi-line generation + optional stitching | `{lines[{text, voice_design?, ...}], stitch?, gap_ms?, post_process?}` |
 
-**Response (all conversations)**
+**`POST /generate` response:**
 
 ```json
 {
-  "ok": true,
-  "conversations": { "maya:phone": 3.2, "luna:bedroom": 1.0 }
+  "job_id": "abc123",
+  "status": "completed",
+  "filename": "tts_abc123.wav",
+  "duration": 3.2,
+  "download_url": "/download/tts_abc123.wav"
 }
 ```
 
-**Response (specific key — `?key=maya:phone`)**
+Long texts return `{"job_id": "...", "status": "queued"}` — poll via
+`GET /jobs/{job_id}`.
 
-```json
-{
-  "ok": true,
-  "key": "maya:phone",
-  "heat": 3.2,
-  "directive": "allow"
-}
+**`POST /generate_stream` SSE events:**
+
+```
+data: {"chunk": "<base64-wav>", "duration": 1.5, "index": 0}
+data: {"done": true, "total_duration": 3.2, "chunks": 2}
+```
+
+**`WS /ws/stream` protocol:**
+Client sends JSON text frame → server replies with binary WAV frames →
+final JSON text frame `{"done": true, "total_duration": 3.2, "chunks": 2}`.
+
+### Jobs & Files
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/jobs/{job_id}` | Poll async generation status |
+| GET | `/download/{filename}` | Download a generated WAV file |
+
+### Voices
+
+| Method | Endpoint | Description | Body / Params |
+|--------|----------|-------------|---------------|
+| GET | `/voices` | List all voice designs (presets + character casts) | — |
+| POST | `/cast` | Save a voice design for a character | `{character_id, description, model_size?, reference_audio?, tags?}` |
+
+### Health & Status
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/health` | Quick health check |
+| GET | `/status` | Server status: model loaded, queue depth, totals |
+
+---
+
+## Socket.IO Events
+
+All Flask scenes use [Flask-SocketIO](https://flask-socketio.readthedocs.io/).
+Connect: `const socket = io('http://localhost:<port>');`
+
+### Phone Scene (port 5555)
+
+| Event | Direction | Payload | Description |
+|-------|-----------|---------|-------------|
+| `message_new` | Server→Client | `{thread_id, message, char_name?, mood?}` | New message in a thread |
+| `thread_updated` | Server→Client | `{thread_id}` | Thread metadata changed |
+| `typing` | Server→Client | `{thread_id, char_id, active}` | Character typing indicator |
+| `game_event` | Server→Client | `{thread_id, event, ...}` | Game started/challenge/ended |
+| `mood_update` | Server→Client | `{...payload}` | Character mood changed |
+| `story_beat` | Server→Client | `{...payload}` | Story beat triggered |
+| `admin_wipe` | Server→Client | `{messages, media}` | Admin wipe completed |
+
+### Bedroom Scene (port 5556)
+
+| Event | Direction | Payload | Description |
+|-------|-----------|---------|-------------|
+| `connect` | Client→Server | — | Server sends `scene_state` + `constants` |
+| `request_state` | Client→Server | — | Request full state broadcast |
+| `chat_message` | Bidirectional | `{name, message, timestamp}` | Chat in the scene |
+| `quick_stat` | Client→Server | `{character_id, stat, delta}` | Adjust a stat quickly |
+| `scene_state` | Server→Client | `{...full state}` | Full scene state broadcast |
+| `time_changed` | Server→Client | `{time, lighting}` | Time of day changed |
+| `scene_event` | Server→Client | `{type, message}` | Environment event fired |
+| `menace_event` | Server→Client | `{type, message}` | Legacy event (alias) |
+| `director_speaks` | Server→Client | `{name, message, timestamp}` | Director broadcast |
+| `conversation_started` | Server→Client | `{type, line, speaker}` | Themed conversation began |
+| `bedgame_started` | Server→Client | `{...game state}` | Bed game started |
+| `bedgame_action` | Server→Client | `{...record, next_player, game_over}` | Bed game turn |
+| `bedgame_ended` | Server→Client | `{reason}` | Bed game ended |
+| `environment_update` | Server→Client | `{...payload}` | Environment state update |
+| `mood_update` | Server→Client | `{...payload}` | Character mood change |
+| `story_beat` | Server→Client | `{...payload}` | Story beat triggered |
+
+### Casino Scene (port 5559)
+
+| Event | Direction | Payload | Description |
+|-------|-----------|---------|-------------|
+| `game_update` | Server→Client | `{...game state}` | Hand/bet/fold/showdown result |
+| `casino_event` | Server→Client | `{...event}` | Random casino event |
+
+### Realm Scene (port 5562)
+
+| Event | Direction | Payload | Description |
+|-------|-----------|---------|-------------|
+| `game_started` | Server→Client | `{...game state}` | New game started |
+| `turn_update` | Server→Client | `{...game state}` | Turn resolved |
+| `desperation` | Server→Client | `{success, ...}` | Desperation dice result |
+| `mutiny_started` | Server→Client | `{duration}` | Mutiny mode activated |
+| `item_stolen` | Server→Client | `{...item}` | Assistant stole an item |
+| `murder_started` | Server→Client | `{...result, narration}` | Murder mystery started |
+| `accusation_result` | Server→Client | `{won?, remaining?}` | Accusation outcome |
+| `combat_started` | Server→Client | `{enemy_name, enemy_hp, ...}` | Combat initiated |
+| `combat_turn` | Server→Client | `{player_damage, enemy_hp, ...}` | Combat round |
+| `combat_victory` | Server→Client | `{defeated, xp_gained, loot?}` | Enemy defeated |
+| `combat_flee` | Server→Client | `{fled, enemy_damage?}` | Flee attempt result |
+| `combat_defend` | Server→Client | `{enemy_damage, player_hp}` | Defend result |
+| `combat_item_used` | Server→Client | `{healed?, item_damage?, ...}` | Item used in combat |
+| `location_changed` | Server→Client | `{from_name, to_name, ...}` | Player moved |
+| `quest_accepted` | Server→Client | `{title, description, ...}` | Quest accepted |
+| `equipment_changed` | Server→Client | `{...equipment}` | Equipment changed |
+| `gold_changed` | Server→Client | `{gold}` | Gold amount changed |
+
+### Overlay (namespace `/overlay`)
+
+| Event | Direction | Payload | Description |
+|-------|-----------|---------|-------------|
+| `connect` | Client→Server | — | Server sends `overlay_activity` snapshot |
+| `overlay_refresh` | Client→Server | — | Request full state refresh |
+| `overlay_activity` | Server→Client | `{...snapshot}` | ActivityBus snapshot |
+
+---
+
+## MCP Tools
+
+50+ tools are available via the MCP (Model Context Protocol) integration,
+enabling LLM agents to interact with the simulation programmatically.
+
+Tool categories include: memory, image generation (ComfyUI), voice (TTS),
+video, character state, scene control, training, and research.
+
+See **[MCP_FRAMEWORK.md](MCP_FRAMEWORK.md)** for the full MCP tool
+reference, protocol details, and integration guide.

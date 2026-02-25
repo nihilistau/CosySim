@@ -2,6 +2,21 @@
 
 All notable changes to CosySim are documented here.
 
+## Sprint 14 — Framework Adoption & Scene AAA Upgrade
+- **Monolith split**: cosysim_server.py → engine/mcp/tools/ (8 domain modules, 67 functions extracted)
+- **Governance migration**: All 11 scenes now use build_governance_context() + StateCoordinator
+- **CommandCenter**: Live scene feed, status cards, character viewer, scene control, system metrics
+- **Realm gameplay**: d20 combat, 10 locations, equipment (12 items), economy (gold/shop/levels)
+- **Tests**: 1,756 (was 1,397, +359 new tests)
+- Test files: dialog_system, scene_rules_engine, character_registry, interaction_trees, character_agent, bedroom_game, casino_game, phone_routing
+
+## Sprint 13 — Training Pipeline, NotebookLM MCP, TTS Streaming
+- **Training**: merge_adapters.py, 4 training skills, evaluate_model(), 2100 dataset examples
+- **NotebookLM MCP**: proxy server, 5 skills, config, Phone Research app
+- **TTS streaming**: sentence-level chunking, SSE endpoint, WebSocket endpoint
+- **Dead code**: Removed shadowed functions + unused protocol
+- **Tests**: 1,397 (was 1,313, +84 new tests)
+
 ## [4.0.1] — 2026-02-24
 
 ### TagRegistry — Extensible Tag System
