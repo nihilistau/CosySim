@@ -2,6 +2,44 @@
 
 All notable changes to CosySim are documented here.
 
+## v0.51 — Multi-Model Orchestration & Skill Wiring
+
+### InferenceOrchestrator (NEW)
+- **Unified inference API** — Single `infer()` call bridges ModelManager, InferenceRouter, and ResourceManager
+- **Agent profiles** — Register per-agent model preferences (tier, temperature, token budget)
+- **Tier-aware routing** — Automatic tier selection: classify→router, act/tools→GPU, background→utility
+- **Performance tracking** — Rolling TPS/latency per tier with adaptive routing (high error rate → fallback)
+- **Runtime config** — Update model mode, strategy, VRAM caps, concurrency at runtime via `update_config()`
+- **Comprehensive status** — Unified status API aggregating orchestrator + model manager + resource manager
+
+### Phone Skills — Wired to Database
+- `phone_send_message` — Now persists via `phone_db.save_message()` with Socket.IO broadcast
+- `phone_check_messages` — Enhanced with total unread count, message previews, and unread markers
+- `phone_start_game` — Creates persistent game session via `phone_db.create_game_session()`
+- `phone_game_action` — Updates game state with action history and round tracking
+- `phone_generate_image` — Integrates ComfyUI for real image generation, saves to gallery thread
+- `phone_toggle_autotxt` — Sets scene `_autotxt_muted` flag with Socket.IO status broadcast
+
+### Config Validator Upgrade
+- Added 11 LMStudio config validations: `load_mode`, `concurrent_slots`, `jit_ttl_seconds`, `vram_cap_mb`, `strategy`, `default_ttl`, `gpu`, `context_length`
+- Added `values` validation support (enum-like allowed value checking)
+- Added `logging.level` allowed values validation
+- Schema expanded from 8 → 22 validated keys
+
+### Gallery Scene Upgrade
+- Added background ticker (45s interval) for ambient mood drift and visitor events
+- Characters now evolve mood autonomously between skill calls
+- Ambient gallery events (visitors, lighting shifts) add atmosphere
+- State broadcast on each tick for real-time UI updates
+- Proper `stop()` cleanup with ticker thread join
+
+### Scene Consistency
+- Fixed 5 scene `__init__.py` files (bedroom, casino, lounge, tavern, warzone)
+- All 13 graded scenes properly export scene class in `__all__`
+
+### Tests
+- **64 new tests** (1,839 → 1,903 total): orchestrator (25), phone skills (19), config validator (20)
+
 ## v0.50b — Nexus Q&A, Research Manager & YouTube Import
 
 ### Bedroom v6 — Camera Views & Layout Overhaul

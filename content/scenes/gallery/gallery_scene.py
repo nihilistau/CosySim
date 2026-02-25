@@ -189,6 +189,10 @@ class GalleryScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
         # Streaming enabled by default (v2.7 showcase)
         self.streaming_enabled = True
 
+        # Background ticker
+        self._ticker_stop = threading.Event()
+        self._ticker_thread: Optional[threading.Thread] = None
+
         # Flask
         self.app = Flask(
             __name__,
@@ -251,15 +255,78 @@ class GalleryScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
             fw.on("artwork_created", lambda evt: self._on_art_event(evt))
         except Exception as exc:
             logger.warning("MCP init skipped: %s", exc)
+        # Start background ticker for ambient updates
+        self._start_ticker()
         logger.info("GalleryScene started on %s:%s", self.host, self.port)
         self.socketio.run(self.app, host=self.host, port=self.port, debug=False, use_reloader=False)
 
     def stop(self) -> None:
+        self._ticker_stop.set()
+        if self._ticker_thread and self._ticker_thread.is_alive():
+            self._ticker_thread.join(timeout=3)
         try:
             get_framework().save_state()
         except Exception:
             pass
         logger.info("GalleryScene stopped")
+
+    def _start_ticker(self, interval: float = 45.0) -> None:
+        """Background loop for ambient gallery events."""
+        def _loop():
+            while not self._ticker_stop.is_set():
+                self._ticker_stop.wait(interval)
+                if self._ticker_stop.is_set():
+                    break
+                try:
+                    self._gallery_tick()
+                except Exception as e:
+                    logger.debug("Gallery tick error: %s", e)
+
+        self._ticker_thread = threading.Thread(
+            target=_loop, daemon=True, name="GalleryTicker"
+        )
+        self._ticker_thread.start()
+
+    def _gallery_tick(self) -> None:
+        """Periodic ambient update — mood decay, visitor events, state broadcast."""
+        if not self.characters:
+            return
+
+        changes = []
+
+        for cid, char in self.characters.items():
+            # Mood drift (small random walk)
+            old_mood = char.mood
+            drift = random.choice([-0.02, -0.01, 0.0, 0.01, 0.02])
+            char.mood = max(0.0, min(1.0, char.mood + drift))
+            if abs(char.mood - old_mood) > 0.01:
+                changes.append(f"{cid}: mood {old_mood:.2f}→{char.mood:.2f}")
+
+        # Random ambient event (10% chance per tick)
+        if random.random() < 0.10 and self.artworks:
+            artwork = random.choice(list(self.artworks.values()))
+            events = [
+                f"A visitor pauses to admire '{artwork.title}'.",
+                f"Light shifts across '{artwork.title}', revealing new details.",
+                f"Quiet murmurs of appreciation surround '{artwork.title}'.",
+            ]
+            event_msg = random.choice(events)
+            self.gallery_log.append({
+                "time": datetime.now().isoformat(),
+                "type": "ambient",
+                "message": event_msg,
+            })
+            changes.append(event_msg)
+
+        # Broadcast state if anything changed
+        if changes:
+            try:
+                self.socketio.emit("gallery_update", {
+                    "characters": {cid: c.to_dict() for cid, c in self.characters.items()},
+                    "log": self.gallery_log[-5:],
+                })
+            except Exception:
+                pass
 
     def get_plugin_info(self) -> Dict[str, Any]:
         return {

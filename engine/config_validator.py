@@ -17,16 +17,30 @@ logger = logging.getLogger(__name__)
 
 # Schema: {dot_path: {"type": type, "required": bool, "range": (min, max)|None}}
 _SCHEMA: Dict[str, Dict[str, Any]] = {
+    # System
     "system.name":              {"type": str,   "required": True},
     "system.version":           {"type": str,   "required": True},
     "database.sqlite.path":     {"type": str,   "required": True},
+    # Scene ports
     "scenes.phone.port":        {"type": int,   "required": True,  "range": (1024, 65535)},
     "scenes.bedroom.port":      {"type": int,   "required": True,  "range": (1024, 65535)},
     "scenes.dashboard.port":    {"type": int,   "required": True,  "range": (1024, 65535)},
+    # Legacy LLM
     "llm.default.base_url":     {"type": str,   "required": True},
     "llm.default.temperature":  {"type": float, "required": False, "range": (0.0, 2.0)},
     "llm.default.max_tokens":   {"type": int,   "required": False, "range": (1, 100000)},
-    "logging.level":            {"type": str,   "required": False},
+    # LMStudio orchestration
+    "lmstudio.load_mode":       {"type": str,   "required": False, "values": ["concurrent", "jit", "jit_ttl"]},
+    "lmstudio.concurrent_slots": {"type": int,  "required": False, "range": (1, 32)},
+    "lmstudio.jit_ttl_seconds": {"type": int,   "required": False, "range": (10, 3600)},
+    "lmstudio.vram_cap_mb":     {"type": int,   "required": False, "range": (1000, 100000)},
+    "lmstudio.resource_manager.strategy": {"type": str, "required": False,
+        "values": ["single_big", "concurrent", "multi_small", "jit_swap", "speculative", "hybrid"]},
+    "lmstudio.resource_manager.default_ttl": {"type": int, "required": False, "range": (10, 3600)},
+    "lmstudio.default_load_opts.gpu":        {"type": float, "required": False, "range": (0.0, 1.0)},
+    "lmstudio.default_load_opts.context_length": {"type": int, "required": False, "range": (512, 131072)},
+    # Logging
+    "logging.level":            {"type": str,   "required": False, "values": ["DEBUG", "INFO", "WARNING", "ERROR"]},
     "comfyui.base_url":         {"type": str,   "required": False},
 }
 
@@ -75,6 +89,13 @@ def validate_config(cfg: Dict[str, Any]) -> List[str]:
             lo, hi = rng
             if value < lo or value > hi:
                 warnings.append(f"Config '{path}': value {value} outside range [{lo}, {hi}]")
+
+        allowed = rules.get("values")
+        if allowed and isinstance(value, str):
+            if value not in allowed:
+                warnings.append(
+                    f"Config '{path}': '{value}' not in allowed values: {allowed}"
+                )
 
     # Port uniqueness
     ports: Dict[str, int] = {}

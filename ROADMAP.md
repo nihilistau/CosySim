@@ -1,6 +1,6 @@
 # CosySim Roadmap
 
-> Current: **v0.50b** | Last updated: 2025-02-25
+> Current: **v0.51** | Last updated: 2025-02-25
 
 ## Philosophy
 

@@ -1,10 +1,10 @@
 # CosySim — AI Agent Simulation Framework
 
-> v0.50b — A local-first AI simulation platform powered by LMStudio with a custom MCP framework and Nexus knowledge system.
+> v0.51 — A local-first AI simulation platform powered by LMStudio with a custom MCP framework and Nexus knowledge system.
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Tests: 1839](https://img.shields.io/badge/tests-1839%20passing-brightgreen.svg)]()
+[![Tests: 1903](https://img.shields.io/badge/tests-1903%20passing-brightgreen.svg)]()
 
 ## Overview
 

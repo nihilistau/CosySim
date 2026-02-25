@@ -91,6 +91,8 @@ from .tool_factory     import ToolSpec, tool, from_callable, run_with_tools
 from .sdk_client       import SDKClient, get_sdk_client, SDK_AVAILABLE
 # Inference router (three-tier priority queue)
 from .router           import InferenceRouter, Priority, Tier, Channel
+# Unified orchestrator
+from .orchestrator     import InferenceOrchestrator, get_orchestrator, AgentProfile
 # Tool registry (MCP ↔ SDK bridge)
 from .tool_registry    import (
     ToolRegistry as SDKToolRegistry, ToolScope,
@@ -120,6 +122,8 @@ __all__ = [
     "SDKClient", "get_sdk_client", "SDK_AVAILABLE",
     # Inference router
     "InferenceRouter", "Priority", "Tier", "Channel",
+    # Unified orchestrator
+    "InferenceOrchestrator", "get_orchestrator", "AgentProfile",
     # Tool registry
     "SDKToolRegistry", "ToolScope", "get_tool_registry", "reset_tool_registry",
 ]
