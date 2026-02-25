@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CosySim — Bedroom v4</title>
+    <title>CosySim — Bedroom v6</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
@@ -405,12 +405,24 @@
     <div id="tab-settings" class="tab-content">
 
         <section class="panel-section">
+            <h3>Camera Views</h3>
+            <p class="muted-hint">Lock camera to a room area</p>
+            <div id="viewPresetsGrid" class="view-presets-grid"></div>
+            <div style="display:flex;gap:6px;margin-top:6px">
+                <button class="btn-sm" onclick="cycleView(-1)" title="Previous view">◀ Prev</button>
+                <button class="btn-sm" onclick="cycleView(1)" title="Next view">Next ▶</button>
+            </div>
+        </section>
+
+        <section class="panel-section">
             <h3>Camera</h3>
             <div class="settings-grid">
                 <label class="mini-label">Camera Speed</label>
                 <input type="range" id="settingCameraSpeed" min="1" max="10" value="5" oninput="updateSetting('cameraSpeed', this.value)">
                 <label class="mini-label">FOV</label>
                 <input type="range" id="settingFov" min="30" max="90" value="55" oninput="updateSetting('fov', this.value)">
+                <label class="mini-label">Zoom</label>
+                <input type="range" id="settingZoom" min="2" max="30" value="10" oninput="updateSetting('zoom', this.value)">
             </div>
         </section>
 
@@ -516,7 +528,7 @@
     </span>
 </div>
 
-<script src="{{ url_for('static', filename='js/character_models.js') }}?v=2.0"></script>
-<script src="{{ url_for('static', filename='js/bedroom.js') }}?v=5.0"></script>
+<script src="{{ url_for('static', filename='js/character_models.js') }}?v=3.0"></script>
+<script src="{{ url_for('static', filename='js/bedroom.js') }}?v=6.0"></script>
 </body>
 </html>

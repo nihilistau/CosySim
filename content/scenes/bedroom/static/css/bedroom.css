@@ -536,6 +536,34 @@ body {
     background: transparent;
 }
 
+/* ── Camera View Presets ─────────────────────────────── */
+.view-presets-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px;
+}
+.view-preset-btn {
+    padding: 6px 4px;
+    background: rgba(100,181,246,0.08);
+    border: 1px solid rgba(100,181,246,0.2);
+    border-radius: 6px;
+    color: #8aa;
+    cursor: pointer;
+    font-size: 10px;
+    text-align: center;
+    transition: all 0.2s;
+}
+.view-preset-btn:hover {
+    background: rgba(100,181,246,0.2);
+    color: #fff;
+}
+.view-preset-btn.active {
+    background: rgba(255,107,157,0.2);
+    border-color: rgba(255,107,157,0.5);
+    color: #ff6b9d;
+    font-weight: bold;
+}
+
 @media (max-width: 960px) {
     .side-panel { width: 260px; }
     .activity-feed { width: calc(100% - 260px); }

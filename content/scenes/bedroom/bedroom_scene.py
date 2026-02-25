@@ -864,7 +864,7 @@ def _build_bedroom_map() -> SceneMap:
             capacity=3,
             properties={
                 "privacy": 0.95, "comfort": 1.0, "spiciness": 10,
-                "pos": {"x": -3, "y": 0, "z": -3},
+                "pos": {"x": -5, "y": 0, "z": -1},
                 "mountable": True,
                 "mount_positions": [
                     "laying down", "on all fours", "straddling", "riding",
@@ -891,7 +891,7 @@ def _build_bedroom_map() -> SceneMap:
             capacity=2,
             properties={
                 "privacy": 0.5, "comfort": 0.85, "spiciness": 8,
-                "pos": {"x": 3, "y": 0, "z": 0},
+                "pos": {"x": 5.5, "y": 0, "z": 0},
                 "mountable": True,
                 "mount_positions": [
                     "sitting", "straddling", "bent over", "riding",
@@ -916,7 +916,7 @@ def _build_bedroom_map() -> SceneMap:
             capacity=2,
             properties={
                 "privacy": 0.35, "comfort": 0.5, "spiciness": 6,
-                "pos": {"x": 0, "y": 0, "z": -4.5},
+                "pos": {"x": -3, "y": 0, "z": -5.5},
                 "mountable": True,
                 "mount_positions": [
                     "sitting", "standing", "leaning", "bent over",
@@ -941,7 +941,7 @@ def _build_bedroom_map() -> SceneMap:
             capacity=2,
             properties={
                 "privacy": 1.0, "comfort": 0.8, "spiciness": 10,
-                "pos": {"x": 5.8, "y": 0, "z": -4},
+                "pos": {"x": 6.5, "y": 0, "z": -4.5},
                 "mountable": True,
                 "mount_positions": [
                     "standing", "kneeling", "bent over", "against the wall",
@@ -967,7 +967,7 @@ def _build_bedroom_map() -> SceneMap:
             capacity=2,
             properties={
                 "privacy": 0.15, "comfort": 0.45, "spiciness": 8,
-                "pos": {"x": 5, "y": 0, "z": 4},
+                "pos": {"x": 5, "y": 0, "z": 5.5},
                 "mountable": True,
                 "mount_positions": [
                     "standing", "leaning", "bent over", "against the wall",
@@ -993,7 +993,7 @@ def _build_bedroom_map() -> SceneMap:
             capacity=2,
             properties={
                 "privacy": 0.4, "comfort": 0.5, "spiciness": 9,
-                "pos": {"x": -5.5, "y": 0, "z": 0},
+                "pos": {"x": 3, "y": 0, "z": -5.8},
                 "mountable": True,
                 "mount_positions": [
                     "standing", "sitting", "kneeling", "bent over",
@@ -1017,7 +1017,7 @@ def _build_bedroom_map() -> SceneMap:
             capacity=2,
             properties={
                 "privacy": 0.1, "comfort": 0.2, "spiciness": 7,
-                "pos": {"x": 5, "y": 0, "z": 3},
+                "pos": {"x": 7.5, "y": 0, "z": 3},
                 "mountable": True,
                 "mount_positions": [
                     "standing", "leaning", "against the wall",
@@ -1044,7 +1044,7 @@ def _build_bedroom_map() -> SceneMap:
             capacity=2,
             properties={
                 "privacy": 0.7, "comfort": 0.9, "spiciness": 8,
-                "pos": {"x": 0, "y": 0, "z": 1.5},
+                "pos": {"x": -2, "y": 0, "z": 4},
                 "mountable": True,
                 "mount_positions": [
                     "lying down", "sitting", "kneeling", "on all fours",
@@ -1192,7 +1192,7 @@ class BedroomScene(BaseScene, MCPSceneMixin, mcp_scene_id="bedroom"):
                 "props_held": profile.props_held,
                 "personality": profile.personality_key,
                 "stats": profile.stats.to_dict(),
-                "compliance": round(profile.stats.compliance_score(
+                "compliance_score": round(profile.stats.compliance_score(
                     PERSONALITY_PROFILES.get(profile.personality_key, {}).get("compliance_mod", 0)
                 ), 1),
                 "feeling": profile.stats.describe(),
