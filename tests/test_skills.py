@@ -85,3 +85,45 @@ class TestChainContext:
         # In a fresh thread-local, should return empty dict
         ctx = get_chain_context()
         assert isinstance(ctx, dict)
+
+
+class TestSceneSkillsRegistration:
+    """All scene skills register correctly when imported."""
+
+    SCENE_PACKS = [
+        "bedroom", "casino", "coders", "command_center", "gallery",
+        "heist", "lounge", "neoncity", "phone", "realm", "warzone",
+    ]
+
+    @classmethod
+    def setup_class(cls):
+        """Import all scene packages to trigger @skill registration."""
+        for name in cls.SCENE_PACKS:
+            try:
+                __import__(f"content.scenes.{name}")
+            except Exception:
+                pass
+
+    def test_all_scene_packs_have_skills(self):
+        for pack in self.SCENE_PACKS:
+            tools = SKILL_REGISTRY.get_pack_tools(pack)
+            assert len(tools) >= 1, f"Pack '{pack}' has no registered skills"
+
+    def test_minimum_skill_count(self):
+        total = len(SKILL_REGISTRY._by_name)
+        assert total >= 80, f"Expected 80+ skills, got {total}"
+
+    def test_skills_have_descriptions(self):
+        for name, meta in SKILL_REGISTRY._by_name.items():
+            if meta.pack in self.SCENE_PACKS:
+                assert meta.description, f"Skill '{name}' in pack '{meta.pack}' has no description"
+
+    def test_skills_are_callable(self):
+        for name, meta in SKILL_REGISTRY._by_name.items():
+            assert callable(meta.func), f"Skill '{name}' func is not callable"
+
+    def test_no_duplicate_skill_names(self):
+        seen = {}
+        for name, meta in SKILL_REGISTRY._by_name.items():
+            assert name not in seen, f"Duplicate skill name: {name}"
+            seen[name] = meta.pack
