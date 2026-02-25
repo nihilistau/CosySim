@@ -1120,6 +1120,15 @@ class BedroomScene(BaseScene, MCPSceneMixin, mcp_scene_id="bedroom"):
 
     # ── Helpers ──────────────────────────────────────────────────────────
 
+    def _get_governance_context(self, agent_id: str) -> str:
+        """Get governance directives from the interceptor pipeline."""
+        try:
+            from engine.mcp.comms_framework import build_governance_context
+            ctx = build_governance_context(agent_id, "bedroom", "")
+            return f"{ctx}\n\n" if ctx else ""
+        except Exception:
+            return ""
+
     def _refresh_location_state(self):
         self.scene_state["locations"] = {}
         for loc in self.scene_map.locations:
@@ -1268,7 +1277,13 @@ class BedroomScene(BaseScene, MCPSceneMixin, mcp_scene_id="bedroom"):
             val = int(m.group(2)) * sign
             stat = m.group(3).lower()
             for cid, profile in self.profiles.items():
-                profile.stats.adjust(**{stat: val * 0.5})
+                prop_delta = {stat: val * 0.5}
+                profile.stats.adjust(**prop_delta)
+                try:
+                    from engine.mcp.state_coordinator import get_coordinator
+                    get_coordinator().update(cid, source="prop_effect", scene="bedroom", **prop_delta)
+                except Exception:
+                    pass
 
     def _end_bed_game(self, reason: str = "The game ends."):
         """End the bed sex game and announce it."""
@@ -1383,6 +1398,11 @@ class BedroomScene(BaseScene, MCPSceneMixin, mcp_scene_id="bedroom"):
             if cid not in self.profiles:
                 return jsonify({"error": "Character not found"}), 404
             self.profiles[cid].stats.adjust(**{stat: delta})
+            try:
+                from engine.mcp.state_coordinator import get_coordinator
+                get_coordinator().update(cid, source="director_adjust", scene="bedroom", **{stat: delta})
+            except Exception:
+                pass
             self._broadcast_state()
             self._sync_to_mcp("stat_adjusted", {"character_id": cid, "stat": stat, "delta": delta})
             return jsonify({"success": True, "stats": self.profiles[cid].stats.to_dict()})
@@ -1397,6 +1417,11 @@ class BedroomScene(BaseScene, MCPSceneMixin, mcp_scene_id="bedroom"):
                 return jsonify({"error": "Character not found"}), 404
             setattr(self.profiles[cid].stats, stat, value)
             self.profiles[cid].stats.clamp()
+            try:
+                from engine.mcp.state_coordinator import get_coordinator
+                get_coordinator().update(cid, source="director_set", scene="bedroom", **{stat: value})
+            except Exception:
+                pass
             self._broadcast_state()
             return jsonify({"success": True})
 
@@ -1410,6 +1435,11 @@ class BedroomScene(BaseScene, MCPSceneMixin, mcp_scene_id="bedroom"):
             self.profiles[cid].outfit = outfit
             if outfit in ("nothing", "lingerie"):
                 self.profiles[cid].stats.adjust(arousal=10, explicitness=5)
+                try:
+                    from engine.mcp.state_coordinator import get_coordinator
+                    get_coordinator().update(cid, source="outfit_change", scene="bedroom", arousal=10, explicitness=5)
+                except Exception:
+                    pass
             self._inject_to_loop("(environment)", f"{self.characters[cid].name} is now wearing: {outfit}.", "environment")
             self._broadcast_state()
             self._sync_to_mcp("outfit_changed", {"character_id": cid, "outfit": outfit})
@@ -1753,6 +1783,11 @@ class BedroomScene(BaseScene, MCPSceneMixin, mcp_scene_id="bedroom"):
                     deltas = {k: v for k, v in boosted_fx.items()
                               if hasattr(self.profiles[pid].stats, k)}
                     self.profiles[pid].stats.adjust(**deltas)
+                    try:
+                        from engine.mcp.state_coordinator import get_coordinator
+                        get_coordinator().update(pid, source="bedgame_action", scene="bedroom", **deltas)
+                    except Exception:
+                        pass
             # Record in history
             explicit_level = BED_GAME_ACTIONS.get(action_id, {}).get("explicit_level", 2) if action_id else 2
             # Track escalation
@@ -1864,8 +1899,13 @@ class BedroomScene(BaseScene, MCPSceneMixin, mcp_scene_id="bedroom"):
             self.active_scenario = key
             sc = PREMADE_SCENARIOS[key]
             for stat, delta in sc.get("mood_shift", {}).items():
-                for profile in self.profiles.values():
+                for cid, profile in self.profiles.items():
                     profile.stats.adjust(**{stat: delta})
+                    try:
+                        from engine.mcp.state_coordinator import get_coordinator
+                        get_coordinator().update(cid, source="scenario_mood", scene="bedroom", **{stat: delta})
+                    except Exception:
+                        pass
             self._inject_to_loop("(Scene)", sc["opening"], "scenario")
             self.story_beats = list(sc.get("beats", []))
             self.scene_state["active_scenario"] = key
@@ -2207,6 +2247,11 @@ class BedroomScene(BaseScene, MCPSceneMixin, mcp_scene_id="bedroom"):
             delta = float(data.get("delta", 0))
             if cid in self.profiles and stat:
                 self.profiles[cid].stats.adjust(**{stat: delta})
+                try:
+                    from engine.mcp.state_coordinator import get_coordinator
+                    get_coordinator().update(cid, source="quick_stat", scene="bedroom", **{stat: delta})
+                except Exception:
+                    pass
                 self._broadcast_state()
 
     # ── Agent Loop ───────────────────────────────────────────────────────
@@ -2262,9 +2307,10 @@ class BedroomScene(BaseScene, MCPSceneMixin, mcp_scene_id="bedroom"):
                 char, profile, self.scene_state, self.profiles,
                 self.story_beats, self.active_scenario,
             )
+            gov_ctx = self._get_governance_context(cid)
             self._inject_to_loop(
                 "(system)",
-                f"[ROLEPLAY CONTEXT for {char.name}]\n{rp_prompt}",
+                f"[ROLEPLAY CONTEXT for {char.name}]\n{gov_ctx}{rp_prompt}",
                 "system",
             )
 
