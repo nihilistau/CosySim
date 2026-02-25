@@ -11,7 +11,7 @@ import logging
 import time
 import uuid
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -133,7 +133,7 @@ class PhoneDB:
             if row:
                 return row["thread_id"]
             tid = str(uuid.uuid4())
-            now = datetime.utcnow().isoformat()
+            now = datetime.now(timezone.utc).isoformat()
             c.execute(
                 "INSERT INTO phone_threads(id,type,created_at,updated_at) VALUES(?,?,?,?)",
                 (tid, "dm", now, now),
@@ -149,7 +149,7 @@ class PhoneDB:
         """Create a group thread and return its id."""
         with self.conn() as c:
             tid = str(uuid.uuid4())
-            now = datetime.utcnow().isoformat()
+            now = datetime.now(timezone.utc).isoformat()
             c.execute(
                 "INSERT INTO phone_threads(id,type,name,created_at,updated_at) VALUES(?,?,?,?,?)",
                 (tid, "group", name, now, now),
@@ -235,7 +235,7 @@ class PhoneDB:
         conversation_id: Optional[str] = None,
     ) -> Dict:
         msg_id = str(uuid.uuid4())
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(timezone.utc).isoformat()
         with self.conn() as c:
             c.execute(
                 """INSERT INTO phone_messages
@@ -298,7 +298,7 @@ class PhoneDB:
             ).fetchone()
             if not last:
                 return
-            now = datetime.utcnow().isoformat()
+            now = datetime.now(timezone.utc).isoformat()
             c.execute(
                 """INSERT INTO phone_reads(thread_id, character_id, last_read_id, read_at)
                    VALUES(?,?,?,?)
@@ -369,7 +369,7 @@ class PhoneDB:
     def create_game_session(self, thread_id: str, char_id: str,
                             session_type: str = "truth_or_dare") -> str:
         gid = str(uuid.uuid4())
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(timezone.utc).isoformat()
         with self.conn() as c:
             # Deactivate any existing session in same thread
             c.execute("UPDATE phone_game_sessions SET active=0 WHERE thread_id=?", (thread_id,))
@@ -396,7 +396,7 @@ class PhoneDB:
         return d
 
     def update_game_state(self, session_id: str, state: Dict) -> None:
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(timezone.utc).isoformat()
         with self.conn() as c:
             c.execute(
                 "UPDATE phone_game_sessions SET state=?, updated_at=? WHERE id=?",
@@ -404,7 +404,7 @@ class PhoneDB:
             )
 
     def end_game_session(self, session_id: str) -> None:
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(timezone.utc).isoformat()
         with self.conn() as c:
             c.execute(
                 "UPDATE phone_game_sessions SET active=0, updated_at=? WHERE id=?",
