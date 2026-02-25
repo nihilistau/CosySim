@@ -7,17 +7,18 @@
 
 ## Project Overview
 
-CosySim is a multi-scene AI simulation framework (v3.2, Sprint 15) built on
-a custom MCP pipeline with LMStudio v1 API integration. It orchestrates
-virtual agents across 15 interactive scenes, each with real-time state
-management, skill-based tool calling, dialog systems, and interceptor-governed
-agent behavior.
+CosySim is a multi-scene AI simulation framework (v0.50a) built on
+a custom MCP pipeline with LMStudio v1 API integration and Nexus knowledge system.
+It orchestrates virtual agents across 17 interactive scenes, each with real-time
+state management, skill-based tool calling, dialog systems, and interceptor-governed
+agent behavior. Nexus provides central knowledge management, rules engine,
+session tracking, and prompt versioning.
 
 **Core systems:** MCPFramework state tree · DialogSystem conversation threading
 · InterceptorPipeline agent governance · @skill decorator tools · EventChain
-audit logging · LMStudio v1 streaming with stateful conversations
+audit logging · LMStudio v1 streaming with stateful conversations · Nexus knowledge system
 
-**Test suite:** 1,756 tests across 69 files — run before and after changes.
+**Test suite:** 1,832 tests across 70+ files — run before and after changes.
 
 ## Quick Reference
 

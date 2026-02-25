@@ -1,18 +1,20 @@
 # CosySim — AI Agent Simulation Framework
 
-> A local-first AI simulation platform powered by LMStudio with a custom MCP framework.
+> v0.50a — A local-first AI simulation platform powered by LMStudio with a custom MCP framework and Nexus knowledge system.
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Tests: 1756](https://img.shields.io/badge/tests-1756%20passing-brightgreen.svg)]()
+[![Tests: 1832](https://img.shields.io/badge/tests-1832%20passing-brightgreen.svg)]()
 
 ## Overview
 
-CosySim is an AI agent simulation framework where every scene is a self-contained web application with its own agents, state, and game logic. Scenes range from a messaging app with dynamic mood tracking to a full LitRPG with dual-agent orchestration, a cyberpunk strategy board game, and an AI coding sandbox — all running locally against LMStudio.
+CosySim is an AI agent simulation framework and **meta-system** — a playground for designing, testing, benchmarking, and evolving AI agent interactions. Every scene is a self-contained web application with its own agents, state, and game logic. Scenes range from a messaging app with dynamic mood tracking to a full LitRPG with dual-agent orchestration, a cyberpunk strategy board game, and an AI coding sandbox — all running locally against LMStudio.
 
 What makes CosySim unique is its **Model Context Protocol (MCP) pipeline**. Agents don't just generate text — they call tools during inference for memory retrieval, media generation, game mechanics, and state mutation. A 25-interceptor governance pipeline wraps every inference call, injecting context, enforcing personality constraints, syncing mood and relationship state, and shaping responses before they reach the user.
 
-The framework is designed for builders who want to experiment with multi-agent orchestration, tool-augmented LLMs, and interactive simulations without cloud dependencies. Everything runs on your machine: LMStudio for inference, ChromaDB for memory, ComfyUI for image generation, and Qwen3-TTS for voice — all wired together through MCP skill packs.
+**Nexus** is the system's central nervous system — a knowledge management layer that tracks sessions, stores prompts with versioning, enforces rules across scopes, and enables self-improving feedback loops. Agents can submit ideas, log experiments, and query change history through Nexus skills.
+
+The framework is designed for builders who want to experiment with multi-agent orchestration, tool-augmented LLMs, and interactive simulations without cloud dependencies. Everything runs on your machine: LMStudio for inference, ChromaDB for memory, ComfyUI for image generation, Qwen3-TTS for voice, and Nexus for knowledge — all wired together through MCP skill packs.
 
 ## Quick Start
 
@@ -57,6 +59,8 @@ python launcher.py --status          # Check service health
 | **Coders** | 5564 | Flask | AI agent idle sim — agents write real code in sandboxed Python |
 | **Heist** | 5565 | Flask | Cooperative multi-agent heist with planning, execution, and escape phases |
 | **Command Center** | 5566 | Flask | War-room dashboard with live scene controls and system monitoring |
+| **Games** | 5567 | Flask | Multi-game arcade — word games, trivia, and creative challenges |
+| **Tavern** | 5558 | Flask | Dragon's Flagon — atmospheric fantasy tavern with NPC patrons |
 
 ### Utility Scenes
 
@@ -86,7 +90,7 @@ python launcher.py --status          # Check service health
 │  ├── phone/            Each scene has its own agents,   │
 │  ├── realm/            state, templates, and skill pack │
 │  ├── neoncity/                                          │
-│  └── ...               (11 game + 4 utility scenes)     │
+│  └── ...               (13 game + 4 utility scenes)     │
 ├─────────────────────────────────────────────────────────┤
 │  engine/               Reusable framework               │
 │  ├── agents/           CharacterAgent, VirtualAgent,    │
@@ -110,23 +114,24 @@ python launcher.py --status          # Check service health
 
 - **MCP Pipeline** — 25-interceptor governance pipeline wrapping every inference call. Interceptors inject context, enforce rules, sync state, and shape responses pre- and post-inference.
 - **Governance** — `AgentGovernor` + `InterceptorPipeline` with priority-ordered interceptors: personality guards, policy enforcers, mood sync, relationship tracking, activity logging, and more.
-- **Skill Packs** — 9 core packs (memory, character, comfyui, voice, tts, social, boards, training, notebooklm) + per-scene packs + nexus pack. Skills are Python functions exposed as MCP tools via the `@skill` decorator.
+- **Skill Packs** — 10 core packs (memory, character, comfyui, voice, tts, social, boards, training, notebooklm, nexus) + per-scene packs. Skills are Python functions exposed as MCP tools via the `@skill` decorator.
 - **Character System** — Stats, traits, mood, arousal, relationship scores, buffs, and tag-based personality modeling. Characters evolve through interactions.
 - **LMStudio Integration** — Native v1 API with `response_id` threading for KV cache reuse, SSE streaming with inline tag extraction, and stateful conversation branching.
 - **TTS** — Qwen3-TTS voice generation server with voice designer, presets, and MCP tool integration.
 - **Media Generation** — ComfyUI integration for images and video, wired as MCP tools with workflow templates.
-- **Nexus Knowledge System** — External knowledge management service ([C:\Files\Nexus](../../../Nexus)) with FTS5 search, NotebookLM integration (dual-backend: HTTP + browser), and agent ingress. CosySim connects via 4 nexus skills and the REST API on port 8700.
+- **Nexus Knowledge System** — Central knowledge management service with FTS5 search, NotebookLM integration, rules engine, session tracking, prompt versioning, and agent ingress. 10 Nexus MCP skills. REST API on port 8700.
 
 ## Project Stats
 
 | Metric | Count |
 |--------|-------|
-| Tests | 1,756 |
-| Game scenes | 11 |
+| Tests | 1,832 |
+| Game scenes | 13 |
 | Interceptors | 25 |
-| MCP tools | 50+ |
-| Core skill packs | 9 |
-| Scene skill packs | 11 |
+| MCP skills | 148+ |
+| Core skill packs | 10 |
+| Scene skill packs | 13 |
+| Nexus skills | 10 |
 
 ## Documentation
 
@@ -140,6 +145,7 @@ python launcher.py --status          # Check service health
 - [TTS & Voice](docs/TTS.md)
 - [Skills](docs/SKILLS.md)
 - [NotebookLM & Nexus](docs/NOTEBOOKLM.md)
+- [Nexus Integration](docs/NEXUS_INTEGRATION.md)
 - [Configuration](docs/CONFIGURATION.md)
 - [Admin Guide](docs/ADMIN_GUIDE.md)
 - [Testing](docs/TESTING.md)

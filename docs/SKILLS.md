@@ -1,4 +1,4 @@
-# CosySim Skills System — v3.2
+# CosySim Skills System — v0.50a
 
 Skills are Python callables that an LLM agent invokes as **tools** during inference.
 The `@skill` decorator registers them into the global `SKILL_REGISTRY`. LMStudio
@@ -38,6 +38,7 @@ VirtualAgentManager.infer()     engine/agents/virtual_agent_manager.py
 | `boards` | board_skills.py | Shared board game mechanics |
 | `training` | training_skills.py | `trigger_finetune`, `get_training_status`, `export_training_data`, `list_trained_models` |
 | `notebooklm` | notebooklm_skills.py | `notebooklm_ask`, `notebooklm_add_source`, `notebooklm_generate_audio`, `notebooklm_list_notebooks`, `notebooklm_search` |
+| `nexus` | nexus_skills.py | `nexus_search`, `nexus_add`, `nexus_nlm_ask`, `nexus_status`, `nexus_log_session`, `nexus_store_prompt`, `nexus_search_prompts`, `nexus_get_rules`, `nexus_submit_idea`, `nexus_changelog` |
 
 ### Scene Packs (content/scenes/{name}/{name}_skills.py)
 
@@ -47,13 +48,15 @@ VirtualAgentManager.infer()     engine/agents/virtual_agent_manager.py
 | `bedroom` | bedroom_skills.py | wardrobe, interactions, stats, consent, atmosphere, narrative, timed actions, furniture | 10 |
 | `neoncity` | neoncity_skills.py | player status, movement, combat, hacking, storm queries, events, end turn | 9 |
 | `phone` | phone_skills.py | message send/read, contacts, media, call controls | 6 |
-| `casino` | casino_skills.py | game state, betting, cards, table management, jackpots | 6 |
-| `heist` | heist_skills.py | crew management, intel, planning, execute phase, escape | 6 |
-| `lounge` | lounge_skills.py | jukebox, drinks, conversation starters, atmosphere, social | 6 |
+| `casino` | casino_skills.py | game state, betting, cards, table management, jackpots, check, raise, bluff | 9 |
+| `heist` | heist_skills.py | crew management, intel, planning, execute phase, escape | 7 |
+| `lounge` | lounge_skills.py | jukebox, drinks, secrets, back room, atmosphere, social, trust | 10 |
 | `coders` | coders_skills.py | room status, agent info, add feature, feature list, run code, tick | 6 |
 | `command_center` | command_center_skills.py | system monitoring, model control, scene status, diagnostics, training | 6 |
-| `warzone` | warzone_skills.py | squad control, tactical, objectives, combat, intel | 5 |
-| `gallery` | gallery_skills.py | exhibit management, art generation, critique, curation, tours | 5 |
+| `warzone` | warzone_skills.py | status, attack, build, upgrade, special ops, recon, end turn | 7 |
+| `gallery` | gallery_skills.py | exhibit management, art generation, critique, curation, tours, gallery walk | 8 |
+| `tavern` | tavern_skills.py | order food/drink, patron info, tales, dice, brawl, cook, menu, atmosphere, secret menu, bard song | 10 |
+| `games` | games_skills.py | word games, trivia, creative challenges, scores, status, hint, skip | 7 |
 
 ---
 

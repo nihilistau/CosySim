@@ -34,6 +34,7 @@
 | [API Reference](API.md) | REST endpoints, Socket.IO events, all scenes |
 | [TTS](TTS.md) | Qwen3-TTS server, voice design, streaming |
 | [NotebookLM & Nexus](NOTEBOOKLM.md) | NotebookLM integration via Nexus dual-backend |
+| [Nexus Integration](NEXUS_INTEGRATION.md) | NexusClient, 10 skills, rules engine, sessions, prompts |
 
 ## External Systems
 

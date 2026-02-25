@@ -2,6 +2,45 @@
 
 All notable changes to CosySim are documented here.
 
+## v0.50a — Master Consolidation & Nexus Integration
+
+### Nexus Schema v2
+- Added `rules` table: scope-based governance with condition/action JSON, priority, enabled flag
+- Added `sessions` table: project/repo/branch tracking, commits, files_changed, skills_used
+- Schema version bumped 1→2
+- Added 9 new NexusStore methods: rules CRUD, sessions CRUD, batch_add_entries
+- Added 14 new API routes for rules, sessions, batch, type-filtered entries
+- 19 new Nexus tests (150→169 passing)
+
+### NexusClient Upgrade
+- Session tracking: log_session, update_session, get_session, list_sessions
+- Rules engine: get_rules, add_rule
+- Prompt management: store_prompt, get_prompts
+- Batch operations: batch_add
+- Changelog tracking: store_changelog
+- list_by_type shortcut
+- Retry logic with exponential backoff (configurable max_retries)
+
+### Nexus Skills (4→10)
+- `nexus_log_session`: Session tracking
+- `nexus_store_prompt`: Prompt versioning
+- `nexus_search_prompts`: Prompt discovery
+- `nexus_get_rules`: Rules retrieval
+- `nexus_submit_idea`: Improvement ideas
+- `nexus_changelog`: Change history
+
+### Documentation
+- Created `docs/NEXUS_INTEGRATION.md` — comprehensive integration guide
+- Updated README.md to v0.50a with Nexus-first philosophy, 1832 tests, 13 game scenes
+- Updated SKILLS.md to v0.50a with all 148+ skills documented
+- Updated SCENES.md port map with Tavern + Games
+
+### Stats
+- **Tests**: 1,832 passing (CosySim) + 169 passing (Nexus) = **2,001 total**
+- **MCP Skills**: 148+ across 23 packs (10 core + 13 scene)
+- **Game Scenes**: 13
+- **Nexus Skills**: 10
+
 ## Sprint 16 — Scene Upgrades & Framework Showcase
 
 ### 16a — Dragon's Flagon Tavern (New Showcase Scene)
