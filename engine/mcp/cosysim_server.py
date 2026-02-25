@@ -3363,6 +3363,304 @@ def resource_scene_status(scene_name: str) -> str:
     return _impl(scene_name)
 
 
+# ═══════════════════════════════════════════════════════════════════════
+# NEXUS BRIDGE — Access Nexus knowledge from CosySim MCP server
+# ═══════════════════════════════════════════════════════════════════════
+
+def _get_nexus():
+    """Lazy Nexus client getter — avoids import-time side effects."""
+    try:
+        from engine.nexus.client import get_nexus_client
+        return get_nexus_client()
+    except Exception as e:
+        logger.warning("Nexus client unavailable: %s", e)
+        return None
+
+
+@mcp.tool()
+def nexus_search(query: str, limit: int = 10) -> str:
+    """Search the Nexus knowledge base for entries matching a query.
+    Returns matching knowledge entries with titles, content, and metadata."""
+    nx = _get_nexus()
+    if not nx:
+        return json.dumps({"error": "Nexus unavailable"})
+    results = nx.search(query, limit=limit)
+    return json.dumps({"results": results, "count": len(results)})
+
+
+@mcp.tool()
+def nexus_ask(question: str, depth: str = "auto", category: str = "") -> str:
+    """Smart Q&A against Nexus — checks Q&A cache first, then FTS5 search,
+    then NotebookLM if needed. Returns the best available answer."""
+    nx = _get_nexus()
+    if not nx:
+        return json.dumps({"error": "Nexus unavailable"})
+    answer = nx.ask(question, depth=depth, category=category)
+    return json.dumps(answer)
+
+
+@mcp.tool()
+def nexus_add(title: str, content: str, content_type: str = "note",
+              category: str = "", tags: str = "") -> str:
+    """Store a knowledge entry in Nexus. Tags should be comma-separated.
+    Content types: note, document, prompt, qa, changelog, decision, snippet, bug."""
+    nx = _get_nexus()
+    if not nx:
+        return json.dumps({"error": "Nexus unavailable"})
+    tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
+    entry_id = nx.add_entry(title, content, content_type=content_type,
+                            category=category, tags=tag_list)
+    if entry_id:
+        return json.dumps({"ok": True, "id": entry_id})
+    return json.dumps({"ok": False, "error": "Failed to add entry"})
+
+
+@mcp.tool()
+def nexus_add_qa(question: str, answer: str, category: str = "",
+                 tags: str = "") -> str:
+    """Store a question-answer pair in Nexus for future lookups."""
+    nx = _get_nexus()
+    if not nx:
+        return json.dumps({"error": "Nexus unavailable"})
+    tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
+    qa_id = nx.add_qa(question, answer, category=category, tags=tag_list)
+    if qa_id:
+        return json.dumps({"ok": True, "id": qa_id})
+    return json.dumps({"ok": False, "error": "Failed to add Q&A"})
+
+
+@mcp.tool()
+def nexus_get_rules(scope: str = "", rule_type: str = "") -> str:
+    """Get active governance rules from Nexus, optionally filtered by scope and type."""
+    nx = _get_nexus()
+    if not nx:
+        return json.dumps({"error": "Nexus unavailable"})
+    rules = nx.get_rules(scope=scope, rule_type=rule_type)
+    return json.dumps({"rules": rules, "count": len(rules)})
+
+
+@mcp.tool()
+def nexus_store_prompt(name: str, content: str, category: str = "system",
+                       version: str = "1") -> str:
+    """Store a versioned prompt template in Nexus for reuse."""
+    nx = _get_nexus()
+    if not nx:
+        return json.dumps({"error": "Nexus unavailable"})
+    prompt_id = nx.store_prompt(name, content, category=category, version=version)
+    if prompt_id:
+        return json.dumps({"ok": True, "id": prompt_id})
+    return json.dumps({"ok": False, "error": "Failed to store prompt"})
+
+
+@mcp.tool()
+def nexus_get_prompts(category: str = "", name: str = "") -> str:
+    """Retrieve stored prompt templates from Nexus."""
+    nx = _get_nexus()
+    if not nx:
+        return json.dumps({"error": "Nexus unavailable"})
+    prompts = nx.get_prompts(category=category, name=name)
+    return json.dumps({"prompts": prompts, "count": len(prompts)})
+
+
+@mcp.tool()
+def nexus_research(question: str) -> str:
+    """Start a deep research session in Nexus using NotebookLM.
+    Returns a research_id to use with nexus_converse and nexus_finish_research."""
+    nx = _get_nexus()
+    if not nx:
+        return json.dumps({"error": "Nexus unavailable"})
+    result = nx.research(question)
+    return json.dumps(result)
+
+
+@mcp.tool()
+def nexus_converse(research_id: str, message: str) -> str:
+    """Continue a Nexus research conversation. Use after nexus_research."""
+    nx = _get_nexus()
+    if not nx:
+        return json.dumps({"error": "Nexus unavailable"})
+    result = nx.converse(research_id, message)
+    return json.dumps(result)
+
+
+@mcp.tool()
+def nexus_finish_research(research_id: str) -> str:
+    """Complete a research session and distill Q&A pairs into Nexus."""
+    nx = _get_nexus()
+    if not nx:
+        return json.dumps({"error": "Nexus unavailable"})
+    result = nx.finish_research(research_id)
+    return json.dumps(result)
+
+
+@mcp.tool()
+def nexus_import_youtube(url: str, category: str = "youtube",
+                         tags: str = "") -> str:
+    """Import a YouTube video transcript into Nexus knowledge base."""
+    nx = _get_nexus()
+    if not nx:
+        return json.dumps({"error": "Nexus unavailable"})
+    tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
+    result = nx.import_youtube(url, category=category, tags=tag_list)
+    return json.dumps(result)
+
+
+@mcp.tool()
+def nexus_log_session(project: str = "CosySim", repo: str = "",
+                      branch: str = "") -> str:
+    """Create a session record in Nexus for tracking work."""
+    nx = _get_nexus()
+    if not nx:
+        return json.dumps({"error": "Nexus unavailable"})
+    session_id = nx.log_session(project=project, repo=repo, branch=branch)
+    if session_id:
+        return json.dumps({"ok": True, "session_id": session_id})
+    return json.dumps({"ok": False, "error": "Failed to create session"})
+
+
+@mcp.tool()
+def nexus_status() -> str:
+    """Check Nexus system health and get basic stats."""
+    nx = _get_nexus()
+    if not nx:
+        return json.dumps({"available": False, "error": "Client not initialized"})
+    health = nx.health()
+    stats = nx.stats()
+    return json.dumps({
+        "available": health.get("ok", False),
+        "health": health,
+        "stats": stats,
+    })
+
+
+@mcp.tool()
+def nexus_list_plugins(scope: str = "") -> str:
+    """List registered Nexus plugins."""
+    nx = _get_nexus()
+    if not nx:
+        return json.dumps({"error": "Nexus unavailable"})
+    plugins = nx.list_plugins(scope=scope)
+    return json.dumps({"plugins": plugins, "count": len(plugins)})
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# SKILL DISCOVERY — Let agents discover available tools
+# ═══════════════════════════════════════════════════════════════════════
+
+@mcp.tool()
+def list_all_skills() -> str:
+    """List all registered MCP skills grouped by pack.
+    Shows skill name, description, cooldown, and pack membership."""
+    try:
+        from engine.skills.registry import get_skill_registry
+        registry = get_skill_registry()
+        packs = {}
+        for name, meta in registry.list_skills().items():
+            pack = meta.get("pack", "unknown")
+            if pack not in packs:
+                packs[pack] = []
+            packs[pack].append({
+                "name": name,
+                "description": meta.get("description", ""),
+                "cooldown": meta.get("cooldown", 0),
+            })
+        return json.dumps({
+            "packs": packs,
+            "total_skills": sum(len(v) for v in packs.values()),
+            "total_packs": len(packs),
+        })
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def get_skill_info(skill_name: str) -> str:
+    """Get detailed information about a specific MCP skill including
+    its parameters, return type, pack, cooldown, and usage examples."""
+    try:
+        from engine.skills.registry import get_skill_registry
+        registry = get_skill_registry()
+        skills = registry.list_skills()
+        if skill_name not in skills:
+            return json.dumps({"error": f"Skill '{skill_name}' not found"})
+        meta = skills[skill_name]
+        return json.dumps({
+            "name": skill_name,
+            "description": meta.get("description", ""),
+            "pack": meta.get("pack", "unknown"),
+            "cooldown": meta.get("cooldown", 0),
+            "parameters": meta.get("parameters", {}),
+        })
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# SYSTEM STATUS — Infrastructure monitoring
+# ═══════════════════════════════════════════════════════════════════════
+
+@mcp.tool()
+def system_status() -> str:
+    """Get comprehensive CosySim system status — services, models,
+    scenes, skills, orchestrator, and Nexus connectivity."""
+    status = {"version": "0.51b", "services": {}, "scenes": {}, "skills": {}}
+
+    # Config
+    try:
+        cfg = _get_config()
+        status["config"] = {
+            "lmstudio_url": cfg.get("lmstudio.base_url", "unknown"),
+            "load_mode": cfg.get("lmstudio.load_mode", "unknown"),
+        }
+    except Exception:
+        status["config"] = {"error": "unavailable"}
+
+    # LMStudio
+    try:
+        from engine.lmstudio.lms_client import LMSClient
+        client = LMSClient()
+        models = client.list_models()
+        status["services"]["lmstudio"] = {
+            "available": True,
+            "models_loaded": len(models) if models else 0,
+        }
+    except Exception:
+        status["services"]["lmstudio"] = {"available": False}
+
+    # Nexus
+    nx = _get_nexus()
+    if nx:
+        status["services"]["nexus"] = {"available": nx.is_available()}
+    else:
+        status["services"]["nexus"] = {"available": False}
+
+    # Skills
+    try:
+        from engine.skills.registry import get_skill_registry
+        registry = get_skill_registry()
+        skills = registry.list_skills()
+        packs = set(m.get("pack", "unknown") for m in skills.values())
+        status["skills"] = {"total": len(skills), "packs": len(packs)}
+    except Exception:
+        status["skills"] = {"error": "unavailable"}
+
+    # Active scenes
+    try:
+        from engine.scenes.base_scene import BaseScene
+        active = BaseScene.get_active_scenes() if hasattr(BaseScene, 'get_active_scenes') else {}
+        status["scenes"]["active"] = list(active.keys()) if active else []
+    except Exception:
+        status["scenes"]["active"] = []
+
+    return json.dumps(status)
+
+
+@mcp.resource("nexus://status")
+def resource_nexus_status() -> str:
+    """Nexus knowledge system health and stats."""
+    return nexus_status()
+
+
 # ── Entry point ────────────────────────────────────────────────────────
 
 def run_server(mode: str = "stdio"):

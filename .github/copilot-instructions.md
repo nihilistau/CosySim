@@ -7,9 +7,9 @@
 
 ## Project Overview
 
-CosySim is a multi-scene AI simulation framework (v0.50b) built on
+CosySim is a multi-scene AI simulation framework (v0.51b) built on
 a custom MCP pipeline with LMStudio v1 API integration and Nexus knowledge system.
-It orchestrates virtual agents across 17 interactive scenes, each with real-time
+It orchestrates virtual agents across 18 interactive scenes, each with real-time
 state management, skill-based tool calling, dialog systems, and interceptor-governed
 agent behavior. Nexus provides central knowledge management, rules engine,
 session tracking, and prompt versioning.
@@ -17,8 +17,37 @@ session tracking, and prompt versioning.
 **Core systems:** MCPFramework state tree · DialogSystem conversation threading
 · InterceptorPipeline agent governance · @skill decorator tools · EventChain
 audit logging · LMStudio v1 streaming with stateful conversations · Nexus knowledge system
+· InferenceOrchestrator multi-model routing
 
-**Test suite:** 1,832 tests across 70+ files — run before and after changes.
+**Test suite:** 1,903+ tests across 70+ files — run before and after changes.
+
+**MCP Server:** 124 tools available via `.vscode/mcp.json` — includes Nexus bridge,
+skill discovery, and system monitoring tools.
+
+## MCP Tools Available
+
+This workspace has a CosySim MCP server configured in `.vscode/mcp.json`.
+You can call these tools directly:
+
+### Nexus Knowledge Tools (use before coding)
+- `nexus_search(query)` — Search knowledge base
+- `nexus_ask(question)` — Smart Q&A (cache → FTS → NLM)
+- `nexus_add(title, content, content_type)` — Store knowledge
+- `nexus_add_qa(question, answer)` — Store Q&A pair
+- `nexus_get_rules(scope)` — Get governance rules
+- `nexus_store_prompt(name, content)` — Version prompts
+- `nexus_get_prompts(category)` — Retrieve prompts
+- `nexus_research(question)` — Start deep research
+- `nexus_converse(research_id, message)` — Continue research
+- `nexus_finish_research(research_id)` — Distill findings
+- `nexus_import_youtube(url)` — Import video transcripts
+- `nexus_log_session(project)` — Track work session
+- `nexus_status()` — Check Nexus health
+
+### System Discovery
+- `list_all_skills()` — All skills grouped by pack
+- `get_skill_info(skill_name)` — Skill details + parameters
+- `system_status()` — Full system health check
 
 ## Quick Reference
 
@@ -39,29 +68,32 @@ from engine.mcp import get_governor                # AgentGovernor
 from engine.mcp import get_router                  # AgentRouter
 from engine.scenes.base_scene import BaseScene     # Scene base class
 from engine.skills.skill import skill              # @skill decorator
+from engine.nexus.client import get_nexus_client   # Nexus KMS client
+from engine.lmstudio.orchestrator import get_orchestrator  # Multi-model orchestrator
 ```
 
 ### Project Structure
 ```
 CosySim/
 ├── engine/         # Core framework — modify carefully
-│   ├── mcp/        # MCPFramework, DialogSystem, GameMCP, Governor
+│   ├── mcp/        # MCPFramework, DialogSystem, GameMCP, Governor, CosySim MCP Server
 │   ├── agents/     # VirtualAgent, InterceptorPipeline, StreamProcessor
-│   ├── lmstudio/   # LMS client, router, conversation, model manager
+│   ├── lmstudio/   # LMS client, router, conversation, model manager, orchestrator
 │   ├── scenes/     # BaseScene, SceneManager, SceneRegistry
-│   ├── skills/     # @skill decorator, registry, 10 builtin packs
+│   ├── skills/     # @skill decorator, registry, 13 builtin packs
 │   ├── services/   # Activity bus, resilience, housekeeping
 │   ├── pipeline/   # VirtualPipeline, token routing
 │   ├── tts/        # Qwen3 TTS server
-│   ├── nexus/      # Nexus KMS client
+│   ├── nexus/      # Nexus KMS client + CLI tools
 │   └── config.py   # ConfigManager singleton
 ├── content/        # Game content
-│   ├── scenes/     # 15 scene implementations
+│   ├── scenes/     # 18 scene implementations
 │   └── simulation/ # Database, character system, services
 ├── config/         # YAML/JSON config (default, dev, prod, voices, skills, mcp)
-├── tests/          # pytest suite (69 files)
+├── tests/          # pytest suite (70+ files, 1903+ tests)
 ├── docs/           # Documentation (INDEX.md entry point)
 ├── .github/        # Copilot customization (instructions, agents, hooks)
+├── .vscode/        # VS Code config + MCP server definitions
 ├── main.py         # Application entry point
 └── launcher.py     # Scene launcher CLI
 ```
@@ -118,6 +150,7 @@ Path-specific rules auto-apply based on file patterns:
 
 | Agent | Purpose |
 |-------|---------|
+| `Copilot Workflow` | Master agent — uses all MCP tools, Nexus-first workflow |
 | `Scene Builder` | Scaffold new scenes from scratch |
 | `Scene Debugger` | Diagnose and fix scene/agent issues |
 | `Scene Auditor` | Rate scenes against AAA quality standard |
@@ -138,26 +171,43 @@ Path-specific rules auto-apply based on file patterns:
 Nexus is the **first port of call** for information retrieval and storage.
 Before writing code, search Nexus. After making decisions, store them in Nexus.
 
-### Quick Nexus Usage
+### MCP Tools (Preferred — call directly via tool use)
+These 14 Nexus tools are available via the CosySim MCP server (`.vscode/mcp.json`):
+```
+nexus_search("interceptor pipeline")          — Search knowledge base
+nexus_ask("How does state persistence work?") — Smart Q&A (cache → FTS → NLM)
+nexus_add("Title", content, "decision")       — Store knowledge entry
+nexus_add_qa("How does X?", "X works by...")  — Store Q&A pair
+nexus_get_rules("coding")                     — Get governance rules
+nexus_store_prompt("system_v2", content)       — Version a prompt
+nexus_get_prompts("system")                   — Retrieve stored prompts
+nexus_research("Best approach for X?")        — Start deep NLM research
+nexus_converse(research_id, "follow up")      — Continue research
+nexus_finish_research(research_id)            — Distill Q&A from research
+nexus_import_youtube(url)                     — Import video transcript
+nexus_log_session("CosySim")                  — Track work session
+nexus_status()                                — Check Nexus health
+nexus_list_plugins()                          — List plugins
+```
+
+### Python API (for project code)
 ```python
 from engine.nexus.client import get_nexus_client
 client = get_nexus_client()
-
-# Search before coding
 results = client.search("interceptor pipeline")
 answer = client.ask("How does state persistence work?")
-
-# Store decisions and knowledge
-client.add_entry("Decision: Use FTS5 for search", content, content_type="document", category="architecture")
-client.add_qa("How does X work?", "X works by...", category="dev")
-
-# Research a topic deeply
-session = client.research("Best approach for agent memory?")
-client.converse(session["research_id"], "What about token limits?")
-client.finish_research(session["research_id"])
+client.add_entry("Decision: Use FTS5", content, content_type="document", category="architecture")
 ```
 
-### Nexus Skills for Agents
+### CLI (terminal commands)
+```bash
+python -m engine.nexus.cli search "interceptor pipeline"
+python -m engine.nexus.cli ask "How does state work?"
+python -m engine.nexus.cli add "Title" "content" --type decision
+python -m engine.nexus.cli status
+```
+
+### Nexus Skills for LLM Agents
 | Skill | Use For |
 |-------|---------|
 | `nexus_ask` | Smart Q&A (cache → FTS → NLM) |

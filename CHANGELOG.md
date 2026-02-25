@@ -2,6 +2,29 @@
 
 All notable changes to CosySim are documented here.
 
+## v0.51b — Copilot CLI + Nexus Integration
+
+### MCP Server — Nexus Bridge (NEW)
+- **14 Nexus tools** added to CosySim MCP server — search, ask, add, Q&A, rules, prompts, research, converse, finish_research, import_youtube, log_session, status, list_plugins
+- **Skill discovery tools** — `list_all_skills()` shows all 194 skills by pack, `get_skill_info()` returns parameters and metadata
+- **System status tool** — `system_status()` reports service health, model status, scene activity, skill counts
+- **Total MCP tools**: 107 → 124
+
+### Copilot CLI Wiring (NEW)
+- **`.vscode/mcp.json`** created — CosySim + Nexus MCP servers now accessible from Copilot CLI
+- **Copilot Workflow agent** — New master agent (`copilot-workflow.agent.md`) with Nexus-first workflow
+- **Updated copilot-instructions.md** — v0.51b, MCP tool docs, Nexus workflow, 10 agents
+- **Updated global instructions** — `~/.copilot/copilot-instructions.md` with Nexus-first workflow
+
+### Nexus CLI (NEW)
+- **`python -m engine.nexus.cli`** — Full CLI for Nexus: search, ask, add, qa, status, prompts, rules, youtube
+- JSON output mode with `--json` flag
+- Argument parsing with subcommands and options
+
+### Tests
+- **24 new tests** (test_nexus_bridge.py) — Nexus tool logic, MCP registration, CLI commands
+- Total tests: 1,927 passing
+
 ## v0.51 — Multi-Model Orchestration & Skill Wiring
 
 ### InferenceOrchestrator (NEW)
