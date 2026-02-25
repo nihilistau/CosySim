@@ -2,6 +2,51 @@
 
 All notable changes to CosySim are documented here.
 
+## Sprint 16 — Scene Upgrades & Framework Showcase
+
+### 16a — Dragon's Flagon Tavern (New Showcase Scene)
+- **New scene**: Fantasy tavern on port 5558, demonstrates every MCP framework feature
+- **State**: TavernState with gold economy, 6-stat system, 4-NPC reputation (5 tiers), atmosphere/heat meter, quest board (5 quests), rumor system (8 rumors), dice gambling, time-of-day cycle, stranger appearances
+- **Skills**: 10 MCP skills — status, order_drink, check_reputation, hear_rumor, quest_board, dice, influence, request_song, trade, advance_time
+- **Rules**: Atmosphere directives, time directives, reputation gates, stat-gated actions, full LLM directive builder
+- **Web UI**: NPC cards, rep bars, stat displays, action buttons, dice game, quest board, merchant, event feed, real-time SocketIO
+- **Tests**: 76 tests covering state, rules, and constants
+
+### 16b — Games Scene Upgrade (F→C+)
+- Converted from bare Flask Blueprint to proper `GamesScene(BaseScene)` on port 5567
+- 7 MCP skills wrapping MysteryGame and TruthOrDareGame programmatic APIs
+- Skills: games_status, mystery_start/clue/accuse, tod_start/roll/answer
+
+### 16c — Gallery Skills Upgrade (C+→B-)
+- 5→8 skills with module-level state tracking (prestige, patron_mood, visitor_count, artworks)
+- New: gallery_set_theme (6 themes), gallery_auction (simulated bidding war), gallery_patron_interact
+- Upgraded: create_art (10 style validation), critique (3-axis scoring, masterpiece detection), change_room (prestige gate)
+
+### 16d — Warzone Skills Upgrade (stubs→real)
+- 5→7 skills wired to actual GameState.process_action() engine
+- attack (weapon vs defense with crits/intercepts), build (4 building types), upgrade (weapon/defense)
+- special_op (spy/emp/sabotage/shield/taunt), recon, end_turn (AI turn + income + weather)
+
+### 16e — Lounge Skills Upgrade (stubs→real)
+- 5→10 skills wired to trust/heat/secrets/song state
+- Trust-gated cocktails, intimacy-leveled secret sharing, progressive secret unlocks
+- Back room access (trust ≥70), heat management, dream whisper & mirror soul (trust-gated)
+
+### 16f — Casino Skills Upgrade
+- 6→9 skills with new poker mechanics
+- check (stay in hand), raise (minimum $10), bluff (style-based success rates)
+
+### Skill Count Summary
+| Scene | Before | After |
+|-------|--------|-------|
+| Tavern | NEW | 10 |
+| Games | 0 | 7 |
+| Gallery | 5 | 8 |
+| Warzone | 5 (stubs) | 7 |
+| Lounge | 5 (stubs) | 10 |
+| Casino | 6 | 9 |
+| **Total** | **21** | **51** (+30 skills)
+
 ## Sprint 15 — Nexus Knowledge System & Documentation Overhaul
 
 ### 15a — Documentation Overhaul

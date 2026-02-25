@@ -1,6 +1,6 @@
 # CosySim — Agent Notes & System Architecture
 
-Generated: [2026-07-25T00:00:00Z] — v4.0.0
+Generated: [2026-07-25T00:00:00Z] — v4.0.0 (Updated Sprint 16)
 
 > Complete structural summary of the CosySim AI simulation framework.
 > Covers file dependencies, game loop, MCP skill system, scene architecture,  
@@ -2834,3 +2834,62 @@ Key test files added in v4.0:
 - `tests/test_training_pipeline.py` — finetune_local + auto_train (15 tests)
 - `tests/test_observability.py`
 - `tests/test_tag_registry.py` — TagRegistry singleton, builtins, detection, custom tags (52 tests) — MetricsDB, MetricsCollector, AlertEngine
+
+---
+
+## Sprint 16 — Scene Audit & Upgrades
+
+### Scene Audit Results (Post Sprint 16)
+
+| Scene | Grade | Score | BaseScene | Skills | Tests | Port |
+|-------|-------|-------|-----------|--------|-------|------|
+| Bedroom | A | 78 | ✅ | 10 | ❌ | 5556 |
+| Tavern ✨ | A- | NEW | ✅ | 10 | ✅ 76 | 5558 |
+| Lounge | A- | 75 | ✅ | 10 ↑ | ❌ | 5557 |
+| Realm | B+ | 72 | ✅ | 30+ | ❌ | 5562 |
+| Phone | B+ | 70 | ✅ | 6 | ❌ | 5555 |
+| Heist | B | 69 | ✅ | 7 | ❌ | 5565 |
+| Casino | B+ | 68 | ✅ | 9 ↑ | ❌ | 5559 |
+| NeonCity | B | 68 | ✅ | 9 | ❌ | 5563 |
+| Coders | B- | 65 | ✅ | 9 | ❌ | 5564 |
+| Gallery | B- | 65 ↑ | ✅ | 8 ↑ | ❌ | 5560 |
+| Command Ctr | C+ | 58 | ✅ | 6 | ❌ | 5566 |
+| Warzone | C+ | 58 ↑ | ✅ | 7 ↑ | ❌ | 5561 |
+| Games | C+ | 55 ↑ | ✅ ↑ | 7 ↑ | ❌ | 5567 |
+| Admin | C- | 41 | ❌ Streamlit | 0 | ❌ | 8502 |
+| Dashboard | D | 32 | ❌ Streamlit | 0 | ❌ | 8501 |
+| Hub | F | 18 | ❌ Streamlit | 0 | ❌ | 8500 |
+
+↑ = upgraded this sprint. Hub/Dashboard/Admin are Streamlit services, not game scenes.
+
+### Total MCP Skills by Pack
+
+| Pack | Skills | State |
+|------|--------|-------|
+| realm | 30+ | Full GameState |
+| bedroom | 10 | BedroomState |
+| tavern | 10 | TavernState |
+| lounge | 10 | Trust/Heat/Songs |
+| casino | 9 | Poker GameState |
+| neon_city | 9 | Grid Board |
+| coders | 9 | SimState |
+| gallery | 8 | Prestige/Artwork |
+| heist | 7 | HeistGame |
+| games | 7 | Mystery/ToD |
+| warzone | 7 | GameState |
+| command_center | 6 | System Monitor |
+| phone | 6 | Conversations |
+
+### Dragon's Flagon Tavern — MCP Framework Showcase
+
+The Tavern scene (port 5558) was created to demonstrate every MCP framework feature:
+
+**State Management**: TavernState class with gold economy, 6-stat system (charm/wit/strength/luck/lore/stealth), 4-NPC reputation tracking (5 tiers: Stranger→Legend), atmosphere/heat meter, quest board, rumor system, dice gambling, time-of-day cycle.
+
+**MCP Wiring**: MCPSceneMixin with scene node, lifecycle hooks, state sync, consequence firing. Background ticker thread calls `framework.tick()` every 30s for scheduled consequences.
+
+**Skills**: 10 skills using every pattern — state reads (status), resource modification (order_drink, trade), gated access (reputation checks), random outcomes (dice), consequence chains (drink effects), timers (request_song), multi-action verbs (quest_board with accept/progress/list).
+
+**Rules Engine**: `build_scene_directive()` generates dynamic LLM system prompt injections based on atmosphere, time of day, reputation gates, and stat gates.
+
+**Web UI**: Full HTML/SocketIO interface with NPC cards, reputation bars, stat displays, quest board, merchant panel, dice game, event feed.
