@@ -131,11 +131,11 @@ class TestMCPToolRegistration:
         from engine.mcp.cosysim_server import mcp
 
         async def check():
-            tools = await mcp.get_tools()
-            return tools
+            tools = await mcp.list_tools()
+            return [t.name for t in tools]
 
-        tools = asyncio.run(check())
-        nexus_tools = [n for n in tools if "nexus" in n.lower()]
+        tool_names = asyncio.run(check())
+        nexus_tools = [n for n in tool_names if "nexus" in n.lower()]
         assert len(nexus_tools) >= 14, f"Expected 14+ Nexus tools, got {len(nexus_tools)}"
 
     def test_discovery_tools_registered(self):
@@ -143,24 +143,24 @@ class TestMCPToolRegistration:
         from engine.mcp.cosysim_server import mcp
 
         async def check():
-            tools = await mcp.get_tools()
-            return tools
+            tools = await mcp.list_tools()
+            return [t.name for t in tools]
 
-        tools = asyncio.run(check())
-        assert "list_all_skills" in tools
-        assert "get_skill_info" in tools
-        assert "system_status" in tools
+        tool_names = asyncio.run(check())
+        assert "list_all_skills" in tool_names
+        assert "get_skill_info" in tool_names
+        assert "system_status" in tool_names
 
     def test_total_tool_count(self):
         import asyncio
         from engine.mcp.cosysim_server import mcp
 
         async def check():
-            tools = await mcp.get_tools()
-            return tools
+            tools = await mcp.list_tools()
+            return [t.name for t in tools]
 
-        tools = asyncio.run(check())
-        assert len(tools) >= 120, f"Expected 120+ tools, got {len(tools)}"
+        tool_names = asyncio.run(check())
+        assert len(tool_names) >= 120, f"Expected 120+ tools, got {len(tool_names)}"
 
 
 # ═══════════════════════════════════════════════════════════════════════

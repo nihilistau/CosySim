@@ -3552,22 +3552,22 @@ def list_all_skills() -> str:
     """List all registered MCP skills grouped by pack.
     Shows skill name, description, cooldown, and pack membership."""
     try:
-        from engine.skills.registry import get_skill_registry
-        registry = get_skill_registry()
-        packs = {}
-        for name, meta in registry.list_skills().items():
+        from engine.skills.registry import SKILL_REGISTRY
+        desc = SKILL_REGISTRY.describe()
+        packs_map: dict = {}
+        for name, meta in desc.items():
             pack = meta.get("pack", "unknown")
-            if pack not in packs:
-                packs[pack] = []
-            packs[pack].append({
+            if pack not in packs_map:
+                packs_map[pack] = []
+            packs_map[pack].append({
                 "name": name,
                 "description": meta.get("description", ""),
                 "cooldown": meta.get("cooldown", 0),
             })
         return json.dumps({
-            "packs": packs,
-            "total_skills": sum(len(v) for v in packs.values()),
-            "total_packs": len(packs),
+            "packs": packs_map,
+            "total_skills": sum(len(v) for v in packs_map.values()),
+            "total_packs": len(packs_map),
         })
     except Exception as e:
         return json.dumps({"error": str(e)})
@@ -3578,12 +3578,11 @@ def get_skill_info(skill_name: str) -> str:
     """Get detailed information about a specific MCP skill including
     its parameters, return type, pack, cooldown, and usage examples."""
     try:
-        from engine.skills.registry import get_skill_registry
-        registry = get_skill_registry()
-        skills = registry.list_skills()
-        if skill_name not in skills:
+        from engine.skills.registry import SKILL_REGISTRY
+        desc = SKILL_REGISTRY.describe()
+        if skill_name not in desc:
             return json.dumps({"error": f"Skill '{skill_name}' not found"})
-        meta = skills[skill_name]
+        meta = desc[skill_name]
         return json.dumps({
             "name": skill_name,
             "description": meta.get("description", ""),
@@ -3619,10 +3618,12 @@ def system_status() -> str:
     try:
         from engine.lmstudio.lms_client import LMSClient
         client = LMSClient()
-        models = client.list_models()
+        models = client.get_models(loaded_only=False)
+        loaded = client.get_models(loaded_only=True)
         status["services"]["lmstudio"] = {
             "available": True,
-            "models_loaded": len(models) if models else 0,
+            "models_available": len(models) if models else 0,
+            "models_loaded": len(loaded) if loaded else 0,
         }
     except Exception:
         status["services"]["lmstudio"] = {"available": False}
@@ -3630,17 +3631,25 @@ def system_status() -> str:
     # Nexus
     nx = _get_nexus()
     if nx:
-        status["services"]["nexus"] = {"available": nx.is_available()}
+        try:
+            status["services"]["nexus"] = {
+                "available": nx.is_available(),
+            }
+        except Exception:
+            status["services"]["nexus"] = {"available": False}
     else:
         status["services"]["nexus"] = {"available": False}
 
     # Skills
     try:
-        from engine.skills.registry import get_skill_registry
-        registry = get_skill_registry()
-        skills = registry.list_skills()
-        packs = set(m.get("pack", "unknown") for m in skills.values())
-        status["skills"] = {"total": len(skills), "packs": len(packs)}
+        from engine.skills.registry import SKILL_REGISTRY
+        desc = SKILL_REGISTRY.describe()
+        packs = SKILL_REGISTRY.all_packs()
+        status["skills"] = {
+            "total": len(desc),
+            "packs": len(packs),
+            "pack_names": sorted(packs),
+        }
     except Exception:
         status["skills"] = {"error": "unavailable"}
 
@@ -3659,6 +3668,109 @@ def system_status() -> str:
 def resource_nexus_status() -> str:
     """Nexus knowledge system health and stats."""
     return nexus_status()
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# NEXUS MAINTENANCE — Knowledge seeding and upkeep
+# ═══════════════════════════════════════════════════════════════════════
+
+@mcp.tool()
+def seed_nexus(source: str = "all") -> str:
+    """Seed Nexus with project knowledge. Idempotent — safe to run repeatedly.
+    Source options: docs, qa, rules, prompts, conventions, all."""
+    try:
+        from engine.nexus.nexus_seeder import NexusSeeder
+        seeder = NexusSeeder()
+        valid = {"docs", "qa", "rules", "prompts", "conventions", "all"}
+        if source not in valid:
+            return json.dumps({"error": f"Invalid source '{source}'. Use: {sorted(valid)}"})
+        counts = seeder.seed(source)
+        return json.dumps({"status": "ok", "source": source, "created": counts})
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def nexus_maintain(action: str = "health") -> str:
+    """Nexus knowledge maintenance. Actions: health, dedup, cleanup, reindex.
+    - health: Show knowledge base stats and quality metrics
+    - dedup: Find and remove duplicate entries
+    - cleanup: Remove empty or low-quality entries
+    - reindex: Force FTS5 reindex"""
+    nx = _get_nexus()
+    if not nx:
+        return json.dumps({"error": "Nexus unavailable"})
+    try:
+        import requests
+        base = f"http://127.0.0.1:{nx._port if hasattr(nx, '_port') else 8700}"
+
+        if action == "health":
+            entries_r = requests.get(f"{base}/api/entries", params={"limit": 500}, timeout=5)
+            entries = entries_r.json().get("data", []) if entries_r.ok else []
+            qa_r = requests.get(f"{base}/api/qa", params={"limit": 500}, timeout=5)
+            qa_list = qa_r.json().get("data", []) if qa_r.ok else []
+            rules_r = requests.get(f"{base}/api/rules", timeout=5)
+            rules_list = rules_r.json().get("data", []) if rules_r.ok else []
+            from collections import Counter
+            types = dict(Counter(e.get("content_type", "?") for e in entries))
+            cats = dict(Counter(e.get("category", "?") for e in entries))
+            empty = sum(1 for e in entries if len(e.get("content", "")) < 20)
+            return json.dumps({
+                "status": "ok",
+                "entries": len(entries),
+                "qa_pairs": len(qa_list),
+                "rules": len(rules_list),
+                "by_type": types,
+                "by_category": cats,
+                "low_quality": empty,
+            })
+
+        elif action == "dedup":
+            entries_r = requests.get(f"{base}/api/entries", params={"limit": 500}, timeout=5)
+            entries = entries_r.json().get("data", []) if entries_r.ok else []
+            seen_titles: dict = {}
+            duplicates = []
+            for e in entries:
+                title = e.get("title", "").strip().lower()
+                if title in seen_titles:
+                    duplicates.append({"id": e["id"], "title": e["title"],
+                                       "duplicate_of": seen_titles[title]})
+                else:
+                    seen_titles[title] = e["id"]
+            removed = 0
+            for dup in duplicates:
+                r = requests.delete(f"{base}/api/entries/{dup['id']}", timeout=5)
+                if r.ok:
+                    removed += 1
+            return json.dumps({
+                "status": "ok", "found": len(duplicates),
+                "removed": removed, "duplicates": duplicates[:10],
+            })
+
+        elif action == "cleanup":
+            entries_r = requests.get(f"{base}/api/entries", params={"limit": 500}, timeout=5)
+            entries = entries_r.json().get("data", []) if entries_r.ok else []
+            low_quality = [e for e in entries if len(e.get("content", "")) < 10]
+            removed = 0
+            for e in low_quality:
+                r = requests.delete(f"{base}/api/entries/{e['id']}", timeout=5)
+                if r.ok:
+                    removed += 1
+            return json.dumps({
+                "status": "ok", "low_quality_found": len(low_quality),
+                "removed": removed,
+            })
+
+        elif action == "reindex":
+            r = requests.post(f"{base}/api/reindex", timeout=30)
+            if r.ok:
+                return json.dumps({"status": "ok", "message": "FTS5 reindex triggered"})
+            return json.dumps({"status": "ok", "message": "Reindex endpoint not available"})
+
+        else:
+            return json.dumps({"error": f"Unknown action '{action}'. Use: health, dedup, cleanup, reindex"})
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 
 # ── Entry point ────────────────────────────────────────────────────────

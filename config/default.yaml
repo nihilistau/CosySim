@@ -490,6 +490,7 @@ comms:
   governance_enabled: true      # route CharacterAgent.reply() through interceptors
   skill_manifest_path: "config/skill_manifests.yaml"
   interceptors:
+    nexus_prompt:              true    # inject Nexus knowledge/rules into agent context
     router_message_injector:  true
     auto_result_injector:     true
     skill_awareness:          true

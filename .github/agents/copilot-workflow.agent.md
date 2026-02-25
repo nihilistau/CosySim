@@ -31,6 +31,8 @@ You have direct access to these CosySim MCP server tools:
 | `nexus_log_session` | Track work sessions |
 | `nexus_status` | Check Nexus health |
 | `nexus_list_plugins` | List registered plugins |
+| `seed_nexus` | Seed/refresh knowledge base |
+| `nexus_maintain` | Maintenance: health, dedup, cleanup |
 
 ### System Discovery
 | Tool | Use For |
@@ -67,3 +69,17 @@ wardrobe, mood, image generation, conversation management, and framework status.
 - System monitoring and health checks
 - Planning work that needs stored knowledge
 - Any task where you want the full toolset
+
+## CLI Bridge Fallback
+
+If MCP tools are unavailable, use the Nexus CLI bridge directly:
+```powershell
+python -m engine.nexus.bridge search "topic"
+python -m engine.nexus.bridge ask "How does X work?"
+python -m engine.nexus.bridge store "Title" "Content" --type note --category dev
+python -m engine.nexus.bridge qa "Question?" "Answer."
+python -m engine.nexus.bridge rules "global"
+python -m engine.nexus.bridge health
+python -m engine.nexus.bridge seed all
+python -m engine.nexus.bridge maintain dedup
+```

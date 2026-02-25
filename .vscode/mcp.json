@@ -2,15 +2,17 @@
   "servers": {
     "cosysim": {
       "type": "stdio",
-      "command": "python",
+      "command": "C:\\Files\\Models\\CosySim\\.venv\\Scripts\\python.exe",
       "args": ["-m", "engine.mcp.cosysim_server"],
-      "cwd": "${workspaceFolder}"
+      "cwd": "${workspaceFolder}",
+      "autoStart": true
     },
     "nexus": {
       "type": "stdio",
       "command": "python",
       "args": ["-m", "nexus.mcp.server"],
-      "cwd": "C:\\Files\\Nexus"
+      "cwd": "C:\\Files\\Nexus",
+      "autoStart": true
     }
   }
 }

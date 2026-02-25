@@ -5,10 +5,12 @@ All notable changes to CosySim are documented here.
 ## v0.51b — Copilot CLI + Nexus Integration
 
 ### MCP Server — Nexus Bridge (NEW)
-- **14 Nexus tools** added to CosySim MCP server — search, ask, add, Q&A, rules, prompts, research, converse, finish_research, import_youtube, log_session, status, list_plugins
+- **16 Nexus tools** added to CosySim MCP server — search, ask, add, Q&A, rules, prompts, research, converse, finish_research, import_youtube, log_session, status, list_plugins, seed_nexus, nexus_maintain
 - **Skill discovery tools** — `list_all_skills()` shows all 194 skills by pack, `get_skill_info()` returns parameters and metadata
 - **System status tool** — `system_status()` reports service health, model status, scene activity, skill counts
-- **Total MCP tools**: 107 → 124
+- **Knowledge seeder** — `seed_nexus(source)` populates Nexus with project docs, Q&A, rules, prompts, conventions
+- **Knowledge maintenance** — `nexus_maintain(action)` for health stats, dedup, cleanup, reindex
+- **Total MCP tools**: 107 → 126
 
 ### Copilot CLI Wiring (NEW)
 - **`.vscode/mcp.json`** created — CosySim + Nexus MCP servers now accessible from Copilot CLI
@@ -16,14 +18,39 @@ All notable changes to CosySim are documented here.
 - **Updated copilot-instructions.md** — v0.51b, MCP tool docs, Nexus workflow, 10 agents
 - **Updated global instructions** — `~/.copilot/copilot-instructions.md` with Nexus-first workflow
 
+### Nexus CLI Bridge (NEW)
+- **`python -m engine.nexus.bridge`** — Standalone CLI for Nexus access without MCP server
+- Commands: search, ask, store, qa, rules, health, seed, maintain
+- JSON output for machine parsing
+- Fallback when MCP server is not running
+
+### Nexus Knowledge Seeder (NEW)
+- **`engine/nexus/nexus_seeder.py`** — Idempotent knowledge seeder utility
+- Seeds: 16 doc entries, 20+ Q&A pairs, 16 governance rules, 9 agent prompts, 4 coding conventions
+- CLI: `python -m engine.nexus.nexus_seeder [docs|qa|rules|prompts|conventions|all]`
+
+### NexusPromptInterceptor (NEW)
+- **Priority 4** interceptor that enriches agent prompts with Nexus knowledge
+- Loads base agent prompt, governance rules, and scene-specific context at runtime
+- TTL-cached (5 min) to avoid excessive Nexus API calls
+- Registered in `config/default.yaml` under `comms.interceptors`
+
+### Infrastructure Fixes
+- Fixed `system_status` tool — corrected stale `get_skill_registry()` → `SKILL_REGISTRY`
+- Fixed `list_all_skills` and `get_skill_info` — same stale import fix
+- Fixed session logger — `nexus_session_logger.py` now uses `/api/entries` (was broken `/api/agent/submit`)
+- Enhanced session logger — captures git context (branch, commits, modified files)
+- Fixed `test_nexus_bridge.py` — updated for fastmcp 3.0 API (`mcp.list_tools()`)
+- Added `autoStart: true` to `.vscode/mcp.json` for both servers
+
 ### Nexus CLI (NEW)
 - **`python -m engine.nexus.cli`** — Full CLI for Nexus: search, ask, add, qa, status, prompts, rules, youtube
 - JSON output mode with `--json` flag
 - Argument parsing with subcommands and options
 
 ### Tests
-- **24 new tests** (test_nexus_bridge.py) — Nexus tool logic, MCP registration, CLI commands
-- Total tests: 1,927 passing
+- **103 new tests** — Nexus bridge (24), seeder & bridge (79)
+- Total tests: 1,996 passing (10 pre-existing sdk_client failures)
 
 ## v0.51 — Multi-Model Orchestration & Skill Wiring
 

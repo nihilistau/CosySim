@@ -21,7 +21,7 @@ audit logging · LMStudio v1 streaming with stateful conversations · Nexus know
 
 **Test suite:** 1,903+ tests across 70+ files — run before and after changes.
 
-**MCP Server:** 124 tools available via `.vscode/mcp.json` — includes Nexus bridge,
+**MCP Server:** 126 tools available via `.vscode/mcp.json` — includes Nexus bridge,
 skill discovery, and system monitoring tools.
 
 ## MCP Tools Available
@@ -43,6 +43,20 @@ You can call these tools directly:
 - `nexus_import_youtube(url)` — Import video transcripts
 - `nexus_log_session(project)` — Track work session
 - `nexus_status()` — Check Nexus health
+
+### Nexus Maintenance
+- `seed_nexus(source)` — Seed knowledge (docs/qa/rules/prompts/conventions/all)
+- `nexus_maintain(action)` — Maintenance (health/dedup/cleanup/reindex)
+
+### Nexus CLI Bridge (fallback when MCP server is not running)
+```powershell
+python -m engine.nexus.bridge search "query"
+python -m engine.nexus.bridge ask "question"
+python -m engine.nexus.bridge store "Title" "Content" --type note --category dev
+python -m engine.nexus.bridge health
+python -m engine.nexus.bridge seed all
+python -m engine.nexus.bridge maintain dedup
+```
 
 ### System Discovery
 - `list_all_skills()` — All skills grouped by pack
@@ -188,6 +202,8 @@ nexus_import_youtube(url)                     — Import video transcript
 nexus_log_session("CosySim")                  — Track work session
 nexus_status()                                — Check Nexus health
 nexus_list_plugins()                          — List plugins
+seed_nexus("all")                             — Seed/refresh knowledge base
+nexus_maintain("health")                      — Maintenance: health/dedup/cleanup/reindex
 ```
 
 ### Python API (for project code)
@@ -199,11 +215,22 @@ answer = client.ask("How does state persistence work?")
 client.add_entry("Decision: Use FTS5", content, content_type="document", category="architecture")
 ```
 
-### CLI (terminal commands)
+### CLI Bridge (standalone — works without MCP server)
+```bash
+python -m engine.nexus.bridge search "interceptor pipeline"
+python -m engine.nexus.bridge ask "How does state work?"
+python -m engine.nexus.bridge store "Title" "content" --type note --category dev
+python -m engine.nexus.bridge qa "Question?" "Answer."
+python -m engine.nexus.bridge rules "global"
+python -m engine.nexus.bridge health
+python -m engine.nexus.bridge seed all
+python -m engine.nexus.bridge maintain dedup
+```
+
+### Legacy CLI
 ```bash
 python -m engine.nexus.cli search "interceptor pipeline"
 python -m engine.nexus.cli ask "How does state work?"
-python -m engine.nexus.cli add "Title" "content" --type decision
 python -m engine.nexus.cli status
 ```
 
