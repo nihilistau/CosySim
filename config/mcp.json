@@ -8,6 +8,11 @@
       "command": "npx",
       "args": ["notebooklm-mcp"],
       "env": {}
+    },
+    "nexus": {
+      "command": "python",
+      "args": ["-m", "nexus.mcp.server"],
+      "cwd": "C:\\Files\\Nexus"
     }
   }
 }

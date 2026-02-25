@@ -497,3 +497,9 @@ framework:
   state_file: "data/mcp_framework_state.json"
   max_event_log: 500              # max events in the event bus log
   max_consequence_age_turns: 50   # auto-clean old fired consequences
+
+# Nexus Knowledge System integration
+nexus:
+  enabled: true
+  base_url: "http://localhost:8700"
+  auto_submit: false
