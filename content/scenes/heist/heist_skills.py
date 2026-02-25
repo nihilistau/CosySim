@@ -28,7 +28,7 @@ def _get_heist():
 @skill(
     name="heist_status",
     description="Get the current heist situation: phase, suspicion, crew status, obstacles, loot.",
-    scene="heist",
+    pack="heist",
     cooldown=2,
 )
 def heist_status() -> str:
@@ -47,7 +47,7 @@ def heist_status() -> str:
         "carry_loot, loop_cameras, jam_comms, improvise, getaway. "
         "Each action has a success chance based on the crew member's specialty."
     ),
-    scene="heist",
+    pack="heist",
     cooldown=3,
 )
 def heist_action(character_id: str, action: str) -> str:
@@ -62,7 +62,7 @@ def heist_action(character_id: str, action: str) -> str:
 @skill(
     name="heist_advance_phase",
     description="Advance the heist to the next phase. Phases: planning → approach → execution → escape → complete.",
-    scene="heist",
+    pack="heist",
     cooldown=5,
 )
 def heist_advance_phase() -> str:
@@ -77,7 +77,7 @@ def heist_advance_phase() -> str:
 @skill(
     name="heist_collect_loot",
     description="Collect loot from the current location. Amount in dollars.",
-    scene="heist",
+    pack="heist",
     cooldown=3,
 )
 def heist_collect_loot(amount: int = 50000) -> str:
@@ -92,7 +92,7 @@ def heist_collect_loot(amount: int = 50000) -> str:
 @skill(
     name="heist_crew_check",
     description="Check the status and skills of a specific crew member.",
-    scene="heist",
+    pack="heist",
     cooldown=1,
 )
 def heist_crew_check(character_id: str) -> str:
@@ -118,7 +118,7 @@ def heist_crew_check(character_id: str) -> str:
 @skill(
     name="heist_obstacles",
     description="List remaining obstacles that need to be cleared to complete the heist.",
-    scene="heist",
+    pack="heist",
     cooldown=2,
 )
 def heist_obstacles() -> str:
