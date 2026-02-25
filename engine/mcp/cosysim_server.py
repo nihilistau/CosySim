@@ -3773,6 +3773,84 @@ def nexus_maintain(action: str = "health") -> str:
         return json.dumps({"error": str(e)})
 
 
+@mcp.tool()
+def nexus_remember(content: str, agent_id: str = "copilot",
+                   memory_type: str = "observation", importance: float = 0.5) -> str:
+    """Store a memory in Nexus for an agent or Copilot.
+    Types: observation, preference, fact, emotion, event, decision."""
+    try:
+        from engine.nexus.nexus_memory import NexusMemory
+        namespace = "copilot" if agent_id == "copilot" else "agent"
+        mem = NexusMemory(namespace=namespace, agent_id=agent_id)
+        entry_id = mem.remember(content, importance=importance, memory_type=memory_type)
+        return json.dumps({"status": "ok", "entry_id": entry_id, "agent": agent_id})
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def nexus_recall(query: str, agent_id: str = "copilot", limit: int = 5) -> str:
+    """Recall memories from Nexus for an agent or Copilot."""
+    try:
+        from engine.nexus.nexus_memory import NexusMemory
+        namespace = "copilot" if agent_id == "copilot" else "agent"
+        mem = NexusMemory(namespace=namespace, agent_id=agent_id)
+        memories = mem.recall(query, top_k=limit)
+        return json.dumps({"status": "ok", "memories": memories, "count": len(memories)})
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def nexus_memory_context(agent_id: str = "copilot", max_tokens: int = 500) -> str:
+    """Get a compact memory context window for an agent."""
+    try:
+        from engine.nexus.nexus_memory import NexusMemory
+        namespace = "copilot" if agent_id == "copilot" else "agent"
+        mem = NexusMemory(namespace=namespace, agent_id=agent_id)
+        context = mem.get_context_window(max_chars=max_tokens)
+        return json.dumps({"status": "ok", "context": context, "agent": agent_id})
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def capture_training_data(user_message: str, agent_response: str,
+                          dataset_type: str = "conversation",
+                          quality_score: float = 0.7,
+                          character_id: str = "") -> str:
+    """Capture an LLM interaction as training data for fine-tuning."""
+    try:
+        from engine.nexus.training_pipeline import get_training_pipeline
+        tp = get_training_pipeline()
+        entry_id = tp.capture_interaction(
+            user_message, agent_response,
+            dataset_type=dataset_type,
+            quality_score=quality_score,
+            character_id=character_id or None,
+        )
+        return json.dumps({"status": "ok", "entry_id": entry_id, "type": dataset_type})
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def generate_content(character_id: str, content_type: str = "greetings") -> str:
+    """Generate pre-built content for a character. Types: greetings, reactions."""
+    try:
+        from engine.nexus.workflows import ContentWorkflow
+        cw = ContentWorkflow()
+        if content_type == "greetings":
+            ids = cw.generate_greetings(character_id)
+        elif content_type == "reactions":
+            ids = cw.generate_reactions(character_id)
+        else:
+            return json.dumps({"error": f"Unknown type '{content_type}'. Use: greetings, reactions"})
+        return json.dumps({"status": "ok", "entries_created": len(ids), "ids": ids[:5]})
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
 # ── Entry point ────────────────────────────────────────────────────────
 
 def run_server(mode: str = "stdio"):

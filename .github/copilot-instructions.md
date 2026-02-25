@@ -21,7 +21,7 @@ audit logging · LMStudio v1 streaming with stateful conversations · Nexus know
 
 **Test suite:** 1,903+ tests across 70+ files — run before and after changes.
 
-**MCP Server:** 126 tools available via `.vscode/mcp.json` — includes Nexus bridge,
+**MCP Server:** 131 tools available via `.vscode/mcp.json` — includes Nexus bridge,
 skill discovery, and system monitoring tools.
 
 ## MCP Tools Available

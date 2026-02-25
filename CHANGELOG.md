@@ -10,7 +10,46 @@ All notable changes to CosySim are documented here.
 - **System status tool** — `system_status()` reports service health, model status, scene activity, skill counts
 - **Knowledge seeder** — `seed_nexus(source)` populates Nexus with project docs, Q&A, rules, prompts, conventions
 - **Knowledge maintenance** — `nexus_maintain(action)` for health stats, dedup, cleanup, reindex
-- **Total MCP tools**: 107 → 126
+- **Memory tools** — `nexus_remember`, `nexus_recall`, `nexus_memory_context` for agent/Copilot memory
+- **Training tools** — `capture_training_data` for fine-tuning data capture
+- **Content tools** — `generate_content` for pre-built dialog generation
+- **Total MCP tools**: 107 → 131
+
+### Nexus Namespace Separation (NEW)
+- **7 namespaces** — system, scene, agent, copilot, training, research, content
+- **Access control** — Per-namespace read/write rules, cross-namespace access matrix
+- **Validation** — `validate_entry()` enforces content type, category, and tag rules
+- **Auto-detection** — `detect_namespace()` infers namespace from category/tags
+- **38 enforcement rules** installed (16 original + 22 namespace rules)
+- **All entries retagged** with proper namespace tags
+
+### NexusMemory System (NEW)
+- **`engine/nexus/nexus_memory.py`** — Unified memory for Copilot and characters
+- Methods: `remember()`, `recall()`, `get_context_window()`, `compact()`, `forget()`
+- Factory functions: `get_copilot_memory()`, `get_character_memory(character_id)`
+- Importance scoring, memory type classification, time decay
+- FTS5-backed semantic recall via Nexus search
+
+### Training Pipeline (NEW)
+- **`engine/nexus/training_pipeline.py`** — Capture LLM interactions for fine-tuning
+- Methods: `capture_interaction()`, `export_dataset()`, `generate_synthetic()`, `get_stats()`
+- Exports JSONL compatible with `training/finetune_local.py`
+- 5 dataset types: conversation, tag_extraction, tool_routing, response_quality, decision_classify
+- Singleton via `get_training_pipeline()`
+
+### Content & Research Workflows (NEW)
+- **`engine/nexus/workflows.py`** — Three workflow classes
+- **ContentWorkflow**: Generate greetings, reactions, scene descriptions per character/mood
+- **ResearchWorkflow**: 3-tier lookup (Q&A cache → FTS → NLM), store findings
+- **NotebookWorkflow**: Seed NotebookLM reference notebooks, check NLM status
+- 72+ content entries generated (greetings, reactions, scene descriptions for 5 characters)
+
+### Nexus Control Panel (NEW)
+- **`engine/nexus/control_panel.py`** — Streamlit dashboard on port 8702
+- Pages: Dashboard, Knowledge Browser, Rules Engine, Memory Viewer, Training Data, Research, Content Generator, Maintenance
+- Namespace-filtered browsing, rule creation, memory management
+- Training data capture/export, synthetic data generation
+- Run: `streamlit run engine/nexus/control_panel.py --server.port 8702`
 
 ### Copilot CLI Wiring (NEW)
 - **`.vscode/mcp.json`** created — CosySim + Nexus MCP servers now accessible from Copilot CLI
@@ -49,8 +88,8 @@ All notable changes to CosySim are documented here.
 - Argument parsing with subcommands and options
 
 ### Tests
-- **103 new tests** — Nexus bridge (24), seeder & bridge (79)
-- Total tests: 1,996 passing (10 pre-existing sdk_client failures)
+- **155 new tests** — Nexus bridge (24), seeder & bridge (79), Phase 2 (52)
+- Total tests: 2,048 passing (10 pre-existing sdk_client failures)
 
 ## v0.51 — Multi-Model Orchestration & Skill Wiring
 
