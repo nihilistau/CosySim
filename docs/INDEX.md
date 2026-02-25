@@ -33,7 +33,14 @@
 |-----|-------------|
 | [API Reference](API.md) | REST endpoints, Socket.IO events, all scenes |
 | [TTS](TTS.md) | Qwen3-TTS server, voice design, streaming |
-| [NotebookLM](NOTEBOOKLM.md) | NotebookLM MCP integration |
+| [NotebookLM & Nexus](NOTEBOOKLM.md) | NotebookLM integration via Nexus dual-backend |
+
+## External Systems
+
+| Doc | Description |
+|-----|-------------|
+| [Nexus Architecture](../../Nexus/docs/ARCHITECTURE.md) | Knowledge Management System design |
+| [Nexus README](../../Nexus/README.md) | Nexus quick start, API endpoints, MCP tools |
 
 ## Training & Testing
 
@@ -54,8 +61,7 @@
 
 | Doc | Description |
 |-----|-------------|
-| [Project CozyDreamz](ProjectNext/Project-CozyDreamz.md) | Roadmap and framework adoption |
-| [Scene AAA Plan](Scene-AAA-Upgrade-Plan.md) | Scene upgrade compliance matrix |
+| [Scene AAA Plan](Scene-AAA-Upgrade-Plan.md) | Scene upgrade audit and compliance matrix |
 
 ## Internal (Development Logs)
 

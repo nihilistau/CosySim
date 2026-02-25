@@ -73,6 +73,8 @@ python launcher.py --status          # Check service health
 |---------|------|------|-------------|
 | **TTS** | 8600 | FastAPI | Qwen3-TTS voice generation with MCP integration |
 | **Bridge** | 8601 | FastAPI | MCP web bridge (SSE proxy, file upload) |
+| **Nexus API** | 8700 | Flask | Knowledge management, NLM integration, FTS5 search |
+| **Nexus Dashboard** | 8701 | Flask | Knowledge browser, NLM panel, agent activity |
 
 ## Architecture
 
@@ -108,11 +110,12 @@ python launcher.py --status          # Check service health
 
 - **MCP Pipeline** — 25-interceptor governance pipeline wrapping every inference call. Interceptors inject context, enforce rules, sync state, and shape responses pre- and post-inference.
 - **Governance** — `AgentGovernor` + `InterceptorPipeline` with priority-ordered interceptors: personality guards, policy enforcers, mood sync, relationship tracking, activity logging, and more.
-- **Skill Packs** — 9 core packs (memory, character, comfyui, voice, tts, social, boards, training, notebooklm) + per-scene packs. Skills are Python functions exposed as MCP tools via the `@skill` decorator.
+- **Skill Packs** — 9 core packs (memory, character, comfyui, voice, tts, social, boards, training, notebooklm) + per-scene packs + nexus pack. Skills are Python functions exposed as MCP tools via the `@skill` decorator.
 - **Character System** — Stats, traits, mood, arousal, relationship scores, buffs, and tag-based personality modeling. Characters evolve through interactions.
 - **LMStudio Integration** — Native v1 API with `response_id` threading for KV cache reuse, SSE streaming with inline tag extraction, and stateful conversation branching.
 - **TTS** — Qwen3-TTS voice generation server with voice designer, presets, and MCP tool integration.
 - **Media Generation** — ComfyUI integration for images and video, wired as MCP tools with workflow templates.
+- **Nexus Knowledge System** — External knowledge management service ([C:\Files\Nexus](../../../Nexus)) with FTS5 search, NotebookLM integration (dual-backend: HTTP + browser), and agent ingress. CosySim connects via 4 nexus skills and the REST API on port 8700.
 
 ## Project Stats
 
@@ -127,21 +130,24 @@ python launcher.py --status          # Check service health
 
 ## Documentation
 
-- [Architecture & Structure](docs/STRUCTURE_GUIDE.md)
+- [Documentation Index](docs/INDEX.md)
+- [Architecture](docs/ARCHITECTURE.md)
 - [API Reference](docs/API.md)
 - [MCP Framework](docs/MCP_FRAMEWORK.md)
-- [MCP Architecture](docs/MCP_ARCHITECTURE.md)
-- [Agents Guide](docs/AGENTS_GUIDE.md)
+- [Characters](docs/CHARACTERS.md)
+- [Scenes Guide](docs/SCENES.md)
 - [LMStudio Integration](docs/LMSTUDIO.md)
 - [TTS & Voice](docs/TTS.md)
 - [Skills](docs/SKILLS.md)
+- [NotebookLM & Nexus](docs/NOTEBOOKLM.md)
+- [Configuration](docs/CONFIGURATION.md)
 - [Admin Guide](docs/ADMIN_GUIDE.md)
+- [Testing](docs/TESTING.md)
+- [Training](docs/TRAINING.md)
 - [KPI & Metrics](docs/KPI.md)
 - [Contributing](docs/CONTRIBUTING.md)
-- [NotebookLM](docs/NOTEBOOKLM.md)
 - [Changelog](CHANGELOG.md)
 - [Onboarding](ONBOARDING.md)
-- [Security](SECURITY.md)
 
 ## License
 

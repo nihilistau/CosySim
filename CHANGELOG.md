@@ -2,6 +2,31 @@
 
 All notable changes to CosySim are documented here.
 
+## Sprint 15 — Nexus Knowledge System & Documentation Overhaul
+
+### 15a — Documentation Overhaul
+- Consolidated 31 → 20 docs, zero duplicates
+- **New docs**: ARCHITECTURE, SCENES, CHARACTERS, CONFIGURATION, TESTING, TRAINING, INDEX
+- **Rewrote**: README (absorbed QUICK_START+CHEATSHEET), MCP_FRAMEWORK (consolidated with MCP_ARCHITECTURE), API (538 lines from source), ONBOARDING, CONTRIBUTING
+- **Deleted**: 11 stale/duplicate files (-7,476 lines)
+- **Archived**: AGENT_NOTES + AGENT_REVELATIONS → docs/internal/
+
+### 15b — Nexus Knowledge Management System (C:\Files\Nexus)
+- New standalone project: 33 Python files, 3,253 lines
+- 3-layer database: NLM Mirror, Ground Truth, Working Layer (14 tables + FTS5)
+- REST API: 38 routes on port 8700
+- MCP Server: 21 tools via FastMCP (stdio/SSE)
+- Dashboard: Dark-themed web UI on port 8701
+- 4 ingress adapters: NLM sync, manual, agent, pipeline
+- CosySim integration: NexusClient + 4 nexus skills + mcp.json wiring
+- Tests: 150 passing (Nexus), 1,756 passing (CosySim)
+
+### 15c — NotebookLM Dual Backend
+- Browser bridge: Patchright-based browser automation (notebooklm-skill submodule)
+- NLMManager: Auto backend selection (HTTP → browser fallback)
+- 7 new API routes, 3 new MCP tools
+- Config: prefer_backend: auto | http | browser
+
 ## Sprint 14 — Framework Adoption & Scene AAA Upgrade
 - **Monolith split**: cosysim_server.py → engine/mcp/tools/ (8 domain modules, 67 functions extracted)
 - **Governance migration**: All 11 scenes now use build_governance_context() + StateCoordinator
