@@ -673,6 +673,177 @@ const CC = (function () {
             .catch(() => {});
     }
 
+    // ── C4: Scene Control Panel ────────────────────────────
+    let scControlScene = "";
+    let scControlChars = [];
+
+    function loadSceneControlScenes() {
+        fetch("/api/live_feed")
+            .then(r => r.json())
+            .then(scenes => {
+                const sel = $("#sc-scene-select");
+                const dest = $("#sc-xfer-dest");
+                if (!sel) return;
+                const prev = sel.value;
+                sel.innerHTML = '<option value="">Select a scene...</option>';
+                if (dest) dest.innerHTML = '<option value="">Destination...</option>';
+                (scenes || []).forEach(s => {
+                    const opt = document.createElement("option");
+                    opt.value = s.name;
+                    opt.textContent = s.title || s.name;
+                    sel.appendChild(opt);
+                    if (dest) {
+                        const opt2 = opt.cloneNode(true);
+                        dest.appendChild(opt2);
+                    }
+                });
+                if (prev) sel.value = prev;
+            })
+            .catch(() => {});
+    }
+
+    function onSceneControlSceneChange() {
+        const sel = $("#sc-scene-select");
+        scControlScene = sel ? sel.value : "";
+        if (scControlScene) {
+            loadSceneControlCharacters();
+        } else {
+            scControlChars = [];
+            updateSceneControlCharDropdowns([]);
+            const container = $("#sc-characters");
+            if (container) container.innerHTML = '<div class="muted">Select a scene to view characters</div>';
+            setText("sc-char-count", "");
+        }
+    }
+
+    function loadSceneControlCharacters() {
+        if (!scControlScene) return;
+        fetch(`/api/scene_control/characters/${scControlScene}`)
+            .then(r => r.json())
+            .then(chars => {
+                scControlChars = chars || [];
+                updateSceneControlCharDropdowns(scControlChars);
+                renderSceneControlCharacters(scControlChars);
+                setText("sc-char-count", `${scControlChars.length} character(s)`);
+            })
+            .catch(() => {});
+    }
+
+    function updateSceneControlCharDropdowns(chars) {
+        ["#sc-dir-char", "#sc-xfer-char"].forEach(selId => {
+            const sel = $(selId);
+            if (!sel) return;
+            sel.innerHTML = '<option value="">Character...</option>';
+            chars.forEach(c => {
+                const opt = document.createElement("option");
+                opt.value = c.id;
+                opt.textContent = c.name || c.id;
+                sel.appendChild(opt);
+            });
+        });
+    }
+
+    function renderSceneControlCharacters(chars) {
+        const container = $("#sc-characters");
+        if (!container) return;
+        if (!chars || chars.length === 0) {
+            container.innerHTML = '<div class="muted">No characters in this scene</div>';
+            return;
+        }
+        container.innerHTML = chars.map(c => {
+            const mood = c.mood || "neutral";
+            const energy = c.energy != null ? c.energy : "?";
+            return `<div class="sc-char-card">
+                <div class="sc-char-name">${c.name || c.id}</div>
+                <div class="sc-char-stats">
+                    <span>😊 ${mood}</span>
+                    <span>⚡ ${energy}</span>
+                    ${c.arousal != null ? `<span>💗 ${c.arousal}</span>` : ""}
+                    ${c.inhibition != null ? `<span>🛡 ${c.inhibition}</span>` : ""}
+                </div>
+            </div>`;
+        }).join("");
+    }
+
+    function sendDirective() {
+        if (!scControlScene) { addFeedItem("alert", "Select a scene first"); return; }
+        const charSel = $("#sc-dir-char");
+        const charId = charSel ? charSel.value : "";
+        const text = ($("#sc-dir-text") || {}).value || "";
+        const turns = parseInt(($("#sc-dir-turns") || {}).value) || 3;
+
+        if (!charId || !text) { addFeedItem("alert", "Character and directive text required"); return; }
+
+        fetch("/api/scene_control/directive", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ scene_id: scControlScene, character_id: charId, directive: text, turns }),
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                addFeedItem("alert", `Directive failed: ${data.error}`);
+            } else {
+                addFeedItem("system", `Directive → ${charId} in ${scControlScene} (${turns} turns)`);
+                const input = $("#sc-dir-text");
+                if (input) input.value = "";
+            }
+        })
+        .catch(e => addFeedItem("alert", `Directive error: ${e.message}`));
+    }
+
+    function sendBroadcast() {
+        if (!scControlScene) { addFeedItem("alert", "Select a scene first"); return; }
+        const msg = ($("#sc-bcast-msg") || {}).value || "";
+        const sender = ($("#sc-bcast-sender") || {}).value || "system";
+
+        if (!msg) { addFeedItem("alert", "Broadcast message required"); return; }
+
+        fetch("/api/scene_control/broadcast", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ scene_id: scControlScene, message: msg, sender }),
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                addFeedItem("alert", `Broadcast failed: ${data.error}`);
+            } else {
+                addFeedItem("system", `📢 Broadcast to ${scControlScene}: ${msg.substring(0, 60)}`);
+                const input = $("#sc-bcast-msg");
+                if (input) input.value = "";
+            }
+        })
+        .catch(e => addFeedItem("alert", `Broadcast error: ${e.message}`));
+    }
+
+    function sendTransfer() {
+        if (!scControlScene) { addFeedItem("alert", "Select a scene first"); return; }
+        const charSel = $("#sc-xfer-char");
+        const destSel = $("#sc-xfer-dest");
+        const charId = charSel ? charSel.value : "";
+        const dest = destSel ? destSel.value : "";
+
+        if (!charId || !dest) { addFeedItem("alert", "Character and destination required"); return; }
+        if (dest === scControlScene) { addFeedItem("alert", "Destination must differ from source"); return; }
+
+        fetch("/api/scene_control/transfer", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ character_id: charId, from_scene: scControlScene, to_scene: dest }),
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                addFeedItem("alert", `Transfer failed: ${data.error}`);
+            } else {
+                addFeedItem("system", `🔄 Transferred ${charId}: ${scControlScene} → ${dest}`);
+                setTimeout(loadSceneControlCharacters, 1000);
+            }
+        })
+        .catch(e => addFeedItem("alert", `Transfer error: ${e.message}`));
+    }
+
     // ── C5: System Metrics ──────────────────────────────────
     function refreshSystemMetrics() {
         fetch("/api/system_metrics")
@@ -734,6 +905,10 @@ const CC = (function () {
         refreshSceneStatus();
         setInterval(refreshSceneStatus, 5000);
 
+        // C4: Scene control panel
+        loadSceneControlScenes();
+        setInterval(loadSceneControlScenes, 15000);
+
         // C5: Load system metrics
         refreshSystemMetrics();
         setInterval(refreshSystemMetrics, 10000);
@@ -747,5 +922,7 @@ const CC = (function () {
         viewCharacter, viewConversations, injectEvent,
         onLiveFeedSceneChange, refreshSceneStatus,
         loadCharacterState, refreshSystemMetrics,
+        onSceneControlSceneChange, sendDirective,
+        sendBroadcast, sendTransfer,
     };
 })();

@@ -76,6 +76,7 @@ class CommandCenterScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
         self._register_routes()
         self._register_scene_routes()
         self._register_monitoring_routes()
+        self._register_scene_control_routes()
         self._register_socketio()
 
         # Framework integration
@@ -878,6 +879,165 @@ class CommandCenterScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
 
             result["timestamp"] = time.time()
             return jsonify(result)
+
+    # ------------------------------------------------------------------
+    # C4: Scene Control Panel Routes
+    # ------------------------------------------------------------------
+
+    def _register_scene_control_routes(self):
+        app = self.app
+
+        @app.route("/api/scene_control/directive", methods=["POST"])
+        def api_scene_control_directive():
+            """Inject a response directive into a character in a scene."""
+            data = request.get_json(silent=True) or {}
+            scene_id = data.get("scene_id")
+            character_id = data.get("character_id")
+            directive = data.get("directive", "")
+            turns = data.get("turns", 1)
+
+            if not scene_id or not character_id or not directive:
+                return jsonify({"error": "Missing scene_id, character_id, or directive"}), 400
+
+            scene = get_active_scene(scene_id)
+            if not scene:
+                return jsonify({"error": f"Scene '{scene_id}' not active"}), 404
+
+            try:
+                from engine.mcp.dialog_system import get_dialog_system
+                ds = get_dialog_system()
+                ds.set_directive(
+                    character_id, scene_id,
+                    directive_type="topic_steer",
+                    value=directive,
+                    turns=int(turns),
+                    issued_by="command_center",
+                )
+                log.info("Directive injected: %s in %s → %s (%d turns)",
+                         character_id, scene_id, directive[:60], turns)
+                return jsonify({
+                    "ok": True, "character_id": character_id,
+                    "scene_id": scene_id, "turns": turns,
+                })
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @app.route("/api/scene_control/broadcast", methods=["POST"])
+        def api_scene_control_broadcast():
+            """Send a broadcast message to all characters in a scene."""
+            data = request.get_json(silent=True) or {}
+            scene_id = data.get("scene_id")
+            message = data.get("message", "")
+            sender = data.get("sender", "system")
+
+            if not scene_id or not message:
+                return jsonify({"error": "Missing scene_id or message"}), 400
+
+            scene = get_active_scene(scene_id)
+            if not scene:
+                return jsonify({"error": f"Scene '{scene_id}' not active"}), 404
+
+            try:
+                fw = get_framework()
+                fw.emit_event(scene_id, "system_broadcast", {
+                    "text": message, "source": sender,
+                })
+
+                # Also log to EventChain for persistence
+                try:
+                    from content.simulation.database.events import get_event_chain
+                    ec = get_event_chain()
+                    ec.log(
+                        event_type="system_broadcast",
+                        actor=sender,
+                        payload={"message": message},
+                        summary=f"Broadcast: {message[:80]}",
+                        scene_id=scene_id,
+                    )
+                except Exception:
+                    pass
+
+                log.info("Broadcast to %s from %s: %s", scene_id, sender, message[:80])
+                return jsonify({"ok": True, "scene_id": scene_id, "sender": sender})
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @app.route("/api/scene_control/characters/<scene_name>")
+        def api_scene_control_characters(scene_name: str):
+            """List characters in a scene with their current state."""
+            scene = get_active_scene(scene_name)
+            if not scene:
+                return jsonify({"error": f"Scene '{scene_name}' not active"}), 404
+
+            char_ids = []
+            if hasattr(scene, "characters") and isinstance(scene.characters, dict):
+                char_ids = list(scene.characters.keys())
+            elif hasattr(scene, "_characters") and isinstance(scene._characters, dict):
+                char_ids = list(scene._characters.keys())
+
+            chars = []
+            for cid in char_ids:
+                info = self._get_character_details(cid)
+                info["scene"] = scene_name
+                chars.append(info)
+            return jsonify(chars)
+
+        @app.route("/api/scene_control/transfer", methods=["POST"])
+        def api_scene_control_transfer():
+            """Transfer a character between scenes."""
+            data = request.get_json(silent=True) or {}
+            character_id = data.get("character_id")
+            from_scene = data.get("from_scene")
+            to_scene = data.get("to_scene")
+
+            if not character_id or not from_scene or not to_scene:
+                return jsonify({"error": "Missing character_id, from_scene, or to_scene"}), 400
+
+            src = get_active_scene(from_scene)
+            dst = get_active_scene(to_scene)
+            if not src:
+                return jsonify({"error": f"Source scene '{from_scene}' not active"}), 404
+            if not dst:
+                return jsonify({"error": f"Destination scene '{to_scene}' not active"}), 404
+
+            try:
+                # Log cross-scene transfer event
+                try:
+                    from content.simulation.database.events import get_event_chain
+                    ec = get_event_chain()
+                    ec.log(
+                        event_type="character_transfer",
+                        actor="command_center",
+                        payload={
+                            "character_id": character_id,
+                            "from_scene": from_scene,
+                            "to_scene": to_scene,
+                        },
+                        summary=f"Transfer {character_id}: {from_scene} → {to_scene}",
+                        scene_id=from_scene,
+                        character_id=character_id,
+                    )
+                except Exception:
+                    pass
+
+                # Emit framework events to both scenes
+                fw = get_framework()
+                fw.emit_event(from_scene, "character_departed", {
+                    "character_id": character_id, "destination": to_scene,
+                    "source": "command_center",
+                })
+                fw.emit_event(to_scene, "character_arrived", {
+                    "character_id": character_id, "origin": from_scene,
+                    "source": "command_center",
+                })
+
+                log.info("Transfer %s: %s → %s", character_id, from_scene, to_scene)
+                return jsonify({
+                    "ok": True, "character_id": character_id,
+                    "from_scene": from_scene, "to_scene": to_scene,
+                })
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
 
     def _register_socketio(self):
         @self.socketio.on("connect")

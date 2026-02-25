@@ -502,6 +502,70 @@ body {
     width: 200px;
 }
 .cc-input:focus { border-color: var(--cc-accent); outline: none; }
+
+/* C4: Scene Control Panel */
+.scene-control-status {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.scene-control-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 12px;
+    margin-bottom: 12px;
+}
+.sc-form-card {
+    background: #0f172a;
+    border: 1px solid var(--cc-border);
+    border-radius: 8px;
+    padding: 12px;
+}
+.sc-form-card h3 {
+    font-size: 12px;
+    font-weight: 700;
+    margin-bottom: 8px;
+    color: var(--cc-accent);
+}
+.sc-form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.sc-form-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.sc-label {
+    font-size: 11px;
+    color: var(--cc-muted);
+    white-space: nowrap;
+}
+.sc-characters-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 8px;
+    margin-top: 8px;
+}
+.sc-char-card {
+    background: #0f172a;
+    border: 1px solid var(--cc-border);
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-size: 11px;
+}
+.sc-char-card .sc-char-name {
+    font-weight: 700;
+    color: var(--cc-accent);
+    margin-bottom: 4px;
+}
+.sc-char-card .sc-char-stats {
+    color: var(--cc-muted);
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
 .char-state-columns {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));

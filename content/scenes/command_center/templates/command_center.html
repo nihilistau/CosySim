@@ -218,6 +218,62 @@
             </div>
         </section>
 
+        <!-- C4: Scene Control Panel -->
+        <section class="cc-panel cc-wide" id="panel-scene-control">
+            <div class="panel-header-row">
+                <h2>Scene Control</h2>
+                <div class="scene-control-status">
+                    <select id="sc-scene-select" class="cc-select" onchange="CC.onSceneControlSceneChange()">
+                        <option value="">Select a scene...</option>
+                    </select>
+                    <span id="sc-char-count" class="muted"></span>
+                </div>
+            </div>
+            <div class="scene-control-grid">
+                <!-- Directive injection -->
+                <div class="sc-form-card">
+                    <h3>💉 Inject Directive</h3>
+                    <div class="sc-form-group">
+                        <select id="sc-dir-char" class="cc-select"><option value="">Character...</option></select>
+                        <input type="text" id="sc-dir-text" class="cc-input" placeholder="Directive text..." style="width:100%;">
+                        <div class="sc-form-row">
+                            <label class="sc-label">Turns:</label>
+                            <input type="number" id="sc-dir-turns" class="cc-input" value="3" min="1" max="99" style="width:60px;">
+                            <button class="cc-btn small" onclick="CC.sendDirective()">Send</button>
+                        </div>
+                    </div>
+                </div>
+                <!-- Broadcast message -->
+                <div class="sc-form-card">
+                    <h3>📢 Broadcast</h3>
+                    <div class="sc-form-group">
+                        <input type="text" id="sc-bcast-msg" class="cc-input" placeholder="Broadcast message..." style="width:100%;">
+                        <div class="sc-form-row">
+                            <label class="sc-label">Sender:</label>
+                            <input type="text" id="sc-bcast-sender" class="cc-input" value="system" style="width:100px;">
+                            <button class="cc-btn small" onclick="CC.sendBroadcast()">Broadcast</button>
+                        </div>
+                    </div>
+                </div>
+                <!-- Character transfer -->
+                <div class="sc-form-card">
+                    <h3>🔄 Transfer Character</h3>
+                    <div class="sc-form-group">
+                        <select id="sc-xfer-char" class="cc-select"><option value="">Character...</option></select>
+                        <div class="sc-form-row">
+                            <label class="sc-label">To:</label>
+                            <select id="sc-xfer-dest" class="cc-select"><option value="">Destination...</option></select>
+                            <button class="cc-btn small" onclick="CC.sendTransfer()">Transfer</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- Characters in scene -->
+            <div id="sc-characters" class="sc-characters-list">
+                <div class="muted">Select a scene to view characters</div>
+            </div>
+        </section>
+
         <!-- C5: System Metrics -->
         <section class="cc-panel" id="panel-sys-metrics">
             <h2>System Metrics</h2>
