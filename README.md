@@ -1,6 +1,6 @@
 # CosySim — AI Agent Simulation Framework
 
-> v0.50a — A local-first AI simulation platform powered by LMStudio with a custom MCP framework and Nexus knowledge system.
+> v0.50b — A local-first AI simulation platform powered by LMStudio with a custom MCP framework and Nexus knowledge system.
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -119,7 +119,7 @@ python launcher.py --status          # Check service health
 - **LMStudio Integration** — Native v1 API with `response_id` threading for KV cache reuse, SSE streaming with inline tag extraction, and stateful conversation branching.
 - **TTS** — Qwen3-TTS voice generation server with voice designer, presets, and MCP tool integration.
 - **Media Generation** — ComfyUI integration for images and video, wired as MCP tools with workflow templates.
-- **Nexus Knowledge System** — Central knowledge management service with FTS5 search, NotebookLM integration, rules engine, session tracking, prompt versioning, and agent ingress. 10 Nexus MCP skills. REST API on port 8700.
+- **Nexus Knowledge System** — Central knowledge management service with FTS5 search, NotebookLM integration, rules engine, session tracking, prompt versioning, Q&A distillation cache, Research Manager, YouTube transcript ingestion, and plugin system. 16 Nexus MCP skills. REST API on port 8700.
 
 ## Project Stats
 
@@ -128,10 +128,10 @@ python launcher.py --status          # Check service health
 | Tests | 1,832 |
 | Game scenes | 13 |
 | Interceptors | 25 |
-| MCP skills | 148+ |
+| MCP skills | 165 |
 | Core skill packs | 10 |
 | Scene skill packs | 13 |
-| Nexus skills | 10 |
+| Nexus skills | 16 |
 
 ## Documentation
 

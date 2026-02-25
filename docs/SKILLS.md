@@ -1,4 +1,4 @@
-# CosySim Skills System — v0.50a
+# CosySim Skills System — v0.50b
 
 Skills are Python callables that an LLM agent invokes as **tools** during inference.
 The `@skill` decorator registers them into the global `SKILL_REGISTRY`. LMStudio
@@ -38,7 +38,7 @@ VirtualAgentManager.infer()     engine/agents/virtual_agent_manager.py
 | `boards` | board_skills.py | Shared board game mechanics |
 | `training` | training_skills.py | `trigger_finetune`, `get_training_status`, `export_training_data`, `list_trained_models` |
 | `notebooklm` | notebooklm_skills.py | `notebooklm_ask`, `notebooklm_add_source`, `notebooklm_generate_audio`, `notebooklm_list_notebooks`, `notebooklm_search` |
-| `nexus` | nexus_skills.py | `nexus_search`, `nexus_add`, `nexus_nlm_ask`, `nexus_status`, `nexus_log_session`, `nexus_store_prompt`, `nexus_search_prompts`, `nexus_get_rules`, `nexus_submit_idea`, `nexus_changelog` |
+| `nexus` | nexus_skills.py | `nexus_search`, `nexus_add`, `nexus_nlm_ask`, `nexus_status`, `nexus_log_session`, `nexus_store_prompt`, `nexus_search_prompts`, `nexus_get_rules`, `nexus_submit_idea`, `nexus_changelog`, `nexus_ask`, `nexus_research`, `nexus_converse`, `nexus_finish_research`, `nexus_youtube` |
 
 ### Scene Packs (content/scenes/{name}/{name}_skills.py)
 

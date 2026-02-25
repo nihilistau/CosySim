@@ -2,6 +2,39 @@
 
 All notable changes to CosySim are documented here.
 
+## v0.50b — Nexus Q&A, Research Manager & YouTube Import
+
+### NexusClient — 10 New Methods
+- `ask()`: Query the Q&A cache → FTS5 → NLM pipeline
+- `find_qa()`: Search the Q&A distillation cache
+- `add_qa()`: Store a question-answer pair in the cache
+- `research()`: Start a multi-turn research session
+- `converse()`: Continue a research conversation with follow-ups
+- `finish_research()`: Close a research session and return summary
+- `list_research()`: List research sessions by status
+- `import_youtube()`: Ingest a YouTube video transcript into Nexus
+- `list_plugins()`: List registered plugin hooks
+- `add_plugin()`: Register a plugin script for a lifecycle hook
+
+### Nexus Skills (10→16)
+- `nexus_ask`: Ask against Q&A cache and NLM pipeline
+- `nexus_research`: Start a multi-turn research session
+- `nexus_converse`: Continue a research conversation
+- `nexus_finish_research`: Close research session with summary
+- `nexus_youtube`: Import YouTube transcript into knowledge base
+
+### New Subsystems
+- **Q&A Distillation Cache** — Stores distilled question-answer pairs for instant lookup before falling back to FTS5/NLM
+- **Research Manager** — Multi-turn investigative sessions backed by Q&A cache → FTS5 → NLM pipeline
+- **YouTube Transcript Ingestion** — Downloads, chunks, and indexes video transcripts as knowledge entries
+- **Plugin System** — Lifecycle hooks (post_ingest, pre_query, post_query, on_research_close) for extending Nexus pipelines
+
+### Stats
+- **MCP Skills**: 165 across 23 packs (10 core + 13 scene)
+- **Nexus Skills**: 16
+
+---
+
 ## v0.50a — Master Consolidation & Nexus Integration
 
 ### Nexus Schema v2

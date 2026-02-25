@@ -1,4 +1,4 @@
-# Nexus Integration Guide — v0.50a
+# Nexus Integration Guide — v0.50b
 
 Nexus is CosySim's central knowledge management system. It provides persistent storage, full-text search, rules enforcement, session tracking, and prompt versioning — accessible from agents, scenes, skills, and external tools.
 
@@ -8,7 +8,7 @@ Nexus is CosySim's central knowledge management system. It provides persistent s
 ┌──────────────────────────────────────────────────┐
 │  CosySim (Agents, Scenes, Skills)                │
 │  ├── engine/nexus/client.py   NexusClient HTTP   │
-│  ├── engine/skills/builtin/nexus_skills.py  10   │
+│  ├── engine/skills/builtin/nexus_skills.py  16   │
 │  └── engine/agents/interceptors.py  (activity)   │
 ├──────────────────────────────────────────────────┤
 │              HTTP REST API (port 8700)            │
@@ -81,13 +81,31 @@ ids = client.batch_add([
 
 # Changelog
 client.store_changelog("v0.50a", "Nexus integration overhaul", commits=["abc123"])
+
+# Q&A
+results = client.find_qa("How does combat work?", limit=5)
+qa_id = client.add_qa("What is Nexus?", "Central knowledge management system.")
+answer = client.ask("Explain the rules engine")
+
+# Research
+session = client.research("combat mechanics analysis")
+reply = client.converse(session["id"], "What about critical hits?")
+summary = client.finish_research(session["id"])
+sessions = client.list_research(status="active")
+
+# YouTube
+entry_id = client.import_youtube("https://youtube.com/watch?v=...", tags=["tutorial"])
+
+# Plugins
+plugins = client.list_plugins()
+client.add_plugin("my_hook", hook="post_ingest", script="plugins/my_hook.py")
 ```
 
 ### Retry & Resilience
 
 The client retries failed requests up to `max_retries` times with exponential backoff (0.5s × attempt). If Nexus is unavailable, methods return graceful defaults (`None`, `[]`, `False`).
 
-## MCP Skills (10)
+## MCP Skills (16)
 
 | Skill | Description |
 |-------|-------------|
@@ -101,6 +119,11 @@ The client retries failed requests up to `max_retries` times with exponential ba
 | `nexus_get_rules` | Get active rules for a scope |
 | `nexus_submit_idea` | Submit improvement ideas |
 | `nexus_changelog` | Query change history |
+| `nexus_ask` | Ask a question against the Q&A cache and NLM pipeline |
+| `nexus_research` | Start a multi-turn research session |
+| `nexus_converse` | Continue a research conversation with follow-up questions |
+| `nexus_finish_research` | Close a research session and return a summary |
+| `nexus_youtube` | Import a YouTube video transcript into the knowledge base |
 
 All skills are in the `nexus` pack and available to any agent via `mcp_skill_pack("nexus")`.
 
@@ -176,6 +199,75 @@ The interceptor pipeline can auto-log agent activity to Nexus post-inference, tr
 | POST | `/api/agent/submit` | Agent knowledge submission |
 | GET | `/api/stats` | Database statistics |
 | GET | `/api/health` | Health check |
+
+## Q&A Distillation Cache
+
+The Q&A cache stores distilled question-answer pairs extracted from knowledge entries and research sessions. When a question is asked via `nexus_ask`, the pipeline checks the Q&A cache first for an instant hit before falling back to FTS5 search and NLM backends.
+
+```python
+# Add a Q&A pair directly
+client.add_qa("What is the rules engine?", "Scope-based governance policies with condition/action JSON.")
+
+# Search the cache
+results = client.find_qa("rules engine", limit=5)
+
+# Ask — checks Q&A cache → FTS5 → NLM pipeline
+answer = client.ask("How do rules work?")
+```
+
+## Research Manager
+
+The Research Manager supports multi-turn investigative sessions. A research session opens a conversational context backed by the Q&A cache → FTS5 → NLM pipeline, allowing iterative exploration of a topic.
+
+```python
+# Start a research session
+session = client.research("combat mechanics deep dive")
+
+# Ask follow-up questions within the session
+reply = client.converse(session["id"], "How do critical hits work?")
+reply = client.converse(session["id"], "What about armor penetration?")
+
+# List active sessions
+active = client.list_research(status="active")
+
+# Close session and get a summary
+summary = client.finish_research(session["id"])
+```
+
+The Research Manager pipeline: **Q&A cache** (instant) → **FTS5 full-text search** (fast) → **NLM backends** (deep). Each step only runs if the previous step didn't produce a confident answer.
+
+## YouTube Transcript Import
+
+Nexus can ingest YouTube video transcripts as knowledge entries. The `import_youtube` method downloads the transcript, chunks it into manageable segments, and stores each chunk as a searchable knowledge entry.
+
+```python
+entry_id = client.import_youtube(
+    "https://youtube.com/watch?v=abc123",
+    tags=["tutorial", "combat"],
+    content_type="note",
+    category="reference"
+)
+```
+
+The corresponding `nexus_youtube` skill exposes this to agents during inference.
+
+## Plugin System
+
+The plugin system provides lifecycle hooks for extending Nexus ingestion and query pipelines. Plugins are Python scripts registered with a specific hook point.
+
+Available hooks:
+- `post_ingest` — Runs after a knowledge entry is stored
+- `pre_query` — Modifies or enriches queries before search
+- `post_query` — Post-processes search results before returning
+- `on_research_close` — Triggered when a research session finishes
+
+```python
+# Register a plugin
+client.add_plugin("my_enricher", hook="post_ingest", script="plugins/enrich.py")
+
+# List registered plugins
+plugins = client.list_plugins()
+```
 
 ## Configuration
 
