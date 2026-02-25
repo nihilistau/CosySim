@@ -304,6 +304,11 @@ class CasinoScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
             except Exception:
                 system = "You are a casino character. Keep responses short. Use [MOOD:emotion] tags."
 
+            # Append governance context (interceptor injections, scene rules)
+            governance = self._get_governance_context(character_id)
+            if governance:
+                system = f"{system}\n\n{governance}"
+
             request = InferenceRequest(
                 agent_id=character_id,
                 messages=[
@@ -335,6 +340,14 @@ class CasinoScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
         except Exception as exc:
             logger.debug("Casino agent reply failed: %s", exc)
             return result
+
+    def _get_governance_context(self, character_id: str) -> str:
+        """Build governance context for a casino character's LLM call."""
+        try:
+            from engine.mcp.comms_framework import build_governance_context
+            return build_governance_context(character_id, "casino", "") or ""
+        except Exception:
+            return ""
 
     # ══════════════════════════════════════════════════════════════════
     #  GAME ENGINE
