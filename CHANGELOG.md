@@ -4,6 +4,20 @@ All notable changes to CosySim are documented here.
 
 ## v0.50b — Nexus Q&A, Research Manager & YouTube Import
 
+### Bedroom v6 — Camera Views & Layout Overhaul
+- **Camera view presets** — 8 preset views (Overview, Bed, Couch, Bath, Fireplace, Vanity, Bar, Balcony) with smooth animated transitions
+- **Room layout reorganized** — 16×14 room with 4 distinct wall areas: bed (left), couch+bath (right), bar+vanity (back), fireplace+balcony (front)
+- **View controls** — Prev/Next cycle buttons, zoom slider, expanded orbit controls
+- **Stats fix** — `compliance_score` field name mismatch fixed between backend and frontend
+- **Furniture scaling** — Bed 3.4×4.6, bathtub 2.2 z-axis, all sized for avatar containment
+
+### Scene Consistency Fix
+- Fixed 5 scene `__init__.py` files missing scene class imports (bedroom, casino, lounge, tavern, warzone)
+- All 13 graded scenes now properly export their scene class in `__all__`
+
+### Project Documentation
+- Added `ROADMAP.md` — Structured roadmap from v0.51 through v0.55+ with scene quality targets
+
 ### NexusClient — 10 New Methods
 - `ask()`: Query the Q&A cache → FTS5 → NLM pipeline
 - `find_qa()`: Search the Q&A distillation cache
