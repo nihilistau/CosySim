@@ -12,6 +12,7 @@ backups/
 
 # Visual Studio Code files
 .vscode
+!.vscode/mcp.json
 .vs
 
 # PyCharm files

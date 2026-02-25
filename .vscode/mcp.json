@@ -1,0 +1,16 @@
+{
+  "servers": {
+    "cosysim": {
+      "type": "stdio",
+      "command": "python",
+      "args": ["-m", "engine.mcp.cosysim_server"],
+      "cwd": "${workspaceFolder}"
+    },
+    "nexus": {
+      "type": "stdio",
+      "command": "python",
+      "args": ["-m", "nexus.mcp.server"],
+      "cwd": "C:\\Files\\Nexus"
+    }
+  }
+}
