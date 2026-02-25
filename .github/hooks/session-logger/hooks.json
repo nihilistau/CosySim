@@ -4,26 +4,26 @@
     "sessionStart": [
       {
         "type": "command",
-        "command": "powershell",
-        "args": ["-NoProfile", "-Command", "$timestamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'; $logDir = '.github/hooks/logs'; if (-not (Test-Path $logDir)) { New-Item -ItemType Directory $logDir -Force | Out-Null }; Add-Content \"$logDir/session.log\" \"[$timestamp] SESSION START\""],
+        "command": "python",
+        "args": ["engine/nexus/nexus_session_logger.py", "start"],
         "cwd": ".",
-        "timeoutSec": 5
+        "timeoutSec": 10
       }
     ],
     "sessionEnd": [
       {
         "type": "command",
-        "command": "powershell",
-        "args": ["-NoProfile", "-Command", "$timestamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'; Add-Content '.github/hooks/logs/session.log' \"[$timestamp] SESSION END\""],
+        "command": "python",
+        "args": ["engine/nexus/nexus_session_logger.py", "end"],
         "cwd": ".",
-        "timeoutSec": 5
+        "timeoutSec": 10
       }
     ],
     "userPromptSubmitted": [
       {
         "type": "command",
-        "command": "powershell",
-        "args": ["-NoProfile", "-Command", "$timestamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'; Add-Content '.github/hooks/logs/session.log' \"[$timestamp] PROMPT SUBMITTED\""],
+        "command": "python",
+        "args": ["engine/nexus/nexus_session_logger.py", "prompt"],
         "cwd": ".",
         "timeoutSec": 5
       }
