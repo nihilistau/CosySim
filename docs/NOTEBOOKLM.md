@@ -1,7 +1,7 @@
 # NotebookLM MCP Integration
 
 CosySim integrates with Google NotebookLM through the
-[notebooklm-mcp](https://www.npmjs.com/package/@roomi-fields/notebooklm-mcp)
+[notebooklm-mcp](https://www.npmjs.com/package/notebooklm-mcp)
 bridge.  This lets CosySim skills search notebooks, add sources (URLs, PDFs,
 YouTube links), and generate podcast-style audio overviews — all without
 leaving the engine.
@@ -13,13 +13,13 @@ leaving the engine.
 1. **Install the npm package** (one-time):
 
    ```bash
-   npm install @roomi-fields/notebooklm-mcp
+   npm install notebooklm-mcp
    ```
 
 2. **Launch the MCP server** and complete browser-based Google login:
 
    ```bash
-   npx @roomi-fields/notebooklm-mcp
+   npx notebooklm-mcp
    ```
 
    A browser window opens for Google sign-in.  After you authenticate, the
@@ -46,7 +46,7 @@ notebooklm:
 ```
 
 Set `enabled: true` and, if you installed the package locally, set
-`server_path` to `node_modules/@roomi-fields/notebooklm-mcp/dist/index.js`.
+`server_path` to `node_modules/notebooklm-mcp/dist/index.js`.
 
 An MCP-compatible config file is also available at `config/mcp.json` for use
 with LMStudio or other MCP hosts.

@@ -9,7 +9,7 @@
 ## Executive Summary
 
 CosySim has excellent infrastructure but fragmented adoption. The framework provides
-17 interceptors, a rules engine, dialog system, state coordinator, conversation heat,
+24 interceptors, a rules engine, dialog system, state coordinator, conversation heat,
 interaction trees, MCPTimers, game sessions, cross-scene messaging, a 3-tier inference
 router, stream watcher with kill switch, and a training pipeline. **Most scenes use
 less than 30% of these features.**
@@ -42,15 +42,16 @@ Scenes declare rules, register handlers, provide templates. They don't contain l
 ## 1. Current State Assessment
 
 ### What Works Well (Keep & Extend)
-- **Interceptor pipeline** — 18 interceptors, priority 8-92, composable
+- **Interceptor pipeline** — 24 interceptors, priority 8-92, composable
 - **CharacterStateCoordinator** — unified state write-through (NEW)
 - **LMSClient** — native v1 API, SSE streaming, stateful conversations
 - **InferenceRouter** — 3-tier priority queue with affinity tracking
-- **Skill system** — @skill decorator, registry, cooldowns, packs
+- **Skill system** — @skill decorator, registry, cooldowns, packs (Training Skills ×4, NotebookLM Skills ×5 built-in)
 - **VirtualPipeline** — stream watcher + kill switch + pre-warm
 - **TagRegistry** — extensible inline tag routing
 - **ConversationHeat** — thermal conversation model with auto-decay
 - **Training pipeline** — dataset generation + auto-train + Colab notebook
+- **TTS streaming** — real-time text-to-speech endpoint (Sprint 13)
 
 ### What Needs Work (Fix & Wire)
 - **7 of 11 scenes** don't use Governor/Interceptor pipeline
@@ -658,7 +659,7 @@ Most are reasonably current but reference old patterns. Need updates for:
 4. Fix port conflicts in scene configs
 5. Remove dead code (empty dirs, unused methods)
 6. Clean up bare except:pass blocks in framework.py
-7. Run full test suite, verify 1175+ pass
+7. Run full test suite, verify 1337+ pass
 
 ### Sprint 2: Phone Scene Framework Migration
 **Goal:** Transform the biggest anti-pattern scene
@@ -748,9 +749,9 @@ For each scene:
 | content/simulation/ | ~15 | Database, characters, services |
 | content/shared/ | ~3 | Themes, static assets |
 
-### Tests (~8,000 lines estimated)
-- 47 test files
-- 1,175 tests passing
+### Tests (~9,000 lines estimated)
+- 47+ test files
+- 1,337 tests passing (Sprint 13)
 - Coverage: engine subsystems well-tested, scenes under-tested
 
 ### Total Project: ~51,000+ lines of Python
@@ -759,3 +760,16 @@ For each scene:
 
 *This is a living document. Update as implementation progresses.*
 *Each sprint should update the Framework Adoption Matrix (§4) to track progress.*
+
+---
+
+## Sprint 13 Completion Log
+
+**Completed items:**
+- ✅ Training pipeline fully wired (dataset generation, auto-train, Colab notebook)
+- ✅ NotebookLM MCP integration (5 skills)
+- ✅ TTS streaming endpoint added
+- ✅ Dead code cleanup pass
+- ✅ All 11 scenes now have @skill files (Training Skills ×4, NotebookLM Skills ×5 as built-in packs)
+- ✅ 24 interceptors in pipeline (up from 18)
+- ✅ 1,337 tests passing (up from 1,175)

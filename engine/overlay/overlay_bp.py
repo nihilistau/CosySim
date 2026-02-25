@@ -18,6 +18,10 @@ Flask Blueprint mountable on any CosySim scene.  Provides:
 * ``/overlay/api/inference`` — Inference config defaults & override
 * ``/overlay/api/router`` — InferenceRouter metrics (queue, tiers, throughput)
 * ``/overlay/api/router/tiers`` — Per-tier slot configuration and live usage
+* ``/overlay/api/training/config`` — Training pipeline configuration
+* ``/overlay/api/training/status`` — Training jobs status
+* ``/overlay/api/training/datasets`` — Available training datasets
+* ``/overlay/api/notebooklm/status`` — NotebookLM proxy status
 
 Mount::
 
@@ -823,6 +827,82 @@ def api_add_character_tag(char_id):
         return jsonify({"ok": True, "tag": tag, "character": char_id})
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+# ── Training ────────────────────────────────────────────────────────────
+
+@overlay_bp.route("/api/training/config")
+def api_training_config():
+    """Return the current training pipeline configuration."""
+    try:
+        from engine.config import get_config
+        cfg = get_config()
+        training_cfg = cfg.get("training", {})
+        return jsonify({"ok": True, "training": training_cfg})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+@overlay_bp.route("/api/training/status")
+def api_training_status():
+    """Return training jobs status."""
+    try:
+        from engine.skills.builtin.training_skills import _training_jobs
+        summary = {jid: {"status": info["status"]} for jid, info in _training_jobs.items()}
+        return jsonify({"ok": True, "jobs": summary})
+    except ImportError:
+        return jsonify({"ok": True, "jobs": {}})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+@overlay_bp.route("/api/training/datasets")
+def api_training_datasets():
+    """List available datasets in training/datasets/ with file sizes."""
+    import os
+    try:
+        datasets_dir = os.path.join(os.path.dirname(__file__), "..", "..", "training", "datasets")
+        datasets_dir = os.path.normpath(datasets_dir)
+        datasets = []
+        if os.path.isdir(datasets_dir):
+            for fname in sorted(os.listdir(datasets_dir)):
+                fpath = os.path.join(datasets_dir, fname)
+                if os.path.isfile(fpath):
+                    datasets.append({
+                        "name": fname,
+                        "size_bytes": os.path.getsize(fpath),
+                    })
+        return jsonify({"ok": True, "datasets": datasets, "path": datasets_dir})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+# ── NotebookLM ──────────────────────────────────────────────────────────
+
+@overlay_bp.route("/api/notebooklm/status")
+def api_notebooklm_status():
+    """Return NotebookLM proxy running status and config."""
+    try:
+        from engine.config import get_config
+        cfg = get_config()
+        nlm_cfg = cfg.get("notebooklm", {})
+        running = False
+        try:
+            from engine.mcp.notebooklm_proxy import get_notebooklm_proxy
+            proxy = get_notebooklm_proxy()
+            running = proxy.is_running()
+        except Exception:
+            pass
+        return jsonify({
+            "ok": True,
+            "enabled": nlm_cfg.get("enabled", False),
+            "running": running,
+            "proxy_url": nlm_cfg.get("proxy_url", ""),
+            "server_path": nlm_cfg.get("server_path", ""),
+        })
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
 
 def _register_socketio_events(socketio) -> None:
     """Register Socket.IO event handlers for overlay real-time updates."""

@@ -6,6 +6,8 @@ Qwen3-TTS models (0.6B for fast/simple, 1.7B for complex/emotional).
 
 Endpoints:
     POST /generate     — Generate speech from text
+    POST /generate_stream — Stream audio as SSE events
+    WS   /ws/stream    — Real-time audio push over WebSocket
     GET  /voices       — List available voice designs
     GET  /status       — Server status + queue depth
     POST /cast         — Save a voice design for a character
@@ -35,7 +37,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException, BackgroundTasks, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
@@ -198,6 +200,30 @@ class Qwen3TTSEngine:
     @property
     def is_loaded(self) -> bool:
         return self._loaded
+
+    @property
+    def speculative(self) -> dict:
+        """
+        Speculative decoding config for Qwen3-TTS.
+
+        When enabled, uses Qwen3-TTS 0.6B as the draft model for the 1.7B
+        target model.  Both share the same tokenizer family, making them
+        compatible for speculative decoding.  Actual spec-decode execution
+        is handled by the model framework (e.g. LMStudio / vLLM).
+
+        Config keys:
+            tts.speculative.enabled     — bool, default False
+            tts.speculative.draft_model — str,  default "0.6b"
+        """
+        try:
+            from engine.config import get_config
+            cfg = get_config()
+            return {
+                "enabled": cfg.get("tts.speculative.enabled", False),
+                "draft_model": cfg.get("tts.speculative.draft_model", "0.6b"),
+            }
+        except Exception:
+            return {"enabled": False, "draft_model": "0.6b"}
 
     def _select_model(self, model_size: str):
         """Return (model, tokenizer) for the requested size, with fallback."""
@@ -876,6 +902,82 @@ def create_tts_app() -> FastAPI:
             "total_failed": failed,
             "voice_dir": str(VOICE_DIR),
         }
+
+    # ── WebSocket streaming ────────────────────────────────────────
+
+    @app.websocket("/ws/stream")
+    async def ws_stream(websocket: WebSocket):
+        """
+        Real-time audio push over WebSocket.
+
+        Client sends a JSON text message::
+
+            {"text": "Hello world", "voice_design": "...", "model_size": "auto",
+             "sample_rate": 24000, "max_duration": 60}
+
+        Server replies with binary frames (raw WAV chunk bytes) followed by
+        a final JSON text frame::
+
+            {"done": true, "total_duration": 3.2, "chunks": 2}
+        """
+        import asyncio
+
+        await websocket.accept()
+        try:
+            raw = await websocket.receive_text()
+            params = json.loads(raw)
+
+            text = params.get("text", "")
+            if not text:
+                await websocket.send_json({"error": "text is required"})
+                await websocket.close(code=1008)
+                return
+
+            voice_design = params.get("voice_design", "A clear, natural speaking voice.")
+            model_size = params.get("model_size", "auto")
+            sample_rate = int(params.get("sample_rate", 24000))
+            max_duration = int(params.get("max_duration", 60))
+
+            if params.get("character_id"):
+                try:
+                    from engine.tts.voice_designer import get_voice_designer
+                    designer = get_voice_designer()
+                    design = designer.get(params["character_id"])
+                    voice_design = design.description
+                    if model_size == "auto":
+                        model_size = design.model_size
+                except Exception:
+                    pass
+
+            if model_size == "auto":
+                model_size = "0.6b" if len(text) < 100 else "1.7b"
+
+            total_dur = 0.0
+            chunks = 0
+            for audio_bytes, dur in _engine.generate_stream(
+                text=text,
+                voice_design=voice_design,
+                model_size=model_size,
+                sample_rate=sample_rate,
+                max_duration=max_duration,
+            ):
+                await websocket.send_bytes(audio_bytes)
+                total_dur += dur
+                chunks += 1
+                await asyncio.sleep(0)
+
+            await websocket.send_json({
+                "done": True, "total_duration": total_dur, "chunks": chunks,
+            })
+        except WebSocketDisconnect:
+            logger.debug("WebSocket client disconnected during TTS stream")
+        except Exception as e:
+            logger.warning("WebSocket TTS stream error: %s", e)
+            try:
+                await websocket.send_json({"error": str(e)})
+                await websocket.close(code=1011)
+            except Exception:
+                pass
 
     # ── MCP mount ───────────────────────────────────────────────────
 

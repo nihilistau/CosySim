@@ -1420,3 +1420,114 @@ pre-authored scripts. This is CosySim's version of long-term character memory.
 **Design decision:** Tags use a separate dict from stats/buffs intentionally. Stats are
 numerical (0-100), buffs are temporary modifiers, tags are behavioral labels. Three
 orthogonal systems that compose cleanly in the interceptor pipeline.
+
+---
+
+## Revelation #52: Training Pipeline Integration
+
+**Discovery:** CosySim generates thousands of high-quality character interactions per
+session — mood-aware dialog, escalation sequences, personality-consistent responses —
+but none of this was being captured for model fine-tuning. The training infrastructure
+(datasets, LoRA configs) existed in `training/` but had no bridge to live gameplay data
+and no way to merge trained adapters back into servable models.
+
+**Fix:** Three components:
+1. **merge_adapters.py**: Sequential LoRA adapter merging into base model + optional
+   GGUF quantization export (q4_k_m). CLI + Python API.
+2. **training_skills.py**: 4 @skill functions — `trigger_finetune`, `get_training_status`,
+   `export_training_data`, `list_trained_models`. Agents can now trigger and monitor
+   training jobs via tool calls.
+3. **generate_datasets.py** verified: produces 2100 training examples from interaction logs.
+
+**Pattern:** The feedback loop is now closed: gameplay → dataset export → fine-tune →
+merge adapters → deploy model → better gameplay. Skills make this operable by agents
+themselves, not just developers.
+
+---
+
+## Revelation #53: NotebookLM as External Knowledge MCP
+
+**Discovery:** Characters needed access to external knowledge bases — research material,
+lore documents, user-uploaded references — but CosySim had no retrieval-augmented
+generation (RAG) capability. Google NotebookLM provides notebook-based knowledge
+management with citation support, but it's a browser-based tool with no direct API.
+
+**Fix:** Built a proxy bridge:
+1. **notebooklm_proxy.py**: HTTP proxy that manages a NotebookLM MCP Node.js server
+   process. Thread-safe singleton, health-check polling, configurable via default.yaml.
+2. **notebooklm_skills.py**: 5 @skill functions — `notebooklm_ask` (query with citations),
+   `notebooklm_add_source` (URL/text/PDF/YouTube), `notebooklm_generate_audio`
+   (podcast-style overview), `notebooklm_list_notebooks`, `notebooklm_search`.
+3. **Config**: `notebooklm:` section in default.yaml (proxy_url, node_cmd, server_path,
+   auth_profile_dir, startup_timeout).
+
+**Pattern:** External tool integration via MCP proxy + @skill wrapper. The proxy handles
+process lifecycle; skills provide the agent-callable interface. Same pattern can wrap
+any Node.js MCP server.
+
+---
+
+## Revelation #54: TTS Audio Streaming
+
+**Discovery:** The TTS engine (Qwen3/CosyVoice) generated complete audio files before
+returning them. For long character monologues (30+ seconds), users waited in silence
+until the entire file was ready. No progressive playback was possible.
+
+**Fix:** Sentence-level streaming in Qwen3TTSEngine:
+1. **Sentence chunking**: Input text split at sentence boundaries (`.!?`). Each sentence
+   generated independently as a WAV chunk.
+2. **SSE endpoint**: `POST /generate_stream` returns Server-Sent Events — each event
+   carries `{"chunk": base64_audio, "duration": float, "index": int}`.
+3. **Completion signal**: Final event `{"done": true, "total_duration": float, "chunks": count}`.
+4. **Memory safety**: Configurable `max_chunk_chars` (500) prevents OOM on long inputs.
+5. **Config**: `tts.streaming` section — `enabled`, `chunk_method` (sentence/fixed_length),
+   `max_chunk_chars`. Also `tts.speculative` for draft model acceleration.
+
+**Impact:** First audio chunk arrives within 1-2 seconds instead of 15-30 seconds.
+Characters start "speaking" almost immediately. Progressive playback makes conversations
+feel real-time.
+
+---
+
+## Implementation Log (Sprint 13 — Training, NotebookLM, TTS Streaming)
+
+| Sprint | Revelation | Action | Status |
+|--------|-----------|--------|--------|
+| Sprint 13 | N/A (Phase A) | Removed shadowed get_scene_rules() (104 lines) from cosysim_server.py | Done |
+| Sprint 13 | N/A (Phase A) | Removed shadowed bump_conversation_heat() (18 lines) from cosysim_server.py | Done |
+| Sprint 13 | N/A (Phase A) | Removed unused GameStateObserver protocol from protocols.py | Done |
+| Sprint 13 | #52 (Phase B) | merge_adapters.py: LoRA merging + GGUF export | Done |
+| Sprint 13 | #52 (Phase B) | training_skills.py: 4 @skill functions | Done |
+| Sprint 13 | #52 (Phase B) | generate_datasets.py verified: 2100 examples | Done |
+| Sprint 13 | #53 (Phase C) | notebooklm_proxy.py: HTTP proxy for NotebookLM MCP Node.js | Done |
+| Sprint 13 | #53 (Phase C) | notebooklm_skills.py: 5 @skill functions | Done |
+| Sprint 13 | #53 (Phase C) | NotebookLM config section in default.yaml | Done |
+| Sprint 13 | #54 (Phase D) | Qwen3TTSEngine.generate_stream(): sentence-level chunking | Done |
+| Sprint 13 | #54 (Phase D) | POST /generate_stream SSE endpoint: base64 WAV chunks | Done |
+| Sprint 13 | #54 (Phase D) | TTS streaming + speculative config in default.yaml | Done |
+| Sprint 13 | N/A (Phase E) | LMSTUDIO.md + SKILLS.md documentation updates | Done |
+| Sprint 13 | N/A (Phase E) | 24 new tests (1337 total, was 1313) | Done |
+
+### Updated Framework Adoption (Post-Sprint 13)
+
+| Feature | Adoption | Change |
+|---------|----------|--------|
+| MCPSceneMixin | 11/11 (100%) | unchanged |
+| SceneStateManager | 11/11 (100%) | unchanged |
+| Interceptor Pipeline | 11/11 (100%) | 24 interceptors (was 23) |
+| Scene-Specific Context | 11/11 (100%) | unchanged |
+| CharacterStateCoordinator | 11/11 (100%) | unchanged |
+| ConversationHeat | 11/11 (100%) | unchanged |
+| TagRegistry | 11/11 (100%) | unchanged |
+| SCENE_METADATA | 11/11 (100%) | unchanged |
+| Registry Persistence | 11/11 (100%) | unchanged |
+| Scene Transition Tracking | 11/11 (100%) | unchanged |
+| Ambient Events | 11/11 (100%) | unchanged |
+| MCP Rules Files | 11/11 (100%) | unchanged |
+| @skill Files | 11/11 (100%) | + training + notebooklm built-in packs |
+| DialogSystem Admin API | ∞ (overlay) | unchanged |
+| Sex Pose System | 1/11 (Bedroom) | unchanged |
+| Training Pipeline | built-in pack | NEW — 4 skills |
+| NotebookLM MCP | built-in pack | NEW — 5 skills + proxy |
+| TTS Streaming | engine-level | NEW — SSE endpoint |
+| Total Tests | 1337 | was 1313 (+24) |

@@ -2,6 +2,7 @@
 ## Deep Audit & Upgrade Path for All CosySim Scenes
 
 Generated: 2026-02-24  
+Updated: Sprint 13  
 Status: Planning Phase
 
 ---
@@ -19,7 +20,7 @@ fully wired, genuinely fun, mechanically deep.
 
 | Rank | Scene | Score | LOC | Framework % | Key Strength | Critical Gap |
 |------|-------|-------|-----|-------------|-------------|-------------|
-| 1 | **Bedroom** | 9/10 | 2200+ | 98% | Full adult system, poses, escalation, 23 interceptors | UI for bed game controls |
+| 1 | **Bedroom** | 9/10 | 2200+ | 98% | Full adult system, poses, escalation, 24 interceptors | UI for bed game controls |
 | 2 | **Casino** | 8/10 | 988 | 95% | Complete poker loop, bluffing, consequences | Hand eval too simple, no all-in |
 | 3 | **Heist** | 8/10 | 1111 | 85% | 4-phase state machine, crew AI, complications | Manual threading, no leaderboard |
 | 4 | **Coders** | 7.5/10 | 757 | 100% | Clean MCP-native, sandbox execution | No failure recovery, agents identical |
@@ -341,12 +342,12 @@ is the user's home base — must be functional first.
 
 Every scene must satisfy ALL of these:
 
-- [ ] Uses MCPSceneMixin ✓ (already 10/10)
+- [x] Uses MCPSceneMixin ✓ (already 10/10)
 - [ ] Uses SceneStateManager for all state
 - [ ] Has separate rules file registered with SceneRulesEngine
-- [ ] Has skill pack with 3+ skills
+- [x] Has skill pack with 3+ skills ✓ (all 11 scenes — Sprint 13)
 - [ ] Has TagRegistry custom tags
-- [ ] Has SCENE_METADATA ✓ (already 10/10)
+- [x] Has SCENE_METADATA ✓ (already 10/10)
 - [ ] Uses MCPTimer instead of manual threading
 - [ ] Uses VirtualAgentManager (not raw LMS calls)
 - [ ] Has SharedBoard integration (leaderboard or bulletin)
@@ -364,23 +365,26 @@ Every scene must satisfy ALL of these:
 
 ## Current Compliance Matrix
 
+*Updated Sprint 13 — All 11 scenes now have @skill files. 24 interceptors in pipeline. 1,337 tests passing.*
+*Built-in packs: Training Skills (4), NotebookLM Skills (5). TTS streaming endpoint added.*
+
 | Scene | Rules File | Skills 3+ | MCPTimer | VAM | SharedBoard | Consequences | 2+ Loops | Win/Loss | Persist |
 |-------|-----------|----------|---------|-----|------------|-------------|---------|---------|---------|
 | Bedroom | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ |
-| Casino | ✅ | ⚠️2 | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ⚠️ |
+| Casino | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ⚠️ |
 | Heist | ✅ | ✅ | ⚠️ | ❌ | ❌ | ✅ | ✅ | ✅ | ❌ |
 | Coders | ❌ | ✅ | ⚠️ | ❌ | ❌ | ✅ | ✅ | ✅ | ❌ |
-| Lounge | ✅ | ⚠️dead | ✅ | ✅ | ❌ | ✅ | ✅ | ⚠️ | ⚠️ |
-| Phone | ✅ | ⚠️ | ❌ | ⚠️ | ✅ | ⚠️ | ✅ | N/A | ✅ |
-| Gallery | ❌ | ❌ | ❌ | ⚠️ | ❌ | ❌ | ⚠️ | ❌ | ❌ |
-| Warzone | ❌ | ⚠️1 | ❌ | ⚠️ | ✅ | ⚠️ | ✅ | ✅ | ❌ |
+| Lounge | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ | ⚠️ | ⚠️ |
+| Phone | ✅ | ✅ | ❌ | ⚠️ | ✅ | ⚠️ | ✅ | N/A | ✅ |
+| Gallery | ❌ | ✅ | ❌ | ⚠️ | ❌ | ❌ | ⚠️ | ❌ | ❌ |
+| Warzone | ❌ | ✅ | ❌ | ⚠️ | ✅ | ⚠️ | ✅ | ✅ | ❌ |
 | NeonCity | ❌ | ✅ | ⚠️ | ❌ | ❌ | ⚠️ | ✅ | ✅ | ❌ |
 | Realm | ❌ | ✅ | ⚠️ | ❌ | ❌ | ⚠️ | ⚠️ | ⚠️ | ❌ |
-| CmdCenter | ❌ | ❌ | ❌ | N/A | ❌ | ❌ | ❌ | N/A | ❌ |
+| CmdCenter | ❌ | ✅ | ❌ | N/A | ❌ | ❌ | ❌ | N/A | ❌ |
 
 **Legend:** ✅ = Done | ⚠️ = Partial/Broken | ❌ = Missing
 
-**Total ✅ across all scenes:** ~33%  
+**Total ✅ across all scenes:** ~40%  
 **Target:** 100%
 
 ---

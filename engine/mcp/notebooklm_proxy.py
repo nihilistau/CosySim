@@ -3,7 +3,7 @@ NotebookLM MCP Proxy — bridges CosySim skills to the notebooklm-mcp server.
 
 Architecture
 ~~~~~~~~~~~~
-The ``@roomi-fields/notebooklm-mcp`` npm package exposes NotebookLM
+The ``notebooklm-mcp`` npm package exposes NotebookLM
 capabilities (ask, add source, generate audio, etc.) through a Node.js
 server.  This proxy manages the Node.js process lifecycle and forwards
 HTTP requests from Python skills to the server's REST API.
@@ -18,7 +18,7 @@ Configuration (``config/default.yaml`` under ``notebooklm`` key)::
     notebooklm:
       enabled: true
       node_cmd: "node"
-      server_path: "node_modules/@roomi-fields/notebooklm-mcp/dist/index.js"
+      server_path: "node_modules/notebooklm-mcp/dist/index.js"
       base_url: "http://localhost:8800"
       auth_profile_dir: ""          # Chrome profile for Google sign-in
 

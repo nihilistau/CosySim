@@ -1677,6 +1677,133 @@
   });
 
   /* ══════════════════════════════════════════════════════════
+     APP: Research — NotebookLM integration
+  ══════════════════════════════════════════════════════════ */
+
+  CosyPhone.registerApp('research', {
+    name: 'Research', icon: '📚', color: 'linear-gradient(135deg, #5856D6, #AF52DE)',
+
+    render(body) {
+      body.innerHTML = `
+        <div class="section-header">Research</div>
+        <div class="section-sub">Search & manage NotebookLM notebooks</div>
+
+        <div style="padding:0 16px">
+          <div style="display:flex;gap:8px;margin-bottom:12px">
+            <input id="rs-query" type="text" style="flex:1;background:var(--bg2);border:1px solid var(--sep);border-radius:var(--radius);padding:10px 12px;font-size:15px;color:var(--label);outline:none" placeholder="Ask a question or search notebooks…">
+            <button class="pill-btn pill-primary" style="font-size:13px" onclick="CosyPhone.apps.research._search()">🔍</button>
+          </div>
+          <div style="display:flex;gap:8px;margin-bottom:16px">
+            <button class="pill-btn pill-secondary" style="flex:1;justify-content:center;font-size:13px" onclick="CosyPhone.apps.research._listNotebooks()">📓 Notebooks</button>
+            <button class="pill-btn pill-secondary" style="flex:1;justify-content:center;font-size:13px" onclick="CosyPhone.apps.research._showAddSource()">➕ Add Source</button>
+            <button class="pill-btn pill-secondary" style="flex:1;justify-content:center;font-size:13px" onclick="CosyPhone.apps.research._showAudio()">🎧 Audio</button>
+          </div>
+        </div>
+        <div id="rs-results" style="padding:0 16px"></div>`;
+    },
+
+    async _search() {
+      const q = qs('#rs-query').value.trim();
+      if (!q) { toast('Enter a query'); return; }
+      const el = qs('#rs-results');
+      el.innerHTML = '<div class="news-loading"><div class="spinner"></div>Searching…</div>';
+      try {
+        const data = await api('POST', '/api/research/search', { question: q });
+        const answer = data.answer || '';
+        const citations = data.citations || [];
+        el.innerHTML = `
+          <div style="background:var(--bg2);border-radius:var(--radius);padding:12px;margin-bottom:12px">
+            <div style="font-weight:600;margin-bottom:8px">Answer</div>
+            <div style="font-size:14px;color:var(--label);line-height:1.5">${answer || 'No answer returned.'}</div>
+          </div>
+          ${citations.length ? `<div style="font-size:12px;color:var(--label2);margin-bottom:8px">Citations</div>` +
+            citations.map(c => `<div style="background:var(--bg2);border-radius:var(--radius);padding:8px 12px;margin-bottom:6px;font-size:13px;color:var(--label)">${typeof c === 'string' ? c : JSON.stringify(c)}</div>`).join('') : ''}`;
+      } catch (e) {
+        el.innerHTML = `<div style="color:var(--red)">Search failed: ${e.message}</div>`;
+      }
+    },
+
+    async _listNotebooks() {
+      const el = qs('#rs-results');
+      el.innerHTML = '<div class="news-loading"><div class="spinner"></div>Loading notebooks…</div>';
+      try {
+        const data = await api('GET', '/api/research/notebooks');
+        const notebooks = data.notebooks || [];
+        if (!notebooks.length) { el.innerHTML = '<div style="color:var(--label2)">No notebooks found</div>'; return; }
+        el.innerHTML = notebooks.map(nb => `
+          <div class="contact-row" style="cursor:default">
+            <div style="font-size:28px;margin-right:12px">📓</div>
+            <div style="flex:1">
+              <div style="font-weight:600">${nb.title || nb.id}</div>
+              <div style="font-size:12px;color:var(--label2)">${nb.source_count ?? '?'} sources</div>
+            </div>
+          </div>`).join('');
+      } catch (e) {
+        el.innerHTML = `<div style="color:var(--red)">Failed to load notebooks: ${e.message}</div>`;
+      }
+    },
+
+    _showAddSource() {
+      const el = qs('#rs-results');
+      el.innerHTML = `
+        <div style="background:var(--bg2);border-radius:var(--radius);padding:12px;margin-bottom:12px">
+          <div style="font-weight:600;margin-bottom:8px">Add Source to Notebook</div>
+          <input id="rs-nb-id" type="text" style="width:100%;background:var(--bg1);border:1px solid var(--sep);border-radius:var(--radius);padding:8px 12px;font-size:14px;color:var(--label);margin-bottom:8px;outline:none" placeholder="Notebook ID">
+          <select id="rs-src-type" style="width:100%;background:var(--bg1);border:1px solid var(--sep);border-radius:var(--radius);padding:8px 12px;font-size:14px;color:var(--label);margin-bottom:8px;outline:none">
+            <option value="text">Text</option>
+            <option value="url">URL</option>
+            <option value="youtube">YouTube</option>
+            <option value="pdf">PDF path</option>
+          </select>
+          <textarea id="rs-src-val" style="width:100%;height:80px;background:var(--bg1);border:1px solid var(--sep);border-radius:var(--radius);padding:8px 12px;font-size:14px;color:var(--label);resize:none;outline:none" placeholder="Paste URL, text, or file path…"></textarea>
+          <button class="pill-btn pill-primary" style="width:100%;justify-content:center;margin-top:8px" onclick="CosyPhone.apps.research._addSource()">➕ Add Source</button>
+        </div>`;
+    },
+
+    async _addSource() {
+      const nbId = qs('#rs-nb-id').value.trim();
+      const srcType = qs('#rs-src-type').value;
+      const srcVal = qs('#rs-src-val').value.trim();
+      if (!nbId || !srcVal) { toast('Notebook ID and source value required'); return; }
+      const el = qs('#rs-results');
+      el.innerHTML = '<div class="news-loading"><div class="spinner"></div>Adding source…</div>';
+      try {
+        const data = await api('POST', '/api/research/add_source', { notebook_id: nbId, source_type: srcType, source_value: srcVal });
+        el.innerHTML = `<div style="background:var(--bg2);border-radius:var(--radius);padding:12px;color:var(--label)">✅ Source added (ID: ${data.source_id || '—'})</div>`;
+      } catch (e) {
+        el.innerHTML = `<div style="color:var(--red)">Failed: ${e.message}</div>`;
+      }
+    },
+
+    _showAudio() {
+      const el = qs('#rs-results');
+      el.innerHTML = `
+        <div style="background:var(--bg2);border-radius:var(--radius);padding:12px;margin-bottom:12px">
+          <div style="font-weight:600;margin-bottom:8px">Generate Audio Overview</div>
+          <input id="rs-audio-nb" type="text" style="width:100%;background:var(--bg1);border:1px solid var(--sep);border-radius:var(--radius);padding:8px 12px;font-size:14px;color:var(--label);margin-bottom:8px;outline:none" placeholder="Notebook ID">
+          <input id="rs-audio-custom" type="text" style="width:100%;background:var(--bg1);border:1px solid var(--sep);border-radius:var(--radius);padding:8px 12px;font-size:14px;color:var(--label);margin-bottom:8px;outline:none" placeholder="Customization prompt (optional)">
+          <button class="pill-btn pill-primary" style="width:100%;justify-content:center;margin-top:4px" onclick="CosyPhone.apps.research._generateAudio()">🎧 Generate Audio</button>
+        </div>`;
+    },
+
+    async _generateAudio() {
+      const nbId = qs('#rs-audio-nb').value.trim();
+      if (!nbId) { toast('Enter a notebook ID'); return; }
+      const customization = qs('#rs-audio-custom').value.trim();
+      const el = qs('#rs-results');
+      el.innerHTML = '<div class="news-loading"><div class="spinner"></div>Generating audio…</div>';
+      try {
+        const payload = { notebook_id: nbId };
+        if (customization) payload.customization = customization;
+        const data = await api('POST', '/api/research/audio', payload);
+        el.innerHTML = `<div style="background:var(--bg2);border-radius:var(--radius);padding:12px;color:var(--label)">🎧 Audio generation started (Job: ${data.job_id || '—'})</div>`;
+      } catch (e) {
+        el.innerHTML = `<div style="color:var(--red)">Failed: ${e.message}</div>`;
+      }
+    },
+  });
+
+  /* ══════════════════════════════════════════════════════════
      BOOT
   ══════════════════════════════════════════════════════════ */
 

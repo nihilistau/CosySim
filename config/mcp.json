@@ -6,7 +6,7 @@
     },
     "notebooklm": {
       "command": "npx",
-      "args": ["@nicobailon/notebooklm-mcp"],
+      "args": ["notebooklm-mcp"],
       "env": {}
     }
   }

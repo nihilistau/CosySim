@@ -1169,6 +1169,69 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
             except Exception as exc:
                 return jsonify({"ok": False, "error": str(exc)}), 500
 
+        # ── Research (NotebookLM) routes ─────────────────────────────────────
+        from engine.skills.builtin.notebooklm_skills import (
+            notebooklm_ask,
+            notebooklm_add_source,
+            notebooklm_generate_audio,
+            notebooklm_list_notebooks,
+        )
+
+        @app.route("/api/research/search", methods=["POST"])
+        def research_search():
+            data = request.get_json(silent=True) or {}
+            question = data.get("question", "")
+            notebook_id = data.get("notebook_id", "")
+            if not question:
+                return jsonify({"ok": False, "error": "question required"}), 400
+            try:
+                import json as _json
+                result = _json.loads(notebooklm_ask(question, notebook_id=notebook_id))
+                result["ok"] = True
+                return jsonify(result)
+            except Exception as exc:
+                return jsonify({"ok": False, "error": str(exc)}), 500
+
+        @app.route("/api/research/add_source", methods=["POST"])
+        def research_add_source():
+            data = request.get_json(silent=True) or {}
+            notebook_id = data.get("notebook_id", "")
+            source_type = data.get("source_type", "url")
+            source_value = data.get("source_value", "")
+            if not notebook_id or not source_value:
+                return jsonify({"ok": False, "error": "notebook_id and source_value required"}), 400
+            try:
+                import json as _json
+                result = _json.loads(notebooklm_add_source(notebook_id, source_type=source_type, source_value=source_value))
+                result["ok"] = True
+                return jsonify(result)
+            except Exception as exc:
+                return jsonify({"ok": False, "error": str(exc)}), 500
+
+        @app.route("/api/research/audio", methods=["POST"])
+        def research_audio():
+            data = request.get_json(silent=True) or {}
+            notebook_id = data.get("notebook_id", "")
+            customization = data.get("customization", "")
+            if not notebook_id:
+                return jsonify({"ok": False, "error": "notebook_id required"}), 400
+            try:
+                import json as _json
+                result = _json.loads(notebooklm_generate_audio(notebook_id, customization=customization))
+                result["ok"] = True
+                return jsonify(result)
+            except Exception as exc:
+                return jsonify({"ok": False, "error": str(exc)}), 500
+
+        @app.route("/api/research/notebooks")
+        def research_notebooks():
+            try:
+                import json as _json
+                notebooks = _json.loads(notebooklm_list_notebooks())
+                return jsonify({"ok": True, "notebooks": notebooks})
+            except Exception as exc:
+                return jsonify({"ok": False, "error": str(exc)}), 500
+
 
 # ── Module entry point ────────────────────────────────────────────────────────
 
