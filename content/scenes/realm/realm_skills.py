@@ -330,6 +330,117 @@ def realm_combat_flee() -> str:
     return f"❌ Failed to flee! Enemy hits for {result.get('enemy_damage', 0)} damage. HP: {result.get('player_hp', '?')}"
 
 
+@skill(
+    pack="realm",
+    tags=["game", "combat"],
+    category=SkillCategory.GAME,
+    description="Defend in combat — halves incoming damage this round.",
+    cooldown=2,
+)
+def realm_combat_defend() -> str:
+    """Raise your guard to reduce incoming damage."""
+    scene = _get_realm_scene()
+    if not scene or not scene.state:
+        return "No active Realm game."
+    result = scene.state.combat_defend()
+    if "error" in result:
+        return result["error"]
+    lines = [f"🛡️ DEFEND! You brace against the {result.get('enemy_name', 'enemy')}."]
+    if result.get("enemy_damage", 0) > 0:
+        lines.append(f"Reduced hit: {result['enemy_damage']} damage taken.")
+    else:
+        lines.append("The enemy's attack glances off!")
+    lines.append(f"HP: {result['player_hp']} | Enemy HP: {result['enemy_hp']}")
+    return "\n".join(lines)
+
+
+@skill(
+    pack="realm",
+    tags=["game", "combat"],
+    category=SkillCategory.GAME,
+    description="Use a consumable item during combat (health potion, fire scroll, etc.).",
+    cooldown=2,
+)
+def realm_combat_use_item(item_id: str = "") -> str:
+    """Use a consumable item mid-combat."""
+    scene = _get_realm_scene()
+    if not scene or not scene.state:
+        return "No active Realm game."
+    if not item_id:
+        return "Provide an item_id. Use realm_inventory() to see items."
+    result = scene.state.combat_use_item(item_id)
+    if "error" in result:
+        return result["error"]
+    lines = [f"🧪 Used {result.get('item_name', 'item')} in combat!"]
+    if result.get("healed"):
+        lines.append(f"  ❤️ Healed {result['healed']} HP")
+    if result.get("restored_mp"):
+        lines.append(f"  💙 Restored {result['restored_mp']} MP")
+    if result.get("item_damage"):
+        lines.append(f"  💥 Dealt {result['item_damage']} damage to enemy")
+    if result.get("enemy_damage", 0) > 0:
+        lines.append(f"  Enemy strikes back for {result['enemy_damage']} damage")
+    lines.append(f"HP: {result.get('player_hp', '?')} | Enemy HP: {result.get('enemy_hp', '?')}")
+    if result.get("defeated"):
+        lines.append(f"🏆 VICTORY! +{result.get('xp_gained', 0)} XP")
+    return "\n".join(lines)
+
+
+# ── Location ──────────────────────────────────────────────────
+
+@skill(
+    pack="realm",
+    tags=["game", "exploration"],
+    category=SkillCategory.GAME,
+    description="View your current location and connected destinations.",
+    cooldown=1,
+)
+def realm_location() -> str:
+    """Show current location info and connections."""
+    scene = _get_realm_scene()
+    if not scene or not scene.state:
+        return "No active Realm game."
+    info = scene.state.get_location_info()
+    lines = [f"📍 {info['name']}", info['description'], "— Connections:"]
+    for c in info.get("connections_info", []):
+        lines.append(f"  → {c['name']} ({c['key']})")
+    return "\n".join(lines)
+
+
+@skill(
+    pack="realm",
+    tags=["game", "exploration"],
+    category=SkillCategory.GAME,
+    description="Travel to a connected location. May trigger random encounters.",
+    cooldown=3,
+)
+def realm_move(destination: str = "") -> str:
+    """Move to a connected location by its key."""
+    scene = _get_realm_scene()
+    if not scene or not scene.state:
+        return "No active Realm game."
+    if not destination:
+        return "Provide a destination key. Use realm_location() to see connections."
+    result = scene.state.move_to_location(destination)
+    if "error" in result:
+        return result["error"]
+    lines = [f"🚶 Traveled to {result['to_name']}.", result["description"]]
+    if result.get("encounter"):
+        enc = result["encounter"]
+        lines.append(f"⚔️ AMBUSH! A {enc.get('enemy_name', 'creature')} blocks your path! "
+                     f"HP: {enc.get('enemy_hp', '?')}/{enc.get('enemy_max_hp', '?')}")
+    if result.get("quest_updates"):
+        for qu in result["quest_updates"]:
+            if qu.get("completed"):
+                lines.append(f"🎯 Quest '{qu['quest']}' COMPLETE!")
+            else:
+                lines.append(f"📋 Quest progress: {qu['progress']}/{qu['target']}")
+    lines.append("— Connections:")
+    for c in result.get("connections", []):
+        lines.append(f"  → {c['name']} ({c['key']})")
+    return "\n".join(lines)
+
+
 # ── Quests ────────────────────────────────────────────────────
 
 @skill(

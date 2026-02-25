@@ -41,6 +41,7 @@ DEFAULT_STATS = {
     "strength": 10, "agility": 10, "intellect": 10,
     "charisma": 10, "luck": 5,
     "level": 1, "xp": 0, "xp_next": 100,
+    "gold": 0,
 }
 
 SKILL_TREE = {
@@ -60,6 +61,29 @@ STARTER_ITEMS = [
     {"id": "health_potion", "name": "Health Potion", "type": "consumable", "heal": 25, "description": "Tastes like cherry cough syrup."},
     {"id": "torch",        "name": "Torch",         "type": "utility",  "description": "Illuminates dark areas. Burns for 30 minutes."},
 ]
+
+# ═══════════════════════════════════════════════════════════════
+#  EQUIPMENT & ECONOMY
+# ═══════════════════════════════════════════════════════════════
+
+EQUIPMENT_SLOTS = ["weapon", "armor", "shield", "helm", "boots", "ring", "amulet"]
+
+ITEM_CATALOG = {
+    "rusty_sword":          {"name": "Rusty Sword",          "slot": "weapon",  "attack": 2,  "value": 10},
+    "iron_sword":           {"name": "Iron Sword",           "slot": "weapon",  "attack": 5,  "value": 50},
+    "steel_sword":          {"name": "Steel Greatsword",     "slot": "weapon",  "attack": 8,  "value": 150},
+    "leather_armor":        {"name": "Leather Armor",        "slot": "armor",   "defense": 3, "value": 30},
+    "chainmail":            {"name": "Chainmail",            "slot": "armor",   "defense": 6, "value": 120},
+    "plate_armor":          {"name": "Plate Armor",          "slot": "armor",   "defense": 10,"value": 300},
+    "wooden_shield":        {"name": "Wooden Shield",        "slot": "shield",  "defense": 2, "value": 15},
+    "iron_helm":            {"name": "Iron Helm",            "slot": "helm",    "defense": 2, "value": 40},
+    "health_potion":        {"name": "Health Potion",        "slot": None,      "heal": 20,   "value": 25, "consumable": True},
+    "mana_potion":          {"name": "Mana Potion",          "slot": None,      "mana": 15,   "value": 30, "consumable": True},
+    "ring_of_strength":     {"name": "Ring of Strength",     "slot": "ring",    "attack": 3,  "value": 200},
+    "amulet_of_protection": {"name": "Amulet of Protection", "slot": "amulet",  "defense": 3, "value": 200},
+}
+
+GOLD_DROP_RANGE = {"min": 5, "max": 25}
 
 # ═══════════════════════════════════════════════════════════════
 #  COMBAT: ENEMY TEMPLATES
@@ -85,6 +109,95 @@ COMBAT_LOOT_TABLE = [
     {"id": "fire_scroll",   "name": "Fire Scroll",    "type": "consumable", "damage": 15, "description": "Single-use fireball."},
     {"id": "gold_ring",     "name": "Gold Ring",      "type": "treasure",   "value": 50,  "description": "Worth a pretty penny."},
 ]
+
+# ═══════════════════════════════════════════════════════════════
+#  LOCATION SYSTEM
+# ═══════════════════════════════════════════════════════════════
+
+REALM_LOCATIONS = {
+    "tavern": {
+        "name": "The Rusty Flagon",
+        "description": "A smoky tavern filled with weary travellers, clinking mugs, and questionable stew. The barkeep eyes you warily.",
+        "encounters": ["drunk_patron", "traveling_merchant"],
+        "enemy_pool": ["bandit"],
+        "encounter_chance": 0.2,
+        "connections": ["town_square", "back_alley"],
+    },
+    "town_square": {
+        "name": "Thornwick Square",
+        "description": "The bustling heart of Thornwick. A crumbling fountain stands at its centre, surrounded by market stalls and gossiping townsfolk.",
+        "encounters": ["pickpocket", "town_crier"],
+        "enemy_pool": ["goblin", "bandit"],
+        "encounter_chance": 0.25,
+        "connections": ["tavern", "market", "castle_gate", "dark_forest"],
+    },
+    "market": {
+        "name": "Market District",
+        "description": "Rows of colourful stalls hawk everything from enchanted trinkets to dubious potions. Haggling voices echo off stone walls.",
+        "encounters": ["haggling_vendor", "lost_child"],
+        "enemy_pool": ["bandit"],
+        "encounter_chance": 0.15,
+        "connections": ["town_square", "temple"],
+    },
+    "temple": {
+        "name": "Temple of the Silver Flame",
+        "description": "A serene sanctuary of white marble and stained glass. Acolytes murmur prayers while incense drifts through the air.",
+        "encounters": ["healing_priest", "cursed_pilgrim"],
+        "enemy_pool": ["wraith"],
+        "encounter_chance": 0.1,
+        "connections": ["market"],
+    },
+    "castle_gate": {
+        "name": "Castle Gatehouse",
+        "description": "Iron-banded gates tower above you, flanked by armoured guards. Beyond lies the seat of power — if they'll let you pass.",
+        "encounters": ["guard_captain", "suspicious_courier"],
+        "enemy_pool": ["skeleton"],
+        "encounter_chance": 0.2,
+        "connections": ["town_square", "throne_room"],
+    },
+    "throne_room": {
+        "name": "The Throne Room",
+        "description": "Gold-veined marble floors stretch toward an obsidian throne. The air hums with political tension and barely concealed ambition.",
+        "encounters": ["king_audience", "court_intrigue"],
+        "enemy_pool": ["dark_mage"],
+        "encounter_chance": 0.15,
+        "connections": ["castle_gate"],
+    },
+    "back_alley": {
+        "name": "The Rat Warrens",
+        "description": "Narrow, refuse-choked alleyways where the desperate and dangerous lurk. Shadows shift at every corner.",
+        "encounters": ["black_market_dealer", "ambush"],
+        "enemy_pool": ["bandit", "goblin", "dire_wolf"],
+        "encounter_chance": 0.4,
+        "connections": ["tavern", "dark_forest"],
+    },
+    "dark_forest": {
+        "name": "Whispering Woods",
+        "description": "Ancient trees groan overhead, their branches blotting out the sky. Something watches from the undergrowth.",
+        "encounters": ["wolf_pack", "fairy_ring", "bandit_camp"],
+        "enemy_pool": ["dire_wolf", "goblin", "skeleton", "troll"],
+        "encounter_chance": 0.5,
+        "connections": ["town_square", "back_alley", "ancient_ruins"],
+    },
+    "ancient_ruins": {
+        "name": "Ruins of Aldrath",
+        "description": "Crumbling stone walls etched with forgotten runes. The ground trembles faintly, as if something stirs below.",
+        "encounters": ["skeleton_warriors", "trapped_chest", "boss_lich"],
+        "enemy_pool": ["skeleton", "wraith", "dark_mage", "troll"],
+        "encounter_chance": 0.6,
+        "connections": ["dark_forest", "dragon_lair"],
+    },
+    "dragon_lair": {
+        "name": "Ember Caverns",
+        "description": "Blistering heat radiates from the cavern walls. Scorched bones crunch underfoot and a low rumble shakes the earth.",
+        "encounters": ["boss_dragon", "treasure_hoard"],
+        "enemy_pool": ["dragon_wyrmling", "wraith"],
+        "encounter_chance": 0.7,
+        "connections": ["ancient_ruins"],
+    },
+}
+
+DEFAULT_LOCATION = "tavern"
 
 # ═══════════════════════════════════════════════════════════════
 #  QUESTS
@@ -199,6 +312,14 @@ class RealmGameState:
         self.active_quests: List[Dict[str, Any]] = []
         self.completed_quests: List[str] = []
 
+        # ── Equipment & Economy ──
+        self.equipment: Dict[str, Optional[str]] = {slot: None for slot in EQUIPMENT_SLOTS}
+        self.gold: int = 50
+
+        # ── Location ──
+        self.current_location: str = DEFAULT_LOCATION
+        self.defending: bool = False
+
     # ── Accessors ──
 
     def to_dict(self) -> Dict[str, Any]:
@@ -224,6 +345,10 @@ class RealmGameState:
                 "active_quests": list(self.active_quests),
                 "completed_quests": list(self.completed_quests),
                 "murder": self.murder.to_dict() if self.murder else None,
+                "equipment": dict(self.equipment),
+                "gold": self.gold,
+                "current_location": self.current_location,
+                "location_info": REALM_LOCATIONS.get(self.current_location, {}),
             }
 
     # ── Time ──
@@ -343,6 +468,145 @@ class RealmGameState:
     def has_item(self, item_id: str) -> bool:
         return any(i.get("id") == item_id for i in self.inventory)
 
+    # ── Equipment ──
+
+    def equip_item(self, item_id: str) -> Dict[str, Any]:
+        """Equip an inventory item to its designated slot."""
+        catalog_key = item_id.split("_", maxsplit=0)[0]  # handle unique suffixes
+        # Find matching catalog entry by base id
+        base_key = None
+        for key in ITEM_CATALOG:
+            if item_id == key or item_id.startswith(key + "_"):
+                base_key = key
+                break
+        if not base_key:
+            return {"error": f"Item '{item_id}' not in catalog"}
+        cat_entry = ITEM_CATALOG[base_key]
+        slot = cat_entry.get("slot")
+        if not slot:
+            return {"error": "Item cannot be equipped (consumable)"}
+        if not self.has_item(item_id):
+            return {"error": "Item not in inventory"}
+        with self._lock:
+            # Unequip current item in that slot first
+            old_item_id = self.equipment.get(slot)
+            if old_item_id:
+                self.equipment[slot] = None
+            self.equipment[slot] = item_id
+        return {"equipped": True, "slot": slot, "item_id": item_id, "name": cat_entry["name"],
+                "replaced": old_item_id}
+
+    def unequip_slot(self, slot: str) -> Dict[str, Any]:
+        """Unequip an item from a slot."""
+        if slot not in EQUIPMENT_SLOTS:
+            return {"error": f"Invalid slot: {slot}"}
+        with self._lock:
+            item_id = self.equipment.get(slot)
+            if not item_id:
+                return {"error": f"Nothing equipped in {slot}"}
+            self.equipment[slot] = None
+        return {"unequipped": True, "slot": slot, "item_id": item_id}
+
+    def get_equipment(self) -> Dict[str, Any]:
+        """Return current equipment with catalog details."""
+        result: Dict[str, Any] = {}
+        with self._lock:
+            for slot in EQUIPMENT_SLOTS:
+                item_id = self.equipment.get(slot)
+                if item_id:
+                    base_key = None
+                    for key in ITEM_CATALOG:
+                        if item_id == key or item_id.startswith(key + "_"):
+                            base_key = key
+                            break
+                    result[slot] = {"item_id": item_id, **(ITEM_CATALOG.get(base_key, {}) if base_key else {})}
+                else:
+                    result[slot] = None
+        return result
+
+    def get_total_stats(self) -> Dict[str, Any]:
+        """Return base stats plus equipment bonuses."""
+        with self._lock:
+            stats = dict(self.player_stats)
+            bonus_attack = 0
+            bonus_defense = 0
+            for slot in EQUIPMENT_SLOTS:
+                item_id = self.equipment.get(slot)
+                if not item_id:
+                    continue
+                base_key = None
+                for key in ITEM_CATALOG:
+                    if item_id == key or item_id.startswith(key + "_"):
+                        base_key = key
+                        break
+                if base_key:
+                    entry = ITEM_CATALOG[base_key]
+                    bonus_attack += entry.get("attack", 0)
+                    bonus_defense += entry.get("defense", 0)
+            stats["bonus_attack"] = bonus_attack
+            stats["bonus_defense"] = bonus_defense
+            stats["effective_attack"] = stats.get("strength", 10) + bonus_attack
+            stats["effective_defense"] = bonus_defense
+            return stats
+
+    # ── Economy ──
+
+    def add_gold(self, amount: int) -> int:
+        with self._lock:
+            self.gold += amount
+            return self.gold
+
+    def remove_gold(self, amount: int) -> Tuple[bool, int]:
+        """Remove gold; returns (success, new_balance)."""
+        with self._lock:
+            if self.gold < amount:
+                return False, self.gold
+            self.gold -= amount
+            return True, self.gold
+
+    def buy_item(self, item_key: str) -> Dict[str, Any]:
+        """Buy an item from the catalog."""
+        if item_key not in ITEM_CATALOG:
+            return {"error": "Item not in catalog"}
+        entry = ITEM_CATALOG[item_key]
+        cost = entry.get("value", 0)
+        with self._lock:
+            if self.gold < cost:
+                return {"error": "Not enough gold", "gold": self.gold, "cost": cost}
+            self.gold -= cost
+            item = {
+                "id": f"{item_key}_{uuid.uuid4().hex[:4]}",
+                "name": entry["name"],
+                "type": entry.get("slot") or ("consumable" if entry.get("consumable") else "misc"),
+                "description": f"Purchased from shop for {cost} gold.",
+            }
+            self.inventory.append(item)
+        return {"bought": True, "item": item, "gold": self.gold}
+
+    def sell_item(self, item_id: str) -> Dict[str, Any]:
+        """Sell an inventory item for half its catalog value."""
+        # Unequip first if equipped
+        for slot, eid in self.equipment.items():
+            if eid == item_id:
+                self.equipment[slot] = None
+                break
+        item = self.remove_item(item_id)
+        if not item:
+            return {"error": "Item not in inventory"}
+        base_key = None
+        for key in ITEM_CATALOG:
+            if item_id == key or item_id.startswith(key + "_"):
+                base_key = key
+                break
+        value = ITEM_CATALOG[base_key]["value"] // 2 if base_key else 1
+        with self._lock:
+            self.gold += value
+        return {"sold": True, "item_name": item.get("name", item_id), "gold_gained": value, "gold": self.gold}
+
+    def get_level(self) -> int:
+        """XP-based level: floor(xp / 100) + 1."""
+        return self.player_stats.get("level", 1)
+
     # ── Fourth-Wall (Assistant stealing from UI) ──
 
     def assistant_steal(self, item_name: str) -> Dict[str, Any]:
@@ -427,23 +691,21 @@ class RealmGameState:
         base_dmg = weapon.get("damage", 3) if weapon else 3
         str_mod = (self.player_stats.get("strength", 10) - 10) // 2
         roll = random.randint(1, 20)
+        enemy_def = self.combat.template.get("defense", 0)
         crit = roll == 20
-        miss = roll == 1
-        if miss:
+        miss = (roll + str_mod) < enemy_def and not crit
+        if roll == 1 or miss:
             player_dmg = 0
+            miss = True
         else:
             player_dmg = base_dmg + str_mod + (base_dmg if crit else 0)
+            player_dmg = max(1, player_dmg - enemy_def)
         self.combat.enemy_hp = max(0, self.combat.enemy_hp - player_dmg)
+        # Enemy counter-attack
         enemy_dmg = 0
         if self.combat.enemy_hp > 0:
-            enemy_roll = random.randint(1, 20)
-            agi_mod = (self.player_stats.get("agility", 10) - 10) // 2
-            dodge = enemy_roll <= max(1, 2 + agi_mod)
-            if not dodge:
-                raw = self.combat.template.get("attack", 5)
-                defense = 0  # can be expanded with armor
-                enemy_dmg = max(1, raw - defense)
-                self.take_damage(enemy_dmg)
+            enemy_dmg = self._enemy_attacks()
+        self.defending = False  # reset defend stance after any action
         defeated = self.combat.enemy_hp <= 0
         result = {
             "roll": roll, "crit": crit, "miss": miss,
@@ -453,6 +715,78 @@ class RealmGameState:
             "defeated": defeated,
             "weapon": weapon.get("name", "Fists") if weapon else "Fists",
         }
+        if defeated:
+            result.update(self._resolve_combat_victory())
+        return result
+
+    def _enemy_attacks(self) -> int:
+        """Run the enemy's counter-attack against the player, respecting defend stance."""
+        if not self.combat or not self.combat.active:
+            return 0
+        enemy_roll = random.randint(1, 20)
+        agi_mod = (self.player_stats.get("agility", 10) - 10) // 2
+        dodge = enemy_roll <= max(1, 2 + agi_mod)
+        if dodge:
+            return 0
+        raw = self.combat.template.get("attack", 5)
+        if self.defending:
+            raw = raw // 2  # defend halves incoming damage
+        dmg = max(1, raw)
+        self.take_damage(dmg)
+        return dmg
+
+    def combat_defend(self) -> Dict[str, Any]:
+        """Player defends — halves incoming damage this round, enemy still attacks."""
+        if not self.combat or not self.combat.active:
+            return {"error": "Not in combat"}
+        self.defending = True
+        enemy_dmg = self._enemy_attacks()
+        self.defending = False
+        return {
+            "defended": True,
+            "enemy_damage": enemy_dmg,
+            "player_hp": self.player_stats["hp"],
+            "enemy_hp": self.combat.enemy_hp,
+            "enemy_name": self.combat.enemy_name,
+        }
+
+    def combat_use_item(self, item_id: str) -> Dict[str, Any]:
+        """Use a consumable item during combat."""
+        if not self.combat or not self.combat.active:
+            return {"error": "Not in combat"}
+        item = None
+        for i in self.inventory:
+            if i.get("id") == item_id:
+                item = i
+                break
+        if not item:
+            return {"error": "Item not found in inventory"}
+        result: Dict[str, Any] = {"item_name": item.get("name", item_id)}
+        # Apply item effects
+        if item.get("type") == "consumable" or item.get("heal") or item.get("heal_mp") or item.get("damage"):
+            self.remove_item(item_id)
+            if item.get("heal"):
+                hp = self.heal(item["heal"])
+                result["healed"] = item["heal"]
+                result["player_hp"] = hp
+            if item.get("heal_mp"):
+                self.adjust_stat("mp", item["heal_mp"])
+                result["restored_mp"] = item["heal_mp"]
+            if item.get("damage"):
+                self.combat.enemy_hp = max(0, self.combat.enemy_hp - item["damage"])
+                result["item_damage"] = item["damage"]
+                result["enemy_hp"] = self.combat.enemy_hp
+        else:
+            return {"error": f"'{item.get('name', item_id)}' cannot be used in combat"}
+        # Enemy counter-attack (using item takes a turn)
+        enemy_dmg = 0
+        defeated = self.combat.enemy_hp <= 0
+        if not defeated:
+            enemy_dmg = self._enemy_attacks()
+        result["enemy_damage"] = enemy_dmg
+        result["player_hp"] = self.player_stats["hp"]
+        result["enemy_hp"] = self.combat.enemy_hp
+        result["defeated"] = defeated
         if defeated:
             result.update(self._resolve_combat_victory())
         return result
@@ -483,6 +817,12 @@ class RealmGameState:
         xp_result = self.gain_xp(xp)
         self.total_kills += 1
         result = {"xp_gained": xp, **xp_result}
+        # Gold drop
+        gold_drop = random.randint(GOLD_DROP_RANGE["min"], GOLD_DROP_RANGE["max"])
+        luck_gold = (self.player_stats.get("luck", 5) - 5)
+        gold_drop = max(1, gold_drop + luck_gold)
+        self.add_gold(gold_drop)
+        result["gold_gained"] = gold_drop
         # Loot roll
         loot_chance = self.combat.template.get("loot_chance", 0.3)
         luck_bonus = (self.player_stats.get("luck", 5) - 5) * 0.02
@@ -577,6 +917,63 @@ class RealmGameState:
             for k, t in QUEST_TEMPLATES.items()
             if k not in self.completed_quests and k not in active_keys
         ]
+
+    # ── Location System ──
+
+    def get_location_info(self) -> Dict[str, Any]:
+        """Return info about the player's current location."""
+        loc = REALM_LOCATIONS.get(self.current_location, {})
+        return {
+            "location_key": self.current_location,
+            "name": loc.get("name", self.current_location),
+            "description": loc.get("description", ""),
+            "connections": loc.get("connections", []),
+            "connections_info": [
+                {"key": c, "name": REALM_LOCATIONS[c]["name"]}
+                for c in loc.get("connections", [])
+                if c in REALM_LOCATIONS
+            ],
+        }
+
+    def move_to_location(self, destination: str) -> Dict[str, Any]:
+        """Move the player to a connected location. May trigger a random encounter."""
+        if self.combat and self.combat.active:
+            return {"error": "Cannot move while in combat"}
+        if destination not in REALM_LOCATIONS:
+            return {"error": f"Unknown location: {destination}"}
+        current = REALM_LOCATIONS.get(self.current_location, {})
+        if destination not in current.get("connections", []):
+            return {"error": f"Cannot reach '{REALM_LOCATIONS[destination]['name']}' from here. "
+                    f"Connected locations: {', '.join(current.get('connections', []))}"}
+        with self._lock:
+            old_location = self.current_location
+            self.current_location = destination
+        dest_info = REALM_LOCATIONS[destination]
+        result: Dict[str, Any] = {
+            "moved": True,
+            "from": old_location,
+            "from_name": REALM_LOCATIONS.get(old_location, {}).get("name", old_location),
+            "to": destination,
+            "to_name": dest_info["name"],
+            "description": dest_info["description"],
+            "connections": [
+                {"key": c, "name": REALM_LOCATIONS[c]["name"]}
+                for c in dest_info.get("connections", [])
+                if c in REALM_LOCATIONS
+            ],
+        }
+        # Random encounter check
+        encounter_chance = dest_info.get("encounter_chance", 0.3)
+        if random.random() < encounter_chance and dest_info.get("enemy_pool"):
+            enemy_key = random.choice(dest_info["enemy_pool"])
+            combat = self.start_combat(enemy_key)
+            result["encounter"] = combat
+            result["encounter_enemy"] = enemy_key
+        # Advance turn-based quest progress
+        quest_updates = self._check_quest_progress("turn")
+        if quest_updates:
+            result["quest_updates"] = quest_updates
+        return result
 
     # ── SharedBoard helpers ──
 

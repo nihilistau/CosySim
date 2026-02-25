@@ -207,10 +207,26 @@ _ACTIONS: List[Dict[str, Any]] = [
     {
         "id": "attack",
         "label": "Attack",
-        "description": "Attack an enemy with equipped weapon.",
+        "description": "Attack an enemy with equipped weapon. Roll d20 + strength mod vs enemy defense.",
         "intimacy_level": 1,
         "condition": {},
         "effects": [{"effect_type": "stat_delta", "params": {"target_hp": "negative"}}],
+    },
+    {
+        "id": "defend",
+        "label": "Defend",
+        "description": "Raise guard to halve incoming damage this round. Enemy still attacks.",
+        "intimacy_level": 1,
+        "condition": {},
+        "effects": [],
+    },
+    {
+        "id": "flee",
+        "label": "Flee",
+        "description": "Attempt to flee combat. Roll d20 + agility mod vs DC 12.",
+        "intimacy_level": 1,
+        "condition": {},
+        "effects": [],
     },
     {
         "id": "use_item",
@@ -251,6 +267,14 @@ _ACTIONS: List[Dict[str, Any]] = [
         "intimacy_level": 1,
         "condition": {},
         "effects": [{"effect_type": "stat_delta", "params": {"hp": 20, "mp": 10}}],
+    },
+    {
+        "id": "move_location",
+        "label": "Travel",
+        "description": "Move to a connected location. May trigger random encounters en route.",
+        "intimacy_level": 1,
+        "condition": {},
+        "effects": [],
     },
 ]
 

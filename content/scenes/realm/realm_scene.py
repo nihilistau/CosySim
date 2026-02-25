@@ -34,9 +34,12 @@ from engine.mcp.framework import MCPSceneMixin, get_framework
 
 from .realm_state import (
     DIRECTOR_PERSONALITIES,
+    EQUIPMENT_SLOTS,
+    ITEM_CATALOG,
     MURDER_ROOMS,
     MURDER_WEAPONS,
     MurderMysteryState,
+    REALM_LOCATIONS,
     RealmGameState,
     SKILL_TREE,
 )
@@ -66,6 +69,13 @@ def _director_system_prompt(state: RealmGameState) -> str:
     if echo_hint:
         echo_section = f"\n\n[MEMORY ECHO — weave this subtly into narration]\n{echo_hint}"
 
+    loc = REALM_LOCATIONS.get(state.current_location, {})
+    location_section = f"\nLOCATION: {loc.get('name', state.current_location)} — {loc.get('description', '')}"
+    connections = loc.get("connections", [])
+    if connections:
+        conn_names = [REALM_LOCATIONS.get(c, {}).get("name", c) for c in connections]
+        location_section += f"\nConnected to: {', '.join(conn_names)}"
+
     return f"""You are THE DIRECTOR of an interactive LitRPG visual novel called "The Realm".
 
 PERSONALITY: {personality.get('label', 'The Director')}
@@ -82,9 +92,12 @@ YOUR ROLE:
 
 PLAYER STATE:
 HP: {state.player_stats['hp']}/{state.player_stats['max_hp']} | MP: {state.player_stats['mp']}/{state.player_stats['max_mp']}
-Level: {state.player_stats['level']} | STR: {state.player_stats['strength']} AGI: {state.player_stats['agility']} INT: {state.player_stats['intellect']} CHA: {state.player_stats['charisma']} LCK: {state.player_stats['luck']}
+Level: {state.player_stats['level']} | Gold: {state.player_stats.get('gold', 0)}
+STR: {state.player_stats['strength']} AGI: {state.player_stats['agility']} INT: {state.player_stats['intellect']} CHA: {state.player_stats['charisma']} LCK: {state.player_stats['luck']}
 Inventory: {', '.join(i['name'] for i in state.inventory) or 'Empty'}
-Turn: {state.turn_number}{murder_brief}{echo_section}
+Turn: {state.turn_number}{location_section}{murder_brief}{echo_section}
+
+COMBAT ACTIONS: attack (d20+STR vs defense), defend (halve damage), flee (d20+AGI vs DC12), use_item
 
 RESPONSE FORMAT — you MUST end every response with a JSON block:
 ```json
@@ -712,6 +725,108 @@ class RealmScene(BaseScene, MCPSceneMixin, mcp_scene_id="realm"):
             self.socketio.emit("combat_flee", result)
             return jsonify({**result, "narration": narration.get("narration", "")})
 
+        @self.app.route("/api/combat/defend", methods=["POST"])
+        def combat_defend():
+            if not self.state or not self.state.combat:
+                return jsonify({"error": "Not in combat"}), 400
+            result = self.state.combat_defend()
+            if "error" in result:
+                return jsonify(result), 400
+            narration = self._director_infer(
+                f"The player raises their guard and braces for impact! "
+                f"The {result.get('enemy_name', 'enemy')} strikes but the blow is softened — "
+                f"only {result.get('enemy_damage', 0)} damage gets through. "
+                f"Player HP: {result.get('player_hp', '?')}. "
+                "Narrate the defensive stance and present combat choices."
+            )
+            self._apply_director_result(narration)
+            self.socketio.emit("combat_defend", result)
+            return jsonify({**result, "narration": narration.get("narration", "")})
+
+        @self.app.route("/api/combat/use_item", methods=["POST"])
+        def combat_use_item():
+            if not self.state or not self.state.combat:
+                return jsonify({"error": "Not in combat"}), 400
+            data = request.get_json(silent=True) or {}
+            item_id = data.get("item_id")
+            if not item_id:
+                return jsonify({"error": "item_id required"}), 400
+            result = self.state.combat_use_item(item_id)
+            if "error" in result:
+                return jsonify(result), 400
+            parts = [f"The player uses {result.get('item_name', 'an item')} mid-combat!"]
+            if result.get("healed"):
+                parts.append(f"Healed {result['healed']} HP.")
+            if result.get("restored_mp"):
+                parts.append(f"Restored {result['restored_mp']} MP.")
+            if result.get("item_damage"):
+                parts.append(f"Dealt {result['item_damage']} damage to the enemy!")
+            if result.get("enemy_damage", 0) > 0:
+                parts.append(f"Enemy strikes back for {result['enemy_damage']} damage.")
+            parts.append(f"Player HP: {result.get('player_hp', '?')} | Enemy HP: {result.get('enemy_hp', '?')}.")
+            if result.get("defeated"):
+                parts.append("The enemy is defeated!")
+            narration = self._director_infer(" ".join(parts) + " Narrate the action.")
+            self._apply_director_result(narration)
+            event = "combat_victory" if result.get("defeated") else "combat_item_used"
+            self.socketio.emit(event, result)
+            # Sync item usage to coordinator
+            try:
+                from engine.mcp.state_coordinator import get_coordinator
+                get_coordinator().update(
+                    "realm_player", source="realm_combat_item", scene="realm",
+                    hp=self.state.player_stats.get("hp", 0),
+                )
+            except Exception:
+                pass
+            return jsonify({**result, "narration": narration.get("narration", "")})
+
+        # ── Location Routes ──
+
+        @self.app.route("/api/location/current")
+        def location_current():
+            if not self.state:
+                return jsonify({"error": "No active game"}), 400
+            return jsonify(self.state.get_location_info())
+
+        @self.app.route("/api/location/move", methods=["POST"])
+        def location_move():
+            if not self.state or self.state.ended:
+                return jsonify({"error": "No active game"}), 400
+            data = request.get_json(silent=True) or {}
+            destination = data.get("destination")
+            if not destination:
+                return jsonify({"error": "destination required"}), 400
+            result = self.state.move_to_location(destination)
+            if "error" in result:
+                return jsonify(result), 400
+            # Director narrates the journey
+            encounter_text = ""
+            if result.get("encounter"):
+                enc = result["encounter"]
+                encounter_text = (
+                    f" A {enc.get('enemy_name', 'creature')} blocks the path! "
+                    f"Enemy HP: {enc.get('enemy_hp', '?')}/{enc.get('enemy_max_hp', '?')}. "
+                    "Present combat choices: attack, defend, flee, or use item."
+                )
+            narration = self._director_infer(
+                f"The player travels from {result['from_name']} to {result['to_name']}. "
+                f"{result['description']}{encounter_text} "
+                "Narrate the journey and arrival."
+            )
+            self._apply_director_result(narration)
+            self.socketio.emit("location_changed", result)
+            # Sync location to coordinator
+            try:
+                from engine.mcp.state_coordinator import get_coordinator
+                get_coordinator().update(
+                    "realm_player", source="realm_location", scene="realm",
+                    location=result["to_name"],
+                )
+            except Exception:
+                pass
+            return jsonify({**result, "narration": narration.get("narration", ""), "state": self.state.to_dict()})
+
         # ── Quest Routes ──
 
         @self.app.route("/api/quests")
@@ -743,6 +858,85 @@ class RealmScene(BaseScene, MCPSceneMixin, mcp_scene_id="realm"):
             self._apply_director_result(narration)
             self.socketio.emit("quest_accepted", quest)
             return jsonify({**result, "narration": narration.get("narration", "")})
+
+        # ── Equipment Routes ──
+
+        @self.app.route("/api/equipment")
+        def equipment_get():
+            if not self.state:
+                return jsonify({"error": "No active game"}), 400
+            return jsonify({
+                "equipment": self.state.get_equipment(),
+                "total_stats": self.state.get_total_stats(),
+            })
+
+        @self.app.route("/api/equipment/equip", methods=["POST"])
+        def equipment_equip():
+            if not self.state:
+                return jsonify({"error": "No active game"}), 400
+            data = request.get_json(silent=True) or {}
+            item_id = data.get("item_id")
+            if not item_id:
+                return jsonify({"error": "item_id required"}), 400
+            result = self.state.equip_item(item_id)
+            if "error" in result:
+                return jsonify(result), 400
+            self.socketio.emit("equipment_changed", self.state.get_equipment())
+            return jsonify(result)
+
+        @self.app.route("/api/equipment/unequip", methods=["POST"])
+        def equipment_unequip():
+            if not self.state:
+                return jsonify({"error": "No active game"}), 400
+            data = request.get_json(silent=True) or {}
+            slot = data.get("slot")
+            if not slot:
+                return jsonify({"error": "slot required"}), 400
+            result = self.state.unequip_slot(slot)
+            if "error" in result:
+                return jsonify(result), 400
+            self.socketio.emit("equipment_changed", self.state.get_equipment())
+            return jsonify(result)
+
+        @self.app.route("/api/inventory")
+        def inventory_list():
+            if not self.state:
+                return jsonify({"error": "No active game"}), 400
+            return jsonify({"inventory": list(self.state.inventory), "gold": self.state.gold})
+
+        # ── Shop / Economy Routes ──
+
+        @self.app.route("/api/shop/catalog")
+        def shop_catalog():
+            return jsonify({"catalog": {k: {**v, "id": k} for k, v in ITEM_CATALOG.items()}})
+
+        @self.app.route("/api/shop/buy", methods=["POST"])
+        def shop_buy():
+            if not self.state:
+                return jsonify({"error": "No active game"}), 400
+            data = request.get_json(silent=True) or {}
+            item_key = data.get("item_id")
+            if not item_key:
+                return jsonify({"error": "item_id required"}), 400
+            result = self.state.buy_item(item_key)
+            if "error" in result:
+                return jsonify(result), 400
+            self.socketio.emit("gold_changed", {"gold": self.state.gold})
+            return jsonify(result)
+
+        @self.app.route("/api/shop/sell", methods=["POST"])
+        def shop_sell():
+            if not self.state:
+                return jsonify({"error": "No active game"}), 400
+            data = request.get_json(silent=True) or {}
+            item_id = data.get("item_id")
+            if not item_id:
+                return jsonify({"error": "item_id required"}), 400
+            result = self.state.sell_item(item_id)
+            if "error" in result:
+                return jsonify(result), 400
+            self.socketio.emit("gold_changed", {"gold": self.state.gold})
+            return jsonify(result)
 
     # ── SocketIO ──
 
@@ -777,10 +971,21 @@ class RealmScene(BaseScene, MCPSceneMixin, mcp_scene_id="realm"):
                 {"path": "/api/game/state",      "methods": ["GET"],  "description": "Get game state"},
                 {"path": "/api/combat/start",    "methods": ["POST"], "description": "Start combat encounter"},
                 {"path": "/api/combat/attack",   "methods": ["POST"], "description": "Attack in combat"},
+                {"path": "/api/combat/defend",   "methods": ["POST"], "description": "Defend in combat"},
                 {"path": "/api/combat/flee",     "methods": ["POST"], "description": "Flee from combat"},
+                {"path": "/api/combat/use_item", "methods": ["POST"], "description": "Use item in combat"},
+                {"path": "/api/location/current","methods": ["GET"],  "description": "Get current location"},
+                {"path": "/api/location/move",   "methods": ["POST"], "description": "Move to connected location"},
                 {"path": "/api/quests",          "methods": ["GET"],  "description": "List quests"},
                 {"path": "/api/quests/accept",   "methods": ["POST"], "description": "Accept a quest"},
                 {"path": "/api/murder/start",    "methods": ["POST"], "description": "Start murder mystery"},
                 {"path": "/api/murder/accuse",   "methods": ["POST"], "description": "Accuse in murder mystery"},
+                {"path": "/api/equipment",       "methods": ["GET"],  "description": "Get equipment"},
+                {"path": "/api/equipment/equip",  "methods": ["POST"], "description": "Equip an item"},
+                {"path": "/api/equipment/unequip","methods": ["POST"], "description": "Unequip a slot"},
+                {"path": "/api/inventory",       "methods": ["GET"],  "description": "Get inventory"},
+                {"path": "/api/shop/catalog",    "methods": ["GET"],  "description": "Shop catalog"},
+                {"path": "/api/shop/buy",        "methods": ["POST"], "description": "Buy item"},
+                {"path": "/api/shop/sell",       "methods": ["POST"], "description": "Sell item"},
             ],
         }
