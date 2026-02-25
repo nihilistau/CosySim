@@ -174,43 +174,42 @@ class RealmScene(BaseScene, MCPSceneMixin, mcp_scene_id="realm"):
         return get_virtual_agent_manager()
 
     def _director_infer(self, user_message: str) -> Dict[str, Any]:
-        """Send a message through the Director pipeline (stateful) with governance."""
+        """Send a message through the Director pipeline via VirtualAgentManager with governance."""
         if not self.state:
             return {"narration": "No active game.", "choices": []}
 
         try:
-            from engine.lmstudio.lms_client import get_lms_client
+            from engine.agents.virtual_agent_manager import get_virtual_agent_manager
+            from engine.agents.virtual_agent import InferenceRequest
             from engine.mcp.comms_framework import build_governance_context
-            client = get_lms_client()
+
+            mgr = get_virtual_agent_manager()
 
             system_prompt = _director_system_prompt(self.state)
             gov_ctx = build_governance_context("realm_director", "realm", user_message)
             if gov_ctx:
                 system_prompt = f"{system_prompt}\n\n{gov_ctx}"
-            messages = [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_message},
-            ]
 
-            # Use stateful conversation threading
-            kwargs: Dict[str, Any] = {"store": True}
-            if self._director_conv_id:
-                try:
-                    resp = client.chat_stateful(
-                        user_msg=user_message,
-                        previous_response_id=self._director_conv_id,
-                        config={"temperature": 0.85, "max_output_tokens": 1500},
-                    )
-                except Exception:
-                    resp = client.chat(messages, temperature=0.85, max_tokens=1500, **kwargs)
-            else:
-                resp = client.chat(messages, temperature=0.85, max_tokens=1500, **kwargs)
+            req = InferenceRequest(
+                agent_id="realm_director",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_message},
+                ],
+                temperature=0.85,
+                max_output_tokens=1500,
+                conversation_id=f"realm_director_{self.state.session_id}",
+                previous_response_id=self._director_conv_id,
+                store=True,
+                metadata={"scene": "realm", "role": "director"},
+            )
+            proc = mgr.infer_processed(req)
 
             # Track conversation thread
-            if hasattr(resp, "response_id") and resp.response_id:
-                self._director_conv_id = resp.response_id
+            if proc.response_id:
+                self._director_conv_id = proc.response_id
 
-            raw = resp.content if hasattr(resp, "content") else str(resp)
+            raw = proc.clean_text or proc.raw_text or ""
             return self._parse_director_response(raw)
 
         except Exception as e:
@@ -223,26 +222,36 @@ class RealmScene(BaseScene, MCPSceneMixin, mcp_scene_id="realm"):
             }
 
     def _assistant_infer(self, context: str) -> str:
-        """Get a short quip from the Assistant with governance context."""
+        """Get a short quip from the Assistant via VirtualAgentManager with governance."""
         if not self.state:
             return ""
 
-        from engine.lmstudio.lms_client import get_lms_client
-        from engine.mcp.comms_framework import build_governance_context
-        client = get_lms_client()
-
-        system_prompt = _assistant_system_prompt(self.state)
-        gov_ctx = build_governance_context("realm_assistant", "realm", context)
-        if gov_ctx:
-            system_prompt = f"{system_prompt}\n\n{gov_ctx}"
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": context},
-        ]
-
         try:
-            resp = client.chat(messages, temperature=0.95, max_tokens=200, store=False)
-            return resp.content if hasattr(resp, "content") else str(resp)
+            from engine.agents.virtual_agent_manager import get_virtual_agent_manager
+            from engine.agents.virtual_agent import InferenceRequest
+            from engine.mcp.comms_framework import build_governance_context
+
+            mgr = get_virtual_agent_manager()
+
+            system_prompt = _assistant_system_prompt(self.state)
+            gov_ctx = build_governance_context("realm_assistant", "realm", context)
+            if gov_ctx:
+                system_prompt = f"{system_prompt}\n\n{gov_ctx}"
+
+            req = InferenceRequest(
+                agent_id="realm_assistant",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": context},
+                ],
+                temperature=0.95,
+                max_output_tokens=200,
+                conversation_id=f"realm_assistant_{self.state.session_id}",
+                store=False,
+                metadata={"scene": "realm", "role": "assistant"},
+            )
+            proc = mgr.infer_processed(req)
+            return (proc.clean_text or proc.raw_text or "").strip()
         except Exception as e:
             logger.warning("Assistant inference failed: %s", e)
             return "*The Assistant stares blankly at the screen.*"
@@ -324,6 +333,14 @@ class RealmScene(BaseScene, MCPSceneMixin, mcp_scene_id="realm"):
             xp_result = self.state.gain_xp(xp)
             if xp_result.get("leveled_up"):
                 self.socketio.emit("level_up", xp_result)
+            try:
+                from engine.mcp.state_coordinator import get_coordinator
+                get_coordinator().update(
+                    "realm_player", source="realm_xp", scene="realm",
+                    xp=xp, level=self.state.player_stats.get("level", 1),
+                )
+            except Exception:
+                pass
 
         # Damage
         damage = result.get("damage", 0)
@@ -332,6 +349,14 @@ class RealmScene(BaseScene, MCPSceneMixin, mcp_scene_id="realm"):
             if dead:
                 self.state.record_death(result.get("narration", "unknown")[:100], self.state.turn_number)
                 self.socketio.emit("player_death", {"cause": result.get("narration", "")[:200]})
+            try:
+                from engine.mcp.state_coordinator import get_coordinator
+                get_coordinator().update(
+                    "realm_player", source="realm_combat", scene="realm",
+                    energy=-(damage), hp=self.state.player_stats.get("hp", 0),
+                )
+            except Exception:
+                pass
 
         # Skill check
         sc = result.get("skill_check")
@@ -630,7 +655,7 @@ class RealmScene(BaseScene, MCPSceneMixin, mcp_scene_id="realm"):
         def combat_start():
             if not self.state:
                 return jsonify({"error": "No active game"}), 400
-            data = flask_request.get_json(silent=True) or {}
+            data = request.get_json(silent=True) or {}
             enemy_key = data.get("enemy")
             result = self.state.start_combat(enemy_key)
             if "error" in result:
@@ -703,7 +728,7 @@ class RealmScene(BaseScene, MCPSceneMixin, mcp_scene_id="realm"):
         def quest_accept():
             if not self.state:
                 return jsonify({"error": "No active game"}), 400
-            data = flask_request.get_json(silent=True) or {}
+            data = request.get_json(silent=True) or {}
             quest_key = data.get("quest")
             if not quest_key:
                 return jsonify({"error": "quest key required"}), 400

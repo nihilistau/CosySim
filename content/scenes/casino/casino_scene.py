@@ -327,12 +327,22 @@ class CasinoScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
             result["image_requests"] = list(proc.image_requests)
             result["action_tags"] = list(proc.action_tags)
 
-            # Sync mood to framework
+            # Sync mood to framework + StateCoordinator
             if result["mood"]:
                 try:
                     char_node = get_framework().get_character(character_id)
                     if char_node:
                         char_node.update_state({"mood": result["mood"]})
+                except Exception:
+                    pass
+                try:
+                    from engine.mcp.state_coordinator import get_coordinator
+                    get_coordinator().update(
+                        character_id,
+                        mood=result["mood"],
+                        source="casino_reply",
+                        scene=SCENE_ID,
+                    )
                 except Exception:
                     pass
 

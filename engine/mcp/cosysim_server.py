@@ -88,21 +88,8 @@ def search_memory(query: str, character_id: Optional[str] = None, top_k: int = 5
     Returns the most relevant stored memories for the given query.
     Use this to recall past conversations, facts, or context.
     """
-    rag = _get_rag()
-    if rag is None:
-        return "RAG system unavailable."
-    try:
-        results = rag.search(query, character_id=character_id, top_k=top_k)
-        if not results:
-            return "No relevant memories found."
-        entries = []
-        for i, r in enumerate(results, 1):
-            text = r.get("text", r.get("document", str(r)))
-            score = r.get("score", r.get("distance", "?"))
-            entries.append(f"{i}. [score={score}] {text}")
-        return "\n".join(entries)
-    except Exception as e:
-        return f"Memory search failed: {e}"
+    from engine.mcp.tools.memory_tools import search_memory as _impl
+    return _impl(query, _get_rag(), character_id=character_id, top_k=top_k)
 
 
 @mcp.tool()
@@ -111,15 +98,8 @@ def store_memory(text: str, character_id: str, metadata: Optional[str] = None) -
     Store a new memory for a character in the RAG system.
     Use this to save important facts, conversation summaries, or observations.
     """
-    rag = _get_rag()
-    if rag is None:
-        return "RAG system unavailable."
-    try:
-        meta = json.loads(metadata) if metadata else {}
-        rag.add(text, character_id=character_id, metadata=meta)
-        return f"Memory stored for character {character_id}."
-    except Exception as e:
-        return f"Failed to store memory: {e}"
+    from engine.mcp.tools.memory_tools import store_memory as _impl
+    return _impl(text, character_id, _get_rag(), metadata=metadata)
 
 
 @mcp.tool()
@@ -128,19 +108,8 @@ def get_character_state(character_id: str) -> str:
     Get the current state of a character including mood, energy, and relationships.
     Returns JSON with all character state fields.
     """
-    db = _get_db()
-    try:
-        state = db.get_character_state(character_id)
-        if state is None:
-            return f"No state found for character {character_id}."
-        # Also get relationships
-        rels = db.list_relationships(character_id)
-        return json.dumps({
-            "state": dict(state) if state else {},
-            "relationships": [dict(r) for r in rels] if rels else [],
-        }, indent=2, default=str)
-    except Exception as e:
-        return f"Failed to get character state: {e}"
+    from engine.mcp.tools.character_tools import get_character_state as _impl
+    return _impl(character_id, _get_db())
 
 
 @mcp.tool()
@@ -155,19 +124,8 @@ def adjust_relationship(
     Fields: relationship_level, trust, attraction, arousal_a, arousal_b.
     Delta is added to current value (can be negative). Values clamped 0-1.
     """
-    valid_fields = {"relationship_level", "trust", "attraction", "arousal_a", "arousal_b"}
-    if field not in valid_fields:
-        return f"Invalid field '{field}'. Must be one of: {', '.join(sorted(valid_fields))}"
-
-    db = _get_db()
-    try:
-        rel = db.get_or_create_relationship(character_a, character_b)
-        current = rel.get(field, 0.0) if rel else 0.0
-        new_val = max(0.0, min(1.0, current + delta))
-        db.update_relationship(character_a, character_b, {field: new_val})
-        return f"Updated {field}: {current:.2f} → {new_val:.2f}"
-    except Exception as e:
-        return f"Failed to adjust relationship: {e}"
+    from engine.mcp.tools.character_tools import adjust_relationship as _impl
+    return _impl(character_a, character_b, field, delta, _get_db())
 
 
 @mcp.tool()
@@ -230,18 +188,8 @@ def list_characters() -> str:
     """
     List all characters in the database with their names and IDs.
     """
-    db = _get_db()
-    try:
-        chars = db.get_all_characters()
-        if not chars:
-            return "No characters found."
-        lines = []
-        for c in chars:
-            c_dict = dict(c) if not isinstance(c, dict) else c
-            lines.append(f"- {c_dict.get('name', '?')} (id: {c_dict.get('id', '?')})")
-        return "\n".join(lines)
-    except Exception as e:
-        return f"Failed to list characters: {e}"
+    from engine.mcp.tools.character_tools import list_characters as _impl
+    return _impl(_get_db())
 
 
 @mcp.tool()
@@ -250,20 +198,8 @@ def get_benchmark_stats() -> str:
     Get performance benchmark statistics.
     Returns timing KPIs (min/max/avg/p95) for all tracked operations.
     """
-    try:
-        from engine.logging import get_benchmarks
-        stats = get_benchmarks()
-        if not stats:
-            return "No benchmark data available."
-        lines = []
-        for op, s in stats.items():
-            lines.append(
-                f"{op}: count={s['count']}, avg={s['avg_ms']:.1f}ms, "
-                f"p95={s['p95_ms']:.1f}ms, max={s['max_ms']:.1f}ms"
-            )
-        return "\n".join(lines)
-    except Exception as e:
-        return f"Failed to get benchmarks: {e}"
+    from engine.mcp.tools.utility_tools import get_benchmark_stats_logic as _impl
+    return _impl()
 
 
 @mcp.tool()
@@ -278,16 +214,8 @@ def generate_image_request(
     Provide a detailed prompt describing the desired image.
     Returns the file path of the generated image.
     """
-    try:
-        from content.simulation.services.comfyui_client import ComfyUIClient
-        from engine.config import get_config
-        config = get_config()
-        url = config.get("comfyui.base_url", "http://127.0.0.1:8188")
-        client = ComfyUIClient(base_url=url)
-        result = client.generate_image(prompt=prompt, width=width, height=height)
-        return f"Image generated: {result}" if result else "Image generation failed."
-    except Exception as e:
-        return f"Image generation failed: {e}"
+    from engine.mcp.tools.media_tools import generate_image_request_logic as _impl
+    return _impl(prompt, width=width, height=height, character_id=character_id)
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -337,18 +265,8 @@ def roll_dice(sides: int = 6, count: int = 1) -> str:
     Example: roll_dice(100) gives a d100 result for truth-or-dare.
     Odd results = Truth, Even results = Dare (for truth-or-dare game).
     """
-    import random as _random
-    sides  = max(2, min(sides, 1000))
-    count  = max(1, min(count, 20))
-    rolls  = [_random.randint(1, sides) for _ in range(count)]
-    total  = sum(rolls)
-    result = {
-        "rolls": rolls,
-        "total": total,
-        "sides": sides,
-        "outcome": "odd" if total % 2 == 1 else "even",
-    }
-    return json.dumps(result)
+    from engine.mcp.tools.utility_tools import roll_dice_logic as _impl
+    return _impl(sides, count)
 
 
 @mcp.tool()
@@ -359,60 +277,8 @@ def get_random_topic(category: str = "general") -> str:
     'conversation_starters', 'relationship_questions', 'general'.
     Use this to get fresh ideas for games, topics, or challenges.
     """
-    import random as _rnd
-    TOPICS = {
-        "truth_questions": [
-            "What is your biggest secret you've never told anyone?",
-            "Who was your first crush and do you still think about them?",
-            "What is the most embarrassing thing that has ever happened to you?",
-            "What is something you've done that you deeply regret?",
-            "If you could change one decision you've made, what would it be?",
-            "Have you ever lied to protect someone's feelings? What happened?",
-            "What is the worst thing you've ever done and gotten away with?",
-            "What is one thing you wish people understood about you?",
-        ],
-        "dare_ideas": [
-            "Send a voice message saying something embarrassing.",
-            "Describe your ideal perfect day in as much vivid detail as possible.",
-            "Confess something you've been thinking about but haven't said.",
-            "Tell me three things you secretly find attractive.",
-            "Describe a dream you've had recently in detail.",
-            "Say something kind but totally unexpected.",
-            "Invent and tell me a one-minute story right now.",
-            "Describe yourself using only three words.",
-        ],
-        "mystery_clues": [
-            "A torn piece of paper with coordinates written in ink.",
-            "An old photograph with a face scratched out.",
-            "A key that fits no known lock.",
-            "A voicemail from a number that doesn't exist.",
-            "A book with one passage underlined in red.",
-            "A receipt from a restaurant that closed ten years ago.",
-            "A note written in a language you don't recognise.",
-        ],
-        "conversation_starters": [
-            "If you could live anywhere in the world, where would you choose?",
-            "What is something you want to learn but haven't started yet?",
-            "What memory always makes you smile?",
-            "If you had one superpower for a day, what would it be?",
-            "What song always puts you in a good mood?",
-        ],
-        "relationship_questions": [
-            "What do you value most in a partner?",
-            "What is your love language?",
-            "Describe your perfect evening together.",
-            "What is one thing you've always wanted to do with someone special?",
-        ],
-        "general": [
-            "Tell me something interesting you learned this week.",
-            "What is your favourite way to relax?",
-            "If you could meet any historical figure, who would it be?",
-            "What is the best book or show you've experienced recently?",
-        ],
-    }
-    pool  = TOPICS.get(category, TOPICS["general"])
-    topic = _rnd.choice(pool)
-    return json.dumps({"category": category, "topic": topic})
+    from engine.mcp.tools.utility_tools import get_random_topic_logic as _impl
+    return _impl(category)
 
 
 # ── Game state ─────────────────────────────────────────────────────────
@@ -425,15 +291,8 @@ def get_game_state(game_id: str, key: Optional[str] = None) -> str:
     If key is None, returns the entire game state dict.
     Common game IDs: 'truth_or_dare', 'mystery'.
     """
-    try:
-        from engine.mcp.comms_framework import get_game_state as _gs
-        gs = _gs()
-        if key:
-            val = gs.get(game_id, key)
-            return json.dumps({game_id: {key: val}})
-        return json.dumps({game_id: gs.get_all(game_id)}, indent=2, default=str)
-    except Exception as e:
-        return f"Failed to get game state: {e}"
+    from engine.mcp.tools.game_tools import get_game_state as _impl
+    return _impl(game_id, key=key)
 
 
 @mcp.tool()
@@ -444,12 +303,8 @@ def set_game_state(game_id: str, key: str, value: str) -> str:
     Value is stored as a string — use JSON encoding for complex types.
     Example: set_game_state('truth_or_dare', 'round', '3')
     """
-    try:
-        from engine.mcp.comms_framework import get_game_state as _gs
-        _gs().set(game_id, key, value)
-        return f"Game state updated: {game_id}.{key} = {value!r}"
-    except Exception as e:
-        return f"Failed to set game state: {e}"
+    from engine.mcp.tools.game_tools import set_game_state as _impl
+    return _impl(game_id, key, value)
 
 
 @mcp.tool()
@@ -460,21 +315,8 @@ def start_game(game_id: str, scene: str = "phone", config_json: Optional[str] = 
     This resets existing game state and marks the game as active.
     The game rules will automatically be injected into your system context.
     """
-    try:
-        from engine.mcp.comms_framework import get_game_state as _gs
-        gs = _gs()
-        gs.reset(game_id)
-        config = json.loads(config_json) if config_json else {}
-        gs.set(game_id, "active",     True)
-        gs.set(game_id, "scene",      scene)
-        gs.set(game_id, "started_at", str(__import__("time").time()))
-        gs.set(game_id, "round",      0)
-        gs.set(game_id, "score",      0)
-        for k, v in config.items():
-            gs.set(game_id, k, v)
-        return f"Game '{game_id}' started in scene '{scene}'."
-    except Exception as e:
-        return f"Failed to start game: {e}"
+    from engine.mcp.tools.game_tools import start_game as _impl
+    return _impl(game_id, scene, config_json)
 
 
 @mcp.tool()
@@ -483,19 +325,8 @@ def end_game(game_id: str) -> str:
     End a game and record the final result.
     Returns a summary of the final game state including score.
     """
-    try:
-        from engine.mcp.comms_framework import get_game_state as _gs
-        gs  = _gs()
-        state = gs.get_all(game_id)
-        gs.set(game_id, "active",  False)
-        gs.set(game_id, "ended_at", str(__import__("time").time()))
-        return json.dumps({
-            "game_id": game_id,
-            "summary": "Game ended.",
-            "final_state": state,
-        }, indent=2, default=str)
-    except Exception as e:
-        return f"Failed to end game: {e}"
+    from engine.mcp.tools.game_tools import end_game as _impl
+    return _impl(game_id)
 
 
 # ── MCP-tracked game tools (MCPGameSession) ───────────────────────────
@@ -522,11 +353,8 @@ def launch_game(
     -------
     JSON with the new session summary including game_id and initial state.
     """
-    try:
-        from content.scenes.bedroom.bedroom_game_skill import launch_game as _lg
-        return _lg(character_id, game_type, case_index)
-    except Exception as e:
-        return json.dumps({"error": str(e)})
+    from engine.mcp.tools.game_tools import launch_game as _impl
+    return _impl(character_id, game_type, case_index)
 
 
 @mcp.tool()
@@ -541,11 +369,8 @@ def get_active_game(character_id: str) -> str:
     -------
     JSON: {"active": false} if no session, or full session summary + 10-turn history.
     """
-    try:
-        from content.scenes.bedroom.bedroom_game_skill import get_active_game as _gag
-        return _gag(character_id)
-    except Exception as e:
-        return json.dumps({"error": str(e)})
+    from engine.mcp.tools.game_tools import get_active_game as _impl
+    return _impl(character_id)
 
 
 @mcp.tool()
@@ -580,11 +405,8 @@ def game_action(
     -------
     JSON result dict with outcome details.
     """
-    try:
-        from content.scenes.bedroom.bedroom_game_skill import game_action as _ga
-        return _ga(character_id, action, data_json)
-    except Exception as e:
-        return json.dumps({"error": str(e)})
+    from engine.mcp.tools.game_tools import game_action as _impl
+    return _impl(character_id, action, data_json)
 
 
 @mcp.tool()
@@ -604,11 +426,8 @@ def game_history(character_id: str, limit: int = 20) -> str:
     -------
     JSON with game_id, game_type, current turn, and history list.
     """
-    try:
-        from content.scenes.bedroom.bedroom_game_skill import game_history as _gh
-        return _gh(character_id, limit)
-    except Exception as e:
-        return json.dumps({"error": str(e)})
+    from engine.mcp.tools.game_tools import game_history as _impl
+    return _impl(character_id, limit)
 
 
 # ── Character emotion & mood ───────────────────────────────────────────
@@ -707,29 +526,8 @@ def get_scene_context(scene: str = "phone") -> str:
     active characters, current game (if any), service health.
     Use this to understand the state of the world before acting.
     """
-    try:
-        from engine.mcp.comms_framework import get_game_state as _gs
-        from engine.logging.monitor import get_system_monitor
-        gs = _gs().get_all
-        mon = get_system_monitor()
-
-        active_games = []
-        _gstate = _gs()
-        for gid in _gstate.all_games():
-            if _gstate.get(gid, "active") and _gstate.get(gid, "scene") == scene:
-                active_games.append({"game_id": gid, "state": _gstate.get_all(gid)})
-
-        return json.dumps({
-            "scene": scene,
-            "active_games": active_games,
-            "system": {
-                "cpu_pct":          mon.snapshot().get("cpu_percent"),
-                "gpu_vram_used_mb": mon.snapshot().get("gpu_vram_used_mb"),
-                "loaded_model":     mon.get_loaded_model(),
-            },
-        }, indent=2, default=str)
-    except Exception as e:
-        return f"Failed to get scene context: {e}"
+    from engine.mcp.tools.scene_tools import get_scene_context as _impl
+    return _impl(scene)
 
 
 @mcp.tool()
@@ -780,25 +578,8 @@ def get_system_stats() -> str:
     loaded LMStudio model, and activity bus status.
     Use this to check if the system is under load or what model is active.
     """
-    try:
-        from engine.logging.monitor import get_system_monitor
-        from engine.services.activity_bus import get_activity_bus
-        mon = get_system_monitor()
-        bus = get_activity_bus()
-        snap = mon.snapshot()
-        return json.dumps({
-            "cpu_percent":      snap.get("cpu_percent"),
-            "ram_used_gb":      snap.get("ram_used_gb"),
-            "ram_total_gb":     snap.get("ram_total_gb"),
-            "gpu_vram_used_mb": snap.get("gpu_vram_used_mb"),
-            "gpu_vram_total_mb":snap.get("gpu_vram_total_mb"),
-            "gpu_temp_c":       snap.get("gpu_temp_c"),
-            "gpu_name":         snap.get("gpu_name"),
-            "loaded_model":     mon.get_loaded_model(),
-            "activity":         bus.snapshot(),
-        }, indent=2, default=str)
-    except Exception as e:
-        return f"Stats unavailable: {e}"
+    from engine.mcp.tools.utility_tools import get_system_stats_logic as _impl
+    return _impl()
 
 
 @mcp.tool()
@@ -843,49 +624,8 @@ def search_web(query: str, max_results: int = 5) -> str:
     that might not be in your training data.
     Returns a list of titles, snippets, and URLs.
     """
-    # Try DuckDuckGo Instant Answers API (no key required)
-    try:
-        import httpx
-        params = {
-            "q":              query,
-            "format":         "json",
-            "no_html":        "1",
-            "skip_disambig":  "1",
-        }
-        r = httpx.get(
-            "https://api.duckduckgo.com/",
-            params=params,
-            timeout=8.0,
-        )
-        data = r.json()
-        results = []
-        # Abstract (main answer)
-        if data.get("AbstractText"):
-            results.append({
-                "title":   data.get("Heading", "DuckDuckGo"),
-                "snippet": data["AbstractText"][:400],
-                "url":     data.get("AbstractURL", ""),
-            })
-        # Related topics
-        for topic in data.get("RelatedTopics", [])[:max_results - 1]:
-            if "Text" in topic:
-                results.append({
-                    "title":   topic.get("Text", "")[:80],
-                    "snippet": topic.get("Text", "")[:400],
-                    "url":     topic.get("FirstURL", ""),
-                })
-        if results:
-            return json.dumps(results, indent=2)
-    except Exception:
-        pass
-
-    # Fallback: return a note that web search is unavailable offline
-    return json.dumps([{
-        "title": "Search unavailable",
-        "snippet": f"Could not perform web search for '{query}'. "
-                   "The system may be offline or the search service is unreachable.",
-        "url": "",
-    }])
+    from engine.mcp.tools.media_tools import search_web_logic as _impl
+    return _impl(query, max_results)
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -919,8 +659,8 @@ def wardrobe_get(character_id: str) -> str:
     Returns JSON with 'worn' list, 'removed' list, 'description' (human-readable),
     and 'is_naked' boolean.
     """
-    wardrobe = _ssm().get_wardrobe(character_id)
-    return json.dumps(wardrobe.to_dict(), indent=2)
+    from engine.mcp.tools.wardrobe_tools import wardrobe_get as _impl
+    return _impl(_ssm(), character_id)
 
 
 @mcp.tool()
@@ -931,14 +671,8 @@ def wardrobe_init(character_id: str, style: str = "casual") -> str:
 
     style: 'casual' | 'lingerie' | 'party' | 'nightwear' | 'swimwear'
     """
-    wardrobe = _ssm().initialise_wardrobe(character_id, style=style)
-    return json.dumps({
-        "initialised": True,
-        "style": style,
-        "item_count": len(wardrobe.items),
-        "description": wardrobe.coverage_description(),
-        "worn_items": [{"id": i.id, "name": i.name, "category": i.category} for i in wardrobe.worn_items()],
-    }, indent=2)
+    from engine.mcp.tools.wardrobe_tools import wardrobe_init as _impl
+    return _impl(_ssm(), character_id, style=style)
 
 
 @mcp.tool()
@@ -953,25 +687,8 @@ def wardrobe_remove_item(character_id: str, item_id: str, removed_by: str = "") 
     Returns the item details and updated coverage description, or an error if
     the item is not found or already removed.
     """
-    item = _ssm().remove_clothing(character_id, item_id, removed_by=removed_by)
-    if not item:
-        # Check if item exists at all
-        wardrobe = _ssm().get_wardrobe(character_id)
-        existing = wardrobe.get_item(item_id)
-        if existing and not existing.is_worn:
-            return json.dumps({"error": f"'{item_id}' is already removed.", "already_removed": True})
-        return json.dumps({"error": f"Item '{item_id}' not found in wardrobe."})
-
-    wardrobe = _ssm().get_wardrobe(character_id)
-    # Arouse the character slightly when clothing comes off
-    _ssm().update_stats(character_id, arousal=8, openness=3)
-    return json.dumps({
-        "removed": True,
-        "item": item.to_dict(),
-        "now_wearing": wardrobe.coverage_description(),
-        "is_naked": len(wardrobe.worn_items()) == 0,
-        "stat_effect": "arousal+8, openness+3",
-    }, indent=2)
+    from engine.mcp.tools.wardrobe_tools import wardrobe_remove_item as _impl
+    return _impl(_ssm(), character_id, item_id, removed_by=removed_by)
 
 
 @mcp.tool()
@@ -984,24 +701,8 @@ def wardrobe_remove_outermost(character_id: str, removed_by: str = "") -> str:
     Returns what was removed and what's left.  Call repeatedly to fully
     undress.
     """
-    item = _ssm().remove_outermost(character_id, removed_by=removed_by)
-    if not item:
-        wardrobe = _ssm().get_wardrobe(character_id)
-        return json.dumps({
-            "removed": False,
-            "message": f"{character_id} is already wearing nothing.",
-            "is_naked": True,
-        })
-    wardrobe = _ssm().get_wardrobe(character_id)
-    _ssm().update_stats(character_id, arousal=12, openness=5)
-    return json.dumps({
-        "removed": True,
-        "item": item.to_dict(),
-        "now_wearing": wardrobe.coverage_description(),
-        "remaining_layers": len(wardrobe.worn_items()),
-        "is_naked": len(wardrobe.worn_items()) == 0,
-        "stat_effect": "arousal+12, openness+5",
-    }, indent=2)
+    from engine.mcp.tools.wardrobe_tools import wardrobe_remove_outermost as _impl
+    return _impl(_ssm(), character_id, removed_by=removed_by)
 
 
 @mcp.tool()
@@ -1019,15 +720,8 @@ def wardrobe_add_item(
 
     category: bra | underwear | top | bottom | full_outfit | shoes | outerwear | accessory | socks
     """
-    from engine.mcp.scene_state import ClothingItem
-    item = ClothingItem(id=item_id, name=name, category=category, color=color, style=style)
-    _ssm().add_clothing(character_id, item)
-    wardrobe = _ssm().get_wardrobe(character_id)
-    return json.dumps({
-        "added": True,
-        "item": item.to_dict(),
-        "now_wearing": wardrobe.coverage_description(),
-    }, indent=2)
+    from engine.mcp.tools.wardrobe_tools import wardrobe_add_item as _impl
+    return _impl(_ssm(), character_id, item_id, name, category, color=color, style=style)
 
 
 @mcp.tool()
@@ -1036,13 +730,8 @@ def wardrobe_redress(character_id: str) -> str:
     Put all previously removed clothing back on a character.
     Use at scene reset or morning-after scenarios.
     """
-    count = _ssm().re_dress(character_id)
-    wardrobe = _ssm().get_wardrobe(character_id)
-    return json.dumps({
-        "redressed": True,
-        "items_restored": count,
-        "now_wearing": wardrobe.coverage_description(),
-    }, indent=2)
+    from engine.mcp.tools.wardrobe_tools import wardrobe_redress as _impl
+    return _impl(_ssm(), character_id)
 
 
 # ── CHARACTER SCENE STATS ────────────────────────────────────────────
@@ -1379,8 +1068,8 @@ def add_scene_narrative(
       "The Director dims the lights to red."
       "Aria admits she's been thinking about him all day."
     """
-    _ssm().add_narrative(scene_id, event, character_id=character_id, entry_type=entry_type)
-    return json.dumps({"logged": True, "event": event, "scene_id": scene_id})
+    from engine.mcp.tools.scene_tools import add_scene_narrative as _impl
+    return _impl(scene_id, event, character_id=character_id, entry_type=entry_type)
 
 
 @mcp.tool()
@@ -1392,14 +1081,8 @@ def get_scene_narrative(scene_id: str, limit: int = 20) -> str:
     Returns a text summary and a structured list of entries.
     Always call this at scene start and after resuming a paused session.
     """
-    entries = _ssm().get_narrative_entries(scene_id, limit=limit)
-    text    = _ssm().get_narrative(scene_id, limit=limit)
-    return json.dumps({
-        "scene_id":       scene_id,
-        "entry_count":    len(entries),
-        "narrative_text": text,
-        "entries":        entries,
-    }, indent=2)
+    from engine.mcp.tools.scene_tools import get_scene_narrative as _impl
+    return _impl(scene_id, limit)
 
 
 @mcp.tool()
@@ -1413,9 +1096,8 @@ def get_full_scene_snapshot(scene_id: str, character_ids: str = "") -> str:
     Use this at scene start, after a skip, or to ground your response in the
     current reality of the room.  This is your oracle.
     """
-    char_list = [c.strip() for c in character_ids.split(",") if c.strip()] if character_ids else None
-    snapshot = _ssm().get_scene_snapshot(scene_id, character_ids=char_list)
-    return json.dumps(snapshot, indent=2)
+    from engine.mcp.tools.scene_tools import get_full_scene_snapshot as _impl
+    return _impl(scene_id, character_ids)
 
 
 # ── SCENE ATMOSPHERE ─────────────────────────────────────────────────
@@ -1444,22 +1126,9 @@ def set_scene_atmosphere(
     This is written into the narrative log and returned to agents via
     get_full_scene_snapshot().
     """
-    atm: dict = {}
-    if lighting:      atm["lighting"]       = lighting
-    if mood:          atm["mood"]           = mood
-    if music:         atm["music"]          = music
-    if temperature:   atm["temperature"]    = temperature
-    if props_present: atm["props_present"]  = [p.strip() for p in props_present.split(",")]
-    if note:          atm["note"]           = note
-    _ssm().set_atmosphere(scene_id, **atm)
-    if atm:
-        desc_parts = []
-        if lighting: desc_parts.append(f"{lighting} lighting")
-        if mood:     desc_parts.append(f"{mood} mood")
-        if music:    desc_parts.append(f"{music} playing")
-        if note:     desc_parts.append(note)
-        _ssm().add_narrative(scene_id, "Atmosphere: " + ", ".join(desc_parts) + ".", entry_type="environment")
-    return json.dumps({"set": True, "atmosphere": atm, "scene_id": scene_id}, indent=2)
+    from engine.mcp.tools.scene_tools import set_scene_atmosphere as _impl
+    return _impl(scene_id, lighting=lighting, mood=mood, music=music,
+                 temperature=temperature, props_present=props_present, note=note)
 
 
 # ── CONSENT & AGENCY ─────────────────────────────────────────────────
@@ -1748,28 +1417,11 @@ def character_register(
         pronouns:         e.g. "she/her"
         scene_roles_json: JSON dict of scene → role  e.g. '{"bedroom": "lover"}'
     """
-    try:
-        import json as _json
-        from engine.mcp.character_registry import get_character_registry, apply_default_skills
-        reg = get_character_registry()
-        appearance   = _json.loads(appearance_json)   if appearance_json   else {}
-        personality  = _json.loads(personality_json)  if personality_json  else {}
-        scene_roles  = _json.loads(scene_roles_json)  if scene_roles_json  else {}
-        rec = reg.register(
-            character_id,
-            name        = name,
-            age         = age,
-            appearance  = appearance,
-            personality = personality,
-            backstory   = backstory,
-            voice_style = voice_style,
-            pronouns    = pronouns,
-            scene_roles = scene_roles,
-        )
-        apply_default_skills(character_id)
-        return json.dumps({"ok": True, "character_id": character_id, "name": rec.profile.name})
-    except Exception as exc:
-        return json.dumps({"ok": False, "error": str(exc)})
+    from engine.mcp.tools.character_tools import character_register as _impl
+    return _impl(character_id, name, age=age, appearance_json=appearance_json,
+                 personality_json=personality_json, backstory=backstory,
+                 voice_style=voice_style, pronouns=pronouns,
+                 scene_roles_json=scene_roles_json)
 
 
 @mcp.tool()
@@ -1782,18 +1434,8 @@ def character_query(character_id: str, attribute: str) -> str:
         attribute:    Any key: "name", "age", "mood", "arousal", "voice_style",
                       "hair", "eye_colour", "restrictions", "flags", etc.
     """
-    try:
-        from engine.mcp.character_registry import get_character_registry
-        reg = get_character_registry()
-        reg.ensure(character_id)
-        value = reg.get_attribute(character_id, attribute)
-        if value is None:
-            # Try state fields directly
-            state = reg.get_state(character_id)
-            value = state.__dict__.get(attribute) if state else None
-        return json.dumps({"character_id": character_id, "attribute": attribute, "value": value})
-    except Exception as exc:
-        return json.dumps({"error": str(exc)})
+    from engine.mcp.tools.character_tools import character_query as _impl
+    return _impl(character_id, attribute)
 
 
 @mcp.tool()
@@ -1813,21 +1455,8 @@ def character_set_attribute(
         attribute:    State field name
         value:        New value (will be coerced from string where possible)
     """
-    try:
-        from engine.mcp.character_registry import get_character_registry
-        reg = get_character_registry()
-        reg.ensure(character_id)
-        # Coerce numeric strings
-        coerced: Any = value
-        try:
-            coerced = float(value) if '.' in value else int(value)
-        except (ValueError, TypeError):
-            if value.lower() in ("true", "false"):
-                coerced = value.lower() == "true"
-        reg.set_state(character_id, **{attribute: coerced})
-        return json.dumps({"ok": True, "character_id": character_id, attribute: coerced})
-    except Exception as exc:
-        return json.dumps({"ok": False, "error": str(exc)})
+    from engine.mcp.tools.character_tools import character_set_attribute as _impl
+    return _impl(character_id, attribute, value)
 
 
 @mcp.tool()
@@ -1839,14 +1468,8 @@ def character_get_summary(character_id: str) -> str:
     Args:
         character_id: e.g. "aria"
     """
-    try:
-        from engine.mcp.character_registry import get_character_registry
-        reg = get_character_registry()
-        reg.ensure(character_id)
-        summary = reg.get_character_summary(character_id)
-        return json.dumps(summary, indent=2)
-    except Exception as exc:
-        return json.dumps({"error": str(exc)})
+    from engine.mcp.tools.character_tools import character_get_summary as _impl
+    return _impl(character_id)
 
 
 @mcp.tool()
@@ -1871,24 +1494,9 @@ def character_assign_skill(
         trigger:      "auto" (always runs) | "optional" | "required"
         priority:     Execution priority (lower = earlier)
     """
-    try:
-        import json as _json
-        from engine.mcp.character_registry import get_character_registry
-        reg = get_character_registry()
-        reg.ensure(character_id)
-        params = _json.loads(params_json) if params_json else {}
-        entry = reg.assign_skill(
-            character_id,
-            skill_id   = skill_id,
-            skill_type = skill_type,
-            label      = label or skill_id,
-            params     = params,
-            trigger    = trigger,
-            priority   = priority,
-        )
-        return json.dumps({"ok": True, "character_id": character_id, "skill_id": skill_id, "trigger": entry.trigger})
-    except Exception as exc:
-        return json.dumps({"ok": False, "error": str(exc)})
+    from engine.mcp.tools.character_tools import character_assign_skill as _impl
+    return _impl(character_id, skill_id, skill_type=skill_type, label=label,
+                 params_json=params_json, trigger=trigger, priority=priority)
 
 
 @mcp.tool()
@@ -1900,12 +1508,8 @@ def character_revoke_skill(character_id: str, skill_id: str) -> str:
         character_id: e.g. "aria"
         skill_id:     Skill to remove
     """
-    try:
-        from engine.mcp.character_registry import get_character_registry
-        ok = get_character_registry().revoke_skill(character_id, skill_id)
-        return json.dumps({"ok": ok, "character_id": character_id, "skill_id": skill_id})
-    except Exception as exc:
-        return json.dumps({"ok": False, "error": str(exc)})
+    from engine.mcp.tools.character_tools import character_revoke_skill as _impl
+    return _impl(character_id, skill_id)
 
 
 @mcp.tool()
@@ -1917,18 +1521,8 @@ def character_get_skills(character_id: str, trigger: str = "") -> str:
         character_id: e.g. "aria"
         trigger:      Optional filter: "auto" | "optional" | "required" | "" (all)
     """
-    try:
-        from engine.mcp.character_registry import get_character_registry
-        reg = get_character_registry()
-        reg.ensure(character_id)
-        skills = reg.get_skills(character_id, trigger=trigger or None)
-        return json.dumps([
-            {"skill_id": s.skill_id, "label": s.label, "type": s.skill_type,
-             "trigger": s.trigger, "priority": s.priority, "enabled": s.enabled}
-            for s in skills
-        ], indent=2)
-    except Exception as exc:
-        return json.dumps({"error": str(exc)})
+    from engine.mcp.tools.character_tools import character_get_skills as _impl
+    return _impl(character_id, trigger=trigger)
 
 
 @mcp.tool()
@@ -1941,12 +1535,8 @@ def character_add_restriction(character_id: str, restriction: str) -> str:
         character_id: e.g. "aria"
         restriction:  Named restriction e.g. "no_nudity", "safe_mode"
     """
-    try:
-        from engine.mcp.character_registry import get_character_registry
-        get_character_registry().add_restriction(character_id, restriction)
-        return json.dumps({"ok": True, "character_id": character_id, "added": restriction})
-    except Exception as exc:
-        return json.dumps({"ok": False, "error": str(exc)})
+    from engine.mcp.tools.character_tools import character_add_restriction as _impl
+    return _impl(character_id, restriction)
 
 
 @mcp.tool()
@@ -1958,12 +1548,8 @@ def character_remove_restriction(character_id: str, restriction: str) -> str:
         character_id: e.g. "aria"
         restriction:  Name of the restriction to remove
     """
-    try:
-        from engine.mcp.character_registry import get_character_registry
-        get_character_registry().remove_restriction(character_id, restriction)
-        return json.dumps({"ok": True, "character_id": character_id, "removed": restriction})
-    except Exception as exc:
-        return json.dumps({"ok": False, "error": str(exc)})
+    from engine.mcp.tools.character_tools import character_remove_restriction as _impl
+    return _impl(character_id, restriction)
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -1990,17 +1576,12 @@ def get_dialog_options(
         stats_json:        JSON dict of current stats e.g. '{"arousal": 55, "openness": 40}'
         max_options:       Maximum number of options to return
     """
-    try:
-        import json as _json
-        from engine.mcp.dialog_system import get_dialog_system
-        ds = get_dialog_system()
-        tags  = _json.loads(context_tags_json) if context_tags_json else []
-        stats = _json.loads(stats_json)        if stats_json        else {}
-        opts  = ds.get_options(character_id, scene_id, context_tags=tags, stats=stats, max_options=max_options)
-        heat  = ds.get_conversation_heat(character_id, scene_id)
-        return json.dumps({"options": opts, "conversation_heat": heat, "scene": scene_id}, indent=2)
-    except Exception as exc:
-        return json.dumps({"error": str(exc)})
+    from engine.mcp.dialog_system import get_dialog_system
+    from engine.mcp.tools.dialog_tools import get_dialog_options as _impl
+    tags  = json.loads(context_tags_json) if context_tags_json else []
+    stats = json.loads(stats_json)        if stats_json        else {}
+    return _impl(get_dialog_system(), character_id, scene_id,
+                 context_tags=tags, stats=stats, max_options=max_options)
 
 
 @mcp.tool()
@@ -2024,12 +1605,9 @@ def speech_enhance(
         style:        Speech style to apply
         scene_id:     Current scene for context
     """
-    try:
-        from engine.mcp.dialog_system import get_dialog_system
-        result = get_dialog_system().enhance_speech(character_id, text, style=style, scene=scene_id)
-        return json.dumps(result, indent=2)
-    except Exception as exc:
-        return json.dumps({"error": str(exc)})
+    from engine.mcp.dialog_system import get_dialog_system
+    from engine.mcp.tools.dialog_tools import speech_enhance as _impl
+    return _impl(get_dialog_system(), character_id, text, style=style, scene_id=scene_id)
 
 
 @mcp.tool()
@@ -2061,21 +1639,11 @@ def set_response_directive(
         turns:          How many turns this directive lasts
         issued_by:      Who issued it (for audit)
     """
-    try:
-        from engine.mcp.dialog_system import get_dialog_system
-        get_dialog_system().set_directive(
-            character_id, scene_id,
-            directive_type = directive_type,
-            value          = value,
-            turns          = turns,
-            issued_by      = issued_by,
-        )
-        return json.dumps({
-            "ok": True, "character_id": character_id, "scene": scene_id,
-            "directive_type": directive_type, "turns": turns,
-        })
-    except Exception as exc:
-        return json.dumps({"ok": False, "error": str(exc)})
+    from engine.mcp.dialog_system import get_dialog_system
+    from engine.mcp.tools.dialog_tools import set_response_directive as _impl
+    return _impl(get_dialog_system(), character_id, scene_id,
+                 directive_type=directive_type, value=value, turns=turns,
+                 issued_by=issued_by)
 
 
 @mcp.tool()
@@ -2088,12 +1656,9 @@ def get_active_directive(character_id: str, scene_id: str) -> str:
         character_id: e.g. "aria"
         scene_id:     e.g. "bedroom"
     """
-    try:
-        from engine.mcp.dialog_system import get_dialog_system
-        directive = get_dialog_system().get_active_directive(character_id, scene_id)
-        return json.dumps(directive or {"active": False})
-    except Exception as exc:
-        return json.dumps({"error": str(exc)})
+    from engine.mcp.dialog_system import get_dialog_system
+    from engine.mcp.tools.dialog_tools import get_active_directive as _impl
+    return _impl(get_dialog_system(), character_id, scene_id)
 
 
 @mcp.tool()
@@ -2105,12 +1670,9 @@ def clear_directive(character_id: str, scene_id: str) -> str:
         character_id: e.g. "aria"
         scene_id:     e.g. "bedroom"
     """
-    try:
-        from engine.mcp.dialog_system import get_dialog_system
-        get_dialog_system().clear_directive(character_id, scene_id)
-        return json.dumps({"ok": True, "character_id": character_id, "scene": scene_id})
-    except Exception as exc:
-        return json.dumps({"ok": False, "error": str(exc)})
+    from engine.mcp.dialog_system import get_dialog_system
+    from engine.mcp.tools.dialog_tools import clear_directive as _impl
+    return _impl(get_dialog_system(), character_id, scene_id)
 
 
 @mcp.tool()
@@ -2123,15 +1685,9 @@ def get_conversation_heat(character_id: str, scene_id: str) -> str:
         character_id: e.g. "aria"
         scene_id:     e.g. "phone"
     """
-    try:
-        from engine.mcp.dialog_system import get_dialog_system
-        ds   = get_dialog_system()
-        heat = ds.get_conversation_heat(character_id, scene_id)
-        turn = ds.get_turn(character_id, scene_id)
-        topics = ds.get_recent_topics(character_id, scene_id)
-        return json.dumps({"heat": heat, "turn": turn, "recent_topics": topics})
-    except Exception as exc:
-        return json.dumps({"error": str(exc)})
+    from engine.mcp.dialog_system import get_dialog_system
+    from engine.mcp.tools.dialog_tools import get_conversation_heat as _impl
+    return _impl(get_dialog_system(), character_id, scene_id)
 
 
 # NOTE: bump_conversation_heat() defined below in CONVERSATION MANAGEMENT section
@@ -2152,11 +1708,8 @@ def get_scene_rules(scene_id: str) -> str:
     Args:
         scene_id: e.g. "bedroom" or "phone"
     """
-    try:
-        from engine.mcp.scene_rules_engine import get_rules_engine
-        return get_rules_engine().get_rules_text(scene_id)
-    except Exception as exc:
-        return f"Error: {exc}"
+    from engine.mcp.tools.scene_tools import get_scene_rules as _impl
+    return _impl(scene_id)
 
 
 @mcp.tool()
@@ -2176,17 +1729,9 @@ def get_scene_available_actions(
         stats_json:       JSON dict of current stats
         scene_state_json: JSON dict of scene state flags
     """
-    try:
-        import json as _json
-        from engine.mcp.scene_rules_engine import get_rules_engine
-        stats       = _json.loads(stats_json)       if stats_json       else {}
-        scene_state = _json.loads(scene_state_json) if scene_state_json else {}
-        actions = get_rules_engine().get_available_actions(
-            scene_id, character_id, stats=stats, scene_state=scene_state
-        )
-        return json.dumps({"scene": scene_id, "character": character_id, "actions": actions}, indent=2)
-    except Exception as exc:
-        return json.dumps({"error": str(exc)})
+    from engine.mcp.tools.scene_tools import get_scene_available_actions as _impl
+    return _impl(scene_id, character_id, stats_json=stats_json,
+                 scene_state_json=scene_state_json)
 
 
 @mcp.tool()
@@ -2209,14 +1754,8 @@ def apply_scene_rule(
         target_ids_json: JSON list of target character IDs
         issuer:          Who triggered this (for audit)
     """
-    try:
-        import json as _json
-        from engine.mcp.scene_rules_engine import get_rules_engine
-        targets = _json.loads(target_ids_json) if target_ids_json else []
-        result  = get_rules_engine().apply_rule(scene_id, rule_id, target_ids=targets or None, issuer=issuer)
-        return json.dumps(result, indent=2)
-    except Exception as exc:
-        return json.dumps({"ok": False, "error": str(exc)})
+    from engine.mcp.tools.scene_tools import apply_scene_rule as _impl
+    return _impl(scene_id, rule_id, target_ids_json=target_ids_json, issuer=issuer)
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -2325,38 +1864,11 @@ def speak_as(
         style:        Force a style (or leave blank to auto-select)
         scene_id:     Current scene for context
     """
-    try:
-        from engine.mcp.dialog_system import get_dialog_system, SpeechStyle
-        from engine.mcp.character_registry import get_character_registry
-
-        reg = get_character_registry()
-        reg.ensure(character_id)
-
-        # Auto-select style based on mood if not specified
-        if not style:
-            try:
-                state = reg.get_state(character_id)
-                mood_map = {
-                    "excited":   SpeechStyle.PLAYFUL,
-                    "aroused":   SpeechStyle.CHARGED,
-                    "tender":    SpeechStyle.WARM,
-                    "dominant":  SpeechStyle.DOMINANT,
-                    "sad":       SpeechStyle.VULNERABLE,
-                    "teasing":   SpeechStyle.TEASING,
-                    "confident": SpeechStyle.DIRECT,
-                    "reflective": SpeechStyle.LITERARY,
-                    "whisper":   SpeechStyle.WHISPER,
-                }
-                style = mood_map.get(state.mood, SpeechStyle.NATURAL) if state else SpeechStyle.NATURAL
-            except Exception:
-                style = SpeechStyle.NATURAL
-
-        ds     = get_dialog_system()
-        result = ds.enhance_speech(character_id, text, style=style, scene=scene_id)
-        result["character_id"] = character_id
-        return json.dumps(result, indent=2)
-    except Exception as exc:
-        return json.dumps({"error": str(exc)})
+    from engine.mcp.dialog_system import get_dialog_system
+    from engine.mcp.character_registry import get_character_registry
+    from engine.mcp.tools.dialog_tools import speak_as as _impl
+    return _impl(get_dialog_system(), get_character_registry(),
+                 character_id, text, style=style, scene_id=scene_id)
 
 
 @mcp.tool()
@@ -2393,29 +1905,10 @@ def enforce_behavior(
         scene_id:      Scene context
         turns:         How many turns the enforcement lasts
     """
-    try:
-        from engine.mcp.dialog_system import get_dialog_system
-        ds = get_dialog_system()
-        ds.set_directive(
-            character_id, scene_id,
-            directive_type = behavior_type,
-            value          = value,
-            turns          = turns,
-            issued_by      = f"enforce_behavior:{reason or 'unspecified'}",
-        )
-        # Audit to scene narrative
-        try:
-            from engine.mcp.scene_state import get_scene_state_manager
-            ssm = get_scene_state_manager()
-            note = f"[Director enforced {behavior_type} on {character_id}]"
-            if reason:
-                note += f" Reason: {reason}"
-            ssm.add_narrative(scene_id or "bedroom", note, entry_type="directive", character_id=character_id)
-        except Exception:
-            pass
-        return json.dumps({"ok": True, "character_id": character_id, "behavior": behavior_type, "turns": turns})
-    except Exception as exc:
-        return json.dumps({"ok": False, "error": str(exc)})
+    from engine.mcp.dialog_system import get_dialog_system
+    from engine.mcp.tools.dialog_tools import enforce_behavior as _impl
+    return _impl(get_dialog_system(), character_id, behavior_type, value,
+                 reason=reason, scene_id=scene_id, turns=turns, ssm=_ssm())
 
 
 @mcp.tool()
@@ -2446,54 +1939,9 @@ def scene_broadcast(
                                    directive (dict): {type, value, turns}
         target_characters_json:  JSON list of character IDs (empty = all in scene)
     """
-    try:
-        import json as _json
-        payload   = _json.loads(payload_json)   if payload_json   else {}
-        targets   = _json.loads(target_characters_json) if target_characters_json else []
-
-        applied: Dict[str, Any] = {"event_type": event_type, "scene_id": scene_id, "applied": []}
-
-        desc = payload.get("description", f"Scene event: {event_type}")
-        try:
-            from engine.mcp.scene_state import get_scene_state_manager
-            ssm = get_scene_state_manager()
-            ssm.add_narrative(scene_id, desc, entry_type="environment")
-            applied["narrative"] = desc
-        except Exception:
-            pass
-
-        stat_effects: Dict[str, Dict] = payload.get("stat_effects", {})
-        for char_id, effects in stat_effects.items():
-            if targets and char_id not in targets:
-                continue
-            try:
-                from engine.mcp.scene_state import get_scene_state_manager
-                ssm = get_scene_state_manager()
-                ssm.update_stats(char_id, **effects)
-                applied["applied"].append({"char": char_id, "stats": effects})
-            except Exception as se:
-                applied["applied"].append({"char": char_id, "error": str(se)})
-
-        directive_info = payload.get("directive")
-        if directive_info and targets:
-            try:
-                from engine.mcp.dialog_system import get_dialog_system
-                ds = get_dialog_system()
-                for char_id in targets:
-                    ds.set_directive(
-                        char_id, scene_id,
-                        directive_type = directive_info.get("type", "topic_steer"),
-                        value          = directive_info.get("value", ""),
-                        turns          = directive_info.get("turns", 1),
-                        issued_by      = "scene_broadcast",
-                    )
-                applied["directive_issued_to"] = targets
-            except Exception as de:
-                applied["directive_error"] = str(de)
-
-        return json.dumps(applied, indent=2)
-    except Exception as exc:
-        return json.dumps({"ok": False, "error": str(exc)})
+    from engine.mcp.tools.scene_tools import scene_broadcast as _impl
+    return _impl(scene_id, event_type, payload_json=payload_json,
+                 target_characters_json=target_characters_json)
 
 
 @mcp.tool()
@@ -2514,48 +1962,8 @@ def get_scene_rules_summary(scene_id: str, character_id: str = "") -> str:
         scene_id:     e.g. "bedroom" or "phone"
         character_id: The character you're working with
     """
-    try:
-        result: Dict[str, Any] = {"scene_id": scene_id, "character_id": character_id}
-
-        # Scene rules and actions
-        try:
-            from engine.mcp.scene_rules_engine import get_rules_engine
-            eng = get_rules_engine()
-            result["rules_text"] = eng.get_rules_text(scene_id)
-            if character_id:
-                result["available_actions"] = eng.get_available_actions(scene_id, character_id)
-        except Exception as re:
-            result["rules_error"] = str(re)
-
-        # Character skills
-        if character_id:
-            try:
-                from engine.mcp.character_registry import get_character_registry
-                reg = get_character_registry()
-                reg.ensure(character_id)
-                skills = reg.get_skills(character_id)
-                result["character_skills"] = [
-                    {"id": s.skill_id, "label": s.label, "trigger": s.trigger}
-                    for s in skills
-                ]
-                result["character_summary"] = reg.get_character_summary(character_id)
-            except Exception as ce:
-                result["character_error"] = str(ce)
-
-        # Conversation heat + directive
-        if character_id:
-            try:
-                from engine.mcp.dialog_system import get_dialog_system
-                ds = get_dialog_system()
-                result["conversation_heat"] = ds.get_conversation_heat(character_id, scene_id)
-                result["active_directive"]  = ds.get_active_directive(character_id, scene_id)
-                result["recent_topics"]     = ds.get_recent_topics(character_id, scene_id)
-            except Exception as de:
-                result["dialog_error"] = str(de)
-
-        return json.dumps(result, indent=2)
-    except Exception as exc:
-        return json.dumps({"error": str(exc)})
+    from engine.mcp.tools.scene_tools import get_scene_rules_summary as _impl
+    return _impl(scene_id, character_id)
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -2584,18 +1992,8 @@ def start_timer(
         duration_secs:    How long the timer runs in real seconds
         on_complete_note: Text returned when the timer finishes (use it in your response)
     """
-    try:
-        from engine.mcp.framework import get_framework
-        timer = get_framework().start_timer(timer_name, duration_secs, on_complete_note=on_complete_note)
-        return json.dumps({
-            "ok": True,
-            "timer_name":    timer.name,
-            "duration_secs": timer.duration_secs,
-            "status":        "started",
-            "note":          "Call check_timer(timer_name) each turn to see progress.",
-        })
-    except Exception as exc:
-        return json.dumps({"ok": False, "error": str(exc)})
+    from engine.mcp.tools.utility_tools import start_timer_logic as _impl
+    return _impl(timer_name, duration_secs, on_complete_note=on_complete_note)
 
 
 @mcp.tool()
@@ -2612,14 +2010,8 @@ def check_timer(timer_name: str) -> str:
     Args:
         timer_name: The name you gave when starting the timer
     """
-    try:
-        from engine.mcp.framework import get_framework
-        timer = get_framework().check_timer(timer_name)
-        if timer is None:
-            return json.dumps({"found": False, "timer_name": timer_name})
-        return json.dumps({**timer.to_dict(), "found": True})
-    except Exception as exc:
-        return json.dumps({"error": str(exc)})
+    from engine.mcp.tools.utility_tools import check_timer_logic as _impl
+    return _impl(timer_name)
 
 
 @mcp.tool()
@@ -2630,12 +2022,8 @@ def cancel_timer(timer_name: str) -> str:
     Args:
         timer_name: The timer to cancel
     """
-    try:
-        from engine.mcp.framework import get_framework
-        ok = get_framework().cancel_timer(timer_name)
-        return json.dumps({"ok": ok, "timer_name": timer_name})
-    except Exception as exc:
-        return json.dumps({"ok": False, "error": str(exc)})
+    from engine.mcp.tools.utility_tools import cancel_timer_logic as _impl
+    return _impl(timer_name)
 
 
 @mcp.tool()
@@ -2670,15 +2058,8 @@ def random_pick(
         weights_json: JSON list of floats — bias the distribution
         seed:         Integer seed for reproducible results (omit for random)
     """
-    try:
-        import json as _json
-        from engine.mcp.framework import get_framework
-        options = _json.loads(options_json) if options_json and options_json != "[]" else None
-        weights = _json.loads(weights_json) if weights_json and weights_json != "[]" else None
-        result  = get_framework().random_pick(n=n, seed=seed, weights=weights, options=options)
-        return json.dumps(result)
-    except Exception as exc:
-        return json.dumps({"error": str(exc)})
+    from engine.mcp.tools.utility_tools import random_pick_logic as _impl
+    return _impl(n, options_json=options_json, weights_json=weights_json, seed=seed)
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -2723,27 +2104,9 @@ def cross_scene_message(
         message:      The message content
         message_type: text | call_notification | event | system
     """
-    try:
-        from engine.mcp.framework import get_framework
-        msg = get_framework().cross_scene_send(
-            from_char    = from_char,
-            from_scene   = from_scene,
-            to_char      = to_char,
-            to_scene     = to_scene,
-            message      = message,
-            message_type = message_type,
-        )
-        return json.dumps({
-            "ok":          True,
-            "message_id":  msg.message_id,
-            "from":        f"{from_char}@{from_scene}",
-            "to":          f"{to_char}@{to_scene}",
-            "type":        message_type,
-            "preview":     message[:80],
-            "note":        f"{to_char} will see this message on their next turn.",
-        })
-    except Exception as exc:
-        return json.dumps({"ok": False, "error": str(exc)})
+    from engine.mcp.tools.utility_tools import cross_scene_message_logic as _impl
+    return _impl(from_char, from_scene, to_char, to_scene, message,
+                 message_type=message_type)
 
 
 @mcp.tool()
@@ -2758,12 +2121,8 @@ def get_cross_scene_inbox(character_id: str) -> str:
     Args:
         character_id: The character whose inbox to check
     """
-    try:
-        from engine.mcp.framework import get_framework
-        messages = get_framework().get_cross_scene_inbox(character_id)
-        return json.dumps({"character_id": character_id, "messages": messages, "count": len(messages)})
-    except Exception as exc:
-        return json.dumps({"error": str(exc)})
+    from engine.mcp.tools.utility_tools import get_cross_scene_inbox_logic as _impl
+    return _impl(character_id)
 
 
 @mcp.tool()
@@ -2772,11 +2131,8 @@ def get_framework_status() -> str:
     Return a full MCPFramework status snapshot: active scenes, characters,
     timers, and pending consequence chains.  Use as a Director overview.
     """
-    try:
-        from engine.mcp.framework import get_framework
-        return json.dumps(get_framework().get_status(), indent=2)
-    except Exception as exc:
-        return json.dumps({"error": str(exc)})
+    from engine.mcp.tools.utility_tools import get_framework_status_logic as _impl
+    return _impl()
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -3772,11 +3128,8 @@ def lounge_heat_tick(
 
 def resource_config() -> str:
     """Current CosySim configuration snapshot."""
-    try:
-        config = _get_config()
-        return json.dumps(dict(config._config), indent=2, default=str)
-    except Exception as e:
-        return f"Config unavailable: {e}"
+    from engine.mcp.tools.utility_tools import resource_config_logic as _impl
+    return _impl(_get_config)
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -3796,24 +3149,8 @@ def send_selfie(
     Provide a detailed prompt describing the selfie (pose, expression, setting).
     Returns JSON with the image path and metadata.
     """
-    try:
-        from content.simulation.services.comfyui_client import ComfyUIClient
-        from engine.config import get_config
-        config = get_config()
-        url = config.get("comfyui.base_url", "http://127.0.0.1:8188")
-        client = ComfyUIClient(base_url=url)
-        result = client.generate_image(prompt=prompt, width=width, height=height)
-        if result:
-            return json.dumps({
-                "success": True,
-                "image_path": str(result),
-                "prompt": prompt,
-                "character_id": character_id or "unknown",
-                "display_hint": "inline_image",
-            })
-        return json.dumps({"success": False, "error": "Generation returned no result"})
-    except Exception as e:
-        return json.dumps({"success": False, "error": str(e)})
+    from engine.mcp.tools.media_tools import send_selfie_logic as _impl
+    return _impl(prompt, character_id=character_id, width=width, height=height)
 
 
 @mcp.tool()
@@ -3828,24 +3165,8 @@ def send_voice_message(
     Provide the text to speak and optional emotion tag.
     Returns JSON with the audio path.
     """
-    try:
-        from content.simulation.services.voice_message import generate_voice_message
-        result = generate_voice_message(
-            text=text,
-            character_id=character_id or "default",
-            emotion=emotion,
-        )
-        if result:
-            return json.dumps({
-                "success": True,
-                "audio_path": str(result),
-                "text": text,
-                "emotion": emotion,
-                "display_hint": "audio_player",
-            })
-        return json.dumps({"success": False, "error": "TTS generation failed"})
-    except Exception as e:
-        return json.dumps({"success": False, "error": str(e)})
+    from engine.mcp.tools.media_tools import send_voice_message_logic as _impl
+    return _impl(text, character_id=character_id, emotion=emotion)
 
 
 @mcp.tool()
@@ -4010,107 +3331,36 @@ def suggest_activity(scene_id: str = "phone") -> str:
     Suggest a scene-appropriate activity based on current context.
     Returns a list of suggested activities with descriptions.
     """
-    activities = {
-        "phone": [
-            {"name": "Truth or Dare", "desc": "Start a game with 🎮 Play button", "heat_min": 0},
-            {"name": "Photo sharing", "desc": "Ask for a selfie or share one", "heat_min": 20},
-            {"name": "Voice note", "desc": "Send a voice message", "heat_min": 0},
-            {"name": "Deep conversation", "desc": "Ask about dreams, fears, desires", "heat_min": 10},
-            {"name": "Roleplay", "desc": "Suggest a fun scenario to act out", "heat_min": 40},
-            {"name": "Flirting game", "desc": "See who can be more creative with compliments", "heat_min": 30},
-        ],
-        "bedroom": [
-            {"name": "Set the mood", "desc": "Change lighting, music, atmosphere", "heat_min": 0},
-            {"name": "Wardrobe change", "desc": "Try on different outfits", "heat_min": 10},
-            {"name": "Dance", "desc": "Put on music and dance together", "heat_min": 20},
-            {"name": "Massage", "desc": "Offer or receive a massage", "heat_min": 40},
-            {"name": "Story time", "desc": "Share personal stories or fantasies", "heat_min": 30},
-            {"name": "Pillow fight", "desc": "Playful physical activity", "heat_min": 10},
-        ],
-        "lounge": [
-            {"name": "Order drinks", "desc": "Try the cocktail menu", "heat_min": 0},
-            {"name": "Karaoke", "desc": "Sing a song together", "heat_min": 0},
-            {"name": "People watch", "desc": "Comment on other patrons", "heat_min": 0},
-            {"name": "Dance floor", "desc": "Hit the dance floor", "heat_min": 20},
-            {"name": "VIP room", "desc": "Move to a more private area", "heat_min": 40},
-        ],
-    }
-    scene_activities = activities.get(scene_id, activities["phone"])
-    return json.dumps({
-        "scene": scene_id,
-        "suggestions": scene_activities,
-    }, indent=2)
+    from engine.mcp.tools.utility_tools import suggest_activity_logic as _impl
+    return _impl(scene_id)
 
 
 @mcp.resource("benchmark://summary")
 def resource_benchmarks() -> str:
     """Performance benchmark summary with timing KPIs."""
-    try:
-        from engine.logging import get_benchmarks
-        return json.dumps(get_benchmarks(), indent=2, default=str)
-    except Exception as e:
-        return f"Benchmarks unavailable: {e}"
+    from engine.mcp.tools.utility_tools import resource_benchmarks_logic as _impl
+    return _impl()
 
 
 @mcp.resource("character://{character_id}")
 def resource_character(character_id: str) -> str:
     """Full character profile including personality, state, and relationships."""
-    db = _get_db()
-    try:
-        char = db.get_character(character_id)
-        state = db.get_character_state(character_id)
-        rels = db.list_relationships(character_id)
-        personality = db.get_personality(character_id)
-        return json.dumps({
-            "character": dict(char) if char else None,
-            "personality": dict(personality) if personality else None,
-            "state": dict(state) if state else None,
-            "relationships": [dict(r) for r in rels] if rels else [],
-        }, indent=2, default=str)
-    except Exception as e:
-        return f"Character data unavailable: {e}"
+    from engine.mcp.tools.utility_tools import resource_character_logic as _impl
+    return _impl(character_id, _get_db())
 
 
 @mcp.resource("chain://{chain_id}")
 def resource_chain(chain_id: str) -> str:
     """Full EventChain tree for a specific chain."""
-    db = _get_db()
-    try:
-        events = db.get_chain_events(chain_id, limit=100)
-        return json.dumps(
-            [dict(e) if not isinstance(e, dict) else e for e in events],
-            indent=2, default=str,
-        )
-    except Exception as e:
-        return f"Chain unavailable: {e}"
+    from engine.mcp.tools.utility_tools import resource_chain_logic as _impl
+    return _impl(chain_id, _get_db())
 
 
 @mcp.resource("scene://{scene_name}/status")
 def resource_scene_status(scene_name: str) -> str:
     """Scene health status and connection info."""
-    import socket
-    from engine.config import get_config
-    config = get_config()
-    port = int(config.get(f"scenes.{scene_name}.port", 0))
-    if not port:
-        # Fallback to known ports
-        known = {"phone": 5555, "bedroom": 5556, "hub": 8500, "admin": 8502}
-        port = known.get(scene_name, 0)
-    if not port:
-        return json.dumps({"scene": scene_name, "status": "unknown", "error": "No port configured"})
-
-    try:
-        with socket.create_connection(("127.0.0.1", port), timeout=1.0):
-            running = True
-    except OSError:
-        running = False
-
-    return json.dumps({
-        "scene": scene_name,
-        "port": port,
-        "status": "running" if running else "stopped",
-        "url": f"http://localhost:{port}",
-    }, indent=2)
+    from engine.mcp.tools.scene_tools import resource_scene_status as _impl
+    return _impl(scene_name)
 
 
 # ── Entry point ────────────────────────────────────────────────────────

@@ -287,6 +287,16 @@ class LoungeScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
         # Update heat as a tracked stat in scene state
         ssm.update_stats("lounge_scene", heat_level=heat)
 
+        # Sync heat to StateCoordinator for governance visibility
+        try:
+            from engine.mcp.state_coordinator import get_coordinator
+            get_coordinator().update(
+                VIKTOR_ID, mood="alert" if heat >= 65 else "watchful",
+                source="lounge_heat", scene=SCENE_ID,
+            )
+        except Exception:
+            pass
+
         if heat >= 85:
             self._apply_rule("heat_critical_rule")
         elif heat >= 65:
@@ -443,7 +453,24 @@ class LoungeScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
             self._apply_rule("champagne_gate")
             fired.append("champagne_gate")
 
+        # Sync guest state through StateCoordinator after trust checks
+        self._sync_guest_state()
         return fired
+
+    def _sync_guest_state(self) -> None:
+        """Push guest trust / heat / back-room state through the StateCoordinator."""
+        try:
+            from engine.mcp.state_coordinator import get_coordinator
+            get_coordinator().update(
+                "guest",
+                mode="set",
+                source="lounge_sync",
+                scene=SCENE_ID,
+                trust=self.guest_trust,
+                heat=self.heat_level,
+            )
+        except Exception:
+            pass
 
     def _get_scene_flag(self, flag: str) -> Any:
         try:
@@ -722,11 +749,18 @@ class LoungeScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
             return result
 
     def _update_character_mood(self, character_id: str, mood: str) -> None:
-        """Push mood update to MCP framework."""
+        """Push mood update to MCP framework and StateCoordinator."""
         try:
             char_node = self._fw.get_character(character_id)
             if char_node:
                 char_node.update_state({"mood": mood, "last_mood_source": "lounge_reply"})
+        except Exception:
+            pass
+        try:
+            from engine.mcp.state_coordinator import get_coordinator
+            get_coordinator().update(
+                character_id, mood=mood, source="lounge_reply", scene=SCENE_ID,
+            )
         except Exception:
             pass
 
@@ -776,6 +810,7 @@ class LoungeScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
                     try:
                         from engine.agents.virtual_agent_manager import get_virtual_agent_manager
                         from engine.agents.virtual_agent import InferenceRequest
+                        from engine.mcp.comms_framework import build_governance_context
                         mgr = get_virtual_agent_manager()
                         system = (
                             f"You are {self_.character.name}. {self_.character._backstory}\n"
@@ -784,6 +819,9 @@ class LoungeScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
                             "If describing something visual, use [IMAGE:description].\n"
                             "Use [ACTION:description] for physical actions."
                         )
+                        gov_ctx = build_governance_context(self_.character_id, SCENE_ID, message)
+                        if gov_ctx:
+                            system = f"{system}\n\n{gov_ctx}"
                         msgs = [{"role": "system", "content": system}]
                         for turn in (history or []):
                             msgs.append({"role": turn.get("role", "user"), "content": turn.get("content", "")})
@@ -1002,6 +1040,7 @@ class LoungeScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
                     "error": "Viktor doesn't move. There is no back room. Not for you.",
                 })
             self.in_back_room = True
+            self._sync_guest_state()
             result = self._apply_rule("back_room_gate")
             self._ssm.add_narrative(
                 SCENE_ID, "guest",

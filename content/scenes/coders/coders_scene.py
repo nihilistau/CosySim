@@ -294,6 +294,19 @@ class CodersRoomScene(BaseScene, MCPSceneMixin, mcp_scene_id="coders"):
                 self._state_mgr.add_narrative(SCENE_ID, f"{agent.name}: {agent.status}")
         except Exception:
             pass
+        # Sync agent state through the StateCoordinator for governance visibility
+        try:
+            from engine.mcp.state_coordinator import get_coordinator
+            coord = get_coordinator()
+            for agent in (self.state.agents or []):
+                coord.update(
+                    agent.id,
+                    mood=agent.status,
+                    source="coders_sync",
+                    scene=SCENE_ID,
+                )
+        except Exception:
+            pass
 
     def _setup_routes(self):
 
