@@ -74,10 +74,25 @@ class NexusClient:
     
     # ─── NotebookLM ───────────────────────────────────────────
     
-    def nlm_ask(self, question: str, notebook_id: str = "") -> Dict:
+    def nlm_ask(self, question: str, notebook_id: str = "",
+                notebook_url: str = "") -> Dict:
+        """Ask via HTTP-only backend."""
         payload = {"question": question}
         if notebook_id: payload["notebook_id"] = notebook_id
+        if notebook_url: payload["notebook_url"] = notebook_url
         return self._post("/api/nlm/ask", payload)
+    
+    def nlm_unified_ask(self, question: str, notebook_id: str = "",
+                        notebook_url: str = "") -> Dict:
+        """Ask via best available backend (HTTP → browser fallback)."""
+        payload = {"question": question}
+        if notebook_id: payload["notebook_id"] = notebook_id
+        if notebook_url: payload["notebook_url"] = notebook_url
+        return self._post("/api/nlm/unified/ask", payload)
+    
+    def nlm_status(self) -> Dict:
+        """Get status of all NLM backends."""
+        return self._get("/api/nlm/status")
     
     def nlm_list_notebooks(self) -> List[Dict]:
         result = self._get("/api/nlm/notebooks")
