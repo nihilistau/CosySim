@@ -1323,3 +1323,61 @@ argument → tension debuff, sex → intimacy buff). Timer-based expiry sweep.
 | Sprint 11 | N/A | Command Center: 8 routes, 6 skills, live monitor | Done |
 | Sprint 11 | N/A | Phone Hacker App (targets, profile, messages, inject) | Done |
 | Sprint 11 | N/A | 1262 tests passing (was 1245) | Done |
+
+---
+
+## Implementation Log (Sprint 12 — Combat, Quests & Skills Completion)
+
+| Sprint | Revelation | Action | Status |
+|--------|-----------|--------|--------|
+| Sprint 12 | #49 | Realm combat system: 8 enemies, d20 mechanics, loot | Done |
+| Sprint 12 | #50 | Realm quest system: 5 templates, kill/turn-based progress | Done |
+| Sprint 12 | #51 | Fixed deadlock: threading.Lock → RLock in RealmGameState | Done |
+| Sprint 12 | #52 | Casino governance wired into _get_agent_reply() | Done |
+| Sprint 12 | N/A | Created MCP skills for Casino (6), Gallery (5), Lounge (6), Warzone (5) | Done |
+| Sprint 12 | N/A | Created Phone skills (6) and Bedroom skills (11) | Done |
+| Sprint 12 | N/A | All 11 scenes now have @skill files + __init__.py imports | Done |
+| Sprint 12 | N/A | Fixed heist_skills.py: scene= → pack= param | Done |
+| Sprint 12 | N/A | 1295 tests passing (was 1271) | Done |
+
+---
+
+## Revelation #49: Combat Systems Need Reentrant Locks
+
+**Discovery:** The Realm combat/quest system deadlocked on quest completion.
+`_check_quest_progress()` holds `self._lock`, then calls `_complete_quest()`
+which calls `gain_xp()` which also acquires `self._lock`. With a standard
+`threading.Lock()`, this is a deadlock.
+
+**Fix:** Changed to `threading.RLock()` (reentrant). Any game state class with
+nested method calls that both acquire locks MUST use RLock.
+
+**Pattern:** This applies to ALL state classes with locking. Audit: RealmGameState,
+HeistGame, WarzoneGameState, CasinoScene.game_state, CodersRoomState.
+
+---
+
+## Revelation #50: Skills Files Are The API Contract
+
+**Discovery:** All 11 scenes now have `{name}_skills.py` files with @skill-decorated
+functions. These are the callable tools that LMS agents can use via tool calls.
+They form the **public API** of each scene.
+
+**Pattern:** Every skill file follows the same structure:
+1. `_get_{name}_scene()` helper using `get_active_scene()`
+2. Skills decorated with `@skill(pack="{name}", tags=[...], category=..., description="...")`
+3. Each skill returns a string summary suitable for LLM consumption
+4. Skills file imported in `__init__.py` with `from . import {name}_skills`
+
+**Coverage after Sprint 12:**
+- Realm: 12 skills (combat, quests, explore, inventory, stats)
+- Bedroom: 11 skills (character control, environment, game, events)
+- Phone: 6 skills (messaging, games, media)
+- Casino: 6 skills (poker, drinks, bluffs)
+- Lounge: 6 skills (social, drinks, dreams)
+- Warzone: 5 skills (tactical, recon, special ops)
+- Gallery: 5 skills (art, critique, debate)
+- Heist: 6 skills (status, actions, crew, intel)
+- Coders: 5 skills (simulation, features, agents)
+- NeonCity: 5 skills (district, factions, contracts)
+- CommandCenter: 6 skills (system status, monitoring)
