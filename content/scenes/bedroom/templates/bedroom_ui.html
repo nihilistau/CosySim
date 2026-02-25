@@ -81,9 +81,11 @@
         <button class="tab-btn active" data-tab="scene"      onclick="showTab('scene')">Scene</button>
         <button class="tab-btn"        data-tab="characters" onclick="showTab('characters')">Cast</button>
         <button class="tab-btn"        data-tab="direct"     onclick="showTab('direct')">Direct</button>
+        <button class="tab-btn"        data-tab="interact"   onclick="showTab('interact')">Interact</button>
         <button class="tab-btn"        data-tab="storyline"  onclick="showTab('storyline')">Story</button>
         <button class="tab-btn"        data-tab="props"      onclick="showTab('props')">Props</button>
         <button class="tab-btn"        data-tab="events"     onclick="showTab('events')">Events</button>
+        <button class="tab-btn"        data-tab="settings"   onclick="showTab('settings')">⚙</button>
     </div>
 
     <!-- ── TAB: SCENE ────────────────────────────────────────────── -->
@@ -152,6 +154,60 @@
         </section>
 
         <section class="panel-section">
+            <h3>Director Avatar</h3>
+            <p class="muted-hint">Place your avatar in the scene to participate directly.</p>
+            <div class="director-form">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+                    <select id="dirAvatarGender" class="select-input">
+                        <option value="male">Male</option>
+                        <option value="female">Female</option>
+                    </select>
+                    <select id="dirAvatarSkin" class="select-input">
+                        <option value="pale">Pale</option>
+                        <option value="fair">Fair</option>
+                        <option value="light">Light</option>
+                        <option value="medium">Medium</option>
+                        <option value="tan">Tan</option>
+                        <option value="brown">Brown</option>
+                        <option value="dark">Dark</option>
+                    </select>
+                    <select id="dirAvatarHair" class="select-input">
+                        <option value="black">Black</option>
+                        <option value="brown">Brown</option>
+                        <option value="blonde">Blonde</option>
+                        <option value="red">Red</option>
+                        <option value="auburn">Auburn</option>
+                        <option value="platinum">Platinum</option>
+                        <option value="silver">Silver</option>
+                    </select>
+                    <select id="dirAvatarOutfit" class="select-input">
+                        <option value="casual">Casual</option>
+                        <option value="formal">Formal</option>
+                        <option value="silk_robe">Silk Robe</option>
+                        <option value="nothing">Nothing</option>
+                        <option value="lingerie">Lingerie</option>
+                        <option value="leather">Leather</option>
+                        <option value="evening_dress">Evening Dress</option>
+                    </select>
+                </div>
+                <select id="dirAvatarLocation" class="select-input">
+                    <option value="bed">Bed</option>
+                    <option value="couch">Couch</option>
+                    <option value="fireplace">Fireplace</option>
+                    <option value="bar">Bar</option>
+                    <option value="bathroom">Bathroom</option>
+                    <option value="vanity">Vanity</option>
+                    <option value="balcony">Balcony</option>
+                    <option value="doorway">Doorway</option>
+                </select>
+                <div style="display:flex;gap:6px">
+                    <button class="btn-action" onclick="placeDirectorAvatar()">Place Avatar</button>
+                    <button class="btn-sm btn-ghost" onclick="removeDirectorAvatar()">Remove</button>
+                </div>
+            </div>
+        </section>
+
+        <section class="panel-section">
             <h3>Whisper</h3>
             <div class="director-form">
                 <select id="whisperTarget" class="select-input">
@@ -202,6 +258,43 @@
         </section>
 
     </div><!-- /tab-direct -->
+
+    <!-- ── TAB: INTERACT ─────────────────────────────────────────── -->
+    <div id="tab-interact" class="tab-content">
+
+        <section class="panel-section">
+            <h3>Furniture Interactions</h3>
+            <p class="muted-hint">Click a location to use its interactions.</p>
+            <div id="interactLocationGrid" class="interact-grid"></div>
+        </section>
+
+        <section class="panel-section">
+            <h3 id="interactLocationTitle" style="display:none">— Select a location —</h3>
+            <div id="interactActions" class="interact-actions"></div>
+        </section>
+
+        <section class="panel-section">
+            <h3>Quick Move</h3>
+            <p class="muted-hint">Move a character to a location.</p>
+            <div class="director-form">
+                <select id="moveCharSelect" class="select-input">
+                    <option value="">— character —</option>
+                </select>
+                <select id="moveLocSelect" class="select-input">
+                    <option value="bed">🛏 Bed</option>
+                    <option value="couch">🛋 Couch</option>
+                    <option value="fireplace">🔥 Fireplace</option>
+                    <option value="bar">🍸 Bar</option>
+                    <option value="bathroom">🛁 Bathroom</option>
+                    <option value="vanity">💄 Vanity</option>
+                    <option value="balcony">🌙 Balcony</option>
+                    <option value="doorway">🚪 Doorway</option>
+                </select>
+                <button class="btn-action" onclick="quickMoveChar()">Move</button>
+            </div>
+        </section>
+
+    </div><!-- /tab-interact -->
 
     <!-- ── TAB: STORYLINE ────────────────────────────────────────── -->
     <div id="tab-storyline" class="tab-content">
@@ -290,6 +383,8 @@
                 <button class="event-btn spicy" onclick="fireEvent('rose_petals')">🌹 Rose Petals</button>
                 <button class="event-btn" onclick="fireEvent('phone_rings')">📱 Phone Rings</button>
                 <button class="event-btn" onclick="fireEvent('door_opens')">🚪 Door Opens</button>
+                <button class="event-btn romantic" onclick="fireEvent('stoke_fire')">🔥 Stoke Fire</button>
+                <button class="event-btn romantic" onclick="fireEvent('dim_lights')">🌙 Dim Lights</button>
             </div>
         </section>
 
@@ -305,6 +400,64 @@
         </section>
 
     </div><!-- /tab-events -->
+
+    <!-- ── TAB: SETTINGS ──────────────────────────────────────────── -->
+    <div id="tab-settings" class="tab-content">
+
+        <section class="panel-section">
+            <h3>Camera</h3>
+            <div class="settings-grid">
+                <label class="mini-label">Camera Speed</label>
+                <input type="range" id="settingCameraSpeed" min="1" max="10" value="5" oninput="updateSetting('cameraSpeed', this.value)">
+                <label class="mini-label">FOV</label>
+                <input type="range" id="settingFov" min="30" max="90" value="55" oninput="updateSetting('fov', this.value)">
+            </div>
+        </section>
+
+        <section class="panel-section">
+            <h3>Lighting</h3>
+            <div class="settings-grid">
+                <label class="mini-label">Ambient Brightness</label>
+                <input type="range" id="settingAmbient" min="0" max="100" value="15" oninput="updateSetting('ambient', this.value)">
+                <label class="mini-label">Shadow Quality</label>
+                <select id="settingShadows" class="select-input" onchange="updateSetting('shadows', this.value)">
+                    <option value="high">High (2048)</option>
+                    <option value="medium" selected>Medium (1024)</option>
+                    <option value="low">Low (512)</option>
+                    <option value="off">Off</option>
+                </select>
+                <label class="mini-label">Fireplace Intensity</label>
+                <input type="range" id="settingFireplace" min="0" max="100" value="60" oninput="updateSetting('fireIntensity', this.value)">
+            </div>
+        </section>
+
+        <section class="panel-section">
+            <h3>Room</h3>
+            <div class="settings-grid">
+                <label class="mini-label">Wall Color</label>
+                <input type="color" id="settingWallColor" value="#2a2a3d" onchange="updateSetting('wallColor', this.value)">
+                <label class="mini-label">Floor Color</label>
+                <input type="color" id="settingFloorColor" value="#3d2b1f" onchange="updateSetting('floorColor', this.value)">
+                <label class="mini-label">Rug Color</label>
+                <input type="color" id="settingRugColor" value="#4a2040" onchange="updateSetting('rugColor', this.value)">
+            </div>
+        </section>
+
+        <section class="panel-section">
+            <h3>Agent</h3>
+            <div class="settings-grid">
+                <label class="mini-label">Response Length</label>
+                <select id="settingResponseLen" class="select-input" onchange="updateSetting('responseLen', this.value)">
+                    <option value="short">Short</option>
+                    <option value="medium" selected>Medium</option>
+                    <option value="long">Long</option>
+                </select>
+                <label class="mini-label">Tick Interval (sec)</label>
+                <input type="range" id="settingTickInterval" min="3" max="30" value="8" oninput="updateSetting('tickInterval', this.value)">
+            </div>
+        </section>
+
+    </div><!-- /tab-settings -->
 
 </aside><!-- /sidePanel -->
 
@@ -363,7 +516,7 @@
     </span>
 </div>
 
-<script src="{{ url_for('static', filename='js/character_models.js') }}?v=1.0"></script>
-<script src="{{ url_for('static', filename='js/bedroom.js') }}?v=4.0"></script>
+<script src="{{ url_for('static', filename='js/character_models.js') }}?v=2.0"></script>
+<script src="{{ url_for('static', filename='js/bedroom.js') }}?v=5.0"></script>
 </body>
 </html>

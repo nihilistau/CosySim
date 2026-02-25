@@ -941,7 +941,7 @@ def _build_bedroom_map() -> SceneMap:
             capacity=2,
             properties={
                 "privacy": 1.0, "comfort": 0.8, "spiciness": 10,
-                "pos": {"x": -5, "y": 0, "z": 2},
+                "pos": {"x": 5.8, "y": 0, "z": -4},
                 "mountable": True,
                 "mount_positions": [
                     "standing", "kneeling", "bent over", "against the wall",
@@ -967,7 +967,7 @@ def _build_bedroom_map() -> SceneMap:
             capacity=2,
             properties={
                 "privacy": 0.15, "comfort": 0.45, "spiciness": 8,
-                "pos": {"x": 0, "y": 0, "z": -5},
+                "pos": {"x": 5, "y": 0, "z": 4},
                 "mountable": True,
                 "mount_positions": [
                     "standing", "leaning", "bent over", "against the wall",
@@ -993,7 +993,7 @@ def _build_bedroom_map() -> SceneMap:
             capacity=2,
             properties={
                 "privacy": 0.4, "comfort": 0.5, "spiciness": 9,
-                "pos": {"x": -5, "y": 0, "z": -1},
+                "pos": {"x": -5.5, "y": 0, "z": 0},
                 "mountable": True,
                 "mount_positions": [
                     "standing", "sitting", "kneeling", "bent over",
@@ -1026,6 +1026,33 @@ def _build_bedroom_map() -> SceneMap:
                 "allowed_positions": [
                     "standing", "leaning", "against the wall",
                     "pinned down", "kneeling",
+                ],
+            },
+        ),
+        Location(
+            id="fireplace", name="Fireplace",
+            description="A grand stone fireplace with crackling flames, a fur rug spread before it, and warm amber light. The heart of the room's romantic atmosphere.",
+            interactions=[
+                "sit by the fire", "lie on fur rug", "cuddle by fireplace",
+                "warm up", "stoke the fire", "share a blanket",
+                "slow dance by firelight", "massage by the fire",
+                "undress by firelight", "make out on the rug",
+                "make love by the fire", "pillow talk by embers",
+                "share wine by the fire", "tell secrets",
+                "play a game", "read together",
+            ],
+            capacity=2,
+            properties={
+                "privacy": 0.7, "comfort": 0.9, "spiciness": 8,
+                "pos": {"x": 0, "y": 0, "z": 1.5},
+                "mountable": True,
+                "mount_positions": [
+                    "lying down", "sitting", "kneeling", "on all fours",
+                    "straddling", "spooning",
+                ],
+                "allowed_positions": [
+                    "lying down", "sitting", "kneeling", "on all fours",
+                    "straddling", "spooning", "standing",
                 ],
             },
         ),
@@ -1069,6 +1096,7 @@ class BedroomScene(BaseScene, MCPSceneMixin, mcp_scene_id="bedroom"):
         self.pending_actions: Dict[str, str] = {}
         self.director_in_scene: bool = False
         self.director_name: str = "Director"
+        self.director_avatar: Optional[Dict] = None  # {gender, skin_tone, hair_color, location_id}
 
         # Room props
         self.room_props: List[str] = []
@@ -1173,6 +1201,7 @@ class BedroomScene(BaseScene, MCPSceneMixin, mcp_scene_id="bedroom"):
         self.scene_state["active_scenario"] = self.active_scenario
         self.scene_state["story_beats"] = self.story_beats[:5]
         self.scene_state["director_in_scene"] = self.director_in_scene
+        self.scene_state["director_avatar"] = self.director_avatar
         self.scene_state["bed_game"] = self.bed_game.to_dict()
 
     def _broadcast_state(self):
@@ -1339,6 +1368,41 @@ class BedroomScene(BaseScene, MCPSceneMixin, mcp_scene_id="bedroom"):
         @self.app.route("/api/scene/lighting_presets")
         def get_lighting_presets():
             return jsonify(LIGHTING_PRESETS)
+
+        @self.app.route("/api/scene/furniture_interact", methods=["POST"])
+        def furniture_interact():
+            """Trigger a furniture-based interaction between characters or director."""
+            data = request.json or {}
+            location_id = data.get("location_id", "bed")
+            interaction = data.get("interaction", "")
+            actor = data.get("actor", "director")  # 'director' or character_id
+            if not interaction:
+                return jsonify({"error": "No interaction specified"}), 400
+            loc = self.scene_map.get_location(location_id)
+            if not loc:
+                return jsonify({"error": f"Unknown location: {location_id}"}), 400
+            actor_name = self.director_name if actor == "director" else (
+                self.characters[actor].name if actor in self.characters else actor
+            )
+            msg = f"{actor_name} {interaction} at the {loc.name}."
+            self._inject_to_loop("(environment)", msg, "environment")
+            self._broadcast_state()
+            return jsonify({"success": True, "message": msg})
+
+        @self.app.route("/api/scene/locations")
+        def get_locations():
+            """Return all location data for UI interaction buttons."""
+            locs = {}
+            for loc_id, loc in self.scene_map.locations.items():
+                locs[loc_id] = {
+                    "id": loc.id,
+                    "name": loc.name,
+                    "description": loc.description,
+                    "interactions": loc.interactions[:12],  # top interactions for UI
+                    "capacity": loc.capacity,
+                    "pos": loc.properties.get("pos", {"x": 0, "y": 0, "z": 0}),
+                }
+            return jsonify(locs)
 
         # ── Characters ──────────────────────────────────────────────
         @self.app.route("/api/characters/list")
@@ -1595,7 +1659,43 @@ class BedroomScene(BaseScene, MCPSceneMixin, mcp_scene_id="bedroom"):
             if self.director_in_scene:
                 self._inject_to_loop("(environment)", f"The Director enters the scene as '{self.director_name}'.", "environment")
             else:
+                self.director_avatar = None
                 self._inject_to_loop("(environment)", "The Director steps back to observe.", "environment")
+            self._broadcast_state()
+            return jsonify({"success": True})
+
+        @self.app.route("/api/director/avatar", methods=["POST"])
+        def director_avatar():
+            """Place or update the director's 3D avatar in the scene."""
+            data = request.json or {}
+            action = data.get("action", "place")
+            if action == "remove":
+                self.director_avatar = None
+                self._inject_to_loop("(environment)", f"{self.director_name}'s avatar fades from the scene.", "environment")
+            else:
+                self.director_avatar = {
+                    "name": self.director_name,
+                    "gender": data.get("gender", "male"),
+                    "skin_tone": data.get("skin_tone", "fair"),
+                    "hair_color": data.get("hair_color", "brown"),
+                    "outfit": data.get("outfit", "casual"),
+                    "location_id": data.get("location_id", "bed"),
+                }
+                self.director_in_scene = True
+                loc_name = self.director_avatar["location_id"]
+                self._inject_to_loop("(environment)", f"{self.director_name} appears at the {loc_name}.", "environment")
+            self._broadcast_state()
+            return jsonify({"success": True, "avatar": self.director_avatar})
+
+        @self.app.route("/api/director/avatar/move", methods=["POST"])
+        def director_avatar_move():
+            """Move the director's avatar to a new location."""
+            data = request.json or {}
+            if not self.director_avatar:
+                return jsonify({"error": "No director avatar in scene"}), 400
+            loc_id = data.get("location_id", "bed")
+            self.director_avatar["location_id"] = loc_id
+            self._inject_to_loop("(environment)", f"{self.director_name} moves to the {loc_id}.", "environment")
             self._broadcast_state()
             return jsonify({"success": True})
 

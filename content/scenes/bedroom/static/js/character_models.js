@@ -986,7 +986,6 @@ function updateCharacterOutfit(model, outfitKey) {
 function setCharacterExpression(model, mood) {
     if (!model || !model.headData) return;
     const hd = model.headData;
-    // Find elements by name traversal
     const mouth = hd.group.getObjectByName('mouth');
     const browL = hd.group.getObjectByName('browL');
     const browR = hd.group.getObjectByName('browR');
@@ -994,50 +993,67 @@ function setCharacterExpression(model, mood) {
     const pupilR = hd.group.getObjectByName('pupilR');
 
     // Reset to neutral
-    if (browL) browL.rotation.z = 0.10;
-    if (browR) browR.rotation.z = -0.10;
-    if (browL) browL.position.y = 0.042;
-    if (browR) browR.position.y = 0.042;
+    if (browL) { browL.rotation.z = 0.10; browL.position.y = 0.042; }
+    if (browR) { browR.rotation.z = -0.10; browR.position.y = 0.042; }
     if (mouth) { mouth.scale.set(1, 1, 1); mouth.rotation.x = Math.PI * 0.1; }
+    if (pupilL) pupilL.scale.set(1, 1, 1);
+    if (pupilR) pupilR.scale.set(1, 1, 1);
 
     const m = (mood || 'neutral').toLowerCase();
-    if (m.includes('happy') || m.includes('joy') || m.includes('pleasure')) {
-        // Smile — wider mouth, raised brows
+    if (m.includes('happy') || m.includes('joy') || m.includes('pleasure') || m.includes('delight')) {
         if (mouth) mouth.scale.set(1.3, 1.2, 1);
         if (browL) browL.position.y = 0.046;
         if (browR) browR.position.y = 0.046;
     } else if (m.includes('aroused') || m.includes('horny') || m.includes('lust')) {
-        // Half-lidded eyes, parted lips
         if (browL) { browL.position.y = 0.038; browL.rotation.z = 0.05; }
         if (browR) { browR.position.y = 0.038; browR.rotation.z = -0.05; }
         if (mouth) mouth.scale.set(1.1, 1.4, 1);
-        // Pupils dilate
         if (pupilL) pupilL.scale.set(1.4, 1.4, 1.4);
         if (pupilR) pupilR.scale.set(1.4, 1.4, 1.4);
-    } else if (m.includes('sad') || m.includes('upset')) {
+    } else if (m.includes('sad') || m.includes('upset') || m.includes('melanchol')) {
         if (browL) { browL.rotation.z = 0.25; browL.position.y = 0.044; }
         if (browR) { browR.rotation.z = -0.25; browR.position.y = 0.044; }
         if (mouth) { mouth.scale.set(0.9, 0.8, 1); mouth.rotation.x = Math.PI * 0.2; }
-    } else if (m.includes('angry') || m.includes('rage')) {
+    } else if (m.includes('angry') || m.includes('rage') || m.includes('furious')) {
         if (browL) { browL.rotation.z = -0.2; browL.position.y = 0.038; }
         if (browR) { browR.rotation.z = 0.2; browR.position.y = 0.038; }
         if (mouth) mouth.scale.set(1.2, 0.6, 1);
-    } else if (m.includes('fear') || m.includes('scared') || m.includes('shock')) {
+        if (pupilL) pupilL.scale.set(0.8, 0.8, 0.8);
+        if (pupilR) pupilR.scale.set(0.8, 0.8, 0.8);
+    } else if (m.includes('fear') || m.includes('scared') || m.includes('shock') || m.includes('surprise')) {
         if (browL) browL.position.y = 0.050;
         if (browR) browR.position.y = 0.050;
         if (mouth) mouth.scale.set(1.4, 1.8, 1);
         if (pupilL) pupilL.scale.set(0.7, 0.7, 0.7);
         if (pupilR) pupilR.scale.set(0.7, 0.7, 0.7);
-    } else if (m.includes('seduc') || m.includes('flirt') || m.includes('teas')) {
+    } else if (m.includes('seduc') || m.includes('flirt') || m.includes('teas') || m.includes('coy')) {
         if (browL) { browL.position.y = 0.045; browL.rotation.z = 0.15; }
         if (browR) { browR.position.y = 0.040; browR.rotation.z = -0.05; }
         if (mouth) mouth.scale.set(1.15, 1.0, 1);
-    } else if (m.includes('moan') || m.includes('ecsta') || m.includes('orgasm')) {
+    } else if (m.includes('moan') || m.includes('ecsta') || m.includes('orgasm') || m.includes('climax')) {
         if (browL) { browL.position.y = 0.046; browL.rotation.z = 0.18; }
         if (browR) { browR.position.y = 0.046; browR.rotation.z = -0.18; }
         if (mouth) mouth.scale.set(1.5, 2.0, 1);
         if (pupilL) pupilL.scale.set(1.6, 1.6, 1.6);
         if (pupilR) pupilR.scale.set(1.6, 1.6, 1.6);
+    } else if (m.includes('contempt') || m.includes('disgust') || m.includes('bored')) {
+        if (browL) { browL.position.y = 0.040; browL.rotation.z = -0.1; }
+        if (browR) { browR.position.y = 0.043; browR.rotation.z = 0.08; }
+        if (mouth) { mouth.scale.set(0.85, 0.7, 1); mouth.rotation.x = Math.PI * 0.15; }
+    } else if (m.includes('shy') || m.includes('embarrass') || m.includes('blush')) {
+        if (browL) { browL.position.y = 0.046; browL.rotation.z = 0.2; }
+        if (browR) { browR.position.y = 0.046; browR.rotation.z = -0.2; }
+        if (mouth) mouth.scale.set(0.9, 0.9, 1);
+        // Subtle "looking down"
+        if (hd.group) hd.group.rotation.x = 0.1;
+    } else if (m.includes('smirk') || m.includes('mischiev') || m.includes('sly')) {
+        if (browL) { browL.position.y = 0.044; browL.rotation.z = 0.05; }
+        if (browR) { browR.position.y = 0.048; browR.rotation.z = -0.15; }
+        if (mouth) { mouth.scale.set(1.1, 0.9, 1); }
+    } else if (m.includes('relax') || m.includes('content') || m.includes('peace') || m.includes('calm')) {
+        if (mouth) mouth.scale.set(1.1, 1.05, 1);
+        if (browL) browL.position.y = 0.044;
+        if (browR) browR.position.y = 0.044;
     }
 }
 
@@ -1047,20 +1063,59 @@ function setCharacterExpression(model, mood) {
 
 function animateCharacterModel(model, time) {
     if (!model || !model.bodyGroup) return;
-    // Subtle breathing — torso scale
-    const breathAmp = 0.012;
-    const breathFreq = 1.2;
-    const breath = 1.0 + breathAmp * Math.sin(time * breathFreq * Math.PI * 2);
-    model.bodyGroup.children[0].scale.x = breath; // torso mesh
-    model.bodyGroup.children[0].scale.z = model.dims.torsoScaleZ * breath;
+    const d = model.dims;
 
-    // Gentle sway
-    const sway = 0.008 * Math.sin(time * 0.7);
+    // Breathing — torso scale oscillation
+    const breathAmp = 0.015;
+    const breathFreq = 1.1 + (model.charColor === '#ff6b9d' ? 0.1 : 0);
+    const breath = 1.0 + breathAmp * Math.sin(time * breathFreq * Math.PI * 2);
+    const torsoMesh = model.bodyGroup.children[0];
+    if (torsoMesh) {
+        torsoMesh.scale.x = breath;
+        torsoMesh.scale.z = d.torsoScaleZ * breath;
+    }
+
+    // Gentle body sway (side-to-side)
+    const sway = 0.01 * Math.sin(time * 0.6);
     model.bodyGroup.rotation.y = sway;
 
-    // Arms micro-sway
-    if (model.armL) model.armL.rotation.x = 0.02 * Math.sin(time * 0.9 + 1.0);
-    if (model.armR) model.armR.rotation.x = 0.02 * Math.sin(time * 0.9 + 2.5);
+    // Weight shift — subtle lateral translation
+    const weightShift = 0.015 * Math.sin(time * 0.35);
+    model.bodyGroup.position.x = weightShift;
+
+    // Arms — natural swing with asymmetric timing
+    if (model.armL) {
+        model.armL.rotation.x = 0.03 * Math.sin(time * 0.8 + 1.0);
+        model.armL.rotation.z = -0.02 + 0.01 * Math.sin(time * 0.5);
+    }
+    if (model.armR) {
+        model.armR.rotation.x = 0.03 * Math.sin(time * 0.8 + 2.5);
+        model.armR.rotation.z = 0.02 - 0.01 * Math.sin(time * 0.5 + 1.0);
+    }
+
+    // Legs — subtle knee flex
+    if (model.legL) model.legL.rotation.x = 0.005 * Math.sin(time * 0.4);
+    if (model.legR) model.legR.rotation.x = 0.005 * Math.sin(time * 0.4 + Math.PI);
+
+    // Head micro-movement (looking around subtly)
+    if (model.headData && model.headData.group) {
+        model.headData.group.rotation.y = 0.04 * Math.sin(time * 0.25);
+        model.headData.group.rotation.x = 0.015 * Math.sin(time * 0.3 + 0.5);
+    }
+
+    // Blink cycle (every ~4 seconds, brief scale-down of eyes)
+    const blinkCycle = time % 4.0;
+    if (model.headData && model.headData.group && blinkCycle > 3.85 && blinkCycle < 3.95) {
+        const pupilL = model.headData.group.getObjectByName('pupilL');
+        const pupilR = model.headData.group.getObjectByName('pupilR');
+        if (pupilL) pupilL.scale.y = 0.2;
+        if (pupilR) pupilR.scale.y = 0.2;
+    } else if (model.headData && model.headData.group) {
+        const pupilL = model.headData.group.getObjectByName('pupilL');
+        const pupilR = model.headData.group.getObjectByName('pupilR');
+        if (pupilL && pupilL.scale.y < 0.9) pupilL.scale.y = 1.0;
+        if (pupilR && pupilR.scale.y < 0.9) pupilR.scale.y = 1.0;
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════
