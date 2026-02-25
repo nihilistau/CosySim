@@ -99,6 +99,7 @@ class CharacterStateCoordinator:
         self._global_lock = threading.Lock()  # protects _char_locks dict
         self._listeners: list = []
         self._buffs: Dict[str, Dict[str, RelationshipBuff]] = {}  # char_id → {buff_id → Buff}
+        self._tags: Dict[str, Dict[str, Dict]] = {}  # char_id → {tag → info}
 
     def _get_char_lock(self, character_id: str) -> threading.RLock:
         """Get or create a per-character reentrant lock."""
@@ -443,6 +444,84 @@ class CharacterStateCoordinator:
         score += (rel - 50) * 0.2  # ±10
 
         return max(0, min(100, score))
+
+    # ── Character Tags System ────────────────────────────────────────
+
+    def add_tag(
+        self,
+        character_id: str,
+        tag: str,
+        strength: float = 1.0,
+        decay_rate: float = 0.01,
+    ) -> None:
+        """
+        Add or reinforce a character tag.
+
+        Tags are soft labels that reflect accumulated behavior patterns.
+        They decay slowly over time — if not reinforced, they fade.
+
+        Parameters
+        ----------
+        tag : str
+            Short label, e.g. "flirtatious", "daring", "loyal".
+        strength : float
+            Initial or added strength (0.0-1.0). Reinforcing adds to existing.
+        decay_rate : float
+            How much strength is lost per sweep (default 0.01 per drift tick).
+        """
+        lock = self._get_char_lock(character_id)
+        with lock:
+            if character_id not in self._tags:
+                self._tags[character_id] = {}
+            existing = self._tags[character_id].get(tag)
+            if existing:
+                existing["strength"] = min(1.0, existing["strength"] + strength * 0.5)
+                existing["reinforced"] = time.time()
+            else:
+                self._tags[character_id][tag] = {
+                    "strength": min(1.0, strength),
+                    "decay_rate": decay_rate,
+                    "created": time.time(),
+                    "reinforced": time.time(),
+                }
+
+    def get_tags(self, character_id: str, min_strength: float = 0.1) -> Dict[str, float]:
+        """Get active tags for a character, filtered by minimum strength."""
+        tags = self._tags.get(character_id, {})
+        return {
+            tag: info["strength"]
+            for tag, info in tags.items()
+            if info["strength"] >= min_strength
+        }
+
+    def get_top_tags(self, character_id: str, n: int = 5) -> List[str]:
+        """Get the N strongest tags for a character."""
+        tags = self.get_tags(character_id, min_strength=0.05)
+        sorted_tags = sorted(tags.items(), key=lambda x: -x[1])
+        return [tag for tag, _ in sorted_tags[:n]]
+
+    def decay_tags(self, character_id: str) -> int:
+        """Decay all tags for a character. Called by drift interceptor. Returns removed count."""
+        lock = self._get_char_lock(character_id)
+        removed = 0
+        with lock:
+            tags = self._tags.get(character_id, {})
+            expired = []
+            for tag, info in tags.items():
+                info["strength"] -= info["decay_rate"]
+                if info["strength"] <= 0:
+                    expired.append(tag)
+            for tag in expired:
+                del tags[tag]
+                removed += 1
+        return removed
+
+    def sweep_all_tags(self) -> int:
+        """Decay tags for ALL characters. Returns total removed count."""
+        total = 0
+        for char_id in list(self._tags.keys()):
+            total += self.decay_tags(char_id)
+        return total
 
 
 @dataclass

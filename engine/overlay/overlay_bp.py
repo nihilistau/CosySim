@@ -794,6 +794,36 @@ def api_character_attraction(char_id, other_id):
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 500
 
+
+@overlay_bp.route("/api/characters/<char_id>/tags")
+def api_character_tags(char_id):
+    """Get behavioral tags for a character."""
+    try:
+        from engine.mcp.state_coordinator import get_coordinator
+        coord = get_coordinator()
+        tags = coord.get_tags(char_id)
+        top = coord.get_top_tags(char_id, n=10)
+        return jsonify({"ok": True, "character": char_id, "tags": tags, "top": top})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+@overlay_bp.route("/api/characters/<char_id>/tags", methods=["POST"])
+def api_add_character_tag(char_id):
+    """Manually add or reinforce a behavioral tag."""
+    try:
+        from engine.mcp.state_coordinator import get_coordinator
+        data = request.get_json(silent=True) or {}
+        tag = data.get("tag", "")
+        strength = data.get("strength", 0.5)
+        if not tag:
+            return jsonify({"ok": False, "error": "tag required"}), 400
+        coord = get_coordinator()
+        coord.add_tag(char_id, tag, strength=strength)
+        return jsonify({"ok": True, "tag": tag, "character": char_id})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
 def _register_socketio_events(socketio) -> None:
     """Register Socket.IO event handlers for overlay real-time updates."""
     from flask_socketio import emit

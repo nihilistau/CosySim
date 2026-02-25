@@ -1547,6 +1547,16 @@ class CharacterRegistryInterceptor(InterceptorBase):
                 if cached_profile:
                     lines.append(cached_profile)
 
+                # Inject behavioral tags from StateCoordinator
+                try:
+                    from engine.mcp.state_coordinator import get_coordinator
+                    coord = get_coordinator()
+                    tags = coord.get_top_tags(agent_id, n=5)
+                    if tags:
+                        lines.append(f"Behavioral tags: {', '.join(tags)}")
+                except Exception:
+                    pass
+
                 lines.append("[/CHARACTER IDENTITY]")
                 block = "\n".join(lines)
                 ctx["system_prompt"] = block + "\n\n" + ctx.get("system_prompt", "")
@@ -2034,6 +2044,8 @@ class NaturalMoodDriftInterceptor(InterceptorBase):
 
             # Sweep expired buffs (piggyback on drift — runs every call)
             coord.sweep_all_expired_buffs()
+            # Decay behavioral tags (very slow — only removes dead tags)
+            coord.sweep_all_tags()
 
             # Pick the most relevant inner thought
             thought = None
@@ -2200,6 +2212,21 @@ class RelationshipEventInterceptor(InterceptorBase):
         super().__init__(*args, **kwargs)
         self._last_fired: Dict[str, float] = {}  # "agent:buff_id" → timestamp
 
+    _KEYWORD_TAGS: Dict[str, str] = {
+        "cuddle": "affectionate", "hug": "affectionate", "caress": "affectionate",
+        "kiss": "romantic", "flirt": "flirtatious", "wink": "flirtatious",
+        "tease": "playful", "laugh": "fun-loving",
+        "moan": "passionate", "orgasm": "passionate", "thrust": "daring",
+        "compliment": "charming", "apologize": "empathetic",
+        "argue": "confrontational", "insult": "hostile", "yell": "aggressive",
+        "cry": "vulnerable", "massage": "caring", "ride": "daring",
+    }
+
+    @classmethod
+    def _keyword_to_tag(cls, keyword: str) -> str:
+        """Map an interaction keyword to a behavioral tag."""
+        return cls._KEYWORD_TAGS.get(keyword, "")
+
     def post_call(self, ctx: ResponseContext) -> None:
         agent_id = ctx.get("agent_id", "")
         reply = ctx.get("reply", "")
@@ -2225,6 +2252,10 @@ class RelationshipEventInterceptor(InterceptorBase):
                         agent_id, buff_id, dict(deltas), duration,
                         source=f"relationship_event:{keyword}",
                     )
+                    # Also add behavioral tag based on the keyword category
+                    tag = self._keyword_to_tag(keyword)
+                    if tag:
+                        coord.add_tag(agent_id, tag, strength=0.15)
                     self._last_fired[cooldown_key] = now
                     applied.append(f"{keyword}→{buff_suffix}")
                 except Exception as exc:

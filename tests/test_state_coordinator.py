@@ -413,3 +413,83 @@ class TestAttractionModel:
         for _ in range(10):
             score = coord.calculate_attraction("x", "y")
             assert 0 <= score <= 100
+
+
+class TestCharacterTags:
+    """Tests for the behavioral tags system."""
+
+    def _make_coord(self):
+        from engine.mcp.state_coordinator import CharacterStateCoordinator
+        return CharacterStateCoordinator()
+
+    def test_add_tag(self):
+        coord = self._make_coord()
+        coord.add_tag("lola", "flirtatious", strength=0.5)
+        tags = coord.get_tags("lola")
+        assert "flirtatious" in tags
+        assert abs(tags["flirtatious"] - 0.5) < 0.01
+
+    def test_reinforce_tag(self):
+        coord = self._make_coord()
+        coord.add_tag("lola", "bold", strength=0.4)
+        initial = coord.get_tags("lola")["bold"]
+        coord.add_tag("lola", "bold", strength=0.3)
+        after = coord.get_tags("lola")["bold"]
+        assert after > initial, "Reinforcing should increase strength"
+        assert after <= 1.0, "Strength must cap at 1.0"
+
+    def test_strength_caps_at_one(self):
+        coord = self._make_coord()
+        for _ in range(20):
+            coord.add_tag("lola", "passionate", strength=0.9)
+        tags = coord.get_tags("lola")
+        assert tags["passionate"] <= 1.0
+
+    def test_decay_reduces_strength(self):
+        coord = self._make_coord()
+        coord.add_tag("lola", "romantic", strength=0.8, decay_rate=0.5)
+        coord.decay_tags("lola")
+        tags = coord.get_tags("lola")
+        assert tags["romantic"] < 0.8
+
+    def test_decay_removes_dead_tags(self):
+        coord = self._make_coord()
+        coord.add_tag("lola", "ephemeral", strength=0.01, decay_rate=0.5)
+        coord.decay_tags("lola")
+        tags = coord.get_tags("lola")
+        assert "ephemeral" not in tags, "Dead tag should be removed"
+
+    def test_get_top_tags(self):
+        coord = self._make_coord()
+        coord.add_tag("lola", "bold", strength=0.9)
+        coord.add_tag("lola", "shy", strength=0.1)
+        coord.add_tag("lola", "romantic", strength=0.7)
+        top = coord.get_top_tags("lola", n=2)
+        assert len(top) == 2
+        assert top[0] == "bold"
+        assert top[1] == "romantic"
+
+    def test_sweep_all_tags(self):
+        coord = self._make_coord()
+        coord.add_tag("a", "x", strength=0.01, decay_rate=0.5)
+        coord.add_tag("b", "y", strength=0.9)
+        coord.sweep_all_tags()
+        assert "x" not in coord.get_tags("a")
+        assert "y" in coord.get_tags("b")
+
+    def test_tags_empty_for_unknown(self):
+        coord = self._make_coord()
+        tags = coord.get_tags("nobody")
+        assert tags == {}
+
+    def test_top_tags_empty_for_unknown(self):
+        coord = self._make_coord()
+        top = coord.get_top_tags("nobody", n=5)
+        assert top == []
+
+    def test_default_decay_rate(self):
+        coord = self._make_coord()
+        coord.add_tag("lola", "witty", strength=0.5)
+        # Access internal storage for decay_rate — get_tags only returns strength
+        info = coord._tags["lola"]["witty"]
+        assert info["decay_rate"] == 0.01, "Default decay is slow (0.01)"
