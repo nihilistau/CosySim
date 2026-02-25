@@ -206,6 +206,9 @@ SCENE_CATEGORIES = {
             {"name": "Coders Room",     "icon": "💻", "port": 5564, "mode": "coders",
              "desc": "AI agent idle sim — agents write real Python, review, test in sandboxed pipelines",
              "color": "#10b981"},
+            {"name": "Dragon's Flagon", "icon": "🍺", "port": 5558, "mode": "tavern",
+             "desc": "Fantasy tavern — 4 NPCs, quests, dice gambling, reputation, atmosphere, MCP showcase",
+             "color": "#d4a344"},
         ],
     },
     "tools": {
@@ -244,6 +247,7 @@ HEALTH_SERVICES = [
     ("Realm",     "http://localhost:5562/api/health"),
     ("NeonCity",  "http://localhost:5563/api/health"),
     ("Coders",    "http://localhost:5564/api/health"),
+    ("Tavern",    "http://localhost:5558/api/health"),
     ("Admin",     "http://localhost:8502"),
 ]
 

@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Dragon's Flagon</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+    <style>
+        :root {
+            --bg-dark: #1a0f0a;
+            --bg-card: #2a1f15;
+            --bg-panel: #3a2a1a;
+            --gold: #d4a344;
+            --gold-dim: #8a6a2a;
+            --text: #e8d5b5;
+            --text-dim: #a08060;
+            --red: #c44;
+            --green: #4a4;
+            --blue: #48a;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Georgia', serif;
+            background: var(--bg-dark);
+            color: var(--text);
+            min-height: 100vh;
+        }
+        header {
+            background: linear-gradient(135deg, var(--bg-card), var(--bg-panel));
+            border-bottom: 2px solid var(--gold-dim);
+            padding: 12px 20px;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        header h1 { color: var(--gold); font-size: 1.4em; }
+        .status-bar {
+            display: flex; gap: 16px; font-size: 0.85em; color: var(--text-dim);
+        }
+        .status-bar .gold { color: var(--gold); font-weight: bold; }
+        .main {
+            display: grid;
+            grid-template-columns: 1fr 320px;
+            gap: 12px;
+            padding: 12px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .panel {
+            background: var(--bg-card);
+            border: 1px solid var(--gold-dim);
+            border-radius: 8px;
+            padding: 14px;
+        }
+        .panel h2 {
+            color: var(--gold);
+            font-size: 1em;
+            margin-bottom: 10px;
+            border-bottom: 1px solid var(--gold-dim);
+            padding-bottom: 6px;
+        }
+        .npc-grid {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+            margin-bottom: 12px;
+        }
+        .npc-card {
+            background: var(--bg-panel);
+            border: 1px solid var(--gold-dim);
+            border-radius: 6px;
+            padding: 10px;
+            cursor: pointer;
+            transition: border-color 0.2s;
+        }
+        .npc-card:hover { border-color: var(--gold); }
+        .npc-card .name { color: var(--gold); font-weight: bold; font-size: 0.9em; }
+        .npc-card .role { color: var(--text-dim); font-size: 0.75em; }
+        .npc-card .rep { font-size: 0.75em; margin-top: 4px; }
+        .rep-bar {
+            height: 4px; background: var(--bg-dark); border-radius: 2px; margin-top: 3px;
+        }
+        .rep-fill {
+            height: 100%; border-radius: 2px;
+            background: linear-gradient(90deg, var(--red), var(--gold), var(--green));
+            transition: width 0.3s;
+        }
+        .feed {
+            max-height: 300px;
+            overflow-y: auto;
+            font-size: 0.85em;
+        }
+        .feed-entry {
+            padding: 6px 0;
+            border-bottom: 1px solid rgba(212,163,68,0.15);
+        }
+        .feed-entry .time { color: var(--text-dim); font-size: 0.75em; }
+        .actions {
+            display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px;
+        }
+        .btn {
+            background: var(--bg-panel);
+            border: 1px solid var(--gold-dim);
+            color: var(--text);
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 0.8em;
+            transition: all 0.2s;
+        }
+        .btn:hover { background: var(--gold-dim); color: #fff; }
+        .btn.primary { background: var(--gold-dim); color: #fff; }
+        .btn.primary:hover { background: var(--gold); color: var(--bg-dark); }
+        .stat-row {
+            display: flex; justify-content: space-between;
+            font-size: 0.8em; margin: 3px 0;
+        }
+        .stat-bar {
+            width: 60px; height: 6px; background: var(--bg-dark);
+            border-radius: 3px; display: inline-block; vertical-align: middle;
+        }
+        .stat-fill {
+            height: 100%; border-radius: 3px; transition: width 0.3s;
+            background: var(--gold);
+        }
+        .atmosphere-badge {
+            display: inline-block; padding: 3px 8px; border-radius: 10px;
+            font-size: 0.75em; font-weight: bold; text-transform: uppercase;
+        }
+        .atm-quiet { background: var(--blue); }
+        .atm-lively { background: var(--green); }
+        .atm-rowdy { background: #a80; }
+        .atm-brawl { background: var(--red); }
+        .quest-item {
+            background: var(--bg-panel); border-radius: 4px; padding: 8px;
+            margin: 4px 0; font-size: 0.8em;
+        }
+        .quest-item .title { color: var(--gold); }
+        .sidebar { display: flex; flex-direction: column; gap: 12px; }
+        #result-toast {
+            position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+            background: var(--bg-panel); border: 1px solid var(--gold);
+            color: var(--text); padding: 12px 24px; border-radius: 8px;
+            font-size: 0.9em; display: none; z-index: 100; max-width: 500px;
+            text-align: center; white-space: pre-line;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>🍺 The Dragon's Flagon</h1>
+        <div class="status-bar">
+            <span>Turn <b id="turn">0</b></span>
+            <span class="gold">💰 <b id="gold">50</b>g</span>
+            <span>🔥 Heat <b id="heat">0</b></span>
+            <span class="atmosphere-badge" id="atmosphere">quiet</span>
+            <span>🕐 <b id="time-of-day">evening</b></span>
+        </div>
+    </header>
+
+    <div class="main">
+        <div>
+            <!-- NPCs -->
+            <div class="panel">
+                <h2>🏠 Tavern Patrons</h2>
+                <div class="npc-grid" id="npc-grid"></div>
+            </div>
+
+            <!-- Actions -->
+            <div class="panel" style="margin-top:12px">
+                <h2>⚔️ Actions</h2>
+                <div class="actions">
+                    <button class="btn primary" onclick="api('drink',{drink_id:'ale'})">🍺 Order Ale (3g)</button>
+                    <button class="btn" onclick="api('drink',{drink_id:'wine'})">🍷 Wine (8g)</button>
+                    <button class="btn" onclick="api('drink',{drink_id:'mead'})">🍯 Mead (5g)</button>
+                    <button class="btn" onclick="api('drink',{drink_id:'spirits'})">🔥 Spirits (12g)</button>
+                    <button class="btn" onclick="api('drink',{drink_id:'tea'})">🍵 Tea (2g)</button>
+                </div>
+                <div class="actions" style="margin-top:6px">
+                    <button class="btn" onclick="api('song',{mood:'merry'})">🎵 Merry Song</button>
+                    <button class="btn" onclick="api('song',{mood:'epic'})">⚔️ Epic Song</button>
+                    <button class="btn" onclick="api('song',{mood:'romantic'})">💕 Romantic</button>
+                    <button class="btn" onclick="api('song',{mood:'mysterious'})">🌙 Mysterious</button>
+                </div>
+                <div class="actions" style="margin-top:6px">
+                    <button class="btn primary" onclick="api('influence',{action:'buy_round'})">🍻 Buy Round (20g)</button>
+                    <button class="btn" onclick="api('influence',{action:'toast'})">🥂 Toast</button>
+                    <button class="btn" onclick="api('influence',{action:'calm'})">🕊️ Calm Down</button>
+                    <button class="btn" onclick="api('rumor')">🗣️ Listen for Rumours</button>
+                    <button class="btn" onclick="api('time')">⏰ Advance Time</button>
+                </div>
+            </div>
+
+            <!-- Dice -->
+            <div class="panel" style="margin-top:12px">
+                <h2>🎲 Dragon's Dice</h2>
+                <div class="actions">
+                    <button class="btn primary" onclick="api('dice',{action:'start',bet:10})">Start (10g)</button>
+                    <button class="btn" onclick="api('dice',{action:'roll'})">Roll</button>
+                    <button class="btn" onclick="api('dice',{action:'hold'})">Hold</button>
+                </div>
+            </div>
+
+            <!-- Trade -->
+            <div class="panel" style="margin-top:12px">
+                <h2>🏪 Merchant</h2>
+                <div id="trade-display" style="font-size:0.85em;margin-bottom:8px"></div>
+                <div class="actions">
+                    <button class="btn" onclick="api('trade',{action:'browse'})">Browse</button>
+                    <button class="btn" onclick="api('trade',{action:'buy',item_id:'healing_potion'})">Buy Potion (15g)</button>
+                    <button class="btn" onclick="api('trade',{action:'buy',item_id:'lucky_charm'})">Lucky Charm (25g)</button>
+                    <button class="btn" onclick="api('trade',{action:'buy',item_id:'smoke_bomb'})">Smoke Bomb (10g)</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <!-- Stats -->
+            <div class="panel">
+                <h2>📊 Stats</h2>
+                <div id="stats-display"></div>
+            </div>
+
+            <!-- Quests -->
+            <div class="panel">
+                <h2>📜 Quests</h2>
+                <div id="quest-display"></div>
+                <div class="actions" style="margin-top:6px">
+                    <button class="btn" onclick="api('quest',{action:'list'})">Refresh</button>
+                </div>
+            </div>
+
+            <!-- Event Feed -->
+            <div class="panel">
+                <h2>📖 Event Log</h2>
+                <div class="feed" id="event-feed"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="result-toast"></div>
+
+    <script>
+        const socket = io();
+        const NPC_DATA = {
+            greta:    { name: 'Greta Ironhearth', role: 'Barkeeper', icon: '🍺' },
+            bard:     { name: 'Finnegan Strings', role: 'Traveling Bard', icon: '🎵' },
+            merchant: { name: 'Durgin Copperscale', role: 'Merchant', icon: '🏪' },
+            stranger: { name: 'The Stranger', role: 'Mysterious Figure', icon: '🗝️' },
+        };
+
+        let state = {};
+
+        function updateUI(s) {
+            if (!s) return;
+            state = s;
+            document.getElementById('turn').textContent = s.turn;
+            document.getElementById('gold').textContent = s.gold;
+            document.getElementById('heat').textContent = s.heat;
+            document.getElementById('time-of-day').textContent = s.time_of_day;
+
+            const atmEl = document.getElementById('atmosphere');
+            atmEl.textContent = s.atmosphere;
+            atmEl.className = 'atmosphere-badge atm-' + s.atmosphere;
+
+            // NPCs
+            const grid = document.getElementById('npc-grid');
+            grid.innerHTML = '';
+            (s.npcs_present || []).forEach(id => {
+                const npc = NPC_DATA[id];
+                if (!npc) return;
+                const rep = (s.reputation || {})[id] || 50;
+                const card = document.createElement('div');
+                card.className = 'npc-card';
+                card.innerHTML = `
+                    <div class="name">${npc.icon} ${npc.name}</div>
+                    <div class="role">${npc.role}</div>
+                    <div class="rep">Rep: ${rep}/100</div>
+                    <div class="rep-bar"><div class="rep-fill" style="width:${rep}%"></div></div>
+                `;
+                grid.appendChild(card);
+            });
+
+            // Stats
+            const statsDiv = document.getElementById('stats-display');
+            statsDiv.innerHTML = '';
+            Object.entries(s.stats || {}).forEach(([k, v]) => {
+                statsDiv.innerHTML += `
+                    <div class="stat-row">
+                        <span>${k}</span>
+                        <span>
+                            <div class="stat-bar"><div class="stat-fill" style="width:${v}%"></div></div>
+                            ${v}
+                        </span>
+                    </div>`;
+            });
+
+            // Quests
+            const qDiv = document.getElementById('quest-display');
+            qDiv.innerHTML = '';
+            Object.entries(s.quests || {}).forEach(([id, q]) => {
+                if (q.status === 'completed') return;
+                const statusIcon = q.status === 'active' ? '🔶' : '📋';
+                qDiv.innerHTML += `
+                    <div class="quest-item">
+                        ${statusIcon} <span class="title">${q.title}</span>
+                        <span style="color:var(--text-dim)"> (${q.status})</span>
+                        ${q.status === 'available' ?
+                            `<button class="btn" style="float:right;padding:2px 8px"
+                                onclick="api('quest',{action:'accept',quest_id:'${id}'})">Accept</button>` : ''}
+                        ${q.status === 'active' ?
+                            `<div style="margin-top:4px;font-size:0.85em">Progress: ${q.progress}/${q.max}</div>` : ''}
+                    </div>`;
+            });
+        }
+
+        function addFeedEntry(text) {
+            const feed = document.getElementById('event-feed');
+            const entry = document.createElement('div');
+            entry.className = 'feed-entry';
+            const now = new Date().toLocaleTimeString();
+            entry.innerHTML = `<span class="time">${now}</span> ${text}`;
+            feed.prepend(entry);
+            if (feed.children.length > 30) feed.removeChild(feed.lastChild);
+        }
+
+        function showToast(text) {
+            const t = document.getElementById('result-toast');
+            t.textContent = text;
+            t.style.display = 'block';
+            setTimeout(() => t.style.display = 'none', 3500);
+        }
+
+        async function api(endpoint, body = {}) {
+            try {
+                const r = await fetch(`/api/${endpoint}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
+                const data = await r.json();
+                if (data.state) updateUI(data.state);
+                if (data.result) {
+                    showToast(data.result);
+                    addFeedEntry(data.result.split('\n')[0]);
+                }
+            } catch (e) {
+                showToast('Error: ' + e.message);
+            }
+        }
+
+        // SocketIO events
+        socket.on('state_update', updateUI);
+        socket.on('event', d => addFeedEntry(d.text || JSON.stringify(d)));
+        socket.on('drink', d => addFeedEntry('🍺 ' + (d.result || '').split('\n')[0]));
+        socket.on('dice', d => addFeedEntry('🎲 ' + (d.result || '')));
+        socket.on('atmosphere', d => addFeedEntry(`🔥 Atmosphere: ${d.atmosphere} (heat ${d.heat})`));
+        socket.on('time_change', d => addFeedEntry(`⏰ Time: ${d.time} (turn ${d.turn})`));
+        socket.on('consequence', d => addFeedEntry('⚡ ' + (d.description || JSON.stringify(d))));
+
+        // Initial load
+        fetch('/api/status').then(r => r.json()).then(updateUI);
+    </script>
+</body>
+</html>
