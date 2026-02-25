@@ -91,6 +91,16 @@ scenes:
     port: 5566
     debug: false
 
+  tavern:
+    host: "localhost"
+    port: 5558
+    debug: false
+
+  games:
+    host: "localhost"
+    port: 5567
+    debug: false
+
   hub:
     host: "localhost"
     port: 8500

@@ -21,6 +21,7 @@ Every game scene in CosySim follows the same architecture:
 | 5555 | Phone | Social simulation |
 | 5556 | Bedroom | Adult roleplay |
 | 5557 | Lounge | Social / speakeasy |
+| 5558 | Tavern | Fantasy RPG tavern |
 | 5559 | Casino | Gambling simulation |
 | 5560 | Gallery | Creative / art |
 | 5561 | Warzone | Military RTS |
@@ -29,6 +30,7 @@ Every game scene in CosySim follows the same architecture:
 | 5564 | Coders Room | Coding simulation |
 | 5565 | Heist | Crime co-op |
 | 5566 | Command Center | System monitoring |
+| 5567 | Games Arcade | Mini-games |
 | 8500 | Hub | Scene launcher (Streamlit) |
 | 8501 | Dashboard | Character management (Streamlit) |
 | 8502 | Admin Panel | System admin (Streamlit) |
@@ -217,15 +219,19 @@ In `__init__.py`, export the scene class. The Hub and launcher discover scenes a
 
 **Genre:** Social · **Max characters:** 5
 
-#### MCP Skills (6)
+#### MCP Skills (10)
 | Skill | Description |
 |-------|-------------|
-| `lounge_status` | Get atmosphere, current song, character moods |
-| `lounge_order_drink` | Order cocktail with mood/stat effects (10s cooldown) |
-| `lounge_request_song` | Request song for playlist |
-| `lounge_share_secret` | Build intimacy/trust with character (30s cooldown) |
-| `lounge_dream_whisper` | Enter character's dreamspace (60s cooldown) |
-| `lounge_mirror_soul` | Reflect character's emotions empathically (45s cooldown) |
+| `lounge_status` | Full status: trust, heat, song, secrets, mood |
+| `lounge_order_drink` | Trust-gated cocktails with stat effects (10s cooldown) |
+| `lounge_menu` | View cocktail menu with trust requirements |
+| `lounge_request_song` | Request song from playlist, shifts mood (15s cooldown) |
+| `lounge_share_secret` | Intimacy-leveled sharing, builds trust (20s cooldown) |
+| `lounge_ask_secret` | Progressive secret unlocks from NPCs (30s cooldown) |
+| `lounge_back_room` | Access back room (trust ≥70 gate, 15s cooldown) |
+| `lounge_cool_down` | Reduce heat via chill/change_subject/buy_round (20s cooldown) |
+| `lounge_dream_whisper` | Enter character's dreamspace (trust ≥60, 60s cooldown) |
+| `lounge_mirror_soul` | Reflect character's emotions (trust ≥30, 45s cooldown) |
 
 #### Game Mechanics
 - **Heat meter** — 0–100, ticks every 180 seconds via MCPTimer. At ≥ 65 mood shifts to alert; at ≥ 85 enforcement consequences trigger.
@@ -257,21 +263,75 @@ In `__init__.py`, export the scene class. The Hub and launcher discover scenes a
 
 ---
 
+### Tavern (port 5558)
+
+**Dragon's Flagon Tavern** — A fantasy RPG tavern showcasing every MCP framework feature. Gold economy, reputation system, quest board, dice gambling, rumor mill, and time-of-day cycle.
+
+**Genre:** Fantasy RPG · **Max characters:** 4
+
+#### MCP Skills (10)
+| Skill | Description |
+|-------|-------------|
+| `tavern_status` | Full status: gold, stats, reputation, atmosphere, time |
+| `tavern_order_drink` | Buy drinks with gold, consequence chains (5s cooldown) |
+| `tavern_check_reputation` | View reputation with specific NPC |
+| `tavern_hear_rumor` | Discover rumors (some unlock quests) |
+| `tavern_quest_board` | Accept, progress, or list quests (8s cooldown) |
+| `tavern_dice` | Start, roll, or hold in dice gambling (5s cooldown) |
+| `tavern_influence` | buy_round, calm crowd, or propose toast (10s cooldown) |
+| `tavern_request_song` | Request song from bard (MCPTimer, 15s cooldown) |
+| `tavern_trade` | Buy/sell items with reputation discounts (5s cooldown) |
+| `tavern_advance_time` | Advance time of day (15s cooldown) |
+
+#### Game Mechanics
+- **Gold economy** — Earn from quests/gambling, spend on drinks/trades
+- **6-stat system** — Charm, Wit, Strength, Luck, Lore, Stealth (10-100)
+- **Reputation** — Per-NPC (Greta, Bard, Merchant, Stranger), 5 tiers: Stranger → Regular → Trusted → Honored → Legend
+- **Quest board** — 5 quests with multi-step progression
+- **Dice gambling** — Roll-and-hold mechanics with gold stakes
+- **Atmosphere** — Calm → Lively → Rowdy → Brawl, affects NPC behavior
+- **Time cycle** — Morning → Afternoon → Evening → Night → Late Night
+- **Rumor mill** — 8 rumors, some unlock quest content
+- **Stranger mechanic** — Mysterious figure appears and disappears
+
+#### Characters
+| Character | Role |
+|-----------|------|
+| **Greta** | Barkeep — warm, no-nonsense, knows everyone's business |
+| **Bard** | Traveling musician — stories, songs, rumors |
+| **Merchant** | Trader — sells items, negotiates prices |
+| **Stranger** | Hooded figure — quest giver with hidden agenda |
+
+#### Key API Endpoints
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/api/state` | Full tavern state |
+| POST | `/api/order` | Order a drink |
+| POST | `/api/quest` | Quest actions (accept/progress) |
+| POST | `/api/dice` | Dice game actions |
+| POST | `/api/trade` | Buy/sell items |
+| POST | `/api/rumor` | Hear a rumor |
+
+---
+
 ### Casino (port 5559)
 
 **The Casino Floor** — A noir underground poker den with blackjack, poker, roulette, and slots. AI dealers and characters with personality-driven gambling styles.
 
 **Genre:** Gambling simulation · **Max characters:** 5
 
-#### MCP Skills (6)
+#### MCP Skills (9)
 | Skill | Description |
 |-------|-------------|
 | `casino_table_status` | Get round, phase, pot, player chips, community cards |
-| `casino_bet` | Place bet with chip management |
+| `casino_bet` | Place bet with chip management (5s cooldown) |
 | `casino_fold` | Fold hand and forfeit pot |
-| `casino_all_in` | Push all remaining chips into pot |
+| `casino_all_in` | Push all remaining chips into pot (30s cooldown) |
 | `casino_order_drink` | Order cocktail with stat effects |
 | `casino_read_opponent` | Analyze opponent bluff tells (15s cooldown) |
+| `casino_check` | Check/call — stay in hand without raising (3s cooldown) |
+| `casino_raise` | Raise the bet (min $10, 5s cooldown) |
+| `casino_bluff` | Bluff with style: confident/nervous/aggressive (20s cooldown) |
 
 #### Game Mechanics
 - **Texas Hold'em poker** — Community cards, betting rounds, hand evaluation, showdown.
@@ -311,14 +371,17 @@ In `__init__.py`, export the scene class. The Hub and launcher discover scenes a
 
 **Genre:** Creative · **Max characters:** 5
 
-#### MCP Skills (5)
+#### MCP Skills (8)
 | Skill | Description |
 |-------|-------------|
-| `gallery_exhibition_status` | Get current theme, artwork count, room |
-| `gallery_create_art` | Submit new artwork (20s cooldown) |
-| `gallery_critique` | Rate artwork 1–10 with verdict (10s cooldown) |
-| `gallery_change_room` | Navigate gallery rooms |
-| `gallery_art_debate` | Initiate art debate with opponent (30s cooldown) |
+| `gallery_exhibition_status` | Get theme, prestige, artwork count, visitors |
+| `gallery_create_art` | Submit artwork in 10 validated styles (20s cooldown) |
+| `gallery_critique` | 3-axis scoring (technique/emotion/originality, 10s cooldown) |
+| `gallery_change_room` | Navigate rooms (prestige-gated private_collection) |
+| `gallery_art_debate` | Skill roll with prestige bonus (30s cooldown) |
+| `gallery_set_theme` | Change exhibition theme from 6 options |
+| `gallery_auction` | Simulated bidding war for artworks (30s cooldown) |
+| `gallery_patron_interact` | Greet, tour, or inspire gallery patrons (10s cooldown) |
 
 #### Game Mechanics
 - **Exhibition system** — Themed exhibitions enforce style consistency (Dreams Unveiled, Neon Futures, Raw Emotions).
@@ -356,14 +419,16 @@ Characters are dynamically assigned roles from the database on startup:
 
 **Genre:** Strategy · **Max characters:** 4
 
-#### MCP Skills (5)
+#### MCP Skills (7)
 | Skill | Description |
 |-------|-------------|
-| `warzone_status` | Get turn, weather, resources, unit positions |
-| `warzone_deploy` | Deploy unit: infantry, armor, artillery, air_support |
-| `warzone_attack` | Attack enemy: base, flanks, supply_line |
-| `warzone_recon` | Spend intel to gather enemy intelligence |
-| `warzone_special_op` | Execute sabotage, airstrike, or counter-intelligence |
+| `warzone_status` | Full battlefield status: turn, weather, resources, HP, buildings, spy intel |
+| `warzone_attack` | Attack base or building via GameState.process_action() (5s cooldown) |
+| `warzone_build` | Build factory/power_plant/radar/fortress (5s cooldown) |
+| `warzone_upgrade` | Upgrade weapon or defense level (8s cooldown) |
+| `warzone_special_op` | Execute spy/emp/sabotage/shield/taunt (15s cooldown) |
+| `warzone_recon` | Deploy recon (spy satellite alias, 15s cooldown) |
+| `warzone_end_turn` | End turn: AI acts, income collected, weather rolls (3s cooldown) |
 
 #### Game Mechanics
 - **Resource tycoon loop** — Collect credits/power/intel from buildings → upgrade weapons/defenses → attack.
@@ -715,20 +780,25 @@ Mood, energy, relationship level, arousal, memory count per character.
 
 ---
 
-### Games (sub-modules)
+### Games Arcade (port 5567)
 
-Standalone mini-game modules used by the Phone and Bedroom scenes.
+**Games Arcade** — Mini-game collection wrapped as a proper BaseScene with MCP skills. Hosts Mystery Investigation and Truth or Dare as sub-modules.
 
-#### Truth or Dare
-- **Flow:** Start → Roll (1–6, odd = truth, even = dare) → Answer → End
-- **Content:** 15 truth questions + 15 dare prompts
-- **Scoring:** 1 pt per truth, 2 pts per dare completed
-- **API:** `/games/truth-or-dare/start`, `/roll`, `/answer`, `/state`, `/end`
-- **Integration:** Standalone `TruthOrDareGame` class + MCP session logging
+**Genre:** Mini-games · **Max characters:** 0
 
-#### Mystery Investigation
-- **Flow:** Start (pick case) → Gather clues (5 total, red herrings every 3rd) → Accuse culprit → Win/Loss
-- **Cases:** 3 pre-built (Heirloom, Poisoning, Masterpiece) with clues, red herrings, culprits
-- **Accusation:** Fuzzy matching — suspect name substring matches culprit
-- **API:** `/games/mystery/start`, `/clue`, `/accuse`, `/state`, `/end`
-- **Integration:** Standalone `MysteryGame` class + MCP session logging
+#### MCP Skills (7)
+| Skill | Description |
+|-------|-------------|
+| `games_status` | Get active game and current state |
+| `games_mystery_start` | Start a mystery case (3 cases available) |
+| `games_mystery_clue` | Get next clue (with red herrings) |
+| `games_mystery_accuse` | Accuse a suspect (fuzzy matching) |
+| `games_tod_start` | Start Truth or Dare |
+| `games_tod_roll` | Roll 1-6 (odd=truth, even=dare) |
+| `games_tod_answer` | Submit answer with score |
+
+#### Sub-Games
+
+**Truth or Dare** — Roll-based party game with 15 truths + 15 dares, 1pt per truth / 2pts per dare.
+
+**Mystery Investigation** — 3 cases (Heirloom, Poisoning, Masterpiece) with 5 clues each, red herrings, and fuzzy-match accusations.

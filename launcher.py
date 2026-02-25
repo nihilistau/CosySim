@@ -49,6 +49,8 @@ FLASK_SCENES: Dict[str, Dict[str, Any]] = {
                 "port": 5556, "label": "The Bedroom"},
     "lounge":  {"cls": "content.scenes.lounge.lounge_scene.LoungeScene",
                 "port": 5557, "label": "The Velvet Lounge"},
+    "tavern":  {"cls": "content.scenes.tavern.tavern_scene.TavernScene",
+                "port": 5558, "label": "Dragon's Flagon Tavern"},
     "casino":  {"cls": "content.scenes.casino.casino_scene.CasinoScene",
                 "port": 5559, "label": "Midnight Casino"},
     "gallery": {"cls": "content.scenes.gallery.gallery_scene.GalleryScene",
@@ -61,6 +63,12 @@ FLASK_SCENES: Dict[str, Dict[str, Any]] = {
                  "port": 5563, "label": "NeonCity"},
     "coders":  {"cls": "content.scenes.coders.coders_scene.CodersRoomScene",
                 "port": 5564, "label": "The Coders Room"},
+    "heist":   {"cls": "content.scenes.heist.heist_scene.HeistScene",
+                "port": 5565, "label": "The Heist"},
+    "command_center": {"cls": "content.scenes.command_center.command_scene.CommandCenterScene",
+                       "port": 5566, "label": "Command Center"},
+    "games":   {"cls": "content.scenes.games.games_scene.GamesScene",
+                "port": 5567, "label": "Games Arcade"},
 }
 
 STREAMLIT_APPS: Dict[str, Dict[str, Any]] = {
