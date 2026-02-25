@@ -414,6 +414,55 @@ class Qwen3TTSEngine:
         logger.info("Generated %s: %.1fs via Qwen3-TTS (%s)", filename, duration, model_size)
         return filepath, duration
 
+    def generate_stream(
+        self,
+        text: str,
+        voice_design: str,
+        model_size: str = "1.7b",
+        sample_rate: int = 24000,
+        max_duration: int = 60,
+    ):
+        """
+        Generate speech in sentence-level chunks, yielding (audio_bytes, duration)
+        for each chunk as it's ready.  Enables real-time audio streaming.
+
+        Yields:
+            (bytes, float) — PCM int16 audio bytes and chunk duration in seconds.
+        """
+        import re
+        sentences = re.split(r'(?<=[.!?])\s+', text.strip())
+        if not sentences:
+            sentences = [text]
+
+        total_duration = 0.0
+        for sentence in sentences:
+            sentence = sentence.strip()
+            if not sentence:
+                continue
+            if total_duration >= max_duration:
+                break
+            try:
+                filepath, dur = self.generate(
+                    text=sentence,
+                    voice_design=voice_design,
+                    model_size=model_size,
+                    sample_rate=sample_rate,
+                    max_duration=int(max_duration - total_duration),
+                    post_process=False,
+                )
+                with open(str(filepath), "rb") as f:
+                    audio_data = f.read()
+                total_duration += dur
+                yield audio_data, dur
+                # Clean up chunk file
+                try:
+                    filepath.unlink()
+                except Exception:
+                    pass
+            except Exception as e:
+                logger.warning("Chunk generation failed for '%s': %s", sentence[:40], e)
+                continue
+
     def _chunk_text(self, text: str) -> List[str]:
         """Split long text into chunks at sentence boundaries."""
         import re
@@ -602,6 +651,70 @@ def create_tts_app() -> FastAPI:
             # Queue for async generation
             background_tasks.add_task(_run_generation, job_id, request)
             return GenerateResponse(job_id=job_id, status="queued")
+
+    # ── Streaming generation ───────────────────────────────────────
+
+    class StreamRequest(BaseModel):
+        text: str = Field(..., min_length=1, max_length=50000)
+        voice_design: str = Field(default="A clear, natural speaking voice.")
+        character_id: Optional[str] = None
+        model_size: str = Field(default="auto")
+        sample_rate: int = Field(default=24000)
+        max_duration: int = Field(default=60, ge=10, le=3600)
+
+    @app.post("/generate_stream")
+    async def generate_stream(request: StreamRequest):
+        """
+        Stream audio generation as SSE events.  Each event contains a
+        base64-encoded WAV chunk for one sentence.
+
+        Events:
+          data: {"chunk": <base64>, "duration": <float>, "index": <int>}
+          data: {"done": true, "total_duration": <float>, "chunks": <int>}
+        """
+        import asyncio
+        import base64
+        from starlette.responses import StreamingResponse
+
+        voice_design = request.voice_design
+        model_size = request.model_size
+
+        if request.character_id:
+            try:
+                from engine.tts.voice_designer import get_voice_designer
+                designer = get_voice_designer()
+                design = designer.get(request.character_id)
+                voice_design = design.description
+                if model_size == "auto":
+                    model_size = design.model_size
+            except Exception:
+                pass
+
+        if model_size == "auto":
+            model_size = "0.6b" if len(request.text) < 100 else "1.7b"
+
+        async def event_generator():
+            total_dur = 0.0
+            idx = 0
+            for audio_bytes, dur in _engine.generate_stream(
+                text=request.text,
+                voice_design=voice_design,
+                model_size=model_size,
+                sample_rate=request.sample_rate,
+                max_duration=request.max_duration,
+            ):
+                b64 = base64.b64encode(audio_bytes).decode("ascii")
+                yield f"data: {json.dumps({'chunk': b64, 'duration': dur, 'index': idx})}\n\n"
+                total_dur += dur
+                idx += 1
+                await asyncio.sleep(0)  # yield to event loop
+            yield f"data: {json.dumps({'done': True, 'total_duration': total_dur, 'chunks': idx})}\n\n"
+
+        return StreamingResponse(
+            event_generator(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
 
     # ── Job status ──────────────────────────────────────────────────
 

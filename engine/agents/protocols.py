@@ -129,26 +129,6 @@ class IInterceptor(Protocol):
 
 
 # ══════════════════════════════════════════════════════════════════════
-#  GameStateObserver — callback contract for GameState watchers
-# ══════════════════════════════════════════════════════════════════════
-
-@runtime_checkable
-class GameStateObserver(Protocol):
-    """
-    Callback protocol for GameState reactive observers.
-
-    Register with ``GameState.subscribe(game_id, observer_fn)``::
-
-        def on_score_change(game_id: str, key: str, value: Any) -> None:
-            print(f"Game {game_id}: {key} = {value}")
-
-        get_game_state().subscribe("tod_game", on_score_change)
-    """
-
-    def __call__(self, game_id: str, key: str, value: Any) -> None: ...
-
-
-# ══════════════════════════════════════════════════════════════════════
 #  Type aliases
 # ══════════════════════════════════════════════════════════════════════
 
@@ -162,7 +142,6 @@ __all__ = [
     "IAgent",
     "IInterceptor",
     "AgentCapability",
-    "GameStateObserver",
     "AgentId",
     "SceneId",
     "ChainId",

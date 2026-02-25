@@ -120,6 +120,13 @@ tts:
   stream: true
   device: "cuda"  # or "cpu"
   server_url: "http://localhost:8600"  # Qwen3-TTS FastAPI server
+  streaming:
+    enabled: true                      # enable chunked streaming generation
+    chunk_method: "sentence"           # sentence | fixed_length
+    max_chunk_chars: 500               # max characters per chunk
+  speculative:
+    enabled: false                     # use 0.6B as draft for 1.7B (same-family spec decode)
+    draft_model: "0.6b"               # draft model size for speculative decoding
 
 # STT configuration  
 stt:
@@ -458,7 +465,17 @@ training:
     top_p: 0.9
     description: "Game engine agent — fair, rule-following, dramatic"
 
-# Communications / Governance framework
+
+# NotebookLM MCP integration
+notebooklm:
+  enabled: false                       # enable NotebookLM MCP bridge
+  proxy_url: "http://localhost:8800"    # CosySim-side proxy URL
+  node_cmd: "node"                     # Node.js command
+  server_path: ""                      # path to notebooklm-mcp dist/index.js
+  default_notebook_id: ""              # default notebook for queries
+  auth_profile_dir: ""                 # Chrome profile directory for Google auth
+  startup_timeout: 15                  # seconds to wait for server startup
+
 comms:
   governance_enabled: true      # route CharacterAgent.reply() through interceptors
   skill_manifest_path: "config/skill_manifests.yaml"

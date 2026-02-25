@@ -1552,8 +1552,13 @@ class CharacterRegistryInterceptor(InterceptorBase):
                     from engine.mcp.state_coordinator import get_coordinator
                     coord = get_coordinator()
                     tags = coord.get_top_tags(agent_id, n=5)
+                    perms = coord.get_permanent_tags(agent_id)
                     if tags:
-                        lines.append(f"Behavioral tags: {', '.join(tags)}")
+                        perm_set = set(perms)
+                        labeled = []
+                        for t in tags:
+                            labeled.append(f"{t} (core)" if t in perm_set else t)
+                        lines.append(f"Behavioral tags: {', '.join(labeled)}")
                 except Exception:
                     pass
 

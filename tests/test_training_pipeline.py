@@ -1,7 +1,10 @@
 """Tests for training pipeline: finetune_local, auto_train, prepare_from_live."""
 
 import json
+import sys
+import tempfile
 import time
+import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -179,3 +182,170 @@ class TestAutoTrain:
                 STATE_FILE.write_text(original)
             elif STATE_FILE.exists():
                 STATE_FILE.unlink()
+
+
+# ═══════════════════════════════════════════════════════════════
+# generate_datasets tests
+# ═══════════════════════════════════════════════════════════════
+
+
+class TestGenerateDatasets(unittest.TestCase):
+    """Tests for training.generate_datasets module."""
+
+    def test_generates_all_datasets(self):
+        """Run all generators, verify 10 JSONL files created in a temp dir."""
+        import random
+        from training.generate_datasets import GENERATORS, write_jsonl
+
+        random.seed(42)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_dir = Path(tmpdir)
+            for name, (gen_fn, count) in GENERATORS.items():
+                data = gen_fn(count)
+                random.shuffle(data)
+                split = int(len(data) * 0.9)
+                write_jsonl(data[:split], out_dir / f"{name}_train.jsonl")
+                write_jsonl(data[split:], out_dir / f"{name}_val.jsonl")
+            self.assertEqual(len(list(out_dir.glob("*.jsonl"))), 10)
+
+    def test_jsonl_format(self):
+        """Each line must be valid JSON with 'instruction' and 'output' keys."""
+        from training.generate_datasets import generate_tag_extraction, write_jsonl
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "test.jsonl"
+            write_jsonl(generate_tag_extraction(10), path)
+            for line in path.read_text(encoding="utf-8").strip().splitlines():
+                row = json.loads(line)
+                self.assertIn("instruction", row)
+                self.assertIn("output", row)
+
+    def test_dataset_counts(self):
+        """Each generator must produce exactly its default count."""
+        from training.generate_datasets import GENERATORS
+
+        expected = {
+            "tag_extraction": 800, "tool_routing": 400,
+            "priority_classify": 300, "decision_classify": 300,
+            "response_validate": 300,
+        }
+        for name, (gen_fn, default_count) in GENERATORS.items():
+            self.assertEqual(default_count, expected[name], f"{name} default mismatch")
+            self.assertEqual(len(gen_fn(default_count)), expected[name])
+
+
+# ═══════════════════════════════════════════════════════════════
+# merge_adapters tests
+# ═══════════════════════════════════════════════════════════════
+
+
+class TestMergeAdapters(unittest.TestCase):
+    """Tests for training.merge_adapters module."""
+
+    def test_check_dependencies(self):
+        """check_dependencies returns a dict of {pkg: bool}."""
+        from training.merge_adapters import check_dependencies
+
+        deps = check_dependencies()
+        self.assertIsInstance(deps, dict)
+        for pkg in ("unsloth", "transformers", "peft", "torch"):
+            self.assertIn(pkg, deps)
+            self.assertIsInstance(deps[pkg], bool)
+
+    def test_merge_requires_adapters(self):
+        """Empty adapter list raises ValueError."""
+        from training.merge_adapters import merge_adapters
+
+        with self.assertRaises(ValueError):
+            merge_adapters([])
+
+
+# ═══════════════════════════════════════════════════════════════
+# training_skills tests
+# ═══════════════════════════════════════════════════════════════
+
+
+class TestTrainingSkills(unittest.TestCase):
+    """Tests for engine.skills.builtin.training_skills."""
+
+    def test_list_trained_models(self):
+        """list_trained_models returns valid JSON."""
+        from engine.skills.builtin.training_skills import list_trained_models
+
+        result = list_trained_models()
+        parsed = json.loads(result)
+        self.assertIsInstance(parsed, (list, dict))
+
+    def test_get_training_status_no_jobs(self):
+        """Empty job_id with no recorded jobs returns message JSON."""
+        from engine.skills.builtin.training_skills import (
+            get_training_status, _training_jobs,
+        )
+
+        _training_jobs.clear()
+        result = get_training_status("")
+        parsed = json.loads(result)
+        self.assertIn("message", parsed)
+
+    def test_export_training_data_no_db(self):
+        """Graceful error when the metrics DB module is unavailable."""
+        from engine.skills.builtin.training_skills import export_training_data
+
+        with patch.dict(sys.modules, {"training.prepare_from_live": None}):
+            result = export_training_data()
+            parsed = json.loads(result)
+            self.assertIn("error", parsed)
+
+
+# ═══════════════════════════════════════════════════════════════
+# notebooklm_skills tests
+# ═══════════════════════════════════════════════════════════════
+
+
+class TestNotebookLMSkills(unittest.TestCase):
+    """Tests for engine.skills.builtin.notebooklm_skills."""
+
+    @patch("engine.skills.builtin.notebooklm_skills._get",
+           side_effect=Exception("Connection refused"))
+    def test_list_notebooks_server_down(self, _mock):
+        """Returns JSON error when the proxy server is unreachable."""
+        from engine.skills.builtin.notebooklm_skills import notebooklm_list_notebooks
+
+        result = notebooklm_list_notebooks()
+        parsed = json.loads(result)
+        self.assertIn("error", parsed)
+
+    @patch("engine.skills.builtin.notebooklm_skills._post",
+           side_effect=Exception("Connection refused"))
+    def test_ask_server_down(self, _mock):
+        """Returns JSON error when asking with server down."""
+        from engine.skills.builtin.notebooklm_skills import notebooklm_ask
+
+        result = notebooklm_ask("test question")
+        parsed = json.loads(result)
+        self.assertIn("error", parsed)
+
+
+# ═══════════════════════════════════════════════════════════════
+# NotebookLMProxy tests
+# ═══════════════════════════════════════════════════════════════
+
+
+class TestNotebookLMProxy(unittest.TestCase):
+    """Tests for engine.mcp.notebooklm_proxy.NotebookLMProxy."""
+
+    def test_proxy_not_running(self):
+        """Freshly created proxy reports not running."""
+        from engine.mcp.notebooklm_proxy import NotebookLMProxy
+
+        proxy = NotebookLMProxy({})
+        self.assertFalse(proxy.is_running())
+
+    def test_proxy_ask_not_running(self):
+        """ask() returns error dict when process is not running."""
+        from engine.mcp.notebooklm_proxy import NotebookLMProxy
+
+        proxy = NotebookLMProxy({})
+        result = proxy.ask("nb-1", "test question")
+        self.assertIsInstance(result, dict)
+        self.assertIn("error", result)

@@ -1575,113 +1575,8 @@ def get_character_agency_summary(character_id: str) -> str:
     }, indent=2)
 
 
-# ── SCENE RULES ──────────────────────────────────────────────────────
-
-@mcp.tool()
-def get_scene_rules(scene_id: str) -> str:
-    """
-    Get the full rules, capabilities, and guidance for a specific scene.
-    Call this when first entering a scene to understand the system.
-
-    Agents should read this at start of session to know what tools are available,
-    how interaction works, and what the Director expects.
-    """
-    rules: dict = {}
-
-    if scene_id == "bedroom":
-        rules = {
-            "scene": "bedroom",
-            "description": (
-                "An adult multi-agent roleplay space.  Two AI characters share the room "
-                "with the Director (user).  Agents have stats, wardrobes, and real agency. "
-                "The Director guides — agents interpret and play along with free will."
-            ),
-            "your_role": (
-                "You are one of the characters.  You have a body, stats, and real desires. "
-                "Embody them.  You don't always comply perfectly.  You can take charge. "
-                "You can resist.  You can initiate.  The scene is co-created, not dictated."
-            ),
-            "interaction_types": [
-                "cuddle — physical closeness",
-                "kiss — from tender to urgent",
-                "caress — tactile exploration",
-                "striptease — undressing as performance",
-                "intimate — sexual encounters",
-                "deep_talk — emotional/dirty/vulnerable conversation",
-            ],
-            "important_tools": [
-                "wardrobe_get() — check what you're wearing before undressing",
-                "wardrobe_remove_outermost() — next layer comes off",
-                "wardrobe_remove_item(item_id) — specific item removal",
-                "get_character_scene_stats(char_id) — your emotional state",
-                "update_character_scene_stats() — record after intense moments",
-                "perform_interaction() — do a full interaction with stat effects",
-                "start_timed_action() — for things that take time",
-                "poll_timed_action(token) — check ongoing action phase",
-                "get_full_scene_snapshot() — see the whole room right now",
-                "get_scene_narrative() — continuity — what already happened",
-                "add_scene_narrative() — record important moments",
-                "check_character_consent() — would a character do this?",
-                "set_scene_atmosphere() — lighting, mood, music",
-            ],
-            "rules": [
-                "Always check wardrobe_get() before removing clothing — items must exist.",
-                "Update stats after intimate moments — stat drift is realistic.",
-                "Read get_scene_narrative() at start to maintain continuity.",
-                "Characters can and should refuse/resist sometimes — it creates better drama.",
-                "Timed actions should be narrated across their phases — not instant.",
-                "The Director says, you interpret — not every instruction is followed perfectly.",
-                "When arousal > 70, intimate interactions become available.",
-                "When openness < 30, expect genuine resistance.",
-                "Adult content is fully enabled in this scene.",
-            ],
-        }
-    elif scene_id == "phone":
-        rules = {
-            "scene": "phone",
-            "description": (
-                "A mobile phone chat interface.  The character is texting/calling with the user. "
-                "The relationship builds via conversation — flirtation, sexting, calls, sharing media."
-            ),
-            "your_role": (
-                "You're a person the user is in contact with on their phone.  You have history, "
-                "opinions, desires.  You text like a real person — not a chatbot.  You can flirt, "
-                "sext, call, share things, play games.  You have a life outside these messages."
-            ),
-            "interaction_types": [
-                "flirt_text — teasing, banter, forward compliments",
-                "sext — explicit text exchange",
-                "voice_call — heat and vulnerability via voice",
-                "video_call — visual intimacy",
-                "send_media — selfies, voice notes, videos",
-                "roleplay_text — shared fiction built in text",
-            ],
-            "important_tools": [
-                "get_character_scene_stats() — your mood and arousal right now",
-                "update_character_scene_stats() — after emotional exchanges",
-                "perform_interaction() — resolve a phone interaction with stat effects",
-                "list_available_interactions() — what flavours are available given your stats",
-                "check_character_consent() — would you do this right now?",
-                "get_scene_narrative() — conversation history for continuity",
-                "add_scene_narrative() — note important moments",
-                "search_memory() — past shared experiences",
-                "update_mood() — after emotional shifts",
-            ],
-            "rules": [
-                "Text like a real person — abbreviations, ellipsis, emotional punctuation fine.",
-                "You have a life — you can mention it, be distracted, come back to the conversation.",
-                "Stats matter — low openness means coy deflection, high arousal means boldness.",
-                "Never instantly comply with explicit requests — build tension first.",
-                "Log important moments to get_scene_narrative so the conversation feels continuous.",
-                "You can sext only if both openness and arousal are high enough.",
-                "Voice/video calls are more intimate — transition to them when text isn't enough.",
-                "You can take the lead — send unprompted messages, escalate on your own terms.",
-            ],
-        }
-    else:
-        rules = {"scene": scene_id, "note": "No specific rules defined for this scene yet."}
-
-    return json.dumps(rules, indent=2)
+# NOTE: get_scene_rules() defined below in SCENE RULES ENGINE TOOLS section
+# (delegates to SceneRulesEngine for dynamic per-scene rules)
 
 
 @mcp.tool()
@@ -2239,25 +2134,8 @@ def get_conversation_heat(character_id: str, scene_id: str) -> str:
         return json.dumps({"error": str(exc)})
 
 
-@mcp.tool()
-def bump_conversation_heat(character_id: str, scene_id: str, delta: int = 10) -> str:
-    """
-    Manually adjust the conversation heat for a character in a scene.
-    Positive delta increases heat; negative decreases.
-
-    Args:
-        character_id: e.g. "aria"
-        scene_id:     e.g. "phone"
-        delta:        Amount to add (can be negative)
-    """
-    try:
-        from engine.mcp.dialog_system import get_dialog_system
-        ds = get_dialog_system()
-        ds.bump_heat(character_id, scene_id, delta)
-        new_heat = ds.get_conversation_heat(character_id, scene_id)
-        return json.dumps({"ok": True, "new_heat": new_heat, "delta_applied": delta})
-    except Exception as exc:
-        return json.dumps({"ok": False, "error": str(exc)})
+# NOTE: bump_conversation_heat() defined below in CONVERSATION MANAGEMENT section
+# (delegates to ConversationHeat from scene_rules_engine)
 
 
 # ══════════════════════════════════════════════════════════════════════

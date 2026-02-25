@@ -1,4 +1,4 @@
-# CosySim Skills System — v3.1
+# CosySim Skills System — v3.2
 
 Skills are Python callables that an LLM agent invokes as **tools** during inference.
 The `@skill` decorator registers them into the global `SKILL_REGISTRY`. LMStudio
@@ -36,14 +36,24 @@ VirtualAgentManager.infer()     engine/agents/virtual_agent_manager.py
 | `tts` | tts_skills.py | `generate_voice_message`, `cast_voice`, `list_voice_presets`, `list_voicemails` |
 | `social` | social_skills.py | Social interaction skills |
 | `boards` | board_skills.py | Shared board game mechanics |
+| `training` | training_skills.py | `trigger_finetune`, `get_training_status`, `export_training_data`, `list_trained_models` |
+| `notebooklm` | notebooklm_skills.py | `notebooklm_ask`, `notebooklm_add_source`, `notebooklm_generate_audio`, `notebooklm_list_notebooks`, `notebooklm_search` |
 
 ### Scene Packs (content/scenes/{name}/{name}_skills.py)
 
 | Pack | Module | Skills | Count |
 |------|--------|--------|-------|
-| `realm` | realm_skills.py | inventory CRUD, stat checks, director control, murder mystery, fourth-wall, desperation dice | 11 |
-| `neoncity` | neoncity_skills.py | player status, movement, combat, hacking, storm queries, events, end turn | 8 |
+| `realm` | realm_skills.py | inventory CRUD, stat checks, director control, murder mystery, fourth-wall, desperation dice | 16 |
+| `bedroom` | bedroom_skills.py | wardrobe, interactions, stats, consent, atmosphere, narrative, timed actions, furniture | 10 |
+| `neoncity` | neoncity_skills.py | player status, movement, combat, hacking, storm queries, events, end turn | 9 |
+| `phone` | phone_skills.py | message send/read, contacts, media, call controls | 6 |
+| `casino` | casino_skills.py | game state, betting, cards, table management, jackpots | 6 |
+| `heist` | heist_skills.py | crew management, intel, planning, execute phase, escape | 6 |
+| `lounge` | lounge_skills.py | jukebox, drinks, conversation starters, atmosphere, social | 6 |
 | `coders` | coders_skills.py | room status, agent info, add feature, feature list, run code, tick | 6 |
+| `command_center` | command_center_skills.py | system monitoring, model control, scene status, diagnostics, training | 6 |
+| `warzone` | warzone_skills.py | squad control, tactical, objectives, combat, intel | 5 |
+| `gallery` | gallery_skills.py | exhibit management, art generation, critique, curation, tours | 5 |
 
 ---
 

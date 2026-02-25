@@ -177,6 +177,70 @@ CosySim exposes its capabilities as an MCP server (`engine/mcp/cosysim_server.py
 | `adjust_relationship` | Modify trust/attraction between characters |
 | `get_chain_events` | Browse EventChain events |
 | `log_event` | Inject an event into a chain |
+
+## Model Manager
+
+The `ModelManager` (`engine/lmstudio/model_manager.py`) handles model lifecycle with three loading strategies:
+
+| Strategy | Description | Best For |
+|----------|-------------|----------|
+| `CONCURRENT` | One model always loaded, N parallel requests | Multi-agent same-model |
+| `JIT` | Load on demand, evict previous on next load | Sequential specialist workflows |
+| `JIT_TTL` | Load on demand, auto-unload after idle timeout | Sporadic specialist calls |
+
+```python
+from engine.lmstudio.model_manager import get_model_manager, LoadMode
+
+mgr = get_model_manager()
+mgr.set_mode(LoadMode.JIT_TTL, ttl_seconds=300)
+model_id = mgr.ensure_loaded("qwen3-8b")
+# ... use model ...
+mgr.release("qwen3-8b")
+```
+
+## Resource Manager
+
+The `ResourceManager` (`engine/lmstudio/resource_manager.py`) extends ModelManager with six hardware-aware strategies tuned for the target platform (i9 NUC, RTX 2060 12GB):
+
+| Strategy | GPU Models | CPU Models | Use Case |
+|----------|-----------|------------|----------|
+| `SINGLE_BIG` | 1 large (30B+) | 0 | Deep single-agent conversation |
+| `CONCURRENT` | 1 medium (8B) | 0 | Multi-agent same-model |
+| `MULTI_SMALL` | 2-3 small (3B) | 0 | Each agent gets own model |
+| `JIT_SWAP` | 1 at a time | 0 | Sequential specialist |
+| `SPECULATIVE` | 1 main + 1 draft | 0 | 2-3x speedup via spec decode |
+| `HYBRID` | 1 interactive | 1 background | GPU for dialogue, CPU for batch |
+
+## Inference Router
+
+The `InferenceRouter` (`engine/lmstudio/router.py`) provides a three-tier priority queue:
+
+```
+submit(request) → Priority Queue → Tier Selection → Channel → Model
+                   (heapq)         T1/T2/T3         SDK/REST
+```
+
+| Tier | Device | Model | Tasks |
+|------|--------|-------|-------|
+| T1 GPU Primary | GPU | Qwen3-8B | Dialogue, .act() tool calling, narration |
+| T2 CPU Utility | CPU | Ministral-3B | Auto-texts, decisions, JSON output |
+| T3 CPU Router | CPU | Gemma-270M (fine-tuned) | Tag extraction, routing, classification |
+
+Priority levels: `REALTIME(0)` > `INTERACTIVE(1)` > `BACKGROUND(2)` > `BATCH(3)`
+
+## Speculative Decoding
+
+Use a small draft model to generate candidate tokens verified by the main model (1.5-2.5x speedup):
+
+```python
+client = get_lms_client()
+client.enable_speculative("qwen3-8b", "qwen3-0.5b")
+
+# For TTS: Qwen3-TTS 0.6B as draft for 1.7B (same-family, same tokenizer)
+# Config: tts.speculative.enabled: true, tts.speculative.draft_model: "0.6b"
+```
+
+Monitor acceptance ratio via pipeline metrics: `accepted_draft_tokens_count` / `rejected_draft_tokens_count`.
 | `list_characters` | List all characters with IDs |
 | `get_benchmark_stats` | Get timing KPIs |
 | `generate_image_request` | Proxy to ComfyUI |
