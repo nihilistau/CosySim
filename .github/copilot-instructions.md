@@ -7,7 +7,7 @@
 
 ## Project Overview
 
-CosySim is a multi-scene AI simulation framework (v0.50a) built on
+CosySim is a multi-scene AI simulation framework (v0.50b) built on
 a custom MCP pipeline with LMStudio v1 API integration and Nexus knowledge system.
 It orchestrates virtual agents across 17 interactive scenes, each with real-time
 state management, skill-based tool calling, dialog systems, and interceptor-governed
@@ -107,6 +107,7 @@ Path-specific rules auto-apply based on file patterns:
 | `instructions/python.instructions.md` | `**/*.py` |
 | `instructions/scenes.instructions.md` | `content/scenes/**/*.py` |
 | `instructions/mcp-framework.instructions.md` | `engine/mcp/**`, `engine/skills/**`, `engine/agents/**` |
+| `instructions/nexus.instructions.md` | `engine/nexus/**`, `engine/skills/builtin/nexus_skills.py`, `engine/skills/builtin/coding_skills.py` |
 | `instructions/testing.instructions.md` | `tests/**/*.py` |
 | `instructions/lmstudio.instructions.md` | `engine/lmstudio/**/*.py` |
 | `instructions/config.instructions.md` | `config/**/*.yaml` |
@@ -125,8 +126,50 @@ Path-specific rules auto-apply based on file patterns:
 | `Doc Writer` | Maintain documentation system |
 | `Codebase Navigator` | Explain architecture, trace call chains |
 | `System Architect` | Cross-project architecture decisions |
+| `Nexus Researcher` | Research topics, store findings, manage knowledge |
 
 ## Documentation
 - Entry point: `docs/INDEX.md`
 - Architecture: `docs/ARCHITECTURE.md`
 - Full doc list: 20 files covering framework, scenes, skills, config, API, testing, training, LMStudio, TTS, characters, admin
+
+## Nexus Knowledge System
+
+Nexus is the **first port of call** for information retrieval and storage.
+Before writing code, search Nexus. After making decisions, store them in Nexus.
+
+### Quick Nexus Usage
+```python
+from engine.nexus.client import get_nexus_client
+client = get_nexus_client()
+
+# Search before coding
+results = client.search("interceptor pipeline")
+answer = client.ask("How does state persistence work?")
+
+# Store decisions and knowledge
+client.add_entry("Decision: Use FTS5 for search", content, content_type="document", category="architecture")
+client.add_qa("How does X work?", "X works by...", category="dev")
+
+# Research a topic deeply
+session = client.research("Best approach for agent memory?")
+client.converse(session["research_id"], "What about token limits?")
+client.finish_research(session["research_id"])
+```
+
+### Nexus Skills for Agents
+| Skill | Use For |
+|-------|---------|
+| `nexus_ask` | Smart Q&A (cache → FTS → NLM) |
+| `nexus_search` | Full-text knowledge search |
+| `nexus_research` | Start deep NLM research |
+| `nexus_converse` | Continue research conversation |
+| `nexus_finish_research` | Complete and distill research |
+| `nexus_youtube` | Import video transcripts |
+| `coding_store_snippet` | Store reusable code |
+| `coding_store_decision` | Record architecture decisions |
+| `coding_research` | Research APIs/libraries |
+| `coding_store_bug` | Record bug analysis + fix |
+| `coding_log_session` | Track dev sessions |
+
+See `instructions/nexus.instructions.md` for full usage guide.
