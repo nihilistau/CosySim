@@ -500,6 +500,209 @@ const CC = (function () {
         .catch(e => addFeedItem("alert", `Export error: ${e.message}`));
     }
 
+    // ── C1: Live Feed Panel ────────────────────────────────
+    let liveFeedTimer = null;
+    let liveFeedScene = "";
+
+    function loadLiveFeedScenes() {
+        fetch("/api/live_feed")
+            .then(r => r.json())
+            .then(scenes => {
+                const sel = $("#live-feed-scene");
+                if (!sel) return;
+                const prev = sel.value;
+                sel.innerHTML = '<option value="">Select a scene...</option>';
+                (scenes || []).forEach(s => {
+                    const opt = document.createElement("option");
+                    opt.value = s.name;
+                    opt.textContent = s.title || s.name;
+                    sel.appendChild(opt);
+                });
+                if (prev) sel.value = prev;
+            })
+            .catch(() => {});
+    }
+
+    function onLiveFeedSceneChange() {
+        const sel = $("#live-feed-scene");
+        liveFeedScene = sel ? sel.value : "";
+        if (liveFeedTimer) clearInterval(liveFeedTimer);
+        if (liveFeedScene) {
+            refreshLiveFeed();
+            liveFeedTimer = setInterval(refreshLiveFeed, 5000);
+        } else {
+            const container = $("#live-feed-messages");
+            if (container) container.innerHTML = '<div class="muted">Select a scene to view live messages</div>';
+        }
+    }
+
+    function refreshLiveFeed() {
+        if (!liveFeedScene) return;
+        fetch(`/api/live_feed/${liveFeedScene}?limit=20`)
+            .then(r => r.json())
+            .then(msgs => {
+                const container = $("#live-feed-messages");
+                if (!container) return;
+                if (!msgs || msgs.length === 0) {
+                    container.innerHTML = '<div class="muted">No messages yet</div>';
+                    return;
+                }
+                container.innerHTML = msgs.map(m =>
+                    `<div class="feed-item compact">
+                        <span class="feed-ts">${ts(m.ts)}</span>
+                        <span class="feed-type scene">${m.speaker || "?"}</span>
+                        <span class="feed-msg">${m.text || ""}</span>
+                    </div>`
+                ).join("");
+                container.scrollTop = container.scrollHeight;
+            })
+            .catch(() => {});
+    }
+
+    // ── C2: Scene Status Cards ──────────────────────────────
+    function refreshSceneStatus() {
+        fetch("/api/scene_status")
+            .then(r => r.json())
+            .then(cards => {
+                const container = $("#scene-status-cards");
+                if (!container) return;
+                if (!cards || cards.length === 0) {
+                    container.innerHTML = '<div class="muted">No scenes running</div>';
+                    return;
+                }
+                container.innerHTML = cards.map(c => {
+                    const heat = c.conversation_heat != null ? c.conversation_heat : "-";
+                    const heatClass = heat >= 80 ? "crit" : heat >= 50 ? "warn" : "";
+                    const stateEntries = Object.entries(c.game_state || {});
+                    const stateStr = stateEntries.length > 0
+                        ? stateEntries.map(([k, v]) => `${k}: ${v}`).join(", ")
+                        : "—";
+                    return `<div class="status-card">
+                        <div class="status-card-header">
+                            <span class="status-card-title">${c.title || c.name}</span>
+                            <span class="status-dot green" title="Running"></span>
+                        </div>
+                        <div class="status-card-body">
+                            <div class="detail-stat"><span>Port</span><span>${c.port || "?"}</span></div>
+                            <div class="detail-stat"><span>Characters</span><span>👤 ${c.active_characters}</span></div>
+                            <div class="detail-stat"><span>State</span><span>${stateStr}</span></div>
+                            <div class="detail-stat"><span>Heat</span><span class="${heatClass}">🔥 ${heat}</span></div>
+                        </div>
+                    </div>`;
+                }).join("");
+            })
+            .catch(() => {});
+    }
+
+    // ── C3: Character State Viewer ──────────────────────────
+    function loadCharacterState() {
+        const input = $("#char-state-input");
+        const charId = input ? input.value.trim() : "";
+        if (!charId) return;
+
+        fetch(`/api/character_state/${charId}`)
+            .then(r => r.json())
+            .then(data => {
+                const container = $("#char-state-content");
+                if (!container) return;
+                if (data.error) {
+                    container.innerHTML = `<div class="muted">${data.error}</div>`;
+                    return;
+                }
+
+                let html = '<div class="char-state-columns">';
+
+                // Stats column
+                html += '<div class="char-state-col"><h3>Stats</h3>';
+                const stats = data.stats || {};
+                for (const [k, v] of Object.entries(stats)) {
+                    if (v != null) html += `<div class="detail-stat"><span>${k}</span><span>${v}</span></div>`;
+                }
+                if (data.scene) html += `<div class="detail-stat"><span>Scene</span><span>${data.scene}</span></div>`;
+                html += '</div>';
+
+                // Buffs column
+                html += '<div class="char-state-col"><h3>Active Buffs</h3>';
+                const buffs = data.buffs || [];
+                if (buffs.length === 0) {
+                    html += '<div class="muted">No active buffs</div>';
+                } else {
+                    buffs.forEach(b => {
+                        const deltas = Object.entries(b.deltas || {}).map(([k, v]) => `${k}:${v > 0 ? "+" : ""}${v}`).join(" ");
+                        html += `<div class="buff-card">
+                            <span class="buff-id">${b.id}</span>
+                            <span class="buff-deltas">${deltas}</span>
+                            <span class="muted">${b.remaining_secs}s left</span>
+                        </div>`;
+                    });
+                }
+                html += '</div>';
+
+                // Tags column
+                html += '<div class="char-state-col"><h3>Top Tags</h3>';
+                const tags = data.tags || [];
+                if (tags.length === 0) {
+                    html += '<div class="muted">No tags</div>';
+                } else {
+                    tags.forEach(t => {
+                        const pct = Math.min(100, Math.round(t.strength * 100));
+                        html += `<div class="tag-row">
+                            <span class="tag-name">${t.tag}</span>
+                            <div class="meter" style="flex:1;height:10px;"><div class="meter-fill" style="width:${pct}%"></div></div>
+                            <span class="tag-strength">${t.strength}</span>
+                        </div>`;
+                    });
+                }
+                html += '</div>';
+
+                // Relationships
+                html += '<div class="char-state-col"><h3>Relationships</h3>';
+                const rels = data.relationships || [];
+                if (rels.length === 0) {
+                    html += '<div class="muted">No relationships</div>';
+                } else {
+                    rels.forEach(r => {
+                        html += `<div class="detail-stat"><span>→ ${r.target}</span><span>T:${r.trust} A:${r.attraction}</span></div>`;
+                    });
+                }
+                html += '</div>';
+
+                html += '</div>';
+                container.innerHTML = html;
+            })
+            .catch(() => {});
+    }
+
+    // ── C5: System Metrics ──────────────────────────────────
+    function refreshSystemMetrics() {
+        fetch("/api/system_metrics")
+            .then(r => r.json())
+            .then(data => {
+                const container = $("#sys-metrics-content");
+                if (!container) return;
+
+                const fw = data.framework || {};
+                const totals = data.totals || {};
+                const mem = data.memory || {};
+
+                let html = '<div class="stat-grid" style="grid-template-columns:repeat(3,1fr);">';
+                html += `<div class="stat-card"><div class="stat-value">${fw.ready ? "✓" : "✗"}</div><div class="stat-label">Framework</div></div>`;
+                html += `<div class="stat-card"><div class="stat-value">${totals.scenes || 0}</div><div class="stat-label">Scenes</div></div>`;
+                html += `<div class="stat-card"><div class="stat-value">${totals.characters || 0}</div><div class="stat-label">Characters</div></div>`;
+                html += `<div class="stat-card"><div class="stat-value">${totals.events || 0}</div><div class="stat-label">Events</div></div>`;
+                html += `<div class="stat-card"><div class="stat-value">${mem.rss_mb || "?"}</div><div class="stat-label">RSS (MB)</div></div>`;
+                html += `<div class="stat-card"><div class="stat-value">${fw.active_timers || 0}</div><div class="stat-label">Timers</div></div>`;
+                html += '</div>';
+
+                if (fw.scenes && fw.scenes.length > 0) {
+                    html += '<div style="margin-top:8px;font-size:11px;color:var(--cc-muted);">Scenes: ' + fw.scenes.join(", ") + '</div>';
+                }
+
+                container.innerHTML = html;
+            })
+            .catch(() => {});
+    }
+
     // ── Init ────────────────────────────────────────────────
     function init() {
         connect();
@@ -522,6 +725,18 @@ const CC = (function () {
                 .then(applyDashboard)
                 .catch(() => {});
         }, 2000);
+
+        // C1: Populate live feed scene dropdown
+        loadLiveFeedScenes();
+        setInterval(loadLiveFeedScenes, 15000);
+
+        // C2: Load scene status cards
+        refreshSceneStatus();
+        setInterval(refreshSceneStatus, 5000);
+
+        // C5: Load system metrics
+        refreshSystemMetrics();
+        setInterval(refreshSystemMetrics, 10000);
     }
 
     document.addEventListener("DOMContentLoaded", init);
@@ -530,5 +745,7 @@ const CC = (function () {
         togglePause, clearFeed, exportTraining,
         selectScene, showAllScenes, prevScene, nextScene,
         viewCharacter, viewConversations, injectEvent,
+        onLiveFeedSceneChange, refreshSceneStatus,
+        loadCharacterState, refreshSystemMetrics,
     };
 })();

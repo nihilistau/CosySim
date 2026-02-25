@@ -176,6 +176,55 @@
                 Export JSONL
             </button>
         </section>
+
+        <!-- C1: Live Feed Panel -->
+        <section class="cc-panel cc-wide" id="panel-live-feed">
+            <div class="panel-header-row">
+                <h2>Live Feed</h2>
+                <div class="live-feed-controls">
+                    <select id="live-feed-scene" class="cc-select" onchange="CC.onLiveFeedSceneChange()">
+                        <option value="">Select a scene...</option>
+                    </select>
+                    <span id="live-feed-status" class="muted">Auto-refresh: 5s</span>
+                </div>
+            </div>
+            <div id="live-feed-messages" class="feed-list compact" style="max-height:280px;">
+                <div class="muted">Select a scene to view live messages</div>
+            </div>
+        </section>
+
+        <!-- C2: Scene Status Cards -->
+        <section class="cc-panel cc-wide" id="panel-scene-status">
+            <div class="panel-header-row">
+                <h2>Scene Status Cards</h2>
+                <button class="cc-btn small" onclick="CC.refreshSceneStatus()">↻ Refresh</button>
+            </div>
+            <div id="scene-status-cards" class="scene-status-grid">
+                <div class="muted">Loading scene status...</div>
+            </div>
+        </section>
+
+        <!-- C3: Character State Viewer -->
+        <section class="cc-panel cc-wide" id="panel-char-state">
+            <div class="panel-header-row">
+                <h2>Character State Viewer</h2>
+                <div class="char-state-controls">
+                    <input type="text" id="char-state-input" class="cc-input" placeholder="Enter character ID...">
+                    <button class="cc-btn small" onclick="CC.loadCharacterState()">Load</button>
+                </div>
+            </div>
+            <div id="char-state-content" class="char-state-grid">
+                <div class="muted">Enter a character ID to inspect state</div>
+            </div>
+        </section>
+
+        <!-- C5: System Metrics -->
+        <section class="cc-panel" id="panel-sys-metrics">
+            <h2>System Metrics</h2>
+            <div id="sys-metrics-content">
+                <div class="muted">Loading...</div>
+            </div>
+        </section>
     </main>
 
     <!-- Live Event Feed -->

@@ -15,6 +15,7 @@ Displays:
 from __future__ import annotations
 
 import logging
+import sys
 import threading
 import time
 from pathlib import Path
@@ -74,6 +75,7 @@ class CommandCenterScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
 
         self._register_routes()
         self._register_scene_routes()
+        self._register_monitoring_routes()
         self._register_socketio()
 
         # Framework integration
@@ -606,6 +608,276 @@ class CommandCenterScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
                 return jsonify({"ok": True, "char_id": char_id, "updated": data})
             except Exception as exc:
                 return jsonify({"error": str(exc)}), 500
+
+    # ------------------------------------------------------------------
+    # C1–C5 Live Monitoring Routes
+    # ------------------------------------------------------------------
+
+    def _register_monitoring_routes(self):
+        app = self.app
+
+        # -- C1: Live Feed -------------------------------------------------
+
+        @app.route("/api/live_feed")
+        def api_live_feed():
+            """Return the list of running scenes for the Live Feed selector."""
+            scenes = get_all_active_scenes()
+            result = []
+            for sid, sobj in scenes.items():
+                if sid == SCENE_ID:
+                    continue
+                result.append({
+                    "name": sid,
+                    "title": getattr(sobj, "SCENE_METADATA", {}).get("title", sid),
+                    "port": getattr(sobj, "port", None),
+                })
+            return jsonify(result)
+
+        @app.route("/api/live_feed/<scene_name>")
+        def api_live_feed_scene(scene_name: str):
+            """Return recent messages/events from a scene's EventChain."""
+            limit = request.args.get("limit", 20, type=int)
+            messages: List[Dict] = []
+
+            # Primary: MCP framework narratives
+            try:
+                fw = get_framework()
+                narratives = fw.get_state(scene_name, "narratives")
+                if narratives and isinstance(narratives, list):
+                    for n in narratives[-limit:]:
+                        messages.append({
+                            "speaker": n.get("speaker", "system"),
+                            "text": n.get("text", "")[:200],
+                            "ts": n.get("ts", 0),
+                            "type": "narrative",
+                        })
+            except Exception:
+                pass
+
+            # Fallback: EventChain
+            if not messages:
+                try:
+                    from content.simulation.database.events import get_event_chain
+                    ec = get_event_chain()
+                    chains = ec.get_recent_chains(scene_id=scene_name, limit=5)
+                    for chain in chains:
+                        chain_id = chain.get("chain_id")
+                        if chain_id:
+                            events = ec.get_chain(chain_id, limit=limit)
+                            for e in events:
+                                messages.append({
+                                    "speaker": e.get("actor", "system"),
+                                    "text": (e.get("summary") or e.get("event_type", ""))[:200],
+                                    "ts": e.get("timestamp", 0),
+                                    "type": e.get("event_type", "event"),
+                                })
+                except Exception:
+                    pass
+
+            # Sort by timestamp, take last N
+            messages.sort(key=lambda m: m.get("ts", 0))
+            return jsonify(messages[-limit:])
+
+        # -- C2: Scene Status Cards ----------------------------------------
+
+        @app.route("/api/scene_status")
+        def api_scene_status():
+            """Return status cards for ALL active scenes."""
+            scenes = get_all_active_scenes()
+            result = []
+            for sid, sobj in scenes.items():
+                if sid == SCENE_ID:
+                    continue
+                card: Dict[str, Any] = {
+                    "name": sid,
+                    "port": getattr(sobj, "port", None),
+                    "running": True,
+                }
+
+                # Title from metadata
+                meta = getattr(sobj, "SCENE_METADATA", None)
+                card["title"] = meta.get("title", sid) if meta else sid
+
+                # Active characters
+                chars = []
+                if hasattr(sobj, "characters") and isinstance(sobj.characters, dict):
+                    chars = list(sobj.characters.keys())
+                elif hasattr(sobj, "_characters") and isinstance(sobj._characters, dict):
+                    chars = list(sobj._characters.keys())
+                card["active_characters"] = len(chars)
+                card["character_names"] = chars
+
+                # Game state
+                state_snap: Dict[str, Any] = {}
+                state = getattr(sobj, "state", None) or getattr(sobj, "_state", None)
+                if state:
+                    for attr in ("phase", "current_phase", "game_phase", "round_num",
+                                 "turn", "escalation_level", "score", "suspicion"):
+                        val = getattr(state, attr, None)
+                        if val is not None:
+                            state_snap[attr] = val
+                    if hasattr(state, "to_dict"):
+                        try:
+                            d = state.to_dict()
+                            for k in ("phase", "round", "turn", "score"):
+                                if k in d and k not in state_snap:
+                                    state_snap[k] = d[k]
+                        except Exception:
+                            pass
+                card["game_state"] = state_snap
+
+                # Conversation heat
+                heat = None
+                try:
+                    fw = get_framework()
+                    heat_data = fw.get_state(sid, "conversation_heat")
+                    if heat_data:
+                        heat = heat_data.get("level", 0)
+                except Exception:
+                    pass
+                card["conversation_heat"] = heat
+
+                result.append(card)
+            return jsonify(result)
+
+        # -- C3: Character State Viewer ------------------------------------
+
+        @app.route("/api/character_state/<character_id>")
+        def api_character_state(character_id: str):
+            """Return detailed character state: stats, buffs, tags, location."""
+            result: Dict[str, Any] = {"id": character_id}
+
+            # Full state from coordinator (mood, energy, etc.)
+            try:
+                from engine.mcp.character_state_coordinator import get_coordinator
+                coord = get_coordinator()
+                full = coord.get_full_state(character_id)
+                result["stats"] = {
+                    "mood": full.get("mood", "neutral"),
+                    "energy": full.get("energy", 100),
+                    "arousal": full.get("arousal", 0),
+                    "inhibition": full.get("inhibition", 50),
+                    "happiness": full.get("happiness"),
+                }
+                # Include any extra numeric stats
+                for k, v in full.items():
+                    if k not in ("character_id", "mood", "energy", "arousal",
+                                 "inhibition", "happiness") and isinstance(v, (int, float)):
+                        result["stats"][k] = v
+            except Exception:
+                result["stats"] = {}
+
+            # Relationships
+            try:
+                from content.simulation.database.db import Database
+                db = Database()
+                rels = db.get_relationships(character_id)
+                if rels:
+                    result["relationships"] = [
+                        {"target": r.get("target_id"), "trust": r.get("trust", 0),
+                         "attraction": r.get("attraction", 0)}
+                        for r in rels[:10]
+                    ]
+                else:
+                    result["relationships"] = []
+            except Exception:
+                result["relationships"] = []
+
+            # Active buffs with remaining duration
+            try:
+                from engine.mcp.character_state_coordinator import get_coordinator
+                coord = get_coordinator()
+                buffs = coord.get_active_buffs(character_id)
+                result["buffs"] = [
+                    {"id": bid, "deltas": info.get("deltas", {}),
+                     "remaining_secs": round(info.get("remaining_secs", 0), 1),
+                     "source": info.get("source", "")}
+                    for bid, info in (buffs or {}).items()
+                ]
+            except Exception:
+                result["buffs"] = []
+
+            # Top 5 behavioral tags with strength
+            try:
+                from engine.mcp.character_state_coordinator import get_coordinator
+                coord = get_coordinator()
+                top = coord.get_top_tags(character_id, n=5)
+                result["tags"] = [
+                    {"tag": tag, "strength": round(strength, 2)}
+                    for tag, strength in (top or {}).items()
+                ]
+            except Exception:
+                result["tags"] = []
+
+            # Current scene location
+            try:
+                fw = get_framework()
+                char_node = fw.get_character(character_id)
+                result["scene"] = getattr(char_node, "current_scene", None)
+            except Exception:
+                result["scene"] = None
+
+            return jsonify(result)
+
+        # -- C5: System Metrics --------------------------------------------
+
+        @app.route("/api/system_metrics")
+        def api_system_metrics():
+            """Return framework status, totals, and memory estimates."""
+            result: Dict[str, Any] = {}
+
+            # Framework status
+            try:
+                fw = get_framework()
+                result["framework"] = fw.get_status()
+            except Exception:
+                result["framework"] = {"ready": False}
+
+            # Totals
+            scenes = get_all_active_scenes()
+            total_chars = 0
+            for sid, sobj in scenes.items():
+                if hasattr(sobj, "characters") and isinstance(sobj.characters, dict):
+                    total_chars += len(sobj.characters)
+                elif hasattr(sobj, "_characters") and isinstance(sobj._characters, dict):
+                    total_chars += len(sobj._characters)
+
+            total_events = 0
+            try:
+                from content.simulation.database.events import get_event_chain
+                ec = get_event_chain()
+                total_events = ec.get_event_count()
+            except Exception:
+                pass
+
+            result["totals"] = {
+                "scenes": len([s for s in scenes if s != SCENE_ID]),
+                "characters": total_chars,
+                "events": total_events,
+            }
+
+            # Memory estimates
+            try:
+                import os
+                process = None
+                try:
+                    import psutil
+                    process = psutil.Process(os.getpid())
+                    mem = process.memory_info()
+                    result["memory"] = {
+                        "rss_mb": round(mem.rss / (1024 * 1024), 1),
+                        "vms_mb": round(mem.vms / (1024 * 1024), 1),
+                    }
+                except ImportError:
+                    result["memory"] = {
+                        "rss_mb": round(sys.getsizeof(scenes) / (1024 * 1024), 3),
+                        "estimate": True,
+                    }
+            except Exception:
+                result["memory"] = {}
+
+            result["timestamp"] = time.time()
+            return jsonify(result)
 
     def _register_socketio(self):
         @self.socketio.on("connect")

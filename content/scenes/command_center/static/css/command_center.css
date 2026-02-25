@@ -439,3 +439,98 @@ body {
     font-size: 11px;
 }
 .feed-type.scene { color: var(--cc-green); }
+
+/* C1: Live Feed controls */
+.live-feed-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.cc-select {
+    background: #0f172a;
+    color: var(--cc-text);
+    border: 1px solid var(--cc-border);
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-family: inherit;
+    font-size: 12px;
+    min-width: 180px;
+}
+.cc-select:focus { border-color: var(--cc-accent); outline: none; }
+
+/* C2: Scene Status Grid */
+.scene-status-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 10px;
+}
+.status-card {
+    background: #0f172a;
+    border: 1px solid var(--cc-border);
+    border-radius: 8px;
+    padding: 12px;
+}
+.status-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+.status-card-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--cc-accent);
+}
+.status-card-body .detail-stat {
+    font-size: 11px;
+}
+
+/* C3: Character State Viewer */
+.char-state-controls {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+.cc-input {
+    background: #0f172a;
+    color: var(--cc-text);
+    border: 1px solid var(--cc-border);
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-family: inherit;
+    font-size: 12px;
+    width: 200px;
+}
+.cc-input:focus { border-color: var(--cc-accent); outline: none; }
+.char-state-columns {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+}
+.char-state-col {
+    background: #0f172a;
+    border: 1px solid var(--cc-border);
+    border-radius: 6px;
+    padding: 10px;
+    max-height: 260px;
+    overflow-y: auto;
+}
+.buff-card {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    padding: 3px 0;
+    font-size: 11px;
+    border-bottom: 1px solid #1a2332;
+}
+.buff-id { color: var(--cc-accent); font-weight: 600; min-width: 60px; }
+.buff-deltas { color: var(--cc-yellow); }
+.tag-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    padding: 3px 0;
+    font-size: 11px;
+}
+.tag-name { min-width: 70px; color: var(--cc-text); }
+.tag-strength { min-width: 36px; text-align: right; color: var(--cc-muted); }
