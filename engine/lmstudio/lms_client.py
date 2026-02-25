@@ -1,7 +1,7 @@
 """
-LMSClient v3.2 — API-Complete LMStudio v1 REST API client
+LMSClient v0.50a — API-Complete LMStudio v1 REST API client
 
-**CosySim Framework v3.2** — all inference through ``/api/v1/chat``.
+**CosySim Framework v0.50a** — all inference through ``/api/v1/chat``.
 
 Implements every endpoint in the LMStudio v1 REST API:
 

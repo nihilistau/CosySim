@@ -276,7 +276,7 @@ class NeonCityScene(BaseScene, MCPSceneMixin, mcp_scene_id="neoncity"):
     # ── BaseScene contract ──
 
     def start(self) -> None:
-        logger.info("NeonCity v3.2 — Cyberpunk Board Game starting on port %d", self.port)
+        logger.info("NeonCity v0.50a — Cyberpunk Board Game starting on port %d", self.port)
         self.socketio.run(self.app, host=self.host, port=self.port, debug=False, allow_unsafe_werkzeug=True)
 
     def stop(self) -> None:

@@ -195,7 +195,7 @@ SCENE_CATEGORIES = {
         ],
     },
     "showcase": {
-        "label": "⚡ v3.2 Showcase",
+        "label": "⚡ v0.50a Showcase",
         "scenes": [
             {"name": "The Realm",       "icon": "⚔️", "port": 5562, "mode": "realm",
              "desc": "AI-directed LitRPG — dual-agent Director + Assistant, murder mystery, inventory, fourth-wall mechanics",
@@ -270,7 +270,7 @@ def main():
     st.markdown('<h1 class="main-header">🏠 CosySim Hub</h1>', unsafe_allow_html=True)
     st.markdown(
         '<p class="subtitle">Your gateway to the virtual companion system '
-        '<span class="version-badge">v3.2</span></p>',
+        '<span class="version-badge">v0.50a</span></p>',
         unsafe_allow_html=True,
     )
 

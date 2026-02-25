@@ -369,7 +369,7 @@ class CodersRoomScene(BaseScene, MCPSceneMixin, mcp_scene_id="coders"):
     # ── BaseScene contract ──
 
     def start(self) -> None:
-        logger.info("The Coders Room v3.2 starting on port %d", self.port)
+        logger.info("The Coders Room v0.50a starting on port %d", self.port)
         self.socketio.run(self.app, host=self.host, port=self.port, debug=False, allow_unsafe_werkzeug=True)
 
     def stop(self) -> None:

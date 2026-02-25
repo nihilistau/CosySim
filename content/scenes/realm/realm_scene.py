@@ -949,7 +949,7 @@ class RealmScene(BaseScene, MCPSceneMixin, mcp_scene_id="realm"):
     # ── BaseScene contract ──
 
     def start(self) -> None:
-        logger.info("The Realm v3.2 — LitRPG Visual Novel starting on port %d", self.port)
+        logger.info("The Realm v0.50a — LitRPG Visual Novel starting on port %d", self.port)
         self.socketio.run(self.app, host=self.host, port=self.port, debug=False, allow_unsafe_werkzeug=True)
 
     def stop(self) -> None:
