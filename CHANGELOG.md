@@ -185,7 +185,7 @@ All notable changes to CosySim are documented here.
 - **1143 tests passing** across 40 test files (up from 1084)
 - New: `test_tag_registry.py` (52 tests), `test_overlay_router.py` (7 tests)
 
-## [3.2.0] — 2026-02-23
+## [0.49] — 2026-02-23
 
 ### API-Complete LMStudio v1 REST Client
 - **Authentication** — Optional Bearer token support (`lmstudio.api_token` in config); injected into all HTTP requests
@@ -207,9 +207,9 @@ All notable changes to CosySim are documented here.
 - **734 tests passing** across 28 test files (up from 699)
 - 35 new tests covering: auth injection, rich model parsing, load result parsing, unload fix, download endpoints, MCP helpers, speculative decoding, invalid_tool_call parsing
 
-## [3.1.0] — 2026-02-22
+## [0.48] — 2026-02-22
 
-### Showcase Scenes (v3.x Framework Demos)
+### Showcase Scenes (MCP Framework Demos)
 - **The Realm** (port 5562) — Director-guided LitRPG with dual-agent orchestration (Director + Assistant), inventory/stats system, Murder Mystery sub-module, Memory Echoes, Desperation Dice, Fourth-Wall Inventory, Mutiny Mode
 - **NeonCity** (port 5563) — Cyberpunk strategy board game with procedural city grid, Glitch Storm mechanic, 5 prefab nodes (AI Corp, Implant Shop, Mr. Wong's, Black Market, Noodle Stand), movement/combat/hacking phases
 - **The Coders Room** (port 5564) — AI agent idle simulation where agents write real Python code in sandboxed environments, 3 roles (Writer, Reviewer, QA), feature request pipeline, live code output
@@ -229,7 +229,7 @@ All notable changes to CosySim are documented here.
 - **699 tests passing** across 27 test files (up from 670)
 - New: test_realm.py (35), test_neoncity.py (26), test_coders.py (22), test_scene_routes.py (29), test_pipeline_smoke.py (4)
 
-## [3.0.0] — 2026-02-22
+## [0.47] — 2026-02-22
 
 ### MCP Framework v2 — Complete Rewrite
 - **MCPFramework** — Central orchestrator: scene registration, character nodes, event bus, cross-scene messaging
@@ -259,7 +259,7 @@ All notable changes to CosySim are documented here.
 - **Evaluator system** — Post-inference quality evaluation with configurable thresholds
 - **Content router** — Automatic routing of responses to appropriate handlers
 
-## [2.9.0] — 2026-02-22
+## [0.46] — 2026-02-22
 
 ### Pipeline Consolidation
 - **VirtualAgentManager** — Single inference router: request building, model selection, conversation management
@@ -272,14 +272,14 @@ All notable changes to CosySim are documented here.
 - **Pre-call interceptors** — Modify system prompt, inject context, enforce rules
 - **Post-call interceptors** — Extract mood tags, validate content, update stats
 
-## [2.8.0] — 2026-02-22
+## [0.45] — 2026-02-22
 
 ### Stateful Conversations
 - **ConversationManager** — Thread management with response_id tracking
 - **Conversation** — `branch_at()`, `fork()`, `send_stateless()` for conversation branching
 - **Pipeline fixes** — Corrected governance_context flow, fixed interceptor ordering
 
-## [2.7.1] — 2026-02-24
+## [0.44] — 2026-02-24
 
 ### Scene Upgrades
 - **Phone scene** — `infer_processed()` streaming, rich responses (mood/image/voice tags), ComfyUI image gen on `[IMAGE:]` tags
@@ -337,7 +337,7 @@ All notable changes to CosySim are documented here.
 - **BaseScene streaming** — streaming_enabled toggle, active_streams/total_stream_tokens in health
 - **466 tests pass** (up from 424)
 
-## [2.7.0] — 2026-02-23
+## [0.43] — 2026-02-23
 
 ### LMStudio v1 Native API (Full Support)
 - **Native v1 protocol** — All inference via `/api/v1/chat` (input + system_prompt format)
@@ -364,7 +364,7 @@ All notable changes to CosySim are documented here.
 - **Deprecated** `engine/lmstudio/client_v2.py` (test-only)
 - **424 tests pass** (up from 359)
 
-## [2.0.0] — 2026-02-20
+## [0.20] — 2026-02-20
 
 ### Three Pillars Architecture
 - **LMStudio Deep Integration** — REST client v2 (`engine/lmstudio/client_v2.py`) with `/api/v1/` protocol support, per-request MCP integrations, SSE streaming, abort support

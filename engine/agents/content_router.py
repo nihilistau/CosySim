@@ -1,11 +1,11 @@
 """
-ContentRouter v3.1 — Unified content pipeline for all LLM response types.
+ContentRouter — Unified content pipeline for all LLM response types.
 
 Provides robust JSON extraction (brace-counting parser that handles nested
 objects, markdown fences, and text wrappers), inline tag extraction, and
 content classification for routing to downstream handlers.
 
-**v3.1** adds ``ParsedResponse`` and ``ContentRouter.parse_full()`` — a single
+Includes ``ParsedResponse`` and ``ContentRouter.parse_full()`` — a single
 parse pass that extracts all structured data from LLM output.  All downstream
 code (interceptors, stream processor, agent loop) should read from this object
 instead of running independent regex scans.

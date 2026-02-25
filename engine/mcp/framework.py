@@ -1318,7 +1318,7 @@ class MCPFramework:
             path = str(Path(data_dir) / "mcp_framework_state.json")
 
         state = {
-            "version": "3.1.0",
+            "version": "0.50b",
             "saved_at": time.time(),
             "turn": self._turn,
             "scenes": {},

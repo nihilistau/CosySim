@@ -372,7 +372,7 @@ class TavernScene(BaseScene):
         return {
             "name": "tavern",
             "description": self.SCENE_METADATA["description"],
-            "version": "1.0.0",
+            "version": "0.50b",
             "author": "CosySim",
             "port": self.port,
             "tags": ["fantasy", "social", "tavern", "mcp_showcase"],

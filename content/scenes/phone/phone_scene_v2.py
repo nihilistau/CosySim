@@ -255,7 +255,7 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
             "name":        "Phone (v2)",
             "scene_id":    SCENE_ID,
             "description": "iOS-style multi-contact messaging scene with MCP governor.",
-            "version":     "3.1.0",
+            "version":     "0.50b",
             "port":        self.port,
             "skill_packs": ["memory", "character", "social", "narrative"],
         }

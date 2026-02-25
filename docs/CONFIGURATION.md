@@ -30,7 +30,7 @@ Access config values with dot notation: `config.get("lmstudio.base_url")`.
 | Key | Default | Description |
 |-----|---------|-------------|
 | `name` | CosySim AI Playground | Project name |
-| `version` | 3.1.0 | Current version |
+| `version` | 0.50b | Current version |
 | `environment` | default | Active environment |
 
 ### paths

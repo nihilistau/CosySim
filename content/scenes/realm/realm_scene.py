@@ -960,7 +960,7 @@ class RealmScene(BaseScene, MCPSceneMixin, mcp_scene_id="realm"):
             "name": "The Realm",
             "scene_id": SCENE_ID,
             "description": "AI-Directed LitRPG Visual Novel with combat, quests, murder mystery, and dual-agent pipeline.",
-            "version": "3.3.0",
+            "version": "0.50b",
             "port": self.port,
             "author": "CosySim",
             "tags": ["litrpg", "visual_novel", "dual_agent", "combat", "quests", "murder_mystery"],

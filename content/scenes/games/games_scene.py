@@ -162,7 +162,7 @@ class GamesScene(BaseScene):
         return {
             "name": "games",
             "description": self.SCENE_METADATA["description"],
-            "version": "1.0.0",
+            "version": "0.50b",
             "author": "CosySim",
             "port": self.port,
             "tags": ["games", "mystery", "truth_or_dare"],

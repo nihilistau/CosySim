@@ -1216,7 +1216,7 @@ class LoungeScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
         return {
             "name":        "The Velvet Lounge",
             "description": "1920s underground jazz speakeasy — Lola Voss & Viktor Marlowe",
-            "version":     "1.0.0",
+            "version":     "0.50b",
             "author":      "CosySim",
             "port":        LOUNGE_PORT,
             "tags":        ["lounge", "jazz", "mcp", "multi-agent"],

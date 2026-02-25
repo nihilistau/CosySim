@@ -287,7 +287,7 @@ class NeonCityScene(BaseScene, MCPSceneMixin, mcp_scene_id="neoncity"):
             "name": "NeonCity",
             "scene_id": SCENE_ID,
             "description": "Cyberpunk strategy board game with procedural grid, Glitch Storm, and AI opponents.",
-            "version": "3.2.0",
+            "version": "0.50b",
             "port": self.port,
             "author": "CosySim",
             "tags": ["strategy", "cyberpunk", "board_game", "procedural", "showcase"],

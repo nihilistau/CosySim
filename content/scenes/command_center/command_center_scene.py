@@ -1137,7 +1137,7 @@ class CommandCenterScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
             "name": "Command Center",
             "description": "Real-time system observatory — metrics, pipeline, alerts, "
                            "scene monitoring, character viewer, live control",
-            "version": "2.0.0",
+            "version": "0.50b",
             "author": "CosySim",
             "port": self.port,
             "tags": ["dashboard", "metrics", "observatory", "training",

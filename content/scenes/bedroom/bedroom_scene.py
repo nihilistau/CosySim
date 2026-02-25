@@ -2416,7 +2416,7 @@ class BedroomScene(BaseScene, MCPSceneMixin, mcp_scene_id="bedroom"):
         return {
             "name": "Bedroom Scene",
             "description": "Adult multi-agent roleplay bedroom with stats, props, scenarios, and Director controls",
-            "version": "4.1.0",
+            "version": "0.50b",
             "author": "CosySim",
             "port": self.port,
             "tags": ["bedroom", "roleplay", "adult", "multi-agent", "spatial", "intimate", "mcp"],

@@ -1,5 +1,5 @@
 """
-skills_server.py — Lightweight MCP-compatible skills server (v3.1).
+skills_server.py — Lightweight MCP-compatible skills server.
 
 Wraps ``SKILL_REGISTRY`` as an MCP tool endpoint that LMStudio can call
 via ephemeral integration.  Uses Flask blueprint at ``/mcp/skills``.

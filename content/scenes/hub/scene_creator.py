@@ -326,7 +326,7 @@ class {cls}(BaseScene):
         return {{
             "name": "{name}",
             "description": "{desc}",
-            "version": "1.0.0",
+            "version": "0.50b",
             "author": "CosySim",
             "port": {port},
             "tags": ["{name}"],

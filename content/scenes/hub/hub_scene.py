@@ -461,7 +461,7 @@ def _show_settings():
     with c1:
         st.markdown("**System**")
         st.json({
-            "version": "3.2.0",
+            "version": "0.50b",
             "environment": config.get("system.environment", "default"),
             "name": config.get("system.name", "CosySim"),
         })

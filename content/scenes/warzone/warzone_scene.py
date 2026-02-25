@@ -440,7 +440,7 @@ class WarzoneScene(BaseScene, MCPSceneMixin, mcp_scene_id="warzone"):
         return {
             "name": "Global Strike",
             "description": "Modern artillery strategy — Player vs AI Agent",
-            "version": "1.0.0", "author": "CosySim",
+            "version": "0.50b", "author": "CosySim",
             "port": self.port,
             "tags": ["game", "strategy", "threejs", "ai"],
             "skill_packs": ["boards"],

@@ -27,7 +27,7 @@ class TestRealmRoutes:
         assert resp.status_code == 200
         data = resp.get_json()
         assert data["scene_id"] == "realm"
-        assert data["version"] == "3.3.0"
+        assert data["version"] == "0.50b"
         assert "routes" in data
 
     def test_game_state_no_game(self):

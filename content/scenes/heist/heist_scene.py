@@ -503,7 +503,7 @@ class HeistScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
         return {
             "name": "The Heist",
             "description": "Cooperative multi-agent heist planning & execution",
-            "version": "1.0.0",
+            "version": "0.50b",
             "author": "CosySim",
             "port": self.port,
             "tags": ["heist", "multi-agent", "cooperative", "game", "pipeline", "mcp"],

@@ -800,7 +800,7 @@ class CasinoScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
         return {
             "name":        "The Midnight Casino",
             "description": "Noir poker den — Dealer Jack & Hustler Mira. Full MCP showcase.",
-            "version":     "1.0.0",
+            "version":     "0.50b",
             "port":        CASINO_PORT,
             "tags":        ["casino", "poker", "mcp", "multi-agent", "game"],
             "skill_packs": ["social", "environment", "narrative", "memory", "character"],

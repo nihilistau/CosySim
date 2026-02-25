@@ -381,7 +381,7 @@ class CodersRoomScene(BaseScene, MCPSceneMixin, mcp_scene_id="coders"):
             "name": "The Coders Room",
             "scene_id": SCENE_ID,
             "description": "AI agent idle simulation where agents write, review, and test real Python code.",
-            "version": "3.2.0",
+            "version": "0.50b",
             "port": self.port,
             "author": "CosySim",
             "tags": ["coding", "agents", "idle_sim", "sandbox", "showcase"],
