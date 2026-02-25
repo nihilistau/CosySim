@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      {
+        "type": "command",
+        "command": "powershell",
+        "args": ["-NoProfile", "-Command", "$timestamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'; $logDir = '.github/hooks/logs'; if (-not (Test-Path $logDir)) { New-Item -ItemType Directory $logDir -Force | Out-Null }; Add-Content \"$logDir/session.log\" \"[$timestamp] SESSION START\""],
+        "cwd": ".",
+        "timeoutSec": 5
+      }
+    ],
+    "sessionEnd": [
+      {
+        "type": "command",
+        "command": "powershell",
+        "args": ["-NoProfile", "-Command", "$timestamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'; Add-Content '.github/hooks/logs/session.log' \"[$timestamp] SESSION END\""],
+        "cwd": ".",
+        "timeoutSec": 5
+      }
+    ],
+    "userPromptSubmitted": [
+      {
+        "type": "command",
+        "command": "powershell",
+        "args": ["-NoProfile", "-Command", "$timestamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'; Add-Content '.github/hooks/logs/session.log' \"[$timestamp] PROMPT SUBMITTED\""],
+        "cwd": ".",
+        "timeoutSec": 5
+      }
+    ]
+  }
+}
