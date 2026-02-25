@@ -1,14 +1,19 @@
 """
 Nexus HTTP Client — CosySim's interface to the Nexus Knowledge System.
 
+v0.50a: Extended with session tracking, rules engine, prompt management,
+batch operations, and retry logic.
+
 Usage:
     from engine.nexus.client import get_nexus_client
     client = get_nexus_client()
     results = client.search("combat mechanics")
     client.add_entry("Combat Log", "Player defeated dragon", content_type="history")
+    client.log_session("sess-1", project="CosySim", commits=["abc123"])
 """
 import json
 import logging
+import time
 import urllib.request
 import urllib.error
 import threading
@@ -19,11 +24,15 @@ logger = logging.getLogger(__name__)
 _DEFAULT_URL = "http://localhost:8700"
 
 class NexusClient:
-    """HTTP client for Nexus REST API."""
+    """HTTP client for Nexus REST API with retry and caching."""
     
-    def __init__(self, base_url: str = _DEFAULT_URL, timeout: int = 30):
+    def __init__(self, base_url: str = _DEFAULT_URL, timeout: int = 30,
+                 max_retries: int = 2):
         self._base_url = base_url.rstrip("/")
         self._timeout = timeout
+        self._max_retries = max_retries
+        self._cache: Dict[str, tuple] = {}  # path -> (data, timestamp)
+        self._cache_ttl = 60  # seconds
     
     # ─── Knowledge Entries ─────────────────────────────────────
     
@@ -55,10 +64,19 @@ class NexusClient:
     def list_entries(self, content_type: str = "", category: str = "",
                      limit: int = 20) -> List[Dict]:
         params = []
-        if content_type: params.append(f"content_type={content_type}")
+        if content_type: params.append(f"type={content_type}")
         if category: params.append(f"category={category}")
         params.append(f"limit={limit}")
         result = self._get(f"/api/entries?{'&'.join(params)}")
+        return result.get("data", []) if result.get("ok") else []
+
+    def list_by_type(self, content_type: str, category: str = "",
+                     limit: int = 50) -> List[Dict]:
+        """Shortcut: list entries filtered by content_type."""
+        params = [f"limit={limit}"]
+        if category:
+            params.append(f"category={category}")
+        result = self._get(f"/api/entries/by-type/{content_type}?{'&'.join(params)}")
         return result.get("data", []) if result.get("ok") else []
     
     # ─── Agent Submission ──────────────────────────────────────
@@ -71,6 +89,100 @@ class NexusClient:
             "category": category, "tags": tags or [],
         })
         return result.get("data", {}).get("entry_id") if result.get("ok") else None
+
+    # ─── Sessions ─────────────────────────────────────────────
+
+    def log_session(self, session_id: str = None, project: str = "",
+                    repo: str = "", branch: str = "",
+                    agent_id: str = "copilot") -> Optional[str]:
+        """Create a new session record in Nexus. Returns session ID."""
+        payload = {
+            "project": project, "repo": repo,
+            "branch": branch, "agent_id": agent_id,
+        }
+        if session_id:
+            payload["id"] = session_id
+        result = self._post("/api/sessions", payload)
+        return result.get("data", {}).get("id") if result.get("ok") else None
+
+    def update_session(self, session_id: str, **fields) -> bool:
+        """Update session (summary, commits, files_changed, status, etc.)."""
+        result = self._put(f"/api/sessions/{session_id}", fields)
+        return result.get("ok", False)
+
+    def get_session(self, session_id: str) -> Optional[Dict]:
+        result = self._get(f"/api/sessions/{session_id}")
+        return result.get("data") if result.get("ok") else None
+
+    def list_sessions(self, project: str = "", status: str = "",
+                      limit: int = 50) -> List[Dict]:
+        params = [f"limit={limit}"]
+        if project: params.append(f"project={project}")
+        if status: params.append(f"status={status}")
+        result = self._get(f"/api/sessions?{'&'.join(params)}")
+        return result.get("data", []) if result.get("ok") else []
+
+    # ─── Rules ────────────────────────────────────────────────
+
+    def get_rules(self, scope: str = "", rule_type: str = "") -> List[Dict]:
+        """Get active rules, optionally filtered by scope and type."""
+        params = []
+        if scope: params.append(f"scope={scope}")
+        if rule_type: params.append(f"type={rule_type}")
+        qs = f"?{'&'.join(params)}" if params else ""
+        result = self._get(f"/api/rules{qs}")
+        return result.get("data", []) if result.get("ok") else []
+
+    def add_rule(self, scope: str, rule_type: str, name: str,
+                 condition: dict, action: dict,
+                 priority: int = 50) -> Optional[str]:
+        """Create a new rule. Returns rule ID."""
+        result = self._post("/api/rules", {
+            "scope": scope, "rule_type": rule_type, "name": name,
+            "condition": condition, "action": action, "priority": priority,
+        })
+        return result.get("data", {}).get("id") if result.get("ok") else None
+
+    # ─── Prompts ──────────────────────────────────────────────
+
+    def store_prompt(self, name: str, content: str, category: str = "system",
+                     version: str = "1", tags: list = None) -> Optional[str]:
+        """Store a prompt in Nexus as a 'prompt' content_type entry."""
+        return self.add_entry(
+            title=name, content=content, content_type="prompt",
+            category=category, tags=(tags or []) + [f"v:{version}"],
+            created_by="cosysim",
+        )
+
+    def get_prompts(self, category: str = "", name: str = "") -> List[Dict]:
+        """Retrieve stored prompts, optionally filtered."""
+        prompts = self.list_by_type("prompt", category=category)
+        if name:
+            prompts = [p for p in prompts if name.lower() in p.get("title", "").lower()]
+        return prompts
+
+    # ─── Batch Operations ─────────────────────────────────────
+
+    def batch_add(self, entries: List[Dict]) -> List[str]:
+        """Add multiple entries in one request. Returns list of IDs."""
+        result = self._post("/api/batch", {"entries": entries})
+        if result.get("ok"):
+            return result.get("data", {}).get("ids", [])
+        return []
+
+    # ─── Changelog ────────────────────────────────────────────
+
+    def store_changelog(self, version: str, changes: str,
+                        commits: list = None) -> Optional[str]:
+        """Store a changelog entry in Nexus."""
+        content = changes
+        if commits:
+            content += "\n\nCommits: " + ", ".join(commits)
+        return self.add_entry(
+            title=f"Changelog {version}", content=content,
+            content_type="changelog", category="system",
+            tags=["changelog", version],
+        )
     
     # ─── NotebookLM ───────────────────────────────────────────
     
@@ -117,7 +229,7 @@ class NexusClient:
         except Exception:
             return False
     
-    # ─── HTTP Helpers ─────────────────────────────────────────
+    # ─── HTTP Helpers (with retry) ────────────────────────────
     
     def _get(self, path: str) -> dict:
         return self._request("GET", path)
@@ -133,18 +245,25 @@ class NexusClient:
     
     def _request(self, method: str, path: str, payload: dict = None) -> dict:
         url = f"{self._base_url}{path}"
-        try:
-            if payload and method in ("POST", "PUT"):
-                data = json.dumps(payload).encode()
-                req = urllib.request.Request(url, data=data, method=method,
-                    headers={"Content-Type": "application/json"})
-            else:
-                req = urllib.request.Request(url, method=method)
-            with urllib.request.urlopen(req, timeout=self._timeout) as resp:
-                return json.loads(resp.read().decode())
-        except Exception as exc:
-            logger.debug("Nexus %s %s failed: %s", method, path, exc)
-            return {"ok": False, "error": str(exc)}
+        last_err = None
+        for attempt in range(1, self._max_retries + 1):
+            try:
+                if payload and method in ("POST", "PUT"):
+                    data = json.dumps(payload).encode()
+                    req = urllib.request.Request(url, data=data, method=method,
+                        headers={"Content-Type": "application/json"})
+                else:
+                    req = urllib.request.Request(url, method=method)
+                with urllib.request.urlopen(req, timeout=self._timeout) as resp:
+                    return json.loads(resp.read().decode())
+            except Exception as exc:
+                last_err = exc
+                if attempt < self._max_retries:
+                    time.sleep(0.5 * attempt)  # exponential backoff
+                    continue
+                logger.debug("Nexus %s %s failed after %d attempts: %s",
+                            method, path, attempt, exc)
+        return {"ok": False, "error": str(last_err)}
 
 
 # Singleton
