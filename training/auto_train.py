@@ -198,7 +198,43 @@ def check_and_train(
         state["history"] = state["history"][-50:]
 
     _save_state(state)
+
+    # Log training results to Nexus (best-effort)
+    if results:
+        _log_training_to_nexus(results)
+
     return results
+
+
+def _log_training_to_nexus(results: Dict[str, dict]) -> None:
+    """Log training run results to Nexus knowledge store."""
+    try:
+        import urllib.request
+        for dataset, info in results.items():
+            data = json.dumps({
+                "content": json.dumps({
+                    "dataset": dataset,
+                    "action": info.get("action", "unknown"),
+                    "examples": info.get("count", 0),
+                    "loss": info.get("loss"),
+                    "output": info.get("output"),
+                    "timestamp": time.time(),
+                }),
+                "content_type": "training_run",
+                "tags": ["training", dataset, info.get("action", "unknown")],
+                "metadata": {"dataset": dataset, "action": info.get("action")},
+                "quality_score": 0.8 if info.get("action") == "trained" else 0.5,
+            }).encode()
+            req = urllib.request.Request(
+                "http://localhost:9400/api/knowledge",
+                data=data,
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            urllib.request.urlopen(req, timeout=5)
+            log.info("Logged training run for %s to Nexus", dataset)
+    except Exception as exc:
+        log.debug("Nexus logging skipped: %s", exc)
 
 
 def daemon_loop(

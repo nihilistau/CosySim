@@ -97,11 +97,15 @@ python launcher.py --status          # Check service health
 │  │                     VirtualAgentManager               │
 │  ├── mcp/              MCPFramework, InterceptorPipeline│
 │  │                     DialogSystem, GameSession         │
-│  ├── skills/           @skill decorator, 9 builtin packs│
+│  ├── skills/           @skill decorator, 13 builtin     │
+│  │                     packs + per-scene packs           │
 │  ├── lmstudio/         LMSClient (v1 API), streaming,  │
 │  │                     response_id threading             │
+│  ├── nexus/            NexusClient, ExperimentFramework,│
+│  │                     SessionLogger, KnowledgeSeeder    │
 │  ├── tts/              Qwen3-TTS server + VoiceDesigner │
-│  └── scenes/           BaseScene, SceneRegistry         │
+│  └── scenes/           BaseScene, SceneRegistry,        │
+│                        AgentStateManager                 │
 ├─────────────────────────────────────────────────────────┤
 │  config/               YAML + JSON configuration        │
 │  content/simulation/   Characters, RAG, media services  │
@@ -114,24 +118,27 @@ python launcher.py --status          # Check service health
 
 - **MCP Pipeline** — 25-interceptor governance pipeline wrapping every inference call. Interceptors inject context, enforce rules, sync state, and shape responses pre- and post-inference.
 - **Governance** — `AgentGovernor` + `InterceptorPipeline` with priority-ordered interceptors: personality guards, policy enforcers, mood sync, relationship tracking, activity logging, and more.
-- **Skill Packs** — 10 core packs (memory, character, comfyui, voice, tts, social, boards, training, notebooklm, nexus) + per-scene packs. Skills are Python functions exposed as MCP tools via the `@skill` decorator.
+- **Skill Packs** — 13 core packs (memory, character, comfyui, voice, tts, social, boards, training, notebooklm, nexus, coding, experiment, agent_state) + per-scene packs. Skills are Python functions exposed as MCP tools via the `@skill` decorator.
 - **Character System** — Stats, traits, mood, arousal, relationship scores, buffs, and tag-based personality modeling. Characters evolve through interactions.
 - **LMStudio Integration** — Native v1 API with `response_id` threading for KV cache reuse, SSE streaming with inline tag extraction, and stateful conversation branching.
 - **TTS** — Qwen3-TTS voice generation server with voice designer, presets, and MCP tool integration.
 - **Media Generation** — ComfyUI integration for images and video, wired as MCP tools with workflow templates.
-- **Nexus Knowledge System** — Central knowledge management service with FTS5 search, NotebookLM integration, rules engine, session tracking, prompt versioning, Q&A distillation cache, Research Manager, YouTube transcript ingestion, and plugin system. 16 Nexus MCP skills. REST API on port 8700.
+- **Nexus Knowledge System** — Central knowledge management service with FTS5 search, NotebookLM integration, rules engine, session tracking, prompt versioning, Q&A distillation cache, Research Manager, YouTube transcript ingestion, and plugin system (12 action handlers). 16 Nexus MCP skills. REST API on port 8700.
+- **Experiment Framework** — A/B testing for prompts, configs, and scene parameters. Create experiments, record results, evaluate winners — all logged to Nexus.
+- **Cross-Scene Agent State** — Persistent agent identity across scenes: reputation, relationships, achievements, mood history. Agents carry context between scenes.
 
 ## Project Stats
 
 | Metric | Count |
 |--------|-------|
-| Tests | 1,832 |
+| Tests | 1,839 |
 | Game scenes | 13 |
 | Interceptors | 25 |
-| MCP skills | 165 |
-| Core skill packs | 10 |
+| MCP skills | 194 |
+| Core skill packs | 13 |
 | Scene skill packs | 13 |
 | Nexus skills | 16 |
+| Nexus plugins | 12 |
 
 ## Documentation
 

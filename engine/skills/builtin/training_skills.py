@@ -188,3 +188,29 @@ def list_trained_models() -> str:
         })
 
     return json.dumps(models)
+
+
+# ── auto_train_check ────────────────────────────────────────────────────
+
+@skill(
+    pack="training",
+    description=(
+        "Check auto-training pipeline status: candidate counts, "
+        "thresholds, and recent training history."
+    ),
+    tags=["training", "auto", "status"],
+)
+def training_auto_check() -> str:
+    """
+    Check the auto-training pipeline status including candidate
+    counts per dataset and recent training history.
+
+    Returns:
+        JSON with candidate_counts, thresholds, and recent_history.
+    """
+    try:
+        from training.auto_train import get_status
+        status = get_status()
+        return json.dumps(status, default=str, indent=2)
+    except Exception as exc:
+        return json.dumps({"error": f"Auto-train check failed: {exc}"})
