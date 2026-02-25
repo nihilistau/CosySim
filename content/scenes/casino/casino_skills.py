@@ -141,3 +141,75 @@ def casino_all_in() -> str:
     gs["pot"] = gs.get("pot", 0) + chips
     gs["player_chips"] = 0
     return f"ALL IN! ${chips} pushed into the pot. Pot is now ${gs['pot']}."
+
+
+@skill(
+    pack="casino",
+    tags=["game", "casino", "poker"],
+    category=SkillCategory.GAME,
+    description="Check (pass without betting) or call (match the current bet).",
+    cooldown=3,
+)
+def casino_check() -> str:
+    """Check/call — stay in the hand without raising."""
+    scene = _get_casino_scene()
+    if not scene:
+        return "Casino not active."
+    gs = getattr(scene, "game_state", {})
+    phase = gs.get("phase", "idle")
+    if phase == "idle":
+        return "No active hand. Start a new round first."
+    return f"You check. Pot: ${gs.get('pot', 0)} | Your chips: ${gs.get('player_chips', 0)}"
+
+
+@skill(
+    pack="casino",
+    tags=["game", "casino", "poker"],
+    category=SkillCategory.GAME,
+    description="Raise the bet — bet more than the minimum to pressure opponents.",
+    cooldown=5,
+)
+def casino_raise(amount: int = 20) -> str:
+    """Raise — adds extra chips to assert dominance."""
+    scene = _get_casino_scene()
+    if not scene:
+        return "Casino not active."
+    gs = getattr(scene, "game_state", {})
+    chips = gs.get("player_chips", 0)
+    if amount > chips:
+        return f"Not enough chips to raise ${amount}. You have ${chips}."
+    if amount < 10:
+        return "Minimum raise is $10."
+    gs["pot"] = gs.get("pot", 0) + amount
+    gs["player_chips"] = chips - amount
+    return f"You raise ${amount}! Pot: ${gs['pot']} | Chips: ${gs['player_chips']}"
+
+
+@skill(
+    pack="casino",
+    tags=["game", "casino", "poker"],
+    category=SkillCategory.GAME,
+    description="Attempt a bluff — act strong with a weak hand to force folds.",
+    cooldown=20,
+)
+def casino_bluff(style: str = "confident") -> str:
+    """Bluff with style: confident, nervous, or aggressive. Outcome varies."""
+    import random
+    scene = _get_casino_scene()
+    if not scene:
+        return "Casino not active."
+    gs = getattr(scene, "game_state", {})
+    if gs.get("phase", "idle") == "idle":
+        return "No hand in play."
+
+    success_rates = {"confident": 0.55, "nervous": 0.35, "aggressive": 0.65}
+    chance = success_rates.get(style, 0.5)
+    success = random.random() < chance
+
+    if success:
+        pot = gs.get("pot", 0)
+        gs["player_chips"] = gs.get("player_chips", 0) + pot
+        gs["pot"] = 0
+        return f"🎭 Bluff SUCCESS ({style})! Opponents fold. You win ${pot}!"
+    else:
+        return f"🎭 Bluff FAILED ({style})! They called your bluff. Tension rises..."
