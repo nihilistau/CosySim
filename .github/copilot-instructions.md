@@ -30,6 +30,8 @@ This workspace has a CosySim MCP server configured in `.vscode/mcp.json`.
 You can call these tools directly:
 
 ### Nexus Knowledge Tools (use before coding)
+- `nexus_smart_query(question)` — **PRIMARY** query tool (cache → FTS → ask → LLM, auto-stores)
+- `nexus_router_stats()` — Query router hit rates, tokens saved
 - `nexus_search(query)` — Search knowledge base
 - `nexus_ask(question)` — Smart Q&A (cache → FTS → NLM)
 - `nexus_add(title, content, content_type)` — Store knowledge

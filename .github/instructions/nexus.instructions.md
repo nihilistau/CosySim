@@ -28,6 +28,28 @@ Nexus is the central knowledge backbone. Every coding agent should use it as
    `nexus_ask` stores answers automatically, or explicitly via `add_qa()`
 8. **Research results** — `nexus_finish_research(research_id)` distills Q&A pairs
 
+## Smart Query Router (Preferred Entry Point)
+
+**Always use `nexus_smart_query` as the primary way to ask questions.**
+It provides a 4-tier pipeline that checks all Nexus sources before falling
+back to an LLM, and auto-stores LLM answers for future reuse:
+
+```
+1. Q&A Cache (instant)  →  Previously answered questions
+2. FTS5 Search (fast)   →  Synthesize from existing knowledge entries
+3. Nexus Ask (smart)    →  Server-side pipeline (cache → FTS → NLM)
+4. LLM Fallback (last)  →  LMStudio call, auto-stored back in Nexus
+```
+
+- MCP tool: `nexus_smart_query(question, min_confidence=0.3, use_llm=true, category="")`
+- Python: `from engine.nexus.query_router import get_query_router; get_query_router().query("question")`
+- Returns: `{answer, source, confidence, cached, tokens_saved, query_time_ms}`
+- Stats: `nexus_router_stats()` — shows hit rates, cache performance, tokens saved
+
+**Every LLM answer is auto-cached** — the next time anyone asks the same question,
+Nexus answers instantly without using tokens. This is the core of the
+"always be improving Nexus" loop.
+
 ## Smart Q&A Pipeline
 
 The `nexus_ask(question, depth)` skill uses a 3-tier lookup:

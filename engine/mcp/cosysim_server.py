@@ -4051,6 +4051,85 @@ def copilot_local_model_guide(task_type: str = "general") -> str:
         return json.dumps({"error": str(e)})
 
 
+@mcp.tool()
+def nexus_smart_query(question: str, min_confidence: float = 0.3,
+                      use_llm: bool = True, category: str = "") -> str:
+    """Route a query through the Nexus-first pipeline.
+    Checks Q&A cache → FTS search → Nexus ask → LLM fallback.
+    LLM answers are stored back in Nexus for future reuse.
+    Returns answer, source, confidence, and tokens saved."""
+    try:
+        from engine.nexus.query_router import get_query_router
+        router = get_query_router()
+        result = router.query(
+            question, min_confidence=min_confidence,
+            use_llm=use_llm, category=category,
+            source_hint="copilot",
+        )
+        return json.dumps(result.to_dict(), indent=2)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def nexus_router_stats() -> str:
+    """Get NexusQueryRouter statistics: hit rates, cache performance, tokens saved."""
+    try:
+        from engine.nexus.query_router import get_query_router
+        router = get_query_router()
+        return json.dumps(router.stats.to_dict(), indent=2)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def agent_create_task(title: str, description: str = "", agent: str = "copilot",
+                      priority: str = "normal", tags: str = "") -> str:
+    """Create a tracked agent task in Nexus. Returns task ID."""
+    try:
+        from engine.nexus.agent_tags import get_task_manager
+        mgr = get_task_manager()
+        tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
+        task_id = mgr.create_task(title, description, agent, priority, tag_list)
+        return json.dumps({"task_id": task_id, "status": "created"})
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def agent_update_task(task_id: str, status: str) -> str:
+    """Update an agent task status (pending/in_progress/done/blocked/cancelled)."""
+    try:
+        from engine.nexus.agent_tags import get_task_manager
+        ok = get_task_manager().update_status(task_id, status)
+        return json.dumps({"updated": ok})
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def agent_complete_task(task_id: str, summary: str = "") -> str:
+    """Mark an agent task as done with an optional completion summary."""
+    try:
+        from engine.nexus.agent_tags import get_task_manager
+        ok = get_task_manager().complete_task(task_id, summary)
+        return json.dumps({"completed": ok})
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def agent_list_tasks(status: str = "", agent: str = "", limit: int = 20) -> str:
+    """List agent tasks, optionally filtered by status and agent."""
+    try:
+        from engine.nexus.agent_tags import get_task_manager
+        tasks = get_task_manager().list_tasks(
+            status=status or None, agent=agent or None, limit=limit)
+        return json.dumps([t.to_dict() for t in tasks], indent=2)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
 # ── Entry point ────────────────────────────────────────────────────────
 
 def run_server(mode: str = "stdio"):

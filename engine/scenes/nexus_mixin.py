@@ -79,7 +79,10 @@ class NexusSceneMixin:
             return []
 
     def nexus_ask(self, question: str, depth: str = "shallow") -> Optional[str]:
-        """Ask Nexus a question (uses Q&A cache → FTS → NLM pipeline).
+        """Ask Nexus a question via the NexusQueryRouter (cache → FTS → ask → LLM).
+
+        Uses the smart query router to check all tiers before falling back
+        to LLM.  Answers are auto-cached for future reuse.
 
         Args:
             question: The question to ask.
@@ -88,6 +91,20 @@ class NexusSceneMixin:
         Returns:
             Answer string, or None if unavailable.
         """
+        try:
+            from engine.nexus.query_router import get_query_router
+            router = get_query_router()
+            use_llm = depth != "shallow"
+            result = router.query(
+                question,
+                use_llm=use_llm,
+                category=getattr(self, "_nexus_scene_id", "scene"),
+                source_hint=f"scene:{getattr(self, '_nexus_scene_id', 'unknown')}",
+            )
+            return result.answer if result.answer else None
+        except Exception:
+            pass
+        # Fallback to direct client call if router unavailable
         if not self._nexus_available or not self._nexus_client:
             return None
         try:

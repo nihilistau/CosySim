@@ -136,10 +136,18 @@ class NexusPanelScene(BaseScene, NexusSceneMixin):
                     nexus_stats = client.stats()
                 except Exception as exc:
                     nexus_stats = {"error": str(exc)}
+            # Include query router stats
+            router_stats = {}
+            try:
+                from engine.nexus.query_router import get_query_router
+                router_stats = get_query_router().stats.to_dict()
+            except Exception:
+                pass
             self._log_activity("stats_check", source="dashboard")
             return jsonify({
                 "panel_stats": self._stats,
                 "nexus_stats": nexus_stats,
+                "router_stats": router_stats,
                 "nexus_available": bool(client and client.is_available()),
             })
 
@@ -149,6 +157,30 @@ class NexusPanelScene(BaseScene, NexusSceneMixin):
             return jsonify(self._get_activity(limit))
 
         # ── Knowledge Explorer ──────────────────────────────────────
+
+        @app.route("/api/smart_query")
+        def api_smart_query():
+            question = request.args.get("q", "")
+            if not question:
+                return jsonify({"error": "No question provided"}), 400
+            try:
+                from engine.nexus.query_router import get_query_router
+                router = get_query_router()
+                result = router.query(
+                    question,
+                    use_llm=request.args.get("llm", "true").lower() == "true",
+                    category=request.args.get("category", ""),
+                    source_hint="nexus_panel",
+                )
+                self._stats["searches"] += 1
+                self._log_activity(
+                    "smart_query",
+                    f"q={question[:40]} → {result.source} (conf={result.confidence:.2f})",
+                    "explorer",
+                )
+                return jsonify(result.to_dict())
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
 
         @app.route("/api/search")
         def api_search():
