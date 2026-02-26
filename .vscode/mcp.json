@@ -1,18 +1,58 @@
 {
-  "servers": {
-    "cosysim": {
-      "type": "stdio",
-      "command": "C:\\Files\\Models\\CosySim\\.venv\\Scripts\\python.exe",
-      "args": ["-m", "engine.mcp.cosysim_server"],
-      "cwd": "${workspaceFolder}",
-      "autoStart": true
-    },
-    "nexus": {
-      "type": "stdio",
-      "command": "python",
-      "args": ["-m", "nexus.mcp.server"],
-      "cwd": "C:\\Files\\Nexus",
-      "autoStart": true
-    }
-  }
+	"servers": {
+		"cosysim": {
+			"type": "stdio",
+			"command": "C:\\Files\\Models\\CosySim\\.venv\\Scripts\\python.exe",
+			"args": [
+				"-m",
+				"engine.mcp.cosysim_server"
+			],
+			"cwd": "${workspaceFolder}",
+			"autoStart": true
+		},
+		"nexus": {
+			"type": "stdio",
+			"command": "python",
+			"args": [
+				"-m",
+				"nexus.mcp.server"
+			],
+			"cwd": "C:\\Files\\Nexus",
+			"autoStart": true
+		},
+		"github": {
+			"type": "http",
+			"url": "https://api.githubcopilot.com/mcp/",
+			"headers": {
+				"X-MCP-Toolsets": "default,copilot_spaces"
+			}
+		},
+		"io.github.f/prompts.chat-mcp": {
+			"type": "stdio",
+			"command": "npx",
+			"args": [
+				"@fkadev/prompts.chat-mcp@1.0.9"
+			],
+			"env": {
+				"PROMPTS_API_KEY": "${input:PROMPTS_API_KEY}",
+				"PROMPTS_QUERY": "${input:PROMPTS_QUERY}"
+			},
+			"gallery": "https://api.mcp.github.com",
+			"version": "1.0.9"
+		}
+	},
+	"inputs": [
+		{
+			"id": "PROMPTS_API_KEY",
+			"type": "promptString",
+			"description": "API key for authenticated requests (enables save_prompt tool)",
+			"password": true
+		},
+		{
+			"id": "PROMPTS_QUERY",
+			"type": "promptString",
+			"description": "Query string to filter prompts (e.g., users=a,b&categories=c,d&tags=e,f)",
+			"password": false
+		}
+	]
 }
