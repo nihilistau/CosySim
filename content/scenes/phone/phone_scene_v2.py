@@ -184,6 +184,7 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE
         self._autotxt_deadlines: Dict[str, float] = {}
         self._autotxt_lock = threading.Lock()
         self._autotxt_muted = False  # Global mute for autonomous messages
+        self._tick_lock = threading.RLock()
 
         # Background ticker
         self._ticker_stop = threading.Event()
@@ -309,17 +310,18 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE
 
     def _ticker_loop(self) -> None:
         while not self._ticker_stop.wait(10):
-            if self._autotxt_muted:
-                continue
-            now = time.time()
-            with self._autotxt_lock:
-                due = [cid for cid, dl in self._autotxt_deadlines.items() if dl <= now]
-            for char_id in due:
-                self._fire_autotxt(char_id)
-            try:
-                get_framework().tick(SCENE_ID)
-            except Exception:
-                pass
+            with self._tick_lock:
+                if self._autotxt_muted:
+                    continue
+                now = time.time()
+                with self._autotxt_lock:
+                    due = [cid for cid, dl in self._autotxt_deadlines.items() if dl <= now]
+                for char_id in due:
+                    self._fire_autotxt(char_id)
+                try:
+                    get_framework().tick(SCENE_ID)
+                except Exception:
+                    pass
 
     def _fire_autotxt(self, char_id: str) -> None:
         """Generate and deliver an autonomous text from char_id.
@@ -327,64 +329,65 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE
         v2.9: Uses store=false decision query to determine IF and WHAT to text,
         then store=true stateful call for the actual message content.
         """
-        try:
-            thread_id = self.phone_db.get_or_create_dm(char_id)
-            char      = self.db.get_character(char_id)
-            char_name = (char or {}).get("name", char_id)
-
-            # Determine conversation mode from recent history
-            conv_mode = "neutral"
+        with self._tick_lock:
             try:
-                from engine.mcp.scene_rules_engine import get_conversation_heat
-                heat = get_conversation_heat()
-                heat_level = heat.get_level(f"phone_{char_id}")
-                if heat_level in ("hot", "intense"):
-                    conv_mode = "intimate"
-                elif heat_level == "warm":
-                    conv_mode = "flirty"
-                else:
-                    thread_msgs = self.phone_db.get_messages(thread_id, limit=5)
-                    if any(m.get("content", "") for m in thread_msgs):
-                        conv_mode = "warm"
-            except Exception:
-                pass
+                thread_id = self.phone_db.get_or_create_dm(char_id)
+                char      = self.db.get_character(char_id)
+                char_name = (char or {}).get("name", char_id)
 
-            prompt = autotxt_prompt(conv_mode)
-            reply  = self._generate_reply(char_id, prompt, system_override=prompt)
-            text   = reply.get("text", "").strip()
-            if not text:
-                return
+                # Determine conversation mode from recent history
+                conv_mode = "neutral"
+                try:
+                    from engine.mcp.scene_rules_engine import get_conversation_heat
+                    heat = get_conversation_heat()
+                    heat_level = heat.get_level(f"phone_{char_id}")
+                    if heat_level in ("hot", "intense"):
+                        conv_mode = "intimate"
+                    elif heat_level == "warm":
+                        conv_mode = "flirty"
+                    else:
+                        thread_msgs = self.phone_db.get_messages(thread_id, limit=5)
+                        if any(m.get("content", "") for m in thread_msgs):
+                            conv_mode = "warm"
+                except Exception:
+                    pass
 
-            metadata = {}
-            if reply.get("mood"):
-                metadata["mood"] = reply["mood"]
-            if reply.get("image_requests"):
-                metadata["image_requests"] = reply["image_requests"]
+                prompt = autotxt_prompt(conv_mode)
+                reply  = self._generate_reply(char_id, prompt, system_override=prompt)
+                text   = reply.get("text", "").strip()
+                if not text:
+                    return
 
-            msg = self.phone_db.save_message(
-                thread_id=thread_id,
-                sender_id=char_id,
-                content=text,
-                msg_type="text",
-                metadata=metadata if metadata else None,
-            )
-            try:
-                get_framework().emit_event("message_sent", {
-                    "scene_id": SCENE_ID, "char_id": char_id,
-                    "type": "autotxt", "thread_id": thread_id,
-                }, source=SCENE_ID)
-            except Exception:
-                pass
-            self._emit("message_new", {
-                "thread_id": thread_id,
-                "message":   msg,
-                "char_name": char_name,
-            })
-            self._emit("thread_updated", {"thread_id": thread_id})
-        except Exception as exc:
-            logger.warning("autotxt fire failed for %s: %s", char_id, exc)
-        finally:
-            self._schedule_autotxt(char_id)
+                metadata = {}
+                if reply.get("mood"):
+                    metadata["mood"] = reply["mood"]
+                if reply.get("image_requests"):
+                    metadata["image_requests"] = reply["image_requests"]
+
+                msg = self.phone_db.save_message(
+                    thread_id=thread_id,
+                    sender_id=char_id,
+                    content=text,
+                    msg_type="text",
+                    metadata=metadata if metadata else None,
+                )
+                try:
+                    get_framework().emit_event("message_sent", {
+                        "scene_id": SCENE_ID, "char_id": char_id,
+                        "type": "autotxt", "thread_id": thread_id,
+                    }, source=SCENE_ID)
+                except Exception:
+                    pass
+                self._emit("message_new", {
+                    "thread_id": thread_id,
+                    "message":   msg,
+                    "char_name": char_name,
+                })
+                self._emit("thread_updated", {"thread_id": thread_id})
+            except Exception as exc:
+                logger.warning("autotxt fire failed for %s: %s", char_id, exc)
+            finally:
+                self._schedule_autotxt(char_id)
 
     # ── LLM reply ────────────────────────────────────────────────────────────
 
@@ -576,81 +579,82 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE
 
             # Generate AI replies (off-thread to return fast)
             def _reply_worker():
-                for char_id in members:
-                    if char_id == "user":
-                        continue
-                    try:
-                        # Emit typing indicator
-                        self._emit("typing", {"thread_id": thread_id, "char_id": char_id, "active": True})
-                        time.sleep(random.uniform(0.5, 2.0))
-
-                        reply = self._generate_reply(char_id, content, thread_id=thread_id)
-                        reply_text = reply.get("text", "").strip()
-                        if not reply_text:
+                with self._tick_lock:
+                    for char_id in members:
+                        if char_id == "user":
                             continue
-
-                        char = self.db.get_character(char_id)
-                        char_name = (char or {}).get("name", char_id)
-
-                        # Build message metadata from rich response
-                        metadata = {}
-                        if reply.get("mood"):
-                            metadata["mood"] = reply["mood"]
-
-                        ai_msg = self.phone_db.save_message(
-                            thread_id=thread_id,
-                            sender_id=char_id,
-                            content=reply_text,
-                            msg_type="text",
-                            metadata=metadata if metadata else None,
-                            response_id=reply.get("response_id"),
-                            conversation_id=f"phone_{char_id}",
-                        )
-                        self._emit("typing", {"thread_id": thread_id, "char_id": char_id, "active": False})
-
-                        # Handle image requests — generate and send as separate message
-                        for img_prompt in reply.get("image_requests", []):
-                            try:
-                                from content.simulation.services.comfyui_client import get_comfyui_client
-                                comfy = get_comfyui_client()
-                                image_path = comfy.generate_image(
-                                    prompt=f"{char_name} selfie: {img_prompt}",
-                                    character_name=char_name,
-                                )
-                                if image_path:
-                                    img_msg = self.phone_db.save_message(
-                                        thread_id=thread_id,
-                                        sender_id=char_id,
-                                        content=img_prompt,
-                                        msg_type="photo",
-                                        metadata={"image_path": str(image_path), "generated": True},
-                                    )
-                                    self._emit("message_new", {
-                                        "thread_id": thread_id,
-                                        "message": img_msg,
-                                        "char_name": char_name,
-                                    })
-                            except Exception as img_exc:
-                                logger.debug("Image generation failed: %s", img_exc)
-
                         try:
-                            get_framework().emit_event("message_sent", {
-                                "scene_id": SCENE_ID, "char_id": char_id,
-                                "type": "reply", "thread_id": thread_id,
-                                "mood": reply.get("mood"),
-                            }, source=SCENE_ID)
-                        except Exception:
-                            pass
-                        self._emit("message_new", {
-                            "thread_id": thread_id,
-                            "message":   ai_msg,
-                            "char_name": char_name,
-                            "mood":      reply.get("mood"),
-                        })
-                        self._emit("thread_updated", {"thread_id": thread_id})
-                    except Exception as exc:
-                        logger.error("Reply worker error for %s: %s", char_id, exc)
-                        self._emit("typing", {"thread_id": thread_id, "char_id": char_id, "active": False})
+                            # Emit typing indicator
+                            self._emit("typing", {"thread_id": thread_id, "char_id": char_id, "active": True})
+                            time.sleep(random.uniform(0.5, 2.0))
+
+                            reply = self._generate_reply(char_id, content, thread_id=thread_id)
+                            reply_text = reply.get("text", "").strip()
+                            if not reply_text:
+                                continue
+
+                            char = self.db.get_character(char_id)
+                            char_name = (char or {}).get("name", char_id)
+
+                            # Build message metadata from rich response
+                            metadata = {}
+                            if reply.get("mood"):
+                                metadata["mood"] = reply["mood"]
+
+                            ai_msg = self.phone_db.save_message(
+                                thread_id=thread_id,
+                                sender_id=char_id,
+                                content=reply_text,
+                                msg_type="text",
+                                metadata=metadata if metadata else None,
+                                response_id=reply.get("response_id"),
+                                conversation_id=f"phone_{char_id}",
+                            )
+                            self._emit("typing", {"thread_id": thread_id, "char_id": char_id, "active": False})
+
+                            # Handle image requests — generate and send as separate message
+                            for img_prompt in reply.get("image_requests", []):
+                                try:
+                                    from content.simulation.services.comfyui_client import get_comfyui_client
+                                    comfy = get_comfyui_client()
+                                    image_path = comfy.generate_image(
+                                        prompt=f"{char_name} selfie: {img_prompt}",
+                                        character_name=char_name,
+                                    )
+                                    if image_path:
+                                        img_msg = self.phone_db.save_message(
+                                            thread_id=thread_id,
+                                            sender_id=char_id,
+                                            content=img_prompt,
+                                            msg_type="photo",
+                                            metadata={"image_path": str(image_path), "generated": True},
+                                        )
+                                        self._emit("message_new", {
+                                            "thread_id": thread_id,
+                                            "message": img_msg,
+                                            "char_name": char_name,
+                                        })
+                                except Exception as img_exc:
+                                    logger.debug("Image generation failed: %s", img_exc)
+
+                            try:
+                                get_framework().emit_event("message_sent", {
+                                    "scene_id": SCENE_ID, "char_id": char_id,
+                                    "type": "reply", "thread_id": thread_id,
+                                    "mood": reply.get("mood"),
+                                }, source=SCENE_ID)
+                            except Exception:
+                                pass
+                            self._emit("message_new", {
+                                "thread_id": thread_id,
+                                "message":   ai_msg,
+                                "char_name": char_name,
+                                "mood":      reply.get("mood"),
+                            })
+                            self._emit("thread_updated", {"thread_id": thread_id})
+                        except Exception as exc:
+                            logger.error("Reply worker error for %s: %s", char_id, exc)
+                            self._emit("typing", {"thread_id": thread_id, "char_id": char_id, "active": False})
 
             threading.Thread(target=_reply_worker, daemon=True).start()
             return jsonify({"ok": True, "message": user_msg})

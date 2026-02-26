@@ -36,6 +36,7 @@ logger = logging.getLogger(__name__)
 
 # ──────────────────────────────────────────────── hardware defaults ──
 # RTX 2060 12 GB — override via config or COSYSIM_* env vars.
+DEFAULT_LMSTUDIO_PORT = 1234   # searchable constant for fallback port
 _DEFAULT_GPU       = 0.9       # fraction of model layers on GPU
 _DEFAULT_TTL       = 3600      # seconds before auto-unload (0 = never)
 _DEFAULT_CTX       = 4096      # context window
@@ -73,7 +74,7 @@ class LMStudioManager:
             config = get_config()
 
         self.host:       str = config.get("lmstudio.host", "127.0.0.1")
-        self.port:       int = int(config.get("lmstudio.port", 1234))
+        self.port:       int = int(config.get("lmstudio.port", DEFAULT_LMSTUDIO_PORT))
         self.cli:        str = config.get("lmstudio.cli",  "lms")
         self.vram_cap_mb: int = int(config.get("lmstudio.vram_cap_mb", _VRAM_CAP_MB))
 
