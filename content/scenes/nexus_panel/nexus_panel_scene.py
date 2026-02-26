@@ -654,6 +654,331 @@ class NexusPanelScene(BaseScene, NexusSceneMixin):
             except Exception as exc:
                 return jsonify({"error": str(exc)}), 500
 
+        # ── NLM / Ingestion Routes ─────────────────────────────────
+
+        @app.route("/api/ingest/har", methods=["POST"])
+        def api_ingest_har():
+            """Upload and preview a HAR file."""
+            if "file" not in request.files:
+                return jsonify({"error": "No file uploaded"}), 400
+            f = request.files["file"]
+            import tempfile
+            with tempfile.NamedTemporaryFile(suffix=".har", delete=False) as tmp:
+                f.save(tmp.name)
+                tmp_path = tmp.name
+            try:
+                from engine.nexus.har_extractor import HARExtractor
+                ext = HARExtractor()
+                notebooks = ext.extract(tmp_path)
+                return jsonify({
+                    "notebooks": [nb.to_dict() for nb in notebooks],
+                    "count": len(notebooks),
+                    "tmp_path": tmp_path,
+                })
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @app.route("/api/ingest/har/commit", methods=["POST"])
+        def api_ingest_har_commit():
+            """Commit HAR data to Nexus."""
+            data = request.get_json(force=True)
+            tmp_path = data.get("tmp_path", "")
+            items = data.get("items", ["sources", "documents", "notes", "conversations"])
+            try:
+                from engine.nexus.har_extractor import HARExtractor
+                ext = HARExtractor()
+                notebooks = ext.extract(tmp_path)
+                client = self._get_client()
+                if not client:
+                    return jsonify({"error": "Nexus unavailable"}), 503
+                results = []
+                for nb in notebooks:
+                    r = ext.ingest_to_nexus(nb, client, items=items)
+                    results.append({"name": nb.name, "stored": r.stored, "total": r.total})
+                self._log_activity("har_ingest", f"{len(notebooks)} notebooks", "ingest")
+                return jsonify({"results": results})
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @app.route("/api/ingest/codebase", methods=["POST"])
+        def api_ingest_codebase():
+            """Create an NLM notebook from source files."""
+            data = request.get_json(force=True)
+            files = data.get("files", [])
+            name = data.get("name", "Codebase Analysis")
+            if not files:
+                return jsonify({"error": "No files provided"}), 400
+            try:
+                from engine.nexus.nlm_engine import get_nlm_engine
+                engine = get_nlm_engine()
+                result = engine.create_from_files(files, name)
+                self._log_activity("codebase_notebook", name, "create")
+                return jsonify(result)
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @app.route("/api/nlm/notebook", methods=["POST"])
+        def api_nlm_create_notebook():
+            """Create a new NLM notebook."""
+            data = request.get_json(force=True)
+            name = data.get("name", "")
+            sources = data.get("sources")
+            if not name:
+                return jsonify({"error": "Name required"}), 400
+            try:
+                from engine.nexus.nlm_engine import get_nlm_engine
+                result = get_nlm_engine().create_notebook(name, sources=sources)
+                self._log_activity("nlm_create", name, "create")
+                return jsonify(result)
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @app.route("/api/nlm/notebook/<nb_id>", methods=["DELETE"])
+        def api_nlm_delete_notebook(nb_id: str):
+            """Delete an NLM notebook."""
+            try:
+                from engine.nexus.nlm_engine import get_nlm_engine
+                result = get_nlm_engine().delete_notebook(nb_id)
+                return jsonify(result)
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @app.route("/api/nlm/notebook/<nb_id>/sources", methods=["POST"])
+        def api_nlm_add_source(nb_id: str):
+            """Add a source to an NLM notebook."""
+            data = request.get_json(force=True)
+            try:
+                from engine.nexus.nlm_engine import get_nlm_engine
+                result = get_nlm_engine().add_source(
+                    nb_id, data.get("type", "text"), data.get("value", "")
+                )
+                return jsonify(result)
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @app.route("/api/nlm/ask", methods=["POST"])
+        def api_nlm_ask():
+            """Ask NLM via the 4-tier router."""
+            data = request.get_json(force=True)
+            question = data.get("question", "")
+            nb_id = data.get("notebook_id", "")
+            if not question:
+                return jsonify({"error": "Question required"}), 400
+            try:
+                from engine.nexus.nlm_router import get_nlm_router
+                result = get_nlm_router().route(question, notebook_id=nb_id)
+                self._log_activity("nlm_ask", question[:60], "query")
+                return jsonify(result.to_dict())
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @app.route("/api/nlm/ask-batch", methods=["POST"])
+        def api_nlm_ask_batch():
+            """Batch-ask questions via NLM router."""
+            data = request.get_json(force=True)
+            questions = data.get("questions", [])
+            nb_id = data.get("notebook_id", "")
+            if not questions:
+                return jsonify({"error": "Questions required"}), 400
+            try:
+                from engine.nexus.nlm_router import get_nlm_router
+                router = get_nlm_router()
+                results = [router.route(q, notebook_id=nb_id).to_dict() for q in questions]
+                self._log_activity("nlm_batch", f"{len(questions)} questions", "query")
+                return jsonify({"results": results, "count": len(results)})
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @app.route("/api/nlm/distill", methods=["POST"])
+        def api_nlm_distill():
+            """Distill Q&A pairs from a notebook."""
+            data = request.get_json(force=True)
+            nb_id = data.get("notebook_id", "")
+            topic = data.get("topic", "")
+            count = data.get("count", 20)
+            if not nb_id:
+                return jsonify({"error": "notebook_id required"}), 400
+            try:
+                from engine.nexus.knowledge_forge import get_knowledge_forge
+                forge = get_knowledge_forge()
+                topics = [topic] if topic else None
+                result = forge.distill(nb_id, topics=topics, count=count)
+                self._log_activity("nlm_distill", f"{len(result.qa_pairs)} pairs", "forge")
+                return jsonify({
+                    "success": result.success,
+                    "qa_count": len(result.qa_pairs),
+                    "qa_pairs": [p.to_dict() for p in result.qa_pairs],
+                    "nexus_ids": result.nexus_ids,
+                    "errors": result.errors,
+                    "duration": result.duration_seconds,
+                })
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @app.route("/api/nlm/decompose", methods=["POST"])
+        def api_nlm_decompose():
+            """Decompose a plan into implementation steps."""
+            data = request.get_json(force=True)
+            plan = data.get("plan", "")
+            nb_id = data.get("notebook_id", "")
+            if not plan:
+                return jsonify({"error": "Plan text required"}), 400
+            try:
+                from engine.nexus.knowledge_forge import get_knowledge_forge
+                result = get_knowledge_forge().decompose(plan, notebook_id=nb_id)
+                return jsonify({
+                    "success": result.success,
+                    "steps": result.steps,
+                    "errors": result.errors,
+                    "duration": result.duration_seconds,
+                })
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @app.route("/api/nlm/analyze", methods=["POST"])
+        def api_nlm_analyze():
+            """Analyze source files via NLM."""
+            data = request.get_json(force=True)
+            files = data.get("files", [])
+            questions = data.get("questions")
+            if not files:
+                return jsonify({"error": "Files required"}), 400
+            try:
+                from engine.nexus.knowledge_forge import get_knowledge_forge
+                result = get_knowledge_forge().analyze(files, questions=questions)
+                return jsonify({
+                    "success": result.success,
+                    "notebook_id": result.notebook_id,
+                    "insights": [p.to_dict() for p in result.qa_pairs],
+                    "errors": result.errors,
+                    "duration": result.duration_seconds,
+                })
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @app.route("/api/nlm/solve", methods=["POST"])
+        def api_nlm_solve():
+            """Solve a problem via NLM."""
+            data = request.get_json(force=True)
+            question = data.get("question", "")
+            if not question:
+                return jsonify({"error": "Question required"}), 400
+            try:
+                from engine.nexus.knowledge_forge import get_knowledge_forge
+                result = get_knowledge_forge().solve(
+                    question,
+                    context_files=data.get("files"),
+                    notebook_id=data.get("notebook_id", ""),
+                )
+                return jsonify({
+                    "success": result.success,
+                    "solution": result.qa_pairs[0].to_dict() if result.qa_pairs else None,
+                    "errors": result.errors,
+                    "duration": result.duration_seconds,
+                })
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @app.route("/api/nlm/build-topic", methods=["POST"])
+        def api_nlm_build_topic():
+            """End-to-end topic knowledge building."""
+            data = request.get_json(force=True)
+            topic = data.get("topic", "")
+            if not topic:
+                return jsonify({"error": "Topic required"}), 400
+            try:
+                from engine.nexus.knowledge_forge import get_knowledge_forge
+                result = get_knowledge_forge().build_topic(
+                    topic,
+                    sources=data.get("sources"),
+                    question_count=data.get("count", 30),
+                )
+                self._log_activity("nlm_build_topic", topic, "forge")
+                return jsonify({
+                    "success": result.success,
+                    "notebook_id": result.notebook_id,
+                    "qa_count": len(result.qa_pairs),
+                    "nexus_ids": result.nexus_ids,
+                    "errors": result.errors,
+                    "duration": result.duration_seconds,
+                })
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @app.route("/api/nlm/generate", methods=["POST"])
+        def api_nlm_generate():
+            """Generate a document from a notebook."""
+            data = request.get_json(force=True)
+            nb_id = data.get("notebook_id", "")
+            if not nb_id:
+                return jsonify({"error": "notebook_id required"}), 400
+            try:
+                from engine.nexus.knowledge_forge import get_knowledge_forge
+                result = get_knowledge_forge().generate_doc(
+                    nb_id,
+                    doc_type=data.get("type", "study_guide"),
+                    instructions=data.get("instructions", ""),
+                )
+                return jsonify({
+                    "success": result.success,
+                    "documents": result.documents,
+                    "errors": result.errors,
+                    "duration": result.duration_seconds,
+                })
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @app.route("/api/nlm/router/stats")
+        def api_nlm_router_stats():
+            """Get NLM router savings metrics."""
+            try:
+                from engine.nexus.nlm_router import get_nlm_router
+                return jsonify(get_nlm_router().savings_report())
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @app.route("/api/nlm/engine/stats")
+        def api_nlm_engine_stats():
+            """Get NLM engine usage stats."""
+            try:
+                from engine.nexus.nlm_engine import get_nlm_engine
+                return jsonify(get_nlm_engine().status())
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @app.route("/api/questions/generate", methods=["POST"])
+        def api_generate_questions():
+            """Generate questions for batch asking."""
+            data = request.get_json(force=True)
+            topic = data.get("topic", "")
+            if not topic:
+                return jsonify({"error": "Topic required"}), 400
+            try:
+                from engine.nexus.knowledge_forge import generate_questions
+                qs = generate_questions(
+                    topic,
+                    category=data.get("category", "topic"),
+                    count=data.get("count", 10),
+                    subject=data.get("subject", topic[:50]),
+                )
+                return jsonify({"questions": qs, "count": len(qs)})
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @app.route("/api/entry/<entry_id>", methods=["PUT"])
+        def api_update_entry(entry_id: str):
+            """Update an existing Nexus entry."""
+            data = request.get_json(force=True)
+            client = self._get_client()
+            if not client:
+                return jsonify({"error": "Nexus unavailable"}), 503
+            try:
+                result = client.update_entry(entry_id, **data)
+                self._log_activity("entry_update", entry_id[:12], "update")
+                return jsonify({"success": True, "result": result})
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
     # ── Lifecycle ───────────────────────────────────────────────────────
 
     def start(self) -> None:
