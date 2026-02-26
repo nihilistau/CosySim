@@ -362,7 +362,7 @@ def research_pipeline(
                     timeout=10,
                 )
             except Exception:
-                pass
+                logger.debug("Failed to store research Q&A result in Nexus", exc_info=True)
 
         if output_path:
             Path(output_path).parent.mkdir(parents=True, exist_ok=True)
@@ -467,7 +467,7 @@ def _extract_codebase_metrics() -> Dict[str, Any]:
             try:
                 lines += len(f.read_text(encoding="utf-8", errors="ignore").splitlines())
             except Exception:
-                pass
+                logger.debug(f"Failed to read file for metrics: {f}", exc_info=True)
         metrics["by_directory"][subdir] = {"files": len(files), "lines": lines}
         metrics["total_files"] += len(files)
         metrics["total_lines"] += lines
@@ -544,7 +544,7 @@ def quality_audit(
                             if "->" in stripped:
                                 typed += 1
                 except Exception:
-                    pass
+                    logger.debug(f"Failed to audit file: {py_file}", exc_info=True)
 
         audit["functions"] = {
             "total": total_functions,
@@ -571,7 +571,7 @@ def quality_audit(
                     if "except:" in content and "except Exception" not in content:
                         antipatterns.append(f"{rel_path}: bare except clause")
                 except Exception:
-                    pass
+                    logger.debug(f"Failed to scan file for antipatterns: {py_file}", exc_info=True)
         audit["antipatterns"] = antipatterns[:20]
         audit["antipattern_count"] = len(antipatterns)
 

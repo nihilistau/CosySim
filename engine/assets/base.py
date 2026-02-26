@@ -136,7 +136,7 @@ class BaseAsset(ABC):
         Raises:
             ValueError: If validation fails with specific error
         """
-        pass
+        raise NotImplementedError(f"{self.__class__.__name__}.validate() not implemented")
     
     @abstractmethod
     def export(self) -> Dict[str, Any]:
@@ -146,7 +146,7 @@ class BaseAsset(ABC):
         Returns:
             Dictionary representation of asset
         """
-        pass
+        raise NotImplementedError(f"{self.__class__.__name__}.export() not implemented")
     
     @classmethod
     @abstractmethod
@@ -160,7 +160,7 @@ class BaseAsset(ABC):
         Returns:
             Asset instance
         """
-        pass
+        raise NotImplementedError(f"{cls.__name__}.import_data() not implemented")
     
     def get_checksum(self) -> str:
         """

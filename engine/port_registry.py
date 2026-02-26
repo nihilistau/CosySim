@@ -128,6 +128,7 @@ class PortRegistry:
             from engine.config import get_config
             cfg = get_config()
         except Exception:
+            logger.debug("Config unavailable, using default ports", exc_info=True)
             return
 
         # Scene ports
@@ -148,13 +149,13 @@ class PortRegistry:
             try:
                 self._ports["qwen3_tts"] = int(tts_url.rsplit(":", 1)[-1].rstrip("/"))
             except ValueError:
-                pass
+                logger.debug(f"Failed to parse qwen3_tts port from URL: {tts_url}", exc_info=True)
         orpheus_url = cfg.get("tts.orpheus.server_url", "")
         if orpheus_url and ":" in orpheus_url.rsplit(":", 1)[-1]:
             try:
                 self._ports["orpheus_tts"] = int(orpheus_url.rsplit(":", 1)[-1].rstrip("/"))
             except ValueError:
-                pass
+                logger.debug(f"Failed to parse orpheus_tts port from URL: {orpheus_url}", exc_info=True)
 
         # LMStudio
         lms_port = cfg.get("lmstudio.port")

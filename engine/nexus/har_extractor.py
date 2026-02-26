@@ -98,7 +98,7 @@ def _get_response_text(entry: Dict[str, Any]) -> str:
         try:
             text = base64.b64decode(text).decode("utf-8", errors="replace")
         except Exception:
-            logger.debug("Failed to base64-decode entry")
+            logger.debug("Failed to base64-decode entry", exc_info=True)
     return text
 
 
@@ -228,6 +228,7 @@ def _extract_sources(data: Any) -> tuple[str, List[Dict[str, Any]]]:
                     "source_type": source_type,
                 })
             except (IndexError, TypeError):
+                logger.debug("Failed to parse source entry", exc_info=True)
                 continue
     except (IndexError, TypeError) as e:
         logger.warning("Failed to parse sources: %s", e)
@@ -389,7 +390,7 @@ class HARExtractor:
                                 for s in _extract_strings(inner, 100):
                                     nb.documents.append(s)
                         except (json.JSONDecodeError, IndexError, TypeError):
-                            pass
+                            logger.debug("Failed to parse GenerateFreeForm entry", exc_info=True)
             nb.documents = _dedup(nb.documents)
 
         logger.info(
