@@ -2,6 +2,67 @@
 
 All notable changes to CosySim are documented here.
 
+## v0.52b — URL System, llmster, Audit Hardening, and Smart Infrastructure
+
+### Sprint 7: System Audit & Hardening
+- **CRITICAL FIX**: Added missing `LoadConfig` import in `resource_manager.py` — prevented NameError on model loading
+- **FIX**: Removed duplicate `nexus_maintain()` in `cosysim_server.py` (was defined twice)
+- **FIX**: `agent_state.py` migrated from hardcoded port 9400 to `NexusClient` — state persistence now works
+- **Error handling**: All 144 MCP tools now wrapped with try/except — no more unhandled crashes
+- **Config cleanup**: Annotated unused YAML sections (stt, security, testing, observability) as RESERVED
+- **Config fix**: Added missing `llm.custom_context` key to `default.yaml`
+- **Removed**: Empty `content/scenes/media/` placeholder directory
+- **Docs accuracy**: Fixed `nexus_search_prompts` → `nexus_get_prompts`, clarified 4-tier query router
+- **Test count**: 2,362 → 2,613 tests (+251)
+
+### New Tests (Sprint 7)
+- `tests/test_lounge.py` — 79 tests: heat management, song selection, drink system, trust gates, MCP syncing
+- `tests/test_gallery.py` — 49 tests: gallery tick, mood drift, artworks, governor context, exhibitions
+- `tests/test_games.py` — 60 tests: route registration, health, plugin info, game tracking, MCP wiring
+- `tests/test_activity_bus.py` — 33 tests: push/pop, context manager, snapshot, concurrency, thread safety
+- `tests/test_resilience.py` — 30 tests: circuit breaker states, recovery timeout, retry decorator, backoff
+
+## v0.52b — URL System, llmster, and Smart Infrastructure
+
+### Nexus URL Manager (NEW)
+- **`engine/nexus/url_manager.py`** — Store, scrape, and dissect web content into Nexus knowledge
+- `URLEntry` dataclass with metadata (title, synopsis, tags, domain)
+- `WebScraper` — stdlib-based HTML scraping with guardrails (500KB max, domain blocklist, rate limiting)
+- `ContentDissector` — intelligent chunking by headings, paragraphs, and sentence boundaries
+- `URLManager` singleton — full lifecycle: add → scrape → dissect → store in Nexus
+- Content types: `url` (bookmarks), `webpage` (full pages), `note` (dissected fragments)
+- 33 tests covering all components
+
+### LlmsterManager (NEW)
+- **`engine/lmstudio/llmster_manager.py`** — wraps `lms` CLI for daemon/server management
+- Daemon control: `daemon_up()`, `daemon_down()`, `daemon_status()`
+- Server control: `server_start()`, `server_stop()`
+- Model operations: `load_model()` with `n_parallel` (continuous batching), `unload_model()`, `list_models()`, `list_loaded()`, `download_model()`
+- Runtime update: `runtime_update("llama.cpp")`
+- Config: `lmstudio.llmster` section in `default.yaml` (n_parallel, unified_kv_cache)
+- 29 tests covering CLI mocking, lifecycle, error handling
+
+### Remote Inference (NEW)
+- **`deployment/colab_lmstudio_setup.ipynb`** — Colab Pro setup notebook
+- Install llmster, mount Drive, download models, start server, expose via ngrok
+- GPU recommendations: L4 (Qwen3-30B-A3B), A100 (Llama-3.1-70B)
+- Config: `lmstudio.remote_hosts` and `lmstudio.link` sections
+
+### New MCP Tools
+- **URL tools**: `nexus_add_url`, `nexus_list_urls`, `nexus_scrape_url`, `nexus_url_stats`
+- **Llmster tools**: `llmster_status`, `llmster_load`, `llmster_unload`, `llmster_models`, `llmster_download`
+- **Feature tracking**: `nexus_track_feature`, `nexus_list_features`
+- **Total MCP tools**: 133 → 144
+
+### Nexus Panel Routes
+- `GET/POST /api/urls` — Add and list URLs
+- `POST /api/urls/scrape` — Trigger URL scraping
+- `GET /api/urls/stats` — URL system statistics
+
+### Test Suite
+- **2362 tests** across 70+ files — all passing
+- New test files: `test_url_manager.py` (33), `test_llmster_manager.py` (29)
+
 ## v0.51b — Copilot CLI + Nexus Integration
 
 ### MCP Server — Nexus Bridge (NEW)

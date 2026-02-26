@@ -586,6 +586,74 @@ class NexusPanelScene(BaseScene, NexusSceneMixin):
             except Exception as exc:
                 return jsonify({"error": str(exc)}), 500
 
+        # ── URL Management Routes ──────────────────────────────────
+
+        @app.route("/api/urls", methods=["GET"])
+        def api_list_urls():
+            limit = request.args.get("limit", 50, type=int)
+            domain = request.args.get("domain", "")
+            try:
+                from engine.nexus.url_manager import get_url_manager
+                mgr = get_url_manager()
+                urls = mgr.list_urls(limit=limit, domain=domain or None)
+                return jsonify([u.to_dict() for u in urls])
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @app.route("/api/urls", methods=["POST"])
+        def api_add_url():
+            data = request.get_json(force=True)
+            url = data.get("url", "")
+            if not url:
+                return jsonify({"error": "No URL provided"}), 400
+            try:
+                from engine.nexus.url_manager import get_url_manager
+                mgr = get_url_manager()
+                tags = data.get("tags", [])
+                if isinstance(tags, str):
+                    tags = [t.strip() for t in tags.split(",") if t.strip()]
+                scrape = data.get("scrape", False)
+                if scrape:
+                    result = mgr.process_url(
+                        url, title=data.get("title"), tags=tags, added_by="panel")
+                else:
+                    result = mgr.add_url(
+                        url, title=data.get("title"), tags=tags, added_by="panel")
+                if result is None:
+                    return jsonify({"error": "Failed to add URL"}), 400
+                self._log_activity("url_add", url[:60], "url")
+                if isinstance(result, dict):
+                    return jsonify(result)
+                return jsonify({"status": "ok", "entry_id": result})
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @app.route("/api/urls/scrape", methods=["POST"])
+        def api_scrape_url():
+            data = request.get_json(force=True)
+            url = data.get("url", "")
+            if not url:
+                return jsonify({"error": "No URL provided"}), 400
+            try:
+                from engine.nexus.url_manager import get_url_manager
+                mgr = get_url_manager()
+                result = mgr.process_url(url, added_by="panel")
+                if result is None:
+                    return jsonify({"error": "Scrape failed"}), 400
+                self._log_activity("url_scrape", url[:60], "url")
+                return jsonify(result)
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @app.route("/api/urls/stats")
+        def api_url_stats():
+            try:
+                from engine.nexus.url_manager import get_url_manager
+                mgr = get_url_manager()
+                return jsonify(mgr.stats)
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
     # ── Lifecycle ───────────────────────────────────────────────────────
 
     def start(self) -> None:

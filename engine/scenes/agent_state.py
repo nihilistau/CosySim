@@ -131,8 +131,7 @@ class AgentPersistentState:
 class AgentStateManager:
     """Manages persistent state for all agents across scenes."""
 
-    def __init__(self, nexus_url: str = "http://localhost:9400"):
-        self.nexus_url = nexus_url
+    def __init__(self) -> None:
         self._states: Dict[str, AgentPersistentState] = {}
 
     def get_state(self, agent_id: str) -> AgentPersistentState:
@@ -181,21 +180,16 @@ class AgentStateManager:
     def _save_to_nexus(self, state: AgentPersistentState) -> None:
         """Persist agent state to Nexus (best-effort)."""
         try:
-            import urllib.request
-            data = json.dumps({
-                "content": json.dumps(state.to_dict()),
-                "content_type": "agent_state",
-                "tags": ["agent", state.agent_id, "persistent_state"],
-                "metadata": {"agent_id": state.agent_id},
-                "quality_score": 0.7,
-            }).encode()
-            req = urllib.request.Request(
-                f"{self.nexus_url}/api/knowledge",
-                data=data,
-                headers={"Content-Type": "application/json"},
-                method="POST",
+            from engine.nexus.client import get_nexus_client
+            client = get_nexus_client()
+            if not client.is_available():
+                return
+            client.add_entry(
+                title=f"Agent State: {state.agent_id}",
+                content=json.dumps(state.to_dict()),
+                content_type="agent_state",
+                tags=["agent", state.agent_id, "persistent_state"],
             )
-            urllib.request.urlopen(req, timeout=5)
         except Exception:
             pass
 

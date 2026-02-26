@@ -19,7 +19,7 @@ session tracking, and prompt versioning.
 audit logging · LMStudio v1 streaming with stateful conversations · Nexus knowledge system
 · InferenceOrchestrator multi-model routing
 
-**Test suite:** 1,903+ tests across 70+ files — run before and after changes.
+**Test suite:** 2,613+ tests across 75+ files — run before and after changes.
 
 **MCP Server:** 131 tools available via `.vscode/mcp.json` — includes Nexus bridge,
 skill discovery, and system monitoring tools.
@@ -106,7 +106,7 @@ CosySim/
 │   ├── scenes/     # 18 scene implementations
 │   └── simulation/ # Database, character system, services
 ├── config/         # YAML/JSON config (default, dev, prod, voices, skills, mcp)
-├── tests/          # pytest suite (70+ files, 1903+ tests)
+├── tests/          # pytest suite (75+ files, 2613+ tests)
 ├── docs/           # Documentation (INDEX.md entry point)
 ├── .github/        # Copilot customization (instructions, agents, hooks)
 ├── .vscode/        # VS Code config + MCP server definitions
@@ -208,6 +208,17 @@ nexus_status()                                — Check Nexus health
 nexus_list_plugins()                          — List plugins
 seed_nexus("all")                             — Seed/refresh knowledge base
 nexus_maintain("health")                      — Maintenance: health/dedup/cleanup/reindex
+nexus_add_url(url, tags="ai,research")        — Add URL and optionally scrape
+nexus_list_urls(domain="github.com")          — List stored URLs
+nexus_scrape_url(url)                         — Scrape URL into Nexus fragments
+nexus_url_stats()                             — URL system statistics
+nexus_track_feature(name, description)        — Track feature implementation status
+nexus_list_features()                         — List features and their status
+llmster_status()                              — Daemon/server/model status
+llmster_load(model, n_parallel=4)             — Load model with continuous batching
+llmster_unload(model)                         — Unload model
+llmster_models()                              — List available models on disk
+llmster_download(model)                       — Download model from catalog
 ```
 
 ### Python API (for project code)

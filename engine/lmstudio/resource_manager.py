@@ -57,6 +57,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Callable, Deque, Dict, List, Optional, Tuple
 
+from engine.lmstudio.inference_config import LoadConfig
+
 logger = logging.getLogger(__name__)
 
 

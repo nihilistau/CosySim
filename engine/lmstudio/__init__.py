@@ -98,6 +98,8 @@ from .tool_registry    import (
     ToolRegistry as SDKToolRegistry, ToolScope,
     get_tool_registry, reset_tool_registry,
 )
+# Llmster daemon manager
+from .llmster_manager  import LlmsterManager, get_llmster_manager
 
 __all__ = [
     # Native v1 (the only inference path)
@@ -126,4 +128,6 @@ __all__ = [
     "InferenceOrchestrator", "get_orchestrator", "AgentProfile",
     # Tool registry
     "SDKToolRegistry", "ToolScope", "get_tool_registry", "reset_tool_registry",
+    # Llmster daemon
+    "LlmsterManager", "get_llmster_manager",
 ]

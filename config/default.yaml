@@ -143,7 +143,7 @@ tts:
     enabled: false                     # use 0.6B as draft for 1.7B (same-family spec decode)
     draft_model: "0.6b"               # draft model size for speculative decoding
 
-# STT configuration  
+# STT configuration — RESERVED for future implementation
 stt:
   engine: "whisper"
   model_size: "base"
@@ -158,6 +158,7 @@ llm:
   temperature: 0.7
   max_tokens: 5000
   stream: true
+  custom_context: ""  # Extra context injected into agent system prompts
 
 # LMStudio SDK configuration
 lmstudio:
@@ -270,6 +271,32 @@ lmstudio:
       device: "cpu"
       enabled: false
 
+  # ── Llmster / Daemon Mode ────────────────────────────────────────
+  llmster:
+    enabled: true               # enable llmster CLI management
+    lms_path: ""                # explicit path to lms binary (empty = auto-detect)
+    auto_daemon: false          # auto-start daemon if not running
+    default_n_parallel: 4       # continuous batching slots for model loads
+    unified_kv_cache: true      # LMStudio 0.4.0 unified KV cache
+
+  # ── Remote Inference Hosts ──────────────────────────────────────
+  remote_hosts: []
+  #   - name: "colab_l4"
+  #     url: "https://xxx.ngrok.io"
+  #     gpu: "L4"
+  #     vram_mb: 24576
+  #     enabled: false
+  #   - name: "colab_a100"
+  #     url: "https://yyy.ngrok.io"
+  #     gpu: "A100"
+  #     vram_mb: 40960
+  #     enabled: false
+
+  # ── LM Studio Link (future) ────────────────────────────────────
+  link:
+    enabled: false              # waiting list — enable when access granted
+    url: ""
+
 # Hardware profile (used by LMStudioManager for VRAM estimation)
 hardware:
   gpu_name: "NVIDIA GeForce RTX 2060"
@@ -357,7 +384,7 @@ assets:
     enabled: true
     max_versions: 5
 
-# Security
+# Security — RESERVED for future implementation
 security:
   input_validation:
     max_message_length: 10000
@@ -374,7 +401,7 @@ logging:
   max_bytes: 10485760  # 10MB
   backup_count: 5
 
-# Testing
+# Testing — RESERVED for test runner config
 testing:
   database: "simulation_test.db"
   mock_external_services: true
@@ -422,7 +449,7 @@ pipeline:
     max_branches: 10               # Max active branches per conversation
     branch_ttl: 300                # Seconds before pruning unused branches
 
-# Observability — metrics collection and alerting
+# Observability — RESERVED for metrics/alerting system
 observability:
   metrics_db: "data/metrics.db"
   system_tick_interval: 1.0        # Seconds between system snapshots

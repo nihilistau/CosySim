@@ -88,9 +88,11 @@ def search_memory(query: str, character_id: Optional[str] = None, top_k: int = 5
     Returns the most relevant stored memories for the given query.
     Use this to recall past conversations, facts, or context.
     """
-    from engine.mcp.tools.memory_tools import search_memory as _impl
-    return _impl(query, _get_rag(), character_id=character_id, top_k=top_k)
-
+    try:
+        from engine.mcp.tools.memory_tools import search_memory as _impl
+        return _impl(query, _get_rag(), character_id=character_id, top_k=top_k)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def store_memory(text: str, character_id: str, metadata: Optional[str] = None) -> str:
@@ -98,9 +100,11 @@ def store_memory(text: str, character_id: str, metadata: Optional[str] = None) -
     Store a new memory for a character in the RAG system.
     Use this to save important facts, conversation summaries, or observations.
     """
-    from engine.mcp.tools.memory_tools import store_memory as _impl
-    return _impl(text, character_id, _get_rag(), metadata=metadata)
-
+    try:
+        from engine.mcp.tools.memory_tools import store_memory as _impl
+        return _impl(text, character_id, _get_rag(), metadata=metadata)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def get_character_state(character_id: str) -> str:
@@ -108,9 +112,11 @@ def get_character_state(character_id: str) -> str:
     Get the current state of a character including mood, energy, and relationships.
     Returns JSON with all character state fields.
     """
-    from engine.mcp.tools.character_tools import get_character_state as _impl
-    return _impl(character_id, _get_db())
-
+    try:
+        from engine.mcp.tools.character_tools import get_character_state as _impl
+        return _impl(character_id, _get_db())
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def adjust_relationship(
@@ -124,9 +130,11 @@ def adjust_relationship(
     Fields: relationship_level, trust, attraction, arousal_a, arousal_b.
     Delta is added to current value (can be negative). Values clamped 0-1.
     """
-    from engine.mcp.tools.character_tools import adjust_relationship as _impl
-    return _impl(character_a, character_b, field, delta, _get_db())
-
+    try:
+        from engine.mcp.tools.character_tools import adjust_relationship as _impl
+        return _impl(character_a, character_b, field, delta, _get_db())
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def get_chain_events(chain_id: str, limit: int = 20) -> str:
@@ -188,9 +196,11 @@ def list_characters() -> str:
     """
     List all characters in the database with their names and IDs.
     """
-    from engine.mcp.tools.character_tools import list_characters as _impl
-    return _impl(_get_db())
-
+    try:
+        from engine.mcp.tools.character_tools import list_characters as _impl
+        return _impl(_get_db())
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def get_benchmark_stats() -> str:
@@ -198,9 +208,11 @@ def get_benchmark_stats() -> str:
     Get performance benchmark statistics.
     Returns timing KPIs (min/max/avg/p95) for all tracked operations.
     """
-    from engine.mcp.tools.utility_tools import get_benchmark_stats_logic as _impl
-    return _impl()
-
+    try:
+        from engine.mcp.tools.utility_tools import get_benchmark_stats_logic as _impl
+        return _impl()
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def generate_image_request(
@@ -214,9 +226,11 @@ def generate_image_request(
     Provide a detailed prompt describing the desired image.
     Returns the file path of the generated image.
     """
-    from engine.mcp.tools.media_tools import generate_image_request_logic as _impl
-    return _impl(prompt, width=width, height=height, character_id=character_id)
-
+    try:
+        from engine.mcp.tools.media_tools import generate_image_request_logic as _impl
+        return _impl(prompt, width=width, height=height, character_id=character_id)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 # ═══════════════════════════════════════════════════════════════════════
 #  COMMS FRAMEWORK TOOLS  (governance, games, routing, stats)
@@ -265,9 +279,11 @@ def roll_dice(sides: int = 6, count: int = 1) -> str:
     Example: roll_dice(100) gives a d100 result for truth-or-dare.
     Odd results = Truth, Even results = Dare (for truth-or-dare game).
     """
-    from engine.mcp.tools.utility_tools import roll_dice_logic as _impl
-    return _impl(sides, count)
-
+    try:
+        from engine.mcp.tools.utility_tools import roll_dice_logic as _impl
+        return _impl(sides, count)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def get_random_topic(category: str = "general") -> str:
@@ -277,9 +293,11 @@ def get_random_topic(category: str = "general") -> str:
     'conversation_starters', 'relationship_questions', 'general'.
     Use this to get fresh ideas for games, topics, or challenges.
     """
-    from engine.mcp.tools.utility_tools import get_random_topic_logic as _impl
-    return _impl(category)
-
+    try:
+        from engine.mcp.tools.utility_tools import get_random_topic_logic as _impl
+        return _impl(category)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 # ── Game state ─────────────────────────────────────────────────────────
 
@@ -291,9 +309,11 @@ def get_game_state(game_id: str, key: Optional[str] = None) -> str:
     If key is None, returns the entire game state dict.
     Common game IDs: 'truth_or_dare', 'mystery'.
     """
-    from engine.mcp.tools.game_tools import get_game_state as _impl
-    return _impl(game_id, key=key)
-
+    try:
+        from engine.mcp.tools.game_tools import get_game_state as _impl
+        return _impl(game_id, key=key)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def set_game_state(game_id: str, key: str, value: str) -> str:
@@ -303,9 +323,11 @@ def set_game_state(game_id: str, key: str, value: str) -> str:
     Value is stored as a string — use JSON encoding for complex types.
     Example: set_game_state('truth_or_dare', 'round', '3')
     """
-    from engine.mcp.tools.game_tools import set_game_state as _impl
-    return _impl(game_id, key, value)
-
+    try:
+        from engine.mcp.tools.game_tools import set_game_state as _impl
+        return _impl(game_id, key, value)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def start_game(game_id: str, scene: str = "phone", config_json: Optional[str] = None) -> str:
@@ -315,9 +337,11 @@ def start_game(game_id: str, scene: str = "phone", config_json: Optional[str] = 
     This resets existing game state and marks the game as active.
     The game rules will automatically be injected into your system context.
     """
-    from engine.mcp.tools.game_tools import start_game as _impl
-    return _impl(game_id, scene, config_json)
-
+    try:
+        from engine.mcp.tools.game_tools import start_game as _impl
+        return _impl(game_id, scene, config_json)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def end_game(game_id: str) -> str:
@@ -325,9 +349,11 @@ def end_game(game_id: str) -> str:
     End a game and record the final result.
     Returns a summary of the final game state including score.
     """
-    from engine.mcp.tools.game_tools import end_game as _impl
-    return _impl(game_id)
-
+    try:
+        from engine.mcp.tools.game_tools import end_game as _impl
+        return _impl(game_id)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 # ── MCP-tracked game tools (MCPGameSession) ───────────────────────────
 
@@ -353,9 +379,11 @@ def launch_game(
     -------
     JSON with the new session summary including game_id and initial state.
     """
-    from engine.mcp.tools.game_tools import launch_game as _impl
-    return _impl(character_id, game_type, case_index)
-
+    try:
+        from engine.mcp.tools.game_tools import launch_game as _impl
+        return _impl(character_id, game_type, case_index)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def get_active_game(character_id: str) -> str:
@@ -369,9 +397,11 @@ def get_active_game(character_id: str) -> str:
     -------
     JSON: {"active": false} if no session, or full session summary + 10-turn history.
     """
-    from engine.mcp.tools.game_tools import get_active_game as _impl
-    return _impl(character_id)
-
+    try:
+        from engine.mcp.tools.game_tools import get_active_game as _impl
+        return _impl(character_id)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def game_action(
@@ -405,9 +435,11 @@ def game_action(
     -------
     JSON result dict with outcome details.
     """
-    from engine.mcp.tools.game_tools import game_action as _impl
-    return _impl(character_id, action, data_json)
-
+    try:
+        from engine.mcp.tools.game_tools import game_action as _impl
+        return _impl(character_id, action, data_json)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def game_history(character_id: str, limit: int = 20) -> str:
@@ -426,9 +458,11 @@ def game_history(character_id: str, limit: int = 20) -> str:
     -------
     JSON with game_id, game_type, current turn, and history list.
     """
-    from engine.mcp.tools.game_tools import game_history as _impl
-    return _impl(character_id, limit)
-
+    try:
+        from engine.mcp.tools.game_tools import game_history as _impl
+        return _impl(character_id, limit)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 # ── Character emotion & mood ───────────────────────────────────────────
 
@@ -472,29 +506,31 @@ def apply_effect(
     'energise', 'deflate', 'excite', 'calm', 'curiosity_spike'.
     value: magnitude of the effect (0.0–1.0).
     """
-    EFFECT_MAP = {
-        "trust_boost":      {"trust": value},
-        "trust_drop":       {"trust": -value},
-        "attraction_boost": {"attraction": value},
-        "energise":         {"arousal_a": value},
-        "deflate":          {"arousal_a": -value},
-        "excite":           {"arousal_a": value, "attraction": value * 0.5},
-        "calm":             {"arousal_a": -value * 0.5},
-        "curiosity_spike":  {"relationship_level": value * 0.3},
-    }
-    fields = EFFECT_MAP.get(effect_name)
-    if not fields:
-        return f"Unknown effect '{effect_name}'."
-    db = _get_db()
-    results = []
-    for field, delta in fields.items():
-        try:
-            db.update_character_state(character_id, {field: delta})
-            results.append(f"{field}+={delta:+.2f}")
-        except Exception:
-            pass
-    return f"Applied effect '{effect_name}' to {character_id}: {', '.join(results)}"
-
+    try:
+        EFFECT_MAP = {
+            "trust_boost":      {"trust": value},
+            "trust_drop":       {"trust": -value},
+            "attraction_boost": {"attraction": value},
+            "energise":         {"arousal_a": value},
+            "deflate":          {"arousal_a": -value},
+            "excite":           {"arousal_a": value, "attraction": value * 0.5},
+            "calm":             {"arousal_a": -value * 0.5},
+            "curiosity_spike":  {"relationship_level": value * 0.3},
+        }
+        fields = EFFECT_MAP.get(effect_name)
+        if not fields:
+            return f"Unknown effect '{effect_name}'."
+        db = _get_db()
+        results = []
+        for field, delta in fields.items():
+            try:
+                db.update_character_state(character_id, {field: delta})
+                results.append(f"{field}+={delta:+.2f}")
+            except Exception:
+                pass
+        return f"Applied effect '{effect_name}' to {character_id}: {', '.join(results)}"
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 # ── Agent routing & communication ──────────────────────────────────────
 
@@ -526,9 +562,11 @@ def get_scene_context(scene: str = "phone") -> str:
     active characters, current game (if any), service health.
     Use this to understand the state of the world before acting.
     """
-    from engine.mcp.tools.scene_tools import get_scene_context as _impl
-    return _impl(scene)
-
+    try:
+        from engine.mcp.tools.scene_tools import get_scene_context as _impl
+        return _impl(scene)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def intercept_and_enhance(
@@ -578,9 +616,11 @@ def get_system_stats() -> str:
     loaded LMStudio model, and activity bus status.
     Use this to check if the system is under load or what model is active.
     """
-    from engine.mcp.tools.utility_tools import get_system_stats_logic as _impl
-    return _impl()
-
+    try:
+        from engine.mcp.tools.utility_tools import get_system_stats_logic as _impl
+        return _impl()
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def check_relationship(character_a: str, character_b: str) -> str:
@@ -624,9 +664,11 @@ def search_web(query: str, max_results: int = 5) -> str:
     that might not be in your training data.
     Returns a list of titles, snippets, and URLs.
     """
-    from engine.mcp.tools.media_tools import search_web_logic as _impl
-    return _impl(query, max_results)
-
+    try:
+        from engine.mcp.tools.media_tools import search_web_logic as _impl
+        return _impl(query, max_results)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 # ══════════════════════════════════════════════════════════════════════
 # ██████████████████████████████████████████████████████████████████████
@@ -659,9 +701,11 @@ def wardrobe_get(character_id: str) -> str:
     Returns JSON with 'worn' list, 'removed' list, 'description' (human-readable),
     and 'is_naked' boolean.
     """
-    from engine.mcp.tools.wardrobe_tools import wardrobe_get as _impl
-    return _impl(_ssm(), character_id)
-
+    try:
+        from engine.mcp.tools.wardrobe_tools import wardrobe_get as _impl
+        return _impl(_ssm(), character_id)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def wardrobe_init(character_id: str, style: str = "casual") -> str:
@@ -671,9 +715,11 @@ def wardrobe_init(character_id: str, style: str = "casual") -> str:
 
     style: 'casual' | 'lingerie' | 'party' | 'nightwear' | 'swimwear'
     """
-    from engine.mcp.tools.wardrobe_tools import wardrobe_init as _impl
-    return _impl(_ssm(), character_id, style=style)
-
+    try:
+        from engine.mcp.tools.wardrobe_tools import wardrobe_init as _impl
+        return _impl(_ssm(), character_id, style=style)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def wardrobe_remove_item(character_id: str, item_id: str, removed_by: str = "") -> str:
@@ -687,9 +733,11 @@ def wardrobe_remove_item(character_id: str, item_id: str, removed_by: str = "") 
     Returns the item details and updated coverage description, or an error if
     the item is not found or already removed.
     """
-    from engine.mcp.tools.wardrobe_tools import wardrobe_remove_item as _impl
-    return _impl(_ssm(), character_id, item_id, removed_by=removed_by)
-
+    try:
+        from engine.mcp.tools.wardrobe_tools import wardrobe_remove_item as _impl
+        return _impl(_ssm(), character_id, item_id, removed_by=removed_by)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def wardrobe_remove_outermost(character_id: str, removed_by: str = "") -> str:
@@ -701,9 +749,11 @@ def wardrobe_remove_outermost(character_id: str, removed_by: str = "") -> str:
     Returns what was removed and what's left.  Call repeatedly to fully
     undress.
     """
-    from engine.mcp.tools.wardrobe_tools import wardrobe_remove_outermost as _impl
-    return _impl(_ssm(), character_id, removed_by=removed_by)
-
+    try:
+        from engine.mcp.tools.wardrobe_tools import wardrobe_remove_outermost as _impl
+        return _impl(_ssm(), character_id, removed_by=removed_by)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def wardrobe_add_item(
@@ -720,9 +770,11 @@ def wardrobe_add_item(
 
     category: bra | underwear | top | bottom | full_outfit | shoes | outerwear | accessory | socks
     """
-    from engine.mcp.tools.wardrobe_tools import wardrobe_add_item as _impl
-    return _impl(_ssm(), character_id, item_id, name, category, color=color, style=style)
-
+    try:
+        from engine.mcp.tools.wardrobe_tools import wardrobe_add_item as _impl
+        return _impl(_ssm(), character_id, item_id, name, category, color=color, style=style)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def wardrobe_redress(character_id: str) -> str:
@@ -730,9 +782,11 @@ def wardrobe_redress(character_id: str) -> str:
     Put all previously removed clothing back on a character.
     Use at scene reset or morning-after scenarios.
     """
-    from engine.mcp.tools.wardrobe_tools import wardrobe_redress as _impl
-    return _impl(_ssm(), character_id)
-
+    try:
+        from engine.mcp.tools.wardrobe_tools import wardrobe_redress as _impl
+        return _impl(_ssm(), character_id)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 # ── CHARACTER SCENE STATS ────────────────────────────────────────────
 
@@ -748,16 +802,18 @@ def get_character_scene_stats(character_id: str) -> str:
     Also returns 'emotional_state' — a human-readable description of how the
     character is feeling right now.  USE THIS to inform how they should behave.
     """
-    stats = _ssm().get_stats(character_id)
-    wardrobe = _ssm().get_wardrobe(character_id)
-    return json.dumps({
-        "character_id":    character_id,
-        "stats":           stats.to_dict(),
-        "emotional_state": stats.emotional_state_text(),
-        "wearing":         wardrobe.coverage_description(),
-        "is_naked":        len(wardrobe.worn_items()) == 0,
-    }, indent=2)
-
+    try:
+        stats = _ssm().get_stats(character_id)
+        wardrobe = _ssm().get_wardrobe(character_id)
+        return json.dumps({
+            "character_id":    character_id,
+            "stats":           stats.to_dict(),
+            "emotional_state": stats.emotional_state_text(),
+            "wearing":         wardrobe.coverage_description(),
+            "is_naked":        len(wardrobe.worn_items()) == 0,
+        }, indent=2)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def update_character_scene_stats(character_id: str, stat_changes: str) -> str:
@@ -792,26 +848,30 @@ def set_character_scene_stat(character_id: str, stat: str, value: float) -> str:
     stat: arousal | horniness | pleasure | happiness | anger | fear |
           drunkenness | tiredness | explicitness | openness | affection | dominance
     """
-    _coord().update(character_id, mode="set", source="mcp_tool", **{stat: value})
-    stats = _ssm().get_stats(character_id)
-    return json.dumps({
-        "set": True,
-        "stat": stat,
-        "value": getattr(stats, stat, None),
-        "emotional_state": stats.emotional_state_text(),
-    }, indent=2)
-
+    try:
+        _coord().update(character_id, mode="set", source="mcp_tool", **{stat: value})
+        stats = _ssm().get_stats(character_id)
+        return json.dumps({
+            "set": True,
+            "stat": stat,
+            "value": getattr(stats, stat, None),
+            "emotional_state": stats.emotional_state_text(),
+        }, indent=2)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def reset_character_scene_stats(character_id: str) -> str:
     """Reset all scene stats for a character back to defaults (scene reset / new character)."""
-    stats = _ssm().reset_stats(character_id)
-    return json.dumps({
-        "reset": True,
-        "character_id": character_id,
-        "stats": stats.to_dict(),
-    }, indent=2)
-
+    try:
+        stats = _ssm().reset_stats(character_id)
+        return json.dumps({
+            "reset": True,
+            "character_id": character_id,
+            "stats": stats.to_dict(),
+        }, indent=2)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 # ── INTERACTIONS ──────────────────────────────────────────────────────
 
@@ -844,72 +904,74 @@ def perform_interaction(
     Returns the interaction result, narrative fragments, stat effects applied,
     and a timed action token if the interaction takes time.
     """
-    it = _itrees()
-    initiator_stats = _ssm().get_stats(initiator_id).to_dict()
-    result = it.get_interaction_result(
-        interaction_type,
-        subtype or None,
-        initiator_stats=initiator_stats,
-        target_stats=_ssm().get_stats(target_id).to_dict() if target_id else None,
-        scene=scene_id,
-        intensity_override=intensity or None,
-    )
-
-    if "error" in result:
-        return json.dumps(result)
-
-    # Apply stat effects to both characters
-    for char_id in [initiator_id, target_id]:
-        if char_id:
-            _ssm().update_stats(char_id, **result["stat_effects"])
-
-    # Log to narrative
-    opening = result.get("narrative_opening", "")
-    _ssm().add_narrative(
-        scene_id,
-        opening,
-        character_id=initiator_id,
-        entry_type="action",
-    )
-
-    # Log interaction record
-    from engine.mcp.scene_state import InteractionRecord
-    record = InteractionRecord(
-        interaction_id=json.dumps({"t": result["type"], "s": result["subtype"]})[:32],
-        scene_id=scene_id,
-        interaction_type=result["type"],
-        subtype=result["subtype"],
-        initiator_id=initiator_id,
-        target_id=target_id,
-        description=result["description"],
-        duration_secs=result["duration_secs"],
-        stat_effects=result["stat_effects"],
-    )
-    _ssm().log_interaction(scene_id, record)
-
-    # Start timed action if duration > 0
-    action_token = None
-    if result["duration_secs"] > 0:
-        action_token = _ssm().start_timed_action(
-            initiator_id,
-            action_type=result["type"],
-            duration=result["duration_secs"],
-            description=result["description"],
-            phase_labels=result.get("phases", []),
+    try:
+        it = _itrees()
+        initiator_stats = _ssm().get_stats(initiator_id).to_dict()
+        result = it.get_interaction_result(
+            interaction_type,
+            subtype or None,
+            initiator_stats=initiator_stats,
+            target_stats=_ssm().get_stats(target_id).to_dict() if target_id else None,
+            scene=scene_id,
+            intensity_override=intensity or None,
         )
 
-    # Updated stats
-    new_stats = _ssm().get_stats(initiator_id).to_dict()
+        if "error" in result:
+            return json.dumps(result)
 
-    return json.dumps({
-        "interaction":        result,
-        "stat_effects_applied": result["stat_effects"],
-        "initiator_new_stats":  new_stats,
-        "initiator_emotional_state": _ssm().get_stats(initiator_id).emotional_state_text(),
-        "timed_action_token": action_token,
-        "narrative_fragment": opening,
-    }, indent=2)
+        # Apply stat effects to both characters
+        for char_id in [initiator_id, target_id]:
+            if char_id:
+                _ssm().update_stats(char_id, **result["stat_effects"])
 
+        # Log to narrative
+        opening = result.get("narrative_opening", "")
+        _ssm().add_narrative(
+            scene_id,
+            opening,
+            character_id=initiator_id,
+            entry_type="action",
+        )
+
+        # Log interaction record
+        from engine.mcp.scene_state import InteractionRecord
+        record = InteractionRecord(
+            interaction_id=json.dumps({"t": result["type"], "s": result["subtype"]})[:32],
+            scene_id=scene_id,
+            interaction_type=result["type"],
+            subtype=result["subtype"],
+            initiator_id=initiator_id,
+            target_id=target_id,
+            description=result["description"],
+            duration_secs=result["duration_secs"],
+            stat_effects=result["stat_effects"],
+        )
+        _ssm().log_interaction(scene_id, record)
+
+        # Start timed action if duration > 0
+        action_token = None
+        if result["duration_secs"] > 0:
+            action_token = _ssm().start_timed_action(
+                initiator_id,
+                action_type=result["type"],
+                duration=result["duration_secs"],
+                description=result["description"],
+                phase_labels=result.get("phases", []),
+            )
+
+        # Updated stats
+        new_stats = _ssm().get_stats(initiator_id).to_dict()
+
+        return json.dumps({
+            "interaction":        result,
+            "stat_effects_applied": result["stat_effects"],
+            "initiator_new_stats":  new_stats,
+            "initiator_emotional_state": _ssm().get_stats(initiator_id).emotional_state_text(),
+            "timed_action_token": action_token,
+            "narrative_fragment": opening,
+        }, indent=2)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def list_available_interactions(character_id: str, scene_id: str = "bedroom") -> str:
@@ -920,17 +982,19 @@ def list_available_interactions(character_id: str, scene_id: str = "bedroom") ->
 
     Returns a filtered list — only shows subtypes whose stat requirements are met.
     """
-    it = _itrees()
-    stats = _ssm().get_stats(character_id).to_dict()
-    available = it.get_available_interactions(stats, scene=scene_id)
-    all_types = it.list_interaction_types(scene=scene_id)
-    return json.dumps({
-        "character_id":  character_id,
-        "emotional_state": _ssm().get_stats(character_id).emotional_state_text(),
-        "available_now": available,
-        "all_types":     all_types,
-    }, indent=2)
-
+    try:
+        it = _itrees()
+        stats = _ssm().get_stats(character_id).to_dict()
+        available = it.get_available_interactions(stats, scene=scene_id)
+        all_types = it.list_interaction_types(scene=scene_id)
+        return json.dumps({
+            "character_id":  character_id,
+            "emotional_state": _ssm().get_stats(character_id).emotional_state_text(),
+            "available_now": available,
+            "all_types":     all_types,
+        }, indent=2)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def get_interaction_details(
@@ -945,37 +1009,39 @@ def get_interaction_details(
     Call this to understand what an interaction involves before using it,
     or to pick the right fragments for your narration.
     """
-    it = _itrees()
-    trees = it.BEDROOM_INTERACTIONS if scene_id == "bedroom" else it.PHONE_INTERACTIONS
-    itype = trees.get(interaction_type)
-    if not itype:
-        return json.dumps({"error": f"Unknown type '{interaction_type}'"})
-    if subtype:
-        sub = itype.get_subtype(subtype)
-        if not sub:
-            return json.dumps({"error": f"Unknown subtype '{subtype}'"})
-        import dataclasses
-        return json.dumps(dataclasses.asdict(sub), indent=2)
-    # Return overview of all subtypes
-    return json.dumps({
-        "type":     itype.id,
-        "label":    itype.label,
-        "description": itype.description,
-        "subtypes": [
-            {
-                "id": s.id, "label": s.label,
-                "description": s.description,
-                "intimacy": s.intimacy,
-                "duration": s.duration,
-                "stat_effects": s.stat_effects,
-                "phases": s.phases,
-                "sample_fragments": s.fragments[:3],
-                "requires": s.requires,
-            }
-            for s in itype.subtypes
-        ],
-    }, indent=2)
-
+    try:
+        it = _itrees()
+        trees = it.BEDROOM_INTERACTIONS if scene_id == "bedroom" else it.PHONE_INTERACTIONS
+        itype = trees.get(interaction_type)
+        if not itype:
+            return json.dumps({"error": f"Unknown type '{interaction_type}'"})
+        if subtype:
+            sub = itype.get_subtype(subtype)
+            if not sub:
+                return json.dumps({"error": f"Unknown subtype '{subtype}'"})
+            import dataclasses
+            return json.dumps(dataclasses.asdict(sub), indent=2)
+        # Return overview of all subtypes
+        return json.dumps({
+            "type":     itype.id,
+            "label":    itype.label,
+            "description": itype.description,
+            "subtypes": [
+                {
+                    "id": s.id, "label": s.label,
+                    "description": s.description,
+                    "intimacy": s.intimacy,
+                    "duration": s.duration,
+                    "stat_effects": s.stat_effects,
+                    "phases": s.phases,
+                    "sample_fragments": s.fragments[:3],
+                    "requires": s.requires,
+                }
+                for s in itype.subtypes
+            ],
+        }, indent=2)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 # ── TIMED ACTIONS ─────────────────────────────────────────────────────
 
@@ -997,23 +1063,25 @@ def start_timed_action(
     phases: comma-separated phase labels e.g. 'beginning,building,peak,afterglow'
     duration_secs: how long the action takes (15-120 typical)
     """
-    phase_list = [p.strip() for p in phases.split(",") if p.strip()] if phases else []
-    token = _ssm().start_timed_action(
-        character_id, action_type,
-        duration=duration_secs,
-        description=description,
-        phase_labels=phase_list,
-    )
-    return json.dumps({
-        "started": True,
-        "token": token,
-        "character_id": character_id,
-        "action_type": action_type,
-        "duration_secs": duration_secs,
-        "description": description,
-        "message": f"Use poll_timed_action('{token}') to check progress.",
-    }, indent=2)
-
+    try:
+        phase_list = [p.strip() for p in phases.split(",") if p.strip()] if phases else []
+        token = _ssm().start_timed_action(
+            character_id, action_type,
+            duration=duration_secs,
+            description=description,
+            phase_labels=phase_list,
+        )
+        return json.dumps({
+            "started": True,
+            "token": token,
+            "character_id": character_id,
+            "action_type": action_type,
+            "duration_secs": duration_secs,
+            "description": description,
+            "message": f"Use poll_timed_action('{token}') to check progress.",
+        }, indent=2)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def poll_timed_action(token: str) -> str:
@@ -1024,18 +1092,22 @@ def poll_timed_action(token: str) -> str:
     Check this periodically to narrate an unfolding scene.  When complete=true
     the action has finished — emit the afterglow narrative.
     """
-    status = _ssm().poll_timed_action(token)
-    if not status:
-        return json.dumps({"error": f"No action found with token '{token}'"})
-    return json.dumps(status, indent=2)
-
+    try:
+        status = _ssm().poll_timed_action(token)
+        if not status:
+            return json.dumps({"error": f"No action found with token '{token}'"})
+        return json.dumps(status, indent=2)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def abort_timed_action(token: str) -> str:
     """Stop a timed action early (e.g. interrupted by Director or refused by character)."""
-    ok = _ssm().abort_timed_action(token)
-    return json.dumps({"aborted": ok, "token": token})
-
+    try:
+        ok = _ssm().abort_timed_action(token)
+        return json.dumps({"aborted": ok, "token": token})
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def list_active_timed_actions(character_id: str = "") -> str:
@@ -1043,9 +1115,11 @@ def list_active_timed_actions(character_id: str = "") -> str:
     List all currently running timed actions.
     Pass character_id to filter to a specific character, or leave blank for all.
     """
-    actions = _ssm().active_timed_actions(character_id=character_id or None)
-    return json.dumps({"active_actions": actions, "count": len(actions)}, indent=2)
-
+    try:
+        actions = _ssm().active_timed_actions(character_id=character_id or None)
+        return json.dumps({"active_actions": actions, "count": len(actions)}, indent=2)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 # ── NARRATIVE & CONTINUITY ───────────────────────────────────────────
 
@@ -1068,9 +1142,11 @@ def add_scene_narrative(
       "The Director dims the lights to red."
       "Aria admits she's been thinking about him all day."
     """
-    from engine.mcp.tools.scene_tools import add_scene_narrative as _impl
-    return _impl(scene_id, event, character_id=character_id, entry_type=entry_type)
-
+    try:
+        from engine.mcp.tools.scene_tools import add_scene_narrative as _impl
+        return _impl(scene_id, event, character_id=character_id, entry_type=entry_type)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def get_scene_narrative(scene_id: str, limit: int = 20) -> str:
@@ -1081,9 +1157,11 @@ def get_scene_narrative(scene_id: str, limit: int = 20) -> str:
     Returns a text summary and a structured list of entries.
     Always call this at scene start and after resuming a paused session.
     """
-    from engine.mcp.tools.scene_tools import get_scene_narrative as _impl
-    return _impl(scene_id, limit)
-
+    try:
+        from engine.mcp.tools.scene_tools import get_scene_narrative as _impl
+        return _impl(scene_id, limit)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def get_full_scene_snapshot(scene_id: str, character_ids: str = "") -> str:
@@ -1096,9 +1174,11 @@ def get_full_scene_snapshot(scene_id: str, character_ids: str = "") -> str:
     Use this at scene start, after a skip, or to ground your response in the
     current reality of the room.  This is your oracle.
     """
-    from engine.mcp.tools.scene_tools import get_full_scene_snapshot as _impl
-    return _impl(scene_id, character_ids)
-
+    try:
+        from engine.mcp.tools.scene_tools import get_full_scene_snapshot as _impl
+        return _impl(scene_id, character_ids)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 # ── SCENE ATMOSPHERE ─────────────────────────────────────────────────
 
@@ -1126,10 +1206,12 @@ def set_scene_atmosphere(
     This is written into the narrative log and returned to agents via
     get_full_scene_snapshot().
     """
-    from engine.mcp.tools.scene_tools import set_scene_atmosphere as _impl
-    return _impl(scene_id, lighting=lighting, mood=mood, music=music,
-                 temperature=temperature, props_present=props_present, note=note)
-
+    try:
+        from engine.mcp.tools.scene_tools import set_scene_atmosphere as _impl
+        return _impl(scene_id, lighting=lighting, mood=mood, music=music,
+                     temperature=temperature, props_present=props_present, note=note)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 # ── CONSENT & AGENCY ─────────────────────────────────────────────────
 
@@ -1146,48 +1228,50 @@ def check_character_consent(character_id: str, action_type: str) -> str:
     action_type examples: 'striptease', 'kiss', 'sex', 'oral', 'cuddle',
                           'dirty_talk', 'remove_top', 'remove_all'
     """
-    stats = _ssm().get_stats(character_id).to_dict()
-    openness   = float(stats.get("openness", 65))
-    arousal    = float(stats.get("arousal", 20))
-    fear       = float(stats.get("fear", 5))
-    anger      = float(stats.get("anger", 5))
-    happiness  = float(stats.get("happiness", 60))
-    affection  = float(stats.get("affection", 50))
+    try:
+        stats = _ssm().get_stats(character_id).to_dict()
+        openness   = float(stats.get("openness", 65))
+        arousal    = float(stats.get("arousal", 20))
+        fear       = float(stats.get("fear", 5))
+        anger      = float(stats.get("anger", 5))
+        happiness  = float(stats.get("happiness", 60))
+        affection  = float(stats.get("affection", 50))
 
-    intimacy_map = {
-        "cuddle": 20, "kiss": 30, "caress": 35,
-        "dirty_talk": 45, "striptease": 50, "remove_top": 45,
-        "remove_all": 60, "oral": 65, "foreplay": 55,
-        "sex": 70, "role_play": 50, "submission": 65,
-    }
-    threshold = intimacy_map.get(action_type.lower(), 50)
-    score = (openness * 0.4) + (arousal * 0.3) + (happiness * 0.15) + (affection * 0.15)
-    score -= (fear * 0.4) + (anger * 0.3)
+        intimacy_map = {
+            "cuddle": 20, "kiss": 30, "caress": 35,
+            "dirty_talk": 45, "striptease": 50, "remove_top": 45,
+            "remove_all": 60, "oral": 65, "foreplay": 55,
+            "sex": 70, "role_play": 50, "submission": 65,
+        }
+        threshold = intimacy_map.get(action_type.lower(), 50)
+        score = (openness * 0.4) + (arousal * 0.3) + (happiness * 0.15) + (affection * 0.15)
+        score -= (fear * 0.4) + (anger * 0.3)
 
-    if score >= threshold + 15:
-        decision = "WILL"
-        detail   = "enthusiastically willing — may even take the lead"
-    elif score >= threshold:
-        decision = "WILL"
-        detail   = "willing, probably with some playful resistance"
-    elif score >= threshold - 15:
-        decision = "RELUCTANT"
-        detail   = "hesitant but could be persuaded if approached well"
-    else:
-        decision  = "REFUSE"
-        detail    = "refusing — this goes against current state or mood"
+        if score >= threshold + 15:
+            decision = "WILL"
+            detail   = "enthusiastically willing — may even take the lead"
+        elif score >= threshold:
+            decision = "WILL"
+            detail   = "willing, probably with some playful resistance"
+        elif score >= threshold - 15:
+            decision = "RELUCTANT"
+            detail   = "hesitant but could be persuaded if approached well"
+        else:
+            decision  = "REFUSE"
+            detail    = "refusing — this goes against current state or mood"
 
-    return json.dumps({
-        "character_id":  character_id,
-        "action":        action_type,
-        "decision":      decision,
-        "detail":        detail,
-        "score":         round(score, 1),
-        "threshold":     threshold,
-        "emotional_state": _ssm().get_stats(character_id).emotional_state_text(),
-        "note": "REFUSE creates drama — lean into it. Negotiation and resistance are part of the scene.",
-    }, indent=2)
-
+        return json.dumps({
+            "character_id":  character_id,
+            "action":        action_type,
+            "decision":      decision,
+            "detail":        detail,
+            "score":         round(score, 1),
+            "threshold":     threshold,
+            "emotional_state": _ssm().get_stats(character_id).emotional_state_text(),
+            "note": "REFUSE creates drama — lean into it. Negotiation and resistance are part of the scene.",
+        }, indent=2)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def get_character_agency_summary(character_id: str) -> str:
@@ -1198,51 +1282,53 @@ def get_character_agency_summary(character_id: str) -> str:
 
     Use this to write authentic agent responses that feel real rather than always-compliant.
     """
-    stats = _ssm().get_stats(character_id).to_dict()
-    wardrobe = _ssm().get_wardrobe(character_id)
+    try:
+        stats = _ssm().get_stats(character_id).to_dict()
+        wardrobe = _ssm().get_wardrobe(character_id)
 
-    arousal    = float(stats.get("arousal", 20))
-    openness   = float(stats.get("openness", 65))
-    happiness  = float(stats.get("happiness", 60))
-    horniness  = float(stats.get("horniness", 15))
-    dominance  = float(stats.get("dominance", 50))
-    affection  = float(stats.get("affection", 50))
-    fear       = float(stats.get("fear", 5))
-    anger      = float(stats.get("anger", 5))
+        arousal    = float(stats.get("arousal", 20))
+        openness   = float(stats.get("openness", 65))
+        happiness  = float(stats.get("happiness", 60))
+        horniness  = float(stats.get("horniness", 15))
+        dominance  = float(stats.get("dominance", 50))
+        affection  = float(stats.get("affection", 50))
+        fear       = float(stats.get("fear", 5))
+        anger      = float(stats.get("anger", 5))
 
-    compliance = max(0, min(100, openness * 0.4 + happiness * 0.2 + arousal * 0.2 - fear * 0.3 - anger * 0.3))
+        compliance = max(0, min(100, openness * 0.4 + happiness * 0.2 + arousal * 0.2 - fear * 0.3 - anger * 0.3))
 
-    wants, resists, might_initiate = [], [], []
-    if arousal > 60:     wants.append("physical closeness, touch, intimacy")
-    if horniness > 50:   wants.append("explicitly sexual encounter")
-    if happiness > 70:   wants.append("to share joy, laugh, play")
-    if affection > 65:   wants.append("tender moments, to be seen and held")
-    if fear > 40:        resists.append("unfamiliar or overwhelming actions")
-    if anger > 40:       resists.append("being told what to do right now")
-    if dominance > 65:   might_initiate.append("taking control of the scene")
-    if dominance < 35:   might_initiate.append("asking permission, following lead")
-    if arousal > 70 and horniness > 60:
-        might_initiate.append("making the first bold move")
-    if happiness > 75:   might_initiate.append("playful teasing or mischief")
+        wants, resists, might_initiate = [], [], []
+        if arousal > 60:     wants.append("physical closeness, touch, intimacy")
+        if horniness > 50:   wants.append("explicitly sexual encounter")
+        if happiness > 70:   wants.append("to share joy, laugh, play")
+        if affection > 65:   wants.append("tender moments, to be seen and held")
+        if fear > 40:        resists.append("unfamiliar or overwhelming actions")
+        if anger > 40:       resists.append("being told what to do right now")
+        if dominance > 65:   might_initiate.append("taking control of the scene")
+        if dominance < 35:   might_initiate.append("asking permission, following lead")
+        if arousal > 70 and horniness > 60:
+            might_initiate.append("making the first bold move")
+        if happiness > 75:   might_initiate.append("playful teasing or mischief")
 
-    return json.dumps({
-        "character_id":    character_id,
-        "emotional_state": _ssm().get_stats(character_id).emotional_state_text(),
-        "stats":           stats,
-        "wearing":         wardrobe.coverage_description(),
-        "compliance_score": round(compliance, 1),
-        "compliance_label": (
-            "highly compliant — will enthusiastically follow most directions" if compliance > 75 else
-            "moderately open — willing with right approach" if compliance > 50 else
-            "resistant — may push back or redirect" if compliance > 30 else
-            "very resistant — has strong opinions right now"
-        ),
-        "wants":           wants if wants else ["to engage authentically with the scene"],
-        "resists":         resists if resists else ["nothing in particular right now"],
-        "might_spontaneously_initiate": might_initiate if might_initiate else ["following your lead"],
-        "note": "Honour this — characters with free will are more interesting than yes-machines.",
-    }, indent=2)
-
+        return json.dumps({
+            "character_id":    character_id,
+            "emotional_state": _ssm().get_stats(character_id).emotional_state_text(),
+            "stats":           stats,
+            "wearing":         wardrobe.coverage_description(),
+            "compliance_score": round(compliance, 1),
+            "compliance_label": (
+                "highly compliant — will enthusiastically follow most directions" if compliance > 75 else
+                "moderately open — willing with right approach" if compliance > 50 else
+                "resistant — may push back or redirect" if compliance > 30 else
+                "very resistant — has strong opinions right now"
+            ),
+            "wants":           wants if wants else ["to engage authentically with the scene"],
+            "resists":         resists if resists else ["nothing in particular right now"],
+            "might_spontaneously_initiate": might_initiate if might_initiate else ["following your lead"],
+            "note": "Honour this — characters with free will are more interesting than yes-machines.",
+        }, indent=2)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 # NOTE: get_scene_rules() defined below in SCENE RULES ENGINE TOOLS section
 # (delegates to SceneRulesEngine for dynamic per-scene rules)
@@ -1255,44 +1341,46 @@ def get_all_tools_for_scene(scene_id: str = "bedroom") -> str:
     Call this at the start of a session so you know every tool at your disposal.
     Agents should internalise this list and joke/reference their abilities naturally.
     """
-    bedroom_tools = [
-        "wardrobe_get", "wardrobe_init", "wardrobe_remove_item",
-        "wardrobe_remove_outermost", "wardrobe_add_item", "wardrobe_redress",
-        "get_character_scene_stats", "update_character_scene_stats",
-        "set_character_scene_stat", "reset_character_scene_stats",
-        "perform_interaction", "list_available_interactions", "get_interaction_details",
-        "start_timed_action", "poll_timed_action", "abort_timed_action", "list_active_timed_actions",
-        "add_scene_narrative", "get_scene_narrative", "get_full_scene_snapshot",
-        "set_scene_atmosphere", "check_character_consent", "get_character_agency_summary",
-        "get_scene_rules", "get_all_tools_for_scene",
-        # Plus all existing tools:
-        "search_memory", "store_memory", "get_character_state", "adjust_relationship",
-        "get_game_state", "set_game_state", "update_mood", "apply_effect",
-        "send_to_agent", "get_system_stats", "check_relationship", "roll_dice",
-        "get_random_topic", "intercept_and_enhance",
-    ]
-    phone_tools = [
-        "get_character_scene_stats", "update_character_scene_stats",
-        "perform_interaction", "list_available_interactions", "get_interaction_details",
-        "add_scene_narrative", "get_scene_narrative",
-        "check_character_consent", "get_character_agency_summary",
-        "get_scene_rules",
-        "search_memory", "update_mood", "check_relationship", "adjust_relationship",
-        "get_random_topic", "roll_dice", "send_to_agent", "search_web",
-        "intercept_and_enhance", "apply_effect", "get_system_stats",
-    ]
-    tool_list = bedroom_tools if scene_id == "bedroom" else phone_tools
-    return json.dumps({
-        "scene_id": scene_id,
-        "tool_count": len(tool_list),
-        "tools": tool_list,
-        "tip": (
-            "You know about all of these tools. "
-            "Reference them naturally in conversation — agents aware of their own abilities "
-            "are more interesting and more fun to interact with."
-        ),
-    }, indent=2)
-
+    try:
+        bedroom_tools = [
+            "wardrobe_get", "wardrobe_init", "wardrobe_remove_item",
+            "wardrobe_remove_outermost", "wardrobe_add_item", "wardrobe_redress",
+            "get_character_scene_stats", "update_character_scene_stats",
+            "set_character_scene_stat", "reset_character_scene_stats",
+            "perform_interaction", "list_available_interactions", "get_interaction_details",
+            "start_timed_action", "poll_timed_action", "abort_timed_action", "list_active_timed_actions",
+            "add_scene_narrative", "get_scene_narrative", "get_full_scene_snapshot",
+            "set_scene_atmosphere", "check_character_consent", "get_character_agency_summary",
+            "get_scene_rules", "get_all_tools_for_scene",
+            # Plus all existing tools:
+            "search_memory", "store_memory", "get_character_state", "adjust_relationship",
+            "get_game_state", "set_game_state", "update_mood", "apply_effect",
+            "send_to_agent", "get_system_stats", "check_relationship", "roll_dice",
+            "get_random_topic", "intercept_and_enhance",
+        ]
+        phone_tools = [
+            "get_character_scene_stats", "update_character_scene_stats",
+            "perform_interaction", "list_available_interactions", "get_interaction_details",
+            "add_scene_narrative", "get_scene_narrative",
+            "check_character_consent", "get_character_agency_summary",
+            "get_scene_rules",
+            "search_memory", "update_mood", "check_relationship", "adjust_relationship",
+            "get_random_topic", "roll_dice", "send_to_agent", "search_web",
+            "intercept_and_enhance", "apply_effect", "get_system_stats",
+        ]
+        tool_list = bedroom_tools if scene_id == "bedroom" else phone_tools
+        return json.dumps({
+            "scene_id": scene_id,
+            "tool_count": len(tool_list),
+            "tools": tool_list,
+            "tip": (
+                "You know about all of these tools. "
+                "Reference them naturally in conversation — agents aware of their own abilities "
+                "are more interesting and more fun to interact with."
+            ),
+        }, indent=2)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 # ── DIRECTOR TOOLS ───────────────────────────────────────────────────
 
@@ -1314,35 +1402,37 @@ def director_action(
     Characters receive this as a system-level directive.  Whether they comply
     depends on their check_character_consent() score.
     """
-    targets = [t.strip() for t in target_character_ids.split(",") if t.strip()]
-    _ssm().add_narrative(scene_id, f"[DIRECTOR]: {action}", entry_type="system")
+    try:
+        targets = [t.strip() for t in target_character_ids.split(",") if t.strip()]
+        _ssm().add_narrative(scene_id, f"[DIRECTOR]: {action}", entry_type="system")
 
-    applied = {}
-    if stat_impact:
+        applied = {}
+        if stat_impact:
+            try:
+                impact = json.loads(stat_impact)
+                for cid in targets:
+                    _ssm().update_stats(cid, **impact)
+                applied = impact
+            except Exception:
+                pass
+
         try:
-            impact = json.loads(stat_impact)
+            from engine.mcp.comms_framework import get_router
+            router = get_router()
             for cid in targets:
-                _ssm().update_stats(cid, **impact)
-            applied = impact
+                router.send(cid, f"[DIRECTOR DIRECTIVE]: {action}", sender_id="director")
         except Exception:
             pass
 
-    try:
-        from engine.mcp.comms_framework import get_router
-        router = get_router()
-        for cid in targets:
-            router.send(cid, f"[DIRECTOR DIRECTIVE]: {action}", sender_id="director")
-    except Exception:
-        pass
-
-    return json.dumps({
-        "directive_issued": True,
-        "action": action,
-        "targets": targets,
-        "stat_impact_applied": applied,
-        "note": "Characters have free will — they may interpret, resist, or embellish.",
-    }, indent=2)
-
+        return json.dumps({
+            "directive_issued": True,
+            "action": action,
+            "targets": targets,
+            "stat_impact_applied": applied,
+            "note": "Characters have free will — they may interpret, resist, or embellish.",
+        }, indent=2)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def resolve_random_scene_event(scene_id: str = "bedroom") -> str:
@@ -1352,38 +1442,40 @@ def resolve_random_scene_event(scene_id: str = "bedroom") -> str:
 
     Returns an event description and any stat effects — ready to use.
     """
-    import random
-    bedroom_events = [
-        {"event": "The music changes to something slower and more suggestive.", "effects": {"arousal": 10}},
-        {"event": "A bottle of wine appears on the bedside table — already open.", "effects": {"happiness": 15, "drunkenness": 10}},
-        {"event": "The lights dim automatically to their lowest setting.", "effects": {"arousal": 12, "fear": 5}},
-        {"event": "Outside, the city is suddenly very quiet. The room feels more private than before.", "effects": {"openness": 10}},
-        {"event": "A message arrives on someone's phone — then is pointedly ignored.", "effects": {"happiness": 5}},
-        {"event": "The shower turns on in the next room — someone's getting ready.", "effects": {"arousal": 8}},
-        {"event": "One character catches the other watching them intently.", "effects": {"arousal": 20, "happiness": 10}},
-        {"event": "A scented candle fills the room with warm vanilla.", "effects": {"happiness": 10, "arousal": 8, "fear": -5}},
-        {"event": "Someone's phone buzzes — both glance at it and neither reaches for it.", "effects": {"affection": 15}},
-        {"event": "An accidental brush of hands lingers a half-second too long.", "effects": {"arousal": 18, "affection": 12}},
-        {"event": "Someone laughs at something — genuine and surprised. The tension shifts perfectly.", "effects": {"happiness": 20}},
-        {"event": "Eye contact holds a beat past comfortable. Neither looks away.", "effects": {"arousal": 22, "affection": 10}},
-    ]
-    phone_events = [
-        {"event": "A meme arrives from the other person — no context, just vibes.", "effects": {"happiness": 15}},
-        {"event": "Three dots appear... then disappear... then the message that finally arrives is unexpected.", "effects": {"arousal": 10, "happiness": 10}},
-        {"event": "A voice note lands — warm, slightly out of breath, like they recorded it walking.", "effects": {"affection": 20, "arousal": 12}},
-        {"event": "They text something at 2am. Just your name. Nothing else.", "effects": {"arousal": 25, "affection": 20}},
-        {"event": "A blurry selfie arrives with 'be there in 10' typed underneath.", "effects": {"happiness": 25, "arousal": 15}},
-        {"event": "They reference something you said three weeks ago. They've been thinking about it.", "effects": {"affection": 30}},
-    ]
-    events = bedroom_events if scene_id == "bedroom" else phone_events
-    chosen = random.choice(events)
-    _ssm().add_narrative(scene_id, chosen["event"], entry_type="environment")
-    return json.dumps({
-        "event": chosen["event"],
-        "stat_effects": chosen["effects"],
-        "note": "Log this event in your response — make it feel organic.",
-    }, indent=2)
-
+    try:
+        import random
+        bedroom_events = [
+            {"event": "The music changes to something slower and more suggestive.", "effects": {"arousal": 10}},
+            {"event": "A bottle of wine appears on the bedside table — already open.", "effects": {"happiness": 15, "drunkenness": 10}},
+            {"event": "The lights dim automatically to their lowest setting.", "effects": {"arousal": 12, "fear": 5}},
+            {"event": "Outside, the city is suddenly very quiet. The room feels more private than before.", "effects": {"openness": 10}},
+            {"event": "A message arrives on someone's phone — then is pointedly ignored.", "effects": {"happiness": 5}},
+            {"event": "The shower turns on in the next room — someone's getting ready.", "effects": {"arousal": 8}},
+            {"event": "One character catches the other watching them intently.", "effects": {"arousal": 20, "happiness": 10}},
+            {"event": "A scented candle fills the room with warm vanilla.", "effects": {"happiness": 10, "arousal": 8, "fear": -5}},
+            {"event": "Someone's phone buzzes — both glance at it and neither reaches for it.", "effects": {"affection": 15}},
+            {"event": "An accidental brush of hands lingers a half-second too long.", "effects": {"arousal": 18, "affection": 12}},
+            {"event": "Someone laughs at something — genuine and surprised. The tension shifts perfectly.", "effects": {"happiness": 20}},
+            {"event": "Eye contact holds a beat past comfortable. Neither looks away.", "effects": {"arousal": 22, "affection": 10}},
+        ]
+        phone_events = [
+            {"event": "A meme arrives from the other person — no context, just vibes.", "effects": {"happiness": 15}},
+            {"event": "Three dots appear... then disappear... then the message that finally arrives is unexpected.", "effects": {"arousal": 10, "happiness": 10}},
+            {"event": "A voice note lands — warm, slightly out of breath, like they recorded it walking.", "effects": {"affection": 20, "arousal": 12}},
+            {"event": "They text something at 2am. Just your name. Nothing else.", "effects": {"arousal": 25, "affection": 20}},
+            {"event": "A blurry selfie arrives with 'be there in 10' typed underneath.", "effects": {"happiness": 25, "arousal": 15}},
+            {"event": "They reference something you said three weeks ago. They've been thinking about it.", "effects": {"affection": 30}},
+        ]
+        events = bedroom_events if scene_id == "bedroom" else phone_events
+        chosen = random.choice(events)
+        _ssm().add_narrative(scene_id, chosen["event"], entry_type="environment")
+        return json.dumps({
+            "event": chosen["event"],
+            "stat_effects": chosen["effects"],
+            "note": "Log this event in your response — make it feel organic.",
+        }, indent=2)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 # ══════════════════════════════════════════════════════════════════════
 #  CHARACTER REGISTRY TOOLS
@@ -1417,12 +1509,14 @@ def character_register(
         pronouns:         e.g. "she/her"
         scene_roles_json: JSON dict of scene → role  e.g. '{"bedroom": "lover"}'
     """
-    from engine.mcp.tools.character_tools import character_register as _impl
-    return _impl(character_id, name, age=age, appearance_json=appearance_json,
-                 personality_json=personality_json, backstory=backstory,
-                 voice_style=voice_style, pronouns=pronouns,
-                 scene_roles_json=scene_roles_json)
-
+    try:
+        from engine.mcp.tools.character_tools import character_register as _impl
+        return _impl(character_id, name, age=age, appearance_json=appearance_json,
+                     personality_json=personality_json, backstory=backstory,
+                     voice_style=voice_style, pronouns=pronouns,
+                     scene_roles_json=scene_roles_json)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def character_query(character_id: str, attribute: str) -> str:
@@ -1434,9 +1528,11 @@ def character_query(character_id: str, attribute: str) -> str:
         attribute:    Any key: "name", "age", "mood", "arousal", "voice_style",
                       "hair", "eye_colour", "restrictions", "flags", etc.
     """
-    from engine.mcp.tools.character_tools import character_query as _impl
-    return _impl(character_id, attribute)
-
+    try:
+        from engine.mcp.tools.character_tools import character_query as _impl
+        return _impl(character_id, attribute)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def character_set_attribute(
@@ -1455,9 +1551,11 @@ def character_set_attribute(
         attribute:    State field name
         value:        New value (will be coerced from string where possible)
     """
-    from engine.mcp.tools.character_tools import character_set_attribute as _impl
-    return _impl(character_id, attribute, value)
-
+    try:
+        from engine.mcp.tools.character_tools import character_set_attribute as _impl
+        return _impl(character_id, attribute, value)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def character_get_summary(character_id: str) -> str:
@@ -1468,9 +1566,11 @@ def character_get_summary(character_id: str) -> str:
     Args:
         character_id: e.g. "aria"
     """
-    from engine.mcp.tools.character_tools import character_get_summary as _impl
-    return _impl(character_id)
-
+    try:
+        from engine.mcp.tools.character_tools import character_get_summary as _impl
+        return _impl(character_id)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def character_assign_skill(
@@ -1494,10 +1594,12 @@ def character_assign_skill(
         trigger:      "auto" (always runs) | "optional" | "required"
         priority:     Execution priority (lower = earlier)
     """
-    from engine.mcp.tools.character_tools import character_assign_skill as _impl
-    return _impl(character_id, skill_id, skill_type=skill_type, label=label,
-                 params_json=params_json, trigger=trigger, priority=priority)
-
+    try:
+        from engine.mcp.tools.character_tools import character_assign_skill as _impl
+        return _impl(character_id, skill_id, skill_type=skill_type, label=label,
+                     params_json=params_json, trigger=trigger, priority=priority)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def character_revoke_skill(character_id: str, skill_id: str) -> str:
@@ -1508,9 +1610,11 @@ def character_revoke_skill(character_id: str, skill_id: str) -> str:
         character_id: e.g. "aria"
         skill_id:     Skill to remove
     """
-    from engine.mcp.tools.character_tools import character_revoke_skill as _impl
-    return _impl(character_id, skill_id)
-
+    try:
+        from engine.mcp.tools.character_tools import character_revoke_skill as _impl
+        return _impl(character_id, skill_id)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def character_get_skills(character_id: str, trigger: str = "") -> str:
@@ -1521,9 +1625,11 @@ def character_get_skills(character_id: str, trigger: str = "") -> str:
         character_id: e.g. "aria"
         trigger:      Optional filter: "auto" | "optional" | "required" | "" (all)
     """
-    from engine.mcp.tools.character_tools import character_get_skills as _impl
-    return _impl(character_id, trigger=trigger)
-
+    try:
+        from engine.mcp.tools.character_tools import character_get_skills as _impl
+        return _impl(character_id, trigger=trigger)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def character_add_restriction(character_id: str, restriction: str) -> str:
@@ -1535,9 +1641,11 @@ def character_add_restriction(character_id: str, restriction: str) -> str:
         character_id: e.g. "aria"
         restriction:  Named restriction e.g. "no_nudity", "safe_mode"
     """
-    from engine.mcp.tools.character_tools import character_add_restriction as _impl
-    return _impl(character_id, restriction)
-
+    try:
+        from engine.mcp.tools.character_tools import character_add_restriction as _impl
+        return _impl(character_id, restriction)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def character_remove_restriction(character_id: str, restriction: str) -> str:
@@ -1548,9 +1656,11 @@ def character_remove_restriction(character_id: str, restriction: str) -> str:
         character_id: e.g. "aria"
         restriction:  Name of the restriction to remove
     """
-    from engine.mcp.tools.character_tools import character_remove_restriction as _impl
-    return _impl(character_id, restriction)
-
+    try:
+        from engine.mcp.tools.character_tools import character_remove_restriction as _impl
+        return _impl(character_id, restriction)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 # ══════════════════════════════════════════════════════════════════════
 #  DIALOG SYSTEM TOOLS
@@ -1576,13 +1686,15 @@ def get_dialog_options(
         stats_json:        JSON dict of current stats e.g. '{"arousal": 55, "openness": 40}'
         max_options:       Maximum number of options to return
     """
-    from engine.mcp.dialog_system import get_dialog_system
-    from engine.mcp.tools.dialog_tools import get_dialog_options as _impl
-    tags  = json.loads(context_tags_json) if context_tags_json else []
-    stats = json.loads(stats_json)        if stats_json        else {}
-    return _impl(get_dialog_system(), character_id, scene_id,
-                 context_tags=tags, stats=stats, max_options=max_options)
-
+    try:
+        from engine.mcp.dialog_system import get_dialog_system
+        from engine.mcp.tools.dialog_tools import get_dialog_options as _impl
+        tags  = json.loads(context_tags_json) if context_tags_json else []
+        stats = json.loads(stats_json)        if stats_json        else {}
+        return _impl(get_dialog_system(), character_id, scene_id,
+                     context_tags=tags, stats=stats, max_options=max_options)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def speech_enhance(
@@ -1605,10 +1717,12 @@ def speech_enhance(
         style:        Speech style to apply
         scene_id:     Current scene for context
     """
-    from engine.mcp.dialog_system import get_dialog_system
-    from engine.mcp.tools.dialog_tools import speech_enhance as _impl
-    return _impl(get_dialog_system(), character_id, text, style=style, scene_id=scene_id)
-
+    try:
+        from engine.mcp.dialog_system import get_dialog_system
+        from engine.mcp.tools.dialog_tools import speech_enhance as _impl
+        return _impl(get_dialog_system(), character_id, text, style=style, scene_id=scene_id)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def set_response_directive(
@@ -1639,12 +1753,14 @@ def set_response_directive(
         turns:          How many turns this directive lasts
         issued_by:      Who issued it (for audit)
     """
-    from engine.mcp.dialog_system import get_dialog_system
-    from engine.mcp.tools.dialog_tools import set_response_directive as _impl
-    return _impl(get_dialog_system(), character_id, scene_id,
-                 directive_type=directive_type, value=value, turns=turns,
-                 issued_by=issued_by)
-
+    try:
+        from engine.mcp.dialog_system import get_dialog_system
+        from engine.mcp.tools.dialog_tools import set_response_directive as _impl
+        return _impl(get_dialog_system(), character_id, scene_id,
+                     directive_type=directive_type, value=value, turns=turns,
+                     issued_by=issued_by)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def get_active_directive(character_id: str, scene_id: str) -> str:
@@ -1656,10 +1772,12 @@ def get_active_directive(character_id: str, scene_id: str) -> str:
         character_id: e.g. "aria"
         scene_id:     e.g. "bedroom"
     """
-    from engine.mcp.dialog_system import get_dialog_system
-    from engine.mcp.tools.dialog_tools import get_active_directive as _impl
-    return _impl(get_dialog_system(), character_id, scene_id)
-
+    try:
+        from engine.mcp.dialog_system import get_dialog_system
+        from engine.mcp.tools.dialog_tools import get_active_directive as _impl
+        return _impl(get_dialog_system(), character_id, scene_id)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def clear_directive(character_id: str, scene_id: str) -> str:
@@ -1670,10 +1788,12 @@ def clear_directive(character_id: str, scene_id: str) -> str:
         character_id: e.g. "aria"
         scene_id:     e.g. "bedroom"
     """
-    from engine.mcp.dialog_system import get_dialog_system
-    from engine.mcp.tools.dialog_tools import clear_directive as _impl
-    return _impl(get_dialog_system(), character_id, scene_id)
-
+    try:
+        from engine.mcp.dialog_system import get_dialog_system
+        from engine.mcp.tools.dialog_tools import clear_directive as _impl
+        return _impl(get_dialog_system(), character_id, scene_id)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def get_conversation_heat(character_id: str, scene_id: str) -> str:
@@ -1685,10 +1805,12 @@ def get_conversation_heat(character_id: str, scene_id: str) -> str:
         character_id: e.g. "aria"
         scene_id:     e.g. "phone"
     """
-    from engine.mcp.dialog_system import get_dialog_system
-    from engine.mcp.tools.dialog_tools import get_conversation_heat as _impl
-    return _impl(get_dialog_system(), character_id, scene_id)
-
+    try:
+        from engine.mcp.dialog_system import get_dialog_system
+        from engine.mcp.tools.dialog_tools import get_conversation_heat as _impl
+        return _impl(get_dialog_system(), character_id, scene_id)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 # NOTE: bump_conversation_heat() defined below in CONVERSATION MANAGEMENT section
 # (delegates to ConversationHeat from scene_rules_engine)
@@ -1708,9 +1830,11 @@ def get_scene_rules(scene_id: str) -> str:
     Args:
         scene_id: e.g. "bedroom" or "phone"
     """
-    from engine.mcp.tools.scene_tools import get_scene_rules as _impl
-    return _impl(scene_id)
-
+    try:
+        from engine.mcp.tools.scene_tools import get_scene_rules as _impl
+        return _impl(scene_id)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def get_scene_available_actions(
@@ -1729,10 +1853,12 @@ def get_scene_available_actions(
         stats_json:       JSON dict of current stats
         scene_state_json: JSON dict of scene state flags
     """
-    from engine.mcp.tools.scene_tools import get_scene_available_actions as _impl
-    return _impl(scene_id, character_id, stats_json=stats_json,
-                 scene_state_json=scene_state_json)
-
+    try:
+        from engine.mcp.tools.scene_tools import get_scene_available_actions as _impl
+        return _impl(scene_id, character_id, stats_json=stats_json,
+                     scene_state_json=scene_state_json)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def apply_scene_rule(
@@ -1754,9 +1880,11 @@ def apply_scene_rule(
         target_ids_json: JSON list of target character IDs
         issuer:          Who triggered this (for audit)
     """
-    from engine.mcp.tools.scene_tools import apply_scene_rule as _impl
-    return _impl(scene_id, rule_id, target_ids_json=target_ids_json, issuer=issuer)
-
+    try:
+        from engine.mcp.tools.scene_tools import apply_scene_rule as _impl
+        return _impl(scene_id, rule_id, target_ids_json=target_ids_json, issuer=issuer)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 # ══════════════════════════════════════════════════════════════════════
 #  5 KEY PYTHON-POWERED TOOLS  (hooks into the full MCP stack)
@@ -1864,12 +1992,14 @@ def speak_as(
         style:        Force a style (or leave blank to auto-select)
         scene_id:     Current scene for context
     """
-    from engine.mcp.dialog_system import get_dialog_system
-    from engine.mcp.character_registry import get_character_registry
-    from engine.mcp.tools.dialog_tools import speak_as as _impl
-    return _impl(get_dialog_system(), get_character_registry(),
-                 character_id, text, style=style, scene_id=scene_id)
-
+    try:
+        from engine.mcp.dialog_system import get_dialog_system
+        from engine.mcp.character_registry import get_character_registry
+        from engine.mcp.tools.dialog_tools import speak_as as _impl
+        return _impl(get_dialog_system(), get_character_registry(),
+                     character_id, text, style=style, scene_id=scene_id)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def enforce_behavior(
@@ -1905,11 +2035,13 @@ def enforce_behavior(
         scene_id:      Scene context
         turns:         How many turns the enforcement lasts
     """
-    from engine.mcp.dialog_system import get_dialog_system
-    from engine.mcp.tools.dialog_tools import enforce_behavior as _impl
-    return _impl(get_dialog_system(), character_id, behavior_type, value,
-                 reason=reason, scene_id=scene_id, turns=turns, ssm=_ssm())
-
+    try:
+        from engine.mcp.dialog_system import get_dialog_system
+        from engine.mcp.tools.dialog_tools import enforce_behavior as _impl
+        return _impl(get_dialog_system(), character_id, behavior_type, value,
+                     reason=reason, scene_id=scene_id, turns=turns, ssm=_ssm())
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def scene_broadcast(
@@ -1939,10 +2071,12 @@ def scene_broadcast(
                                    directive (dict): {type, value, turns}
         target_characters_json:  JSON list of character IDs (empty = all in scene)
     """
-    from engine.mcp.tools.scene_tools import scene_broadcast as _impl
-    return _impl(scene_id, event_type, payload_json=payload_json,
-                 target_characters_json=target_characters_json)
-
+    try:
+        from engine.mcp.tools.scene_tools import scene_broadcast as _impl
+        return _impl(scene_id, event_type, payload_json=payload_json,
+                     target_characters_json=target_characters_json)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def get_scene_rules_summary(scene_id: str, character_id: str = "") -> str:
@@ -1962,9 +2096,11 @@ def get_scene_rules_summary(scene_id: str, character_id: str = "") -> str:
         scene_id:     e.g. "bedroom" or "phone"
         character_id: The character you're working with
     """
-    from engine.mcp.tools.scene_tools import get_scene_rules_summary as _impl
-    return _impl(scene_id, character_id)
-
+    try:
+        from engine.mcp.tools.scene_tools import get_scene_rules_summary as _impl
+        return _impl(scene_id, character_id)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 # ══════════════════════════════════════════════════════════════════════
 #  FRAMEWORK TOOLS  ─ timers, random, cross-scene, consequences
@@ -1992,9 +2128,11 @@ def start_timer(
         duration_secs:    How long the timer runs in real seconds
         on_complete_note: Text returned when the timer finishes (use it in your response)
     """
-    from engine.mcp.tools.utility_tools import start_timer_logic as _impl
-    return _impl(timer_name, duration_secs, on_complete_note=on_complete_note)
-
+    try:
+        from engine.mcp.tools.utility_tools import start_timer_logic as _impl
+        return _impl(timer_name, duration_secs, on_complete_note=on_complete_note)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def check_timer(timer_name: str) -> str:
@@ -2010,9 +2148,11 @@ def check_timer(timer_name: str) -> str:
     Args:
         timer_name: The name you gave when starting the timer
     """
-    from engine.mcp.tools.utility_tools import check_timer_logic as _impl
-    return _impl(timer_name)
-
+    try:
+        from engine.mcp.tools.utility_tools import check_timer_logic as _impl
+        return _impl(timer_name)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def cancel_timer(timer_name: str) -> str:
@@ -2022,9 +2162,11 @@ def cancel_timer(timer_name: str) -> str:
     Args:
         timer_name: The timer to cancel
     """
-    from engine.mcp.tools.utility_tools import cancel_timer_logic as _impl
-    return _impl(timer_name)
-
+    try:
+        from engine.mcp.tools.utility_tools import cancel_timer_logic as _impl
+        return _impl(timer_name)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def random_pick(
@@ -2058,9 +2200,11 @@ def random_pick(
         weights_json: JSON list of floats — bias the distribution
         seed:         Integer seed for reproducible results (omit for random)
     """
-    from engine.mcp.tools.utility_tools import random_pick_logic as _impl
-    return _impl(n, options_json=options_json, weights_json=weights_json, seed=seed)
-
+    try:
+        from engine.mcp.tools.utility_tools import random_pick_logic as _impl
+        return _impl(n, options_json=options_json, weights_json=weights_json, seed=seed)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 # ══════════════════════════════════════════════════════════════════════
 #  AMAZING FEATURE 1: CROSS-SCENE COMMUNICATION
@@ -2104,10 +2248,12 @@ def cross_scene_message(
         message:      The message content
         message_type: text | call_notification | event | system
     """
-    from engine.mcp.tools.utility_tools import cross_scene_message_logic as _impl
-    return _impl(from_char, from_scene, to_char, to_scene, message,
-                 message_type=message_type)
-
+    try:
+        from engine.mcp.tools.utility_tools import cross_scene_message_logic as _impl
+        return _impl(from_char, from_scene, to_char, to_scene, message,
+                     message_type=message_type)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def get_cross_scene_inbox(character_id: str) -> str:
@@ -2121,9 +2267,11 @@ def get_cross_scene_inbox(character_id: str) -> str:
     Args:
         character_id: The character whose inbox to check
     """
-    from engine.mcp.tools.utility_tools import get_cross_scene_inbox_logic as _impl
-    return _impl(character_id)
-
+    try:
+        from engine.mcp.tools.utility_tools import get_cross_scene_inbox_logic as _impl
+        return _impl(character_id)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def get_framework_status() -> str:
@@ -2131,9 +2279,11 @@ def get_framework_status() -> str:
     Return a full MCPFramework status snapshot: active scenes, characters,
     timers, and pending consequence chains.  Use as a Director overview.
     """
-    from engine.mcp.tools.utility_tools import get_framework_status_logic as _impl
-    return _impl()
-
+    try:
+        from engine.mcp.tools.utility_tools import get_framework_status_logic as _impl
+        return _impl()
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 # ══════════════════════════════════════════════════════════════════════
 #  AMAZING FEATURE 2: MOOD CONTAGION
@@ -3149,9 +3299,11 @@ def send_selfie(
     Provide a detailed prompt describing the selfie (pose, expression, setting).
     Returns JSON with the image path and metadata.
     """
-    from engine.mcp.tools.media_tools import send_selfie_logic as _impl
-    return _impl(prompt, character_id=character_id, width=width, height=height)
-
+    try:
+        from engine.mcp.tools.media_tools import send_selfie_logic as _impl
+        return _impl(prompt, character_id=character_id, width=width, height=height)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def send_voice_message(
@@ -3165,9 +3317,11 @@ def send_voice_message(
     Provide the text to speak and optional emotion tag.
     Returns JSON with the audio path.
     """
-    from engine.mcp.tools.media_tools import send_voice_message_logic as _impl
-    return _impl(text, character_id=character_id, emotion=emotion)
-
+    try:
+        from engine.mcp.tools.media_tools import send_voice_message_logic as _impl
+        return _impl(text, character_id=character_id, emotion=emotion)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def query_stateless(prompt: str, system: str = "") -> str:
@@ -3331,9 +3485,11 @@ def suggest_activity(scene_id: str = "phone") -> str:
     Suggest a scene-appropriate activity based on current context.
     Returns a list of suggested activities with descriptions.
     """
-    from engine.mcp.tools.utility_tools import suggest_activity_logic as _impl
-    return _impl(scene_id)
-
+    try:
+        from engine.mcp.tools.utility_tools import suggest_activity_logic as _impl
+        return _impl(scene_id)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.resource("benchmark://summary")
 def resource_benchmarks() -> str:
@@ -3381,167 +3537,195 @@ def _get_nexus():
 def nexus_search(query: str, limit: int = 10) -> str:
     """Search the Nexus knowledge base for entries matching a query.
     Returns matching knowledge entries with titles, content, and metadata."""
-    nx = _get_nexus()
-    if not nx:
-        return json.dumps({"error": "Nexus unavailable"})
-    results = nx.search(query, limit=limit)
-    return json.dumps({"results": results, "count": len(results)})
-
+    try:
+        nx = _get_nexus()
+        if not nx:
+            return json.dumps({"error": "Nexus unavailable"})
+        results = nx.search(query, limit=limit)
+        return json.dumps({"results": results, "count": len(results)})
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def nexus_ask(question: str, depth: str = "auto", category: str = "") -> str:
     """Smart Q&A against Nexus — checks Q&A cache first, then FTS5 search,
     then NotebookLM if needed. Returns the best available answer."""
-    nx = _get_nexus()
-    if not nx:
-        return json.dumps({"error": "Nexus unavailable"})
-    answer = nx.ask(question, depth=depth, category=category)
-    return json.dumps(answer)
-
+    try:
+        nx = _get_nexus()
+        if not nx:
+            return json.dumps({"error": "Nexus unavailable"})
+        answer = nx.ask(question, depth=depth, category=category)
+        return json.dumps(answer)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def nexus_add(title: str, content: str, content_type: str = "note",
               category: str = "", tags: str = "") -> str:
     """Store a knowledge entry in Nexus. Tags should be comma-separated.
     Content types: note, document, prompt, qa, changelog, decision, snippet, bug."""
-    nx = _get_nexus()
-    if not nx:
-        return json.dumps({"error": "Nexus unavailable"})
-    tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
-    entry_id = nx.add_entry(title, content, content_type=content_type,
-                            category=category, tags=tag_list)
-    if entry_id:
-        return json.dumps({"ok": True, "id": entry_id})
-    return json.dumps({"ok": False, "error": "Failed to add entry"})
-
+    try:
+        nx = _get_nexus()
+        if not nx:
+            return json.dumps({"error": "Nexus unavailable"})
+        tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
+        entry_id = nx.add_entry(title, content, content_type=content_type,
+                                category=category, tags=tag_list)
+        if entry_id:
+            return json.dumps({"ok": True, "id": entry_id})
+        return json.dumps({"ok": False, "error": "Failed to add entry"})
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def nexus_add_qa(question: str, answer: str, category: str = "",
                  tags: str = "") -> str:
     """Store a question-answer pair in Nexus for future lookups."""
-    nx = _get_nexus()
-    if not nx:
-        return json.dumps({"error": "Nexus unavailable"})
-    tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
-    qa_id = nx.add_qa(question, answer, category=category, tags=tag_list)
-    if qa_id:
-        return json.dumps({"ok": True, "id": qa_id})
-    return json.dumps({"ok": False, "error": "Failed to add Q&A"})
-
+    try:
+        nx = _get_nexus()
+        if not nx:
+            return json.dumps({"error": "Nexus unavailable"})
+        tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
+        qa_id = nx.add_qa(question, answer, category=category, tags=tag_list)
+        if qa_id:
+            return json.dumps({"ok": True, "id": qa_id})
+        return json.dumps({"ok": False, "error": "Failed to add Q&A"})
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def nexus_get_rules(scope: str = "", rule_type: str = "") -> str:
     """Get active governance rules from Nexus, optionally filtered by scope and type."""
-    nx = _get_nexus()
-    if not nx:
-        return json.dumps({"error": "Nexus unavailable"})
-    rules = nx.get_rules(scope=scope, rule_type=rule_type)
-    return json.dumps({"rules": rules, "count": len(rules)})
-
+    try:
+        nx = _get_nexus()
+        if not nx:
+            return json.dumps({"error": "Nexus unavailable"})
+        rules = nx.get_rules(scope=scope, rule_type=rule_type)
+        return json.dumps({"rules": rules, "count": len(rules)})
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def nexus_store_prompt(name: str, content: str, category: str = "system",
                        version: str = "1") -> str:
     """Store a versioned prompt template in Nexus for reuse."""
-    nx = _get_nexus()
-    if not nx:
-        return json.dumps({"error": "Nexus unavailable"})
-    prompt_id = nx.store_prompt(name, content, category=category, version=version)
-    if prompt_id:
-        return json.dumps({"ok": True, "id": prompt_id})
-    return json.dumps({"ok": False, "error": "Failed to store prompt"})
-
+    try:
+        nx = _get_nexus()
+        if not nx:
+            return json.dumps({"error": "Nexus unavailable"})
+        prompt_id = nx.store_prompt(name, content, category=category, version=version)
+        if prompt_id:
+            return json.dumps({"ok": True, "id": prompt_id})
+        return json.dumps({"ok": False, "error": "Failed to store prompt"})
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def nexus_get_prompts(category: str = "", name: str = "") -> str:
     """Retrieve stored prompt templates from Nexus."""
-    nx = _get_nexus()
-    if not nx:
-        return json.dumps({"error": "Nexus unavailable"})
-    prompts = nx.get_prompts(category=category, name=name)
-    return json.dumps({"prompts": prompts, "count": len(prompts)})
-
+    try:
+        nx = _get_nexus()
+        if not nx:
+            return json.dumps({"error": "Nexus unavailable"})
+        prompts = nx.get_prompts(category=category, name=name)
+        return json.dumps({"prompts": prompts, "count": len(prompts)})
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def nexus_research(question: str) -> str:
     """Start a deep research session in Nexus using NotebookLM.
     Returns a research_id to use with nexus_converse and nexus_finish_research."""
-    nx = _get_nexus()
-    if not nx:
-        return json.dumps({"error": "Nexus unavailable"})
-    result = nx.research(question)
-    return json.dumps(result)
-
+    try:
+        nx = _get_nexus()
+        if not nx:
+            return json.dumps({"error": "Nexus unavailable"})
+        result = nx.research(question)
+        return json.dumps(result)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def nexus_converse(research_id: str, message: str) -> str:
     """Continue a Nexus research conversation. Use after nexus_research."""
-    nx = _get_nexus()
-    if not nx:
-        return json.dumps({"error": "Nexus unavailable"})
-    result = nx.converse(research_id, message)
-    return json.dumps(result)
-
+    try:
+        nx = _get_nexus()
+        if not nx:
+            return json.dumps({"error": "Nexus unavailable"})
+        result = nx.converse(research_id, message)
+        return json.dumps(result)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def nexus_finish_research(research_id: str) -> str:
     """Complete a research session and distill Q&A pairs into Nexus."""
-    nx = _get_nexus()
-    if not nx:
-        return json.dumps({"error": "Nexus unavailable"})
-    result = nx.finish_research(research_id)
-    return json.dumps(result)
-
+    try:
+        nx = _get_nexus()
+        if not nx:
+            return json.dumps({"error": "Nexus unavailable"})
+        result = nx.finish_research(research_id)
+        return json.dumps(result)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def nexus_import_youtube(url: str, category: str = "youtube",
                          tags: str = "") -> str:
     """Import a YouTube video transcript into Nexus knowledge base."""
-    nx = _get_nexus()
-    if not nx:
-        return json.dumps({"error": "Nexus unavailable"})
-    tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
-    result = nx.import_youtube(url, category=category, tags=tag_list)
-    return json.dumps(result)
-
+    try:
+        nx = _get_nexus()
+        if not nx:
+            return json.dumps({"error": "Nexus unavailable"})
+        tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
+        result = nx.import_youtube(url, category=category, tags=tag_list)
+        return json.dumps(result)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def nexus_log_session(project: str = "CosySim", repo: str = "",
                       branch: str = "") -> str:
     """Create a session record in Nexus for tracking work."""
-    nx = _get_nexus()
-    if not nx:
-        return json.dumps({"error": "Nexus unavailable"})
-    session_id = nx.log_session(project=project, repo=repo, branch=branch)
-    if session_id:
-        return json.dumps({"ok": True, "session_id": session_id})
-    return json.dumps({"ok": False, "error": "Failed to create session"})
-
+    try:
+        nx = _get_nexus()
+        if not nx:
+            return json.dumps({"error": "Nexus unavailable"})
+        session_id = nx.log_session(project=project, repo=repo, branch=branch)
+        if session_id:
+            return json.dumps({"ok": True, "session_id": session_id})
+        return json.dumps({"ok": False, "error": "Failed to create session"})
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def nexus_status() -> str:
     """Check Nexus system health and get basic stats."""
-    nx = _get_nexus()
-    if not nx:
-        return json.dumps({"available": False, "error": "Client not initialized"})
-    health = nx.health()
-    stats = nx.stats()
-    return json.dumps({
-        "available": health.get("ok", False),
-        "health": health,
-        "stats": stats,
-    })
-
+    try:
+        nx = _get_nexus()
+        if not nx:
+            return json.dumps({"available": False, "error": "Client not initialized"})
+        health = nx.health()
+        stats = nx.stats()
+        return json.dumps({
+            "available": health.get("ok", False),
+            "health": health,
+            "stats": stats,
+        })
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def nexus_list_plugins(scope: str = "") -> str:
     """List registered Nexus plugins."""
-    nx = _get_nexus()
-    if not nx:
-        return json.dumps({"error": "Nexus unavailable"})
-    plugins = nx.list_plugins(scope=scope)
-    return json.dumps({"plugins": plugins, "count": len(plugins)})
-
+    try:
+        nx = _get_nexus()
+        if not nx:
+            return json.dumps({"error": "Nexus unavailable"})
+        plugins = nx.list_plugins(scope=scope)
+        return json.dumps({"plugins": plugins, "count": len(plugins)})
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 # ═══════════════════════════════════════════════════════════════════════
 # SKILL DISCOVERY — Let agents discover available tools
@@ -3686,89 +3870,6 @@ def seed_nexus(source: str = "all") -> str:
             return json.dumps({"error": f"Invalid source '{source}'. Use: {sorted(valid)}"})
         counts = seeder.seed(source)
         return json.dumps({"status": "ok", "source": source, "created": counts})
-    except Exception as e:
-        return json.dumps({"error": str(e)})
-
-
-@mcp.tool()
-def nexus_maintain(action: str = "health") -> str:
-    """Nexus knowledge maintenance. Actions: health, dedup, cleanup, reindex.
-    - health: Show knowledge base stats and quality metrics
-    - dedup: Find and remove duplicate entries
-    - cleanup: Remove empty or low-quality entries
-    - reindex: Force FTS5 reindex"""
-    nx = _get_nexus()
-    if not nx:
-        return json.dumps({"error": "Nexus unavailable"})
-    try:
-        import requests
-        base = f"http://127.0.0.1:{nx._port if hasattr(nx, '_port') else 8700}"
-
-        if action == "health":
-            entries_r = requests.get(f"{base}/api/entries", params={"limit": 500}, timeout=5)
-            entries = entries_r.json().get("data", []) if entries_r.ok else []
-            qa_r = requests.get(f"{base}/api/qa", params={"limit": 500}, timeout=5)
-            qa_list = qa_r.json().get("data", []) if qa_r.ok else []
-            rules_r = requests.get(f"{base}/api/rules", timeout=5)
-            rules_list = rules_r.json().get("data", []) if rules_r.ok else []
-            from collections import Counter
-            types = dict(Counter(e.get("content_type", "?") for e in entries))
-            cats = dict(Counter(e.get("category", "?") for e in entries))
-            empty = sum(1 for e in entries if len(e.get("content", "")) < 20)
-            return json.dumps({
-                "status": "ok",
-                "entries": len(entries),
-                "qa_pairs": len(qa_list),
-                "rules": len(rules_list),
-                "by_type": types,
-                "by_category": cats,
-                "low_quality": empty,
-            })
-
-        elif action == "dedup":
-            entries_r = requests.get(f"{base}/api/entries", params={"limit": 500}, timeout=5)
-            entries = entries_r.json().get("data", []) if entries_r.ok else []
-            seen_titles: dict = {}
-            duplicates = []
-            for e in entries:
-                title = e.get("title", "").strip().lower()
-                if title in seen_titles:
-                    duplicates.append({"id": e["id"], "title": e["title"],
-                                       "duplicate_of": seen_titles[title]})
-                else:
-                    seen_titles[title] = e["id"]
-            removed = 0
-            for dup in duplicates:
-                r = requests.delete(f"{base}/api/entries/{dup['id']}", timeout=5)
-                if r.ok:
-                    removed += 1
-            return json.dumps({
-                "status": "ok", "found": len(duplicates),
-                "removed": removed, "duplicates": duplicates[:10],
-            })
-
-        elif action == "cleanup":
-            entries_r = requests.get(f"{base}/api/entries", params={"limit": 500}, timeout=5)
-            entries = entries_r.json().get("data", []) if entries_r.ok else []
-            low_quality = [e for e in entries if len(e.get("content", "")) < 10]
-            removed = 0
-            for e in low_quality:
-                r = requests.delete(f"{base}/api/entries/{e['id']}", timeout=5)
-                if r.ok:
-                    removed += 1
-            return json.dumps({
-                "status": "ok", "low_quality_found": len(low_quality),
-                "removed": removed,
-            })
-
-        elif action == "reindex":
-            r = requests.post(f"{base}/api/reindex", timeout=30)
-            if r.ok:
-                return json.dumps({"status": "ok", "message": "FTS5 reindex triggered"})
-            return json.dumps({"status": "ok", "message": "Reindex endpoint not available"})
-
-        else:
-            return json.dumps({"error": f"Unknown action '{action}'. Use: health, dedup, cleanup, reindex"})
     except Exception as e:
         return json.dumps({"error": str(e)})
 

@@ -14,7 +14,7 @@ Nexus is the central knowledge backbone. Every coding agent should use it as
 1. **Search first** — `nexus_search("topic")` or `nexus_ask("question")` before
    writing code. Check if there's an existing answer, design decision, or pattern.
 2. **Check rules** — `nexus_get_rules(scope="scene:X")` to understand constraints.
-3. **Load prompts** — `nexus_search_prompts(category="system")` for stored system prompts.
+3. **Load prompts** — `nexus_get_prompts(category="system")` for stored system prompts.
 
 ### During Work
 4. **Store decisions** — When making an architecture or design decision, store it:
@@ -58,6 +58,11 @@ The `nexus_ask(question, depth)` skill uses a 3-tier lookup:
 1. Q&A Cache (instant)  →  Previously answered questions
 2. FTS5 Search (fast)   →  Synthesize from existing knowledge entries
 3. NLM Research (deep)  →  NotebookLM notebook-backed research
+```
+
+The `NexusQueryRouter` adds a 4th tier (LLM fallback) and auto-stores answers:
+```
+4. LLM Fallback (slow)  →  Send to LMStudio, store answer in Nexus
 ```
 
 - Use `depth="shallow"` for quick lookups (no NLM)
