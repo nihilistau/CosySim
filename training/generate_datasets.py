@@ -204,8 +204,17 @@ def generate_tool_routing(count: int = 400) -> List[Dict]:
     ]
 
     chars = ["lola", "aria", "viktor", "frankie", "mira"]
-    topics = ["coffee", "music", "movies", "cats", "cooking", "travel", "games"]
-    texts = ["hello!", "I miss you", "thinking of you", "want to hang out?"]
+    topics = [
+        "coffee", "music", "movies", "cats", "cooking", "travel", "games",
+        "books", "fashion", "sports", "art", "science", "history", "dreams",
+        "space", "nature", "technology", "dance", "photography", "yoga",
+    ]
+    texts = [
+        "hello!", "I miss you", "thinking of you", "want to hang out?",
+        "good morning!", "how's your day?", "can we talk?", "I'm bored",
+        "what are you doing?", "let's do something fun", "I had a dream about you",
+        "check this out!", "are you free later?", "I need your advice",
+    ]
 
     examples = []
     for _ in range(count):
@@ -244,49 +253,91 @@ def generate_tool_routing(count: int = 400) -> List[Dict]:
 
 def generate_priority_classify(count: int = 300) -> List[Dict]:
     """Dataset 3: classify request priority and tier."""
-    patterns = [
-        ("bedroom_scene: character responding to player speech", "realtime", "gpu", "interactive_dialogue"),
-        ("phone_scene: autonomous text from NPC", "background", "cpu", "auto_text"),
-        ("phone_scene: player sent message, waiting for reply", "realtime", "gpu", "interactive_dialogue"),
-        ("bedroom_scene: narrator describing scene", "interactive", "gpu", "narration"),
-        ("system: checking if NPC should text player", "background", "cpu", "decision_check"),
-        ("system: classifying tags from stream", "realtime", "router", "tag_extraction"),
-        ("system: validating response format", "batch", "router", "validation"),
-        ("lounge_scene: character performing action", "interactive", "gpu", "scene_action"),
-        ("realm_scene: combat narration", "realtime", "gpu", "game_critical"),
-        ("phone_scene: generating emoji reaction", "background", "cpu", "trivial_generation"),
-        ("system: embedding memory for RAG", "batch", "cpu", "embedding"),
-        ("bedroom_scene: generating image prompt", "interactive", "gpu", "creative"),
-        ("system: route tool call", "realtime", "router", "tool_routing"),
-        ("lounge_scene: NPC idle chatter", "background", "cpu", "ambient"),
-        ("bedroom_scene: player waiting for response", "realtime", "gpu", "user_facing"),
-        # ── Extended patterns ──
-        ("casino_scene: player placing bet", "interactive", "gpu", "game_action"),
-        ("casino_scene: NPC dealer narrating", "interactive", "gpu", "narration"),
-        ("gallery_scene: describing artwork", "interactive", "gpu", "creative"),
-        ("tavern_scene: group conversation", "interactive", "gpu", "multi_character"),
-        ("warzone_scene: tactical combat round", "realtime", "gpu", "game_critical"),
-        ("coders_scene: generating code review", "interactive", "gpu", "creative"),
-        ("nexus: searching knowledge base", "background", "cpu", "knowledge_query"),
-        ("nexus: storing decision", "batch", "cpu", "knowledge_write"),
-        ("system: priority classification", "realtime", "router", "meta_routing"),
-        ("system: NPC decision tree", "background", "router", "decision_classify"),
-        ("games_scene: mystery clue narration", "interactive", "gpu", "game_action"),
-        ("games_scene: truth or dare prompt", "interactive", "gpu", "game_action"),
-        ("hub_scene: scene navigation request", "interactive", "cpu", "navigation"),
-        ("system: auto-training check", "batch", "cpu", "maintenance"),
-        ("phone_scene: voice message generation", "interactive", "gpu", "tts_generation"),
+    scenes = [
+        "bedroom_scene", "phone_scene", "lounge_scene", "casino_scene",
+        "gallery_scene", "realm_scene", "tavern_scene", "coders_scene",
+        "games_scene", "hub_scene", "warzone_scene", "shop_scene",
+    ]
+    chars = ["lola", "aria", "viktor", "frankie", "mira"]
+    actions_realtime = [
+        "character responding to player speech",
+        "player waiting for response",
+        "combat round narration",
+        "player making critical choice",
+        "real-time dialogue exchange",
+    ]
+    actions_interactive = [
+        "narrator describing scene",
+        "character performing action",
+        "generating image prompt",
+        "NPC describing environment",
+        "group conversation round",
+        "code review generation",
+        "artwork description",
+    ]
+    actions_background = [
+        "autonomous text from NPC",
+        "checking if NPC should text player",
+        "NPC idle chatter",
+        "generating emoji reaction",
+        "autonomous mood update",
+        "scheduling idle animation",
+    ]
+    actions_batch = [
+        "embedding memory for RAG",
+        "storing decision to Nexus",
+        "auto-training threshold check",
+        "bulk memory indexing",
+        "nightly knowledge export",
+    ]
+    actions_router = [
+        "classifying tags from stream",
+        "validating response format",
+        "route tool call",
+        "priority classification",
+        "NPC decision tree evaluation",
+    ]
+
+    tier_map = {
+        "realtime": ("gpu", ["interactive_dialogue", "game_critical", "user_facing", "combat_narration"]),
+        "interactive": ("gpu", ["narration", "scene_action", "creative", "multi_character", "game_action"]),
+        "background": ("cpu", ["auto_text", "decision_check", "ambient", "trivial_generation", "mood_update"]),
+        "batch": ("cpu", ["embedding", "knowledge_write", "maintenance", "indexing", "export"]),
+        "router": ("router", ["tag_extraction", "validation", "tool_routing", "meta_routing", "decision_classify"]),
+    }
+
+    noise_options = [
+        "", " (high load)", " (idle)", " (model warm)", " (cold start)",
+        " (VRAM 80%)", " (queue depth 3)", " (priority override)",
+        " (batch window)", " (low latency required)",
     ]
 
     examples = []
     for _ in range(count):
-        pat, priority, tier, reason = random.choice(patterns)
-        # Add some variance
-        noise = random.choice(["", " (high load)", " (idle)", " (model warm)"])
+        scene = random.choice(scenes)
+        char = random.choice(chars)
+        priority = random.choice(list(tier_map.keys()))
+        tier, reasons = tier_map[priority]
+        reason = random.choice(reasons)
+
+        if priority == "realtime":
+            action = random.choice(actions_realtime)
+        elif priority == "interactive":
+            action = random.choice(actions_interactive)
+        elif priority == "background":
+            action = random.choice(actions_background)
+        elif priority == "batch":
+            action = random.choice(actions_batch)
+        else:
+            action = random.choice(actions_router)
+            scene = "system"
+
+        noise = random.choice(noise_options)
+        context = f"{scene}: {char} {action}" if scene != "system" else f"system: {action}"
         output = json.dumps({"priority": priority, "tier": tier, "reason": reason})
         examples.append({
             "instruction": "Classify the following request's priority level and target tier.",
-            "input": pat + noise,
+            "input": context + noise,
             "output": output,
         })
     return examples
@@ -335,30 +386,91 @@ def generate_decision_classify(count: int = 300) -> List[Dict]:
 
 def generate_response_validate(count: int = 300) -> List[Dict]:
     """Dataset 5: validate LLM response format."""
-    valid_examples = [
-        ("dialogue", "*smiles warmly* Hey there! How's it going?", True, "valid_dialogue_with_action"),
-        ("dialogue", "I was just thinking about you!", True, "valid_dialogue"),
-        ("dialogue", "Oh, that's interesting. Tell me more.", True, "valid_dialogue"),
-        ("json_action", '{"action":"speak","text":"hello"}', True, "valid_json"),
-        ("json_action", '{"mood":"happy","energy":80}', True, "valid_json"),
-        ("tool_call", '<tool_call>{"name":"roll_dice","arguments":{"sides":6}}</tool_call>', True, "valid_tool_call"),
-    ]
-    invalid_examples = [
-        ("json_action", "Sure! I'd love to help you with that.", False, "plain_text_not_json"),
-        ("json_action", "Here's what I think we should do:", False, "plain_text_not_json"),
-        ("dialogue", '{"response": "hello"}', False, "json_not_dialogue"),
-        ("dialogue", "", False, "empty_response"),
-        ("tool_call", "I'll search for that memory now.", False, "plain_text_not_tool_call"),
-        ("json_action", "{invalid json", False, "malformed_json"),
-        ("dialogue", "As an AI language model, I cannot", False, "ai_refusal"),
-    ]
+    chars = ["lola", "aria", "viktor", "frankie", "mira"]
+    moods = MOODS[:10]
+    actions = ACTIONS[:15]
+
+    def _make_valid_dialogue() -> tuple[str, str]:
+        templates = [
+            "*smiles warmly* Hey there! How's it going?",
+            "I was just thinking about you!",
+            "Oh, that's interesting. Tell me more.",
+            f"*{random.choice(actions)}* Did you miss me?",
+            f"*laughs* You always know how to make me {random.choice(moods)}.",
+            f"I'm feeling a bit {random.choice(moods)} today, but seeing you helps.",
+            "Want to do something fun together?",
+            f"*{random.choice(actions)}* I've been waiting for you.",
+            "That reminds me of something funny that happened earlier.",
+            "Can we talk about something? It's been on my mind.",
+            f"*{random.choice(actions)}* You're so sweet, you know that?",
+            "I had the craziest dream last night...",
+            f"Honestly? I'm feeling pretty {random.choice(moods)} right now.",
+            "Tell me more about yourself. I want to know everything!",
+            f"*{random.choice(actions)}* Mmm, that sounds nice.",
+        ]
+        text = random.choice(templates)
+        reason = "valid_dialogue" if not text.startswith("*") else "valid_dialogue_with_action"
+        return text, reason
+
+    def _make_valid_json() -> tuple[str, str]:
+        variants = [
+            json.dumps({"action": random.choice(actions), "text": "hello"}),
+            json.dumps({"mood": random.choice(moods), "energy": random.randint(20, 90)}),
+            json.dumps({"target": random.choice(chars), "action": "approach"}),
+            json.dumps({"type": "emote", "emote": random.choice(actions)}),
+            json.dumps({"state_update": {"mood": random.choice(moods), "confidence": random.randint(30, 80)}}),
+        ]
+        return random.choice(variants), "valid_json"
+
+    def _make_valid_tool_call() -> tuple[str, str]:
+        tool = random.choice(TOOL_NAMES)
+        args = {"query": random.choice(["music", "memories", "feelings"])} if "search" in tool else {"sides": 6}
+        tc = json.dumps({"name": tool, "arguments": args})
+        return f"<tool_call>{tc}</tool_call>", "valid_tool_call"
+
+    def _make_invalid() -> tuple[str, str, str]:
+        """Returns (expected_format, actual_output, reason)."""
+        invalids = [
+            ("json_action", "Sure! I'd love to help you with that.", "plain_text_not_json"),
+            ("json_action", "Here's what I think we should do:", "plain_text_not_json"),
+            ("json_action", f"I think {random.choice(chars)} should {random.choice(actions)}.", "plain_text_not_json"),
+            ("dialogue", json.dumps({"response": "hello"}), "json_not_dialogue"),
+            ("dialogue", json.dumps({"text": "Hi", "mood": random.choice(moods)}), "json_not_dialogue"),
+            ("dialogue", "", "empty_response"),
+            ("dialogue", "   ", "empty_response"),
+            ("tool_call", f"I'll {random.choice(actions)} for you now.", "plain_text_not_tool_call"),
+            ("tool_call", "Let me search for that memory now.", "plain_text_not_tool_call"),
+            ("json_action", "{invalid json", "malformed_json"),
+            ("json_action", "{'key': 'single quotes'}", "malformed_json"),
+            ("json_action", "{missing_value: }", "malformed_json"),
+            ("dialogue", "As an AI language model, I cannot", "ai_refusal"),
+            ("dialogue", "I'm sorry, but I can't help with that.", "ai_refusal"),
+            ("dialogue", "I don't have the ability to", "ai_refusal"),
+            ("tool_call", f"<tool_call>{{invalid}}</tool_call>", "malformed_tool_call"),
+            ("dialogue", f"[{random.choice(chars).upper()}]: Hello", "wrong_format_prefix"),
+            ("json_action", "null", "null_response"),
+            ("tool_call", json.dumps({"name": "unknown_tool", "arguments": {}}), "missing_tool_call_wrapper"),
+        ]
+        return random.choice(invalids)
 
     examples = []
     for _ in range(count):
         if random.random() < 0.5:
-            expected, got, valid, reason = random.choice(valid_examples)
+            # Valid example
+            fmt_choice = random.choice(["dialogue", "json", "tool"])
+            if fmt_choice == "dialogue":
+                got, reason = _make_valid_dialogue()
+                expected = "dialogue"
+            elif fmt_choice == "json":
+                got, reason = _make_valid_json()
+                expected = "json_action"
+            else:
+                got, reason = _make_valid_tool_call()
+                expected = "tool_call"
+            valid = True
         else:
-            expected, got, valid, reason = random.choice(invalid_examples)
+            expected, got, reason = _make_invalid()
+            valid = False
 
         input_text = f"Expected: {expected}. Got: {got}"
         suggested = "none" if valid else "retry_with_constraint"
@@ -395,12 +507,25 @@ def write_jsonl(data: List[Dict], path: Path) -> int:
     return len(data)
 
 
+def _dedup(data: List[Dict]) -> List[Dict]:
+    """Remove duplicate examples by (input, output) pair."""
+    seen: set = set()
+    unique: List[Dict] = []
+    for item in data:
+        key = (item.get("input", ""), item.get("output", ""))
+        if key not in seen:
+            seen.add(key)
+            unique.append(item)
+    return unique
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate Gemma 270M training datasets")
     parser.add_argument("--out", default="training/datasets", help="Output directory")
     parser.add_argument("--only", help="Generate only this dataset (comma-separated)")
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument("--scale", type=float, default=1.0, help="Multiply dataset sizes (e.g. 2.0 for 2x)")
+    parser.add_argument("--no-dedup", action="store_true", help="Skip deduplication")
     args = parser.parse_args()
 
     random.seed(args.seed)
@@ -413,8 +538,15 @@ def main() -> None:
 
     total = 0
     for name, (gen_fn, default_count) in targets.items():
+        # Over-generate then dedup to hit target count
         scaled_count = int(default_count * args.scale)
-        data = gen_fn(scaled_count)
+        raw_count = scaled_count * 3 if not args.no_dedup else scaled_count
+        data = gen_fn(raw_count)
+        if not args.no_dedup:
+            before = len(data)
+            data = _dedup(data)
+            data = data[:scaled_count]  # Trim to target
+            print(f"  {name}: generated {before}, deduped to {len(data)}")
         # 90/10 train/val split
         random.shuffle(data)
         split = int(len(data) * 0.9)
