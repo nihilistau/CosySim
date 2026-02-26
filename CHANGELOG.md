@@ -2,6 +2,50 @@
 
 All notable changes to CosySim are documented here.
 
+## v0.53b — Sprint 14: Agent Infrastructure & Training Pipeline
+
+### Port Registry (NEW)
+- **`engine/port_registry.py`** — Central service port management
+  - 25 default services, config integration, conflict detection
+  - Service groups (scenes, streamlit, tts, infrastructure)
+  - URL builder, summary report, singleton access via `get_port_registry()`
+
+### MCP Server Split
+- **`engine/mcp/devtools_server.py`** (NEW) — Extracted 38 Nexus/Copilot/System/Agent tools
+  - FastMCP("CosySim-DevTools") — separate development workflow server
+  - Nexus bridge (18 tools), Copilot (5), Agent (4), System (11)
+- **`engine/mcp/cosysim_server.py`** — Now 106 game/scene/character tools only
+
+### Agent Workflows (NEW)
+- **`engine/workflows/agent_workflows.py`** — 5 configurable workflow patterns
+  - `knowledge_distill` — Nexus → structured JSONL datasets
+  - `dataset_curate` — Multi-source curation with quality scoring
+  - `research_pipeline` — Automated Nexus Q&A + FTS research
+  - `metrics_extract` — Test, codebase, training data metrics
+  - `quality_audit` — Docstring/type-hint coverage, anti-pattern detection
+  - CLI: `python -m engine.workflows.agent_workflows {workflow}`
+
+### Dataset Curator (NEW)
+- **`engine/nexus/dataset_curator.py`** — Nexus→training data pipeline
+  - 4 output formats: instruction (Alpaca), chat_ml, sharegpt, raw
+  - Quality filtering, deduplication, CurationStats tracking
+
+### Training Data Quality
+- **Deduplication:** Generators now over-generate 3x then dedup
+  - Fixed 76-98% duplicate rates in tool_routing/priority/response datasets
+- **Enhanced diversity:** Richer templates for all generators
+- **Combined multi-task dataset:** 3185 unique examples (2865 train + 320 val)
+- **`training/prepare_training.py`** — Preflight validation, multi-task combiner
+
+### Doc Automation (NEW)
+- **`.github/workflows/copilot-autofix.yml`** — Triggers on labeled issues + weekly
+- Issue template + label definitions for documentation tasks
+
+### Test Suite
+- **2882 tests** passing (64 new: port registry 20, dataset curator 25, workflows 19)
+
+---
+
 ## v0.52b — Sprint 13: Orpheus TTS & Nexus Cleanup
 
 ### Orpheus-FastAPI TTS Integration (NEW)
