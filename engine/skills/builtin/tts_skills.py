@@ -165,3 +165,69 @@ def list_voicemails(character_id: str, limit: int = 10) -> str:
         return json.dumps(results, indent=2) if results else "No voice messages found."
     except Exception as exc:
         return f"Failed to list voicemails: {exc}"
+
+
+@skill(
+    pack="tts",
+    description=(
+        "Generate speech using Orpheus TTS. Supports 24 voices across 8 languages "
+        "with emotion tags (<laugh>, <sigh>, <gasp>). Best for character dialog."
+    ),
+    tags=["tts", "voice", "orpheus", "multilingual"],
+)
+def orpheus_speak(
+    text: str,
+    voice: str = "tara",
+    mood: str = "",
+    speed: float = 1.0,
+) -> str:
+    """Generate speech using the Orpheus-FastAPI TTS backend.
+
+    Args:
+        text: Text to synthesize (supports emotion tags like <laugh>).
+        voice: Orpheus voice name (tara, leo, leah, dan, etc).
+        mood: CosySim mood to inject emotion (happy, sad, surprised, etc).
+        speed: Speed factor 0.5-1.5.
+
+    Returns:
+        Path to the generated WAV file, or error message.
+    """
+    try:
+        from engine.tts.orpheus_client import get_orpheus_client
+
+        client = get_orpheus_client()
+        path = client.generate(text, voice=voice, mood=mood or None, speed=speed)
+        return f"Voice message saved: {path}"
+    except ConnectionError as exc:
+        return f"Orpheus TTS offline: {exc}"
+    except Exception as exc:
+        return f"Orpheus TTS failed: {exc}"
+
+
+@skill(
+    pack="tts",
+    description="List all available Orpheus TTS voices with language and style info.",
+    tags=["tts", "voice", "orpheus", "list"],
+)
+def list_orpheus_voices(lang: str = "") -> str:
+    """List available Orpheus voices, optionally filtered by language.
+
+    Args:
+        lang: Language code to filter by (en, fr, de, ko, etc). Empty for all.
+
+    Returns:
+        Formatted voice list.
+    """
+    from engine.tts.orpheus_client import ORPHEUS_VOICES
+
+    voices = ORPHEUS_VOICES
+    if lang:
+        voices = {k: v for k, v in voices.items() if v["lang"] == lang.lower()}
+
+    if not voices:
+        return f"No Orpheus voices found for language '{lang}'."
+
+    lines = []
+    for name, info in voices.items():
+        lines.append(f"• {name} ({info['lang']}, {info['gender']}): {info['style']}")
+    return "\n".join(lines)

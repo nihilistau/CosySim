@@ -1,15 +1,18 @@
-"""engine.tts — Text-to-Speech subsystem (Qwen3-TTS, CosyVoice, etc.)"""
+"""engine.tts — Text-to-Speech subsystem (Qwen3-TTS, Orpheus, CosyVoice)"""
 
 from __future__ import annotations
 
 from engine.tts.qwen3_server import Qwen3TTSEngine
 from engine.tts.voice_designer import VoiceDesigner
 from engine.tts.audio_processor import AudioProcessor
+from engine.tts.orpheus_client import OrpheusClient, get_orpheus_client
 
 __all__ = [
     "Qwen3TTSEngine",
     "VoiceDesigner",
     "AudioProcessor",
+    "OrpheusClient",
+    "get_orpheus_client",
     "get_tts_stream_url",
     "get_tts_ws_url",
 ]

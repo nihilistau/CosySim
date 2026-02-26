@@ -142,6 +142,10 @@ tts:
   speculative:
     enabled: false                     # use 0.6B as draft for 1.7B (same-family spec decode)
     draft_model: "0.6b"               # draft model size for speculative decoding
+  orpheus:
+    server_url: "http://localhost:5005"  # Orpheus-FastAPI server
+    default_voice: "tara"               # Default voice (24 available)
+    timeout: 120                        # Request timeout in seconds
 
 # LLM configuration
 llm:
