@@ -120,6 +120,7 @@ class VirtualPipeline:
         result.pipeline_latency_ms = (time.perf_counter() - t0) * 1000
         result.pipeline_ended = time.time()
         result.retry_count = self._kill_switch.retry_count
+        result._request = request  # Attach for training capture
 
         self._last_result = result
 

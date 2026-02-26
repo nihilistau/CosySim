@@ -77,6 +77,15 @@ class MetricsCollector:
             metrics_db=self._db,
         )
 
+        # Training data capture
+        self._training_capture = None
+        try:
+            from engine.observability.training_capture import TrainingCapture
+            self._training_capture = TrainingCapture(db=self._db)
+            logger.info("TrainingCapture wired into MetricsCollector")
+        except Exception:
+            logger.debug("TrainingCapture unavailable", exc_info=True)
+
         # Thread control
         self._running = False
         self._thread: Optional[threading.Thread] = None
@@ -93,6 +102,11 @@ class MetricsCollector:
     @property
     def alert_engine(self) -> AlertEngine:
         return self._alert_engine
+
+    @property
+    def training_capture(self):
+        """Access the wired TrainingCapture instance (may be None)."""
+        return self._training_capture
 
     @property
     def last_system_snapshot(self) -> Dict[str, Any]:
@@ -177,6 +191,15 @@ class MetricsCollector:
 
         except Exception as exc:
             logger.debug("Failed to record pipeline metrics: %s", exc)
+
+        # Capture training data (independent of metrics recording)
+        if self._training_capture and self._training_capture.enabled:
+            try:
+                self._training_capture.on_pipeline_complete(
+                    getattr(result, "_request", None), result
+                )
+            except Exception:
+                logger.debug("Training capture error", exc_info=True)
 
     # ── Background loop ─────────────────────────────────────────────
 

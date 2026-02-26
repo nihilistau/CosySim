@@ -1405,7 +1405,205 @@ class NexusPanelScene(BaseScene, NexusSceneMixin):
                 "history": session["history"],
             })
 
-    # ── Guided Distillation Helpers ─────────────────────────────────────
+        # ── Training Data Pipeline ─────────────────────────────────────
+
+        @app.route("/api/training/status")
+        def api_training_status():
+            """Full training pipeline status — candidates, datasets, readiness."""
+            from training.data_manager import get_data_manager
+            mgr = get_data_manager()
+            return jsonify(mgr.get_pipeline_status().to_dict())
+
+        @app.route("/api/training/candidates")
+        def api_training_candidates():
+            """List training candidates for review/curation."""
+            from training.data_manager import get_data_manager
+            mgr = get_data_manager()
+            dataset = request.args.get("dataset")
+            min_quality = float(request.args.get("min_quality", 0.0))
+            exported = request.args.get("exported")
+            limit = int(request.args.get("limit", 100))
+            exp_flag = None
+            if exported == "true":
+                exp_flag = True
+            elif exported == "false":
+                exp_flag = False
+            candidates = mgr.get_candidates(
+                dataset=dataset,
+                min_quality=min_quality,
+                exported=exp_flag,
+                limit=limit,
+            )
+            return jsonify({"candidates": candidates, "count": len(candidates)})
+
+        @app.route("/api/training/candidates/<int:candidate_id>/quality", methods=["PUT"])
+        def api_training_update_quality(candidate_id: int):
+            """Update quality score for a candidate (user review)."""
+            from training.data_manager import get_data_manager
+            data = request.get_json(force=True)
+            mgr = get_data_manager()
+            result = mgr.update_candidate_quality(
+                candidate_id=candidate_id,
+                quality_score=float(data.get("quality_score", 0.5)),
+                notes=data.get("notes", ""),
+            )
+            return jsonify({"action": result.action, "affected": result.affected,
+                            "details": result.details})
+
+        @app.route("/api/training/candidates/bulk", methods=["PUT"])
+        def api_training_bulk_quality():
+            """Bulk approve/reject candidates."""
+            from training.data_manager import get_data_manager
+            data = request.get_json(force=True)
+            mgr = get_data_manager()
+            result = mgr.bulk_update_quality(
+                candidate_ids=data.get("ids", []),
+                quality_score=float(data.get("quality_score", 1.0)),
+                notes=data.get("notes", "bulk_update"),
+            )
+            return jsonify({"action": result.action, "affected": result.affected,
+                            "details": result.details})
+
+        @app.route("/api/training/candidates/<int:candidate_id>", methods=["DELETE"])
+        def api_training_delete_candidate(candidate_id: int):
+            """Delete a training candidate."""
+            from training.data_manager import get_data_manager
+            mgr = get_data_manager()
+            result = mgr.delete_candidate(candidate_id)
+            return jsonify({"action": result.action, "affected": result.affected})
+
+        @app.route("/api/training/candidates", methods=["POST"])
+        def api_training_add_manual():
+            """Manually add a training example (gold data)."""
+            from training.data_manager import get_data_manager
+            data = request.get_json(force=True)
+            mgr = get_data_manager()
+            result = mgr.add_manual_example(
+                dataset=data.get("dataset", ""),
+                input_text=data.get("input_text", ""),
+                output_text=data.get("output_text", ""),
+                quality_score=float(data.get("quality_score", 1.0)),
+                notes=data.get("notes", "manual"),
+            )
+            return jsonify({"action": result.action, "affected": result.affected,
+                            "details": result.details})
+
+        @app.route("/api/training/capture", methods=["POST"])
+        def api_training_capture_toggle():
+            """Enable or disable live training data capture."""
+            from training.data_manager import get_data_manager
+            data = request.get_json(force=True)
+            mgr = get_data_manager()
+            enabled = data.get("enabled", True)
+            success = mgr.set_capture_enabled(enabled)
+            return jsonify({"enabled": enabled, "success": success})
+
+        @app.route("/api/training/seed", methods=["POST"])
+        def api_training_seed():
+            """Generate synthetic seed data for datasets."""
+            from training.data_manager import get_data_manager
+            data = request.get_json(force=True)
+            mgr = get_data_manager()
+            results = mgr.seed_datasets(
+                datasets=data.get("datasets"),
+                force=data.get("force", False),
+            )
+            return jsonify(results)
+
+        @app.route("/api/training/export-live", methods=["POST"])
+        def api_training_export_live():
+            """Export pending candidates from DB to live JSONL files."""
+            from training.data_manager import get_data_manager
+            data = request.get_json(force=True) if request.is_json else {}
+            mgr = get_data_manager()
+            results = mgr.export_live_candidates(
+                dataset=data.get("dataset"),
+                min_quality=float(data.get("min_quality", 0.7)),
+            )
+            return jsonify(results)
+
+        @app.route("/api/training/merge", methods=["POST"])
+        def api_training_merge():
+            """Merge synthetic + live datasets into combined files."""
+            from training.data_manager import get_data_manager
+            data = request.get_json(force=True) if request.is_json else {}
+            mgr = get_data_manager()
+            results = mgr.merge_datasets(dataset=data.get("dataset"))
+            return jsonify(results)
+
+        @app.route("/api/training/augment/nexus", methods=["POST"])
+        def api_training_augment_nexus():
+            """Augment training data from Nexus Q&A."""
+            from training.data_manager import get_data_manager
+            mgr = get_data_manager()
+            return jsonify(mgr.augment_from_nexus())
+
+        @app.route("/api/training/augment/nlm", methods=["POST"])
+        def api_training_augment_nlm():
+            """Augment training data from NLM distillation."""
+            from training.data_manager import get_data_manager
+            data = request.get_json(force=True)
+            mgr = get_data_manager()
+            results = mgr.augment_from_nlm(
+                notebook_id=data.get("notebook_id", ""),
+                topics=data.get("topics"),
+                count=int(data.get("count", 50)),
+            )
+            return jsonify(results)
+
+        @app.route("/api/training/validate")
+        def api_training_validate():
+            """Validate all datasets for quality and completeness."""
+            from training.data_manager import get_data_manager
+            mgr = get_data_manager()
+            return jsonify(mgr.validate_datasets())
+
+        @app.route("/api/training/combine", methods=["POST"])
+        def api_training_combine():
+            """Create the final combined multi-task dataset."""
+            from training.data_manager import get_data_manager
+            mgr = get_data_manager()
+            return jsonify(mgr.create_combined_dataset())
+
+        @app.route("/api/training/prepare", methods=["POST"])
+        def api_training_prepare():
+            """Run the full preparation pipeline end-to-end."""
+            from training.data_manager import get_data_manager
+            data = request.get_json(force=True) if request.is_json else {}
+            mgr = get_data_manager()
+            results = mgr.prepare_for_training(
+                min_quality=float(data.get("min_quality", 0.7)),
+                augment_nexus=data.get("augment_nexus", False),
+                augment_nlm=data.get("augment_nlm", False),
+                nlm_notebook_id=data.get("nlm_notebook_id", ""),
+            )
+            return jsonify(results)
+
+        @app.route("/api/training/config")
+        def api_training_config():
+            """Get the current training configuration."""
+            from training.data_manager import get_data_manager
+            mgr = get_data_manager()
+            return jsonify(mgr.get_training_config())
+
+        @app.route("/api/training/files")
+        def api_training_files():
+            """List all dataset files with sizes and counts."""
+            from training.data_manager import get_data_manager
+            mgr = get_data_manager()
+            return jsonify({"files": mgr.get_dataset_files()})
+
+        @app.route("/api/training/download/<filename>")
+        def api_training_download(filename: str):
+            """Download a dataset file."""
+            from training.data_manager import get_data_manager
+            mgr = get_data_manager()
+            path = mgr.download_dataset(filename)
+            if not path:
+                return jsonify({"error": "File not found"}), 404
+            from flask import send_file
+            return send_file(str(path), as_attachment=True,
+                             download_name=filename, mimetype="application/jsonl")
 
     def _generate_suggestions(
         self, question: str, answer: str, notebook_id: Optional[str] = None
