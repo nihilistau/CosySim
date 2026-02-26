@@ -453,22 +453,111 @@ async function sendChat() {
     }
     if (cmd === '/metrics') {
       appendMsg('assistant', '<div class="spinner"></div> Gathering system metrics...');
-      const m = await api('/api/metrics/system');
+      const [sys, inf, res, bench, pipe, train] = await Promise.all([
+        api('/api/metrics/system').catch(() => null),
+        api('/api/metrics/inference').catch(() => null),
+        api('/api/metrics/resources').catch(() => null),
+        api('/api/metrics/benchmarks').catch(() => null),
+        api('/api/metrics/pipeline').catch(() => null),
+        api('/api/training/status').catch(() => null),
+      ]);
       const lines = [];
-      if (m.system) {
-        lines.push('**System:**', `  CPU: ${m.system.cpu_pct}% · RAM: ${m.system.ram_pct}% · GPU VRAM: ${m.system.gpu_vram_pct}% · Temp: ${m.system.gpu_temp_c}°C`);
+      if (sys && sys.system) {
+        lines.push('**🖥️ System:**', `  CPU: ${sys.system.cpu_pct}% · RAM: ${sys.system.ram_pct}% · GPU VRAM: ${sys.system.gpu_vram_pct}% · Temp: ${sys.system.gpu_temp_c}°C`);
       }
-      if (m.pipeline) {
-        lines.push('**Pipeline:**', `  Requests: ${m.pipeline.total_requests} · Avg TPS: ${m.pipeline.avg_tps} · Avg Latency: ${m.pipeline.avg_latency_ms}ms`);
+      if (pipe && pipe.summary) {
+        const s = pipe.summary;
+        lines.push('**⚡ Pipeline (5m):**', `  Requests: ${s.total_requests || 0} · Avg TPS: ${(s.avg_tps || 0).toFixed(1)} · Avg Latency: ${(s.avg_latency_ms || 0).toFixed(0)}ms · Kills: ${s.total_kills || 0}`);
       }
-      if (m.resources) {
-        lines.push('**Resources:**', `  Strategy: ${m.resources.strategy} · VRAM: ${m.resources.vram_used_mb}/${m.resources.vram_cap_mb} MB`);
+      if (res) {
+        const strategy = res.strategy || res.error || 'unknown';
+        const vram = res.vram_used_mb !== undefined ? `${res.vram_used_mb}/${res.vram_cap_mb} MB` : 'N/A';
+        const slots = res.active_slots !== undefined ? res.active_slots : '?';
+        lines.push('**🧠 Resources:**', `  Strategy: ${strategy} · VRAM: ${vram} · Active Slots: ${slots}`);
+      }
+      if (inf && !inf.error) {
+        const models = inf.models || {};
+        const modelNames = Object.keys(models);
+        if (modelNames.length > 0) {
+          lines.push('**📊 Inference (per-model):**');
+          for (const m of modelNames.slice(0, 5)) {
+            const mm = models[m];
+            lines.push(`  ${m}: ${mm.requests || 0} req · ${(mm.avg_tps || 0).toFixed(1)} TPS · ${(mm.avg_latency_ms || 0).toFixed(0)}ms · err ${((mm.error_rate || 0) * 100).toFixed(1)}%`);
+          }
+        } else {
+          lines.push('**📊 Inference:** No model data yet');
+        }
+      }
+      if (bench && bench.llm_kpis) {
+        const kpi = bench.llm_kpis;
+        if (kpi.count !== undefined) {
+          lines.push('**🏁 Benchmarks:**', `  LLM Calls: ${kpi.count} · Avg TPS: ${(kpi.avg_tps || 0).toFixed(1)} · Avg Latency: ${(kpi.avg_latency_ms || 0).toFixed(0)}ms · P95: ${(kpi.p95_latency_ms || 0).toFixed(0)}ms`);
+        }
+      }
+      if (train) {
+        const ready = train.ready_for_training ? '✅' : '❌';
+        lines.push('**🎓 Training Data:**', `  Capture: ${train.capture_enabled ? 'ON' : 'OFF'} · Captured: ${train.capture_count || 0} · Pending: ${train.candidates_pending || 0} · Total Examples: ${train.total_training_examples || 0} · Ready: ${ready}`);
+      }
+      if (pipe && pipe.alerts && pipe.alerts.length > 0) {
+        lines.push('**🚨 Recent Alerts:**');
+        for (const a of pipe.alerts.slice(0, 3)) {
+          lines.push(`  [${a.level}] ${a.node}: ${a.message}`);
+        }
       }
       replaceLastMsg('assistant', lines.length > 0 ? lines.join('\n') : 'No metrics data available.');
       return;
     }
+    if (cmd === '/training') {
+      appendMsg('assistant', '<div class="spinner"></div> Loading training pipeline status...');
+      const [status, files, validate] = await Promise.all([
+        api('/api/training/status').catch(() => null),
+        api('/api/training/files').catch(() => null),
+        api('/api/training/validate').catch(() => null),
+      ]);
+      const lines = [];
+      if (status) {
+        const ready = status.ready_for_training ? '✅ Ready' : '❌ Not Ready';
+        lines.push(`**🎓 Training Pipeline — ${ready}**`);
+        lines.push(`  Live Capture: ${status.capture_enabled ? '🟢 ON' : '🔴 OFF'} · Captured: ${status.capture_count || 0}`);
+        lines.push(`  Pending Export: ${status.candidates_pending || 0} · Already Exported: ${status.candidates_exported || 0}`);
+        lines.push(`  Total Examples: ${status.total_training_examples || 0}`);
+        if (status.candidates_by_dataset && Object.keys(status.candidates_by_dataset).length > 0) {
+          lines.push('', '**📋 Live Candidates (DB):**');
+          for (const [ds, count] of Object.entries(status.candidates_by_dataset)) {
+            lines.push(`  ${ds}: ${count}`);
+          }
+        }
+        if (status.synthetic_counts && Object.keys(status.synthetic_counts).length > 0) {
+          lines.push('', '**🌱 Synthetic Data:**');
+          for (const [ds, count] of Object.entries(status.synthetic_counts)) {
+            const live = (status.live_counts || {})[ds] || 0;
+            lines.push(`  ${ds}: ${count} synthetic${live > 0 ? ' + ' + live + ' live' : ''}`);
+          }
+        }
+      }
+      if (validate && validate.datasets) {
+        lines.push('', '**🔍 Validation:**');
+        for (const ds of validate.datasets) {
+          const icon = ds.valid ? '✅' : '❌';
+          lines.push(`  ${icon} ${ds.name}: ${ds.train_count} train / ${ds.val_count} val`);
+          if (ds.issues && ds.issues.length > 0) {
+            for (const issue of ds.issues.slice(0, 2)) {
+              lines.push(`      ⚠️ ${issue}`);
+            }
+          }
+        }
+      }
+      if (files && files.files) {
+        const totalSize = files.files.reduce((s, f) => s + f.size_bytes, 0);
+        const totalExamples = files.files.reduce((s, f) => s + f.examples, 0);
+        lines.push('', `**📁 Dataset Files:** ${files.files.length} files · ${totalExamples} examples · ${(totalSize / 1024).toFixed(0)} KB`);
+      }
+      lines.push('', '💡 Use `python -m training.data_manager prepare` to run the full pipeline.');
+      replaceLastMsg('assistant', lines.join('\n'));
+      return;
+    }
     // Unknown command
-    appendMsg('assistant', `Unknown command: \`${cmd}\`\n\nAvailable: /stats, /health, /recent, /research, /backup, /backups, /export, /maintain, /auto-backup, /metrics`);
+    appendMsg('assistant', `Unknown command: \`${cmd}\`\n\nAvailable: /stats, /health, /recent, /research, /backup, /backups, /export, /maintain, /auto-backup, /metrics, /training`);
     return;
 
   // Normal chat — ask the Librarian

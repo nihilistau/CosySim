@@ -117,6 +117,7 @@ class InferenceOrchestrator:
         self._model_manager = None
         self._resource_manager = None
         self._router = None
+        self._inference_monitor = None
 
         # Performance tracking per tier
         self._perf: Dict[str, TierPerformance] = defaultdict(TierPerformance)
@@ -128,6 +129,14 @@ class InferenceOrchestrator:
         # Request counter for metrics
         self._total_requests = 0
         self._total_errors = 0
+
+        # Lazy-wire InferenceMonitor
+        try:
+            from engine.lmstudio.inference_monitor import InferenceMonitor
+            self._inference_monitor = InferenceMonitor(config=self._config)
+            logger.info("InferenceMonitor wired into orchestrator")
+        except Exception:
+            logger.debug("InferenceMonitor unavailable", exc_info=True)
 
         logger.info("InferenceOrchestrator initialized")
 
@@ -190,6 +199,11 @@ class InferenceOrchestrator:
             from engine.lmstudio.router import InferenceRouter
             self._router = InferenceRouter()
         return self._router
+
+    @property
+    def inference_monitor(self):
+        """Access the wired InferenceMonitor (may be None)."""
+        return self._inference_monitor
 
     # ── Main inference API ───────────────────────────────────────────
 
@@ -287,6 +301,19 @@ class InferenceOrchestrator:
 
         except Exception as e:
             self._record_error(tier_name)
+            if self._inference_monitor:
+                try:
+                    self._inference_monitor.record(
+                        agent_id=agent_id or "anonymous",
+                        model=resolved_model or "default",
+                        tier=tier_name,
+                        task_type=task_type,
+                        latency_ms=(time.monotonic() - t0) * 1000,
+                        tokens=0, tps=0.0, success=False,
+                        error=str(e)[:200],
+                    )
+                except Exception:
+                    pass
             raise
 
     def infer_quick(self, prompt: str, *, agent_id: str = "", **kwargs) -> str:
@@ -315,6 +342,7 @@ class InferenceOrchestrator:
         # Record performance
         latency_ms = (time.monotonic() - t0) * 1000
         tps = 0.0
+        tokens = 0
         if hasattr(resp, "usage") and resp.usage:
             try:
                 tokens = int(getattr(resp.usage, "completion_tokens", 0) or 0)
@@ -324,6 +352,23 @@ class InferenceOrchestrator:
                 logger.debug("Suppressed exception", exc_info=True)
 
         self._record_success(tier_name, latency_ms, tps)
+
+        # Feed InferenceMonitor
+        if self._inference_monitor:
+            try:
+                self._inference_monitor.record(
+                    agent_id=agent_id or "anonymous",
+                    model=model or "default",
+                    tier=tier_name,
+                    task_type="chat",
+                    latency_ms=latency_ms,
+                    tokens=tokens,
+                    tps=tps,
+                    success=True,
+                )
+            except Exception:
+                logger.debug("InferenceMonitor record failed", exc_info=True)
+
         return resp
 
     def _infer_stream(

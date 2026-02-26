@@ -1028,9 +1028,11 @@ class NexusPanelScene(BaseScene, NexusSceneMixin):
         def api_metrics_inference():
             """Per-model inference stats from InferenceMonitor."""
             try:
-                from engine.lmstudio.inference_monitor import InferenceMonitor
-                monitor = InferenceMonitor()
-                return jsonify(monitor.get_status())
+                from engine.lmstudio.orchestrator import get_orchestrator
+                orch = get_orchestrator()
+                if orch.inference_monitor:
+                    return jsonify(orch.inference_monitor.get_status())
+                return jsonify({"error": "InferenceMonitor not available"}), 503
             except Exception as exc:
                 return jsonify({"error": str(exc)}), 500
 
