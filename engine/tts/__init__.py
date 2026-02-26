@@ -6,6 +6,7 @@ from engine.tts.qwen3_server import Qwen3TTSEngine
 from engine.tts.voice_designer import VoiceDesigner
 from engine.tts.audio_processor import AudioProcessor
 from engine.tts.orpheus_client import OrpheusClient, get_orpheus_client
+from engine.tts.orpheus_native import OrpheusNative, get_orpheus_native
 from engine.tts.tts_manager import TTSManager, get_tts_manager
 
 __all__ = [
@@ -14,6 +15,8 @@ __all__ = [
     "AudioProcessor",
     "OrpheusClient",
     "get_orpheus_client",
+    "OrpheusNative",
+    "get_orpheus_native",
     "TTSManager",
     "get_tts_manager",
     "get_tts_stream_url",

@@ -135,6 +135,29 @@ tts:
   stream: true
   device: "cuda"  # or "cpu"
   server_url: "http://localhost:8600"  # Qwen3-TTS FastAPI server
+  default_backend: "auto"              # auto | piper | orpheus | orpheus_native | qwen3
+  backends:
+    piper:
+      enabled: true
+      model_path: "C:\\Files\\Models\\tts\\piper\\en_US-amy-medium.onnx"
+      sample_rate: 22050
+    orpheus:
+      enabled: false                     # LMStudio-backed (conflicts with other models)
+      server_url: "http://localhost:5005"
+      default_voice: "tara"
+      timeout: 120
+      model_dir: "D:\\Files\\Models\\Orpheous"
+    orpheus_native:
+      enabled: true                      # Direct GGUF — no LMStudio dependency (CPU inference)
+      model_dir: "D:\\Files\\Models\\Orpheous"
+      default_quant: null                # null=auto-select by text length (q2_k/q4_k_m)
+      gpu_layers: 0                      # 0=CPU (pip wheel); -1=GPU (needs CUDA build)
+      default_voice: "tara"
+    qwen3:
+      enabled: true
+      server_url: "http://localhost:8600"
+      model_size: "0.6b"               # 0.6b | 1.7b | auto | escalate
+      model_path: "pretrained_models/Qwen3-TTS-0.6B"
   streaming:
     enabled: true                      # enable chunked streaming generation
     chunk_method: "sentence"           # sentence | fixed_length
@@ -142,13 +165,6 @@ tts:
   speculative:
     enabled: false                     # use 0.6B as draft for 1.7B (same-family spec decode)
     draft_model: "0.6b"               # draft model size for speculative decoding
-  piper:
-    model_path: "C:\\Files\\Models\\tts\\piper\\en_US-amy-medium.onnx"
-    sample_rate: 22050
-  orpheus:
-    server_url: "http://localhost:5005"  # Orpheus-FastAPI server
-    default_voice: "tara"               # Default voice (24 available)
-    timeout: 120                        # Request timeout in seconds
 
 # STT configuration
 stt:

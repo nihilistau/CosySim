@@ -37,6 +37,7 @@ class TTSBackend(str, Enum):
 
     PIPER = "piper"
     ORPHEUS = "orpheus"
+    ORPHEUS_NATIVE = "orpheus_native"
     QWEN3 = "qwen3"
     AUTO = "auto"
 
@@ -101,9 +102,19 @@ class TTSManager:
         self._available_backends: Dict[str, bool] = {
             TTSBackend.PIPER.value: False,
             TTSBackend.ORPHEUS.value: False,
+            TTSBackend.ORPHEUS_NATIVE.value: False,
             TTSBackend.QWEN3.value: False,
         }
-        logger.info("TTSManager initialized")
+        # Config-driven enabled state (runtime-mutable)
+        self._enabled_backends: Dict[str, bool] = {
+            TTSBackend.PIPER.value: self._get_config("tts.backends.piper.enabled", True),
+            TTSBackend.ORPHEUS.value: self._get_config("tts.backends.orpheus.enabled", True),
+            TTSBackend.ORPHEUS_NATIVE.value: self._get_config("tts.backends.orpheus_native.enabled", True),
+            TTSBackend.QWEN3.value: self._get_config("tts.backends.qwen3.enabled", True),
+        }
+        self._default_backend: str = self._get_config("tts.default_backend", "auto")
+        logger.info("TTSManager initialized (default=%s, enabled=%s)",
+                     self._default_backend, self._enabled_backends)
 
     # ── Configuration ───────────────────────────────────────────────────
 
@@ -117,22 +128,106 @@ class TTSManager:
         except Exception:
             return default
 
+    # ── Runtime Enable/Disable ──────────────────────────────────────────
+
+    def set_backend_enabled(self, backend: str, enabled: bool) -> None:
+        """Enable or disable a backend at runtime.
+
+        Args:
+            backend: Backend name ("piper", "orpheus", "qwen3").
+            enabled: Whether to enable this backend.
+        """
+        if backend not in self._enabled_backends:
+            raise ValueError(f"Unknown backend: {backend}")
+        self._enabled_backends[backend] = enabled
+        logger.info("TTS backend '%s' %s", backend, "enabled" if enabled else "disabled")
+
+    def set_default_backend(self, backend: str) -> None:
+        """Set the default backend for synthesis.
+
+        Args:
+            backend: Backend name or "auto".
+        """
+        valid = {b.value for b in TTSBackend}
+        if backend not in valid:
+            raise ValueError(f"Unknown backend: {backend}. Valid: {valid}")
+        self._default_backend = backend
+        logger.info("TTS default backend set to '%s'", backend)
+
+    def get_tts_config(self) -> Dict[str, Any]:
+        """Get the current TTS configuration state.
+
+        Returns:
+            Dict with default_backend, enabled states, availability, benchmarks.
+        """
+        return {
+            "default_backend": self._default_backend,
+            "backends": {
+                name: {
+                    "enabled": self._enabled_backends.get(name, False),
+                    "available": self._available_backends.get(name, False),
+                    "benchmarks": {
+                        "total_calls": bench.total_calls,
+                        "avg_latency_ms": round(bench.avg_latency_ms, 1),
+                        "avg_rtf": round(bench.avg_rtf, 4),
+                        "failures": bench.failures,
+                    },
+                }
+                for name, bench in self._benchmarks.items()
+            },
+        }
+
+    def update_tts_config(self, updates: Dict[str, Any]) -> Dict[str, Any]:
+        """Apply runtime config updates.
+
+        Args:
+            updates: Dict with optional keys: default_backend, backends.{name}.enabled
+
+        Returns:
+            Updated config state.
+        """
+        if "default_backend" in updates:
+            self.set_default_backend(updates["default_backend"])
+        backends_cfg = updates.get("backends", {})
+        for name, cfg in backends_cfg.items():
+            if isinstance(cfg, dict) and "enabled" in cfg:
+                self.set_backend_enabled(name, bool(cfg["enabled"]))
+            elif isinstance(cfg, bool):
+                self.set_backend_enabled(name, cfg)
+        return self.get_tts_config()
+
+    def is_backend_enabled(self, backend: str) -> bool:
+        """Check if a backend is both enabled and available.
+
+        Args:
+            backend: Backend name.
+
+        Returns:
+            True if enabled in config.
+        """
+        return self._enabled_backends.get(backend, False)
+
     # ── Piper Backend ───────────────────────────────────────────────────
 
     def _ensure_piper(self) -> bool:
         """Load Piper model if not already loaded.
 
         Returns:
-            True if Piper is ready.
+            True if Piper is ready and enabled.
         """
+        if not self._enabled_backends.get(TTSBackend.PIPER.value, True):
+            return False
         if self._piper_loaded:
             return True
         try:
             from piper import PiperVoice
 
             model_path = self._get_config(
-                "tts.piper.model_path",
-                r"C:\Files\Models\tts\piper\en_US-amy-medium.onnx",
+                "tts.backends.piper.model_path",
+                self._get_config(
+                    "tts.piper.model_path",
+                    r"C:\Files\Models\tts\piper\en_US-amy-medium.onnx",
+                ),
             )
             t0 = time.perf_counter()
             self._piper_voice = PiperVoice.load(model_path)
@@ -224,6 +319,43 @@ class TTSManager:
             voice=voice,
         )
 
+    # ── Orpheus Native Backend ──────────────────────────────────────────
+
+    def _synth_orpheus_native(self, text: str, voice: str = "tara") -> TTSResult:
+        """Synthesize with native Orpheus (direct GGUF, no LMStudio).
+
+        Args:
+            text: Text to synthesize.
+            voice: Orpheus voice name.
+
+        Returns:
+            TTSResult with WAV audio.
+        """
+        from engine.tts.orpheus_native import get_orpheus_native
+
+        engine = get_orpheus_native(
+            model_dir=self._get_config(
+                "tts.backends.orpheus_native.model_dir",
+                self._get_config("tts.backends.orpheus.model_dir",
+                                 r"D:\Files\Models\Orpheous"),
+            ),
+        )
+        quant = self._get_config("tts.backends.orpheus_native.default_quant", None)
+        if quant is None:
+            quant = engine.auto_select_quant(text)
+
+        result = engine.synthesize(text, voice=voice, quant=quant)
+        self._available_backends[TTSBackend.ORPHEUS_NATIVE.value] = True
+        return TTSResult(
+            audio_bytes=result.wav_bytes,
+            sample_rate=result.sample_rate,
+            duration=result.duration,
+            backend=TTSBackend.ORPHEUS_NATIVE.value,
+            latency_ms=result.latency_ms,
+            text=text,
+            voice=voice,
+        )
+
     # ── Qwen3 Backend ───────────────────────────────────────────────────
 
     def _synth_qwen3(self, text: str, voice: str = "default") -> TTSResult:
@@ -267,12 +399,12 @@ class TTSManager:
     # ── Auto Selection ──────────────────────────────────────────────────
 
     def _select_backend(self, text: str) -> str:
-        """Choose the best backend based on text and availability.
+        """Choose the best backend based on text, availability, and enabled state.
 
         Strategy:
             - Short text (<200 chars) → Piper (fastest)
-            - Long text (>200 chars) → Orpheus (best quality for narrative)
-            - Fallback → whatever is available
+            - Long text (>200 chars) → Orpheus Native or Orpheus API
+            - Fallback → whatever is available and enabled
 
         Args:
             text: Text to synthesize.
@@ -283,18 +415,35 @@ class TTSManager:
         char_count = len(text)
 
         # Try Piper for short text (real-time assistant replies)
-        if char_count < 200 and self._ensure_piper():
+        if (
+            char_count < 200
+            and self._enabled_backends.get(TTSBackend.PIPER.value)
+            and self._ensure_piper()
+        ):
             return TTSBackend.PIPER.value
 
-        # Try Orpheus for longer text
-        if self._available_backends.get(TTSBackend.ORPHEUS.value):
+        # Try native Orpheus (preferred — no LMStudio dependency)
+        if self._enabled_backends.get(TTSBackend.ORPHEUS_NATIVE.value):
+            return TTSBackend.ORPHEUS_NATIVE.value
+
+        # Try Orpheus API (LMStudio-backed)
+        if (
+            self._enabled_backends.get(TTSBackend.ORPHEUS.value)
+            and self._available_backends.get(TTSBackend.ORPHEUS.value)
+        ):
             return TTSBackend.ORPHEUS.value
 
-        # Fallback to Piper if available
-        if self._ensure_piper():
+        # Fallback to Piper if enabled and available
+        if self._enabled_backends.get(TTSBackend.PIPER.value) and self._ensure_piper():
             return TTSBackend.PIPER.value
 
         # Qwen3 as last resort
+        if self._enabled_backends.get(TTSBackend.QWEN3.value):
+            return TTSBackend.QWEN3.value
+
+        # Nothing enabled — try anything
+        if self._ensure_piper():
+            return TTSBackend.PIPER.value
         return TTSBackend.QWEN3.value
 
     # ── Public API ──────────────────────────────────────────────────────
@@ -324,6 +473,7 @@ class TTSManager:
         dispatch = {
             TTSBackend.PIPER.value: self._synth_piper,
             TTSBackend.ORPHEUS.value: self._synth_orpheus,
+            TTSBackend.ORPHEUS_NATIVE.value: self._synth_orpheus_native,
             TTSBackend.QWEN3.value: self._synth_qwen3,
         }
 
@@ -389,20 +539,31 @@ class TTSManager:
                 "name": TTSBackend.PIPER.value,
                 "label": "Piper (Fast)",
                 "available": self._ensure_piper(),
+                "enabled": self._enabled_backends.get(TTSBackend.PIPER.value, False),
                 "description": "CPU-only ONNX, ~60ms/s, best for real-time",
                 "model": self._piper_model_path or "not loaded",
             },
             {
                 "name": TTSBackend.ORPHEUS.value,
-                "label": "Orpheus (Quality)",
+                "label": "Orpheus API (LMStudio)",
                 "available": self._available_backends.get(TTSBackend.ORPHEUS.value, False),
+                "enabled": self._enabled_backends.get(TTSBackend.ORPHEUS.value, False),
                 "description": "LMStudio-backed, 24 voices, emotion tags",
-                "model": "orpheus-3b",
+                "model": "orpheus-3b (via LMStudio)",
+            },
+            {
+                "name": TTSBackend.ORPHEUS_NATIVE.value,
+                "label": "Orpheus Native (GGUF)",
+                "available": self._available_backends.get(TTSBackend.ORPHEUS_NATIVE.value, False),
+                "enabled": self._enabled_backends.get(TTSBackend.ORPHEUS_NATIVE.value, False),
+                "description": "Direct GGUF inference, multi-quant, no LMStudio",
+                "model": "orpheus-3b GGUF",
             },
             {
                 "name": TTSBackend.QWEN3.value,
                 "label": "Qwen3 (GPU)",
                 "available": self._available_backends.get(TTSBackend.QWEN3.value, False),
+                "enabled": self._enabled_backends.get(TTSBackend.QWEN3.value, False),
                 "description": "GPU-based, 0.6B/1.7B escalation mode",
                 "model": "qwen3-tts",
             },
@@ -425,6 +586,15 @@ class TTSManager:
         except Exception:
             self._available_backends[TTSBackend.ORPHEUS.value] = False
 
+        orpheus_native_ok = False
+        try:
+            from engine.tts.orpheus_native import get_orpheus_native
+            engine = get_orpheus_native()
+            orpheus_native_ok = len(engine.list_models()) > 0
+            self._available_backends[TTSBackend.ORPHEUS_NATIVE.value] = orpheus_native_ok
+        except Exception:
+            self._available_backends[TTSBackend.ORPHEUS_NATIVE.value] = False
+
         qwen3_ok = False
         try:
             import requests
@@ -435,12 +605,13 @@ class TTSManager:
         except Exception:
             self._available_backends[TTSBackend.QWEN3.value] = False
 
-        any_ok = piper_ok or orpheus_ok or qwen3_ok
+        any_ok = piper_ok or orpheus_ok or orpheus_native_ok or qwen3_ok
         return {
             "status": "ok" if any_ok else "degraded",
             "backends": {
                 TTSBackend.PIPER.value: piper_ok,
                 TTSBackend.ORPHEUS.value: orpheus_ok,
+                TTSBackend.ORPHEUS_NATIVE.value: orpheus_native_ok,
                 TTSBackend.QWEN3.value: qwen3_ok,
             },
             "benchmarks": self.get_benchmarks(),

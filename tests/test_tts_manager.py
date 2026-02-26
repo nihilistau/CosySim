@@ -336,23 +336,27 @@ class TestAutoSelection:
         """Text at 200 chars does NOT select Piper first."""
         text = "A" * 200
         manager_with_piper._available_backends[TTSBackend.ORPHEUS.value] = True
+        manager_with_piper._enabled_backends["orpheus_native"] = False
         backend = manager_with_piper._select_backend(text)
         assert backend == "orpheus"
 
     def test_long_text_selects_orpheus_when_available(self, manager_with_piper):
         """Long text prefers Orpheus when it is available."""
         manager_with_piper._available_backends[TTSBackend.ORPHEUS.value] = True
+        manager_with_piper._enabled_backends["orpheus_native"] = False
         backend = manager_with_piper._select_backend("x" * 300)
         assert backend == "orpheus"
 
     def test_long_text_falls_back_to_piper(self, manager_with_piper):
         """Long text falls back to Piper when Orpheus unavailable."""
         manager_with_piper._available_backends[TTSBackend.ORPHEUS.value] = False
+        manager_with_piper._enabled_backends["orpheus_native"] = False
         backend = manager_with_piper._select_backend("x" * 300)
         assert backend == "piper"
 
     def test_nothing_available_returns_qwen3(self, manager):
-        """When Piper and Orpheus both unavailable, returns Qwen3."""
+        """When Piper, Orpheus, and native all unavailable, returns Qwen3."""
+        manager._enabled_backends["orpheus_native"] = False
         with patch.object(manager, "_ensure_piper", return_value=False):
             backend = manager._select_backend("Any text")
             assert backend == "qwen3"
@@ -700,7 +704,7 @@ class TestBenchmarks:
     def test_initial_benchmarks_all_zero(self, manager):
         """Fresh manager reports zero stats for all backends."""
         benchmarks = manager.get_benchmarks()
-        for name in ("piper", "orpheus", "qwen3"):
+        for name in ("piper", "orpheus", "orpheus_native", "qwen3"):
             assert benchmarks[name]["total_calls"] == 0
             assert benchmarks[name]["failures"] == 0
             assert benchmarks[name]["avg_latency_ms"] == 0.0
@@ -773,16 +777,20 @@ class TestHealth:
             with patch(
                 "engine.tts.orpheus_client.get_orpheus_client", side_effect=Exception
             ):
-                with patch("requests.get", side_effect=Exception):
-                    result = manager.health()
+                with patch(
+                    "engine.tts.orpheus_native.get_orpheus_native", side_effect=Exception
+                ):
+                    with patch("requests.get", side_effect=Exception):
+                        result = manager.health()
 
         assert result["status"] == "degraded"
 
     def test_health_includes_benchmarks(self, manager_with_piper):
         """Health response contains the benchmarks dict."""
         with patch("engine.tts.orpheus_client.get_orpheus_client", side_effect=Exception):
-            with patch("requests.get", side_effect=Exception):
-                result = manager_with_piper.health()
+            with patch("engine.tts.orpheus_native.get_orpheus_native", side_effect=Exception):
+                with patch("requests.get", side_effect=Exception):
+                    result = manager_with_piper.health()
 
         assert "benchmarks" in result
         assert "piper" in result["benchmarks"]
@@ -824,10 +832,10 @@ class TestHealth:
 class TestListBackends:
     """Tests for list_backends()."""
 
-    def test_returns_three_backends(self, manager_with_piper):
-        """Three backend entries are returned."""
+    def test_returns_four_backends(self, manager_with_piper):
+        """Four backend entries are returned."""
         backends = manager_with_piper.list_backends()
-        assert len(backends) == 3
+        assert len(backends) == 4
 
     def test_backend_names(self, manager_with_piper):
         """Backend names match enum values."""
@@ -835,6 +843,7 @@ class TestListBackends:
         names = [b["name"] for b in backends]
         assert "piper" in names
         assert "orpheus" in names
+        assert "orpheus_native" in names
         assert "qwen3" in names
 
     def test_piper_shows_available(self, manager_with_piper):

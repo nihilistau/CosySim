@@ -162,6 +162,48 @@ def assistant_tts_benchmarks() -> Any:
         return jsonify({"error": str(exc)})
 
 
+@assistant_bp.route("/api/assistant/tts/config", methods=["GET"])
+def assistant_tts_config_get() -> Any:
+    """Return current TTS configuration state."""
+    try:
+        from engine.tts.tts_manager import get_tts_manager
+        mgr = get_tts_manager()
+        return jsonify(mgr.get_tts_config())
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+@assistant_bp.route("/api/assistant/tts/config", methods=["PUT"])
+def assistant_tts_config_put() -> Any:
+    """Update TTS configuration at runtime.
+
+    Accepts JSON body with optional keys:
+        - default_backend: str ("auto", "piper", "orpheus", "orpheus_native", "qwen3")
+        - backends: dict of {name: {enabled: bool}}
+    """
+    try:
+        from engine.tts.tts_manager import get_tts_manager
+        mgr = get_tts_manager()
+        data = request.get_json(force=True)
+        updated = mgr.update_tts_config(data)
+        return jsonify(updated)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+@assistant_bp.route("/api/assistant/tts/models")
+def assistant_tts_models() -> Any:
+    """List available Orpheus native GGUF models."""
+    try:
+        from engine.tts.orpheus_native import get_orpheus_native
+        engine = get_orpheus_native()
+        return jsonify({"models": engine.list_models()})
+    except Exception as exc:
+        return jsonify({"models": [], "error": str(exc)})
+
+
 @assistant_bp.route("/api/assistant/status")
 def assistant_status() -> Any:
     """Return assistant and system status summary."""
