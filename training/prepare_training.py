@@ -240,7 +240,7 @@ def create_combined_dataset(
         combined_val.extend(val_data)
         stats[task_name] = len(train_data) + len(val_data)
 
-    # Also include any custom datasets
+    # Also include any custom datasets (instruction format only)
     custom_dir = dataset_dir / "custom"
     if custom_dir.exists():
         for jsonl in custom_dir.glob("*_train.jsonl"):
@@ -248,6 +248,13 @@ def create_combined_dataset(
             train_data = _load_jsonl(jsonl)
             val_path = custom_dir / f"{task_name}_val.jsonl"
             val_data = _load_jsonl(val_path) if val_path.exists() else []
+            # Filter to instruction-format only (skip chat_ml entries)
+            required = {"instruction", "input", "output"}
+            train_data = [d for d in train_data if required.issubset(d.keys())]
+            val_data = [d for d in val_data if required.issubset(d.keys())]
+            if not train_data:
+                logger.info("Skipping custom/%s — no instruction-format examples", task_name)
+                continue
             for item in train_data + val_data:
                 item["_task"] = f"custom_{task_name}"
             combined_train.extend(train_data)
