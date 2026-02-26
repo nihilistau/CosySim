@@ -1,6 +1,6 @@
 # CosySim Deployment Guide
 
-> Service architecture, startup procedures, port registry, and troubleshooting for CosySim v0.50b+.
+> Service architecture, startup procedures, port registry, and troubleshooting for CosySim v0.52b+.
 
 ---
 
@@ -28,8 +28,8 @@ CosySim runs as a constellation of services: Flask scenes, Streamlit apps, FastA
 │  └─────────────────────┘  └─────────────────┘  └───────────────────┘   │
 │                                                                         │
 │  ┌──────────────────────────────────────────────────────────────────┐   │
-│  │  TTS Servers (start_servers.ps1)                                 │   │
-│  │  CosyVoice TTS :5050  ·  Whisper STT :5051                      │   │
+│  │  TTS Servers                                                     │   │
+│  │  Qwen3-TTS :8600  ·  Orpheus-FastAPI :5005  ·  Whisper STT :5051│   │
 │  └──────────────────────────────────────────────────────────────────┘   │
 │                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘
@@ -46,6 +46,7 @@ CosySim runs as a constellation of services: Flask scenes, Streamlit apps, FastA
 | LMStudio | External | 1234 | Manual |
 | ComfyUI | External | 8188 | Manual |
 | Nexus KMS | External | 8700 | Manual |
+| Orpheus TTS | FastAPI | 5005 | Manual |
 | NotebookLM proxy | Node.js | 8800 | Optional |
 
 ---

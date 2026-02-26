@@ -3786,7 +3786,7 @@ def get_skill_info(skill_name: str) -> str:
 def system_status() -> str:
     """Get comprehensive CosySim system status — services, models,
     scenes, skills, orchestrator, and Nexus connectivity."""
-    status = {"version": "0.51b", "services": {}, "scenes": {}, "skills": {}}
+    status = {"version": "0.52b", "services": {}, "scenes": {}, "skills": {}}
 
     # Config
     try:

@@ -2,7 +2,32 @@
 
 All notable changes to CosySim are documented here.
 
-## v0.52b — Sprint 10: Inference Bridge & System Improvements
+## v0.52b — Sprint 13: Orpheus TTS & Nexus Cleanup
+
+### Orpheus-FastAPI TTS Integration (NEW)
+- **`engine/tts/orpheus_client.py`** — Second TTS backend alongside Qwen3
+  - 25 named voices with mood→emotion mapping (CosySim moods → Orpheus tags)
+  - Voice matching by gender/mood, streaming support, health checks
+  - LMStudio-hosted inference (orpheus-3b-0.1-ft GGUF)
+- **Skills:** `orpheus_speak`, `list_orpheus_voices` in tts_skills.py
+- **Config:** `tts.orpheus` section in default.yaml
+
+### Nexus KMS Cleanup
+- **Routes split:** Monolithic routes.py (965 lines) → 5 Flask blueprints
+  - entries.py (12 routes), nlm.py (11), admin.py (7), ingress.py (11), research.py (11)
+- **Archive:** browser_bridge.py + notebooklm-skill/ → data/archive/ (preserved, not deleted)
+- **Manager cleanup:** NLM manager now HTTP-only, browser_bridge fallback removed
+- **Q&A telemetry:** _query_stats tracking (cache/FTS/NLM/none hit rates)
+  - `/api/stats/query-resolution` endpoint for monitoring
+  - Persistent logging to agent_activity table
+
+### Test Suite
+- **2818 tests** passing (22 new Orpheus tests)
+- Nexus: 263 tests passing
+
+---
+
+## v0.52b — Sprint 10–12: Inference Bridge & System Improvements
 
 ### Copilot → LMStudio Task Bridge (NEW)
 - **`engine/nexus/lms_task_bridge.py`** — Delegate subtasks to local LMStudio models
