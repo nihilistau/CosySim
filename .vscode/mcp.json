@@ -39,6 +39,14 @@
 			},
 			"gallery": "https://api.mcp.github.com",
 			"version": "1.0.9"
+		},
+		"gh-copilot_spaces": {
+			"type": "http",
+			"url": "https://api.githubcopilot.com/mcp/x/copilot_spaces"
+		},
+		"gh-github_support_docs_search": {
+			"type": "http",
+			"url": "https://api.githubcopilot.com/mcp/x/github_support_docs_search"
 		}
 	},
 	"inputs": [
