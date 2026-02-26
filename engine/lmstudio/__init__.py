@@ -93,6 +93,8 @@ from .sdk_client       import SDKClient, get_sdk_client, SDK_AVAILABLE
 from .router           import InferenceRouter, Priority, Tier, Channel
 # Unified orchestrator
 from .orchestrator     import InferenceOrchestrator, get_orchestrator, AgentProfile
+# Router training data collector
+from .router_data      import RouterDataCollector, RouterRecord, get_router_data_collector
 # Tool registry (MCP ↔ SDK bridge)
 from .tool_registry    import (
     ToolRegistry as SDKToolRegistry, ToolScope,
@@ -126,6 +128,8 @@ __all__ = [
     "InferenceRouter", "Priority", "Tier", "Channel",
     # Unified orchestrator
     "InferenceOrchestrator", "get_orchestrator", "AgentProfile",
+    # Router training data
+    "RouterDataCollector", "RouterRecord", "get_router_data_collector",
     # Tool registry
     "SDKToolRegistry", "ToolScope", "get_tool_registry", "reset_tool_registry",
     # Llmster daemon

@@ -138,6 +138,15 @@ class InferenceOrchestrator:
         except Exception:
             logger.debug("InferenceMonitor unavailable", exc_info=True)
 
+        # Router training data collector
+        self._router_collector = None
+        try:
+            from engine.lmstudio.router_data import get_router_data_collector
+            self._router_collector = get_router_data_collector()
+            logger.info("RouterDataCollector wired into orchestrator")
+        except Exception:
+            logger.debug("RouterDataCollector unavailable", exc_info=True)
+
         logger.info("InferenceOrchestrator initialized")
 
     # ── Configuration ────────────────────────────────────────────────
@@ -314,6 +323,24 @@ class InferenceOrchestrator:
                     )
                 except Exception:
                     pass
+            # Capture failed routing decision
+            if self._router_collector:
+                try:
+                    from engine.lmstudio.router_data import RouterRecord
+                    self._router_collector.record(RouterRecord(
+                        agent_id=agent_id or "anonymous",
+                        task_type=task_type,
+                        priority=priority,
+                        has_tools=bool(tools),
+                        has_system_prompt=bool(system_prompt),
+                        tier_selected=tier_name,
+                        model_used=resolved_model or "default",
+                        latency_ms=(time.monotonic() - t0) * 1000,
+                        success=False,
+                        error=str(e)[:200],
+                    ))
+                except Exception:
+                    pass
             raise
 
     def infer_quick(self, prompt: str, *, agent_id: str = "", **kwargs) -> str:
@@ -368,6 +395,30 @@ class InferenceOrchestrator:
                 )
             except Exception:
                 logger.debug("InferenceMonitor record failed", exc_info=True)
+
+        # Capture routing decision for router training
+        if self._router_collector:
+            try:
+                from engine.lmstudio.router_data import RouterRecord
+                prompt_tokens = 0
+                if hasattr(resp, "usage") and resp.usage:
+                    prompt_tokens = int(getattr(resp.usage, "prompt_tokens", 0) or 0)
+                self._router_collector.record(RouterRecord(
+                    agent_id=agent_id or "anonymous",
+                    task_type="chat",
+                    priority="interactive",
+                    prompt_tokens=prompt_tokens,
+                    has_tools=bool(tools),
+                    has_system_prompt=bool(system_prompt),
+                    tier_selected=tier_name,
+                    model_used=model or "default",
+                    latency_ms=latency_ms,
+                    tokens_generated=tokens,
+                    tokens_per_sec=tps,
+                    success=True,
+                ))
+            except Exception:
+                logger.debug("Router data capture failed", exc_info=True)
 
         return resp
 
