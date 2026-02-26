@@ -112,3 +112,4 @@ __pycache__/
 
 # Copilot hook logs
 .github/hooks/logs/
+unsloth_compiled_cache/
