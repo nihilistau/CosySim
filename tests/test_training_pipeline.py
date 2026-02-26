@@ -4,7 +4,6 @@ import json
 import sys
 import tempfile
 import time
-import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -190,7 +189,7 @@ class TestAutoTrain:
 # ═══════════════════════════════════════════════════════════════
 
 
-class TestGenerateDatasets(unittest.TestCase):
+class TestGenerateDatasets:
     """Tests for training.generate_datasets module."""
 
     def test_generates_all_datasets(self):
@@ -207,7 +206,7 @@ class TestGenerateDatasets(unittest.TestCase):
                 split = int(len(data) * 0.9)
                 write_jsonl(data[:split], out_dir / f"{name}_train.jsonl")
                 write_jsonl(data[split:], out_dir / f"{name}_val.jsonl")
-            self.assertEqual(len(list(out_dir.glob("*.jsonl"))), 10)
+            assert len(list(out_dir.glob("*.jsonl"))) == 10
 
     def test_jsonl_format(self):
         """Each line must be valid JSON with 'instruction' and 'output' keys."""
@@ -218,8 +217,8 @@ class TestGenerateDatasets(unittest.TestCase):
             write_jsonl(generate_tag_extraction(10), path)
             for line in path.read_text(encoding="utf-8").strip().splitlines():
                 row = json.loads(line)
-                self.assertIn("instruction", row)
-                self.assertIn("output", row)
+                assert "instruction" in row
+                assert "output" in row
 
     def test_dataset_counts(self):
         """Each generator must produce exactly its default count."""
@@ -231,8 +230,8 @@ class TestGenerateDatasets(unittest.TestCase):
             "response_validate": 400,
         }
         for name, (gen_fn, default_count) in GENERATORS.items():
-            self.assertEqual(default_count, expected[name], f"{name} default mismatch")
-            self.assertEqual(len(gen_fn(default_count)), expected[name])
+            assert default_count, expected[name] == f"{name} default mismatch"
+            assert len(gen_fn(default_count)) == expected[name]
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -240,7 +239,7 @@ class TestGenerateDatasets(unittest.TestCase):
 # ═══════════════════════════════════════════════════════════════
 
 
-class TestMergeAdapters(unittest.TestCase):
+class TestMergeAdapters:
     """Tests for training.merge_adapters module."""
 
     def test_check_dependencies(self):
@@ -248,16 +247,16 @@ class TestMergeAdapters(unittest.TestCase):
         from training.merge_adapters import check_dependencies
 
         deps = check_dependencies()
-        self.assertIsInstance(deps, dict)
+        assert isinstance(deps, dict)
         for pkg in ("unsloth", "transformers", "peft", "torch"):
-            self.assertIn(pkg, deps)
-            self.assertIsInstance(deps[pkg], bool)
+            assert pkg in deps
+            assert isinstance(deps[pkg], bool)
 
     def test_merge_requires_adapters(self):
         """Empty adapter list raises ValueError."""
         from training.merge_adapters import merge_adapters
 
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError):
             merge_adapters([])
 
 
@@ -266,7 +265,7 @@ class TestMergeAdapters(unittest.TestCase):
 # ═══════════════════════════════════════════════════════════════
 
 
-class TestTrainingSkills(unittest.TestCase):
+class TestTrainingSkills:
     """Tests for engine.skills.builtin.training_skills."""
 
     def test_list_trained_models(self):
@@ -275,7 +274,7 @@ class TestTrainingSkills(unittest.TestCase):
 
         result = list_trained_models()
         parsed = json.loads(result)
-        self.assertIsInstance(parsed, (list, dict))
+        assert isinstance(parsed, (list, dict))
 
     def test_get_training_status_no_jobs(self):
         """Empty job_id with no recorded jobs returns message JSON."""
@@ -286,7 +285,7 @@ class TestTrainingSkills(unittest.TestCase):
         _training_jobs.clear()
         result = get_training_status("")
         parsed = json.loads(result)
-        self.assertIn("message", parsed)
+        assert "message" in parsed
 
     def test_export_training_data_no_db(self):
         """Graceful error when the metrics DB module is unavailable."""
@@ -295,7 +294,7 @@ class TestTrainingSkills(unittest.TestCase):
         with patch.dict(sys.modules, {"training.prepare_from_live": None}):
             result = export_training_data()
             parsed = json.loads(result)
-            self.assertIn("error", parsed)
+            assert "error" in parsed
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -303,7 +302,7 @@ class TestTrainingSkills(unittest.TestCase):
 # ═══════════════════════════════════════════════════════════════
 
 
-class TestNotebookLMSkills(unittest.TestCase):
+class TestNotebookLMSkills:
     """Tests for engine.skills.builtin.notebooklm_skills."""
 
     @patch("engine.skills.builtin.notebooklm_skills._get",
@@ -314,7 +313,7 @@ class TestNotebookLMSkills(unittest.TestCase):
 
         result = notebooklm_list_notebooks()
         parsed = json.loads(result)
-        self.assertIn("error", parsed)
+        assert "error" in parsed
 
     @patch("engine.skills.builtin.notebooklm_skills._post",
            side_effect=Exception("Connection refused"))
@@ -324,7 +323,7 @@ class TestNotebookLMSkills(unittest.TestCase):
 
         result = notebooklm_ask("test question")
         parsed = json.loads(result)
-        self.assertIn("error", parsed)
+        assert "error" in parsed
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -332,7 +331,7 @@ class TestNotebookLMSkills(unittest.TestCase):
 # ═══════════════════════════════════════════════════════════════
 
 
-class TestNotebookLMProxy(unittest.TestCase):
+class TestNotebookLMProxy:
     """Tests for engine.mcp.notebooklm_proxy.NotebookLMProxy."""
 
     def test_proxy_not_running(self):
@@ -340,7 +339,7 @@ class TestNotebookLMProxy(unittest.TestCase):
         from engine.mcp.notebooklm_proxy import NotebookLMProxy
 
         proxy = NotebookLMProxy({})
-        self.assertFalse(proxy.is_running())
+        assert not proxy.is_running()
 
     def test_proxy_ask_not_running(self):
         """ask() returns error dict when process is not running."""
@@ -348,5 +347,5 @@ class TestNotebookLMProxy(unittest.TestCase):
 
         proxy = NotebookLMProxy({})
         result = proxy.ask("nb-1", "test question")
-        self.assertIsInstance(result, dict)
-        self.assertIn("error", result)
+        assert isinstance(result, dict)
+        assert "error" in result
