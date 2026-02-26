@@ -146,62 +146,63 @@ def _get_session_history(session_id: str) -> dict:
     if SESSION_STORE_DB.exists():
         try:
             conn = sqlite3.connect(f"file:{SESSION_STORE_DB}?mode=ro", uri=True)
-            conn.row_factory = sqlite3.Row
+            try:
+                conn.row_factory = sqlite3.Row
 
-            # Get turns
-            turns = conn.execute(
-                "SELECT turn_index, user_message, assistant_response, timestamp "
-                "FROM turns WHERE session_id = ? ORDER BY turn_index",
-                (session_id,),
-            ).fetchall()
-            result["turns"] = [
-                {
-                    "turn": r["turn_index"],
-                    "user": (r["user_message"] or "")[:2000],
-                    "assistant": (r["assistant_response"] or "")[:3000],
-                    "timestamp": r["timestamp"],
-                }
-                for r in turns
-            ]
+                # Get turns
+                turns = conn.execute(
+                    "SELECT turn_index, user_message, assistant_response, timestamp "
+                    "FROM turns WHERE session_id = ? ORDER BY turn_index",
+                    (session_id,),
+                ).fetchall()
+                result["turns"] = [
+                    {
+                        "turn": r["turn_index"],
+                        "user": (r["user_message"] or "")[:2000],
+                        "assistant": (r["assistant_response"] or "")[:3000],
+                        "timestamp": r["timestamp"],
+                    }
+                    for r in turns
+                ]
 
-            # Get checkpoints
-            cps = conn.execute(
-                "SELECT checkpoint_number, title, overview, work_done "
-                "FROM checkpoints WHERE session_id = ? ORDER BY checkpoint_number",
-                (session_id,),
-            ).fetchall()
-            result["checkpoints"] = [
-                {
-                    "number": r["checkpoint_number"],
-                    "title": r["title"],
-                    "overview": (r["overview"] or "")[:1000],
-                    "work_done": (r["work_done"] or "")[:1000],
-                }
-                for r in cps
-            ]
+                # Get checkpoints
+                cps = conn.execute(
+                    "SELECT checkpoint_number, title, overview, work_done "
+                    "FROM checkpoints WHERE session_id = ? ORDER BY checkpoint_number",
+                    (session_id,),
+                ).fetchall()
+                result["checkpoints"] = [
+                    {
+                        "number": r["checkpoint_number"],
+                        "title": r["title"],
+                        "overview": (r["overview"] or "")[:1000],
+                        "work_done": (r["work_done"] or "")[:1000],
+                    }
+                    for r in cps
+                ]
 
-            # Get files
-            files = conn.execute(
-                "SELECT file_path, tool_name FROM session_files "
-                "WHERE session_id = ? ORDER BY first_seen_at",
-                (session_id,),
-            ).fetchall()
-            result["files"] = [
-                {"path": r["file_path"], "action": r["tool_name"]}
-                for r in files
-            ]
+                # Get files
+                files = conn.execute(
+                    "SELECT file_path, tool_name FROM session_files "
+                    "WHERE session_id = ? ORDER BY first_seen_at",
+                    (session_id,),
+                ).fetchall()
+                result["files"] = [
+                    {"path": r["file_path"], "action": r["tool_name"]}
+                    for r in files
+                ]
 
-            # Get refs
-            refs = conn.execute(
-                "SELECT ref_type, ref_value FROM session_refs WHERE session_id = ?",
-                (session_id,),
-            ).fetchall()
-            result["refs"] = [
-                {"type": r["ref_type"], "value": r["ref_value"]}
-                for r in refs
-            ]
-
-            conn.close()
+                # Get refs
+                refs = conn.execute(
+                    "SELECT ref_type, ref_value FROM session_refs WHERE session_id = ?",
+                    (session_id,),
+                ).fetchall()
+                result["refs"] = [
+                    {"type": r["ref_type"], "value": r["ref_value"]}
+                    for r in refs
+                ]
+            finally:
+                conn.close()
         except Exception:
             pass
 
