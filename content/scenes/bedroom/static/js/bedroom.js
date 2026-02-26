@@ -1351,7 +1351,7 @@ function renderCharStatSheets(chars) {
 }
 
 async function quickStat(cid, stat, delta) {
-    await postJSON('/api/character/stats/adjust', { character_id: cid, adjustments: { [stat]: delta } });
+    await postJSON('/api/character/stats/adjust', { character_id: cid, stat: stat, delta: delta });
 }
 
 async function setOutfit(cid, outfit) {
@@ -1641,7 +1641,7 @@ async function injectBeat() {
     const beatEl = document.getElementById('newBeatInput');
     const text   = beatEl?.value.trim();
     if (!text) return;
-    await postJSON('/api/story/beat', { text });
+    await postJSON('/api/story/beat', { beat: text });
     addFeedEntry({ character_name: '(Director)', action: 'scenario', message: '📌 Beat: ' + text }, 'scenario');
     if (beatEl) beatEl.value = '';
 }
@@ -1730,7 +1730,7 @@ async function fireCustomEvent() {
     const el   = document.getElementById('customEventInput');
     const desc = el?.value.trim();
     if (!desc) return;
-    await postJSON('/api/event/fire', { type: 'custom', description: desc });
+    await postJSON('/api/event/fire', { type: 'custom', custom: desc });
     addFeedEntry({ character_name: '(Event)', action: 'environment', message: desc }, 'environment');
     if (el) el.value = '';
 }
@@ -1940,7 +1940,7 @@ async function placeDirectorAvatar() {
         body: JSON.stringify({ action: 'place', name, gender, skin_tone: skinTone, hair_color: hairColor, outfit, location_id: locationId })
     });
     if (!resp.ok) return;
-    addFeedMessage('director', `${name}'s avatar placed at ${locationId}`);
+    addFeedEntry({ character_name: '(Director)', action: 'director', message: `${name}'s avatar placed at ${locationId}` }, 'director');
 }
 
 async function removeDirectorAvatar() {
@@ -1953,7 +1953,7 @@ async function removeDirectorAvatar() {
         scene.remove(directorSprite.group);
         directorSprite = null;
     }
-    addFeedMessage('director', 'Director avatar removed');
+    addFeedEntry({ character_name: '(Director)', action: 'director', message: 'Director avatar removed' }, 'director');
 }
 
 function updateDirectorAvatar(avatarData) {
@@ -2046,7 +2046,7 @@ async function doFurnitureInteract(locationId, interaction) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ location_id: locationId, interaction, actor: 'director' })
     });
-    addFeedMessage('director', `${interaction} at the ${locationId}`);
+    addFeedEntry({ character_name: '(Director)', action: 'director', message: `${interaction} at the ${locationId}` }, 'director');
 }
 
 async function quickMoveChar() {

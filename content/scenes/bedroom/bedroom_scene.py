@@ -22,7 +22,7 @@ from flask_socketio import SocketIO, emit
 from flask_cors import CORS
 from typing import Optional, Dict, List, Any
 from dataclasses import dataclass, field, asdict
-import json, random, threading
+import json, random, threading, time
 from datetime import datetime
 from pathlib import Path
 import sys
@@ -1393,8 +1393,8 @@ class BedroomScene(BaseScene, MCPSceneMixin, mcp_scene_id="bedroom"):
         def get_locations():
             """Return all location data for UI interaction buttons."""
             locs = {}
-            for loc_id, loc in self.scene_map.locations.items():
-                locs[loc_id] = {
+            for loc in self.scene_map.locations:
+                locs[loc.id] = {
                     "id": loc.id,
                     "name": loc.name,
                     "description": loc.description,
