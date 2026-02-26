@@ -24,7 +24,12 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 NEXUS_URL = "http://localhost:8700"
-DEFAULT_OUTPUT = Path("C:/Files/knowledge-pipeline/knowledge/nexus-export")
+DEFAULT_OUTPUT = Path(
+    __import__("os").environ.get(
+        "COSYSIM_KNOWLEDGE_EXPORT_DIR",
+        str(Path.home() / "knowledge-pipeline" / "knowledge" / "nexus-export"),
+    )
+)
 
 
 def _fetch_nexus(path: str) -> dict:

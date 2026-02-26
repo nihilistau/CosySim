@@ -2,6 +2,18 @@
 
 from __future__ import annotations
 
+from engine.tts.qwen3_server import Qwen3TTSEngine
+from engine.tts.voice_designer import VoiceDesigner
+from engine.tts.audio_processor import AudioProcessor
+
+__all__ = [
+    "Qwen3TTSEngine",
+    "VoiceDesigner",
+    "AudioProcessor",
+    "get_tts_stream_url",
+    "get_tts_ws_url",
+]
+
 
 def get_tts_stream_url() -> str:
     """Return the SSE streaming endpoint URL from config.

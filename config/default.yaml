@@ -546,3 +546,11 @@ nexus:
   enabled: true
   base_url: "http://localhost:8700"
   auto_submit: false
+
+# GitHub Codespace remote execution
+codespace:
+  enabled: true
+  gh_path: "gh.exe"
+  default_repo: "nihilistau/CosySim"
+  default_machine: "standardLinux32gb"
+  idle_timeout: "30m"

@@ -65,7 +65,7 @@ FLASK_SCENES: Dict[str, Dict[str, Any]] = {
                 "port": 5564, "label": "The Coders Room"},
     "heist":   {"cls": "content.scenes.heist.heist_scene.HeistScene",
                 "port": 5565, "label": "The Heist"},
-    "command_center": {"cls": "content.scenes.command_center.command_scene.CommandCenterScene",
+    "command_center": {"cls": "content.scenes.command_center.command_center_scene.CommandCenterScene",
                        "port": 5566, "label": "Command Center"},
     "games":   {"cls": "content.scenes.games.games_scene.GamesScene",
                 "port": 5567, "label": "Games Arcade"},
