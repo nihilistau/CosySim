@@ -37,12 +37,14 @@ for _stream in (sys.stdout, sys.stderr):
 PROJECT_ROOT = Path(__file__).parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-VERSION = "0.50b"
+VERSION = "0.57b"
 
 # ── Scene catalogue (class-path → metadata) ─────────────────────────────
 # SceneRegistry auto-discovers these, but we keep a manual catalogue as
 # fallback and for Streamlit/FastAPI services that aren't BaseScene.
 FLASK_SCENES: Dict[str, Dict[str, Any]] = {
+    "hub":     {"cls": "content.scenes.hub.hub_flask.HubScene",
+                "port": 8500, "label": "CosySim Hub"},
     "phone":   {"cls": "content.scenes.phone.phone_scene_v2.PhoneSceneV2",
                 "port": 5555, "label": "CosyPhone OS"},
     "bedroom": {"cls": "content.scenes.bedroom.bedroom_scene.BedroomScene",
@@ -74,8 +76,6 @@ FLASK_SCENES: Dict[str, Dict[str, Any]] = {
 }
 
 STREAMLIT_APPS: Dict[str, Dict[str, Any]] = {
-    "hub":       {"script": "content/scenes/hub/hub_scene.py",
-                  "port": 8500, "label": "Hub"},
     "dashboard": {"script": "content/scenes/dashboard/dashboard_v2.py",
                   "port": 8501, "label": "Dashboard"},
     "admin":     {"script": "content/scenes/admin/admin_panel.py",

@@ -19,6 +19,7 @@ from flask import Flask, jsonify, render_template, request
 from engine.config import get_config
 from engine.scenes.base_scene import BaseScene
 from engine.scenes.nexus_mixin import NexusSceneMixin
+from content.shared import register_shared_assets
 
 try:
     from flask_socketio import SocketIO, emit
@@ -76,6 +77,8 @@ class NexusPanelScene(BaseScene, NexusSceneMixin):
             )
         else:
             self.socketio = None
+
+        register_shared_assets(self.app)
 
         # Activity feed — ring buffer of recent events
         self._activity: deque = deque(maxlen=500)

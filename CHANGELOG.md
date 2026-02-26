@@ -2,6 +2,42 @@
 
 All notable changes to CosySim are documented here.
 
+## v0.57b — UX Overhaul & System Assistant
+
+### Scene Navigation Bar (NEW)
+- **`cosysim-navbar.js`** — floating navigation bar auto-injected into every scene
+- Back/Forward/Home buttons with session-based history tracking
+- Scene selector dropdown with live health status (green/red dots)
+- Keyboard shortcuts: Ctrl+Shift+H (home), Ctrl+Shift+←/→ (navigate), Ctrl+Shift+N (toggle)
+- Minimizable, persistent state across page loads
+
+### System Assistant "Aria" (NEW)
+- **`engine/assistant/system_assistant.py`** — singleton AI assistant character
+- Floating overlay widget injected into every scene (Ctrl+Shift+A to toggle)
+- Chat interface with text input and quick action buttons
+- Built-in commands: system status, scene list, navigation ("go to bedroom")
+- LLM-powered responses with fallback when LLM unavailable
+- Registered in CharacterRegistry with personality, backstory, voice style
+- **`engine/assistant/assistant_bp.py`** — Flask Blueprint with `/api/assistant/chat` and `/api/assistant/status`
+
+### Hub Rebuild (Streamlit → Flask)
+- **`content/scenes/hub/hub_flask.py`** — complete rewrite as Flask scene
+- Scene grid with live health status indicators
+- System metrics bar (scenes online, agent count, VRAM usage)
+- Modern dark UI using CosySim design tokens
+- `/api/scenes` and `/api/system` REST endpoints
+- Hub now starts as Flask scene on port 8500 (no Streamlit dependency)
+
+### Shared Asset Injection
+- `register_shared_assets()` now auto-injects navbar + assistant via `after_request` hook
+- All 14 Flask scenes get navigation + assistant automatically
+- Added `register_shared_assets()` to 4 scenes that were missing it (games, coders, tavern, nexus_panel)
+- Assistant Blueprint auto-mounted on every scene
+
+### Launcher
+- Hub moved from Streamlit to Flask in launcher catalogue
+- Version bumped to 0.57b
+
 ## v0.56b — Deep Polish Sprint
 
 ### Games Scene: THIN → DEEP

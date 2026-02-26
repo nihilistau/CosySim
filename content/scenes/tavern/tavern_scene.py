@@ -38,6 +38,7 @@ from flask_socketio import SocketIO
 
 from engine.scenes.base_scene import BaseScene
 from engine.scenes.nexus_mixin import NexusSceneMixin
+from content.shared import register_shared_assets
 
 log = logging.getLogger(__name__)
 
@@ -103,6 +104,7 @@ class TavernScene(BaseScene, NexusSceneMixin):
             static_folder=os.path.join(os.path.dirname(__file__), "static"),
         )
         self.socketio = SocketIO(self.app, cors_allowed_origins="*", async_mode="threading")
+        register_shared_assets(self.app)
 
         self._register_routes()
         self._register_socketio()

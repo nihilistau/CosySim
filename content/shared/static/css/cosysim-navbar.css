@@ -1,0 +1,261 @@
+/*
+ * CosySim Navigation Bar
+ * ======================
+ * Floating scene navigation overlay injected into every Flask scene.
+ * Uses design tokens from design_tokens.css.
+ */
+
+/* ── Navigation Bar Container ────────────────────────────── */
+.cs-navbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 99990;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  background: rgba(10, 14, 23, 0.88);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(59, 130, 246, 0.15);
+  font-family: -apple-system, system-ui, 'Segoe UI', sans-serif;
+  font-size: 12px;
+  color: var(--cs-text-secondary, #9ca3af);
+  transition: transform 0.3s ease, opacity 0.3s ease;
+  user-select: none;
+}
+
+.cs-navbar.collapsed {
+  transform: translateY(-100%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ── Toggle Tab (visible when collapsed) ─────────────────── */
+.cs-navbar-toggle {
+  position: fixed;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 99989;
+  width: 48px;
+  height: 14px;
+  background: rgba(59, 130, 246, 0.3);
+  border: none;
+  border-radius: 0 0 8px 8px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cs-navbar-toggle::after {
+  content: '▼';
+  font-size: 8px;
+  color: var(--cs-text-muted, #6b7280);
+}
+
+.cs-navbar.collapsed ~ .cs-navbar-toggle {
+  opacity: 0.6;
+}
+
+.cs-navbar-toggle:hover {
+  opacity: 1 !important;
+  background: rgba(59, 130, 246, 0.5);
+}
+
+/* ── Nav Buttons ─────────────────────────────────────────── */
+.cs-nav-btn {
+  background: none;
+  border: 1px solid transparent;
+  color: var(--cs-text-secondary, #9ca3af);
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.cs-nav-btn:hover {
+  color: var(--cs-text-primary, #e5e7eb);
+  background: rgba(59, 130, 246, 0.12);
+  border-color: rgba(59, 130, 246, 0.2);
+}
+
+.cs-nav-btn:active {
+  background: rgba(59, 130, 246, 0.2);
+}
+
+.cs-nav-btn.active {
+  color: var(--cs-accent, #3b82f6);
+  background: rgba(59, 130, 246, 0.1);
+}
+
+.cs-nav-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+/* ── Scene Name (current) ────────────────────────────────── */
+.cs-nav-scene-name {
+  color: var(--cs-text-primary, #e5e7eb);
+  font-weight: 600;
+  font-size: 12px;
+  padding: 0 8px;
+  letter-spacing: 0.02em;
+}
+
+/* ── Separator ───────────────────────────────────────────── */
+.cs-nav-sep {
+  width: 1px;
+  height: 18px;
+  background: rgba(156, 163, 175, 0.2);
+  margin: 0 4px;
+}
+
+/* ── Spacer ──────────────────────────────────────────────── */
+.cs-nav-spacer {
+  flex: 1;
+}
+
+/* ── Scene Selector Dropdown ─────────────────────────────── */
+.cs-nav-dropdown {
+  position: relative;
+}
+
+.cs-nav-dropdown-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 280px;
+  max-height: 420px;
+  overflow-y: auto;
+  background: rgba(17, 24, 39, 0.96);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  padding: 8px;
+  display: none;
+  z-index: 99991;
+}
+
+.cs-nav-dropdown-panel.open {
+  display: block;
+  animation: cs-dropdown-in 0.15s ease;
+}
+
+@keyframes cs-dropdown-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Scene Card in Dropdown ──────────────────────────────── */
+.cs-nav-scene-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+  text-decoration: none;
+  color: inherit;
+}
+
+.cs-nav-scene-card:hover {
+  background: rgba(59, 130, 246, 0.1);
+}
+
+.cs-nav-scene-card.current {
+  background: rgba(59, 130, 246, 0.12);
+  border-left: 2px solid var(--cs-accent, #3b82f6);
+}
+
+.cs-nav-scene-card .scene-icon {
+  font-size: 18px;
+  width: 28px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.cs-nav-scene-card .scene-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.cs-nav-scene-card .scene-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--cs-text-primary, #e5e7eb);
+}
+
+.cs-nav-scene-card .scene-port {
+  font-size: 10px;
+  color: var(--cs-text-muted, #6b7280);
+}
+
+/* ── Status Dot ──────────────────────────────────────────── */
+.cs-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.cs-status-dot.online  { background: var(--cs-green, #22c55e); box-shadow: 0 0 4px rgba(34, 197, 94, 0.4); }
+.cs-status-dot.offline { background: var(--cs-text-dim, #4b5563); }
+.cs-status-dot.unknown { background: var(--cs-yellow, #eab308); }
+
+/* ── Section Header in Dropdown ──────────────────────────── */
+.cs-nav-section {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--cs-text-muted, #6b7280);
+  padding: 8px 10px 4px;
+  margin-top: 4px;
+}
+
+.cs-nav-section:first-child {
+  margin-top: 0;
+}
+
+/* ── Minimize Button ─────────────────────────────────────── */
+.cs-nav-minimize {
+  font-size: 10px;
+  padding: 4px 6px;
+  opacity: 0.5;
+}
+
+.cs-nav-minimize:hover {
+  opacity: 1;
+}
+
+/* ── Body padding to prevent content hiding behind navbar ── */
+body.cs-navbar-active {
+  padding-top: 42px !important;
+}
+
+/* ── Scrollbar styling for dropdown ──────────────────────── */
+.cs-nav-dropdown-panel::-webkit-scrollbar {
+  width: 4px;
+}
+
+.cs-nav-dropdown-panel::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.cs-nav-dropdown-panel::-webkit-scrollbar-thumb {
+  background: rgba(59, 130, 246, 0.3);
+  border-radius: 2px;
+}

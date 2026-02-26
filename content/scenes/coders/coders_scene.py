@@ -27,6 +27,7 @@ from engine.mcp.framework import MCPSceneMixin, get_framework
 from engine.mcp.scene_state import get_scene_state_manager
 from engine.mcp.tag_registry import TagRegistry, TagDef
 from content.scenes.coders.coders_rules import register_coders_rules
+from content.shared import register_shared_assets
 
 from .coders_state import (
     AgentRole,
@@ -65,6 +66,7 @@ class CodersRoomScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="c
         self.app.config["SECRET_KEY"] = "coders_room_v3"
         CORS(self.app)
         self.socketio = SocketIO(self.app, cors_allowed_origins="*")
+        register_shared_assets(self.app)
 
         self.mount_overlay(self.app, self.socketio)
         self.mount_skills_server(self.app)

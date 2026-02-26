@@ -19,6 +19,7 @@ from flask_socketio import SocketIO, emit
 
 from engine.scenes.base_scene import BaseScene
 from engine.scenes.nexus_mixin import NexusSceneMixin
+from content.shared import register_shared_assets
 
 log = logging.getLogger(__name__)
 
@@ -62,6 +63,7 @@ class GamesScene(BaseScene, NexusSceneMixin):
         )
         self.socketio = SocketIO(self.app, cors_allowed_origins="*",
                                  async_mode="threading")
+        register_shared_assets(self.app)
 
         self.mystery_games: Dict[str, Any] = {}
         self.tod_games: Dict[str, Any] = {}
