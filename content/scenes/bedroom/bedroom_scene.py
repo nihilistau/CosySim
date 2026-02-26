@@ -1184,6 +1184,7 @@ class BedroomScene(BaseScene, MCPSceneMixin, mcp_scene_id="bedroom"):
             self.scene_state["characters"][cid] = {
                 "name": char.name,
                 "gender": self._get_character_gender(char),
+                "bio": getattr(char, "description", "") or getattr(char, "bio", "") or "",
                 "mood": char.mood,
                 "location": loc.name if loc else None,
                 "location_id": loc.id if loc else None,
@@ -2220,7 +2221,9 @@ class BedroomScene(BaseScene, MCPSceneMixin, mcp_scene_id="bedroom"):
                 "props": PROPS,
                 "personalities": {k: {"traits": v["traits"]} for k, v in PERSONALITY_PROFILES.items()},
                 "lighting_presets": LIGHTING_PRESETS,
-                "scenarios": {k: {"label": v["label"], "emoji": v["emoji"]} for k, v in PREMADE_SCENARIOS.items()},
+                "scenarios": {k: {"label": v["label"], "emoji": v["emoji"],
+                              "beats": v.get("beats", []), "opening": v.get("opening", "")}
+                             for k, v in PREMADE_SCENARIOS.items()},
             })
 
         # ── MCP Framework API ─────────────────────────────────────────
@@ -2321,7 +2324,9 @@ class BedroomScene(BaseScene, MCPSceneMixin, mcp_scene_id="bedroom"):
                 "positions": POSITIONS, "outfits": OUTFITS, "props": PROPS,
                 "personalities": {k: {"traits": v["traits"]} for k, v in PERSONALITY_PROFILES.items()},
                 "lighting": LIGHTING_PRESETS,
-                "scenarios": {k: {"label": v["label"], "emoji": v["emoji"]} for k, v in PREMADE_SCENARIOS.items()},
+                "scenarios": {k: {"label": v["label"], "emoji": v["emoji"],
+                              "beats": v.get("beats", []), "opening": v.get("opening", "")}
+                             for k, v in PREMADE_SCENARIOS.items()},
             })
 
         @self.socketio.on("disconnect")
@@ -2472,11 +2477,21 @@ class BedroomScene(BaseScene, MCPSceneMixin, mcp_scene_id="bedroom"):
                     pass
                 # Also update local profile stats for immediate UI feedback
                 self.profiles[character_id].stats.adjust(**deltas)
-            # Forward speech to the chat panel so dialogue shows as chat bubbles
+            # Emit agent_action event so ALL actions appear in the UI feed
+            char = self.characters.get(character_id)
+            char_name = char.name if char else character_id
+            self.socketio.emit("agent_action", {
+                "character_id": character_id,
+                "character_name": char_name,
+                "action": action_type,
+                "message": action.get("message", ""),
+                "target": action.get("target", ""),
+                "timestamp": action.get("timestamp", ""),
+            })
+            # Also forward speech to chat_message for chat bubble display
             if action_type == "speak" and action.get("message"):
-                char = self.characters.get(character_id)
                 self.socketio.emit("chat_message", {
-                    "name":      char.name if char else character_id,
+                    "name":      char_name,
                     "message":   action["message"],
                     "timestamp": action.get("timestamp", ""),
                     "character_id": character_id,

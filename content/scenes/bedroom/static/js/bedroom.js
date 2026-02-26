@@ -1223,7 +1223,7 @@ function applyState(st) {
     // Director avatar
     updateDirectorAvatar(st.director_avatar || null);
 
-    // Interact tab — populate move dropdown
+    // Interact tab — populate move dropdowns
     const moveCharSel = document.getElementById('moveCharSelect');
     if (moveCharSel && st.characters) {
         const current = moveCharSel.value;
@@ -1232,6 +1232,15 @@ function applyState(st) {
             moveCharSel.innerHTML += '<option value="' + cid + '">' + esc(info.name) + '</option>';
         }
         if (current) moveCharSel.value = current;
+    }
+    const moveLocSel = document.getElementById('moveLocSelect');
+    if (moveLocSel && st.locations) {
+        const curLoc = moveLocSel.value;
+        moveLocSel.innerHTML = '<option value="">— location —</option>';
+        for (const [lid, loc] of Object.entries(st.locations)) {
+            moveLocSel.innerHTML += '<option value="' + lid + '">' + esc(loc.name) + '</option>';
+        }
+        if (curLoc) moveLocSel.value = curLoc;
     }
 
     // Agent button
@@ -1302,6 +1311,12 @@ function renderCharStatSheets(chars) {
                 '<span class="stat-sheet-name">' + esc(info.name) + '</span>' +
                 '<span class="stat-sheet-feeling">' + esc(feeling) + '</span>' +
             '</div>';
+
+        // Bio
+        if (info.bio) {
+            sheet.innerHTML +=
+                '<div class="char-bio">' + esc(info.bio) + '</div>';
+        }
 
         // Compliance
         sheet.innerHTML +=
