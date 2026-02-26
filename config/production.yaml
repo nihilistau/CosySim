@@ -26,6 +26,82 @@ scenes:
     port: 5556
     debug: false
 
+  lounge:
+    host: "0.0.0.0"
+    port: 5557
+    debug: false
+
+  casino:
+    host: "0.0.0.0"
+    port: 5559
+    debug: false
+
+  gallery:
+    host: "0.0.0.0"
+    port: 5560
+    debug: false
+
+  warzone:
+    host: "0.0.0.0"
+    port: 5561
+    debug: false
+
+  realm:
+    host: "0.0.0.0"
+    port: 5562
+    debug: false
+
+  neoncity:
+    host: "0.0.0.0"
+    port: 5563
+    debug: false
+
+  coders:
+    host: "0.0.0.0"
+    port: 5564
+    debug: false
+
+  heist:
+    host: "0.0.0.0"
+    port: 5565
+    debug: false
+
+  command_center:
+    host: "0.0.0.0"
+    port: 5566
+    debug: false
+
+  tavern:
+    host: "0.0.0.0"
+    port: 5558
+    debug: false
+
+  games:
+    host: "0.0.0.0"
+    port: 5567
+    debug: false
+
+  nexus_panel:
+    host: "0.0.0.0"
+    port: 5570
+    debug: false
+
+  hub:
+    host: "0.0.0.0"
+    port: 8500
+
+  admin:
+    host: "0.0.0.0"
+    port: 8502
+
+  assets:
+    host: "0.0.0.0"
+    port: 8503
+
+  creator:
+    host: "0.0.0.0"
+    port: 8504
+
 # Production TTS (GPU acceleration)
 tts:
   warm_start: true

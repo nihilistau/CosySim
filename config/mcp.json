@@ -12,7 +12,7 @@
     "nexus": {
       "command": "python",
       "args": ["-m", "nexus.mcp.server"],
-      "cwd": "C:\\Files\\Nexus"
+      "cwd": "${NEXUS_ROOT:-C:\\Files\\Nexus}"
     }
   }
 }

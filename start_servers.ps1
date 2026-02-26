@@ -30,19 +30,37 @@ Write-Host "  TTS Port: $TTSPort" -ForegroundColor Cyan
 Write-Host "  STT Port: $STTPort" -ForegroundColor Cyan
 Write-Host ""
 
+# Check port availability
+function Test-PortFree([int]$Port) {
+    $conn = Get-NetTCPConnection -LocalPort $Port -ErrorAction SilentlyContinue
+    if ($conn) {
+        Write-Host "  ⚠️  Port $Port already in use by PID $($conn[0].OwningProcess)" -ForegroundColor Red
+        return $false
+    }
+    return $true
+}
+
 # Start TTS Server
 if ($Mode -eq "both" -or $Mode -eq "tts") {
     Write-Host "Starting TTS Server..." -ForegroundColor Yellow
-    Write-Host "  Endpoint: http://${localIP}:${TTSPort}/v1/audio/speech" -ForegroundColor Cyan
-    Write-Host "  Model: CosyVoice3-0.5B" -ForegroundColor Cyan
-    
-    $ttsJob = Start-Process python -ArgumentList "tts_server.py --host $Host --port $TTSPort" -PassThru -NoNewWindow
-    Start-Sleep -Seconds 2
-    
-    if ($ttsJob.HasExited) {
-        Write-Host "  ❌ TTS server failed to start" -ForegroundColor Red
+    if (-not (Test-PortFree $TTSPort)) {
+        Write-Host "  ❌ TTS port $TTSPort is occupied — skipping" -ForegroundColor Red
     } else {
-        Write-Host "  ✅ TTS server started (PID: $($ttsJob.Id))" -ForegroundColor Green
+        Write-Host "  Endpoint: http://${localIP}:${TTSPort}/v1/audio/speech" -ForegroundColor Cyan
+        Write-Host "  Model: CosyVoice3-0.5B" -ForegroundColor Cyan
+        
+        try {
+            $ttsJob = Start-Process python -ArgumentList "tts_server.py --host $Host --port $TTSPort" -PassThru -NoNewWindow
+            Start-Sleep -Seconds 2
+            
+            if ($ttsJob.HasExited) {
+                Write-Host "  ❌ TTS server failed to start (exit code: $($ttsJob.ExitCode))" -ForegroundColor Red
+            } else {
+                Write-Host "  ✅ TTS server started (PID: $($ttsJob.Id))" -ForegroundColor Green
+            }
+        } catch {
+            Write-Host "  ❌ TTS server error: $_" -ForegroundColor Red
+        }
     }
     Write-Host ""
 }
@@ -50,16 +68,24 @@ if ($Mode -eq "both" -or $Mode -eq "tts") {
 # Start STT Server
 if ($Mode -eq "both" -or $Mode -eq "stt") {
     Write-Host "Starting STT Server..." -ForegroundColor Yellow
-    Write-Host "  Endpoint: http://${localIP}:${STTPort}/v1/audio/transcriptions" -ForegroundColor Cyan
-    Write-Host "  Model: Whisper $WhisperModel" -ForegroundColor Cyan
-    
-    $sttJob = Start-Process python -ArgumentList "stt_server.py --host $Host --port $STTPort --model $WhisperModel" -PassThru -NoNewWindow
-    Start-Sleep -Seconds 2
-    
-    if ($sttJob.HasExited) {
-        Write-Host "  ❌ STT server failed to start" -ForegroundColor Red
+    if (-not (Test-PortFree $STTPort)) {
+        Write-Host "  ❌ STT port $STTPort is occupied — skipping" -ForegroundColor Red
     } else {
-        Write-Host "  ✅ STT server started (PID: $($sttJob.Id))" -ForegroundColor Green
+        Write-Host "  Endpoint: http://${localIP}:${STTPort}/v1/audio/transcriptions" -ForegroundColor Cyan
+        Write-Host "  Model: Whisper $WhisperModel" -ForegroundColor Cyan
+        
+        try {
+            $sttJob = Start-Process python -ArgumentList "stt_server.py --host $Host --port $STTPort --model $WhisperModel" -PassThru -NoNewWindow
+            Start-Sleep -Seconds 2
+            
+            if ($sttJob.HasExited) {
+                Write-Host "  ❌ STT server failed to start (exit code: $($sttJob.ExitCode))" -ForegroundColor Red
+            } else {
+                Write-Host "  ✅ STT server started (PID: $($sttJob.Id))" -ForegroundColor Green
+            }
+        } catch {
+            Write-Host "  ❌ STT server error: $_" -ForegroundColor Red
+        }
     }
     Write-Host ""
 }

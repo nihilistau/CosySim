@@ -2,6 +2,34 @@
 
 All notable changes to CosySim are documented here.
 
+## v0.55b — Full-Project Audit & Hardening
+
+### Code Quality
+- Hardened 10+ silent exception handlers with `exc_info=True` logging
+- Added `NotImplementedError` to 3 abstract methods in `engine/assets/base.py`
+- Phone scene: RLock for thread-safe background ticker loop
+- LMStudio client: `DEFAULT_LMSTUDIO_PORT` constant (no more hardcoded 1234)
+
+### Test Coverage (+398 tests → 3,410 total)
+- `test_resource_manager.py` — 82 tests: VRAM strategies, slots, eviction, TTL
+- `test_model_manager.py` — 100 tests: lifecycle, tiers, reaper, CLI
+- `test_conversation.py` — 78 tests: stateful threading, branching, fork
+- `test_copilot_bridge.py` — 94 tests: full session lifecycle, savings tracking
+- `test_housekeeping.py` — 44 tests: service checks, integrity, media scan
+
+### Frontend Polish
+- `api()` helper: 30s AbortController timeout + HTTP status error handling
+- Toast notification system (info/success/error/warning with auto-dismiss)
+- `withButton()` helper: auto-disable buttons during async operations
+- `checkStatus()`: graceful offline handling instead of crash
+- Librarian chat: NLM router (4-tier) integration with Q&A fallback
+
+### Config & Deployment
+- `production.yaml`: all 18 scenes with host/port/debug overrides
+- `config/mcp.json`: env var support for Nexus path
+- `pyproject.toml`: synced missing framework deps (fastmcp, flask, streamlit, etc.)
+- `start_servers.ps1`: port conflict detection + try/catch error handling
+
 ## v0.54b — Sprint 14 Phase 2: NLM Intelligence Layer
 
 ### NLM Engine Modules (NEW)
