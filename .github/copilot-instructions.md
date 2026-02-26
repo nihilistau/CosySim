@@ -134,6 +134,8 @@ CosySim/
 - Mock external services in tests (LMStudio, ComfyUI, TTS, Nexus)
 - Run tests after changes
 - Include `Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>` in commits
+- **On context compaction**: run `python engine/nexus/nexus_session_logger.py compact` to export checkpoint and decision data to Nexus before context is lost
+- **After major work blocks**: run `python engine/nexus/nexus_session_logger.py checkpoint` to export new checkpoints to Nexus
 
 ### Never
 - Store game state in local Python variables

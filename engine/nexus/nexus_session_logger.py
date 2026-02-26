@@ -7,16 +7,22 @@ Falls back to local logging if Nexus is unavailable.
 Captures:
   - Git context (branch, recent commits, modified files)
   - Full conversation history from Copilot session store
-  - Checkpoint summaries
+  - Checkpoint summaries (auto-detected on each prompt)
+  - Compaction snapshots (decisions, plans, git state)
   - Files created/edited during the session
 
 On session end, exports complete history to Nexus and runs the knowledge
 distiller to extract reusable facts and Q&A from the conversation.
 
+On each prompt, auto-detects new checkpoints and exports them to Nexus.
+On compaction, captures a full snapshot (checkpoints, decisions, plan, git).
+
 Usage:
     python engine/nexus/nexus_session_logger.py start
     python engine/nexus/nexus_session_logger.py end
     python engine/nexus/nexus_session_logger.py prompt
+    python engine/nexus/nexus_session_logger.py checkpoint
+    python engine/nexus/nexus_session_logger.py compact
 """
 from __future__ import annotations
 
@@ -408,21 +414,161 @@ def handle_end():
 
 
 def handle_prompt():
-    """Called on user prompt submission — increment counter."""
+    """Called on user prompt submission — increment counter and check for new checkpoints."""
     session = _load_session()
     session["prompts"] = session.get("prompts", 0) + 1
     session["last_prompt_at"] = _now()
     _save_session(session)
     _log_local("PROMPT", {"count": session["prompts"]})
 
+    # Auto-detect and export new checkpoints
+    _auto_export_checkpoints(session)
+
+
+def _auto_export_checkpoints(session: dict):
+    """Detect new checkpoints in session-state and export to Nexus."""
+    session_id = session.get("session_id") or _find_session_id()
+    if not session_id:
+        return
+
+    checkpoints_dir = (
+        Path.home() / ".copilot" / "session-state" / session_id / "checkpoints"
+    )
+    if not checkpoints_dir.exists():
+        return
+
+    # Track which checkpoints we've already exported
+    exported = set(session.get("exported_checkpoints", []))
+    cp_files = sorted(checkpoints_dir.glob("*.md"))
+
+    new_count = 0
+    for cp_file in cp_files:
+        if cp_file.name == "index.md" or cp_file.name in exported:
+            continue
+
+        try:
+            content = cp_file.read_text(encoding="utf-8")[:8000]
+        except Exception:
+            continue
+
+        # Extract title from first heading or filename
+        title = cp_file.stem.replace("-", " ").title()
+        for line in content.splitlines()[:5]:
+            if line.startswith("# "):
+                title = line[2:].strip()
+                break
+
+        result = _post("/api/entries", {
+            "title": f"Checkpoint: {title}",
+            "content": content,
+            "content_type": "history",
+            "category": "sessions",
+            "tags": ["copilot", "checkpoint", "auto-export",
+                     session.get("git", {}).get("branch", "")],
+        })
+
+        if result and result.get("ok"):
+            exported.add(cp_file.name)
+            new_count += 1
+            _log_local("CHECKPOINT_EXPORTED", {"file": cp_file.name, "title": title})
+
+    if new_count > 0:
+        session["exported_checkpoints"] = sorted(exported)
+        _save_session(session)
+
+
+def handle_checkpoint():
+    """Explicitly export all new checkpoints to Nexus.
+
+    Called manually or by Copilot CLI on checkpoint/compaction events.
+    """
+    session = _load_session()
+    session_id = session.get("session_id") or _find_session_id()
+    if session_id:
+        session["session_id"] = session_id
+    _auto_export_checkpoints(session)
+    _log_local("CHECKPOINT_MANUAL")
+
+
+def handle_compaction():
+    """Called on context compaction — export current state to Nexus.
+
+    Compaction means the context window is being summarised. We capture
+    the current checkpoint, conversation summary, and git state before
+    the older context is lost.
+    """
+    session = _load_session()
+    session_id = session.get("session_id") or _find_session_id()
+    git_ctx = _get_git_context()
+
+    # Export any new checkpoints first
+    if session_id:
+        session["session_id"] = session_id
+    _auto_export_checkpoints(session)
+
+    # Build compaction snapshot
+    history: dict = {}
+    if session_id:
+        history = _get_session_history(session_id)
+
+    snapshot_parts = [
+        f"Compaction at {_now()}",
+        f"Branch: {git_ctx.get('branch', '?')}",
+        f"Prompts so far: {session.get('prompts', '?')}",
+        f"Session started: {session.get('started_at', '?')}",
+    ]
+
+    if git_ctx.get("last_commit"):
+        snapshot_parts.append(f"Last commit: {git_ctx['last_commit']}")
+
+    if history.get("checkpoints"):
+        snapshot_parts.append(f"\nCheckpoints ({len(history['checkpoints'])}):")
+        for cp in history["checkpoints"]:
+            snapshot_parts.append(f"  {cp['number']}. {cp.get('title', 'Untitled')}")
+            if cp.get("overview"):
+                snapshot_parts.append(f"     {cp['overview'][:300]}")
+
+    if history.get("plan"):
+        snapshot_parts.append(f"\nPlan (truncated):\n{history['plan'][:2000]}")
+
+    # Extract decisions from recent turns
+    decisions = _extract_key_decisions(history)
+    if decisions:
+        snapshot_parts.append(f"\nKey decisions ({len(decisions)}):")
+        for d in decisions[:10]:
+            snapshot_parts.append(f"  - {d}")
+
+    snapshot = "\n".join(snapshot_parts)
+
+    _post("/api/entries", {
+        "title": f"Compaction snapshot — {_now()}",
+        "content": snapshot,
+        "content_type": "history",
+        "category": "sessions",
+        "tags": ["copilot", "compaction", "snapshot",
+                 git_ctx.get("branch", "")],
+    })
+
+    _log_local("COMPACTION", {
+        "prompts": session.get("prompts", 0),
+        "checkpoints": len(history.get("checkpoints", [])),
+        "decisions": len(decisions),
+    })
+
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: nexus_session_logger.py [start|end|prompt]")
+        print("Usage: nexus_session_logger.py [start|end|prompt|checkpoint|compact]")
         sys.exit(1)
 
     action = sys.argv[1].lower()
-    handlers = {"start": handle_start, "end": handle_end, "prompt": handle_prompt}
+    handlers = {
+        "start": handle_start,
+        "end": handle_end,
+        "prompt": handle_prompt,
+        "checkpoint": handle_checkpoint,
+        "compact": handle_compaction,
+    }
     handler = handlers.get(action)
     if handler:
         handler()
