@@ -2,6 +2,30 @@
 
 All notable changes to CosySim are documented here.
 
+## v0.52b — Sprint 9: CI/CD & Agent Infrastructure
+
+### GitHub Actions CI Pipeline (NEW)
+- **`.github/workflows/ci.yml`** — Automated test pipeline
+  - Triggers on push/PR to master
+  - Python 3.12, pip cache, core deps only (no GPU)
+  - Runs full test suite (2,729 tests)
+  - 15-minute timeout with summary output
+
+### Copilot Coding Agent Environment (NEW)
+- **`.github/workflows/copilot-setup-steps.yml`** — Pre-install dependencies for remote Copilot agent
+  - Installs core Python packages (pytest, flask, pydantic, etc.)
+  - Verifies test collection before agent starts working
+  - Enables autonomous issue resolution by Copilot
+
+### Copilot Hook Scripts (NEW)
+- **`.github/hooks/scripts/log-tool-usage.ps1`** — JSONL audit trail for all tool calls
+- **`.github/hooks/scripts/check-tool-safety.ps1`** — Block destructive ops (delete/remove/drop/destroy/purge/truncate)
+- **`.github/hooks/scripts/log-session.ps1`** — Session lifecycle logging
+- **`.github/hooks/scripts/log-errors.ps1`** — Error logging to JSONL
+- Updated `cosysim-hooks.json` to delegate to script files instead of inline commands
+
+---
+
 ## v0.52b — Sprint 8.5: External Service Integration, URL Ingestion
 
 ### Sprint 8.5: External Services, URL Ingestion, Prompt Engineering
