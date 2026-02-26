@@ -1,6 +1,6 @@
 # LMStudio Integration Guide
 
-CosySim implements the **complete LMStudio v1 REST API** for local LLM inference. This guide covers all endpoints, MCP integration, streaming, speculative decoding, and configuration.
+CosySim (v0.52b) implements the **complete LMStudio v1 REST API** for local LLM inference. This guide covers all endpoints, MCP integration, streaming, speculative decoding, multi-model orchestration, and configuration.
 
 > **Input/output format asymmetry:** LMStudio v1 accepts `input` + `system_prompt` (not OpenAI-style messages array) but returns standard `output[]` message objects. CosySim's `LMSClient` handles this translation — callers pass standard `messages` lists and `InferenceConfig.to_native_v1()` converts them automatically.
 
@@ -167,7 +167,7 @@ All 19 SSE event types are parsed:
 
 ## MCP Server
 
-CosySim exposes its capabilities as an MCP server. Tool logic lives in `engine/mcp/tools/` (8 domain modules, 67 functions); wrappers in `engine/mcp/cosysim_server.py`:
+CosySim exposes its capabilities as an MCP server. Tool logic lives in `engine/mcp/tools/` (8 domain modules, 144 functions); wrappers in `engine/mcp/cosysim_server.py`:
 
 ### Tools (actions the LLM can execute)
 
@@ -200,27 +200,40 @@ CosySim exposes its capabilities as an MCP server. Tool logic lives in `engine/m
 
 ## Model Manager
 
-The `ModelManager` (`engine/lmstudio/model_manager.py`) handles model lifecycle with three loading strategies:
+The `ModelManager` (`engine/lmstudio/model_manager.py`) handles model lifecycle with three loading modes:
 
-| Strategy | Description | Best For |
-|----------|-------------|----------|
-| `CONCURRENT` | One model always loaded, N parallel requests | Multi-agent same-model |
-| `JIT` | Load on demand, evict previous on next load | Sequential specialist workflows |
-| `JIT_TTL` | Load on demand, auto-unload after idle timeout | Sporadic specialist calls |
+| Mode | Description | Best For |
+|------|-------------|----------|
+| `CONCURRENT` | One model stays loaded permanently; all agent requests sent in parallel via LMStudio's concurrent slots | Multi-agent same-model (e.g. Qwen-32B) |
+| `JIT` | Load on demand; when a different model is requested the current one is unloaded first — only one model in VRAM at a time | Sequential specialist workflows (summarise → classify → respond) |
+| `JIT_TTL` | Load on demand; models stay warm until idle for `ttl_seconds` — multiple small models can coexist if they arrive within the TTL window | Sporadic specialist calls with small models |
+
+### JIT_TTL Reaper Thread
+
+`JIT_TTL` mode starts a daemon thread (`ModelReaper`) that runs every 30 seconds. Each tick it calls `_reap_expired()`, which checks every `ModelSession.is_expired` property and unloads models that have been idle longer than `ttl_seconds`. The reaper is started automatically when switching to `JIT_TTL` and stopped on `shutdown()`.
 
 ```python
 from engine.lmstudio.model_manager import get_model_manager, LoadMode
 
 mgr = get_model_manager()
+
+# Permanent concurrent mode
+mgr.set_mode(LoadMode.CONCURRENT, concurrent_model="qwen3-8b")
+
+# JIT with auto-expiry
 mgr.set_mode(LoadMode.JIT_TTL, ttl_seconds=300)
 model_id = mgr.ensure_loaded("qwen3-8b")
 # ... use model ...
 mgr.release("qwen3-8b")
+
+# Check what's loaded
+for s in mgr.list_sessions():
+    print(f"{s.model_key} — requests: {s.request_count}, idle: {s.idle_seconds}s")
 ```
 
 ## Resource Manager
 
-The `ResourceManager` (`engine/lmstudio/resource_manager.py`) extends ModelManager with six hardware-aware strategies tuned for the target platform (i9 NUC, RTX 2060 12GB):
+The `ResourceManager` (`engine/lmstudio/resource_manager.py`) extends ModelManager with six hardware-aware strategies tuned for the target platform (i9 NUC, RTX 2060 12 GB):
 
 | Strategy | GPU Models | CPU Models | Use Case |
 |----------|-----------|------------|----------|
@@ -230,6 +243,32 @@ The `ResourceManager` (`engine/lmstudio/resource_manager.py`) extends ModelManag
 | `JIT_SWAP` | 1 at a time | 0 | Sequential specialist |
 | `SPECULATIVE` | 1 main + 1 draft | 0 | 2-3x speedup via spec decode |
 | `HYBRID` | 1 interactive | 1 background | GPU for dialogue, CPU for batch |
+
+### Strategy Details
+
+- **SINGLE_BIG** — One large model (e.g. 30B MoE) occupies all available VRAM. Best for maximum quality single-agent dialogue where context length and reasoning depth matter most.
+- **CONCURRENT** — One medium model loaded with LMStudio's concurrent slots enabled. Multiple agents share the same model in parallel. Lowest VRAM overhead per-agent.
+- **MULTI_SMALL** — Two or three small models (≤3B) co-resident on GPU, each assigned to a different agent or task type. Requires careful VRAM budgeting via `get_vram_free()`.
+- **JIT_SWAP** — Models loaded and unloaded per request. Only one model lives in VRAM at a time. Best for sequential specialist pipelines (summarise → classify → respond).
+- **SPECULATIVE** — Primary model plus a tiny draft model kept loaded together. The draft model generates candidate tokens verified by the primary, yielding 2-3x throughput.
+- **HYBRID** — Combines GPU and CPU inference. One interactive model on GPU for real-time dialogue, one background model on CPU for batch tasks (image-gen prompts, TTS prep, JSON extraction).
+
+```python
+from engine.lmstudio.resource_manager import get_resource_manager, Strategy
+
+rm = get_resource_manager()
+rm.set_strategy(Strategy.HYBRID)
+
+# Acquire a model slot for an agent
+model_id = rm.acquire("aria", role="big")
+
+# Queue background work on CPU
+rm.queue_background_task("summarise", summarise_fn, args=("long text",))
+
+# Check resources
+print(f"Free VRAM: {rm.get_vram_free()} MB")
+rm.release("aria")
+```
 
 ## Inference Router
 
@@ -247,6 +286,69 @@ submit(request) → Priority Queue → Tier Selection → Channel → Model
 | T3 CPU Router | CPU | Gemma-270M (fine-tuned) | Tag extraction, routing, classification |
 
 Priority levels: `REALTIME(0)` > `INTERACTIVE(1)` > `BACKGROUND(2)` > `BATCH(3)`
+
+## Inference Orchestrator
+
+The `InferenceOrchestrator` (`engine/lmstudio/orchestrator.py`) is the **unified inference API** that bridges ModelManager, InferenceRouter, and ResourceManager into a single `infer()` call. All scene and agent code should go through the orchestrator rather than calling sub-systems directly.
+
+```python
+from engine.lmstudio.orchestrator import get_orchestrator
+
+orch = get_orchestrator()
+
+response = orch.infer(
+    agent_id="aria",
+    messages=[{"role": "user", "content": "Hello"}],
+    task_type="chat",
+    priority="interactive",
+)
+
+# Quick one-liner
+text = orch.infer_quick("Summarise this paragraph...")
+```
+
+### Tier Selection
+
+The orchestrator's `_select_tier()` method maps each request to the optimal inference tier:
+
+| Task Type | Tier | Model | Rationale |
+|-----------|------|-------|-----------|
+| classify, route, tag | `cpu_router` | Gemma-270M | Tiny model, sub-50ms latency |
+| act, tools, chat (has_tools=True) | `gpu_primary` | Qwen3-8B | Needs tool-calling and deep reasoning |
+| background, batch, summarise | `cpu_utility` | Ministral-3B | Offloads GPU for interactive work |
+| _(default)_ | `gpu_primary` | Qwen3-8B | Safe fallback for unclassified tasks |
+
+The `cpu_utility` tier is only selected when its rolling error rate is below 0.2 — if the small model is unreliable for a workload, requests automatically fall back to `gpu_primary`.
+
+### Agent Profiles
+
+Named agents can register an `AgentProfile` to override default routing:
+
+```python
+orch.register_profile(AgentProfile(
+    agent_id="aria",
+    preferred_tier="gpu_primary",
+    preferred_model="qwen3-8b",
+    max_tokens=4000,
+    context_budget=8192,
+    temperature=0.7,
+    priority_boost=0,
+))
+```
+
+### Runtime Reconfiguration
+
+```python
+# Switch model manager mode
+orch.update_config(model_manager_mode="jit_ttl", ttl_seconds=300)
+
+# Switch resource strategy
+orch.update_config(resource_strategy="hybrid")
+
+# Performance metrics per tier
+perf = orch.get_performance()
+# → {"gpu_primary": TierPerformance(latency_ms=320, tokens_per_sec=42, ...)}
+```
 
 ## Speculative Decoding
 
@@ -283,6 +385,32 @@ resp = conv.send_stateless("Quick question?")
 ```
 
 Each `response_id` is tracked in `Conversation._response_id_history` for replay and undo.
+
+## llmster CLI
+
+The `LlmsterManager` (`engine/lmstudio/llmster_manager.py`) wraps the `lms.exe` CLI binary, and five MCP tools expose it for agent-driven model management:
+
+| MCP Tool | Description |
+|----------|-------------|
+| `llmster_status()` | Daemon/server/model status → `LlmsterStatus` (daemon_running, server_running, loaded_models, cli_version) |
+| `llmster_load(model, n_parallel=4)` | Load a model with continuous batching config → `ModelLoadResult` |
+| `llmster_unload(model)` | Unload a model from memory |
+| `llmster_models()` | List all models available on disk |
+| `llmster_download(model)` | Download a model from the LMStudio catalog |
+
+```python
+from engine.lmstudio.llmster_manager import get_llmster_manager
+
+mgr = get_llmster_manager()
+
+status = mgr.daemon_status()
+print(f"Server on :{status.server_port}, models: {status.loaded_models}")
+
+result = mgr.load_model("qwen/qwen3-8b", n_parallel=4, gpu_offload=0.9)
+mgr.unload_model("qwen/qwen3-8b")
+```
+
+The manager also exposes lower-level methods for daemon lifecycle (`daemon_up()` / `daemon_down()`), server control (`server_start(port)` / `server_stop()`), and runtime updates (`runtime_update(backend="llama.cpp")`).
 
 ## Configuration
 
