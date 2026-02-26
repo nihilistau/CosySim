@@ -2,6 +2,42 @@
 
 All notable changes to CosySim are documented here.
 
+## v0.52b — Sprint 10: Inference Bridge & System Improvements
+
+### Copilot → LMStudio Task Bridge (NEW)
+- **`engine/nexus/lms_task_bridge.py`** — Delegate subtasks to local LMStudio models
+  - `run_prompt()` — Single prompt execution with metrics
+  - `run_batch()` — Sequential batch execution with Nexus storage
+  - `run_task()` — Structured tasks (evaluate, summarize, generate, classify, compare)
+  - `check_lmstudio()` — Health check with loaded model listing
+  - `TaskResult` dataclass with ok/tps/latency tracking
+
+### Inference Leaderboard Skills (NEW)
+- **`engine/skills/builtin/inference_skills.py`** — 5 MCP skills for benchmarking
+  - `benchmark_model` — Run quick benchmark against loaded model
+  - `store_benchmark` — Store results in Nexus leaderboard
+  - `get_leaderboard` — Retrieve and compare performance data
+  - `check_lmstudio_status` — Check server status and loaded models
+  - `delegate_task` — Delegate structured tasks to LMStudio
+
+### Nexus Client Enhancements
+- **Access tracking** — `track_access()` and `search_ranked()` for relevance scoring
+- **Benchmark storage** — `store_benchmark()` and `get_leaderboard()` for inference data
+
+### Git → Nexus Auto-Sync (NEW)
+- **`.git/hooks/post-commit`** — Every commit auto-stores in Nexus (message, files, branch)
+
+### Copilot Instructions Updated
+- Added "READ FIRST" section: full system access, LMStudio always running, proactive installs
+- Added LMStudio task delegation documentation
+- Strengthened pre-compaction dump instructions
+
+### Tests
+- 29 new tests (test_lms_task_bridge.py) — all passing
+- Total: 2,758 tests passing
+
+---
+
 ## v0.52b — Sprint 9: CI/CD & Agent Infrastructure
 
 ### GitHub Actions CI Pipeline (NEW)

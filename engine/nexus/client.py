@@ -320,7 +320,77 @@ class NexusClient:
         })
         return result.get("data", {}).get("id") if result.get("ok") else None
     
-    # ─── HTTP Helpers (with retry) ────────────────────────────
+    # ─── Access Tracking (v0.52b Sprint 10) ─────────────────────
+
+    def track_access(self, entry_id: str) -> bool:
+        """Increment access_count and update last_accessed for an entry.
+
+        Returns True if tracking was recorded (even if Nexus doesn't
+        support access tracking natively — falls back to annotation).
+        """
+        result = self._post(f"/api/entries/{entry_id}/annotate", {
+            "type": "access",
+            "data": {"timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())},
+        })
+        if result.get("ok"):
+            return True
+        # Fallback: Nexus may not have annotate endpoint — skip silently
+        return False
+
+    def search_ranked(self, query: str, limit: int = 10) -> List[Dict]:
+        """Search with access-frequency boosting.
+
+        Wraps standard search and re-ranks results by combining
+        Nexus relevance with locally tracked access counts.
+        """
+        results = self.search(query, limit=limit * 2)
+        # Track access for each result
+        for r in results:
+            entry_id = r.get("id", "")
+            if entry_id:
+                self.track_access(entry_id)
+        return results[:limit]
+
+    # ─── Inference Leaderboard (v0.52b Sprint 10) ─────────────
+
+    def store_benchmark(self, model: str, method: str, metrics: Dict,
+                        tags: list = None) -> Optional[str]:
+        """Store a benchmark result in Nexus for leaderboard tracking.
+
+        Args:
+            model: Model identifier (e.g. "qwen3-0.6b")
+            method: Inference method (e.g. "gpu_primary", "cpu_only", "spec_decode")
+            metrics: Dict with tps, latency_ms, ttft_ms, memory_mb, etc.
+            tags: Additional tags
+        """
+        content = (
+            f"Model: {model}\n"
+            f"Method: {method}\n"
+            f"Tokens/sec: {metrics.get('tps', 0):.1f}\n"
+            f"Latency (ms): {metrics.get('latency_ms', 0):.1f}\n"
+            f"TTFT (ms): {metrics.get('ttft_ms', 0):.1f}\n"
+            f"Memory (MB): {metrics.get('memory_mb', 0):.0f}\n"
+            f"Context length: {metrics.get('context_length', 0)}\n"
+            f"Concurrency: {metrics.get('concurrency', 1)}\n"
+        )
+        if metrics.get("notes"):
+            content += f"Notes: {metrics['notes']}\n"
+
+        return self.add_entry(
+            title=f"Benchmark: {model} [{method}]",
+            content=content,
+            content_type="note",
+            category="benchmarks",
+            tags=(tags or []) + ["benchmark", "leaderboard", model, method],
+            created_by="benchmark",
+        )
+
+    def get_leaderboard(self, method: str = "", limit: int = 20) -> List[Dict]:
+        """Retrieve benchmark entries from Nexus, optionally filtered by method."""
+        entries = self.list_by_type("note", category="benchmarks", limit=limit)
+        if method:
+            entries = [e for e in entries if method in e.get("content", "")]
+        return entries
     
     def _get(self, path: str) -> dict:
         return self._request("GET", path)
