@@ -34,7 +34,8 @@
 | [API Reference](API.md) | REST endpoints, Socket.IO events, all scenes |
 | [TTS](TTS.md) | Qwen3-TTS server, voice design, streaming |
 | [NotebookLM & Nexus](NOTEBOOKLM.md) | NotebookLM integration via Nexus dual-backend |
-| [Nexus Integration](NEXUS_INTEGRATION.md) | NexusClient, 10 skills, rules engine, sessions, prompts |
+| [Nexus Integration](NEXUS_INTEGRATION.md) | NexusClient, 16 skills, namespaces, memory, distillers, training, workflows |
+| [Copilot System](COPILOT_SYSTEM.md) | Copilot CLI integration: hooks, memory loop, MCP tools, distillers, instructions |
 
 ## External Systems
 

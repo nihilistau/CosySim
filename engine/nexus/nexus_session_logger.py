@@ -4,8 +4,14 @@ nexus_session_logger.py — Logs Copilot CLI session events to Nexus.
 Called by .github/hooks/session-logger/hooks.json on session lifecycle events.
 Falls back to local logging if Nexus is unavailable.
 
-Captures git context (branch, recent commits, modified files) and stores
-enriched session records in Nexus for project history tracking.
+Captures:
+  - Git context (branch, recent commits, modified files)
+  - Full conversation history from Copilot session store
+  - Checkpoint summaries
+  - Files created/edited during the session
+
+On session end, exports complete history to Nexus and runs the knowledge
+distiller to extract reusable facts and Q&A from the conversation.
 
 Usage:
     python engine/nexus/nexus_session_logger.py start
@@ -16,6 +22,7 @@ from __future__ import annotations
 
 import json
 import os
+import sqlite3
 import subprocess
 import sys
 import urllib.error
@@ -26,6 +33,7 @@ from pathlib import Path
 NEXUS_URL = os.environ.get("NEXUS_URL", "http://localhost:8700")
 LOG_DIR = Path(__file__).resolve().parent.parent.parent / ".github" / "hooks" / "logs"
 SESSION_FILE = LOG_DIR / "current_session.json"
+SESSION_STORE_DB = Path.home() / ".copilot" / "session-store" / "store.sqlite"
 
 
 def _now() -> str:
@@ -109,14 +117,180 @@ def _get_git_context() -> dict:
     return ctx
 
 
+def _find_session_id() -> str | None:
+    """Find current Copilot session ID from the session state directory."""
+    state_dir = Path.home() / ".copilot" / "session-state"
+    if not state_dir.exists():
+        return None
+    # Find most recently modified session directory
+    sessions = [d for d in state_dir.iterdir() if d.is_dir() and not d.name.startswith(".")]
+    if not sessions:
+        return None
+    return max(sessions, key=lambda d: d.stat().st_mtime).name
+
+
+def _get_session_history(session_id: str) -> dict:
+    """Extract full conversation history from Copilot session store.
+
+    Returns dict with turns, checkpoints, files, refs.
+    """
+    result: dict = {"turns": [], "checkpoints": [], "files": [], "refs": []}
+
+    # Try session store DB
+    if SESSION_STORE_DB.exists():
+        try:
+            conn = sqlite3.connect(f"file:{SESSION_STORE_DB}?mode=ro", uri=True)
+            conn.row_factory = sqlite3.Row
+
+            # Get turns
+            turns = conn.execute(
+                "SELECT turn_index, user_message, assistant_response, timestamp "
+                "FROM turns WHERE session_id = ? ORDER BY turn_index",
+                (session_id,),
+            ).fetchall()
+            result["turns"] = [
+                {
+                    "turn": r["turn_index"],
+                    "user": (r["user_message"] or "")[:2000],
+                    "assistant": (r["assistant_response"] or "")[:3000],
+                    "timestamp": r["timestamp"],
+                }
+                for r in turns
+            ]
+
+            # Get checkpoints
+            cps = conn.execute(
+                "SELECT checkpoint_number, title, overview, work_done "
+                "FROM checkpoints WHERE session_id = ? ORDER BY checkpoint_number",
+                (session_id,),
+            ).fetchall()
+            result["checkpoints"] = [
+                {
+                    "number": r["checkpoint_number"],
+                    "title": r["title"],
+                    "overview": (r["overview"] or "")[:1000],
+                    "work_done": (r["work_done"] or "")[:1000],
+                }
+                for r in cps
+            ]
+
+            # Get files
+            files = conn.execute(
+                "SELECT file_path, tool_name FROM session_files "
+                "WHERE session_id = ? ORDER BY first_seen_at",
+                (session_id,),
+            ).fetchall()
+            result["files"] = [
+                {"path": r["file_path"], "action": r["tool_name"]}
+                for r in files
+            ]
+
+            # Get refs
+            refs = conn.execute(
+                "SELECT ref_type, ref_value FROM session_refs WHERE session_id = ?",
+                (session_id,),
+            ).fetchall()
+            result["refs"] = [
+                {"type": r["ref_type"], "value": r["ref_value"]}
+                for r in refs
+            ]
+
+            conn.close()
+        except Exception:
+            pass
+
+    # Also try plan.md from session state
+    plan_path = (
+        Path.home() / ".copilot" / "session-state" / session_id / "plan.md"
+    )
+    if plan_path.exists():
+        try:
+            result["plan"] = plan_path.read_text(encoding="utf-8")[:5000]
+        except Exception:
+            pass
+
+    return result
+
+
+def _build_history_entry(session: dict, git_ctx: dict, history: dict) -> str:
+    """Build a comprehensive history entry from session data."""
+    lines = []
+    lines.append(f"Session: {session.get('started_at', '?')} to {session.get('ended_at', '?')}")
+    lines.append(f"Branch: {git_ctx.get('branch', '?')}")
+    lines.append(f"Prompts: {session.get('prompts', '?')}")
+    lines.append(f"CWD: {session.get('cwd', '?')}")
+    lines.append("")
+
+    if git_ctx.get("last_commit"):
+        lines.append(f"Last commit: {git_ctx['last_commit']}")
+    if git_ctx.get("recent_commits"):
+        lines.append("Recent commits:")
+        for c in git_ctx["recent_commits"][:5]:
+            lines.append(f"  - {c}")
+        lines.append("")
+
+    if history.get("files"):
+        lines.append("Files touched:")
+        for f in history["files"]:
+            lines.append(f"  - [{f['action']}] {f['path']}")
+        lines.append("")
+
+    if history.get("refs"):
+        lines.append("References:")
+        for r in history["refs"]:
+            lines.append(f"  - {r['type']}: {r['value']}")
+        lines.append("")
+
+    if history.get("checkpoints"):
+        lines.append("Checkpoints:")
+        for cp in history["checkpoints"]:
+            lines.append(f"  {cp['number']}. {cp.get('title', 'Untitled')}")
+            if cp.get("overview"):
+                lines.append(f"     {cp['overview'][:200]}")
+        lines.append("")
+
+    return "\n".join(lines)
+
+
+def _build_conversation_log(history: dict) -> str:
+    """Build a formatted conversation log from turns."""
+    lines = []
+    for t in history.get("turns", []):
+        user = t.get("user", "").strip()
+        assistant = t.get("assistant", "").strip()
+        if user:
+            lines.append(f"[Turn {t['turn']}] USER: {user[:500]}")
+        if assistant:
+            lines.append(f"[Turn {t['turn']}] ASSISTANT: {assistant[:1000]}")
+        lines.append("")
+    return "\n".join(lines)
+
+
+def _extract_key_decisions(history: dict) -> list[str]:
+    """Extract key decisions and learnings from assistant responses."""
+    decisions = []
+    for t in history.get("turns", []):
+        resp = t.get("assistant", "")
+        # Look for decision markers
+        for marker in ["Decision:", "Fixed:", "Created:", "Added:", "Updated:",
+                        "Commit:", "Result:", "Architecture:"]:
+            if marker in resp:
+                idx = resp.index(marker)
+                snippet = resp[idx:idx + 200].split("\n")[0]
+                decisions.append(snippet)
+    return decisions[:20]
+
+
 def handle_start():
     """Called on session start — create session record with git context."""
     git_ctx = _get_git_context()
+    session_id = _find_session_id()
     session = {
         "started_at": _now(),
         "prompts": 0,
         "cwd": os.getcwd(),
         "git": git_ctx,
+        "session_id": session_id,
     }
     _save_session(session)
     _log_local("SESSION_START", session)
@@ -124,54 +298,109 @@ def handle_start():
     branch_info = f" on branch '{git_ctx.get('branch', '?')}'" if git_ctx.get("branch") else ""
     content = (
         f"Copilot CLI session started in {os.getcwd()}{branch_info}.\n"
-        f"Last commit: {git_ctx.get('last_commit', 'N/A')}"
+        f"Last commit: {git_ctx.get('last_commit', 'N/A')}\n"
+        f"Session ID: {session_id or 'unknown'}"
     )
     _post("/api/entries", {
         "title": f"Copilot session started — {_now()}",
         "content": content,
         "content_type": "history",
         "category": "sessions",
-        "tags": ["session", "copilot-cli", "start", git_ctx.get("branch", "")],
+        "tags": ["session", "copilot", "start", git_ctx.get("branch", "")],
     })
 
 
 def handle_end():
-    """Called on session end — finalize with git diff summary."""
+    """Called on session end — export full history to Nexus."""
     session = _load_session()
     session["ended_at"] = _now()
-    duration_info = ""
-    if "started_at" in session:
-        duration_info = f" (started: {session['started_at']})"
 
     # Capture end-of-session git context
     end_git = _get_git_context()
     start_git = session.get("git", {})
+    session_id = session.get("session_id") or _find_session_id()
+
+    # Get full conversation history from session store
+    history: dict = {}
+    if session_id:
+        history = _get_session_history(session_id)
 
     # Compute files changed during session
     start_files = set(start_git.get("modified_files", []))
     end_files = set(end_git.get("modified_files", []))
     new_changes = sorted(end_files - start_files) if end_files else []
 
-    summary_lines = [
-        f"Copilot CLI session ended{duration_info}.",
-        f"Prompts: {session.get('prompts', '?')}",
-        f"CWD: {session.get('cwd', '?')}",
-        f"Branch: {end_git.get('branch', '?')}",
-    ]
-    if end_git.get("last_commit"):
-        summary_lines.append(f"Last commit: {end_git['last_commit']}")
+    # 1. Store session summary entry
+    summary = _build_history_entry(session, end_git, history)
     if new_changes:
-        summary_lines.append(f"Files changed during session: {', '.join(new_changes[:20])}")
-
-    summary = "\n".join(summary_lines)
-    _log_local("SESSION_END", session)
+        summary += f"\nFiles changed during session: {', '.join(new_changes[:20])}"
 
     _post("/api/entries", {
         "title": f"Copilot session ended — {_now()}",
         "content": summary,
         "content_type": "history",
         "category": "sessions",
-        "tags": ["session", "copilot-cli", "end", end_git.get("branch", "")],
+        "tags": ["session", "copilot", "end", "summary",
+                 end_git.get("branch", "")],
+    })
+
+    # 2. Store full conversation log (if we have turns)
+    if history.get("turns"):
+        conv_log = _build_conversation_log(history)
+        if len(conv_log) > 100:
+            # Truncate very long conversations to fit Nexus storage
+            if len(conv_log) > 50000:
+                conv_log = conv_log[:50000] + "\n\n[TRUNCATED — full log exceeded 50k chars]"
+            _post("/api/entries", {
+                "title": f"Conversation log — {_now()} ({len(history['turns'])} turns)",
+                "content": conv_log,
+                "content_type": "history",
+                "category": "sessions",
+                "tags": ["session", "copilot", "conversation-log",
+                         end_git.get("branch", ""),
+                         f"turns:{len(history['turns'])}"],
+            })
+
+    # 3. Store plan if it exists
+    if history.get("plan"):
+        _post("/api/entries", {
+            "title": f"Session plan — {_now()}",
+            "content": history["plan"],
+            "content_type": "document",
+            "category": "sessions",
+            "tags": ["session", "copilot", "plan", end_git.get("branch", "")],
+        })
+
+    # 4. Extract and store key decisions as Q&A
+    decisions = _extract_key_decisions(history)
+    for dec in decisions[:5]:
+        _post("/api/qa", {
+            "question": f"What was decided about: {dec[:80]}?",
+            "answer": dec,
+            "category": "decisions",
+            "tags": ["copilot", "decision", "auto-extracted"],
+        })
+
+    # 5. Store checkpoint summaries as knowledge
+    for cp in history.get("checkpoints", []):
+        if cp.get("work_done"):
+            _post("/api/entries", {
+                "title": f"Checkpoint {cp['number']}: {cp.get('title', 'Untitled')}",
+                "content": (
+                    f"Overview: {cp.get('overview', 'N/A')}\n\n"
+                    f"Work done: {cp.get('work_done', 'N/A')}"
+                ),
+                "content_type": "history",
+                "category": "sessions",
+                "tags": ["session", "copilot", "checkpoint",
+                         end_git.get("branch", "")],
+            })
+
+    _log_local("SESSION_END", {
+        "prompts": session.get("prompts", 0),
+        "turns": len(history.get("turns", [])),
+        "files": len(history.get("files", [])),
+        "checkpoints": len(history.get("checkpoints", [])),
     })
 
     if SESSION_FILE.exists():

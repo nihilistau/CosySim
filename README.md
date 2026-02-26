@@ -4,7 +4,7 @@
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Tests: 1927](https://img.shields.io/badge/tests-1927%20passing-brightgreen.svg)]()
+[![Tests: 2048+](https://img.shields.io/badge/tests-2048%2B%20passing-brightgreen.svg)]()
 
 ## Overview
 
@@ -79,6 +79,7 @@ python launcher.py --status          # Check service health
 | **Bridge** | 8601 | FastAPI | MCP web bridge (SSE proxy, file upload) |
 | **Nexus API** | 8700 | Flask | Knowledge management, NLM integration, FTS5 search |
 | **Nexus Dashboard** | 8701 | Flask | Knowledge browser, NLM panel, agent activity |
+| **Nexus Control Panel** | 8702 | Streamlit | 8-page dashboard: knowledge, memory, training, distillers |
 
 ## Architecture
 
@@ -123,7 +124,7 @@ python launcher.py --status          # Check service health
 - **LMStudio Integration** — Native v1 API with `response_id` threading for KV cache reuse, SSE streaming with inline tag extraction, and stateful conversation branching.
 - **TTS** — Qwen3-TTS voice generation server with voice designer, presets, and MCP tool integration.
 - **Media Generation** — ComfyUI integration for images and video, wired as MCP tools with workflow templates.
-- **Nexus Knowledge System** — Central knowledge management service with FTS5 search, NotebookLM integration, rules engine, session tracking, prompt versioning, Q&A distillation cache, Research Manager, YouTube transcript ingestion, and plugin system (12 action handlers). 16 Nexus MCP skills. REST API on port 8700.
+- **Nexus Knowledge System** — Central knowledge management service with FTS5 search, NotebookLM integration, rules engine, session tracking, prompt versioning, Q&A distillation cache, Research Manager, YouTube transcript ingestion, namespace separation (7 namespaces), unified memory system, 4 knowledge distillers, training data pipeline, content/research workflows, and control panel. 16 Nexus MCP skills + 9 server tools. REST API on port 8700, control panel on port 8702.
 - **Experiment Framework** — A/B testing for prompts, configs, and scene parameters. Create experiments, record results, evaluate winners — all logged to Nexus.
 - **Cross-Scene Agent State** — Persistent agent identity across scenes: reputation, relationships, achievements, mood history. Agents carry context between scenes.
 
@@ -131,14 +132,16 @@ python launcher.py --status          # Check service health
 
 | Metric | Count |
 |--------|-------|
-| Tests | 1,839 |
+| Tests | 2,048+ |
 | Game scenes | 13 |
 | Interceptors | 25 |
 | MCP skills | 194 |
+| MCP server tools | 133 |
 | Core skill packs | 13 |
 | Scene skill packs | 13 |
 | Nexus skills | 16 |
-| Nexus plugins | 12 |
+| Nexus distillers | 4 |
+| Copilot agents | 10 |
 
 ## Documentation
 
@@ -153,6 +156,7 @@ python launcher.py --status          # Check service health
 - [Skills](docs/SKILLS.md)
 - [NotebookLM & Nexus](docs/NOTEBOOKLM.md)
 - [Nexus Integration](docs/NEXUS_INTEGRATION.md)
+- [Copilot System](docs/COPILOT_SYSTEM.md)
 - [Configuration](docs/CONFIGURATION.md)
 - [Admin Guide](docs/ADMIN_GUIDE.md)
 - [Testing](docs/TESTING.md)

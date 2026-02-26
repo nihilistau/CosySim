@@ -13,7 +13,7 @@ All notable changes to CosySim are documented here.
 - **Memory tools** — `nexus_remember`, `nexus_recall`, `nexus_memory_context` for agent/Copilot memory
 - **Training tools** — `capture_training_data` for fine-tuning data capture
 - **Content tools** — `generate_content` for pre-built dialog generation
-- **Total MCP tools**: 107 → 131
+- **Total MCP tools**: 107 → 133
 
 ### Nexus Namespace Separation (NEW)
 - **7 namespaces** — system, scene, agent, copilot, training, research, content
@@ -81,6 +81,29 @@ All notable changes to CosySim are documented here.
 - Enhanced session logger — captures git context (branch, commits, modified files)
 - Fixed `test_nexus_bridge.py` — updated for fastmcp 3.0 API (`mcp.list_tools()`)
 - Added `autoStart: true` to `.vscode/mcp.json` for both servers
+
+### Knowledge Distillers (NEW)
+- **`engine/nexus/nexus_distiller.py`** — 4 knowledge distillers
+- **NexusDistiller** — Extracts decisions, bug fixes, file conventions from conversation logs; compacts daily sessions; generates context primers
+- **QADeduplicator** — Finds and merges near-duplicate Q&A pairs using word-level Jaccard similarity (threshold: 0.75)
+- **SkillUsageDistiller** — Analyses session logs for MCP skill/tool usage frequency, errors, underutilisation
+- **PromptEvolutionDistiller** — Tracks prompt version lineage, analyses structural patterns (role defs, constraints, guardrails, output formats)
+- **`run_all_distillers()`** — Runs all 4 distillers in sequence
+- CLI: `python -m engine.nexus.nexus_distiller [distill|compact|stats|primer|dedup|skills|prompts|lineage|all]`
+- MCP tool: `nexus_distill(action)` supports all 10 actions
+- **Session export tool** — `nexus_export_session()` exports current Copilot session to Nexus
+
+### Session Logger Upgrade
+- **Full conversation export** — Reads from Copilot session_store SQLite DB on session end
+- Exports: conversation log, session summary, checkpoints, plan, auto-extracted decisions as Q&A
+- Stores complete turn history (USER/ASSISTANT) with truncation for large sessions
+- Session start/end entries tagged with git branch for filtering
+
+### Documentation Overhaul
+- **New: `docs/COPILOT_SYSTEM.md`** — Complete Copilot CLI system documentation: hooks, memory loop, MCP tools, distillers, CLI bridge, instruction hierarchy, custom agents, token reduction strategy
+- **Rewritten: `docs/NEXUS_INTEGRATION.md`** — Full v0.51b coverage: namespaces, memory, distillers, training pipeline, workflows, control panel, seeder, bridge, interceptor
+- **Updated: `docs/INDEX.md`** — Added COPILOT_SYSTEM.md, updated Nexus description
+- **Updated: `README.md`** — Test count (2,048+), MCP tool count (133), Nexus Control Panel in services, project stats refresh
 
 ### Nexus CLI (NEW)
 - **`python -m engine.nexus.cli`** — Full CLI for Nexus: search, ask, add, qa, status, prompts, rules, youtube

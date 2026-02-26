@@ -3851,6 +3851,108 @@ def generate_content(character_id: str, content_type: str = "greetings") -> str:
         return json.dumps({"error": str(e)})
 
 
+@mcp.tool()
+def nexus_distill(action: str = "stats") -> str:
+    """Distill raw session data into reusable knowledge. Actions:
+    - stats: Knowledge base statistics and token estimates
+    - distill: Extract decisions, fixes, conventions from conversation logs
+    - compact: Merge old daily session entries into summaries
+    - primer: Generate compact context primer for new sessions
+    - dedup: Find and remove duplicate Q&A pairs
+    - dedup-dry: Preview duplicates without removing
+    - skills: Analyse skill usage patterns from session logs
+    - prompts: Analyse prompt structural patterns
+    - lineage: Show prompt version evolution history
+    - all: Run all distillers in sequence"""
+    try:
+        from engine.nexus.nexus_distiller import (
+            NexusDistiller, QADeduplicator, SkillUsageDistiller,
+            PromptEvolutionDistiller, run_all_distillers,
+        )
+        if action == "stats":
+            return json.dumps(NexusDistiller().get_stats(), indent=2)
+        elif action == "distill":
+            return json.dumps(NexusDistiller().distill())
+        elif action == "compact":
+            return json.dumps(NexusDistiller().compact_sessions())
+        elif action == "primer":
+            return NexusDistiller().generate_context_primer()
+        elif action == "dedup":
+            return json.dumps(QADeduplicator().deduplicate(dry_run=False), indent=2)
+        elif action == "dedup-dry":
+            return json.dumps(QADeduplicator().deduplicate(dry_run=True), indent=2)
+        elif action == "skills":
+            return json.dumps(SkillUsageDistiller().distill_and_store(), indent=2)
+        elif action == "prompts":
+            return json.dumps(PromptEvolutionDistiller().distill_patterns(), indent=2)
+        elif action == "lineage":
+            return json.dumps(PromptEvolutionDistiller().get_lineage(), indent=2)
+        elif action == "all":
+            return json.dumps(run_all_distillers(), indent=2)
+        else:
+            return json.dumps({"error": f"Unknown action '{action}'. Use: stats, distill, compact, primer, dedup, dedup-dry, skills, prompts, lineage, all"})
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def nexus_export_session() -> str:
+    """Export current Copilot session history to Nexus.
+    Captures conversation turns, checkpoints, files, and plan from
+    the session store database."""
+    try:
+        from engine.nexus.nexus_session_logger import _find_session_id, _get_session_history
+        session_id = _find_session_id()
+        if not session_id:
+            return json.dumps({"error": "No active session found"})
+
+        history = _get_session_history(session_id)
+        stored = 0
+
+        # Store conversation log
+        from engine.nexus.nexus_session_logger import _build_conversation_log, _now
+        conv = _build_conversation_log(history)
+        if conv and len(conv) > 100:
+            if len(conv) > 50000:
+                conv = conv[:50000] + "\n\n[TRUNCATED]"
+            import requests as req
+            r = req.post("http://127.0.0.1:8700/api/entries", json={
+                "title": f"Conversation log — {_now()} ({len(history.get('turns', []))} turns)",
+                "content": conv,
+                "content_type": "history",
+                "category": "sessions",
+                "tags": ["session", "copilot", "conversation-log",
+                         f"turns:{len(history.get('turns', []))}"],
+            }, timeout=10)
+            if r.ok:
+                stored += 1
+
+        # Store checkpoints
+        for cp in history.get("checkpoints", []):
+            if cp.get("work_done"):
+                import requests as req
+                r = req.post("http://127.0.0.1:8700/api/entries", json={
+                    "title": f"Checkpoint {cp['number']}: {cp.get('title', '')}",
+                    "content": f"Overview: {cp.get('overview', '')}\n\nWork: {cp.get('work_done', '')}",
+                    "content_type": "history",
+                    "category": "sessions",
+                    "tags": ["session", "copilot", "checkpoint"],
+                }, timeout=10)
+                if r.ok:
+                    stored += 1
+
+        return json.dumps({
+            "status": "ok",
+            "session_id": session_id,
+            "turns": len(history.get("turns", [])),
+            "checkpoints": len(history.get("checkpoints", [])),
+            "files": len(history.get("files", [])),
+            "entries_stored": stored,
+        })
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
 # ── Entry point ────────────────────────────────────────────────────────
 
 def run_server(mode: str = "stdio"):
