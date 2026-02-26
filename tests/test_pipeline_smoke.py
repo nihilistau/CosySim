@@ -960,9 +960,10 @@ class TestBedroomInteractionRecords:
         import inspect, importlib
         mod = importlib.import_module("content.scenes.bedroom.bedroom_scene")
         cls = getattr(mod, "BedroomScene")
-        source = inspect.getsource(cls)
-        assert "log_interaction" in source
-        assert "InteractionRecord" in source
+        # Check across the full MRO (class + mixins)
+        sources = "".join(inspect.getsource(c) for c in cls.__mro__ if c is not object)
+        assert "log_interaction" in sources
+        assert "InteractionRecord" in sources
 
 
 # ══════════════════════════════════════════════════════════════════════
