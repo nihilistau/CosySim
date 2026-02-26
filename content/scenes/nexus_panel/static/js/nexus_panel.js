@@ -49,12 +49,66 @@ updateClock();
 
 // ── Fetch Helper ────────────────────────────────────────────────────
 async function api(path, opts = {}) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30000);
   try {
-    const res = await fetch(API + path, opts);
+    const res = await fetch(API + path, { ...opts, signal: controller.signal });
+    clearTimeout(timeout);
+    if (!res.ok) {
+      const body = await res.text();
+      console.error(`API ${res.status}:`, path, body);
+      return { error: `HTTP ${res.status}: ${body.slice(0, 200)}` };
+    }
     return await res.json();
   } catch (e) {
+    clearTimeout(timeout);
+    if (e.name === 'AbortError') {
+      console.error('API timeout:', path);
+      showToast('Request timed out — is Nexus running?', 'error');
+      return { error: 'Request timed out after 30s' };
+    }
     console.error('API error:', path, e);
     return { error: e.message };
+  }
+}
+
+// ── Toast Notification System ───────────────────────────────────────
+function showToast(message, level = 'info') {
+  let container = document.getElementById('toast-container');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'toast-container';
+    container.style.cssText = 'position:fixed;top:16px;right:16px;z-index:9999;display:flex;flex-direction:column;gap:8px;';
+    document.body.appendChild(container);
+  }
+  const toast = document.createElement('div');
+  const colors = { info: '#2563eb', success: '#16a34a', error: '#dc2626', warning: '#d97706' };
+  const icons = { info: 'ℹ️', success: '✅', error: '❌', warning: '⚠️' };
+  toast.style.cssText = `background:${colors[level] || colors.info};color:#fff;padding:10px 16px;border-radius:8px;font-size:13px;box-shadow:0 4px 12px rgba(0,0,0,.3);opacity:0;transition:opacity .3s;max-width:360px;`;
+  toast.textContent = `${icons[level] || ''} ${message}`;
+  container.appendChild(toast);
+  requestAnimationFrame(() => { toast.style.opacity = '1'; });
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    setTimeout(() => toast.remove(), 300);
+  }, 4000);
+}
+
+// ── Button Disable Helper ───────────────────────────────────────────
+async function withButton(btn, asyncFn) {
+  if (!btn || btn.disabled) return;
+  const origText = btn.textContent;
+  btn.disabled = true;
+  btn.style.opacity = '0.6';
+  btn.textContent = '⏳ ' + origText;
+  try {
+    return await asyncFn();
+  } catch (e) {
+    showToast(e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.style.opacity = '1';
+    btn.textContent = origText;
   }
 }
 
@@ -62,6 +116,11 @@ async function api(path, opts = {}) {
 async function checkStatus() {
   const badge = document.getElementById('nexus-status');
   const data = await api('/api/stats');
+  if (data.error) {
+    badge.textContent = '● Offline';
+    badge.className = 'status-badge offline';
+    return data;
+  }
   if (data.nexus_available) {
     badge.textContent = '● Online';
     badge.className = 'status-badge online';

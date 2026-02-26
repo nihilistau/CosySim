@@ -524,7 +524,7 @@ class NexusPanelScene(BaseScene, NexusSceneMixin):
             self._stats["librarian_chats"] += 1
             self._log_activity("librarian_chat", message[:80], "librarian")
 
-            # The Librarian uses Nexus knowledge to answer
+            # The Librarian uses NLM router (4-tier) when available, else Nexus Q&A
             client = self._get_client()
             if not client or not client.is_available():
                 return jsonify({
@@ -533,7 +533,23 @@ class NexusPanelScene(BaseScene, NexusSceneMixin):
                     "source": "offline",
                 })
 
-            # Try Q&A pipeline first
+            # Try NLM router first (tier 1: cache → tier 2: FTS → tier 3: NLM → tier 4: LLM)
+            try:
+                from engine.nexus.nlm_router import get_nlm_router
+                router = get_nlm_router()
+                result = router.route(message)
+                if result and result.get("answer"):
+                    self._stats["tokens_saved_est"] += 800 if result.get("source_tier") != "llm" else 0
+                    return jsonify({
+                        "response": result["answer"],
+                        "source": result.get("source_tier", "router"),
+                        "confidence": result.get("confidence", 0.7),
+                        "sources": result.get("sources", [])[:5],
+                    })
+            except Exception as exc:
+                logger.debug("NLM router unavailable, falling back to Q&A: %s", exc)
+
+            # Fallback: Nexus Q&A pipeline
             try:
                 qa_result = client.ask(message, depth="auto")
                 answer = qa_result.get("answer", "")
