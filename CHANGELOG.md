@@ -2,6 +2,46 @@
 
 All notable changes to CosySim are documented here.
 
+## v0.52b — Sprint 8.5: External Service Integration, URL Ingestion
+
+### Sprint 8.5: External Services, URL Ingestion, Prompt Engineering
+
+#### prompts.chat Integration (NEW)
+- **`engine/skills/builtin/prompts_chat_skills.py`** — 5 MCP skills for prompt discovery
+  - `search_prompts()` — Search prompts.chat by keyword, type, category
+  - `get_prompt()` — Retrieve specific prompt by ID
+  - `get_skill_from_prompts()` — Get Agent Skills with all files
+  - `improve_prompt()` — AI-powered prompt enhancement
+  - `ingest_prompts_to_nexus()` — Search & store best prompts in Nexus
+
+#### URL Ingestion Pipeline (NEW)
+- **`engine/nexus/url_ingest.py`** — Fetch web pages → markdown → Nexus
+  - HTML-to-markdown converter (strips scripts/styles/nav, converts headers/lists/code/links)
+  - `fetch_url()` for single page retrieval
+  - `ingest_url()` for single URL → Nexus storage
+  - `ingest_batch()` for bulk ingestion with result tracking
+  - `IngestResult` / `IngestBatch` dataclasses with summary stats
+
+#### GitHub Models Prompt Templates (NEW)
+- **`prompts/character-dialog.prompt.yml`** — Character dialog quality evaluation
+- **`prompts/skill-response.prompt.yml`** — Skill output format testing
+- **`prompts/narration.prompt.yml`** — Scene narration quality evaluation
+
+#### Copilot Agent Hooks (NEW)
+- **`.github/hooks/cosysim-hooks.json`** — Session logging, tool audit, destructive op blocking
+  - `sessionStart/End` — Log session lifecycle
+  - `preToolUse` — Block delete/remove/drop operations
+  - `postToolUse` — Audit trail for all tool calls
+  - `errorOccurred` — Error logging
+
+#### Nexus Knowledge Seeded (13 entries)
+- 8 documents: GitHub Models (evaluators, .prompt.yml, API, prototyping), Copilot (hooks, best practices, environment, firewall), prompts.chat API
+- 5 Q&A pairs: evaluation workflow, .prompt.yml format, hooks system, prompts.chat API, GitHub Models API
+
+#### Tests: 2,729 passing (+47 new)
+- `tests/test_prompts_chat_skills.py` — 17 tests
+- `tests/test_url_ingest.py` — 30 tests
+
 ## v0.52b — Sprint 8: Knowledge, Tuning, Agents, QoL
 
 ### Sprint 8: Knowledge System, Inference Tuning, Agent Infrastructure, QoL

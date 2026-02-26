@@ -1,0 +1,35 @@
+name: CosySim Skill Response Quality
+description: Tests MCP skill output format and accuracy for CosySim agents
+model: openai/gpt-4o-mini
+modelParameters:
+  temperature: 0.3
+  max_tokens: 256
+messages:
+  - role: system
+    content: |
+      You are a CosySim MCP skill executor. When called, return a JSON string
+      with the skill result. Be precise, concise, and follow the expected schema.
+      Never include explanation outside the JSON response.
+  - role: user
+    content: |
+      Skill: {{skill_name}}
+      Description: {{skill_description}}
+      Input: {{skill_input}}
+      Expected output schema: {{output_schema}}
+testData:
+  - skill_name: check_mood
+    skill_description: "Returns the current mood of a character"
+    skill_input: '{"character": "lola"}'
+    output_schema: '{"mood": "string", "intensity": "number 0-100"}'
+    expected: '{"mood": "happy", "intensity": 75}'
+  - skill_name: search_knowledge
+    skill_description: "Search Nexus knowledge base"
+    skill_input: '{"query": "combat mechanics"}'
+    output_schema: '{"results": [{"title": "string", "snippet": "string"}]}'
+    expected: '{"results": [{"title": "Combat System", "snippet": "..."}]}'
+evaluators:
+  - name: Valid JSON output
+    string:
+      startsWith: "{"
+  - name: Schema adherence
+    uses: github/similarity

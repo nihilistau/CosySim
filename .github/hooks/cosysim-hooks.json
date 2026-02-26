@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      {
+        "type": "command",
+        "powershell": "Write-Output \"[HOOK] Session started at $(Get-Date -Format o)\" >> .github/hooks/logs/session.log",
+        "bash": "echo \"[HOOK] Session started at $(date -Iseconds)\" >> .github/hooks/logs/session.log",
+        "timeoutSec": 5
+      }
+    ],
+    "sessionEnd": [
+      {
+        "type": "command",
+        "powershell": "Write-Output \"[HOOK] Session ended at $(Get-Date -Format o)\" >> .github/hooks/logs/session.log",
+        "bash": "echo \"[HOOK] Session ended at $(date -Iseconds)\" >> .github/hooks/logs/session.log",
+        "timeoutSec": 5
+      }
+    ],
+    "postToolUse": [
+      {
+        "type": "command",
+        "powershell": "$input | ConvertFrom-Json | Select-Object -Property toolName,timestamp | ConvertTo-Json -Compress >> .github/hooks/logs/tools.jsonl",
+        "bash": "cat | jq -c '{toolName: .toolName, timestamp: .timestamp}' >> .github/hooks/logs/tools.jsonl",
+        "timeoutSec": 3
+      }
+    ],
+    "preToolUse": [
+      {
+        "type": "command",
+        "powershell": "$data = $input | ConvertFrom-Json; if ($data.toolName -match 'delete|remove|drop') { Write-Output '{\"decision\": \"deny\", \"reason\": \"Destructive operations require manual approval\"}' } else { Write-Output '{\"decision\": \"approve\"}' }",
+        "bash": "data=$(cat); tool=$(echo $data | jq -r '.toolName'); case $tool in *delete*|*remove*|*drop*) echo '{\"decision\": \"deny\", \"reason\": \"Destructive operations require manual approval\"}';; *) echo '{\"decision\": \"approve\"}';; esac",
+        "timeoutSec": 5
+      }
+    ],
+    "errorOccurred": [
+      {
+        "type": "command",
+        "powershell": "$input | ConvertFrom-Json | Select-Object -Property error,toolName,timestamp | ConvertTo-Json -Compress >> .github/hooks/logs/errors.jsonl",
+        "bash": "cat | jq -c '{error: .error, toolName: .toolName, timestamp: .timestamp}' >> .github/hooks/logs/errors.jsonl",
+        "timeoutSec": 3
+      }
+    ]
+  }
+}

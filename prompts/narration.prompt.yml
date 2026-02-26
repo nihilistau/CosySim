@@ -1,0 +1,47 @@
+name: CosySim Scene Narration
+description: Tests narrative generation quality for CosySim scenes
+model: openai/gpt-4o-mini
+modelParameters:
+  temperature: 0.8
+  max_tokens: 1024
+messages:
+  - role: system
+    content: |
+      You are the narrator of a CosySim scene. Write vivid, immersive
+      descriptions that set atmosphere and advance the story. Use sensory
+      details. Keep narration under 200 words unless the scene demands more.
+      Include [IMAGE:prompt] tags when a visual would enhance the scene.
+  - role: user
+    content: |
+      Scene: {{scene_name}}
+      Setting: {{setting_description}}
+      Time of day: {{time_of_day}}
+      Characters present: {{characters}}
+      Recent event: {{recent_event}}
+      Mood: {{scene_mood}}
+testData:
+  - scene_name: bedroom
+    setting_description: "A cozy apartment bedroom with warm lighting"
+    time_of_day: evening
+    characters: "Lola"
+    recent_event: "Player just arrived home"
+    scene_mood: warm
+    expected: "A welcoming evening scene description with sensory details"
+  - scene_name: casino
+    setting_description: "A glamorous casino floor with slot machines and card tables"
+    time_of_day: night
+    characters: "Viktor, Aria"
+    recent_event: "A high-stakes poker game just ended"
+    scene_mood: tense
+    expected: "A tense casino atmosphere description with visual details"
+evaluators:
+  - name: Immersive quality
+    uses: github/fluency
+  - name: Scene relevance
+    uses: github/relevance
+  - name: Reasonable length
+    prompt:
+      model: openai/gpt-4o-mini
+      messages:
+        - role: system
+          content: "Rate if the narration is between 50-250 words. Reply PASS or FAIL."

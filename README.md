@@ -4,7 +4,7 @@
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Tests: 2682+](https://img.shields.io/badge/tests-2682%2B%20passing-brightgreen.svg)]()
+[![Tests: 2729+](https://img.shields.io/badge/tests-2729%2B%20passing-brightgreen.svg)]()
 
 ## Overview
 
@@ -119,7 +119,7 @@ python launcher.py --status          # Check service health
 
 - **MCP Pipeline** — 25-interceptor governance pipeline wrapping every inference call. Interceptors inject context, enforce rules, sync state, and shape responses pre- and post-inference.
 - **Governance** — `AgentGovernor` + `InterceptorPipeline` with priority-ordered interceptors: personality guards, policy enforcers, mood sync, relationship tracking, activity logging, and more.
-- **Skill Packs** — 13 core packs (memory, character, comfyui, voice, tts, social, boards, training, notebooklm, nexus, coding, experiment, agent_state) + 13 per-scene packs. 160+ skills exposed as MCP tools via the `@skill` decorator.
+- **Skill Packs** — 14 core packs (memory, character, comfyui, voice, tts, social, boards, training, notebooklm, nexus, coding, experiment, agent_state, prompts_chat) + 13 per-scene packs. 165+ skills exposed as MCP tools via the `@skill` decorator.
 - **Character System** — Stats, traits, mood, arousal, relationship scores, buffs, and tag-based personality modeling. Characters evolve through interactions.
 - **LMStudio Integration** — Native v1 API with `response_id` threading for KV cache reuse, SSE streaming with inline tag extraction, stateful conversation branching, InferenceOrchestrator with tier-based routing (GPU primary, CPU utility, router), 6 ResourceManager strategies, and JIT model loading with TTL eviction.
 - **TTS** — Qwen3-TTS voice generation server with voice designer, presets, and MCP tool integration.
@@ -139,7 +139,7 @@ python launcher.py --status          # Check service health
 | Interceptors | 25 |
 | MCP skills | 160+ |
 | MCP server tools | 144 |
-| Core skill packs | 13 |
+| Core skill packs | 14 |
 | Scene skill packs | 13 |
 | Nexus skills | 16 |
 | Nexus distillers | 4 |
