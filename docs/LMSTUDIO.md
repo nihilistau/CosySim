@@ -1,6 +1,6 @@
 # LMStudio Integration Guide
 
-CosySim (v0.52b) implements the **complete LMStudio v1 REST API** for local LLM inference. This guide covers all endpoints, MCP integration, streaming, speculative decoding, multi-model orchestration, and configuration.
+CosySim (v0.55b) implements the **complete LMStudio v1 REST API** for local LLM inference. This guide covers all endpoints, MCP integration, streaming, speculative decoding, multi-model orchestration, and configuration.
 
 > **Input/output format asymmetry:** LMStudio v1 accepts `input` + `system_prompt` (not OpenAI-style messages array) but returns standard `output[]` message objects. CosySim's `LMSClient` handles this translation — callers pass standard `messages` lists and `InferenceConfig.to_native_v1()` converts them automatically.
 
@@ -349,6 +349,85 @@ orch.update_config(resource_strategy="hybrid")
 perf = orch.get_performance()
 # → {"gpu_primary": TierPerformance(latency_ms=320, tokens_per_sec=42, ...)}
 ```
+
+## RouterDataCollector
+
+The `RouterDataCollector` (`engine/lmstudio/router_data_collector.py`) captures
+inference requests and outcomes for training the Gemma-270M router model. Every
+call through the InferenceOrchestrator is logged with features and tier labels.
+
+```python
+from engine.lmstudio.router_data_collector import get_router_data_collector
+
+collector = get_router_data_collector()
+
+# Capture happens automatically via orchestrator hooks
+# Manual capture for custom pipelines:
+collector.capture(
+    prompt="Summarise this paragraph...",
+    task_type="summarise",
+    tier_selected="cpu_utility",
+    latency_ms=180,
+    tokens_out=120,
+    success=True,
+)
+
+# Export for fine-tuning
+collector.export_jsonl("training/data/router_training.jsonl")
+collector.export_stats()  # → tier distribution, accuracy, label counts
+```
+
+### Captured Features
+
+| Feature | Description |
+|---------|-------------|
+| `prompt_length` | Token count of input prompt |
+| `task_type` | Classified task (chat, classify, summarise, etc.) |
+| `has_tools` | Whether tool use is requested |
+| `priority` | Request priority level |
+| `tier_selected` | Which tier handled the request |
+| `latency_ms` | End-to-end latency |
+| `tokens_out` | Output token count |
+| `success` | Whether the request completed without error |
+
+Data is stored in `metrics.db` and exported as JSONL for Gemma-270M fine-tuning.
+
+## InferenceMonitor
+
+The `InferenceMonitor` (`engine/lmstudio/inference_monitor.py`) tracks per-model
+inference performance in real time and snapshots metrics to Nexus.
+
+```python
+from engine.lmstudio.inference_monitor import get_inference_monitor
+
+monitor = get_inference_monitor()
+
+# Query per-model stats
+stats = monitor.get_model_stats("qwen3-8b")
+# → {"latency_avg_ms": 320, "tps": 42, "error_rate": 0.01, "queue_depth": 2}
+
+# Get all models
+all_stats = monitor.get_all_stats()
+
+# Snapshot to Nexus (called automatically by scheduled maintenance)
+monitor.snapshot_to_nexus()
+```
+
+### Tracked Metrics
+
+| Metric | Per-Model | Description |
+|--------|-----------|-------------|
+| `latency_avg_ms` | ✅ | Rolling average response latency |
+| `latency_p95_ms` | ✅ | 95th percentile latency |
+| `tokens_per_sec` | ✅ | Average generation speed |
+| `error_rate` | ✅ | Rolling error rate (0.0–1.0) |
+| `queue_depth` | ✅ | Current pending requests |
+| `total_requests` | ✅ | Lifetime request count |
+| `total_tokens` | ✅ | Lifetime tokens generated |
+
+The orchestrator uses `error_rate` from the monitor to make tier fallback
+decisions — if `cpu_utility` error rate exceeds 0.2, requests fall back to
+`gpu_primary` automatically.
 
 ## Speculative Decoding
 

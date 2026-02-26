@@ -1,8 +1,9 @@
-# CosySim Skills System — v0.50b
+# CosySim Skills System — v0.55b
 
 Skills are Python callables that an LLM agent invokes as **tools** during inference.
 The `@skill` decorator registers them into the global `SKILL_REGISTRY`. LMStudio
-calls skills via MCP tool use during `/api/v1/chat` responses.
+calls skills via MCP tool use during `/api/v1/chat` responses. The system now
+includes **160+ skills across 25+ packs** (13 core + 13 scene packs).
 
 ---
 
@@ -39,6 +40,8 @@ VirtualAgentManager.infer()     engine/agents/virtual_agent_manager.py
 | `training` | training_skills.py | `trigger_finetune`, `get_training_status`, `export_training_data`, `list_trained_models` |
 | `notebooklm` | notebooklm_skills.py | `notebooklm_ask`, `notebooklm_add_source`, `notebooklm_generate_audio`, `notebooklm_list_notebooks`, `notebooklm_search` |
 | `nexus` | nexus_skills.py | `nexus_search`, `nexus_add`, `nexus_nlm_ask`, `nexus_status`, `nexus_log_session`, `nexus_store_prompt`, `nexus_search_prompts`, `nexus_get_rules`, `nexus_submit_idea`, `nexus_changelog`, `nexus_ask`, `nexus_research`, `nexus_converse`, `nexus_finish_research`, `nexus_youtube` |
+| `coding` | coding_skills.py | `coding_store_snippet`, `coding_store_decision`, `coding_research`, `coding_store_bug`, `coding_log_session`, `coding_find_snippet`, `coding_list_decisions`, `coding_get_session` |
+| `nlm_forge` | nlm_forge_skills.py | `nlm_ask`, `nlm_batch_ask`, `nlm_distill`, `nlm_decompose`, `nlm_analyze`, `nlm_solve`, `nlm_build_topic`, `nlm_status`, `nlm_cache_stats`, `nlm_guided_distill` |
 
 ### Scene Packs (content/scenes/{name}/{name}_skills.py)
 

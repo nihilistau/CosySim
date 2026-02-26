@@ -7,7 +7,7 @@
 
 | Project | Path | Purpose |
 |---------|------|---------|
-| CosySim | C:\Files\Models\CosySim | Multi-scene AI simulation framework (v0.52b) |
+| CosySim | C:\Files\Models\CosySim | Multi-scene AI simulation framework (v0.55b) |
 | Nexus KMS | C:\Files\Nexus | Knowledge management system |
 | MCP Servers | C:\Files\MCP | LMStudio + AnythingLLM bridges |
 
@@ -25,6 +25,11 @@
 | ComfyUI | 8188 | `GET /` (optional) |
 
 ## Step 1: Search Nexus First
+
+> **Nexus-First Mandate:** BEFORE any work, search Nexus. If Nexus has the answer,
+> use it (zero compute cost). If Nexus misses, use `nlm_ask()` (free Gemini compute,
+> auto-stored). AFTER work, store decisions, patterns, and Q&A back in Nexus.
+> Every skip wastes compute that compounds forever.
 
 Before writing ANY code, search Nexus for existing knowledge:
 
@@ -89,7 +94,7 @@ CosySim/
 │   ├── scenes/     # 13 scene implementations
 │   └── simulation/ # Database, character system, services
 ├── config/         # YAML/JSON config
-├── tests/          # pytest suite (75+ files, 2613+ tests)
+├── tests/          # pytest suite (75+ files, 3,521 tests)
 ├── docs/           # Documentation (INDEX.md entry point)
 └── .github/        # Copilot agents, instructions, hooks
 ```

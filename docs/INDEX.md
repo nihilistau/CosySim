@@ -1,6 +1,6 @@
 # CosySim Documentation Index
 
-> All project documentation in one place. v0.52b — 2,613+ tests, 144 MCP tools, 13 scenes.
+> All project documentation in one place. v0.55b — 3,521 tests, 160+ MCP tools, 18 scenes.
 
 ## Getting Started
 
@@ -39,7 +39,6 @@
 | [NotebookLM & Nexus](NOTEBOOKLM.md) | NotebookLM integration via Nexus dual-backend |
 | [NotebookLM HAR SDK](NOTEBOOKLM_HAR_SDK.md) | Batchexecute protocol, RPC endpoints, HAR extraction script |
 | [Nexus Integration](NEXUS_INTEGRATION.md) | NexusClient, 16 skills, namespaces, memory, distillers, training, workflows |
-| [Copilot System](COPILOT_SYSTEM.md) | Copilot CLI integration: hooks, memory loop, MCP tools, distillers, instructions |
 
 ## External Systems
 
@@ -60,7 +59,8 @@
 | Doc | Description |
 |-----|-------------|
 | [Training](TRAINING.md) | Gemma 270M fine-tuning pipeline, datasets, Colab |
-| [Testing](TESTING.md) | Test commands, fixtures, writing tests (2,613+ tests, 75+ files) |
+| [Router Training Data](ROUTER_TRAINING.md) | RouterDataCollector, inference capture, tier label export |
+| [Testing](TESTING.md) | Test commands, fixtures, writing tests (3,521 tests, 75+ files) |
 
 ## Development
 
@@ -69,16 +69,9 @@
 | [Contributing](CONTRIBUTING.md) | Scene creation, skill writing, interceptors, tests |
 | [Changelog](../CHANGELOG.md) | Sprint history and changes |
 
-## Project Planning
-
-| Doc | Description |
-|-----|-------------|
-| [Scene AAA Plan](Scene-AAA-Upgrade-Plan.md) | Scene upgrade audit and compliance matrix |
-
 ## Internal (Development Logs)
 
 | Doc | Description |
 |-----|-------------|
-| [Agent Notes](internal/AGENT_NOTES.md) | System design notes (generated) |
 | [Agent Revelations](internal/AGENT_REVELATIONS.md) | Sprint implementation logs |
 | [Project CozyDreamz](internal/Project-CozyDreamz.md) | Original project design document |

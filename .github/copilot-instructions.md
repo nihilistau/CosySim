@@ -7,9 +7,9 @@
 
 ## Project Overview
 
-CosySim is a multi-scene AI simulation framework (v0.52b) built on
+CosySim is a multi-scene AI simulation framework (v0.55b) built on
 a custom MCP pipeline with LMStudio v1 API integration and Nexus knowledge system.
-It orchestrates virtual agents across 13 game scenes + 4 utility scenes, each with real-time
+It orchestrates virtual agents across 18 interactive scenes, each with real-time
 state management, skill-based tool calling, dialog systems, and interceptor-governed
 agent behavior. Nexus provides central knowledge management, rules engine,
 session tracking, and prompt versioning.
@@ -17,11 +17,11 @@ session tracking, and prompt versioning.
 **Core systems:** MCPFramework state tree · DialogSystem conversation threading
 · InterceptorPipeline agent governance · @skill decorator tools · EventChain
 audit logging · LMStudio v1 streaming with stateful conversations · Nexus knowledge system
-· InferenceOrchestrator multi-model routing
+· InferenceOrchestrator multi-model routing · RouterDataCollector training capture
 
-**Test suite:** 2,613+ tests across 75+ files — run before and after changes.
+**Test suite:** 3,521 tests across 90+ files — run before and after changes.
 
-**MCP Server:** 144 tools available via `.vscode/mcp.json` — includes Nexus bridge,
+**MCP Server:** 124 tools available via `.vscode/mcp.json` — includes Nexus bridge,
 skill discovery, and system monitoring tools.
 
 ## MCP Tools Available
@@ -86,6 +86,7 @@ from engine.scenes.base_scene import BaseScene     # Scene base class
 from engine.skills.skill import skill              # @skill decorator
 from engine.nexus.client import get_nexus_client   # Nexus KMS client
 from engine.lmstudio.orchestrator import get_orchestrator  # Multi-model orchestrator
+from engine.lmstudio.router_data import get_router_data_collector  # Training data
 ```
 
 ### Project Structure
@@ -94,19 +95,19 @@ CosySim/
 ├── engine/         # Core framework — modify carefully
 │   ├── mcp/        # MCPFramework, DialogSystem, GameMCP, Governor, CosySim MCP Server
 │   ├── agents/     # VirtualAgent, InterceptorPipeline, StreamProcessor
-│   ├── lmstudio/   # LMS client, router, conversation, model manager, orchestrator
+│   ├── lmstudio/   # LMS client, router, conversation, model manager, orchestrator, router_data
 │   ├── scenes/     # BaseScene, SceneManager, SceneRegistry
 │   ├── skills/     # @skill decorator, registry, 13 builtin packs
 │   ├── services/   # Activity bus, resilience, housekeeping
 │   ├── pipeline/   # VirtualPipeline, token routing
 │   ├── tts/        # Qwen3 TTS server
-│   ├── nexus/      # Nexus KMS client + CLI tools
+│   ├── nexus/      # Nexus KMS client, NLM engine, Knowledge Forge, copilot bridge
 │   └── config.py   # ConfigManager singleton
 ├── content/        # Game content
-│   ├── scenes/     # 13 scene implementations
+│   ├── scenes/     # 18 scene implementations
 │   └── simulation/ # Database, character system, services
 ├── config/         # YAML/JSON config (default, dev, prod, voices, skills, mcp)
-├── tests/          # pytest suite (75+ files, 2613+ tests)
+├── tests/          # pytest suite (90+ files, 3521 tests)
 ├── docs/           # Documentation (INDEX.md entry point)
 ├── .github/        # Copilot customization (instructions, agents, hooks)
 ├── .vscode/        # VS Code config + MCP server definitions
@@ -120,11 +121,10 @@ CosySim/
 | LMStudio | 1234 | LLM inference (v1 API) |
 | ComfyUI | 8188 | Image/video generation |
 | Nexus KMS | 8700 | Knowledge management |
-| Nexus Dashboard | 8701 | Knowledge browser |
-| Nexus Control Panel | 8702 | 8-page Streamlit dashboard |
 | TTS Server | 8600 | Text-to-speech (Qwen3) |
 | Web Bridge | 8601 | Socket.IO real-time |
 | Hub | 8500 | Scene hub + navigation |
+| Nexus Panel | 5570 | Nexus dashboard + Librarian |
 
 ## Critical Rules
 
@@ -195,7 +195,8 @@ Path-specific rules auto-apply based on file patterns:
 ## Documentation
 - Entry point: `docs/INDEX.md`
 - Architecture: `docs/ARCHITECTURE.md`
-- Full doc list: 20 files covering framework, scenes, skills, config, API, testing, training, LMStudio, TTS, characters, admin
+- System audit: `docs/SYSTEM_AUDIT.md` (v0.55b, grade A-)
+- Full doc list: 26 files covering framework, scenes, skills, config, API, testing, training, LMStudio, TTS, characters, admin, Nexus, NLM
 
 ## Nexus Knowledge System
 

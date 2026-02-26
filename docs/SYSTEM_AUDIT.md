@@ -9,7 +9,7 @@
 
 CosySim v0.55b is a genuinely impressive piece of engineering. The NLM Intelligence
 Layer (Sprint 14) has transformed it from "a simulation framework with some AI" into
-"a self-improving knowledge-first AI system." The test suite (3,410 tests, 0 failures)
+"a self-improving knowledge-first AI system." The test suite (3,521 tests, 0 failures)
 is robust and covers every major subsystem.
 
 **Overall Grade: A-**
@@ -233,6 +233,8 @@ These are verified complete data flows, not aspirational:
 8. **Dashboard → All 8 tabs → 90 API routes → Nexus/NLM backends** ✅
 9. **System metrics → MetricsDB → Inference monitor → Pipeline stats** ✅
 10. **Guided distillation → NLM answer → 3 suggestions → Store Q&A** ✅
+11. **Bedroom mixin refactor → shared mixins → reduced duplication** ✅
+12. **Router inference → RouterDataCollector → JSONL export → Gemma fine-tune** ✅
 
 ---
 
@@ -274,6 +276,15 @@ These are verified complete data flows, not aspirational:
    thread runs backup + dedup + scoring on a configurable interval. Combined with
    backup rotation (keep N), this prevents both data loss and unbounded disk growth.
 
+6. **The bedroom mixin refactor is a template for other scenes.** By extracting shared
+   behavior into composable mixins, the bedroom scene reduced code duplication and
+   established a pattern that other scenes can follow for their own refactors.
+
+7. **Router training data capture closes the self-improvement loop.** The
+   RouterDataCollector logs every inference request with tier labels, latency, and
+   token counts. This data feeds back into Gemma-270M fine-tuning, making the router
+   smarter over time — another compound improvement alongside the NLM cache.
+
 ---
 
 ## Metrics Summary
@@ -283,7 +294,7 @@ These are verified complete data flows, not aspirational:
 | Python files (engine/) | ~120 |
 | Python files (content/) | ~80 |
 | Test files | 70+ |
-| Tests passing | 2,995 |
+| Tests passing | 3,521 |
 | Tests failing | 0 |
 | API routes (Nexus Panel) | ~90 |
 | MCP skills | 160+ across 25 packs |

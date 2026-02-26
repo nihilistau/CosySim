@@ -1,4 +1,4 @@
-# Nexus Integration Guide — v0.51b
+# Nexus Integration Guide — v0.55b
 
 Nexus is CosySim's central knowledge management system. It provides persistent
 storage, full-text search, namespace-separated knowledge, rules enforcement,
@@ -143,6 +143,30 @@ defaults (`None`, `[]`, `False`).
 | `nexus_converse` | Continue a research conversation |
 | `nexus_finish_research` | Close research session, return summary |
 | `nexus_youtube` | Import YouTube transcript into knowledge base |
+
+### NLM Forge Pack (10 skills)
+
+| Skill | Description |
+|-------|-------------|
+| `nlm_ask` | Query NLM backends (Gemini via proxy or local NLM service) |
+| `nlm_batch_ask` | Batch multiple questions to NLM in one call |
+| `nlm_distill` | Distill long content into concise knowledge entries |
+| `nlm_decompose` | Break complex problems into sub-tasks |
+| `nlm_analyze` | Analyze code or text with NLM reasoning |
+| `nlm_solve` | Multi-step problem solving with NLM |
+| `nlm_build_topic` | Build comprehensive topic summaries from knowledge base |
+| `nlm_status` | Check NLM backend health and router stats |
+| `nlm_cache_stats` | View Q&A cache hit rates and tier distribution |
+| `nlm_guided_distill` | Interactive guided distillation with suggestions |
+
+### Skill Totals
+
+| Pack | Count |
+|------|-------|
+| Nexus | 16 |
+| Coding | 8 |
+| NLM Forge | 10 |
+| **Total Nexus-layer skills** | **34** |
 
 ### Coding Pack (8 skills)
 
@@ -338,6 +362,88 @@ nw.seed_notebook_knowledge(scope="architecture")
 nw.check_nlm_status()
 ```
 
+## NLM Intelligence Layer
+
+Added in Sprint 14 (v0.55b), the NLM Intelligence Layer provides a 4-tier
+knowledge routing pipeline and NLM-powered knowledge operations.
+
+### NLM Engine (`engine/nexus/nlm_engine.py`)
+
+The NLM Engine provides dual-backend access to NotebookLM intelligence:
+
+```python
+from engine.nexus.nlm_engine import get_nlm_engine
+
+nlm = get_nlm_engine()
+answer = nlm.ask("How does the interceptor pipeline work?")
+batch = nlm.batch_ask(["Q1?", "Q2?", "Q3?"])
+```
+
+- **Backend 1:** localhost:8800 proxy → Google Gemini (free compute)
+- **Backend 2:** localhost:3000 local NLM service
+- Automatic failover between backends
+- All answers cached in Nexus Q&A for compound improvement
+
+### NLM Router (`engine/nexus/nlm_router.py`)
+
+The 4-tier router provides intelligent query routing:
+
+```
+Query → Tier 1 (Q&A Cache) → Tier 2 (FTS5 Search) → Tier 3 (NLM Engine) → Tier 4 (Local LLM)
+```
+
+| Tier | Source | Latency | Cost |
+|------|--------|---------|------|
+| T1 Cache | Nexus Q&A pairs | <10ms | Free |
+| T2 FTS5 | Nexus full-text search | <50ms | Free |
+| T3 NLM | NotebookLM/Gemini | ~2s | Free (Gemini) |
+| T4 LLM | Local LMStudio model | ~5s | GPU compute |
+
+Answers from Tier 3/4 are automatically promoted to Tier 1 cache, so repeated
+questions are instant. The router tracks hit rates per tier for monitoring.
+
+### Knowledge Forge (`engine/nexus/knowledge_forge.py`)
+
+The Knowledge Forge provides NLM-powered knowledge operations:
+
+```python
+from engine.nexus.knowledge_forge import get_knowledge_forge
+
+forge = get_knowledge_forge()
+forge.distill("Long technical content...")    # → concise summary stored in Nexus
+forge.decompose("Complex problem")            # → sub-task breakdown
+forge.analyze("Code snippet")                 # → analysis with recommendations
+forge.solve("Multi-step problem")             # → step-by-step solution
+forge.build_topic("interceptors")             # → comprehensive topic summary
+```
+
+## Copilot Bridge
+
+`engine/nexus/copilot_bridge.py` integrates Nexus into the Copilot CLI session
+lifecycle, providing automatic knowledge consultation and session tracking.
+
+### Lifecycle Hooks
+
+| Hook | When | What It Does |
+|------|------|-------------|
+| `pre_plan` | Before agent plans work | Searches Nexus for relevant context, returns knowledge primer |
+| `analyze` | During code analysis | Queries NLM for architectural guidance |
+| `guide` | During implementation | Provides best-practice recommendations from knowledge base |
+| `validate` | After changes | Checks decisions against stored conventions and rules |
+| `post_session` | Session end | Extracts decisions/Q&A from session, stores in Nexus |
+
+### Savings Tracking
+
+The bridge tracks compute savings from cache hits vs. full NLM/LLM calls:
+
+```python
+from engine.nexus.copilot_bridge import get_copilot_bridge
+
+bridge = get_copilot_bridge()
+stats = bridge.get_savings()
+# → {"cache_hits": 142, "nlm_calls_saved": 89, "estimated_tokens_saved": 45000}
+```
+
 ## Knowledge Seeder
 
 `engine/nexus/nexus_seeder.py` performs idempotent knowledge seeding from
@@ -421,7 +527,7 @@ captures Copilot CLI session lifecycle events via `.github/hooks/`:
   extracts key decisions as Q&A
 - **Prompt count**: Tracks number of prompts per session
 
-See [Copilot System](COPILOT_SYSTEM.md) for full details.
+See [Copilot Bridge](#copilot-bridge) above for full details.
 
 ## API Routes
 
