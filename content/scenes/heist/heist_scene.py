@@ -31,6 +31,7 @@ from flask_socketio import SocketIO, emit
 from flask_cors import CORS
 
 from engine.scenes.base_scene import BaseScene
+from engine.scenes.nexus_mixin import NexusSceneMixin
 from engine.mcp.framework import MCPSceneMixin
 from content.scenes.heist.heist_game import (
     HeistState, Phase, Specialty, VENUES, CrewMember,
@@ -87,7 +88,7 @@ CREW_TEMPLATES = {
 }
 
 
-class HeistScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
+class HeistScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_ID):
     """Cooperative heist planning & execution scene."""
 
     SCENE_METADATA = {
@@ -136,7 +137,9 @@ class HeistScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
             handler=None, strip_from_output=True, pre_warm_intent="heist_plan"
         ))
 
-    # ── Routes ───────────────────────────────────────────────────────────
+        self.nexus_init("heist")
+
+    # ── Routes───────────────────────────────────────────────────────────
 
     def _register_routes(self):
         app = self.app
@@ -524,6 +527,7 @@ class HeistScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
         )
 
     def stop(self) -> None:
+        self.nexus_flush()
         self._ticker_stop.set()
         try:
             from engine.mcp.framework import get_framework

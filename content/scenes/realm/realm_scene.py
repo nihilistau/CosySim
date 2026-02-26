@@ -30,6 +30,7 @@ from flask_cors import CORS
 from flask_socketio import SocketIO
 
 from engine.scenes.base_scene import BaseScene
+from engine.scenes.nexus_mixin import NexusSceneMixin
 from engine.mcp.framework import MCPSceneMixin, get_framework
 
 from .realm_state import (
@@ -131,7 +132,7 @@ Keep responses SHORT. You're a speech bubble, not a novel. Use humor, sarcasm, p
 #  REALM SCENE
 # ═══════════════════════════════════════════════════════════════
 
-class RealmScene(BaseScene, MCPSceneMixin, mcp_scene_id="realm"):
+class RealmScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="realm"):
     """The Realm — AI-Directed LitRPG / Visual Novel."""
 
     SCENE_METADATA = {
@@ -180,7 +181,9 @@ class RealmScene(BaseScene, MCPSceneMixin, mcp_scene_id="realm"):
         # MCP rules
         register_realm_rules()
 
-    # ── Agent helpers ──
+        self.nexus_init("realm")
+
+    # ── Agent helpers──
 
     def _get_manager(self):
         from engine.agents.virtual_agent_manager import get_virtual_agent_manager
@@ -953,6 +956,7 @@ class RealmScene(BaseScene, MCPSceneMixin, mcp_scene_id="realm"):
         self.socketio.run(self.app, host=self.host, port=self.port, debug=False, allow_unsafe_werkzeug=True)
 
     def stop(self) -> None:
+        self.nexus_flush()
         self._mcp_deregister_scene()
 
     def get_plugin_info(self) -> Dict[str, Any]:

@@ -47,6 +47,7 @@ from engine.paths import ROOT as _root
 sys.path.insert(0, str(_root))
 
 from engine.scenes.base_scene import BaseScene
+from engine.scenes.nexus_mixin import NexusSceneMixin
 from engine.mcp.framework import MCPSceneMixin, get_framework
 from content.scenes.casino.casino_mcp import (
     register_casino_rules,
@@ -67,7 +68,7 @@ CASINO_PORT = 5559
 #  CASINO SCENE
 # ══════════════════════════════════════════════════════════════════════
 
-class CasinoScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
+class CasinoScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_ID):
     """
     The Midnight Casino — MCP framework showcase.
 
@@ -140,6 +141,8 @@ class CasinoScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
         # Framework integration
         self._state_mgr = get_scene_state_manager()
         self._tag_registry = TagRegistry.get()
+
+        self.nexus_init("casino")
 
     # ══════════════════════════════════════════════════════════════════
     #  FRAMEWORK INTEGRATION
@@ -812,6 +815,7 @@ class CasinoScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
         self.socketio.run(self.app, host=self.host, port=self.port, debug=False)
 
     def stop(self) -> None:
+        self.nexus_flush()
         logger.info("The Midnight Casino closing")
         try:
             self._fw.save_state()

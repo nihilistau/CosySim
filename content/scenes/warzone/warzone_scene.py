@@ -24,6 +24,7 @@ from flask import Flask, render_template, jsonify, request
 from flask_socketio import SocketIO, emit
 
 from engine.scenes.base_scene import BaseScene
+from engine.scenes.nexus_mixin import NexusSceneMixin
 from engine.mcp.framework import MCPSceneMixin
 from content.shared import register_shared_assets
 from engine.mcp.scene_state import get_scene_state_manager
@@ -381,7 +382,7 @@ class GameState:
 
 # ── Scene class ──────────────────────────────────────────────────────
 
-class WarzoneScene(BaseScene, MCPSceneMixin, mcp_scene_id="warzone"):
+class WarzoneScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="warzone"):
     """Global Strike — Modern artillery strategy scene."""
 
     SCENE_METADATA = {
@@ -424,7 +425,9 @@ class WarzoneScene(BaseScene, MCPSceneMixin, mcp_scene_id="warzone"):
         # MCP rules
         register_warzone_rules()
 
-    # ── BaseScene interface ──────────────────────────────────────────
+        self.nexus_init("warzone")
+
+    # ── BaseScene interface──────────────────────────────────────────
 
     def start(self):
         self.register_health_route(self.app)
@@ -434,6 +437,7 @@ class WarzoneScene(BaseScene, MCPSceneMixin, mcp_scene_id="warzone"):
                           allow_unsafe_werkzeug=True)
 
     def stop(self):
+        self.nexus_flush()
         self._mcp_deregister_scene()
 
     def get_plugin_info(self):

@@ -35,6 +35,7 @@ from engine.paths import ROOT as project_root
 import sys; sys.path.insert(0, str(project_root))
 
 from engine.scenes.base_scene import BaseScene
+from engine.scenes.nexus_mixin import NexusSceneMixin
 from engine.mcp.framework import MCPSceneMixin, get_framework
 from content.simulation.database.db import Database
 from content.shared import register_shared_assets
@@ -163,7 +164,7 @@ class GalleryCharacter:
 
 # ── Gallery Scene ──────────────────────────────────────────────────────────────
 
-class GalleryScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
+class GalleryScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_ID):
     """Interactive art gallery — v2.7 framework showcase."""
 
     SCENE_METADATA = {
@@ -217,6 +218,8 @@ class GalleryScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
         self._tag_registry = TagRegistry.get()
         self._governors: Dict[str, Any] = {}  # char_id → governor
 
+        self.nexus_init("gallery")
+
     def _get_governor_context(self, char_id: str) -> str:
         """
         Gather framework context via the interceptor pipeline.
@@ -261,6 +264,7 @@ class GalleryScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
         self.socketio.run(self.app, host=self.host, port=self.port, debug=False, use_reloader=False)
 
     def stop(self) -> None:
+        self.nexus_flush()
         self._ticker_stop.set()
         if self._ticker_thread and self._ticker_thread.is_alive():
             self._ticker_thread.join(timeout=3)

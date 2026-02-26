@@ -37,6 +37,7 @@ from engine.paths import ROOT as _root
 sys.path.insert(0, str(_root))
 
 from engine.scenes.base_scene import BaseScene
+from engine.scenes.nexus_mixin import NexusSceneMixin
 from engine.mcp.framework import MCPSceneMixin
 from content.scenes.lounge.lounge_mcp import (
     register_lounge_rules,
@@ -57,7 +58,7 @@ LOUNGE_PORT = 5557
 #  LOUNGE SCENE
 # ──────────────────────────────────────────────────────────────────────────────
 
-class LoungeScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
+class LoungeScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_ID):
     """
     The Velvet Lounge — MCP-first scene showcasing the full framework.
 
@@ -125,6 +126,8 @@ class LoungeScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
 
         # ── Start first song ─────────────────────────────────────────────────
         self._start_next_song()
+
+        self.nexus_init("lounge")
 
     # ══════════════════════════════════════════════════════════════════════════
     #  FRAMEWORK SHORTCUTS
@@ -1201,6 +1204,7 @@ class LoungeScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
 
     def stop(self) -> None:
         """Gracefully stop the lounge scene."""
+        self.nexus_flush()
         logger.info("The Velvet Lounge closing")
         try:
             self._fw.save_state()

@@ -26,6 +26,7 @@ from flask_cors import CORS
 from flask_socketio import SocketIO, emit
 
 from engine.scenes.base_scene import BaseScene, get_all_active_scenes, get_active_scene
+from engine.scenes.nexus_mixin import NexusSceneMixin
 from engine.mcp.framework import MCPSceneMixin, get_framework
 from content.shared import register_shared_assets
 from engine.mcp.scene_state import get_scene_state_manager
@@ -37,7 +38,7 @@ SCENE_ID = "command_center"
 DEFAULT_PORT = 5566
 
 
-class CommandCenterScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
+class CommandCenterScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_ID):
     """Real-time system observatory dashboard with live scene monitoring and control."""
 
     SCENE_METADATA = {
@@ -89,6 +90,8 @@ class CommandCenterScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
             register_command_center_rules()
         except Exception as exc:
             log.warning("Failed to register command center rules: %s", exc)
+
+        self.nexus_init("command_center")
 
     # ------------------------------------------------------------------
     # Lazy accessors for singletons
@@ -1128,6 +1131,7 @@ class CommandCenterScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
         )
 
     def stop(self):
+        self.nexus_flush()
         self._stop_ticker()
         self._mcp_deregister_scene()
         log.info("Command Center stopped")

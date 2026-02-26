@@ -20,6 +20,7 @@ from flask_cors import CORS
 from flask_socketio import SocketIO
 
 from engine.scenes.base_scene import BaseScene
+from engine.scenes.nexus_mixin import NexusSceneMixin
 from engine.mcp.framework import MCPSceneMixin, get_framework
 from engine.mcp.scene_state import get_scene_state_manager
 from engine.mcp.tag_registry import TagRegistry, TagDef
@@ -38,7 +39,7 @@ SCENE_ID = "neoncity"
 DEFAULT_PORT = 5563
 
 
-class NeonCityScene(BaseScene, MCPSceneMixin, mcp_scene_id="neoncity"):
+class NeonCityScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="neoncity"):
     """NeonCity — Cyberpunk Strategy Board Game."""
 
     SCENE_METADATA = {
@@ -82,6 +83,8 @@ class NeonCityScene(BaseScene, MCPSceneMixin, mcp_scene_id="neoncity"):
 
         # MCP rules
         register_neoncity_rules()
+
+        self.nexus_init("neoncity")
 
     def _narrate(self, context: str) -> str:
         """Get a cyberpunk flavor narration from LMS with governance context."""
@@ -280,6 +283,7 @@ class NeonCityScene(BaseScene, MCPSceneMixin, mcp_scene_id="neoncity"):
         self.socketio.run(self.app, host=self.host, port=self.port, debug=False, allow_unsafe_werkzeug=True)
 
     def stop(self) -> None:
+        self.nexus_flush()
         self._mcp_deregister_scene()
 
     def get_plugin_info(self) -> Dict[str, Any]:

@@ -22,6 +22,7 @@ from flask_cors import CORS
 from flask_socketio import SocketIO
 
 from engine.scenes.base_scene import BaseScene
+from engine.scenes.nexus_mixin import NexusSceneMixin
 from engine.mcp.framework import MCPSceneMixin, get_framework
 from engine.mcp.scene_state import get_scene_state_manager
 from engine.mcp.tag_registry import TagRegistry, TagDef
@@ -40,7 +41,7 @@ SCENE_ID = "coders"
 DEFAULT_PORT = 5564
 
 
-class CodersRoomScene(BaseScene, MCPSceneMixin, mcp_scene_id="coders"):
+class CodersRoomScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="coders"):
     """The Coders Room — AI Agent Idle Code Simulation."""
 
     SCENE_METADATA = {
@@ -79,6 +80,8 @@ class CodersRoomScene(BaseScene, MCPSceneMixin, mcp_scene_id="coders"):
         register_coders_rules()
         self._tick_thread: Optional[threading.Thread] = None
         self._running = False
+
+        self.nexus_init("coders")
 
         self._setup_routes()
         self._setup_socketio()
@@ -373,6 +376,7 @@ class CodersRoomScene(BaseScene, MCPSceneMixin, mcp_scene_id="coders"):
         self.socketio.run(self.app, host=self.host, port=self.port, debug=False, allow_unsafe_werkzeug=True)
 
     def stop(self) -> None:
+        self.nexus_flush()
         self._running = False
         self._mcp_deregister_scene()
 

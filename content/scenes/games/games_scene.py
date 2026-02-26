@@ -17,6 +17,7 @@ from flask import Flask, jsonify, render_template_string
 from flask_socketio import SocketIO
 
 from engine.scenes.base_scene import BaseScene
+from engine.scenes.nexus_mixin import NexusSceneMixin
 
 log = logging.getLogger(__name__)
 
@@ -63,7 +64,7 @@ games_tod_answer    — Submit answer</pre>
 </body></html>"""
 
 
-class GamesScene(BaseScene):
+class GamesScene(BaseScene, NexusSceneMixin):
     """Games Arcade — wraps MysteryGame and TruthOrDareGame in BaseScene."""
 
     SCENE_METADATA = {
@@ -96,6 +97,8 @@ class GamesScene(BaseScene):
 
         self._register_routes()
         self._wire_mcp()
+
+        self.nexus_init("games")
 
         log.info("GamesScene created on port %d", port)
 
@@ -149,6 +152,7 @@ class GamesScene(BaseScene):
                           allow_unsafe_werkzeug=True)
 
     def stop(self) -> None:
+        self.nexus_flush()
         log.info("Stopping GamesScene")
 
     def get_health(self) -> Dict[str, Any]:

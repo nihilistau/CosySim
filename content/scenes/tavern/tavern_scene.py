@@ -37,6 +37,7 @@ from flask import Flask, jsonify, render_template, request
 from flask_socketio import SocketIO
 
 from engine.scenes.base_scene import BaseScene
+from engine.scenes.nexus_mixin import NexusSceneMixin
 
 log = logging.getLogger(__name__)
 
@@ -52,7 +53,7 @@ DEFAULT_PORT = 5558
 #  Scene class
 # ---------------------------------------------------------------------------
 
-class TavernScene(BaseScene):
+class TavernScene(BaseScene, NexusSceneMixin):
     """The Dragon's Flagon — a fantasy tavern.
 
     Inherits BaseScene for lifecycle management and uses MCPSceneMixin
@@ -112,6 +113,8 @@ class TavernScene(BaseScene):
         # Background ticker
         self._ticker_running = False
         self._ticker_thread: Optional[threading.Thread] = None
+
+        self.nexus_init("tavern")
 
         log.info("TavernScene created on port %d", port)
 
@@ -355,6 +358,7 @@ class TavernScene(BaseScene):
                           allow_unsafe_werkzeug=True)
 
     def stop(self) -> None:
+        self.nexus_flush()
         log.info("Stopping TavernScene")
         self._stop_ticker()
 

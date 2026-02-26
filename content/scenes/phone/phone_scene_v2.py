@@ -32,6 +32,7 @@ from engine.paths import ROOT as project_root
 import sys; sys.path.insert(0, str(project_root))
 
 from engine.scenes.base_scene import BaseScene
+from engine.scenes.nexus_mixin import NexusSceneMixin
 from engine.mcp.framework import MCPSceneMixin, get_framework
 from content.scenes.phone.phone_db import PhoneDB
 from content.scenes.phone.phone_rules_v2 import (
@@ -154,7 +155,7 @@ class _PhoneCharacterAgent:
 
 # ── Main scene class ──────────────────────────────────────────────────────────
 
-class PhoneSceneV2(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
+class PhoneSceneV2(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_ID):
     """iOS-style phone scene — multi-contact DMs, group chats, truth-or-dare."""
 
     SCENE_METADATA = {
@@ -209,6 +210,8 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
         self._state_mgr = get_scene_state_manager()
         self._tag_registry = TagRegistry.get()
 
+        self.nexus_init("phone")
+
     def start(self) -> None:
         self._seed_characters()
         self._start_ticker()
@@ -226,6 +229,7 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
         self.socketio.run(self.app, host=self.host, port=self.port, debug=False, use_reloader=False)
 
     def stop(self) -> None:
+        self.nexus_flush()
         self._ticker_stop.set()
         # Save framework state on graceful shutdown
         try:
