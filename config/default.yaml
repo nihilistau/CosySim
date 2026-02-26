@@ -101,6 +101,11 @@ scenes:
     port: 5567
     debug: false
 
+  nexus_panel:
+    host: "localhost"
+    port: 5570
+    debug: false
+
   hub:
     host: "localhost"
     port: 8500

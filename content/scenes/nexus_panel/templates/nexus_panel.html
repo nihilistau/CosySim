@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nexus Control Panel</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/nexus_panel.css') }}">
+</head>
+<body>
+  <!-- ── Top Bar ─────────────────────────────────────────────────── -->
+  <header id="topbar">
+    <div class="topbar-left">
+      <div class="logo">◆ NEXUS</div>
+      <span class="version">Knowledge Management System</span>
+    </div>
+    <div class="topbar-center">
+      <nav class="tab-nav">
+        <button class="tab-btn active" data-panel="dashboard">Dashboard</button>
+        <button class="tab-btn" data-panel="explorer">Explorer</button>
+        <button class="tab-btn" data-panel="librarian">Librarian</button>
+        <button class="tab-btn" data-panel="maintenance">Maintenance</button>
+        <button class="tab-btn" data-panel="workflows">Workflows</button>
+        <button class="tab-btn" data-panel="copilot">Copilot</button>
+      </nav>
+    </div>
+    <div class="topbar-right">
+      <span id="nexus-status" class="status-badge offline">● Checking...</span>
+      <span id="clock"></span>
+    </div>
+  </header>
+
+  <!-- ── Main Layout ─────────────────────────────────────────────── -->
+  <div id="main-layout">
+    <!-- ── Sidebar: Activity Feed ──────────────────────────────── -->
+    <aside id="sidebar">
+      <div class="sidebar-header">
+        <h3>Activity Feed</h3>
+        <button id="clear-activity" class="btn-icon" title="Clear">✕</button>
+      </div>
+      <div id="activity-feed"></div>
+
+      <div class="sidebar-section">
+        <h4>Quick Stats</h4>
+        <div id="quick-stats">
+          <div class="stat-row"><span>Searches</span><span id="qs-searches">0</span></div>
+          <div class="stat-row"><span>Q&A Answered</span><span id="qs-qa">0</span></div>
+          <div class="stat-row"><span>Entries Added</span><span id="qs-added">0</span></div>
+          <div class="stat-row"><span>Maintenance</span><span id="qs-maint">0</span></div>
+          <div class="stat-row"><span>Librarian Chats</span><span id="qs-chats">0</span></div>
+          <div class="stat-row highlight"><span>Est. Tokens Saved</span><span id="qs-tokens">0</span></div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ── Content Panels ──────────────────────────────────────── -->
+    <main id="content">
+
+      <!-- ══ Dashboard Panel ═══════════════════════════════════ -->
+      <section id="panel-dashboard" class="panel active">
+        <div class="panel-grid">
+          <!-- Stats Cards -->
+          <div class="card stat-card">
+            <div class="card-icon">📚</div>
+            <div class="card-value" id="dash-entries">—</div>
+            <div class="card-label">Knowledge Entries</div>
+          </div>
+          <div class="card stat-card">
+            <div class="card-icon">❓</div>
+            <div class="card-value" id="dash-qa">—</div>
+            <div class="card-label">Q&A Pairs</div>
+          </div>
+          <div class="card stat-card">
+            <div class="card-icon">📋</div>
+            <div class="card-value" id="dash-sessions">—</div>
+            <div class="card-label">Sessions</div>
+          </div>
+          <div class="card stat-card">
+            <div class="card-icon">📜</div>
+            <div class="card-value" id="dash-rules">—</div>
+            <div class="card-label">Rules</div>
+          </div>
+          <div class="card stat-card">
+            <div class="card-icon">🧠</div>
+            <div class="card-value" id="dash-prompts">—</div>
+            <div class="card-label">Prompts</div>
+          </div>
+          <div class="card stat-card accent">
+            <div class="card-icon">⚡</div>
+            <div class="card-value" id="dash-tokens">0</div>
+            <div class="card-label">Tokens Saved</div>
+          </div>
+
+          <!-- Health Overview -->
+          <div class="card wide">
+            <h3>System Health</h3>
+            <div id="health-details">
+              <p class="muted">Loading health data...</p>
+            </div>
+          </div>
+
+          <!-- Recent Entries -->
+          <div class="card wide">
+            <h3>Recent Knowledge Entries</h3>
+            <div id="recent-entries">
+              <p class="muted">Loading...</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ══ Knowledge Explorer ════════════════════════════════ -->
+      <section id="panel-explorer" class="panel">
+        <div class="explorer-layout">
+          <div class="explorer-toolbar">
+            <input type="text" id="search-input" placeholder="Search knowledge base..." class="input-lg">
+            <button id="search-btn" class="btn primary">Search</button>
+            <select id="filter-type" class="select-sm">
+              <option value="">All Types</option>
+              <option value="note">Notes</option>
+              <option value="code">Code</option>
+              <option value="document">Documents</option>
+              <option value="memory">Memories</option>
+              <option value="history">History</option>
+              <option value="prompt">Prompts</option>
+              <option value="research">Research</option>
+            </select>
+            <select id="filter-category" class="select-sm">
+              <option value="">All Categories</option>
+              <option value="architecture">Architecture</option>
+              <option value="debugging">Debugging</option>
+              <option value="testing">Testing</option>
+              <option value="sessions">Sessions</option>
+              <option value="development">Development</option>
+            </select>
+            <button id="add-entry-btn" class="btn success">+ Add Entry</button>
+          </div>
+          <div class="explorer-content">
+            <div id="entry-list" class="entry-list"></div>
+            <div id="entry-detail" class="entry-detail">
+              <p class="muted center">Select an entry to view details</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Add Entry Modal -->
+        <div id="add-entry-modal" class="modal hidden">
+          <div class="modal-content">
+            <h3>Add Knowledge Entry</h3>
+            <input type="text" id="new-title" placeholder="Title" class="input-full">
+            <textarea id="new-content" placeholder="Content..." class="textarea-full" rows="6"></textarea>
+            <div class="modal-row">
+              <select id="new-type">
+                <option value="note">Note</option>
+                <option value="code">Code</option>
+                <option value="document">Document</option>
+                <option value="memory">Memory</option>
+              </select>
+              <select id="new-category">
+                <option value="general">General</option>
+                <option value="architecture">Architecture</option>
+                <option value="debugging">Debugging</option>
+                <option value="testing">Testing</option>
+                <option value="development">Development</option>
+              </select>
+              <input type="text" id="new-tags" placeholder="Tags (comma-separated)">
+            </div>
+            <div class="modal-actions">
+              <button id="save-entry" class="btn primary">Save</button>
+              <button id="cancel-entry" class="btn">Cancel</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ══ Librarian Chat ════════════════════════════════════ -->
+      <section id="panel-librarian" class="panel">
+        <div class="librarian-layout">
+          <div class="librarian-sidebar">
+            <div class="librarian-avatar">
+              <div class="avatar-icon">📖</div>
+              <h3>The Librarian</h3>
+              <p class="muted">Nexus Knowledge Expert</p>
+            </div>
+            <div class="librarian-info">
+              <h4>Capabilities</h4>
+              <ul>
+                <li>🔍 Knowledge search</li>
+                <li>❓ Smart Q&A (cache→FTS→NLM)</li>
+                <li>🔬 Deep research sessions</li>
+                <li>🛠 Maintenance operations</li>
+                <li>📊 System statistics</li>
+                <li>📝 Knowledge curation</li>
+              </ul>
+            </div>
+            <div class="librarian-info">
+              <h4>Quick Commands</h4>
+              <div class="quick-cmds">
+                <button class="cmd-btn" data-cmd="/stats">📊 Stats</button>
+                <button class="cmd-btn" data-cmd="/health">🏥 Health</button>
+                <button class="cmd-btn" data-cmd="/recent">📋 Recent</button>
+                <button class="cmd-btn" data-cmd="/research">🔬 Research</button>
+              </div>
+            </div>
+          </div>
+          <div class="chat-container">
+            <div id="chat-messages">
+              <div class="msg system">
+                <div class="msg-content">
+                  <strong>The Librarian</strong> is your Nexus knowledge expert.
+                  Ask questions, search the knowledge base, run maintenance, or start research sessions.
+                  <br><br>
+                  Try: <em>"What do you know about the interceptor pipeline?"</em>
+                  or use <code>/stats</code>, <code>/health</code>, <code>/research [topic]</code>
+                </div>
+              </div>
+            </div>
+            <div class="chat-input-row">
+              <input type="text" id="chat-input" placeholder="Ask the Librarian..." class="input-lg">
+              <button id="chat-send" class="btn primary">Send</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ══ Maintenance Panel ═════════════════════════════════ -->
+      <section id="panel-maintenance" class="panel">
+        <div class="maint-grid">
+          <div class="card action-card">
+            <h3>🏥 Health Check</h3>
+            <p>Full health report: entry counts, quality metrics, duplicate detection, recommendations.</p>
+            <button class="btn primary maint-btn" data-action="health">Run Health Check</button>
+          </div>
+          <div class="card action-card">
+            <h3>🔄 Deduplication</h3>
+            <p>Find and merge duplicate entries based on title similarity (Jaccard ≥ 0.85).</p>
+            <div class="btn-group">
+              <button class="btn maint-btn" data-action="dedup">Dry Run</button>
+              <button class="btn danger maint-btn" data-action="dedup-apply">Apply</button>
+            </div>
+          </div>
+          <div class="card action-card">
+            <h3>📦 Compact Sessions</h3>
+            <p>Summarise old session logs (>7 days) into single entries to save space.</p>
+            <button class="btn primary maint-btn" data-action="compact">Compact</button>
+          </div>
+          <div class="card action-card">
+            <h3>⭐ Quality Scoring</h3>
+            <p>Score all entries by quality (length, tags, metadata completeness). Flag low-quality.</p>
+            <button class="btn primary maint-btn" data-action="score">Score Entries</button>
+          </div>
+          <div class="card action-card">
+            <h3>🚀 Full Maintenance</h3>
+            <p>Run all maintenance tasks: health, dedup, compact, score in sequence.</p>
+            <div class="btn-group">
+              <button class="btn maint-btn" data-action="full">Dry Run</button>
+              <button class="btn danger maint-btn" data-action="full-apply">Apply All</button>
+            </div>
+          </div>
+        </div>
+        <div class="card wide" id="maint-output-card">
+          <h3>Maintenance Output</h3>
+          <pre id="maint-output">No maintenance tasks run yet.</pre>
+        </div>
+      </section>
+
+      <!-- ══ Workflows Panel ═══════════════════════════════════ -->
+      <section id="panel-workflows" class="panel">
+        <div class="workflow-grid">
+          <!-- Research Workflow -->
+          <div class="card wide">
+            <h3>🔬 Research Workflow</h3>
+            <p>Start a deep NLM-backed research session, follow up with questions, distill findings.</p>
+            <div class="workflow-row">
+              <input type="text" id="research-question" placeholder="Research question..." class="input-lg">
+              <button id="start-research" class="btn primary">Start Research</button>
+            </div>
+            <div id="research-sessions" class="research-list"></div>
+          </div>
+
+          <!-- YouTube Import -->
+          <div class="card">
+            <h3>📺 YouTube Import</h3>
+            <p>Import video transcripts as knowledge entries.</p>
+            <div class="workflow-row">
+              <input type="text" id="youtube-url" placeholder="YouTube URL..." class="input-lg">
+              <button id="import-youtube" class="btn primary">Import</button>
+            </div>
+            <div id="youtube-status"></div>
+          </div>
+
+          <!-- Training Data Collection -->
+          <div class="card">
+            <h3>🎓 Training Data Curation</h3>
+            <p>Extract Q&A pairs from knowledge entries for fine-tuning datasets.</p>
+            <button id="extract-training" class="btn primary">Extract Q&A Pairs</button>
+            <div id="training-status"></div>
+          </div>
+
+          <!-- Knowledge Generation -->
+          <div class="card wide">
+            <h3>📝 Knowledge Generation</h3>
+            <p>Generate documentation, guides, and reference material from existing knowledge.</p>
+            <div class="workflow-row">
+              <select id="gen-type" class="select-sm">
+                <option value="context_primer">Context Primer</option>
+                <option value="local_guide">Local Model Guide</option>
+              </select>
+              <select id="gen-task" class="select-sm">
+                <option value="general">General</option>
+                <option value="code_review">Code Review</option>
+                <option value="knowledge_extraction">Knowledge Extraction</option>
+                <option value="qa_generation">Q&A Generation</option>
+                <option value="maintenance">Maintenance</option>
+              </select>
+              <button id="generate-doc" class="btn primary">Generate</button>
+            </div>
+            <div id="generated-artifacts" class="artifacts-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ══ Copilot Panel ═════════════════════════════════════ -->
+      <section id="panel-copilot" class="panel">
+        <div class="copilot-grid">
+          <!-- Config -->
+          <div class="card">
+            <h3>⚙️ Configuration</h3>
+            <div id="copilot-config">
+              <p class="muted">Loading configuration...</p>
+            </div>
+          </div>
+
+          <!-- Skills -->
+          <div class="card wide">
+            <h3>🔧 Registered Skills</h3>
+            <div id="copilot-skills">
+              <p class="muted">Loading skills...</p>
+            </div>
+          </div>
+
+          <!-- Prompts -->
+          <div class="card wide">
+            <h3>📝 Stored Prompts</h3>
+            <div class="prompt-toolbar">
+              <button id="load-prompts" class="btn">Refresh</button>
+              <button id="add-prompt-btn" class="btn success">+ Add Prompt</button>
+            </div>
+            <div id="copilot-prompts">
+              <p class="muted">Click Refresh to load prompts.</p>
+            </div>
+          </div>
+
+          <!-- Rules -->
+          <div class="card">
+            <h3>📋 Governance Rules</h3>
+            <div id="copilot-rules">
+              <p class="muted">Loading rules...</p>
+            </div>
+          </div>
+
+          <!-- Sessions -->
+          <div class="card">
+            <h3>📊 Recent Sessions</h3>
+            <div id="copilot-sessions">
+              <p class="muted">Loading sessions...</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- ── Right Sidebar: Artifacts ────────────────────────────── -->
+    <aside id="artifacts-sidebar">
+      <div class="sidebar-header">
+        <h3>Artifacts</h3>
+        <button id="toggle-artifacts" class="btn-icon" title="Toggle">◀</button>
+      </div>
+      <div id="artifacts-list">
+        <p class="muted">Generated documents and reports will appear here.</p>
+      </div>
+    </aside>
+  </div>
+
+  <script src="{{ url_for('static', filename='js/nexus_panel.js') }}"></script>
+</body>
+</html>

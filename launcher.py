@@ -69,6 +69,8 @@ FLASK_SCENES: Dict[str, Dict[str, Any]] = {
                        "port": 5566, "label": "Command Center"},
     "games":   {"cls": "content.scenes.games.games_scene.GamesScene",
                 "port": 5567, "label": "Games Arcade"},
+    "nexus_panel": {"cls": "content.scenes.nexus_panel.nexus_panel_scene.NexusPanelScene",
+                    "port": 5570, "label": "Nexus Control Panel"},
 }
 
 STREAMLIT_APPS: Dict[str, Dict[str, Any]] = {
