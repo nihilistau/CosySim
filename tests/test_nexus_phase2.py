@@ -457,7 +457,7 @@ class TestMCPMemoryTools:
         mock_post.return_value = MagicMock(
             ok=True, json=lambda: {"data": {"id": "mem-tool-1"}}
         )
-        from engine.mcp.cosysim_server import nexus_remember
+        from engine.mcp.devtools_server import nexus_remember
         fn = nexus_remember.fn if hasattr(nexus_remember, "fn") else nexus_remember
         result = json.loads(fn("Test memory", agent_id="copilot"))
         assert result["status"] == "ok"
@@ -469,7 +469,7 @@ class TestMCPMemoryTools:
             ok=True,
             json=lambda: {"data": []}
         )
-        from engine.mcp.cosysim_server import nexus_recall
+        from engine.mcp.devtools_server import nexus_recall
         fn = nexus_recall.fn if hasattr(nexus_recall, "fn") else nexus_recall
         result = json.loads(fn("test query", agent_id="copilot"))
         assert result["status"] == "ok"
@@ -480,7 +480,7 @@ class TestMCPMemoryTools:
             ok=True,
             json=lambda: {"data": []}
         )
-        from engine.mcp.cosysim_server import nexus_memory_context
+        from engine.mcp.devtools_server import nexus_memory_context
         fn = nexus_memory_context.fn if hasattr(nexus_memory_context, "fn") else nexus_memory_context
         result = json.loads(fn(agent_id="copilot"))
         assert result["status"] == "ok"
@@ -490,7 +490,7 @@ class TestMCPMemoryTools:
         mock_post.return_value = MagicMock(
             ok=True, json=lambda: {"data": {"id": "train-tool-1"}}
         )
-        from engine.mcp.cosysim_server import capture_training_data
+        from engine.mcp.devtools_server import capture_training_data
         fn = capture_training_data.fn if hasattr(capture_training_data, "fn") else capture_training_data
         result = json.loads(fn("Hello", "Hi there!"))
         assert result["status"] == "ok"
@@ -500,7 +500,7 @@ class TestMCPMemoryTools:
         mock_post.return_value = MagicMock(
             ok=True, json=lambda: {"data": {"id": "gen-1"}}
         )
-        from engine.mcp.cosysim_server import generate_content
+        from engine.mcp.devtools_server import generate_content
         fn = generate_content.fn if hasattr(generate_content, "fn") else generate_content
         result = json.loads(fn("lola", "greetings"))
         assert result["status"] == "ok"

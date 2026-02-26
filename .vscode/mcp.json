@@ -2,10 +2,20 @@
 	"servers": {
 		"cosysim": {
 			"type": "stdio",
-			"command": "C:\\Files\\Models\\CosySim\\.venv\\Scripts\\python.exe",
+			"command": "python",
 			"args": [
 				"-m",
 				"engine.mcp.cosysim_server"
+			],
+			"cwd": "${workspaceFolder}",
+			"autoStart": true
+		},
+		"cosysim-devtools": {
+			"type": "stdio",
+			"command": "python",
+			"args": [
+				"-m",
+				"engine.mcp.devtools_server"
 			],
 			"cwd": "${workspaceFolder}",
 			"autoStart": true

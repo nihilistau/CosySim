@@ -1071,7 +1071,7 @@ class TestMCPSeedNexus:
 
     def test_seed_nexus_all(self):
         """seed_nexus('all') calls seeder and returns JSON result."""
-        from engine.mcp.cosysim_server import seed_nexus
+        from engine.mcp.devtools_server import seed_nexus
 
         mock_seeder_cls = MagicMock()
         mock_instance = MagicMock()
@@ -1090,7 +1090,7 @@ class TestMCPSeedNexus:
 
     def test_seed_nexus_invalid_source(self):
         """seed_nexus with invalid source returns error JSON."""
-        from engine.mcp.cosysim_server import seed_nexus
+        from engine.mcp.devtools_server import seed_nexus
 
         mock_seeder_cls = MagicMock()
         mock_instance = MagicMock()
@@ -1105,7 +1105,7 @@ class TestMCPSeedNexus:
 
     def test_seed_nexus_handles_exception(self):
         """seed_nexus returns error JSON when seeder raises."""
-        from engine.mcp.cosysim_server import seed_nexus
+        from engine.mcp.devtools_server import seed_nexus
 
         mock_seeder_cls = MagicMock()
         mock_seeder_cls.side_effect = RuntimeError("Nexus down")
@@ -1125,7 +1125,7 @@ class TestMCPNexusMaintain:
     @patch("engine.nexus.self_maintenance.nexus_health_report")
     def test_maintain_health_returns_stats(self, mock_health):
         """nexus_maintain('health') delegates to self_maintenance health_report."""
-        from engine.mcp.cosysim_server import nexus_maintain
+        from engine.mcp.devtools_server import nexus_maintain
 
         mock_health.return_value = {
             "status": "healthy",
@@ -1144,7 +1144,7 @@ class TestMCPNexusMaintain:
     @patch("engine.nexus.self_maintenance.nexus_merge_duplicates")
     def test_maintain_dedup_removes_duplicates(self, mock_dedup):
         """nexus_maintain('dedup') delegates to merge_duplicates dry-run."""
-        from engine.mcp.cosysim_server import nexus_maintain
+        from engine.mcp.devtools_server import nexus_maintain
 
         mock_dedup.return_value = {
             "duplicate_groups": 1,
@@ -1166,7 +1166,7 @@ class TestMCPNexusMaintain:
     @patch("engine.nexus.self_maintenance.nexus_score_entries")
     def test_maintain_cleanup_removes_short_content(self, mock_score):
         """nexus_maintain('score') delegates to score_entries for quality checks."""
-        from engine.mcp.cosysim_server import nexus_maintain
+        from engine.mcp.devtools_server import nexus_maintain
 
         mock_score.return_value = {
             "scored": 5,
@@ -1183,7 +1183,7 @@ class TestMCPNexusMaintain:
     @patch("engine.nexus.self_maintenance.nexus_compact_sessions")
     def test_maintain_reindex_posts_to_api(self, mock_compact):
         """nexus_maintain('compact') delegates to compact_sessions."""
-        from engine.mcp.cosysim_server import nexus_maintain
+        from engine.mcp.devtools_server import nexus_maintain
 
         mock_compact.return_value = {"compacted": 3, "errors": 0, "skipped": 1}
 
@@ -1196,7 +1196,7 @@ class TestMCPNexusMaintain:
     @patch("engine.nexus.self_maintenance.nexus_health_report")
     def test_maintain_returns_error_when_nexus_unavailable(self, mock_health):
         """nexus_maintain returns error JSON when self_maintenance raises."""
-        from engine.mcp.cosysim_server import nexus_maintain
+        from engine.mcp.devtools_server import nexus_maintain
 
         mock_health.side_effect = Exception("Nexus unavailable")
 
@@ -1207,7 +1207,7 @@ class TestMCPNexusMaintain:
 
     def test_maintain_unknown_action_returns_error(self):
         """nexus_maintain with unknown action returns error JSON."""
-        from engine.mcp.cosysim_server import nexus_maintain
+        from engine.mcp.devtools_server import nexus_maintain
 
         result = json.loads(_call_mcp(nexus_maintain, "nonsense"))
 

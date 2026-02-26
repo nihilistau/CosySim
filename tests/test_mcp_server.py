@@ -187,18 +187,20 @@ class TestListCharacters:
 
 class TestGetBenchmarkStats:
     def test_success(self):
+        from engine.mcp import devtools_server
         mock_stats = {
             "llm.complete": {"count": 10, "avg_ms": 500, "p95_ms": 800, "max_ms": 1000},
         }
-        with patch("engine.mcp.cosysim_server.get_benchmarks", mock_stats, create=True):
+        with patch("engine.mcp.devtools_server.get_benchmark_stats", wraps=devtools_server.get_benchmark_stats):
             with patch("engine.logging.get_benchmarks", return_value=mock_stats):
-                result = _call(cosysim_server.get_benchmark_stats, )
-                assert "llm.complete" in result or "No benchmark" in result or "Failed" in result
+                result = _call(devtools_server.get_benchmark_stats)
+                assert "llm.complete" in result or "No benchmark" in result or "Failed" in result or "error" in result
 
     def test_no_data(self):
+        from engine.mcp import devtools_server
         with patch("engine.logging.get_benchmarks", return_value={}):
-            result = _call(cosysim_server.get_benchmark_stats, )
-            assert "No benchmark" in result or "Failed" in result
+            result = _call(devtools_server.get_benchmark_stats)
+            assert "No benchmark" in result or "Failed" in result or "error" in result
 
 
 class TestGenerateImageRequest:

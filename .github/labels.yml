@@ -1,0 +1,38 @@
+# CosySim GitHub Labels
+# Sync with: https://github.com/EndBug/label-sync or manually via GitHub UI
+
+- name: documentation
+  color: "0075ca"
+  description: Documentation improvements or additions
+
+- name: copilot-task
+  color: "7057ff"
+  description: Task for Copilot agent to handle autonomously
+
+- name: auto-fix
+  color: "e4e669"
+  description: Automated fix applied by CI or Copilot
+
+- name: bug
+  color: "d73a4a"
+  description: Something isn't working
+
+- name: enhancement
+  color: "a2eeef"
+  description: New feature or request
+
+- name: engine
+  color: "1d76db"
+  description: Core engine changes (MCP, agents, skills)
+
+- name: scene
+  color: "c5def5"
+  description: Scene-specific changes
+
+- name: nexus
+  color: "fbca04"
+  description: Nexus knowledge system changes
+
+- name: tests
+  color: "bfd4f2"
+  description: Test additions or fixes

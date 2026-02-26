@@ -128,7 +128,7 @@ class TestMCPToolRegistration:
 
     def test_nexus_tools_registered(self):
         import asyncio
-        from engine.mcp.cosysim_server import mcp
+        from engine.mcp.devtools_server import mcp
 
         async def check():
             tools = await mcp.get_tools()
@@ -140,7 +140,7 @@ class TestMCPToolRegistration:
 
     def test_discovery_tools_registered(self):
         import asyncio
-        from engine.mcp.cosysim_server import mcp
+        from engine.mcp.devtools_server import mcp
 
         async def check():
             tools = await mcp.get_tools()
@@ -152,15 +152,16 @@ class TestMCPToolRegistration:
         assert "system_status" in tool_names
 
     def test_total_tool_count(self):
+        """Devtools server should have 30+ tools (Nexus + system + copilot + agent)."""
         import asyncio
-        from engine.mcp.cosysim_server import mcp
+        from engine.mcp.devtools_server import mcp
 
         async def check():
             tools = await mcp.get_tools()
             return list(tools.keys())
 
         tool_names = asyncio.run(check())
-        assert len(tool_names) >= 120, f"Expected 120+ tools, got {len(tool_names)}"
+        assert len(tool_names) >= 30, f"Expected 30+ tools, got {len(tool_names)}"
 
 
 # ═══════════════════════════════════════════════════════════════════════
