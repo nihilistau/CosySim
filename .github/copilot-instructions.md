@@ -277,4 +277,56 @@ python -m engine.nexus.cli status
 | `coding_store_bug` | Record bug analysis + fix |
 | `coding_log_session` | Track dev sessions |
 
+### NLM Forge Skills (NotebookLM-powered)
+| Skill | Use For |
+|-------|---------|
+| `nlm_ask` | Route question through 4-tier NLM-first pipeline |
+| `nlm_batch_ask` | Batch-ask multiple questions via NLM router |
+| `nlm_create_notebook` | Create NLM notebook with sources |
+| `nlm_add_codebase` | Add source files to NLM notebook |
+| `nlm_generate_doc` | Generate study guides, FAQs, briefings |
+| `nlm_distill` | Distill Q&A pairs from notebook |
+| `nlm_decompose` | Break plan into small-model steps |
+| `nlm_analyze` | Analyze source code via NLM |
+| `nlm_solve` | Solve problems with NLM + code context |
+| `nlm_build_topic` | End-to-end knowledge building pipeline |
+
+### NLM CLI (terminal)
+```bash
+python -m engine.nexus.nlm_cli ask "How does the interceptor pipeline work?"
+python -m engine.nexus.nlm_cli batch-ask -f questions.txt -n nb-123
+python -m engine.nexus.nlm_cli distill nb-123 --topic "MCP state" --count 20
+python -m engine.nexus.nlm_cli forge "MCP Framework" --sources https://docs.example.com
+python -m engine.nexus.nlm_cli stats
+```
+
 See `instructions/nexus.instructions.md` for full usage guide.
+
+## NLM-First Workflow — MANDATORY
+
+**Every question should go through the NLM-first router.** This saves compute
+and compounds knowledge over time.
+
+### The 4-Tier Pipeline
+```
+Tier 1: Nexus Q&A Cache  → instant, free (prior answers)
+Tier 2: Nexus FTS Search → fast, free (synthesize from entries)
+Tier 3: NotebookLM Ask   → free Gemini compute (auto-stores for Tier 1)
+Tier 4: LMStudio LLM     → local GPU, LAST RESORT
+```
+
+### Before Every Task
+1. **Search Nexus** — `nexus_search("task topic")` to find existing knowledge
+2. **Check Q&A** — `nexus_ask("key question")` for cached answers
+3. **Batch-ask NLM** — Write out 10-20 questions, send via `nlm_batch_ask`
+4. **Work from answers** — Use NLM knowledge instead of burning LLM tokens
+
+### After Every Task
+1. **Store decisions** — `nexus_add("Decision: ...", content, "decision")`
+2. **Cache Q&A** — `nexus_add_qa("How does X?", "X works by...")`
+3. **Log session** — `nexus_log_session("CosySim")`
+
+### The Compound Effect
+Every answer stored in Nexus is one fewer LLM call in the future.
+Cache hit rate increases over time. NLM calls decrease. The system
+gets smarter the more it's used.

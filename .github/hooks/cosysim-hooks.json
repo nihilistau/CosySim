@@ -7,6 +7,12 @@
         "powershell": "pwsh -File .github/hooks/scripts/log-session.ps1",
         "bash": "mkdir -p .github/hooks/logs && echo \"[HOOK] sessionStart at $(date -Iseconds)\" >> .github/hooks/logs/session.log",
         "timeoutSec": 5
+      },
+      {
+        "type": "command",
+        "powershell": "python -c \"from engine.nexus.copilot_bridge import get_copilot_bridge; import json, sys; data=json.load(sys.stdin) if not sys.stdin.isatty() else {}; ctx=get_copilot_bridge().session_start(data.get('task','')); print(json.dumps(ctx))\"",
+        "bash": "python3 -c \"from engine.nexus.copilot_bridge import get_copilot_bridge; import json,sys; data=json.load(sys.stdin) if not sys.stdin.isatty() else {}; ctx=get_copilot_bridge().session_start(data.get('task','')); print(json.dumps(ctx))\"",
+        "timeoutSec": 10
       }
     ],
     "sessionEnd": [
@@ -15,6 +21,12 @@
         "powershell": "pwsh -File .github/hooks/scripts/log-session.ps1",
         "bash": "echo \"[HOOK] sessionEnd at $(date -Iseconds)\" >> .github/hooks/logs/session.log",
         "timeoutSec": 5
+      },
+      {
+        "type": "command",
+        "powershell": "python -c \"from engine.nexus.copilot_bridge import get_copilot_bridge; import json,sys; data=json.load(sys.stdin) if not sys.stdin.isatty() else {}; get_copilot_bridge().session_end(data.get('summary',''))\"",
+        "bash": "python3 -c \"from engine.nexus.copilot_bridge import get_copilot_bridge; import json,sys; data=json.load(sys.stdin) if not sys.stdin.isatty() else {}; get_copilot_bridge().session_end(data.get('summary',''))\"",
+        "timeoutSec": 10
       }
     ],
     "postToolUse": [
