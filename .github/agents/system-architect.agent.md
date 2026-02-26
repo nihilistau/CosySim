@@ -30,6 +30,13 @@ Available NLM tools: `nlm_ask`, `nlm_batch_ask`, `nlm_distill`, `nlm_decompose`,
 | ComfyUI | External | 8188 | REST API |
 | NotebookLM MCP | NPM | 3000 | Node.js |
 
+### Key Engine Subsystems
+| Component | Path | Purpose |
+|-----------|------|---------|
+| RouterDataCollector | `engine/lmstudio/router_data.py` | Captures training data for model routing |
+| InferenceOrchestrator | `engine/lmstudio/orchestrator.py` | Unified multi-model inference API |
+| NLM Intelligence Layer | `engine/nexus/nlm_engine.py`, `knowledge_forge.py`, `nlm_router.py`, `copilot_bridge.py` | Gemini-powered knowledge synthesis |
+
 ## Your Responsibilities
 
 1. **Cross-Project Decisions** — When a feature spans CosySim + Nexus, decide

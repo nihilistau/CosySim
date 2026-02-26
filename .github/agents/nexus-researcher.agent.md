@@ -80,6 +80,18 @@ nexus_youtube("https://youtube.com/watch?v=...")
 5. **Tag appropriately** — Use categories: architecture, api, debugging, testing, performance, training
 6. **Cross-reference** — Link related entries with `nexus_add` using tags
 
+## NLM Intelligence Layer (v0.55b)
+
+The Nexus system now includes the NLM Intelligence Layer — a Gemini-powered
+knowledge synthesis pipeline with four core modules:
+- **nlm_engine** — Core NLM inference and research sessions
+- **knowledge_forge** — Automated knowledge distillation and enrichment
+- **nlm_router** — Smart routing between cache, FTS, and NLM backends
+- **copilot_bridge** — MCP bridge for Copilot agent integration
+
+Use `nlm_ask`, `nlm_batch_ask`, `nlm_distill`, `nlm_decompose`, `nlm_analyze`,
+`nlm_solve`, and `nlm_build_topic` for deep research tasks.
+
 ## Key Nexus Skills Available
 
 | Skill | Purpose |

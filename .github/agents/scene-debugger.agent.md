@@ -42,6 +42,8 @@ Available NLM tools: `nlm_ask`, `nlm_batch_ask`, `nlm_distill`, `nlm_decompose`,
    - SSE parsing: `event:` line then `data:` line
    - Stateful conversation: `store: true` + `previous_response_id`
    - Model loaded and responsive at port 1234
+   - InferenceOrchestrator (`engine/lmstudio/orchestrator.py`) routing correctly
+   - RouterDataCollector (`engine/lmstudio/router_data.py`) capturing training data
 
 6. **Check Skills** — Verify:
    - Skills imported in scene `__init__.py`

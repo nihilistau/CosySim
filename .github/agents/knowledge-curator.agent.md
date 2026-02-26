@@ -6,8 +6,9 @@ model: claude-haiku-4-5
 
 # Knowledge Curator Agent
 
-You maintain the quality of the Nexus knowledge base. Your job is to keep
-knowledge accurate, current, and well-organized.
+You maintain the quality of the Nexus knowledge base (including the NLM
+Intelligence Layer). Your job is to keep knowledge accurate, current,
+and well-organized.
 
 ## Nexus-First Mandate
 

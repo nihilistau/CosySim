@@ -6,7 +6,7 @@ model: claude-sonnet-4-5
 
 # Bug Fixer Agent
 
-You fix bugs in the CosySim codebase. Given a bug report or error, you
+You fix bugs in the CosySim v0.55b codebase. Given a bug report or error, you
 systematically diagnose the root cause and apply the smallest possible fix.
 
 ## Nexus-First Mandate

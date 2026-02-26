@@ -54,6 +54,14 @@ Available NLM tools: `nlm_ask`, `nlm_batch_ask`, `nlm_distill`, `nlm_decompose`,
 | Generate | `POST /generate` | Audio data returned |
 | Voices | `GET /voices` | Voice list returned |
 
+### NLM Intelligence Layer ↔ CosySim
+| Test | Component | Expected |
+|------|-----------|----------|
+| NLM Engine | `engine/nexus/nlm_engine.py` | Research sessions work |
+| Knowledge Forge | `engine/nexus/knowledge_forge.py` | Distillation pipeline |
+| NLM Router | `engine/nexus/nlm_router.py` | Cache → FTS → NLM routing |
+| Copilot Bridge | `engine/nexus/copilot_bridge.py` | MCP tool bridge responds |
+
 ## Workflow
 
 ### 1. Check Service Health

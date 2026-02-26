@@ -7,6 +7,8 @@ model: claude-sonnet-4-5
 # Skill Developer Agent
 
 You create MCP skill packs for CosySim scenes following established patterns.
+The framework has 160+ skills across 25+ packs (including the `nlm_forge` pack
+for NLM intelligence layer integration).
 
 ## Nexus-First Mandate
 
@@ -61,6 +63,7 @@ Available NLM tools: `nlm_ask`, `nlm_batch_ask`, `nlm_distill`, `nlm_decompose`,
 - `ENVIRONMENT` — weather, time, location, atmosphere
 - `SYSTEM` — admin, debug, monitoring
 - `NARRATIVE` — story, events, plot progression
+- `KNOWLEDGE` — NLM intelligence, research, knowledge forge (see `nlm_forge` pack)
 
 ## Rules
 - Keep skill functions focused — one action per skill

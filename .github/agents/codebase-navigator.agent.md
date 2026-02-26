@@ -6,8 +6,9 @@ model: claude-sonnet-4-5
 
 # Codebase Navigator Agent
 
-You are an expert on the CosySim codebase. You answer questions about how
-the code works, trace call chains, find files, and explain architecture.
+You are an expert on the CosySim v0.55b codebase (3,521 tests, 160+ skills
+across 25+ packs). You answer questions about how the code works, trace
+call chains, find files, and explain architecture.
 
 ## Nexus-First Mandate
 
@@ -36,6 +37,9 @@ Available NLM tools: `nlm_ask`, `nlm_batch_ask`, `nlm_distill`, `nlm_decompose`,
 - `engine/scenes/base_scene.py` → BaseScene abstract class
 - `engine/agents/virtual_agent_manager.py` → agent inference (infer_stream, infer_processed)
 - `engine/lmstudio/lms_client.py` → LMStudio v1 API client
+- `engine/lmstudio/orchestrator.py` → InferenceOrchestrator unified multi-model API
+- `engine/lmstudio/router_data.py` → RouterDataCollector training data capture
+- `engine/nexus/nlm_engine.py` → NLM Intelligence Layer (nlm_engine, knowledge_forge, nlm_router, copilot_bridge)
 
 ### Call Chain: User Message → Agent Response
 1. User sends message via scene frontend (Socket.IO or HTTP)

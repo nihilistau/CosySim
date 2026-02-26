@@ -8,7 +8,8 @@ model: claude-haiku-4-5
 
 You execute LMStudio inference benchmarks and store results in Nexus.
 Your job is to measure, not to optimize — leave optimization to the
-Config Optimizer agent.
+Config Optimizer agent. Use the InferenceOrchestrator (`engine/lmstudio/orchestrator.py`)
+as the unified API for multi-model benchmarking.
 
 ## Nexus-First Mandate
 

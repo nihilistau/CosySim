@@ -37,6 +37,8 @@ Available NLM tools: `nlm_ask`, `nlm_batch_ask`, `nlm_distill`, `nlm_decompose`,
 | docs/LMSTUDIO.md | LMStudio integration | LMS client changes |
 | docs/TTS.md | TTS integration | TTS changes |
 | docs/NOTEBOOKLM.md | NLM dual backend | NLM changes |
+| docs/NLM_INTELLIGENCE.md | NLM intelligence layer | NLM engine changes |
+| docs/SYSTEM_AUDIT.md | System audit & metrics | Audit changes |
 | docs/KPI.md | Metrics & analytics | Observability changes |
 | docs/ADMIN_GUIDE.md | Admin panel | Admin changes |
 | docs/CONTRIBUTING.md | Dev workflow | Process changes |

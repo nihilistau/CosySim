@@ -39,6 +39,8 @@ Available NLM tools: `nlm_ask`, `nlm_batch_ask`, `nlm_distill`, `nlm_decompose`,
 - Which models handle which task types
 - CPU vs GPU assignments
 - Overflow routing thresholds
+- InferenceOrchestrator (`engine/lmstudio/orchestrator.py`) unified API configuration
+- RouterDataCollector training data capture settings
 
 ## Workflow
 

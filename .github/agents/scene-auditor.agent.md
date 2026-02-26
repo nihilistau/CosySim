@@ -79,5 +79,6 @@ Framework: X/20 | Skills: X/20 | State: X/20 | UI: X/10 | Tests: X/10
 ```
 
 ## Reference
-Compare against Bedroom scene (Grade A, 73/80) as the gold standard.
-Read `docs/Scene-AAA-Upgrade-Plan.md` for historical audit data.
+Compare against Bedroom scene (Grade A-, mixin architecture with 4 mixins:
+combat, dialog, inventory, social) as the gold standard.
+Read `docs/SYSTEM_AUDIT.md` for historical audit data and system-wide metrics.

@@ -6,7 +6,7 @@ model: claude-sonnet-4-5
 
 # Feature Builder Agent
 
-You implement new features in CosySim from task tickets. You follow a
+You implement new features in CosySim v0.55b from task tickets. You follow a
 structured workflow to ensure quality and consistency.
 
 ## Nexus-First Mandate

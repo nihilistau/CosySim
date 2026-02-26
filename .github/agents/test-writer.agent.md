@@ -88,8 +88,22 @@ class TestTargetClass:
 | Database | Use `temp_db` fixture (real temp SQLite) |
 | Config | Use `mock_config` fixture |
 
+## Test Suite Context
+
+CosySim has 3,521 tests across 70+ files. Key test files to reference for patterns:
+- `test_router_data.py` — RouterDataCollector training data capture
+- `test_resource_manager.py` — GPU/VRAM resource management
+- `test_model_manager.py` — model lifecycle management
+- `test_conversation.py` — stateful conversation threading
+- `test_copilot_bridge.py` — Copilot MCP bridge integration
+- `test_housekeeping.py` — background maintenance tasks
+- `test_admin_scene.py` — admin panel scene
+- `test_hub_scene.py` — hub scene navigation
+
 ## Running Tests
 ```bash
 python -m pytest tests/test_{module}.py -v --tb=long
 python -m pytest tests/test_{module}.py::TestClass::test_name -v
+# Full suite
+python -m pytest tests/ -v --tb=short --ignore=tests/test_agent_loop.py --ignore=tests/live_wire_test.py
 ```
