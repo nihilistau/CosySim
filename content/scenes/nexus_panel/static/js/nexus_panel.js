@@ -47,6 +47,29 @@ function updateClock() {
 setInterval(updateClock, 1000);
 updateClock();
 
+// ── NLM Status Indicator ────────────────────────────────────────────
+async function checkNLMStatus() {
+  try {
+    const data = await api('/api/nlm/status');
+    const el = document.getElementById('nlm-status');
+    if (!el) return;
+
+    const tiers = data.tiers || {};
+    const parts = Object.values(tiers).map(t => {
+      const icon = t.available ? '🟢' : '🔴';
+      return `${icon} ${t.label}`;
+    });
+
+    el.innerHTML = parts.join(' · ');
+    el.title = data.nlm_available
+      ? 'NLM Intelligence Layer: Online'
+      : 'NLM offline — using cache/FTS fallback';
+  } catch {
+    const el = document.getElementById('nlm-status');
+    if (el) el.innerHTML = '⚪ NLM status unknown';
+  }
+}
+
 // ── Fetch Helper ────────────────────────────────────────────────────
 async function api(path, opts = {}) {
   const controller = new AbortController();
@@ -628,7 +651,9 @@ async function sendChat() {
   });
 
   const response = result.response || result.error || 'No response';
-  const meta = result.source ? `Source: ${result.source}` : '';
+  const tierLabel = result.source_tier || result.source || '';
+  const tierBadge = tierLabel ? `[${tierLabel}]` : '';
+  const meta = tierBadge ? `Source: ${tierBadge}` : '';
   const conf = result.confidence != null ? ` · Confidence: ${Math.round(result.confidence * 100)}%` : '';
   replaceLastMsg('assistant', response, meta + conf);
 }
@@ -1225,7 +1250,9 @@ function esc(str) {
 
 // ── Init ────────────────────────────────────────────────────────────
 loadDashboard();
+checkNLMStatus();
 pollTimer = setInterval(() => {
   checkStatus();
   loadActivity();
 }, 15000);
+setInterval(checkNLMStatus, 30000);

@@ -455,13 +455,50 @@ class NexusPanelScene(BaseScene, NexusSceneMixin):
 
         @app.route("/api/nlm/status")
         def api_nlm_status():
-            client = self._get_client()
-            if not client:
-                return jsonify({"error": "Nexus unavailable"}), 503
+            """Check NLM service availability and readiness."""
+            status: Dict[str, Any] = {"nlm_available": False, "proxy_url": "", "tiers": {}}
             try:
-                return jsonify(client.nlm_status())
+                cfg = get_config()
+                enabled = cfg.get("notebooklm.enabled", False)
+                proxy_url = cfg.get("notebooklm.proxy_url", "http://localhost:8800")
+                status["enabled"] = enabled
+                status["proxy_url"] = proxy_url
+
+                # Check Tier 1: Q&A cache
+                status["tiers"]["cache"] = {"available": True, "label": "Q&A Cache"}
+
+                # Check Tier 2: FTS search
+                status["tiers"]["fts"] = {"available": True, "label": "Full-Text Search"}
+
+                # Check Tier 3: NLM proxy
+                if enabled:
+                    try:
+                        import urllib.request
+                        req = urllib.request.Request(f"{proxy_url}/health", method="GET")
+                        with urllib.request.urlopen(req, timeout=3) as resp:
+                            status["tiers"]["nlm"] = {"available": resp.status == 200, "label": "NotebookLM"}
+                            status["nlm_available"] = True
+                    except Exception:
+                        status["tiers"]["nlm"] = {"available": False, "label": "NotebookLM (offline)"}
+                else:
+                    status["tiers"]["nlm"] = {"available": False, "label": "NotebookLM (disabled)"}
+
+                # Check Tier 4: LLM fallback
+                try:
+                    import urllib.request
+                    lms_url = cfg.get("lmstudio.host", "localhost")
+                    lms_port = cfg.get("lmstudio.port", 1234)
+                    req = urllib.request.Request(f"http://{lms_url}:{lms_port}/api/v1/models", method="GET")
+                    with urllib.request.urlopen(req, timeout=3) as resp:
+                        status["tiers"]["llm"] = {"available": resp.status == 200, "label": "LMStudio LLM"}
+                except Exception:
+                    status["tiers"]["llm"] = {"available": False, "label": "LMStudio (offline)"}
+
             except Exception as exc:
-                return jsonify({"error": str(exc)}), 500
+                logger.warning("NLM status check failed: %s", exc)
+                status["error"] = str(exc)
+
+            return jsonify(status)
 
         @app.route("/api/nlm/notebooks")
         def api_nlm_notebooks():
@@ -543,6 +580,7 @@ class NexusPanelScene(BaseScene, NexusSceneMixin):
                     return jsonify({
                         "response": result["answer"],
                         "source": result.get("source_tier", "router"),
+                        "source_tier": result.get("source_tier", "router"),
                         "confidence": result.get("confidence", 0.7),
                         "sources": result.get("sources", [])[:5],
                     })
@@ -562,6 +600,7 @@ class NexusPanelScene(BaseScene, NexusSceneMixin):
                     return jsonify({
                         "response": answer,
                         "source": source,
+                        "source_tier": source,
                         "confidence": confidence,
                         "sources": sources[:5],
                     })
@@ -584,6 +623,7 @@ class NexusPanelScene(BaseScene, NexusSceneMixin):
                     return jsonify({
                         "response": response,
                         "source": "search",
+                        "source_tier": "fts",
                         "confidence": 0.5,
                         "sources": [r.get("title", "") for r in results[:3]],
                     })
@@ -594,6 +634,7 @@ class NexusPanelScene(BaseScene, NexusSceneMixin):
                 "response": "I couldn't find relevant information. Try rephrasing your "
                             "question or use the Knowledge Explorer to browse entries directly.",
                 "source": "none",
+                "source_tier": "none",
                 "confidence": 0,
             })
 
@@ -1622,6 +1663,52 @@ class NexusPanelScene(BaseScene, NexusSceneMixin):
             from flask import send_file
             return send_file(str(path), as_attachment=True,
                              download_name=filename, mimetype="application/jsonl")
+
+        # ──── Router Training Data ────
+
+        @app.route("/api/router-data/stats")
+        def router_data_stats():
+            """Get router training data collection stats."""
+            try:
+                from engine.lmstudio.router_data import get_router_data_collector
+                collector = get_router_data_collector()
+                stats = collector.get_stats()
+                return jsonify(stats)
+            except Exception as e:
+                return jsonify({"error": str(e), "records": 0})
+
+        @app.route("/api/router-data/export", methods=["POST"])
+        def router_data_export():
+            """Export router training data as JSONL."""
+            try:
+                from engine.lmstudio.router_data import get_router_data_collector
+                collector = get_router_data_collector()
+                body = request.get_json(silent=True) or {}
+                path = body.get("path", "training/datasets/router_live.jsonl")
+                count = collector.export_jsonl(path)
+                return jsonify({"exported": count, "path": path})
+            except Exception as e:
+                return jsonify({"error": str(e)}), 500
+
+        @app.route("/api/router-data/readiness")
+        def router_data_readiness():
+            """Check if we have enough data to start training."""
+            try:
+                from engine.lmstudio.router_data import get_router_data_collector
+                collector = get_router_data_collector()
+                stats = collector.get_stats()
+                total = stats.get("total_records", 0)
+                success_rate = stats.get("success_rate", 0)
+                ready = total >= 100 and success_rate > 0.5
+                return jsonify({
+                    "ready": ready,
+                    "total_records": total,
+                    "success_rate": success_rate,
+                    "min_required": 100,
+                    "recommendation": "Ready for training!" if ready else f"Need {max(0, 100 - total)} more records",
+                })
+            except Exception as e:
+                return jsonify({"ready": False, "error": str(e)})
 
     def _generate_suggestions(
         self, question: str, answer: str, notebook_id: Optional[str] = None
