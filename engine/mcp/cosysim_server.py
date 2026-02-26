@@ -3518,10 +3518,10 @@ def resource_scene_status(scene_name: str) -> str:
 def run_server(mode: str = "stdio"):
     """Start the MCP server."""
     if mode == "http":
-        print("Starting CosySim MCP server in HTTP mode...")
+        logger.info("Starting CosySim MCP server in HTTP mode...")
         mcp.run(transport="sse")
     else:
-        print("Starting CosySim MCP server in stdio mode...")
+        logger.info("Starting CosySim MCP server in stdio mode...")
         mcp.run()
 
 

@@ -192,7 +192,7 @@ class BaseScene(ABC):
             try:
                 self.load_character(char_id)
             except Exception as e:
-                print(f"Warning: Could not load character {char_id}: {e}")
+                logger.warning(f"Could not load character {char_id}: {e}", exc_info=True)
 
         # Apply scene configuration
         self.scene_config['settings'] = scene_asset.config

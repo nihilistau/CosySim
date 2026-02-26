@@ -218,10 +218,9 @@ if __name__ == "__main__":
 
     app = create_bridge_app()
 
-    print(f"\n🌉 CosySim Web Bridge starting on http://{args.host}:{args.port}")
-    print(f"   MCP endpoint: http://localhost:{args.port}/mcp/sse")
-    print(f"   Streaming:    POST http://localhost:{args.port}/api/chat/stream")
-    print(f"   Upload:       POST http://localhost:{args.port}/api/upload")
-    print()
+    logger.info(f"🌉 CosySim Web Bridge starting on http://{args.host}:{args.port}")
+    logger.info(f"   MCP endpoint: http://localhost:{args.port}/mcp/sse")
+    logger.info(f"   Streaming:    POST http://localhost:{args.port}/api/chat/stream")
+    logger.info(f"   Upload:       POST http://localhost:{args.port}/api/upload")
 
     uvicorn.run(app, host=args.host, port=args.port)
