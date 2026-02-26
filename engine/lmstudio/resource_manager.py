@@ -150,7 +150,7 @@ class ResourceManager:
         # Agent → model_id mapping
         self._agent_models: Dict[str, str] = {}
 
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
 
         # Background task queue and worker
         self._task_queue: Deque[BackgroundTask] = deque()
