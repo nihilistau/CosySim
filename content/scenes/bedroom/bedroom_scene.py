@@ -35,6 +35,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 from engine.scenes.base_scene import BaseScene
+from engine.scenes.nexus_mixin import NexusSceneMixin
 from engine.mcp.framework import MCPSceneMixin
 from engine.agents.agent_loop import AgentLoop
 from content.scenes.bedroom.bedroom_rules import register_bedroom_rules
@@ -1062,7 +1063,7 @@ def _build_bedroom_map() -> SceneMap:
     return sm
 
 
-class BedroomScene(BaseScene, MCPSceneMixin, mcp_scene_id="bedroom"):
+class BedroomScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="bedroom"):
     """Adult multi-agent roleplay bedroom — v4."""
 
     SCENE_METADATA = {
@@ -1119,6 +1120,9 @@ class BedroomScene(BaseScene, MCPSceneMixin, mcp_scene_id="bedroom"):
             "director_in_scene": False,
         }
         self._refresh_location_state()
+
+        # Nexus knowledge integration
+        self.nexus_init("bedroom")
 
         # Flask
         self.app = Flask(
@@ -2525,6 +2529,12 @@ class BedroomScene(BaseScene, MCPSceneMixin, mcp_scene_id="bedroom"):
             "character_id": character_id,
             "action": action.get("action", ""),
         })
+        # Store significant interactions in Nexus
+        self.nexus_store_event(
+            action_type,
+            f"{char_name}: {action.get('message', action_type)[:120]}",
+            tags=[character_id, action_type],
+        )
 
     # ── BaseScene interface──────────────────────────────────────────────
     def get_plugin_info(self) -> dict:
@@ -2561,7 +2571,9 @@ class BedroomScene(BaseScene, MCPSceneMixin, mcp_scene_id="bedroom"):
             get_framework().save_state()
         except Exception:
             pass
-        print("Bedroom scene stopped.")
+        # Flush Nexus event buffer
+        self.nexus_flush()
+        logger.info("Bedroom scene stopped.")
 
     def _on_env_change(self, evt) -> None:
         """React to environment_change events from the framework event bus."""
