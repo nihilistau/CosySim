@@ -174,16 +174,21 @@ async function searchEntries() {
 
 function renderEntryList(entries) {
   const el = document.getElementById('entry-list');
+  const bulkBtn = document.getElementById('bulk-delete-btn');
   if (entries.length === 0) {
     el.innerHTML = '<p class="muted center" style="padding:20px">No entries found</p>';
+    bulkBtn?.classList.add('hidden');
     return;
   }
   el.innerHTML = entries.map((e, i) => `
     <div class="entry-item" data-idx="${i}">
-      <div class="entry-title">${esc(e.title || 'Untitled')}</div>
-      <div class="entry-meta">
-        <span class="entry-type">${esc(e.content_type || 'note')}</span>
-        ${e.category ? `<span style="margin-left:6px">${esc(e.category)}</span>` : ''}
+      <input type="checkbox" class="entry-check" data-id="${esc(e.id || '')}" onclick="event.stopPropagation(); toggleBulkBtn()">
+      <div style="flex:1">
+        <div class="entry-title">${esc(e.title || 'Untitled')}</div>
+        <div class="entry-meta">
+          <span class="entry-type">${esc(e.content_type || 'note')}</span>
+          ${e.category ? `<span style="margin-left:6px">${esc(e.category)}</span>` : ''}
+        </div>
       </div>
     </div>
   `).join('');
@@ -200,6 +205,8 @@ function renderEntryList(entries) {
 function showEntry(e) {
   const el = document.getElementById('entry-detail');
   const tags = (e.tags || []).map(t => `<span class="tag">${esc(t)}</span>`).join('');
+  const isCode = (e.content_type === 'code');
+  const contentClass = isCode ? 'detail-content code-content' : 'detail-content';
   el.innerHTML = `
     <h2>${esc(e.title || 'Untitled')}</h2>
     <div class="detail-meta">
@@ -207,12 +214,51 @@ function showEntry(e) {
       ${e.category ? ` · ${esc(e.category)}` : ''}
       ${e.id ? ` · ID: ${esc(e.id)}` : ''}
       ${e.created_at ? ` · ${new Date(e.created_at).toLocaleString()}` : ''}
-      <button class="btn danger" style="float:right;font-size:11px;padding:2px 8px"
-              onclick="deleteEntry('${esc(e.id || '')}')">Delete</button>
+      <span style="float:right;display:flex;gap:4px">
+        <button class="btn primary" style="font-size:11px;padding:2px 8px"
+                onclick="editEntry('${esc(e.id || '')}')">Edit</button>
+        <button class="btn danger" style="font-size:11px;padding:2px 8px"
+                onclick="deleteEntry('${esc(e.id || '')}')">Delete</button>
+      </span>
     </div>
-    <div class="detail-content">${esc(e.content || '')}</div>
+    <div class="${contentClass}" id="entry-content-view">${esc(e.content || '')}</div>
+    <div id="entry-edit-area" class="hidden">
+      <textarea id="edit-content" class="textarea-full" rows="10">${esc(e.content || '')}</textarea>
+      <div style="margin-top:8px;display:flex;gap:8px">
+        <button class="btn primary" onclick="saveEditedEntry('${esc(e.id || '')}')">Save</button>
+        <button class="btn" onclick="cancelEdit()">Cancel</button>
+      </div>
+    </div>
     ${tags ? `<div class="detail-tags">${tags}</div>` : ''}
   `;
+}
+
+function editEntry(id) {
+  document.getElementById('entry-content-view')?.classList.add('hidden');
+  document.getElementById('entry-edit-area')?.classList.remove('hidden');
+}
+
+function cancelEdit() {
+  document.getElementById('entry-content-view')?.classList.remove('hidden');
+  document.getElementById('entry-edit-area')?.classList.add('hidden');
+}
+
+async function saveEditedEntry(id) {
+  const content = document.getElementById('edit-content')?.value;
+  if (!id || content == null) return;
+  const result = await api(`/api/entry/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content })
+  });
+  if (result.error) {
+    alert('Save failed: ' + result.error);
+  } else {
+    cancelEdit();
+    document.getElementById('entry-content-view').textContent = content;
+    const idx = currentEntries.findIndex(e => e.id === id);
+    if (idx >= 0) currentEntries[idx].content = content;
+  }
 }
 
 async function deleteEntry(id) {
@@ -222,6 +268,30 @@ async function deleteEntry(id) {
   document.getElementById('entry-detail').innerHTML =
     '<p class="muted center">Entry deleted</p>';
 }
+
+function toggleBulkBtn() {
+  const checked = document.querySelectorAll('.entry-check:checked');
+  const btn = document.getElementById('bulk-delete-btn');
+  if (checked.length > 0) {
+    btn?.classList.remove('hidden');
+    btn.textContent = `Delete Selected (${checked.length})`;
+  } else {
+    btn?.classList.add('hidden');
+  }
+}
+
+document.getElementById('bulk-delete-btn')?.addEventListener('click', async () => {
+  const checked = document.querySelectorAll('.entry-check:checked');
+  if (checked.length === 0) return;
+  if (!confirm(`Delete ${checked.length} entries?`)) return;
+  for (const cb of checked) {
+    await api('/api/entry/' + cb.dataset.id, { method: 'DELETE' });
+  }
+  loadEntries();
+  document.getElementById('entry-detail').innerHTML =
+    '<p class="muted center">Entries deleted</p>';
+  document.getElementById('bulk-delete-btn')?.classList.add('hidden');
+});
 
 document.getElementById('search-btn').addEventListener('click', searchEntries);
 document.getElementById('search-input').addEventListener('keydown', e => {
