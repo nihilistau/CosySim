@@ -181,13 +181,13 @@ class VirtualAgentManager:
                         self._router._sdk_client = get_sdk_client()
                         has_backend = True
                 except Exception:
-                    pass
+                    logger.debug("Suppressed exception", exc_info=True)
                 try:
                     from engine.lmstudio.lms_client import get_lms_client
                     self._router._rest_client = get_lms_client()
                     has_backend = True
                 except Exception:
-                    pass
+                    logger.debug("Suppressed exception", exc_info=True)
 
                 if not has_backend:
                     self._router = None
@@ -248,7 +248,7 @@ class VirtualAgentManager:
                     collector = get_metrics_collector()
                     on_metrics = collector.on_pipeline_result
                 except Exception:
-                    pass
+                    logger.debug("Suppressed exception", exc_info=True)
 
                 # Optional: tool executor for pre-warming
                 tool_executor = None
@@ -258,7 +258,7 @@ class VirtualAgentManager:
                     if registry:
                         tool_executor = lambda name, ctx: registry.invoke(name, **ctx)
                 except Exception:
-                    pass
+                    logger.debug("Suppressed exception", exc_info=True)
 
                 self._pipeline = VirtualPipeline(
                     vam=self,
@@ -327,7 +327,7 @@ class VirtualAgentManager:
                     if chunk:
                         yield chunk
             except StopIteration:
-                pass
+                logger.debug("Suppressed exception", exc_info=True)
 
         result = pipeline.execute(request, stream_fn=stream_fn)
 
@@ -403,7 +403,7 @@ class VirtualAgentManager:
                     from engine.lmstudio.conversation import get_conversation_manager
                     get_conversation_manager().delete(agent.conversation_id or "")
                 except Exception:
-                    pass
+                    logger.debug("Suppressed exception", exc_info=True)
                 logger.info("Unregistered VirtualAgent: %s", agent.name)
             return agent
 
@@ -749,7 +749,7 @@ class VirtualAgentManager:
                 conv.model = model
                 conv.invalidate()
         except Exception:
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
         return True
 
     def set_all_models(self, model: str) -> int:
@@ -884,7 +884,7 @@ class VirtualAgentManager:
                 if integration:
                     cfg.integrations = [integration]
             except Exception:
-                pass
+                logger.debug("Suppressed exception", exc_info=True)
 
         # ── v3.3: Router dispatch for stateless calls ──
         router = self.get_router()

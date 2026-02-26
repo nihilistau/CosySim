@@ -184,7 +184,7 @@ class NexusMemory:
                         try:
                             imp = int(t.split(":")[1]) / 10.0
                         except (ValueError, IndexError):
-                            pass
+                            logger.debug("Suppressed exception", exc_info=True)
 
                 if imp < min_importance:
                     continue
@@ -265,7 +265,7 @@ class NexusMemory:
                     for mem in stored[:5]:
                         parts.append(f"  {mem[:200]}")
         except Exception:
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
 
         context = "\n".join(parts)
         if len(context) > max_chars:

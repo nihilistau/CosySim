@@ -107,7 +107,7 @@ class NotebookLMProxy:
                 self._process.kill()
                 self._process.wait(timeout=3)
             except OSError:
-                pass
+                logger.debug("Suppressed exception", exc_info=True)
             logger.info("notebooklm-mcp process stopped")
             self._process = None
 
@@ -168,7 +168,7 @@ class NotebookLMProxy:
                     logger.info("notebooklm-mcp server is healthy")
                     return True
             except (urllib.error.URLError, OSError):
-                pass
+                logger.debug("Suppressed exception", exc_info=True)
             time.sleep(_HEALTH_POLL_INTERVAL)
         logger.error("notebooklm-mcp did not become healthy within %ss", _HEALTH_TIMEOUT)
         return False

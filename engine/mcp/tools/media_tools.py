@@ -129,7 +129,7 @@ def search_web_logic(query: str, max_results: int = 5) -> str:
         if results:
             return json.dumps(results, indent=2)
     except Exception:
-        pass
+        logger.debug("Suppressed exception", exc_info=True)
 
     # Fallback: return a note that web search is unavailable offline
     return json.dumps([{

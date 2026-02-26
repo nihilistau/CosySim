@@ -153,7 +153,7 @@ def api_agent_detail(agent_id: str):
                 "tags": list(char_node._tags),
             }
         except Exception:
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
 
         return jsonify({
             "ok": True,
@@ -309,7 +309,7 @@ def api_events():
                     yield f"data: {json.dumps(evt)}\n\n"
                 time.sleep(1.0)
         except GeneratorExit:
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
         except Exception as exc:
             yield f"data: {json.dumps({'error': str(exc)})}\n\n"
 
@@ -708,7 +708,7 @@ def api_scene_summary():
                 if scene_obj:
                     scene_data["metadata"] = scene_obj.scene_metadata
             except Exception:
-                pass
+                logger.debug("Suppressed exception", exc_info=True)
             # Include heat for scene conversations if available
             try:
                 from engine.mcp.scene_rules_engine import get_conversation_heat
@@ -721,7 +721,7 @@ def api_scene_summary():
                 if scene_heat:
                     scene_data["heat"] = scene_heat
             except Exception:
-                pass
+                logger.debug("Suppressed exception", exc_info=True)
             # Include character states for the scene
             try:
                 from engine.mcp.state_coordinator import get_coordinator
@@ -745,7 +745,7 @@ def api_scene_summary():
                     if char_states:
                         scene_data["characters"] = char_states
             except Exception:
-                pass
+                logger.debug("Suppressed exception", exc_info=True)
             summary[scene_id] = scene_data
 
         return jsonify({"ok": True, "scenes": summary})
@@ -892,7 +892,7 @@ def api_notebooklm_status():
             proxy = get_notebooklm_proxy()
             running = proxy.is_running()
         except Exception:
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
         return jsonify({
             "ok": True,
             "enabled": nlm_cfg.get("enabled", False),
@@ -917,7 +917,7 @@ def _register_socketio_events(socketio) -> None:
             snap = bus.snapshot()
             emit("overlay_activity", snap)
         except Exception:
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
 
     @socketio.on("overlay_refresh", namespace="/overlay")
     def on_overlay_refresh():
@@ -928,7 +928,7 @@ def _register_socketio_events(socketio) -> None:
             snap = bus.snapshot()
             emit("overlay_activity", snap)
         except Exception:
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
 
 
 def overlay_emit(event: str, data: dict) -> None:
@@ -938,7 +938,7 @@ def overlay_emit(event: str, data: dict) -> None:
         try:
             sio.emit(event, data, namespace="/overlay")
         except Exception:
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
 
 
 # ── Mount helper ────────────────────────────────────────────────────────
@@ -1002,7 +1002,7 @@ def mount_overlay(app, socketio=None) -> None:
                     data = data.replace("</body>", snippet + "</body>")
                     response.set_data(data)
             except Exception:
-                pass
+                logger.debug("Suppressed exception", exc_info=True)
         return response
 
     logger.info("Control overlay mounted at /overlay/")

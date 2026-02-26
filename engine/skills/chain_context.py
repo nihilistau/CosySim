@@ -27,6 +27,9 @@ Usage (skill side)::
 
 import threading
 from typing import Any, Dict, Optional
+import logging
+
+logger = logging.getLogger(__name__)
 
 _local = threading.local()
 
@@ -52,7 +55,7 @@ def set_chain_context(
             from engine.mcp.framework import get_framework
             ctx["_mcp_char"] = get_framework().get_character(character_id)
         except Exception:
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
     _local.chain_ctx = ctx
 
 

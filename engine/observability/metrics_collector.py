@@ -249,7 +249,7 @@ class MetricsCollector:
             self._last_pipeline_summary = summary
             self._emit("metric_pipeline", summary)
         except Exception:
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
 
     # ── Helpers ──────────────────────────────────────────────────────
 
@@ -268,7 +268,7 @@ class MetricsCollector:
             try:
                 self._emit_fn(event, data)
             except Exception:
-                pass
+                logger.debug("Suppressed exception", exc_info=True)
 
     @staticmethod
     def _default_rules() -> List[AlertRule]:

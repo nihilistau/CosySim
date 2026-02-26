@@ -152,7 +152,7 @@ def _try_parse(text: str) -> Optional[Dict[str, Any]]:
         if isinstance(obj, dict):
             return obj
     except json.JSONDecodeError:
-        pass
+        logger.debug("Suppressed exception", exc_info=True)
 
     # Try fixing trailing commas
     cleaned = re.sub(r",\s*([}\]])", r"\1", text)
@@ -161,7 +161,7 @@ def _try_parse(text: str) -> Optional[Dict[str, Any]]:
         if isinstance(obj, dict):
             return obj
     except json.JSONDecodeError:
-        pass
+        logger.debug("Suppressed exception", exc_info=True)
 
     return None
 
@@ -377,7 +377,7 @@ class ContentRouter:
                 try:
                     parsed.mood_intensity = float(mood_match.group(2))
                 except ValueError:
-                    pass
+                    logger.debug("Suppressed exception", exc_info=True)
         elif "MOOD" in parsed.tags:
             parsed.mood = parsed.tags["MOOD"][0].lower()
 

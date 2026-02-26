@@ -1,0 +1,31 @@
+# CosySim Code Ownership
+# Solo project — documents which areas are most critical and who maintains them.
+# Entries are ordered by priority (most critical first).
+
+# Core framework — highest impact, change carefully
+/engine/mcp/                    @nihilistau
+/engine/agents/                 @nihilistau
+/engine/skills/                 @nihilistau
+/engine/pipeline/               @nihilistau
+
+# Infrastructure
+/engine/lmstudio/               @nihilistau
+/engine/config.py               @nihilistau
+/engine/config_validator.py     @nihilistau
+/config/                        @nihilistau
+
+# Knowledge system
+/engine/nexus/                  @nihilistau
+
+# Scenes
+/content/scenes/                @nihilistau
+/engine/scenes/                 @nihilistau
+
+# Tests
+/tests/                         @nihilistau
+
+# CI/CD and Copilot
+/.github/                       @nihilistau
+
+# Documentation
+/docs/                          @nihilistau

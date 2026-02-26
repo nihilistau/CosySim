@@ -161,7 +161,7 @@ class RouterMessageInjector(InterceptorBase):
                         f"\n(The player just came from the {prev} scene.)"
                     )
         except Exception:
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
 
         if not pending:
             return
@@ -1082,7 +1082,7 @@ class LoungeSceneInterceptor(InterceptorBase):
                 if conv_directive:
                     lines.append(f"[Conversation pacing] {conv_directive}")
             except Exception:
-                pass
+                logger.debug("Suppressed exception", exc_info=True)
 
             injection = "\n\n[LOUNGE MCP CONTEXT]\n" + "\n".join(lines) + "\n[/LOUNGE MCP CONTEXT]"
             ctx["system_prompt"] = ctx.get("system_prompt", "") + injection
@@ -1134,7 +1134,7 @@ class GallerySceneInterceptor(InterceptorBase):
                 energy = snapshot.get("energy", 50)
                 lines.append(f"Your current mood: {mood} (energy: {energy}%)")
         except Exception:
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
 
         try:
             # ── Scene narrative ────────────────────────────────────
@@ -1145,7 +1145,7 @@ class GallerySceneInterceptor(InterceptorBase):
                 events = [e["event"] for e in narrative]
                 lines.append("Recent gallery events: " + " | ".join(events[-3:]))
         except Exception:
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
 
         try:
             # ── ConversationHeat pacing ────────────────────────────
@@ -1156,7 +1156,7 @@ class GallerySceneInterceptor(InterceptorBase):
             if directive:
                 lines.append(f"[Conversation pacing] {directive}")
         except Exception:
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
 
         if lines:
             injection = "\n\n[GALLERY CONTEXT]\n" + "\n".join(lines) + "\n[/GALLERY CONTEXT]"
@@ -1244,7 +1244,7 @@ class UniversalSceneInterceptor(InterceptorBase):
                 if extra_fields:
                     lines.append(f"State: {', '.join(extra_fields)}")
         except Exception:
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
 
         # ── Scene narrative ───────────────────────────────────────
         try:
@@ -1255,7 +1255,7 @@ class UniversalSceneInterceptor(InterceptorBase):
                 events = [e["event"] for e in narrative]
                 lines.append("Recent events: " + " | ".join(events[-3:]))
         except Exception:
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
 
         # ── Scene atmosphere ──────────────────────────────────────
         try:
@@ -1266,7 +1266,7 @@ class UniversalSceneInterceptor(InterceptorBase):
             if atm_str:
                 lines.append(f"Atmosphere: {atm_str}")
         except Exception:
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
 
         # ── ConversationHeat pacing ───────────────────────────────
         try:
@@ -1277,7 +1277,7 @@ class UniversalSceneInterceptor(InterceptorBase):
             if directive:
                 lines.append(f"[Conversation pacing] {directive}")
         except Exception:
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
 
         # ── Available MCP actions ─────────────────────────────────
         try:
@@ -1292,7 +1292,7 @@ class UniversalSceneInterceptor(InterceptorBase):
                 action_names = [a["id"] for a in actions[:6]]
                 lines.append(f"Available actions: {', '.join(action_names)}")
         except Exception:
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
 
         if lines:
             tag = scene.upper().replace("_", " ")
@@ -1560,7 +1560,7 @@ class CharacterRegistryInterceptor(InterceptorBase):
                             labeled.append(f"{t} (core)" if t in perm_set else t)
                         lines.append(f"Behavioral tags: {', '.join(labeled)}")
                 except Exception:
-                    pass
+                    logger.debug("Suppressed exception", exc_info=True)
 
                 lines.append("[/CHARACTER IDENTITY]")
                 block = "\n".join(lines)
@@ -1949,7 +1949,7 @@ class MoodSyncInterceptor(InterceptorBase):
                     stats.setdefault("energy", rec.state.energy or 50)
                     stats.setdefault("inhibition", rec.state.inhibition or 50)
             except Exception:
-                pass
+                logger.debug("Suppressed exception", exc_info=True)
 
             if not stats:
                 return

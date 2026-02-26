@@ -121,7 +121,7 @@ class SDKClient:
                 try:
                     self._client.close()
                 except Exception:
-                    pass
+                    logger.debug("Suppressed exception", exc_info=True)
                 self._client = None
                 logger.info("SDK connection closed")
 

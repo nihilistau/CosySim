@@ -8,6 +8,8 @@ import threading
 from collections import deque
 from datetime import datetime
 
+logger = logging.getLogger(__name__)
+
 # ── Constants ────────────────────────────────────────────────────────────────
 MAX_RECORDS = 2000          # maximum log lines kept in memory
 DEFAULT_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
@@ -57,7 +59,7 @@ class _RingHandler(logging.Handler):
                         data={"level": record.levelname, "logger": record.name},
                     )
                 except Exception:
-                    pass
+                    logger.debug("Suppressed exception", exc_info=True)
         except Exception:                 # never crash the emitting thread
             self.handleError(record)
 

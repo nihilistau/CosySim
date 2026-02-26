@@ -246,7 +246,7 @@ class CharacterStateCoordinator:
             state = reg.get_state(character_id)
             result.update(state)
         except Exception:
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
 
         # SSM stats
         try:
@@ -255,7 +255,7 @@ class CharacterStateCoordinator:
             stats = ssm.get_stats(character_id)
             result.update(stats.to_dict())
         except Exception:
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
 
         return result
 
@@ -315,7 +315,7 @@ class CharacterStateCoordinator:
                 },
             ))
         except Exception:
-            pass  # ActivityBus is optional
+            logger.debug("ActivityBus is optional", exc_info=True)
 
     # ── Persistence ───────────────────────────────────────────────────
 

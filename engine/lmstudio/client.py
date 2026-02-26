@@ -99,7 +99,7 @@ class LMStudioManager:
             data   = json.loads(result)
             return bool(data.get("running") or data.get("status") == "running")
         except (LMStudioCLIError, json.JSONDecodeError):
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
 
         # Fallback: direct HTTP probe
         try:

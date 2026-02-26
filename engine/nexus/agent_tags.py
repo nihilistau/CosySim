@@ -298,7 +298,7 @@ class AgentTaskManager:
                 self._local_cache[task_id] = task
                 return task
         except Exception:
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
         return None
 
 

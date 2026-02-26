@@ -527,7 +527,7 @@ def apply_effect(
                 db.update_character_state(character_id, {field: delta})
                 results.append(f"{field}+={delta:+.2f}")
             except Exception:
-                pass
+                logger.debug("Suppressed exception", exc_info=True)
         return f"Applied effect '{effect_name}' to {character_id}: {', '.join(results)}"
     except Exception as e:
         return json.dumps({"error": str(e)})
@@ -1414,7 +1414,7 @@ def director_action(
                     _ssm().update_stats(cid, **impact)
                 applied = impact
             except Exception:
-                pass
+                logger.debug("Suppressed exception", exc_info=True)
 
         try:
             from engine.mcp.comms_framework import get_router
@@ -1422,7 +1422,7 @@ def director_action(
             for cid in targets:
                 router.send(cid, f"[DIRECTOR DIRECTIVE]: {action}", sender_id="director")
         except Exception:
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
 
         return json.dumps({
             "directive_issued": True,
@@ -1953,7 +1953,7 @@ def memory_recall(
                 if rec:
                     name = rec.profile.name
             except Exception:
-                pass
+                logger.debug("Suppressed exception", exc_info=True)
             all_memories = results["long_term"] + results["recent"]
             hook = get_dialog_system().build_memory_hook(all_memories, name)
             results["memory_hook"] = hook
@@ -2382,7 +2382,7 @@ def mood_contagion(
                     try:
                         ssm.update_stats(target_id, **{stat: delta})
                     except Exception:
-                        pass
+                        logger.debug("Suppressed exception", exc_info=True)
 
                 applied.append({
                     "target":                  target_id,
@@ -2797,7 +2797,7 @@ def time_echo(
                 best = results[0]
                 memory_fragment = (best.get("content") or str(best))[:200]
         except Exception:
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
 
         # Build the echoed fragment
         if memory_fragment:
@@ -3237,13 +3237,13 @@ def lounge_heat_tick(
                 eng.apply_rule(scene_id, "heat_critical_rule", target_ids=[LOLA_ID], issuer="heat_tick")
                 fired.append("heat_critical_rule")
             except Exception:
-                pass
+                logger.debug("Suppressed exception", exc_info=True)
         elif new_heat >= 65:
             try:
                 eng.apply_rule(scene_id, "heat_warning_rule", target_ids=[VIKTOR_ID], issuer="heat_tick")
                 fired.append("heat_warning_rule")
             except Exception:
-                pass
+                logger.debug("Suppressed exception", exc_info=True)
 
         if delta > 0 and new_heat >= 50:
             fw.cross_scene_send(

@@ -514,7 +514,7 @@ class ConversationManager:
                 try:
                     callback(reason, count)
                 except Exception:
-                    pass
+                    logger.debug("Suppressed exception", exc_info=True)
             return count
 
     def invalidate_model(self, model_id: str) -> int:

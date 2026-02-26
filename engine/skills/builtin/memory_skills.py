@@ -9,6 +9,9 @@ These skills give the LLM direct access to:
 from __future__ import annotations
 
 from engine.skills.skill import skill
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 @skill(
@@ -244,7 +247,7 @@ def summarize_chain(
                         character_id=character_id or ctx.get("character_id"),
                     )
             except Exception:
-                pass
+                logger.debug("Suppressed exception", exc_info=True)
 
             return f"Chain summarized and stored in long-term memory:\n\n{summary_text}"
 

@@ -207,7 +207,7 @@ def ingest_prompts_to_nexus(query: str, limit: int = 5,
                         parsed = json.loads(text)
                         prompts = parsed.get("prompts", [])
                     except (json.JSONDecodeError, AttributeError):
-                        pass
+                        logger.debug("Suppressed exception", exc_info=True)
 
     client = get_nexus_client()
     stored = 0

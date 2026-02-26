@@ -1,0 +1,45 @@
+/* Games Arcade — scene styles */
+body {
+  background: #1a1a2e;
+  color: #e0e0e0;
+  font-family: sans-serif;
+  max-width: 800px;
+  margin: 40px auto;
+  padding: 0 20px;
+}
+
+h1 { color: #e94560; }
+h2 { color: #0f3460; margin-top: 30px; }
+
+.game {
+  background: #16213e;
+  border: 1px solid #0f3460;
+  border-radius: 8px;
+  padding: 20px;
+  margin: 12px 0;
+}
+
+.game h3 {
+  color: #e94560;
+  margin: 0 0 8px;
+}
+
+.btn {
+  background: #e94560;
+  color: #fff;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  margin: 4px;
+}
+
+.btn:hover { background: #c73e54; }
+
+pre {
+  background: #0d1117;
+  padding: 12px;
+  border-radius: 4px;
+  overflow-x: auto;
+  font-size: 0.85em;
+}

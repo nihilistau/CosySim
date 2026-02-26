@@ -1093,7 +1093,7 @@ class LMSClient:
                         try:
                             on_event(event)
                         except Exception:
-                            pass
+                            logger.debug("Suppressed exception", exc_info=True)
 
                     # Yield message content deltas to the caller
                     if event.event_type == "message.delta" and event.content:
@@ -1369,7 +1369,7 @@ class LMSClient:
                 },
             )
         except Exception:
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
 
         try:
             from engine.logging.benchmark import record_llm_kpi
@@ -1381,7 +1381,7 @@ class LMSClient:
                 model=resp.model,
             )
         except Exception:
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
 
     # ── Conversation state management ──────────────────────────────────
 
@@ -1391,7 +1391,7 @@ class LMSClient:
             from engine.lmstudio.conversation import get_conversation_manager
             get_conversation_manager().invalidate_model(model_id)
         except Exception:
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
         self.invalidate_model_cache()
 
     def unload_model(self, model_id: str) -> bool:
@@ -1423,7 +1423,7 @@ class LMSClient:
         try:
             self._client.close()
         except Exception:
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
 
 
 # ── MCP integration helpers ─────────────────────────────────────────────

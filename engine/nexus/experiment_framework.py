@@ -233,7 +233,7 @@ class ExperimentRunner:
             )
             urllib.request.urlopen(req, timeout=5)
         except Exception:
-            pass  # Best-effort logging
+            logger.debug("Best-effort logging", exc_info=True)
 
 
 # Module-level singleton

@@ -43,7 +43,14 @@ def _make_scene(port: int = 15567):
         # Create real Flask app + SocketIO for route testing
         from flask import Flask
         from flask_socketio import SocketIO
-        s.app = Flask("test_games")
+        import os
+        import content.scenes.games.games_scene as _gsm
+        scene_dir = os.path.dirname(os.path.abspath(_gsm.__file__))
+        s.app = Flask(
+            "test_games",
+            template_folder=os.path.join(scene_dir, "templates"),
+            static_folder=os.path.join(scene_dir, "static"),
+        )
         s.socketio = SocketIO(s.app, async_mode="threading")
 
         # Stub BaseScene helper methods called during _register_routes

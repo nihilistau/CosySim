@@ -143,13 +143,6 @@ tts:
     enabled: false                     # use 0.6B as draft for 1.7B (same-family spec decode)
     draft_model: "0.6b"               # draft model size for speculative decoding
 
-# STT configuration — RESERVED for future implementation
-stt:
-  engine: "whisper"
-  model_size: "base"
-  language: "en"
-  device: "cuda"
-
 # LLM configuration
 llm:
   provider: "lmstudio"  # or "openai", "local"
@@ -292,11 +285,6 @@ lmstudio:
   #     vram_mb: 40960
   #     enabled: false
 
-  # ── LM Studio Link (future) ────────────────────────────────────
-  link:
-    enabled: false              # waiting list — enable when access granted
-    url: ""
-
 # Hardware profile (used by LMStudioManager for VRAM estimation)
 hardware:
   gpu_name: "NVIDIA GeForce RTX 2060"
@@ -384,15 +372,6 @@ assets:
     enabled: true
     max_versions: 5
 
-# Security — RESERVED for future implementation
-security:
-  input_validation:
-    max_message_length: 10000
-    max_file_size: 10485760  # 10MB
-  rate_limiting:
-    enabled: false
-    requests_per_minute: 60
-
 # Logging
 logging:
   level: "INFO"
@@ -400,11 +379,6 @@ logging:
   file: "./logs/cosysim.log"
   max_bytes: 10485760  # 10MB
   backup_count: 5
-
-# Testing — RESERVED for test runner config
-testing:
-  database: "simulation_test.db"
-  mock_external_services: true
 
 # Agent profiles — map agent roles to LLM parameters
 # Used by MCPFramework.get_agent_profile() and ModelManager.ensure_for_agent()
@@ -449,7 +423,7 @@ pipeline:
     max_branches: 10               # Max active branches per conversation
     branch_ttl: 300                # Seconds before pruning unused branches
 
-# Observability — RESERVED for metrics/alerting system
+# Observability — metrics and alerting system
 observability:
   metrics_db: "data/metrics.db"
   system_tick_interval: 1.0        # Seconds between system snapshots

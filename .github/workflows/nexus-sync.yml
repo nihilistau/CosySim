@@ -1,0 +1,82 @@
+# Weekly export of Nexus knowledge base to the knowledge-pipeline repo
+# so the Copilot Space stays evergreen automatically.
+#
+# Trigger: schedule (Sunday 03:00 UTC) + manual dispatch
+# Uses: engine/nexus/cli.py export → commits to nihilistau/knowledge-pipeline
+
+name: Nexus → Space Sync
+
+on:
+  schedule:
+    - cron: "0 3 * * 0"   # Every Sunday at 03:00 UTC
+  workflow_dispatch: {}    # Manual trigger
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout CosySim
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: pip install requests pyyaml
+
+      - name: Export Nexus knowledge
+        env:
+          NEXUS_URL: ${{ secrets.NEXUS_URL }}
+        run: |
+          python -c "
+          import json, os, requests, pathlib
+
+          base = os.environ.get('NEXUS_URL', 'http://localhost:8700')
+          out = pathlib.Path('nexus_export')
+          out.mkdir(exist_ok=True)
+
+          # Export all entries
+          r = requests.get(f'{base}/api/entries', params={'limit': 5000}, timeout=30)
+          r.raise_for_status()
+          entries = r.json().get('entries', [])
+          (out / 'entries.json').write_text(json.dumps(entries, indent=2))
+
+          # Export Q&A pairs
+          r = requests.get(f'{base}/api/qa', params={'limit': 5000}, timeout=30)
+          r.raise_for_status()
+          qa = r.json().get('qa_pairs', r.json().get('results', []))
+          (out / 'qa.json').write_text(json.dumps(qa, indent=2))
+
+          # Export rules
+          r = requests.get(f'{base}/api/rules', timeout=30)
+          r.raise_for_status()
+          rules = r.json().get('rules', [])
+          (out / 'rules.json').write_text(json.dumps(rules, indent=2))
+
+          print(f'Exported {len(entries)} entries, {len(qa)} Q&A, {len(rules)} rules')
+          "
+
+      - name: Push to knowledge-pipeline
+        env:
+          GH_TOKEN: ${{ secrets.KNOWLEDGE_PIPELINE_TOKEN }}
+        run: |
+          git clone https://x-access-token:${GH_TOKEN}@github.com/nihilistau/knowledge-pipeline.git kp
+          cp -r nexus_export/* kp/data/ 2>/dev/null || mkdir -p kp/data && cp -r nexus_export/* kp/data/
+          cd kp
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to sync"
+          else
+            git commit -m "chore: weekly Nexus knowledge sync $(date -u +%Y-%m-%d)"
+            git push
+            echo "Knowledge synced successfully"
+          fi

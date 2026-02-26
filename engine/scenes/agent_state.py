@@ -191,7 +191,7 @@ class AgentStateManager:
                 tags=["agent", state.agent_id, "persistent_state"],
             )
         except Exception:
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
 
 
 # Module-level singleton

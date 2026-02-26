@@ -128,7 +128,7 @@ class VirtualPipeline:
             try:
                 self._on_metrics(result)
             except Exception:
-                pass
+                logger.debug("Suppressed exception", exc_info=True)
 
         return result
 
@@ -192,7 +192,7 @@ class VirtualPipeline:
                 try:
                     on_delta(token)
                 except Exception:
-                    pass
+                    logger.debug("Suppressed exception", exc_info=True)
 
         # Build result
         raw_text = "".join(accumulated)
@@ -264,7 +264,7 @@ class VirtualPipeline:
                     try:
                         on_delta(token)
                     except Exception:
-                        pass
+                        logger.debug("Suppressed exception", exc_info=True)
 
             raw_text = "".join(accumulated)
             gen_time = (time.perf_counter() - t_gen) * 1000

@@ -7,6 +7,7 @@
 | Doc | Description |
 |-----|-------------|
 | [README](../README.md) | Project overview, quick start, architecture |
+| [Deployment](DEPLOYMENT.md) | Service architecture, startup, ports, health checks |
 | [Configuration](CONFIGURATION.md) | All config files and settings |
 | [Roadmap](../ROADMAP.md) | Version history and future plans |
 
@@ -15,9 +16,11 @@
 | Doc | Description |
 |-----|-------------|
 | [Architecture](ARCHITECTURE.md) | System design, layers, data flow, interceptor pipeline |
+| [Interceptors](INTERCEPTORS.md) | Interceptor pipeline — all 25 hooks, priorities, custom interceptors |
 | [MCP Framework](MCP_FRAMEWORK.md) | Tools, governance, state, dialog, rules, skills |
 | [Characters](CHARACTERS.md) | Personality, stats, buffs, tags, relationships |
 | [LMStudio](LMSTUDIO.md) | InferenceOrchestrator, model management, routing, streaming, branching |
+| [Spatial System](SPATIAL.md) | SceneMap, Location, character positioning, proximity gating |
 
 ## Scenes & Content
 
@@ -44,13 +47,19 @@
 | [Nexus Architecture](../../Nexus/docs/ARCHITECTURE.md) | Knowledge Management System design |
 | [Nexus README](../../Nexus/README.md) | Nexus quick start, API endpoints, MCP tools |
 
+## Observability
+
+| Doc | Description |
+|-----|-------------|
+| [Logging](LOGGING.md) | CosyLogger ring buffer, SystemMonitor, structured logging patterns |
+| [KPI](KPI.md) | `@timed` decorator, LLM KPIs, benchmarking dashboard |
+
 ## Training & Testing
 
 | Doc | Description |
 |-----|-------------|
 | [Training](TRAINING.md) | Gemma 270M fine-tuning pipeline, datasets, Colab |
 | [Testing](TESTING.md) | Test commands, fixtures, writing tests (2,613+ tests, 75+ files) |
-| [KPI](KPI.md) | Performance metrics and monitoring |
 
 ## Development
 

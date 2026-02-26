@@ -545,7 +545,7 @@ class URLManager:
                     data = json.loads(entry.get("content", "{}"))
                     url = data.get("url", "")
                 except (json.JSONDecodeError, TypeError):
-                    pass
+                    logger.debug("Suppressed exception", exc_info=True)
 
         if not url:
             return None
@@ -702,7 +702,7 @@ class URLManager:
                     if data.get("url") == url:
                         return True
                 except (json.JSONDecodeError, TypeError):
-                    pass
+                    logger.debug("Suppressed exception", exc_info=True)
             return False
         except Exception:
             return False
@@ -744,7 +744,7 @@ class URLManager:
                 )
                 stored += 1
             except Exception:
-                pass
+                logger.debug("Suppressed exception", exc_info=True)
 
         self._stats["fragments_created"] += stored
 
@@ -761,7 +761,7 @@ class URLManager:
                     data["dissected"] = True
                     self._client.update_entry(entry_id, content=json.dumps(data))
             except Exception:
-                pass
+                logger.debug("Suppressed exception", exc_info=True)
 
         return stored
 
@@ -791,7 +791,7 @@ class URLManager:
                 )
                 count += 1
             except Exception:
-                pass
+                logger.debug("Suppressed exception", exc_info=True)
 
         return count
 

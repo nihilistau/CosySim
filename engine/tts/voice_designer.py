@@ -150,7 +150,7 @@ class VoiceDesigner:
                 data={"character_id": character_id, "model_size": design.model_size, "tags": design.tags},
             )
         except Exception:
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
 
     def get(self, character_id: str) -> VoiceDesign:
         """Get a character's voice design, or a sensible default."""

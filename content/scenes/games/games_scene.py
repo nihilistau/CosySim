@@ -13,7 +13,7 @@ import logging
 import os
 from typing import Any, Dict
 
-from flask import Flask, jsonify, render_template_string
+from flask import Flask, jsonify, render_template
 from flask_socketio import SocketIO
 
 from engine.scenes.base_scene import BaseScene
@@ -24,51 +24,15 @@ log = logging.getLogger(__name__)
 SCENE_ID = "games"
 DEFAULT_PORT = 5567
 
-# Simple HTML landing page
-GAMES_HTML = """<!DOCTYPE html>
-<html lang="en"><head>
-<meta charset="UTF-8"><title>Games Arcade</title>
-<style>
-body{background:#1a1a2e;color:#e0e0e0;font-family:sans-serif;max-width:800px;margin:40px auto;padding:0 20px}
-h1{color:#e94560}h2{color:#0f3460;margin-top:30px}
-.game{background:#16213e;border:1px solid #0f3460;border-radius:8px;padding:20px;margin:12px 0}
-.game h3{color:#e94560;margin:0 0 8px}.btn{background:#e94560;color:#fff;border:none;padding:8px 16px;
-border-radius:4px;cursor:pointer;margin:4px}.btn:hover{background:#c73e54}
-pre{background:#0d1117;padding:12px;border-radius:4px;overflow-x:auto;font-size:0.85em}
-</style></head><body>
-<h1>🎮 Games Arcade</h1>
-<p>Two mini-games available via REST API and MCP skills.</p>
-
-<div class="game"><h3>🔍 Mystery Investigation</h3>
-<p>Work through 5 clues to identify the culprit. 3 pre-made cases.</p>
-<pre>POST /games/mystery/start   — Start a case
-GET  /games/mystery/clue    — Get next clue
-POST /games/mystery/accuse  — Name the culprit
-GET  /games/mystery/state   — Check progress</pre></div>
-
-<div class="game"><h3>🎲 Truth or Dare</h3>
-<p>Roll dice, answer truths or complete dares. Score 5+ to win.</p>
-<pre>POST /games/truth-or-dare/start  — Start game
-POST /games/truth-or-dare/roll   — Roll for truth/dare
-POST /games/truth-or-dare/answer — Submit answer
-GET  /games/truth-or-dare/state  — Check score</pre></div>
-
-<h2>MCP Skills</h2>
-<pre>games_status        — List active/available games
-games_mystery_start — Start a mystery case
-games_mystery_clue  — Get next clue
-games_mystery_accuse— Accuse the culprit
-games_tod_start     — Start truth-or-dare
-games_tod_roll      — Roll dice
-games_tod_answer    — Submit answer</pre>
-</body></html>"""
-
 
 class GamesScene(BaseScene, NexusSceneMixin):
     """Games Arcade — wraps MysteryGame and TruthOrDareGame in BaseScene."""
 
     SCENE_METADATA = {
+        "name": "games",
         "title": "Games Arcade",
+        "port": 5567,
+        "type": "game",
         "description": (
             "Mini-game collection: Mystery Investigation (3 cases, 5 clues) "
             "and Truth-or-Dare (dice rolls, scoring). Playable via REST or MCP skills."
@@ -87,7 +51,12 @@ class GamesScene(BaseScene, NexusSceneMixin):
     def __init__(self, host: str = "0.0.0.0", port: int = DEFAULT_PORT):
         super().__init__(scene_name=SCENE_ID, host=host, port=port)
 
-        self.app = Flask(__name__)
+        scene_dir = os.path.dirname(os.path.abspath(__file__))
+        self.app = Flask(
+            __name__,
+            template_folder=os.path.join(scene_dir, "templates"),
+            static_folder=os.path.join(scene_dir, "static"),
+        )
         self.socketio = SocketIO(self.app, cors_allowed_origins="*",
                                  async_mode="threading")
 
@@ -123,7 +92,7 @@ class GamesScene(BaseScene, NexusSceneMixin):
 
         @app.route("/")
         def index():
-            return render_template_string(GAMES_HTML)
+            return render_template("games.html")
 
         @app.route("/api/health")
         def health():

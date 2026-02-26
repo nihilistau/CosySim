@@ -1297,7 +1297,7 @@ class MCPFramework:
                             description=pcfg.get("description", ""),
                         )
         except Exception:
-            pass  # Config not loaded yet — use defaults
+            logger.debug("Config not loaded yet — use defaults", exc_info=True)
 
     # ── State persistence ─────────────────────────────────────────────
 

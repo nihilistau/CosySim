@@ -11,6 +11,9 @@ from __future__ import annotations
 import json
 import socket
 from typing import Any, Dict, List, Optional
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 # ── helpers ────────────────────────────────────────────────────────────
@@ -183,7 +186,7 @@ def scene_broadcast(
             ssm.add_narrative(scene_id, desc, entry_type="environment")
             applied["narrative"] = desc
         except Exception:
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
 
         stat_effects: Dict[str, Dict] = payload.get("stat_effects", {})
         for char_id, effects in stat_effects.items():

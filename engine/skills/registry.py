@@ -86,7 +86,7 @@ class SkillRegistry:
                 data={"skill": meta.name, "pack": meta.pack, "tags": meta.tags},
             )
         except Exception:
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
 
     # ──────────────────────────────────────────────────── read ──
 

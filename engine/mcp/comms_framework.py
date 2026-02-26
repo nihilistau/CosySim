@@ -626,7 +626,7 @@ class AgentGovernor:
                     if va:
                         last_response = getattr(va, "_last_response", None)
                 except Exception:
-                    pass
+                    logger.debug("Suppressed exception", exc_info=True)
                 ctx["response_id"] = agent_state.get("last_response_id", "")
                 ctx["is_stateful"] = bool(
                     ctx["response_id"] and ctx["response_id"].startswith("resp_")
@@ -736,7 +736,7 @@ def _invoke_mcp_tool(tool_name: str, args: Dict, ctx: ResponseContext) -> Any:
             import engine.mcp.comms_tools as ct
             fn = getattr(ct, tool_name, None)
         except ImportError:
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
     if fn is None:
         raise ValueError(f"Tool {tool_name!r} not found in MCP server or comms_tools")
     return fn(**args)

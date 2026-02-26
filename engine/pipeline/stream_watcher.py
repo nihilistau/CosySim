@@ -126,7 +126,7 @@ class RuleBasedWatcher:
                     self._last_reason = f"Forbidden pattern matched: {pattern}"
                     return self._last_reason
             except re.error:
-                pass
+                logger.debug("Suppressed exception", exc_info=True)
         return None
 
     _last_reason: str = ""

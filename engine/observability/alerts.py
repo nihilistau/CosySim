@@ -189,7 +189,7 @@ class AlertEngine:
                     try:
                         self._on_alert(alert)
                     except Exception:
-                        pass
+                        logger.debug("Suppressed exception", exc_info=True)
 
                 logger.info(
                     "Alert: %s %s → %s (%s)",

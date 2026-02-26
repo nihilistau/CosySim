@@ -727,7 +727,7 @@ def seed_registry_from_character(char: Any, *, voice_id: str = "") -> None:
             if isinstance(voices, dict) and cid in voices:
                 resolved_voice_id = cid
         except Exception:
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
 
     # Gather personality traits from whatever attributes exist
     _trait_keys = [
@@ -742,7 +742,7 @@ def seed_registry_from_character(char: Any, *, voice_id: str = "") -> None:
             try:
                 personality[k] = float(v)
             except (TypeError, ValueError):
-                pass
+                logger.debug("Suppressed exception", exc_info=True)
 
     # Appearance dict — accept existing dict, string description, or build from attrs
     _raw_app = getattr(char, "appearance", {}) or {}
@@ -783,7 +783,7 @@ def seed_registry_from_character(char: Any, *, voice_id: str = "") -> None:
         try:
             state_kwargs["mood_intensity"] = float(mood_intensity)
         except Exception:
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
     if state_kwargs:
         reg.set_state(cid, **state_kwargs)
 

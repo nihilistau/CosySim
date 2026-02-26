@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Games Arcade</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/games.css') }}">
+</head>
+<body>
+  <h1>🎮 Games Arcade</h1>
+  <p>Two mini-games available via REST API and MCP skills.</p>
+
+  <div class="game">
+    <h3>🔍 Mystery Investigation</h3>
+    <p>Work through 5 clues to identify the culprit. 3 pre-made cases.</p>
+    <pre>POST /games/mystery/start   — Start a case
+GET  /games/mystery/clue    — Get next clue
+POST /games/mystery/accuse  — Name the culprit
+GET  /games/mystery/state   — Check progress</pre>
+  </div>
+
+  <div class="game">
+    <h3>🎲 Truth or Dare</h3>
+    <p>Roll dice, answer truths or complete dares. Score 5+ to win.</p>
+    <pre>POST /games/truth-or-dare/start  — Start game
+POST /games/truth-or-dare/roll   — Roll for truth/dare
+POST /games/truth-or-dare/answer — Submit answer
+GET  /games/truth-or-dare/state  — Check score</pre>
+  </div>
+
+  <h2>MCP Skills</h2>
+  <pre>games_status         — List active/available games
+games_mystery_start  — Start a mystery case
+games_mystery_clue   — Get next clue
+games_mystery_accuse — Accuse the culprit
+games_tod_start      — Start truth-or-dare
+games_tod_roll       — Roll dice
+games_tod_answer     — Submit answer</pre>
+
+  <script src="https://cdn.socket.io/4.6.0/socket.io.min.js"></script>
+  <script src="{{ url_for('static', filename='js/games.js') }}"></script>
+</body>
+</html>

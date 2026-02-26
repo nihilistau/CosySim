@@ -346,7 +346,7 @@ class ModelManager:
                         data={"model_key": model_key, "gpu": gpu, "ctx": ctx, "ttl": ttl},
                     )
                 except Exception:
-                    pass
+                    logger.debug("Suppressed exception", exc_info=True)
             return result
         except Exception as exc:
             logger.error("CLI load failed for %r: %s", model_key, exc)
@@ -366,7 +366,7 @@ class ModelManager:
                     data={"model_key": model_key},
                 )
             except Exception:
-                pass
+                logger.debug("Suppressed exception", exc_info=True)
         except Exception as exc:
             logger.warning("CLI unload failed for %r: %s", model_key, exc)
 

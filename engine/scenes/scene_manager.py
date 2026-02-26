@@ -136,7 +136,7 @@ class SceneManager:
             try:
                 scene._mcp_deregister_scene()
             except Exception:
-                pass
+                logger.debug("Suppressed exception", exc_info=True)
             del self.active_scenes[scene_name]
             logger.info("SceneManager: stopped scene '%s'", scene_name)
     

@@ -321,7 +321,7 @@ class InferenceOrchestrator:
                 if tokens > 0 and latency_ms > 0:
                     tps = tokens / (latency_ms / 1000)
             except (TypeError, ValueError):
-                pass
+                logger.debug("Suppressed exception", exc_info=True)
 
         self._record_success(tier_name, latency_ms, tps)
         return resp
@@ -486,12 +486,12 @@ class InferenceOrchestrator:
         try:
             self.resource_manager.shutdown()
         except Exception:
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
         try:
             if self._router and hasattr(self._router, "stop"):
                 self._router.stop()
         except Exception:
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
         logger.info("InferenceOrchestrator shut down")
 
 
@@ -518,5 +518,5 @@ def reset_orchestrator() -> None:
             try:
                 _instance.shutdown()
             except Exception:
-                pass
+                logger.debug("Suppressed exception", exc_info=True)
             _instance = None

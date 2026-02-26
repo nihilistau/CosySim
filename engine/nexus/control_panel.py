@@ -21,6 +21,9 @@ from typing import Any, Dict, List
 
 import requests
 import streamlit as st
+import logging
+
+logger = logging.getLogger(__name__)
 
 NEXUS_URL = "http://127.0.0.1:8700"
 
@@ -266,7 +269,7 @@ elif page == "⚖️ Rules Engine":
                         try:
                             condition = json.loads(condition)
                         except Exception:
-                            pass
+                            logger.debug("Suppressed exception", exc_info=True)
                     st.json(condition)
                     st.divider()
 

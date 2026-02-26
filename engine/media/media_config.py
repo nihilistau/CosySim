@@ -19,6 +19,9 @@ from __future__ import annotations
 
 import threading
 from typing import Any, Dict, Tuple
+import logging
+
+logger = logging.getLogger(__name__)
 
 _lock = threading.Lock()
 _instance: "MediaConfig | None" = None
@@ -119,6 +122,6 @@ def get_media_config() -> MediaConfig:
             from engine.config import get_config
             raw = get_config().get("media_standards", None)
         except Exception:
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
         _instance = MediaConfig(raw)
         return _instance

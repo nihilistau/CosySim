@@ -215,7 +215,7 @@ class NexusDistiller:
                     timeout=5,
                 )
             except Exception:
-                pass
+                logger.debug("Suppressed exception", exc_info=True)
 
         # Process session summaries for pattern extraction
         summaries = _api_get("/api/search", {"q": "session ended summary", "limit": 50})
@@ -495,7 +495,7 @@ class QADeduplicator:
                     if r.ok:
                         removed += 1
                 except Exception:
-                    pass
+                    logger.debug("Suppressed exception", exc_info=True)
 
         return {
             "duplicates_found": len(dupes),

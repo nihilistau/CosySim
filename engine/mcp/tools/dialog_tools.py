@@ -9,6 +9,9 @@ from __future__ import annotations
 
 import json
 from typing import Any, Dict, List, Optional
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 # ── get_dialog_options ───────────────────────────────────────────────
@@ -201,7 +204,7 @@ def enforce_behavior(
                     entry_type="directive", character_id=character_id,
                 )
             except Exception:
-                pass
+                logger.debug("Suppressed exception", exc_info=True)
         return json.dumps({"ok": True, "character_id": character_id, "behavior": behavior_type, "turns": turns})
     except Exception as exc:
         return json.dumps({"ok": False, "error": str(exc)})

@@ -75,7 +75,7 @@ class SceneRegistry:
                 from engine.mcp.framework import get_framework
                 get_framework().get_scene(scene_info.name)
             except Exception:
-                pass
+                logger.debug("Suppressed exception", exc_info=True)
 
         logger.info("Discovered %d scenes: %s",
                      len(self._scenes),
@@ -123,7 +123,7 @@ class SceneRegistry:
             if hasattr(instance, 'get_plugin_info'):
                 return instance.get_plugin_info()
         except Exception:
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
         # Fallback: look for class-level metadata
         return {
             "name": cls.__name__.replace("Scene", ""),

@@ -95,7 +95,7 @@ class SystemMonitor:
                         "gpu_temp_c": int(parts[3].strip()),
                     }
         except (FileNotFoundError, subprocess.TimeoutExpired, Exception):
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
         return {
             "gpu_vram_used_mb": None,
             "gpu_vram_total_mb": None,
@@ -168,7 +168,7 @@ class SystemMonitor:
                 if models:
                     return models[0].get("id", "unknown")
         except Exception:
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
         return None
 
 

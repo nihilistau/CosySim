@@ -283,7 +283,7 @@ class HousekeepingService:
                         f.unlink()
                         removed += 1
                     except Exception:
-                        pass
+                        logger.debug("Suppressed exception", exc_info=True)
 
         return removed
 

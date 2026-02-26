@@ -24,6 +24,9 @@ from typing import TYPE_CHECKING, Dict, List, Optional, Any
 from pathlib import Path
 import json
 from datetime import datetime
+import logging
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from content.simulation.character_system.character import Character
@@ -200,7 +203,7 @@ class BaseScene(ABC):
             from engine.mcp.framework import get_framework
             get_framework().get_scene(scene_asset.name)
         except Exception:
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
 
         # Call scene-specific load logic
         self.on_scene_loaded(scene_asset)
@@ -267,7 +270,7 @@ class BaseScene(ABC):
             from engine.mcp.character_registry import get_character_registry
             get_character_registry().persist_to_db()
         except Exception:
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
 
     @abstractmethod
     def get_plugin_info(self) -> Dict[str, Any]:
@@ -333,7 +336,7 @@ class BaseScene(ABC):
             monitor = get_system_monitor()
             health["system"] = monitor.snapshot()
         except Exception:
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
         return health
 
     def register_health_route(self, app) -> None:

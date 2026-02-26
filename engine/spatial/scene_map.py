@@ -8,6 +8,9 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional
 from engine.spatial.location import Location
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class SceneMap:
@@ -67,7 +70,7 @@ class SceneMap:
             from engine.mcp.character_registry import get_character_registry
             get_character_registry().set_state(character_id, {"location": loc.name})
         except Exception:
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
         try:
             from engine.services.activity_bus import get_activity_bus
             get_activity_bus().publish(
@@ -78,7 +81,7 @@ class SceneMap:
                 data={"location": loc.name, "location_id": location_id},
             )
         except Exception:
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
         return True
 
     def move_character(self, character_id: str, to_location_id: str) -> bool:
@@ -95,7 +98,7 @@ class SceneMap:
             from engine.mcp.character_registry import get_character_registry
             get_character_registry().set_state(character_id, {"location": None})
         except Exception:
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
         try:
             from engine.services.activity_bus import get_activity_bus
             get_activity_bus().publish(
@@ -106,7 +109,7 @@ class SceneMap:
                 data={"location": loc_name, "location_id": loc_id},
             )
         except Exception:
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
 
     def get_character_location(self, character_id: str) -> Optional[Location]:
         loc_id = self._char_location.get(character_id)

@@ -125,7 +125,7 @@ class SceneAgent:
                     data={"task_preview": task[:200], "result_preview": result[:200]},
                 )
             except Exception:
-                pass
+                logger.debug("Suppressed exception", exc_info=True)
 
             return result
 

@@ -243,7 +243,7 @@ class VirtualAgent:
                 from engine.mcp.framework import get_framework
                 get_framework().get_character(character.id).enter_scene(scene)
         except Exception:
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
 
         # Restore persisted state if available
         self.load_state()
@@ -431,7 +431,7 @@ class VirtualAgent:
                     "scene": self.scene or "unknown",
                 })
             except Exception:
-                pass
+                logger.debug("Suppressed exception", exc_info=True)
 
             # ActivityBus
             try:
@@ -448,13 +448,13 @@ class VirtualAgent:
                     },
                 )
             except Exception:
-                pass
+                logger.debug("Suppressed exception", exc_info=True)
 
         if self._on_response:
             try:
                 self._on_response(self, response, reply_text)
             except Exception:
-                pass
+                logger.debug("Suppressed exception", exc_info=True)
 
         return reply_text
 
@@ -565,7 +565,7 @@ class VirtualAgent:
                 fw_char = get_framework().get_character(char.id)
                 mcp_brief = fw_char.brief()
         except Exception:
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
 
         warmth = getattr(char, "warmth", 0.5)
         formality = getattr(char, "formality", 0.5)
@@ -661,7 +661,7 @@ class VirtualAgent:
                     character_id=self.id,
                 )
         except Exception:
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
 
     # ── Internal ────────────────────────────────────────────────────
 

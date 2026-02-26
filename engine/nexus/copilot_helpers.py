@@ -183,7 +183,7 @@ def generate_context_primer(project: str = "CosySim") -> str:
                 lines.append(f"- {title}")
             sections.append("## Recent Decisions\n" + "\n".join(lines))
     except Exception:
-        pass
+        logger.debug("Suppressed exception", exc_info=True)
 
     # Recent progress
     try:
@@ -195,7 +195,7 @@ def generate_context_primer(project: str = "CosySim") -> str:
                 lines.append(f"- {title}")
             sections.append("## Recent Work\n" + "\n".join(lines))
     except Exception:
-        pass
+        logger.debug("Suppressed exception", exc_info=True)
 
     # Active discoveries
     try:
@@ -208,7 +208,7 @@ def generate_context_primer(project: str = "CosySim") -> str:
                 lines.append(f"- **{title}**: {content}")
             sections.append("## Known Gotchas\n" + "\n".join(lines))
     except Exception:
-        pass
+        logger.debug("Suppressed exception", exc_info=True)
 
     # Key snippets
     try:
@@ -220,7 +220,7 @@ def generate_context_primer(project: str = "CosySim") -> str:
                 lines.append(f"- {title}")
             sections.append("## Available Snippets\n" + "\n".join(lines))
     except Exception:
-        pass
+        logger.debug("Suppressed exception", exc_info=True)
 
     if not sections:
         return f"# {project} Context Primer\n\nNo knowledge available yet."

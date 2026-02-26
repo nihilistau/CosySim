@@ -410,7 +410,7 @@ class MCPGameSession:
                 data={**data, "game_id": self.game_id, "game_type": self.session_type},
             )
         except Exception:
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
 
         # AgentRouter — character awareness
         try:
@@ -421,7 +421,7 @@ class MCPGameSession:
                 sender_id=f"game_engine/{self.game_id}",
             )
         except Exception:
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
 
     def _apply_stat_sync(self, event_type: str) -> None:
         """Push stat deltas from this event into the scene SceneStateManager."""
@@ -588,7 +588,7 @@ class GameSessionInterceptor:
                         session = get_session(gid)
                         break
             except Exception:
-                pass
+                logger.debug("Suppressed exception", exc_info=True)
 
         if session is None:
             return

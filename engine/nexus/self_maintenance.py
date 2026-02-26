@@ -83,7 +83,7 @@ def nexus_health_report() -> Dict[str, Any]:
             entries = client.list_entries(content_type=content_type, limit=1)
             report["metrics"][f"count_{content_type}"] = len(entries)
         except Exception:
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
 
     # Check for potential duplicates
     try:
@@ -98,7 +98,7 @@ def nexus_health_report() -> Dict[str, Any]:
             report["issues"].append(f"Found {len(dupes)} potential duplicate title groups")
             report["recommendations"].append("Run 'dedup' to merge duplicates")
     except Exception:
-        pass
+        logger.debug("Suppressed exception", exc_info=True)
 
     # Quality assessment
     if total > 0 and report["metrics"].get("total_qa", 0) == 0:

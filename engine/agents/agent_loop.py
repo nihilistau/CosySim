@@ -124,7 +124,7 @@ class AgentLoop:
             from engine.mcp.framework import get_framework
             get_framework().get_character(character_id).leave_scene()
         except Exception:
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
 
     def set_action_callback(self, fn: Callable) -> None:
         """Set a callback ``fn(character_id, action_dict)`` fired after every action."""
@@ -144,7 +144,7 @@ class AgentLoop:
             try:
                 return mgr.infer_with_pipeline(request)
             except Exception:
-                pass
+                logger.debug("Suppressed exception", exc_info=True)
         return mgr.infer_processed(request)
 
     # ── Loop control ────────────────────────────────────────────────────
@@ -242,7 +242,7 @@ class AgentLoop:
             from engine.mcp.framework import get_framework
             get_framework().tick()
         except Exception:
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
 
         # ActivityBus: publish tick summary
         try:
@@ -256,7 +256,7 @@ class AgentLoop:
                 data={"tick": self._tick_count, "action_count": len(actions)},
             )
         except Exception:
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
 
         return actions
 
@@ -431,7 +431,7 @@ class AgentLoop:
             if char_node:
                 char_node.update_state({"mood": mood, "last_mood_source": "agent_loop"})
         except Exception:
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
 
     def _decide_batch(self, char_ids: List[str], contexts: Dict[str, str]) -> Dict[str, Dict]:
         """Batch-decide actions for multiple characters in parallel."""
@@ -644,7 +644,7 @@ class AgentLoop:
                 data={"action": action, "target": target, "message": message, "tick": self._tick_count},
             )
         except Exception:
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
 
         # Emit to UI
         if self.socketio:
@@ -672,7 +672,7 @@ class AgentLoop:
                 character_id=result["character_id"],
             )
         except Exception:
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
 
     def _generate_dialog(self, character_id: str, decision: Dict) -> Optional[str]:
         """Generate stateful dialog for a character's speech action.

@@ -35,6 +35,9 @@ import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
+import logging
+
+logger = logging.getLogger(__name__)
 
 NEXUS_URL = os.environ.get("NEXUS_URL", "http://localhost:8700")
 LOG_DIR = Path(__file__).resolve().parent.parent.parent / ".github" / "hooks" / "logs"
@@ -74,7 +77,7 @@ def _load_session() -> dict:
         try:
             return json.loads(SESSION_FILE.read_text())
         except Exception:
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
     return {}
 
 
@@ -204,7 +207,7 @@ def _get_session_history(session_id: str) -> dict:
             finally:
                 conn.close()
         except Exception:
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
 
     # Also try plan.md from session state
     plan_path = (
@@ -214,7 +217,7 @@ def _get_session_history(session_id: str) -> dict:
         try:
             result["plan"] = plan_path.read_text(encoding="utf-8")[:5000]
         except Exception:
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
 
     return result
 

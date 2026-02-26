@@ -103,7 +103,7 @@ class NexusSceneMixin:
             )
             return result.answer if result.answer else None
         except Exception:
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
         # Fallback to direct client call if router unavailable
         if not self._nexus_available or not self._nexus_client:
             return None

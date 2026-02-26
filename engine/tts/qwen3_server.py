@@ -302,7 +302,7 @@ class Qwen3TTSEngine:
                 try:
                     filepath.unlink()
                 except Exception:
-                    pass
+                    logger.debug("Suppressed exception", exc_info=True)
 
         # Fallback: 1.7B (quality)
         if self._model_17b:
@@ -484,7 +484,7 @@ class Qwen3TTSEngine:
                 try:
                     filepath.unlink()
                 except Exception:
-                    pass
+                    logger.debug("Suppressed exception", exc_info=True)
             except Exception as e:
                 logger.warning("Chunk generation failed for '%s': %s", sentence[:40], e)
                 continue
@@ -552,7 +552,7 @@ def _run_generation(job_id: str, request: GenerateRequest):
                 if model_size == "auto":
                     model_size = design.model_size
             except Exception:
-                pass
+                logger.debug("Suppressed exception", exc_info=True)
 
         if model_size == "auto":
             # Auto-select: short text → 0.6b, long/emotional → 1.7b
@@ -593,7 +593,7 @@ def _run_generation(job_id: str, request: GenerateRequest):
                     character_id=request.character_id,
                 )
             except Exception:
-                pass
+                logger.debug("Suppressed exception", exc_info=True)
 
         logger.info("TTS job %s completed: %s (%.1fs)", job_id, filepath.name, duration)
 
@@ -614,7 +614,7 @@ def _run_generation(job_id: str, request: GenerateRequest):
                 },
             )
         except Exception:
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
 
     except Exception as e:
         job.status = "failed"
@@ -714,7 +714,7 @@ def create_tts_app() -> FastAPI:
                 if model_size == "auto":
                     model_size = design.model_size
             except Exception:
-                pass
+                logger.debug("Suppressed exception", exc_info=True)
 
         if model_size == "auto":
             model_size = "0.6b" if len(request.text) < 100 else "1.7b"
@@ -947,7 +947,7 @@ def create_tts_app() -> FastAPI:
                     if model_size == "auto":
                         model_size = design.model_size
                 except Exception:
-                    pass
+                    logger.debug("Suppressed exception", exc_info=True)
 
             if model_size == "auto":
                 model_size = "0.6b" if len(text) < 100 else "1.7b"
@@ -977,7 +977,7 @@ def create_tts_app() -> FastAPI:
                 await websocket.send_json({"error": str(e)})
                 await websocket.close(code=1011)
             except Exception:
-                pass
+                logger.debug("Suppressed exception", exc_info=True)
 
     # ── MCP mount ───────────────────────────────────────────────────
 

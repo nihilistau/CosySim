@@ -12,6 +12,9 @@ handle the failure in its next turn.
 from __future__ import annotations
 
 from engine.skills.skill import skill
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 @skill(
@@ -92,7 +95,7 @@ def generate_image(
                         character_id=ctx.get("character_id"),
                     )
             except Exception:
-                pass
+                logger.debug("Suppressed exception", exc_info=True)
 
             return f"/api/media/download/{fname}"
         return "Image generation returned no result. Check ComfyUI output folder."

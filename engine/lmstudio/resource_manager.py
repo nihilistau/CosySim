@@ -508,7 +508,7 @@ class ResourceManager:
             if profile.model:
                 return profile.model
         except Exception:
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
 
         # Fallback to config
         concurrent_model = self._config.get("lmstudio.concurrent_model", "")
@@ -559,7 +559,7 @@ class ResourceManager:
                 data=data,
             )
         except Exception:
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
 
 
 # ── Singleton ───────────────────────────────────────────────────────────

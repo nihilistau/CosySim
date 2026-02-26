@@ -246,7 +246,7 @@ class ContentWorkflow:
                 results = r.json()
                 return results.get("data", []) if isinstance(results, dict) else results
         except Exception:
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
         return []
 
 
@@ -384,7 +384,7 @@ class ResearchWorkflow:
                 }, timeout=5)
                 return r.json().get("data", {}).get("id")
         except Exception:
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
         return None
 
 
@@ -565,6 +565,6 @@ class NotebookWorkflow:
                 status["http"] = data.get("status") == "ok"
                 status["details"] = data
         except Exception:
-            pass
+            logger.debug("Suppressed exception", exc_info=True)
 
         return status
