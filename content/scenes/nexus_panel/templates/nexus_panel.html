@@ -187,12 +187,12 @@
             <div class="librarian-info">
               <h4>Capabilities</h4>
               <ul>
-                <li>🔍 Knowledge search</li>
-                <li>❓ Smart Q&A (cache→FTS→NLM)</li>
+                <li>🔍 Knowledge search & Q&A</li>
                 <li>🔬 Deep research sessions</li>
-                <li>🛠 Maintenance operations</li>
-                <li>📊 System statistics</li>
-                <li>📝 Knowledge curation</li>
+                <li>🛠 Maintenance & health checks</li>
+                <li>💾 Backup & restore</li>
+                <li>📥 Import & export data</li>
+                <li>📊 System metrics & stats</li>
               </ul>
             </div>
             <div class="librarian-info">
@@ -201,6 +201,12 @@
                 <button class="cmd-btn" data-cmd="/stats">📊 Stats</button>
                 <button class="cmd-btn" data-cmd="/health">🏥 Health</button>
                 <button class="cmd-btn" data-cmd="/recent">📋 Recent</button>
+                <button class="cmd-btn" data-cmd="/backup">💾 Backup</button>
+                <button class="cmd-btn" data-cmd="/backups">📁 Backups</button>
+                <button class="cmd-btn" data-cmd="/export">📥 Export</button>
+                <button class="cmd-btn" data-cmd="/metrics">📈 Metrics</button>
+                <button class="cmd-btn" data-cmd="/maintain">🔧 Maintain</button>
+                <button class="cmd-btn" data-cmd="/auto-backup start">🔄 Auto</button>
                 <button class="cmd-btn" data-cmd="/research">🔬 Research</button>
               </div>
             </div>
@@ -209,11 +215,13 @@
             <div id="chat-messages">
               <div class="msg system">
                 <div class="msg-content">
-                  <strong>The Librarian</strong> is your Nexus knowledge expert.
-                  Ask questions, search the knowledge base, run maintenance, or start research sessions.
+                  <strong>The Librarian</strong> — overseer and guardian of the Nexus knowledge base.
+                  I manage backups, health, maintenance, imports/exports, and answer questions using the full knowledge pipeline.
                   <br><br>
                   Try: <em>"What do you know about the interceptor pipeline?"</em>
-                  or use <code>/stats</code>, <code>/health</code>, <code>/research [topic]</code>
+                  <br>
+                  Commands: <code>/stats</code> <code>/health</code> <code>/backup</code> <code>/backups</code> <code>/export</code>
+                  <code>/maintain</code> <code>/auto-backup</code> <code>/metrics</code> <code>/research [topic]</code>
                 </div>
               </div>
             </div>
@@ -540,6 +548,7 @@
     </aside>
   </div>
 
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
   <script src="{{ url_for('static', filename='js/nexus_panel.js') }}"></script>
 </body>
 </html>

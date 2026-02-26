@@ -8,6 +8,16 @@ model: claude-sonnet-4-5
 
 You write pytest test suites for CosySim following established patterns.
 
+## Nexus-First Mandate
+
+1. **BEFORE any work:** `nexus_search(task_topic)` + `nexus_ask(key_question)`
+2. **If Nexus has answer:** USE IT (zero compute cost)
+3. **If Nexus misses:** `nlm_ask(question)` — free Gemini compute, auto-stored
+4. **AFTER work:** Store decisions, patterns, Q&A in Nexus via `nexus_add()` or `nexus_add_qa()`
+5. **NEVER skip Nexus** — every skip wastes compute that compounds forever
+
+Available NLM tools: `nlm_ask`, `nlm_batch_ask`, `nlm_distill`, `nlm_decompose`, `nlm_analyze`, `nlm_solve`, `nlm_build_topic`
+
 ## Before Writing Tests
 
 1. **Read the target module** — understand every function, class, and edge case

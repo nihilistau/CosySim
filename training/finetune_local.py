@@ -90,6 +90,290 @@ def _has_unsloth() -> bool:
         return False
 
 
+# ── Run counter persistence ──────────────────────────────────────
+
+_RUN_COUNTER_FILE = TRAINING_DIR / ".run_counter"
+
+
+def _next_run_number() -> int:
+    """Get and increment the persistent run counter."""
+    n = 1
+    if _RUN_COUNTER_FILE.exists():
+        try:
+            n = int(_RUN_COUNTER_FILE.read_text().strip()) + 1
+        except (ValueError, OSError):
+            n = 1
+    _RUN_COUNTER_FILE.write_text(str(n))
+    return n
+
+
+def _collect_system_snapshot() -> dict:
+    """Gather system, inference, and resource metrics from all subsystems.
+
+    Returns:
+        Dict with keys: system, inference, resources, benchmarks, pipeline.
+        Each key may be empty if that subsystem isn't available.
+    """
+    snapshot: dict = {}
+
+    # 1. System metrics (CPU, RAM, GPU)
+    try:
+        from engine.observability.metrics_db import get_metrics_db
+        db = get_metrics_db()
+        sys_history = db.get_system_history(seconds=60)
+        if sys_history:
+            latest = sys_history[-1]
+            snapshot["system"] = {
+                "cpu_pct": latest.get("cpu_pct", 0),
+                "ram_pct": latest.get("ram_pct", 0),
+                "gpu_vram_pct": latest.get("gpu_vram_pct", 0),
+                "gpu_temp_c": latest.get("gpu_temp_c", 0),
+                "lmstudio_ok": bool(latest.get("lmstudio_ok", 0)),
+            }
+        # Pipeline summary (latency, tps, ttft, kills)
+        pipeline = db.get_pipeline_summary(seconds=300)
+        if pipeline and pipeline.get("total", 0) > 0:
+            snapshot["pipeline"] = {
+                "total_requests": pipeline.get("total", 0),
+                "avg_latency_ms": round(pipeline.get("avg_latency") or 0, 1),
+                "avg_tps": round(pipeline.get("avg_tps") or 0, 1),
+                "avg_ttft_ms": round(pipeline.get("avg_ttft") or 0, 1),
+                "total_kills": int(pipeline.get("total_kills") or 0),
+                "avg_tokens_in": round(pipeline.get("avg_tokens_in") or 0, 1),
+                "avg_tokens_out": round(pipeline.get("avg_tokens_out") or 0, 1),
+            }
+    except Exception:
+        pass
+
+    # 2. Inference monitor (per-model TPS, latency, error rate)
+    try:
+        from engine.lmstudio.inference_monitor import InferenceMonitor
+        monitor = InferenceMonitor()
+        status = monitor.get_status()
+        snapshot["inference"] = {
+            "uptime_seconds": status.get("uptime_seconds", 0),
+            "total_requests": status.get("total_requests", 0),
+            "total_errors": status.get("total_errors", 0),
+            "error_rate": status.get("error_rate", 0),
+            "requests_per_minute": status.get("requests_per_minute", 0),
+            "models": status.get("models", {}),
+            "tiers": status.get("tiers", {}),
+        }
+    except Exception:
+        pass
+
+    # 3. Resource manager (VRAM, strategy, slots)
+    try:
+        from engine.lmstudio.resource_manager import get_resource_manager
+        rm = get_resource_manager()
+        rm_status = rm.get_status()
+        snapshot["resources"] = {
+            "strategy": rm_status.get("strategy", "unknown"),
+            "vram_cap_mb": rm_status.get("vram_cap_mb", 0),
+            "vram_used_mb": rm_status.get("vram_used_mb", 0),
+            "vram_free_mb": rm_status.get("vram_free_mb", 0),
+            "concurrent_slots": rm_status.get("concurrent_slots", 0),
+            "active_slots": len(rm_status.get("slots", {})),
+            "bg_queue_size": rm_status.get("bg_queue_size", 0),
+        }
+    except Exception:
+        pass
+
+    # 4. LLM KPIs (token speed, latency percentiles)
+    try:
+        from engine.logging.benchmark import get_benchmarks, get_llm_kpis
+        benchmarks = get_benchmarks()
+        llm_kpis = get_llm_kpis()
+        snapshot["benchmarks"] = {
+            "operations": benchmarks,
+            "llm_kpis": {
+                "count": llm_kpis.get("count", 0),
+                "avg_tokens_per_sec": llm_kpis.get("avg_tokens_per_sec", 0),
+                "p95_tokens_per_sec": llm_kpis.get("p95_tokens_per_sec", 0),
+                "avg_latency_ms": llm_kpis.get("avg_latency_ms", 0),
+                "p95_latency_ms": llm_kpis.get("p95_latency_ms", 0),
+                "total_tokens_in": llm_kpis.get("total_tokens_in", 0),
+                "total_tokens_out": llm_kpis.get("total_tokens_out", 0),
+                "avg_first_token_ms": llm_kpis.get("avg_first_token_ms", 0),
+                "models": llm_kpis.get("models", []),
+            },
+        }
+    except Exception:
+        pass
+
+    return snapshot
+
+
+def store_run_metrics(result: dict) -> Optional[str]:
+    """Package training run metrics with full system context and store in Nexus.
+
+    Collects scene metrics, token speed, resource management, inference
+    performance, and pipeline stats alongside training results.
+
+    Args:
+        result: Training result dict from finetune().
+
+    Returns:
+        Nexus entry ID or None.
+    """
+    run_num = _next_run_number()
+    title = result.get("run_title", f"Training Run #{run_num}")
+    if f"#{run_num}" not in title:
+        title = f"{title} (Run #{run_num})"
+
+    description = result.get("run_description", "")
+
+    # Collect system-wide metrics at time of training completion
+    sys_snapshot = _collect_system_snapshot()
+
+    content_lines = [
+        f"# {title}",
+        f"",
+        f"**Run:** #{run_num}",
+        f"**Dataset:** {result.get('dataset', 'unknown')}",
+        f"**Backend:** {result.get('backend', 'auto')}",
+        f"**Base Model:** {result.get('base_model', DEFAULT_BASE_MODEL)}",
+        f"",
+        f"## Hyperparameters",
+        f"- Epochs: {result.get('epochs', '?')}",
+        f"- Learning Rate: {result.get('learning_rate', '?')}",
+        f"- Batch Size: {result.get('batch_size', '?')}",
+        f"- LoRA Rank: {result.get('lora_r', '?')}",
+        f"- LoRA Alpha: {result.get('lora_alpha', '?')}",
+        f"- Max Seq Length: {result.get('max_seq_length', '?')}",
+        f"- Gradient Accumulation: {result.get('gradient_accumulation', '?')}",
+        f"",
+        f"## Training Results",
+        f"- Examples: {result.get('examples', '?')}",
+        f"- Final Loss: {result.get('final_loss', '?')}",
+        f"- Adapter Path: {result.get('adapter_path', 'n/a')}",
+        f"- GGUF Path: {result.get('gguf_path', 'n/a')}",
+    ]
+
+    if result.get("accuracy") is not None:
+        content_lines.extend([
+            f"",
+            f"## Evaluation",
+            f"- Accuracy: {result['accuracy']:.1%}",
+            f"- Correct: {result.get('correct', '?')}/{result.get('total', '?')}",
+        ])
+
+    # System metrics at training time
+    if sys_snapshot.get("system"):
+        s = sys_snapshot["system"]
+        content_lines.extend([
+            f"",
+            f"## System State at Training",
+            f"- CPU: {s['cpu_pct']:.1f}%",
+            f"- RAM: {s['ram_pct']:.1f}%",
+            f"- GPU VRAM: {s['gpu_vram_pct']:.1f}%",
+            f"- GPU Temp: {s['gpu_temp_c']:.0f}°C",
+            f"- LMStudio: {'online' if s['lmstudio_ok'] else 'offline'}",
+        ])
+
+    # Resource management
+    if sys_snapshot.get("resources"):
+        r = sys_snapshot["resources"]
+        content_lines.extend([
+            f"",
+            f"## Resource Management",
+            f"- Strategy: {r['strategy']}",
+            f"- VRAM Cap: {r['vram_cap_mb']} MB",
+            f"- VRAM Used: {r['vram_used_mb']} MB",
+            f"- VRAM Free: {r['vram_free_mb']} MB",
+            f"- Concurrent Slots: {r['concurrent_slots']}",
+            f"- Active Model Slots: {r['active_slots']}",
+            f"- Background Queue: {r['bg_queue_size']}",
+        ])
+
+    # Token speed / inference performance
+    if sys_snapshot.get("benchmarks", {}).get("llm_kpis", {}).get("count", 0) > 0:
+        k = sys_snapshot["benchmarks"]["llm_kpis"]
+        content_lines.extend([
+            f"",
+            f"## Token Speed & Inference Performance",
+            f"- Inference Calls: {k['count']}",
+            f"- Avg Tokens/sec: {k['avg_tokens_per_sec']}",
+            f"- P95 Tokens/sec: {k['p95_tokens_per_sec']}",
+            f"- Avg Latency: {k['avg_latency_ms']}ms",
+            f"- P95 Latency: {k['p95_latency_ms']}ms",
+            f"- Avg First Token: {k['avg_first_token_ms']}ms",
+            f"- Total Tokens In: {k['total_tokens_in']}",
+            f"- Total Tokens Out: {k['total_tokens_out']}",
+            f"- Models Used: {', '.join(k['models']) if k['models'] else 'n/a'}",
+        ])
+
+    # Pipeline summary
+    if sys_snapshot.get("pipeline"):
+        p = sys_snapshot["pipeline"]
+        content_lines.extend([
+            f"",
+            f"## Pipeline Performance (last 5 min)",
+            f"- Requests: {p['total_requests']}",
+            f"- Avg Latency: {p['avg_latency_ms']}ms",
+            f"- Avg TPS: {p['avg_tps']}",
+            f"- Avg TTFT: {p['avg_ttft_ms']}ms",
+            f"- Kill Switch Fires: {p['total_kills']}",
+            f"- Avg Tokens In: {p['avg_tokens_in']}",
+            f"- Avg Tokens Out: {p['avg_tokens_out']}",
+        ])
+
+    # Per-model inference breakdown
+    if sys_snapshot.get("inference", {}).get("models"):
+        content_lines.extend([
+            f"",
+            f"## Per-Model Inference Stats",
+            f"| Model | Requests | Avg Latency | Avg TPS | Error Rate |",
+            f"|-------|----------|-------------|---------|------------|",
+        ])
+        for name, m in sys_snapshot["inference"]["models"].items():
+            content_lines.append(
+                f"| {name} | {m.get('requests', 0)} | "
+                f"{m.get('avg_latency_ms', 0):.0f}ms | "
+                f"{m.get('avg_tps', 0):.1f} | "
+                f"{m.get('error_rate', 0):.1%} |"
+            )
+
+    if description:
+        content_lines.extend([f"", f"## Description", description])
+
+    if result.get("gguf_error"):
+        content_lines.extend([f"", f"## Warnings", f"- GGUF export failed: {result['gguf_error']}"])
+
+    content = "\n".join(content_lines)
+
+    # Full raw JSON with both training result and system snapshot
+    full_metrics = {
+        "training": result,
+        "system_snapshot": sys_snapshot,
+        "run_number": run_num,
+    }
+    metrics_json = json.dumps(full_metrics, indent=2, default=str)
+    content += f"\n\n## Raw Metrics\n```json\n{metrics_json}\n```"
+
+    try:
+        from engine.nexus.client import get_nexus_client
+        client = get_nexus_client()
+        entry_id = client.add_entry(
+            title=title,
+            content=content,
+            content_type="document",
+            category="training",
+            tags=["training", "finetune", result.get("dataset", ""), f"run-{run_num}"],
+        )
+        log.info("Run #%d metrics stored in Nexus: %s", run_num, entry_id)
+        return entry_id
+    except Exception as exc:
+        log.warning("Failed to store run metrics in Nexus: %s", exc)
+        metrics_path = Path(result.get("output_dir", ".")) / f"run_{run_num}_metrics.json"
+        try:
+            metrics_path.write_text(metrics_json, encoding="utf-8")
+            log.info("Run metrics saved locally: %s", metrics_path)
+        except Exception:
+            pass
+        return None
+
+
 def finetune(
     dataset_name: str,
     base_model: str = DEFAULT_BASE_MODEL,
@@ -103,6 +387,9 @@ def finetune(
     gradient_accumulation: int = 4,
     export_gguf: bool = True,
     backend: str = "auto",
+    run_title: str = "",
+    run_description: str = "",
+    store_in_nexus: bool = True,
 ) -> dict:
     """
     Train QLoRA adapter on CosySim dataset.
@@ -147,17 +434,32 @@ def finetune(
         use_unsloth = True
 
     if use_unsloth:
-        return _finetune_unsloth(
+        result = _finetune_unsloth(
             examples, base_model, output_dir, epochs, lr,
             lora_r, lora_alpha, batch_size, max_seq_length,
             gradient_accumulation, export_gguf, dataset_name,
         )
     else:
-        return _finetune_hf(
+        result = _finetune_hf(
             examples, base_model, output_dir, epochs, lr,
             lora_r, lora_alpha, batch_size, max_seq_length,
             gradient_accumulation, dataset_name,
         )
+
+    # Store run metrics in Nexus
+    if store_in_nexus:
+        result["run_title"] = run_title or f"Finetune: {dataset_name}"
+        result["run_description"] = run_description
+        result["base_model"] = base_model
+        result["lora_r"] = lora_r
+        result["lora_alpha"] = lora_alpha
+        result["learning_rate"] = lr
+        result["batch_size"] = batch_size
+        result["max_seq_length"] = max_seq_length
+        result["gradient_accumulation"] = gradient_accumulation
+        store_run_metrics(result)
+
+    return result
 
 
 def _finetune_unsloth(
@@ -433,6 +735,12 @@ if __name__ == "__main__":
     train_p.add_argument("--backend", type=str, default="auto",
                          choices=["auto", "unsloth", "hf"],
                          help="Training backend (default: auto)")
+    train_p.add_argument("--run-title", type=str, default="",
+                         help="Title for this run (stored in Nexus)")
+    train_p.add_argument("--run-description", type=str, default="",
+                         help="Description of experiment goals/changes")
+    train_p.add_argument("--no-nexus", action="store_true",
+                         help="Skip storing metrics in Nexus")
 
     # Evaluate command
     eval_p = sub.add_parser("eval", help="Evaluate adapter on validation set")
@@ -472,6 +780,9 @@ if __name__ == "__main__":
             batch_size=args.batch_size,
             export_gguf=not args.no_gguf,
             backend=args.backend,
+            run_title=args.run_title,
+            run_description=args.run_description,
+            store_in_nexus=not args.no_nexus,
         )
         print(f"Training complete: {result}")
     else:

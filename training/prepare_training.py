@@ -339,7 +339,66 @@ def augment_from_nexus(
     return results
 
 
-# ── Training Config Builder ──────────────────────────────────────
+def augment_from_nlm(
+    notebook_id: str = "",
+    topics: Optional[List[str]] = None,
+    count: int = 50,
+    quality_threshold: float = 0.3,
+    output_dir: Path = CUSTOM_DIR,
+    fmt: str = "instruction",
+) -> Dict[str, Any]:
+    """Distill Q&A from NotebookLM and export as training data.
+
+    Uses the KnowledgeForge to ask NLM questions and format the
+    answers as training JSONL. This is free Gemini compute turned
+    directly into fine-tuning data.
+
+    Args:
+        notebook_id: NLM notebook to distill from.
+        topics: Topics to focus on (auto-generated if None).
+        count: Number of Q&A pairs to generate.
+        quality_threshold: Minimum quality score (0.0-1.0).
+        output_dir: Where to write the JSONL.
+        fmt: Output format (instruction, chat_ml, sharegpt).
+
+    Returns:
+        Dict with counts and status.
+    """
+    try:
+        from engine.nexus.knowledge_forge import get_knowledge_forge
+    except ImportError:
+        logger.error("KnowledgeForge not available — skipping NLM augmentation")
+        return {"error": "KnowledgeForge not importable"}
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    forge = get_knowledge_forge()
+
+    results: Dict[str, Any] = {}
+
+    try:
+        result = forge.export_training(
+            notebook_id=notebook_id,
+            format=fmt,
+            topics=topics,
+            count=count,
+            quality_threshold=quality_threshold,
+            output_path=str(output_dir / "nlm_forge_train.jsonl"),
+        )
+        results["success"] = result.success
+        results["qa_generated"] = len(result.qa_pairs)
+        results["errors"] = result.errors
+        results["duration_seconds"] = result.duration_seconds
+        if result.documents:
+            for doc in result.documents:
+                if isinstance(doc, dict):
+                    results["output_path"] = doc.get("path", "")
+                    results["format"] = doc.get("format", fmt)
+        logger.info("NLM forge exported %d Q&A pairs", len(result.qa_pairs))
+    except Exception as e:
+        logger.warning("Failed NLM forge export: %s", e)
+        results["error"] = str(e)
+
+    return results
 
 def build_training_config(
     dataset_name: str = "combined_multitask",
@@ -401,6 +460,10 @@ def main() -> None:
     parser.add_argument("--validate", action="store_true", help="Validate all datasets")
     parser.add_argument("--combine", action="store_true", help="Create multi-task combined dataset")
     parser.add_argument("--augment-nexus", action="store_true", help="Augment with Nexus data")
+    parser.add_argument("--augment-nlm", action="store_true", help="Augment with NLM forge data")
+    parser.add_argument("--nlm-notebook", default="", help="NLM notebook ID for forge export")
+    parser.add_argument("--nlm-count", type=int, default=50, help="Number of Q&A pairs to generate")
+    parser.add_argument("--nlm-topics", nargs="*", help="Topics for NLM distillation")
     parser.add_argument("--preflight", action="store_true", help="Full pre-flight check (validate + combine)")
     parser.add_argument("--config", action="store_true", help="Print training config JSON")
     parser.add_argument("--dataset-dir", default="training/datasets", help="Dataset directory")
@@ -422,6 +485,17 @@ def main() -> None:
         for k, v in results.items():
             print(f"  {k}: {v}")
 
+    if args.augment_nlm:
+        print("\n🧠 Augmenting from NLM Forge...")
+        results = augment_from_nlm(
+            notebook_id=args.nlm_notebook,
+            topics=args.nlm_topics,
+            count=args.nlm_count,
+            output_dir=dataset_dir / "custom",
+        )
+        for k, v in results.items():
+            print(f"  {k}: {v}")
+
     if args.preflight or args.combine:
         print("\n📦 Creating combined multi-task dataset...")
         stats = create_combined_dataset(dataset_dir)
@@ -432,7 +506,7 @@ def main() -> None:
         config = build_training_config()
         print(json.dumps(config, indent=2))
 
-    if not any([args.validate, args.combine, args.augment_nexus, args.preflight, args.config]):
+    if not any([args.validate, args.combine, args.augment_nexus, args.augment_nlm, args.preflight, args.config]):
         parser.print_help()
 
 

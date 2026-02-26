@@ -326,6 +326,27 @@ class CopilotBridge:
             if path and path not in self._metrics.files_edited:
                 self._metrics.files_edited.append(path)
 
+    def track_error(self, tool_name: str, error_msg: str) -> None:
+        """Track an error occurrence for pattern analysis.
+
+        Args:
+            tool_name: Name of the tool that errored.
+            error_msg: Error message text.
+        """
+        self._metrics.tools_used.append(f"ERROR:{tool_name}")
+        try:
+            nexus = self._get_nexus()
+            if nexus:
+                nexus.add_entry(
+                    f"Error in {tool_name}",
+                    f"Tool: {tool_name}\nError: {error_msg}",
+                    content_type="memory",
+                    category="debugging",
+                    tags=["error", "copilot", tool_name],
+                )
+        except Exception:
+            pass
+
     def store_decision(self, title: str, content: str, category: str = "architecture") -> Optional[str]:
         """Store a design decision in Nexus.
 

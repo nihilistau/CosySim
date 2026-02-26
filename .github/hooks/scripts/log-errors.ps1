@@ -1,5 +1,5 @@
 #!/usr/bin/env pwsh
-# Hook script: Log errors to JSONL for later analysis
+# Hook script: Log errors to JSONL and optionally store in Nexus
 # Called by cosysim-hooks.json errorOccurred hook
 
 param()
@@ -22,6 +22,19 @@ try {
                 timestamp = if ($parsed.timestamp) { $parsed.timestamp } else { (Get-Date -Format o) }
             } | ConvertTo-Json -Compress
             Add-Content -Path $logFile -Value $entry
+
+            # Store recurring errors in Nexus for pattern analysis (non-blocking)
+            $errMsg = if ($parsed.error) { ($parsed.error -replace "'", "''").Substring(0, [Math]::Min(200, $parsed.error.Length)) } else { "" }
+            $tool = if ($parsed.toolName) { $parsed.toolName -replace "'", "''" } else { "unknown" }
+            if ($errMsg) {
+                python -c "
+try:
+    from engine.nexus.copilot_bridge import get_copilot_bridge
+    get_copilot_bridge().track_error('$tool', '$errMsg')
+except Exception:
+    pass
+" 2>$null
+            }
         }
     }
 } catch {

@@ -20,6 +20,12 @@ from engine.config import get_config
 from engine.scenes.base_scene import BaseScene
 from engine.scenes.nexus_mixin import NexusSceneMixin
 
+try:
+    from flask_socketio import SocketIO, emit
+except ImportError:
+    SocketIO = None  # type: ignore[misc,assignment]
+    emit = None  # type: ignore[assignment]
+
 logger = logging.getLogger(__name__)
 
 SCENE_ID = "nexus_panel"
@@ -63,6 +69,14 @@ class NexusPanelScene(BaseScene, NexusSceneMixin):
         )
         self.app.config["SECRET_KEY"] = cfg.get("flask.secret_key", "nexus-panel-key")
 
+        # Socket.IO for real-time progress streaming
+        if SocketIO is not None:
+            self.socketio = SocketIO(
+                self.app, cors_allowed_origins="*", async_mode="threading"
+            )
+        else:
+            self.socketio = None
+
         # Activity feed — ring buffer of recent events
         self._activity: deque = deque(maxlen=500)
         self._activity_lock = threading.Lock()
@@ -77,6 +91,9 @@ class NexusPanelScene(BaseScene, NexusSceneMixin):
             "librarian_chats": 0,
             "tokens_saved_est": 0,
         }
+
+        # Guided distillation sessions
+        self._guided_sessions: Dict[str, dict] = {}
 
         self._register_routes()
         self.nexus_init(SCENE_ID)
@@ -101,6 +118,14 @@ class NexusPanelScene(BaseScene, NexusSceneMixin):
     def _get_activity(self, limit: int = 50) -> List[Dict]:
         with self._activity_lock:
             return list(self._activity)[:limit]
+
+    def _emit_progress(self, event: str, data: Dict[str, Any]) -> None:
+        """Emit a Socket.IO progress event if available."""
+        if self.socketio is not None:
+            try:
+                self.socketio.emit(event, data)
+            except Exception:
+                pass
 
     # ── Nexus Proxy Helpers ─────────────────────────────────────────────
 
@@ -783,7 +808,15 @@ class NexusPanelScene(BaseScene, NexusSceneMixin):
             try:
                 from engine.nexus.nlm_router import get_nlm_router
                 router = get_nlm_router()
-                results = [router.route(q, notebook_id=nb_id).to_dict() for q in questions]
+                results = []
+                for i, q in enumerate(questions):
+                    r = router.route(q, notebook_id=nb_id)
+                    results.append(r.to_dict())
+                    self._emit_progress("batch_progress", {
+                        "current": i + 1,
+                        "total": len(questions),
+                        "tier": r.source_tier,
+                    })
                 self._log_activity("nlm_batch", f"{len(questions)} questions", "query")
                 return jsonify({"results": results, "count": len(results)})
             except Exception as exc:
@@ -979,13 +1012,460 @@ class NexusPanelScene(BaseScene, NexusSceneMixin):
             except Exception as exc:
                 return jsonify({"error": str(exc)}), 500
 
+        # ── System Metrics Routes ───────────────────────────────────
+
+        @app.route("/api/metrics/system")
+        def api_metrics_system():
+            """Current system metrics snapshot (CPU, RAM, GPU, pipeline)."""
+            try:
+                from training.finetune_local import _collect_system_snapshot
+                snap = _collect_system_snapshot()
+                return jsonify(snap)
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @app.route("/api/metrics/inference")
+        def api_metrics_inference():
+            """Per-model inference stats from InferenceMonitor."""
+            try:
+                from engine.lmstudio.inference_monitor import InferenceMonitor
+                monitor = InferenceMonitor()
+                return jsonify(monitor.get_status())
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @app.route("/api/metrics/resources")
+        def api_metrics_resources():
+            """Resource manager status (VRAM, slots, strategy)."""
+            try:
+                from engine.lmstudio.resource_manager import get_resource_manager
+                rm = get_resource_manager()
+                return jsonify(rm.get_status())
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @app.route("/api/metrics/benchmarks")
+        def api_metrics_benchmarks():
+            """Operation timings and LLM KPIs."""
+            try:
+                from engine.logging.benchmark import get_benchmarks, get_llm_kpis
+                return jsonify({
+                    "operations": get_benchmarks(),
+                    "llm_kpis": get_llm_kpis(),
+                })
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @app.route("/api/metrics/pipeline")
+        def api_metrics_pipeline():
+            """Pipeline summary and recent history."""
+            try:
+                from engine.observability.metrics_db import get_metrics_db
+                db = get_metrics_db()
+                seconds = int(request.args.get("seconds", 300))
+                return jsonify({
+                    "summary": db.get_pipeline_summary(seconds=seconds),
+                    "system_history": db.get_system_history(seconds=seconds),
+                    "alerts": db.get_recent_alerts(limit=20),
+                })
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @app.route("/api/metrics/training-runs")
+        def api_metrics_training_runs():
+            """List all training run entries from Nexus."""
+            client = self._get_client()
+            if not client:
+                return jsonify({"error": "Nexus unavailable"}), 503
+            try:
+                results = client.search("training finetune run")
+                runs = [r for r in results if "training" in r.get("tags", [])]
+                return jsonify({"runs": runs, "count": len(runs)})
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        # ── Log Streaming Routes ────────────────────────────────────
+
+        @app.route("/api/logs/recent")
+        def api_logs_recent():
+            """Get recent logs from CosyLogger ring buffer."""
+            try:
+                from engine.logging.cosy_logger import get_logs
+                level = request.args.get("level", "WARNING")
+                count = int(request.args.get("count", 100))
+                logs = get_logs(level=level, count=count)
+                return jsonify({"logs": logs, "count": len(logs)})
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @app.route("/api/logs/store", methods=["POST"])
+        def api_logs_store():
+            """Flush recent ERROR+ logs to Nexus for pattern analysis."""
+            client = self._get_client()
+            if not client:
+                return jsonify({"error": "Nexus unavailable"}), 503
+            try:
+                from engine.logging.cosy_logger import get_logs
+                level = request.json.get("level", "ERROR") if request.json else "ERROR"
+                count = int(request.json.get("count", 50)) if request.json else 50
+                logs = get_logs(level=level, count=count)
+                if not logs:
+                    return jsonify({"stored": 0, "message": "No logs to store"})
+                content = "\n".join(
+                    f"[{l.get('timestamp', '?')}] {l.get('level', '?')} "
+                    f"{l.get('name', '?')}: {l.get('message', '')}"
+                    for l in logs
+                )
+                entry_id = client.add_entry(
+                    title=f"System Logs: {time.strftime('%Y-%m-%d %H:%M')}",
+                    content=content,
+                    content_type="history",
+                    category="debugging",
+                    tags=["logs", "system", level.lower()],
+                )
+                self._log_activity("log_store", f"{len(logs)} entries", "store")
+                return jsonify({"stored": len(logs), "entry_id": entry_id})
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        # ── Data Export Routes ──────────────────────────────────────
+
+        @app.route("/api/export/all")
+        def api_export_all():
+            """Export entire Nexus knowledge base as JSON."""
+            client = self._get_client()
+            if not client:
+                return jsonify({"error": "Nexus unavailable"}), 503
+            try:
+                from flask import Response
+                entries = []
+                for ctype in ["note", "code", "document", "prompt",
+                              "transcript", "research", "memory",
+                              "history", "plan"]:
+                    try:
+                        results = client.list_by_type(ctype, limit=1000)
+                        entries.extend(results)
+                    except Exception:
+                        pass
+                # Also export Q&A cache
+                qa_pairs = []
+                try:
+                    qa_results = client.search("*", limit=2000)
+                    qa_pairs = [r for r in qa_results
+                                if r.get("content_type") == "qa"]
+                except Exception:
+                    pass
+
+                export_data = {
+                    "exported_at": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    "entry_count": len(entries),
+                    "qa_count": len(qa_pairs),
+                    "entries": entries,
+                    "qa_pairs": qa_pairs,
+                }
+                export_json = json.dumps(export_data, indent=2, default=str)
+                self._log_activity("export", f"{len(entries)} entries", "export")
+                return Response(
+                    export_json,
+                    mimetype="application/json",
+                    headers={
+                        "Content-Disposition":
+                            f"attachment; filename=nexus_export_{time.strftime('%Y%m%d_%H%M%S')}.json"
+                    },
+                )
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @app.route("/api/export/training")
+        def api_export_training():
+            """Export training-related entries as JSONL."""
+            client = self._get_client()
+            if not client:
+                return jsonify({"error": "Nexus unavailable"}), 503
+            try:
+                from flask import Response
+                results = client.search("training finetune run", limit=500)
+                runs = [r for r in results if "training" in r.get("tags", [])]
+                lines = [json.dumps(r, default=str) for r in runs]
+                self._log_activity("export_training", f"{len(runs)} runs")
+                return Response(
+                    "\n".join(lines),
+                    mimetype="application/x-ndjson",
+                    headers={
+                        "Content-Disposition":
+                            f"attachment; filename=training_runs_{time.strftime('%Y%m%d')}.jsonl"
+                    },
+                )
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        # ── Backup & Restore Routes ─────────────────────────────────
+
+        @app.route("/api/backup", methods=["POST"])
+        def api_backup():
+            """Create a Nexus knowledge base backup."""
+            data = request.get_json(force=True) if request.is_json else {}
+            label = data.get("label", "")
+            try:
+                from engine.nexus.self_maintenance import nexus_backup
+                result = nexus_backup(label=label)
+                if result.get("success"):
+                    self._log_activity("backup", f"{result['entry_count']} entries", "backup")
+                return jsonify(result)
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @app.route("/api/backup/list")
+        def api_backup_list():
+            """List available Nexus backups."""
+            try:
+                from engine.nexus.self_maintenance import nexus_list_backups
+                backups = nexus_list_backups()
+                return jsonify({"backups": backups, "count": len(backups)})
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @app.route("/api/backup/restore", methods=["POST"])
+        def api_backup_restore():
+            """Restore a Nexus backup."""
+            data = request.get_json(force=True)
+            backup_path = data.get("path", "")
+            overwrite = data.get("overwrite", False)
+            if not backup_path:
+                return jsonify({"error": "path is required"}), 400
+            try:
+                from engine.nexus.self_maintenance import nexus_restore
+                result = nexus_restore(backup_path, overwrite=overwrite)
+                if result.get("success"):
+                    self._log_activity(
+                        "restore", f"{result['restored']} entries", "restore"
+                    )
+                return jsonify(result)
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @app.route("/api/backup/prune", methods=["POST"])
+        def api_backup_prune():
+            """Prune old backups, keeping the most recent N."""
+            data = request.get_json(force=True) if request.is_json else {}
+            keep = int(data.get("keep", 10))
+            try:
+                from engine.nexus.self_maintenance import nexus_prune_backups
+                result = nexus_prune_backups(keep=keep)
+                self._log_activity("backup_prune", f"kept {keep}", "maintenance")
+                return jsonify(result)
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @app.route("/api/backup/auto", methods=["POST"])
+        def api_backup_auto():
+            """Start or stop auto-backup scheduler."""
+            data = request.get_json(force=True) if request.is_json else {}
+            action = data.get("action", "start")
+            try:
+                if action == "start":
+                    from engine.nexus.self_maintenance import start_scheduled_maintenance
+                    start_scheduled_maintenance(
+                        backup_interval_hours=float(data.get("backup_hours", 24)),
+                        maintenance_interval_hours=float(data.get("maintenance_hours", 12)),
+                        max_backups=int(data.get("max_backups", 10)),
+                    )
+                    self._log_activity("auto_maintenance", "started", "maintenance")
+                    return jsonify({"status": "started"})
+                else:
+                    from engine.nexus.self_maintenance import stop_scheduled_maintenance
+                    stop_scheduled_maintenance()
+                    self._log_activity("auto_maintenance", "stopped", "maintenance")
+                    return jsonify({"status": "stopped"})
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @app.route("/api/import/json", methods=["POST"])
+        def api_import_json():
+            """Import entries from uploaded JSON."""
+            data = request.get_json(force=True)
+            entries = data.get("entries", [])
+            if not entries:
+                return jsonify({"error": "No entries to import"}), 400
+            client = self._get_client()
+            if not client:
+                return jsonify({"error": "Nexus unavailable"}), 503
+            imported = 0
+            errors = 0
+            for entry in entries:
+                try:
+                    client.add_entry(
+                        title=entry.get("title", "Imported"),
+                        content=entry.get("content", ""),
+                        content_type=entry.get("content_type", "note"),
+                        category=entry.get("category", "imported"),
+                        tags=entry.get("tags", ["imported"]),
+                    )
+                    imported += 1
+                except Exception:
+                    errors += 1
+            self._log_activity("import", f"{imported} entries", "import")
+            return jsonify({"imported": imported, "errors": errors})
+
+        # ── Guided NLM Distillation Routes ──────────────────────────
+
+        @app.route("/api/nlm/guided/start", methods=["POST"])
+        def api_guided_start():
+            """Start a guided distillation session.
+
+            NLM answers the initial question, then suggests 3 follow-ups
+            with practical examples. Each answer is stored as a Q&A pair.
+            """
+            data = request.get_json(force=True)
+            question = data.get("question", "")
+            notebook_id = data.get("notebook_id")
+            if not question:
+                return jsonify({"error": "question is required"}), 400
+            try:
+                from engine.nexus.nlm_router import NLMRouter
+                router = NLMRouter()
+                result = router.route(question, notebook_id=notebook_id)
+                answer = result.answer if hasattr(result, "answer") else str(result)
+
+                # Generate 3 follow-up suggestions
+                suggestions = self._generate_suggestions(question, answer, notebook_id)
+
+                session_id = f"guided_{int(time.time())}_{hash(question) % 10000}"
+                self._guided_sessions[session_id] = {
+                    "history": [{"role": "user", "content": question},
+                                {"role": "assistant", "content": answer}],
+                    "notebook_id": notebook_id,
+                    "qa_stored": 0,
+                }
+
+                # Auto-store first Q&A
+                stored_qa = self._store_guided_qa(question, answer)
+
+                return jsonify({
+                    "session_id": session_id,
+                    "answer": answer,
+                    "suggestions": suggestions,
+                    "qa_stored": 1 if stored_qa else 0,
+                    "source_tier": getattr(result, "source_tier", "unknown"),
+                })
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @app.route("/api/nlm/guided/continue", methods=["POST"])
+        def api_guided_continue():
+            """Continue a guided distillation session with a follow-up."""
+            data = request.get_json(force=True)
+            session_id = data.get("session_id", "")
+            question = data.get("question", "")
+            if not session_id or session_id not in self._guided_sessions:
+                return jsonify({"error": "Invalid session_id"}), 400
+            if not question:
+                return jsonify({"error": "question is required"}), 400
+            try:
+                session = self._guided_sessions[session_id]
+                notebook_id = session.get("notebook_id")
+
+                from engine.nexus.nlm_router import NLMRouter
+                router = NLMRouter()
+                result = router.route(question, notebook_id=notebook_id)
+                answer = result.answer if hasattr(result, "answer") else str(result)
+
+                session["history"].extend([
+                    {"role": "user", "content": question},
+                    {"role": "assistant", "content": answer},
+                ])
+
+                suggestions = self._generate_suggestions(question, answer, notebook_id)
+                stored_qa = self._store_guided_qa(question, answer)
+                if stored_qa:
+                    session["qa_stored"] = session.get("qa_stored", 0) + 1
+
+                return jsonify({
+                    "session_id": session_id,
+                    "answer": answer,
+                    "suggestions": suggestions,
+                    "qa_stored": session["qa_stored"],
+                    "turn": len(session["history"]) // 2,
+                })
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @app.route("/api/nlm/guided/finish", methods=["POST"])
+        def api_guided_finish():
+            """Finish a guided session and return summary."""
+            data = request.get_json(force=True)
+            session_id = data.get("session_id", "")
+            if session_id not in self._guided_sessions:
+                return jsonify({"error": "Invalid session_id"}), 400
+            session = self._guided_sessions.pop(session_id)
+            turns = len(session["history"]) // 2
+            return jsonify({
+                "turns": turns,
+                "qa_stored": session.get("qa_stored", 0),
+                "history": session["history"],
+            })
+
+    # ── Guided Distillation Helpers ─────────────────────────────────────
+
+    def _generate_suggestions(
+        self, question: str, answer: str, notebook_id: Optional[str] = None
+    ) -> List[Dict[str, str]]:
+        """Generate 3 follow-up suggestions based on the Q&A context.
+
+        Each suggestion has a 'question' (the follow-up) and a 'label'
+        (short human-readable tag like 'Practical Example').
+        """
+        suggestions = []
+        try:
+            from engine.nexus.knowledge_forge import KnowledgeForge
+            forge = KnowledgeForge()
+            context = f"Question: {question}\nAnswer: {answer[:500]}"
+            qs = forge.generate_questions(
+                context=context,
+                category="follow_up",
+                count=3,
+            )
+            labels = ["Dive Deeper", "Practical Example", "Related Topic"]
+            for i, q in enumerate(qs[:3]):
+                suggestions.append({
+                    "question": q,
+                    "label": labels[i] if i < len(labels) else "Follow-up",
+                })
+        except Exception as exc:
+            logger.debug("Suggestion generation failed: %s", exc)
+            # Fallback: generate generic follow-ups from the question
+            suggestions = [
+                {"question": f"Can you show a practical code example for: {question}",
+                 "label": "Code Example"},
+                {"question": f"What are common pitfalls when implementing this?",
+                 "label": "Pitfalls"},
+                {"question": f"How does this integrate with the rest of the system?",
+                 "label": "Integration"},
+            ]
+        return suggestions
+
+    def _store_guided_qa(self, question: str, answer: str) -> Optional[str]:
+        """Store a guided distillation Q&A pair in Nexus."""
+        client = self._get_client()
+        if not client:
+            return None
+        try:
+            return client.add_qa(question, answer, category="distillation")
+        except Exception as exc:
+            logger.debug("Failed to store guided Q&A: %s", exc)
+            return None
+
     # ── Lifecycle ───────────────────────────────────────────────────────
 
     def start(self) -> None:
         """Start the Nexus Control Panel."""
         self._log_activity("panel_start", f"port={self.port}")
         logger.info("Starting Nexus Control Panel on port %s", self.port)
-        self.app.run(host=self.host, port=self.port, debug=False, use_reloader=False)
+        if self.socketio is not None:
+            self.socketio.run(self.app, host=self.host, port=self.port,
+                              debug=False, use_reloader=False)
+        else:
+            self.app.run(host=self.host, port=self.port, debug=False, use_reloader=False)
 
     def stop(self) -> None:
         """Stop the panel and flush Nexus events."""

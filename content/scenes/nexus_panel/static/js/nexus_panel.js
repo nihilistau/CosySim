@@ -5,6 +5,20 @@ const API = '';
 let pollTimer = null;
 const artifacts = [];
 
+// ── Socket.IO (optional real-time streaming) ────────────────────────
+let socket = null;
+if (typeof io !== 'undefined') {
+  socket = io();
+  socket.on('batch_progress', (data) => {
+    const el = document.getElementById('batch-progress');
+    if (el) el.textContent = `Processing ${data.current}/${data.total} (${data.tier})...`;
+  });
+  socket.on('forge_progress', (data) => {
+    const el = document.getElementById('topic-result') || document.getElementById('har-result');
+    if (el && data.step) el.innerHTML = `<p class="muted">${data.step}...</p>`;
+  });
+}
+
 // ── Tab Navigation ──────────────────────────────────────────────────
 document.querySelectorAll('.tab-btn').forEach(btn => {
   btn.addEventListener('click', () => {
@@ -384,7 +398,78 @@ async function sendChat() {
         : `Error: ${r.error || 'Unknown'}`);
       return;
     }
-  }
+    if (cmd === '/backup') {
+      appendMsg('assistant', '<div class="spinner"></div> Creating backup...');
+      const b = await api('/api/backup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: arg || '' }),
+      });
+      if (b.success) {
+        replaceLastMsg('assistant', `✅ Backup created successfully!\n\n**Entries:** ${b.entry_count}\n**Q&A:** ${b.qa_count}\n**Size:** ${(b.size_bytes / 1024).toFixed(1)} KB\n**Path:** \`${b.backup_path}\``);
+      } else {
+        replaceLastMsg('assistant', `❌ Backup failed: ${b.error || 'Unknown error'}`);
+      }
+      return;
+    }
+    if (cmd === '/backups') {
+      appendMsg('assistant', '<div class="spinner"></div> Listing backups...');
+      const bl = await api('/api/backup/list');
+      if (bl.backups && bl.backups.length > 0) {
+        const lines = bl.backups.map(b => {
+          const size = (b.size_bytes / 1024).toFixed(1);
+          const date = new Date(b.created * 1000).toLocaleString();
+          return `• **${b.filename}** — ${b.entry_count} entries, ${size} KB (${date})${b.label ? ' [' + b.label + ']' : ''}`;
+        });
+        replaceLastMsg('assistant', `Found **${bl.count}** backups:\n${lines.join('\n')}`);
+      } else {
+        replaceLastMsg('assistant', 'No backups found. Use `/backup` to create one.');
+      }
+      return;
+    }
+    if (cmd === '/export') {
+      appendMsg('assistant', '<div class="spinner"></div> Exporting knowledge base...');
+      window.open('/api/export/all', '_blank');
+      replaceLastMsg('assistant', '📥 Export download started. The JSON file contains all entries and Q&A pairs.');
+      return;
+    }
+    if (cmd === '/maintain') {
+      const action = arg || 'full';
+      appendMsg('assistant', `<div class="spinner"></div> Running maintenance: ${action}...`);
+      const m = await api(`/api/maintain/${action}`, { method: 'POST' });
+      replaceLastMsg('assistant', '```\n' + JSON.stringify(m, null, 2) + '\n```');
+      return;
+    }
+    if (cmd === '/auto-backup') {
+      const action = arg === 'stop' ? 'stop' : 'start';
+      appendMsg('assistant', `<div class="spinner"></div> ${action === 'start' ? 'Starting' : 'Stopping'} auto-backup...`);
+      const r = await api('/api/backup/auto', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action }),
+      });
+      replaceLastMsg('assistant', `🔄 Auto-backup scheduler **${r.status || action}**. Backups every 24h, maintenance every 12h.`);
+      return;
+    }
+    if (cmd === '/metrics') {
+      appendMsg('assistant', '<div class="spinner"></div> Gathering system metrics...');
+      const m = await api('/api/metrics/system');
+      const lines = [];
+      if (m.system) {
+        lines.push('**System:**', `  CPU: ${m.system.cpu_pct}% · RAM: ${m.system.ram_pct}% · GPU VRAM: ${m.system.gpu_vram_pct}% · Temp: ${m.system.gpu_temp_c}°C`);
+      }
+      if (m.pipeline) {
+        lines.push('**Pipeline:**', `  Requests: ${m.pipeline.total_requests} · Avg TPS: ${m.pipeline.avg_tps} · Avg Latency: ${m.pipeline.avg_latency_ms}ms`);
+      }
+      if (m.resources) {
+        lines.push('**Resources:**', `  Strategy: ${m.resources.strategy} · VRAM: ${m.resources.vram_used_mb}/${m.resources.vram_cap_mb} MB`);
+      }
+      replaceLastMsg('assistant', lines.length > 0 ? lines.join('\n') : 'No metrics data available.');
+      return;
+    }
+    // Unknown command
+    appendMsg('assistant', `Unknown command: \`${cmd}\`\n\nAvailable: /stats, /health, /recent, /research, /backup, /backups, /export, /maintain, /auto-backup, /metrics`);
+    return;
 
   // Normal chat — ask the Librarian
   appendMsg('assistant', '<div class="spinner"></div> Thinking...');

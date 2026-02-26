@@ -2,6 +2,61 @@
 
 All notable changes to CosySim are documented here.
 
+## v0.54b — Sprint 14 Phase 2: NLM Intelligence Layer
+
+### NLM Engine Modules (NEW)
+- **`engine/nexus/har_extractor.py`** — Extract NotebookLM data from HAR files
+  - 5-layer decode pipeline (XSSI → length-prefix → wrb.fr → inner JSON → content)
+  - NotebookData/IngestResult dataclasses, cookie extraction, Nexus ingest
+- **`engine/nexus/nlm_engine.py`** — Unified NLM client with dual backend (proxy:8800 + Nexus:3000)
+  - Notebook CRUD, source management, batch Q&A, conversation, document generation
+  - Graceful fallback between backends, NLMStats tracking
+- **`engine/nexus/knowledge_forge.py`** — NLM knowledge orchestration
+  - distill, decompose, analyze, polish, solve, export_training, build_topic, score
+  - Question generation templates, ForgeResult/QAPair dataclasses
+- **`engine/nexus/nlm_router.py`** — 4-tier NLM-first query router
+  - Cache → FTS → NLM → LLM pipeline, all answers auto-stored
+  - RouteResult with source_tier, confidence, savings metrics
+
+### Copilot Self-Improvement (NEW)
+- **`engine/nexus/copilot_bridge.py`** — Session lifecycle hooks
+  - pre_plan, analyze_files, get_guide, track_tool_use, track_error, store_decision
+  - Session metrics: compute savings, tool usage, file edits, errors
+- **`.github/hooks/`** — Upgraded preToolUse/postToolUse/errorOccurred hooks
+  - Nexus-first workflow enforcement (reminders on code edit without Nexus search)
+  - CopilotBridge integration for tool tracking and error pattern analysis
+- **All 18 `.agent.md` files** updated with Nexus-First Mandate preamble
+
+### NLM MCP Skills (NEW)
+- **`engine/skills/builtin/nlm_forge_skills.py`** — 10 @skill(pack="nlm_forge") functions
+  - nlm_ask, nlm_batch_ask, nlm_create_notebook, nlm_add_codebase, nlm_generate_doc
+  - nlm_distill, nlm_decompose, nlm_analyze, nlm_solve, nlm_build_topic
+
+### NLM CLI (NEW)
+- **`engine/nexus/nlm_cli.py`** — 16 terminal subcommands
+  - ask, batch-ask, converse, create, list, delete, add-source, add-codebase
+  - generate, distill, decompose, analyze, solve, forge, extract, stats
+
+### Nexus Control Panel Upgrades
+- **28 new API routes** — HAR ingestion, NLM queries, batch Q&A, forge operations
+- **Ingestion Tab** — HAR drag-and-drop upload, codebase indexer, notebook browser
+- **NLM Lab Tab** — 4-tier router query, batch Q&A workshop, plan decomposer,
+  code analyzer, topic builder, savings dashboard
+- **Explorer Upgrades** — Inline editing, bulk selection/delete, code syntax styling
+- **Socket.IO** — Real-time progress streaming for batch operations
+
+### Training Pipeline
+- **`training/prepare_training.py`** — Added `--augment-nlm` flag
+  - Connects KnowledgeForge.export_training() to dataset pipeline
+  - NLM-distilled Q&A exported as fine-tuning JSONL
+
+### Documentation
+- **`docs/NOTEBOOKLM_HAR_SDK.md`** — 1,472-line SDK reference for batchexecute protocol
+
+### Tests
+- **113 new tests** across 4 files (har_extractor, nlm_engine, knowledge_forge, nlm_router)
+- Total suite: 2,995 tests, all passing
+
 ## v0.53b — Sprint 14: Agent Infrastructure & Training Pipeline
 
 ### Port Registry (NEW)
