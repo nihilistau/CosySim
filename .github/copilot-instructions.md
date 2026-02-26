@@ -7,9 +7,9 @@
 
 ## Project Overview
 
-CosySim is a multi-scene AI simulation framework (v0.51b) built on
+CosySim is a multi-scene AI simulation framework (v0.52b) built on
 a custom MCP pipeline with LMStudio v1 API integration and Nexus knowledge system.
-It orchestrates virtual agents across 18 interactive scenes, each with real-time
+It orchestrates virtual agents across 13 game scenes + 4 utility scenes, each with real-time
 state management, skill-based tool calling, dialog systems, and interceptor-governed
 agent behavior. Nexus provides central knowledge management, rules engine,
 session tracking, and prompt versioning.
@@ -21,7 +21,7 @@ audit logging · LMStudio v1 streaming with stateful conversations · Nexus know
 
 **Test suite:** 2,613+ tests across 75+ files — run before and after changes.
 
-**MCP Server:** 131 tools available via `.vscode/mcp.json` — includes Nexus bridge,
+**MCP Server:** 144 tools available via `.vscode/mcp.json` — includes Nexus bridge,
 skill discovery, and system monitoring tools.
 
 ## MCP Tools Available
@@ -103,7 +103,7 @@ CosySim/
 │   ├── nexus/      # Nexus KMS client + CLI tools
 │   └── config.py   # ConfigManager singleton
 ├── content/        # Game content
-│   ├── scenes/     # 18 scene implementations
+│   ├── scenes/     # 13 scene implementations
 │   └── simulation/ # Database, character system, services
 ├── config/         # YAML/JSON config (default, dev, prod, voices, skills, mcp)
 ├── tests/          # pytest suite (75+ files, 2613+ tests)
@@ -120,6 +120,8 @@ CosySim/
 | LMStudio | 1234 | LLM inference (v1 API) |
 | ComfyUI | 8188 | Image/video generation |
 | Nexus KMS | 8700 | Knowledge management |
+| Nexus Dashboard | 8701 | Knowledge browser |
+| Nexus Control Panel | 8702 | 8-page Streamlit dashboard |
 | TTS Server | 8600 | Text-to-speech (Qwen3) |
 | Web Bridge | 8601 | Socket.IO real-time |
 | Hub | 8500 | Scene hub + navigation |
@@ -136,8 +138,11 @@ CosySim/
 - Mock external services in tests (LMStudio, ComfyUI, TTS, Nexus)
 - Run tests after changes
 - Include `Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>` in commits
+- **Search Nexus first** — before writing any code, `nexus_search("topic")` or `nexus_ask("question?")`
+- **Store audit results in Nexus** — all audit/rating results must be stored as Nexus entries with content_type="audit"
 - **On context compaction**: run `python engine/nexus/nexus_session_logger.py compact` to export checkpoint and decision data to Nexus before context is lost
 - **After major work blocks**: run `python engine/nexus/nexus_session_logger.py checkpoint` to export new checkpoints to Nexus
+- **New agents**: see `docs/AGENT_ONBOARDING.md` for full onboarding guide
 
 ### Never
 - Store game state in local Python variables
@@ -178,6 +183,14 @@ Path-specific rules auto-apply based on file patterns:
 | `Codebase Navigator` | Explain architecture, trace call chains |
 | `System Architect` | Cross-project architecture decisions |
 | `Nexus Researcher` | Research topics, store findings, manage knowledge |
+| `Code Reviewer` | Review code changes against conventions |
+| `Bug Fixer` | Diagnose and fix bugs from task tickets |
+| `Feature Builder` | Implement features from structured tickets |
+| `Refactoring Agent` | Structural refactoring without behavior change |
+| `Benchmark Runner` | Execute LMStudio benchmarks, store results |
+| `Config Optimizer` | Optimize YAML configs based on benchmark data |
+| `Knowledge Curator` | Maintain Nexus knowledge quality |
+| `Integration Tester` | Test inter-system integration points |
 
 ## Documentation
 - Entry point: `docs/INDEX.md`

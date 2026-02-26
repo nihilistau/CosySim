@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Send to Nexus — Options</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 500px; margin: 40px auto; padding: 20px; background: #1a1a2e; color: #e0e0e0; }
+    h1 { color: #7c3aed; font-size: 24px; }
+    label { display: block; margin: 16px 0 6px; font-weight: 600; color: #a0a0c0; }
+    input, select { width: 100%; padding: 10px; border: 1px solid #333; border-radius: 6px; background: #16213e; color: #e0e0e0; font-size: 14px; box-sizing: border-box; }
+    input:focus { outline: none; border-color: #7c3aed; }
+    .checkbox-row { display: flex; align-items: center; gap: 10px; margin: 16px 0; }
+    .checkbox-row input { width: auto; }
+    button { margin-top: 20px; padding: 12px 24px; background: #7c3aed; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 600; }
+    button:hover { background: #6d28d9; }
+    .status { margin-top: 12px; padding: 10px; border-radius: 6px; display: none; }
+    .status.success { display: block; background: #064e3b; color: #6ee7b7; }
+    .status.error { display: block; background: #7f1d1d; color: #fca5a5; }
+    .info { font-size: 12px; color: #666; margin-top: 4px; }
+  </style>
+</head>
+<body>
+  <h1>⚡ Send to Nexus</h1>
+
+  <label for="nexusUrl">Nexus API URL</label>
+  <input type="text" id="nexusUrl" placeholder="http://localhost:8700/api">
+  <div class="info">The base URL for your Nexus Knowledge Management System API</div>
+
+  <label for="defaultCategory">Default Category</label>
+  <select id="defaultCategory">
+    <option value="research">research</option>
+    <option value="architecture">architecture</option>
+    <option value="dev">dev</option>
+    <option value="debugging">debugging</option>
+    <option value="tutorial">tutorial</option>
+    <option value="reference">reference</option>
+  </select>
+
+  <label for="autoTags">Auto-Tags (comma-separated)</label>
+  <input type="text" id="autoTags" placeholder="web-capture, chrome">
+
+  <div class="checkbox-row">
+    <input type="checkbox" id="autoIngestYoutube" checked>
+    <label for="autoIngestYoutube" style="margin:0">Auto-import YouTube videos (transcript extraction)</label>
+  </div>
+
+  <button id="save">Save Settings</button>
+  <button id="test" style="background: #059669;">Test Connection</button>
+
+  <div id="status" class="status"></div>
+
+  <script src="options.js"></script>
+</body>
+</html>

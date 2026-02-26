@@ -1,14 +1,14 @@
 # CosySim Documentation Index
 
-> All project documentation in one place.
+> All project documentation in one place. v0.52b — 2,613+ tests, 144 MCP tools, 13 scenes.
 
 ## Getting Started
 
 | Doc | Description |
 |-----|-------------|
 | [README](../README.md) | Project overview, quick start, architecture |
-| [Onboarding](../ONBOARDING.md) | Setup and first launch |
 | [Configuration](CONFIGURATION.md) | All config files and settings |
+| [Roadmap](../ROADMAP.md) | Version history and future plans |
 
 ## Architecture & Design
 
@@ -17,14 +17,14 @@
 | [Architecture](ARCHITECTURE.md) | System design, layers, data flow, interceptor pipeline |
 | [MCP Framework](MCP_FRAMEWORK.md) | Tools, governance, state, dialog, rules, skills |
 | [Characters](CHARACTERS.md) | Personality, stats, buffs, tags, relationships |
-| [LMStudio](LMSTUDIO.md) | Model management, routing, streaming, branching |
+| [LMStudio](LMSTUDIO.md) | InferenceOrchestrator, model management, routing, streaming, branching |
 
 ## Scenes & Content
 
 | Doc | Description |
 |-----|-------------|
-| [Scenes Guide](SCENES.md) | All 11 game scenes — mechanics, APIs, rules |
-| [Skills](SKILLS.md) | @skill decorator, 9 built-in + 11 scene packs |
+| [Scenes Guide](SCENES.md) | All 13 game scenes — mechanics, APIs, rules |
+| [Skills](SKILLS.md) | @skill decorator, 13 built-in + 13 scene packs (160+ skills) |
 | [Admin Guide](ADMIN_GUIDE.md) | Admin panel pages and operations |
 
 ## APIs & Integration
@@ -49,7 +49,8 @@
 | Doc | Description |
 |-----|-------------|
 | [Training](TRAINING.md) | Gemma 270M fine-tuning pipeline, datasets, Colab |
-| [Testing](TESTING.md) | Test commands, fixtures, writing tests |
+| [Testing](TESTING.md) | Test commands, fixtures, writing tests (2,613+ tests, 75+ files) |
+| [KPI](KPI.md) | Performance metrics and monitoring |
 
 ## Development
 
@@ -57,7 +58,6 @@
 |-----|-------------|
 | [Contributing](CONTRIBUTING.md) | Scene creation, skill writing, interceptors, tests |
 | [Changelog](../CHANGELOG.md) | Sprint history and changes |
-| [KPI](KPI.md) | Performance metrics and monitoring |
 
 ## Project Planning
 
@@ -71,3 +71,4 @@
 |-----|-------------|
 | [Agent Notes](internal/AGENT_NOTES.md) | System design notes (generated) |
 | [Agent Revelations](internal/AGENT_REVELATIONS.md) | Sprint implementation logs |
+| [Project CozyDreamz](internal/Project-CozyDreamz.md) | Original project design document |

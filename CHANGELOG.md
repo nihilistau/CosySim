@@ -2,6 +2,62 @@
 
 All notable changes to CosySim are documented here.
 
+## v0.52b — Sprint 8: Knowledge, Tuning, Agents, QoL
+
+### Sprint 8: Knowledge System, Inference Tuning, Agent Infrastructure, QoL
+
+#### LMStudio Inference Tuning System (NEW)
+- **`engine/lmstudio/auto_tuner.py`** — Iterative settings optimizer
+  - `find_optimal()` tests configs per task type (roleplay, code, routing, chat, narration)
+  - `test_hypothesis()` for CPU overflow, speculative decoding, context reduction
+  - Stores optimal configs in Nexus as structured audit entries
+- **`engine/lmstudio/inference_monitor.py`** — Live transaction monitoring
+  - Per-model and per-tier rolling metrics (latency, TPS, error rate)
+  - Queue depth tracking, bottleneck detection, periodic Nexus snapshots
+  - Thread-safe singleton via `get_inference_monitor()`
+
+#### Agent Task Scheduler (NEW)
+- **`engine/nexus/task_scheduler.py`** — Priority-based task queue
+  - `AgentTask` dataclass with priority, complexity, dependencies, allowed operations
+  - `claim_task()` with preferred complexity/tag filtering
+  - Dependency-aware scheduling, subtask support, Nexus sync
+  - Singleton via `get_task_scheduler()`
+
+#### Agent Onboarding Documentation (NEW)
+- **`docs/AGENT_ONBOARDING.md`** — Self-onboarding guide for Copilot/local agents
+- **`docs/LOCAL_AGENT_GUIDE.md`** — Safety rails for local LMStudio agents
+
+#### Custom Agent Templates (8 NEW)
+- `code-reviewer`, `bug-fixer`, `feature-builder`, `refactoring-agent`
+- `benchmark-runner`, `config-optimizer`, `knowledge-curator`, `integration-tester`
+
+#### QoL Automations (NEW)
+- **Chrome Extension** (`deployment/chrome-nexus/`) — Right-click → Nexus, YouTube auto-import
+- **PowerShell Scripts** (`deployment/scripts/`) — 5 scripts with toast notifications
+- **AutoHotkey Hotkeys** (`deployment/autohotkey/`) — Win+Shift global shortcuts
+- **Logitech Setup Guide** (`deployment/logitech/`) — M720 + MX Keys Mini mapping
+- **Windows Scheduler** (`deployment/scheduler/`) — Automated overnight tasks
+
+#### Nexus Knowledge Seeded
+- Model catalog (49 models with tier assignments)
+- Settings guide (temperature, concurrency, CPU/GPU)
+- Sprint 7 technical audit findings
+- 5 rating system entries (scenes, framework, Nexus, tools, Copilot)
+- Audit storage rules
+
+#### Documentation Updates
+- ROADMAP.md: v0.51 marked done, v0.51b + v0.52b sections added
+- README.md: Badge fixed (2682+), tool/skill counts updated
+- INDEX.md: Scene count fixed (13), dead refs removed
+- LMSTUDIO.md: Orchestrator, ResourceManager, ModelManager docs added
+- copilot-instructions.md: v0.52b, 18 agents, Nexus-first rules
+
+#### Test Count: 2,613 → 2,682 (+69)
+- `tests/test_benchmark.py` — 11 tests: prompt bank, result/summary, run_quick, matrix, Nexus storage
+- `tests/test_auto_tuner.py` — 14 tests: configs, find_optimal, hypotheses, Nexus storage
+- `tests/test_inference_monitor.py` — 16 tests: metrics, transactions, bottlenecks, snapshots
+- `tests/test_task_scheduler.py` — 28 tests: CRUD, claiming, dependencies, priorities, Nexus sync
+
 ## v0.52b — URL System, llmster, Audit Hardening, and Smart Infrastructure
 
 ### Sprint 7: System Audit & Hardening

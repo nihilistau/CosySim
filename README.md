@@ -4,7 +4,7 @@
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Tests: 2048+](https://img.shields.io/badge/tests-2048%2B%20passing-brightgreen.svg)]()
+[![Tests: 2682+](https://img.shields.io/badge/tests-2682%2B%20passing-brightgreen.svg)]()
 
 ## Overview
 
@@ -119,29 +119,33 @@ python launcher.py --status          # Check service health
 
 - **MCP Pipeline** — 25-interceptor governance pipeline wrapping every inference call. Interceptors inject context, enforce rules, sync state, and shape responses pre- and post-inference.
 - **Governance** — `AgentGovernor` + `InterceptorPipeline` with priority-ordered interceptors: personality guards, policy enforcers, mood sync, relationship tracking, activity logging, and more.
-- **Skill Packs** — 13 core packs (memory, character, comfyui, voice, tts, social, boards, training, notebooklm, nexus, coding, experiment, agent_state) + per-scene packs. Skills are Python functions exposed as MCP tools via the `@skill` decorator.
+- **Skill Packs** — 13 core packs (memory, character, comfyui, voice, tts, social, boards, training, notebooklm, nexus, coding, experiment, agent_state) + 13 per-scene packs. 160+ skills exposed as MCP tools via the `@skill` decorator.
 - **Character System** — Stats, traits, mood, arousal, relationship scores, buffs, and tag-based personality modeling. Characters evolve through interactions.
-- **LMStudio Integration** — Native v1 API with `response_id` threading for KV cache reuse, SSE streaming with inline tag extraction, and stateful conversation branching.
+- **LMStudio Integration** — Native v1 API with `response_id` threading for KV cache reuse, SSE streaming with inline tag extraction, stateful conversation branching, InferenceOrchestrator with tier-based routing (GPU primary, CPU utility, router), 6 ResourceManager strategies, and JIT model loading with TTL eviction.
 - **TTS** — Qwen3-TTS voice generation server with voice designer, presets, and MCP tool integration.
 - **Media Generation** — ComfyUI integration for images and video, wired as MCP tools with workflow templates.
 - **Nexus Knowledge System** — Central knowledge management service with FTS5 search, NotebookLM integration, rules engine, session tracking, prompt versioning, Q&A distillation cache, Research Manager, YouTube transcript ingestion, namespace separation (7 namespaces), unified memory system, 4 knowledge distillers, training data pipeline, content/research workflows, and control panel. 16 Nexus MCP skills + 9 server tools. REST API on port 8700, control panel on port 8702.
 - **Experiment Framework** — A/B testing for prompts, configs, and scene parameters. Create experiments, record results, evaluate winners — all logged to Nexus.
 - **Cross-Scene Agent State** — Persistent agent identity across scenes: reputation, relationships, achievements, mood history. Agents carry context between scenes.
+- **URL System** — Web content ingestion with heading extraction, semantic chunking, and context window preparation.
+- **llmster CLI Bridge** — 5 MCP tools wrapping LMStudio CLI for model management, status, and diagnostics.
 
 ## Project Stats
 
 | Metric | Count |
 |--------|-------|
-| Tests | 2,048+ |
+| Tests | 2,613+ |
 | Game scenes | 13 |
 | Interceptors | 25 |
-| MCP skills | 194 |
-| MCP server tools | 133 |
+| MCP skills | 160+ |
+| MCP server tools | 144 |
 | Core skill packs | 13 |
 | Scene skill packs | 13 |
 | Nexus skills | 16 |
 | Nexus distillers | 4 |
 | Copilot agents | 10 |
+| Nexus knowledge entries | 300+ |
+| Nexus Q&A pairs | 90+ |
 
 ## Documentation
 
@@ -164,7 +168,7 @@ python launcher.py --status          # Check service health
 - [KPI & Metrics](docs/KPI.md)
 - [Contributing](docs/CONTRIBUTING.md)
 - [Changelog](CHANGELOG.md)
-- [Onboarding](ONBOARDING.md)
+- [Roadmap](ROADMAP.md)
 
 ## License
 
