@@ -1,6 +1,6 @@
 # CosySim Roadmap
 
-> Current: **v0.52b** | Last updated: 2025-07-16
+> Current: **v0.55b** | Last updated: 2025-07-20
 
 ## Philosophy
 
@@ -54,60 +54,45 @@ CosySim is a **meta-system** — a playground for designing, testing, benchmarki
 - [x] 144 MCP server tools, 160 MCP skills across 25 packs
 - [x] 2,613 tests passing across 75+ files
 
-### v0.52b — Sprint 8: Knowledge Seeding, Tuning, Agent System ✅ (in progress)
+### v0.52b — Sprint 8: Knowledge Seeding, Tuning, Agent System ✅
 - [x] Nexus knowledge dump — 49-model catalog, settings guide, technical findings stored
 - [x] Nexus audit rules — structured audit requirements enforced
-- [ ] Automated inference benchmarking framework
-- [ ] Auto-tuner for LMStudio settings optimization
-- [ ] Inference transaction monitor
-- [ ] Agent onboarding documentation
-- [ ] Agent task scheduler for overnight automation
-- [ ] 8 new coding agent templates
-- [ ] QoL automations (Chrome extension, PowerShell scripts, AutoHotkey, Logitech profiles)
-- [ ] Documentation overhaul and rating systems
+
+### v0.53b — Training Pipeline & Metrics ✅
+- [x] Training pipeline wiring and metrics collection
+- [x] Metrics backup and audit systems
+
+### v0.54b — NLM Intelligence Layer ✅
+- [x] NLM Engine, Knowledge Forge, NLM Router (4-tier: cache → FTS → synthesis → deep research)
+- [x] Copilot Bridge session hooks
+- [x] 10 NLM forge MCP skills
+- [x] NLM CLI (16 commands)
+- [x] Nexus Control Panel upgrades — 28 new routes, NLM Lab tab
+- [x] HAR extractor for NotebookLM
+
+### v0.55b — Full-Project Audit & Hardening ✅ ← CURRENT
+- [x] 3,521 tests passing (was ~3,012), 0 failures
+- [x] ResourceManager deadlock fix (Lock → RLock)
+- [x] Router training data capture system for 270M model fine-tuning
+- [x] Bedroom scene mixin refactor (2,610 → 1,300 lines) — combat, dialog, inventory, social
+- [x] Frontend polish — 30s timeout, toast notifications, button guards
+- [x] Config hardening — all 18 scenes in production.yaml
+- [x] unittest → pytest migration
+- [x] Project grade: A- (was B+)
 
 ---
 
 ## Next Up
 
-### v0.53 — Inference Intelligence & Benchmarking
+### v0.56b — Live Wire & Streaming
 
-**Automated tuning** — Find optimal model configurations:
-- [ ] Benchmark framework (TPS, TTFT, latency per config matrix)
-- [ ] Auto-tuner (iterative settings optimizer, stores optimal configs in Nexus)
-- [ ] CPU overflow hypothesis testing (route simple tasks to CPU-only models)
-- [ ] Smart routing validation (measure GPU+CPU split vs GPU-only performance)
-- [ ] Live inference monitoring (queue depth, utilization, bottleneck detection)
-
-**Agent self-improvement** — Close the feedback loop:
-- [ ] A/B testing framework for prompts and configurations
+- [ ] Live wire testing framework for end-to-end scene validation
+- [ ] Socket.IO streaming for batch operations
+- [ ] Scene template system (scaffold new scenes from archetypes)
 - [ ] Agent performance metrics (engagement, coherence, creativity scores)
-- [ ] Automatic prompt refinement based on evaluation results
-- [ ] Experiment result storage in Nexus with analysis
+- [ ] Cross-scene event propagation
 
-### v0.54 — Canvas Interface System
-
-**Dynamic UI generation** — Agents create their own interfaces:
-- [ ] Canvas component library (charts, forms, grids, media viewers)
-- [ ] Agent-driven layout generation (describe UI → get working interface)
-- [ ] Real-time data binding between agent state and UI components
-- [ ] Template system for common patterns (dashboard, chat, game board)
-
-**Scene creator upgrade** — Visual scene building:
-- [ ] Drag-and-drop scene layout
-- [ ] Visual skill/interceptor wiring
-- [ ] Live preview with hot-reload
-
-### v0.55 — Training & Fine-tuning Platform
-
-**Training environment** — Systematic model improvement:
-- [ ] Conversation quality scoring pipeline
-- [ ] Automated training data generation from scenes
-- [ ] Fine-tune experiment tracking in Nexus
-- [ ] Model comparison dashboards
-- [ ] Regression detection (model quality alerts)
-
-### v0.56+ — Advanced Features
+### v0.57+ — Advanced Features
 
 **Multi-agent orchestration:**
 - [ ] Agent teams with role specialization
@@ -115,36 +100,11 @@ CosySim is a **meta-system** — a playground for designing, testing, benchmarki
 - [ ] Agent-to-agent teaching (knowledge transfer)
 - [ ] Emergent behavior detection and logging
 
-**Scene intelligence:**
-- [ ] Scene auto-scaling (adjust tick rate, agent count based on activity)
-- [ ] Cross-scene event propagation (events in one scene affect others)
-- [ ] Agent migration between scenes with state preservation
-
 **Production readiness:**
 - [ ] Scene packaging (export/import scenes as packages)
-- [ ] Plugin marketplace (share skills, interceptors, scenes)
 - [ ] Remote agent support (agents running on different machines)
 - [ ] Performance profiling and bottleneck detection
-
----
-
-## Scene Quality Targets
-
-| Scene | Current | Target | Priority |
-|-------|---------|--------|----------|
-| Bedroom | A+ (78) | A+ | Maintain |
-| Casino | B+ (65) | A (70+) | v0.53 |
-| Lounge | B (62) | A- (68+) | v0.53 |
-| Tavern | B (60) | B+ (65+) | v0.54 |
-| Heist | B (59) | B+ (65+) | v0.54 |
-| Phone | B (59) | A- (68+) | v0.53 |
-| Command Center | B (58) | B+ (65+) | v0.54 |
-| Games | B- (55) | B (60+) | v0.54 |
-| Warzone | C+ (54) | B (60+) | v0.53 |
-| Gallery | C+ (53) | B (60+) | v0.53 |
-| Coders | C (45) | B- (55+) | v0.54 |
-| NeonCity | C (43) | B- (55+) | v0.54 |
-| Realm | C- (41) | C+ (50+) | v0.55 |
+- [ ] Plugin marketplace (share skills, interceptors, scenes)
 
 ---
 
@@ -153,7 +113,7 @@ CosySim is a **meta-system** — a playground for designing, testing, benchmarki
 1. **Everything through MCP** — Skills, state, events, and cross-system communication all go through the MCP pipeline
 2. **Nexus as truth** — Prompts, rules, configurations, session history, and experiment results live in Nexus
 3. **Local-first** — No cloud dependencies. LMStudio, ChromaDB, ComfyUI, TTS all run locally
-4. **Test-driven** — Every feature gets tests. Current: 2,613 CosySim + 253 Nexus
+4. **Test-driven** — Every feature gets tests. Current: 3,521 CosySim tests
 5. **Scene independence** — Scenes are self-contained. Adding a scene shouldn't break others
 6. **Agent freedom within rails** — Governance pipeline enforces consistency without killing creativity
 7. **Nexus-first workflow** — Search Nexus before coding, store decisions after. Audit results always go to Nexus
