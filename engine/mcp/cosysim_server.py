@@ -3953,6 +3953,104 @@ def nexus_export_session() -> str:
         return json.dumps({"error": str(e)})
 
 
+@mcp.tool()
+def nexus_maintain(action: str = "health") -> str:
+    """Run Nexus self-maintenance tasks. Actions:
+    - health: Full health report (entry counts, duplicates, quality)
+    - dedup: Find duplicate entries (dry-run)
+    - dedup-apply: Actually merge/remove duplicates
+    - compact: Compact old session logs into summaries
+    - score: Score entries by quality and flag low-quality
+    - full: Run all maintenance tasks (dry-run)
+    - full-apply: Run all maintenance tasks and apply changes"""
+    try:
+        from engine.nexus.self_maintenance import (
+            nexus_health_report,
+            nexus_merge_duplicates,
+            nexus_compact_sessions,
+            nexus_score_entries,
+            nexus_full_maintenance,
+        )
+        if action == "health":
+            result = nexus_health_report()
+        elif action == "dedup":
+            result = nexus_merge_duplicates(dry_run=True)
+        elif action == "dedup-apply":
+            result = nexus_merge_duplicates(dry_run=False)
+        elif action == "compact":
+            result = nexus_compact_sessions()
+        elif action == "score":
+            result = nexus_score_entries()
+        elif action == "full":
+            result = nexus_full_maintenance(dry_run=True)
+        elif action == "full-apply":
+            result = nexus_full_maintenance(dry_run=False)
+        else:
+            return json.dumps({"error": f"Unknown action: {action}",
+                              "available": ["health", "dedup", "dedup-apply",
+                                           "compact", "score", "full", "full-apply"]})
+        return json.dumps(result, indent=2, default=str)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def copilot_store_snippet(title: str, code: str, language: str = "python", tags: str = "") -> str:
+    """Store a reusable code snippet in Nexus for future sessions."""
+    try:
+        from engine.nexus.copilot_helpers import store_snippet
+        tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
+        result = store_snippet(title, code, language, tag_list)
+        return json.dumps(result)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def copilot_store_discovery(title: str, finding: str, category: str = "debugging") -> str:
+    """Store a discovery, workaround, or gotcha in Nexus for future reference."""
+    try:
+        from engine.nexus.copilot_helpers import store_discovery
+        result = store_discovery(title, finding, category)
+        return json.dumps(result)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def copilot_log_progress(task: str, status: str = "completed", details: str = "",
+                         tests_passed: int = 0, commit_sha: str = "") -> str:
+    """Log work progress to Nexus for tracking across sessions."""
+    try:
+        from engine.nexus.copilot_helpers import log_work_progress
+        result = log_work_progress(task, status, details, tests_passed=tests_passed,
+                                   commit_sha=commit_sha)
+        return json.dumps(result)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def copilot_context_primer(project: str = "CosySim") -> str:
+    """Generate a context primer from Nexus knowledge for new sessions."""
+    try:
+        from engine.nexus.copilot_helpers import generate_context_primer
+        return generate_context_primer(project)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def copilot_local_model_guide(task_type: str = "general") -> str:
+    """Get guidance text for local LMStudio models to safely use Nexus.
+    Task types: general, code_review, knowledge_extraction, qa_generation, maintenance"""
+    try:
+        from engine.nexus.copilot_helpers import generate_local_model_guidance
+        return generate_local_model_guidance(task_type)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
 # ── Entry point ────────────────────────────────────────────────────────
 
 def run_server(mode: str = "stdio"):

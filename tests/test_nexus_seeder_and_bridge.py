@@ -1122,134 +1122,92 @@ class TestMCPSeedNexus:
 class TestMCPNexusMaintain:
     """Tests for the nexus_maintain MCP tool in cosysim_server.py."""
 
-    @patch("requests.get")
-    @patch("engine.mcp.cosysim_server._get_nexus")
-    def test_maintain_health_returns_stats(self, mock_get_nexus, mock_get):
-        """nexus_maintain('health') returns entry/qa/rule counts."""
+    @patch("engine.nexus.self_maintenance.nexus_health_report")
+    def test_maintain_health_returns_stats(self, mock_health):
+        """nexus_maintain('health') delegates to self_maintenance health_report."""
         from engine.mcp.cosysim_server import nexus_maintain
 
-        mock_nx = MagicMock()
-        mock_get_nexus.return_value = mock_nx
-
-        entries_resp = MagicMock()
-        entries_resp.ok = True
-        entries_resp.json.return_value = {
-            "data": [
-                {"content_type": "note", "category": "dev", "content": "x" * 30},
-                {"content_type": "code", "category": "arch", "content": "y" * 5},
-            ]
+        mock_health.return_value = {
+            "status": "healthy",
+            "metrics": {"total_entries": 2, "total_qa": 1, "total_rules": 0},
+            "issues": [],
+            "recommendations": [],
         }
-
-        qa_resp = MagicMock()
-        qa_resp.ok = True
-        qa_resp.json.return_value = {"data": [{"q": "Q1"}]}
-
-        rules_resp = MagicMock()
-        rules_resp.ok = True
-        rules_resp.json.return_value = {"data": []}
-
-        mock_get.side_effect = [entries_resp, qa_resp, rules_resp]
 
         result = json.loads(_call_mcp(nexus_maintain, "health"))
 
-        assert result["status"] == "ok"
-        assert result["entries"] == 2
-        assert result["qa_pairs"] == 1
-        assert result["rules"] == 0
-        assert result["low_quality"] == 1  # "y" * 5 < 20 chars
+        assert result["status"] == "healthy"
+        assert result["metrics"]["total_entries"] == 2
+        assert result["metrics"]["total_qa"] == 1
+        mock_health.assert_called_once()
 
-    @patch("requests.delete")
-    @patch("requests.get")
-    @patch("engine.mcp.cosysim_server._get_nexus")
-    def test_maintain_dedup_removes_duplicates(self, mock_get_nexus, mock_get, mock_delete):
-        """nexus_maintain('dedup') finds duplicate titles and deletes them."""
+    @patch("engine.nexus.self_maintenance.nexus_merge_duplicates")
+    def test_maintain_dedup_removes_duplicates(self, mock_dedup):
+        """nexus_maintain('dedup') delegates to merge_duplicates dry-run."""
         from engine.mcp.cosysim_server import nexus_maintain
 
-        mock_nx = MagicMock()
-        mock_get_nexus.return_value = mock_nx
-
-        entries_resp = MagicMock()
-        entries_resp.ok = True
-        entries_resp.json.return_value = {
-            "data": [
-                {"id": "1", "title": "Test"},
-                {"id": "2", "title": "Test"},  # dup
-                {"id": "3", "title": "Unique"},
-            ]
+        mock_dedup.return_value = {
+            "duplicate_groups": 1,
+            "total_duplicates": 1,
+            "merged": 0,
+            "dry_run": True,
+            "groups": [{"original": {"id": "1", "title": "Test"},
+                        "duplicates": [{"id": "2", "title": "Test", "similarity": 1.0}],
+                        "count": 2}],
         }
-
-        mock_get.return_value = entries_resp
-        mock_delete.return_value = MagicMock(ok=True)
 
         result = json.loads(_call_mcp(nexus_maintain, "dedup"))
 
-        assert result["status"] == "ok"
-        assert result["found"] == 1
-        assert result["removed"] == 1
+        assert result["duplicate_groups"] == 1
+        assert result["total_duplicates"] == 1
+        assert result["dry_run"] is True
+        mock_dedup.assert_called_once_with(dry_run=True)
 
-    @patch("requests.delete")
-    @patch("requests.get")
-    @patch("engine.mcp.cosysim_server._get_nexus")
-    def test_maintain_cleanup_removes_short_content(self, mock_get_nexus, mock_get, mock_delete):
-        """nexus_maintain('cleanup') removes entries with content < 10 chars."""
+    @patch("engine.nexus.self_maintenance.nexus_score_entries")
+    def test_maintain_cleanup_removes_short_content(self, mock_score):
+        """nexus_maintain('score') delegates to score_entries for quality checks."""
         from engine.mcp.cosysim_server import nexus_maintain
 
-        mock_nx = MagicMock()
-        mock_get_nexus.return_value = mock_nx
-
-        entries_resp = MagicMock()
-        entries_resp.ok = True
-        entries_resp.json.return_value = {
-            "data": [
-                {"id": "1", "content": "tiny"},
-                {"id": "2", "content": "A" * 100},
-            ]
+        mock_score.return_value = {
+            "scored": 5,
+            "avg_quality": 0.6,
+            "low_quality": [{"id": "1", "title": "tiny", "score": 0.1}],
         }
 
-        mock_get.return_value = entries_resp
-        mock_delete.return_value = MagicMock(ok=True)
+        result = json.loads(_call_mcp(nexus_maintain, "score"))
 
-        result = json.loads(_call_mcp(nexus_maintain, "cleanup"))
+        assert result["scored"] == 5
+        assert len(result["low_quality"]) == 1
+        mock_score.assert_called_once()
 
-        assert result["status"] == "ok"
-        assert result["low_quality_found"] == 1
-        assert result["removed"] == 1
-
-    @patch("requests.post")
-    @patch("engine.mcp.cosysim_server._get_nexus")
-    def test_maintain_reindex_posts_to_api(self, mock_get_nexus, mock_post):
-        """nexus_maintain('reindex') POSTs to /api/reindex."""
+    @patch("engine.nexus.self_maintenance.nexus_compact_sessions")
+    def test_maintain_reindex_posts_to_api(self, mock_compact):
+        """nexus_maintain('compact') delegates to compact_sessions."""
         from engine.mcp.cosysim_server import nexus_maintain
 
-        mock_nx = MagicMock()
-        mock_get_nexus.return_value = mock_nx
+        mock_compact.return_value = {"compacted": 3, "errors": 0, "skipped": 1}
 
-        mock_post.return_value = MagicMock(ok=True)
+        result = json.loads(_call_mcp(nexus_maintain, "compact"))
 
-        result = json.loads(_call_mcp(nexus_maintain, "reindex"))
+        assert result["compacted"] == 3
+        assert result["skipped"] == 1
+        mock_compact.assert_called_once()
 
-        assert result["status"] == "ok"
-        assert "reindex" in result["message"].lower()
-
-    @patch("engine.mcp.cosysim_server._get_nexus")
-    def test_maintain_returns_error_when_nexus_unavailable(self, mock_get_nexus):
-        """nexus_maintain returns error when Nexus client is None."""
+    @patch("engine.nexus.self_maintenance.nexus_health_report")
+    def test_maintain_returns_error_when_nexus_unavailable(self, mock_health):
+        """nexus_maintain returns error JSON when self_maintenance raises."""
         from engine.mcp.cosysim_server import nexus_maintain
 
-        mock_get_nexus.return_value = None
+        mock_health.side_effect = Exception("Nexus unavailable")
 
         result = json.loads(_call_mcp(nexus_maintain, "health"))
 
         assert "error" in result
         assert "unavailable" in result["error"].lower()
 
-    @patch("engine.mcp.cosysim_server._get_nexus")
-    def test_maintain_unknown_action_returns_error(self, mock_get_nexus):
+    def test_maintain_unknown_action_returns_error(self):
         """nexus_maintain with unknown action returns error JSON."""
         from engine.mcp.cosysim_server import nexus_maintain
-
-        mock_nx = MagicMock()
-        mock_get_nexus.return_value = mock_nx
 
         result = json.loads(_call_mcp(nexus_maintain, "nonsense"))
 
