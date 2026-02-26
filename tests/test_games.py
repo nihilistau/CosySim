@@ -251,7 +251,7 @@ class TestGetHealth:
 
     def test_health_keys(self, scene):
         h = scene.get_health()
-        assert set(h.keys()) == {"scene", "status", "port"}
+        assert {"scene", "status", "port"}.issubset(set(h.keys()))
 
     def test_health_scene_id(self, scene):
         assert scene.get_health()["scene"] == "games"
@@ -285,7 +285,7 @@ class TestGetPluginInfo:
 
     def test_plugin_info_version(self, scene):
         info = scene.get_plugin_info()
-        assert info["version"] == "0.50b"
+        assert info["version"] == "0.56b"
 
     def test_plugin_info_author(self, scene):
         assert scene.get_plugin_info()["author"] == "CosySim"
@@ -548,3 +548,787 @@ class TestEdgeCases:
         client = scene.app.test_client()
         resp = client.get("/api/status")
         assert resp.content_type.startswith("application/json")
+
+
+# ═══════════════════════════════════════════════════════════════
+#  GameMaster Registration & Replies  (v0.56b)
+# ═══════════════════════════════════════════════════════════════
+
+class TestGameMaster:
+    """GameMaster character registration and AI-narrated reply generation."""
+
+    @pytest.fixture
+    def scene(self):
+        s = _make_scene()
+        s._fw = None
+        return s
+
+    # ── get_health now includes gamemaster key ────────────────────
+
+    def test_health_contains_gamemaster_key(self, scene):
+        h = scene.get_health()
+        assert "gamemaster" in h
+
+    def test_health_gamemaster_value(self, scene):
+        assert scene.get_health()["gamemaster"] == "gamemaster"
+
+    # ── _register_gamemaster ─────────────────────────────────────
+
+    @patch("engine.mcp.character_registry.apply_default_skills")
+    @patch("engine.mcp.character_registry.get_character_registry")
+    def test_register_calls_registry(self, mock_get_reg, mock_skills, scene):
+        mock_reg = MagicMock()
+        mock_reg.exists.return_value = False
+        mock_get_reg.return_value = mock_reg
+
+        scene._register_gamemaster()
+
+        mock_reg.register.assert_called_once()
+
+    @patch("engine.mcp.character_registry.apply_default_skills")
+    @patch("engine.mcp.character_registry.get_character_registry")
+    def test_register_uses_gamemaster_id(self, mock_get_reg, mock_skills, scene):
+        mock_reg = MagicMock()
+        mock_reg.exists.return_value = False
+        mock_get_reg.return_value = mock_reg
+
+        scene._register_gamemaster()
+
+        args, _ = mock_reg.register.call_args
+        assert args[0] == "gamemaster"
+
+    @patch("engine.mcp.character_registry.apply_default_skills")
+    @patch("engine.mcp.character_registry.get_character_registry")
+    def test_register_sets_name(self, mock_get_reg, mock_skills, scene):
+        mock_reg = MagicMock()
+        mock_reg.exists.return_value = False
+        mock_get_reg.return_value = mock_reg
+
+        scene._register_gamemaster()
+
+        _, kwargs = mock_reg.register.call_args
+        assert kwargs["name"] == "The GameMaster"
+
+    @patch("engine.mcp.character_registry.apply_default_skills")
+    @patch("engine.mcp.character_registry.get_character_registry")
+    def test_register_sets_personality_traits(self, mock_get_reg, mock_skills, scene):
+        mock_reg = MagicMock()
+        mock_reg.exists.return_value = False
+        mock_get_reg.return_value = mock_reg
+
+        scene._register_gamemaster()
+
+        _, kwargs = mock_reg.register.call_args
+        personality = kwargs["personality"]
+        assert personality["wit"] == 0.9
+        assert personality["assertiveness"] == 0.8
+        assert personality["vulnerability"] == 0.0
+
+    @patch("engine.mcp.character_registry.apply_default_skills")
+    @patch("engine.mcp.character_registry.get_character_registry")
+    def test_register_sets_backstory(self, mock_get_reg, mock_skills, scene):
+        mock_reg = MagicMock()
+        mock_reg.exists.return_value = False
+        mock_get_reg.return_value = mock_reg
+
+        scene._register_gamemaster()
+
+        _, kwargs = mock_reg.register.call_args
+        assert "omniscient narrator" in kwargs["backstory"]
+        assert "Games Arcade" in kwargs["backstory"]
+
+    @patch("engine.mcp.character_registry.apply_default_skills")
+    @patch("engine.mcp.character_registry.get_character_registry")
+    def test_register_sets_voice_style(self, mock_get_reg, mock_skills, scene):
+        mock_reg = MagicMock()
+        mock_reg.exists.return_value = False
+        mock_get_reg.return_value = mock_reg
+
+        scene._register_gamemaster()
+
+        _, kwargs = mock_reg.register.call_args
+        assert "theatrical" in kwargs["voice_style"]
+        assert "suspenseful" in kwargs["voice_style"]
+
+    @patch("engine.mcp.character_registry.apply_default_skills")
+    @patch("engine.mcp.character_registry.get_character_registry")
+    def test_register_sets_scene_roles(self, mock_get_reg, mock_skills, scene):
+        mock_reg = MagicMock()
+        mock_reg.exists.return_value = False
+        mock_get_reg.return_value = mock_reg
+
+        scene._register_gamemaster()
+
+        _, kwargs = mock_reg.register.call_args
+        assert kwargs["scene_roles"] == ["games"]
+
+    @patch("engine.mcp.character_registry.apply_default_skills")
+    @patch("engine.mcp.character_registry.get_character_registry")
+    def test_register_applies_default_skills(self, mock_get_reg, mock_skills, scene):
+        mock_reg = MagicMock()
+        mock_reg.exists.return_value = False
+        mock_get_reg.return_value = mock_reg
+
+        scene._register_gamemaster()
+
+        mock_skills.assert_called_once_with("gamemaster")
+
+    @patch("engine.mcp.character_registry.apply_default_skills")
+    @patch("engine.mcp.character_registry.get_character_registry")
+    def test_register_skips_when_already_exists(self, mock_get_reg, mock_skills, scene):
+        mock_reg = MagicMock()
+        mock_reg.exists.return_value = True
+        mock_get_reg.return_value = mock_reg
+
+        scene._register_gamemaster()
+
+        mock_reg.register.assert_not_called()
+        mock_skills.assert_not_called()
+
+    @patch("engine.mcp.character_registry.apply_default_skills")
+    @patch("engine.mcp.character_registry.get_character_registry")
+    def test_register_enters_scene_when_fw_present(self, mock_get_reg, mock_skills, scene):
+        mock_reg = MagicMock()
+        mock_reg.exists.return_value = False
+        mock_get_reg.return_value = mock_reg
+        scene._fw = MagicMock()
+
+        scene._register_gamemaster()
+
+        scene._fw.get_character.assert_called_once_with("gamemaster")
+        scene._fw.get_character.return_value.enter_scene.assert_called_once_with("games")
+
+    @patch("engine.mcp.character_registry.apply_default_skills")
+    @patch("engine.mcp.character_registry.get_character_registry")
+    def test_register_no_enter_scene_without_fw(self, mock_get_reg, mock_skills, scene):
+        mock_reg = MagicMock()
+        mock_reg.exists.return_value = False
+        mock_get_reg.return_value = mock_reg
+        # scene._fw is already None from fixture
+
+        scene._register_gamemaster()
+
+        # No crash — enter_scene path is skipped
+        mock_reg.register.assert_called_once()
+
+    def test_register_graceful_on_registry_error(self, scene):
+        """Registration degrades gracefully if character_registry raises."""
+        with patch(
+            "engine.mcp.character_registry.get_character_registry",
+            side_effect=RuntimeError("registry unavailable"),
+        ):
+            scene._register_gamemaster()  # should not raise
+
+    # ── _get_gamemaster_reply ────────────────────────────────────
+
+    @patch("engine.agents.virtual_agent.InferenceRequest")
+    @patch("engine.agents.virtual_agent_manager.get_virtual_agent_manager")
+    def test_reply_returns_stripped_text(self, mock_get_mgr, mock_ir, scene):
+        mock_proc = MagicMock()
+        mock_proc.clean_text = "  A dramatic reveal!  "
+        mock_get_mgr.return_value.infer_processed.return_value = mock_proc
+        scene._get_governance_context = MagicMock(return_value="")
+
+        result = scene._get_gamemaster_reply("Who did it?")
+
+        assert result == "A dramatic reveal!"
+
+    @patch("engine.agents.virtual_agent.InferenceRequest")
+    @patch("engine.agents.virtual_agent_manager.get_virtual_agent_manager")
+    def test_reply_builds_request_with_gamemaster_id(self, mock_get_mgr, mock_ir, scene):
+        mock_proc = MagicMock(clean_text="ok")
+        mock_get_mgr.return_value.infer_processed.return_value = mock_proc
+        scene._get_governance_context = MagicMock(return_value="")
+
+        scene._get_gamemaster_reply("test")
+
+        _, kwargs = mock_ir.call_args
+        assert kwargs["agent_id"] == "gamemaster"
+
+    @patch("engine.agents.virtual_agent.InferenceRequest")
+    @patch("engine.agents.virtual_agent_manager.get_virtual_agent_manager")
+    def test_reply_sets_temperature_and_tokens(self, mock_get_mgr, mock_ir, scene):
+        mock_proc = MagicMock(clean_text="ok")
+        mock_get_mgr.return_value.infer_processed.return_value = mock_proc
+        scene._get_governance_context = MagicMock(return_value="")
+
+        scene._get_gamemaster_reply("test")
+
+        _, kwargs = mock_ir.call_args
+        assert kwargs["temperature"] == 0.8
+        assert kwargs["max_output_tokens"] == 150
+
+    @patch("engine.agents.virtual_agent.InferenceRequest")
+    @patch("engine.agents.virtual_agent_manager.get_virtual_agent_manager")
+    def test_reply_system_prompt_identifies_gamemaster(self, mock_get_mgr, mock_ir, scene):
+        mock_proc = MagicMock(clean_text="ok")
+        mock_get_mgr.return_value.infer_processed.return_value = mock_proc
+        scene._get_governance_context = MagicMock(return_value="")
+
+        scene._get_gamemaster_reply("test")
+
+        _, kwargs = mock_ir.call_args
+        messages = kwargs["messages"]
+        system_content = messages[0]["content"]
+        assert messages[0]["role"] == "system"
+        assert "The GameMaster" in system_content
+        assert "theatrical" in system_content
+        assert "[MOOD:emotion]" in system_content
+
+    @patch("engine.agents.virtual_agent.InferenceRequest")
+    @patch("engine.agents.virtual_agent_manager.get_virtual_agent_manager")
+    def test_reply_passes_user_prompt_as_message(self, mock_get_mgr, mock_ir, scene):
+        mock_proc = MagicMock(clean_text="ok")
+        mock_get_mgr.return_value.infer_processed.return_value = mock_proc
+        scene._get_governance_context = MagicMock(return_value="")
+
+        scene._get_gamemaster_reply("Who stole the diamond?")
+
+        _, kwargs = mock_ir.call_args
+        user_msg = kwargs["messages"][1]
+        assert user_msg["role"] == "user"
+        assert user_msg["content"] == "Who stole the diamond?"
+
+    @patch("engine.agents.virtual_agent.InferenceRequest")
+    @patch("engine.agents.virtual_agent_manager.get_virtual_agent_manager")
+    def test_reply_appends_governance_to_system(self, mock_get_mgr, mock_ir, scene):
+        mock_proc = MagicMock(clean_text="ok")
+        mock_get_mgr.return_value.infer_processed.return_value = mock_proc
+        scene._get_governance_context = MagicMock(
+            return_value="Be respectful and stay in character."
+        )
+
+        scene._get_gamemaster_reply("test")
+
+        _, kwargs = mock_ir.call_args
+        system_content = kwargs["messages"][0]["content"]
+        assert "Be respectful and stay in character." in system_content
+
+    @patch("engine.agents.virtual_agent.InferenceRequest")
+    @patch("engine.agents.virtual_agent_manager.get_virtual_agent_manager")
+    def test_reply_sets_scene_metadata(self, mock_get_mgr, mock_ir, scene):
+        mock_proc = MagicMock(clean_text="ok")
+        mock_get_mgr.return_value.infer_processed.return_value = mock_proc
+        scene._get_governance_context = MagicMock(return_value="")
+
+        scene._get_gamemaster_reply("test")
+
+        _, kwargs = mock_ir.call_args
+        assert kwargs["metadata"]["scene"] == "games"
+        assert kwargs["metadata"]["role"] == "game_master"
+        assert kwargs["store"] is False
+
+    @patch("engine.agents.virtual_agent.InferenceRequest")
+    @patch("engine.agents.virtual_agent_manager.get_virtual_agent_manager")
+    def test_reply_returns_empty_when_clean_text_none(self, mock_get_mgr, mock_ir, scene):
+        mock_proc = MagicMock()
+        mock_proc.clean_text = None
+        mock_get_mgr.return_value.infer_processed.return_value = mock_proc
+        scene._get_governance_context = MagicMock(return_value="")
+
+        result = scene._get_gamemaster_reply("test")
+
+        assert result == ""
+
+    def test_reply_returns_empty_on_exception(self, scene):
+        """When LLM is unavailable, reply returns empty string."""
+        with patch(
+            "engine.agents.virtual_agent_manager.get_virtual_agent_manager",
+            side_effect=RuntimeError("offline"),
+        ):
+            result = scene._get_gamemaster_reply("Hello?")
+            assert result == ""
+
+    # ── _get_governance_context ──────────────────────────────────
+
+    @patch("engine.mcp.get_governor")
+    def test_governance_context_returns_string(self, mock_get_gov, scene):
+        mock_gov = MagicMock()
+        mock_gov.build_governance_context.return_value = "Stay in character."
+        mock_get_gov.return_value = mock_gov
+
+        result = scene._get_governance_context("gamemaster")
+
+        assert result == "Stay in character."
+        mock_gov.build_governance_context.assert_called_once_with("gamemaster", "games")
+
+    def test_governance_context_empty_on_error(self, scene):
+        """Returns empty string when governor is unavailable."""
+        with patch("engine.mcp.get_governor", side_effect=ImportError("no governor")):
+            assert scene._get_governance_context("gamemaster") == ""
+
+
+# ═══════════════════════════════════════════════════════════════
+#  Score Tracking  (v0.56b)
+# ═══════════════════════════════════════════════════════════════
+
+class TestScoreTracking:
+    """_update_score persists wins, losses, and points via MCP state."""
+
+    @pytest.fixture
+    def scene(self):
+        """Scene without MCP — scores work but are not persisted."""
+        s = _make_scene()
+        s._fw = None
+        return s
+
+    @pytest.fixture
+    def scene_mcp(self):
+        """Scene with mocked MCP scene node for state persistence."""
+        s = _make_scene()
+        s._fw = MagicMock()
+        s._scene_node = MagicMock()
+        s._scene_node.get_state.return_value = {
+            "scores": {},
+            "games_played": 0,
+            "mysteries_solved": 0,
+        }
+        return s
+
+    def test_new_player_initialised_with_zeroes(self, scene_mcp):
+        result = scene_mcp._update_score("alice", "mystery", True)
+        assert result["mystery_losses"] == 0
+        assert result["tod_score"] == 0
+        assert result["tod_rounds"] == 0
+
+    def test_mystery_win_increments(self, scene_mcp):
+        result = scene_mcp._update_score("alice", "mystery", True)
+        assert result["mystery_wins"] == 1
+
+    def test_mystery_loss_increments(self, scene_mcp):
+        result = scene_mcp._update_score("alice", "mystery", False)
+        assert result["mystery_losses"] == 1
+        assert result["mystery_wins"] == 0
+
+    def test_tod_score_adds_points(self, scene_mcp):
+        result = scene_mcp._update_score("alice", "tod", False, points=10)
+        assert result["tod_score"] == 10
+
+    def test_tod_increments_rounds(self, scene_mcp):
+        result = scene_mcp._update_score("alice", "tod", False, points=5)
+        assert result["tod_rounds"] == 1
+
+    def test_total_games_increments(self, scene_mcp):
+        result = scene_mcp._update_score("alice", "mystery", True)
+        assert result["total_games"] == 1
+
+    def test_persists_scores_to_mcp_state(self, scene_mcp):
+        scene_mcp._update_score("alice", "mystery", True)
+        scene_mcp._scene_node.update_state.assert_called_once()
+        state = scene_mcp._scene_node.update_state.call_args[0][0]
+        assert "alice" in state["scores"]
+
+    def test_games_played_counter_increments(self, scene_mcp):
+        scene_mcp._update_score("alice", "mystery", True)
+        state = scene_mcp._scene_node.update_state.call_args[0][0]
+        assert state["games_played"] == 1
+
+    def test_mystery_win_increments_solved_counter(self, scene_mcp):
+        scene_mcp._update_score("alice", "mystery", True)
+        state = scene_mcp._scene_node.update_state.call_args[0][0]
+        assert state["mysteries_solved"] == 1
+
+    def test_mystery_loss_does_not_increment_solved(self, scene_mcp):
+        scene_mcp._update_score("alice", "mystery", False)
+        state = scene_mcp._scene_node.update_state.call_args[0][0]
+        assert state.get("mysteries_solved", 0) == 0
+
+    def test_works_without_scene_node(self, scene):
+        """Score tracking returns result even without MCP."""
+        result = scene._update_score("bob", "mystery", True)
+        assert result["mystery_wins"] == 1
+        assert result["total_games"] == 1
+
+    def test_scores_api_empty_without_mcp(self, scene):
+        client = scene.app.test_client()
+        resp = client.get("/api/scores")
+        assert resp.status_code == 200
+        assert resp.get_json() == {}
+
+    def test_scores_api_returns_player_data(self, scene_mcp):
+        scene_mcp._scene_node.get_state.return_value = {
+            "scores": {"alice": {"mystery_wins": 3, "total_games": 5}},
+        }
+        client = scene_mcp.app.test_client()
+        resp = client.get("/api/scores")
+        data = resp.get_json()
+        assert data["alice"]["mystery_wins"] == 3
+
+    def test_scores_api_json_content_type(self, scene):
+        client = scene.app.test_client()
+        resp = client.get("/api/scores")
+        assert resp.content_type.startswith("application/json")
+
+
+# ═══════════════════════════════════════════════════════════════
+#  GameMaster HTTP Routes  (v0.56b)
+# ═══════════════════════════════════════════════════════════════
+
+class TestGameMasterRoutes:
+    """HTTP endpoints that proxy the AI GameMaster."""
+
+    @pytest.fixture
+    def scene(self):
+        s = _make_scene()
+        s._fw = None
+        return s
+
+    @pytest.fixture
+    def client(self, scene):
+        return scene.app.test_client()
+
+    def test_chat_returns_reply(self, client, scene):
+        scene._get_gamemaster_reply = MagicMock(return_value="Indeed!")
+        resp = client.post("/api/chat", json={"message": "Hello"})
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["reply"] == "Indeed!"
+        assert data["character"] == "The GameMaster"
+
+    def test_chat_empty_message_returns_400(self, client):
+        resp = client.post("/api/chat", json={"message": ""})
+        assert resp.status_code == 400
+
+    def test_chat_missing_message_returns_400(self, client):
+        resp = client.post("/api/chat", json={})
+        assert resp.status_code == 400
+
+    def test_chat_fallback_when_ai_unavailable(self, client, scene):
+        scene._get_gamemaster_reply = MagicMock(return_value="")
+        resp = client.post("/api/chat", json={"message": "Hello"})
+        data = resp.get_json()
+        assert "ponders" in data["reply"]
+
+    def test_narrate_clue_returns_narration(self, client, scene):
+        scene._get_gamemaster_reply = MagicMock(return_value="A mysterious clue!")
+        resp = client.post("/api/mystery/narrate", json={
+            "clue": "A bloody knife",
+            "case_title": "Murder at Midnight",
+            "clue_number": 1,
+        })
+        assert resp.status_code == 200
+        assert resp.get_json()["narration"] == "A mysterious clue!"
+
+    def test_narrate_fallback_uses_raw_clue(self, client, scene):
+        scene._get_gamemaster_reply = MagicMock(return_value="")
+        resp = client.post("/api/mystery/narrate", json={"clue": "A note"})
+        assert resp.get_json()["narration"] == "A note"
+
+    def test_react_correct_accusation(self, client, scene):
+        scene._get_gamemaster_reply = MagicMock(return_value="Brilliant!")
+        scene._update_score = MagicMock()
+        resp = client.post("/api/mystery/react", json={
+            "correct": True, "suspect": "Butler", "player": "alice",
+        })
+        data = resp.get_json()
+        assert data["reaction"] == "Brilliant!"
+        scene._update_score.assert_called_once_with("alice", "mystery", True)
+
+    def test_react_incorrect_accusation(self, client, scene):
+        scene._get_gamemaster_reply = MagicMock(return_value="So close!")
+        scene._update_score = MagicMock()
+        resp = client.post("/api/mystery/react", json={
+            "correct": False, "suspect": "Butler",
+            "real_culprit": "Maid", "player": "alice",
+        })
+        resp.get_json()
+        scene._update_score.assert_called_once_with("alice", "mystery", False)
+
+    def test_react_fallback_correct(self, client, scene):
+        scene._get_gamemaster_reply = MagicMock(return_value="")
+        scene._update_score = MagicMock()
+        resp = client.post("/api/mystery/react", json={
+            "correct": True, "suspect": "Butler", "player": "p",
+        })
+        assert resp.get_json()["reaction"] == "Brilliant!"
+
+    def test_react_fallback_incorrect(self, client, scene):
+        scene._get_gamemaster_reply = MagicMock(return_value="")
+        scene._update_score = MagicMock()
+        resp = client.post("/api/mystery/react", json={
+            "correct": False, "suspect": "Butler", "player": "p",
+        })
+        assert resp.get_json()["reaction"] == "Not quite..."
+
+
+# ═══════════════════════════════════════════════════════════════
+#  Socket.IO Events  (v0.56b)
+# ═══════════════════════════════════════════════════════════════
+
+class TestSocketEvents:
+    """Socket.IO event handlers for real-time gameplay."""
+
+    @pytest.fixture
+    def scene(self):
+        s = _make_scene()
+        s._fw = None
+        s._setup_socketio()
+        return s
+
+    @pytest.fixture
+    def sio_client(self, scene):
+        """Connected test client with initial connect event drained."""
+        client = scene.socketio.test_client(scene.app)
+        client.get_received()          # drain the auto-connect event
+        yield client
+        client.disconnect()
+
+    # ── connect ──────────────────────────────────────────────────
+
+    def test_connect_emits_game_update(self, scene):
+        client = scene.socketio.test_client(scene.app)
+        received = client.get_received()
+        updates = [m for m in received if m["name"] == "game_update"]
+        assert len(updates) == 1
+        assert updates[0]["args"][0]["type"] == "connected"
+        client.disconnect()
+
+    def test_connect_lists_available_games(self, scene):
+        client = scene.socketio.test_client(scene.app)
+        received = client.get_received()
+        update = next(m for m in received if m["name"] == "game_update")
+        games = update["args"][0]["games_available"]
+        assert "mystery" in games
+        assert "truth_or_dare" in games
+        client.disconnect()
+
+    # ── chat_message ─────────────────────────────────────────────
+
+    def test_chat_emits_reply(self, sio_client, scene):
+        scene._get_gamemaster_reply = MagicMock(return_value="The plot thickens!")
+        sio_client.emit("chat_message", {"message": "Hello"})
+        received = sio_client.get_received()
+        replies = [m for m in received if m["name"] == "chat_reply"]
+        assert len(replies) == 1
+        assert replies[0]["args"][0]["character"] == "The GameMaster"
+        assert replies[0]["args"][0]["message"] == "The plot thickens!"
+
+    def test_chat_includes_timestamp(self, sio_client, scene):
+        scene._get_gamemaster_reply = MagicMock(return_value="ok")
+        sio_client.emit("chat_message", {"message": "Hi"})
+        received = sio_client.get_received()
+        reply = next(m for m in received if m["name"] == "chat_reply")
+        assert "timestamp" in reply["args"][0]
+
+    def test_chat_empty_message_no_reply(self, sio_client, scene):
+        sio_client.emit("chat_message", {"message": ""})
+        received = sio_client.get_received()
+        replies = [m for m in received if m["name"] == "chat_reply"]
+        assert len(replies) == 0
+
+    def test_chat_fallback_when_ai_returns_empty(self, sio_client, scene):
+        scene._get_gamemaster_reply = MagicMock(return_value="")
+        sio_client.emit("chat_message", {"message": "Hello"})
+        received = sio_client.get_received()
+        reply = next(m for m in received if m["name"] == "chat_reply")
+        assert "chin" in reply["args"][0]["message"]  # "strokes their chin"
+
+    # ── mystery_start ────────────────────────────────────────────
+
+    @patch("content.scenes.games.mystery_investigation.MysteryGame")
+    def test_mystery_start_emits_started(self, mock_cls, sio_client, scene):
+        mock_game = MagicMock()
+        mock_game.start.return_value = {
+            "case_title": "The Lost Key", "setting": "A dark library",
+        }
+        mock_cls.return_value = mock_game
+        scene._get_gamemaster_reply = MagicMock(return_value="Welcome, detective!")
+
+        sio_client.emit("mystery_start", {"player": "alice"})
+        received = sio_client.get_received()
+
+        started = [m for m in received if m["name"] == "mystery_started"]
+        assert len(started) == 1
+        assert started[0]["args"][0]["case_title"] == "The Lost Key"
+        assert started[0]["args"][0]["setting"] == "A dark library"
+
+    @patch("content.scenes.games.mystery_investigation.MysteryGame")
+    def test_mystery_start_tracks_game(self, mock_cls, sio_client, scene):
+        mock_game = MagicMock()
+        mock_game.start.return_value = {"case_title": "X", "setting": "Y"}
+        mock_cls.return_value = mock_game
+        scene._get_gamemaster_reply = MagicMock(return_value="")
+
+        sio_client.emit("mystery_start", {"player": "alice"})
+
+        assert "alice" in scene.mystery_games
+
+    # ── mystery_clue ─────────────────────────────────────────────
+
+    def test_mystery_clue_emits_revealed(self, sio_client, scene):
+        mock_game = MagicMock()
+        mock_game.next_clue.return_value = {"clue": "A fingerprint", "clues_found": 2}
+        scene.mystery_games["alice"] = mock_game
+        scene._get_gamemaster_reply = MagicMock(return_value="Interesting...")
+
+        sio_client.emit("mystery_clue", {"player": "alice"})
+        received = sio_client.get_received()
+
+        clues = [m for m in received if m["name"] == "clue_revealed"]
+        assert len(clues) == 1
+        assert clues[0]["args"][0]["clue"] == "A fingerprint"
+        assert clues[0]["args"][0]["clue_number"] == 2
+        assert clues[0]["args"][0]["total"] == 5
+
+    def test_mystery_clue_marks_all_found(self, sio_client, scene):
+        mock_game = MagicMock()
+        mock_game.next_clue.return_value = {"clue": "Final clue", "clues_found": 5}
+        scene.mystery_games["alice"] = mock_game
+        scene._get_gamemaster_reply = MagicMock(return_value="")
+
+        sio_client.emit("mystery_clue", {"player": "alice"})
+        received = sio_client.get_received()
+
+        clue_msg = next(m for m in received if m["name"] == "clue_revealed")
+        assert clue_msg["args"][0]["all_found"] is True
+
+    def test_mystery_clue_no_game_emits_error(self, sio_client, scene):
+        sio_client.emit("mystery_clue", {"player": "nobody"})
+        received = sio_client.get_received()
+        errors = [m for m in received if m["name"] == "error"]
+        assert len(errors) == 1
+        assert "Start one first" in errors[0]["args"][0]["message"]
+
+    # ── mystery_accuse ───────────────────────────────────────────
+
+    def test_mystery_accuse_correct(self, sio_client, scene):
+        mock_game = MagicMock()
+        mock_game.accuse.return_value = {"correct": True, "real_culprit": "Butler"}
+        scene.mystery_games["alice"] = mock_game
+        scene._get_gamemaster_reply = MagicMock(return_value="Brilliant!")
+
+        sio_client.emit("mystery_accuse", {"player": "alice", "suspect": "Butler"})
+        received = sio_client.get_received()
+
+        results = [m for m in received if m["name"] == "accusation_result"]
+        assert len(results) == 1
+        assert results[0]["args"][0]["correct"] is True
+
+    def test_mystery_accuse_incorrect(self, sio_client, scene):
+        mock_game = MagicMock()
+        mock_game.accuse.return_value = {"correct": False, "real_culprit": "Maid"}
+        scene.mystery_games["bob"] = mock_game
+        scene._get_gamemaster_reply = MagicMock(return_value="So close!")
+
+        sio_client.emit("mystery_accuse", {"player": "bob", "suspect": "Butler"})
+        received = sio_client.get_received()
+
+        result = next(m for m in received if m["name"] == "accusation_result")
+        assert result["args"][0]["correct"] is False
+        assert result["args"][0]["real_culprit"] == "Maid"
+
+    def test_mystery_accuse_no_game_emits_error(self, sio_client, scene):
+        sio_client.emit("mystery_accuse", {"player": "ghost", "suspect": "X"})
+        received = sio_client.get_received()
+        errors = [m for m in received if m["name"] == "error"]
+        assert len(errors) == 1
+
+    def test_mystery_accuse_emits_mcp_event_when_fw_present(self, sio_client, scene):
+        mock_game = MagicMock()
+        mock_game.accuse.return_value = {"correct": True, "real_culprit": "Butler"}
+        scene.mystery_games["alice"] = mock_game
+        scene._get_gamemaster_reply = MagicMock(return_value="")
+        scene._fw = MagicMock()
+
+        sio_client.emit("mystery_accuse", {"player": "alice", "suspect": "Butler"})
+
+        scene._fw.emit_event.assert_called_once()
+        call_args = scene._fw.emit_event.call_args
+        assert call_args[0][0] == "mystery_completed"
+        assert call_args[1]["source"] == "games"
+
+    # ── tod_start ────────────────────────────────────────────────
+
+    @patch("content.scenes.games.truth_or_dare.TruthOrDareGame")
+    def test_tod_start_emits_started(self, mock_cls, sio_client, scene):
+        mock_game = MagicMock()
+        mock_cls.return_value = mock_game
+        scene._get_gamemaster_reply = MagicMock(return_value="Let the game begin!")
+
+        sio_client.emit("tod_start", {"player": "carol"})
+        received = sio_client.get_received()
+
+        started = [m for m in received if m["name"] == "tod_started"]
+        assert len(started) == 1
+
+    @patch("content.scenes.games.truth_or_dare.TruthOrDareGame")
+    def test_tod_start_tracks_game(self, mock_cls, sio_client, scene):
+        mock_cls.return_value = MagicMock()
+        scene._get_gamemaster_reply = MagicMock(return_value="")
+
+        sio_client.emit("tod_start", {"player": "carol"})
+
+        assert "carol" in scene.tod_games
+
+    # ── tod_roll ─────────────────────────────────────────────────
+
+    def test_tod_roll_emits_prompt(self, sio_client, scene):
+        mock_game = MagicMock()
+        mock_game.roll.return_value = {
+            "roll": 4, "type": "dare", "prompt": "Do a dance",
+        }
+        scene.tod_games["carol"] = mock_game
+        scene._get_gamemaster_reply = MagicMock(return_value="A dare!")
+
+        sio_client.emit("tod_roll", {"player": "carol"})
+        received = sio_client.get_received()
+
+        prompts = [m for m in received if m["name"] == "tod_prompt"]
+        assert len(prompts) == 1
+        assert prompts[0]["args"][0]["type"] == "dare"
+        assert prompts[0]["args"][0]["prompt"] == "Do a dance"
+
+    def test_tod_roll_no_game_emits_error(self, sio_client, scene):
+        sio_client.emit("tod_roll", {"player": "nobody"})
+        received = sio_client.get_received()
+        errors = [m for m in received if m["name"] == "error"]
+        assert len(errors) == 1
+
+    def test_tod_roll_runtime_error_emits_error(self, sio_client, scene):
+        mock_game = MagicMock()
+        mock_game.roll.side_effect = RuntimeError("no more rolls")
+        scene.tod_games["carol"] = mock_game
+
+        sio_client.emit("tod_roll", {"player": "carol"})
+        received = sio_client.get_received()
+
+        errors = [m for m in received if m["name"] == "error"]
+        assert len(errors) == 1
+        assert "no more rolls" in errors[0]["args"][0]["message"]
+
+    # ── tod_answer ───────────────────────────────────────────────
+
+    def test_tod_answer_emits_scored(self, sio_client, scene):
+        mock_game = MagicMock()
+        mock_game.answer.return_value = {"score": 3}
+        scene.tod_games["carol"] = mock_game
+
+        sio_client.emit("tod_answer", {
+            "player": "carol", "completed": True, "response": "I did it",
+        })
+        received = sio_client.get_received()
+
+        scored = [m for m in received if m["name"] == "tod_scored"]
+        assert len(scored) == 1
+        assert scored[0]["args"][0]["score"] == 3
+
+    def test_tod_answer_win_emits_complete(self, sio_client, scene):
+        mock_game = MagicMock()
+        mock_game.answer.return_value = {"score": 5}
+        scene.tod_games["carol"] = mock_game
+        scene._get_gamemaster_reply = MagicMock(return_value="You win!")
+
+        sio_client.emit("tod_answer", {
+            "player": "carol", "completed": True, "response": "done",
+        })
+        received = sio_client.get_received()
+
+        complete = [m for m in received if m["name"] == "tod_complete"]
+        assert len(complete) == 1
+        assert complete[0]["args"][0]["score"] == 5
+
+    def test_tod_answer_no_game_emits_error(self, sio_client, scene):
+        sio_client.emit("tod_answer", {"player": "ghost", "completed": True})
+        received = sio_client.get_received()
+        errors = [m for m in received if m["name"] == "error"]
+        assert len(errors) == 1

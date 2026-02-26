@@ -1,45 +1,307 @@
 /* Games Arcade — scene styles */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
 body {
-  background: #1a1a2e;
+  background: #0d1117;
   color: #e0e0e0;
-  font-family: sans-serif;
+  font-family: 'Segoe UI', sans-serif;
+  min-height: 100vh;
+}
+
+header {
+  background: #161b22;
+  padding: 16px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 2px solid #e94560;
+}
+
+h1 { color: #e94560; font-size: 1.4em; }
+h2 { color: #e94560; margin-bottom: 12px; }
+
+#status-bar {
+  display: flex;
+  gap: 20px;
+  font-size: 0.85em;
+  color: #8b949e;
+}
+
+.connected { color: #3fb950; }
+.disconnected { color: #f85149; }
+
+/* ── Panels ───────────────────────────────────────────────────── */
+
+.panel {
   max-width: 800px;
-  margin: 40px auto;
+  margin: 24px auto;
   padding: 0 20px;
 }
 
-h1 { color: #e94560; }
-h2 { color: #0f3460; margin-top: 30px; }
-
-.game {
-  background: #16213e;
-  border: 1px solid #0f3460;
-  border-radius: 8px;
-  padding: 20px;
-  margin: 12px 0;
+.game-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
 }
 
-.game h3 {
-  color: #e94560;
-  margin: 0 0 8px;
+/* ── Game Cards ───────────────────────────────────────────────── */
+
+.game-card {
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 12px;
+  padding: 24px;
+  margin: 16px 0;
+  cursor: pointer;
+  transition: border-color 0.2s, transform 0.1s;
 }
+
+.game-card:hover {
+  border-color: #e94560;
+  transform: translateY(-2px);
+}
+
+.game-card h3 { color: #e94560; margin-bottom: 8px; font-size: 1.2em; }
+.game-card p { color: #8b949e; margin-bottom: 12px; }
+
+/* ── Buttons ──────────────────────────────────────────────────── */
 
 .btn {
   background: #e94560;
   color: #fff;
   border: none;
-  padding: 8px 16px;
-  border-radius: 4px;
+  padding: 10px 20px;
+  border-radius: 6px;
   cursor: pointer;
-  margin: 4px;
+  font-size: 0.9em;
+  transition: background 0.2s;
 }
 
 .btn:hover { background: #c73e54; }
+.btn:disabled { background: #484f58; cursor: not-allowed; }
+.btn-secondary { background: #30363d; }
+.btn-secondary:hover { background: #484f58; }
+.btn-accent { background: #238636; }
+.btn-accent:hover { background: #2ea043; }
+.btn-small { padding: 6px 12px; font-size: 0.8em; }
 
-pre {
-  background: #0d1117;
-  padding: 12px;
+/* ── Mystery ──────────────────────────────────────────────────── */
+
+.setting {
+  color: #8b949e;
+  font-style: italic;
+  margin-bottom: 16px;
+  padding: 8px 12px;
+  border-left: 3px solid #30363d;
+}
+
+.narration {
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+  min-height: 60px;
+  line-height: 1.6;
+  color: #c9d1d9;
+}
+
+#clue-progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+#clue-bar {
+  flex: 1;
+  height: 8px;
+  background: #21262d;
   border-radius: 4px;
-  overflow-x: auto;
+  overflow: hidden;
+}
+
+#clue-fill {
+  height: 100%;
+  background: #e94560;
+  width: 0%;
+  transition: width 0.5s ease;
+  border-radius: 4px;
+}
+
+#clue-count { color: #8b949e; font-size: 0.85em; white-space: nowrap; }
+
+.clue-item {
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  padding: 10px 14px;
+  margin: 6px 0;
+  font-size: 0.9em;
+}
+
+.clue-num {
+  color: #e94560;
+  font-weight: bold;
+  margin-right: 8px;
+}
+
+#mystery-actions, #tod-actions {
+  display: flex;
+  gap: 10px;
+  margin: 16px 0;
+}
+
+#accuse-form {
+  display: flex;
+  gap: 10px;
+  margin: 12px 0;
+}
+
+#accuse-form input, #suspect-input {
+  flex: 1;
+  padding: 10px 14px;
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  color: #e0e0e0;
+  font-size: 0.95em;
+}
+
+.result {
+  padding: 16px;
+  border-radius: 8px;
+  margin: 16px 0;
+  font-size: 1.05em;
+  text-align: center;
+}
+
+.result-win {
+  background: #0d2818;
+  border: 1px solid #238636;
+  color: #3fb950;
+}
+
+.result-loss {
+  background: #2d1117;
+  border: 1px solid #f85149;
+  color: #f85149;
+}
+
+/* ── Truth or Dare ────────────────────────────────────────────── */
+
+#tod-score-display {
+  font-size: 1.2em;
+  color: #8b949e;
+  margin-bottom: 16px;
+}
+
+#tod-score { color: #e94560; font-weight: bold; }
+
+.tod-badge {
+  display: inline-block;
+  padding: 6px 16px;
+  border-radius: 20px;
+  font-weight: bold;
+  font-size: 0.9em;
+  margin-bottom: 12px;
+}
+
+.tod-badge.truth { background: #0c2d6b; color: #58a6ff; }
+.tod-badge.dare { background: #5a1017; color: #f85149; }
+
+#tod-prompt-text {
+  font-size: 1.1em;
+  margin-bottom: 12px;
+  line-height: 1.5;
+}
+
+#tod-prompt-area {
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+#tod-response {
+  width: 100%;
+  padding: 10px;
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  color: #e0e0e0;
+  resize: vertical;
+  min-height: 60px;
+  margin-bottom: 10px;
+  font-family: inherit;
+}
+
+/* ── Chat Panel ───────────────────────────────────────────────── */
+
+#chat-panel {
+  position: fixed;
+  bottom: 0;
+  right: 20px;
+  width: 340px;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-bottom: none;
+  border-radius: 10px 10px 0 0;
+  z-index: 100;
+}
+
+#chat-header {
+  padding: 10px 14px;
+  background: #21262d;
+  border-radius: 10px 10px 0 0;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: bold;
+  color: #e94560;
+}
+
+#chat-messages {
+  height: 200px;
+  overflow-y: auto;
+  padding: 10px;
+  display: none;
+}
+
+.chat-msg {
+  margin: 6px 0;
+  padding: 6px 10px;
+  border-radius: 6px;
   font-size: 0.85em;
+  line-height: 1.4;
+}
+
+.chat-gm { background: #21262d; }
+.chat-you { background: #0c2d6b; text-align: right; }
+
+#chat-input-area {
+  display: none;
+  padding: 8px;
+  gap: 6px;
+  border-top: 1px solid #30363d;
+}
+
+#chat-input {
+  flex: 1;
+  padding: 8px 10px;
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  color: #e0e0e0;
+  font-size: 0.85em;
+}
+
+/* ── Responsive ───────────────────────────────────────────────── */
+
+@media (max-width: 600px) {
+  header { flex-direction: column; gap: 8px; }
+  #chat-panel { width: calc(100% - 20px); right: 10px; }
 }

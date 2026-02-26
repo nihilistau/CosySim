@@ -2,6 +2,34 @@
 
 All notable changes to CosySim are documented here.
 
+## v0.56b — Deep Polish Sprint
+
+### Games Scene: THIN → DEEP
+- AI GameMaster agent with character registration, governance context, and personality
+- Socket.IO real-time events: mystery investigation, truth-or-dare, game chat
+- MCP state tree with score persistence and active game tracking
+- Interactive playable UI with game cards, mystery panel, T&D panel, chat widget
+- Full JavaScript client with typewriter text effects and event handling
+
+### Coders Scene: MEDIUM → DEEP
+- Session persistence: save/load/list coding sessions as JSON
+- Auto-save on scene stop with agent stats, tick count, completed features
+- Three new API routes: `/api/sessions`, `/api/session/save`, `/api/session/load`
+
+### Router Training Pipeline
+- Three new API routes: `/api/router-data/stats`, `/export`, `/readiness`
+- `training/deploy_router.py` — auto-deploy trained GGUF to LMStudio models directory
+
+### NLM Graceful Degradation
+- `/api/nlm/status` route with tier-aware health checks
+- NLM status widget in Nexus Panel dashboard header
+- `source_tier` field in Librarian chat responses
+- Periodic NLM health polling in frontend
+
+### Tests
+- Updated Games scene tests for new health/plugin_info fields
+- +111 tests → 3,521+ total
+
 ## v0.55b — Full-Project Audit & Hardening
 
 ### Code Quality

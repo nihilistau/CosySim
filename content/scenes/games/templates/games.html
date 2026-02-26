@@ -7,35 +7,86 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/games.css') }}">
 </head>
 <body>
-  <h1>🎮 Games Arcade</h1>
-  <p>Two mini-games available via REST API and MCP skills.</p>
+  <header>
+    <h1>🎮 Games Arcade</h1>
+    <div id="status-bar">
+      <span id="connection-status">⚪ Connecting...</span>
+      <span id="score-display"></span>
+    </div>
+  </header>
 
-  <div class="game">
-    <h3>🔍 Mystery Investigation</h3>
-    <p>Work through 5 clues to identify the culprit. 3 pre-made cases.</p>
-    <pre>POST /games/mystery/start   — Start a case
-GET  /games/mystery/clue    — Get next clue
-POST /games/mystery/accuse  — Name the culprit
-GET  /games/mystery/state   — Check progress</pre>
+  <!-- Game Selector -->
+  <div id="game-select" class="panel">
+    <div class="game-card" onclick="startMystery()">
+      <h3>🔍 Mystery Investigation</h3>
+      <p>Work through 5 clues to identify the culprit. The GameMaster narrates your journey.</p>
+      <button class="btn">Play</button>
+    </div>
+    <div class="game-card" onclick="startTOD()">
+      <h3>🎲 Truth or Dare</h3>
+      <p>Roll dice, answer truths or complete dares. Score 5+ to win.</p>
+      <button class="btn">Play</button>
+    </div>
   </div>
 
-  <div class="game">
-    <h3>🎲 Truth or Dare</h3>
-    <p>Roll dice, answer truths or complete dares. Score 5+ to win.</p>
-    <pre>POST /games/truth-or-dare/start  — Start game
-POST /games/truth-or-dare/roll   — Roll for truth/dare
-POST /games/truth-or-dare/answer — Submit answer
-GET  /games/truth-or-dare/state  — Check score</pre>
+  <!-- Mystery Game UI -->
+  <div id="mystery-panel" class="panel" style="display:none">
+    <div class="game-header">
+      <h2 id="mystery-title">🔍 Mystery</h2>
+      <button class="btn btn-small btn-secondary" onclick="exitGame()">✕ Exit</button>
+    </div>
+    <div id="mystery-setting" class="setting"></div>
+    <div id="mystery-narration" class="narration"></div>
+    <div id="clue-progress">
+      <div id="clue-bar"><div id="clue-fill"></div></div>
+      <span id="clue-count">0 / 5 clues</span>
+    </div>
+    <div id="clues-list"></div>
+    <div id="mystery-actions">
+      <button class="btn" id="btn-clue" onclick="getClue()">🔎 Search for Clue</button>
+      <button class="btn btn-accent" id="btn-accuse" onclick="showAccuseForm()" style="display:none">⚖️ Make Accusation</button>
+    </div>
+    <div id="accuse-form" style="display:none">
+      <input type="text" id="suspect-input" placeholder="Name the culprit...">
+      <button class="btn btn-accent" onclick="makeAccusation()">Accuse!</button>
+    </div>
+    <div id="mystery-result" class="result" style="display:none"></div>
   </div>
 
-  <h2>MCP Skills</h2>
-  <pre>games_status         — List active/available games
-games_mystery_start  — Start a mystery case
-games_mystery_clue   — Get next clue
-games_mystery_accuse — Accuse the culprit
-games_tod_start      — Start truth-or-dare
-games_tod_roll       — Roll dice
-games_tod_answer     — Submit answer</pre>
+  <!-- Truth or Dare UI -->
+  <div id="tod-panel" class="panel" style="display:none">
+    <div class="game-header">
+      <h2>🎲 Truth or Dare</h2>
+      <button class="btn btn-small btn-secondary" onclick="exitGame()">✕ Exit</button>
+    </div>
+    <div id="tod-narration" class="narration"></div>
+    <div id="tod-score-display">Score: <span id="tod-score">0</span> / 5</div>
+    <div id="tod-prompt-area" style="display:none">
+      <div id="tod-type" class="tod-badge"></div>
+      <div id="tod-prompt-text"></div>
+      <textarea id="tod-response" placeholder="Your response..."></textarea>
+      <button class="btn" onclick="submitAnswer(true)">✅ Done</button>
+      <button class="btn btn-secondary" onclick="submitAnswer(false)">⏭️ Skip</button>
+    </div>
+    <div id="tod-actions">
+      <button class="btn" id="btn-roll" onclick="rollDice()">🎲 Roll Dice</button>
+    </div>
+    <div id="tod-result" class="result" style="display:none"></div>
+  </div>
+
+  <!-- GameMaster Chat -->
+  <div id="chat-panel">
+    <div id="chat-header" onclick="toggleChat()">
+      💬 <span>GameMaster</span>
+      <span id="chat-toggle">▲</span>
+    </div>
+    <div id="chat-messages"></div>
+    <div id="chat-input-area">
+      <input type="text" id="chat-input" placeholder="Talk to the GameMaster..."
+             onkeydown="if(event.key==='Enter')sendChat()">
+      <button class="btn btn-small" onclick="sendChat()">Send</button>
+    </div>
+  </div>
 
   <script src="https://cdn.socket.io/4.6.0/socket.io.min.js"></script>
   <script src="{{ url_for('static', filename='js/games.js') }}"></script>

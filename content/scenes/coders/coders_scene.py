@@ -363,6 +363,27 @@ class CodersRoomScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="c
             self._tick()
             return jsonify(self.state.to_dict())
 
+        @self.app.route("/api/sessions")
+        def list_sessions():
+            return jsonify(self._list_sessions())
+
+        @self.app.route("/api/session/save", methods=["POST"])
+        def save_session():
+            path = self._save_session()
+            if path:
+                return jsonify({"success": True, "path": path})
+            return jsonify({"error": "No active session"}), 400
+
+        @self.app.route("/api/session/load", methods=["POST"])
+        def load_session():
+            data = request.json or {}
+            session_id = data.get("session_id", "")
+            if not session_id:
+                return jsonify({"error": "session_id required"}), 400
+            if self._load_session(session_id):
+                return jsonify({"success": True, **self.state.to_dict()})
+            return jsonify({"error": "Session not found"}), 404
+
     def _setup_socketio(self):
         @self.socketio.on("connect")
         def on_connect():
@@ -372,12 +393,14 @@ class CodersRoomScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="c
     # ── BaseScene contract ──
 
     def start(self) -> None:
-        logger.info("The Coders Room v0.50a starting on port %d", self.port)
+        logger.info("The Coders Room v0.56b starting on port %d", self.port)
         self.socketio.run(self.app, host=self.host, port=self.port, debug=False, allow_unsafe_werkzeug=True)
 
     def stop(self) -> None:
         self.nexus_flush()
         self._running = False
+        if self.state:
+            self._save_session()
         self._mcp_deregister_scene()
 
     def get_plugin_info(self) -> Dict[str, Any]:
@@ -385,7 +408,7 @@ class CodersRoomScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="c
             "name": "The Coders Room",
             "scene_id": SCENE_ID,
             "description": "AI agent idle simulation where agents write, review, and test real Python code.",
-            "version": "0.50b",
+            "version": "0.56b",
             "port": self.port,
             "author": "CosySim",
             "tags": ["coding", "agents", "idle_sim", "sandbox", "showcase"],
@@ -396,5 +419,68 @@ class CodersRoomScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="c
                 {"path": "/api/state",       "methods": ["GET"],  "description": "Get state"},
                 {"path": "/api/feature/add", "methods": ["POST"], "description": "Add feature request"},
                 {"path": "/api/tick",        "methods": ["POST"], "description": "Manual tick"},
+                {"path": "/api/sessions",    "methods": ["GET"],  "description": "List saved sessions"},
+                {"path": "/api/session/load", "methods": ["POST"], "description": "Load saved session"},
             ],
         }
+
+    # ── Session Persistence ──
+
+    _SESSIONS_DIR = Path("data/coders_sessions")
+
+    def _save_session(self) -> Optional[str]:
+        """Save current session state to disk."""
+        if not self.state:
+            return None
+        self._SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
+        path = self._SESSIONS_DIR / f"{self.state.session_id}.json"
+        data = self.state.to_dict()
+        data["completed_features"] = [f.to_dict() for f in self.state.completed_features]
+        data["saved_at"] = time.time()
+        path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        logger.info("Coders session saved: %s", path)
+        return str(path)
+
+    def _load_session(self, session_id: str) -> bool:
+        """Restore a previously saved session."""
+        path = self._SESSIONS_DIR / f"{session_id}.json"
+        if not path.exists():
+            return False
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            self.state = CodersRoomState()
+            self.state.session_id = data.get("session_id", session_id)
+            self.state.tick_count = data.get("tick_count", 0)
+            self.state.total_lines = data.get("total_lines", 0)
+            self.state.total_tests = data.get("total_tests", 0)
+            for ad in data.get("agents", []):
+                agent = self.state.get_agent(ad.get("id", ""))
+                if agent:
+                    agent.lines_written = ad.get("lines_written", 0)
+                    agent.reviews_done = ad.get("reviews_done", 0)
+                    agent.tests_run = ad.get("tests_run", 0)
+            self.state.active = False
+            logger.info("Coders session loaded: %s", session_id)
+            return True
+        except Exception as exc:
+            logger.warning("Failed to load session %s: %s", session_id, exc)
+            return False
+
+    def _list_sessions(self) -> List[Dict[str, Any]]:
+        """List all saved sessions."""
+        if not self._SESSIONS_DIR.exists():
+            return []
+        sessions = []
+        for path in sorted(self._SESSIONS_DIR.glob("*.json"), reverse=True):
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+                sessions.append({
+                    "session_id": data.get("session_id", path.stem),
+                    "completed": data.get("completed", 0),
+                    "total_lines": data.get("total_lines", 0),
+                    "total_tests": data.get("total_tests", 0),
+                    "saved_at": data.get("saved_at", 0),
+                })
+            except Exception:
+                pass
+        return sessions
