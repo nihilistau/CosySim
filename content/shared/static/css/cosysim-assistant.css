@@ -279,3 +279,69 @@
   0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
   40% { transform: scale(1); opacity: 1; }
 }
+
+/* ── Voice Controls ──────────────────────────────────────── */
+.cs-assistant-voice-toggle {
+  background: none;
+  border: none;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 4px;
+  transition: background 0.2s;
+  line-height: 1;
+}
+
+.cs-assistant-voice-toggle:hover {
+  background: rgba(102, 126, 234, 0.2);
+}
+
+.cs-assistant-mic {
+  background: none;
+  border: 1px solid rgba(102, 126, 234, 0.3);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 6px 8px;
+  border-radius: 6px;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.cs-assistant-mic:hover {
+  background: rgba(102, 126, 234, 0.15);
+  border-color: rgba(102, 126, 234, 0.5);
+}
+
+.cs-assistant-mic.recording {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.5);
+  animation: cs-mic-pulse 1s infinite;
+}
+
+@keyframes cs-mic-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.3); }
+  50% { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
+}
+
+.cs-assistant-voice-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  font-size: 11px;
+  color: var(--cs-text-muted, #9ca3af);
+  border-top: 1px solid rgba(102, 126, 234, 0.1);
+}
+
+.cs-voice-indicator {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #10b981;
+  flex-shrink: 0;
+}
+
+.cs-assistant-input-area {
+  display: flex;
+  gap: 6px;
+}

@@ -142,10 +142,18 @@ tts:
   speculative:
     enabled: false                     # use 0.6B as draft for 1.7B (same-family spec decode)
     draft_model: "0.6b"               # draft model size for speculative decoding
+  piper:
+    model_path: "C:\\Files\\Models\\tts\\piper\\en_US-amy-medium.onnx"
+    sample_rate: 22050
   orpheus:
     server_url: "http://localhost:5005"  # Orpheus-FastAPI server
     default_voice: "tara"               # Default voice (24 available)
     timeout: 120                        # Request timeout in seconds
+
+# STT configuration
+stt:
+  server_url: "http://localhost:5051"   # Whisper STT server
+  model: "base"                         # tiny, base, small, medium, large
 
 # LLM configuration
 llm:

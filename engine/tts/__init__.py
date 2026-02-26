@@ -1,4 +1,4 @@
-"""engine.tts — Text-to-Speech subsystem (Qwen3-TTS, Orpheus, CosyVoice)"""
+"""engine.tts — Text-to-Speech subsystem (Piper, Orpheus, Qwen3-TTS)"""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ from engine.tts.qwen3_server import Qwen3TTSEngine
 from engine.tts.voice_designer import VoiceDesigner
 from engine.tts.audio_processor import AudioProcessor
 from engine.tts.orpheus_client import OrpheusClient, get_orpheus_client
+from engine.tts.tts_manager import TTSManager, get_tts_manager
 
 __all__ = [
     "Qwen3TTSEngine",
@@ -13,6 +14,8 @@ __all__ = [
     "AudioProcessor",
     "OrpheusClient",
     "get_orpheus_client",
+    "TTSManager",
+    "get_tts_manager",
     "get_tts_stream_url",
     "get_tts_ws_url",
 ]

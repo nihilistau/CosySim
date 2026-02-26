@@ -2,7 +2,25 @@
 
 All notable changes to CosySim are documented here.
 
-## v0.57b — UX Overhaul & System Assistant
+## v0.57b — UX Overhaul, System Assistant & Voice Interface
+
+### Voice Interface (NEW)
+- **`engine/tts/tts_manager.py`** — unified TTS manager routing between backends:
+  - **Piper** (fast, CPU-only): ~250ms for 3s audio, 14x faster than real-time
+  - **Orpheus** (quality, 24 voices): LMStudio-backed with emotion tags
+  - **Qwen3** (GPU, 0.6B/1.7B): escalation mode with speculative decoding
+- Auto-selects backend: short text → Piper, long text → Orpheus, fallback chain
+- Performance benchmarking: per-backend latency, RTF, call counts, failure tracking
+- **Voice API endpoints** on assistant Blueprint:
+  - `POST /api/assistant/voice` — TTS synthesis (returns audio/wav)
+  - `POST /api/assistant/listen` — STT via Whisper (forwards to :5051)
+  - `GET /api/assistant/tts/health` — backend health check
+  - `GET /api/assistant/tts/benchmarks` — performance metrics
+- **Push-to-talk** in assistant overlay: hold 🎤 to record, auto-transcribes via Whisper
+- **Audio playback**: toggle 🔊 to hear Aria's responses spoken aloud
+- Keyboard shortcuts: Ctrl+Shift+V (toggle voice mode)
+- STT config added: `stt.server_url` in default.yaml
+- Piper config added: `tts.piper.model_path` in default.yaml
 
 ### Scene Navigation Bar (NEW)
 - **`cosysim-navbar.js`** — floating navigation bar auto-injected into every scene
