@@ -20,6 +20,8 @@
         <button class="tab-btn" data-panel="librarian">Librarian</button>
         <button class="tab-btn" data-panel="maintenance">Maintenance</button>
         <button class="tab-btn" data-panel="workflows">Workflows</button>
+        <button class="tab-btn" data-panel="ingestion">Ingestion</button>
+        <button class="tab-btn" data-panel="nlmlab">NLM Lab</button>
         <button class="tab-btn" data-panel="copilot">Copilot</button>
       </nav>
     </div>
@@ -315,6 +317,161 @@
               <button id="generate-doc" class="btn primary">Generate</button>
             </div>
             <div id="generated-artifacts" class="artifacts-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ══ Ingestion Panel ═══════════════════════════════════ -->
+      <section id="panel-ingestion" class="panel">
+        <div class="ingest-layout">
+          <!-- HAR Upload -->
+          <div class="card wide">
+            <h3>📦 HAR File Ingestion</h3>
+            <p>Upload a NotebookLM HAR file to extract notebooks, sources, conversations and notes.</p>
+            <div class="har-upload-zone" id="har-dropzone">
+              <div class="dropzone-content">
+                <span class="dropzone-icon">📁</span>
+                <p>Drag & drop a .har file here, or click to browse</p>
+                <input type="file" id="har-file-input" accept=".har" hidden>
+              </div>
+            </div>
+            <div id="har-preview" class="hidden">
+              <h4>Preview</h4>
+              <div id="har-notebooks"></div>
+              <div class="har-actions">
+                <label><input type="checkbox" id="har-sources" checked> Sources</label>
+                <label><input type="checkbox" id="har-documents" checked> Documents</label>
+                <label><input type="checkbox" id="har-notes" checked> Notes</label>
+                <label><input type="checkbox" id="har-convos" checked> Conversations</label>
+                <button id="har-commit-btn" class="btn primary">Commit to Nexus</button>
+              </div>
+              <div id="har-result"></div>
+            </div>
+          </div>
+
+          <!-- Codebase Indexer -->
+          <div class="card">
+            <h3>💻 Codebase Indexer</h3>
+            <p>Create an NLM notebook from source files for analysis.</p>
+            <input type="text" id="codebase-name" placeholder="Notebook name..." class="input-full">
+            <textarea id="codebase-files" placeholder="File paths (one per line)..." class="textarea-full" rows="4"></textarea>
+            <button id="codebase-index-btn" class="btn primary">Create Notebook</button>
+            <div id="codebase-result"></div>
+          </div>
+
+          <!-- Notebook Browser -->
+          <div class="card">
+            <h3>📓 NLM Notebooks</h3>
+            <p>Browse and manage NotebookLM notebooks.</p>
+            <button id="refresh-notebooks-btn" class="btn">Refresh</button>
+            <div id="notebook-list">
+              <p class="muted">Click Refresh to load notebooks.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ══ NLM Lab Panel ═════════════════════════════════════ -->
+      <section id="panel-nlmlab" class="panel">
+        <div class="nlmlab-layout">
+          <!-- NLM Ask (Router) -->
+          <div class="card wide">
+            <h3>🧠 NLM-First Query</h3>
+            <p>Ask a question — routes through cache → FTS → NLM → LLM. Answers auto-stored.</p>
+            <div class="nlm-ask-row">
+              <input type="text" id="nlm-question" placeholder="Ask anything..." class="input-lg">
+              <input type="text" id="nlm-notebook-id" placeholder="Notebook ID (optional)" class="input-sm">
+              <button id="nlm-ask-btn" class="btn primary">Ask</button>
+            </div>
+            <div id="nlm-answer" class="hidden">
+              <div class="nlm-answer-header">
+                <span class="tier-badge" id="nlm-tier"></span>
+                <span class="nlm-meta" id="nlm-meta"></span>
+              </div>
+              <div id="nlm-answer-text" class="nlm-answer-body"></div>
+            </div>
+          </div>
+
+          <!-- Batch Q&A Workshop -->
+          <div class="card wide">
+            <h3>📋 Batch Q&A Workshop</h3>
+            <p>Write questions or auto-generate, then batch-send to NLM. All answers stored in Nexus.</p>
+            <div class="batch-toolbar">
+              <input type="text" id="batch-topic" placeholder="Topic for auto-generation..." class="input-lg">
+              <input type="number" id="batch-count" value="10" min="1" max="50" class="input-xs">
+              <button id="batch-generate-btn" class="btn">Generate Questions</button>
+            </div>
+            <textarea id="batch-questions" placeholder="Enter questions (one per line)..." class="textarea-full" rows="6"></textarea>
+            <div class="batch-actions">
+              <input type="text" id="batch-nb-id" placeholder="Notebook ID (optional)" class="input-sm">
+              <button id="batch-send-btn" class="btn primary">Send All to NLM</button>
+              <span id="batch-progress" class="muted"></span>
+            </div>
+            <div id="batch-results" class="hidden">
+              <h4>Results</h4>
+              <div id="batch-results-list"></div>
+            </div>
+          </div>
+
+          <!-- Plan Decomposer -->
+          <div class="card">
+            <h3>🧩 Plan Decomposer</h3>
+            <p>Break a complex plan into small-model implementation steps.</p>
+            <textarea id="decompose-plan" placeholder="Paste your plan here..." class="textarea-full" rows="4"></textarea>
+            <button id="decompose-btn" class="btn primary">Decompose</button>
+            <div id="decompose-result"></div>
+          </div>
+
+          <!-- Code Analyzer -->
+          <div class="card">
+            <h3>🔬 Code Analyzer</h3>
+            <p>Send source files to NLM for expert analysis.</p>
+            <textarea id="analyze-files" placeholder="File paths (one per line)..." class="textarea-full" rows="3"></textarea>
+            <textarea id="analyze-questions" placeholder="Questions (one per line, optional)..." class="textarea-full" rows="2"></textarea>
+            <button id="analyze-btn" class="btn primary">Analyze</button>
+            <div id="analyze-result"></div>
+          </div>
+
+          <!-- Topic Builder -->
+          <div class="card">
+            <h3>📚 Topic Builder</h3>
+            <p>End-to-end: create notebook → generate questions → batch-ask → store in Nexus.</p>
+            <input type="text" id="topic-name" placeholder="Topic name..." class="input-full">
+            <textarea id="topic-sources" placeholder="Source URLs or text (one per line)..." class="textarea-full" rows="3"></textarea>
+            <input type="number" id="topic-count" value="30" min="5" max="100" class="input-xs">
+            <span class="muted">questions</span>
+            <button id="topic-build-btn" class="btn primary">Build Knowledge</button>
+            <div id="topic-result"></div>
+          </div>
+
+          <!-- Savings Dashboard -->
+          <div class="card wide">
+            <h3>📊 NLM Savings Metrics</h3>
+            <div id="savings-dashboard">
+              <div class="savings-grid">
+                <div class="savings-card">
+                  <div class="savings-value" id="sav-cache">0</div>
+                  <div class="savings-label">Cache Hits</div>
+                </div>
+                <div class="savings-card">
+                  <div class="savings-value" id="sav-fts">0</div>
+                  <div class="savings-label">FTS Hits</div>
+                </div>
+                <div class="savings-card">
+                  <div class="savings-value" id="sav-nlm">0</div>
+                  <div class="savings-label">NLM Answers</div>
+                </div>
+                <div class="savings-card">
+                  <div class="savings-value" id="sav-llm">0</div>
+                  <div class="savings-label">LLM Fallbacks</div>
+                </div>
+                <div class="savings-card accent">
+                  <div class="savings-value" id="sav-pct">0%</div>
+                  <div class="savings-label">Compute Saved</div>
+                </div>
+              </div>
+              <button id="refresh-savings-btn" class="btn">Refresh Stats</button>
+            </div>
           </div>
         </div>
       </section>

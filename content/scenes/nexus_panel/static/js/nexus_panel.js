@@ -20,6 +20,8 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     else if (name === 'explorer') loadEntries();
     else if (name === 'copilot') loadCopilotPanel();
     else if (name === 'workflows') loadResearchSessions();
+    else if (name === 'ingestion') loadIngestionPanel();
+    else if (name === 'nlmlab') loadNLMLabPanel();
   });
 });
 
@@ -596,6 +598,319 @@ function showArtifactModal(a) {
   document.getElementById('new-category').value = 'general';
   modal.classList.remove('hidden');
 }
+
+// ── Ingestion Panel ─────────────────────────────────────────────────
+let harTmpPath = '';
+
+function loadIngestionPanel() {
+  loadNotebooks();
+}
+
+// HAR Upload
+const dropzone = document.getElementById('har-dropzone');
+const harInput = document.getElementById('har-file-input');
+
+if (dropzone) {
+  dropzone.addEventListener('click', () => harInput?.click());
+  dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('dragover'); });
+  dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+  dropzone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropzone.classList.remove('dragover');
+    if (e.dataTransfer.files.length) uploadHAR(e.dataTransfer.files[0]);
+  });
+}
+if (harInput) {
+  harInput.addEventListener('change', () => {
+    if (harInput.files.length) uploadHAR(harInput.files[0]);
+  });
+}
+
+async function uploadHAR(file) {
+  const form = new FormData();
+  form.append('file', file);
+  const preview = document.getElementById('har-preview');
+  const nbList = document.getElementById('har-notebooks');
+  nbList.innerHTML = '<p class="muted">Uploading & parsing...</p>';
+  preview.classList.remove('hidden');
+
+  const data = await fetch('/api/ingest/har', { method: 'POST', body: form }).then(r => r.json());
+  if (data.error) {
+    nbList.innerHTML = `<p style="color:var(--danger)">${esc(data.error)}</p>`;
+    return;
+  }
+  harTmpPath = data.tmp_path;
+  nbList.innerHTML = (data.notebooks || []).map(nb => `
+    <div class="har-notebook-card">
+      <strong>${esc(nb.name || nb.id)}</strong>
+      <div class="har-counts">
+        <span>📄 ${(nb.sources || []).length} sources</span>
+        <span>📝 ${(nb.notes || []).length} notes</span>
+        <span>💬 ${(nb.conversations || []).length} conversations</span>
+        <span>📚 ${(nb.documents || []).length} docs</span>
+      </div>
+    </div>
+  `).join('') || '<p class="muted">No notebooks found in HAR file.</p>';
+}
+
+document.getElementById('har-commit-btn')?.addEventListener('click', async () => {
+  if (!harTmpPath) return;
+  const items = [];
+  if (document.getElementById('har-sources')?.checked) items.push('sources');
+  if (document.getElementById('har-documents')?.checked) items.push('documents');
+  if (document.getElementById('har-notes')?.checked) items.push('notes');
+  if (document.getElementById('har-convos')?.checked) items.push('conversations');
+
+  const resultEl = document.getElementById('har-result');
+  resultEl.innerHTML = '<p class="muted">Committing...</p>';
+  const data = await api('/api/ingest/har/commit', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tmp_path: harTmpPath, items })
+  });
+  if (data.error) {
+    resultEl.innerHTML = `<p style="color:var(--danger)">${esc(data.error)}</p>`;
+  } else {
+    resultEl.innerHTML = (data.results || []).map(r =>
+      `<div class="result-row">✅ <strong>${esc(r.name)}</strong> — ${r.stored}/${r.total} items stored</div>`
+    ).join('');
+  }
+});
+
+// Codebase Indexer
+document.getElementById('codebase-index-btn')?.addEventListener('click', async () => {
+  const name = document.getElementById('codebase-name')?.value.trim();
+  const filesText = document.getElementById('codebase-files')?.value.trim();
+  const resultEl = document.getElementById('codebase-result');
+  if (!name || !filesText) {
+    resultEl.innerHTML = '<p style="color:var(--danger)">Name and files required.</p>';
+    return;
+  }
+  const files = filesText.split('\n').map(f => f.trim()).filter(Boolean);
+  resultEl.innerHTML = '<p class="muted">Creating notebook...</p>';
+  const data = await api('/api/ingest/codebase', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, files })
+  });
+  if (data.error) {
+    resultEl.innerHTML = `<p style="color:var(--danger)">${esc(data.error)}</p>`;
+  } else {
+    resultEl.innerHTML = `<div class="result-row">✅ Notebook created: <strong>${esc(data.notebook_id || data.id || 'OK')}</strong></div>`;
+  }
+});
+
+// Notebook Browser
+async function loadNotebooks() {
+  const listEl = document.getElementById('notebook-list');
+  if (!listEl) return;
+  listEl.innerHTML = '<p class="muted">Loading...</p>';
+  const data = await api('/api/nlm/status');
+  if (data.error) {
+    listEl.innerHTML = `<p style="color:var(--danger)">${esc(data.error)}</p>`;
+    return;
+  }
+  const notebooks = data.notebooks || [];
+  if (notebooks.length === 0) {
+    listEl.innerHTML = '<p class="muted">No notebooks found.</p>';
+    return;
+  }
+  listEl.innerHTML = notebooks.map(nb => `
+    <div class="notebook-card">
+      <strong>${esc(nb.name || nb.id)}</strong>
+      <span class="muted">${esc(nb.id || '')}</span>
+      <button class="btn-icon btn-danger nb-delete" data-id="${esc(nb.id)}" title="Delete">🗑</button>
+    </div>
+  `).join('');
+  listEl.querySelectorAll('.nb-delete').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      if (!confirm('Delete this notebook?')) return;
+      await api(`/api/nlm/notebook/${btn.dataset.id}`, { method: 'DELETE' });
+      loadNotebooks();
+    });
+  });
+}
+
+document.getElementById('refresh-notebooks-btn')?.addEventListener('click', loadNotebooks);
+
+// ── NLM Lab Panel ───────────────────────────────────────────────────
+function loadNLMLabPanel() {
+  loadSavings();
+}
+
+// NLM Ask
+document.getElementById('nlm-ask-btn')?.addEventListener('click', async () => {
+  const question = document.getElementById('nlm-question')?.value.trim();
+  const nbId = document.getElementById('nlm-notebook-id')?.value.trim();
+  if (!question) return;
+
+  const answerEl = document.getElementById('nlm-answer');
+  const textEl = document.getElementById('nlm-answer-text');
+  const tierEl = document.getElementById('nlm-tier');
+  const metaEl = document.getElementById('nlm-meta');
+
+  textEl.textContent = 'Thinking...';
+  answerEl.classList.remove('hidden');
+
+  const data = await api('/api/nlm/ask', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ question, notebook_id: nbId })
+  });
+
+  if (data.error) {
+    textEl.textContent = data.error;
+    tierEl.textContent = '❌';
+    tierEl.className = 'tier-badge error';
+  } else {
+    textEl.textContent = data.answer || 'No answer';
+    const tier = data.source_tier || 'unknown';
+    const tierLabels = { cache: '⚡ Cache', fts: '🔍 FTS', nlm: '🧠 NLM', llm: '🤖 LLM', none: '❓ None' };
+    tierEl.textContent = tierLabels[tier] || tier;
+    tierEl.className = `tier-badge tier-${tier}`;
+    const ms = data.query_time_ms ? `${data.query_time_ms.toFixed(0)}ms` : '';
+    const cached = data.was_cached ? ' (cached)' : '';
+    metaEl.textContent = `${ms}${cached} | confidence: ${((data.confidence || 0) * 100).toFixed(0)}%`;
+  }
+});
+
+// Batch Q&A
+document.getElementById('batch-generate-btn')?.addEventListener('click', async () => {
+  const topic = document.getElementById('batch-topic')?.value.trim();
+  const count = parseInt(document.getElementById('batch-count')?.value || '10');
+  if (!topic) return;
+  const data = await api('/api/questions/generate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ topic, count })
+  });
+  if (data.questions) {
+    document.getElementById('batch-questions').value = data.questions.join('\n');
+  }
+});
+
+document.getElementById('batch-send-btn')?.addEventListener('click', async () => {
+  const text = document.getElementById('batch-questions')?.value.trim();
+  const nbId = document.getElementById('batch-nb-id')?.value.trim();
+  if (!text) return;
+  const questions = text.split('\n').map(q => q.trim()).filter(Boolean);
+  const progress = document.getElementById('batch-progress');
+  const resultsEl = document.getElementById('batch-results');
+  const listEl = document.getElementById('batch-results-list');
+
+  progress.textContent = `Sending ${questions.length} questions...`;
+  const data = await api('/api/nlm/ask-batch', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ questions, notebook_id: nbId })
+  });
+
+  if (data.error) {
+    progress.textContent = data.error;
+    return;
+  }
+
+  progress.textContent = `Done — ${data.count} answers received.`;
+  resultsEl.classList.remove('hidden');
+  const tierLabels = { cache: '⚡ Cache', fts: '🔍 FTS', nlm: '🧠 NLM', llm: '🤖 LLM', none: '❓ None' };
+  listEl.innerHTML = (data.results || []).map((r, i) => `
+    <div class="batch-result-row">
+      <div class="batch-q"><strong>Q${i + 1}:</strong> ${esc(questions[i] || '')}</div>
+      <div class="batch-a"><span class="tier-badge tier-${r.source_tier}">${tierLabels[r.source_tier] || r.source_tier}</span> ${esc(r.answer || 'No answer')}</div>
+    </div>
+  `).join('');
+  loadSavings();
+});
+
+// Plan Decomposer
+document.getElementById('decompose-btn')?.addEventListener('click', async () => {
+  const plan = document.getElementById('decompose-plan')?.value.trim();
+  const resultEl = document.getElementById('decompose-result');
+  if (!plan) return;
+  resultEl.innerHTML = '<p class="muted">Decomposing...</p>';
+  const data = await api('/api/nlm/decompose', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ plan })
+  });
+  if (data.error) {
+    resultEl.innerHTML = `<p style="color:var(--danger)">${esc(data.error)}</p>`;
+  } else {
+    const steps = data.steps || [];
+    resultEl.innerHTML = steps.length
+      ? `<ol class="step-list">${steps.map(s => `<li>${esc(s)}</li>`).join('')}</ol>`
+      : '<p class="muted">No steps returned.</p>';
+  }
+});
+
+// Code Analyzer
+document.getElementById('analyze-btn')?.addEventListener('click', async () => {
+  const filesText = document.getElementById('analyze-files')?.value.trim();
+  const qText = document.getElementById('analyze-questions')?.value.trim();
+  const resultEl = document.getElementById('analyze-result');
+  if (!filesText) return;
+  const files = filesText.split('\n').map(f => f.trim()).filter(Boolean);
+  const questions = qText ? qText.split('\n').map(q => q.trim()).filter(Boolean) : undefined;
+  resultEl.innerHTML = '<p class="muted">Analyzing...</p>';
+  const data = await api('/api/nlm/analyze', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ files, questions })
+  });
+  if (data.error) {
+    resultEl.innerHTML = `<p style="color:var(--danger)">${esc(data.error)}</p>`;
+  } else {
+    const insights = data.insights || [];
+    resultEl.innerHTML = insights.length
+      ? insights.map(i => `<div class="insight-card"><strong>${esc(i.question)}</strong><p>${esc(i.answer)}</p></div>`).join('')
+      : '<p class="muted">No insights returned.</p>';
+  }
+});
+
+// Topic Builder
+document.getElementById('topic-build-btn')?.addEventListener('click', async () => {
+  const topic = document.getElementById('topic-name')?.value.trim();
+  const srcText = document.getElementById('topic-sources')?.value.trim();
+  const count = parseInt(document.getElementById('topic-count')?.value || '30');
+  const resultEl = document.getElementById('topic-result');
+  if (!topic) return;
+  const sources = srcText ? srcText.split('\n').map(s => s.trim()).filter(Boolean) : undefined;
+  resultEl.innerHTML = '<p class="muted">Building topic knowledge (this may take a while)...</p>';
+  const data = await api('/api/nlm/build-topic', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ topic, sources, count })
+  });
+  if (data.error) {
+    resultEl.innerHTML = `<p style="color:var(--danger)">${esc(data.error)}</p>`;
+  } else {
+    resultEl.innerHTML = `
+      <div class="result-row">
+        ${data.success ? '✅' : '⚠️'} <strong>${esc(topic)}</strong> —
+        ${data.qa_count || 0} Q&A pairs stored,
+        notebook: ${esc(data.notebook_id || 'n/a')},
+        took ${(data.duration || 0).toFixed(1)}s
+      </div>
+      ${(data.errors || []).map(e => `<p style="color:var(--warning)">${esc(e)}</p>`).join('')}
+    `;
+  }
+  loadSavings();
+});
+
+// Savings
+async function loadSavings() {
+  const data = await api('/api/nlm/router/stats');
+  if (data.error) return;
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  set('sav-cache', data.cache_hits || 0);
+  set('sav-fts', data.fts_hits || 0);
+  set('sav-nlm', data.nlm_hits || 0);
+  set('sav-llm', data.llm_fallbacks || 0);
+  const pct = data.compute_saved_pct != null ? (data.compute_saved_pct * 100).toFixed(1) : '0';
+  set('sav-pct', pct + '%');
+}
+
+document.getElementById('refresh-savings-btn')?.addEventListener('click', loadSavings);
 
 // ── Utilities ───────────────────────────────────────────────────────
 function esc(str) {
