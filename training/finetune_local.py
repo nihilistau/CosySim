@@ -76,9 +76,18 @@ def check_dependencies() -> dict[str, bool]:
         try:
             __import__(pkg)
             deps[pkg] = True
-        except ImportError:
+        except (ImportError, Exception):
             deps[pkg] = False
     return deps
+
+
+def _has_unsloth() -> bool:
+    """Check if Unsloth is importable (fails on Windows due to Triton)."""
+    try:
+        from unsloth import FastLanguageModel  # noqa: F401
+        return True
+    except Exception:
+        return False
 
 
 def finetune(
@@ -93,6 +102,7 @@ def finetune(
     max_seq_length: int = 512,
     gradient_accumulation: int = 4,
     export_gguf: bool = True,
+    backend: str = "auto",
 ) -> dict:
     """
     Train QLoRA adapter on CosySim dataset.
@@ -109,11 +119,11 @@ def finetune(
         max_seq_length: Max token length.
         gradient_accumulation: Gradient accumulation steps.
         export_gguf: Whether to export GGUF after training.
+        backend: "unsloth", "hf", or "auto" (tries unsloth first).
 
     Returns:
         Dict with training results (loss, path, etc.).
     """
-    # Resolve output directory
     if output_dir is None:
         output_dir = str(OUTPUT_DIR / f"cosysim-{dataset_name}")
     os.makedirs(output_dir, exist_ok=True)
@@ -129,16 +139,34 @@ def finetune(
     if not examples:
         raise ValueError(f"No training data found for '{dataset_name}'")
 
-    # Check deps
-    deps = check_dependencies()
-    missing = [k for k, v in deps.items() if not v]
-    if missing:
-        raise ImportError(
-            f"Missing training dependencies: {', '.join(missing)}. "
-            f"Install with: pip install unsloth transformers peft trl datasets"
+    # Select backend
+    use_unsloth = False
+    if backend == "auto":
+        use_unsloth = _has_unsloth()
+    elif backend == "unsloth":
+        use_unsloth = True
+
+    if use_unsloth:
+        return _finetune_unsloth(
+            examples, base_model, output_dir, epochs, lr,
+            lora_r, lora_alpha, batch_size, max_seq_length,
+            gradient_accumulation, export_gguf, dataset_name,
+        )
+    else:
+        return _finetune_hf(
+            examples, base_model, output_dir, epochs, lr,
+            lora_r, lora_alpha, batch_size, max_seq_length,
+            gradient_accumulation, dataset_name,
         )
 
-    # Dynamic imports (only if deps available)
+
+def _finetune_unsloth(
+    examples: list, base_model: str, output_dir: str,
+    epochs: int, lr: float, lora_r: int, lora_alpha: int,
+    batch_size: int, max_seq_length: int, gradient_accumulation: int,
+    export_gguf: bool, dataset_name: str,
+) -> dict:
+    """Train using Unsloth (Linux/Colab, 4-bit QLoRA)."""
     from unsloth import FastLanguageModel
     from trl import SFTTrainer, SFTConfig
     import torch
@@ -232,6 +260,89 @@ def finetune(
     return result
 
 
+def _finetune_hf(
+    examples: list, base_model: str, output_dir: str,
+    epochs: int, lr: float, lora_r: int, lora_alpha: int,
+    batch_size: int, max_seq_length: int, gradient_accumulation: int,
+    dataset_name: str,
+) -> dict:
+    """Train using HuggingFace Transformers + PEFT (Windows-compatible, no Triton)."""
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+    from peft import LoraConfig, get_peft_model, TaskType
+    from trl import SFTTrainer, SFTConfig
+    from datasets import Dataset
+    import torch
+
+    log.info("[HF backend] Loading base model: %s", base_model)
+    tokenizer = AutoTokenizer.from_pretrained(base_model)
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+
+    model = AutoModelForCausalLM.from_pretrained(
+        base_model,
+        torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
+        device_map="auto" if torch.cuda.is_available() else None,
+    )
+
+    lora_config = LoraConfig(
+        task_type=TaskType.CAUSAL_LM,
+        r=lora_r,
+        lora_alpha=lora_alpha,
+        target_modules=["q_proj", "k_proj", "v_proj", "o_proj",
+                        "gate_proj", "up_proj", "down_proj"],
+        lora_dropout=0.05,
+        bias="none",
+    )
+    model = get_peft_model(model, lora_config)
+    log.info("[HF backend] LoRA applied (r=%d, alpha=%d), trainable params: %d",
+             lora_r, lora_alpha, model.num_parameters(only_trainable=True))
+
+    formatted = [_format_prompt(ex) for ex in examples]
+    train_dataset = Dataset.from_dict({"text": formatted})
+
+    training_args = SFTConfig(
+        output_dir=output_dir,
+        num_train_epochs=epochs,
+        per_device_train_batch_size=batch_size,
+        gradient_accumulation_steps=gradient_accumulation,
+        learning_rate=lr,
+        weight_decay=0.01,
+        warmup_steps=5,
+        logging_steps=10,
+        save_strategy="epoch",
+        bf16=False,
+        fp16=torch.cuda.is_available(),
+        max_seq_length=max_seq_length,
+        dataset_text_field="text",
+        packing=False,
+    )
+
+    trainer = SFTTrainer(
+        model=model,
+        tokenizer=tokenizer,
+        train_dataset=train_dataset,
+        args=training_args,
+    )
+
+    log.info("[HF backend] Training: %d examples, %d epochs", len(examples), epochs)
+    train_result = trainer.train()
+
+    adapter_path = os.path.join(output_dir, "adapter")
+    model.save_pretrained(adapter_path)
+    tokenizer.save_pretrained(adapter_path)
+    log.info("[HF backend] Adapter saved to %s", adapter_path)
+
+    return {
+        "backend": "hf",
+        "dataset": dataset_name,
+        "examples": len(examples),
+        "epochs": epochs,
+        "final_loss": train_result.training_loss,
+        "adapter_path": adapter_path,
+        "output_dir": output_dir,
+    }
+
+
 def evaluate_model(
     adapter_path: str,
     dataset_name: str,
@@ -319,6 +430,9 @@ if __name__ == "__main__":
     train_p.add_argument("--batch-size", type=int, default=4)
     train_p.add_argument("--output-dir", type=str, default=None)
     train_p.add_argument("--no-gguf", action="store_true")
+    train_p.add_argument("--backend", type=str, default="auto",
+                         choices=["auto", "unsloth", "hf"],
+                         help="Training backend (default: auto)")
 
     # Evaluate command
     eval_p = sub.add_parser("eval", help="Evaluate adapter on validation set")
@@ -357,6 +471,7 @@ if __name__ == "__main__":
             lora_r=args.lora_r,
             batch_size=args.batch_size,
             export_gguf=not args.no_gguf,
+            backend=args.backend,
         )
         print(f"Training complete: {result}")
     else:

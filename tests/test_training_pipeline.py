@@ -57,11 +57,12 @@ class TestFinetuneLocal:
 
     def test_finetune_missing_deps(self):
         from training.finetune_local import finetune
-        # Without unsloth installed, should raise ImportError
-        with patch("training.finetune_local.check_dependencies",
-                    return_value={"unsloth": False, "transformers": True, "peft": True,
-                                  "trl": True, "torch": True, "datasets": True}):
-            with pytest.raises(ImportError, match="Missing training dependencies"):
+        # With HF fallback, missing unsloth alone doesn't raise.
+        # Mock both backends unavailable to trigger ImportError.
+        with patch("training.finetune_local._has_unsloth", return_value=False), \
+             patch("training.finetune_local._finetune_hf",
+                   side_effect=ImportError("Missing transformers")):
+            with pytest.raises(ImportError):
                 finetune(dataset_name="tag_extraction")
 
     def test_finetune_no_data(self):
@@ -225,9 +226,9 @@ class TestGenerateDatasets(unittest.TestCase):
         from training.generate_datasets import GENERATORS
 
         expected = {
-            "tag_extraction": 800, "tool_routing": 400,
-            "priority_classify": 300, "decision_classify": 300,
-            "response_validate": 300,
+            "tag_extraction": 800, "tool_routing": 600,
+            "priority_classify": 400, "decision_classify": 400,
+            "response_validate": 400,
         }
         for name, (gen_fn, default_count) in GENERATORS.items():
             self.assertEqual(default_count, expected[name], f"{name} default mismatch")

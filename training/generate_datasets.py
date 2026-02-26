@@ -183,6 +183,24 @@ def generate_tool_routing(count: int = 400) -> List[Dict]:
         ("Suggest something fun to do", "suggest_activity", {"scene_id": "current"}),
         ("Give me a random topic to talk about", "get_random_topic", {"category": "general"}),
         ("Take off {char}'s jacket", "wardrobe_remove_item", {"character_id": "{char}", "item_id": "jacket", "removed_by": "player"}),
+        # ── Extended skill routing intents ──
+        ("Search Nexus for {topic}", "nexus_search", {"query": "{topic}"}),
+        ("Ask Nexus how {topic} works", "nexus_ask", {"question": "how does {topic} work?"}),
+        ("Store this decision about {topic}", "nexus_add", {"title": "Decision: {topic}", "content": "{text}"}),
+        ("Start research on {topic}", "nexus_research", {"question": "{topic}"}),
+        ("Generate an image of {char} at the beach", "generate_image_request", {"prompt": "{char} at the beach"}),
+        ("Check system health", "system_status", {}),
+        ("What skills are available?", "list_all_skills", {}),
+        ("Start a mystery game", "games_mystery_start", {"character_id": "{char}"}),
+        ("Roll for truth or dare", "games_tod_roll", {"character_id": "{char}"}),
+        ("Check {char}'s phone messages", "phone_get_messages", {"character_id": "{char}"}),
+        ("Send {char} a text message", "phone_send_message", {"character_id": "{char}", "text": "{text}"}),
+        ("What's the conversation history with {char}?", "get_conversation_history", {"character_id": "{char}"}),
+        ("Change the lighting to dim", "set_environment", {"lighting": "dim"}),
+        ("Play some music", "play_ambient", {"sound": "music", "scene_id": "current"}),
+        ("How are all the characters feeling?", "get_all_character_states", {}),
+        ("Log this session to Nexus", "nexus_log_session", {"project": "CosySim"}),
+        ("Store a code snippet about {topic}", "coding_store_snippet", {"title": "{topic}", "code": "# example"}),
     ]
 
     chars = ["lola", "aria", "viktor", "frankie", "mira"]
@@ -242,6 +260,22 @@ def generate_priority_classify(count: int = 300) -> List[Dict]:
         ("system: route tool call", "realtime", "router", "tool_routing"),
         ("lounge_scene: NPC idle chatter", "background", "cpu", "ambient"),
         ("bedroom_scene: player waiting for response", "realtime", "gpu", "user_facing"),
+        # ── Extended patterns ──
+        ("casino_scene: player placing bet", "interactive", "gpu", "game_action"),
+        ("casino_scene: NPC dealer narrating", "interactive", "gpu", "narration"),
+        ("gallery_scene: describing artwork", "interactive", "gpu", "creative"),
+        ("tavern_scene: group conversation", "interactive", "gpu", "multi_character"),
+        ("warzone_scene: tactical combat round", "realtime", "gpu", "game_critical"),
+        ("coders_scene: generating code review", "interactive", "gpu", "creative"),
+        ("nexus: searching knowledge base", "background", "cpu", "knowledge_query"),
+        ("nexus: storing decision", "batch", "cpu", "knowledge_write"),
+        ("system: priority classification", "realtime", "router", "meta_routing"),
+        ("system: NPC decision tree", "background", "router", "decision_classify"),
+        ("games_scene: mystery clue narration", "interactive", "gpu", "game_action"),
+        ("games_scene: truth or dare prompt", "interactive", "gpu", "game_action"),
+        ("hub_scene: scene navigation request", "interactive", "cpu", "navigation"),
+        ("system: auto-training check", "batch", "cpu", "maintenance"),
+        ("phone_scene: voice message generation", "interactive", "gpu", "tts_generation"),
     ]
 
     examples = []
@@ -345,10 +379,10 @@ def generate_response_validate(count: int = 300) -> List[Dict]:
 
 GENERATORS = {
     "tag_extraction":     (generate_tag_extraction, 800),
-    "tool_routing":       (generate_tool_routing, 400),
-    "priority_classify":  (generate_priority_classify, 300),
-    "decision_classify":  (generate_decision_classify, 300),
-    "response_validate":  (generate_response_validate, 300),
+    "tool_routing":       (generate_tool_routing, 600),
+    "priority_classify":  (generate_priority_classify, 400),
+    "decision_classify":  (generate_decision_classify, 400),
+    "response_validate":  (generate_response_validate, 400),
 }
 
 
@@ -366,6 +400,7 @@ def main() -> None:
     parser.add_argument("--out", default="training/datasets", help="Output directory")
     parser.add_argument("--only", help="Generate only this dataset (comma-separated)")
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
+    parser.add_argument("--scale", type=float, default=1.0, help="Multiply dataset sizes (e.g. 2.0 for 2x)")
     args = parser.parse_args()
 
     random.seed(args.seed)
@@ -378,7 +413,8 @@ def main() -> None:
 
     total = 0
     for name, (gen_fn, default_count) in targets.items():
-        data = gen_fn(default_count)
+        scaled_count = int(default_count * args.scale)
+        data = gen_fn(scaled_count)
         # 90/10 train/val split
         random.shuffle(data)
         split = int(len(data) * 0.9)

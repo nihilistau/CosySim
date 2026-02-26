@@ -32,7 +32,7 @@ def check_dependencies() -> dict[str, bool]:
         try:
             __import__(pkg)
             deps[pkg] = True
-        except ImportError:
+        except (ImportError, Exception):
             deps[pkg] = False
     return deps
 
