@@ -19,9 +19,11 @@ Actions:
 from __future__ import annotations
 
 import logging
+import re
 import threading
 import time
 from collections import defaultdict
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
@@ -104,6 +106,20 @@ def nexus_health_report() -> Dict[str, Any]:
     # Quality assessment
     if total > 0 and report["metrics"].get("total_qa", 0) == 0:
         report["recommendations"].append("No Q&A pairs — run distillers to extract Q&A from entries")
+
+    # Quality scoring summary
+    try:
+        qr = quality_report()
+        report["quality"] = {
+            "average_score": qr["average_score"],
+            "score_distribution": qr["score_distribution"],
+            "low_quality_count": len(qr["low_quality"]),
+            "duplicate_count": len(qr["duplicates"]),
+            "stale_count": len(qr["stale"]),
+        }
+        report["recommendations"].extend(qr["recommendations"])
+    except Exception:
+        logger.debug("Quality scoring skipped", exc_info=True)
 
     return report
 
@@ -602,6 +618,350 @@ def nexus_prune_backups(keep: int = 10) -> Dict[str, Any]:
     return {"deleted": deleted, "remaining": len(all_backups) - deleted}
 
 
+# ── Knowledge Quality Scoring ───────────────────────────────────────────
+
+
+class KnowledgeScorer:
+    """Scores individual Nexus entries on freshness, quality, uniqueness, and completeness.
+
+    Each dimension yields a score from 0.0 to 1.0.  A weighted composite
+    score summarises overall entry health.
+
+    Args:
+        max_age_days: Age at which freshness drops to 0.  Default 90.
+        all_entries: Optional pre-fetched list used for uniqueness checks.
+    """
+
+    WEIGHTS = {
+        "freshness": 0.2,
+        "quality": 0.4,
+        "uniqueness": 0.2,
+        "completeness": 0.2,
+    }
+
+    def __init__(
+        self,
+        max_age_days: int = 90,
+        all_entries: Optional[List[Dict[str, Any]]] = None,
+    ) -> None:
+        self._max_age_days = max_age_days
+        self._all_titles: List[str] = []
+        if all_entries:
+            self._all_titles = [
+                e.get("title", "").lower().strip() for e in all_entries
+            ]
+
+    # ── Individual dimension scorers ──────────────────────────
+
+    def freshness(self, entry: Dict[str, Any]) -> float:
+        """Score based on entry age.  1.0 = brand new, 0.0 = max_age_days old.
+
+        Args:
+            entry: Nexus entry dict (expects ``created_at`` or ``updated_at``).
+
+        Returns:
+            Freshness score between 0.0 and 1.0.
+        """
+        ts_str = entry.get("updated_at") or entry.get("created_at") or ""
+        if not ts_str:
+            return 0.0
+        try:
+            if isinstance(ts_str, (int, float)):
+                entry_dt = datetime.fromtimestamp(ts_str, tz=timezone.utc)
+            else:
+                entry_dt = datetime.fromisoformat(
+                    str(ts_str).replace("Z", "+00:00")
+                )
+            age_days = (datetime.now(timezone.utc) - entry_dt).total_seconds() / 86400
+            return round(max(0.0, 1.0 - age_days / self._max_age_days), 4)
+        except (ValueError, TypeError, OSError):
+            return 0.0
+
+    def quality(self, entry: Dict[str, Any]) -> float:
+        """Score based on content richness and structure.
+
+        Factors (max 1.0 total):
+        - Content length (up to 0.4)
+        - Structural markers — headers, code blocks, lists (up to 0.3)
+        - Title quality — length and specificity (up to 0.3)
+
+        Args:
+            entry: Nexus entry dict.
+
+        Returns:
+            Quality score between 0.0 and 1.0.
+        """
+        score = 0.0
+        content = entry.get("content", "") or ""
+
+        # Content length contribution (0–0.4)
+        clen = len(content)
+        if clen >= 500:
+            score += 0.4
+        elif clen >= 200:
+            score += 0.3
+        elif clen >= 50:
+            score += 0.2
+        elif clen > 0:
+            score += 0.1
+
+        # Structure markers (0–0.3)
+        struct_score = 0.0
+        if re.search(r"^#{1,6}\s", content, re.MULTILINE):
+            struct_score += 0.1
+        if "```" in content:
+            struct_score += 0.1
+        if re.search(r"^[\-\*]\s", content, re.MULTILINE):
+            struct_score += 0.1
+        score += struct_score
+
+        # Title quality (0–0.3)
+        title = entry.get("title", "") or ""
+        tlen = len(title)
+        if tlen >= 20:
+            score += 0.2
+        elif tlen >= 5:
+            score += 0.1
+        # Bonus for multi-word descriptive title
+        if len(title.split()) >= 3:
+            score += 0.1
+
+        return round(min(score, 1.0), 4)
+
+    def uniqueness(self, entry: Dict[str, Any]) -> float:
+        """Score based on how distinct the title is from other entries.
+
+        Uses Jaccard word-overlap against all known titles.  A high maximum
+        similarity to any other entry yields a *low* uniqueness score.
+
+        Args:
+            entry: Nexus entry dict.
+
+        Returns:
+            Uniqueness score between 0.0 and 1.0 (1.0 = fully unique).
+        """
+        title = (entry.get("title", "") or "").lower().strip()
+        if not title or not self._all_titles:
+            return 1.0
+
+        max_sim = 0.0
+        words_a = set(title.split())
+        skipped_self = False
+        for other in self._all_titles:
+            if not skipped_self and other == title:
+                skipped_self = True
+                continue
+            words_b = set(other.split())
+            if not words_b:
+                continue
+            intersection = words_a & words_b
+            union = words_a | words_b
+            sim = len(intersection) / len(union) if union else 0.0
+            if sim > max_sim:
+                max_sim = sim
+
+        return round(max(0.0, 1.0 - max_sim), 4)
+
+    def completeness(self, entry: Dict[str, Any]) -> float:
+        """Score based on metadata field presence.
+
+        Checks: title, content, content_type, category, tags.  Each
+        present field contributes 0.2.
+
+        Args:
+            entry: Nexus entry dict.
+
+        Returns:
+            Completeness score between 0.0 and 1.0.
+        """
+        score = 0.0
+        if entry.get("title"):
+            score += 0.2
+        if entry.get("content"):
+            score += 0.2
+        if entry.get("content_type"):
+            score += 0.2
+        if entry.get("category"):
+            score += 0.2
+        tags = entry.get("tags")
+        if tags and (isinstance(tags, list) and len(tags) > 0):
+            score += 0.2
+        return round(score, 4)
+
+    # ── Composite / batch ─────────────────────────────────────
+
+    def composite_score(self, entry: Dict[str, Any]) -> float:
+        """Weighted average of all four dimensions.
+
+        Args:
+            entry: Nexus entry dict.
+
+        Returns:
+            Composite score between 0.0 and 1.0.
+        """
+        f = self.freshness(entry)
+        q = self.quality(entry)
+        u = self.uniqueness(entry)
+        c = self.completeness(entry)
+        return round(
+            f * self.WEIGHTS["freshness"]
+            + q * self.WEIGHTS["quality"]
+            + u * self.WEIGHTS["uniqueness"]
+            + c * self.WEIGHTS["completeness"],
+            4,
+        )
+
+    def score_entry(self, entry: Dict[str, Any]) -> Dict[str, Any]:
+        """Score a single entry and return a detailed result dict.
+
+        Args:
+            entry: Nexus entry dict.
+
+        Returns:
+            Dict with entry_id, title, per-dimension scores, composite, issues.
+        """
+        f = self.freshness(entry)
+        q = self.quality(entry)
+        u = self.uniqueness(entry)
+        c = self.completeness(entry)
+        comp = round(
+            f * self.WEIGHTS["freshness"]
+            + q * self.WEIGHTS["quality"]
+            + u * self.WEIGHTS["uniqueness"]
+            + c * self.WEIGHTS["completeness"],
+            4,
+        )
+
+        issues: List[str] = []
+        if f < 0.2:
+            issues.append("stale")
+        if q < 0.3:
+            issues.append("low_quality_content")
+        if u < 0.3:
+            issues.append("likely_duplicate")
+        if c < 0.4:
+            issues.append("incomplete_metadata")
+
+        return {
+            "entry_id": entry.get("id", ""),
+            "title": entry.get("title", "(untitled)"),
+            "freshness": f,
+            "quality": q,
+            "uniqueness": u,
+            "completeness": c,
+            "composite": comp,
+            "issues": issues,
+        }
+
+    def score_all(self, entries: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Score every entry in the list.
+
+        Args:
+            entries: List of Nexus entry dicts.
+
+        Returns:
+            List of score dicts (same order as input).
+        """
+        return [self.score_entry(e) for e in entries]
+
+
+def _classify_score(composite: float) -> str:
+    """Map a composite score to a bucket label.
+
+    Args:
+        composite: Score between 0.0 and 1.0.
+
+    Returns:
+        One of ``"excellent"``, ``"good"``, ``"fair"``, ``"poor"``.
+    """
+    if composite >= 0.7:
+        return "excellent"
+    if composite >= 0.5:
+        return "good"
+    if composite >= 0.3:
+        return "fair"
+    return "poor"
+
+
+def quality_report() -> Dict[str, Any]:
+    """Fetch all Nexus entries, score them, and produce an aggregate report.
+
+    Returns:
+        Dict with total_entries, average_score, score_distribution,
+        low_quality, duplicates, stale, and recommendations.
+    """
+    client = _get_client()
+
+    try:
+        entries = client.list_entries(limit=500)
+    except Exception as exc:
+        logger.error("Failed to fetch entries for quality report: %s", exc)
+        return {
+            "total_entries": 0,
+            "average_score": 0.0,
+            "score_distribution": {"excellent": 0, "good": 0, "fair": 0, "poor": 0},
+            "low_quality": [],
+            "duplicates": [],
+            "stale": [],
+            "recommendations": ["Could not fetch entries — check Nexus connectivity."],
+        }
+
+    scorer = KnowledgeScorer(all_entries=entries)
+    scored = scorer.score_all(entries)
+
+    distribution: Dict[str, int] = {"excellent": 0, "good": 0, "fair": 0, "poor": 0}
+    low_quality: List[Dict[str, Any]] = []
+    duplicates: List[Dict[str, Any]] = []
+    stale: List[Dict[str, Any]] = []
+
+    total_score = 0.0
+
+    for s in scored:
+        comp = s["composite"]
+        total_score += comp
+        distribution[_classify_score(comp)] += 1
+
+        if comp < 0.4:
+            low_quality.append(s)
+        if s["uniqueness"] < 0.3:
+            duplicates.append(s)
+        if s["freshness"] < 0.2:
+            stale.append(s)
+
+    total = len(scored)
+    avg = round(total_score / total, 4) if total else 0.0
+
+    recommendations: List[str] = []
+    if distribution["poor"] > total * 0.2:
+        recommendations.append(
+            f"{distribution['poor']} entries scored 'poor' — review and enrich or remove them."
+        )
+    if len(duplicates) > 0:
+        recommendations.append(
+            f"{len(duplicates)} entries look like duplicates — run 'dedup' to merge."
+        )
+    if len(stale) > total * 0.3:
+        recommendations.append(
+            f"{len(stale)} entries are stale — refresh or archive old content."
+        )
+    if avg < 0.5:
+        recommendations.append(
+            "Average quality is below 0.5 — prioritise improving entry content and metadata."
+        )
+    if not recommendations:
+        recommendations.append("Knowledge base quality looks healthy.")
+
+    return {
+        "total_entries": total,
+        "average_score": avg,
+        "score_distribution": distribution,
+        "low_quality": low_quality[:30],
+        "duplicates": duplicates[:30],
+        "stale": stale[:30],
+        "recommendations": recommendations,
+    }
+
+
 # ── Scheduled Maintenance ──────────────────────────────────────────────
 
 _scheduler_thread: Optional[threading.Thread] = None
@@ -699,7 +1059,7 @@ def main() -> None:
         "health": lambda: nexus_health_report(),
         "dedup": lambda: nexus_merge_duplicates(dry_run=not apply_flag),
         "compact": lambda: nexus_compact_sessions(),
-        "score": lambda: nexus_score_entries(),
+        "score": lambda: quality_report(),
         "full": lambda: nexus_full_maintenance(dry_run=not apply_flag),
         "backup": lambda: nexus_backup(label=args[1] if len(args) > 1 else ""),
         "restore": lambda: nexus_restore(args[1] if len(args) > 1 else ""),
