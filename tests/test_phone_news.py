@@ -297,3 +297,71 @@ class TestHAMCPTools:
         ]
         for tool in ha_tools:
             assert f"def {tool}" in source, f"MCP tool {tool} not found in devtools_server"
+
+
+# ── HA News Push Callback ────────────────────────────────────────────
+
+
+class TestHANewsPush:
+    """Test the scheduler callback that pushes news to HA notifications."""
+
+    @patch("engine.integrations.homeassistant.get_ha_client")
+    @patch("engine.nexus.client.get_nexus_client")
+    @patch("engine.config.get_config")
+    def test_push_skips_when_ha_not_connected(self, mock_cfg, mock_nexus, mock_ha):
+        """Callback skips when HA is not reachable."""
+        from engine.nexus.scheduler_daemon import _ha_news_push_callback
+        mock_ha.return_value.is_connected.return_value = False
+        mock_ha.return_value.connect.return_value = {"connected": False}
+        result = _ha_news_push_callback()
+        assert result.get("skipped") is True
+
+    @patch("engine.integrations.homeassistant.get_ha_client")
+    @patch("engine.nexus.client.get_nexus_client")
+    @patch("engine.config.get_config")
+    def test_push_sends_high_relevance_articles(self, mock_cfg, mock_nexus, mock_ha):
+        """Callback pushes articles with high relevance or 'breaking'."""
+        from engine.nexus.scheduler_daemon import _ha_news_push_callback
+        from datetime import datetime, timezone
+
+        mock_ha.return_value.is_connected.return_value = True
+        mock_cfg.return_value.get.return_value = 0.7
+
+        now = datetime.now(timezone.utc).isoformat()
+        mock_nexus.return_value.search.return_value = [
+            {
+                "title": "Breaking: AI News",
+                "content": "relevance: 0.9 https://example.com/news",
+                "created_at": now,
+            },
+            {
+                "title": "Low relevance article",
+                "content": "relevance: 0.2 boring stuff",
+                "created_at": now,
+            },
+        ]
+
+        result = _ha_news_push_callback()
+        assert result["pushed"] >= 1
+        mock_ha.return_value.send_news_alert.assert_called()
+
+    @patch("engine.integrations.homeassistant.get_ha_client")
+    @patch("engine.nexus.client.get_nexus_client")
+    @patch("engine.config.get_config")
+    def test_push_skips_old_articles(self, mock_cfg, mock_nexus, mock_ha):
+        """Callback skips articles older than 24 hours."""
+        from engine.nexus.scheduler_daemon import _ha_news_push_callback
+
+        mock_ha.return_value.is_connected.return_value = True
+        mock_cfg.return_value.get.return_value = 0.7
+
+        mock_nexus.return_value.search.return_value = [
+            {
+                "title": "Breaking: Old News",
+                "content": "relevance: 0.95",
+                "created_at": "2020-01-01T00:00:00+00:00",
+            },
+        ]
+
+        result = _ha_news_push_callback()
+        assert result["pushed"] == 0

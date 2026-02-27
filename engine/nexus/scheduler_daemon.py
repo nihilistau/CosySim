@@ -694,6 +694,74 @@ def _governance_audit_callback() -> Dict[str, Any]:
     }
 
 
+def _ha_news_push_callback() -> Dict[str, Any]:
+    """Push high-relevance news articles to Home Assistant as notifications."""
+    try:
+        from engine.integrations.homeassistant import get_ha_client
+        from engine.nexus.client import get_nexus_client
+    except Exception as exc:
+        return {"error": f"Import failed: {exc}"}
+
+    ha = get_ha_client()
+    if not ha.is_connected():
+        conn = ha.connect()
+        if not conn.get("connected"):
+            return {"skipped": True, "reason": "HA not reachable"}
+
+    # Get recent news from Nexus
+    try:
+        client = get_nexus_client()
+        results = client.search("content_type:news", limit=20)
+    except Exception as exc:
+        return {"error": f"Nexus search failed: {exc}"}
+
+    from engine.config import get_config
+    threshold = get_config().get("homeassistant.news_alert_threshold", 0.7)
+
+    pushed = 0
+    errors = 0
+    for entry in results:
+        relevance = 0.0
+        content = entry.get("content", "")
+        title = entry.get("title", "")
+        # Check if already pushed (simple heuristic: skip if older than 24h)
+        from datetime import datetime, timezone
+        created = entry.get("created_at", "")
+        if created:
+            try:
+                dt = datetime.fromisoformat(created.replace("Z", "+00:00"))
+                age_hours = (datetime.now(timezone.utc) - dt).total_seconds() / 3600
+                if age_hours > 24:
+                    continue
+            except Exception:
+                pass
+
+        # Extract relevance from content if available
+        if "relevance" in content.lower():
+            try:
+                import re
+                match = re.search(r"relevance[:\s]+([0-9.]+)", content, re.IGNORECASE)
+                if match:
+                    relevance = float(match.group(1))
+            except Exception:
+                pass
+
+        if relevance >= threshold or "breaking" in title.lower():
+            try:
+                url = ""
+                if "http" in content:
+                    import re
+                    url_match = re.search(r"(https?://\S+)", content)
+                    if url_match:
+                        url = url_match.group(1)
+                ha.send_news_alert(title, content[:200], url=url, relevance=relevance)
+                pushed += 1
+            except Exception:
+                errors += 1
+
+    return {"pushed": pushed, "errors": errors, "checked": len(results)}
+
+
 def _register_builtin_tasks(daemon: TaskSchedulerDaemon) -> None:
     """Register all built-in autonomous tasks."""
     daemon.register(
@@ -761,6 +829,12 @@ def _register_builtin_tasks(daemon: TaskSchedulerDaemon) -> None:
         "Governance Rules Audit",
         "weekly",
         _governance_audit_callback,
+    )
+    daemon.register(
+        "ha-news-push",
+        "Push News to Home Assistant",
+        "every_8h",
+        _ha_news_push_callback,
     )
 
 
