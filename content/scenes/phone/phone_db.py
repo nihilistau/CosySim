@@ -117,6 +117,32 @@ class PhoneDB:
             except Exception:
                 pass  # Already exists
 
+        # ── News feed tables ──────────────────────────────────────────────
+        with self.conn() as c:
+            c.executescript("""
+                CREATE TABLE IF NOT EXISTS phone_news_items (
+                    id          TEXT PRIMARY KEY,
+                    title       TEXT NOT NULL,
+                    summary     TEXT NOT NULL DEFAULT '',
+                    url         TEXT,
+                    source_id   TEXT NOT NULL DEFAULT '',
+                    category    TEXT NOT NULL DEFAULT '',
+                    relevance   REAL NOT NULL DEFAULT 0.0,
+                    markup      TEXT NOT NULL DEFAULT '',
+                    is_read     INTEGER NOT NULL DEFAULT 0,
+                    is_deleted  INTEGER NOT NULL DEFAULT 0,
+                    feedback    INTEGER NOT NULL DEFAULT 0,
+                    created_at  TEXT NOT NULL,
+                    read_at     TEXT,
+                    nexus_id    TEXT
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_news_created
+                    ON phone_news_items(created_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_news_deleted
+                    ON phone_news_items(is_deleted);
+            """)
+
     # ─── thread helpers ──────────────────────────────────────────────
 
     def get_or_create_dm(self, char_id: str) -> str:
@@ -423,3 +449,111 @@ class PhoneDB:
             c.execute("DELETE FROM phone_game_sessions")
             c.execute("DELETE FROM phone_threads")
         return n
+
+    # ─── news feed ────────────────────────────────────────────────────
+
+    def upsert_news_item(
+        self,
+        item_id: str,
+        title: str,
+        summary: str,
+        url: str,
+        source_id: str,
+        category: str,
+        relevance: float,
+        markup: str,
+        nexus_id: str = "",
+    ) -> bool:
+        """Insert or update a news item. Returns True if new."""
+        now = datetime.now(timezone.utc).isoformat()
+        with self.conn() as c:
+            existing = c.execute(
+                "SELECT id FROM phone_news_items WHERE id=?", (item_id,)
+            ).fetchone()
+            if existing:
+                return False
+            c.execute(
+                """INSERT INTO phone_news_items
+                   (id, title, summary, url, source_id, category, relevance,
+                    markup, created_at, nexus_id)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (item_id, title, summary, url, source_id, category,
+                 relevance, markup, now, nexus_id),
+            )
+        return True
+
+    def get_news_feed(
+        self,
+        limit: int = 30,
+        offset: int = 0,
+        include_deleted: bool = False,
+        unread_only: bool = False,
+    ) -> List[Dict[str, Any]]:
+        """Get news feed items ordered by date descending."""
+        with self.conn() as c:
+            conditions = []
+            if not include_deleted:
+                conditions.append("is_deleted = 0")
+            if unread_only:
+                conditions.append("is_read = 0")
+            where = "WHERE " + " AND ".join(conditions) if conditions else ""
+            rows = c.execute(
+                f"SELECT * FROM phone_news_items {where} ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                (limit, offset),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def get_news_stats(self) -> Dict[str, Any]:
+        """Get news feed stats."""
+        with self.conn() as c:
+            total = c.execute("SELECT COUNT(*) as n FROM phone_news_items WHERE is_deleted=0").fetchone()["n"]
+            unread = c.execute("SELECT COUNT(*) as n FROM phone_news_items WHERE is_deleted=0 AND is_read=0").fetchone()["n"]
+            liked = c.execute("SELECT COUNT(*) as n FROM phone_news_items WHERE feedback > 0").fetchone()["n"]
+            disliked = c.execute("SELECT COUNT(*) as n FROM phone_news_items WHERE feedback < 0").fetchone()["n"]
+        return {"total": total, "unread": unread, "liked": liked, "disliked": disliked}
+
+    def set_news_read(self, item_id: str) -> None:
+        """Mark a news item as read."""
+        now = datetime.now(timezone.utc).isoformat()
+        with self.conn() as c:
+            c.execute(
+                "UPDATE phone_news_items SET is_read=1, read_at=? WHERE id=?",
+                (now, item_id),
+            )
+
+    def set_news_feedback(self, item_id: str, feedback: int) -> None:
+        """Set feedback on a news item. +1 = thumbs up, -1 = thumbs down, 0 = neutral."""
+        with self.conn() as c:
+            c.execute(
+                "UPDATE phone_news_items SET feedback=? WHERE id=?",
+                (max(-1, min(1, feedback)), item_id),
+            )
+
+    def delete_news_item(self, item_id: str) -> None:
+        """Soft-delete a news item."""
+        with self.conn() as c:
+            c.execute("UPDATE phone_news_items SET is_deleted=1 WHERE id=?", (item_id,))
+
+    def get_feedback_summary(self) -> Dict[str, Any]:
+        """Get summary of user feedback for tuning news scoring."""
+        with self.conn() as c:
+            # Liked sources
+            liked_sources = c.execute(
+                """SELECT source_id, COUNT(*) as cnt FROM phone_news_items
+                   WHERE feedback > 0 GROUP BY source_id ORDER BY cnt DESC"""
+            ).fetchall()
+            # Disliked sources
+            disliked_sources = c.execute(
+                """SELECT source_id, COUNT(*) as cnt FROM phone_news_items
+                   WHERE feedback < 0 GROUP BY source_id ORDER BY cnt DESC"""
+            ).fetchall()
+            # Liked categories
+            liked_cats = c.execute(
+                """SELECT category, COUNT(*) as cnt FROM phone_news_items
+                   WHERE feedback > 0 GROUP BY category ORDER BY cnt DESC"""
+            ).fetchall()
+        return {
+            "liked_sources": {r["source_id"]: r["cnt"] for r in liked_sources},
+            "disliked_sources": {r["source_id"]: r["cnt"] for r in disliked_sources},
+            "liked_categories": {r["category"]: r["cnt"] for r in liked_cats},
+        }

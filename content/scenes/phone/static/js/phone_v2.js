@@ -119,6 +119,7 @@
       this.socket.on('game_event', d => { if (this.apps.messages) this.apps.messages.onGameEvent(d); });
       this.socket.on('mood_update', d => { if (this.apps.mood_ring) this.apps.mood_ring.onMoodUpdate(d); });
       this.socket.on('admin_wipe', () => { toast('All data wiped'); if (this.apps.messages) this.apps.messages.onWipe(); });
+      this.socket.on('news_updated', d => { if (this.apps.news) { this.apps.news._loadFeed(); toast('📰 New articles available'); } });
     },
 
     _initClock() {
@@ -1343,38 +1344,172 @@
 
   CosyPhone.registerApp('news', {
     name: 'CosyNews', icon: '📰', color: 'linear-gradient(135deg, #FF453A, #FF9F0A)',
+    _items: [],
+    _filter: 'all',
+    _stats: null,
+    _unread: 0,
+
+    badge() { return this._unread; },
 
     render(body) {
       body.innerHTML = `
         <div class="section-header">CosyNews</div>
-        <div class="section-sub">AI-generated simulation news</div>
+        <div class="section-sub">Curated AI & tech news feed</div>
+        <div id="news-stats-bar" class="news-stats-bar" style="display:none"></div>
+        <div id="news-filter-bar" class="news-filter-bar"></div>
         <div id="news-feed"></div>`;
-      this._generateNews();
+      this._loadFeed();
     },
 
-    _generateNews() {
+    async _loadFeed() {
       const feed = qs('#news-feed');
       if (!feed) return;
-      // Generate fake news from simulation events
-      const headlines = [
-        { emoji: '🏠', title: 'New Simulation Season Begins', excerpt: 'Characters across CosySim have started fresh conversations and relationships. The mood system reports high optimism levels.', source: 'CosySim Daily', category: 'Community' },
-        { emoji: '🎮', title: 'Global Strike Tournament Announced', excerpt: 'Players compete in the new Global Strike artillery game. Early reports suggest the Energy Shield defense is dominating the meta.', source: 'GameWire', category: 'Gaming' },
-        { emoji: '🤖', title: 'Agent Intelligence Upgrade Complete', excerpt: 'The v2.7 framework brings streaming inference, conversation branching, and real-time mood detection to all agents.', source: 'TechBeat', category: 'Technology' },
-        { emoji: '💬', title: 'Phone Scene Gets Major Overhaul', excerpt: 'The CosyPhone OS update brings a full home screen, 10+ apps, arcade games, and multiplayer game nights with AI friends.', source: 'AppReview', category: 'Apps' },
-        { emoji: '🎭', title: 'Mood Contagion Discovered', excerpt: 'Scientists in the simulation have confirmed that character moods can influence nearby agents through the MCP framework event bus.', source: 'SimScience', category: 'Research' },
-        { emoji: '🌐', title: 'Message Boards Go Live', excerpt: 'The new SharedBoardManager enables cross-scene communication. Agents can now leave messages for each other system-wide.', source: 'NetworkNews', category: 'Infrastructure' },
-      ];
-      feed.innerHTML = headlines.map(n => `
-        <div class="news-card anim-fadeIn">
-          <div class="news-img" style="background:linear-gradient(135deg,${this._randGrad()})">${n.emoji}</div>
-          <div class="news-content">
-            <div style="font-size:11px;color:var(--accent);font-weight:600;text-transform:uppercase;margin-bottom:4px">${n.category}</div>
-            <div class="news-headline">${n.title}</div>
-            <div class="news-excerpt">${n.excerpt}</div>
-            <div class="news-meta"><span>${n.source}</span><span>${new Date().toLocaleDateString()}</span></div>
-          </div>
-        </div>`).join('');
+      feed.innerHTML = '<div class="news-loading"><div class="spinner"></div>Loading news…</div>';
+      try {
+        const r = await fetch('/api/news/feed?limit=50');
+        const d = await r.json();
+        this._items = d.items || [];
+        this._unread = this._items.filter(i => !i.read).length;
+        CosyPhone._updateBadges();
+        this._loadStats();
+        this._renderFilters();
+        this._renderItems();
+      } catch (e) {
+        feed.innerHTML = '<div class="news-empty"><div class="big-icon">📡</div><h3>Feed Unavailable</h3><p>Pull down to retry</p></div>';
+      }
     },
+
+    async _loadStats() {
+      try {
+        const r = await fetch('/api/news/stats');
+        const d = await r.json();
+        this._stats = d.stats || d;
+        const bar = qs('#news-stats-bar');
+        if (!bar || !this._stats) return;
+        bar.style.display = 'flex';
+        bar.innerHTML = `
+          <div class="news-stat"><div class="num">${this._stats.total || 0}</div><div class="lbl">Articles</div></div>
+          <div class="news-stat"><div class="num">${this._stats.unread || 0}</div><div class="lbl">Unread</div></div>
+          <div class="news-stat"><div class="num">${this._stats.liked || 0}</div><div class="lbl">Liked</div></div>`;
+      } catch {}
+    },
+
+    _renderFilters() {
+      const bar = qs('#news-filter-bar');
+      if (!bar) return;
+      const cats = new Set(['all']);
+      this._items.forEach(i => { if (i.category) cats.add(i.category); });
+      bar.innerHTML = [...cats].map(c =>
+        `<button class="news-filter-btn${c === this._filter ? ' active' : ''}" data-cat="${c}">${c === 'all' ? 'All' : c}</button>`
+      ).join('');
+      bar.querySelectorAll('.news-filter-btn').forEach(btn => {
+        btn.onclick = () => {
+          this._filter = btn.dataset.cat;
+          bar.querySelectorAll('.news-filter-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          this._renderItems();
+        };
+      });
+    },
+
+    _renderItems() {
+      const feed = qs('#news-feed');
+      if (!feed) return;
+      const items = this._filter === 'all' ? this._items : this._items.filter(i => i.category === this._filter);
+      if (!items.length) {
+        feed.innerHTML = '<div class="news-empty"><div class="big-icon">📰</div><h3>No News Yet</h3><p>Tap refresh to fetch the latest</p></div>';
+        return;
+      }
+      feed.innerHTML = items.map(n => {
+        const rel = n.relevance || n.relevance_score || 0;
+        const relevance = rel >= 0.7 ? 'high' : rel >= 0.4 ? 'medium' : 'low';
+        const isRead = n.is_read || n.read;
+        const readCls = isRead ? ' read' : '';
+        const fb = typeof n.feedback === 'number' ? n.feedback : 0;
+        const likedCls = fb > 0 ? ' liked' : '';
+        const dislikedCls = fb < 0 ? ' disliked' : '';
+        const emoji = this._catEmoji(n.category);
+        const timeAgo = this._timeAgo(n.created_at || n.fetched_at || n.published_at);
+        const nid = n.id || n.nexus_id;
+        return `
+          <div class="news-card anim-fadeIn${readCls}" data-nid="${nid}">
+            <div class="news-img" style="background:linear-gradient(135deg,${this._randGrad()})">${emoji}</div>
+            <div class="news-content">
+              <div style="display:flex;gap:6px;align-items:center;margin-bottom:4px">
+                <span class="news-category-tag">${this._esc(n.category || 'general')}</span>
+                <span class="news-relevance ${relevance}">${relevance}</span>
+              </div>
+              <div class="news-headline">${this._esc(n.title)}</div>
+              <div class="news-excerpt">${this._esc(n.summary || '')}</div>
+              <div class="news-meta">
+                <span>${this._esc(n.source_id || n.source || 'Unknown')}</span>
+                <span>${timeAgo}</span>
+              </div>
+            </div>
+            <div class="news-actions">
+              <div class="action-group">
+                <button class="news-action-btn${likedCls}" onclick="CosyPhone.apps.news._feedback('${nid}','up',this)">👍</button>
+                <button class="news-action-btn${dislikedCls}" onclick="CosyPhone.apps.news._feedback('${nid}','down',this)">👎</button>
+              </div>
+              <div class="action-group">
+                ${n.url ? `<button class="news-action-btn" onclick="window.open('${n.url}','_blank')">🔗 Open</button>` : ''}
+                <button class="news-action-btn" onclick="CosyPhone.apps.news._markRead('${nid}',this)">✓ Read</button>
+                <button class="news-action-btn" onclick="CosyPhone.apps.news._delete('${nid}',this)">🗑</button>
+              </div>
+            </div>
+          </div>`;
+      }).join('');
+    },
+
+    async _feedback(id, direction, btn) {
+      try {
+        await fetch('/api/news/feedback', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({item_id: id, feedback: direction}) });
+        const card = btn.closest('.news-card');
+        const item = this._items.find(i => (i.id || i.nexus_id) === id);
+        if (item) item.feedback = direction;
+        card.querySelectorAll('.news-action-btn').forEach(b => { b.classList.remove('liked','disliked'); });
+        btn.classList.add(direction === 'up' ? 'liked' : 'disliked');
+        CosyPhone._toast(direction === 'up' ? '👍 Liked' : '👎 Disliked');
+      } catch {}
+    },
+
+    async _markRead(id, btn) {
+      try {
+        await fetch('/api/news/feedback', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({item_id: id, action: 'read'}) });
+        const card = btn.closest('.news-card');
+        card.classList.add('read');
+        const item = this._items.find(i => (i.id || i.nexus_id) === id);
+        if (item) { item.read = true; this._unread = Math.max(0, this._unread - 1); CosyPhone._updateBadges(); }
+        CosyPhone._toast('Marked as read');
+      } catch {}
+    },
+
+    async _delete(id, btn) {
+      try {
+        await fetch('/api/news/feedback', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({item_id: id, action: 'delete'}) });
+        const card = btn.closest('.news-card');
+        card.classList.add('removing');
+        setTimeout(() => { card.remove(); }, 300);
+        this._items = this._items.filter(i => (i.id || i.nexus_id) !== id);
+        CosyPhone._toast('Removed');
+      } catch {}
+    },
+
+    _catEmoji(cat) {
+      const map = { technology: '🤖', ai: '🧠', python: '🐍', llm: '💬', gaming: '🎮', research: '🔬', infrastructure: '🌐', community: '🏠', apps: '📱', science: '🔭', security: '🔒' };
+      return map[(cat || '').toLowerCase()] || '📰';
+    },
+
+    _timeAgo(ts) {
+      if (!ts) return '';
+      const diff = (Date.now() - new Date(ts).getTime()) / 1000;
+      if (diff < 60) return 'just now';
+      if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+      if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+      return `${Math.floor(diff / 86400)}d ago`;
+    },
+
+    _esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; },
 
     _randGrad() {
       const colors = ['#1a1a2e,#16213e', '#2d1b69,#11998e', '#fc5c7d,#6a82fb', '#f12711,#f5af19', '#0f0c29,#302b63'];

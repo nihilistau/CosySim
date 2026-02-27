@@ -466,6 +466,118 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE
         except Exception:
             pass
 
+    # ── News Feed Helpers ───────────────────────────────────────────────────
+
+    def _sync_news_from_nexus(self) -> int:
+        """Pull latest news articles from Nexus into the phone feed."""
+        try:
+            from engine.nexus.client import get_nexus_client
+            client = get_nexus_client()
+            results = client.search("News:", limit=50)
+            if not results:
+                return 0
+
+            import hashlib
+            count = 0
+            for entry in results:
+                title = entry.get("title", "")
+                content = entry.get("content", "")
+                if not title.startswith("News:") and not title.startswith("[News]"):
+                    continue
+
+                # Extract URL from content
+                url = ""
+                for line in content.split("\n"):
+                    if line.startswith("URL:"):
+                        url = line[4:].strip()
+                        break
+
+                # Extract relevance
+                relevance = 0.0
+                for line in content.split("\n"):
+                    if line.startswith("Relevance:"):
+                        try:
+                            relevance = float(line.split(":")[1].strip())
+                        except (ValueError, IndexError):
+                            pass
+                        break
+
+                item_id = hashlib.sha256(
+                    (title + url).encode("utf-8")
+                ).hexdigest()[:16]
+
+                clean_title = title.replace("News: ", "").replace("[News] ", "")
+                # Build markup card
+                markup = self._build_news_markup(clean_title, content, url, relevance)
+
+                new = self.phone_db.upsert_news_item(
+                    item_id=item_id,
+                    title=clean_title,
+                    summary=content[:300],
+                    url=url,
+                    source_id=entry.get("category", ""),
+                    category=entry.get("category", "general"),
+                    relevance=relevance,
+                    markup=markup,
+                    nexus_id=entry.get("id", ""),
+                )
+                if new:
+                    count += 1
+
+            if count > 0:
+                self._emit("news_updated", self.phone_db.get_news_stats())
+            return count
+        except Exception as exc:
+            logger.warning("News sync failed: %s", exc)
+            return 0
+
+    def _build_news_markup(
+        self, title: str, content: str, url: str, relevance: float,
+    ) -> str:
+        """Build an HTML card for a news article."""
+        # Extract summary from content (skip metadata lines)
+        summary_lines = []
+        for line in content.split("\n"):
+            if line.startswith(("**", "Source:", "URL:", "Published:", "Relevance:")):
+                continue
+            if line.strip():
+                summary_lines.append(line.strip())
+        summary = " ".join(summary_lines)[:250]
+
+        rel_pct = int(relevance * 100)
+        rel_color = "#4caf50" if relevance > 0.6 else "#ff9800" if relevance > 0.3 else "#9e9e9e"
+
+        return f"""<div class="news-card">
+  <h3 class="news-title">{title}</h3>
+  <p class="news-summary">{summary}</p>
+  <div class="news-meta">
+    <span class="news-relevance" style="color:{rel_color}">{rel_pct}% relevant</span>
+    {f'<a href="{url}" target="_blank" class="news-link">Read →</a>' if url else ''}
+  </div>
+</div>"""
+
+    def _record_news_feedback(self, item_id: str, feedback: int) -> None:
+        """Record news feedback in the training flywheel for the feedback loop."""
+        try:
+            from engine.nexus.training_flywheel import get_training_flywheel
+            flywheel = get_training_flywheel()
+
+            # Get the news item details
+            items = self.phone_db.get_news_feed(limit=1000)
+            item = next((i for i in items if i["id"] == item_id), None)
+            if not item:
+                return
+
+            label = "positive" if feedback > 0 else "negative"
+            flywheel.collect_from_preference(
+                prompt=f"News article: {item['title']}",
+                chosen=f"User {label} feedback on news from {item['source_id']}: {item['title']}",
+                rejected=f"No feedback on similar articles",
+                source="phone_news_feedback",
+            )
+        except Exception as exc:
+            logger.debug("News feedback recording failed: %s", exc)
+
     def _register_socketio(self) -> None:
         sio = self.socketio
 
@@ -1005,6 +1117,81 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE
                     "threads":  len(threads),
                     "scene_id": SCENE_ID,
                 })
+            except Exception as exc:
+                return jsonify({"ok": False, "error": str(exc)}), 500
+
+        # ── News Feed API ─────────────────────────────────────────────
+        @app.route("/api/news/feed")
+        def news_feed():
+            """Get curated news feed."""
+            try:
+                limit = int(request.args.get("limit", 30))
+                offset = int(request.args.get("offset", 0))
+                unread_only = request.args.get("unread", "").lower() == "true"
+                items = self.phone_db.get_news_feed(
+                    limit=limit, offset=offset, unread_only=unread_only,
+                )
+                stats = self.phone_db.get_news_stats()
+                return jsonify({"ok": True, "items": items, "stats": stats})
+            except Exception as exc:
+                return jsonify({"ok": False, "error": str(exc)}), 500
+
+        @app.route("/api/news/refresh", methods=["POST"])
+        def news_refresh():
+            """Pull latest news from Nexus into the phone feed."""
+            try:
+                count = self._sync_news_from_nexus()
+                return jsonify({"ok": True, "synced": count})
+            except Exception as exc:
+                return jsonify({"ok": False, "error": str(exc)}), 500
+
+        @app.route("/api/news/feedback", methods=["POST"])
+        def news_feedback():
+            """Submit feedback on a news item."""
+            try:
+                body = request.get_json(force=True, silent=True) or {}
+                item_id = body.get("item_id", "") or body.get("id", "")
+                action = body.get("action", "")
+                feedback = body.get("feedback", "")
+
+                if not item_id:
+                    return jsonify({"ok": False, "error": "item_id required"}), 400
+
+                if feedback == "up":
+                    action = "thumbs_up"
+                elif feedback == "down":
+                    action = "thumbs_down"
+
+                if not action:
+                    return jsonify({"ok": False, "error": "action or feedback required"}), 400
+
+                if action == "read":
+                    self.phone_db.set_news_read(item_id)
+                elif action == "delete":
+                    self.phone_db.delete_news_item(item_id)
+                elif action == "thumbs_up":
+                    self.phone_db.set_news_feedback(item_id, 1)
+                    self.phone_db.set_news_read(item_id)
+                    self._record_news_feedback(item_id, 1)
+                elif action == "thumbs_down":
+                    self.phone_db.set_news_feedback(item_id, -1)
+                    self.phone_db.set_news_read(item_id)
+                    self._record_news_feedback(item_id, -1)
+                else:
+                    return jsonify({"ok": False, "error": f"Unknown action: {action}"}), 400
+
+                self._emit("news_updated", self.phone_db.get_news_stats())
+                return jsonify({"ok": True, "action": action, "item_id": item_id})
+            except Exception as exc:
+                return jsonify({"ok": False, "error": str(exc)}), 500
+
+        @app.route("/api/news/stats")
+        def news_stats():
+            """Get news feed statistics."""
+            try:
+                stats = self.phone_db.get_news_stats()
+                feedback = self.phone_db.get_feedback_summary()
+                return jsonify({"ok": True, "stats": stats, "feedback": feedback})
             except Exception as exc:
                 return jsonify({"ok": False, "error": str(exc)}), 500
 
