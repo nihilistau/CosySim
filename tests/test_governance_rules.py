@@ -351,3 +351,183 @@ def test_all_rules_returns_dicts(manager):
     assert isinstance(rules, list)
     assert all(isinstance(r, dict) for r in rules)
     assert all("name" in r and "scope" in r for r in rules)
+
+
+# ──── Enforcement Tests ────
+
+
+class TestGovernanceError:
+    """Tests for GovernanceError exception."""
+
+    def test_governance_error_attributes(self):
+        """GovernanceError stores rule, severity, and violations."""
+        from engine.nexus.governance_rules import GovernanceError
+        err = GovernanceError(
+            rule="no-print",
+            message="print() not allowed",
+            severity="reject",
+            violations=[{"rule": "no-print", "line": 5}],
+        )
+        assert err.rule == "no-print"
+        assert err.severity == "reject"
+        assert len(err.violations) == 1
+        assert str(err) == "print() not allowed"
+
+    def test_governance_error_default_violations(self):
+        """GovernanceError defaults to empty violations list."""
+        from engine.nexus.governance_rules import GovernanceError
+        err = GovernanceError(rule="test", message="msg")
+        assert err.violations == []
+        assert err.severity == "reject"
+
+
+class TestEnforceGovernance:
+    """Tests for enforce_governance() active enforcement."""
+
+    def test_enforce_blocks_unauthorized_agent(self, mock_client):
+        """enforce_governance raises GovernanceError for denied agents."""
+        from engine.nexus.governance_rules import enforce_governance, GovernanceError
+        with pytest.raises(GovernanceError, match="not permitted"):
+            enforce_governance(agent_id="tiny-0.6b", operation="delete")
+
+    def test_enforce_allows_copilot(self, mock_client):
+        """enforce_governance passes for Copilot with write access."""
+        from engine.nexus.governance_rules import enforce_governance
+        result = enforce_governance(agent_id="copilot", operation="write")
+        assert isinstance(result, list)
+
+    def test_enforce_blocks_file_violations(self, manager, tmp_path):
+        """enforce_governance raises on reject-severity file violations."""
+        from engine.nexus.governance_rules import enforce_governance, GovernanceError
+        bad_file = tmp_path / "bad.py"
+        bad_file.write_text("from .module import thing\nprint('hello')\n")
+        with pytest.raises(GovernanceError) as exc_info:
+            enforce_governance(filepath=str(bad_file), agent_id="copilot", operation="write")
+        assert len(exc_info.value.violations) >= 1
+        rules_hit = [v["rule"] for v in exc_info.value.violations]
+        assert "absolute-imports" in rules_hit or "no-print" in rules_hit
+
+    def test_enforce_passes_clean_file(self, manager, tmp_path):
+        """enforce_governance passes for a compliant Python file."""
+        from engine.nexus.governance_rules import enforce_governance
+        good_file = tmp_path / "good.py"
+        good_file.write_text(textwrap.dedent('''\
+            """Module docstring."""
+            from __future__ import annotations
+
+            import logging
+
+            logger = logging.getLogger(__name__)
+
+
+            def hello(name: str) -> str:
+                """Say hello."""
+                return f"Hello, {name}"
+        '''))
+        result = enforce_governance(filepath=str(good_file), agent_id="copilot", operation="write")
+        # No blocking violations — only advisory warnings if any
+        assert isinstance(result, list)
+
+    def test_enforce_commit_violations(self, mock_client):
+        """enforce_governance raises on bad commit messages."""
+        from engine.nexus.governance_rules import enforce_governance, GovernanceError
+        with pytest.raises(GovernanceError, match="conventional"):
+            enforce_governance(
+                commit_message="bad commit message",
+                agent_id="copilot",
+                operation="write",
+            )
+
+    def test_enforce_commit_passes_good_message(self, mock_client):
+        """enforce_governance passes for well-formed commit messages."""
+        from engine.nexus.governance_rules import enforce_governance
+        result = enforce_governance(
+            commit_message="feat: add new feature\n\nCo-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>",
+            agent_id="copilot",
+            operation="write",
+        )
+        assert isinstance(result, list)
+
+    def test_enforce_returns_advisory_violations(self, manager, tmp_path):
+        """enforce_governance returns advisory (warn) violations without raising."""
+        from engine.nexus.governance_rules import enforce_governance
+        # File with only warn-level issues (no future annotations, no logger)
+        file_with_warnings = tmp_path / "warn_only.py"
+        file_with_warnings.write_text("x = 1\n")
+        result = enforce_governance(filepath=str(file_with_warnings), agent_id="copilot", operation="write")
+        # Should have advisory violations but not raise
+        assert isinstance(result, list)
+        assert len(result) > 0  # At least logger-required warning
+
+
+class TestGovernedDecorator:
+    """Tests for @governed decorator."""
+
+    def test_governed_allows_permitted_agent(self, mock_client):
+        """@governed allows execution when agent has permission."""
+        from engine.nexus.governance_rules import governed
+
+        @governed(operation="write", agent_id="copilot")
+        def my_func(x: int) -> int:
+            return x * 2
+
+        assert my_func(5) == 10
+
+    def test_governed_blocks_unpermitted_agent(self, mock_client):
+        """@governed raises GovernanceError for denied agents."""
+        from engine.nexus.governance_rules import governed, GovernanceError
+
+        @governed(operation="admin", agent_id="tiny-0.6b")
+        def my_admin_func() -> str:
+            return "admin action"
+
+        with pytest.raises(GovernanceError, match="denied"):
+            my_admin_func()
+
+    def test_governed_agent_id_override(self, mock_client):
+        """@governed allows agent_id override via kwarg."""
+        from engine.nexus.governance_rules import governed, GovernanceError
+
+        @governed(operation="delete", agent_id="copilot")
+        def delete_thing() -> str:
+            return "deleted"
+
+        # Default agent (copilot) should be allowed
+        assert delete_thing() == "deleted"
+
+        # Override to small agent should be denied
+        with pytest.raises(GovernanceError):
+            delete_thing(agent_id="tiny-0.6b")
+
+    def test_governed_preserves_function_metadata(self, mock_client):
+        """@governed preserves the wrapped function's name and docstring."""
+        from engine.nexus.governance_rules import governed
+
+        @governed(operation="read")
+        def documented_func() -> str:
+            """My docstring."""
+            return "ok"
+
+        assert documented_func.__name__ == "documented_func"
+        assert documented_func.__doc__ == "My docstring."
+
+    def test_governed_read_only_agent_can_read(self, mock_client):
+        """@governed allows read-only agents to perform read operations."""
+        from engine.nexus.governance_rules import governed
+
+        @governed(operation="read", agent_id="tiny-0.6b")
+        def read_data() -> str:
+            return "data"
+
+        assert read_data() == "data"
+
+    def test_governed_read_only_agent_cannot_write(self, mock_client):
+        """@governed blocks read-only agents from write operations."""
+        from engine.nexus.governance_rules import governed, GovernanceError
+
+        @governed(operation="write", agent_id="tiny-0.6b")
+        def write_data() -> str:
+            return "written"
+
+        with pytest.raises(GovernanceError):
+            write_data()

@@ -296,6 +296,31 @@ def governance_check_permissions(agent_id: str, operation: str) -> str:
     return json.dumps({"agent_id": agent_id, "operation": operation, "allowed": allowed})
 
 
+@skill(pack="autonomy", description="Enforce governance — block if violations found",
+       tags=["governance", "enforce", "blocking", "autonomy"], category=SkillCategory.SYSTEM)
+def governance_enforce(filepath: str = "", agent_id: str = "copilot",
+                       operation: str = "write") -> str:
+    """Actively enforce governance rules. Unlike governance_validate_file
+    (advisory), this raises an error on reject/block violations. Use before
+    writing files or performing restricted operations."""
+    from engine.nexus.governance_rules import enforce_governance, GovernanceError
+    try:
+        violations = enforce_governance(
+            filepath=filepath or None,
+            agent_id=agent_id,
+            operation=operation,
+        )
+        return json.dumps({"allowed": True, "advisory_violations": len(violations)})
+    except GovernanceError as ge:
+        return json.dumps({
+            "allowed": False,
+            "rule": ge.rule,
+            "message": str(ge),
+            "severity": ge.severity,
+            "violation_count": len(ge.violations),
+        }, default=str)
+
+
 @skill(pack="autonomy", description="Seed all governance rules into Nexus",
        tags=["governance", "seed", "nexus", "autonomy"], category=SkillCategory.SYSTEM,
        cooldown=60)

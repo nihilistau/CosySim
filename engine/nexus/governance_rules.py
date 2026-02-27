@@ -3,18 +3,26 @@
 Provides GovernanceManager for seeding, querying, and validating against
 governance rules stored in Nexus. Rules are descriptive (agents consult them)
 with basic regex-based validation for coding standards.
+
+The @governed decorator and enforce_governance() function provide active
+enforcement at the Python API level — not just advisory, but blocking.
 """
 from __future__ import annotations
 
 import argparse
+import functools
 import logging
 import re
 import sys
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, TypeVar, cast
 
 from engine.nexus.client import get_nexus_client
+
+logger = logging.getLogger(__name__)
+
+F = TypeVar("F", bound=Callable[..., Any])
 
 logger = logging.getLogger(__name__)
 
@@ -561,6 +569,137 @@ def _parse_agent_info(agent_id: str) -> Dict[str, Any]:
 
     # Unknown agent — default to small
     return {"is_copilot": False, "size": 0}
+
+
+# ──── Enforcement ────
+
+
+class GovernanceError(Exception):
+    """Raised when a governance rule blocks an operation."""
+
+    def __init__(self, rule: str, message: str, severity: str = "reject",
+                 violations: Optional[List[Dict[str, Any]]] = None) -> None:
+        self.rule = rule
+        self.severity = severity
+        self.violations = violations or []
+        super().__init__(message)
+
+
+def enforce_governance(
+    filepath: Optional[str] = None,
+    agent_id: str = "copilot",
+    operation: str = "write",
+    commit_message: Optional[str] = None,
+    severity_threshold: str = "reject",
+) -> List[Dict[str, Any]]:
+    """Active governance enforcement — raises GovernanceError on violations.
+
+    Unlike validate_file() which just returns violations, this function
+    raises GovernanceError if any violations meet or exceed the severity
+    threshold. Use this at action boundaries to prevent rule-breaking
+    changes from proceeding.
+
+    Args:
+        filepath: Python file to validate (optional).
+        agent_id: Agent requesting the operation (for permission checks).
+        operation: Operation type (read/write/delete/admin).
+        commit_message: Commit message to validate (optional).
+        severity_threshold: Minimum severity to block on ('reject', 'block', 'error').
+
+    Returns:
+        List of all violations found (for logging/auditing even if none block).
+
+    Raises:
+        GovernanceError: If blocking violations are found.
+    """
+    blocking_severities = {"reject", "block", "error"}
+    if severity_threshold == "warn":
+        blocking_severities.add("warn")
+
+    mgr = get_governance_manager()
+    all_violations: List[Dict[str, Any]] = []
+
+    # Permission check
+    if not mgr.check_permissions(agent_id, operation):
+        raise GovernanceError(
+            rule="agent-permissions",
+            message=f"Agent '{agent_id}' is not permitted to perform '{operation}'",
+            severity="reject",
+        )
+
+    # File validation
+    if filepath:
+        file_violations = mgr.validate_file(filepath)
+        all_violations.extend(file_violations)
+
+    # Commit validation
+    if commit_message:
+        commit_violations = mgr.validate_commit(commit_message)
+        all_violations.extend(commit_violations)
+
+    # Check for blocking violations
+    blocking = [v for v in all_violations if v.get("severity") in blocking_severities]
+    if blocking:
+        first = blocking[0]
+        raise GovernanceError(
+            rule=first.get("rule", "unknown"),
+            message=f"Governance violation: {first.get('message', 'unknown')} ({len(blocking)} blocking violation(s))",
+            severity=first.get("severity", "reject"),
+            violations=blocking,
+        )
+
+    # Log advisory violations
+    for v in all_violations:
+        logger.debug("Governance advisory [%s]: %s", v.get("rule"), v.get("message"))
+
+    return all_violations
+
+
+def governed(
+    operation: str = "write",
+    agent_id: str = "copilot",
+    severity_threshold: str = "reject",
+) -> Callable[[F], F]:
+    """Decorator for governance-enforced functions.
+
+    Wraps a function with permission checks. The decorated function
+    will raise GovernanceError if the specified agent doesn't have
+    permission to perform the specified operation.
+
+    Args:
+        operation: Operation type this function performs (read/write/delete/admin).
+        agent_id: Default agent ID (can be overridden via 'agent_id' kwarg).
+        severity_threshold: Minimum severity that blocks execution.
+
+    Returns:
+        Decorated function with governance enforcement.
+
+    Example:
+        @governed(operation="write", agent_id="qwen3-0.6b")
+        def update_config(key: str, value: str) -> bool:
+            ...
+
+        @governed(operation="admin")
+        def delete_entries(category: str) -> int:
+            ...
+    """
+    def decorator(func: F) -> F:
+        @functools.wraps(func)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            effective_agent = kwargs.pop("agent_id", agent_id)
+            mgr = get_governance_manager()
+            if not mgr.check_permissions(effective_agent, operation):
+                raise GovernanceError(
+                    rule="agent-permissions",
+                    message=(
+                        f"Agent '{effective_agent}' denied '{operation}' "
+                        f"on {func.__qualname__}"
+                    ),
+                    severity="reject",
+                )
+            return func(*args, **kwargs)
+        return cast(F, wrapper)
+    return decorator
 
 
 # ──── CLI ────

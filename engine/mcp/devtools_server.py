@@ -917,6 +917,33 @@ def governance_check_permission(agent_id: str, operation: str) -> str:
 
 
 @mcp.tool()
+def governance_enforce(filepath: str = "", agent_id: str = "copilot",
+                       operation: str = "write", commit_message: str = "") -> str:
+    """Enforce governance rules — raises error if blocking violations found.
+    Unlike governance_validate (advisory), this blocks on reject/block severity."""
+    try:
+        from engine.nexus.governance_rules import enforce_governance, GovernanceError
+        try:
+            violations = enforce_governance(
+                filepath=filepath or None,
+                agent_id=agent_id,
+                operation=operation,
+                commit_message=commit_message or None,
+            )
+            return json.dumps({"allowed": True, "advisory_violations": len(violations)})
+        except GovernanceError as ge:
+            return json.dumps({
+                "allowed": False,
+                "rule": ge.rule,
+                "message": str(ge),
+                "severity": ge.severity,
+                "violations": ge.violations,
+            }, default=str)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
 def task_auto_generate(source: str = "quality") -> str:
     """Auto-generate tasks from system events. source: 'quality' (from stale
     Nexus entries), 'tests' (run and parse test failures). Returns created tasks."""
