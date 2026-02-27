@@ -18,14 +18,17 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import sys
 from typing import Any
 
 from engine.nexus.client import get_nexus_client
 
+logger = logging.getLogger(__name__)
+
 
 def _output(data: Any) -> None:
-    """Print JSON output."""
+    """Print JSON output to stdout for CLI consumers."""
     print(json.dumps(data, indent=2, default=str))
 
 
@@ -217,4 +220,5 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     main()

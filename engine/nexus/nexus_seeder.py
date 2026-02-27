@@ -159,7 +159,7 @@ def seed_docs() -> int:
     for title, content, ct, cat, tags in entries:
         if add_entry(title, content, ct, cat, tags):
             created += 1
-    print(f"  Docs: {created}/{len(entries)} entries created")
+    logger.info("  Docs: %s/%s entries created", created, len(entries))
     return created
 
 
@@ -406,7 +406,7 @@ def seed_qa() -> int:
     for question, answer, category, tags in pairs:
         if add_qa(question, answer, category, tags):
             created += 1
-    print(f"  Q&A: {created}/{len(pairs)} pairs created")
+    logger.info("  Q&A: %s/%s pairs created", created, len(pairs))
     return created
 
 
@@ -669,7 +669,7 @@ def seed_rules() -> int:
     for scope, rtype, condition, action, priority in rules:
         if add_rule(scope, rtype, condition, action, priority):
             created += 1
-    print(f"  Rules: {created}/{len(rules)} rules created")
+    logger.info("  Rules: %s/%s rules created", created, len(rules))
     return created
 
 
@@ -734,7 +734,7 @@ def seed_conventions() -> int:
     for title, content, ct, cat, tags in conventions:
         if add_entry(title, content, ct, cat, tags):
             created += 1
-    print(f"  Conventions: {created}/{len(conventions)} entries created")
+    logger.info("  Conventions: %s/%s entries created", created, len(conventions))
     return created
 
 
@@ -808,7 +808,7 @@ def seed_prompts() -> int:
     for title, content, ct, cat, tags in prompts:
         if add_entry(title, content, ct, cat, tags):
             created += 1
-    print(f"  Prompts: {created}/{len(prompts)} entries created")
+    logger.info("  Prompts: %s/%s entries created", created, len(prompts))
     return created
 
 
@@ -817,14 +817,14 @@ def seed_prompts() -> int:
 def seed_all() -> dict[str, int]:
     """Run all seeders."""
     results = {}
-    print("Seeding Nexus knowledge base...")
+    logger.info("Seeding Nexus knowledge base...")
     results["docs"] = seed_docs()
     results["qa"] = seed_qa()
     results["rules"] = seed_rules()
     results["prompts"] = seed_prompts()
     results["conventions"] = seed_conventions()
     total = sum(results.values())
-    print(f"\nTotal: {total} items created")
+    logger.info("\nTotal: %s items created", total)
     return results
 
 
@@ -848,8 +848,8 @@ def main():
 
     seeder = seeders.get(target)
     if not seeder:
-        print(f"Unknown target: {target}")
-        print(f"Available: {', '.join(seeders.keys())}")
+        logger.error("Unknown target: %s", target)
+        logger.error("Available: %s", ", ".join(seeders.keys()))
         sys.exit(1)
 
     seeder()

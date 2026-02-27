@@ -34,6 +34,7 @@ try {
             if ($isEdit) {
                 $sessionFile = Join-Path $PSScriptRoot ".." "logs" "current_session.json"
                 $nexusUsed = $false
+                $governanceDeny = $false
                 if (Test-Path $sessionFile) {
                     $session = Get-Content $sessionFile -Raw | ConvertFrom-Json -ErrorAction SilentlyContinue
                     if ($session.nexus_consulted) { $nexusUsed = $true }
@@ -57,7 +58,16 @@ except Exception as e:
                         if ($valResult) {
                             $val = $valResult | ConvertFrom-Json -ErrorAction SilentlyContinue
                             if ($val -and -not $val.valid) {
-                                $governanceMsg = "Governance: " + ($val.violations -join "; ")
+                                $rejectCount = 0
+                                foreach ($v in $val.violations) {
+                                    if ($v.severity -eq "reject" -or $v.severity -eq "block") {
+                                        $rejectCount++
+                                    }
+                                }
+                                $governanceMsg = "Governance: " + ($val.violations | ForEach-Object { $_.message } | Select-Object -First 5) -join "; "
+                                if ($rejectCount -gt 0) {
+                                    $governanceDeny = $true
+                                }
                             }
                         }
                     } catch {
@@ -68,9 +78,15 @@ except Exception as e:
                 if (-not $nexusUsed) {
                     $msg = "Reminder: Consider searching Nexus before editing code (nexus_search or nlm_ask)."
                     if ($governanceMsg) { $msg = $msg + " " + $governanceMsg }
-                    Write-Output ('{"decision": "approve", "message": "' + $msg + '"}')
+                    if ($governanceDeny) {
+                        Write-Output ('{"decision": "deny", "reason": "' + $governanceMsg + '"}')
+                    } else {
+                        Write-Output ('{"decision": "approve", "message": "' + $msg + '"}')
+                    }
                 } else {
-                    if ($governanceMsg) {
+                    if ($governanceDeny) {
+                        Write-Output ('{"decision": "deny", "reason": "' + $governanceMsg + '"}')
+                    } elseif ($governanceMsg) {
                         Write-Output ('{"decision": "approve", "message": "' + $governanceMsg + '"}')
                     } else {
                         Write-Output '{"decision": "approve"}'

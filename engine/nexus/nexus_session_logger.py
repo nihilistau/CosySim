@@ -562,7 +562,7 @@ def handle_compaction():
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: nexus_session_logger.py [start|end|prompt|checkpoint|compact]")
+        logger.info("Usage: nexus_session_logger.py [start|end|prompt|checkpoint|compact]")
         sys.exit(1)
 
     action = sys.argv[1].lower()
@@ -577,9 +577,10 @@ def main():
     if handler:
         handler()
     else:
-        print(f"Unknown action: {action}")
+        logger.error("Unknown action: %s", action)
         sys.exit(1)
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     main()

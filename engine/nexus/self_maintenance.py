@@ -1070,12 +1070,12 @@ def main() -> None:
     }
 
     if action not in actions:
-        print(f"Unknown action: {action}")
-        print(f"Available: {', '.join(actions.keys())}")
+        logger.info("Unknown action: %s", action)
+        logger.info("Available: %s", ", ".join(actions.keys()))
         sys.exit(1)
 
     result = actions[action]()
-    print(json.dumps(result, indent=2, default=str))
+    logger.info(json.dumps(result, indent=2, default=str))
 
 
 if __name__ == "__main__":

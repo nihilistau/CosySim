@@ -18,6 +18,10 @@ import time
 from pathlib import Path
 from typing import List, Optional
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 def _get_router():
     """Lazy-load NLMRouter."""
@@ -45,7 +49,7 @@ def _get_extractor():
 
 def _progress_callback(current: int, total: int, question: str) -> None:
     """Print batch progress."""
-    print(f"  [{current}/{total}] {question[:70]}")
+    logger.info("  [%s/%s] %s", current, total, question[:70])
 
 
 # ──── Commands ────
@@ -54,10 +58,10 @@ def cmd_ask(args: argparse.Namespace) -> None:
     """Ask a question via the NLM-first router."""
     router = _get_router()
     result = router.route(args.question, notebook_id=args.notebook or "")
-    print(f"\n[{result.source_tier}] (conf: {result.confidence:.0%}, {result.query_time_ms:.0f}ms)")
-    print(f"\n{result.answer}\n")
+    logger.info("\n[%s] (conf: %.0f%%, %.0fms)", result.source_tier, result.confidence * 100, result.query_time_ms)
+    logger.info("\n%s\n", result.answer)
     if result.stored_in_nexus:
-        print("  → Stored in Nexus for future cache hits")
+        logger.info("  → Stored in Nexus for future cache hits")
 
 
 def cmd_batch_ask(args: argparse.Namespace) -> None:
@@ -75,25 +79,25 @@ def cmd_batch_ask(args: argparse.Namespace) -> None:
     elif args.questions:
         questions = args.questions
     else:
-        print("Provide questions via --file or as arguments")
+        logger.info("Provide questions via --file or as arguments")
         return
 
-    print(f"\nBatch asking {len(questions)} questions...\n")
+    logger.info("\nBatch asking %s questions...\n", len(questions))
     router = _get_router()
     results = []
     for i, q in enumerate(questions):
-        print(f"  [{i+1}/{len(questions)}] {q[:70]}")
+        logger.info("  [%s/%s] %s", i + 1, len(questions), q[:70])
         result = router.route(q, notebook_id=args.notebook or "")
         results.append(result)
-        print(f"    → [{result.source_tier}] {result.answer[:80]}...")
+        logger.info("    → [%s] %s...", result.source_tier, result.answer[:80])
 
     # Summary
     tiers = {}
     for r in results:
         tiers[r.source_tier] = tiers.get(r.source_tier, 0) + 1
-    print(f"\n  Summary: {len(results)} answered")
+    logger.info("\n  Summary: %s answered", len(results))
     for tier, count in sorted(tiers.items()):
-        print(f"    {tier}: {count}")
+        logger.info("    %s: %s", tier, count)
 
 
 def cmd_converse(args: argparse.Namespace) -> None:
@@ -101,11 +105,11 @@ def cmd_converse(args: argparse.Namespace) -> None:
     engine = _get_engine()
     nb_id = args.notebook
     if not nb_id:
-        print("Error: --notebook required for conversation mode")
+        logger.error("--notebook required for conversation mode")
         return
 
-    print(f"NLM Teacher Mode — Notebook: {nb_id[:8]}...")
-    print("Type 'quit' to exit.\n")
+    logger.info("NLM Teacher Mode — Notebook: %s...", nb_id[:8])
+    logger.info("Type 'quit' to exit.\n")
 
     while True:
         try:
@@ -120,9 +124,9 @@ def cmd_converse(args: argparse.Namespace) -> None:
         result = engine.ask(nb_id, msg)
         answer = result.get("answer", result.get("response", ""))
         if "error" in result:
-            print(f"Error: {result['error']}")
+            logger.error("%s", result['error'])
         else:
-            print(f"\nNLM: {answer}\n")
+            logger.info("\nNLM: %s\n", answer)
 
 
 def cmd_create(args: argparse.Namespace) -> None:
@@ -132,12 +136,12 @@ def cmd_create(args: argparse.Namespace) -> None:
     result = engine.create_notebook(args.name, sources=sources)
     nb_id = result.get("notebook_id") or result.get("id", "")
     if nb_id:
-        print(f"Created notebook: {nb_id}")
-        print(f"  Name: {args.name}")
+        logger.info("Created notebook: %s", nb_id)
+        logger.info("  Name: %s", args.name)
         if sources:
-            print(f"  Sources: {len(sources)}")
+            logger.info("  Sources: %s", len(sources))
     else:
-        print(f"Error: {result}")
+        logger.error("%s", result)
 
 
 def cmd_list(args: argparse.Namespace) -> None:
@@ -145,20 +149,20 @@ def cmd_list(args: argparse.Namespace) -> None:
     engine = _get_engine()
     notebooks = engine.list_notebooks()
     if not notebooks:
-        print("No notebooks found (or backend unavailable)")
+        logger.info("No notebooks found (or backend unavailable)")
         return
-    print(f"\n{len(notebooks)} notebook(s):\n")
+    logger.info("\n%s notebook(s):\n", len(notebooks))
     for nb in notebooks:
         nb_id = nb.get("id", nb.get("notebook_id", "?"))
         name = nb.get("name", nb.get("title", "Untitled"))
-        print(f"  {nb_id[:12]}...  {name}")
+        logger.info("  %s...  %s", nb_id[:12], name)
 
 
 def cmd_add_source(args: argparse.Namespace) -> None:
     """Add a source to a notebook."""
     engine = _get_engine()
     result = engine.add_source(args.notebook, args.type, args.value)
-    print(json.dumps(result, indent=2))
+    logger.info(json.dumps(result, indent=2, default=str))
 
 
 def cmd_add_codebase(args: argparse.Namespace) -> None:
@@ -167,8 +171,8 @@ def cmd_add_codebase(args: argparse.Namespace) -> None:
     result = engine.create_from_files(args.files, args.name or f"Codebase: {args.notebook[:8]}")
     nb_id = result.get("notebook_id", "")
     added = result.get("sources_added", 0)
-    print(f"Notebook: {nb_id}")
-    print(f"Sources added: {added}/{len(args.files)}")
+    logger.info("Notebook: %s", nb_id)
+    logger.info("Sources added: %s/%s", added, len(args.files))
 
 
 def cmd_generate(args: argparse.Namespace) -> None:
@@ -177,27 +181,27 @@ def cmd_generate(args: argparse.Namespace) -> None:
     result = forge.generate_doc(args.notebook, args.type, args.instructions or "")
     if result.documents:
         content = result.documents[0].get("content", "")
-        print(f"\n--- {args.type} ---\n")
-        print(content[:2000])
+        logger.info("\n--- %s ---\n", args.type)
+        logger.info("%s", content[:2000])
         if len(content) > 2000:
-            print(f"\n... ({len(content)} chars total)")
+            logger.info("\n... (%s chars total)", len(content))
     else:
-        print(f"Error: {result.errors}")
+        logger.error("%s", result.errors)
 
 
 def cmd_distill(args: argparse.Namespace) -> None:
     """Distill Q&A pairs from a notebook."""
     forge = _get_forge()
     topics = [args.topic] if args.topic else None
-    print(f"Distilling from notebook {args.notebook[:8]}...")
+    logger.info("Distilling from notebook %s...", args.notebook[:8])
     result = forge.distill(
         args.notebook, topics=topics, count=args.count,
         delay=args.delay, on_progress=_progress_callback,
     )
-    print(f"\n  {len(result.qa_pairs)} Q&A pairs generated")
-    print(f"  {len(result.nexus_ids)} stored in Nexus")
-    print(f"  {len(result.errors)} errors")
-    print(f"  Duration: {result.duration_seconds}s")
+    logger.info("\n  %s Q&A pairs generated", len(result.qa_pairs))
+    logger.info("  %s stored in Nexus", len(result.nexus_ids))
+    logger.info("  %s errors", len(result.errors))
+    logger.info("  Duration: %ss", result.duration_seconds)
 
     if args.output:
         outpath = Path(args.output)
@@ -205,7 +209,7 @@ def cmd_distill(args: argparse.Namespace) -> None:
         with open(outpath, "w", encoding="utf-8") as f:
             for pair in result.qa_pairs:
                 f.write(json.dumps(pair.to_dict(), ensure_ascii=False) + "\n")
-        print(f"  Written to: {outpath}")
+        logger.info("  Written to: %s", outpath)
 
 
 def cmd_decompose(args: argparse.Namespace) -> None:
@@ -216,22 +220,22 @@ def cmd_decompose(args: argparse.Namespace) -> None:
         plan_text = Path(plan_text).read_text(encoding="utf-8")
     result = forge.decompose(plan_text, notebook_id=args.notebook or "")
     if result.steps:
-        print(f"\n{len(result.steps)} steps:\n")
+        logger.info("\n%s steps:\n", len(result.steps))
         for step in result.steps:
-            print(f"  {step['step']}. {step['instruction'][:100]}")
+            logger.info("  %s. %s", step['step'], step['instruction'][:100])
     else:
-        print(f"Error: {result.errors}")
+        logger.error("%s", result.errors)
 
 
 def cmd_analyze(args: argparse.Namespace) -> None:
     """Analyze source files."""
     forge = _get_forge()
-    print(f"Analyzing {len(args.files)} files...")
+    logger.info("Analyzing %s files...", len(args.files))
     result = forge.analyze(args.files)
-    print(f"\n  {len(result.qa_pairs)} insights generated")
+    logger.info("\n  %s insights generated", len(result.qa_pairs))
     for pair in result.qa_pairs[:5]:
-        print(f"\n  Q: {pair.question[:80]}")
-        print(f"  A: {pair.answer[:120]}...")
+        logger.info("\n  Q: %s", pair.question[:80])
+        logger.info("  A: %s...", pair.answer[:120])
 
 
 def cmd_solve(args: argparse.Namespace) -> None:
@@ -243,9 +247,9 @@ def cmd_solve(args: argparse.Namespace) -> None:
         notebook_id=args.notebook or "",
     )
     if result.qa_pairs:
-        print(f"\n{result.qa_pairs[0].answer}\n")
+        logger.info("\n%s\n", result.qa_pairs[0].answer)
     else:
-        print(f"Error: {result.errors}")
+        logger.error("%s", result.errors)
 
 
 def cmd_extract(args: argparse.Namespace) -> None:
@@ -253,22 +257,22 @@ def cmd_extract(args: argparse.Namespace) -> None:
     extractor = _get_extractor()
     if args.preview:
         preview = extractor.preview(args.har_file)
-        print(json.dumps(preview, indent=2))
+        logger.info(json.dumps(preview, indent=2, default=str))
         return
 
     notebooks = extractor.extract(args.har_file)
-    print(f"\nExtracted {len(notebooks)} notebook(s):\n")
+    logger.info("\nExtracted %s notebook(s):\n", len(notebooks))
     for nb in notebooks:
         stats = nb.stats()
-        print(f"  {nb.id[:12]}... — {nb.name}")
-        print(f"    Sources: {stats['sources']}, Docs: {stats['documents']}")
-        print(f"    Notes: {stats['notes']}, Conversations: {stats['conversations']}")
+        logger.info("  %s... — %s", nb.id[:12], nb.name)
+        logger.info("    Sources: %s, Docs: %s", stats['sources'], stats['documents'])
+        logger.info("    Notes: %s, Conversations: %s", stats['notes'], stats['conversations'])
 
     if args.save:
         outdir = Path(args.save)
         for nb in notebooks:
             path = extractor.save_notebook(nb, outdir)
-            print(f"  Saved: {path}")
+            logger.info("  Saved: %s", path)
 
 
 def cmd_ingest(args: argparse.Namespace) -> None:
@@ -279,7 +283,7 @@ def cmd_ingest(args: argparse.Namespace) -> None:
     notebooks = extractor.extract(args.har_file)
     for nb in notebooks:
         result = extractor.ingest_to_nexus(nb, client)
-        print(f"  {nb.name}: {result.stored}/{result.total} entries, {result.skipped} skipped")
+        logger.info("  %s: %s/%s entries, %s skipped", nb.name, result.stored, result.total, result.skipped)
 
 
 def cmd_stats(args: argparse.Namespace) -> None:
@@ -287,28 +291,28 @@ def cmd_stats(args: argparse.Namespace) -> None:
     engine = _get_engine()
     router = _get_router()
 
-    print("\n═══ NLM Engine Stats ═══")
+    logger.info("\n═══ NLM Engine Stats ═══")
     for k, v in engine.stats().items():
-        print(f"  {k}: {v}")
+        logger.info("  %s: %s", k, v)
 
-    print("\n═══ Router Savings ═══")
+    logger.info("\n═══ Router Savings ═══")
     report = router.savings_report()
     for k, v in report.items():
         if isinstance(v, dict):
-            print(f"  {k}:")
+            logger.info("  %s:", k)
             for kk, vv in v.items():
-                print(f"    {kk}: {vv}")
+                logger.info("    %s: %s", kk, vv)
         else:
-            print(f"  {k}: {v}")
+            logger.info("  %s: %s", k, v)
 
 
 def cmd_forge(args: argparse.Namespace) -> None:
     """Run end-to-end forge pipeline for a topic."""
     forge = _get_forge()
-    print(f"Building knowledge for: {args.topic}")
+    logger.info("Building knowledge for: %s", args.topic)
 
     def on_progress(phase: str, current: int, total: int) -> None:
-        print(f"  [{phase}] {current}/{total}")
+        logger.info("  [%s] %s/%s", phase, current, total)
 
     result = forge.build_topic(
         args.topic,
@@ -316,10 +320,10 @@ def cmd_forge(args: argparse.Namespace) -> None:
         question_count=args.count,
         on_progress=on_progress,
     )
-    print(f"\n  Notebook: {result.notebook_id}")
-    print(f"  Q&A pairs: {len(result.qa_pairs)}")
-    print(f"  Stored in Nexus: {len(result.nexus_ids)}")
-    print(f"  Duration: {result.duration_seconds}s")
+    logger.info("\n  Notebook: %s", result.notebook_id)
+    logger.info("  Q&A pairs: %s", len(result.qa_pairs))
+    logger.info("  Stored in Nexus: %s", len(result.nexus_ids))
+    logger.info("  Duration: %ss", result.duration_seconds)
 
     if args.export:
         outpath = Path(args.export)
@@ -328,7 +332,7 @@ def cmd_forge(args: argparse.Namespace) -> None:
             format=args.format or "instruction",
             output_path=str(outpath),
         )
-        print(f"  Exported to: {outpath}")
+        logger.info("  Exported to: %s", outpath)
 
 
 # ──── Parser ────
@@ -471,4 +475,5 @@ def main(argv: Optional[List[str]] = None) -> None:
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     main()

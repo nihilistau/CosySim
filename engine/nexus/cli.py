@@ -12,33 +12,37 @@ Usage:
 """
 import argparse
 import json
+import logging
 import sys
 import textwrap
 from typing import List
 
 from engine.nexus.client import get_nexus_client
 
+logger = logging.getLogger(__name__)
+
 
 def _print_json(data, indent: int = 2):
     """Pretty-print JSON data."""
-    print(json.dumps(data, indent=indent, default=str))
+    logger.info(json.dumps(data, indent=indent, default=str))
 
 
 def _print_entries(entries: List[dict], fields=("title", "content_type", "category")):
     """Print a list of entries in a readable table format."""
     if not entries:
-        print("No results found.")
+        logger.info("No results found.")
         return
     for i, entry in enumerate(entries, 1):
         title = entry.get("title", "Untitled")
         ctype = entry.get("content_type", "")
         cat = entry.get("category", "")
-        print(f"  {i}. [{ctype}] {title}" + (f" ({cat})" if cat else ""))
+        suffix = " (%s)" % cat if cat else ""
+        logger.info("  %d. [%s] %s%s", i, ctype, title, suffix)
         content = entry.get("content", "")
         if content:
             preview = textwrap.shorten(content, width=120, placeholder="...")
-            print(f"     {preview}")
-    print(f"\n  {len(entries)} result(s)")
+            logger.info("     %s", preview)
+    logger.info("\n  %d result(s)", len(entries))
 
 
 def cmd_search(args):
@@ -48,7 +52,7 @@ def cmd_search(args):
     if args.json:
         _print_json(results)
     else:
-        print(f"Search: \"{args.query}\"\n")
+        logger.info("Search: \"%s\"\n", args.query)
         _print_entries(results)
 
 
@@ -59,15 +63,15 @@ def cmd_ask(args):
     if args.json:
         _print_json(answer)
     else:
-        print(f"Q: {args.question}\n")
+        logger.info("Q: %s\n", args.question)
         if answer.get("answer"):
-            print(f"A: {answer['answer']}")
+            logger.info("A: %s", answer["answer"])
             if answer.get("source"):
-                print(f"\n  Source: {answer['source']}")
+                logger.info("\n  Source: %s", answer["source"])
             if answer.get("confidence"):
-                print(f"  Confidence: {answer['confidence']}")
+                logger.info("  Confidence: %s", answer["confidence"])
         else:
-            print("No answer found.")
+            logger.info("No answer found.")
 
 
 def cmd_add(args):
@@ -82,9 +86,9 @@ def cmd_add(args):
         tags=tags,
     )
     if entry_id:
-        print(f"Stored: {entry_id}")
+        logger.info("Stored: %s", entry_id)
     else:
-        print("Failed to store entry.", file=sys.stderr)
+        logger.error("Failed to store entry.")
         sys.exit(1)
 
 
@@ -97,12 +101,13 @@ def cmd_status(args):
         _print_json({"health": health, "stats": stats})
     else:
         available = health.get("ok", False)
-        print(f"Nexus: {'ONLINE' if available else 'OFFLINE'}")
+        status_str = "ONLINE" if available else "OFFLINE"
+        logger.info("Nexus: %s", status_str)
         if stats.get("ok"):
             data = stats.get("data", stats)
             for key, val in data.items():
                 if key != "ok":
-                    print(f"  {key}: {val}")
+                    logger.info("  %s: %s", key, val)
 
 
 def cmd_prompts(args):
@@ -112,7 +117,8 @@ def cmd_prompts(args):
     if args.json:
         _print_json(prompts)
     else:
-        print(f"Prompts" + (f" ({args.category})" if args.category else "") + ":\n")
+        suffix = " (%s)" % args.category if args.category else ""
+        logger.info("Prompts%s:\n", suffix)
         _print_entries(prompts)
 
 
@@ -124,15 +130,15 @@ def cmd_rules(args):
         _print_json(rules)
     else:
         if not rules:
-            print("No rules found.")
+            logger.info("No rules found.")
             return
         for i, rule in enumerate(rules, 1):
-            print(f"  {i}. [{rule.get('scope', '')}] {rule.get('name', 'Unnamed')}")
+            logger.info("  %d. [%s] %s", i, rule.get("scope", ""), rule.get("name", "Unnamed"))
             if rule.get("condition"):
-                print(f"     Condition: {json.dumps(rule['condition'])}")
+                logger.info("     Condition: %s", json.dumps(rule["condition"]))
             if rule.get("action"):
-                print(f"     Action: {json.dumps(rule['action'])}")
-        print(f"\n  {len(rules)} rule(s)")
+                logger.info("     Action: %s", json.dumps(rule["action"]))
+        logger.info("\n  %d rule(s)", len(rules))
 
 
 def cmd_youtube(args):
@@ -141,11 +147,11 @@ def cmd_youtube(args):
     tags = [t.strip() for t in args.tags.split(",")] if args.tags else []
     result = client.import_youtube(args.url, category=args.category, tags=tags)
     if result:
-        print(f"Imported: {result.get('title', 'unknown')}")
+        logger.info("Imported: %s", result.get("title", "unknown"))
         if result.get("entry_id"):
-            print(f"  Entry ID: {result['entry_id']}")
+            logger.info("  Entry ID: %s", result["entry_id"])
     else:
-        print("Import failed.", file=sys.stderr)
+        logger.error("Import failed.")
         sys.exit(1)
 
 
@@ -154,9 +160,9 @@ def cmd_qa(args):
     client = get_nexus_client()
     qa_id = client.add_qa(args.question, args.answer, category=args.category)
     if qa_id:
-        print(f"Stored Q&A: {qa_id}")
+        logger.info("Stored Q&A: %s", qa_id)
     else:
-        print("Failed to store Q&A.", file=sys.stderr)
+        logger.error("Failed to store Q&A.")
         sys.exit(1)
 
 
@@ -228,4 +234,5 @@ def main():
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     main()

@@ -810,36 +810,37 @@ def main() -> None:
         "skills, prompts, lineage, all"
     )
     if len(sys.argv) < 2:
-        print(f"Usage: python -m engine.nexus.nexus_distiller [{actions}]")
+        logger.info("Usage: python -m engine.nexus.nexus_distiller [%s]", actions)
         sys.exit(1)
 
     action = sys.argv[1].lower()
 
     if action == "distill":
-        print(json.dumps(NexusDistiller().distill(), indent=2))
+        logger.info(json.dumps(NexusDistiller().distill(), indent=2, default=str))
     elif action == "compact":
         days = int(sys.argv[2]) if len(sys.argv) > 2 else 7
-        print(json.dumps(NexusDistiller().compact_sessions(days), indent=2))
+        logger.info(json.dumps(NexusDistiller().compact_sessions(days), indent=2, default=str))
     elif action == "stats":
-        print(json.dumps(NexusDistiller().get_stats(), indent=2))
+        logger.info(json.dumps(NexusDistiller().get_stats(), indent=2, default=str))
     elif action == "primer":
-        print(NexusDistiller().generate_context_primer())
+        logger.info("%s", NexusDistiller().generate_context_primer())
     elif action == "dedup":
-        print(json.dumps(QADeduplicator().deduplicate(dry_run=False), indent=2))
+        logger.info(json.dumps(QADeduplicator().deduplicate(dry_run=False), indent=2, default=str))
     elif action == "dedup-dry":
-        print(json.dumps(QADeduplicator().deduplicate(dry_run=True), indent=2))
+        logger.info(json.dumps(QADeduplicator().deduplicate(dry_run=True), indent=2, default=str))
     elif action == "skills":
-        print(json.dumps(SkillUsageDistiller().distill_and_store(), indent=2))
+        logger.info(json.dumps(SkillUsageDistiller().distill_and_store(), indent=2, default=str))
     elif action == "prompts":
-        print(json.dumps(PromptEvolutionDistiller().distill_patterns(), indent=2))
+        logger.info(json.dumps(PromptEvolutionDistiller().distill_patterns(), indent=2, default=str))
     elif action == "lineage":
-        print(json.dumps(PromptEvolutionDistiller().get_lineage(), indent=2))
+        logger.info(json.dumps(PromptEvolutionDistiller().get_lineage(), indent=2, default=str))
     elif action == "all":
-        print(json.dumps(run_all_distillers(), indent=2))
+        logger.info(json.dumps(run_all_distillers(), indent=2, default=str))
     else:
-        print(f"Unknown action: {action}. Use: {actions}")
+        logger.error("Unknown action: %s. Use: %s", action, actions)
         sys.exit(1)
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     main()

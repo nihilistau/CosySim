@@ -214,7 +214,7 @@ def main() -> None:
         limit=args.limit,
     )
 
-    print(f"Exported: {counts['exported']}, Skipped: {counts['skipped']}, Errors: {counts['errors']}")
+    logger.info("Exported: %d, Skipped: %d, Errors: %d", counts["exported"], counts["skipped"], counts["errors"])
 
     if args.push:
         push_export(args.output)
