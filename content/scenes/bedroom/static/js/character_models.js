@@ -352,7 +352,7 @@ function _buildHead(d, skinMat, hairColor, irisColor, gender) {
         g.add(crop);
     }
 
-    return g;
+    return { group: g };
 }
 
 function _buildArm(d, skinMat, side) {
@@ -984,7 +984,7 @@ function updateCharacterOutfit(model, outfitKey) {
 // ═══════════════════════════════════════════════════════════════════════
 
 function setCharacterExpression(model, mood) {
-    if (!model || !model.headData) return;
+    if (!model || !model.headData || !model.headData.group) return;
     const hd = model.headData;
     const mouth = hd.group.getObjectByName('mouth');
     const browL = hd.group.getObjectByName('browL');

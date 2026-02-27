@@ -1187,7 +1187,9 @@ function applyState(st) {
 
     // 3D
     if (st.locations) buildLocationMarkers(st.locations);
-    if (st.characters) updateCharPositions(st.characters, st.locations || {});
+    try {
+        if (st.characters) updateCharPositions(st.characters, st.locations || {});
+    } catch (e) { console.warn('3D update error (non-fatal):', e.message); }
     if (st.lighting)   applyLighting(st.lighting);
     timeOfDay = st.time_of_day || 'evening';
 
