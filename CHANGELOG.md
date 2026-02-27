@@ -2,12 +2,52 @@
 
 All notable changes to CosySim are documented here.
 
+## v0.59b — Connected System: Phone, HA & Deep Storage
+
+### Phone News Feed (NEW)
+- **`engine/integrations/phone_news.py`** — curated news feed for mobile phone scene
+- Markdown-rendered news cards with read/delete/thumbs up/down interactions
+- User feedback loop into training flywheel for preference learning
+- Socket.IO real-time push for breaking news
+
+### Home Assistant Integration (NEW)
+- **`engine/integrations/homeassistant.py`** — HA REST API client (entities, services, states)
+- Auto-discover entities on homeassistant.local
+- 11 MCP tools for agent HA control (toggle, automate, notify, sensor read)
+- HA news bridge: push high-relevance articles as mobile notifications (12th scheduler task)
+- Safety governance rules for HA actions
+
+### NLM Deep Storage (NEW)
+- **`engine/nexus/nlm_deep_storage.py`** — 3-tier notebook archival system (~500 lines)
+  - **Ground Truth**: complete notebook snapshots (metadata, sources, conversations, notes)
+  - **Knowledge Layer**: distilled Q&A with category tagging
+  - **Working Layer**: active notebook references in JSON metadata
+- Conversation chains with UUID-based chain IDs and parent linking
+- HAR extraction support for Google batchexecute RPC responses
+- Local JSON index at `data/nlm_archives/` for fast lookup
+- 9 @skill functions + 8 MCP tools for deep storage operations
+- 27 tests covering archive, retrieve, search, chain, delete flows
+
+### Convention Fixes
+- All `print()` calls in CLI modules converted to `logging.getLogger(__name__)`
+  (cli.py, nlm_cli.py, nexus_distiller.py, nexus_seeder.py, nexus_session_logger.py,
+  self_maintenance.py, har_extractor.py, space_exporter.py)
+- 19 f-string logger calls in cli.py converted to %-formatting
+- `bridge.py._output()` kept as `print()` (CLI contract for machine-readable JSON)
+- Governance enforcement: `check-tool-safety.ps1` now denies edits with reject/block severity
+
+### Test Suite
+- **4,409 tests** across 100+ files (30 new this sprint)
+
+---
+
 ## v0.58b — Project Autonomy: Self-Improving System
 
 ### Autonomous Heartbeat (NEW)
-- **`engine/nexus/scheduler_daemon.py`** — cron-like task daemon with 10 builtin callbacks:
+- **`engine/nexus/scheduler_daemon.py`** — cron-like task daemon with 12 builtin callbacks:
   nexus-maintenance, nexus-dedup, knowledge-quality, notebook-rotation, news-fetch,
-  test-monitor, metrics-collect, training-sync, system-reflection, experiment-scan
+  test-monitor, metrics-collect, training-sync, system-reflection, experiment-scan,
+  task-auto-gen, ha-news-push
 - Configurable intervals, persistent state, thread-safe scheduling
 
 ### Knowledge Intelligence (NEW)
@@ -43,10 +83,10 @@ All notable changes to CosySim are documented here.
   hooks, and preferences to/from Nexus
 
 ### Skills & Tools
-- **`engine/skills/builtin/autonomy_skills.py`** — 59 @skill functions across 11 categories
+- **`engine/skills/builtin/autonomy_skills.py`** — 68 @skill functions across 12 categories
   exposing all autonomy modules to LLM agents
-- **`engine/mcp/devtools_server.py`** — 87+ MCP tools (added ~50 new autonomy tools)
-- Full test suite: **4,379 tests** (462 new) across 98+ files
+- **`engine/mcp/devtools_server.py`** — 95+ MCP tools (added ~58 new autonomy tools)
+- Full test suite: **4,409 tests** (492 new) across 100+ files
 
 ## v0.57b — UX Overhaul, System Assistant & Voice Interface
 
