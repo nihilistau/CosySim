@@ -28,6 +28,31 @@ All notable changes to CosySim are documented here.
 - 9 @skill functions + 8 MCP tools for deep storage operations
 - 27 tests covering archive, retrieve, search, chain, delete flows
 
+### Phone Assistant (NEW)
+- **`engine/assistant/phone_assistant.py`** — cascade routing with 4-tier fallback
+  - Tier 1: System Assistant (Aria) — full CosySim intelligence
+  - Tier 2: Nexus Q&A — cached knowledge (confidence > 0.3)
+  - Tier 3: AnythingLLM — offline/local fallback (phone instance)
+  - Tier 4: Static fallback — graceful degradation
+- Mode control: auto (cascade all), passthrough (server only), offline (local only)
+- Voice synthesis via TTS manager for spoken responses
+- Conversation history with capped buffer and stats tracking
+- 3 @skill functions + 4 MCP tools
+- 35 tests covering cascade, modes, tiers, TTS, history, stats
+
+### System Dashboard (NEW)
+- **Phone system app** — 4-tab dashboard (overview, agents, scheduler, chat)
+- Aggregated system status: LMStudio, Nexus, scheduler, scenes, agents
+- Chat with assistant from mobile via PhoneAssistant cascade
+- 13 tests for dashboard API endpoints
+
+### AnythingLLM Integration (NEW)
+- **`engine/integrations/anythingllm.py`** — REST client with multi-instance support
+- Workspace CRUD, chat, threads, documents, bidirectional Nexus sync
+- 10 @skill functions + 6 MCP tools
+- Config: laptop (localhost:3001) + phone instances
+- 19 tests for client, workspaces, chat, sync
+
 ### Convention Fixes
 - All `print()` calls in CLI modules converted to `logging.getLogger(__name__)`
   (cli.py, nlm_cli.py, nexus_distiller.py, nexus_seeder.py, nexus_session_logger.py,
@@ -37,7 +62,7 @@ All notable changes to CosySim are documented here.
 - Governance enforcement: `check-tool-safety.ps1` now denies edits with reject/block severity
 
 ### Test Suite
-- **4,409 tests** across 100+ files (30 new this sprint)
+- **4,476 tests** across 100+ files (97 new this sprint)
 
 ---
 
