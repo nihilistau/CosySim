@@ -182,10 +182,13 @@ class OrpheusNative:
                 f"No {quant} model found. Available: {list(self._available_models)}"
             )
 
-        # Fix CUDA_PATH if needed
+        # Fix CUDA_PATH — strip trailing \bin and prefer v12.4 for compatibility
         cuda_path = os.environ.get("CUDA_PATH", "")
         if cuda_path.endswith("\\bin"):
             os.environ["CUDA_PATH"] = cuda_path.rsplit("\\bin", 1)[0]
+        cuda_12_4 = r"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.4"
+        if os.path.isdir(cuda_12_4) and "v13" in cuda_path:
+            os.environ["CUDA_PATH"] = cuda_12_4
 
         from llama_cpp import Llama
 

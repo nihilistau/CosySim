@@ -148,10 +148,10 @@ tts:
       timeout: 120
       model_dir: "D:\\Files\\Models\\Orpheous"
     orpheus_native:
-      enabled: true                      # Direct GGUF — no LMStudio dependency (CPU inference)
+      enabled: true                      # Direct GGUF — no LMStudio dependency
       model_dir: "D:\\Files\\Models\\Orpheous"
       default_quant: null                # null=auto-select by text length (q2_k/q4_k_m)
-      gpu_layers: 0                      # 0=CPU (pip wheel); -1=GPU (needs CUDA build)
+      gpu_layers: -1                     # -1=all layers on GPU (CUDA build active)
       default_voice: "tara"
     qwen3:
       enabled: true
