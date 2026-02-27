@@ -19,7 +19,7 @@ session tracking, and prompt versioning.
 audit logging · LMStudio v1 streaming with stateful conversations · Nexus knowledge system
 · InferenceOrchestrator multi-model routing · RouterDataCollector training capture
 
-**Test suite:** 4,476+ tests across 136 files — run before and after changes.
+**Test suite:** 4,660+ tests across 140 files — run before and after changes.
 
 **MCP Server:** 108+ tools available via `.vscode/mcp.json` — includes Nexus bridge,
 skill discovery, and system monitoring tools.
@@ -100,7 +100,7 @@ CosySim/
 │   ├── agents/     # VirtualAgent, InterceptorPipeline, StreamProcessor
 │   ├── lmstudio/   # LMS client, router, conversation, model manager, orchestrator, router_data
 │   ├── scenes/     # BaseScene, SceneManager, SceneRegistry
-│   ├── skills/     # @skill decorator, registry, 20+ builtin packs (187+ skills)
+│   ├── skills/     # @skill decorator, registry, 21 builtin packs (188 skills)
 │   ├── services/   # Activity bus, resilience, housekeeping
 │   ├── pipeline/   # VirtualPipeline, token routing
 │   ├── tts/        # TTS manager (Piper, Orpheus, Qwen3)
@@ -112,7 +112,7 @@ CosySim/
 │   ├── scenes/     # 18 scene implementations
 │   └── simulation/ # Database, character system, services
 ├── config/         # YAML/JSON config (default, dev, prod, voices, skills, mcp)
-├── tests/          # pytest suite (136 files, 4,476+ tests)
+├── tests/          # pytest suite (140 files, 4,660+ tests)
 ├── docs/           # Documentation (INDEX.md entry point)
 ├── .github/        # Copilot customization (instructions, agents, hooks)
 ├── .vscode/        # VS Code config + MCP server definitions

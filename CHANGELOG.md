@@ -61,8 +61,18 @@ All notable changes to CosySim are documented here.
 - `bridge.py._output()` kept as `print()` (CLI contract for machine-readable JSON)
 - Governance enforcement: `check-tool-safety.ps1` now denies edits with reject/block severity
 
+### System Hardening (v0.59b patch)
+- **YAML config fix** — repaired `config/default.yaml` agent_profiles nesting (router,
+  narrator, game_master were incorrectly nested under training.datasets). Fixed 50 tests.
+- **Skill registration** — registered 5 orphaned skill packs (anythingllm, codespace,
+  inference, nlm_forge, prompts_chat) adding 36 previously undiscoverable skills.
+  Total: 188 builtin skills across 21 packs.
+- **Silent exception logging** — replaced 9 bare `except: pass` blocks with
+  `logger.debug/warning` calls (system_assistant, phone_assistant, copilot_bridge,
+  scheduler_daemon, self_maintenance).
+
 ### Test Suite
-- **4,476 tests** across 100+ files (97 new this sprint)
+- **4,660 tests** across 140+ files (119 new skill tests + 50 fixed by YAML repair)
 
 ---
 
