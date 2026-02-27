@@ -805,3 +805,35 @@ def deep_storage_store_conversation(
 def deep_storage_stats() -> str:
     """Get statistics on archived notebooks, entries stored, and storage usage."""
     return json.dumps(_deep_storage().stats(), default=str)
+
+
+# ── Phone Assistant Skills ──────────────────────────────────────────────
+
+
+def _phone_assistant() -> Any:
+    """Lazy accessor for the phone assistant."""
+    from engine.assistant.phone_assistant import get_phone_assistant
+    return get_phone_assistant()
+
+
+@skill(pack="autonomy", description="Chat with the phone assistant (cascading tiers)",
+       tags=["assistant", "phone", "chat", "autonomy"], category=SkillCategory.COMMUNICATION)
+def phone_assistant_chat(message: str, mode: str = "", voice: bool = False) -> str:
+    """Send a message to the phone assistant. Mode: auto/passthrough/offline."""
+    result = _phone_assistant().chat(message, mode=mode or None, voice=voice)
+    return json.dumps(result, default=str)
+
+
+@skill(pack="autonomy", description="Get phone assistant status and connectivity",
+       tags=["assistant", "phone", "status", "autonomy"], category=SkillCategory.SYSTEM)
+def phone_assistant_status() -> str:
+    """Check phone assistant routing mode, connectivity, and hit rates."""
+    return json.dumps(_phone_assistant().status(), default=str)
+
+
+@skill(pack="autonomy", description="Set phone assistant routing mode",
+       tags=["assistant", "phone", "mode", "autonomy"], category=SkillCategory.SYSTEM)
+def phone_assistant_set_mode(mode: str) -> str:
+    """Set routing mode: auto (cascade all), passthrough (server only), offline (local only)."""
+    result = _phone_assistant().set_mode(mode)
+    return json.dumps({"mode": result})

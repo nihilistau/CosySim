@@ -1575,6 +1575,51 @@ def allm_sync_from_nexus(workspace: str, query: str = "*", limit: int = 50, inst
         return json.dumps({"error": str(exc)})
 
 
+# ── Phone Assistant Tools ─────────────────────────────────────────────
+
+
+@mcp.tool()
+async def phone_assistant_chat(message: str, mode: str = "", voice: bool = False) -> str:
+    """Chat with the phone assistant (cascade: system → nexus → anythingllm → fallback)."""
+    try:
+        from engine.assistant.phone_assistant import get_phone_assistant
+        result = get_phone_assistant().chat(message, mode=mode or None, voice=voice)
+        return json.dumps(result, default=str)
+    except Exception as exc:
+        return json.dumps({"error": str(exc)})
+
+
+@mcp.tool()
+async def phone_assistant_status() -> str:
+    """Get phone assistant status: mode, connectivity, stats."""
+    try:
+        from engine.assistant.phone_assistant import get_phone_assistant
+        return json.dumps(get_phone_assistant().status(), default=str)
+    except Exception as exc:
+        return json.dumps({"error": str(exc)})
+
+
+@mcp.tool()
+async def phone_assistant_set_mode(mode: str) -> str:
+    """Set phone assistant mode: auto, passthrough, or offline."""
+    try:
+        from engine.assistant.phone_assistant import get_phone_assistant
+        result = get_phone_assistant().set_mode(mode)
+        return json.dumps({"mode": result})
+    except Exception as exc:
+        return json.dumps({"error": str(exc)})
+
+
+@mcp.tool()
+async def phone_assistant_history(limit: int = 20) -> str:
+    """Get recent phone assistant conversation history."""
+    try:
+        from engine.assistant.phone_assistant import get_phone_assistant
+        return json.dumps(get_phone_assistant().get_history(limit), default=str)
+    except Exception as exc:
+        return json.dumps({"error": str(exc)})
+
+
 # ── Entry point ───────────────────────────────────────────────────────
 
 def run_server(mode: str = "stdio"):

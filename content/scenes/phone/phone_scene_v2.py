@@ -1353,33 +1353,53 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE
 
         @app.route("/api/system/chat", methods=["POST"])
         def system_chat():
-            """Chat with the system assistant from mobile."""
+            """Chat with the phone assistant (cascading through all tiers)."""
             try:
                 data = request.get_json(force=True)
                 message = data.get("message", "").strip()
                 if not message:
                     return jsonify({"ok": False, "error": "No message"}), 400
 
-                # Try system assistant first
-                try:
-                    from engine.assistant.system_assistant import get_assistant
-                    assistant = get_assistant()
-                    reply = assistant.chat(message)
-                    return jsonify({"ok": True, "reply": reply, "source": "assistant"})
-                except Exception:
-                    pass
+                voice = data.get("voice", False)
+                mode = data.get("mode")
 
-                # Fallback to Nexus Q&A
-                try:
-                    from engine.nexus.client import get_nexus_client
-                    client = get_nexus_client()
-                    result = client.ask(message)
-                    if result and result.get("answer"):
-                        return jsonify({"ok": True, "reply": result["answer"], "source": "nexus"})
-                except Exception:
-                    pass
+                from engine.assistant.phone_assistant import get_phone_assistant
+                pa = get_phone_assistant()
+                result = pa.chat(message, mode=mode, voice=voice)
+                return jsonify({"ok": True, **result})
+            except Exception as exc:
+                return jsonify({"ok": False, "error": str(exc)}), 500
 
-                return jsonify({"ok": True, "reply": "System offline — try again later.", "source": "fallback"})
+        @app.route("/api/system/assistant/mode", methods=["GET", "POST"])
+        def system_assistant_mode():
+            """Get or set the phone assistant routing mode."""
+            try:
+                from engine.assistant.phone_assistant import get_phone_assistant
+                pa = get_phone_assistant()
+                if request.method == "POST":
+                    data = request.get_json(force=True)
+                    mode = pa.set_mode(data.get("mode", "auto"))
+                    return jsonify({"ok": True, "mode": mode})
+                return jsonify({"ok": True, "mode": pa.get_mode()})
+            except Exception as exc:
+                return jsonify({"ok": False, "error": str(exc)}), 500
+
+        @app.route("/api/system/assistant/status")
+        def system_assistant_status():
+            """Get phone assistant status including connectivity."""
+            try:
+                from engine.assistant.phone_assistant import get_phone_assistant
+                return jsonify({"ok": True, **get_phone_assistant().status()})
+            except Exception as exc:
+                return jsonify({"ok": False, "error": str(exc)}), 500
+
+        @app.route("/api/system/assistant/history")
+        def system_assistant_history():
+            """Get phone assistant conversation history."""
+            try:
+                from engine.assistant.phone_assistant import get_phone_assistant
+                limit = int(request.args.get("limit", 20))
+                return jsonify({"ok": True, "history": get_phone_assistant().get_history(limit)})
             except Exception as exc:
                 return jsonify({"ok": False, "error": str(exc)}), 500
 
