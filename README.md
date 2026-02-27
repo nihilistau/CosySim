@@ -1,16 +1,16 @@
 # CosySim
 
-> v0.55b — Multi-scene AI simulation framework
+> v0.59b — Multi-scene AI simulation framework
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Tests: 3521](https://img.shields.io/badge/tests-3%2C521%20passing-brightgreen.svg)]()
+[![Tests: 4747](https://img.shields.io/badge/tests-4%2C747%20passing-brightgreen.svg)]()
 
 ## Overview
 
 CosySim is a local-first AI simulation framework that orchestrates virtual agents across 18 interactive scenes. Each scene is a self-contained web application with its own agents, state machine, game logic, and skill pack — from a messaging app with mood tracking to a LitRPG with dual-agent orchestration, a cyberpunk board game, and an AI coding sandbox. Everything runs locally against LMStudio on an NVIDIA GPU.
 
-The core of CosySim is its **Model Context Protocol (MCP) pipeline**. Agents call 160+ skills during inference for memory retrieval, media generation, game mechanics, and state mutation. A 25-interceptor governance pipeline wraps every LLM call, injecting context, enforcing personality constraints, syncing state, and shaping responses. The **Nexus Knowledge System** provides central knowledge management with an NLM intelligence layer, FTS5 search, prompt versioning, and Q&A distillation.
+The core of CosySim is its **Model Context Protocol (MCP) pipeline**. Agents call 188 skills during inference for memory retrieval, media generation, game mechanics, and state mutation. A 22-interceptor governance pipeline wraps every LLM call, injecting context, enforcing personality constraints, syncing state, and shaping responses. The **Nexus Knowledge System** provides central knowledge management with an NLM intelligence layer, FTS5 search, prompt versioning, and Q&A distillation.
 
 CosySim is a meta-system — a playground for designing, testing, and evolving AI agent interactions. Router training data is captured automatically during inference for fine-tuning a 270M routing model. The framework is built for builders who want to experiment with multi-agent orchestration and tool-augmented LLMs without cloud dependencies.
 
@@ -49,9 +49,9 @@ User / Browser
 - Character system with traits, emotions (0–100), relationships, speech patterns
 
 **MCP Framework**
-- 160+ skills across 25+ packs via `@skill` decorator
-- 124 tools exposed via CosySim MCP server
-- 25-interceptor governance pipeline (pre/post inference)
+- 188 skills across 21 packs via `@skill` decorator
+- 214 tools exposed via CosySim MCP server (106 main + 108 devtools)
+- 22-interceptor governance pipeline (10 active, pre/post inference)
 - `AgentGovernor` + `InterceptorPipeline` for personality enforcement
 
 **LMStudio Integration**
@@ -64,19 +64,23 @@ User / Browser
 **Nexus Knowledge System**
 - FTS5 search, NLM intelligence layer (4-tier: cache → FTS → synthesis → deep research)
 - Prompt versioning, Q&A distillation, YouTube transcript ingestion
+- NLM deep storage (3-tier notebook archival with HAR extraction)
 - 10 NLM forge skills, NLM CLI (16 commands), Knowledge Forge
 - Rules engine, session tracking, namespace separation
-- REST API (:8700), dashboard (:8701), control panel (:8702)
+- REST API (:8700), dashboard (:5570)
 
-**Frontend & UX**
-- Toast notifications, button guards, 30s timeout handling
-- NLM router chat in Librarian interface
-- Socket.IO real-time updates across scenes
+**Connected System** (v0.59b)
+- Phone assistant with 4-tier cascade routing (Aria → Nexus → AnythingLLM → static)
+- Home Assistant integration (15 MCP skills, safety governance)
+- AnythingLLM integration (multi-instance, bidirectional Nexus sync)
+- System dashboard (overview, agents, scheduler, chat)
+- System Assistant Aria with cosysim-navbar floating navigation
 
 **DevOps**
-- 3,521 tests, 0 failures across 70+ files
-- 10 Copilot custom agents, 9 instruction files
+- 4,747 tests, 0 failures across 176 files
+- 18 Copilot custom agents, 9 instruction files
 - Config hardening — all 18 scenes in production.yaml
+- Central CORS and health routes on all scenes
 
 ## Quick Start
 
@@ -106,7 +110,7 @@ CosySim/
 ├── engine/              # Core framework
 │   ├── agents/          # CharacterAgent, VirtualAgent, InterceptorPipeline
 │   ├── mcp/             # MCPFramework, DialogSystem, Governor, MCP Server
-│   ├── skills/          # @skill decorator, registry, 13+ builtin packs
+│   ├── skills/          # @skill decorator, registry, 21 builtin packs
 │   ├── lmstudio/        # LMS client, orchestrator, model manager, router
 │   ├── nexus/           # Nexus KMS client, NLM engine, CLI tools
 │   ├── scenes/          # BaseScene, SceneManager, SceneRegistry
@@ -117,7 +121,7 @@ CosySim/
 │   ├── scenes/          # 18 scene implementations
 │   └── simulation/      # Database, character system, services
 ├── config/              # YAML/JSON config (default, dev, prod, voices, skills)
-├── tests/               # pytest suite (70+ files, 3,521 tests)
+├── tests/               # pytest suite (176 files, 4,747 tests)
 ├── docs/                # Documentation (INDEX.md entry point)
 ├── training/            # Fine-tuning pipelines and data
 ├── main.py              # Application entry point
@@ -142,7 +146,7 @@ CosySim/
 | Heist | 5565 | Cooperative multi-agent heist |
 | Command Center | 5566 | System monitoring dashboard |
 | Games | 5567 | Multi-game arcade |
-| Nexus Panel | 5568 | Nexus control interface |
+| Nexus Panel | 5570 | Nexus control interface |
 | Hub | 8500 | Landing page and scene launcher |
 | Dashboard | 8501 | System metrics |
 | Admin | 8502 | Diagnostic center with GOD mode |
@@ -150,14 +154,12 @@ CosySim/
 | TTS | 8600 | Qwen3-TTS voice generation |
 | Web Bridge | 8601 | Socket.IO real-time bridge |
 | Nexus API | 8700 | Knowledge management REST API |
-| Nexus Dashboard | 8701 | Knowledge browser |
-| Nexus Control Panel | 8702 | NLM Lab, training, distillers |
 | ComfyUI | 8188 | Image/video generation |
 
 ## Testing
 
 ```bash
-# Full suite — 3,521 tests
+# Full suite — 4,747 tests
 python -m pytest tests/ -v --tb=short --ignore=tests/test_agent_loop.py --ignore=tests/live_wire_test.py
 
 # Single file

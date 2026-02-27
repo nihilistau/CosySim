@@ -1,6 +1,6 @@
 # CosySim Roadmap
 
-> Current: **v0.55b** | Last updated: 2025-07-20
+> Current: **v0.59b** | Last updated: 2026-02-27
 
 ## Philosophy
 
@@ -70,7 +70,7 @@ CosySim is a **meta-system** — a playground for designing, testing, benchmarki
 - [x] Nexus Control Panel upgrades — 28 new routes, NLM Lab tab
 - [x] HAR extractor for NotebookLM
 
-### v0.55b — Full-Project Audit & Hardening ✅ ← CURRENT
+### v0.55b — Full-Project Audit & Hardening ✅
 - [x] 3,521 tests passing (was ~3,012), 0 failures
 - [x] ResourceManager deadlock fix (Lock → RLock)
 - [x] Router training data capture system for 270M model fine-tuning
@@ -80,19 +80,50 @@ CosySim is a **meta-system** — a playground for designing, testing, benchmarki
 - [x] unittest → pytest migration
 - [x] Project grade: A- (was B+)
 
+### v0.56b — Games, Coders & Scene Expansion ✅
+- [x] Games scene — GameMaster with Socket.IO real-time play
+- [x] Coders scene — session persistence and coding sandbox
+- [x] 3,617 tests across 80+ files
+
+### v0.57b — System Assistant & Navigation ✅
+- [x] System Assistant Aria (`engine/assistant/`)
+- [x] cosysim-navbar.js — floating nav bar auto-injected via shared assets
+- [x] Flask hub (`hub_flask.py` on :8500) replacing Streamlit
+- [x] 3,747 tests across 85+ files
+
+### v0.58b — Project Autonomy: Self-Improving System ✅
+- [x] Scheduler daemon for autonomous task execution
+- [x] Self-maintenance module (health, dedup, compaction, scoring)
+- [x] Autonomous skill pack (67 skills for agent self-management)
+- [x] Local agent guide and onboarding documentation
+
+### v0.59b — Connected System: Phone, HA & Deep Storage ✅ ← CURRENT
+- [x] Phone news feed with user feedback loop
+- [x] Home Assistant integration (11 MCP tools, safety governance)
+- [x] NLM deep storage (3-tier notebook archival, HAR extraction)
+- [x] Phone assistant with 4-tier cascade routing
+- [x] System dashboard app (overview, agents, scheduler, chat)
+- [x] AnythingLLM integration (multi-instance, bidirectional Nexus sync)
+- [x] Central CORS for all scenes, health routes on all 18 scenes
+- [x] Nexus Panel fixes (dashboard stats, entry clicks, HAR timeout, switchTab)
+- [x] Three.js character rendering fixes (buildHead return type, defensive guards)
+- [x] 188 skills across 21 packs, 214 MCP server tools
+- [x] 4,747 tests across 176 files
+
 ---
 
 ## Next Up
 
-### v0.56b — Live Wire & Streaming
+### v0.60b — News Intelligence & Agent Autonomy
 
-- [ ] Live wire testing framework for end-to-end scene validation
-- [ ] Socket.IO streaming for batch operations
-- [ ] Scene template system (scaffold new scenes from archetypes)
+- [ ] News ingestion pipeline — NotebookLM-based source discovery, distillation, Nexus storage
+- [ ] Curated news feeds with agent-driven filtering and relevance scoring
+- [ ] Local agent task runner — pick tickets, implement, test, commit loop
+- [ ] Router model fine-tuning with captured training data (270M)
 - [ ] Agent performance metrics (engagement, coherence, creativity scores)
 - [ ] Cross-scene event propagation
 
-### v0.57+ — Advanced Features
+### v0.61+ — Advanced Features
 
 **Multi-agent orchestration:**
 - [ ] Agent teams with role specialization
@@ -113,7 +144,7 @@ CosySim is a **meta-system** — a playground for designing, testing, benchmarki
 1. **Everything through MCP** — Skills, state, events, and cross-system communication all go through the MCP pipeline
 2. **Nexus as truth** — Prompts, rules, configurations, session history, and experiment results live in Nexus
 3. **Local-first** — No cloud dependencies. LMStudio, ChromaDB, ComfyUI, TTS all run locally
-4. **Test-driven** — Every feature gets tests. Current: 3,521 CosySim tests
+4. **Test-driven** — Every feature gets tests. Current: 4,747 CosySim tests
 5. **Scene independence** — Scenes are self-contained. Adding a scene shouldn't break others
 6. **Agent freedom within rails** — Governance pipeline enforces consistency without killing creativity
 7. **Nexus-first workflow** — Search Nexus before coding, store decisions after. Audit results always go to Nexus

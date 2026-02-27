@@ -71,8 +71,26 @@ All notable changes to CosySim are documented here.
   `logger.debug/warning` calls (system_assistant, phone_assistant, copilot_bridge,
   scheduler_daemon, self_maintenance).
 
+### Web Infrastructure (v0.59b patch)
+- **Central CORS** — added `CORS(app)` in `register_shared_assets()` so all 18 scenes
+  get cross-origin support automatically (was missing from 7 scenes).
+- **Health routes** — added `/api/health` to 7 scenes that were missing it (bedroom,
+  lounge, casino, heist, phone, nexus_panel, gallery) via `BaseScene.register_health_route()`.
+- **Nexus Panel fixes**:
+  - Fixed `nexus_panel.js` syntax error (missing closing brace in chat command handler)
+  - Fixed dashboard stats display — unwrapped `data` layer in API response, mapped correct
+    keys (`knowledge_entries`/`qa_pairs`/`sessions`/`rules` instead of wrong names)
+  - Added `switchTab()` function and click handlers on dashboard recent entries
+  - Made `api()` timeout configurable; increased HAR commit timeout from 30s to 120s
+- **Three.js character rendering** — fixed `_buildHead()` return type in `character_models.js`
+  (was returning bare Group, callers expected `{group: g}`). Added defensive guards in
+  `setCharacterExpression` and `applyState` so 3D errors never block UI updates.
+- **NeonCity scroll** — added `min-height:0` to `.event-log` flex child for proper overflow.
+- **NLM enabled** — set `notebooklm.enabled: true` in config (was false).
+
 ### Test Suite
-- **4,660 tests** across 140+ files (119 new skill tests + 50 fixed by YAML repair)
+- **4,747 tests** across 176 files (87 new NLM/ComfyUI skill tests + 119 board/character/
+  memory/social skill tests + 50 fixed by YAML repair)
 
 ---
 

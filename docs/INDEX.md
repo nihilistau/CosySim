@@ -1,6 +1,6 @@
 # CosySim Documentation Index
 
-> All project documentation in one place. v0.55b — 3,521 tests, 160+ MCP tools, 18 scenes.
+> All project documentation in one place. v0.59b — 4,747 tests, 214 MCP tools, 18 scenes.
 
 ## Getting Started
 
@@ -26,8 +26,8 @@
 
 | Doc | Description |
 |-----|-------------|
-| [Scenes Guide](SCENES.md) | All 13 game scenes — mechanics, APIs, rules |
-| [Skills](SKILLS.md) | @skill decorator, 13 built-in + 13 scene packs (160+ skills) |
+| [Scenes Guide](SCENES.md) | All 18 game scenes — mechanics, APIs, rules |
+| [Skills](SKILLS.md) | @skill decorator, 21 built-in packs (188 skills) |
 | [Admin Guide](ADMIN_GUIDE.md) | Admin panel pages and operations |
 
 ## APIs & Integration
@@ -60,7 +60,7 @@
 |-----|-------------|
 | [Training](TRAINING.md) | Gemma 270M fine-tuning pipeline, datasets, Colab |
 | [Router Training Data](ROUTER_TRAINING.md) | RouterDataCollector, inference capture, tier label export |
-| [Testing](TESTING.md) | Test commands, fixtures, writing tests (3,521 tests, 75+ files) |
+| [Testing](TESTING.md) | Test commands, fixtures, writing tests (4,747 tests, 176 files) |
 
 ## Development
 

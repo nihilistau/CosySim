@@ -19,9 +19,9 @@ session tracking, and prompt versioning.
 audit logging · LMStudio v1 streaming with stateful conversations · Nexus knowledge system
 · InferenceOrchestrator multi-model routing · RouterDataCollector training capture
 
-**Test suite:** 4,660+ tests across 140 files — run before and after changes.
+**Test suite:** 4,747 tests across 176 files — run before and after changes.
 
-**MCP Server:** 108+ tools available via `.vscode/mcp.json` — includes Nexus bridge,
+**MCP Server:** 214 tools available via `.vscode/mcp.json` — includes Nexus bridge,
 skill discovery, and system monitoring tools.
 
 ## MCP Tools Available
@@ -96,7 +96,7 @@ from engine.integrations.anythingllm import get_anythingllm_client  # AnythingLL
 ```
 CosySim/
 ├── engine/         # Core framework — modify carefully
-│   ├── mcp/        # MCPFramework, DialogSystem, GameMCP, Governor, MCP Server (108+ tools)
+│   ├── mcp/        # MCPFramework, DialogSystem, GameMCP, Governor, MCP Server (214 tools)
 │   ├── agents/     # VirtualAgent, InterceptorPipeline, StreamProcessor
 │   ├── lmstudio/   # LMS client, router, conversation, model manager, orchestrator, router_data
 │   ├── scenes/     # BaseScene, SceneManager, SceneRegistry
@@ -112,7 +112,7 @@ CosySim/
 │   ├── scenes/     # 18 scene implementations
 │   └── simulation/ # Database, character system, services
 ├── config/         # YAML/JSON config (default, dev, prod, voices, skills, mcp)
-├── tests/          # pytest suite (140 files, 4,660+ tests)
+├── tests/          # pytest suite (176 files, 4,747 tests)
 ├── docs/           # Documentation (INDEX.md entry point)
 ├── .github/        # Copilot customization (instructions, agents, hooks)
 ├── .vscode/        # VS Code config + MCP server definitions
@@ -201,7 +201,7 @@ Path-specific rules auto-apply based on file patterns:
 ## Documentation
 - Entry point: `docs/INDEX.md`
 - Architecture: `docs/ARCHITECTURE.md`
-- System audit: `docs/SYSTEM_AUDIT.md` (v0.55b, grade A-)
+- System audit: `docs/SYSTEM_AUDIT.md` (v0.59b, grade A)
 - Full doc list: 26 files covering framework, scenes, skills, config, API, testing, training, LMStudio, TTS, characters, admin, Nexus, NLM
 
 ## Nexus Knowledge System
