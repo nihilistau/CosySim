@@ -62,6 +62,11 @@ def _metrics():
     return get_meta_metrics()
 
 
+def _deep_storage():
+    from engine.nexus.nlm_deep_storage import get_deep_storage
+    return get_deep_storage()
+
+
 # ═══════════════════════════════════════════════════════════════════
 # SCHEDULER SKILLS
 # ═══════════════════════════════════════════════════════════════════
@@ -721,3 +726,82 @@ def knowledge_graph_search(query: str) -> str:
 def knowledge_graph_research_tasks() -> str:
     """Auto-create task scheduler entries for detected knowledge gaps."""
     return json.dumps(_graph().create_research_tasks(), default=str)
+
+
+# ═══════════════════════════════════════════════════════════════════
+# NLM DEEP STORAGE SKILLS
+# ═══════════════════════════════════════════════════════════════════
+
+@skill(pack="autonomy", description="Archive a single NLM notebook into Nexus deep storage",
+       tags=["nlm", "deep_storage", "archive", "autonomy"], category=SkillCategory.SYSTEM)
+def deep_storage_archive(notebook_id: str) -> str:
+    """Archive all content from an NLM notebook (metadata, sources, conversations,
+    notes) into Nexus deep storage with chain IDs for retrieval."""
+    return json.dumps(_deep_storage().archive_notebook(notebook_id), default=str)
+
+
+@skill(pack="autonomy", description="Archive ALL NLM notebooks into Nexus deep storage",
+       tags=["nlm", "deep_storage", "archive_all", "autonomy"], category=SkillCategory.SYSTEM)
+def deep_storage_archive_all() -> str:
+    """Pull every NLM notebook into Nexus deep storage. Stores metadata, sources,
+    conversations, notes, and generated content for each notebook."""
+    return json.dumps(_deep_storage().archive_all(), default=str)
+
+
+@skill(pack="autonomy", description="Archive notebook content from a browser HAR capture",
+       tags=["nlm", "deep_storage", "har", "autonomy"], category=SkillCategory.SYSTEM)
+def deep_storage_from_har(har_path: str) -> str:
+    """Extract notebook content from a browser HAR file and store in deep storage."""
+    return json.dumps(_deep_storage().archive_from_har(har_path), default=str)
+
+
+@skill(pack="autonomy", description="Retrieve all archived content for a notebook",
+       tags=["nlm", "deep_storage", "retrieve", "autonomy"], category=SkillCategory.SYSTEM)
+def deep_storage_retrieve(notebook_id: str) -> str:
+    """Get all archived content for a notebook including metadata, sources,
+    conversations, and notes."""
+    return json.dumps(_deep_storage().retrieve(notebook_id), default=str)
+
+
+@skill(pack="autonomy", description="List all archived NLM notebooks",
+       tags=["nlm", "deep_storage", "list", "autonomy"], category=SkillCategory.SYSTEM)
+def deep_storage_list() -> str:
+    """List all notebooks that have been archived in deep storage."""
+    return json.dumps(_deep_storage().list_archives(), default=str)
+
+
+@skill(pack="autonomy", description="Search across all archived NLM conversations",
+       tags=["nlm", "deep_storage", "search", "autonomy"], category=SkillCategory.SYSTEM)
+def deep_storage_search_conversations(query: str) -> str:
+    """Search for conversations across all archived notebooks by keyword."""
+    return json.dumps(_deep_storage().search_conversations(query), default=str)
+
+
+@skill(pack="autonomy", description="Get a full conversation chain by chain ID",
+       tags=["nlm", "deep_storage", "chain", "autonomy"], category=SkillCategory.SYSTEM)
+def deep_storage_get_chain(chain_id: str) -> str:
+    """Retrieve all entries in a conversation chain, ordered chronologically."""
+    return json.dumps(_deep_storage().get_chain(chain_id), default=str)
+
+
+@skill(pack="autonomy", description="Store a conversation in NLM deep storage",
+       tags=["nlm", "deep_storage", "conversation", "autonomy"], category=SkillCategory.SYSTEM)
+def deep_storage_store_conversation(
+    notebook_id: str,
+    messages_json: str,
+    topic: str = "",
+) -> str:
+    """Store a conversation (list of {role, content} messages) in deep storage
+    with a unique chain ID for later retrieval."""
+    messages = json.loads(messages_json)
+    return json.dumps(
+        _deep_storage().store_conversation(notebook_id, messages, topic=topic),
+        default=str,
+    )
+
+
+@skill(pack="autonomy", description="Get NLM deep storage statistics",
+       tags=["nlm", "deep_storage", "stats", "autonomy"], category=SkillCategory.SYSTEM)
+def deep_storage_stats() -> str:
+    """Get statistics on archived notebooks, entries stored, and storage usage."""
+    return json.dumps(_deep_storage().stats(), default=str)
