@@ -26,11 +26,20 @@ def register_shared_assets(app):
     Also auto-injects the navigation bar and system assistant overlay
     into every HTML response via an ``after_request`` hook.
 
+    Enables CORS for cross-scene health checks from the navbar.
+
     Safe to call multiple times — silently skips if already registered.
     """
     if "shared" in app.blueprints:
         return
     from flask import Blueprint
+
+    # Enable CORS so cross-port navbar health checks work
+    try:
+        from flask_cors import CORS
+        CORS(app)
+    except ImportError:
+        pass
 
     shared_bp = Blueprint(
         "shared",

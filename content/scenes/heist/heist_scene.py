@@ -113,6 +113,7 @@ class HeistScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_I
             static_folder=str(scene_dir / "static"),
         )
         register_shared_assets(self.app)
+        self.register_health_route(self.app)
         CORS(self.app)
         self.socketio = SocketIO(self.app, cors_allowed_origins="*", async_mode="threading")
 

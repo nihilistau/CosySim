@@ -641,6 +641,7 @@ async function sendChat() {
     // Unknown command
     appendMsg('assistant', `Unknown command: \`${cmd}\`\n\nAvailable: /stats, /health, /recent, /research, /backup, /backups, /export, /maintain, /auto-backup, /metrics, /training`);
     return;
+  }
 
   // Normal chat — ask the Librarian
   appendMsg('assistant', '<div class="spinner"></div> Thinking...');

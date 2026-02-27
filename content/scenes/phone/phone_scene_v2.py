@@ -197,6 +197,7 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE
             static_folder=str(_STATIC_DIR),
         )
         register_shared_assets(self.app)
+        self.register_health_route(self.app)
         self.app.secret_key = os.urandom(24)
         self.socketio = SocketIO(self.app, cors_allowed_origins="*", async_mode="threading")
 

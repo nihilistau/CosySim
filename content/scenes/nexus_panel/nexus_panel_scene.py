@@ -79,6 +79,7 @@ class NexusPanelScene(BaseScene, NexusSceneMixin):
             self.socketio = None
 
         register_shared_assets(self.app)
+        self.register_health_route(self.app)
 
         # Activity feed — ring buffer of recent events
         self._activity: deque = deque(maxlen=500)
