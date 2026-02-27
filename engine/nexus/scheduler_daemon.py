@@ -601,6 +601,49 @@ def _test_monitor_callback() -> Dict[str, Any]:
     }
 
 
+def _metrics_collect_callback() -> Dict[str, Any]:
+    """Collect and record all system metrics."""
+    from engine.nexus.meta_metrics import get_meta_metrics
+    metrics = get_meta_metrics()
+    collected = metrics.collect_all()
+
+    # Check for regressions
+    alerts = metrics.check_regressions(threshold_pct=10.0)
+    if alerts:
+        # Store regression alerts in Nexus
+        try:
+            from engine.nexus.client import get_nexus_client
+            client = get_nexus_client()
+            alert_text = "\n".join(
+                f"- {a.metric_name}: {a.message}" for a in alerts
+            )
+            client.add_entry(
+                title=f"Metric Alerts: {len(alerts)} regressions detected",
+                content=alert_text,
+                content_type="history",
+                category="system",
+            )
+        except Exception as exc:
+            logger.debug("Could not store metric alerts: %s", exc)
+
+    return {
+        "metrics_collected": len(collected),
+        "alerts": len(alerts),
+    }
+
+
+def _training_sync_callback() -> Dict[str, Any]:
+    """Sync Nexus Q&A into the training flywheel."""
+    from engine.nexus.training_flywheel import get_training_flywheel
+    flywheel = get_training_flywheel()
+    result = flywheel.sync_from_nexus()
+    stats = flywheel.stats()
+    return {
+        "synced": result.get("synced", 0),
+        "total_examples": stats.get("total_examples", 0),
+    }
+
+
 def _register_builtin_tasks(daemon: TaskSchedulerDaemon) -> None:
     """Register all built-in autonomous tasks."""
     daemon.register(
@@ -638,6 +681,18 @@ def _register_builtin_tasks(daemon: TaskSchedulerDaemon) -> None:
         "Test Suite Monitor",
         "daily",
         _test_monitor_callback,
+    )
+    daemon.register(
+        "metrics-collect",
+        "System Metrics Collection",
+        "every_4h",
+        _metrics_collect_callback,
+    )
+    daemon.register(
+        "training-sync",
+        "Training Data Sync",
+        "daily",
+        _training_sync_callback,
     )
 
 

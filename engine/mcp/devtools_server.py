@@ -974,7 +974,132 @@ def task_list_templates() -> str:
         return json.dumps({"error": str(e)})
 
 
-# ── Resources ─────────────────────────────────────────────────────────
+@mcp.tool()
+def diagnose_test_failures(pytest_output: str) -> str:
+    """Auto-diagnose test failures from pytest output. Parses failures,
+    checks Nexus for prior fixes, applies heuristics, asks NLM, stores
+    diagnoses, and creates fix tasks. Returns root causes and suggested fixes."""
+    try:
+        from engine.nexus.auto_diagnosis import get_auto_diagnosis
+        return json.dumps(get_auto_diagnosis().full_pipeline(pytest_output), indent=2, default=str)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def diagnose_test_file(test_file: str, test_name: str = "") -> str:
+    """Run a test file, auto-diagnose failures, and create fix tasks.
+    Returns diagnoses with root cause, confidence, and suggested fixes."""
+    try:
+        from engine.nexus.auto_diagnosis import get_auto_diagnosis
+        diag = get_auto_diagnosis()
+        diagnoses = diag.diagnose_file(test_file, test_name)
+        tasks = diag.create_fix_tasks(diagnoses)
+        return json.dumps({
+            "failures_found": len(diagnoses),
+            "diagnoses": [
+                {
+                    "test": f"{d.failure.test_file}::{d.failure.test_name}",
+                    "error": d.failure.error_type,
+                    "root_cause": d.root_cause[:200],
+                    "suggested_fix": d.suggested_fix[:200],
+                    "confidence": d.confidence,
+                    "source": d.source,
+                }
+                for d in diagnoses
+            ],
+            "tasks_created": len(tasks),
+        }, indent=2, default=str)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def training_stats() -> str:
+    """Get training data flywheel statistics — example counts by source,
+    total examples, export history, and quality distribution."""
+    try:
+        from engine.nexus.training_flywheel import get_training_flywheel
+        return json.dumps(get_training_flywheel().stats(), indent=2, default=str)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def training_export(format: str = "jsonl", min_quality: float = 0.5) -> str:
+    """Export training data for model fine-tuning. format: 'jsonl' (instruction),
+    'sharegpt' (conversation), or 'dpo' (preference). Returns export path and count."""
+    try:
+        from engine.nexus.training_flywheel import get_training_flywheel
+        fw = get_training_flywheel()
+        if format == "sharegpt":
+            return json.dumps(fw.export_sharegpt(min_quality=min_quality), indent=2, default=str)
+        elif format == "dpo":
+            return json.dumps(fw.export_dpo(), indent=2, default=str)
+        else:
+            return json.dumps(fw.export_jsonl(min_quality=min_quality), indent=2, default=str)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def training_sync_nexus() -> str:
+    """Sync all Nexus Q&A pairs into the training flywheel for fine-tuning.
+    Deduplicates against existing examples."""
+    try:
+        from engine.nexus.training_flywheel import get_training_flywheel
+        return json.dumps(get_training_flywheel().sync_from_nexus(), indent=2, default=str)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def metrics_dashboard(hours: int = 24) -> str:
+    """Generate a full system metrics dashboard in markdown with trends,
+    comparisons, and active alerts."""
+    try:
+        from engine.nexus.meta_metrics import get_meta_metrics
+        return get_meta_metrics().dashboard(hours=hours)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def metrics_collect_all() -> str:
+    """Collect and record all current system metrics — VRAM, Nexus stats,
+    inference stats, test counts. Returns recorded values."""
+    try:
+        from engine.nexus.meta_metrics import get_meta_metrics
+        return json.dumps(get_meta_metrics().collect_all(), indent=2, default=str)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def metrics_check_regressions(threshold_pct: float = 10.0) -> str:
+    """Check all tracked metrics for regressions against baselines.
+    Returns alerts for any metrics that degraded beyond the threshold."""
+    try:
+        from engine.nexus.meta_metrics import get_meta_metrics
+        alerts = get_meta_metrics().check_regressions(threshold_pct=threshold_pct)
+        return json.dumps(
+            [{"metric": a.metric_name, "type": a.alert_type, "message": a.message,
+              "current": a.current_value, "baseline": a.baseline_value}
+             for a in alerts],
+            indent=2, default=str,
+        )
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def metrics_snapshot() -> str:
+    """Get the most recent value for every tracked metric."""
+    try:
+        from engine.nexus.meta_metrics import get_meta_metrics
+        return json.dumps(get_meta_metrics().snapshot(), indent=2, default=str)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.resource("nexus://status")
 def resource_nexus_status() -> str:

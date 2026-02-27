@@ -47,6 +47,21 @@ def _tasks():
     return get_task_scheduler()
 
 
+def _diagnosis():
+    from engine.nexus.auto_diagnosis import get_auto_diagnosis
+    return get_auto_diagnosis()
+
+
+def _flywheel():
+    from engine.nexus.training_flywheel import get_training_flywheel
+    return get_training_flywheel()
+
+
+def _metrics():
+    from engine.nexus.meta_metrics import get_meta_metrics
+    return get_meta_metrics()
+
+
 # ═══════════════════════════════════════════════════════════════════
 # SCHEDULER SKILLS
 # ═══════════════════════════════════════════════════════════════════
@@ -353,3 +368,183 @@ def task_list_templates() -> str:
     """Show all available task templates with their default priorities,
     complexities, and tags."""
     return json.dumps(_tasks().list_templates(), indent=2, default=str)
+
+
+# ═══════════════════════════════════════════════════════════════════
+# AUTO-DIAGNOSIS SKILLS
+# ═══════════════════════════════════════════════════════════════════
+
+@skill(pack="autonomy", description="Diagnose test failures from pytest output",
+       tags=["diagnosis", "testing", "auto-fix", "autonomy"], category=SkillCategory.SYSTEM)
+def diagnose_failures(pytest_output: str) -> str:
+    """Parse pytest output, diagnose each failure using Nexus cache and NLM,
+    and create fix tasks for the agent fleet. Returns diagnoses with root cause,
+    suggested fix, and confidence."""
+    result = _diagnosis().full_pipeline(pytest_output)
+    return json.dumps(result, indent=2, default=str)
+
+
+@skill(pack="autonomy", description="Run a test file and auto-diagnose failures",
+       tags=["diagnosis", "testing", "auto-fix", "autonomy"], category=SkillCategory.SYSTEM,
+       cooldown=30)
+def diagnose_test_file(test_file: str, test_name: str = "") -> str:
+    """Run a specific test file, diagnose any failures, and create fix tasks.
+    Returns diagnoses with root cause and suggested fix."""
+    diagnoses = _diagnosis().diagnose_file(test_file, test_name)
+    tasks = _diagnosis().create_fix_tasks(diagnoses)
+    return json.dumps({
+        "failures_found": len(diagnoses),
+        "diagnoses": [
+            {
+                "test": f"{d.failure.test_file}::{d.failure.test_name}",
+                "error": d.failure.error_type,
+                "root_cause": d.root_cause[:200],
+                "suggested_fix": d.suggested_fix[:200],
+                "confidence": d.confidence,
+                "source": d.source,
+            }
+            for d in diagnoses
+        ],
+        "tasks_created": len(tasks),
+    }, indent=2, default=str)
+
+
+# ═══════════════════════════════════════════════════════════════════
+# TRAINING DATA FLYWHEEL SKILLS
+# ═══════════════════════════════════════════════════════════════════
+
+@skill(pack="autonomy", description="Collect a training example from a completed task",
+       tags=["training", "flywheel", "collect", "autonomy"], category=SkillCategory.SYSTEM)
+def training_collect_task(task_description: str, result: str, model: str = "") -> str:
+    """Store a task completion as a training example for model fine-tuning.
+    Records the task description as input and the result as output."""
+    # Create a lightweight task-like object
+    class _TaskProxy:
+        def __init__(self, desc: str) -> None:
+            self.title = desc[:100]
+            self.description = desc
+            self.tags: List[str] = []
+            self.complexity = "medium"
+            self.assigned_agent = model
+            self.id = ""
+            self.completed_at = 0.0
+            self.created_at = 0.0
+    example_id = _flywheel().collect_from_task(_TaskProxy(task_description), result, model)
+    return json.dumps({"id": example_id, "source": "task"})
+
+
+@skill(pack="autonomy", description="Collect a Q&A pair as training data",
+       tags=["training", "flywheel", "collect", "autonomy"], category=SkillCategory.SYSTEM)
+def training_collect_qa(question: str, answer: str, source: str = "manual") -> str:
+    """Store a question-answer pair as instruction-tuning training data."""
+    example_id = _flywheel().collect_from_qa(question, answer, source)
+    return json.dumps({"id": example_id, "source": "qa"})
+
+
+@skill(pack="autonomy", description="Export training data in JSONL format",
+       tags=["training", "flywheel", "export", "autonomy"], category=SkillCategory.SYSTEM,
+       cooldown=30)
+def training_export_jsonl(min_quality: str = "0.5", source_filter: str = "") -> str:
+    """Export training examples as JSONL for instruction tuning.
+    Returns path and count of exported examples."""
+    result = _flywheel().export_jsonl(
+        min_quality=float(min_quality),
+        source_filter=source_filter or "",
+    )
+    return json.dumps(result, indent=2, default=str)
+
+
+@skill(pack="autonomy", description="Export training data in ShareGPT format",
+       tags=["training", "flywheel", "export", "autonomy"], category=SkillCategory.SYSTEM,
+       cooldown=30)
+def training_export_sharegpt(min_quality: str = "0.5") -> str:
+    """Export training examples in ShareGPT conversation format.
+    Returns path and count of exported conversations."""
+    result = _flywheel().export_sharegpt(min_quality=float(min_quality))
+    return json.dumps(result, indent=2, default=str)
+
+
+@skill(pack="autonomy", description="Export preference data in DPO format",
+       tags=["training", "flywheel", "export", "dpo", "autonomy"], category=SkillCategory.SYSTEM,
+       cooldown=30)
+def training_export_dpo() -> str:
+    """Export preference pairs (chosen/rejected) for DPO training.
+    Returns path and count of exported pairs."""
+    result = _flywheel().export_dpo()
+    return json.dumps(result, indent=2, default=str)
+
+
+@skill(pack="autonomy", description="Sync training data from Nexus Q&A pairs",
+       tags=["training", "flywheel", "sync", "autonomy"], category=SkillCategory.SYSTEM,
+       cooldown=60)
+def training_sync_nexus() -> str:
+    """Pull all Q&A pairs from Nexus into the training flywheel.
+    Deduplicates against existing examples."""
+    result = _flywheel().sync_from_nexus()
+    return json.dumps(result, indent=2, default=str)
+
+
+@skill(pack="autonomy", description="Get training flywheel statistics",
+       tags=["training", "flywheel", "stats", "autonomy"], category=SkillCategory.SYSTEM)
+def training_stats() -> str:
+    """Show training data counts by source, total examples, export history."""
+    return json.dumps(_flywheel().stats(), indent=2, default=str)
+
+
+# ═══════════════════════════════════════════════════════════════════
+# META-METRICS DASHBOARD SKILLS
+# ═══════════════════════════════════════════════════════════════════
+
+@skill(pack="autonomy", description="Record a metric value",
+       tags=["metrics", "record", "autonomy"], category=SkillCategory.SYSTEM)
+def metrics_record(name: str, value: str) -> str:
+    """Record a named metric value. Name uses dot-notation (e.g.
+    'nexus.entries.total', 'llm.latency.avg_ms')."""
+    _metrics().record(name, float(value))
+    return json.dumps({"recorded": True, "name": name, "value": float(value)})
+
+
+@skill(pack="autonomy", description="Get metric trend over time",
+       tags=["metrics", "trend", "autonomy"], category=SkillCategory.SYSTEM)
+def metrics_trend(name: str, days: str = "7") -> str:
+    """Analyze a metric's trend: direction, rate of change, min, max, avg
+    over the specified number of days."""
+    return json.dumps(_metrics().trend(name, days=int(days)), indent=2, default=str)
+
+
+@skill(pack="autonomy", description="Check all metrics for regressions",
+       tags=["metrics", "regressions", "alerting", "autonomy"], category=SkillCategory.SYSTEM)
+def metrics_check_regressions(threshold_pct: str = "10") -> str:
+    """Compare recent metrics against baselines and flag regressions
+    beyond the threshold percentage."""
+    alerts = _metrics().check_regressions(threshold_pct=float(threshold_pct))
+    return json.dumps(
+        [{"metric": a.metric_name, "type": a.alert_type, "message": a.message,
+          "current": a.current_value, "baseline": a.baseline_value}
+         for a in alerts],
+        indent=2, default=str,
+    )
+
+
+@skill(pack="autonomy", description="Generate a full system metrics dashboard",
+       tags=["metrics", "dashboard", "autonomy"], category=SkillCategory.SYSTEM)
+def metrics_dashboard(hours: str = "24") -> str:
+    """Generate a markdown dashboard with all system metrics, trends,
+    and active alerts."""
+    return _metrics().dashboard(hours=int(hours))
+
+
+@skill(pack="autonomy", description="Collect and record all system metrics now",
+       tags=["metrics", "collect", "autonomy"], category=SkillCategory.SYSTEM,
+       cooldown=30)
+def metrics_collect_all() -> str:
+    """Collect current system metrics (VRAM, Nexus stats, inference stats)
+    and record them all. Returns the collected values."""
+    return json.dumps(_metrics().collect_all(), indent=2, default=str)
+
+
+@skill(pack="autonomy", description="Take a snapshot of all latest metrics",
+       tags=["metrics", "snapshot", "autonomy"], category=SkillCategory.SYSTEM)
+def metrics_snapshot() -> str:
+    """Return the most recent value for every tracked metric."""
+    return json.dumps(_metrics().snapshot(), indent=2, default=str)
