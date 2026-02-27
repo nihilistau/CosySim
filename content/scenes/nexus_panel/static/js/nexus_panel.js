@@ -20,22 +20,24 @@ if (typeof io !== 'undefined') {
 }
 
 // ── Tab Navigation ──────────────────────────────────────────────────
+function switchTab(name) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  const btn = document.querySelector(`.tab-btn[data-panel="${name}"]`);
+  if (btn) btn.classList.add('active');
+  const panel = document.getElementById('panel-' + name);
+  if (panel) panel.classList.add('active');
+  if (name === 'dashboard') loadDashboard();
+  else if (name === 'explorer') loadEntries();
+  else if (name === 'copilot') loadCopilotPanel();
+  else if (name === 'workflows') loadResearchSessions();
+  else if (name === 'ingestion') loadIngestionPanel();
+  else if (name === 'nlmlab') loadNLMLabPanel();
+}
+
 document.querySelectorAll('.tab-btn').forEach(btn => {
   btn.addEventListener('click', () => {
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-    btn.classList.add('active');
-    const panel = document.getElementById('panel-' + btn.dataset.panel);
-    if (panel) panel.classList.add('active');
-
-    // Lazy-load panel data
-    const name = btn.dataset.panel;
-    if (name === 'dashboard') loadDashboard();
-    else if (name === 'explorer') loadEntries();
-    else if (name === 'copilot') loadCopilotPanel();
-    else if (name === 'workflows') loadResearchSessions();
-    else if (name === 'ingestion') loadIngestionPanel();
-    else if (name === 'nlmlab') loadNLMLabPanel();
+    switchTab(btn.dataset.panel);
   });
 });
 
@@ -71,9 +73,9 @@ async function checkNLMStatus() {
 }
 
 // ── Fetch Helper ────────────────────────────────────────────────────
-async function api(path, opts = {}) {
+async function api(path, opts = {}, timeoutMs = 30000) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 30000);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(API + path, { ...opts, signal: controller.signal });
     clearTimeout(timeout);
@@ -87,8 +89,8 @@ async function api(path, opts = {}) {
     clearTimeout(timeout);
     if (e.name === 'AbortError') {
       console.error('API timeout:', path);
-      showToast('Request timed out — is Nexus running?', 'error');
-      return { error: 'Request timed out after 30s' };
+      showToast(`Request timed out after ${Math.round(timeoutMs/1000)}s`, 'error');
+      return { error: `Request timed out after ${Math.round(timeoutMs/1000)}s` };
     }
     console.error('API error:', path, e);
     return { error: e.message };
@@ -191,15 +193,16 @@ document.getElementById('clear-activity').addEventListener('click', () => {
 // ── Dashboard ───────────────────────────────────────────────────────
 async function loadDashboard() {
   const data = await checkStatus();
-  const ns = data.nexus_stats || {};
+  const nsRaw = data.nexus_stats || {};
+  const ns = nsRaw.data || nsRaw;
   const ps = data.panel_stats || {};
 
   const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
-  set('dash-entries', ns.total_entries ?? '—');
-  set('dash-qa', ns.total_qa ?? '—');
-  set('dash-sessions', ns.total_sessions ?? '—');
-  set('dash-rules', ns.total_rules ?? '—');
-  set('dash-prompts', ns.total_prompts ?? '—');
+  set('dash-entries', ns.knowledge_entries ?? ns.total_entries ?? '—');
+  set('dash-qa', ns.qa_pairs ?? ns.total_qa ?? '—');
+  set('dash-sessions', ns.sessions ?? ns.total_sessions ?? '—');
+  set('dash-rules', ns.rules ?? ns.total_rules ?? '—');
+  set('dash-prompts', ns.plugins ?? ns.total_prompts ?? '—');
   set('dash-tokens', (ps.tokens_saved_est || 0).toLocaleString());
 
   // Health
@@ -228,8 +231,8 @@ async function loadDashboard() {
   const recentEl = document.getElementById('recent-entries');
   const entries = await api('/api/entries?limit=8');
   if (Array.isArray(entries) && entries.length > 0) {
-    recentEl.innerHTML = entries.map(e => `
-      <div class="entry-item" style="display:flex;justify-content:space-between;align-items:center">
+    recentEl.innerHTML = entries.map((e, i) => `
+      <div class="entry-item" data-dash-idx="${i}" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer">
         <div>
           <span class="entry-type">${esc(e.content_type || 'note')}</span>
           <span style="margin-left:8px;font-weight:500">${esc(e.title || 'Untitled')}</span>
@@ -237,6 +240,13 @@ async function loadDashboard() {
         <span style="font-size:11px;color:var(--text-muted)">${esc(e.category || '')}</span>
       </div>
     `).join('');
+    recentEl.querySelectorAll('.entry-item').forEach(item => {
+      item.addEventListener('click', () => {
+        const idx = parseInt(item.dataset.dashIdx);
+        switchTab('explorer');
+        showEntry(entries[idx]);
+      });
+    });
   } else {
     recentEl.innerHTML = '<p class="muted">No entries yet</p>';
   }
@@ -996,7 +1006,7 @@ document.getElementById('har-commit-btn')?.addEventListener('click', async () =>
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ tmp_path: harTmpPath, items })
-  });
+  }, 120000);
   if (data.error) {
     resultEl.innerHTML = `<p style="color:var(--danger)">${esc(data.error)}</p>`;
   } else {

@@ -533,7 +533,7 @@ anythingllm:
 
 # NotebookLM MCP integration
 notebooklm:
-  enabled: false                       # enable NotebookLM MCP bridge
+  enabled: true                        # enable NotebookLM MCP bridge
   proxy_url: "http://localhost:8800"    # CosySim-side proxy URL
   node_cmd: "node"                     # Node.js command
   server_path: ""                      # path to notebooklm-mcp dist/index.js

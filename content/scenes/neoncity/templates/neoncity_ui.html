@@ -51,7 +51,7 @@ body { background:var(--bg); color:var(--text); font-family:var(--font); height:
 
 /* RIGHT: Log + Controls */
 .right-panel { background:var(--panel); border-left:1px solid var(--border); overflow-y:auto; padding:12px; display:flex; flex-direction:column; gap:8px; }
-.event-log { flex:1; overflow-y:auto; font-size:0.75rem; line-height:1.5; }
+.event-log { flex:1; min-height:0; overflow-y:auto; font-size:0.75rem; line-height:1.5; }
 .event-log .entry { padding:4px; border-bottom:1px solid #1a1a2e; }
 .event-log .entry.combat { color:var(--red); }
 .event-log .entry.loot { color:var(--green); }
