@@ -668,6 +668,32 @@ def _experiment_scan_callback() -> Dict[str, Any]:
     }
 
 
+def _governance_audit_callback() -> Dict[str, Any]:
+    """Validate key source files against governance rules and store results."""
+    from engine.nexus.governance_rules import get_governance_manager
+    gm = get_governance_manager()
+    report = gm.stats()
+
+    # Store audit in Nexus
+    try:
+        from engine.nexus.client import get_nexus_client
+        client = get_nexus_client()
+        client.add_entry(
+            title="[Audit] Governance validation",
+            content=json.dumps(report, indent=2, default=str),
+            content_type="audit",
+            category="governance",
+            tags=["governance", "audit", "automated"],
+        )
+    except Exception as exc:
+        logger.debug("Could not store governance audit: %s", exc)
+
+    return {
+        "total_rules": report.get("total_rules", 0),
+        "categories": list(report.get("by_category", {}).keys()),
+    }
+
+
 def _register_builtin_tasks(daemon: TaskSchedulerDaemon) -> None:
     """Register all built-in autonomous tasks."""
     daemon.register(
@@ -729,6 +755,12 @@ def _register_builtin_tasks(daemon: TaskSchedulerDaemon) -> None:
         "Experiment Proposal Scan",
         "weekly",
         _experiment_scan_callback,
+    )
+    daemon.register(
+        "governance-audit",
+        "Governance Rules Audit",
+        "weekly",
+        _governance_audit_callback,
     )
 
 

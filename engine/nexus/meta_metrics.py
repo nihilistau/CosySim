@@ -587,7 +587,7 @@ class MetaMetrics:
 
             for name in metric_names:
                 current = self._latest_value(name)
-                short_trend = self.trend(name, days=max(hours / 24, 1))
+                short_trend = self.trend(name, days=int(max(hours / 24, 1)))
                 long_trend = self.trend(name, days=7)
                 short_arrow = self._trend_arrow(short_trend)
                 long_arrow = self._trend_arrow(long_trend)

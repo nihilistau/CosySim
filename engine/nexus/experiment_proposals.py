@@ -384,7 +384,7 @@ class ExperimentProposer:
                 try:
                     trend = mm.trend(name, days=1)
                     if trend.get("count", 0) > 0:
-                        result[name] = trend.get("latest", 0.0)
+                        result[name] = trend.get("last", 0.0)
                 except Exception:
                     pass
         except Exception as exc:

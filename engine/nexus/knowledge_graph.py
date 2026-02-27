@@ -43,6 +43,13 @@ _STOP_WORDS: Set[str] = {
     "i", "we", "you", "he", "she", "they", "me", "us", "him", "her",
     "them", "my", "our", "your", "his", "their", "use", "using", "used",
     "also", "get", "set", "new", "see", "like", "make", "well", "way",
+    # Domain stop words — generic programming/system terms
+    "args", "kwargs", "self", "cls", "none", "true", "false", "return",
+    "class", "def", "import", "from", "else", "elif", "try", "except",
+    "output", "input", "data", "value", "values", "result", "results",
+    "name", "type", "list", "dict", "str", "int", "float", "bool",
+    "file", "path", "line", "code", "function", "method", "module",
+    "error", "warning", "info", "debug", "log", "logger", "logging",
 }
 
 # Minimum topic length and frequency
@@ -143,7 +150,14 @@ class KnowledgeGraph:
             category = str(entry.get("category", ""))
             tags = entry.get("tags", [])
             if isinstance(tags, str):
-                tags = [t.strip() for t in tags.split(",")]
+                # Handle JSON-encoded tag arrays e.g. '["tag1", "tag2"]'
+                if tags.startswith("["):
+                    try:
+                        tags = json.loads(tags)
+                    except (json.JSONDecodeError, TypeError):
+                        tags = [t.strip() for t in tags.split(",")]
+                else:
+                    tags = [t.strip() for t in tags.split(",")]
 
             topics = self._extract_topics(title, content, tags)
 

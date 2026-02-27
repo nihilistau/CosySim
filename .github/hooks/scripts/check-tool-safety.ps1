@@ -38,10 +38,43 @@ try {
                     $session = Get-Content $sessionFile -Raw | ConvertFrom-Json -ErrorAction SilentlyContinue
                     if ($session.nexus_consulted) { $nexusUsed = $true }
                 }
+
+                # Run governance validation on file edits
+                $governanceMsg = ""
+                if ($parsed.input -and $parsed.input.path) {
+                    try {
+                        $filePath = $parsed.input.path
+                        $valResult = python -c "
+import json, sys
+try:
+    from engine.nexus.governance_rules import get_governance_manager
+    gm = get_governance_manager()
+    r = gm.validate_file('$filePath')
+    print(json.dumps(r))
+except Exception as e:
+    print(json.dumps({'valid': True, 'note': str(e)}))
+" 2>$null
+                        if ($valResult) {
+                            $val = $valResult | ConvertFrom-Json -ErrorAction SilentlyContinue
+                            if ($val -and -not $val.valid) {
+                                $governanceMsg = "Governance: " + ($val.violations -join "; ")
+                            }
+                        }
+                    } catch {
+                        # Governance check failed — don't block
+                    }
+                }
+
                 if (-not $nexusUsed) {
-                    Write-Output '{"decision": "approve", "message": "Reminder: Consider searching Nexus before editing code (nexus_search or nlm_ask)."}'
+                    $msg = "Reminder: Consider searching Nexus before editing code (nexus_search or nlm_ask)."
+                    if ($governanceMsg) { $msg = $msg + " " + $governanceMsg }
+                    Write-Output ('{"decision": "approve", "message": "' + $msg + '"}')
                 } else {
-                    Write-Output '{"decision": "approve"}'
+                    if ($governanceMsg) {
+                        Write-Output ('{"decision": "approve", "message": "' + $governanceMsg + '"}')
+                    } else {
+                        Write-Output '{"decision": "approve"}'
+                    }
                 }
             } else {
                 # Track nexus tool usage

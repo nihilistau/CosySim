@@ -74,6 +74,13 @@ class HubScene(BaseScene):
         register_shared_assets(self.app)
         self.register_health_route(self.app)
 
+        # Register news feed API blueprint
+        try:
+            from engine.nexus.news_feed_api import create_news_blueprint
+            self.app.register_blueprint(create_news_blueprint(), url_prefix="/api/news")
+        except Exception as exc:
+            logger.debug("News feed API not available: %s", exc)
+
         self._setup_routes()
         logger.info("HubScene created on port %d", port)
 
