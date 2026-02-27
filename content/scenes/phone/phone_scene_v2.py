@@ -1276,6 +1276,136 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE
             except Exception as exc:
                 return jsonify({"ok": False, "error": str(exc)}), 500
 
+        # ── System Dashboard Routes ──────────────────────────────────
+
+        @app.route("/api/system/dashboard")
+        def system_dashboard():
+            """Aggregated system health for mobile dashboard."""
+            try:
+                fw = get_framework()
+                status = fw.get_status() if hasattr(fw, "get_status") else {}
+
+                # LMStudio status
+                lms = {"online": False}
+                try:
+                    from engine.lmstudio.model_manager import get_model_manager
+                    mm = get_model_manager()
+                    lms = {"online": True, **mm.status()}
+                except Exception:
+                    pass
+
+                # Nexus health
+                nexus = {"online": False}
+                try:
+                    from engine.nexus.client import get_nexus_client
+                    client = get_nexus_client()
+                    health = client.health() if hasattr(client, "health") else {}
+                    nexus = {"online": True, **(health if isinstance(health, dict) else {})}
+                except Exception:
+                    pass
+
+                # Scheduler status
+                scheduler = {"running": False}
+                try:
+                    from engine.nexus.scheduler_daemon import get_scheduler_daemon
+                    sd = get_scheduler_daemon()
+                    scheduler = sd.status()
+                except Exception:
+                    pass
+
+                # Scene registry
+                scenes = []
+                try:
+                    from engine.scenes.scene_registry import get_scene_registry
+                    reg = get_scene_registry()
+                    scenes = reg.list_scenes() if hasattr(reg, "list_scenes") else []
+                except Exception:
+                    pass
+
+                # Agent profiles
+                agents = []
+                try:
+                    agents = fw.list_agent_profiles() if hasattr(fw, "list_agent_profiles") else []
+                except Exception:
+                    pass
+
+                # Meta metrics summary
+                metrics = {}
+                try:
+                    from engine.nexus.meta_metrics import get_meta_metrics
+                    mm_inst = get_meta_metrics()
+                    metrics = mm_inst.latest_snapshot() if hasattr(mm_inst, "latest_snapshot") else {}
+                except Exception:
+                    pass
+
+                return jsonify({
+                    "ok": True,
+                    "mcp": status,
+                    "lmstudio": lms,
+                    "nexus": nexus,
+                    "scheduler": scheduler,
+                    "scenes": scenes,
+                    "agents": agents,
+                    "metrics": metrics,
+                })
+            except Exception as exc:
+                return jsonify({"ok": False, "error": str(exc)}), 500
+
+        @app.route("/api/system/chat", methods=["POST"])
+        def system_chat():
+            """Chat with the system assistant from mobile."""
+            try:
+                data = request.get_json(force=True)
+                message = data.get("message", "").strip()
+                if not message:
+                    return jsonify({"ok": False, "error": "No message"}), 400
+
+                # Try system assistant first
+                try:
+                    from engine.assistant.system_assistant import get_assistant
+                    assistant = get_assistant()
+                    reply = assistant.chat(message)
+                    return jsonify({"ok": True, "reply": reply, "source": "assistant"})
+                except Exception:
+                    pass
+
+                # Fallback to Nexus Q&A
+                try:
+                    from engine.nexus.client import get_nexus_client
+                    client = get_nexus_client()
+                    result = client.ask(message)
+                    if result and result.get("answer"):
+                        return jsonify({"ok": True, "reply": result["answer"], "source": "nexus"})
+                except Exception:
+                    pass
+
+                return jsonify({"ok": True, "reply": "System offline — try again later.", "source": "fallback"})
+            except Exception as exc:
+                return jsonify({"ok": False, "error": str(exc)}), 500
+
+        @app.route("/api/system/scheduler/tasks")
+        def system_scheduler_tasks():
+            """Get scheduler task list and status."""
+            try:
+                from engine.nexus.scheduler_daemon import get_scheduler_daemon
+                sd = get_scheduler_daemon()
+                tasks = sd.list_tasks() if hasattr(sd, "list_tasks") else []
+                return jsonify({"ok": True, "tasks": tasks})
+            except Exception as exc:
+                return jsonify({"ok": False, "error": str(exc)}), 500
+
+        @app.route("/api/system/nexus/recent")
+        def system_nexus_recent():
+            """Get recent Nexus entries for the dashboard."""
+            try:
+                from engine.nexus.client import get_nexus_client
+                client = get_nexus_client()
+                limit = int(request.args.get("limit", 10))
+                results = client.search("*", limit=limit)
+                return jsonify({"ok": True, "entries": results or []})
+            except Exception as exc:
+                return jsonify({"ok": False, "error": str(exc)}), 500
+
         # ── Hacker App Routes ────────────────────────────────────────
 
         @app.route("/api/hacker/targets")

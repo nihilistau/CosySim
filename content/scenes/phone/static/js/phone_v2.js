@@ -1518,6 +1518,199 @@
   });
 
   /* ══════════════════════════════════════════════════════════
+     APP: System Dashboard
+  ══════════════════════════════════════════════════════════ */
+
+  CosyPhone.registerApp('system', {
+    name: 'System', icon: '🖥️', color: 'linear-gradient(135deg, #0A84FF, #5E5CE6)',
+    _data: null,
+    _chatHistory: [],
+
+    render(body) {
+      body.innerHTML = `
+        <div class="section-header">System Dashboard</div>
+        <div class="section-sub">CosySim status & controls</div>
+        <div id="sys-tabs" style="display:flex;gap:8px;padding:8px 16px;overflow-x:auto">
+          <button class="news-filter-btn active" data-tab="overview" onclick="CosyPhone.apps.system._switchTab('overview',this)">Overview</button>
+          <button class="news-filter-btn" data-tab="agents" onclick="CosyPhone.apps.system._switchTab('agents',this)">Agents</button>
+          <button class="news-filter-btn" data-tab="scheduler" onclick="CosyPhone.apps.system._switchTab('scheduler',this)">Scheduler</button>
+          <button class="news-filter-btn" data-tab="chat" onclick="CosyPhone.apps.system._switchTab('chat',this)">Chat</button>
+        </div>
+        <div id="sys-content" style="padding:0 16px 80px"></div>`;
+      this._loadDashboard();
+    },
+
+    _switchTab(tab, btn) {
+      qs('#sys-tabs').querySelectorAll('.news-filter-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      if (tab === 'overview') this._renderOverview();
+      else if (tab === 'agents') this._renderAgents();
+      else if (tab === 'scheduler') this._renderScheduler();
+      else if (tab === 'chat') this._renderChat();
+    },
+
+    async _loadDashboard() {
+      const c = qs('#sys-content');
+      if (!c) return;
+      c.innerHTML = '<div class="news-loading"><div class="spinner"></div>Loading system status…</div>';
+      try {
+        const r = await fetch('/api/system/dashboard');
+        this._data = await r.json();
+        this._renderOverview();
+      } catch (e) {
+        c.innerHTML = '<div class="news-empty"><div class="big-icon">⚠️</div><h3>Dashboard Unavailable</h3></div>';
+      }
+    },
+
+    _renderOverview() {
+      const c = qs('#sys-content');
+      if (!c || !this._data) return;
+      const d = this._data;
+      const dot = (on) => `<span style="color:${on ? 'var(--green)' : 'var(--red)'}">●</span>`;
+      const lms = d.lmstudio || {};
+      const nex = d.nexus || {};
+      const sch = d.scheduler || {};
+      const agents = d.agents || [];
+      const scenes = d.scenes || [];
+
+      c.innerHTML = `
+        <div class="list-group" style="margin-top:8px">
+          <div class="list-row"><span class="list-icon">🤖</span><span class="list-label">LMStudio</span><span class="list-value">${dot(lms.online)} ${lms.online ? 'Online' : 'Offline'}</span></div>
+          <div class="list-row"><span class="list-icon">🧠</span><span class="list-label">Nexus</span><span class="list-value">${dot(nex.online)} ${nex.online ? 'Online' : 'Offline'}</span></div>
+          <div class="list-row"><span class="list-icon">⏱️</span><span class="list-label">Scheduler</span><span class="list-value">${dot(sch.running)} ${sch.running ? 'Running' : 'Stopped'}</span></div>
+          <div class="list-row"><span class="list-icon">🎭</span><span class="list-label">Agents</span><span class="list-value">${agents.length}</span></div>
+          <div class="list-row"><span class="list-icon">🎬</span><span class="list-label">Scenes</span><span class="list-value">${scenes.length || '—'}</span></div>
+        </div>
+
+        ${lms.loaded_models ? `
+          <div class="section-sub" style="margin-top:12px">Loaded Models</div>
+          <div class="list-group">
+            ${(lms.loaded_models || []).map(m => `<div class="list-row"><span class="list-icon">📦</span><span class="list-label" style="font-size:12px">${this._esc(typeof m === 'string' ? m : m.id || m.name || JSON.stringify(m))}</span></div>`).join('')}
+          </div>` : ''}
+
+        ${d.metrics && Object.keys(d.metrics).length ? `
+          <div class="section-sub" style="margin-top:12px">Metrics</div>
+          <div class="list-group">
+            ${Object.entries(d.metrics).slice(0,6).map(([k,v]) => `<div class="list-row"><span class="list-label">${this._esc(k)}</span><span class="list-value">${typeof v === 'number' ? v.toFixed(1) : v}</span></div>`).join('')}
+          </div>` : ''}
+
+        <button class="pill-btn pill-primary" style="margin-top:16px;width:100%" onclick="CosyPhone.apps.system._loadDashboard()">↻ Refresh</button>`;
+    },
+
+    _renderAgents() {
+      const c = qs('#sys-content');
+      if (!c || !this._data) return;
+      const agents = this._data.agents || [];
+      if (!agents.length) {
+        c.innerHTML = '<div class="news-empty"><div class="big-icon">🤖</div><h3>No Agents</h3></div>';
+        return;
+      }
+      c.innerHTML = `
+        <div class="list-group" style="margin-top:8px">
+          ${agents.map(a => {
+            const name = typeof a === 'string' ? a : a.name || a.id || '?';
+            const model = typeof a === 'object' ? (a.model || a.profile || '') : '';
+            return `<div class="list-row"><span class="list-icon">🤖</span><span class="list-label">${this._esc(name)}</span><span class="list-value" style="font-size:11px">${this._esc(model)}</span></div>`;
+          }).join('')}
+        </div>`;
+    },
+
+    async _renderScheduler() {
+      const c = qs('#sys-content');
+      if (!c) return;
+      c.innerHTML = '<div class="news-loading"><div class="spinner"></div>Loading tasks…</div>';
+      try {
+        const r = await fetch('/api/system/scheduler/tasks');
+        const d = await r.json();
+        const tasks = d.tasks || [];
+        if (!tasks.length) {
+          c.innerHTML = '<div class="news-empty"><div class="big-icon">⏱️</div><h3>No Tasks</h3></div>';
+          return;
+        }
+        c.innerHTML = `<div class="list-group" style="margin-top:8px">
+          ${tasks.map(t => {
+            const name = typeof t === 'string' ? t : t.name || t.id || '?';
+            const interval = typeof t === 'object' ? (t.interval || t.schedule || '') : '';
+            const lastRun = typeof t === 'object' ? (t.last_run || '') : '';
+            return `<div class="list-row" style="flex-wrap:wrap">
+              <span class="list-icon">📋</span>
+              <span class="list-label">${this._esc(name)}</span>
+              <span class="list-value" style="font-size:11px">${this._esc(interval)}</span>
+              ${lastRun ? `<div style="width:100%;font-size:11px;color:var(--label3);padding-left:36px">Last: ${this._esc(lastRun)}</div>` : ''}
+            </div>`;
+          }).join('')}
+        </div>`;
+      } catch (e) {
+        c.innerHTML = '<div class="news-empty"><div class="big-icon">⚠️</div><h3>Error</h3></div>';
+      }
+    },
+
+    _renderChat() {
+      const c = qs('#sys-content');
+      if (!c) return;
+      c.innerHTML = `
+        <div id="sys-chat-messages" style="min-height:200px;max-height:400px;overflow-y:auto;margin-top:8px;display:flex;flex-direction:column;gap:8px">
+          ${this._chatHistory.map(m => this._chatBubble(m.role, m.text)).join('')}
+          ${!this._chatHistory.length ? '<div style="text-align:center;color:var(--label3);padding:40px 0">Chat with the system assistant</div>' : ''}
+        </div>
+        <div style="display:flex;gap:8px;margin-top:12px;padding-bottom:16px">
+          <input id="sys-chat-input" type="text" placeholder="Ask the system…" style="flex:1;padding:10px 14px;border-radius:20px;border:1px solid var(--sep);background:var(--bg3);color:var(--label);font-size:14px"
+            onkeydown="if(event.key==='Enter')CosyPhone.apps.system._sendChat()"/>
+          <button class="pill-btn pill-primary" onclick="CosyPhone.apps.system._sendChat()" style="border-radius:20px;padding:10px 16px">Send</button>
+        </div>`;
+      const msgs = qs('#sys-chat-messages');
+      if (msgs) msgs.scrollTop = msgs.scrollHeight;
+    },
+
+    async _sendChat() {
+      const input = qs('#sys-chat-input');
+      if (!input) return;
+      const msg = input.value.trim();
+      if (!msg) return;
+      input.value = '';
+
+      this._chatHistory.push({ role: 'user', text: msg });
+      const msgs = qs('#sys-chat-messages');
+      if (msgs) {
+        const placeholder = msgs.querySelector('div[style*="text-align:center"]');
+        if (placeholder) placeholder.remove();
+        msgs.innerHTML += this._chatBubble('user', msg);
+        msgs.innerHTML += '<div id="sys-typing" style="padding:8px 14px;color:var(--label3);font-size:13px">Thinking…</div>';
+        msgs.scrollTop = msgs.scrollHeight;
+      }
+
+      try {
+        const r = await fetch('/api/system/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: msg })
+        });
+        const d = await r.json();
+        const reply = d.reply || 'No response';
+        this._chatHistory.push({ role: 'assistant', text: reply });
+
+        const typing = qs('#sys-typing');
+        if (typing) typing.remove();
+        if (msgs) {
+          msgs.innerHTML += this._chatBubble('assistant', reply);
+          msgs.scrollTop = msgs.scrollHeight;
+        }
+      } catch (e) {
+        const typing = qs('#sys-typing');
+        if (typing) typing.remove();
+        if (msgs) msgs.innerHTML += this._chatBubble('assistant', 'Connection error');
+      }
+    },
+
+    _chatBubble(role, text) {
+      const isUser = role === 'user';
+      return `<div style="align-self:${isUser ? 'flex-end' : 'flex-start'};max-width:80%;padding:10px 14px;border-radius:16px;background:${isUser ? 'var(--bubble-out)' : 'var(--bubble-in)'};color:var(--label);font-size:14px;line-height:1.4;word-wrap:break-word">${this._esc(text)}</div>`;
+    },
+
+    _esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; },
+  });
+
+  /* ══════════════════════════════════════════════════════════
      APP: Settings
   ══════════════════════════════════════════════════════════ */
 
