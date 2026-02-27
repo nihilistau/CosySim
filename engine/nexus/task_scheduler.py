@@ -4,6 +4,10 @@ Agent Task Scheduler — Ticketing system for local and Copilot agents.
 Manages task queues with priorities, dependencies, and atomic sub-tasks.
 Tasks are stored in Nexus for persistence and cross-agent visibility.
 
+Includes auto-task generation from test failures, benchmark regressions,
+stale knowledge, and audit findings. Task templates provide repeatable
+patterns for common operations.
+
 Usage::
 
     from engine.nexus.task_scheduler import TaskScheduler
@@ -28,10 +32,19 @@ Usage::
     # Agent claims and completes
     claimed = scheduler.claim_task("bug-fixer-agent")
     scheduler.complete_task(claimed.id, "Done — 3 skills added, tests pass")
+
+    # Auto-generate tasks from test failures
+    scheduler.generate_from_test_failures(test_output)
+
+    # Use task templates
+    task = scheduler.from_template("bug-fix", title="Fix auth bug",
+                                    target_files=["engine/auth.py"])
 """
 from __future__ import annotations
 
+import json
 import logging
+import re
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -379,7 +392,6 @@ class TaskScheduler:
             if resp.ok:
                 results = resp.json().get("results", [])
                 loaded = 0
-                import json
                 for r in results:
                     try:
                         data = json.loads(r.get("content", "{}"))
@@ -394,6 +406,429 @@ class TaskScheduler:
         except Exception as e:
             logger.warning("Cannot load tasks from Nexus: %s", e)
         return 0
+
+    # ── Auto-Generation ─────────────────────────────────────────────
+
+    def generate_from_test_failures(self, test_output: str) -> List[AgentTask]:
+        """Parse pytest output and create bug-fix tasks for each failure.
+
+        Args:
+            test_output: Raw pytest output text.
+
+        Returns:
+            List of created AgentTask instances.
+        """
+        tasks = []
+        failure_pattern = re.compile(
+            r"FAILED\s+(tests/\S+)::(\S+)"
+        )
+        matches = failure_pattern.findall(test_output)
+
+        for test_file, test_name in matches:
+            existing = [
+                t for t in self._tasks.values()
+                if test_name in t.title and t.status in (
+                    TaskStatus.PENDING, TaskStatus.CLAIMED, TaskStatus.IN_PROGRESS
+                )
+            ]
+            if existing:
+                continue
+
+            task = self.create_task(
+                title=f"Fix failing test: {test_name}",
+                description=(
+                    f"Test `{test_name}` in `{test_file}` is failing.\n"
+                    f"Diagnose the failure, fix the underlying code or test, "
+                    f"and verify all tests pass."
+                ),
+                priority=TaskPriority.HIGH,
+                complexity=TaskComplexity.MEDIUM,
+                allowed_operations=["read", "edit", "test"],
+                target_files=[test_file],
+                tags=["auto-generated", "bug-fix", "test-failure"],
+            )
+            tasks.append(task)
+
+        if tasks:
+            logger.info(
+                "Generated %d tasks from %d test failures",
+                len(tasks), len(matches),
+            )
+        return tasks
+
+    def generate_from_benchmark(
+        self,
+        metric_name: str,
+        current_value: float,
+        baseline_value: float,
+        threshold_pct: float = 10.0,
+    ) -> Optional[AgentTask]:
+        """Create an optimization task if a benchmark metric regresses.
+
+        Args:
+            metric_name: Name of the metric (e.g., "inference_tps").
+            current_value: Current measured value.
+            baseline_value: Previous baseline value.
+            threshold_pct: Percentage degradation threshold to trigger task.
+
+        Returns:
+            Created AgentTask if regression detected, None otherwise.
+        """
+        if baseline_value == 0:
+            return None
+
+        change_pct = ((current_value - baseline_value) / abs(baseline_value)) * 100
+        is_regression = change_pct < -threshold_pct
+
+        if not is_regression:
+            return None
+
+        task = self.create_task(
+            title=f"Optimize: {metric_name} regressed {abs(change_pct):.1f}%",
+            description=(
+                f"Benchmark metric `{metric_name}` has regressed.\n"
+                f"Baseline: {baseline_value}, Current: {current_value} "
+                f"(change: {change_pct:+.1f}%).\n"
+                f"Investigate root cause and restore performance."
+            ),
+            priority=TaskPriority.HIGH,
+            complexity=TaskComplexity.HIGH,
+            tags=["auto-generated", "optimization", "benchmark", metric_name],
+        )
+        logger.info(
+            "Generated optimization task for %s: %.1f%% regression",
+            metric_name, abs(change_pct),
+        )
+        return task
+
+    def generate_from_stale_knowledge(
+        self,
+        stale_entries: List[Dict[str, Any]],
+    ) -> List[AgentTask]:
+        """Create refresh tasks for stale Nexus knowledge entries.
+
+        Args:
+            stale_entries: List of stale entry dicts (must have "id", "title").
+
+        Returns:
+            List of created refresh tasks.
+        """
+        tasks = []
+        for entry in stale_entries[:10]:
+            title = entry.get("title", "Unknown")
+            entry_id = entry.get("id", "")
+            task = self.create_task(
+                title=f"Refresh stale knowledge: {title[:60]}",
+                description=(
+                    f"Nexus entry `{entry_id}` — \"{title}\" — is stale.\n"
+                    f"Review, update if still relevant, or delete if obsolete."
+                ),
+                priority=TaskPriority.LOW,
+                complexity=TaskComplexity.LOW,
+                allowed_operations=["read", "edit"],
+                tags=["auto-generated", "knowledge-refresh", "nexus"],
+            )
+            tasks.append(task)
+
+        if tasks:
+            logger.info("Generated %d knowledge refresh tasks", len(tasks))
+        return tasks
+
+    def generate_from_audit(
+        self,
+        audit_findings: List[Dict[str, Any]],
+    ) -> List[AgentTask]:
+        """Create tasks from audit findings.
+
+        Args:
+            audit_findings: List of findings, each with "title", "description",
+                "severity" (critical/high/medium/low), and optional "files".
+
+        Returns:
+            List of created tasks.
+        """
+        severity_to_priority = {
+            "critical": TaskPriority.CRITICAL,
+            "high": TaskPriority.HIGH,
+            "medium": TaskPriority.MEDIUM,
+            "low": TaskPriority.LOW,
+        }
+        tasks = []
+        for finding in audit_findings:
+            severity = finding.get("severity", "medium")
+            task = self.create_task(
+                title=f"Audit: {finding.get('title', 'Fix finding')}",
+                description=finding.get("description", ""),
+                priority=severity_to_priority.get(severity, TaskPriority.MEDIUM),
+                complexity=(
+                    TaskComplexity.HIGH if severity == "critical"
+                    else TaskComplexity.MEDIUM
+                ),
+                allowed_operations=["read", "edit", "create", "test"],
+                target_files=finding.get("files", []),
+                tags=["auto-generated", "audit", f"severity-{severity}"],
+            )
+            tasks.append(task)
+
+        if tasks:
+            logger.info("Generated %d tasks from audit findings", len(tasks))
+        return tasks
+
+    # ── Task Templates ──────────────────────────────────────────────
+
+    def from_template(
+        self,
+        template_name: str,
+        title: str = "",
+        description: str = "",
+        target_files: Optional[List[str]] = None,
+        extra_tags: Optional[List[str]] = None,
+    ) -> AgentTask:
+        """Create a task from a predefined template.
+
+        Args:
+            template_name: Template name (bug-fix, feature, refactor, test,
+                doc-update, skill-add, scene-polish, knowledge-refresh).
+            title: Task title (overrides template default).
+            description: Task description (appended to template default).
+            target_files: Files to target.
+            extra_tags: Additional tags.
+
+        Returns:
+            Created AgentTask.
+
+        Raises:
+            ValueError: If template_name is not recognized.
+        """
+        templates = self._get_templates()
+        tmpl = templates.get(template_name)
+        if not tmpl:
+            raise ValueError(
+                f"Unknown template: {template_name}. "
+                f"Available: {', '.join(templates.keys())}"
+            )
+
+        full_desc = tmpl["description"]
+        if description:
+            full_desc += f"\n\n{description}"
+
+        tags = tmpl.get("tags", []) + (extra_tags or []) + ["from-template"]
+
+        return self.create_task(
+            title=title or tmpl["title"],
+            description=full_desc,
+            priority=tmpl.get("priority", TaskPriority.MEDIUM),
+            complexity=tmpl.get("complexity", TaskComplexity.MEDIUM),
+            allowed_operations=tmpl.get("operations", ["read", "edit", "test"]),
+            target_files=target_files or [],
+            tags=tags,
+        )
+
+    @staticmethod
+    def _get_templates() -> Dict[str, Dict[str, Any]]:
+        """Return predefined task templates."""
+        return {
+            "bug-fix": {
+                "title": "Fix bug",
+                "description": (
+                    "Diagnose the bug, identify root cause, implement fix, "
+                    "add regression test, verify all tests pass."
+                ),
+                "priority": TaskPriority.HIGH,
+                "complexity": TaskComplexity.MEDIUM,
+                "operations": ["read", "edit", "test"],
+                "tags": ["bug-fix"],
+            },
+            "feature": {
+                "title": "Implement feature",
+                "description": (
+                    "Implement the feature following CosySim conventions. "
+                    "Add type hints, docstrings, tests. Update docs if needed. "
+                    "Search Nexus first for existing patterns."
+                ),
+                "priority": TaskPriority.MEDIUM,
+                "complexity": TaskComplexity.HIGH,
+                "operations": ["read", "edit", "create", "test"],
+                "tags": ["feature"],
+            },
+            "refactor": {
+                "title": "Refactor code",
+                "description": (
+                    "Improve code structure without changing behavior. "
+                    "Run full test suite before and after to verify no regressions."
+                ),
+                "priority": TaskPriority.LOW,
+                "complexity": TaskComplexity.MEDIUM,
+                "operations": ["read", "edit", "test"],
+                "tags": ["refactor"],
+            },
+            "test": {
+                "title": "Add tests",
+                "description": (
+                    "Add comprehensive pytest tests. Mock external services. "
+                    "Cover happy path and edge cases. Use existing fixtures "
+                    "from conftest.py."
+                ),
+                "priority": TaskPriority.MEDIUM,
+                "complexity": TaskComplexity.LOW,
+                "operations": ["read", "create", "test"],
+                "tags": ["testing"],
+            },
+            "doc-update": {
+                "title": "Update documentation",
+                "description": (
+                    "Update documentation to reflect current code state. "
+                    "Check for accuracy, add examples, update version numbers."
+                ),
+                "priority": TaskPriority.LOW,
+                "complexity": TaskComplexity.LOW,
+                "operations": ["read", "edit"],
+                "tags": ["documentation"],
+            },
+            "skill-add": {
+                "title": "Add MCP skill",
+                "description": (
+                    "Create a new @skill-decorated function. Follow the skill "
+                    "decorator pattern in engine/skills/skill.py. Register in "
+                    "the appropriate pack. Add tests."
+                ),
+                "priority": TaskPriority.MEDIUM,
+                "complexity": TaskComplexity.MEDIUM,
+                "operations": ["read", "edit", "create", "test"],
+                "tags": ["skill", "mcp"],
+            },
+            "scene-polish": {
+                "title": "Polish scene",
+                "description": (
+                    "Improve scene quality: better error handling, UI polish, "
+                    "skill coverage, test coverage. Reference bedroom scene as AAA standard."
+                ),
+                "priority": TaskPriority.LOW,
+                "complexity": TaskComplexity.MEDIUM,
+                "operations": ["read", "edit", "test"],
+                "tags": ["scene", "polish"],
+            },
+            "knowledge-refresh": {
+                "title": "Refresh knowledge entry",
+                "description": (
+                    "Review and update a stale Nexus knowledge entry. "
+                    "Verify accuracy, update content, or delete if obsolete."
+                ),
+                "priority": TaskPriority.BACKGROUND,
+                "complexity": TaskComplexity.LOW,
+                "operations": ["read", "edit"],
+                "tags": ["nexus", "knowledge"],
+            },
+        }
+
+    def list_templates(self) -> List[Dict[str, Any]]:
+        """List available task templates.
+
+        Returns:
+            List of template summaries.
+        """
+        return [
+            {
+                "name": name,
+                "title": tmpl["title"],
+                "priority": tmpl.get("priority", TaskPriority.MEDIUM),
+                "complexity": tmpl.get("complexity", TaskComplexity.MEDIUM),
+                "tags": tmpl.get("tags", []),
+            }
+            for name, tmpl in self._get_templates().items()
+        ]
+
+    # ── Capability Matching ─────────────────────────────────────────
+
+    def match_agent(
+        self,
+        task: AgentTask,
+        agent_capabilities: Dict[str, Any],
+    ) -> float:
+        """Score how well an agent matches a task (0.0 to 1.0).
+
+        Args:
+            task: The task to match.
+            agent_capabilities: Dict with "model_size_b" (float),
+                "can_edit" (bool), "can_test" (bool), "tags" (List[str]).
+
+        Returns:
+            Match score from 0.0 (no match) to 1.0 (perfect match).
+        """
+        score = 0.0
+        model_size = agent_capabilities.get("model_size_b", 0)
+
+        # Complexity → model size matching
+        complexity_min = {
+            TaskComplexity.LOW: 0.5,
+            TaskComplexity.MEDIUM: 3.0,
+            TaskComplexity.HIGH: 9.0,
+        }
+        min_size = complexity_min.get(task.complexity, 3.0)
+        if model_size >= min_size:
+            score += 0.4
+        elif model_size >= min_size * 0.5:
+            score += 0.2
+
+        # Operation capability matching
+        can_edit = agent_capabilities.get("can_edit", False)
+        can_test = agent_capabilities.get("can_test", False)
+        needs_edit = "edit" in task.allowed_operations or "create" in task.allowed_operations
+        needs_test = "test" in task.allowed_operations
+
+        if needs_edit and can_edit:
+            score += 0.3
+        elif needs_edit and not can_edit:
+            score -= 0.5
+        if needs_test and can_test:
+            score += 0.2
+
+        # Tag overlap
+        agent_tags = set(agent_capabilities.get("tags", []))
+        task_tags = set(task.tags)
+        if agent_tags and task_tags:
+            overlap = len(agent_tags & task_tags) / max(len(task_tags), 1)
+            score += overlap * 0.1
+
+        return max(0.0, min(1.0, score))
+
+    def auto_assign(
+        self,
+        agents: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        """Auto-assign pending tasks to available agents.
+
+        Args:
+            agents: List of agent capability dicts. Each must have
+                "id" (str) and capability fields for match_agent().
+
+        Returns:
+            List of assignment dicts with "task_id", "agent_id", "score".
+        """
+        available = self._get_available_tasks()
+        assignments = []
+
+        for task in available:
+            best_agent = None
+            best_score = 0.0
+
+            for agent in agents:
+                score = self.match_agent(task, agent)
+                if score > best_score:
+                    best_score = score
+                    best_agent = agent
+
+            if best_agent and best_score >= 0.3:
+                self.claim_task(best_agent["id"])
+                assignments.append({
+                    "task_id": task.id,
+                    "agent_id": best_agent["id"],
+                    "score": round(best_score, 2),
+                })
+
+        if assignments:
+            logger.info("Auto-assigned %d tasks", len(assignments))
+        return assignments
 
 
 # ── Singleton ───────────────────────────────────────────────────────────
