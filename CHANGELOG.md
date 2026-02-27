@@ -2,6 +2,52 @@
 
 All notable changes to CosySim are documented here.
 
+## v0.58b — Project Autonomy: Self-Improving System
+
+### Autonomous Heartbeat (NEW)
+- **`engine/nexus/scheduler_daemon.py`** — cron-like task daemon with 10 builtin callbacks:
+  nexus-maintenance, nexus-dedup, knowledge-quality, notebook-rotation, news-fetch,
+  test-monitor, metrics-collect, training-sync, system-reflection, experiment-scan
+- Configurable intervals, persistent state, thread-safe scheduling
+
+### Knowledge Intelligence (NEW)
+- **`engine/nexus/knowledge_graph.py`** — topic graph from Nexus entries with gap detection,
+  co-occurrence edges, clustering, and auto-research task generation
+- **`engine/nexus/nlm_notebook_manager.py`** — NLM notebook fleet management (create, seed, rotate)
+- **`engine/nexus/governance_rules.py`** — 18 executable governance rules with validation engine
+- **Knowledge quality scoring** in `self_maintenance.py` — freshness, relevance, structure scoring
+
+### Self-Repair & Diagnosis (NEW)
+- **`engine/nexus/auto_diagnosis.py`** — parse test failures → Nexus cache → heuristics →
+  NLM diagnosis → fix task generation. Covers 7 error types.
+- **`engine/nexus/system_reflection.py`** — weekly/monthly NLM-driven analysis of system metrics,
+  auto-generates improvement tasks from insights
+- **`engine/nexus/experiment_proposals.py`** — auto-proposes A/B experiments from metric trends
+  with 5 built-in templates
+
+### Training & Metrics (NEW)
+- **`engine/nexus/training_flywheel.py`** — training data collection from tasks, Q&A, conversations.
+  Export to JSONL, ShareGPT, DPO formats. SQLite-backed at `data/training_flywheel.db`
+- **`engine/nexus/meta_metrics.py`** — system metrics dashboard with trend analysis, regression
+  detection, snapshots. SQLite-backed at `data/meta_metrics.db`
+
+### News & Information (NEW)
+- **`engine/nexus/news_sources.py`** — news source registry (HN, RSS, web scrape) with
+  Nexus storage and daily digest generation
+- **`engine/nexus/news_feed_api.py`** — Flask blueprint REST API (5 endpoints: latest,
+  digest, search, sources, stats)
+- **`config/news_sources.yaml`** — 5 curated source definitions
+
+### Copilot Self-Configuration (NEW)
+- **`engine/nexus/copilot_self_config.py`** — sync instruction files, agent definitions,
+  hooks, and preferences to/from Nexus
+
+### Skills & Tools
+- **`engine/skills/builtin/autonomy_skills.py`** — 59 @skill functions across 11 categories
+  exposing all autonomy modules to LLM agents
+- **`engine/mcp/devtools_server.py`** — 87+ MCP tools (added ~50 new autonomy tools)
+- Full test suite: **4,379 tests** (462 new) across 98+ files
+
 ## v0.57b — UX Overhaul, System Assistant & Voice Interface
 
 ### Voice Interface (NEW)
