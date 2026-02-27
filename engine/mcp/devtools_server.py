@@ -728,6 +728,252 @@ def agent_list_tasks(status: str = "", agent: str = "", limit: int = 20) -> str:
         return json.dumps({"error": str(e)})
 
 
+# ═══════════════════════════════════════════════════════════════════════
+# AUTONOMY — SCHEDULER, NEWS, NOTEBOOKS, QUALITY, GOVERNANCE
+# ═══════════════════════════════════════════════════════════════════════
+
+@mcp.tool()
+def scheduler_status() -> str:
+    """Get status of all scheduled autonomous tasks — running state,
+    next-due times, run/error counts, and last results."""
+    try:
+        from engine.nexus.scheduler_daemon import get_scheduler_daemon
+        return json.dumps(get_scheduler_daemon().status(), indent=2, default=str)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def scheduler_run_now(task_id: str) -> str:
+    """Run a scheduled task immediately by ID. Returns success/failure
+    with duration and result details."""
+    try:
+        from engine.nexus.scheduler_daemon import get_scheduler_daemon
+        return json.dumps(get_scheduler_daemon().run_task(task_id), indent=2, default=str)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def news_fetch(category: str = "") -> str:
+    """Fetch, filter, and score news from all enabled sources. Returns
+    top 20 articles with title, URL, relevance score, and source."""
+    try:
+        from engine.nexus.news_sources import get_news_registry
+        registry = get_news_registry()
+        articles = registry.fetch_all(category=category or None)
+        filtered = registry.filter_articles(articles)
+        for a in filtered:
+            a.score = registry.score_relevance(a)
+        filtered.sort(key=lambda a: a.score, reverse=True)
+        return json.dumps(
+            [{"title": a.title, "url": a.url, "score": round(a.score, 2),
+              "source": a.source_id, "category": a.category}
+             for a in filtered[:20]],
+            indent=2,
+        )
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def news_fetch_and_store(category: str = "", max_articles: int = 20) -> str:
+    """Full news pipeline: fetch → filter → score → store in Nexus → generate digest.
+    Returns counts of fetched, filtered, and stored articles."""
+    try:
+        from engine.nexus.news_sources import get_news_registry
+        registry = get_news_registry()
+        articles = registry.fetch_all(category=category or None)
+        filtered = registry.filter_articles(articles)
+        for a in filtered:
+            a.score = registry.score_relevance(a)
+        filtered.sort(key=lambda a: a.score, reverse=True)
+        stored = registry.store_to_nexus(filtered[:max_articles])
+        digest = registry.generate_digest(filtered[:max_articles])
+        if filtered:
+            try:
+                client = _get_nexus()
+                if client:
+                    from datetime import datetime, timezone
+                    client.add_entry(
+                        title=f"News Digest: {datetime.now(timezone.utc).strftime('%Y-%m-%d')}",
+                        content=digest,
+                        content_type="document",
+                        category="news",
+                    )
+            except Exception:
+                pass
+        return json.dumps({"fetched": len(articles), "filtered": len(filtered), "stored": stored})
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def news_digest(category: str = "") -> str:
+    """Generate a markdown daily news digest from configured sources."""
+    try:
+        from engine.nexus.news_sources import get_news_registry
+        registry = get_news_registry()
+        articles = registry.fetch_all(category=category or None)
+        filtered = registry.filter_articles(articles)
+        for a in filtered:
+            a.score = registry.score_relevance(a)
+        filtered.sort(key=lambda a: a.score, reverse=True)
+        return registry.generate_digest(filtered[:20])
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def news_sources() -> str:
+    """List all configured news sources with fetch stats and error rates."""
+    try:
+        from engine.nexus.news_sources import get_news_registry
+        return json.dumps(get_news_registry().stats(), indent=2, default=str)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def nlm_notebook_list() -> str:
+    """List all managed NLM notebooks with health: source counts, ages,
+    last seeded/asked dates, and overall slot health."""
+    try:
+        from engine.nexus.nlm_notebook_manager import get_notebook_manager
+        return json.dumps(get_notebook_manager().health(), indent=2, default=str)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def nlm_notebook_seed(slot_name: str = "cosysim-architecture", source_type: str = "docs") -> str:
+    """Seed an NLM notebook from project files. source_type: 'docs' for
+    documentation, 'code' for engine source files."""
+    try:
+        from engine.nexus.nlm_notebook_manager import get_notebook_manager
+        mgr = get_notebook_manager()
+        if source_type == "code":
+            return json.dumps(mgr.seed_from_code(slot_name), indent=2, default=str)
+        return json.dumps(mgr.seed_from_docs(slot_name), indent=2, default=str)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def nlm_notebook_rotate(slot_name: str) -> str:
+    """Rotate (delete & recreate) an NLM notebook to refresh stale content."""
+    try:
+        from engine.nexus.nlm_notebook_manager import get_notebook_manager
+        return json.dumps(get_notebook_manager().rotate_notebook(slot_name), indent=2, default=str)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def nexus_quality_report() -> str:
+    """Score all Nexus entries by freshness, quality, uniqueness, and
+    completeness. Returns distribution, low-quality entries, duplicates,
+    stale entries, and actionable recommendations."""
+    try:
+        from engine.nexus.self_maintenance import quality_report
+        return json.dumps(quality_report(), indent=2, default=str)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def governance_validate(filepath: str) -> str:
+    """Validate a Python file against all CosySim coding standards.
+    Returns violations with rule names, severity, messages, and line numbers."""
+    try:
+        from engine.nexus.governance_rules import get_governance_manager
+        return json.dumps(get_governance_manager().validate_file(filepath), indent=2, default=str)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def governance_seed() -> str:
+    """Seed all 18 governance rules into Nexus (idempotent). Rules cover
+    coding standards, testing, Nexus workflow, agent permissions, and commits."""
+    try:
+        from engine.nexus.governance_rules import get_governance_manager
+        return json.dumps(get_governance_manager().seed_rules(), indent=2, default=str)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def governance_check_permission(agent_id: str, operation: str) -> str:
+    """Check if an agent can perform an operation. Agent permission rules
+    are based on model parameter count (sub-1B=read-only, 1-10B=write,
+    10B+/Copilot=full access)."""
+    try:
+        from engine.nexus.governance_rules import get_governance_manager
+        allowed = get_governance_manager().check_permissions(agent_id, operation)
+        return json.dumps({"agent_id": agent_id, "operation": operation, "allowed": allowed})
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def task_auto_generate(source: str = "quality") -> str:
+    """Auto-generate tasks from system events. source: 'quality' (from stale
+    Nexus entries), 'tests' (run and parse test failures). Returns created tasks."""
+    try:
+        from engine.nexus.task_scheduler import get_task_scheduler
+        scheduler = get_task_scheduler()
+        tasks = []
+        if source == "quality":
+            from engine.nexus.self_maintenance import quality_report
+            report = quality_report()
+            stale = [{"id": s.get("entry_id", ""), "title": s.get("title", "")}
+                     for s in report.get("stale", [])[:5]]
+            tasks = scheduler.generate_from_stale_knowledge(stale)
+        elif source == "tests":
+            import subprocess, sys
+            result = subprocess.run(
+                [sys.executable, "-m", "pytest", "tests/", "--tb=line", "-q",
+                 "--ignore=tests/test_agent_loop.py", "--ignore=tests/live_wire_test.py"],
+                capture_output=True, text=True, timeout=600
+            )
+            tasks = scheduler.generate_from_test_failures(result.stdout + result.stderr)
+        return json.dumps(
+            {"source": source, "tasks_created": len(tasks),
+             "tasks": [{"id": t.id, "title": t.title} for t in tasks]},
+            indent=2,
+        )
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def task_from_template(template_name: str, title: str = "",
+                       description: str = "", target_files: str = "") -> str:
+    """Create a task from a template: bug-fix, feature, refactor, test,
+    doc-update, skill-add, scene-polish, knowledge-refresh.
+    target_files is comma-separated."""
+    try:
+        from engine.nexus.task_scheduler import get_task_scheduler
+        files = [f.strip() for f in target_files.split(",") if f.strip()] if target_files else []
+        task = get_task_scheduler().from_template(
+            template_name, title=title, description=description, target_files=files
+        )
+        return json.dumps({"id": task.id, "title": task.title, "template": template_name})
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def task_list_templates() -> str:
+    """List all available task templates with priorities and descriptions."""
+    try:
+        from engine.nexus.task_scheduler import get_task_scheduler
+        return json.dumps(get_task_scheduler().list_templates(), indent=2, default=str)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
 # ── Resources ─────────────────────────────────────────────────────────
 
 @mcp.resource("nexus://status")

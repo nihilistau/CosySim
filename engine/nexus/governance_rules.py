@@ -250,16 +250,6 @@ class GovernanceRuleSet:
 
 # ──── Governance Manager ────
 
-_manager: Optional[GovernanceManager] = None
-
-
-def get_governance_manager() -> GovernanceManager:
-    """Get or create the singleton GovernanceManager."""
-    global _manager
-    if _manager is None:
-        _manager = GovernanceManager()
-    return _manager
-
 
 class GovernanceManager:
     """Manages CosySim governance rules in Nexus.
@@ -517,6 +507,19 @@ class GovernanceManager:
             "by_scope": by_scope,
             "by_type": by_type,
         }
+
+
+# ──── Singleton ────
+
+_manager: Optional[GovernanceManager] = None
+
+
+def get_governance_manager() -> GovernanceManager:
+    """Get or create the singleton GovernanceManager."""
+    global _manager
+    if _manager is None:
+        _manager = GovernanceManager()
+    return _manager
 
 
 # ──── Helpers ────

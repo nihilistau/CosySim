@@ -19,7 +19,9 @@ import time
 import urllib.error
 import urllib.request
 import xml.etree.ElementTree as ET
+from collections import defaultdict
 from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -111,7 +113,7 @@ class NewsSourceRegistry:
                 )
                 self._sources[source.id] = source
             count = len(self._sources)
-        logger.info(f"Loaded {count} news sources")
+        logger.info("Loaded %d news sources", count)
         return count
 
     @staticmethod
@@ -126,7 +128,7 @@ class NewsSourceRegistry:
                     data = yaml.safe_load(fh) or {}
                 return data.get("news", data)
         except Exception as exc:
-            logger.warning(f"Fallback YAML load failed: {exc}")
+            logger.warning("Fallback YAML load failed: %s", exc)
         return {}
 
     def list_sources(
@@ -176,7 +178,7 @@ class NewsSourceRegistry:
             if source.id in self._sources:
                 return False
             self._sources[source.id] = source
-        logger.info(f"Added news source: {source.id}")
+        logger.info("Added news source: %s", source.id)
         return True
 
     def remove_source(self, source_id: str) -> bool:
@@ -192,7 +194,7 @@ class NewsSourceRegistry:
             if source_id not in self._sources:
                 return False
             del self._sources[source_id]
-        logger.info(f"Removed news source: {source_id}")
+        logger.info("Removed news source: %s", source_id)
         return True
 
     # ──── Fetching ────────────────────────────────────────────────────────
@@ -208,7 +210,7 @@ class NewsSourceRegistry:
         """
         source = self.get_source(source_id)
         if not source:
-            logger.warning(f"Source not found: {source_id}")
+            logger.warning("Source not found: %s", source_id)
             return []
         return self._dispatch_fetch(source)
 
@@ -227,7 +229,7 @@ class NewsSourceRegistry:
             try:
                 articles.extend(self._dispatch_fetch(source))
             except Exception as exc:
-                logger.error(f"Fetch failed for {source.id}: {exc}")
+                logger.error("Fetch failed for %s: %s", source.id, exc)
                 with self._lock:
                     source.error_count += 1
         return articles
@@ -241,7 +243,7 @@ class NewsSourceRegistry:
         }
         fetcher = fetchers.get(source.type)
         if not fetcher:
-            logger.warning(f"Unknown source type: {source.type}")
+            logger.warning("Unknown source type: %s", source.type)
             return []
         try:
             articles = fetcher(source)
@@ -250,7 +252,7 @@ class NewsSourceRegistry:
                 source.fetch_count += 1
             return articles
         except Exception as exc:
-            logger.error(f"Error fetching {source.id}: {exc}")
+            logger.error("Error fetching %s: %s", source.id, exc)
             with self._lock:
                 source.error_count += 1
             return []
@@ -302,7 +304,7 @@ class NewsSourceRegistry:
         try:
             root = ET.fromstring(raw)
         except ET.ParseError as exc:
-            logger.warning(f"RSS parse error for {source.id}: {exc}")
+            logger.warning("RSS parse error for %s: %s", source.id, exc)
             return []
 
         # Handle both RSS <item> and Atom <entry>
@@ -448,6 +450,102 @@ class NewsSourceRegistry:
                 "sources": source_stats,
             }
 
+    # ──── Nexus Storage ─────────────────────────────────────────────────
+
+    def store_to_nexus(
+        self, articles: List[NewsArticle], max_store: int = 30
+    ) -> int:
+        """Store filtered articles in Nexus with URL-based deduplication.
+
+        Args:
+            articles: Articles to store (already filtered and scored).
+            max_store: Maximum articles to store per call.
+
+        Returns:
+            Number of articles successfully stored.
+        """
+        try:
+            from engine.nexus.client import get_nexus_client
+            client = get_nexus_client()
+        except Exception as exc:
+            logger.warning("Cannot store news — Nexus unavailable: %s", exc)
+            return 0
+
+        stored = 0
+        for article in articles[:max_store]:
+            if not article.title:
+                continue
+
+            # Dedup by URL
+            if article.url:
+                try:
+                    existing = client.search(article.url, limit=1)
+                    if existing and any(article.url in str(e) for e in existing):
+                        continue
+                except Exception:
+                    pass
+
+            content = (
+                f"**{article.title}**\n\n"
+                f"Source: {article.source_id}\n"
+                f"URL: {article.url}\n"
+                f"Published: {article.published_at}\n"
+                f"Relevance: {article.score:.2f}\n\n"
+                f"{article.summary}"
+            )
+
+            try:
+                client.add_entry(
+                    title=f"News: {article.title[:80]}",
+                    content=content,
+                    content_type="note",
+                    category=article.category or "news",
+                    tags=["news", article.source_id] + article.keywords,
+                )
+                stored += 1
+            except Exception as exc:
+                logger.debug("Failed to store article '%s': %s", article.title, exc)
+
+        if stored:
+            logger.info("Stored %d news articles in Nexus", stored)
+        return stored
+
+    def generate_digest(
+        self, articles: List[NewsArticle], max_articles: int = 20
+    ) -> str:
+        """Generate a markdown daily digest from top articles.
+
+        Args:
+            articles: Scored and sorted articles.
+            max_articles: Maximum articles in digest.
+
+        Returns:
+            Markdown digest string.
+        """
+        if not articles:
+            return "No articles today."
+
+        now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        lines = [f"# Daily News Digest — {now_str}\n"]
+
+        by_category: Dict[str, List[NewsArticle]] = defaultdict(list)
+        for a in articles[:max_articles]:
+            by_category[a.category or "general"].append(a)
+
+        for cat, arts in sorted(by_category.items()):
+            lines.append(f"\n## {cat.replace('_', ' ').title()}\n")
+            for art in arts[:10]:
+                lines.append(f"- **{art.title}**")
+                if art.url:
+                    lines.append(f"  [{art.url}]({art.url})")
+                if art.summary:
+                    lines.append(f"  {art.summary[:200]}")
+                if art.score > 0:
+                    lines.append(f"  Relevance: {art.score:.2f}")
+
+        lines.append(f"\n---\n*Generated by CosySim News Engine*")
+        return "\n".join(lines)
+
     # ──── HTTP Helpers ────────────────────────────────────────────────────
 
     @staticmethod
@@ -465,7 +563,7 @@ class NewsSourceRegistry:
             with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT) as resp:
                 return json.loads(resp.read().decode("utf-8"))
         except Exception as exc:
-            logger.warning(f"HTTP JSON fetch failed for {url}: {exc}")
+            logger.warning("HTTP JSON fetch failed for %s: %s", url, exc)
             return None
 
     @staticmethod
@@ -483,7 +581,7 @@ class NewsSourceRegistry:
             with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT) as resp:
                 return resp.read().decode("utf-8", errors="replace")
         except Exception as exc:
-            logger.warning(f"HTTP text fetch failed for {url}: {exc}")
+            logger.warning("HTTP text fetch failed for %s: %s", url, exc)
             return ""
 
     @staticmethod

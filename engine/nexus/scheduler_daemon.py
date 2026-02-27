@@ -432,25 +432,177 @@ def get_scheduler_daemon(state_path: Optional[Path] = None) -> TaskSchedulerDaem
 # ──── Built-in Tasks ────
 
 def _nexus_maintenance_callback() -> Dict[str, Any]:
-    """Run Nexus health report."""
+    """Run Nexus health report and store results."""
     from engine.nexus.self_maintenance import nexus_health_report
-    return nexus_health_report()
+    report = nexus_health_report()
+    # Store the report in Nexus for trend tracking
+    try:
+        from engine.nexus.client import get_nexus_client
+        client = get_nexus_client()
+        client.add_entry(
+            title=f"Health Report: {datetime.now(timezone.utc).strftime('%Y-%m-%d')}",
+            content=json.dumps(report, indent=2, default=str),
+            content_type="history",
+            category="system",
+        )
+    except Exception as exc:
+        logger.debug("Could not store health report in Nexus: %s", exc)
+    return report
 
 
 def _nexus_dedup_callback() -> Dict[str, Any]:
-    """Run Nexus deduplication (dry-run)."""
+    """Run Nexus deduplication (dry-run) and report duplicates."""
     from engine.nexus.self_maintenance import nexus_merge_duplicates
     return nexus_merge_duplicates(dry_run=True)
 
 
-def _knowledge_quality_callback() -> str:
-    """Placeholder for knowledge quality checks."""
-    logger.info("Knowledge quality check — placeholder (no-op)")
-    return "ok"
+def _knowledge_quality_callback() -> Dict[str, Any]:
+    """Score all Nexus entries and auto-generate tasks for stale/low-quality ones."""
+    from engine.nexus.self_maintenance import quality_report
+    report = quality_report()
+
+    # Auto-generate refresh tasks for stale entries
+    stale = report.get("stale", [])
+    if stale:
+        try:
+            from engine.nexus.task_scheduler import get_task_scheduler
+            scheduler = get_task_scheduler()
+            stale_entries = [
+                {"id": s.get("entry_id", ""), "title": s.get("title", "")}
+                for s in stale[:5]
+            ]
+            scheduler.generate_from_stale_knowledge(stale_entries)
+        except Exception as exc:
+            logger.debug("Could not generate stale knowledge tasks: %s", exc)
+
+    # Store quality report in Nexus
+    try:
+        from engine.nexus.client import get_nexus_client
+        client = get_nexus_client()
+        client.add_entry(
+            title=f"Quality Report: {datetime.now(timezone.utc).strftime('%Y-%m-%d')}",
+            content=json.dumps(report, indent=2, default=str),
+            content_type="history",
+            category="system",
+        )
+    except Exception as exc:
+        logger.debug("Could not store quality report in Nexus: %s", exc)
+
+    return report
+
+
+def _notebook_rotation_callback() -> Dict[str, Any]:
+    """Check NLM notebook health and clean up stale research notebooks."""
+    from engine.nexus.nlm_notebook_manager import get_notebook_manager
+    mgr = get_notebook_manager()
+    removed = mgr.cleanup_stale(max_age_days=30)
+    health = mgr.health()
+    return {"removed_slots": removed, "health": health}
+
+
+def _news_fetch_callback() -> Dict[str, Any]:
+    """Fetch news from all sources, filter, score, and store in Nexus."""
+    from engine.nexus.news_sources import get_news_registry
+    registry = get_news_registry()
+
+    articles = registry.fetch_all()
+    filtered = registry.filter_articles(articles)
+
+    # Score and sort by relevance
+    for article in filtered:
+        article.score = registry.score_relevance(article)
+    filtered.sort(key=lambda a: a.score, reverse=True)
+
+    # Store top articles in Nexus
+    stored = registry.store_to_nexus(filtered[:30])
+
+    # Generate daily digest and store it
+    if filtered:
+        digest = registry.generate_digest(filtered[:20])
+        try:
+            from engine.nexus.client import get_nexus_client
+            client = get_nexus_client()
+            client.add_entry(
+                title=f"News Digest: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M')}",
+                content=digest,
+                content_type="document",
+                category="news",
+            )
+        except Exception as exc:
+            logger.debug("Could not store news digest: %s", exc)
+
+    return {
+        "fetched": len(articles),
+        "filtered": len(filtered),
+        "stored": stored,
+    }
+
+
+def _test_monitor_callback() -> Dict[str, Any]:
+    """Run test suite and auto-generate bug-fix tasks from failures."""
+    import subprocess
+
+    try:
+        result = subprocess.run(
+            [
+                sys.executable, "-m", "pytest", "tests/", "--tb=line", "-q",
+                "--ignore=tests/test_agent_loop.py",
+                "--ignore=tests/live_wire_test.py",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=600,
+            cwd=str(Path(__file__).resolve().parent.parent.parent),
+        )
+        output = result.stdout + result.stderr
+    except subprocess.TimeoutExpired:
+        return {"error": "Test suite timed out after 600s"}
+    except Exception as exc:
+        return {"error": f"Failed to run tests: {exc}"}
+
+    # Parse pass/fail counts from pytest summary
+    passed = failed = 0
+    import re as _re
+    match = _re.search(r"(\d+) passed", output)
+    if match:
+        passed = int(match.group(1))
+    match = _re.search(r"(\d+) failed", output)
+    if match:
+        failed = int(match.group(1))
+
+    # Auto-generate tasks from failures
+    tasks_created = 0
+    if failed > 0:
+        try:
+            from engine.nexus.task_scheduler import get_task_scheduler
+            scheduler = get_task_scheduler()
+            tasks = scheduler.generate_from_test_failures(output)
+            tasks_created = len(tasks)
+        except Exception as exc:
+            logger.warning("Could not generate tasks from test failures: %s", exc)
+
+    # Store test results in Nexus
+    try:
+        from engine.nexus.client import get_nexus_client
+        client = get_nexus_client()
+        client.add_entry(
+            title=f"Test Results: {passed} passed, {failed} failed",
+            content=f"Passed: {passed}\nFailed: {failed}\nTasks created: {tasks_created}",
+            content_type="history",
+            category="testing",
+        )
+    except Exception as exc:
+        logger.debug("Could not store test results: %s", exc)
+
+    return {
+        "passed": passed,
+        "failed": failed,
+        "tasks_created": tasks_created,
+    }
 
 
 def _register_builtin_tasks(daemon: TaskSchedulerDaemon) -> None:
-    """Register the default built-in tasks."""
+    """Register all built-in autonomous tasks."""
     daemon.register(
         "nexus-maintenance",
         "Nexus Health Report",
@@ -465,9 +617,27 @@ def _register_builtin_tasks(daemon: TaskSchedulerDaemon) -> None:
     )
     daemon.register(
         "knowledge-quality",
-        "Knowledge Quality Check",
+        "Knowledge Quality Scoring",
         "weekly",
         _knowledge_quality_callback,
+    )
+    daemon.register(
+        "notebook-rotation",
+        "NLM Notebook Rotation",
+        "weekly",
+        _notebook_rotation_callback,
+    )
+    daemon.register(
+        "news-fetch",
+        "News Fetch & Digest",
+        "every_8h",
+        _news_fetch_callback,
+    )
+    daemon.register(
+        "test-monitor",
+        "Test Suite Monitor",
+        "daily",
+        _test_monitor_callback,
     )
 
 
@@ -477,41 +647,41 @@ def _cli_status() -> None:
     """Print status of all tasks."""
     daemon = get_scheduler_daemon()
     info = daemon.status()
-    print(f"Scheduler running: {info['running']}")
-    print(f"Tasks registered: {info['task_count']}\n")
+    logger.info("Scheduler running: %s", info["running"])
+    logger.info("Tasks registered: %d\n", info["task_count"])
     for t in info["tasks"]:
         enabled_str = "enabled" if t["enabled"] else "DISABLED"
-        print(f"  [{t['id']}] {t['name']} ({t['schedule']}, {enabled_str})")
-        print(f"    Last run:  {t['last_run'] or 'never'}")
-        print(f"    Next due:  {t['next_due']}")
-        print(f"    Runs: {t['run_count']}  Errors: {t['error_count']}")
+        logger.info("  [%s] %s (%s, %s)", t["id"], t["name"], t["schedule"], enabled_str)
+        logger.info("    Last run:  %s", t["last_run"] or "never")
+        logger.info("    Next due:  %s", t["next_due"])
+        logger.info("    Runs: %d  Errors: %d", t["run_count"], t["error_count"])
         if t["last_result"]:
-            print(f"    Result: {t['last_result'][:80]}")
-        print()
+            logger.info("    Result: %s", t["last_result"][:80])
+        logger.info("")
 
 
 def _cli_run(task_id: str) -> None:
     """Run a specific task immediately."""
     daemon = get_scheduler_daemon()
-    print(f"Running task: {task_id}")
+    logger.info("Running task: %s", task_id)
     result = daemon.run_task(task_id)
     if result["success"]:
-        print(f"  ✓ Completed in {result['duration_s']}s")
-        print(f"  Result: {result.get('result', '')[:120]}")
+        logger.info("  ✓ Completed in %ss", result["duration_s"])
+        logger.info("  Result: %s", result.get("result", "")[:120])
     else:
-        print(f"  ✗ Failed: {result.get('error', 'unknown')}")
+        logger.info("  ✗ Failed: %s", result.get("error", "unknown"))
 
 
 def _cli_start() -> None:
     """Start the daemon in blocking mode."""
     daemon = get_scheduler_daemon()
-    print("Starting scheduler daemon (Ctrl+C to stop)...")
+    logger.info("Starting scheduler daemon (Ctrl+C to stop)...")
     daemon.start(interval_seconds=60)
     try:
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
-        print("\nStopping...")
+        logger.info("Stopping...")
         daemon.stop()
 
 
@@ -530,7 +700,7 @@ def main() -> None:
     elif args[0] == "start":
         _cli_start()
     else:
-        print("Usage: python -m engine.nexus.scheduler_daemon {status|run <task_id>|start}")
+        logger.info("Usage: python -m engine.nexus.scheduler_daemon {status|run <task_id>|start}")
         sys.exit(1)
 
 
