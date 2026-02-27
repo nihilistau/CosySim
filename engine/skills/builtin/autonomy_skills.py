@@ -665,3 +665,59 @@ def copilot_list_instructions() -> str:
 def copilot_list_agents() -> str:
     """List all Copilot agent definition files."""
     return json.dumps(_copilot_cfg().list_agents(), default=str)
+
+
+# ═══════════════════════════════════════════════════════════════════
+# KNOWLEDGE GRAPH SKILLS
+# ═══════════════════════════════════════════════════════════════════
+
+def _graph():
+    from engine.nexus.knowledge_graph import get_knowledge_graph
+    return get_knowledge_graph()
+
+
+@skill(pack="autonomy", description="Build the knowledge graph from Nexus entries",
+       tags=["knowledge", "graph", "build", "autonomy"], category=SkillCategory.SYSTEM)
+def knowledge_graph_build() -> str:
+    """Build the topic graph from all Nexus entries. Returns summary with
+    topic count, edges, gaps, and clusters."""
+    snap = _graph().build()
+    return json.dumps({
+        "topic_count": snap.topic_count,
+        "edge_count": snap.edge_count,
+        "gap_count": snap.gap_count,
+        "top_topics": snap.top_topics[:10],
+    }, default=str)
+
+
+@skill(pack="autonomy", description="Detect knowledge gaps from the graph",
+       tags=["knowledge", "gaps", "autonomy"], category=SkillCategory.SYSTEM)
+def knowledge_graph_gaps() -> str:
+    """Return topics that are underrepresented relative to related strong topics."""
+    gaps = _graph().detect_gaps()
+    return json.dumps([
+        {"topic": g.topic, "entries": g.entry_count, "priority": g.priority,
+         "research": g.suggested_research}
+        for g in gaps
+    ], default=str)
+
+
+@skill(pack="autonomy", description="Get topic clusters from the knowledge graph",
+       tags=["knowledge", "clusters", "autonomy"], category=SkillCategory.SYSTEM)
+def knowledge_graph_clusters() -> str:
+    """Return topic clusters based on co-occurrence in entries."""
+    return json.dumps(_graph().cluster_topics(), default=str)
+
+
+@skill(pack="autonomy", description="Search topics in the knowledge graph",
+       tags=["knowledge", "search", "autonomy"], category=SkillCategory.SYSTEM)
+def knowledge_graph_search(query: str) -> str:
+    """Search for topics by name substring."""
+    return json.dumps(_graph().search_topics(query), default=str)
+
+
+@skill(pack="autonomy", description="Create research tasks for knowledge gaps",
+       tags=["knowledge", "research", "tasks", "autonomy"], category=SkillCategory.SYSTEM)
+def knowledge_graph_research_tasks() -> str:
+    """Auto-create task scheduler entries for detected knowledge gaps."""
+    return json.dumps(_graph().create_research_tasks(), default=str)

@@ -152,6 +152,9 @@ class TestSkillRegistration:
             "experiment_list_templates",
             "copilot_sync_config", "copilot_config_status",
             "copilot_list_instructions", "copilot_list_agents",
+            "knowledge_graph_build", "knowledge_graph_gaps",
+            "knowledge_graph_clusters", "knowledge_graph_search",
+            "knowledge_graph_research_tasks",
         ]
         for name in expected_skills:
             assert SKILL_REGISTRY.get_skill(name) is not None, f"{name} not in SKILL_REGISTRY"
