@@ -548,3 +548,120 @@ def metrics_collect_all() -> str:
 def metrics_snapshot() -> str:
     """Return the most recent value for every tracked metric."""
     return json.dumps(_metrics().snapshot(), indent=2, default=str)
+
+
+# ═══════════════════════════════════════════════════════════════════
+# SYSTEM REFLECTION SKILLS
+# ═══════════════════════════════════════════════════════════════════
+
+def _reflection():
+    from engine.nexus.system_reflection import get_system_reflection
+    return get_system_reflection()
+
+
+@skill(pack="autonomy", description="Run a system reflection analysis",
+       tags=["reflection", "analysis", "autonomy"], category=SkillCategory.SYSTEM)
+def reflection_run(period: str = "weekly", days: int = 7, use_nlm: bool = False) -> str:
+    """Run a full reflection cycle: collect metrics, analyze patterns,
+    generate insights, and create improvement tasks.
+
+    Args:
+        period: 'weekly' or 'monthly'.
+        days: Number of days of data to analyze.
+        use_nlm: Whether to use NotebookLM for deep analysis.
+    """
+    report = _reflection().run_reflection(period=period, days=days, use_nlm=use_nlm)
+    return json.dumps({
+        "report_id": report.report_id,
+        "insight_count": len(report.insights),
+        "tasks_created": len(report.tasks_created),
+        "duration_seconds": report.duration_seconds,
+    }, default=str)
+
+
+@skill(pack="autonomy", description="Get recent reflection history",
+       tags=["reflection", "history", "autonomy"], category=SkillCategory.SYSTEM)
+def reflection_history(limit: int = 5) -> str:
+    """Return summaries of recent system reflection reports."""
+    return json.dumps(_reflection().get_history(limit=limit), default=str)
+
+
+@skill(pack="autonomy", description="Get insights from the latest reflection",
+       tags=["reflection", "insights", "autonomy"], category=SkillCategory.SYSTEM)
+def reflection_latest_insights(limit: int = 10) -> str:
+    """Return actionable insights from the most recent reflection."""
+    return json.dumps(_reflection().latest_insights(limit=limit), default=str)
+
+
+# ═══════════════════════════════════════════════════════════════════
+# EXPERIMENT PROPOSAL SKILLS
+# ═══════════════════════════════════════════════════════════════════
+
+def _proposer():
+    from engine.nexus.experiment_proposals import get_experiment_proposer
+    return get_experiment_proposer()
+
+
+@skill(pack="autonomy", description="Scan metrics and propose new experiments",
+       tags=["experiment", "proposal", "autonomy"], category=SkillCategory.SYSTEM)
+def experiment_scan_and_propose() -> str:
+    """Scan current metrics against experiment templates and propose
+    experiments for any triggered conditions."""
+    proposals = _proposer().scan_and_propose()
+    return json.dumps([
+        {"proposal_id": p.proposal_id, "experiment_name": p.experiment_name,
+         "trigger": p.trigger_metric, "priority": p.priority}
+        for p in proposals
+    ], default=str)
+
+
+@skill(pack="autonomy", description="List experiment proposal history",
+       tags=["experiment", "history", "autonomy"], category=SkillCategory.SYSTEM)
+def experiment_list_proposals(status: str = "") -> str:
+    """List experiment proposals. Filter by 'pending' or 'active'."""
+    s = status if status else None
+    return json.dumps(_proposer().get_proposals(status=s), default=str)
+
+
+@skill(pack="autonomy", description="List experiment templates",
+       tags=["experiment", "templates", "autonomy"], category=SkillCategory.SYSTEM)
+def experiment_list_templates() -> str:
+    """Return all registered experiment templates and their triggers."""
+    return json.dumps(_proposer().list_templates(), default=str)
+
+
+# ═══════════════════════════════════════════════════════════════════
+# COPILOT SELF-CONFIG SKILLS
+# ═══════════════════════════════════════════════════════════════════
+
+def _copilot_cfg():
+    from engine.nexus.copilot_self_config import get_copilot_config
+    return get_copilot_config()
+
+
+@skill(pack="autonomy", description="Sync all Copilot config to Nexus",
+       tags=["copilot", "config", "sync", "autonomy"], category=SkillCategory.SYSTEM)
+def copilot_sync_config() -> str:
+    """Push instruction files, agent definitions, and hook scripts to Nexus."""
+    return json.dumps(_copilot_cfg().sync_all_to_nexus(), default=str)
+
+
+@skill(pack="autonomy", description="Get Copilot configuration status",
+       tags=["copilot", "config", "status", "autonomy"], category=SkillCategory.SYSTEM)
+def copilot_config_status() -> str:
+    """Return counts of instruction files, agents, hooks, and preferences."""
+    return json.dumps(_copilot_cfg().status(), default=str)
+
+
+@skill(pack="autonomy", description="List Copilot instruction files",
+       tags=["copilot", "instructions", "autonomy"], category=SkillCategory.SYSTEM)
+def copilot_list_instructions() -> str:
+    """List all Copilot instruction files with names and sizes."""
+    return json.dumps(_copilot_cfg().list_instructions(), default=str)
+
+
+@skill(pack="autonomy", description="List Copilot agent definitions",
+       tags=["copilot", "agents", "autonomy"], category=SkillCategory.SYSTEM)
+def copilot_list_agents() -> str:
+    """List all Copilot agent definition files."""
+    return json.dumps(_copilot_cfg().list_agents(), default=str)

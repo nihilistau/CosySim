@@ -644,6 +644,30 @@ def _training_sync_callback() -> Dict[str, Any]:
     }
 
 
+def _system_reflection_callback() -> Dict[str, Any]:
+    """Run weekly system reflection — analyze metrics, generate insights, create tasks."""
+    from engine.nexus.system_reflection import get_system_reflection
+    reflection = get_system_reflection()
+    report = reflection.run_reflection(period="weekly", days=7, use_nlm=False)
+    return {
+        "report_id": report.report_id,
+        "insights": len(report.insights),
+        "tasks_created": len(report.tasks_created),
+        "duration_seconds": report.duration_seconds,
+    }
+
+
+def _experiment_scan_callback() -> Dict[str, Any]:
+    """Scan metrics for experiment opportunities and propose new experiments."""
+    from engine.nexus.experiment_proposals import get_experiment_proposer
+    proposer = get_experiment_proposer()
+    proposals = proposer.scan_and_propose()
+    return {
+        "proposals": len(proposals),
+        "experiments": [p.experiment_name for p in proposals],
+    }
+
+
 def _register_builtin_tasks(daemon: TaskSchedulerDaemon) -> None:
     """Register all built-in autonomous tasks."""
     daemon.register(
@@ -693,6 +717,18 @@ def _register_builtin_tasks(daemon: TaskSchedulerDaemon) -> None:
         "Training Data Sync",
         "daily",
         _training_sync_callback,
+    )
+    daemon.register(
+        "system-reflection",
+        "Weekly System Reflection",
+        "weekly",
+        _system_reflection_callback,
+    )
+    daemon.register(
+        "experiment-scan",
+        "Experiment Proposal Scan",
+        "weekly",
+        _experiment_scan_callback,
     )
 
 

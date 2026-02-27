@@ -147,6 +147,11 @@ class TestSkillRegistration:
             "training_export_dpo", "training_sync_nexus", "training_stats",
             "metrics_record", "metrics_trend", "metrics_check_regressions",
             "metrics_dashboard", "metrics_collect_all", "metrics_snapshot",
+            "reflection_run", "reflection_history", "reflection_latest_insights",
+            "experiment_scan_and_propose", "experiment_list_proposals",
+            "experiment_list_templates",
+            "copilot_sync_config", "copilot_config_status",
+            "copilot_list_instructions", "copilot_list_agents",
         ]
         for name in expected_skills:
             assert SKILL_REGISTRY.get_skill(name) is not None, f"{name} not in SKILL_REGISTRY"
@@ -518,11 +523,11 @@ class TestIntegrationFlow:
 
     @patch("engine.nexus.scheduler_daemon.get_scheduler_daemon")
     def test_scheduler_registers_all_builtin_tasks(self, mock_get):
-        """Scheduler daemon registers 8 builtin tasks."""
+        """Scheduler daemon registers 10 builtin tasks."""
         from engine.nexus.scheduler_daemon import _register_builtin_tasks
         daemon = MagicMock()
         _register_builtin_tasks(daemon)
-        assert daemon.register.call_count == 8
+        assert daemon.register.call_count == 10
 
         task_ids = [call.args[0] for call in daemon.register.call_args_list]
         assert "nexus-maintenance" in task_ids
@@ -533,6 +538,8 @@ class TestIntegrationFlow:
         assert "test-monitor" in task_ids
         assert "metrics-collect" in task_ids
         assert "training-sync" in task_ids
+        assert "system-reflection" in task_ids
+        assert "experiment-scan" in task_ids
 
     @patch("engine.nexus.self_maintenance.quality_report")
     def test_knowledge_quality_callback_calls_quality_report(self, mock_report):
@@ -594,11 +601,11 @@ class TestIntegrationFlow:
         assert d1 is d2
 
     def test_scheduler_daemon_has_builtin_tasks(self):
-        """SchedulerDaemon starts with 8 builtin tasks."""
+        """SchedulerDaemon starts with 10 builtin tasks."""
         from engine.nexus.scheduler_daemon import get_scheduler_daemon
         daemon = get_scheduler_daemon()
         status = daemon.status()
-        assert status["task_count"] == 8
+        assert status["task_count"] == 10
 
     def test_scheduler_daemon_task_ids(self):
         """SchedulerDaemon has the expected task IDs."""
@@ -609,6 +616,7 @@ class TestIntegrationFlow:
             "nexus-maintenance", "nexus-dedup", "knowledge-quality",
             "notebook-rotation", "news-fetch", "test-monitor",
             "metrics-collect", "training-sync",
+            "system-reflection", "experiment-scan",
         ]
         for tid in expected:
             assert tid in task_ids, f"Missing task: {tid}"

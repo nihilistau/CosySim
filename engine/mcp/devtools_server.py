@@ -1101,6 +1101,135 @@ def metrics_snapshot() -> str:
     except Exception as e:
         return json.dumps({"error": str(e)})
 
+
+# ── System Reflection Tools ──────────────────────────────────────────
+
+
+@mcp.tool()
+def reflection_run(period: str = "weekly", days: int = 7, use_nlm: bool = False) -> str:
+    """Run a system reflection analysis — collect metrics, analyze patterns, generate insights, create tasks."""
+    try:
+        from engine.nexus.system_reflection import get_system_reflection
+        report = get_system_reflection().run_reflection(period=period, days=days, use_nlm=use_nlm)
+        return json.dumps({
+            "report_id": report.report_id,
+            "period": report.period,
+            "insight_count": len(report.insights),
+            "tasks_created": len(report.tasks_created),
+            "insights": [
+                {"title": i.title, "category": i.category, "priority": i.priority,
+                 "actionable": i.actionable, "description": i.description[:200]}
+                for i in report.insights
+            ],
+            "duration_seconds": report.duration_seconds,
+        }, default=str)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def reflection_history(limit: int = 5) -> str:
+    """Get recent system reflection reports and their summaries."""
+    try:
+        from engine.nexus.system_reflection import get_system_reflection
+        return json.dumps(get_system_reflection().get_history(limit=limit), default=str)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def reflection_latest_insights(limit: int = 10) -> str:
+    """Get insights from the most recent system reflection."""
+    try:
+        from engine.nexus.system_reflection import get_system_reflection
+        return json.dumps(get_system_reflection().latest_insights(limit=limit), default=str)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+# ── Experiment Proposal Tools ────────────────────────────────────────
+
+
+@mcp.tool()
+def experiment_scan_and_propose() -> str:
+    """Scan current metrics against templates and propose experiments for triggered conditions."""
+    try:
+        from engine.nexus.experiment_proposals import get_experiment_proposer
+        proposals = get_experiment_proposer().scan_and_propose()
+        return json.dumps([
+            {"proposal_id": p.proposal_id, "experiment_name": p.experiment_name,
+             "trigger_metric": p.trigger_metric, "trigger_value": p.trigger_value,
+             "priority": p.priority, "hypothesis": p.hypothesis}
+            for p in proposals
+        ], default=str)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def experiment_list_proposals(status: str = "") -> str:
+    """List experiment proposals. Filter: 'pending', 'active', or '' for all."""
+    try:
+        from engine.nexus.experiment_proposals import get_experiment_proposer
+        s = status if status else None
+        return json.dumps(get_experiment_proposer().get_proposals(status=s), default=str)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def experiment_list_templates() -> str:
+    """List all experiment templates with their triggers and thresholds."""
+    try:
+        from engine.nexus.experiment_proposals import get_experiment_proposer
+        return json.dumps(get_experiment_proposer().list_templates(), default=str)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+# ── Copilot Self-Configuration Tools ─────────────────────────────────
+
+
+@mcp.tool()
+def copilot_sync_config() -> str:
+    """Sync all Copilot instruction files, agent definitions, and hooks to Nexus."""
+    try:
+        from engine.nexus.copilot_self_config import get_copilot_config
+        return json.dumps(get_copilot_config().sync_all_to_nexus(), default=str)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def copilot_config_status() -> str:
+    """Get Copilot configuration status — counts of instructions, agents, hooks."""
+    try:
+        from engine.nexus.copilot_self_config import get_copilot_config
+        return json.dumps(get_copilot_config().status(), default=str)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def copilot_list_instructions() -> str:
+    """List all Copilot instruction files with names and sizes."""
+    try:
+        from engine.nexus.copilot_self_config import get_copilot_config
+        return json.dumps(get_copilot_config().list_instructions(), default=str)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def copilot_list_agents() -> str:
+    """List all Copilot agent definition files."""
+    try:
+        from engine.nexus.copilot_self_config import get_copilot_config
+        return json.dumps(get_copilot_config().list_agents(), default=str)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
 @mcp.resource("nexus://status")
 def resource_nexus_status() -> str:
     """Nexus knowledge system health and stats."""
