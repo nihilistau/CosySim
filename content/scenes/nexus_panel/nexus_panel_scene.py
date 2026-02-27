@@ -780,7 +780,8 @@ class NexusPanelScene(BaseScene, NexusSceneMixin):
                 results = []
                 for nb in notebooks:
                     r = ext.ingest_to_nexus(nb, client, items=items)
-                    results.append({"name": nb.name, "stored": r.stored, "total": r.total})
+                    total = len(nb.sources) + len(nb.documents) + len(nb.notes) + len(nb.conversations)
+                    results.append({"name": nb.notebook_name, "stored": r.entries_created, "total": total})
                 self._log_activity("har_ingest", f"{len(notebooks)} notebooks", "ingest")
                 return jsonify({"results": results})
             except Exception as exc:

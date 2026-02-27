@@ -1436,7 +1436,7 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE
             try:
                 from engine.mcp.state_coordinator import get_coordinator
                 coord = get_coordinator()
-                for char_id in (self.characters or {}):
+                for char_id in (self.active_characters or {}):
                     state = coord.get_full_state(char_id) or {}
                     targets.append({
                         "id": char_id,
@@ -1448,7 +1448,7 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE
                         "scene": state.get("scene", "phone"),
                     })
             except Exception:
-                for char_id in (self.characters or {}):
+                for char_id in (self.active_characters or {}):
                     targets.append({"id": char_id, "name": char_id.replace("_", " ").title(),
                                     "mood": "unknown", "energy": 50, "arousal": 50,
                                     "relationship": 50, "scene": "phone"})

@@ -59,8 +59,13 @@ class NotebookData:
         return {
             "notebook_id": self.notebook_id,
             "notebook_name": self.notebook_name,
+            "name": self.notebook_name,
+            "id": self.notebook_id,
             "summary": self.summary,
             "sources": self.sources,
+            "documents": self.documents,
+            "notes": self.notes,
+            "conversations": self.conversations,
             "content": {
                 "documents": self.documents,
                 "notes": self.notes,

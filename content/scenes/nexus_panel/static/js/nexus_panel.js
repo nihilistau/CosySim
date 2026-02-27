@@ -1044,12 +1044,12 @@ async function loadNotebooks() {
   const listEl = document.getElementById('notebook-list');
   if (!listEl) return;
   listEl.innerHTML = '<p class="muted">Loading...</p>';
-  const data = await api('/api/nlm/status');
+  const data = await api('/api/nlm/notebooks');
   if (data.error) {
     listEl.innerHTML = `<p style="color:var(--danger)">${esc(data.error)}</p>`;
     return;
   }
-  const notebooks = data.notebooks || [];
+  const notebooks = Array.isArray(data) ? data : (data.notebooks || []);
   if (notebooks.length === 0) {
     listEl.innerHTML = '<p class="muted">No notebooks found.</p>';
     return;
