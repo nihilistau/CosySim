@@ -452,14 +452,14 @@ def nexus_backup(label: str = "") -> Dict[str, Any]:
             results = client.list_by_type(ctype, limit=5000)
             entries.extend(results)
         except Exception:
-            pass
+            logger.warning("Could not list entries for type '%s' during backup", ctype)
 
     qa_pairs: list = []
     try:
         qa_results = client.search("*", limit=5000)
         qa_pairs = [r for r in qa_results if r.get("content_type") == "qa"]
     except Exception:
-        pass
+        logger.warning("Could not retrieve Q&A pairs during backup")
 
     export_data = {
         "backup_timestamp": ts,

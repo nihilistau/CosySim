@@ -175,19 +175,19 @@ class SystemAssistant:
             summary["vram_used_mb"] = status.get("vram_used_mb", 0)
             summary["vram_total_mb"] = status.get("vram_total_mb", 0)
         except Exception:
-            pass
+            logger.debug("Could not retrieve VRAM status")
         try:
             from engine.scenes.base_scene import BaseScene
             active = BaseScene.get_all_active_scenes()
             summary["active_scenes"] = list(active.keys())
         except Exception:
-            pass
+            logger.debug("Could not retrieve active scenes")
         try:
             from engine.mcp import get_character_registry
             reg = get_character_registry()
             summary["agent_count"] = len(reg.list_characters())
         except Exception:
-            pass
+            logger.debug("Could not retrieve character registry")
         return summary
 
     def get_scene_list(self) -> List[Dict[str, Any]]:

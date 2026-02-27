@@ -734,7 +734,7 @@ def _ha_news_push_callback() -> Dict[str, Any]:
                 if age_hours > 24:
                     continue
             except Exception:
-                pass
+                logger.debug("Could not parse article timestamp: %s", created)
 
         # Extract relevance from content if available
         if "relevance" in content.lower():
@@ -744,7 +744,7 @@ def _ha_news_push_callback() -> Dict[str, Any]:
                 if match:
                     relevance = float(match.group(1))
             except Exception:
-                pass
+                logger.debug("Could not parse relevance score from content")
 
         if relevance >= threshold or "breaking" in title.lower():
             try:

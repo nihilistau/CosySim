@@ -345,7 +345,7 @@ class CopilotBridge:
                     tags=["error", "copilot", tool_name],
                 )
         except Exception:
-            pass
+            logger.debug("Could not store error tracking in Nexus")
 
     def store_decision(self, title: str, content: str, category: str = "architecture") -> Optional[str]:
         """Store a design decision in Nexus.

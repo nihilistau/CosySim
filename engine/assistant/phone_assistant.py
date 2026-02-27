@@ -242,19 +242,19 @@ class PhoneAssistant:
             get_assistant()
             connected["assistant"] = True
         except Exception:
-            pass
+            logger.debug("System assistant not available")
         try:
             from engine.nexus.client import get_nexus_client
             get_nexus_client()
             connected["nexus"] = True
         except Exception:
-            pass
+            logger.debug("Nexus client not available")
         try:
             from engine.integrations.anythingllm import get_anythingllm_client
             client = get_anythingllm_client()
             connected["anythingllm"] = client.is_connected()
         except Exception:
-            pass
+            logger.debug("AnythingLLM client not available")
 
         return {
             "mode": self._mode,
