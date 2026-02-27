@@ -7,7 +7,7 @@
 
 ## Project Overview
 
-CosySim is a multi-scene AI simulation framework (v0.55b) built on
+CosySim is a multi-scene AI simulation framework (v0.59b) built on
 a custom MCP pipeline with LMStudio v1 API integration and Nexus knowledge system.
 It orchestrates virtual agents across 18 interactive scenes, each with real-time
 state management, skill-based tool calling, dialog systems, and interceptor-governed
@@ -19,9 +19,9 @@ session tracking, and prompt versioning.
 audit logging · LMStudio v1 streaming with stateful conversations · Nexus knowledge system
 · InferenceOrchestrator multi-model routing · RouterDataCollector training capture
 
-**Test suite:** 3,521 tests across 90+ files — run before and after changes.
+**Test suite:** 4,476+ tests across 136 files — run before and after changes.
 
-**MCP Server:** 124 tools available via `.vscode/mcp.json` — includes Nexus bridge,
+**MCP Server:** 108+ tools available via `.vscode/mcp.json` — includes Nexus bridge,
 skill discovery, and system monitoring tools.
 
 ## MCP Tools Available
@@ -87,27 +87,32 @@ from engine.skills.skill import skill              # @skill decorator
 from engine.nexus.client import get_nexus_client   # Nexus KMS client
 from engine.lmstudio.orchestrator import get_orchestrator  # Multi-model orchestrator
 from engine.lmstudio.router_data import get_router_data_collector  # Training data
+from engine.nexus.governance_rules import get_governance_manager  # Governance enforcement
+from engine.assistant.phone_assistant import get_phone_assistant  # Phone assistant
+from engine.integrations.anythingllm import get_anythingllm_client  # AnythingLLM
 ```
 
 ### Project Structure
 ```
 CosySim/
 ├── engine/         # Core framework — modify carefully
-│   ├── mcp/        # MCPFramework, DialogSystem, GameMCP, Governor, CosySim MCP Server
+│   ├── mcp/        # MCPFramework, DialogSystem, GameMCP, Governor, MCP Server (108+ tools)
 │   ├── agents/     # VirtualAgent, InterceptorPipeline, StreamProcessor
 │   ├── lmstudio/   # LMS client, router, conversation, model manager, orchestrator, router_data
 │   ├── scenes/     # BaseScene, SceneManager, SceneRegistry
-│   ├── skills/     # @skill decorator, registry, 13 builtin packs
+│   ├── skills/     # @skill decorator, registry, 20+ builtin packs (187+ skills)
 │   ├── services/   # Activity bus, resilience, housekeeping
 │   ├── pipeline/   # VirtualPipeline, token routing
-│   ├── tts/        # Qwen3 TTS server
-│   ├── nexus/      # Nexus KMS client, NLM engine, Knowledge Forge, copilot bridge
+│   ├── tts/        # TTS manager (Piper, Orpheus, Qwen3)
+│   ├── nexus/      # Nexus client, NLM engine, governance, scheduler, deep storage
+│   ├── assistant/  # System assistant (Aria) + phone assistant
+│   ├── integrations/ # AnythingLLM, Home Assistant, phone news
 │   └── config.py   # ConfigManager singleton
 ├── content/        # Game content
 │   ├── scenes/     # 18 scene implementations
 │   └── simulation/ # Database, character system, services
 ├── config/         # YAML/JSON config (default, dev, prod, voices, skills, mcp)
-├── tests/          # pytest suite (90+ files, 3521 tests)
+├── tests/          # pytest suite (136 files, 4,476+ tests)
 ├── docs/           # Documentation (INDEX.md entry point)
 ├── .github/        # Copilot customization (instructions, agents, hooks)
 ├── .vscode/        # VS Code config + MCP server definitions
@@ -140,6 +145,7 @@ CosySim/
 - Include `Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>` in commits
 - **Search Nexus first** — before writing any code, `nexus_search("topic")` or `nexus_ask("question?")`
 - **Store audit results in Nexus** — all audit/rating results must be stored as Nexus entries with content_type="audit"
+- **Governance is enforced** — `@governed` decorator and `enforce_governance()` block unauthorized operations
 - **On context compaction**: run `python engine/nexus/nexus_session_logger.py compact` to export checkpoint and decision data to Nexus before context is lost
 - **After major work blocks**: run `python engine/nexus/nexus_session_logger.py checkpoint` to export new checkpoints to Nexus
 - **New agents**: see `docs/AGENT_ONBOARDING.md` for full onboarding guide
@@ -233,6 +239,12 @@ llmster_load(model, n_parallel=4)             — Load model with continuous bat
 llmster_unload(model)                         — Unload model
 llmster_models()                              — List available models on disk
 llmster_download(model)                       — Download model from catalog
+governance_enforce(filepath, agent_id)        — Active enforcement (raises on violations)
+phone_assistant_chat(message, mode, voice)    — Chat via 4-tier cascade
+phone_assistant_status()                      — Assistant mode + connectivity
+phone_assistant_set_mode(mode)                — Set routing mode
+allm_chat(workspace, message, instance)       — Chat with AnythingLLM
+deep_storage_archive(notebook_id)             — Archive notebook to Nexus
 ```
 
 ### Python API (for project code)
