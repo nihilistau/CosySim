@@ -519,6 +519,18 @@ homeassistant:
     description: "Game engine agent — fair, rule-following, dramatic"
 
 
+# AnythingLLM integration (phone + laptop instances)
+anythingllm:
+  default_instance: "laptop"
+  timeout_seconds: 30
+  instances:
+    laptop:
+      url: "http://localhost:3001"
+      api_key: ""
+    phone:
+      url: ""
+      api_key: ""
+
 # NotebookLM MCP integration
 notebooklm:
   enabled: false                       # enable NotebookLM MCP bridge
