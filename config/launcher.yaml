@@ -41,7 +41,7 @@ services:
     auto_start: false         # MCP web bridge (Socket.IO)
 
   nlm_proxy:
-    auto_start: false         # NLM Live Proxy (HAR cookie-based batchexecute)
+    auto_start: true          # NLM Live Proxy (HAR cookie-based batchexecute)
 
 scenes:
   # ── Game scenes ───────────────────────────────────────────────────────────

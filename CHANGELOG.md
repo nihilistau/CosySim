@@ -2,6 +2,43 @@
 
 All notable changes to CosySim are documented here.
 
+## v0.60 — NLM v2.1: 18-RPC Catalogue, Configure Chat, Source Reader
+
+### NLM v2.1 Protocol (NEW — commit 2ff3698)
+- **`engine/mcp/nlm_live_proxy.py`** — Major v2.1 update (11 HAR files analyzed):
+  - **18 RPC ID constants** catalogued: RPC_LIST_NOTEBOOKS, RPC_GET_SOURCES, RPC_CHAT_MESSAGE, RPC_ANNOTATE_TEXT, RPC_GENERATE_DOC, RPC_SAVE_NOTE, RPC_READ_SOURCE, RPC_GET_CONVERSATIONS, RPC_LIST_NOTES, RPC_GET_SUMMARY, RPC_AUDIO_OVERVIEW, RPC_AUDIO_STATUS, RPC_CREATE_NOTEBOOK, RPC_DELETE_NOTEBOOK, RPC_ADD_SOURCE, RPC_DELETE_SOURCE, RPC_GET_QUOTA
+  - **s0tc2d** (RPC_CHAT_MESSAGE) — async chat with configure-chat role injection and response length
+  - **CYK0Xb** (RPC_ANNOTATE_TEXT) — synchronous citation-annotate (preferred for Q&A distillation)
+  - **tr032e** (RPC_READ_SOURCE) — reads full markdown content of any source document (NEW)
+  - **ozz5Z** (RPC_GET_QUOTA) — user account info and storage quota (NEW)
+  - Response length constants: `RESP_LEN_DEFAULT=4` (HAR-confirmed), `RESP_LEN_LONGER=1`, `RESP_LEN_SHORTER=2`
+  - Document type constants: `DOC_TYPE_BRIEF=2`, `DOC_TYPE_NOTE=9`
+  - BL staleness tracking: warns when build label is ≥8 days old; `GET /health` returns `bl_age_days`, `bl_stale`
+  - New Flask routes: `POST /notebooks/<id>/chat`, `/chat_batch`, `GET /sources/<id>/content`, `/user/quota`
+  - Updated `/ask` and `/ask_batch` with `mode` parameter (annotate vs chat)
+  - `_REQUEST_TIMEOUT` increased 45→60s for async s0tc2d calls
+- **`engine/mcp/notebooklm_proxy.py`** — v2.1 wrapper methods:
+  - `chat_message()`, `chat_messages_batch()`, `read_source()`, `get_user_quota()`
+- **`docs/NOTEBOOKLM_SDK.md`** — Complete v2.1 rewrite (11 HAR sessions, all 18 RPCs documented):
+  - Build Label Management section, Configure Chat guide (5 role examples)
+  - s0tc2d vs CYK0Xb comparison table, async polling strategy
+  - 6 Use Case Playbooks, BL monitoring guide, Known Limitations
+- **launcher.yaml**: `nlm_proxy` now `auto_start: true`
+
+### NLM v2.1 Skills (+4 new skills in autonomy pack — commit 8e658b4)
+- `nlm_chat(notebook_id, question, role, response_length)` — configure-chat with role injection
+- `nlm_chat_batch(notebook_id, questions, role, response_length)` — batched s0tc2d
+- `nlm_read_source(source_id)` — extract full source markdown
+- `nlm_user_quota()` — fetch account quota info
+- Total NLM skills: 7 → **16**
+
+### Tests (+13 new tests — commit 72f8018)
+- `TestV21Routes`: all 4 new v2.1 routes fully covered (auth guards, success, error paths)
+- Total NLM proxy tests: 54 → **67**
+- Total test suite: 4,800 → **4,823**
+
+---
+
 ## v0.60 — NLM v2: Live Write API, CDP Auth, QA Distiller & Launch Overhaul
 
 ### NotebookLM Live Write API (NEW)
