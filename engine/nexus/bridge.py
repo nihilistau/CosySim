@@ -105,10 +105,19 @@ def cmd_health(args: argparse.Namespace) -> None:
 
 def cmd_seed(args: argparse.Namespace) -> None:
     """Run the Nexus knowledge seeder."""
-    from engine.nexus.nexus_seeder import NexusSeeder
-    seeder = NexusSeeder()
-    counts = seeder.seed(args.source)
-    _output({"status": "ok", "source": args.source, "created": counts})
+    import engine.nexus.nexus_seeder as seeder_mod
+    source = getattr(args, "source", "all")
+    fn_map = {
+        "docs": seeder_mod.seed_docs,
+        "qa": seeder_mod.seed_qa,
+        "rules": seeder_mod.seed_rules,
+        "prompts": seeder_mod.seed_prompts,
+        "conventions": seeder_mod.seed_conventions,
+        "all": seeder_mod.seed_all,
+    }
+    fn = fn_map.get(source, seeder_mod.seed_all)
+    counts = fn()
+    _output({"status": "ok", "source": source, "created": counts})
 
 
 def cmd_maintain(args: argparse.Namespace) -> None:
