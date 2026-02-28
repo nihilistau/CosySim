@@ -1001,19 +1001,36 @@ document.getElementById('har-commit-btn')?.addEventListener('click', async () =>
   if (document.getElementById('har-convos')?.checked) items.push('conversations');
 
   const resultEl = document.getElementById('har-result');
-  resultEl.innerHTML = '<p class="muted">Committing...</p>';
-  const data = await api('/api/ingest/har/commit', {
+  resultEl.innerHTML = '<p class="muted">Committing... <span id="har-progress">Starting</span></p>';
+  const resp = await api('/api/ingest/har/commit', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ tmp_path: harTmpPath, items })
-  }, 120000);
-  if (data.error) {
-    resultEl.innerHTML = `<p style="color:var(--danger)">${esc(data.error)}</p>`;
-  } else {
-    resultEl.innerHTML = (data.results || []).map(r =>
-      `<div class="result-row">✅ <strong>${esc(r.name)}</strong> — ${r.stored}/${r.total} items stored</div>`
-    ).join('');
+  }, 15000);
+  if (resp.error) {
+    resultEl.innerHTML = `<p style="color:var(--danger)">${esc(resp.error)}</p>`;
+    return;
   }
+  // Poll for job completion
+  const jobId = resp.job_id;
+  let attempts = 0;
+  while (attempts < 120) {
+    await new Promise(r => setTimeout(r, 1500));
+    attempts++;
+    const prog = document.getElementById('har-progress');
+    if (prog) prog.textContent = `${attempts * 1.5 | 0}s elapsed...`;
+    const status = await api('/api/ingest/har/status/' + jobId, {}, 10000);
+    if (status.status === 'done') {
+      resultEl.innerHTML = (status.results || []).map(r =>
+        `<div class="result-row">✅ <strong>${esc(r.name)}</strong> — ${r.stored}/${r.total} items stored</div>`
+      ).join('');
+      return;
+    } else if (status.status === 'error') {
+      resultEl.innerHTML = `<p style="color:var(--danger)">${esc(status.error)}</p>`;
+      return;
+    }
+  }
+  resultEl.innerHTML = '<p style="color:var(--warning)">Ingestion is taking longer than expected. Check the activity log.</p>';
 });
 
 // Codebase Indexer

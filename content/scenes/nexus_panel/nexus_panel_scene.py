@@ -99,6 +99,9 @@ class NexusPanelScene(BaseScene, NexusSceneMixin):
         # Guided distillation sessions
         self._guided_sessions: Dict[str, dict] = {}
 
+        # Background ingest job tracker
+        self._ingest_jobs: Dict[str, dict] = {}
+
         self._register_routes()
         self.nexus_init(SCENE_ID)
         logger.info("NexusPanelScene initialised on port %s", port)
@@ -766,26 +769,42 @@ class NexusPanelScene(BaseScene, NexusSceneMixin):
 
         @app.route("/api/ingest/har/commit", methods=["POST"])
         def api_ingest_har_commit():
-            """Commit HAR data to Nexus."""
+            """Commit HAR data to Nexus (runs in background thread)."""
             data = request.get_json(force=True)
             tmp_path = data.get("tmp_path", "")
             items = data.get("items", ["sources", "documents", "notes", "conversations"])
-            try:
-                from engine.nexus.har_extractor import HARExtractor
-                ext = HARExtractor()
-                notebooks = ext.extract(tmp_path)
-                client = self._get_client()
-                if not client:
-                    return jsonify({"error": "Nexus unavailable"}), 503
-                results = []
-                for nb in notebooks:
-                    r = ext.ingest_to_nexus(nb, client, items=items)
-                    total = len(nb.sources) + len(nb.documents) + len(nb.notes) + len(nb.conversations)
-                    results.append({"name": nb.notebook_name, "stored": r.entries_created, "total": total})
-                self._log_activity("har_ingest", f"{len(notebooks)} notebooks", "ingest")
-                return jsonify({"results": results})
-            except Exception as exc:
-                return jsonify({"error": str(exc)}), 500
+            job_id = f"har_ingest_{int(time.time())}"
+            self._ingest_jobs[job_id] = {"status": "running", "results": None, "error": None}
+
+            def _run():
+                try:
+                    from engine.nexus.har_extractor import HARExtractor
+                    ext = HARExtractor()
+                    notebooks = ext.extract(tmp_path)
+                    client = self._get_client()
+                    if not client:
+                        self._ingest_jobs[job_id] = {"status": "error", "results": None, "error": "Nexus unavailable"}
+                        return
+                    results = []
+                    for nb in notebooks:
+                        r = ext.ingest_to_nexus(nb, client, items=items)
+                        total = len(nb.sources) + len(nb.documents) + len(nb.notes) + len(nb.conversations)
+                        results.append({"name": nb.notebook_name, "stored": r.entries_created, "total": total})
+                    self._log_activity("har_ingest", f"{len(notebooks)} notebooks", "ingest")
+                    self._ingest_jobs[job_id] = {"status": "done", "results": results, "error": None}
+                except Exception as exc:
+                    self._ingest_jobs[job_id] = {"status": "error", "results": None, "error": str(exc)}
+
+            threading.Thread(target=_run, daemon=True).start()
+            return jsonify({"job_id": job_id, "status": "running"})
+
+        @app.route("/api/ingest/har/status/<job_id>")
+        def api_ingest_har_status(job_id: str):
+            """Poll HAR ingestion job status."""
+            job = self._ingest_jobs.get(job_id)
+            if not job:
+                return jsonify({"error": "Job not found"}), 404
+            return jsonify(job)
 
         @app.route("/api/ingest/codebase", methods=["POST"])
         def api_ingest_codebase():
