@@ -65,7 +65,7 @@ class CommandCenterScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id
             self.app, cors_allowed_origins="*", async_mode="threading"
         )
 
-        super().__init__(name="command_center", host=host, port=port)
+        super().__init__(scene_name="command_center", host=host, port=port)
 
         self._collector = None
         self._metrics_db = None

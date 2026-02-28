@@ -117,7 +117,7 @@ class HeistScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_I
         CORS(self.app)
         self.socketio = SocketIO(self.app, cors_allowed_origins="*", async_mode="threading")
 
-        super().__init__(name="heist", host=host, port=port)
+        super().__init__(scene_name="heist", host=host, port=port)
 
         self.db = db or Database()
         self.game: Optional[HeistState] = None
