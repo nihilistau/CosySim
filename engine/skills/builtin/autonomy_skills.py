@@ -862,3 +862,161 @@ def phone_assistant_set_mode(mode: str) -> str:
     """Set routing mode: auto (cascade all), passthrough (server only), offline (local only)."""
     result = _phone_assistant().set_mode(mode)
     return json.dumps({"mode": result})
+
+
+# ── NLM Write Skills ────────────────────────────────────────────────────
+
+
+def _nlm_proxy() -> Any:
+    """Lazy accessor for the NLM live proxy client."""
+    from engine.mcp.notebooklm_proxy import get_notebooklm_proxy
+    return get_notebooklm_proxy()
+
+
+@skill(
+    pack="autonomy",
+    description="Ask a single question directly to a NotebookLM notebook via live API (CYK0Xb RPC)",
+    tags=["nlm", "notebooklm", "ask", "research", "autonomy"],
+    category=SkillCategory.MEMORY,
+    cooldown=5.0,
+)
+def nlm_live_ask(notebook_id: str, question: str) -> str:
+    """Ask a single question directly to a NLM notebook. Returns answer_id, answer, and source citations.
+
+    Args:
+        notebook_id: UUID of the notebook to query.
+        question: The question to ask.
+    """
+    result = _nlm_proxy().ask(notebook_id, question)
+    return json.dumps(result, default=str)
+
+
+@skill(
+    pack="autonomy",
+    description="Ask up to 5 questions at once directly to a NotebookLM notebook (batched CYK0Xb)",
+    tags=["nlm", "notebooklm", "batch", "research", "autonomy"],
+    category=SkillCategory.MEMORY,
+    cooldown=5.0,
+)
+def nlm_live_batch_ask(notebook_id: str, questions: str) -> str:
+    """Ask multiple questions in a single HTTP request directly to NLM. Pass questions as JSON array string.
+
+    Args:
+        notebook_id: UUID of the notebook to query.
+        questions: JSON array of question strings, e.g. '["Q1?", "Q2?", "Q3?"]'.
+    """
+    try:
+        q_list = json.loads(questions) if isinstance(questions, str) else questions
+    except json.JSONDecodeError:
+        q_list = [questions]
+    result = _nlm_proxy().batch_ask(notebook_id, q_list)
+    return json.dumps(result, default=str)
+
+
+@skill(
+    pack="autonomy",
+    description="Generate a document/report from selected NotebookLM sources (ciyUvf RPC)",
+    tags=["nlm", "notebooklm", "generate", "document", "autonomy"],
+    category=SkillCategory.MEMORY,
+    cooldown=10.0,
+)
+def nlm_generate_document(notebook_id: str, source_ids: str, doc_type: int = 2) -> str:
+    """Generate a structured document from notebook sources.
+
+    Args:
+        notebook_id: UUID of the notebook.
+        source_ids: JSON array of source UUID strings.
+        doc_type: Document type (2=standard, 9=deep research).
+    """
+    try:
+        sid_list = json.loads(source_ids) if isinstance(source_ids, str) else source_ids
+    except json.JSONDecodeError:
+        sid_list = [source_ids]
+    result = _nlm_proxy().generate_document(notebook_id, sid_list, doc_type)
+    return json.dumps(result, default=str)
+
+
+@skill(
+    pack="autonomy",
+    description="Save a note artifact in a NotebookLM notebook (R7cb6c RPC)",
+    tags=["nlm", "notebooklm", "note", "save", "autonomy"],
+    category=SkillCategory.MEMORY,
+    cooldown=5.0,
+)
+def nlm_save_note(notebook_id: str, source_ids: str, note_type: int = 2) -> str:
+    """Create and save a note artifact from selected sources in a NLM notebook.
+
+    Args:
+        notebook_id: UUID of the notebook.
+        source_ids: JSON array of source UUID strings to associate with the note.
+        note_type: Note type (2=standard note, 9=deep research note).
+    """
+    try:
+        sid_list = json.loads(source_ids) if isinstance(source_ids, str) else source_ids
+    except json.JSONDecodeError:
+        sid_list = [source_ids]
+    result = _nlm_proxy().save_note(notebook_id, sid_list, note_type)
+    return json.dumps(result, default=str)
+
+
+@skill(
+    pack="autonomy",
+    description="Capture NLM auth cookies automatically via Chrome CDP",
+    tags=["nlm", "notebooklm", "auth", "cookies", "autonomy"],
+    category=SkillCategory.SYSTEM,
+    cooldown=30.0,
+)
+def nlm_capture_cookies() -> str:
+    """Automatically capture NotebookLM session cookies from Chrome via CDP.
+
+    Requires Chrome running locally (will be launched if not running).
+    Returns imported cookie count and current build label.
+    """
+    result = _nlm_proxy().capture_cookies()
+    return json.dumps(result, default=str)
+
+
+@skill(
+    pack="autonomy",
+    description="Get NLM proxy metadata: build label and session ID",
+    tags=["nlm", "notebooklm", "meta", "status", "autonomy"],
+    category=SkillCategory.SYSTEM,
+)
+def nlm_proxy_meta() -> str:
+    """Return current NLM proxy metadata (bl build label and f.sid session ID)."""
+    result = _nlm_proxy().get_meta()
+    return json.dumps(result, default=str)
+
+
+@skill(
+    pack="autonomy",
+    description="Run NLM QA distillation on a notebook — generates and stores Q&A pairs in Nexus",
+    tags=["nlm", "notebooklm", "distill", "qa", "nexus", "autonomy"],
+    category=SkillCategory.MEMORY,
+    cooldown=30.0,
+)
+def nlm_distill_notebook(
+    notebook_id: str,
+    topic: str,
+    num_questions: int = 10,
+) -> str:
+    """Ask a batch of topic-specific questions to NLM and store answers as Nexus Q&A pairs.
+
+    Args:
+        notebook_id: UUID of the NLM notebook to query.
+        topic: Topic key from QUESTION_TEMPLATES or free-text topic.
+        num_questions: How many Q&A pairs to generate (max 25 per call).
+    """
+    try:
+        from engine.nexus.nlm_qa_distiller import NLMQADistiller
+        distiller = NLMQADistiller()
+        pairs = distiller.distill_topic(notebook_id, topic,
+                                        num_questions=min(num_questions, 25))
+        return json.dumps({
+            "pairs_generated": len(pairs),
+            "topic": topic,
+            "notebook_id": notebook_id,
+            "sample": pairs[:2] if pairs else [],
+        }, default=str)
+    except Exception as exc:
+        return json.dumps({"error": str(exc)})

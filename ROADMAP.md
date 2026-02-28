@@ -1,6 +1,6 @@
 # CosySim Roadmap
 
-> Current: **v0.59b** | Last updated: 2026-02-27
+> Current: **v0.60** | Last updated: 2026-02-28
 
 ## Philosophy
 
@@ -97,7 +97,7 @@ CosySim is a **meta-system** — a playground for designing, testing, benchmarki
 - [x] Autonomous skill pack (67 skills for agent self-management)
 - [x] Local agent guide and onboarding documentation
 
-### v0.59b — Connected System: Phone, HA & Deep Storage ✅ ← CURRENT
+### v0.59b — Connected System: Phone, HA & Deep Storage ✅
 - [x] Phone news feed with user feedback loop
 - [x] Home Assistant integration (11 MCP tools, safety governance)
 - [x] NLM deep storage (3-tier notebook archival, HAR extraction)
@@ -110,11 +110,21 @@ CosySim is a **meta-system** — a playground for designing, testing, benchmarki
 - [x] 188 skills across 21 packs, 214 MCP server tools
 - [x] 4,747 tests across 176 files
 
+### v0.60 — NLM v2: Live Write API, CDP Auth & QA Distiller ✅ ← CURRENT
+- [x] NLM batchexecute write RPCs: CYK0Xb (ask), ciyUvf (generate doc), R7cb6c (save note)
+- [x] Multi-question batching — 5 questions per HTTP request
+- [x] Chrome CDP automated cookie capture (`engine/nexus/nlm_har_capture.py`)
+- [x] Build label (bl) + f.sid management via `data/nlm_meta.json`
+- [x] NLM QA Distiller — 75 topic questions → Nexus expansion
+- [x] 7 new NLM live skills in autonomy pack
+- [x] Comprehensive NLM SDK documentation (`docs/NOTEBOOKLM_SDK.md`)
+- [x] 195 skills across 21 packs, 4,800 tests
+
 ---
 
 ## Next Up
 
-### v0.60b — News Intelligence & Agent Autonomy
+### v0.61 — News Intelligence & Agent Autonomy
 
 - [ ] News ingestion pipeline — NotebookLM-based source discovery, distillation, Nexus storage
 - [ ] Curated news feeds with agent-driven filtering and relevance scoring

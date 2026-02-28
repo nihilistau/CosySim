@@ -2,7 +2,67 @@
 
 All notable changes to CosySim are documented here.
 
-## v0.59b — Connected System: Phone, HA & Deep Storage
+## v0.60 — NLM v2: Live Write API, CDP Auth, QA Distiller & Launch Overhaul
+
+### NotebookLM Live Write API (NEW)
+- **`engine/mcp/nlm_live_proxy.py`** — Complete v2 rewrite of the batchexecute proxy:
+  - **CYK0Xb RPC** — Ask questions with full answer + citation extraction
+  - **ciyUvf RPC** — Generate documents/reports from notebook sources
+  - **R7cb6c RPC** — Create and save note artifacts in notebooks
+  - **Multi-question batching** — up to 5 questions in a single HTTP request (5× efficiency)
+  - **`_batchexecute_multi()`** — packs N calls into one request, parses all `wrb.fr` blocks
+  - **Build label management** — `bl` and `f.sid` stored in `data/nlm_meta.json`, auto-extracted from HAR
+  - **`_WRITE_CONFIG`** — canonical write config object reverse-engineered from HAR
+  - New REST routes: `POST /notebooks/<id>/ask`, `ask_batch`, `generate`, `save_note`, `GET|POST /meta`
+- **`engine/nexus/nlm_har_capture.py`** (NEW) — Chrome CDP automated cookie capture:
+  - `CDPSession` class — WebSocket-based Chrome DevTools Protocol client
+  - `capture_nlm_cookies()` — launch Chrome, navigate to NLM, extract all session cookies
+  - `WIZ_global_data` extraction for `bl` and `f.sid` without HAR
+  - Fallback: uses existing profile so no login required
+
+### NLM QA Distiller (NEW)
+- **`engine/nexus/nlm_qa_distiller.py`** — systematically expands Nexus QA pairs via NLM:
+  - 75 hand-crafted questions across 7 topic templates: `cosysim_architecture`, `nlm_integration`,
+    `nexus_knowledge_system`, `agent_operations`, `lmstudio_integration`, `scene_development`,
+    `self_improvement`
+  - `NLMQADistiller.bulk_distill()` — runs all templates in 15 batches of 5
+  - Auto-stores Q&A pairs directly in Nexus SQLite (with Nexus server fallback)
+  - `QUESTION_DESIGN_GUIDE` — instructions for local models to write effective NLM questions
+  - CLI: `python -m engine.nexus.nlm_qa_distiller --bulk --notebook <id>`
+
+### NLM SDK Documentation (NEW)
+- **`docs/NOTEBOOKLM_SDK.md`** — comprehensive 19KB protocol reference:
+  - Full batchexecute endpoint spec (URL params, headers, SAPISIDHASH computation)
+  - Complete RPC catalogue: 9 RPCs documented with args/returns
+  - Multi-question batching format with examples
+  - 5 maximization strategies for agent workflows
+  - HAR analysis findings (Chrome 130+ cookie redaction, `wrb.fr` parsing)
+  - Session refresh strategy and build label maintenance
+
+### NLM Live Skills (NEW — 7 skills in autonomy pack)
+- `nlm_live_ask(notebook_id, question)` — direct CYK0Xb ask
+- `nlm_live_batch_ask(notebook_id, questions)` — batch up to 5 questions
+- `nlm_generate_document(notebook_id, source_ids, doc_type)` — ciyUvf document generation
+- `nlm_save_note(notebook_id, source_ids, note_type)` — R7cb6c note creation
+- `nlm_capture_cookies()` — Chrome CDP automatic auth capture
+- `nlm_proxy_meta()` — get current bl/f.sid metadata
+- `nlm_distill_notebook(notebook_id, topic, num_questions)` — distill Q&A → Nexus
+
+### High-Level Proxy Updates
+- **`engine/mcp/notebooklm_proxy.py`** — updated to use live write API:
+  - `ask()` → real CYK0Xb via live proxy (was stub)
+  - Added `batch_ask()`, `generate_document()`, `save_note()`, `capture_cookies()`, `get_meta()`
+
+### Test Suite
+- **4,800 tests** across 176+ files (+53 new NLM v2 tests):
+  - `TestWriteOperationParsing` — CYK0Xb/ciyUvf/R7cb6c response parsers
+  - `TestMultiBatchParsing` — multi-wrb.fr block extraction
+  - `TestWriteFlaskEndpoints` — ask, ask_batch, meta GET/POST, 401 guard
+  - `TestNLMQADistiller` — question templates, fallback, offline behaviour
+
+---
+
+
 
 ### Phone News Feed (NEW)
 - **`engine/integrations/phone_news.py`** — curated news feed for mobile phone scene

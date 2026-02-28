@@ -639,3 +639,120 @@ class TestIntegrationFlow:
         m1 = get_notebook_manager()
         m2 = get_notebook_manager()
         assert m1 is m2
+
+
+class TestNLMWriteSkills:
+    """Tests for the new NLM live write skills in autonomy pack."""
+
+    def test_nlm_live_skills_importable(self):
+        """All 7 new NLM live skills can be imported."""
+        from engine.skills.builtin.autonomy_skills import (
+            nlm_live_ask,
+            nlm_live_batch_ask,
+            nlm_generate_document,
+            nlm_save_note,
+            nlm_capture_cookies,
+            nlm_proxy_meta,
+            nlm_distill_notebook,
+        )
+        assert callable(nlm_live_ask)
+        assert callable(nlm_live_batch_ask)
+        assert callable(nlm_generate_document)
+        assert callable(nlm_save_note)
+        assert callable(nlm_capture_cookies)
+        assert callable(nlm_proxy_meta)
+        assert callable(nlm_distill_notebook)
+
+    def test_nlm_live_ask_returns_error_when_proxy_offline(self):
+        """nlm_live_ask returns JSON error when proxy is not running."""
+        from engine.skills.builtin.autonomy_skills import nlm_live_ask
+        with patch("engine.mcp.notebooklm_proxy.get_notebooklm_proxy") as mock_get:
+            mock_proxy = MagicMock()
+            mock_proxy.ask.return_value = {"error": "proxy_offline"}
+            mock_get.return_value = mock_proxy
+            result = nlm_live_ask("nb-123", "What is MCP?")
+        data = json.loads(result)
+        assert "error" in data
+
+    def test_nlm_live_batch_ask_parses_json_questions(self):
+        """nlm_live_batch_ask deserializes JSON string questions list."""
+        from engine.skills.builtin.autonomy_skills import nlm_live_batch_ask
+        with patch("engine.mcp.notebooklm_proxy.get_notebooklm_proxy") as mock_get:
+            mock_proxy = MagicMock()
+            mock_proxy.batch_ask.return_value = {"answers": [], "count": 0}
+            mock_get.return_value = mock_proxy
+            result = nlm_live_batch_ask("nb-123", '["Q1?", "Q2?"]')
+        data = json.loads(result)
+        assert "answers" in data
+        # Verify the proxy received a list (not a string)
+        call_args = mock_proxy.batch_ask.call_args
+        assert isinstance(call_args[0][1], list)
+        assert call_args[0][1] == ["Q1?", "Q2?"]
+
+    def test_nlm_live_batch_ask_invalid_json_falls_back(self):
+        """nlm_live_batch_ask handles invalid JSON gracefully."""
+        from engine.skills.builtin.autonomy_skills import nlm_live_batch_ask
+        with patch("engine.mcp.notebooklm_proxy.get_notebooklm_proxy") as mock_get:
+            mock_proxy = MagicMock()
+            mock_proxy.batch_ask.return_value = {"answers": []}
+            mock_get.return_value = mock_proxy
+            result = nlm_live_batch_ask("nb-123", "not json")
+        assert json.loads(result) is not None
+        call_args = mock_proxy.batch_ask.call_args
+        assert isinstance(call_args[0][1], list)
+
+    def test_nlm_generate_document_parses_source_ids(self):
+        """nlm_generate_document deserializes source_ids JSON array."""
+        from engine.skills.builtin.autonomy_skills import nlm_generate_document
+        with patch("engine.mcp.notebooklm_proxy.get_notebooklm_proxy") as mock_get:
+            mock_proxy = MagicMock()
+            mock_proxy.generate_document.return_value = {"title": "Test Doc"}
+            mock_get.return_value = mock_proxy
+            result = nlm_generate_document("nb-123", '["src-1", "src-2"]', 2)
+        data = json.loads(result)
+        assert "title" in data
+
+    def test_nlm_save_note_parses_source_ids(self):
+        """nlm_save_note deserializes source_ids JSON array."""
+        from engine.skills.builtin.autonomy_skills import nlm_save_note
+        with patch("engine.mcp.notebooklm_proxy.get_notebooklm_proxy") as mock_get:
+            mock_proxy = MagicMock()
+            mock_proxy.save_note.return_value = {"note_id": "note-123"}
+            mock_get.return_value = mock_proxy
+            result = nlm_save_note("nb-123", '["src-1"]', 2)
+        data = json.loads(result)
+        assert "note_id" in data
+
+    def test_nlm_capture_cookies_returns_json(self):
+        """nlm_capture_cookies returns JSON response."""
+        from engine.skills.builtin.autonomy_skills import nlm_capture_cookies
+        with patch("engine.mcp.notebooklm_proxy.get_notebooklm_proxy") as mock_get:
+            mock_proxy = MagicMock()
+            mock_proxy.capture_cookies.return_value = {"imported_cookies": 5, "status": "ok"}
+            mock_get.return_value = mock_proxy
+            result = nlm_capture_cookies()
+        data = json.loads(result)
+        assert "imported_cookies" in data
+
+    def test_nlm_proxy_meta_returns_json(self):
+        """nlm_proxy_meta returns JSON with bl and f_sid."""
+        from engine.skills.builtin.autonomy_skills import nlm_proxy_meta
+        with patch("engine.mcp.notebooklm_proxy.get_notebooklm_proxy") as mock_get:
+            mock_proxy = MagicMock()
+            mock_proxy.get_meta.return_value = {"bl": "boq_test", "f_sid": "-1"}
+            mock_get.return_value = mock_proxy
+            result = nlm_proxy_meta()
+        data = json.loads(result)
+        assert "bl" in data
+        assert "f_sid" in data
+
+    def test_nlm_distill_notebook_offline_returns_error(self):
+        """nlm_distill_notebook gracefully handles NLM proxy being offline."""
+        from engine.skills.builtin.autonomy_skills import nlm_distill_notebook
+        with patch("engine.nexus.nlm_qa_distiller.NLMQADistiller") as mock_cls:
+            mock_distiller = MagicMock()
+            mock_distiller.distill_topic.return_value = []
+            mock_cls.return_value = mock_distiller
+            result = nlm_distill_notebook("nb-123", "cosysim_architecture", 10)
+        data = json.loads(result)
+        assert data["pairs_generated"] == 0
