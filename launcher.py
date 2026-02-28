@@ -107,6 +107,12 @@ SERVICES: Dict[str, Dict[str, Any]] = {
         "port": 8800, "label": "NLM Live Proxy",
         "auto_start": False,
     },
+    "system_control": {
+        "type": "flask",
+        "cls": "content.scenes.system_control.system_control_scene.SystemControlScene",
+        "port": 5575, "label": "System Control Panel",
+        "auto_start": True,
+    },
 }
 
 SCENES: Dict[str, Dict[str, Any]] = {

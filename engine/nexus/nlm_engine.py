@@ -1,11 +1,7 @@
 """NLM Engine — Unified NotebookLM client for CosySim.
 
-Wraps BOTH the notebooklm-mcp HTTP proxy (Node.js) AND the Nexus-side
-NLM client, providing a single Python interface to all NLM operations.
-
-The engine tries the CosySim proxy first (port 8800), then falls back
-to the Nexus NLM client (port 3000), and can also use direct batchexecute
-with HAR-extracted cookies for read operations.
+Wraps the CosySim NLM Live Proxy (port 8800) providing a single Python
+interface to all NLM operations via the batchexecute API.
 
 Usage:
     from engine.nexus.nlm_engine import get_nlm_engine
@@ -27,6 +23,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 from engine.config import get_config
+from engine.mcp.nlm_live_proxy import NLMClient, get_nlm_client  # noqa: F401  re-exported
 
 logger = logging.getLogger(__name__)
 
@@ -66,12 +63,10 @@ class NLMStats:
 # ──── NLM Engine ────
 
 class NLMEngine:
-    """Unified NotebookLM client with dual backend and metrics tracking.
+    """Unified NotebookLM client backed by the CosySim Live Proxy.
 
-    Backends (tried in order):
-        1. CosySim NotebookLMProxy (localhost:8800) — basic ops
-        2. Nexus NLMClient (localhost:3000) — full CRUD via roomi-fields/notebooklm-mcp
-        3. Direct batchexecute — read-only, requires HAR cookies
+    All requests route through the nlm_live_proxy at localhost:8800
+    which handles batchexecute RPC calls directly with stored auth cookies.
 
     Usage:
         engine = NLMEngine()
@@ -85,9 +80,6 @@ class NLMEngine:
         self._proxy_url: str = cfg.get(
             "notebooklm.base_url", "http://localhost:8800"
         )
-        self._nexus_nlm_url: str = cfg.get(
-            "notebooklm.nexus_nlm_url", "http://localhost:3000"
-        )
         self._timeout: int = cfg.get("notebooklm.timeout", 120)
         self._cookies: Dict[str, str] = {}
         self._stats = NLMStats()
@@ -96,17 +88,15 @@ class NLMEngine:
     # ──── Status ────
 
     def is_available(self) -> bool:
-        """Check if any NLM backend is reachable."""
-        return self._check_backend(self._proxy_url) or self._check_backend(self._nexus_nlm_url)
+        """Check if the NLM proxy backend is reachable."""
+        return self._check_backend(self._proxy_url)
 
     def status(self) -> Dict[str, Any]:
-        """Return status of all backends."""
+        """Return status of the proxy backend."""
         proxy_ok = self._check_backend(self._proxy_url)
-        nexus_ok = self._check_backend(self._nexus_nlm_url)
         return {
-            "available": proxy_ok or nexus_ok,
+            "available": proxy_ok,
             "proxy": {"url": self._proxy_url, "healthy": proxy_ok},
-            "nexus_nlm": {"url": self._nexus_nlm_url, "healthy": nexus_ok},
             "has_cookies": bool(self._cookies),
             "stats": self._stats.to_dict(),
         }
@@ -438,17 +428,10 @@ class NLMEngine:
         payload: Dict[str, Any] = {"notebook_id": notebook_id}
         if customization:
             payload["customization"] = customization
-        # Try proxy first (has /generate_audio)
         result = self._try_post(self._proxy_url, "/generate_audio", payload)
         if result is not None:
             return result
-        # Fall back to Nexus NLM client
-        payload["type"] = "audio"
-        if customization:
-            payload["custom_instructions"] = customization
-        return self._try_post(self._nexus_nlm_url, "/content/generate", payload) or {
-            "error": "No NLM backend available for audio generation"
-        }
+        return {"error": "NLM proxy unavailable for audio generation"}
 
     def download_content(
         self,
@@ -541,29 +524,26 @@ class NLMEngine:
             return None
 
     def _post_any(self, path: str, payload: Dict[str, Any]) -> Dict[str, Any]:
-        """POST to first available backend."""
-        for base in [self._proxy_url, self._nexus_nlm_url]:
-            result = self._try_post(base, path, payload)
-            if result is not None:
-                return result
+        """POST to the proxy backend."""
+        result = self._try_post(self._proxy_url, path, payload)
+        if result is not None:
+            return result
         self._stats.errors += 1
-        return {"error": "No NLM backend available"}
+        return {"error": "NLM proxy unavailable"}
 
     def _get_any(self, path: str, params: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
-        """GET from first available backend."""
-        for base in [self._proxy_url, self._nexus_nlm_url]:
-            result = self._try_get(base, path, params)
-            if result is not None:
-                return result
-        return {"error": "No NLM backend available"}
+        """GET from the proxy backend."""
+        result = self._try_get(self._proxy_url, path, params)
+        if result is not None:
+            return result
+        return {"error": "NLM proxy unavailable"}
 
     def _delete_any(self, path: str, params: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
-        """DELETE on first available backend."""
-        for base in [self._proxy_url, self._nexus_nlm_url]:
-            result = self._try_delete(base, path, params)
-            if result is not None:
-                return result
-        return {"error": "No NLM backend available"}
+        """DELETE on the proxy backend."""
+        result = self._try_delete(self._proxy_url, path, params)
+        if result is not None:
+            return result
+        return {"error": "NLM proxy unavailable"}
 
 
 # ──── Singleton ────

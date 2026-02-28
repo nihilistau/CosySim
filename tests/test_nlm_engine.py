@@ -66,12 +66,11 @@ def test_is_available_proxy(engine):
 
 
 def test_status(engine):
-    """Status returns all backend info."""
+    """Status returns proxy backend info."""
     with patch.object(engine, "_check_backend", return_value=False):
         s = engine.status()
     assert "available" in s
     assert "proxy" in s
-    assert "nexus_nlm" in s
     assert "has_cookies" in s
     assert "stats" in s
 
@@ -255,19 +254,10 @@ def test_create_note(engine):
 # ──── Backend Fallback ────
 
 def test_post_any_tries_both_backends(engine):
-    """POST falls back to second backend if first fails."""
-    call_count = 0
-    def mock_try_post(base_url, path, payload):
-        nonlocal call_count
-        call_count += 1
-        if "8800" in base_url:
-            return None  # proxy down
-        return {"success": True}  # nexus nlm works
-
-    with patch.object(engine, "_try_post", side_effect=mock_try_post):
+    """POST returns error when proxy is down."""
+    with patch.object(engine, "_try_post", return_value=None):
         result = engine._post_any("/test", {})
-    assert result["success"] is True
-    assert call_count == 2
+    assert "error" in result
 
 
 def test_post_any_no_backend(engine):

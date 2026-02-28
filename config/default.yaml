@@ -106,6 +106,11 @@ scenes:
     port: 5570
     debug: false
 
+  system_control:
+    host: "localhost"
+    port: 5575
+    debug: false
+
   hub:
     host: "localhost"
     port: 8500

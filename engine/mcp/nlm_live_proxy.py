@@ -881,6 +881,364 @@ def _parse_save_note_response(data: Any) -> Dict[str, Any]:
     return {"note_id": None, "title": "", "note_type": 2}
 
 
+# ── NLMClient ────────────────────────────────────────────────────────────
+
+class NLMClient:
+    """High-level NotebookLM client wrapping all batchexecute RPCs.
+
+    Provides a clean class-based API over the module-level helper functions.
+    Used by nlm_engine.py and any caller that needs direct NLM access.
+    Delegates to module-level functions and uses the global cookie/meta store.
+    """
+
+    # ── Auth ──────────────────────────────────────────────────────────────
+
+    def get_cookies(self) -> Dict[str, Any]:
+        """Load cookies from disk. Returns empty dict if none."""
+        return _load_cookies()
+
+    def has_cookies(self) -> bool:
+        """Return True if auth cookies are present."""
+        return bool(_load_cookies())
+
+    def import_cookies_from_har(self, har_path: str) -> Dict[str, Any]:
+        """Extract and save cookies from a HAR file.
+
+        Args:
+            har_path: Path to the .har file.
+
+        Returns:
+            Dict with imported count, total count, and meta fields.
+        """
+        new_cookies, new_meta = extract_cookies_from_har(har_path)
+        existing = _load_cookies()
+        merged = {**existing, **new_cookies}
+        _save_cookies(merged)
+        existing_meta = _load_meta()
+        if new_meta.get("bl"):
+            existing_meta["bl"] = new_meta["bl"]
+        if new_meta.get("f_sid"):
+            existing_meta["f_sid"] = new_meta["f_sid"]
+        _save_meta(existing_meta)
+        return {"imported": len(new_cookies), "total": len(merged), **existing_meta}
+
+    def capture_cookies_from_chrome(self) -> Dict[str, Any]:
+        """Auto-capture cookies from Chrome via CDP.
+
+        Returns:
+            Dict with captured cookie count and meta.
+        """
+        from engine.nexus.nlm_har_capture import capture_nlm_cookies
+        return capture_nlm_cookies()
+
+    # ── Notebooks ─────────────────────────────────────────────────────────
+
+    def list_notebooks(self) -> List[Dict[str, Any]]:
+        """List all notebooks for the authenticated user.
+
+        Returns:
+            List of notebook dicts with id and name.
+        """
+        cookies = _load_cookies()
+        if not cookies:
+            return []
+        _, data = _batchexecute("ub2Bae", "[[2]]", cookies)
+        if not data or isinstance(data, dict):
+            return []
+        notebooks = []
+        try:
+            for nb in (data[0] if isinstance(data, list) and data else []):
+                if isinstance(nb, list):
+                    texts = _extract_strings(nb, min_len=5)
+                    name = texts[0] if texts else "Unknown"
+                    nid = None
+                    for part in nb:
+                        if isinstance(part, str) and re.match(r"[a-f0-9-]{36}", part):
+                            nid = part
+                            break
+                    if nid:
+                        notebooks.append({"id": nid, "name": name})
+        except (IndexError, TypeError):
+            pass
+        return notebooks
+
+    def get_notebook(self, notebook_id: str) -> Dict[str, Any]:
+        """Get full notebook data: summary, sources, notes, conversations.
+
+        Args:
+            notebook_id: The notebook UUID.
+
+        Returns:
+            Dict with summary, sources, notes, conversations, and stats.
+        """
+        cookies = _load_cookies()
+        result: Dict[str, Any] = {"notebook_id": notebook_id}
+        _, data = _batchexecute("VfAZjd", json.dumps([notebook_id, [2]]), cookies, notebook_id)
+        result["summary"] = "\n\n".join(_extract_strings(data, 50)) if data and not isinstance(data, dict) else ""
+        _, data = _batchexecute("wXbhsf", json.dumps([None, 1, None, [2]]), cookies, notebook_id)
+        if data and not isinstance(data, dict):
+            result["notebook_name"], result["sources"] = _extract_sources(data)
+        else:
+            result["notebook_name"] = ""
+            result["sources"] = []
+        _, data = _batchexecute(
+            "gArtLc",
+            json.dumps([[2], notebook_id, "NOT artifact.status = \"ARTIFACT_STATUS_SUGGESTED\""]),
+            cookies, notebook_id,
+        )
+        notes = _dedup(_extract_strings(data, 80)) if data and not isinstance(data, dict) else []
+        result["notes"] = [n for n in notes if len(n) > 100]
+        _, data = _batchexecute("cFji9", json.dumps([notebook_id, None, None, [2]]), cookies, notebook_id)
+        convos = _dedup(_extract_strings(data, 80)) if data and not isinstance(data, dict) else []
+        result["conversations"] = [c for c in convos if len(c) > 100]
+        result["stats"] = {
+            "sources": len(result["sources"]),
+            "notes": len(result["notes"]),
+            "conversations": len(result["conversations"]),
+        }
+        return result
+
+    def get_sources(self, notebook_id: str) -> List[Dict[str, Any]]:
+        """List all sources in a notebook.
+
+        Args:
+            notebook_id: The notebook UUID.
+
+        Returns:
+            List of source dicts.
+        """
+        cookies = _load_cookies()
+        _, data = _batchexecute("wXbhsf", json.dumps([None, 1, None, [2]]), cookies, notebook_id)
+        if not data or isinstance(data, dict):
+            return []
+        _, sources = _extract_sources(data)
+        return sources
+
+    def get_chat_history(self, notebook_id: str, page_size: int = 20) -> List[Dict[str, Any]]:
+        """Get conversation/chat history for a notebook (hPTbtc RPC).
+
+        Args:
+            notebook_id: The notebook UUID.
+            page_size: Number of messages per page.
+
+        Returns:
+            List of conversation message dicts.
+        """
+        cookies = _load_cookies()
+        args = json.dumps([[], None, notebook_id, page_size])
+        _, data = _batchexecute("hPTbtc", args, cookies, notebook_id)
+        if not data or isinstance(data, dict):
+            return []
+        messages = []
+        try:
+            for s in _extract_strings(data, min_len=20):
+                if len(s) > 50:
+                    messages.append({"content": s, "type": "message"})
+        except (IndexError, TypeError):
+            pass
+        return messages
+
+    def get_notes(self, notebook_id: str) -> List[str]:
+        """Get all notes/artifacts for a notebook.
+
+        Args:
+            notebook_id: The notebook UUID.
+
+        Returns:
+            List of note text strings.
+        """
+        cookies = _load_cookies()
+        args = json.dumps([[2], notebook_id, "NOT artifact.status = \"ARTIFACT_STATUS_SUGGESTED\""])
+        _, data = _batchexecute("gArtLc", args, cookies, notebook_id)
+        if not data or isinstance(data, dict):
+            return []
+        notes = _dedup(_extract_strings(data, 80))
+        return [n for n in notes if len(n) > 100]
+
+    # ── Ask / Chat ────────────────────────────────────────────────────────
+
+    def ask(self, notebook_id: str, question: str) -> Dict[str, Any]:
+        """Ask a single question using CYK0Xb (citation mode, synchronous).
+
+        Args:
+            notebook_id: The notebook UUID.
+            question: The question to ask.
+
+        Returns:
+            Dict with answer_id, answer, and sources.
+        """
+        return ask_question(notebook_id, question, _load_cookies())
+
+    def ask_batch(
+        self, notebook_id: str, questions: List[str], max_batch: int = 5
+    ) -> List[Dict[str, Any]]:
+        """Ask multiple questions in batches using CYK0Xb.
+
+        Args:
+            notebook_id: The notebook UUID.
+            questions: List of question strings.
+            max_batch: Max questions per HTTP request.
+
+        Returns:
+            List of answer dicts in question order.
+        """
+        return ask_questions_batch(notebook_id, questions, _load_cookies(), max_batch)
+
+    def chat(
+        self,
+        notebook_id: str,
+        question: str,
+        role: str = "",
+        response_length: int = RESP_LEN_DEFAULT,
+    ) -> Dict[str, Any]:
+        """Send a chat message using s0tc2d (async, supports role config).
+
+        Args:
+            notebook_id: The notebook UUID.
+            question: The question to send.
+            role: Optional configure-chat role/goal string.
+            response_length: Response length hint (default RESP_LEN_DEFAULT).
+
+        Returns:
+            Dict with queued status and notebook metadata.
+        """
+        return chat_message(notebook_id, question, _load_cookies(), role, response_length)
+
+    def chat_batch(
+        self,
+        notebook_id: str,
+        questions: List[str],
+        role: str = "",
+        response_length: int = RESP_LEN_DEFAULT,
+        max_batch: int = 5,
+    ) -> List[Dict[str, Any]]:
+        """Send multiple chat messages in batches using s0tc2d.
+
+        Args:
+            notebook_id: The notebook UUID.
+            questions: List of question strings.
+            role: Optional configure-chat role/goal for all messages.
+            response_length: Response length hint.
+            max_batch: Max questions per HTTP request.
+
+        Returns:
+            List of chat response dicts.
+        """
+        return chat_messages_batch(notebook_id, questions, _load_cookies(), role, response_length, max_batch)
+
+    # ── Generate ──────────────────────────────────────────────────────────
+
+    def generate_document(
+        self, notebook_id: str, source_ids: List[str], doc_type: int = 2
+    ) -> Dict[str, Any]:
+        """Generate a document from notebook sources (ciyUvf RPC).
+
+        Args:
+            notebook_id: The notebook UUID.
+            source_ids: List of source UUIDs to include.
+            doc_type: Document type integer (2=standard, 9=deep research).
+
+        Returns:
+            Dict with title, description, and source_ids.
+        """
+        return generate_document(notebook_id, source_ids, _load_cookies(), doc_type)
+
+    def save_note(
+        self, notebook_id: str, source_ids: List[str], note_type: int = 2
+    ) -> Dict[str, Any]:
+        """Save a note artifact to a notebook (R7cb6c RPC).
+
+        Args:
+            notebook_id: The notebook UUID.
+            source_ids: List of source UUIDs to associate.
+            note_type: Note type (2=standard, 9=deep research).
+
+        Returns:
+            Dict with note_id, title, and note_type.
+        """
+        return save_note(notebook_id, source_ids, _load_cookies(), note_type)
+
+    def read_source(self, source_id: str) -> Dict[str, Any]:
+        """Read the full text content of a source (tr032e RPC).
+
+        Args:
+            source_id: UUID of the source to read.
+
+        Returns:
+            Dict with source_id, content, and word_count.
+        """
+        return read_source(source_id, _load_cookies())
+
+    def get_summary(self, notebook_id: str) -> str:
+        """Get the AI-generated overview/summary of a notebook (VfAZjd RPC).
+
+        Args:
+            notebook_id: The notebook UUID.
+
+        Returns:
+            Summary text string.
+        """
+        cookies = _load_cookies()
+        _, data = _batchexecute("VfAZjd", json.dumps([notebook_id, [2]]), cookies, notebook_id)
+        return "\n\n".join(_extract_strings(data, 50)) if data and not isinstance(data, dict) else ""
+
+    def get_user_quota(self) -> Dict[str, Any]:
+        """Fetch user quota and account info (ozz5Z RPC).
+
+        Returns:
+            Dict with quota_data and extracted text.
+        """
+        return get_user_quota(_load_cookies())
+
+    # ── Status ────────────────────────────────────────────────────────────
+
+    def get_status(self) -> Dict[str, Any]:
+        """Return current auth and meta status.
+
+        Returns:
+            Dict with has_cookies, cookie_count, bl, bl_age_days, and bl_stale.
+        """
+        cookies = _load_cookies()
+        meta = _load_meta()
+        import datetime
+        bl_age: Optional[int] = None
+        try:
+            updated_at = meta.get("bl_updated_at")
+            if updated_at:
+                bl_age = (
+                    datetime.datetime.now(datetime.timezone.utc)
+                    - datetime.datetime.fromisoformat(updated_at)
+                ).days
+        except Exception:
+            pass
+        return {
+            "has_cookies": bool(cookies),
+            "cookie_count": len(cookies),
+            "bl": meta.get("bl", _DEFAULT_BL),
+            "bl_age_days": bl_age,
+            "bl_stale": bl_age is not None and bl_age >= 8,
+            "rpc_catalog_version": "v2.1",
+            "known_rpcs": 18,
+        }
+
+
+# ── NLMClient singleton ───────────────────────────────────────────────────
+
+_nlm_client: Optional["NLMClient"] = None
+
+
+def get_nlm_client() -> NLMClient:
+    """Return the shared NLMClient singleton.
+
+    Returns:
+        The global NLMClient instance.
+    """
+    global _nlm_client
+    if _nlm_client is None:
+        _nlm_client = NLMClient()
+    return _nlm_client
+
+
 # ── Flask app ────────────────────────────────────────────────────────────
 
 def create_nlm_proxy_app() -> Flask:
@@ -1408,6 +1766,30 @@ def create_nlm_proxy_app() -> Flask:
         nb_id = data.get("notebook_id", "")
         _, result = _batchexecute(rpc_id, args_str, cookies, nb_id)
         return jsonify({"rpc_id": rpc_id, "data": result})
+
+    @app.route("/notebooks/<notebook_id>/history", methods=["GET"])
+    def get_history(notebook_id: str):
+        """Get conversation/chat history for a notebook (hPTbtc RPC).
+
+        Query params: page_size (default 20)
+        Returns: {messages: [{content, type}], count, notebook_id}
+        """
+        cookies = _cookies()
+        if not cookies:
+            return _no_cookies()
+        page_size = request.args.get("page_size", 20, type=int)
+        args = json.dumps([[], None, notebook_id, page_size])
+        _, data = _batchexecute("hPTbtc", args, cookies, notebook_id)
+        if data is None or (isinstance(data, dict) and "error" in data):
+            return jsonify(data or {"error": "no_data"}), 502
+        messages = []
+        try:
+            for s in _extract_strings(data, min_len=20):
+                if len(s) > 50:
+                    messages.append({"content": s, "type": "message"})
+        except (IndexError, TypeError):
+            pass
+        return jsonify({"messages": messages, "count": len(messages), "notebook_id": notebook_id})
 
     return app
 

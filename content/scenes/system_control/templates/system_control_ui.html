@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>⚙️ System Control</title>
+  <link rel="stylesheet" href="/static/cosysim-shared.css" />
+  <link rel="stylesheet" href="/static/css/system_control.css" />
+</head>
+<body class="dark-theme">
+  <!-- Shared navbar -->
+  <div id="cosysim-navbar"></div>
+
+  <div class="sc-layout">
+    <!-- Sidebar nav -->
+    <nav class="sc-sidebar">
+      <div class="sc-logo">⚙️ System Control</div>
+      <ul class="sc-nav-list">
+        <li class="sc-nav-item active" data-tab="overview">🏠 Overview</li>
+        <li class="sc-nav-item" data-tab="services">🌐 Services</li>
+        <li class="sc-nav-item" data-tab="config">📝 Config Editor</li>
+        <li class="sc-nav-item" data-tab="launcher">🚀 Launcher</li>
+        <li class="sc-nav-item" data-tab="nlm">🤖 NLM Proxy</li>
+        <li class="sc-nav-item" data-tab="nexus">🧠 Nexus</li>
+        <li class="sc-nav-item" data-tab="lmstudio">💡 LMStudio</li>
+        <li class="sc-nav-item" data-tab="logs">📋 Logs</li>
+        <li class="sc-nav-item" data-tab="git">🔀 Git</li>
+      </ul>
+    </nav>
+
+    <!-- Main content -->
+    <main class="sc-main">
+
+      <!-- Overview tab -->
+      <div class="sc-tab active" id="tab-overview">
+        <h2>System Overview</h2>
+        <div class="sc-metrics-grid" id="metrics-grid">
+          <div class="sc-metric-card" id="metric-cpu">
+            <div class="sc-metric-label">CPU</div>
+            <div class="sc-metric-value" id="cpu-val">—</div>
+          </div>
+          <div class="sc-metric-card" id="metric-ram">
+            <div class="sc-metric-label">RAM</div>
+            <div class="sc-metric-value" id="ram-val">—</div>
+          </div>
+          <div class="sc-metric-card" id="metric-gpu">
+            <div class="sc-metric-label">GPU VRAM</div>
+            <div class="sc-metric-value" id="gpu-val">—</div>
+          </div>
+          <div class="sc-metric-card" id="metric-disk">
+            <div class="sc-metric-label">Disk</div>
+            <div class="sc-metric-value" id="disk-val">—</div>
+          </div>
+        </div>
+
+        <h3>Quick Status</h3>
+        <div class="sc-quick-status" id="quick-status">
+          <div class="sc-qs-item" id="qs-nexus">
+            <span class="sc-dot offline"></span> Nexus
+          </div>
+          <div class="sc-qs-item" id="qs-nlm">
+            <span class="sc-dot offline"></span> NLM Proxy
+          </div>
+          <div class="sc-qs-item" id="qs-lmstudio">
+            <span class="sc-dot offline"></span> LMStudio
+          </div>
+          <div class="sc-qs-item" id="qs-hub">
+            <span class="sc-dot offline"></span> Hub
+          </div>
+        </div>
+
+        <div class="sc-refresh-bar">
+          <button class="sc-btn" onclick="refreshOverview()">↻ Refresh</button>
+          <span class="sc-hint" id="last-refresh">—</span>
+        </div>
+      </div>
+
+      <!-- Services tab -->
+      <div class="sc-tab" id="tab-services">
+        <h2>Service Health</h2>
+        <div class="sc-refresh-bar">
+          <button class="sc-btn" onclick="loadServices()">↻ Refresh All</button>
+          <span class="sc-hint" id="services-summary">—</span>
+        </div>
+        <table class="sc-table" id="services-table">
+          <thead>
+            <tr>
+              <th>Service</th>
+              <th>Port</th>
+              <th>Status</th>
+              <th>Details</th>
+            </tr>
+          </thead>
+          <tbody id="services-tbody">
+            <tr><td colspan="4" class="sc-loading">Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Config Editor tab -->
+      <div class="sc-tab" id="tab-config">
+        <h2>Config Editor</h2>
+        <div class="sc-config-layout">
+          <div class="sc-config-sidebar">
+            <div class="sc-config-list" id="config-list">
+              <div class="sc-loading">Loading config files...</div>
+            </div>
+          </div>
+          <div class="sc-config-main">
+            <div class="sc-config-toolbar" id="config-toolbar" style="display:none">
+              <span class="sc-config-filename" id="config-filename">—</span>
+              <button class="sc-btn sc-btn-save" onclick="saveConfig()">💾 Save</button>
+              <button class="sc-btn sc-btn-restore" onclick="restoreConfig()">↩ Restore Backup</button>
+            </div>
+            <div class="sc-config-hint" id="config-hint">Select a config file to edit</div>
+            <textarea id="config-editor" class="sc-code-editor" style="display:none" 
+                      spellcheck="false" autocorrect="off" autocapitalize="off"></textarea>
+            <div class="sc-config-status" id="config-status"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Launcher tab -->
+      <div class="sc-tab" id="tab-launcher">
+        <h2>Launcher Auto-Start</h2>
+        <p class="sc-hint">Toggle which services and scenes auto-start with <code>python launcher.py --core</code></p>
+        <div id="launcher-content">
+          <div class="sc-loading">Loading launcher config...</div>
+        </div>
+      </div>
+
+      <!-- NLM Proxy tab -->
+      <div class="sc-tab" id="tab-nlm">
+        <h2>NLM Proxy</h2>
+        <div class="sc-card" id="nlm-status-card">
+          <div class="sc-loading">Loading NLM status...</div>
+        </div>
+
+        <h3>Import HAR File</h3>
+        <div class="sc-card">
+          <p class="sc-hint">Import a NotebookLM HAR file to update auth cookies.</p>
+          <div class="sc-form-row">
+            <input type="text" id="nlm-har-path" class="sc-input" 
+                   placeholder="C:\Users\You\Downloads\notebooklm.google.com.har" />
+            <button class="sc-btn" onclick="importNlmHar()">📥 Import HAR</button>
+          </div>
+          <div class="sc-status" id="nlm-import-status"></div>
+        </div>
+
+        <h3>Auto-Capture (Chrome CDP)</h3>
+        <div class="sc-card">
+          <p class="sc-hint">Launch Chrome, navigate to NotebookLM, and auto-extract fresh cookies.</p>
+          <button class="sc-btn" onclick="captureNlmCookies()">🌐 Capture from Chrome</button>
+          <div class="sc-status" id="nlm-capture-status"></div>
+        </div>
+
+        <h3>Notebooks</h3>
+        <div class="sc-card">
+          <button class="sc-btn" onclick="loadNlmNotebooks()">↻ Load Notebooks</button>
+          <div id="nlm-notebooks-list" class="sc-notebooks-grid" style="margin-top:12px"></div>
+        </div>
+      </div>
+
+      <!-- Nexus tab -->
+      <div class="sc-tab" id="tab-nexus">
+        <h2>Nexus Knowledge System</h2>
+        <div class="sc-card" id="nexus-status-card">
+          <div class="sc-loading">Loading Nexus status...</div>
+        </div>
+
+        <h3>Quick Search</h3>
+        <div class="sc-card">
+          <div class="sc-form-row">
+            <input type="text" id="nexus-query" class="sc-input" 
+                   placeholder="Search knowledge base..." 
+                   onkeydown="if(event.key==='Enter') nexusSearch()" />
+            <button class="sc-btn" onclick="nexusSearch()">🔍 Search</button>
+          </div>
+          <div id="nexus-results" style="margin-top:12px"></div>
+        </div>
+      </div>
+
+      <!-- LMStudio tab -->
+      <div class="sc-tab" id="tab-lmstudio">
+        <h2>LMStudio</h2>
+        <div class="sc-card" id="lmstudio-status-card">
+          <div class="sc-loading">Loading LMStudio status...</div>
+        </div>
+      </div>
+
+      <!-- Logs tab -->
+      <div class="sc-tab" id="tab-logs">
+        <h2>Log Viewer</h2>
+        <div class="sc-log-layout">
+          <div class="sc-log-sidebar">
+            <button class="sc-btn" style="width:100%;margin-bottom:8px" onclick="loadLogList()">↻ Refresh</button>
+            <div id="log-list" class="sc-log-list">
+              <div class="sc-loading">Loading...</div>
+            </div>
+          </div>
+          <div class="sc-log-main">
+            <div class="sc-log-toolbar" id="log-toolbar" style="display:none">
+              <span id="log-filename-label">—</span>
+              <button class="sc-btn" onclick="refreshCurrentLog()">↻</button>
+              <label>Lines: <input type="number" id="log-lines-input" value="200" style="width:60px" /></label>
+            </div>
+            <pre id="log-viewer" class="sc-log-viewer">Select a log file</pre>
+          </div>
+        </div>
+      </div>
+
+      <!-- Git tab -->
+      <div class="sc-tab" id="tab-git">
+        <h2>Git Status</h2>
+        <div class="sc-card" id="git-card">
+          <div class="sc-loading">Loading git info...</div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <script src="/static/cosysim-navbar.js"></script>
+  <script src="/static/js/system_control.js"></script>
+</body>
+</html>

@@ -29,6 +29,7 @@
 | [Scenes Guide](SCENES.md) | All 18 game scenes — mechanics, APIs, rules |
 | [Skills](SKILLS.md) | @skill decorator, 21 built-in packs (195 skills) |
 | [Admin Guide](ADMIN_GUIDE.md) | Admin panel pages and operations |
+| [System Control Panel](SYSTEM_CONTROL.md) | Config editor, service health, launcher, NLM proxy, Git — port 5575 |
 
 ## APIs & Integration
 

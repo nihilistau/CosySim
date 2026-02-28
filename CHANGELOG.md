@@ -2,7 +2,38 @@
 
 All notable changes to CosySim are documented here.
 
-## v0.60 — NLM v2.1: 18-RPC Catalogue, Configure Chat, Source Reader
+## v0.60.2 — System Control Panel + NLM Client Class
+
+### System Control Panel (NEW — port 5575)
+- **`content/scenes/system_control/system_control_scene.py`** — New Flask scene (20+ API routes):
+  - Config Editor: read/write/validate all YAML+JSON configs with .bak backup
+  - Service Health: parallel health checks of all 19 services (3s timeout per)
+  - Launcher auto-start toggle per service/scene (persisted to launcher.yaml)
+  - NLM Proxy control: HAR import, Chrome CDP cookie capture, notebook list, proxy status
+  - Nexus quick search and health overview
+  - LMStudio status and loaded model listing
+  - Real-time log viewer (tail any log file)
+  - Git status: branch, last 10 commits, working tree changes
+  - System metrics: CPU, RAM, GPU (psutil + pynvml with graceful fallback)
+- **`content/scenes/system_control/templates/system_control_ui.html`** — Dark-theme 9-tab UI
+- **`content/scenes/system_control/static/css/system_control.css`** — Complete CSS
+- **`content/scenes/system_control/static/js/system_control.js`** — Full JavaScript
+- Added to `launcher.py` SERVICES dict, `config/default.yaml`, `config/production.yaml`, `config/launcher.yaml`
+
+### NLM Proxy Class Refactor
+- **`engine/mcp/nlm_live_proxy.py`** — Added `NLMClient` class:
+  - Delegates to all module-level RPC functions (no duplication)
+  - `get_nlm_client()` singleton factory
+  - New `GET /notebooks/<id>/history` Flask route (hPTbtc RPC)
+- **`engine/nexus/nlm_engine.py`** — Removed all `:3000` / Node.js dead code:
+  - Removed `_nexus_nlm_url`, `_post_any`/`_get_any` dual-backend fallback
+  - Imports and re-exports `NLMClient`, `get_nlm_client` for callers
+  - All operations route through `:8800` proxy only
+
+### Tests
+- **4,827 tests passing** (0 failures, 21 warnings)
+
+
 
 ### NLM v2.1 Protocol (NEW — commit 2ff3698)
 - **`engine/mcp/nlm_live_proxy.py`** — Major v2.1 update (11 HAR files analyzed):

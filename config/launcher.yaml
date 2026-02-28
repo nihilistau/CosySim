@@ -22,6 +22,9 @@ services:
   nexus_panel:
     auto_start: true          # Nexus knowledge panel + NLM lab
 
+  system_control:
+    auto_start: true          # System control panel - config editor, service monitor
+
   dashboard:
     auto_start: false         # System metrics dashboard (Streamlit)
 
