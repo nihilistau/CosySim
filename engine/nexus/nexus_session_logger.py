@@ -49,12 +49,12 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def _post(path: str, data: dict, timeout: int = 5) -> dict | None:
-    """Post to Nexus API. Returns response or None on failure."""
+def _post(path: str, data: dict, timeout: int = 5, method: str = "POST") -> dict | None:
+    """Post or PUT to Nexus API. Returns response or None on failure."""
     try:
         url = f"{NEXUS_URL}{path}"
         body = json.dumps(data).encode()
-        req = urllib.request.Request(url, data=body, method="POST",
+        req = urllib.request.Request(url, data=body, method=method,
                                      headers={"Content-Type": "application/json"})
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             return json.loads(resp.read())
@@ -319,6 +319,24 @@ def handle_start():
         "tags": ["session", "copilot", "start", git_ctx.get("branch", "")],
     })
 
+    # Create a proper session record in the Nexus sessions table
+    nexus_session = _post("/api/sessions", {
+        "project": "CosySim",
+        "repo": "CosySim",
+        "branch": git_ctx.get("branch", ""),
+        "agent_id": "copilot",
+        "summary": f"Session started in {os.getcwd()}{branch_info}",
+        "status": "active",
+        "metadata": {
+            "session_id": session_id,
+            "last_commit": git_ctx.get("last_commit", ""),
+            "cwd": os.getcwd(),
+        },
+    })
+    if nexus_session and nexus_session.get("id"):
+        session["nexus_session_id"] = nexus_session["id"]
+        _save_session(session)
+
 
 def handle_end():
     """Called on session end — export full history to Nexus."""
@@ -412,6 +430,21 @@ def handle_end():
         "files": len(history.get("files", [])),
         "checkpoints": len(history.get("checkpoints", [])),
     })
+
+    # Close the Nexus session record
+    nexus_session_id = session.get("nexus_session_id")
+    if nexus_session_id:
+        _post(f"/api/sessions/{nexus_session_id}", {
+            "status": "completed",
+            "summary": (
+                f"Session ended. {session.get('prompts', 0)} prompts, "
+                f"{len(history.get('turns', []))} turns, "
+                f"{len(history.get('checkpoints', []))} checkpoints, "
+                f"{len(history.get('files', []))} files touched."
+            ),
+            "commits": [end_git.get("last_commit", "")],
+            "files_changed": [f["path"] for f in history.get("files", [])[:50]],
+        }, method="PUT")
 
     if SESSION_FILE.exists():
         SESSION_FILE.unlink()

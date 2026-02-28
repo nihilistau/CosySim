@@ -1475,8 +1475,9 @@ def create_nlm_proxy_app() -> Flask:
             "bl": existing_meta.get("bl", _DEFAULT_BL),
             "f_sid": existing_meta.get("f_sid", "-1"),
             "status": "ok",
-            "note": "No cookies found in HAR (Chrome may have redacted them). "
-                    "Use POST /cookies/capture for automatic Chrome CDP extraction."
+            "note": "No cookies found in HAR (Chrome redacted them). "
+                    "In Chrome DevTools: Network tab → Export HAR → tick 'Include sensitive information' checkbox. "
+                    "Alternatively use POST /cookies/capture for Chrome CDP extraction."
             if not new_cookies else None,
         })
 

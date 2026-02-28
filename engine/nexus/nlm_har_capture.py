@@ -1,19 +1,19 @@
 """
-NLM HAR Capture — Automated Chrome CDP cookie extraction for NotebookLM.
+NLM HAR Capture — Automated Chrome cookie extraction for NotebookLM.
 
-Workflow
-~~~~~~~~
-1. Check if Chrome is already running with --remote-debugging-port=9222
-2. If not, launch Chrome with the existing user profile + remote debugging
-3. Navigate to notebooklm.google.com via CDP
-4. Wait for page load and extract cookies via Network.getAllCookies
-5. Also capture the build label (bl) and session ID (f.sid) from the page
-6. Store everything in data/nlm_cookies.json and data/nlm_meta.json
+Extraction methods (tried in order)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+1. CDP (Chrome DevTools Protocol) — requires Chrome with --remote-debugging-port=9222.
+   Fastest, most reliable.  If Chrome is already running without the debug flag,
+   it won't work.
+
+2. DPAPI + SQLite — reads Chrome's on-disk Cookies database directly.
+   Requires Chrome to be closed (file is locked while Chrome runs).
+   Decrypts DPAPI-protected cookie values using Windows CryptUnprotectData.
+   Use ``capture_nlm_cookies_dpapi()`` or pass ``method="dpapi"`` to
+   ``capture_nlm_cookies()``.
 
 Chrome Profile Path (default): C:\\Users\\<user>\\AppData\\Local\\Google\\Chrome\\User Data
-
-The user is already logged in via their existing Chrome profile, so no
-re-authentication is needed.
 
 Usage::
 
@@ -21,17 +21,26 @@ Usage::
     result = capture_nlm_cookies()
     # result = {"imported_cookies": 12, "bl": "boq_...", "f_sid": "...", "status": "ok"}
 
+    # Force DPAPI (requires Chrome to be closed first):
+    result = capture_nlm_cookies(method="dpapi")
+
     # CLI:
     python -m engine.nexus.nlm_har_capture
+    python -m engine.nexus.nlm_har_capture --method dpapi
 """
 from __future__ import annotations
 
+import base64
+import ctypes
 import json
 import logging
 import os
 import re
+import shutil
+import sqlite3
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.parse
 import urllib.request
@@ -61,7 +70,185 @@ _AUTH_COOKIE_NAMES = frozenset([
     "__Secure-1PSID", "__Secure-3PSID", "__Secure-1PAPISID", "__Secure-3PAPISID",
     "__Secure-1PSIDCC", "__Secure-3PSIDCC", "__Secure-1PSIDTS",
     "NID", "1P_JAR", "AEC", "SOCS", "CONSENT",
+    "__Secure-OSID", "__Secure-1PSIDRTS", "__Secure-3PSIDRTS",
+    "__Secure-1PSIDTS", "__Secure-3PSIDTS", "__Secure-BUCKET",
+    "SEARCH_SAMESITE",
 ])
+
+_CHROME_PROFILE_PATH = Path(os.environ.get("USERPROFILE", Path.home())) / \
+    "AppData" / "Local" / "Google" / "Chrome" / "User Data"
+
+
+# ── DPAPI cookie extraction (Chrome closed, Windows only) ─────────────────
+
+def _dpapi_decrypt(ciphertext: bytes) -> Optional[bytes]:
+    """Decrypt bytes with Windows DPAPI CryptUnprotectData."""
+    class DATA_BLOB(ctypes.Structure):
+        _fields_ = [("cbData", ctypes.c_ulong), ("pbData", ctypes.POINTER(ctypes.c_char))]
+
+    p = ctypes.create_string_buffer(ciphertext, len(ciphertext))
+    blobin = DATA_BLOB(ctypes.sizeof(p), p)
+    blobout = DATA_BLOB()
+    retval = ctypes.windll.crypt32.CryptUnprotectData(
+        ctypes.byref(blobin), None, None, None, None, 0, ctypes.byref(blobout)
+    )
+    if not retval:
+        return None
+    result = ctypes.string_at(blobout.pbData, blobout.cbData)
+    ctypes.windll.kernel32.LocalFree(blobout.pbData)
+    return result
+
+
+def _get_chrome_aes_key(profile_dir: Optional[Path] = None) -> Optional[bytes]:
+    """Load and decrypt Chrome's AES-GCM cookie encryption key from Local State."""
+    try:
+        import Cryptodome.Cipher.AES as _AES  # type: ignore[import]
+    except ImportError:
+        try:
+            from Crypto.Cipher import AES as _AES  # type: ignore[import]
+        except ImportError:
+            return None  # pycryptodome not available
+
+    local_state_path = (profile_dir or _CHROME_PROFILE_PATH) / "Local State"
+    if not local_state_path.exists():
+        return None
+    try:
+        state = json.loads(local_state_path.read_text(encoding="utf-8"))
+        enc_key_b64 = state["os_crypt"]["encrypted_key"]
+        enc_key = base64.b64decode(enc_key_b64)
+        # Strip the "DPAPI" prefix (first 5 bytes)
+        if not enc_key.startswith(b"DPAPI"):
+            return None
+        return _dpapi_decrypt(enc_key[5:])
+    except Exception as exc:
+        logger.debug("Failed to get Chrome AES key: %s", exc)
+        return None
+
+
+def _decrypt_chrome_cookie(encrypted_value: bytes, aes_key: Optional[bytes]) -> str:
+    """Decrypt a Chrome cookie value (v10 AES-GCM or legacy DPAPI)."""
+    if not encrypted_value:
+        return ""
+
+    # v10/v20 AES-GCM (Chrome 80+)
+    if encrypted_value[:3] in (b"v10", b"v20") and aes_key:
+        try:
+            from Cryptodome.Cipher import AES  # type: ignore[import]
+        except ImportError:
+            try:
+                from Crypto.Cipher import AES  # type: ignore[import]
+            except ImportError:
+                return ""
+        try:
+            nonce = encrypted_value[3:3 + 12]
+            ciphertext = encrypted_value[3 + 12:-16]
+            tag = encrypted_value[-16:]
+            cipher = AES.new(aes_key, AES.MODE_GCM, nonce=nonce)
+            return cipher.decrypt_and_verify(ciphertext, tag).decode("utf-8", errors="replace")
+        except Exception:
+            return ""
+
+    # Legacy DPAPI (older Chrome)
+    if encrypted_value[:1] != b"\x01":
+        try:
+            result = _dpapi_decrypt(encrypted_value)
+            return result.decode("utf-8", errors="replace") if result else ""
+        except Exception:
+            return ""
+
+    return ""
+
+
+def capture_nlm_cookies_dpapi(profile_dir: Optional[Path] = None) -> Dict[str, Any]:
+    """Extract Google auth cookies directly from Chrome's SQLite cookie DB.
+
+    Chrome must be CLOSED before calling this — the Cookies file is locked
+    while Chrome is running.  This function:
+
+    1. Copies Chrome's Cookies SQLite database to a temp file.
+    2. Loads Chrome's AES key from Local State (DPAPI-encrypted).
+    3. Decrypts each cookie value (AES-GCM v10 or legacy DPAPI).
+    4. Returns only Google auth cookies for .google.com domains.
+
+    Args:
+        profile_dir: Path to Chrome "User Data" directory. Auto-detected if None.
+
+    Returns:
+        Dict matching the ``capture_nlm_cookies`` return format.
+    """
+    base = profile_dir or _CHROME_PROFILE_PATH
+    cookie_db = base / "Default" / "Network" / "Cookies"
+    if not cookie_db.exists():
+        # Fallback to old path
+        cookie_db = base / "Default" / "Cookies"
+    if not cookie_db.exists():
+        return {"error": "cookie_db_not_found",
+                "detail": f"Chrome cookie DB not found at {cookie_db}",
+                "status": "error"}
+
+    # Try to copy (will fail if Chrome is running and has it locked)
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
+        tmp_path = Path(tmp.name)
+    try:
+        shutil.copy2(cookie_db, tmp_path)
+    except (PermissionError, OSError) as exc:
+        tmp_path.unlink(missing_ok=True)
+        return {
+            "error": "cookie_db_locked",
+            "detail": (
+                f"Chrome's Cookies database is locked ({exc}). "
+                "Close Chrome completely and try again."
+            ),
+            "status": "error",
+        }
+
+    aes_key = _get_chrome_aes_key(base)
+    logger.info("Chrome AES key %s", "loaded" if aes_key else "NOT FOUND — will try legacy DPAPI")
+
+    cookies: Dict[str, str] = {}
+    try:
+        conn = sqlite3.connect(f"file:{tmp_path}?mode=ro", uri=True)
+        conn.row_factory = sqlite3.Row
+        try:
+            rows = conn.execute(
+                "SELECT host_key, name, encrypted_value "
+                "FROM cookies WHERE host_key LIKE '%.google.com'"
+            ).fetchall()
+        finally:
+            conn.close()
+    except Exception as exc:
+        tmp_path.unlink(missing_ok=True)
+        return {"error": "db_read_failed", "detail": str(exc), "status": "error"}
+    finally:
+        tmp_path.unlink(missing_ok=True)
+
+    for row in rows:
+        name = row["name"]
+        if name not in _AUTH_COOKIE_NAMES and not any(
+            name.startswith(p) for p in ("__Secure-", "SIDCC")
+        ):
+            continue
+        enc_val = bytes(row["encrypted_value"])
+        value = _decrypt_chrome_cookie(enc_val, aes_key)
+        if value:
+            cookies[name] = value
+
+    logger.info("Extracted %d auth cookies from Chrome DB", len(cookies))
+    if not cookies:
+        return {
+            "error": "no_cookies_decrypted",
+            "detail": "Chrome cookie DB read but no Google auth cookies decrypted. "
+                      "Ensure pycryptodome is installed: pip install pycryptodome",
+            "status": "error",
+        }
+
+    _save_cookies(cookies)
+    return {
+        "imported_cookies": len(cookies),
+        "cookie_names": sorted(cookies.keys()),
+        "status": "ok",
+        "method": "dpapi",
+    }
 
 
 # ── Chrome detection and launch ──────────────────────────────────────────
