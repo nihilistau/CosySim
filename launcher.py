@@ -1,21 +1,30 @@
 #!/usr/bin/env python3
 """
-CosySim Launcher v3
+CosySim Launcher v4
 ====================
+Config-driven launcher with clean services / scenes separation.
 
-Unified entry point with auto-discovery, health checks, and service management.
-
-Scenes are discovered via SceneRegistry (content/scenes/*_scene.py) so adding
-a new scene requires zero changes to this file.
+  Services  — persistent infrastructure (hub, nexus_panel, dashboard, tts …)
+  Scenes    — interactive game environments (bedroom, phone, realm …)
 
 Usage:
-    python launcher.py                       # interactive menu
-    python launcher.py --mode phone          # single scene
-    python launcher.py --mode all            # all Flask scenes + services
-    python launcher.py --list                # show discovered scenes
-    python launcher.py --status              # system health
-    python launcher.py --mode test           # run test suite
+  python launcher.py                  # interactive menu
+  python launcher.py --core           # auto_start services + scenes  <- recommended
+  python launcher.py --services       # auto_start services only
+  python launcher.py --scenes         # auto_start scenes only
+  python launcher.py --all            # every known target
+  python launcher.py bedroom          # single target by name
+  python launcher.py nexus_panel      # single service by name
+  python launcher.py --list           # show all targets + port status
+  python launcher.py --status         # system health check
+  python launcher.py --test           # run test suite
+  python launcher.py --init-db        # initialise simulation database
+  python launcher.py --housekeep      # housekeeping tasks
+
+Auto-start flags live in config/launcher.yaml - edit that file to control
+which targets launch with --core / --services / --scenes.
 """
+from __future__ import annotations
 
 import argparse
 import importlib
@@ -25,9 +34,9 @@ import sys
 import threading
 import time
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
-# Ensure stdout/stderr can handle Unicode on Windows cp1252 consoles
+# Unicode on Windows cp1252 consoles
 for _stream in (sys.stdout, sys.stderr):
     try:
         _stream.reconfigure(encoding="utf-8", errors="replace")
@@ -37,76 +46,120 @@ for _stream in (sys.stdout, sys.stderr):
 PROJECT_ROOT = Path(__file__).parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-VERSION = "0.57b"
+VERSION = "0.60b"
 
-# ── Scene catalogue (class-path → metadata) ─────────────────────────────
-# SceneRegistry auto-discovers these, but we keep a manual catalogue as
-# fallback and for Streamlit/FastAPI services that aren't BaseScene.
-FLASK_SCENES: Dict[str, Dict[str, Any]] = {
-    "hub":     {"cls": "content.scenes.hub.hub_flask.HubScene",
-                "port": 8500, "label": "CosySim Hub"},
-    "phone":   {"cls": "content.scenes.phone.phone_scene_v2.PhoneSceneV2",
-                "port": 5555, "label": "CosyPhone OS"},
-    "bedroom": {"cls": "content.scenes.bedroom.bedroom_scene.BedroomScene",
-                "port": 5556, "label": "The Bedroom"},
-    "lounge":  {"cls": "content.scenes.lounge.lounge_scene.LoungeScene",
-                "port": 5557, "label": "The Velvet Lounge"},
-    "tavern":  {"cls": "content.scenes.tavern.tavern_scene.TavernScene",
-                "port": 5558, "label": "Dragon's Flagon Tavern"},
-    "casino":  {"cls": "content.scenes.casino.casino_scene.CasinoScene",
-                "port": 5559, "label": "Midnight Casino"},
-    "gallery": {"cls": "content.scenes.gallery.gallery_scene.GalleryScene",
-                "port": 5560, "label": "The Gallery"},
-    "warzone": {"cls": "content.scenes.warzone.warzone_scene.WarzoneScene",
-                "port": 5561, "label": "Global Strike"},
-    "realm":   {"cls": "content.scenes.realm.realm_scene.RealmScene",
-                "port": 5562, "label": "The Realm"},
-    "neoncity": {"cls": "content.scenes.neoncity.neoncity_scene.NeonCityScene",
-                 "port": 5563, "label": "NeonCity"},
-    "coders":  {"cls": "content.scenes.coders.coders_scene.CodersRoomScene",
-                "port": 5564, "label": "The Coders Room"},
-    "heist":   {"cls": "content.scenes.heist.heist_scene.HeistScene",
-                "port": 5565, "label": "The Heist"},
-    "command_center": {"cls": "content.scenes.command_center.command_center_scene.CommandCenterScene",
-                       "port": 5566, "label": "Command Center"},
-    "games":   {"cls": "content.scenes.games.games_scene.GamesScene",
-                "port": 5567, "label": "Games Arcade"},
-    "nexus_panel": {"cls": "content.scenes.nexus_panel.nexus_panel_scene.NexusPanelScene",
-                    "port": 5570, "label": "Nexus Control Panel"},
+# ── Catalogues ────────────────────────────────────────────────────────────
+# type: "flask" | "streamlit" | "fastapi"
+# auto_start defaults here; config/launcher.yaml overrides them at runtime.
+
+SERVICES: Dict[str, Dict[str, Any]] = {
+    "hub": {
+        "type": "flask",
+        "cls":  "content.scenes.hub.hub_flask.HubScene",
+        "port": 8500, "label": "CosySim Hub",
+        "auto_start": True,
+    },
+    "nexus_panel": {
+        "type": "flask",
+        "cls":  "content.scenes.nexus_panel.nexus_panel_scene.NexusPanelScene",
+        "port": 5570, "label": "Nexus Control Panel",
+        "auto_start": True,
+    },
+    "dashboard": {
+        "type": "streamlit",
+        "script": "content/scenes/dashboard/dashboard_v2.py",
+        "port": 8501, "label": "System Dashboard",
+        "auto_start": False,
+    },
+    "admin": {
+        "type": "streamlit",
+        "script": "content/scenes/admin/admin_panel.py",
+        "port": 8502, "label": "Admin Panel",
+        "auto_start": False,
+    },
+    "assets": {
+        "type": "streamlit",
+        "script": "content/scenes/assets/asset_generator.py",
+        "port": 8503, "label": "Asset Generator",
+        "auto_start": False,
+    },
+    "creator": {
+        "type": "streamlit",
+        "script": "content/scenes/hub/scene_creator.py",
+        "port": 8504, "label": "Scene Creator",
+        "auto_start": False,
+    },
+    "tts": {
+        "type": "fastapi",
+        "factory": "engine.tts.qwen3_server.create_tts_app",
+        "port": 8600, "label": "TTS Server",
+        "auto_start": False,
+    },
+    "bridge": {
+        "type": "fastapi",
+        "factory": "engine.mcp.web_bridge.create_bridge_app",
+        "port": 8601, "label": "MCP Bridge",
+        "auto_start": False,
+    },
 }
 
-STREAMLIT_APPS: Dict[str, Dict[str, Any]] = {
-    "dashboard": {"script": "content/scenes/dashboard/dashboard_v2.py",
-                  "port": 8501, "label": "Dashboard"},
-    "admin":     {"script": "content/scenes/admin/admin_panel.py",
-                  "port": 8502, "label": "Admin Panel"},
-    "assets":    {"script": "content/scenes/assets/asset_generator.py",
-                  "port": 8503, "label": "Asset Generator"},
-    "creator":   {"script": "content/scenes/hub/scene_creator.py",
-                  "port": 8504, "label": "Scene Creator"},
+SCENES: Dict[str, Dict[str, Any]] = {
+    "phone":          {"type": "flask", "cls": "content.scenes.phone.phone_scene_v2.PhoneSceneV2",
+                       "port": 5555, "label": "CosyPhone OS",           "auto_start": True},
+    "bedroom":        {"type": "flask", "cls": "content.scenes.bedroom.bedroom_scene.BedroomScene",
+                       "port": 5556, "label": "The Bedroom",            "auto_start": True},
+    "lounge":         {"type": "flask", "cls": "content.scenes.lounge.lounge_scene.LoungeScene",
+                       "port": 5557, "label": "The Velvet Lounge",      "auto_start": False},
+    "tavern":         {"type": "flask", "cls": "content.scenes.tavern.tavern_scene.TavernScene",
+                       "port": 5558, "label": "Dragon's Flagon Tavern", "auto_start": False},
+    "casino":         {"type": "flask", "cls": "content.scenes.casino.casino_scene.CasinoScene",
+                       "port": 5559, "label": "Midnight Casino",        "auto_start": False},
+    "gallery":        {"type": "flask", "cls": "content.scenes.gallery.gallery_scene.GalleryScene",
+                       "port": 5560, "label": "The Gallery",            "auto_start": False},
+    "warzone":        {"type": "flask", "cls": "content.scenes.warzone.warzone_scene.WarzoneScene",
+                       "port": 5561, "label": "Global Strike",          "auto_start": False},
+    "realm":          {"type": "flask", "cls": "content.scenes.realm.realm_scene.RealmScene",
+                       "port": 5562, "label": "The Realm",              "auto_start": False},
+    "neoncity":       {"type": "flask", "cls": "content.scenes.neoncity.neoncity_scene.NeonCityScene",
+                       "port": 5563, "label": "NeonCity",               "auto_start": False},
+    "coders":         {"type": "flask", "cls": "content.scenes.coders.coders_scene.CodersRoomScene",
+                       "port": 5564, "label": "The Coders Room",        "auto_start": False},
+    "heist":          {"type": "flask", "cls": "content.scenes.heist.heist_scene.HeistScene",
+                       "port": 5565, "label": "The Heist",              "auto_start": False},
+    "command_center": {"type": "flask",
+                       "cls": "content.scenes.command_center.command_center_scene.CommandCenterScene",
+                       "port": 5566, "label": "Command Center",         "auto_start": False},
+    "games":          {"type": "flask", "cls": "content.scenes.games.games_scene.GamesScene",
+                       "port": 5567, "label": "Games Arcade",           "auto_start": False},
 }
 
-SERVICE_APPS: Dict[str, Dict[str, Any]] = {
-    "tts":    {"factory": "engine.tts.qwen3_server.create_tts_app",
-               "port": 8600, "label": "TTS Server"},
-    "bridge": {"factory": "engine.mcp.web_bridge.create_bridge_app",
-               "port": 8601, "label": "MCP Bridge"},
-}
+ALL_TARGETS: Dict[str, Dict[str, Any]] = {**SERVICES, **SCENES}
+
+# ── Config loader ─────────────────────────────────────────────────────────
+
+_LAUNCHER_CFG = PROJECT_ROOT / "config" / "launcher.yaml"
 
 
-# ── Utilities ────────────────────────────────────────────────────────────
+def _load_config() -> None:
+    """Apply auto_start overrides from config/launcher.yaml."""
+    if not _LAUNCHER_CFG.exists():
+        return
+    try:
+        import yaml  # type: ignore
+        with open(_LAUNCHER_CFG) as fh:
+            cfg = yaml.safe_load(fh) or {}
+        for group_key, catalogue in (("services", SERVICES), ("scenes", SCENES)):
+            for name, settings in (cfg.get(group_key) or {}).items():
+                if name in catalogue and isinstance(settings, dict):
+                    if "auto_start" in settings:
+                        catalogue[name]["auto_start"] = bool(settings["auto_start"])
+    except Exception as exc:
+        print(f"  Warning: launcher.yaml load error: {exc}")
 
-def _banner(title: str, width: int = 62) -> str:
-    pad = width - len(title) - 4
-    return (
-        f"\n{'=' * width}\n"
-        f"  {title}{' ' * max(pad, 0)}\n"
-        f"{'=' * width}\n"
-    )
 
+# ── Low-level helpers ─────────────────────────────────────────────────────
 
-def _check_port(port: int) -> bool:
-    """Return True if *port* is accepting connections on localhost."""
+def _port_up(port: int) -> bool:
     import socket
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.settimeout(0.5)
@@ -114,418 +167,407 @@ def _check_port(port: int) -> bool:
 
 
 def _import_class(dotted: str):
-    """Import 'package.module.ClassName' and return the class."""
-    mod_path, cls_name = dotted.rsplit(".", 1)
-    mod = importlib.import_module(mod_path)
-    return getattr(mod, cls_name)
+    mod, cls = dotted.rsplit(".", 1)
+    return getattr(importlib.import_module(mod), cls)
 
 
 def _import_factory(dotted: str):
-    """Import 'package.module.func' and call it to get an app object."""
-    mod_path, fn_name = dotted.rsplit(".", 1)
-    mod = importlib.import_module(mod_path)
-    return getattr(mod, fn_name)()
+    mod, fn = dotted.rsplit(".", 1)
+    return getattr(importlib.import_module(mod), fn)()
 
 
-# ── Single-mode launchers ───────────────────────────────────────────────
+# ── Single-target runner (foreground / blocking) ──────────────────────────
 
-def launch_flask(name: str, info: Dict[str, Any]) -> None:
-    """Launch a single Flask scene in the foreground."""
-    print(f"\n🎬 Launching {info['label']} on http://localhost:{info['port']}")
-    cls = _import_class(info["cls"])
-    scene = cls()
-    scene.start()
+def _run_single(name: str, info: Dict[str, Any]) -> None:
+    """Start one target in the foreground. Blocks until it exits."""
+    t = info["type"]
+    if t == "flask":
+        _import_class(info["cls"])().start()
+    elif t == "streamlit":
+        script = PROJECT_ROOT / info["script"]
+        if not script.exists():
+            print(f"Script not found: {script}")
+            sys.exit(1)
+        subprocess.run([
+            sys.executable, "-m", "streamlit", "run", str(script),
+            f"--server.port={info['port']}",
+            "--server.address=0.0.0.0",
+            "--server.headless=true",
+            "--browser.gatherUsageStats=false",
+            "--logger.level=warning",
+        ])
+    elif t == "fastapi":
+        import uvicorn  # type: ignore
+        uvicorn.run(_import_factory(info["factory"]),
+                    host="0.0.0.0", port=info["port"], log_level="warning")
+    else:
+        print(f"Unknown type '{t}' for '{name}'")
+        sys.exit(1)
 
 
-def launch_streamlit(name: str, info: Dict[str, Any]) -> None:
-    """Launch a single Streamlit app in the foreground."""
+# ── Multi-launch engine ───────────────────────────────────────────────────
+
+def _start_in_thread(name: str, info: Dict[str, Any],
+                     failed: List[str]) -> threading.Thread:
+    def _worker() -> None:
+        try:
+            _run_single(name, info)
+        except Exception as exc:
+            print(f"\n  {info['label']} crashed: {exc}")
+            failed.append(name)
+    t = threading.Thread(target=_worker, daemon=True, name=f"cosysim-{name}")
+    t.start()
+    return t
+
+
+def _start_streamlit_proc(info: Dict[str, Any],
+                           failed: List[str]) -> Optional[subprocess.Popen]:
     script = PROJECT_ROOT / info["script"]
     if not script.exists():
-        print(f"❌ Script not found: {script}")
-        sys.exit(1)
-    print(f"\n🚀 Launching {info['label']} on http://localhost:{info['port']}")
-    subprocess.run([
-        "streamlit", "run", str(script),
-        f"--server.port={info['port']}",
-        "--server.address=localhost",
-        "--browser.gatherUsageStats=false",
-    ])
-
-
-def launch_service(name: str, info: Dict[str, Any]) -> None:
-    """Launch a single FastAPI/Uvicorn service in the foreground."""
-    import uvicorn  # type: ignore
-    print(f"\n⚙️  Launching {info['label']} on http://localhost:{info['port']}")
-    app = _import_factory(info["factory"])
-    uvicorn.run(app, host="0.0.0.0", port=info["port"], log_level="warning")
-
-
-# ── All-in-one launcher ─────────────────────────────────────────────────
-
-def launch_all(scenes: Optional[List[str]] = None) -> None:
-    """Launch multiple Flask scenes + services in one terminal."""
-    targets = scenes or list(FLASK_SCENES.keys())
-    procs: List[subprocess.Popen] = []
-    threads: List[threading.Thread] = []
-    failed: List[str] = []
-
-    # Build table for banner
-    lines = []
-    for name in targets:
-        info = FLASK_SCENES.get(name, {})
-        lines.append(f"  {info.get('label', name):.<20s} http://localhost:{info.get('port', '?')}")
-    for sname, sinfo in SERVICE_APPS.items():
-        lines.append(f"  {sinfo['label']:.<20s} http://localhost:{sinfo['port']}")
-    lines.append(f"  {'Hub':.<20s} http://localhost:8500  (Streamlit)")
-
-    box_w = 60
-    print(f"\n{'╔' + '═' * box_w + '╗'}")
-    print(f"{'║'} {'CosySim — All Services Launcher':^{box_w}} {'║'}")
-    print(f"{'╠' + '═' * box_w + '╣'}")
-    for line in lines:
-        print(f"{'║'} {line:<{box_w}} {'║'}")
-    print(f"{'╠' + '═' * box_w + '╣'}")
-    print(f"{'║'} {'Press Ctrl+C to stop all services':^{box_w}} {'║'}")
-    print(f"{'╚' + '═' * box_w + '╝'}")
-
-    def _run_flask_thread(name: str, info: Dict[str, Any]) -> None:
-        try:
-            cls = _import_class(info["cls"])
-            scene = cls()
-            print(f"  ✅ {info['label']} starting on :{info['port']}...")
-            scene.start()
-        except Exception as e:
-            print(f"  ❌ {info['label']} failed: {e}")
-            failed.append(name)
-
-    def _run_uvicorn_thread(info: Dict[str, Any]) -> None:
-        try:
-            app = _import_factory(info["factory"])
-            import uvicorn  # type: ignore
-            print(f"  ✅ {info['label']} starting on :{info['port']}...")
-            uvicorn.run(app, host="0.0.0.0", port=info["port"], log_level="warning")
-        except Exception as e:
-            print(f"  ❌ {info['label']} failed: {e}")
-
-    # Flask scenes
-    for name in targets:
-        info = FLASK_SCENES[name]
-        t = threading.Thread(target=_run_flask_thread, args=(name, info), daemon=True)
-        t.start()
-        threads.append(t)
-        time.sleep(0.8)
-
-    # FastAPI services
-    for sname, sinfo in SERVICE_APPS.items():
-        t = threading.Thread(target=_run_uvicorn_thread, args=(sinfo,), daemon=True)
-        t.start()
-        threads.append(t)
-        time.sleep(0.3)
-
-    # Hub as subprocess (Streamlit needs its own process)
-    hub_script = PROJECT_ROOT / "content" / "scenes" / "hub" / "hub_scene.py"
+        print(f"  {info['label']}: script not found, skipping")
+        failed.append(info["label"])
+        return None
     try:
-        hub_proc = subprocess.Popen(
-            ["streamlit", "run", str(hub_script), "--server.port=8500",
-             "--server.headless=true", "--logger.level=warning"],
+        return subprocess.Popen(
+            [sys.executable, "-m", "streamlit", "run", str(script),
+             f"--server.port={info['port']}",
+             "--server.headless=true",
+             "--server.address=0.0.0.0",
+             "--browser.gatherUsageStats=false",
+             "--logger.level=warning"],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         )
-        procs.append(hub_proc)
-        print("  ✅ Hub starting on :8500...")
-    except Exception as e:
-        print(f"  ⚠️  Hub failed (Streamlit?): {e}")
+    except Exception as exc:
+        print(f"  {info['label']}: {exc}")
+        failed.append(info["label"])
+        return None
 
-    # Health check after 5 seconds
+
+def launch_multi(service_names: List[str], scene_names: List[str]) -> None:
+    """
+    Launch services first (let them settle), then scenes.
+    Flask/FastAPI targets run in daemon threads.
+    Streamlit targets get isolated subprocesses.
+    Blocks until Ctrl+C.
+    """
+    total = len(service_names) + len(scene_names)
+    if total == 0:
+        print("Nothing to launch. Check auto_start flags in config/launcher.yaml.")
+        return
+
+    box_w = 62
+    print(f"\n{'=' * (box_w + 2)}")
+    print(f"  CosySim v{VERSION}")
+    print(f"{'=' * (box_w + 2)}")
+    if service_names:
+        print("  SERVICES:")
+        for n in service_names:
+            i = ALL_TARGETS[n]
+            print(f"    {i['label']:.<35s} :{i['port']}")
+    if scene_names:
+        print("  SCENES:")
+        for n in scene_names:
+            i = ALL_TARGETS[n]
+            print(f"    {i['label']:.<35s} :{i['port']}")
+    print(f"  Ctrl+C to stop all")
+    print(f"{'=' * (box_w + 2)}\n")
+
+    all_procs: List[subprocess.Popen] = []
+    failed: List[str] = []
+
+    def _launch_group(names: List[str], group: str) -> None:
+        if not names:
+            return
+        print(f"  Starting {group}...")
+        for name in names:
+            info = ALL_TARGETS[name]
+            if info["type"] == "streamlit":
+                proc = _start_streamlit_proc(info, failed)
+                if proc:
+                    all_procs.append(proc)
+                    print(f"    [OK] {info['label']} (PID {proc.pid})")
+            else:
+                _start_in_thread(name, info, failed)
+                print(f"    [OK] {info['label']} -> :{info['port']}")
+            time.sleep(0.4)
+
+    _launch_group(service_names, "Services")
+    if service_names and scene_names:
+        time.sleep(2)
+    _launch_group(scene_names, "Scenes")
+
     time.sleep(5)
-    print("\n📡 Health check:")
-    all_ports = [(n, FLASK_SCENES[n]["port"]) for n in targets]
-    all_ports += [(sn, si["port"]) for sn, si in SERVICE_APPS.items()]
-    all_ports += [("hub", 8500)]
-    for label, port in all_ports:
-        status = "✅ UP" if _check_port(port) else "⏳ starting..."
-        print(f"  {label:>10s} :{port}  {status}")
-
-    print(f"\n🚀 All services launched! Open http://localhost:8500 for the Hub.\n")
+    print("\n  Health check:")
+    for name in service_names + scene_names:
+        port = ALL_TARGETS[name]["port"]
+        label = ALL_TARGETS[name]["label"]
+        icon = "[UP]" if _port_up(port) else "[--]"
+        note = " FAILED" if name in failed else ""
+        print(f"    {icon} {label:.<35s} :{port}{note}")
+    print(f"\n  {total} target(s) launched.  Hub -> http://localhost:8500\n")
 
     try:
         signal.signal(signal.SIGINT, signal.default_int_handler)
         while True:
-            time.sleep(1)
+            time.sleep(60)
+            down = [n for n in service_names + scene_names
+                    if not _port_up(ALL_TARGETS[n]["port"])]
+            if down:
+                print(f"  Warning: not responding: {', '.join(down)}")
     except KeyboardInterrupt:
-        print("\n🛑 Shutting down...")
-        for p in procs:
-            p.terminate()
-        print("   Done.")
+        print("\n  Shutting down...")
+        for proc in all_procs:
+            try:
+                proc.terminate()
+            except Exception:
+                pass
+        print("  Done.\n")
 
 
-# ── Test runner ──────────────────────────────────────────────────────────
+# ── High-level launchers ──────────────────────────────────────────────────
 
-def launch_test_mode() -> None:
-    """Run the pytest suite."""
-    print(_banner("COSYSIM TEST SUITE"))
+def launch_core() -> None:
+    """Start all auto_start services then all auto_start scenes."""
+    svcs = [n for n, i in SERVICES.items() if i.get("auto_start")]
+    scns = [n for n, i in SCENES.items()   if i.get("auto_start")]
+    launch_multi(svcs, scns)
+
+
+def launch_services_cmd(only_auto: bool = True) -> None:
+    targets = [n for n, i in SERVICES.items() if not only_auto or i.get("auto_start")]
+    launch_multi(targets, [])
+
+
+def launch_scenes_cmd(only_auto: bool = True) -> None:
+    targets = [n for n, i in SCENES.items() if not only_auto or i.get("auto_start")]
+    launch_multi([], targets)
+
+
+def launch_all() -> None:
+    launch_multi(list(SERVICES), list(SCENES))
+
+
+def launch_single(name: str) -> None:
+    info = ALL_TARGETS.get(name)
+    if not info:
+        print(f"Unknown target: '{name}'")
+        print(f"  Services : {', '.join(SERVICES)}")
+        print(f"  Scenes   : {', '.join(SCENES)}")
+        sys.exit(1)
+    group = "service" if name in SERVICES else "scene"
+    print(f"\n  Starting {group} '{info['label']}' -> http://localhost:{info['port']}")
+    _run_single(name, info)
+
+
+# ── Info commands ─────────────────────────────────────────────────────────
+
+def cmd_list() -> None:
+    print(f"\n  CosySim v{VERSION} -- Target List")
+    print(f"  Config: {_LAUNCHER_CFG}\n")
+    for group_label, catalogue in (("SERVICES", SERVICES), ("SCENES", SCENES)):
+        print(f"  -- {group_label} " + "-" * 45)
+        print(f"  {'name':<20}  {'port':>5}  auto  status  label")
+        print(f"  {'-' * 56}")
+        for name, info in catalogue.items():
+            up   = "UP  " if _port_up(info["port"]) else "down"
+            auto = "[x]" if info.get("auto_start") else "   "
+            print(f"  {name:<20}  {info['port']:>5}  {auto}  {up}    {info['label']}")
+        print()
+
+
+def cmd_status() -> None:
+    print(f"\n  CosySim v{VERSION} -- System Status")
+    print(f"  Python {sys.version.split()[0]}  |  {PROJECT_ROOT}\n")
+
+    print("  External Services:")
+    for label, port in [("LMStudio", 1234), ("Nexus KMS", 8700)]:
+        print(f"    {'[UP]' if _port_up(port) else '[--]'} {label:.<22} :{port}")
+
+    print("\n  Services:")
+    for name, info in SERVICES.items():
+        auto = "[auto]" if info.get("auto_start") else "      "
+        print(f"    {'[UP]' if _port_up(info['port']) else '[--]'} "
+              f"{name:.<22} :{info['port']}  {auto}  {info['label']}")
+
+    print("\n  Scenes:")
+    for name, info in SCENES.items():
+        auto = "[auto]" if info.get("auto_start") else "      "
+        print(f"    {'[UP]' if _port_up(info['port']) else '[--]'} "
+              f"{name:.<22} :{info['port']}  {auto}  {info['label']}")
+
+    print(f"\n  Edit {_LAUNCHER_CFG.name} to toggle auto_start flags.\n")
+
+
+def cmd_test() -> None:
     try:
         import pytest
     except ImportError:
-        print("❌ pytest not installed. Run: pip install pytest")
+        print("pytest not installed.")
         sys.exit(1)
-    exit_code = pytest.main([
+    sys.exit(pytest.main([
         "tests/", "-v", "--tb=short", "--color=yes",
         "--ignore=tests/test_agent_loop.py",
         "--ignore=tests/live_wire_test.py",
-    ])
-    sys.exit(exit_code)
+    ]))
 
 
-# ── Database init ────────────────────────────────────────────────────────
-
-def init_database() -> None:
-    """Initialize the simulation database."""
-    print(_banner("DATABASE INIT"))
+def cmd_init_db() -> None:
     from content.simulation.database.db import Database
     try:
         db = Database()
-        print(f"✅ Database at {db.db_path}")
+        print(f"Database at {db.db_path}")
         with db.get_connection() as conn:
             cur = conn.cursor()
             for table in ["characters", "personalities", "roles", "conversations",
                           "interactions", "media", "character_states"]:
                 try:
                     cur.execute(f"SELECT COUNT(*) FROM {table}")
-                    print(f"  ✓ {table}: {cur.fetchone()[0]} rows")
+                    print(f"  {table}: {cur.fetchone()[0]} rows")
                 except Exception:
-                    print(f"  ✗ {table}: not found")
-    except Exception as e:
-        print(f"❌ {e}")
+                    print(f"  {table}: not found")
+    except Exception as exc:
+        print(f"Error: {exc}")
         sys.exit(1)
 
 
-# ── System status ────────────────────────────────────────────────────────
-
-def show_status() -> None:
-    """Show system health: deps, databases, ports, scenes."""
-    print(_banner("COSYSIM SYSTEM STATUS"))
-    print(f"  Python  : {sys.version.split()[0]}")
-    print(f"  Version : {VERSION}")
-
-    # Dependencies
-    print("\n  Dependencies:")
-    for name, mod in [("Flask", "flask"), ("Streamlit", "streamlit"),
-                      ("PyTorch", "torch"), ("ChromaDB", "chromadb"),
-                      ("APScheduler", "apscheduler"), ("Requests", "requests")]:
-        try:
-            m = __import__(mod)
-            print(f"    ✓ {name}: {getattr(m, '__version__', '?')}")
-        except ImportError:
-            print(f"    ✗ {name}: missing")
-
-    # Databases
-    print("\n  Databases:")
-    from engine.paths import (DB_SIMULATION, DB_AGENT_STATE, DB_PHONE,
-                              DB_ASSET_REGISTRY)
-    for db_path in [DB_SIMULATION, DB_AGENT_STATE, DB_PHONE, DB_ASSET_REGISTRY]:
-        db_rel = db_path.relative_to(PROJECT_ROOT)
-        if db_path.exists():
-            size = db_path.stat().st_size / 1024
-            print(f"    ✓ {db_rel} ({size:.0f} KB)")
-        else:
-            print(f"    - {db_rel}: not found")
-
-    # Ports
-    print("\n  Ports:")
-    all_ports = {**{n: i["port"] for n, i in FLASK_SCENES.items()},
-                 **{n: i["port"] for n, i in STREAMLIT_APPS.items()},
-                 **{n: i["port"] for n, i in SERVICE_APPS.items()}}
-    for name, port in sorted(all_ports.items(), key=lambda x: x[1]):
-        up = _check_port(port)
-        status = "🟢 UP" if up else "⚫ down"
-        print(f"    {name:>10s} :{port}  {status}")
-
-    # Directory structure
-    print("\n  Project:")
-    for d in ["engine", "content", "config", "docs", "tests"]:
-        dp = PROJECT_ROOT / d
-        if dp.exists():
-            count = len(list(dp.rglob("*.py")))
-            print(f"    ✓ {d}/ ({count} py files)")
-
-    print()
-
-
-# ── List scenes ──────────────────────────────────────────────────────────
-
-def list_scenes() -> None:
-    """List all known scenes and services."""
-    print(_banner("AVAILABLE SCENES & SERVICES"))
-    print("  Flask Scenes:")
-    for name, info in FLASK_SCENES.items():
-        up = _check_port(info["port"])
-        dot = "🟢" if up else "⚫"
-        print(f"    {dot} {name:>10s}  :{info['port']}  {info['label']}")
-
-    print("\n  Streamlit Apps:")
-    for name, info in STREAMLIT_APPS.items():
-        up = _check_port(info["port"])
-        dot = "🟢" if up else "⚫"
-        print(f"    {dot} {name:>10s}  :{info['port']}  {info['label']}")
-
-    print("\n  Services:")
-    for name, info in SERVICE_APPS.items():
-        up = _check_port(info["port"])
-        dot = "🟢" if up else "⚫"
-        print(f"    {dot} {name:>10s}  :{info['port']}  {info['label']}")
-    print()
-
-
-# ── Interactive menu ─────────────────────────────────────────────────────
+# ── Interactive menu ──────────────────────────────────────────────────────
 
 def interactive_menu() -> None:
-    """Show an interactive menu when no --mode is given."""
     print(f"""
-╔══════════════════════════════════════════════════════════════╗
-║                  CosySim v{VERSION}                            ║
-║              AI Agent Simulation Framework                    ║
-╠══════════════════════════════════════════════════════════════╣
-║                                                              ║
-║  Scenes:                                                     ║
-║    1. phone     - CosyPhone OS           (port 5555)         ║
-║    2. bedroom   - The Bedroom            (port 5556)         ║
-║    3. lounge    - The Velvet Lounge       (port 5557)         ║
-║    4. casino    - Midnight Casino         (port 5559)         ║
-║    5. gallery   - The Gallery             (port 5560)         ║
-║    6. warzone   - Global Strike           (port 5561)         ║
-║                                                              ║
-║  Services:                                                   ║
-║    7. hub       - Central Hub             (port 8500)         ║
-║    8. admin     - Admin Panel             (port 8502)         ║
-║    9. all       - Launch everything                           ║
-║                                                              ║
-║  Tools:                                                      ║
-║    s. status    - System health check                        ║
-║    t. test      - Run test suite                             ║
-║    l. list      - List all scenes + ports                    ║
-║    q. quit                                                   ║
-║                                                              ║
-╚══════════════════════════════════════════════════════════════╝
-""")
-    choice_map = {
-        "1": "phone", "phone": "phone",
-        "2": "bedroom", "bedroom": "bedroom",
-        "3": "lounge", "lounge": "lounge",
-        "4": "casino", "casino": "casino",
-        "5": "gallery", "gallery": "gallery",
-        "6": "warzone", "warzone": "warzone",
-        "7": "hub", "hub": "hub",
-        "8": "admin", "admin": "admin",
-        "9": "all", "all": "all",
-        "s": "status", "status": "status",
-        "t": "test", "test": "test",
-        "l": "list", "list": "list",
-        "q": "quit", "quit": "quit",
-    }
+=================================================================
+  CosySim v{VERSION}  --  AI Agent Simulation Framework
+=================================================================
 
+  Launch Groups:
+    core      -- auto_start services + scenes  (recommended)
+    services  -- auto_start services only
+    scenes    -- auto_start scenes only
+    all       -- every known target
+
+  Single Scene  (type name):
+    phone  bedroom  lounge  casino  gallery  warzone
+    realm  neoncity  coders  heist  command_center  games
+
+  Single Service  (type name):
+    hub  nexus_panel  dashboard  admin  tts  bridge
+
+  Info & Tools:
+    list | status | test | init-db | housekeep | q (quit)
+
+=================================================================
+""")
     try:
         choice = input("  Select: ").strip().lower()
     except (EOFError, KeyboardInterrupt):
-        print("\n👋 Goodbye!")
+        print("\nGoodbye!")
         return
 
-    mode = choice_map.get(choice)
-    if mode == "quit" or mode is None:
-        if mode is None and choice:
-            print(f"  Unknown choice: {choice}")
+    if not choice or choice in ("q", "quit"):
         return
-
-    dispatch(mode)
-
-
-# ── Dispatch ─────────────────────────────────────────────────────────────
-
-def dispatch(mode: str) -> None:
-    """Route a mode string to the correct launcher."""
-    if mode in FLASK_SCENES:
-        launch_flask(mode, FLASK_SCENES[mode])
-    elif mode in STREAMLIT_APPS:
-        launch_streamlit(mode, STREAMLIT_APPS[mode])
-    elif mode in SERVICE_APPS:
-        launch_service(mode, SERVICE_APPS[mode])
-    elif mode == "all":
+    if choice == "core":
+        launch_core()
+    elif choice == "services":
+        launch_services_cmd()
+    elif choice == "scenes":
+        launch_scenes_cmd()
+    elif choice == "all":
         launch_all()
-    elif mode == "test":
-        launch_test_mode()
-    elif mode == "status":
-        show_status()
-    elif mode == "list":
-        list_scenes()
+    elif choice == "list":
+        cmd_list()
+    elif choice == "status":
+        cmd_status()
+    elif choice == "test":
+        cmd_test()
+    elif choice == "init-db":
+        cmd_init_db()
+    elif choice == "housekeep":
+        from engine.services.housekeeping import HousekeepingService
+        HousekeepingService().run_all()
+    elif choice in ALL_TARGETS:
+        launch_single(choice)
     else:
-        print(f"❌ Unknown mode: {mode}")
-        sys.exit(1)
+        print(f"  Unknown: '{choice}' -- try 'list' to see all targets.")
 
 
-# ── CLI ──────────────────────────────────────────────────────────────────
+# ── CLI ───────────────────────────────────────────────────────────────────
 
 def main() -> None:
-    all_modes = sorted(
-        set(list(FLASK_SCENES) + list(STREAMLIT_APPS) + list(SERVICE_APPS)
-            + ["all", "test"])
-    )
+    _load_config()  # apply launcher.yaml overrides before parsing
 
     parser = argparse.ArgumentParser(
-        description=f"CosySim v{VERSION} — AI Agent Simulation Framework",
+        description=f"CosySim v{VERSION} -- AI Agent Simulation Framework",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  %(prog)s                        # interactive menu
-  %(prog)s --mode phone           # launch phone scene
-  %(prog)s --mode all             # launch all services
-  %(prog)s --list                 # show scenes + port status
-  %(prog)s --status               # system health
-  %(prog)s --mode test            # run tests
-  %(prog)s --init-db              # initialize database
-  %(prog)s --housekeep            # media ingest + health checks
+  %(prog)s --core              # auto_start services + scenes
+  %(prog)s --services          # auto_start services only
+  %(prog)s --scenes            # auto_start scenes only
+  %(prog)s --all               # start everything
+  %(prog)s bedroom             # start a single scene
+  %(prog)s nexus_panel         # start a single service
+  %(prog)s --list              # list all targets + port status
+  %(prog)s --status            # system health check
+  %(prog)s --test              # run test suite
 """,
     )
-    parser.add_argument("--mode", choices=all_modes, default=None,
-                        help="Launch mode (omit for interactive menu)")
-    parser.add_argument("--list", action="store_true", help="List scenes and ports")
-    parser.add_argument("--status", action="store_true", help="System health check")
-    parser.add_argument("--init-db", action="store_true", help="Initialize database")
-    parser.add_argument("--housekeep", action="store_true",
-                        help="Run housekeeping tasks")
-    parser.add_argument("--watch", action="store_true",
-                        help="With --housekeep: run continuously")
-    parser.add_argument("--version", action="version", version=f"CosySim v{VERSION}")
+    parser.add_argument("target",      nargs="?",          help="Single target name to start")
+    parser.add_argument("--core",      action="store_true", help="Start auto_start services + scenes")
+    parser.add_argument("--services",  action="store_true", help="Start auto_start services only")
+    parser.add_argument("--scenes",    action="store_true", help="Start auto_start scenes only")
+    parser.add_argument("--all",       action="store_true", help="Start every known target")
+    parser.add_argument("--list",      action="store_true", help="List all targets + port status")
+    parser.add_argument("--status",    action="store_true", help="System health check")
+    parser.add_argument("--test",      action="store_true", help="Run test suite")
+    parser.add_argument("--init-db",   action="store_true", dest="init_db",
+                        help="Initialise simulation database")
+    parser.add_argument("--housekeep", action="store_true", help="Run housekeeping tasks")
+    parser.add_argument("--watch",     action="store_true", help="With --housekeep: run continuously")
+    parser.add_argument("--version",   action="version",    version=f"CosySim v{VERSION}")
+    # Legacy shims (silent)
+    parser.add_argument("--mode",  default=None, help=argparse.SUPPRESS)
+    parser.add_argument("--scene", default=None, help=argparse.SUPPRESS)
 
     args = parser.parse_args()
 
-    if args.init_db:
-        init_database()
-        return
-    if args.status:
-        show_status()
-        return
+    # Legacy --mode shim
+    if args.mode and not args.target:
+        mode_map = {"all": None, "core": None, "test": None}
+        if args.mode not in mode_map:
+            args.target = args.mode
+        elif args.mode == "all":
+            args.all = True
+        elif args.mode == "core":
+            args.core = True
+        elif args.mode == "test":
+            args.test = True
+    if args.scene and not args.target:
+        args.target = args.scene
+
     if args.list:
-        list_scenes()
-        return
-    if args.housekeep:
+        cmd_list()
+    elif args.status:
+        cmd_status()
+    elif args.test:
+        cmd_test()
+    elif args.init_db:
+        cmd_init_db()
+    elif args.housekeep:
         from engine.services.housekeeping import HousekeepingService
         hk = HousekeepingService()
         hk.watch() if args.watch else hk.run_all()
-        return
-
-    if args.mode:
-        dispatch(args.mode)
+    elif args.core:
+        launch_core()
+    elif args.services:
+        launch_services_cmd()
+    elif args.scenes:
+        launch_scenes_cmd()
+    elif args.all:
+        launch_all()
+    elif args.target:
+        launch_single(args.target)
     else:
         interactive_menu()
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except KeyboardInterrupt:
-        print("\n\n👋 Goodbye!")
-        sys.exit(0)
-    except Exception as e:
-        print(f"\n❌ Fatal error: {e}")
-        import traceback
-        traceback.print_exc()
-        sys.exit(1)
+    main()

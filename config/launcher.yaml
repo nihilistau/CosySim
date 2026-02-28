@@ -1,0 +1,83 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# CosySim Launcher Configuration
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# Controls which targets start automatically with:
+#   python launcher.py --services   → auto_start services
+#   python launcher.py --scenes     → auto_start scenes
+#   python launcher.py --core       → both (recommended default)
+#
+# To start a target regardless of auto_start:
+#   python launcher.py bedroom
+#   python launcher.py nexus_panel
+#
+# Set auto_start: true for anything you always want running.
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+  # ── Always-on infrastructure ──────────────────────────────────────────────
+  hub:
+    auto_start: true          # Central navigation hub
+
+  nexus_panel:
+    auto_start: true          # Nexus knowledge panel + NLM lab
+
+  dashboard:
+    auto_start: false         # System metrics dashboard (Streamlit)
+
+  admin:
+    auto_start: false         # Admin panel (Streamlit)
+
+  assets:
+    auto_start: false         # Asset generator (Streamlit)
+
+  creator:
+    auto_start: false         # Scene creator (Streamlit)
+
+  tts:
+    auto_start: false         # TTS server (Qwen3/Piper)
+
+  bridge:
+    auto_start: false         # MCP web bridge (Socket.IO)
+
+scenes:
+  # ── Game scenes ───────────────────────────────────────────────────────────
+  # Set auto_start: true for scenes you want in your regular session.
+  phone:
+    auto_start: true          # CosyPhone OS
+
+  bedroom:
+    auto_start: true          # The Bedroom
+
+  lounge:
+    auto_start: false         # The Velvet Lounge
+
+  tavern:
+    auto_start: false         # Dragon's Flagon Tavern
+
+  casino:
+    auto_start: false         # Midnight Casino
+
+  gallery:
+    auto_start: false         # The Gallery
+
+  warzone:
+    auto_start: false         # Global Strike
+
+  realm:
+    auto_start: false         # The Realm (incl. Murder Mystery)
+
+  neoncity:
+    auto_start: false         # NeonCity cyberpunk RPG
+
+  coders:
+    auto_start: false         # The Coders Room
+
+  heist:
+    auto_start: false         # The Heist
+
+  command_center:
+    auto_start: false         # Command Center
+
+  games:
+    auto_start: false         # Games Arcade
