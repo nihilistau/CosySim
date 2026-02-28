@@ -880,6 +880,37 @@ class TestRefreshSessionTokens:
             proxy_mod._COOKIES_FILE = original_cookies
             proxy_mod._META_FILE = original_meta
 
+    def test_extracts_fsid_from_alternate_wiz_key(self, tmp_path: Path) -> None:
+        """IxjpMA (newer build label) should also be accepted for f.sid."""
+        import engine.mcp.nlm_live_proxy as proxy_mod
+        from unittest.mock import patch, MagicMock
+        original_cookies = proxy_mod._COOKIES_FILE
+        original_meta = proxy_mod._META_FILE
+        proxy_mod._COOKIES_FILE = tmp_path / "cookies2.json"
+        proxy_mod._META_FILE = tmp_path / "meta2.json"
+        proxy_mod._COOKIES_FILE.write_text(json.dumps({"SID": "test"}), encoding="utf-8")
+        proxy_mod._META_FILE.write_text(json.dumps({}), encoding="utf-8")
+
+        fake_html = (
+            'WIZ_global_data = {"IxjpMA": "alternate_fsid", "SNlM0e": "at_value", '
+            '"QrtxK": "boq_labs-tailwind-frontend_20260301.01_p0"};'
+        )
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = fake_html.encode()
+        mock_resp.__enter__ = lambda s: s
+        mock_resp.__exit__ = MagicMock(return_value=False)
+        try:
+            with patch("urllib.request.urlopen", return_value=mock_resp):
+                result = proxy_mod.refresh_session_tokens()
+            assert result is True
+            meta = json.loads(proxy_mod._META_FILE.read_text())
+            assert meta["f_sid"] == "alternate_fsid"
+            assert meta["at"] == "at_value"
+            assert meta["bl"] == "boq_labs-tailwind-frontend_20260301.01_p0"
+        finally:
+            proxy_mod._COOKIES_FILE = original_cookies
+            proxy_mod._META_FILE = original_meta
+
 
 # ── NLMClient class ────────────────────────────────────────────────────
 

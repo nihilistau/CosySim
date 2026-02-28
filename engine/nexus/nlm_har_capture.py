@@ -344,14 +344,15 @@ def capture_nlm_cookies(
 
         logger.info("Captured %d auth cookies via CDP", len(cookies))
 
-        # Step 5: Try to extract bl and f.sid from page JavaScript
+        # Step 5: Try to extract bl, f.sid, and at token from page JavaScript
         meta: Dict[str, str] = {}
         try:
             js_result = cdp_session.send("Runtime.evaluate", {
                 "expression": (
                     "JSON.stringify({"
-                    "  bl: window.WIZ_global_data && window.WIZ_global_data.QrtxK || '',"
-                    "  f_sid: window.WIZ_global_data && window.WIZ_global_data.IxjpMA || '',"
+                    "  bl: (window.WIZ_global_data && (window.WIZ_global_data.QrtxK || window.WIZ_global_data.cfb2h)) || '',"
+                    "  f_sid: (window.WIZ_global_data && (window.WIZ_global_data.IxjpMA || window.WIZ_global_data.FdrFJe)) || '',"
+                    "  at: (window.WIZ_global_data && window.WIZ_global_data.SNlM0e) || '',"
                     "  origin: location.origin"
                     "})"
                 ),
@@ -363,9 +364,14 @@ def capture_nlm_cookies(
                     meta["bl"] = page_data["bl"]
                 if page_data.get("f_sid"):
                     meta["f_sid"] = str(page_data["f_sid"])
-                logger.info("Extracted bl=%s f_sid=%s from page JS", meta.get("bl"), meta.get("f_sid"))
+                if page_data.get("at"):
+                    meta["at"] = page_data["at"]
+                logger.info(
+                    "Extracted from page JS: bl=%s f_sid=%s at_present=%s",
+                    meta.get("bl"), meta.get("f_sid"), bool(meta.get("at")),
+                )
         except Exception as exc:
-            logger.debug("Could not extract bl/f_sid from JS: %s", exc)
+            logger.debug("Could not extract bl/f_sid/at from JS: %s", exc)
 
         if not cookies:
             return {
@@ -386,6 +392,8 @@ def capture_nlm_cookies(
             existing_meta["bl"] = meta["bl"]
         if meta.get("f_sid"):
             existing_meta["f_sid"] = meta["f_sid"]
+        if meta.get("at"):
+            existing_meta["at"] = meta["at"]
         _save_meta(existing_meta)
 
         return {
@@ -393,6 +401,7 @@ def capture_nlm_cookies(
             "cookie_names": list(cookies.keys()),
             "bl": existing_meta.get("bl"),
             "f_sid": existing_meta.get("f_sid"),
+            "at_present": bool(existing_meta.get("at")),
             "status": "ok",
         }
 

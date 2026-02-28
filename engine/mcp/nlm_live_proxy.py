@@ -208,8 +208,14 @@ def refresh_session_tokens() -> bool:
     """Refresh f.sid and at token by loading the NLM main page with stored cookies.
 
     Call this when batchexecute returns null data (stale f.sid / at token).
-    Extracts ``WIZ_global_data.FdrFJe`` (f.sid) and ``SNlM0e`` (at) from the
-    page HTML and persists them to ``data/nlm_meta.json``.
+    Extracts tokens from ``WIZ_global_data`` in the page HTML — tries multiple
+    known key variants since Google obfuscates these names per build:
+
+    - f.sid:  ``IxjpMA``, ``FdrFJe``
+    - at:     ``SNlM0e``
+    - bl:     ``QrtxK``, ``cfb2h`` (also detected from boq_ string in HTML)
+
+    Persists any found values to ``data/nlm_meta.json``.
 
     Returns:
         True if at least one token was refreshed, False otherwise.
@@ -235,37 +241,58 @@ def refresh_session_tokens() -> bool:
         return False
 
     m = re.search(r"WIZ_global_data\s*=\s*({.*?});", html, re.DOTALL)
-    if not m:
-        logger.warning("WIZ_global_data not found in NLM page — cannot refresh tokens")
-        return False
-    try:
-        wiz = json.loads(m.group(1))
-    except Exception as exc:
-        logger.warning("Failed to parse WIZ_global_data: %s", exc)
-        return False
+    wiz: Dict[str, Any] = {}
+    if m:
+        try:
+            wiz = json.loads(m.group(1))
+        except Exception as exc:
+            logger.warning("Failed to parse WIZ_global_data: %s", exc)
 
     meta = _load_meta()
     updated = False
-    if wiz.get("FdrFJe"):
-        meta["f_sid"] = str(wiz["FdrFJe"])
-        updated = True
+
+    # f.sid — try known key variants in order of likelihood
+    for key in ("IxjpMA", "FdrFJe"):
+        if wiz.get(key):
+            meta["f_sid"] = str(wiz[key])
+            updated = True
+            logger.debug("Extracted f.sid from WIZ_global_data.%s", key)
+            break
+
+    # at anti-forgery token
     if wiz.get("SNlM0e"):
         meta["at"] = wiz["SNlM0e"]
         updated = True
+        logger.debug("Extracted at from WIZ_global_data.SNlM0e")
 
-    bl_match = re.search(r'"(boq_labs-tailwind-frontend_[^"]+)"', html)
-    if bl_match:
-        new_bl = bl_match.group(1)
-        if new_bl != meta.get("bl"):
-            meta["bl"] = new_bl
-            updated = True
-            logger.info("Updated build label from live page: %s", new_bl)
+    # bl — try WIZ_global_data keys, then fall back to boq_ string scan
+    for key in ("QrtxK", "cfb2h"):
+        if wiz.get(key):
+            new_bl = str(wiz[key])
+            if new_bl != meta.get("bl"):
+                meta["bl"] = new_bl
+                updated = True
+                logger.info("Updated build label from WIZ_global_data.%s: %s", key, new_bl)
+            break
+    else:
+        bl_match = re.search(r'"(boq_labs-tailwind-frontend_[^"]+)"', html)
+        if bl_match:
+            new_bl = bl_match.group(1)
+            if new_bl != meta.get("bl"):
+                meta["bl"] = new_bl
+                updated = True
+                logger.info("Updated build label from HTML scan: %s", new_bl)
 
     if updated:
         _save_meta(meta)
         logger.info(
-            "Session tokens refreshed: f.sid=%s at=%.20s...",
-            meta.get("f_sid"), meta.get("at", ""),
+            "Session tokens refreshed: f.sid=%s at_present=%s bl=%s",
+            meta.get("f_sid"), bool(meta.get("at")), meta.get("bl"),
+        )
+    else:
+        logger.warning(
+            "refresh_session_tokens: no tokens found in page "
+            "(WIZ keys present: %s)", list(wiz.keys())[:10] if wiz else "none"
         )
     return updated
 
@@ -1829,6 +1856,12 @@ def create_nlm_proxy_app() -> Flask:
             result = capture_nlm_cookies()
             if result.get("error"):
                 return jsonify(result), 500
+            # If at token wasn't captured from CDP JS, refresh it from the live page
+            if not result.get("at_present"):
+                logger.info("at token not in CDP capture — running refresh_session_tokens()")
+                refresh_session_tokens()
+                meta = _load_meta()
+                result["at_present"] = bool(meta.get("at"))
             return jsonify(result)
         except ImportError:
             return jsonify({
