@@ -27,7 +27,7 @@ All outbound NLM calls are rate-limited (default 1.5s between requests).
 Configure via ``notebooklm.rate_limit_seconds`` in config/default.yaml.
 Batch calls count as ONE request for rate-limiting purposes.
 
-Complete RPC Catalogue (v3.0, 21 RPCs + 1 proto endpoint):
+Complete RPC Catalogue (v3.1, 25 RPCs + 1 proto endpoint):
   See docs/NOTEBOOKLM_SDK.md for full documentation.
 
 Usage::
@@ -139,13 +139,16 @@ RPC_LIST_ARTIFACTS      = "gArtLc"
 RPC_MIND_MAP            = "cFji9"    # ⚠️ v3.0: was "conversation history", is mind map
 RPC_ACCOUNT_STATE       = "ozz5Z"
 RPC_READ_SOURCE         = "tr032e"
-RPC_RESUME_SESSION      = "CCqFvf"   # ⭐ v3.0 new: load last active notebook
-RPC_CHAT_MESSAGE        = "s0tc2d"
-RPC_SAVE_NOTE           = "CYK0Xb"   # ⚠️ v3.0: was "legacy chat", is save note
-RPC_GENERATE_DOC        = "ciyUvf"
-RPC_SAVE_REPORT         = "R7cb6c"
-RPC_FAST_RESEARCH_START = "Ljjv0c"   # ⭐ v3.0 new: start fast research
-RPC_ADD_URL_SOURCES     = "LBwxtb"   # ⭐ v3.0 new: add URL sources batch
+RPC_RESUME_SESSION       = "CCqFvf"   # ⭐ v3.0 new: load last active notebook
+RPC_RENAME_NOTEBOOK      = "s0tc2d"   # ⭐ v3.1: was wrongly RPC_CHAT_MESSAGE
+RPC_SAVE_NOTE            = "CYK0Xb"   # ⚠️ v3.0: was "legacy chat", is save note
+RPC_GENERATE_DOC         = "ciyUvf"
+RPC_SAVE_REPORT          = "R7cb6c"
+RPC_FAST_RESEARCH_START  = "Ljjv0c"   # ⭐ v3.0 new: start fast research
+RPC_ADD_RESEARCH_SOURCE  = "LBwxtb"   # ⭐ v3.1: add AI-generated research doc as source
+RPC_ADD_SOURCE           = "izAoDd"   # ⭐ v3.1 new: add URL or YouTube source
+RPC_START_DEEP_RESEARCH  = "QA9ei"    # ⭐ v3.1 new: start deep research → session_id
+RPC_DELETE_SOURCE        = "tGMBJ"    # ⭐ v3.1 new: delete a source
 
 # ── Response Length Constants ────────────────────────────────────────────
 RESP_LEN_DEFAULT = 4
@@ -160,6 +163,16 @@ DOC_TYPE_NOTE    = 9
 _WRITE_CONFIG = [2, None, None,
                  [1, None, None, None, None, None, None, None, None, None, [1]],
                  [[2, 1]]]
+
+# Source config object used by izAoDd (add URL / YouTube source)
+_SOURCE_CONFIG = [1, None, None, None, None, None, None, None, None, None, [1]]
+
+# gRPC endpoint for real free-form chat (GenerateFreeFormStreamed)
+_GRPC_CHAT_URL = (
+    "https://notebooklm.google.com/_/LabsTailwindUi/data/"
+    "google.internal.labs.tailwind.orchestration.v1"
+    ".LabsTailwindOrchestrationService/GenerateFreeFormStreamed"
+)
 
 
 # ── Meta (bl, f.sid) management ─────────────────────────────────────────
@@ -676,124 +689,104 @@ def ask_question(
     return _parse_ask_response(data)
 
 
-def chat_message(
+def rename_notebook(
     notebook_id: str,
-    question: str,
+    new_name: str,
     cookies: Dict[str, str],
-    role: str = "",
-    response_length: int = RESP_LEN_DEFAULT,
 ) -> Dict[str, Any]:
-    """Send a chat message using s0tc2d (current NLM chat RPC).
+    """Rename a notebook using s0tc2d (RENAME_NOTEBOOK RPC).
 
-    This is the proper chat interface. Unlike CYK0Xb (which annotates text),
-    s0tc2d triggers NLM's conversational Gemini model to generate an answer.
-
-    Configure Chat support: pass a ``role`` string to set the chat persona,
-    e.g. "Act as a PhD researcher providing citations" or
-    "You are a patient teacher explaining concepts step by step."
-    The role is injected at position 0 of the message structure.
-
-    Response length: use RESP_LEN_DEFAULT (4), RESP_LEN_LONGER (1, hypothesis),
-    or RESP_LEN_SHORTER (2, hypothesis).
+    Confirmed v3.1 from HAR analysis: s0tc2d is the rename RPC, NOT chat.
+    Payload: [notebook_id, [[null, null, null, [null, "new_name"]]]]
+    Response: [new_name, null, notebook_id, emoji, ...]
 
     Args:
-        notebook_id:     UUID of the target notebook.
-        question:        The question to ask.
-        cookies:         Google auth cookies.
-        role:            Optional configure-chat role/goal string.
-        response_length: Response length hint (default 4).
+        notebook_id: UUID of the notebook to rename.
+        new_name:    The new title for the notebook.
+        cookies:     Google auth cookies.
 
     Returns:
-        Dict with keys: answer_id, answer, sources, notebook_name, raw.
+        Dict with: renamed (bool), notebook_id, name.
     """
-    # Build message structure: [[role_or_null, null*6, [[2,question],[resp_len]]]]
-    inner_msg = [[2, question], [response_length]]
-    chat_config = [role if role else None,
-                   None, None, None, None, None, None,
-                   inner_msg]
-    args = json.dumps([notebook_id, [chat_config]])
-    _, data = _batchexecute(RPC_CHAT_MESSAGE, args, cookies, notebook_id)
-    return _parse_chat_response(data, question)
+    args = json.dumps([notebook_id, [[None, None, None, [None, new_name]]]])
+    _, data = _batchexecute(RPC_RENAME_NOTEBOOK, args, cookies, notebook_id)
+    return _parse_rename_response(data, notebook_id, new_name)
 
 
-def chat_messages_batch(
+def _parse_rename_response(
+    data: Any,
     notebook_id: str,
-    questions: List[str],
-    cookies: Dict[str, str],
-    role: str = "",
-    response_length: int = RESP_LEN_DEFAULT,
-    max_batch: int = 5,
-) -> List[Dict[str, Any]]:
-    """Send multiple chat messages in parallel batches using s0tc2d.
+    new_name: str = "",
+) -> Dict[str, Any]:
+    """Parse an s0tc2d (RENAME_NOTEBOOK) response.
 
-    Args:
-        notebook_id:     UUID of the target notebook.
-        questions:       List of question strings.
-        cookies:         Google auth cookies.
-        role:            Optional configure-chat role/goal for all messages.
-        response_length: Response length hint (default 4).
-        max_batch:       Max questions per HTTP request (default 5).
-
-    Returns:
-        List of chat response dicts in question order.
-    """
-    results: List[Dict[str, Any]] = []
-    for i in range(0, len(questions), max_batch):
-        batch = questions[i:i + max_batch]
-        calls = []
-        for q in batch:
-            inner_msg = [[2, q], [response_length]]
-            chat_config = [role if role else None,
-                           None, None, None, None, None, None,
-                           inner_msg]
-            calls.append((RPC_CHAT_MESSAGE, json.dumps([notebook_id, [chat_config]])))
-        raw_results = _batchexecute_multi(calls, cookies, notebook_id)
-        for j, (_, data) in enumerate(raw_results):
-            results.append(_parse_chat_response(data, batch[j] if j < len(batch) else ""))
-    return results
-
-
-def _parse_chat_response(data: Any, question: str = "") -> Dict[str, Any]:
-    """Parse an s0tc2d response.
-
-    s0tc2d returns: [notebook_title, null, notebook_id, emoji, null,
-                     [status_flags...], null, [[2,"question"],[resp_len]]]
-
-    The response echoes the question metadata but does NOT contain the answer
-    inline — the answer is generated asynchronously. For synchronous answers,
-    use CYK0Xb (ask_question) or poll the conversation history (cFji9).
-
-    Args:
-        data: Parsed inner data from batchexecute response.
-        question: Original question for context.
-
-    Returns:
-        Dict with: notebook_title, notebook_id, question, status, queued.
+    Response structure: [name, null, notebook_id, emoji, ...]
     """
     if data is None:
-        return {"queued": False, "question": question, "error": "no_data",
-                "answer": "", "answer_id": None, "sources": []}
+        return {"renamed": False, "notebook_id": notebook_id, "name": new_name,
+                "error": "no_data"}
     if isinstance(data, dict) and "error" in data:
-        return {"queued": False, "question": question, "answer": "",
-                "answer_id": None, "sources": [], **data}
+        return {"renamed": False, "notebook_id": notebook_id, "name": new_name, **data}
     try:
         if isinstance(data, list) and len(data) >= 3:
-            notebook_title = data[0] if isinstance(data[0], str) else ""
-            notebook_id = data[2] if isinstance(data[2], str) else ""
-            return {
-                "queued": True,
-                "notebook_title": notebook_title,
-                "notebook_id": notebook_id,
-                "question": question,
-                "answer": "",        # Answer arrives asynchronously
-                "answer_id": None,
-                "sources": [],
-                "note": "s0tc2d queues the response. Poll /conversations for answer.",
-            }
+            returned_name = data[0] if isinstance(data[0], str) else new_name
+            returned_id = data[2] if isinstance(data[2], str) else notebook_id
+            return {"renamed": True, "notebook_id": returned_id, "name": returned_name}
     except (IndexError, TypeError) as exc:
-        logger.warning("parse chat response: %s | data=%s", exc, str(data)[:200])
-    return {"queued": False, "question": question, "answer": "",
-            "answer_id": None, "sources": [], "raw": str(data)[:500]}
+        logger.warning("parse rename response: %s | data=%s", exc, str(data)[:200])
+    return {"renamed": True, "notebook_id": notebook_id, "name": new_name}
+
+
+def add_source_url(
+    notebook_id: str,
+    url: str,
+    cookies: Dict[str, str],
+) -> Dict[str, Any]:
+    """Add a URL or YouTube video as a source using izAoDd (ADD_SOURCE RPC).
+
+    Confirmed v3.1 from HAR analysis:
+    - Regular URL: source object with URL at position 2
+    - YouTube URL: source object with [url] at position 7
+    Same RPC handles both — detected automatically via URL pattern.
+
+    Payload: [[[source_obj]], notebook_id, [2], _SOURCE_CONFIG]
+
+    Args:
+        notebook_id: UUID of the target notebook.
+        url:         HTTP/HTTPS URL or YouTube URL to add as source.
+        cookies:     Google auth cookies.
+
+    Returns:
+        Dict with: source_id (UUID or None), url, status ("processing").
+    """
+    is_youtube = bool(re.search(r"youtube\.com/watch|youtu\.be/", url))
+    if is_youtube:
+        source_obj = [None, None, None, None, None, None, None, [url], None, None, 1]
+    else:
+        source_obj = [None, None, url, None, None, None, None, None, None, None, 1]
+    args = json.dumps([[source_obj], notebook_id, [2], _SOURCE_CONFIG])
+    _, data = _batchexecute(RPC_ADD_SOURCE, args, cookies, notebook_id)
+    return _parse_add_source_response(data, url)
+
+
+def _parse_add_source_response(data: Any, url: str = "") -> Dict[str, Any]:
+    """Parse an izAoDd (ADD_SOURCE) response.
+
+    Response contains the new source UUID and processing status.
+    """
+    if data is None:
+        return {"source_id": None, "url": url, "status": "queued", "error": "no_data"}
+    if isinstance(data, dict) and "error" in data:
+        return {"source_id": None, "url": url, "status": "error", **data}
+    source_id = None
+    try:
+        for s in _extract_strings(data, min_len=36):
+            if re.match(r"^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$", s):
+                source_id = s
+                break
+    except Exception as exc:
+        logger.debug("parse add_source: %s", exc)
+    return {"source_id": source_id, "url": url, "status": "processing"}
 
 
 def ask_questions_batch(
@@ -865,6 +858,284 @@ def _parse_ask_response(data: Any) -> Dict[str, Any]:
         logger.warning("parse ask response: %s | data=%s", exc, str(data)[:200])
         return {"answer_id": None, "answer": "", "sources": [],
                 "error": str(exc), "raw": str(data)[:500]}
+
+
+def delete_source(
+    source_id: str,
+    cookies: Dict[str, str],
+) -> Dict[str, Any]:
+    """Delete a source from a notebook using tGMBJ (DELETE_SOURCE RPC).
+
+    Confirmed v3.1 from HAR analysis.
+    Payload: [[[source_id]], [2]]
+
+    Args:
+        source_id: UUID of the source to delete.
+        cookies:   Google auth cookies.
+
+    Returns:
+        Dict with: deleted (bool), source_id.
+    """
+    args = json.dumps([[[source_id]], [2]])
+    _, data = _batchexecute(RPC_DELETE_SOURCE, args, cookies)
+    ok = data is not None and not (isinstance(data, dict) and "error" in data)
+    return {"deleted": ok, "source_id": source_id}
+
+
+def start_deep_research(
+    notebook_id: str,
+    topic: str,
+    cookies: Dict[str, str],
+) -> Dict[str, Any]:
+    """Start a deep research session on a topic using QA9ei.
+
+    Confirmed v3.1 from HAR analysis (was wrongly assumed to be Add Text Source).
+    Payload: [null, [1], ["topic", 1], 5, notebook_id]
+    Returns a session_id UUID. NLM then asynchronously generates a research
+    document which is added as a source via add_research_source (LBwxtb).
+
+    Args:
+        notebook_id: UUID of the target notebook.
+        topic:       The research topic or question.
+        cookies:     Google auth cookies.
+
+    Returns:
+        Dict with: session_id (UUID), topic, notebook_id.
+    """
+    args = json.dumps([None, [1], [topic, 1], 5, notebook_id])
+    _, data = _batchexecute(RPC_START_DEEP_RESEARCH, args, cookies, notebook_id)
+    session_id = None
+    if data is not None:
+        try:
+            for s in _extract_strings(data, min_len=36):
+                if re.match(
+                    r"^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$", s
+                ):
+                    session_id = s
+                    break
+        except Exception as exc:
+            logger.debug("start_deep_research session_id parse: %s", exc)
+    return {"session_id": session_id, "topic": topic, "notebook_id": notebook_id}
+
+
+def add_research_source(
+    notebook_id: str,
+    session_id: str,
+    title: str,
+    content: str,
+    cookies: Dict[str, str],
+) -> Dict[str, Any]:
+    """Add an AI-generated research document as a source using LBwxtb.
+
+    Confirmed v3.1 from HAR analysis. Fires after start_deep_research (QA9ei)
+    with the AI-written document as payload.
+    Payload: [null, [1], session_id, notebook_id, [[null, [title, content]]]]
+
+    Args:
+        notebook_id: UUID of the target notebook.
+        session_id:  Session ID returned by start_deep_research.
+        title:       Title of the research document.
+        content:     Full text content of the research document.
+        cookies:     Google auth cookies.
+
+    Returns:
+        Dict with: source_id (UUID or None), title, session_id, notebook_id.
+    """
+    sources_array = [[None, [title, content]]]
+    args = json.dumps([None, [1], session_id, notebook_id, sources_array])
+    _, data = _batchexecute(RPC_ADD_RESEARCH_SOURCE, args, cookies, notebook_id)
+    source_id = None
+    if data is not None:
+        try:
+            for s in _extract_strings(data, min_len=36):
+                if re.match(
+                    r"^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$", s
+                ):
+                    source_id = s
+                    break
+        except Exception as exc:
+            logger.debug("add_research_source parse: %s", exc)
+    return {
+        "source_id": source_id,
+        "title": title,
+        "session_id": session_id,
+        "notebook_id": notebook_id,
+    }
+
+
+def _grpc_ask(
+    notebook_id: str,
+    question: str,
+    source_ids: List[str],
+    cookies: Dict[str, str],
+    thread_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Ask a free-form question via the gRPC GenerateFreeFormStreamed endpoint.
+
+    This is the REAL chat interface — confirmed v3.1 from HAR analysis.
+    Unlike CYK0Xb (citation-annotate), this triggers NLM's conversational
+    Gemini model for natural dialogue. Supports multi-turn conversation via
+    thread_id.
+
+    Endpoint: POST /GenerateFreeFormStreamed?bl=<bl>
+    Inner payload (9 elements):
+      [0] source_context: [[[src_id1]], [[src_id2]], ...]
+      [1] question text
+      [2] null
+      [3] [2, null, [1], [1]]  — response config
+      [4] thread UUID (existing thread or new UUID for new conversation)
+      [5] null
+      [6] null
+      [7] notebook UUID
+      [8] 1
+    Outer: [null, json.dumps(inner)]
+    Body: f.req=<url_encoded_outer>
+
+    Response: SSE-like streaming. Each chunk has FULL text so far (not deltas).
+    Parse pattern: outer[0] == "wrb.fr" → inner_str → inner[0][0] = full text.
+
+    Args:
+        notebook_id: UUID of the target notebook.
+        question:    The question to ask.
+        source_ids:  All source UUIDs for the notebook (required by NLM).
+        cookies:     Google auth cookies.
+        thread_id:   Existing thread UUID for multi-turn, or None for new.
+
+    Returns:
+        Dict with: answer (full text), thread_id, message_id, question, sources.
+    """
+    import urllib.parse as _urlparse
+
+    if thread_id is None:
+        import uuid
+        thread_id = str(uuid.uuid4())
+
+    meta = _load_meta()
+    bl = meta.get("bl", _DEFAULT_BL)
+
+    source_context = [[[sid]] for sid in source_ids]
+    inner = [
+        source_context,
+        question,
+        None,
+        [2, None, [1], [1]],
+        thread_id,
+        None,
+        None,
+        notebook_id,
+        1,
+    ]
+    outer = json.dumps([None, json.dumps(inner)])
+    params = _urlparse.urlencode({"bl": bl, "rt": "c"})
+    url = _GRPC_CHAT_URL + "?" + params
+    body = ("f.req=" + _urlparse.quote(outer)).encode()
+
+    hdrs = {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Cookie": "; ".join(f"{k}={v}" for k, v in cookies.items()),
+        "Origin": "https://notebooklm.google.com",
+        "Referer": f"https://notebooklm.google.com/notebook/{notebook_id}",
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/130.0.0.0 Safari/537.36"
+        ),
+    }
+
+    _rate_limiter.wait()
+
+    req = urllib.request.Request(url, data=body, headers=hdrs, method="POST")
+    full_text = ""
+    returned_thread_id = thread_id
+    returned_msg_id = None
+
+    try:
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            raw = resp.read().decode("utf-8", errors="replace")
+
+        # Each SSE chunk: size_hex line, then JSON line
+        # JSON line: [["wrb.fr", null, inner_json_str], ...]
+        for line in raw.splitlines():
+            line = line.strip()
+            if not line or line == ")]}'" or re.match(r"^[0-9a-f]+$", line, re.I):
+                continue
+            try:
+                chunk = json.loads(line)
+                for item in chunk:
+                    if not (isinstance(item, list) and len(item) >= 3):
+                        continue
+                    if item[0] != "wrb.fr" or not item[2]:
+                        continue
+                    inner_data = json.loads(item[2])
+                    if not (isinstance(inner_data, list) and inner_data):
+                        continue
+                    first = inner_data[0]
+                    if not isinstance(first, list):
+                        continue
+                    # full text so far at position 0
+                    if first and isinstance(first[0], str):
+                        full_text = first[0]
+                    # thread/message IDs at position 2
+                    if len(first) > 2 and isinstance(first[2], list):
+                        ids = first[2]
+                        if len(ids) >= 1 and ids[0]:
+                            returned_thread_id = ids[0]
+                        if len(ids) >= 2 and ids[1]:
+                            returned_msg_id = ids[1]
+            except (json.JSONDecodeError, IndexError, TypeError):
+                pass
+
+    except Exception as exc:
+        logger.warning("_grpc_ask error: %s", exc)
+        return {
+            "answer": "",
+            "thread_id": thread_id,
+            "message_id": None,
+            "question": question,
+            "sources": [],
+            "error": str(exc),
+        }
+
+    return {
+        "answer": full_text,
+        "thread_id": returned_thread_id,
+        "message_id": returned_msg_id,
+        "question": question,
+        "sources": source_ids,
+    }
+
+
+def grpc_ask_batch(
+    notebook_id: str,
+    questions: List[str],
+    source_ids: List[str],
+    cookies: Dict[str, str],
+    thread_id: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """Ask multiple questions sequentially via GenerateFreeFormStreamed.
+
+    Each question reuses the same thread_id so responses are in context.
+    For independent questions use thread_id=None (each call starts fresh thread).
+
+    Args:
+        notebook_id: UUID of the target notebook.
+        questions:   List of question strings.
+        source_ids:  All source UUIDs for the notebook.
+        cookies:     Google auth cookies.
+        thread_id:   Thread UUID for linked conversation, or None for independent.
+
+    Returns:
+        List of grpc_ask response dicts in question order.
+    """
+    results: List[Dict[str, Any]] = []
+    current_thread = thread_id
+    for q in questions:
+        result = _grpc_ask(notebook_id, q, source_ids, cookies, current_thread)
+        results.append(result)
+        # Continue thread across questions if thread_id was provided or carry forward
+        if thread_id is not None:
+            current_thread = result.get("thread_id", current_thread)
+    return results
 
 
 def read_source(
@@ -1216,47 +1487,159 @@ class NLMClient:
         """
         return ask_questions_batch(notebook_id, questions, _load_cookies(), max_batch)
 
+    def rename(self, notebook_id: str, new_name: str) -> Dict[str, Any]:
+        """Rename a notebook using s0tc2d (RENAME_NOTEBOOK RPC).
+
+        Args:
+            notebook_id: The notebook UUID.
+            new_name: The new title for the notebook.
+
+        Returns:
+            Dict with renamed (bool), notebook_id, and name.
+        """
+        return rename_notebook(notebook_id, new_name, _load_cookies())
+
+    def add_source(self, notebook_id: str, url: str) -> Dict[str, Any]:
+        """Add a URL or YouTube video as a notebook source (izAoDd RPC).
+
+        Args:
+            notebook_id: The notebook UUID.
+            url: HTTP/HTTPS URL or YouTube URL to add.
+
+        Returns:
+            Dict with source_id, url, and status.
+        """
+        return add_source_url(notebook_id, url, _load_cookies())
+
+    def delete_source(self, source_id: str) -> Dict[str, Any]:
+        """Delete a notebook source (tGMBJ RPC).
+
+        Args:
+            source_id: UUID of the source to delete.
+
+        Returns:
+            Dict with deleted (bool) and source_id.
+        """
+        return delete_source(source_id, _load_cookies())
+
+    def deep_research(self, notebook_id: str, topic: str) -> Dict[str, Any]:
+        """Start a deep research session (QA9ei RPC).
+
+        Args:
+            notebook_id: The notebook UUID.
+            topic: The research topic or question.
+
+        Returns:
+            Dict with session_id, topic, and notebook_id.
+        """
+        return start_deep_research(notebook_id, topic, _load_cookies())
+
+    def deep_research_with_source(
+        self, notebook_id: str, topic: str, title: str, content: str
+    ) -> Dict[str, Any]:
+        """Start deep research and add the generated document as a source.
+
+        Runs QA9ei (start_deep_research) then LBwxtb (add_research_source).
+
+        Args:
+            notebook_id: The notebook UUID.
+            topic: The research topic.
+            title: Title for the research document.
+            content: Full text content of the research document.
+
+        Returns:
+            Dict with session_id, source_id, title, and notebook_id.
+        """
+        cookies = _load_cookies()
+        research = start_deep_research(notebook_id, topic, cookies)
+        session_id = research.get("session_id") or topic[:36]
+        source = add_research_source(notebook_id, session_id, title, content, cookies)
+        return {**research, **source}
+
+    def grpc_ask(
+        self,
+        notebook_id: str,
+        question: str,
+        source_ids: Optional[List[str]] = None,
+        thread_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Chat via GenerateFreeFormStreamed (real NLM chat, synchronous).
+
+        Auto-fetches source IDs if not provided. Supports multi-turn conversation
+        via thread_id.
+
+        Args:
+            notebook_id: The notebook UUID.
+            question: The question to ask.
+            source_ids: Source UUIDs (auto-fetched if None).
+            thread_id: Thread UUID for multi-turn, or None for new conversation.
+
+        Returns:
+            Dict with answer, thread_id, message_id, question, sources.
+        """
+        cookies = _load_cookies()
+        if source_ids is None:
+            _, data = _batchexecute(
+                RPC_LIST_SOURCES,
+                json.dumps([None, 1, None, [2]]),
+                cookies,
+                notebook_id,
+            )
+            _, srcs = _extract_sources(data) if data and not isinstance(data, dict) else (None, [])
+            source_ids = [s["id"] for s in srcs if s.get("id")]
+        return _grpc_ask(notebook_id, question, source_ids, cookies, thread_id)
+
+    def grpc_ask_batch(
+        self,
+        notebook_id: str,
+        questions: List[str],
+        source_ids: Optional[List[str]] = None,
+        thread_id: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """Ask multiple questions via GenerateFreeFormStreamed.
+
+        Args:
+            notebook_id: The notebook UUID.
+            questions: List of question strings.
+            source_ids: Source UUIDs (auto-fetched if None).
+            thread_id: Thread UUID for linked conversation (None = independent).
+
+        Returns:
+            List of grpc_ask response dicts in question order.
+        """
+        cookies = _load_cookies()
+        if source_ids is None:
+            _, data = _batchexecute(
+                RPC_LIST_SOURCES,
+                json.dumps([None, 1, None, [2]]),
+                cookies,
+                notebook_id,
+            )
+            _, srcs = _extract_sources(data) if data and not isinstance(data, dict) else (None, [])
+            source_ids = [s["id"] for s in srcs if s.get("id")]
+        return grpc_ask_batch(notebook_id, questions, source_ids, cookies, thread_id)
+
+    # Backward-compat aliases — old "chat" and "chat_batch" now delegate to grpc_ask
+
     def chat(
         self,
         notebook_id: str,
         question: str,
-        role: str = "",
-        response_length: int = RESP_LEN_DEFAULT,
+        thread_id: Optional[str] = None,
+        source_ids: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
-        """Send a chat message using s0tc2d (async, supports role config).
-
-        Args:
-            notebook_id: The notebook UUID.
-            question: The question to send.
-            role: Optional configure-chat role/goal string.
-            response_length: Response length hint (default RESP_LEN_DEFAULT).
-
-        Returns:
-            Dict with queued status and notebook metadata.
-        """
-        return chat_message(notebook_id, question, _load_cookies(), role, response_length)
+        """Alias for grpc_ask (backward compat). Uses GenerateFreeFormStreamed."""
+        return self.grpc_ask(notebook_id, question, source_ids, thread_id)
 
     def chat_batch(
         self,
         notebook_id: str,
         questions: List[str],
-        role: str = "",
-        response_length: int = RESP_LEN_DEFAULT,
-        max_batch: int = 5,
+        thread_id: Optional[str] = None,
+        source_ids: Optional[List[str]] = None,
     ) -> List[Dict[str, Any]]:
-        """Send multiple chat messages in batches using s0tc2d.
-
-        Args:
-            notebook_id: The notebook UUID.
-            questions: List of question strings.
-            role: Optional configure-chat role/goal for all messages.
-            response_length: Response length hint.
-            max_batch: Max questions per HTTP request.
-
-        Returns:
-            List of chat response dicts.
-        """
-        return chat_messages_batch(notebook_id, questions, _load_cookies(), role, response_length, max_batch)
+        """Alias for grpc_ask_batch (backward compat). Uses GenerateFreeFormStreamed."""
+        return self.grpc_ask_batch(notebook_id, questions, source_ids, thread_id)
 
     # ── Generate ──────────────────────────────────────────────────────────
 
@@ -1349,8 +1732,8 @@ class NLMClient:
             "bl": meta.get("bl", _DEFAULT_BL),
             "bl_age_days": bl_age,
             "bl_stale": bl_age is not None and bl_age >= 8,
-            "rpc_catalog_version": "v2.1",
-            "known_rpcs": 18,
+            "rpc_catalog_version": "v3.1",
+            "known_rpcs": 25,
         }
 
 
@@ -1418,8 +1801,8 @@ def create_nlm_proxy_app() -> Flask:
             "bl": bl,
             "bl_age_days": bl_age_days,
             "bl_stale": bl_age_days is not None and bl_age_days >= 8,
-            "rpc_catalog_version": "v3.0",
-            "known_rpcs": 21,
+            "rpc_catalog_version": "v3.1",
+            "known_rpcs": 25,
             "rate_limit_seconds": _rate_limiter._min_gap,
             "registry_available": _registry_available,
         }), 200 if cookies else 503
@@ -1659,20 +2042,16 @@ def create_nlm_proxy_app() -> Flask:
 
     @app.route("/notebooks/<notebook_id>/ask", methods=["POST"])
     def ask_single(notebook_id: str):
-        """Ask a single question to a NotebookLM notebook.
+        """Ask a single question using CYK0Xb (citation-annotate, synchronous).
 
-        Two modes via ``mode`` parameter:
-        - "annotate" (default): CYK0Xb — synchronous, returns cited answer
-        - "chat": s0tc2d — asynchronous, queues response, supports role config
+        For natural conversational chat, use POST /notebooks/<id>/chat instead.
 
         Body (JSON):
           {
             "question": "What is the main argument?",
-            "mode": "annotate",
-            "role": "",
-            "response_length": 4
+            "mode": "annotate"
           }
-        Returns: {answer_id, answer, sources} or {queued, notebook_title}
+        Returns: {answer_id, answer, sources}
         """
         cookies = _cookies()
         if not cookies:
@@ -1681,29 +2060,20 @@ def create_nlm_proxy_app() -> Flask:
         question = body.get("question", "").strip()
         if not question:
             return jsonify({"error": "missing question"}), 400
-        mode = body.get("mode", "annotate")
-        if mode == "chat":
-            role = body.get("role", "")
-            resp_len = body.get("response_length", RESP_LEN_DEFAULT)
-            result = chat_message(notebook_id, question, cookies, role, resp_len)
-        else:
-            result = ask_question(notebook_id, question, cookies)
-        if result.get("error") and not result.get("queued"):
+        result = ask_question(notebook_id, question, cookies)
+        if result.get("error"):
             return jsonify(result), 502
         return jsonify(result)
 
     @app.route("/notebooks/<notebook_id>/ask_batch", methods=["POST"])
-    def ask_batch(notebook_id: str):
-        """Ask multiple questions in parallel (up to max_batch at once).
+    def ask_batch_route(notebook_id: str):
+        """Ask multiple questions in parallel batches using CYK0Xb.
 
-        Two modes: "annotate" (CYK0Xb, default) or "chat" (s0tc2d).
+        For natural conversational chat, use POST /notebooks/<id>/chat_batch instead.
 
         Body (JSON):
           {
             "questions": ["Q1?", "Q2?", "Q3?"],
-            "mode": "annotate",
-            "role": "",
-            "response_length": 4,
             "max_batch": 5
           }
         Returns: {answers: [{answer_id, answer, sources}, ...]}
@@ -1716,19 +2086,11 @@ def create_nlm_proxy_app() -> Flask:
         if not questions or not isinstance(questions, list):
             return jsonify({"error": "missing or invalid questions array"}), 400
         max_batch = body.get("max_batch", 5)
-        mode = body.get("mode", "annotate")
-        if mode == "chat":
-            role = body.get("role", "")
-            resp_len = body.get("response_length", RESP_LEN_DEFAULT)
-            results = chat_messages_batch(notebook_id, questions, cookies,
-                                          role, resp_len, max_batch)
-        else:
-            results = ask_questions_batch(notebook_id, questions, cookies, max_batch)
+        results = ask_questions_batch(notebook_id, questions, cookies, max_batch)
         return jsonify({
             "answers": results,
             "count": len(results),
             "questions": questions,
-            "mode": mode,
         })
 
     @app.route("/notebooks/<notebook_id>/generate", methods=["POST"])
@@ -1769,19 +2131,19 @@ def create_nlm_proxy_app() -> Flask:
 
     @app.route("/notebooks/<notebook_id>/chat", methods=["POST"])
     def chat_single(notebook_id: str):
-        """Send a chat message using the current s0tc2d RPC.
+        """Send a chat message via GenerateFreeFormStreamed (real NLM chat).
 
-        Supports configure-chat role injection and response length control.
-        Note: s0tc2d queues the response asynchronously. The answer arrives
-        via the conversation history — poll GET /conversations after calling.
+        This uses the confirmed GenerateFreeFormStreamed gRPC endpoint — NLM's
+        actual conversational Gemini interface. Supports multi-turn conversation
+        via thread_id. Source IDs are auto-fetched if not provided.
 
         Body (JSON):
           {
             "question": "What is the main argument?",
-            "role": "Act as a PhD researcher providing thorough analysis",
-            "response_length": 4
+            "thread_id": null,
+            "source_ids": ["uuid1", "uuid2"]
           }
-        Returns: {queued, notebook_title, notebook_id, question}
+        Returns: {answer, thread_id, message_id, question, sources}
         """
         cookies = _cookies()
         if not cookies:
@@ -1790,25 +2152,36 @@ def create_nlm_proxy_app() -> Flask:
         question = body.get("question", "").strip()
         if not question:
             return jsonify({"error": "missing question"}), 400
-        role = body.get("role", "")
-        resp_len = body.get("response_length", RESP_LEN_DEFAULT)
-        result = chat_message(notebook_id, question, cookies, role, resp_len)
-        if result.get("error") and not result.get("queued"):
+        thread_id = body.get("thread_id") or None
+        source_ids = body.get("source_ids") or None
+        if source_ids is None:
+            _, data = _batchexecute(
+                RPC_LIST_SOURCES,
+                json.dumps([None, 1, None, [2]]),
+                cookies,
+                notebook_id,
+            )
+            _, srcs = _extract_sources(data) if data and not isinstance(data, dict) else (None, [])
+            source_ids = [s["id"] for s in srcs if s.get("id")]
+        result = _grpc_ask(notebook_id, question, source_ids, cookies, thread_id)
+        if result.get("error"):
             return jsonify(result), 502
         return jsonify(result)
 
     @app.route("/notebooks/<notebook_id>/chat_batch", methods=["POST"])
-    def chat_batch(notebook_id: str):
-        """Send multiple chat messages using s0tc2d in parallel batches.
+    def chat_batch_route(notebook_id: str):
+        """Send multiple chat messages via GenerateFreeFormStreamed.
+
+        Source IDs are auto-fetched if not provided. Pass thread_id to link
+        all questions in a single conversation thread.
 
         Body (JSON):
           {
             "questions": ["Q1?", "Q2?", ...],
-            "role": "Act as a researcher",
-            "response_length": 4,
-            "max_batch": 5
+            "thread_id": null,
+            "source_ids": ["uuid1", "uuid2"]
           }
-        Returns: {queued_count, questions}
+        Returns: {results: [{answer, thread_id, ...}], count}
         """
         cookies = _cookies()
         if not cookies:
@@ -1817,14 +2190,20 @@ def create_nlm_proxy_app() -> Flask:
         questions = body.get("questions", [])
         if not questions:
             return jsonify({"error": "missing questions array"}), 400
-        role = body.get("role", "")
-        resp_len = body.get("response_length", RESP_LEN_DEFAULT)
-        max_batch = body.get("max_batch", 5)
-        results = chat_messages_batch(notebook_id, questions, cookies,
-                                      role, resp_len, max_batch)
+        thread_id = body.get("thread_id") or None
+        source_ids = body.get("source_ids") or None
+        if source_ids is None:
+            _, data = _batchexecute(
+                RPC_LIST_SOURCES,
+                json.dumps([None, 1, None, [2]]),
+                cookies,
+                notebook_id,
+            )
+            _, srcs = _extract_sources(data) if data and not isinstance(data, dict) else (None, [])
+            source_ids = [s["id"] for s in srcs if s.get("id")]
+        results = grpc_ask_batch(notebook_id, questions, source_ids, cookies, thread_id)
         return jsonify({
             "results": results,
-            "queued_count": sum(1 for r in results if r.get("queued")),
             "count": len(results),
             "questions": questions,
         })
@@ -1995,69 +2374,100 @@ def create_nlm_proxy_app() -> Flask:
 
     @app.route("/notebooks/<notebook_id>/sources", methods=["POST"])
     def add_sources(notebook_id: str):
-        """Add URL sources to a notebook via LBwxtb RPC.
+        """Add one or more URL sources to a notebook via izAoDd RPC.
+
+        Confirmed v3.1: izAoDd is the correct RPC for adding URL/YouTube sources.
+        Each URL is added in a separate API call. YouTube URLs are detected
+        automatically and encoded at position 7 instead of position 2.
 
         Body (JSON):
             {
-              "urls": [{"url": "https://...", "title": "optional title"}],
-              "session_id": "optional — if omitted, a fast research session is started first"
+              "urls": ["https://example.com/article", "https://youtu.be/xyz"]
             }
 
-        Returns: {added, session_id, notebook_id, poll_url}
-
-        Flow:
-          1. If session_id not provided, call Ljjv0c to start a fast research session
-          2. Call LBwxtb with the session ID + URL array
-          3. Return poll URL (/notebooks/<id>/sources/wait) to check processing status
+        Returns: {added, results: [{source_id, url, status}], notebook_id}
         """
         cookies = _cookies()
         if not cookies:
             return _no_cookies()
         body = request.json or {}
-        urls = body.get("urls", [])
-        if not urls:
+        raw_urls = body.get("urls", [])
+        if not raw_urls:
             return jsonify({"error": "urls array is required"}), 400
 
-        session_id = body.get("session_id", "")
-
-        # Step 1: start fast research session if no session_id provided
-        if not session_id:
-            query = body.get("query", "research")
-            rs_args = json.dumps([[query, 1], None, 1, notebook_id])
-            _, rs_data = _batchexecute(RPC_FAST_RESEARCH_START, rs_args, cookies, notebook_id)
-            if rs_data is None or (isinstance(rs_data, dict) and "error" in rs_data):
-                return jsonify({"error": "failed to start research session",
-                                "detail": rs_data}), 502
-            try:
-                session_id = rs_data[0] if isinstance(rs_data, list) else ""
-            except (IndexError, TypeError):
-                session_id = ""
-            if not session_id:
-                return jsonify({"error": "no session_id returned from Ljjv0c",
-                                "raw": rs_data}), 502
-            logger.info("Started fast research session %s for notebook %s", session_id, notebook_id)
-
-        # Step 2: build sources array for LBwxtb
-        # Web URL format: [None, None, [url, title], None, None, None, None, None, None, None, 2]
-        sources_array = []
-        for item in urls:
-            url_str = item.get("url", "") if isinstance(item, dict) else str(item)
-            title_str = item.get("title", url_str[:80]) if isinstance(item, dict) else url_str[:80]
-            sources_array.append([None, None, [url_str, title_str],
-                                   None, None, None, None, None, None, None, 2])
-
-        lbw_args = json.dumps([None, [1], session_id, notebook_id, sources_array])
-        _, lbw_data = _batchexecute(RPC_ADD_URL_SOURCES, lbw_args, cookies, notebook_id)
-        if isinstance(lbw_data, dict) and "error" in lbw_data:
-            return jsonify({"error": "LBwxtb failed", "detail": lbw_data}), 502
+        results = []
+        for item in raw_urls:
+            url_str = item if isinstance(item, str) else item.get("url", "")
+            if not url_str:
+                continue
+            res = add_source_url(notebook_id, url_str, cookies)
+            results.append(res)
 
         return jsonify({
-            "added": len(sources_array),
-            "session_id": session_id,
+            "added": len(results),
+            "results": results,
             "notebook_id": notebook_id,
-            "poll_url": f"/notebooks/{notebook_id}/sources/wait",
-            "message": f"Added {len(sources_array)} URL(s). Poll poll_url to wait for processing.",
         })
+
+    @app.route("/notebooks/<notebook_id>/sources/url", methods=["POST"])
+    def add_single_source(notebook_id: str):
+        """Add a single URL or YouTube source to a notebook (izAoDd RPC).
+
+        YouTube URLs (youtube.com/watch, youtu.be/) are auto-detected and
+        encoded at position 7 in the source object. Regular URLs use position 2.
+
+        Body (JSON): {"url": "https://..."}
+        Returns: {source_id, url, status}
+        """
+        cookies = _cookies()
+        if not cookies:
+            return _no_cookies()
+        body = request.json or {}
+        url = body.get("url", "").strip()
+        if not url:
+            return jsonify({"error": "url is required"}), 400
+        result = add_source_url(notebook_id, url, cookies)
+        if result.get("error"):
+            return jsonify(result), 502
+        return jsonify(result)
+
+    @app.route("/notebooks/<notebook_id>/sources/<source_id>", methods=["DELETE"])
+    def delete_source_route(notebook_id: str, source_id: str):
+        """Delete a source from a notebook (tGMBJ RPC).
+
+        Confirmed v3.1 from HAR analysis.
+        Payload: [[[source_id]], [2]]
+
+        Returns: {deleted, source_id}
+        """
+        cookies = _cookies()
+        if not cookies:
+            return _no_cookies()
+        result = delete_source(source_id, cookies)
+        if not result.get("deleted"):
+            return jsonify(result), 502
+        return jsonify(result)
+
+    @app.route("/notebooks/<notebook_id>/rename", methods=["POST"])
+    def rename_notebook_route(notebook_id: str):
+        """Rename a notebook (s0tc2d RPC).
+
+        Confirmed v3.1: s0tc2d is RENAME_NOTEBOOK, not chat.
+
+        Body (JSON): {"name": "New Notebook Title"}
+        Returns: {renamed, notebook_id, name}
+        """
+        cookies = _cookies()
+        if not cookies:
+            return _no_cookies()
+        body = request.json or {}
+        new_name = body.get("name", "").strip()
+        if not new_name:
+            return jsonify({"error": "name is required"}), 400
+        result = rename_notebook(notebook_id, new_name, cookies)
+        if not result.get("renamed"):
+            return jsonify(result), 502
+        return jsonify(result)
 
     # ── Write: poll source processing ───────────────────────────────────
 
@@ -2122,6 +2532,58 @@ def create_nlm_proxy_app() -> Flask:
         except (IndexError, TypeError):
             session_id = ""
         return jsonify({"session_id": session_id, "notebook_id": notebook_id, "query": query})
+
+    @app.route("/notebooks/<notebook_id>/research/deep", methods=["POST"])
+    def start_deep_research_route(notebook_id: str):
+        """Start a deep research session (QA9ei RPC).
+
+        Confirmed v3.1: QA9ei triggers NLM deep research on a topic.
+        Returns session_id. NLM generates a research document async.
+        Use POST /research/source to add the generated document as a source.
+
+        Body (JSON): {"topic": "transformer attention mechanisms"}
+        Returns: {session_id, topic, notebook_id}
+        """
+        cookies = _cookies()
+        if not cookies:
+            return _no_cookies()
+        body = request.json or {}
+        topic = body.get("topic", "").strip()
+        if not topic:
+            return jsonify({"error": "topic is required"}), 400
+        result = start_deep_research(notebook_id, topic, cookies)
+        return jsonify(result)
+
+    @app.route("/notebooks/<notebook_id>/research/source", methods=["POST"])
+    def add_research_source_route(notebook_id: str):
+        """Add an AI-generated research document as a notebook source (LBwxtb RPC).
+
+        Confirmed v3.1: LBwxtb adds AI-generated content docs as sources.
+        Call this after start_deep_research with the generated title and content.
+
+        Body (JSON):
+          {
+            "session_id": "uuid from deep research",
+            "title": "Research: Transformer Attention",
+            "content": "Full text of the research document..."
+          }
+        Returns: {source_id, title, session_id, notebook_id}
+        """
+        cookies = _cookies()
+        if not cookies:
+            return _no_cookies()
+        body = request.json or {}
+        session_id = body.get("session_id", "").strip()
+        title = body.get("title", "").strip()
+        content = body.get("content", "").strip()
+        if not session_id:
+            return jsonify({"error": "session_id is required"}), 400
+        if not title or not content:
+            return jsonify({"error": "title and content are required"}), 400
+        result = add_research_source(notebook_id, session_id, title, content, cookies)
+        if result.get("error"):
+            return jsonify(result), 502
+        return jsonify(result)
 
     # ── Read: conversation threads ───────────────────────────────────────
 

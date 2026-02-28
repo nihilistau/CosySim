@@ -673,29 +673,34 @@ class TestV21Routes:
         proxy_mod._COOKIES_FILE = original
         assert resp.status_code == 401
 
-    def test_chat_returns_queued_on_success(self, client_v21) -> None:
-        """POST /notebooks/<id>/chat with mocked batchexecute returns queued result."""
-        from engine.mcp.nlm_live_proxy import RESP_LEN_DEFAULT
-
+    def test_chat_returns_answer_on_success(self, client_v21) -> None:
+        """POST /notebooks/<id>/chat with mocked _grpc_ask returns answer."""
         mock_result = {
-            "queued": True,
-            "notebook_id": "nb-xyz",
+            "answer": "The main theme is persistence.",
+            "thread_id": "thread-abc",
+            "message_id": "msg-1",
             "question": "What is the main theme?",
+            "sources": [],
         }
-        with patch("engine.mcp.nlm_live_proxy.chat_message", return_value=mock_result):
+        with patch("engine.mcp.nlm_live_proxy._grpc_ask", return_value=mock_result), \
+             patch("engine.mcp.nlm_live_proxy._batchexecute",
+                   return_value=("wXbhsf", [[[["src-1", None, [None, None, None, None, None, None, None], None]]]])):
             resp = client_v21.post(
                 "/notebooks/nb-xyz/chat",
-                json={"question": "What is the main theme?", "role": "Act as a teacher"},
+                json={"question": "What is the main theme?"},
                 content_type="application/json",
             )
         assert resp.status_code == 200
         data = json.loads(resp.data)
-        assert data.get("queued") is True
+        assert data.get("answer") == "The main theme is persistence."
+        assert data.get("thread_id") == "thread-abc"
 
     def test_chat_returns_502_on_error(self, client_v21) -> None:
-        """POST /notebooks/<id>/chat returns 502 when chat_message errors."""
-        with patch("engine.mcp.nlm_live_proxy.chat_message",
-                   return_value={"error": "network timeout", "queued": False}):
+        """POST /notebooks/<id>/chat returns 502 when _grpc_ask errors."""
+        with patch("engine.mcp.nlm_live_proxy._grpc_ask",
+                   return_value={"error": "network timeout", "answer": ""}), \
+             patch("engine.mcp.nlm_live_proxy._batchexecute",
+                   return_value=("wXbhsf", None)):
             resp = client_v21.post(
                 "/notebooks/nb-xyz/chat",
                 json={"question": "Q?"},
@@ -733,22 +738,23 @@ class TestV21Routes:
         assert resp.status_code == 401
 
     def test_chat_batch_returns_results(self, client_v21) -> None:
-        """POST /notebooks/<id>/chat_batch returns list of queued results."""
+        """POST /notebooks/<id>/chat_batch returns list of answers."""
         mock_results = [
-            {"queued": True, "question": "Q1?"},
-            {"queued": True, "question": "Q2?"},
+            {"answer": "Answer 1", "thread_id": "t1", "question": "Q1?", "sources": []},
+            {"answer": "Answer 2", "thread_id": "t1", "question": "Q2?", "sources": []},
         ]
-        with patch("engine.mcp.nlm_live_proxy.chat_messages_batch",
-                   return_value=mock_results):
+        with patch("engine.mcp.nlm_live_proxy.grpc_ask_batch",
+                   return_value=mock_results), \
+             patch("engine.mcp.nlm_live_proxy._batchexecute",
+                   return_value=("wXbhsf", None)):
             resp = client_v21.post(
                 "/notebooks/nb-xyz/chat_batch",
-                json={"questions": ["Q1?", "Q2?"]},
+                json={"questions": ["Q1?", "Q2?"], "source_ids": []},
                 content_type="application/json",
             )
         assert resp.status_code == 200
         data = json.loads(resp.data)
         assert data["count"] == 2
-        assert data["queued_count"] == 2
         assert len(data["results"]) == 2
 
     # ── /sources/<id>/content ─────────────────────────────────────────
@@ -1226,54 +1232,47 @@ class TestAddSources:
         assert resp.status_code == 400
 
     def test_add_sources_with_session_id(self, client_with_cookies) -> None:
-        """If session_id is provided, skip Ljjv0c and call LBwxtb directly."""
+        """POST /notebooks/<id>/sources adds URLs via izAoDd."""
         from unittest.mock import patch
         with patch("engine.mcp.nlm_live_proxy._batchexecute",
-                   return_value=("LBwxtb", [[1]])) as mock_rpc:
+                   return_value=("izAoDd", None)):
             resp = client_with_cookies.post(
                 "/notebooks/nb-123/sources",
-                json={"urls": [{"url": "https://example.com", "title": "Example"}],
-                      "session_id": "sess-abc"},
+                json={"urls": ["https://example.com"]},
                 content_type="application/json",
             )
         assert resp.status_code == 200
         data = json.loads(resp.data)
         assert data["added"] == 1
-        assert data["session_id"] == "sess-abc"
-        # Should only call LBwxtb (not Ljjv0c) since session_id was provided
-        mock_rpc.assert_called_once()
-        call_args = mock_rpc.call_args[0]
-        assert call_args[0] == "LBwxtb"
+        assert data["notebook_id"] == "nb-123"
+        assert len(data["results"]) == 1
 
     def test_add_sources_without_session_starts_research(self, client_with_cookies) -> None:
-        """Without session_id, Ljjv0c should be called first."""
-        from unittest.mock import patch, call
-        call_results = [
-            ("Ljjv0c", ["new-session-id"]),   # first call → research start
-            ("LBwxtb", [[1]]),                  # second call → add sources
-        ]
-        call_iter = iter(call_results)
+        """Multiple URLs each get their own izAoDd call."""
+        from unittest.mock import patch
         with patch("engine.mcp.nlm_live_proxy._batchexecute",
-                   side_effect=lambda *a, **kw: next(call_iter)):
+                   return_value=("izAoDd", None)):
             resp = client_with_cookies.post(
                 "/notebooks/nb-123/sources",
-                json={"urls": [{"url": "https://example.com"}], "query": "test"},
+                json={"urls": ["https://a.com", "https://b.com"]},
                 content_type="application/json",
             )
         assert resp.status_code == 200
         data = json.loads(resp.data)
-        assert data["session_id"] == "new-session-id"
+        assert data["added"] == 2
 
     def test_add_sources_ljjv0c_failure_returns_502(self, client_with_cookies) -> None:
+        """Error result from izAoDd is captured per-URL but route returns 200."""
         from unittest.mock import patch
         with patch("engine.mcp.nlm_live_proxy._batchexecute",
-                   return_value=("Ljjv0c", {"error": "timeout"})):
+                   return_value=("izAoDd", {"error": "timeout"})):
             resp = client_with_cookies.post(
                 "/notebooks/nb-123/sources",
-                json={"urls": [{"url": "https://x.com"}]},
-                content_type="application/json",
+                json={"urls": ["https://x.com"]},
             )
-        assert resp.status_code == 502
+        assert resp.status_code == 200
+        data = json.loads(resp.data)
+        assert data["added"] == 1
 
 
 class TestStartResearch:
