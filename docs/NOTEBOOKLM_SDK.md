@@ -1,7 +1,10 @@
 # NotebookLM SDK — Complete Protocol Documentation
 
-> **Version:** 3.0 (based on HAR analysis of 8 HAR files, 21 unique RPCs confirmed, 2026-02-27/28)
+> **Version:** 3.1 (2026-02-28 — critical RPC corrections + 2 new RPCs + proto chat breakdown)
 > **Status:** Production implementation in `engine/mcp/nlm_live_proxy.py`
+> **New in 3.1:** 3 RPC mappings corrected (`s0tc2d`, `LBwxtb`, `QA9ei`), 2 new RPCs discovered
+> (`izAoDd`, `tGMBJ`), `GenerateFreeFormStreamed` confirmed as the real chat endpoint,
+> Deep Research flow documented, Download/Archive routes added, YouTube encoding clarified.
 > **New in 3.0:** 21 confirmed RPCs (+3 new: `CCqFvf`, `Ljjv0c`, `LBwxtb`), corrected 5 RPC
 > descriptions (`sqTeoe`, `hPTbtc`, `khqZz`, `JFMDGd`, `cFji9`, `CYK0Xb`), added
 > `GenerateFreeFormStreamed` proto endpoint, source data structure, missing operations list.
@@ -19,10 +22,44 @@ short 5–7 character IDs.
 - The API is stateless (after auth). Every call is self-contained.
 - RPC IDs are **STABLE within a Google frontend build** (build label / BL).
 - RPC IDs **CAN change** when Google deploys a new frontend (~weekly).
-- `CYK0Xb` (old chat) → replaced by `s0tc2d` (current chat) after build 20260226.
-- `CYK0Xb` still works as "annotate text with citations" — different use case.
+- `CYK0Xb` is the synchronous annotate/Q&A RPC — returns markdown with `[source_id]` citations.
+- **`s0tc2d` is NOT chat** — it renames the notebook. Every "chat" call in v2.x and v3.0
+  that used `s0tc2d` was silently renaming the notebook.
+- **`GenerateFreeFormStreamed`** is the real chat endpoint — a gRPC/proto call at a different URL.
 - Multi-question batching: 5 RPCs per HTTP request → 5× throughput.
 - The proxy at :8800 wraps all of this in a clean REST API.
+
+---
+
+## ⚠️ What's New in v3.1 — Critical Corrections
+
+> **Three RPC mappings were WRONG in v3.0 and have been corrected based on 2026-02-28 HAR
+> analysis. If you shipped code using these RPCs for the described purposes, it was silently
+> doing the wrong thing.**
+
+### Corrected RPC Mappings
+
+| RPC | v3.0 (WRONG) | v3.1 (CORRECT) | Impact |
+|-----|-------------|----------------|--------|
+| `s0tc2d` | `RPC_CHAT_MESSAGE` — used to "send chat" | `RPC_RENAME_NOTEBOOK` | Every "chat" call via this RPC was silently renaming the notebook |
+| `LBwxtb` | "add URL sources batch" — used to add web/YouTube URLs | `RPC_ADD_RESEARCH_SOURCE` — adds AI-generated research docs as sources | URL sources must use `izAoDd` (new) |
+| `QA9ei` | "Add Text Source" — listed as unknown | `RPC_START_DEEP_RESEARCH` — starts deep research, returns `session_id` | Deep Research flow now fully documented |
+
+### New RPCs Discovered in v3.1
+
+| RPC | Operation | Notes |
+|-----|-----------|-------|
+| `izAoDd` | `RPC_ADD_SOURCE` | Add URL or YouTube video as a source. Replaces the role `LBwxtb` was incorrectly assumed to play. |
+| `tGMBJ` | `RPC_DELETE_SOURCE` | Delete a source from a notebook. |
+
+### Real Chat Endpoint Confirmed
+
+`GenerateFreeFormStreamed` is **NOT** a batchexecute RPC. It is a gRPC/proto endpoint at a
+completely separate URL. Every prior attempt to "chat" using `s0tc2d` was renaming the notebook
+to the question text. See the [GenerateFreeFormStreamed](#generatefreefromstreamed--nlm-chat-proto-endpoint)
+section for the correct payload format.
+
+### v3.1 RPC Count: 25 batchexecute RPCs + 1 proto endpoint
 
 ---
 
@@ -145,8 +182,8 @@ The inner JSON string must be `json.loads()`'d again to get the actual data.
 
 ## Complete RPC Catalogue
 
-**21 unique RPCs confirmed across 8 HAR files.** Operations are divided into
-Read (data retrieval), Write (mutations), and Async (background operations).
+**25 unique RPCs confirmed + 1 proto endpoint (v3.1).** Operations are divided into
+Read (data retrieval), Write (mutations), and the proto chat endpoint.
 
 ### Config Object (`_WRITE_CONFIG`)
 
@@ -235,8 +272,9 @@ args = [notebook_id, None, [2], None, 0]
 # Response: [[notebook_title, [[source_obj, ...]]]]
 ```
 Load a specific notebook by UUID. Identical payload structure to `wXbhsf` but
-takes an explicit `notebook_id`. Used as a **polling RPC** after `LBwxtb` — call
-repeatedly until all newly added sources have a non-zero `word_count`.
+takes an explicit `notebook_id`. Used as a **polling RPC** after adding sources
+via `izAoDd` or `LBwxtb` — call repeatedly until all newly added sources have
+a non-zero `word_count`.
 
 **Polling pattern:**
 ```python
@@ -363,78 +401,68 @@ full source data.
 > **Note on Create Notebook:** No batchexecute RPC was observed for notebook
 > creation across 8 HAR files. The notebook UUID is generated client-side (in
 > browser JS) and the backend record is created lazily on the first mutation
-> (e.g. `LBwxtb`). To create a notebook programmatically: generate a UUID v4,
-> call `LBwxtb` with it as the `notebook_id` — this implicitly creates it.
+> (e.g. `izAoDd`). To create a notebook programmatically: generate a UUID v4,
+> call `izAoDd` with it as the `notebook_id` — this implicitly creates it.
 
 ---
 
-#### `tr032e` — Get Source AI Summary
+#### `tr032e` — Read Full Source Text ⭐ **Clarified in v3.1**
 ```python
 args = [[[[source_id]]]]  # source_id wrapped in 3 nested lists
-# Response: [[[None, [summary_markdown_text]]]]
+# Response: [[[None, [source_markdown_text]]]]
 ```
-Returns the AI-generated summary shown when you click a source in the NLM UI.
-Not the full source text — use `wXbhsf` / `rLM1Ne` for full content extraction.
+Returns the full extracted text of a source in markdown format. This is the
+complete source content — not an AI summary. Useful for programmatic extraction
+of source text into Nexus or for offline processing.
+
+> **v3.0 incorrectly described this as "Get Source AI Summary".** The response is
+> the raw source text (as rendered by NLM's document parser), not an AI-generated
+> summary. `VfAZjd` is the RPC that returns the AI-generated notebook overview.
 
 ---
 
 ### Write RPCs
 
-#### `s0tc2d` — Ask Question (Chat) — **Asynchronous**
+#### `s0tc2d` — Rename Notebook ⭐ **v3.1 CORRECTED** (was wrongly described as chat)
 
-The current chat interface. Triggers Gemini to generate a response
-asynchronously. **The response does NOT contain the answer** — poll `khqZz`
-(via `hPTbtc` to get the thread ID) to retrieve it.
+> **⚠️ BREAKING CORRECTION:** In v3.0 this was documented as `RPC_CHAT_MESSAGE`.
+> HAR analysis on 2026-02-28 confirmed it is `RPC_RENAME_NOTEBOOK`. Any code
+> that used `s0tc2d` to "chat" with a notebook was silently renaming the notebook
+> to the question text. See `GenerateFreeFormStreamed` for the real chat interface.
 
 ```python
-inner_msg = [[2, question_text], [response_length]]
-chat_config = [
-    role_or_none,      # position 0: Configure Chat role string (optional)
-    None,              # positions 1–6: reserved
-    None,
-    None,
-    None,
-    None,
-    None,
-    inner_msg,         # position 7: the message content
-]
-args = [notebook_id, [chat_config]]
-# Response: echoes question metadata + notebook_title (answer arrives async)
+args = [notebook_id, [[None, None, None, [None, "new_name"]]]]
+# Response: echoes the rename operation metadata
 ```
 
-**Response length values:**
-| Value | Meaning |
-|-------|---------|
-| `4`   | Default length |
-| `1`   | Longer response |
-| `2`   | Shorter response |
-
-**Role injection examples:**
+Use this to rename a notebook programmatically:
 ```python
-roles = {
-    "teacher":     "Act as a patient teacher. Use simple language with concrete examples.",
-    "researcher":  "You are a PhD researcher. Cite sources with precise quotes.",
-    "distiller":   "Extract key facts and generate structured Q&A pairs.",
-    "developer":   "You are an expert Python developer. Provide working code with type hints.",
-    "critic":      "Critically analyze claims, identify gaps and contradictions.",
-}
+# Rename a notebook
+rename_args = json.dumps([notebook_id, [[None, None, None, [None, "My New Title"]]]])
+f_req = [["s0tc2d", rename_args, None, "generic"]]
 ```
 
 ---
 
-#### `CYK0Xb` — Save Notebook Note ⚠️ **Corrected in v3.0**
+#### `CYK0Xb` — Save Note / Annotate with Citations ⚠️ **Clarified in v3.1**
 
-Saves a user-created text note to the notebook. **Not** a legacy chat RPC.
-The note text is markdown and saved to the notebook's notes section.
+Synchronous citation Q&A. Submits a question and gets an immediate markdown
+response with inline `[source_id]` citation references. Also used to save
+user-created text notes to the notebook's notes section.
 
 ```python
-args = [notebook_id, note_markdown_text, optional_cursor_position, ...]
-# Response: [[note_id, saved_note_text, ...]]
-# Example: [["d4e015e3-b6f0-4deb-9024-e297a94fc2bf", "# Note title\n\nContent..."]]
+args = [notebook_id, question_text]
+# Response: [[note_id, answer_markdown_with_citations, ...]]
+# Example: [["d4e015e3-b6f0-4deb-9024-e297a94fc2bf",
+#            "The main argument is... [src-uuid1] as further supported by [src-uuid2]"]]
 ```
 
-Use this to programmatically save analysis, summaries, or extracted Q&A as
-persistent notes inside the notebook.
+This is the preferred RPC for **programmatic Q&A extraction** because:
+- Response is synchronous — answer returned in the same HTTP request
+- Citations are embedded as `[source_uuid]` tokens in the markdown
+- Answer is stored as a notebook note artifact
+
+Use `GenerateFreeFormStreamed` for interactive multi-turn chat.
 
 ---
 
@@ -515,113 +543,348 @@ The standalone `1` after `None` appears to be a request mode flag.
 
 ---
 
-#### `LBwxtb` — Add URL Sources (Batch) ⭐ **New in v3.0**
+#### `LBwxtb` — Add Research Source ⭐ **v3.1 CORRECTED** (was wrongly "add URL batch")
 
-Adds one or more URL sources to a notebook. Must be called after `Ljjv0c`
-to provide the `research_session_id`. After calling, poll `rLM1Ne` until all
-sources have a non-zero `word_count` (processing is asynchronous).
+> **⚠️ BREAKING CORRECTION:** In v3.0 this was documented as adding URL sources.
+> It actually adds an **AI-generated research document** produced by Deep Research
+> (`QA9ei`) as a notebook source. To add URL/YouTube sources, use `izAoDd` (new in v3.1).
+
+Adds the AI-generated document from a completed Deep Research session as a source
+in the notebook. Called after `QA9ei` once the research content is available.
 
 ```python
-sources_array = [
-    # Web URL:
-    [None, None, [url, title], None, None, None, None, None, None, None, 2],
-    # YouTube URL (url goes to position 7, not 2):
-    [None, None, None, None, None, None, None, [youtube_url], None, None, 2],
-    # PDF URL:
-    [None, None, [pdf_url, title], None, None, None, None, None, None, None, 3],
+args = [None, [1], session_id, notebook_id, [[None, [title, content]]]]
+# session_id: returned by QA9ei (START_DEEP_RESEARCH)
+# title: display name for the AI-generated source
+# content: the AI research document text
+# Response: [[[source_id], title, [None, word_count, ...]]]
+```
+
+See the [Deep Research Flow](#deep-research-flow) section for the complete usage pattern.
+
+---
+
+#### `QA9ei` — Start Deep Research ⭐ **v3.1 CORRECTED** (was wrongly "Add Text Source")
+
+> **⚠️ BREAKING CORRECTION:** In v3.0 this was listed as unknown ("Add Text Source").
+> HAR analysis on 2026-02-28 confirmed it is `RPC_START_DEEP_RESEARCH`.
+
+Initiates an asynchronous Deep Research session. NLM generates a comprehensive
+AI research document on a given topic. Returns a `session_id` used by `LBwxtb`
+to add the resulting document as a source.
+
+```python
+args = [None, [1], ["topic_query", 1], 5, notebook_id]
+# "topic_query": the research topic
+# 5: depth/iteration count (controls research thoroughness)
+# Response: [session_id]
+# Example: ["a3f8c021-94b2-4e11-bc3a-0f9d72e1aa87"]
+```
+
+The `session_id` is used in the subsequent `LBwxtb` call to attach the
+AI-generated document to the notebook as a source.
+
+---
+
+#### `izAoDd` — Add Source ⭐ **v3.1 NEW** — add URL or YouTube video
+
+Adds a single URL or YouTube video as a source to a notebook. This is the correct
+RPC for adding web sources (replaces the misidentified role of `LBwxtb`).
+
+```python
+_SOURCE_CONFIG = [2, None, None,
+    [1, None, None, None, None, None, None, None, None, None, [1]],
+    [[2, 1]]
 ]
-args = [None, [1], research_session_id, notebook_id, sources_array]
+
+# Regular URL source:
+source_obj = [None, None, url, None, None, None, None, None, None, None, 1]
+# YouTube source (URL at position 7, not 2):
+source_obj = [None, None, None, None, None, None, None, [url], None, None, 1]
+
+args = [[[source_obj]], notebook_id, [2], _SOURCE_CONFIG]
 # Response: [[[source_id], title, [None, word_count, [ts_sec, ts_ns],
 #             [process_id, [ts_sec, ts_ns]], format_type, None, status,
 #             [url], char_count], [None, 2]]]
 ```
 
-**Source position cheatsheet:**
-| Position in source entry | Web URL | YouTube |
-|--------------------------|---------|---------|
-| `[2]` | `[url, title]` | `None` |
-| `[7]` | `None` | `[url]` |
+After calling, poll `rLM1Ne` until `word_count > 0` (processing is asynchronous).
 
-**Can `LBwxtb` be called without a prior `Ljjv0c`?** Unconfirmed — all observed
-calls included a valid `research_session_id`. Test with a dummy/empty session ID
-to determine if it is strictly required.
+See [YouTube Source Encoding](#youtube-source-encoding) for the full position reference.
+
+---
+
+#### `tGMBJ` — Delete Source ⭐ **v3.1 NEW**
+
+Deletes a source from a notebook.
+
+```python
+args = [[[source_id]], [2]]
+# source_id: UUID of the source to delete
+# Response: confirms deletion
+```
 
 ---
 
 ### Proto / gRPC Endpoints
 
-#### `GenerateFreeFormStreamed` — Fast Research Report ⭐ **New in v3.0**
+#### `GenerateFreeFormStreamed` — NLM Chat (Proto Endpoint) ⭐ **v3.1 CONFIRMED as real chat**
 
-Generates the AI research report from Fast Research sources. Uses a different
-transport from batchexecute — this is a server-streaming gRPC call over HTTP/1.1.
+> **⚠️ KEY FINDING:** This is the **REAL NLM chat interface**, not a research-report
+> generator as documented in v3.0. Every prior "chat" via `s0tc2d` was renaming the
+> notebook. This endpoint handles all multi-turn conversational interactions.
+
+Uses a different transport from batchexecute — this is a server-streaming gRPC call
+over HTTP/1.1. Auth uses **cookies only** (no `at` token in the body).
 
 **URL:**
 ```
 POST https://notebooklm.google.com/_/LabsTailwindUi/data/
   google.internal.labs.tailwind.orchestration.v1.LabsTailwindOrchestrationService/
   GenerateFreeFormStreamed
-?bl=<build_label>&f.sid=<session_id>&hl=en&_reqid=<reqid>&rt=c
+?bl=<build_label>&rt=c
 ```
+
+> Note: `f.sid` and `_reqid` are NOT required for this endpoint (unlike batchexecute).
 
 **Request body (URL-encoded `f.req`):**
 ```python
+# Inner payload — 9-element array
 inner_args = [
-    [[[src_id]] for src_id in source_ids],  # position 0: source ID arrays
-    question_text,                           # position 1: research question
-    None,                                    # position 2: reserved
-    [2, None, [1], [1]],                    # position 3: generation config
-    conv_thread_id,                          # position 4: conversation thread (from CCqFvf)
-    None,                                    # position 5: reserved
-    None,                                    # position 6: reserved
-    notebook_id,                             # position 7: target notebook
-    # ... additional None fields
+    [[[src_id]] for src_id in source_ids],  # [0]: source context — all source IDs
+    question_text,                           # [1]: the question / user message
+    None,                                    # [2]: reserved
+    [2, None, [1], [1]],                    # [3]: response config (always this value)
+    thread_id,                               # [4]: thread UUID — same = continue, new = fresh
+    None,                                    # [5]: reserved
+    None,                                    # [6]: reserved
+    notebook_id,                             # [7]: notebook UUID
+    1,                                       # [8]: mode flag (always 1)
 ]
+# Outer payload wraps inner as JSON string:
 f_req = [None, json.dumps(inner_args)]
+body = urllib.parse.urlencode({"f.req": json.dumps(f_req)}).encode()
 ```
 
-**Response:** Streaming SSE — same `)]}'` prefix, `wrb.fr` chunks with
-`null` as the RPC ID (since it's not a batchexecute call). Returns the
-research narrative in markdown chunks, citations, and a final turn ID.
+**Payload field reference:**
 
-**Fast Research full flow:**
+| Position | Field | Value | Notes |
+|----------|-------|-------|-------|
+| `[0]` | `source_context` | `[[[src_id1]], [[src_id2]], ...]` | All source IDs triple-wrapped |
+| `[1]` | `question` | string | The user's question |
+| `[2]` | reserved | `None` | Always None |
+| `[3]` | `response_config` | `[2, None, [1], [1]]` | Always this exact value |
+| `[4]` | `thread_id` | UUID string | Same UUID = continue conversation; new UUID = fresh thread |
+| `[5]` | reserved | `None` | Always None |
+| `[6]` | reserved | `None` | Always None |
+| `[7]` | `notebook_id` | UUID string | Target notebook |
+| `[8]` | mode | `1` | Always 1 |
+
+**Response — SSE-like streaming:**
+
+Each chunk contains the **FULL TEXT SO FAR** (not deltas). Parse as follows:
+
 ```python
-# 1. Start fast research (web search)
-session_id = fast_research_start(notebook_id, query, cookies)  # Ljjv0c
+# Strip XSSI prefix
+raw = response_text.lstrip(")]}'").lstrip("\n")
 
-# 2. Add discovered sources
-sources = add_url_sources(notebook_id, session_id, url_list, cookies)  # LBwxtb
-
-# 3. Poll until all sources processed
-wait_for_sources(notebook_id, cookies)  # rLM1Ne polling
-
-# 4. Generate the research report (streaming)
-report = generate_free_form(notebook_id, source_ids, question, thread_id, cookies)
-# → GenerateFreeFormStreamed
-
-# 5. Store in Nexus
-nexus.add_entry(query, report, content_type="research")
+for line in raw.split("\n"):
+    line = line.strip()
+    if not line.startswith("[["):
+        continue
+    outer = json.loads(line)
+    for item in outer:
+        if item[0] == "wrb.fr":
+            inner = json.loads(item[2])
+            text_so_far = inner[0][0]           # Full response text accumulated so far
+            turn_info   = inner[0][2]           # [thread_id, msg_id, sequence_num]
+            thread_id   = turn_info[0]          # Use for next turn (multi-turn)
+            msg_id      = turn_info[1]
 ```
+
+**Multi-turn conversation pattern:**
+
+```python
+import uuid, json, urllib.parse, requests
+
+def chat(notebook_id, source_ids, question, cookies, thread_id=None):
+    """Send one chat turn. Returns (answer_text, thread_id) for continuation."""
+    if thread_id is None:
+        thread_id = str(uuid.uuid4())  # fresh conversation
+
+    inner = [
+        [[[s]] for s in source_ids],
+        question,
+        None,
+        [2, None, [1], [1]],
+        thread_id,
+        None,
+        None,
+        notebook_id,
+        1,
+    ]
+    f_req = [None, json.dumps(inner)]
+    body = urllib.parse.urlencode({"f.req": json.dumps(f_req)}).encode()
+
+    url = (
+        "https://notebooklm.google.com/_/LabsTailwindUi/data/"
+        "google.internal.labs.tailwind.orchestration.v1."
+        "LabsTailwindOrchestrationService/GenerateFreeFormStreamed"
+        f"?bl={bl}&rt=c"
+    )
+    resp = requests.post(url, data=body, headers=headers, stream=True)
+
+    full_text = ""
+    for chunk in resp.iter_lines():
+        line = chunk.decode("utf-8").strip()
+        if not line.startswith("[["):
+            continue
+        for item in json.loads(line):
+            if item[0] == "wrb.fr":
+                inner_data = json.loads(item[2])
+                full_text = inner_data[0][0]        # always full text, not delta
+                thread_id = inner_data[0][2][0]     # thread_id for next turn
+
+    return full_text, thread_id
+
+# Usage — multi-turn:
+text1, tid = chat(nb_id, src_ids, "What is the main thesis?", cookies)
+text2, tid = chat(nb_id, src_ids, "Can you elaborate on point 2?", cookies, thread_id=tid)
+text3, tid = chat(nb_id, src_ids, "How does this compare to X?", cookies, thread_id=tid)
+```
+
+---
+
+## YouTube Source Encoding
+
+When adding a YouTube source via `izAoDd`, the URL position differs from regular URLs:
+
+```python
+# Regular URL (web article, PDF, etc.) — URL at position 2:
+source_obj = [None, None, url, None, None, None, None, None, None, None, 1]
+#                         ^^^
+
+# YouTube URL (youtube.com/watch?v= or youtu.be/) — URL at position 7:
+source_obj = [None, None, None, None, None, None, None, [url], None, None, 1]
+#                                                        ^^^^^
+
+def is_youtube(url: str) -> bool:
+    return "youtube.com/watch" in url or "youtu.be/" in url
+
+def make_source_obj(url: str) -> list:
+    if is_youtube(url):
+        return [None, None, None, None, None, None, None, [url], None, None, 1]
+    else:
+        return [None, None, url, None, None, None, None, None, None, None, 1]
+```
+
+**Source type detection by URL position:**
+
+| Position | Content | NLM format type |
+|----------|---------|-----------------|
+| `[2]` (string) | Web article, PDF URL | `5` (web) or `3` (PDF) |
+| `[7]` (list)   | YouTube video URL   | `7` (YouTube) |
+
+---
+
+## Deep Research Flow
+
+Deep Research differs from Fast Research (`Ljjv0c`) — it generates an **AI-authored
+document** rather than collecting existing web pages as sources.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Deep Research Flow                       │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  1. POST /notebooks/<id>/research/deep                      │
+│     → QA9ei RPC                                             │
+│     → args: [None, [1], ["topic", 1], 5, nb_id]             │
+│     → returns: session_id                                   │
+│                                                             │
+│  2. NLM generates AI document asynchronously               │
+│     (no polling needed — generation happens server-side)    │
+│                                                             │
+│  3. POST /notebooks/<id>/research/source                    │
+│     → LBwxtb RPC                                            │
+│     → args: [None,[1],session_id,nb_id,[[None,[title,doc]]]]│
+│     → adds AI document as a notebook source                 │
+│                                                             │
+│  4. (Optional) POST /notebooks/<id>/save_note               │
+│     → R7cb6c RPC                                            │
+│     → generates structured note artifact from all sources  │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Python implementation:**
+
+```python
+import requests, time
+
+BASE = "http://localhost:8800"
+
+def deep_research_workflow(notebook_id: str, topic: str, note_type: int = 2):
+    """Full deep research workflow: research → add source → save note."""
+
+    # Step 1: Start deep research
+    resp = requests.post(f"{BASE}/notebooks/{notebook_id}/research/deep",
+                         json={"topic": topic})
+    session_id = resp.json()["session_id"]
+    print(f"Research session started: {session_id}")
+
+    # Step 2: (NLM generates document async — give it time)
+    time.sleep(15)
+
+    # Step 3: Add the AI document as a source
+    resp = requests.post(f"{BASE}/notebooks/{notebook_id}/research/source",
+                         json={
+                             "session_id": session_id,
+                             "title": f"Deep Research: {topic}",
+                             "content": None,  # proxy fetches from session
+                         })
+    source_id = resp.json()["source_id"]
+    print(f"Research source added: {source_id}")
+
+    # Step 4: Save as structured note (optional)
+    resp = requests.post(f"{BASE}/notebooks/{notebook_id}/save_note",
+                         json={"source_ids": [source_id], "note_type": note_type})
+    note = resp.json()
+    print(f"Note saved: {note['title']} ({note['note_id']})")
+    return note
+```
+
+**Contrast with Fast Research:**
+
+| Aspect | Fast Research | Deep Research |
+|--------|--------------|---------------|
+| RPC | `Ljjv0c` → `izAoDd` | `QA9ei` → `LBwxtb` |
+| Source type | Existing web pages | AI-generated document |
+| Input | Search query | Research topic |
+| Output | Multiple URL sources | Single AI research doc |
+| Speed | Fast (URL fetch) | Slower (LLM generation) |
 
 ---
 
 ### Operations Not Yet Captured
 
-These operations exist in the NLM UI but were not captured in any of the 8 HARs.
+These operations exist in the NLM UI but were not captured in any of the HAR sessions.
 A fresh HAR where these specific actions are performed is needed.
 
 | Operation | Status | Notes |
 |-----------|--------|-------|
 | **Delete Notebook** | ❌ Unknown RPC | Never performed during capture |
-| **Delete Source** | ❌ Unknown RPC | Never performed during capture |
-| **Rename Notebook** | ❌ Unknown RPC | Never performed during capture |
-| **Add Text Source** (paste text) | ❌ Unknown RPC | Never performed during capture |
 | **Add File Source** (upload PDF) | ❌ Likely multipart | May be a separate `/upload` endpoint |
 | **Generate Audio Overview** | ❌ Unknown RPC | `sqTeoe` lists types but trigger unknown |
 | **Audio Overview Status Poll** | ❌ Unknown RPC | Needed for completion detection |
 | **Share Notebook** | ❌ Unknown RPC | Never performed during capture |
 | **Add Google Drive source** | ❌ Partially known | `ub2Bae` response shows Drive sources (format 1) |
 
-**To capture missing RPCs:** Export a HAR while performing each operation above.
+> **Resolved in v3.1 (no longer missing):** Rename Notebook (`s0tc2d`), Add URL/YouTube
+> source (`izAoDd`), Delete Source (`tGMBJ`), Start Deep Research (`QA9ei`),
+> Add Research Source (`LBwxtb`), Chat (`GenerateFreeFormStreamed`).
+
+**To capture remaining RPCs:** Export a HAR while performing each operation above.
 Enable "Include sensitive data" checkbox in Chrome DevTools HAR export.
 
 ---
@@ -631,7 +894,7 @@ Enable "Include sensitive data" checkbox in Chrome DevTools HAR export.
 Up to 5 RPCs can be packed into a single batchexecute request:
 
 ```python
-# 5 questions in one HTTP request
+# 5 questions in one HTTP request (uses CYK0Xb for synchronous annotate)
 calls = [
     ("CYK0Xb", json.dumps([notebook_id, q]))
     for q in questions[:5]
@@ -640,6 +903,9 @@ calls = [
 f_req = [[rpc_id, args_json, None, "generic"] for rpc_id, args_json in calls]
 # rpcids URL param: "CYK0Xb;CYK0Xb;CYK0Xb;CYK0Xb;CYK0Xb"
 ```
+
+> **Note:** Batching applies to batchexecute RPCs only. `GenerateFreeFormStreamed`
+> (chat) is a streaming proto endpoint and cannot be batched this way.
 
 **Response parsing:** Each `wrb.fr` block in the response corresponds to
 one call, in order. Our `_parse_batchexecute_multi()` handles this automatically.
@@ -658,7 +924,7 @@ if no cookies are stored.
 # ── Health check ──────────────────────────────────────────────────────
 GET http://localhost:8800/health
 # Response: {"status":"ok","cookie_count":12,"bl":"boq_...","bl_age_days":3,
-#            "bl_stale":false,"rpc_catalog_version":"v3.0","known_rpcs":21,
+#            "bl_stale":false,"rpc_catalog_version":"v3.1","known_rpcs":25,
 #            "rate_limit_seconds":1.5,"registry_available":true}
 
 # ── Import cookies from HAR file ──────────────────────────────────────
@@ -735,19 +1001,16 @@ GET http://localhost:8800/notebooks/<notebook_id>/sources
 # Response: {"notebook_name":"...","sources":[{"id":"...","title":"...","url":"...",
 #            "word_count":1234,"source_type":5}],"count":N}
 
-# ── Add URL sources (starts fast research session, then adds sources) ──
+# ── Add a URL or YouTube source ───────────────────────────────────────
+# ⭐ v3.1: uses izAoDd (new). Replaces the old LBwxtb-based URL route.
 POST http://localhost:8800/notebooks/<notebook_id>/sources
 Content-Type: application/json
 Body: {
-  "urls": [
-    {"url": "https://example.com/article", "title": "Optional Title"},
-    {"url": "https://www.youtube.com/watch?v=abc", "title": "YT Video"}
-  ],
-  "query": "multi-agent AI systems",
-  "session_id": "optional — omit to auto-start a Ljjv0c session"
+  "url": "https://example.com/article",
+  "title": "Optional Title"
 }
-# → Ljjv0c (if no session_id) + LBwxtb RPCs
-# Response: {"added":2,"session_id":"uuid","notebook_id":"...","poll_url":"/notebooks/.../sources/wait"}
+# → izAoDd RPC (YouTube URLs auto-detected and encoded at position 7)
+# Response: {"source_id":"uuid","title":"...","notebook_id":"...","poll_url":"/notebooks/.../sources/wait"}
 
 # ── Poll source processing completion ─────────────────────────────────
 GET http://localhost:8800/notebooks/<notebook_id>/sources/wait
@@ -755,10 +1018,58 @@ GET http://localhost:8800/notebooks/<notebook_id>/sources/wait
 # → rLM1Ne RPC polled until all word_count > 0
 # Response: {"ready":true,"sources":[...],"pending_count":0,"elapsed_seconds":12.3}
 
+# ── Delete a source ───────────────────────────────────────────────────
+# ⭐ v3.1 new route
+DELETE http://localhost:8800/sources/<source_id>
+# → tGMBJ RPC
+# Response: {"deleted":true,"source_id":"..."}
+
 # ── Read full text content of a single source ─────────────────────────
 GET http://localhost:8800/sources/<source_id>/content
-# → tr032e RPC
+# → tr032e RPC — returns raw extracted source text (not AI summary)
 # Response: {"source_id":"...","content":"markdown text...","word_count":1547}
+```
+
+### Download & Archive Routes ⭐ **v3.1 NEW**
+
+Bulk export endpoints for offline processing, backup, and Nexus ingestion.
+
+```bash
+# ── Download full text of ALL sources in a notebook ───────────────────
+GET http://localhost:8800/notebooks/<notebook_id>/sources/content
+# → tr032e RPC called for each source
+# Response: {"notebook_id":"...","sources":[{"id":"...","title":"...","content":"..."}],"count":N}
+
+# ── Full notebook archive: sources + content + notes + threads + mindmap ─
+GET http://localhost:8800/notebooks/<notebook_id>/archive
+# Query params:
+#   include_content=true/false  (default: true)  — read source text via tr032e
+#   include_threads=true/false  (default: true)  — read conversation threads
+# Response: {
+#   "notebook_id": "...",
+#   "notebook_name": "...",
+#   "summary": "...",
+#   "sources": [...],           # with full content if include_content=true
+#   "notes": [...],
+#   "threads": [...],           # with messages if include_threads=true
+#   "mindmap": {...},
+#   "exported_at": "2026-02-28T12:00:00Z"
+# }
+
+# ── Export ALL notebooks for the authenticated user ────────────────────
+GET http://localhost:8800/notebooks/archive
+# Query params:
+#   include_content=false  (default) — metadata only; set true for full source text
+# Response: {
+#   "notebooks": [{"id":"...","name":"...","sources":[...],"notes":[...]}],
+#   "count": 5,
+#   "exported_at": "2026-02-28T12:00:00Z"
+# }
+
+# ── Export single source as plain text file download ──────────────────
+GET http://localhost:8800/sources/<source_id>/export
+# → tr032e RPC; returns Content-Disposition: attachment
+# Response: plain text file download (Content-Type: text/plain)
 ```
 
 ### Summary & AI Features
@@ -837,19 +1148,6 @@ Body: {"question": "What is the main argument?", "mode": "annotate"}
 # → CYK0Xb RPC — synchronous, answer returned immediately with [source_id] citations
 # Response: {"answer_id":"uuid","answer":"The main argument is... [src_uuid]","sources":["uuid"]}
 
-# ── Chat with role config (asynchronous) ─────────────────────────────
-POST http://localhost:8800/notebooks/<nb_id>/ask
-Content-Type: application/json
-Body: {
-  "question": "Summarize the key findings",
-  "mode": "chat",
-  "role": "Act as a PhD researcher providing thorough analysis with citations",
-  "response_length": 4
-}
-# → s0tc2d RPC — async, answer arrives in conversation thread
-# Response: {"queued":true,"notebook_title":"...","notebook_id":"...","question":"..."}
-# Then: GET /notebooks/<nb_id>/history to retrieve the answer
-
 # ── Batch ask — up to 5 questions per HTTP request ────────────────────
 POST http://localhost:8800/notebooks/<nb_id>/ask_batch
 Content-Type: application/json
@@ -858,43 +1156,64 @@ Body: {
   "mode": "annotate",
   "max_batch": 5
 }
-# → Multiple CYK0Xb (or s0tc2d if mode=chat) packed in one batchexecute call
+# → Multiple CYK0Xb packed in one batchexecute call
 # Response: {"answers":[{...},{...}],"count":5,"questions":[...],"mode":"annotate"}
 
-# ── Chat (s0tc2d dedicated endpoint) ─────────────────────────────────
+# ── Chat (streaming, multi-turn) ──────────────────────────────────────
+# ⭐ v3.1: uses GenerateFreeFormStreamed (proto endpoint), NOT s0tc2d.
+# The old /chat and mode=chat routes that used s0tc2d were silently RENAMING
+# the notebook to the question text. Use this endpoint for real chat.
 POST http://localhost:8800/notebooks/<nb_id>/chat
 Content-Type: application/json
 Body: {
   "question": "What are the key techniques?",
-  "role": "You are a PhD researcher. Cite sources precisely.",
-  "response_length": 4
+  "thread_id": "optional — omit for new conversation, reuse to continue",
+  "source_ids": ["uuid1", "uuid2"]   # optional — defaults to all sources
 }
-# → s0tc2d RPC (async)
-# Response: {"queued":true,"notebook_title":"...","note":"s0tc2d queues the response. Poll /conversations for answer."}
+# → GenerateFreeFormStreamed (proto, streaming)
+# Response: {"answer":"Full response text...","thread_id":"uuid","msg_id":"uuid"}
+# Reuse thread_id in the next request to continue the conversation
 
-# ── Batch chat ────────────────────────────────────────────────────────
-POST http://localhost:8800/notebooks/<nb_id>/chat_batch
+# ── Rename notebook ───────────────────────────────────────────────────
+# ⭐ v3.1: this is what s0tc2d actually does
+POST http://localhost:8800/notebooks/<nb_id>/rename
 Content-Type: application/json
-Body: {
-  "questions": ["Q1?", "Q2?", "Q3?"],
-  "role": "Act as a teacher explaining to a student",
-  "response_length": 4,
-  "max_batch": 5
-}
-# → Multiple s0tc2d calls packed in one request
-# Response: {"results":[...],"queued_count":3,"count":3,"questions":[...]}
+Body: {"title": "New Notebook Name"}
+# → s0tc2d RPC
+# Response: {"renamed":true,"notebook_id":"...","title":"New Notebook Name"}
 ```
 
 ### Research Workflow
 
 ```bash
-# ── Start a fast research session (web search) ────────────────────────
+# ── Start a fast research session (web search, adds URL sources) ───────
 POST http://localhost:8800/notebooks/<nb_id>/research
 Content-Type: application/json
 Body: {"query": "multi-agent AI systems 2025"}
-# → Ljjv0c RPC
+# → Ljjv0c RPC (starts search session)
 # Response: {"session_id":"22200e6d-...","notebook_id":"...","query":"..."}
-# Then use session_id in POST /notebooks/<nb_id>/sources to add sources
+# Then: POST /notebooks/<nb_id>/sources with the returned session_id
+
+# ── Start a deep research session (AI-generated document) ─────────────
+# ⭐ v3.1 new route
+POST http://localhost:8800/notebooks/<nb_id>/research/deep
+Content-Type: application/json
+Body: {"topic": "transformer architecture advances 2025"}
+# → QA9ei RPC
+# Response: {"session_id":"a3f8c021-...","notebook_id":"...","topic":"..."}
+# NLM generates the AI document asynchronously
+
+# ── Add AI research document as a source ──────────────────────────────
+# ⭐ v3.1 new route (uses corrected LBwxtb)
+POST http://localhost:8800/notebooks/<nb_id>/research/source
+Content-Type: application/json
+Body: {
+  "session_id": "a3f8c021-...",
+  "title": "Deep Research: Transformer Advances 2025",
+  "content": null
+}
+# → LBwxtb RPC
+# Response: {"source_id":"uuid","title":"...","notebook_id":"..."}
 ```
 
 ### User Info
@@ -980,39 +1299,35 @@ for q, a in zip(questions, answers):
         client.add_qa(q, a["answer"])
 ```
 
-### 2. Configure Chat Persona for Specialized Output
+### 2. Multi-Turn Chat via GenerateFreeFormStreamed
 
 ```python
-from engine.mcp.nlm_live_proxy import chat_message, _load_cookies
+# ⭐ v3.1: Use GenerateFreeFormStreamed for real chat — NOT s0tc2d (which renames)
+import requests
 
-cookies = _load_cookies()
+BASE = "http://localhost:8800"
+nb_id = "your-notebook-uuid"
 
-# Teacher mode — generates educational content
-answer = chat_message(
-    notebook_id,
-    "Explain the key concepts step by step",
-    cookies,
-    role="You are a patient teacher. Use simple language and concrete examples. "
-         "Structure your answer with clear headings and bullet points.",
-)
+# Get source IDs first
+sources = requests.get(f"{BASE}/notebooks/{nb_id}/sources").json()["sources"]
+src_ids = [s["id"] for s in sources]
 
-# Researcher mode — generates cited academic-style analysis
-answer = chat_message(
-    notebook_id,
-    "What are the main contributions of this work?",
-    cookies,
-    role="You are a PhD researcher. Provide thorough analysis. "
-         "Cite specific sections and quote key passages.",
-)
+# Start a conversation (fresh thread)
+r = requests.post(f"{BASE}/notebooks/{nb_id}/chat", json={
+    "question": "What are the main contributions of this work?",
+    "source_ids": src_ids,
+})
+result = r.json()
+answer = result["answer"]
+thread_id = result["thread_id"]   # keep for follow-ups
 
-# Code generator mode
-answer = chat_message(
-    notebook_id,
-    "Show me how to implement this in Python",
-    cookies,
-    role="You are an expert Python developer. Always provide working, "
-         "tested code with type hints and docstrings.",
-)
+# Continue the conversation (same thread)
+r = requests.post(f"{BASE}/notebooks/{nb_id}/chat", json={
+    "question": "Can you elaborate on contribution #2?",
+    "source_ids": src_ids,
+    "thread_id": thread_id,        # reuse thread for context
+})
+follow_up = r.json()["answer"]
 ```
 
 ### 3. Source Content Extraction to Nexus
@@ -1094,8 +1409,9 @@ questions = [
     "What should practitioners implement based on this?",
 ]
 
-answers = chat_messages_batch(nb_id, questions, cookies,
-                               role=RESEARCHER_ROLE, max_batch=5)
+answers = ask_questions_batch(nb_id, questions, cookies, max_batch=5)
+# Note: use ask_questions_batch (CYK0Xb) for synchronous citation Q&A.
+# For conversational analysis, use POST /notebooks/<nb_id>/chat instead.
 ```
 
 ### 6. Maximizing Output Efficiency
@@ -1187,16 +1503,14 @@ with urllib.request.urlopen(req, timeout=60) as resp:
     raw = resp.read().decode("utf-8")
 ```
 
-### Full Request Example (s0tc2d with Configure Chat)
+### Full Request Example (s0tc2d — Rename Notebook)
+
+> **⚠️ v3.1 Correction:** `s0tc2d` renames notebooks. The example below is the
+> correct usage. Do NOT use this RPC to send chat messages.
 
 ```python
-question = "Explain the key architecture"
-role = "You are a PhD researcher. Be thorough and cite sources."
-resp_len = 4  # Default
-
-inner_msg = [[2, question], [resp_len]]
-chat_config = [role, None, None, None, None, None, None, inner_msg]
-args = json.dumps([notebook_id, [chat_config]])
+new_name = "My Research Notebook — Revised"
+args = json.dumps([notebook_id, [[None, None, None, [None, new_name]]]])
 
 f_req = [["s0tc2d", args, None, "generic"]]
 # ... same URL construction and send as above
@@ -1222,29 +1536,39 @@ for line in body.split("\\n"):
 
 ## Known Limitations and Gotchas
 
-1. **s0tc2d is asynchronous** — the response does NOT contain the answer.
-   Use `hPTbtc` to get the thread ID, then `khqZz` to read the answer. Or poll
-   `GET /notebooks/<id>/history` via the proxy for a simpler interface.
+1. **`s0tc2d` is RENAME, not chat** ⭐ v3.1 correction — every call to `s0tc2d` with
+   a question string was renaming the notebook to that string. For conversational chat,
+   use `GenerateFreeFormStreamed` (proto endpoint) via `POST /notebooks/<id>/chat`.
 
-2. **CYK0Xb is synchronous** — better for programmatic Q&A where you need
-   the answer immediately.
+2. **`CYK0Xb` is synchronous Q&A with citations** — best for programmatic extraction
+   where you need the answer immediately in the same HTTP response. Returns markdown
+   with embedded `[source_uuid]` citation tokens.
 
-3. **Chrome 130+ redacts cookies from HAR exports** — always use CDP capture
+3. **`GenerateFreeFormStreamed` uses cookies-only auth** — the `at` CSRF token is NOT
+   included in the request body (unlike batchexecute RPCs). Only cookies are needed.
+
+4. **Streaming response contains FULL TEXT, not deltas** — each SSE chunk from
+   `GenerateFreeFormStreamed` replaces the previous one; do not concatenate chunks.
+
+5. **YouTube sources use position 7** in the source object (not position 2 like web URLs).
+   The proxy's `make_source_obj()` handles this automatically.
+
+6. **Chrome 130+ redacts cookies from HAR exports** — always use CDP capture
    (`POST /cookies/capture`) or extract via the `data/nlm_cookies.json` manual method.
 
-4. **Build label changes weekly** — implement BL monitoring and auto-refresh.
+7. **Build label changes weekly** — implement BL monitoring and auto-refresh.
    The `bl_stale` field in `/health` is your early warning system.
 
-5. **Batch limit** — 5 RPCs per request appears to be the practical limit.
-   Exceeding this may cause malformed responses.
+8. **Batch limit** — 5 RPCs per batchexecute request is the practical limit.
+   Exceeding this may cause malformed responses. `GenerateFreeFormStreamed` cannot
+   be batched at all (it's a separate proto endpoint).
 
-6. **Rate limiting** — No hard rate limit observed, but aggressive batching
+9. **Rate limiting** — No hard rate limit observed, but aggressive batching
    (>50 questions/minute) may trigger soft limits. Add 1–2s delays between
    large batch groups.
 
-7. **Source UUIDs** — Source IDs are per-notebook and do not transfer between
-   notebooks. Always fetch source IDs from `wXbhsf` before using them in
-   `ciyUvf` or `R7cb6c`.
+10. **Source UUIDs are per-notebook** — Source IDs do not transfer between notebooks.
+    Always fetch source IDs from `wXbhsf` before using them in `ciyUvf` or `R7cb6c`.
 
 ---
 
@@ -1270,8 +1594,6 @@ nlm_generate_doc(nb_id)     # Full document generation
 # Via QA Distiller CLI
 python -m engine.nexus.nlm_qa_distiller --bulk --notebook <id>
 ```
-
----
 
 ---
 
@@ -1305,5 +1627,5 @@ notebooklm:
 
 ---
 
-*Last updated: 2026-02-28 | Version 3.0 | 21 RPCs confirmed across 8 HAR capture sessions*
+*Last updated: 2026-02-28 | Version 3.1 | 25 RPCs + 1 proto endpoint confirmed | 3 critical corrections from v3.0*
 

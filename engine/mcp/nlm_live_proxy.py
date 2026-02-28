@@ -1,36 +1,157 @@
 """
-NLM Live Proxy — Full batchexecute API bridge for NotebookLM.
+NLM Live Proxy — Reverse-Engineered NotebookLM batchexecute API Bridge.
 
-Architecture
-~~~~~~~~~~~~
-This proxy provides complete read AND write access to NotebookLM's private
-batchexecute API, reverse-engineered from multi-session HAR analysis (8 HARs,
-21 confirmed RPCs). It exposes a REST API at :8800 for CosySim agents.
+Version: v3.1  |  Last Updated: 2026-02-28
 
-Auth is handled via Google session cookies extracted from either:
-  1. A manually captured HAR file (DevTools → Save all as HAR with sensitive data)
-  2. Automatically via Chrome DevTools Protocol (CDP) — preferred
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+DISCOVERY METHODOLOGY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Every RPC mapping in this file was discovered empirically through 10+ sessions of
+manual HAR analysis.  The workflow each session:
 
-RPC ID Management
-~~~~~~~~~~~~~~~~~
-RPC IDs are **STABLE within a build label** but MAY change when Google deploys
-a new frontend (BL changes approx. weekly). IDs are loaded from:
-  1. data/nlm_rpc_registry.json   — updated by nlm_automation.py
-  2. nlm_rpc_mapper._FALLBACK_RPC_IDS   — hardcoded confirmed IDs (fallback)
+  1. Open NotebookLM in Chrome with DevTools → Network tab open.
+  2. Perform the target operation (rename notebook, add source, ask question…).
+  3. In DevTools: Network tab → right-click the batchexecute POST → "Save all as
+     HAR with content" (must tick "Include sensitive data" for cookies).
+  4. Inspect the HAR to identify the RPC ID (the ``rpcids`` query param), the
+     exact ``f.req`` POST body structure, and the wrb.fr response shape.
+  5. Implement the RPC helper, add a REST endpoint, add it to the RPC table here.
 
-Run ``python -m engine.nexus.nlm_automation`` to re-discover all IDs.
-Run ``python -m engine.nexus.nlm_rpc_mapper`` to check registry status.
+Several RPCs required multiple HAR captures to confirm — particularly write RPCs
+where the first attempt used a wrong payload shape that silently returned null.
 
-Rate Limiting
-~~~~~~~~~~~~~
-All outbound NLM calls are rate-limited (default 1.5s between requests).
-Configure via ``notebooklm.rate_limit_seconds`` in config/default.yaml.
-Batch calls count as ONE request for rate-limiting purposes.
+CRITICAL CORRECTION (v3.1): ``s0tc2d`` was mapped as RPC_CHAT_MESSAGE in v2.x
+based on a misread of early HAR captures.  A fresh HAR confirmed it is actually
+RENAME_NOTEBOOK.  Real chat uses the GenerateFreeFormStreamed gRPC endpoint.
 
-Complete RPC Catalogue (v3.1, 25 RPCs + 1 proto endpoint):
-  See docs/NOTEBOOKLM_SDK.md for full documentation.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+TRANSPORT PROTOCOL: batchexecute
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+NotebookLM's primary API is Google's generic ``/_/LabsTailwindUi/data/batchexecute``
+endpoint (same transport used by Google Maps, Docs, etc.).
 
-Usage::
+Request format:
+  POST /batchexecute?rpcids=<id>&bl=<build_label>&f.sid=<session_id>&hl=en&rt=c
+  Content-Type: application/x-www-form-urlencoded
+  Body: f.req=[["rpc_id","args_json",null,"generic"]]&at=<anti_forgery_token>
+
+  Multiple RPCs in one HTTP request (batching):
+    f.req=[["rpc_id_1","args_1",null,"generic"],["rpc_id_2","args_2",null,"generic"]]
+
+Response format (multi-level wrapping):
+  Line 1:  )]}'                                  ← XSSI protection prefix, always strip
+  Lines 2+: one JSON array per wrb.fr block:
+    [["wrb.fr","rpc_id","<inner_json_string>",null,null,null,"generic"],...]
+  The actual data lives inside the inner_json_string, double-JSON-encoded.
+
+Auth headers required:
+  Cookie: <all Google session cookies>
+  Authorization: SAPISIDHASH <ts>_<sha1(ts + " " + SAPISID + " " + origin)>
+  X-Same-Domain: 1
+  Origin: https://notebooklm.google.com
+
+Build label (bl):
+  Stable per Google frontend deploy, changes ~weekly.
+  Format: boq_labs-tailwind-frontend_YYYYMMDD.NN_p0
+  Stored in data/nlm_meta.json.  Warn after 8 days.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+TRANSPORT PROTOCOL: GenerateFreeFormStreamed (gRPC-Web)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Real conversational chat uses a separate proto endpoint, NOT batchexecute:
+
+  POST https://notebooklm.google.com/_/LabsTailwindUi/data/
+       google.internal.labs.tailwind.orchestration.v1
+       .LabsTailwindOrchestrationService/GenerateFreeFormStreamed
+  Body: f.req=<url_encoded_json>
+
+Payload (outer): [null, json.dumps(inner)]
+Payload (inner, 9 elements):
+  [0] source_context  = [[[src_id_1]], [[src_id_2]], ...]
+  [1] question text
+  [2] null
+  [3] response config = [2, null, [1], [1]]
+  [4] thread_id       = UUID (existing or new, for conversation threading)
+  [5] null
+  [6] null
+  [7] notebook_id
+  [8] 1
+
+Response is SSE-like streaming where each chunk delivers the FULL TEXT SO FAR
+(not incremental deltas).  Parse via wrb.fr blocks: inner[0][0] = full text.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CRITICAL OPERATIONAL NOTES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+BL Staleness:
+  Google deploys new NLM frontends ~weekly, changing the build label (bl).
+  A stale bl causes all batchexecute calls to return null data silently.
+  → Run ``POST /cookies/refresh`` or ``POST /meta`` to update the bl.
+  → Import a fresh HAR to get the new bl automatically.
+  → After 8 days without a bl update, the proxy logs a warning.
+
+Cookie Refresh:
+  Google session cookies expire; SID tokens are typically valid 6-12 months
+  but ``f.sid`` and ``at`` tokens are session-scoped and expire sooner.
+  → ``POST /cookies/refresh`` auto-fetches fresh f.sid and at from the live page.
+  → ``POST /cookies/capture`` uses Chrome CDP to extract fresh cookies entirely.
+  → ``POST /cookies/import`` + HAR file is the manual fallback.
+
+Auth failures:
+  HTTP 401 → cookies are fully expired, must re-authenticate.
+  null data with 200 OK → bl or f.sid is stale; run /cookies/refresh.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+COMPLETE CONFIRMED RPC TABLE  (v3.1, 25 batchexecute RPCs + 1 proto endpoint)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+RPC ID    Name                   Confirmed   Description
+───────   ────────────────────   ─────────   ──────────────────────────────────────
+ZwVcOc    SESSION_INIT           2026-02-20  Init session, returns account info
+wXbhsf    LIST_SOURCES           2026-02-20  List all sources in a notebook
+ub2Bae    LIST_NOTEBOOKS         2026-02-20  List all notebooks for account
+sqTeoe    LIST_AUDIO_TYPES       2026-02-24  List available audio overview types
+rLM1Ne    LOAD_NOTEBOOK          2026-02-20  Load notebook with sources + status
+e3bVqc    NOTEBOOK_INFO          2026-02-20  Get raw notebook content/document data
+hPTbtc    GET_THREAD_IDS         2026-02-24  List conversation thread IDs  (⚠️ v3.0 rename)
+khqZz     READ_THREAD            2026-02-24  Read messages in a thread      (⚠️ v3.0 rename)
+JFMDGd    USER_PROFILE           2026-02-24  Get user profile + queries remaining (⚠️ v3.0)
+VfAZjd    AI_SUMMARY             2026-02-20  Generate/fetch AI notebook summary
+gArtLc    LIST_ARTIFACTS         2026-02-20  List notes and artifacts
+cFji9     MIND_MAP               2026-02-24  Generate/fetch D3 mind map     (⚠️ v3.0 rename)
+ozz5Z     ACCOUNT_STATE          2026-02-20  Account state + storage quota
+tr032e    READ_SOURCE            2026-02-22  Read full text content of a source
+CCqFvf    RESUME_SESSION         2026-02-27  Load last active notebook       (v3.0 new)
+s0tc2d    RENAME_NOTEBOOK        2026-02-28  ⭐ CRITICAL: was wrong in v2.x as CHAT_MESSAGE
+CYK0Xb    SAVE_NOTE              2026-02-22  Citation-annotate Q&A (was "legacy chat" ⚠️)
+ciyUvf    GENERATE_DOC           2026-02-22  Generate document from sources
+R7cb6c    SAVE_REPORT            2026-02-22  Save note artifact to notebook
+Ljjv0c    FAST_RESEARCH_START    2026-02-27  Start fast research session     (v3.0 new)
+LBwxtb    ADD_RESEARCH_SOURCE    2026-02-28  Add AI-generated doc as source  (v3.1 new)
+izAoDd    ADD_SOURCE             2026-02-28  Add URL or YouTube source       (v3.1 new)
+QA9ei     START_DEEP_RESEARCH    2026-02-28  Start deep research → session_id (v3.1 new)
+tGMBJ     DELETE_SOURCE          2026-02-28  Delete a source from notebook   (v3.1 new)
+──────    ─────────────────────  ─────────   ─────────────────────────────────────────────
+(proto)   GenerateFreeFormStreamed 2026-02-27  Real NLM chat via gRPC-Web     (v3.0 new)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION INDEX
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  1. Imports & Module-Level Globals
+  2. Version History
+  3. Constants & RPC Registry
+  4. Rate Limiter
+  5. Meta / Build Label Management
+  6. Cookie Management
+  7. batchexecute Transport Layer
+  8. Response Parsing
+  9. Content Extraction Utilities
+ 10. Write Operation Helpers  (rename, add source, delete source, deep research)
+ 11. Download & Archive Operations
+ 12. NLMClient Class
+ 13. Flask Application  (REST API at :8800)
+ 14. CLI Entry Point
+
+Architecture::
 
     from engine.mcp.nlm_live_proxy import create_nlm_proxy_app, get_nlm_proxy_app
     app = create_nlm_proxy_app()
@@ -38,6 +159,23 @@ Usage::
 
     # Standalone:
     python -m engine.mcp.nlm_live_proxy
+
+Auth is handled via Google session cookies extracted from either:
+  1. A manually captured HAR file (DevTools → Save all as HAR with sensitive data)
+  2. Automatically via Chrome DevTools Protocol (CDP) — preferred
+
+RPC ID Management:
+  RPC IDs are **STABLE within a build label** but MAY change when Google deploys
+  a new frontend (BL changes approx. weekly). IDs are loaded from:
+    1. data/nlm_rpc_registry.json   — updated by nlm_automation.py
+    2. nlm_rpc_mapper._FALLBACK_RPC_IDS   — hardcoded confirmed IDs (fallback)
+  Run ``python -m engine.nexus.nlm_automation`` to re-discover all IDs.
+  Run ``python -m engine.nexus.nlm_rpc_mapper`` to check registry status.
+
+Rate Limiting:
+  All outbound NLM calls are rate-limited (default 1.5s between requests).
+  Configure via ``notebooklm.rate_limit_seconds`` in config/default.yaml.
+  Batch calls count as ONE request for rate-limiting purposes.
 """
 from __future__ import annotations
 
@@ -67,13 +205,50 @@ _BATCH_URL = f"https://{_NLM_HOST}/_/LabsTailwindUi/data/batchexecute"
 _REQUEST_TIMEOUT = 60
 _COOKIES_LOCK = threading.Lock()
 
+# ── Version History ───────────────────────────────────────────────────────
+# v1.0  2026-02-20  Initial proxy with ~12 RPCs from first HAR capture.
+#                   Covered: SESSION_INIT, LIST_SOURCES, LIST_NOTEBOOKS,
+#                   LOAD_NOTEBOOK, NOTEBOOK_INFO, AI_SUMMARY, LIST_ARTIFACTS,
+#                   ACCOUNT_STATE, READ_SOURCE, GENERATE_DOC, SAVE_REPORT,
+#                   SAVE_NOTE (CYK0Xb, wrongly called "ask" at the time).
+# v2.0  2026-02-22  Added SSE streaming for real-time answers, batch Q&A via
+#                   multi-RPC batchexecute, and first write RPCs.  16 RPCs total.
+# v2.1  2026-02-24  21 RPCs confirmed.  Corrected 4 ID mappings (sqTeoe was
+#                   "list all notebooks" → is LIST_AUDIO_TYPES; hPTbtc was
+#                   "list sources paged" → is GET_THREAD_IDS; khqZz was
+#                   "sub-notebook sources" → is READ_THREAD; JFMDGd was
+#                   "sources condensed" → is USER_PROFILE; cFji9 was
+#                   "conversation history" → is MIND_MAP).
+#                   s0tc2d still wrongly mapped as RPC_CHAT_MESSAGE.
+# v3.0  2026-02-27  Chrome CDP auth capture (nlm_har_capture.py).
+#                   Discovered GenerateFreeFormStreamed proto endpoint — this is
+#                   the REAL chat interface, not any batchexecute RPC.
+#                   Added RESUME_SESSION (CCqFvf) and FAST_RESEARCH_START (Ljjv0c).
+#                   QA distiller and grpc_ask batch implemented.
+# v3.1  2026-02-28  CRITICAL CORRECTIONS from fresh HAR analysis:
+#                     s0tc2d = RENAME_NOTEBOOK (NOT chat — v2.x mapping was wrong)
+#                     izAoDd = ADD_SOURCE (new: add URL/YouTube sources)
+#                     QA9ei  = START_DEEP_RESEARCH (new: async research pipeline)
+#                     tGMBJ  = DELETE_SOURCE (new: remove a source by UUID)
+#                     LBwxtb = ADD_RESEARCH_SOURCE (new: add AI doc as source)
+#                   Added download_all_sources(), export_notebook(),
+#                   export_all_notebooks() for full-notebook archival.
+#                   RPC count: 25 batchexecute RPCs + 1 proto endpoint = 26 total.
+# ─────────────────────────────────────────────────────────────────────────
+
 # Known-good build label — updated automatically on HAR import
 # Format: boq_labs-tailwind-frontend_YYYYMMDD.NN_p0
 # Changes roughly weekly when Google deploys a new frontend build.
 _DEFAULT_BL = "boq_labs-tailwind-frontend_20260226.08_p0"
 _DEFAULT_BL_DATE = "2026-02-26"  # for staleness calculation
 
-# ── Rate limiter ─────────────────────────────────────────────────────────
+# ════════════════════════════════════════════════════════════════════════════
+# RATE LIMITER
+# Enforces a minimum time gap between all outbound NLM API calls.
+# Google will 429-throttle or rate-ban clients that poll too fast.
+# Default gap: 1.5 s (configurable via notebooklm.rate_limit_seconds).
+# Batch calls (multiple RPCs in one HTTP request) count as ONE request.
+# ════════════════════════════════════════════════════════════════════════════
 
 class _RateLimiter:
     """Simple per-host rate limiter. Enforces a minimum gap between requests."""
@@ -104,9 +279,16 @@ def _get_rate_limit() -> float:
 
 _rate_limiter = _RateLimiter(min_gap_seconds=1.5)
 
-# ── RPC ID Registry ──────────────────────────────────────────────────────
-# Loaded from nlm_rpc_mapper at runtime; hardcoded constants kept as
-# readable aliases for use in this module.
+# ════════════════════════════════════════════════════════════════════════════
+# CONSTANTS & RPC REGISTRY
+#
+# Hardcoded RPC IDs (confirmed from HAR analysis) used as readable aliases.
+# At call time, _rpc(operation, fallback) consults nlm_rpc_mapper first —
+# if the registry has a fresher value it overrides the constant.
+#
+# ⚠️  Mapping corrections between versions are documented on each constant.
+# ⭐  v3.1 additions are the result of the 2026-02-28 deep HAR session.
+# ════════════════════════════════════════════════════════════════════════════
 
 try:
     from engine.nexus.nlm_rpc_mapper import get_rpc_id as _get_rpc_id
@@ -125,46 +307,179 @@ def _rpc(operation: str, fallback: str) -> str:
     return fallback
 
 # Readable aliases (resolved at call time via _rpc() in actual calls)
-RPC_SESSION_INIT        = "ZwVcOc"
-RPC_LIST_SOURCES        = "wXbhsf"
-RPC_LIST_NOTEBOOKS      = "ub2Bae"
-RPC_LIST_AUDIO_TYPES    = "sqTeoe"   # ⚠️ v3.0: was "list all notebooks", is audio types
-RPC_LOAD_NOTEBOOK       = "rLM1Ne"
-RPC_NOTEBOOK_INFO       = "e3bVqc"
-RPC_GET_THREAD_IDS      = "hPTbtc"   # ⚠️ v3.0: was "list sources paged", is thread IDs
-RPC_READ_THREAD         = "khqZz"    # ⚠️ v3.0: was "sub-notebook sources", is thread msgs
-RPC_USER_PROFILE        = "JFMDGd"   # ⚠️ v3.0: was "sources condensed", is user profile
-RPC_AI_SUMMARY          = "VfAZjd"
-RPC_LIST_ARTIFACTS      = "gArtLc"
-RPC_MIND_MAP            = "cFji9"    # ⚠️ v3.0: was "conversation history", is mind map
-RPC_ACCOUNT_STATE       = "ozz5Z"
-RPC_READ_SOURCE         = "tr032e"
-RPC_RESUME_SESSION       = "CCqFvf"   # ⭐ v3.0 new: load last active notebook
-RPC_RENAME_NOTEBOOK      = "s0tc2d"   # ⭐ v3.1: was wrongly RPC_CHAT_MESSAGE
-RPC_SAVE_NOTE            = "CYK0Xb"   # ⚠️ v3.0: was "legacy chat", is save note
-RPC_GENERATE_DOC         = "ciyUvf"
-RPC_SAVE_REPORT          = "R7cb6c"
-RPC_FAST_RESEARCH_START  = "Ljjv0c"   # ⭐ v3.0 new: start fast research
-RPC_ADD_RESEARCH_SOURCE  = "LBwxtb"   # ⭐ v3.1: add AI-generated research doc as source
-RPC_ADD_SOURCE           = "izAoDd"   # ⭐ v3.1 new: add URL or YouTube source
-RPC_START_DEEP_RESEARCH  = "QA9ei"    # ⭐ v3.1 new: start deep research → session_id
-RPC_DELETE_SOURCE        = "tGMBJ"    # ⭐ v3.1 new: delete a source
+# Each constant has: confirmed date · payload signature · response shape · gotchas
+
+RPC_SESSION_INIT = "ZwVcOc"
+# HAR-confirmed 2026-02-20.  Initialises an NLM browser session.
+# Payload: [] (empty)
+# Response: [session_token, account_info, ...]
+
+RPC_LIST_SOURCES = "wXbhsf"
+# HAR-confirmed 2026-02-20.  Lists all sources in a notebook.
+# Payload: [null, 1, null, [2]]
+# Response: [[[notebook_name, [source_obj, ...]]], ...]
+# Source obj: [[uid], title, [meta: word_count@1, src_type@6, url_list@7], ...]
+
+RPC_LIST_NOTEBOOKS = "ub2Bae"
+# HAR-confirmed 2026-02-20.  Lists all notebooks for the authenticated account.
+# Payload: [[2]]
+# Response: [[[nb_obj, ...]], ...]  — nb_obj contains UUID and name strings.
+
+RPC_LIST_AUDIO_TYPES = "sqTeoe"
+# HAR-confirmed 2026-02-24.  Returns available audio overview types/voices.
+# ⚠️ v3.0 correction: was wrongly mapped as "list all notebooks" in v2.x.
+# Payload: [notebook_id]
+# Response: list of audio type descriptors
+
+RPC_LOAD_NOTEBOOK = "rLM1Ne"
+# HAR-confirmed 2026-02-20.  Loads a notebook with source processing status.
+# Used by /sources/wait polling — returns word_count per source (0 = still processing).
+# Payload: [notebook_id, null, [2], null, 0]
+# Response: same shape as wXbhsf but richer per-source metadata.
+
+RPC_NOTEBOOK_INFO = "e3bVqc"
+# HAR-confirmed 2026-02-20.  Returns raw notebook content/document data.
+# Payload: [null, null, notebook_id]
+# Response: nested document structure (use _extract_strings for text).
+
+RPC_GET_THREAD_IDS = "hPTbtc"
+# HAR-confirmed 2026-02-24.  Returns conversation thread IDs for a notebook.
+# ⚠️ v3.0 correction: was wrongly mapped as "list sources paged" in v2.x.
+# Payload: [[], null, notebook_id, page_size]
+# Response: [[thread_id_list], ...] where each item is [thread_uuid, ...]
+
+RPC_READ_THREAD = "khqZz"
+# HAR-confirmed 2026-02-24.  Reads all messages in a conversation thread.
+# ⚠️ v3.0 correction: was wrongly mapped as "sub-notebook sources" in v2.x.
+# Payload: [[], null, null, thread_id, page_size]
+# Response: nested message objects (use _extract_strings for text content).
+
+RPC_USER_PROFILE = "JFMDGd"
+# HAR-confirmed 2026-02-24.  Returns user profile: email, name, queries remaining.
+# ⚠️ v3.0 correction: was wrongly mapped as "sources condensed" in v2.x.
+# Payload: [notebook_id, [2]]
+# Response: [[email, name, ...], null, queries_remaining, ...]
+
+RPC_AI_SUMMARY = "VfAZjd"
+# HAR-confirmed 2026-02-20.  Fetches or generates the AI summary of a notebook.
+# Payload: [notebook_id, [2]]
+# Response: nested text structure — join _extract_strings(data, 50).
+
+RPC_LIST_ARTIFACTS = "gArtLc"
+# HAR-confirmed 2026-02-20.  Lists notes and saved artifacts in a notebook.
+# Payload: [[2], notebook_id, "NOT artifact.status = \"ARTIFACT_STATUS_SUGGESTED\""]
+# Response: nested artifact objects with title/content strings.
+
+RPC_MIND_MAP = "cFji9"
+# HAR-confirmed 2026-02-24.  Generates/returns D3-format mind map JSON.
+# ⚠️ v3.0 correction: was wrongly mapped as "conversation history" in v2.x.
+# Payload: [notebook_id, null, null, [2]]
+# Response: [json_string, ...] — parse inner JSON for D3 hierarchy.
+
+RPC_ACCOUNT_STATE = "ozz5Z"
+# HAR-confirmed 2026-02-20.  Returns account state including storage quota.
+# Also aliased as RPC_USER_QUOTA (same ID, different usage context).
+# Payload: [[[null, "1", 627], [null,null,null,null,null,null,null,null,null,[null,null,4]], 1]]]
+# Response: complex nested quota structure.
+
+RPC_READ_SOURCE = "tr032e"
+# HAR-confirmed 2026-02-22.  Reads the full text content of a notebook source.
+# Returns the complete markdown-formatted text.  Expensive for large sources.
+# Payload: [[[[source_uuid]]]]
+# Response: nested text chunks — join via _extract_strings(data, 10).
+
+RPC_RESUME_SESSION = "CCqFvf"
+# HAR-confirmed 2026-02-27.  ⭐ v3.0 new.  Loads the last active notebook.
+# Payload: []
+# Response: notebook_id and basic metadata.
+
+RPC_RENAME_NOTEBOOK = "s0tc2d"
+# HAR-confirmed 2026-02-28.  ⭐ CRITICAL v3.1 CORRECTION.
+# This RPC was WRONGLY mapped as RPC_CHAT_MESSAGE in all v2.x code.
+# A fresh HAR on 2026-02-28 definitively confirmed s0tc2d = RENAME_NOTEBOOK.
+# Real chat uses GenerateFreeFormStreamed (the gRPC proto endpoint), not batchexecute.
+# Payload: [notebook_id, [[null, null, null, [null, "new_name"]]]]
+# Response: [new_name, null, notebook_id, emoji_char, ...]
+
+RPC_SAVE_NOTE = "CYK0Xb"
+# HAR-confirmed 2026-02-22.  Citation-annotate Q&A (was called "legacy chat" in v2.x).
+# ⚠️ v3.0 correction: this is NOT real chat — it annotates text with source citations.
+# Used for Q&A distillation: returns cited answers grounded in notebook sources.
+# Payload: [notebook_id, question_text]
+# Response: [[answer_id, markdown_answer_with_citations], ...]
+# Citations appear as [source_uuid] markers in the answer text.
+
+RPC_GENERATE_DOC = "ciyUvf"
+# HAR-confirmed 2026-02-22.  Generates a document/report from selected sources.
+# Payload: [_WRITE_CONFIG, notebook_id, [[src_id_1], [src_id_2], ...]]
+# Response: [[title, description, null, [[src_ids]]], ...]
+
+RPC_SAVE_REPORT = "R7cb6c"
+# HAR-confirmed 2026-02-22.  Saves a note artifact to a notebook.
+# Payload: [_WRITE_CONFIG, notebook_id, [null, null, note_type, [[src_id], ...]]]
+# Response: [[note_id, title, note_type_int, [[source_ids]]], ...]
+
+RPC_FAST_RESEARCH_START = "Ljjv0c"
+# HAR-confirmed 2026-02-27.  ⭐ v3.0 new.  Starts a fast research session.
+# Payload: [[query, 1], null, 1, notebook_id]
+# Response: [session_id, ...]
+
+RPC_ADD_RESEARCH_SOURCE = "LBwxtb"
+# HAR-confirmed 2026-02-28.  ⭐ v3.1 new.
+# Adds an AI-generated research document as a notebook source.
+# Called AFTER start_deep_research (QA9ei) with the AI-authored content.
+# Payload: [null, [1], session_id, notebook_id, [[null, [title, content]]]]
+# Response: source metadata including new source UUID.
+
+RPC_ADD_SOURCE = "izAoDd"
+# HAR-confirmed 2026-02-28.  ⭐ v3.1 new.
+# Adds a URL or YouTube video as a notebook source.
+# The source object shape differs by content type (see add_source_url docstring):
+#   Regular URL: source_obj[2] = url
+#   YouTube URL: source_obj[7] = [url]   (list, at position 7, not 2)
+# Payload: [[[source_obj]], notebook_id, [2], _SOURCE_CONFIG]
+# Response: new source metadata including UUID.  Status is "processing" initially.
+
+RPC_START_DEEP_RESEARCH = "QA9ei"
+# HAR-confirmed 2026-02-28.  ⭐ v3.1 new.
+# Starts an async deep research session on a given topic.
+# NLM generates a research document in the background (takes 10-60 seconds).
+# Returns session_id UUID; poll via add_research_source (LBwxtb) to retrieve doc.
+# Payload: [null, [1], ["topic", 1], 5, notebook_id]
+# Response: [session_uuid, ...]
+
+RPC_DELETE_SOURCE = "tGMBJ"
+# HAR-confirmed 2026-02-28.  ⭐ v3.1 new.
+# Deletes a source from a notebook by UUID.
+# Payload: [[[source_uuid]], [2]]
+# Response: acknowledgement (empty or minimal).
+
+RPC_USER_QUOTA = "ozz5Z"
+# Same ID as RPC_ACCOUNT_STATE — used in get_user_quota() specifically for
+# the quota/storage usage payload variant.
 
 # ── Response Length Constants ────────────────────────────────────────────
-RESP_LEN_DEFAULT = 4
-RESP_LEN_LONGER  = 1
-RESP_LEN_SHORTER = 2
+# Passed as second element of response-config arrays in several RPCs.
+# Controls how much detail NLM returns in the response payload.
+RESP_LEN_DEFAULT = 4  # standard response verbosity (most RPCs)
+RESP_LEN_LONGER  = 1  # request a longer/more detailed response
+RESP_LEN_SHORTER = 2  # request a condensed/shorter response
 
 # ── Document/Note Types ──────────────────────────────────────────────────
-DOC_TYPE_BRIEF   = 2
-DOC_TYPE_NOTE    = 9
+# Used in generate_document() and save_note() to control output format.
+DOC_TYPE_BRIEF   = 2  # standard brief document (used in most cases)
+DOC_TYPE_NOTE    = 9  # deep research / long-form note type
 
-# Write config object shared by several write RPCs (from HAR analysis)
+# Write config object shared by several write RPCs (ciyUvf, R7cb6c).
+# Observed verbatim across 3 different HAR captures — do not change.
+# Structure matches the "write operation metadata" envelope used by NLM.
 _WRITE_CONFIG = [2, None, None,
                  [1, None, None, None, None, None, None, None, None, None, [1]],
                  [[2, 1]]]
 
-# Source config object used by izAoDd (add URL / YouTube source)
+# Source config object used by izAoDd (ADD_SOURCE RPC).
+# This is the "source creation metadata" envelope — confirmed from HAR.
+# Position [0] = 1 signals "create new source"; the [1] at position 10 is flags.
 _SOURCE_CONFIG = [1, None, None, None, None, None, None, None, None, None, [1]]
 
 # gRPC endpoint for real free-form chat (GenerateFreeFormStreamed)
@@ -175,7 +490,18 @@ _GRPC_CHAT_URL = (
 )
 
 
-# ── Meta (bl, f.sid) management ─────────────────────────────────────────
+# ════════════════════════════════════════════════════════════════════════════
+# META / BUILD LABEL MANAGEMENT
+#
+# The batchexecute URL requires two session parameters:
+#   bl      — build label; stable per Google frontend deploy, changes ~weekly.
+#             Format: boq_labs-tailwind-frontend_YYYYMMDD.NN_p0
+#   f.sid   — server session ID; extracted from the NLM page's WIZ_global_data.
+#   at      — anti-forgery token; also from WIZ_global_data (key "SNlM0e").
+#
+# When bl is stale, batchexecute silently returns null for all calls.
+# Refresh via: POST /cookies/refresh  or  POST /meta  or  re-import a HAR.
+# ════════════════════════════════════════════════════════════════════════════
 
 def _load_meta() -> Dict[str, str]:
     """Load stored build label and session meta from disk."""
@@ -323,7 +649,22 @@ def refresh_session_tokens() -> bool:
     return updated
 
 
-# ── Cookie management ────────────────────────────────────────────────────
+# ════════════════════════════════════════════════════════════════════════════
+# COOKIE MANAGEMENT
+#
+# Google auth requires a set of session cookies.  The critical ones are:
+#   SID, SSID, APISID, SAPISID  — core Google session tokens
+#   __Secure-3PSID, __Secure-3PAPISID  — same-site secure variants
+#   HSID  — security cookie preventing CSRF
+#   NID   — Google preference cookie (sometimes needed for API calls)
+#
+# Cookies are stored in data/nlm_cookies.json (thread-safe via _COOKIES_LOCK).
+# Obtain them via: HAR import, CDP capture, or DevTools manual copy.
+#
+# The SAPISIDHASH in the Authorization header is derived from SAPISID:
+#   SHA1(unix_timestamp + " " + SAPISID + " " + "https://notebooklm.google.com")
+# This is a Google-wide anti-abuse mechanism; without it, API calls return 401.
+# ════════════════════════════════════════════════════════════════════════════
 
 def _load_cookies() -> Dict[str, str]:
     """Load stored Google auth cookies from disk."""
@@ -433,7 +774,26 @@ def _cookies_header(cookies: Dict[str, str]) -> str:
 
 
 def _sapisid_hash(cookies: Dict[str, str]) -> str:
-    """Compute the SAPISIDHASH for the Authorization header."""
+    """Compute the SAPISIDHASH Authorization header value.
+
+    Google requires this header on all notebooklm.google.com API requests.
+    Without it, batchexecute returns HTTP 401.
+
+    Algorithm (Google-standard, same across Maps/Docs/NLM):
+      1. Extract SAPISID cookie value (fallback: __Secure-3PAPISID).
+      2. Build raw string: "<unix_ts> <sapisid_value> <origin>"
+      3. SHA-1 hash the raw string.
+      4. Return "SAPISIDHASH <unix_ts>_<hex_digest>"
+
+    The timestamp is included in both the raw string AND the header value so
+    the server can verify freshness (tokens older than ~30 minutes are rejected).
+
+    Args:
+        cookies: Google auth cookies dict (must contain SAPISID or __Secure-3PAPISID).
+
+    Returns:
+        Authorization header value string, or "" if no SAPISID found.
+    """
     import hashlib
     sapisid = cookies.get("SAPISID") or cookies.get("__Secure-3PAPISID", "")
     if not sapisid:
@@ -444,7 +804,25 @@ def _sapisid_hash(cookies: Dict[str, str]) -> str:
     return f"SAPISIDHASH {ts}_{digest}"
 
 
-# ── batchexecute caller ──────────────────────────────────────────────────
+# ════════════════════════════════════════════════════════════════════════════
+# BATCHEXECUTE TRANSPORT LAYER
+#
+# All NLM read and most write operations go through Google's generic
+# batchexecute endpoint.  This section contains the HTTP plumbing:
+#
+#   _build_headers()         — constructs required HTTP headers incl. SAPISIDHASH
+#   _batchexecute()          — single RPC call (thin wrapper around _multi)
+#   _batchexecute_multi()    — multi-RPC batched call (core transport function)
+#
+# Key implementation details:
+#   • All calls go through the rate limiter (_rate_limiter.wait()).
+#   • The f.req body is URL-encoded JSON (not raw JSON).
+#   • The 'at' anti-forgery token is included in the POST body when available.
+#   • If ALL results are null, an automatic single retry is made after
+#     refreshing the f.sid and at tokens from the live NLM page.
+#   • The source-path URL parameter sets the notebook context for NLM's
+#     server-side session tracking (affects source-scoped calls).
+# ════════════════════════════════════════════════════════════════════════════
 
 def _build_headers(cookies: Dict[str, str]) -> Dict[str, str]:
     """Build the HTTP headers required for NLM batchexecute requests."""
@@ -476,14 +854,26 @@ def _batchexecute(
 ) -> Tuple[Optional[str], Any]:
     """Make a single batchexecute RPC call to NotebookLM.
 
+    Thin convenience wrapper around _batchexecute_multi for the common single-RPC
+    case.  Prefer _batchexecute_multi directly when sending multiple RPCs to
+    amortise the HTTP overhead.
+
+    The ``notebook_id`` is passed as ``source-path=/notebook/<id>`` in the URL
+    query string.  NLM uses this for server-side notebook context scoping —
+    some RPCs (LIST_SOURCES, SAVE_NOTE, etc.) require the correct notebook_id
+    here or they silently return null data.
+
     Args:
-        rpc_id:      The RPC function ID (e.g. "VfAZjd", "CYK0Xb").
-        args_json:   JSON-stringified argument array.
-        cookies:     Google auth cookies dict.
-        notebook_id: Optional notebook ID for the source-path URL param.
+        rpc_id:      The RPC function ID (e.g. ``"VfAZjd"``, ``"CYK0Xb"``).
+        args_json:   JSON-stringified argument array (e.g. ``'["nb_id", [2]]'``).
+        cookies:     Google auth cookies dict (from ``_load_cookies()``).
+        notebook_id: Optional notebook UUID for the ``source-path`` URL param.
+                     Pass ``""`` for account-level RPCs (LIST_NOTEBOOKS, USER_QUOTA).
 
     Returns:
-        Tuple of (rpc_id_returned, parsed_inner_data) or (None, None).
+        Tuple of ``(rpc_id_returned, parsed_inner_data)``.
+        Returns ``(None, None)`` on complete failure.
+        Returns ``(None, {"error": ..., "detail": ...})`` on HTTP errors.
     """
     results = _batchexecute_multi(
         [(rpc_id, args_json)], cookies, notebook_id
@@ -501,42 +891,79 @@ def _batchexecute_multi(
 ) -> List[Tuple[Optional[str], Any]]:
     """Make multiple batchexecute RPC calls in a single HTTP request.
 
-    This is the core of multi-question batching — up to 5 questions
-    can be sent simultaneously by packing multiple CYK0Xb calls.
+    This is the core transport function.  All other batchexecute helpers
+    ultimately call this.
+
+    Batching mechanics:
+      Multiple RPC calls are packed into a single POST by putting them all in
+      the ``f.req`` array.  The server processes each independently and returns
+      a ``wrb.fr`` block per call in the response.  Up to ~10 calls per request
+      is safe; NLM seems to silently drop extras beyond that.
+
+    The ``f.req`` body format (confirmed from HAR, SDK v3.0):
+      ``[["rpc_id_1", "args_json_1", null, "generic"], ["rpc_id_2", ...], ...]``
+      This is URL-encoded as: ``f.req=<url_encoded_json_array>``
+
+    The ``at`` anti-forgery token is included in the POST body when present.
+    If not present (fresh install with no page load yet), omit it entirely —
+    including a blank ``at`` causes 403.
+
+    Auto-retry on stale tokens:
+      If ALL returned results are ``None``, it means the bl or f.sid is stale.
+      The function calls ``refresh_session_tokens()`` once and retries the
+      entire batch.  The ``_refreshed`` flag prevents infinite recursion.
+
+    The ``source-path`` URL parameter:
+      Set to ``/notebook/<notebook_id>`` when a notebook_id is provided.
+      This tells NLM which notebook the call is scoped to — critical for
+      source-scoped RPCs.  Set to ``/`` for account-level calls.
 
     Args:
-        calls:       List of (rpc_id, args_json) tuples.
+        calls:       List of ``(rpc_id, args_json)`` tuples.
         cookies:     Google auth cookies dict.
-        notebook_id: Optional notebook context.
+        notebook_id: Optional notebook UUID for the ``source-path`` URL param.
+        _refreshed:  Internal flag — do not pass; prevents refresh infinite loop.
 
     Returns:
-        List of (rpc_id_returned, parsed_inner_data) tuples, one per call.
+        List of ``(rpc_id_returned, parsed_inner_data)`` tuples, one per call,
+        in the same order as the input ``calls`` list.
+        On error, returns ``[(None, {"error": ..., "detail": ...})]`` repeated.
     """
     if not calls:
         return []
 
+    # ── Build the request URL ──────────────────────────────────────────────
     bl = _get_bl()
     fsid = _get_fsid()
     req_id = str(int(time.time()) % 100000 * 100)
 
-    # Build rpcids param — semicolon-separated when batching
+    # rpcids param: semicolon-separated when batching multiple RPCs.
+    # NLM uses this for routing/logging — must match the RPCs in f.req exactly.
     rpc_ids_param = ";".join(rpc_id for rpc_id, _ in calls)
 
     params: Dict[str, str] = {
         "rpcids": rpc_ids_param,
+        # source-path scopes the call to a specific notebook on the server side.
+        # Without it, source-scoped RPCs (wXbhsf, CYK0Xb, etc.) return null.
         "source-path": f"/notebook/{notebook_id}" if notebook_id else "/",
-        "bl": bl,
-        "f.sid": fsid,
+        "bl": bl,        # build label — must match current frontend deploy
+        "f.sid": fsid,   # server session ID extracted from WIZ_global_data
         "hl": "en",
         "_reqid": req_id,
-        "rt": "c",
+        "rt": "c",       # response type "c" = chunked / wrb.fr format
     }
     url = f"{_BATCH_URL}?" + urllib.parse.urlencode(params)
 
-    # Pack all calls into a single f.req array — 2-level format per SDK v3.0:
-    # [["rpc_id", "args_json", null, "generic"], ...]
+    # ── Pack all calls into a single f.req array ───────────────────────────
+    # Format: [["rpc_id", "args_json", null, "generic"], ...]
+    # The 3rd element (null) and 4th element ("generic") are required padding
+    # observed in every HAR capture — their meaning is not fully understood,
+    # but omitting them causes the server to reject the request.
     f_req_calls = [[rpc_id, args_json, None, "generic"] for rpc_id, args_json in calls]
     body_dict: Dict[str, str] = {"f.req": json.dumps(f_req_calls)}
+
+    # Include 'at' anti-forgery token if available.
+    # Do NOT send a blank at= — that causes HTTP 403.  Omit entirely if missing.
     at_token = _load_meta().get("at", "")
     if at_token:
         body_dict["at"] = at_token
@@ -567,7 +994,10 @@ def _batchexecute_multi(
 
     results = _parse_batchexecute_multi(raw)
 
-    # Auto-retry once if all results are null (likely stale at/f.sid token)
+    # ── Auto-retry on stale tokens ─────────────────────────────────────────
+    # If every result is None (not an error dict, just None), the bl or f.sid
+    # is almost certainly stale — NLM returns a valid 200 but with empty data.
+    # We refresh tokens once and retry.  _refreshed=True prevents a second loop.
     if not _refreshed and all(data is None for _, data in results):
         logger.info("All batchexecute results null — refreshing session tokens and retrying")
         if refresh_session_tokens():
@@ -575,19 +1005,60 @@ def _batchexecute_multi(
 
     return results
 
+
+# ════════════════════════════════════════════════════════════════════════════
+# RESPONSE PARSING
+#
+# batchexecute responses have three layers of wrapping to unwrap:
+#   Layer 1: XSSI prefix  )]}'  on the first line — always strip this.
+#   Layer 2: Outer JSON   [["wrb.fr", "rpc_id", "<inner_json_str>", ...], ...]
+#   Layer 3: Inner JSON   the actual RPC result, double-encoded as a string.
+#
+# The response body may contain multiple wrb.fr blocks (one per batched call),
+# each on its own line.  Non-wrb.fr lines (e.g. size hints) are ignored.
+#
+# Parse strategy:
+#   1. Strip the )]}'  XSSI prefix and leading whitespace.
+#   2. Split on newlines.
+#   3. For each line that starts with [["wrb.fr": parse as JSON.
+#   4. Extract outer[0][1] = rpc_id, outer[0][2] = inner_json_string.
+#   5. JSON-decode the inner string to get the actual result.
+# ════════════════════════════════════════════════════════════════════════════
 
 def _parse_batchexecute_multi(raw: str) -> List[Tuple[Optional[str], Any]]:
     """Decode ALL batchexecute wrb.fr blocks from a multi-RPC response.
 
-    A batched response contains multiple ``wrb.fr`` blocks, one per call.
+    Handles Google's three-layer batchexecute response format:
+
+    Layer 1 — XSSI prefix:
+      The response always starts with ``)]}'`` followed by a newline.
+      This is Google's standard Cross-Site Script Inclusion (XSSI) protection.
+      Strip it before any JSON parsing.
+
+    Layer 2 — Outer envelope (one line per RPC call):
+      ``[["wrb.fr", "rpc_id", "<inner_json_string>", null, null, null, "generic"], ...]``
+      Each batched call produces exactly one such line.
+      Lines that do NOT start with ``[["wrb.fr"`` are size hints or padding — skip.
+
+    Layer 3 — Inner data (double-encoded JSON string):
+      ``outer[0][2]`` is a JSON string that must be decoded a second time.
+      After decoding, ``inner`` is the actual RPC result array.
+
+    Args:
+        raw: Raw HTTP response body string from batchexecute.
 
     Returns:
-        List of (rpc_id, parsed_data) tuples in response order.
+        List of ``(rpc_id, parsed_data)`` tuples in response order.
+        Returns ``[(None, None)]`` if no wrb.fr blocks found (unexpected format).
     """
     results: List[Tuple[Optional[str], Any]] = []
+    # ── Strip XSSI prefix ─────────────────────────────────────────────────
+    # Google prepends )]}'  to all batchexecute responses as XSSI protection.
+    # Must strip before any JSON parsing — json.loads will fail otherwise.
     body = raw.lstrip(")]}'").lstrip("\n")
     for line in body.split("\n"):
         line = line.strip()
+        # Only process wrb.fr blocks — skip size hints, empty lines, padding
         if not line.startswith('[["wrb.fr"'):
             continue
         try:
@@ -607,10 +1078,32 @@ def _parse_batchexecute(raw: str) -> Tuple[Optional[str], Any]:
     return results[0] if results else (None, None)
 
 
-# ── Content extraction helpers ───────────────────────────────────────────
+# ════════════════════════════════════════════════════════════════════════════
+# CONTENT EXTRACTION UTILITIES
+#
+# Generic helpers for mining structured data out of deeply nested NLM responses.
+# NLM responses are irregular — the same data can appear at different nesting
+# depths depending on the RPC version and content type.  These helpers use
+# recursive traversal to find strings and structured source objects regardless
+# of exact position.
+# ════════════════════════════════════════════════════════════════════════════
 
 def _extract_strings(obj: Any, min_len: int = 80) -> List[str]:
-    """Recursively extract all meaningful text strings from nested data."""
+    """Recursively extract all meaningful text strings from nested NLM response data.
+
+    NLM response structures are irregular — useful text can appear at arbitrary
+    nesting depths.  This helper does a depth-first walk and collects strings
+    that pass two filters:
+      1. Length >= min_len (avoids UUIDs, short labels, empty strings).
+      2. Not a UUID-like hex string (avoids source IDs and session tokens).
+
+    Args:
+        obj:     Any nested Python object (list, dict, str, int, …).
+        min_len: Minimum string length to keep (default 80 chars).
+
+    Returns:
+        List of matching strings in traversal order.
+    """
     results: List[str] = []
     if isinstance(obj, str):
         s = obj.strip()
@@ -626,12 +1119,43 @@ def _extract_strings(obj: Any, min_len: int = 80) -> List[str]:
 
 
 def _dedup(texts: List[str], key_len: int = 120) -> List[str]:
+    """Deduplicate a list of strings using the first ``key_len`` characters as the key.
+
+    NLM sometimes returns the same text block at multiple nesting levels.
+    This removes duplicates while preserving the first-seen order.
+
+    Args:
+        texts:   List of strings to deduplicate.
+        key_len: Number of leading characters used as the uniqueness key.
+
+    Returns:
+        Deduplicated list in original order.
+    """
     seen: set = set()
     return [t for t in texts if t[:key_len] not in seen and not seen.add(t[:key_len])]  # type: ignore[func-returns-value]
 
 
 def _extract_sources(data: Any) -> Tuple[str, List[Dict]]:
-    """Parse wXbhsf response → (notebook_name, sources_list)."""
+    """Parse a wXbhsf (LIST_SOURCES) response into notebook name + sources list.
+
+    wXbhsf response shape (confirmed from HAR, v3.1):
+      data[0][0]       = nb_core
+      nb_core[0]       = notebook_name (str)
+      nb_core[1]       = list of source objects
+      source[0][0]     = source UUID
+      source[1]        = source title (str)
+      source[2]        = source metadata list:
+        meta[1]        = word_count (int, 0 if still processing)
+        meta[6]        = source_type (int: 1=URL, 2=PDF, 3=text, 7=YouTube, …)
+        meta[7]        = url_list ([url_str, ...])
+
+    Args:
+        data: Parsed inner data from a wXbhsf batchexecute response.
+
+    Returns:
+        Tuple of ``(notebook_name, sources_list)`` where each source is a dict
+        with keys: id, title, url, word_count, source_type.
+    """
     notebook_name = ""
     sources = []
     try:
@@ -664,7 +1188,27 @@ def _extract_sources(data: Any) -> Tuple[str, List[Dict]]:
     return notebook_name, sources
 
 
-# ── Write operation helpers ───────────────────────────────────────────────
+# ════════════════════════════════════════════════════════════════════════════
+# WRITE OPERATION HELPERS
+#
+# Module-level functions for all NLM write (and some read) operations.
+# Each function maps to a specific confirmed RPC ID.
+# These are called both directly and via the NLMClient class methods.
+#
+# Write RPCs confirmed in v3.1:
+#   CYK0Xb (SAVE_NOTE)           — citation-annotate Q&A
+#   s0tc2d (RENAME_NOTEBOOK)     — CRITICAL: was wrong in v2.x
+#   izAoDd (ADD_SOURCE)          — add URL/YouTube source
+#   tGMBJ  (DELETE_SOURCE)       — delete source by UUID
+#   QA9ei  (START_DEEP_RESEARCH) — start async deep research
+#   LBwxtb (ADD_RESEARCH_SOURCE) — add AI-generated doc as source
+#   ciyUvf (GENERATE_DOC)        — generate document from sources
+#   R7cb6c (SAVE_REPORT)         — save note artifact
+#
+# Read RPCs also in this section (for grouping convenience):
+#   tr032e (READ_SOURCE)         — read full source text content
+#   GenerateFreeFormStreamed      — real conversational chat (proto endpoint)
+# ════════════════════════════════════════════════════════════════════════════
 
 def ask_question(
     notebook_id: str,
@@ -759,6 +1303,14 @@ def add_source_url(
     Returns:
         Dict with: source_id (UUID or None), url, status ("processing").
     """
+    # ── YouTube vs regular URL source object encoding ─────────────────────
+    # The izAoDd source object has 11 positional slots.  The URL goes in a
+    # different position depending on content type — confirmed from HAR:
+    #   Regular URL → position 2  (direct string)
+    #   YouTube URL → position 7  (wrapped in a list: [url])
+    # Using the wrong position causes NLM to silently ignore the URL and
+    # create an empty source.  The [2] in the outer payload's 3rd element
+    # is the "add mode" flag (2 = add to existing notebook).
     is_youtube = bool(re.search(r"youtube\.com/watch|youtu\.be/", url))
     if is_youtube:
         source_obj = [None, None, None, None, None, None, None, [url], None, None, 1]
@@ -1014,17 +1566,23 @@ def _grpc_ask(
     bl = meta.get("bl", _DEFAULT_BL)
 
     source_context = [[[sid]] for sid in source_ids]
+    # ── Build the GenerateFreeFormStreamed inner payload ───────────────────
+    # 9-element array confirmed from HAR — positions documented in module docstring.
+    # source_context: each source is wrapped as [[[uuid]]] — triple-nested.
+    # response_config [2,None,[1],[1]]: controls response length/citation style.
+    # thread_id at position [4]: pass existing UUID for multi-turn continuity.
     inner = [
-        source_context,
-        question,
-        None,
-        [2, None, [1], [1]],
-        thread_id,
-        None,
-        None,
-        notebook_id,
-        1,
+        source_context,  # [0] source context: [[[src_id_1]], [[src_id_2]], ...]
+        question,         # [1] the user's question text
+        None,             # [2] null (reserved)
+        [2, None, [1], [1]],  # [3] response config (length/format flags)
+        thread_id,        # [4] thread UUID for conversation continuity
+        None,             # [5] null (reserved)
+        None,             # [6] null (reserved)
+        notebook_id,      # [7] notebook UUID
+        1,                # [8] request type flag
     ]
+    # The outer wrapper is [null, json.dumps(inner)] — the inner is double-encoded
     outer = json.dumps([None, json.dumps(inner)])
     params = _urlparse.urlencode({"bl": bl, "rt": "c"})
     url = _GRPC_CHAT_URL + "?" + params
@@ -1053,10 +1611,25 @@ def _grpc_ask(
         with urllib.request.urlopen(req, timeout=120) as resp:
             raw = resp.read().decode("utf-8", errors="replace")
 
-        # Each SSE chunk: size_hex line, then JSON line
-        # JSON line: [["wrb.fr", null, inner_json_str], ...]
+        # ── SSE-like streaming response parse ──────────────────────────────
+        # GenerateFreeFormStreamed returns chunked SSE-like data.
+        # Each chunk is delivered as two lines: a hex size hint, then a JSON line.
+        # We read the full response body at once (no incremental streaming here)
+        # because urllib reads it all before returning.
+        #
+        # IMPORTANT: NLM delivers FULL TEXT IN EACH CHUNK, not deltas.
+        # Each wrb.fr block contains the complete answer text generated so far.
+        # We therefore only need the LAST wrb.fr block — but iterating all of
+        # them and overwriting full_text is equivalent and simpler.
+        #
+        # Each JSON line structure:
+        #   [["wrb.fr", null, "<inner_json_str>"], ["di", ...], ...]
+        #   inner_data = json.loads(inner_json_str)
+        #   inner_data[0][0]    = full answer text so far (str)
+        #   inner_data[0][2]    = [thread_id, message_id]  (on final chunk)
         for line in raw.splitlines():
             line = line.strip()
+            # Skip empty lines, the )]}'  XSSI prefix, and hex size lines
             if not line or line == ")]}'" or re.match(r"^[0-9a-f]+$", line, re.I):
                 continue
             try:
@@ -1161,7 +1734,19 @@ def read_source(
 
 
 def _parse_read_source_response(data: Any, source_id: str) -> Dict[str, Any]:
-    """Parse a tr032e response → source content."""
+    """Parse a tr032e (READ_SOURCE) response into source content dict.
+
+    tr032e wraps the source text in a nested structure that varies slightly by
+    source type (PDF, URL, YouTube transcript, etc.).  We use _extract_strings
+    with a low min_len to catch all content fragments, then join them.
+
+    Args:
+        data:      Parsed inner data from a tr032e batchexecute response.
+        source_id: UUID of the source (echoed into the return dict).
+
+    Returns:
+        Dict with: source_id, content (joined markdown text), word_count.
+    """
     if data is None:
         return {"source_id": source_id, "content": "", "word_count": 0, "error": "no_data"}
     if isinstance(data, dict) and "error" in data:
@@ -1172,6 +1757,266 @@ def _parse_read_source_response(data: Any, source_id: str) -> Dict[str, Any]:
         "source_id": source_id,
         "content": content,
         "word_count": len(content.split()),
+    }
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# DOWNLOAD & ARCHIVE OPERATIONS
+#
+# High-level operations that combine multiple RPCs to produce complete exports.
+#
+#   download_all_sources()   — fetch full text of all sources (tr032e loop)
+#   export_notebook()        — full notebook archive (summary + sources + notes
+#                              + threads + mindmap) in a single structured dict
+#   export_all_notebooks()   — export every notebook for the authenticated user
+#
+# These are the primary integration points for Nexus ingestion and offline
+# analysis.  Source content reading is rate-limited per the global limiter.
+# ════════════════════════════════════════════════════════════════════════════
+
+def download_all_sources(
+    notebook_id: str,
+    cookies: Dict[str, str],
+    source_ids: Optional[List[str]] = None,
+) -> List[Dict[str, Any]]:
+    """Download the full text content of all sources in a notebook (tr032e RPC).
+
+    Workflow:
+      1. If ``source_ids`` is None, fetch the source list via wXbhsf to get
+         all source UUIDs and their metadata (title, url, source_type).
+      2. Call ``read_source()`` (tr032e) for each source UUID individually.
+         Each call respects the rate limiter (1.5s default gap).
+      3. Return a combined list with both metadata and full text content.
+
+    Use this to extract all NLM source content into Nexus or local storage
+    for offline analysis, fine-tuning data collection, or archival.
+
+    Performance note: Large notebooks with many sources will be slow due to
+    the rate limiter.  A 20-source notebook takes ~30s minimum at 1.5s/call.
+
+    Args:
+        notebook_id: UUID of the target notebook.
+        cookies:     Google auth cookies.
+        source_ids:  Optional list of specific source UUIDs to read. If None,
+                     reads ALL sources in the notebook.
+
+    Returns:
+        List of dicts: [{source_id, title, url, source_type, word_count, content, error}, ...]
+        where ``content`` is the full markdown text of the source.
+        ``error`` is present (and non-None) only if tr032e failed for that source.
+    """
+    if source_ids is None:
+        args = json.dumps([None, 1, None, [2]])
+        _, data = _batchexecute(RPC_LIST_SOURCES, args, cookies, notebook_id)
+        _, sources = _extract_sources(data) if data and not isinstance(data, dict) else ("", [])
+        source_ids = [s["id"] for s in sources if s.get("id")]
+        source_meta = {s["id"]: s for s in sources if s.get("id")}
+    else:
+        source_meta = {}
+
+    results = []
+    for sid in source_ids:
+        meta = source_meta.get(sid, {"id": sid, "title": "", "url": ""})
+        content_result = read_source(sid, cookies)
+        results.append({
+            "source_id": sid,
+            "title": meta.get("title", ""),
+            "url": meta.get("url", ""),
+            "source_type": meta.get("source_type"),
+            "word_count": content_result.get("word_count", 0),
+            "content": content_result.get("content", ""),
+            "error": content_result.get("error"),
+        })
+    return results
+
+
+def export_notebook(
+    notebook_id: str,
+    cookies: Dict[str, str],
+    include_source_content: bool = True,
+    include_threads: bool = True,
+) -> Dict[str, Any]:
+    """Export a complete notebook archive with all available data.
+
+    Makes the following RPC calls in sequence (each rate-limited):
+      1. VfAZjd  (AI_SUMMARY)     — notebook summary text
+      2. wXbhsf  (LIST_SOURCES)   — source metadata list
+      3. tr032e  (READ_SOURCE)    — full text per source (if include_source_content)
+      4. gArtLc  (LIST_ARTIFACTS) — notes and saved artifacts
+      5. hPTbtc  (GET_THREAD_IDS) — conversation thread UUIDs (if include_threads)
+      6. khqZz   (READ_THREAD)    — messages per thread (if include_threads)
+      7. cFji9   (MIND_MAP)       — D3 mind map JSON structure
+
+    The resulting archive dict is self-contained and suitable for:
+      - Storage in Nexus as a knowledge entry
+      - Offline analysis without NLM access
+      - Comparison between notebook versions
+      - Fine-tuning dataset construction
+
+    Performance: With include_source_content=True, this makes (2 + N + 3 + T)
+    API calls where N = source count and T = thread count.  At 1.5s/call, a
+    notebook with 10 sources and 5 threads takes ~30s minimum.
+
+    Args:
+        notebook_id:           UUID of the target notebook.
+        cookies:               Google auth cookies.
+        include_source_content: If True, read full text of each source via
+                               tr032e (slow but complete). False = metadata only.
+        include_threads:       If True, fetch and read all conversation threads.
+
+    Returns:
+        Dict with keys: notebook_id, notebook_name, summary, sources,
+        notes, threads, mindmap, stats (counts + total_source_words), exported_at.
+    """
+    import datetime
+    archive: Dict[str, Any] = {
+        "notebook_id": notebook_id,
+        "exported_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+    }
+
+    # Summary
+    _, data = _batchexecute("VfAZjd", json.dumps([notebook_id, [2]]), cookies, notebook_id)
+    archive["summary"] = "\n\n".join(_extract_strings(data, 50)) if data and not isinstance(data, dict) else ""
+
+    # Sources with optional full content
+    _, data = _batchexecute(RPC_LIST_SOURCES, json.dumps([None, 1, None, [2]]), cookies, notebook_id)
+    notebook_name, sources = _extract_sources(data) if data and not isinstance(data, dict) else ("", [])
+    archive["notebook_name"] = notebook_name
+
+    if include_source_content:
+        sources_with_content = []
+        for src in sources:
+            if src.get("id"):
+                content_result = read_source(src["id"], cookies)
+                src["content"] = content_result.get("content", "")
+                src["content_word_count"] = content_result.get("word_count", 0)
+            sources_with_content.append(src)
+        archive["sources"] = sources_with_content
+    else:
+        archive["sources"] = sources
+
+    # Notes / artifacts
+    _, data = _batchexecute(
+        "gArtLc",
+        json.dumps([[2], notebook_id, "NOT artifact.status = \"ARTIFACT_STATUS_SUGGESTED\""]),
+        cookies, notebook_id,
+    )
+    notes = _dedup(_extract_strings(data, 80)) if data and not isinstance(data, dict) else []
+    archive["notes"] = [n for n in notes if len(n) > 50]
+
+    # Conversation threads
+    if include_threads:
+        t_args = json.dumps([[], None, notebook_id, 50])
+        _, t_data = _batchexecute(RPC_GET_THREAD_IDS, t_args, cookies, notebook_id)
+        thread_ids: List[str] = []
+        try:
+            if isinstance(t_data, list) and t_data:
+                for item in t_data[0]:
+                    if isinstance(item, list) and item and isinstance(item[0], str):
+                        thread_ids.append(item[0])
+        except (IndexError, TypeError):
+            pass
+
+        threads = []
+        for tid in thread_ids:
+            m_args = json.dumps([[], None, None, tid, 50])
+            _, m_data = _batchexecute(RPC_READ_THREAD, m_args, cookies, notebook_id)
+            messages = [s for s in _extract_strings(m_data or [], min_len=10) if len(s) > 20]
+            threads.append({"thread_id": tid, "messages": messages, "message_count": len(messages)})
+        archive["threads"] = threads
+    else:
+        archive["threads"] = []
+
+    # Mind map
+    _, data = _batchexecute(RPC_MIND_MAP, json.dumps([notebook_id, None, None, [2]]), cookies, notebook_id)
+    mindmap_raw = ""
+    try:
+        mindmap_raw = _extract_strings(data, min_len=5)[0] if data and _extract_strings(data, min_len=5) else ""
+    except (IndexError, TypeError):
+        pass
+    try:
+        archive["mindmap"] = json.loads(mindmap_raw)
+    except (json.JSONDecodeError, TypeError):
+        archive["mindmap"] = mindmap_raw or None
+
+    archive["stats"] = {
+        "sources": len(archive["sources"]),
+        "notes": len(archive["notes"]),
+        "threads": len(archive["threads"]),
+        "total_source_words": sum(s.get("content_word_count", s.get("word_count", 0)) for s in archive["sources"]),
+    }
+    return archive
+
+
+def export_all_notebooks(
+    cookies: Dict[str, str],
+    include_source_content: bool = False,
+    include_threads: bool = True,
+) -> Dict[str, Any]:
+    """Export all notebooks for the authenticated user as a complete archive.
+
+    Workflow:
+      1. Call ub2Bae (LIST_NOTEBOOKS) to get all notebook UUIDs + names.
+      2. Call export_notebook() for each notebook in sequence.
+      3. Return a combined result dict.
+
+    Source content is disabled by default for full-account exports because
+    reading all sources across all notebooks can take many minutes.
+    Set include_source_content=True only when you explicitly need all text
+    (e.g., for full Nexus ingestion or training data collection).
+
+    Error handling: Failed notebooks are included in the result with an
+    "error" key instead of crashing the entire export.
+
+    Args:
+        cookies:                Google auth cookies.
+        include_source_content: Read full source text per source per notebook.
+                               Disabled by default for large accounts.
+        include_threads:        Read conversation threads for each notebook.
+
+    Returns:
+        Dict with: count (total notebooks), notebooks (list of archives), exported_at.
+        Each archive follows the export_notebook() return structure.
+    """
+    import datetime
+    _, data = _batchexecute("ub2Bae", "[[2]]", cookies)
+    notebook_ids: List[Dict[str, str]] = []
+    try:
+        for nb in (data[0] if isinstance(data, list) and data else []):
+            if isinstance(nb, list):
+                nid = None
+                for part in nb:
+                    if isinstance(part, str) and re.match(r"[a-f0-9-]{36}", part):
+                        nid = part
+                        break
+                texts = _extract_strings(nb, min_len=5)
+                if nid:
+                    notebook_ids.append({"id": nid, "name": texts[0] if texts else "Unknown"})
+    except (IndexError, TypeError) as exc:
+        logger.warning("export_all_notebooks: list parse error: %s", exc)
+
+    notebooks = []
+    for nb_meta in notebook_ids:
+        try:
+            archive = export_notebook(
+                nb_meta["id"], cookies,
+                include_source_content=include_source_content,
+                include_threads=include_threads,
+            )
+            archive["notebook_name"] = archive.get("notebook_name") or nb_meta["name"]
+            notebooks.append(archive)
+        except Exception as exc:
+            logger.error("export_all_notebooks: failed for %s: %s", nb_meta["id"], exc)
+            notebooks.append({
+                "notebook_id": nb_meta["id"],
+                "notebook_name": nb_meta["name"],
+                "error": str(exc),
+            })
+
+    return {
+        "count": len(notebooks),
+        "notebooks": notebooks,
+        "exported_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
     }
 
 
@@ -1284,7 +2129,28 @@ def _parse_save_note_response(data: Any) -> Dict[str, Any]:
     return {"note_id": None, "title": "", "note_type": 2}
 
 
-# ── NLMClient ────────────────────────────────────────────────────────────
+# ════════════════════════════════════════════════════════════════════════════
+# NLMClient CLASS
+#
+# High-level object-oriented API over all module-level batchexecute helpers.
+# This is the primary interface for CosySim agents and nlm_engine.py.
+#
+# Auth (cookies + meta) is managed via the module-level global store
+# (data/nlm_cookies.json, data/nlm_meta.json) — the client itself is stateless.
+#
+# Method groups:
+#   Auth:        get_cookies, has_cookies, import_cookies_from_har,
+#                capture_cookies_from_chrome
+#   Notebooks:   list_notebooks, get_notebook, get_sources, get_chat_history,
+#                get_notes
+#   Ask/Chat:    ask, ask_batch, grpc_ask, grpc_ask_batch
+#                chat / chat_batch (backward-compat aliases → grpc_ask*)
+#   Write:       rename, add_source, delete_source, deep_research,
+#                deep_research_with_source
+#   Generate:    generate_document, save_note
+#   Read:        read_source, get_summary, get_user_quota
+#   Status:      get_status
+# ════════════════════════════════════════════════════════════════════════════
 
 class NLMClient:
     """High-level NotebookLM client wrapping all batchexecute RPCs.
@@ -1754,7 +2620,61 @@ def get_nlm_client() -> NLMClient:
     return _nlm_client
 
 
-# ── Flask app ────────────────────────────────────────────────────────────
+# ════════════════════════════════════════════════════════════════════════════
+# FLASK APPLICATION
+#
+# REST API server for the NLM Live Proxy, running at :8800.
+# All endpoints require valid Google session cookies to be stored first.
+#
+# Authentication:
+#   POST /cookies/import   — import from HAR file (manual)
+#   POST /cookies/capture  — auto-capture via Chrome CDP (preferred)
+#   POST /cookies/refresh  — refresh f.sid and at tokens from live page
+#   GET  /cookies          — list stored cookie names
+#   DELETE /cookies        — clear all stored cookies
+#
+# Read operations:
+#   GET  /notebooks                         — list all notebooks
+#   GET  /notebooks/<id>                    — full notebook data
+#   GET  /notebooks/<id>/sources            — list sources
+#   GET  /notebooks/<id>/summary            — AI summary
+#   GET  /notebooks/<id>/notes              — notes/artifacts
+#   GET  /notebooks/<id>/conversations      — conversation history
+#   GET  /notebooks/<id>/content            — raw document content
+#   GET  /notebooks/<id>/threads            — thread IDs (hPTbtc)
+#   GET  /notebooks/<id>/threads/<tid>      — thread messages (khqZz)
+#   GET  /notebooks/<id>/mindmap            — D3 mind map (cFji9)
+#   GET  /notebooks/<id>/history            — combined thread history
+#   GET  /sources/<id>/content              — full source text (tr032e)
+#   GET  /user/profile                      — user profile (JFMDGd)
+#   GET  /user/quota                        — storage quota (ozz5Z)
+#
+# Write operations:
+#   POST /notebooks                              — reserve new notebook UUID
+#   POST /notebooks/<id>/sources                 — add URLs (izAoDd)
+#   POST /notebooks/<id>/sources/url             — add single URL (izAoDd)
+#   DELETE /notebooks/<id>/sources/<src_id>      — delete source (tGMBJ)
+#   POST /notebooks/<id>/rename                  — rename (s0tc2d)
+#   POST /notebooks/<id>/ask                     — Q&A via CYK0Xb
+#   POST /notebooks/<id>/ask_batch               — batch Q&A via CYK0Xb
+#   POST /notebooks/<id>/chat                    — chat via GenerateFreeFormStreamed
+#   POST /notebooks/<id>/chat_batch              — batch chat via GenerateFreeFormStreamed
+#   POST /notebooks/<id>/generate                — generate document (ciyUvf)
+#   POST /notebooks/<id>/save_note               — save note artifact (R7cb6c)
+#   POST /notebooks/<id>/research                — fast research (Ljjv0c)
+#   POST /notebooks/<id>/research/deep           — deep research (QA9ei)
+#   POST /notebooks/<id>/research/source         — add research doc (LBwxtb)
+#   GET  /notebooks/<id>/sources/wait            — poll until sources ready (rLM1Ne)
+#
+# Meta / Config:
+#   GET  /health             — service health + BL staleness status
+#   GET  /meta               — current bl, f.sid, at presence
+#   POST /meta               — update bl / f.sid manually
+#   GET  /rate_limit         — current rate limit config
+#   POST /rate_limit         — override rate limit for this session
+#   POST /rpc/<rpc_id>       — generic batchexecute passthrough
+#   GET  /rpc_registry       — RPC registry status (from nlm_rpc_mapper)
+# ════════════════════════════════════════════════════════════════════════════
 
 def create_nlm_proxy_app() -> Flask:
     """Create and return the NLM Live Proxy Flask app."""
@@ -1773,7 +2693,8 @@ def create_nlm_proxy_app() -> Flask:
             ),
         }), 401
 
-    # ── Health ──────────────────────────────────────────────────────────
+    # ── Health & Status Routes ────────────────────────────────────────────
+    # GET /health  — full service health: cookies, BL age, rate limit config
 
     @app.route("/health")
     def health():
@@ -1807,7 +2728,12 @@ def create_nlm_proxy_app() -> Flask:
             "registry_available": _registry_available,
         }), 200 if cookies else 503
 
-    # ── Cookie management ───────────────────────────────────────────────
+    # ── Cookie Management Routes ──────────────────────────────────────────
+    # POST /cookies/refresh  — refresh f.sid + at from live NLM page
+    # POST /cookies/import   — import from HAR file
+    # POST /cookies/capture  — auto-capture via Chrome CDP
+    # GET  /cookies          — list stored cookie names
+    # DELETE /cookies        — clear all stored cookies
 
     @app.route("/cookies/refresh", methods=["POST"])
     def refresh_cookies():
@@ -1898,7 +2824,15 @@ def create_nlm_proxy_app() -> Flask:
         _save_cookies({})
         return jsonify({"cleared": True})
 
-    # ── Notebook list ───────────────────────────────────────────────────
+    # ── Notebook Read Routes ──────────────────────────────────────────────
+    # GET /notebooks                  — list all notebooks (ub2Bae)
+    # GET /notebooks/<id>             — full notebook dump (multiple RPCs)
+    # GET /notebooks/<id>/sources     — source metadata (wXbhsf)
+    # GET /notebooks/<id>/summary     — AI summary (VfAZjd)
+    # GET /notebooks/<id>/notes       — notes/artifacts (gArtLc)
+    # GET /notebooks/<id>/conversations — conversation text (cFji9)
+    # GET /notebooks/<id>/content     — raw document content (e3bVqc)
+    # GET /notebooks/<id>/history     — thread IDs + messages (hPTbtc + khqZz)
 
     @app.route("/notebooks", methods=["GET"])
     def list_notebooks():
@@ -1926,7 +2860,7 @@ def create_nlm_proxy_app() -> Flask:
             logger.warning("parse notebooks: %s", exc)
         return jsonify({"notebooks": notebooks, "count": len(notebooks)})
 
-    # ── Notebook data ───────────────────────────────────────────────────
+    # ── Notebook Sub-Resource Read Routes ─────────────────────────────────
 
     @app.route("/notebooks/<notebook_id>/sources", methods=["GET"])
     def get_sources(notebook_id: str):
@@ -2038,7 +2972,11 @@ def create_nlm_proxy_app() -> Flask:
         }
         return jsonify(result)
 
-    # ── Write operations ────────────────────────────────────────────────
+    # ── Write: Ask / Chat Routes ──────────────────────────────────────────
+    # POST /notebooks/<id>/ask        — citation-annotate Q&A (CYK0Xb)
+    # POST /notebooks/<id>/ask_batch  — batch citation Q&A (CYK0Xb multi)
+    # POST /notebooks/<id>/chat       — real chat (GenerateFreeFormStreamed)
+    # POST /notebooks/<id>/chat_batch — batch chat (GenerateFreeFormStreamed)
 
     @app.route("/notebooks/<notebook_id>/ask", methods=["POST"])
     def ask_single(notebook_id: str):
@@ -2208,6 +3146,28 @@ def create_nlm_proxy_app() -> Flask:
             "questions": questions,
         })
 
+    # ── Write: Source Management Routes ──────────────────────────────────
+    # POST   /notebooks/<id>/sources          — add URLs (izAoDd)
+    # POST   /notebooks/<id>/sources/url      — add single URL (izAoDd)
+    # DELETE /notebooks/<id>/sources/<src_id> — delete source (tGMBJ)
+    # POST   /notebooks/<id>/rename           — rename notebook (s0tc2d)
+    # GET    /notebooks/<id>/sources/wait     — poll until sources ready (rLM1Ne)
+    # POST   /notebooks/<id>/generate         — generate document (ciyUvf)
+    # POST   /notebooks/<id>/save_note        — save note artifact (R7cb6c)
+
+    # ── Write: Research Routes ────────────────────────────────────────────
+    # POST /notebooks/<id>/research        — fast research session (Ljjv0c)
+    # POST /notebooks/<id>/research/deep   — deep research (QA9ei)
+    # POST /notebooks/<id>/research/source — add research doc as source (LBwxtb)
+
+    # ── Read: Threads, Mindmap, User Routes ──────────────────────────────
+    # GET /notebooks/<id>/threads          — thread IDs (hPTbtc)
+    # GET /notebooks/<id>/threads/<tid>    — thread messages (khqZz)
+    # GET /notebooks/<id>/mindmap          — D3 mind map (cFji9)
+    # GET /sources/<id>/content            — full source text (tr032e)
+    # GET /user/profile                    — user profile (JFMDGd)
+    # GET /user/quota                      — storage quota (ozz5Z)
+
     @app.route("/sources/<source_id>/content", methods=["GET"])
     def read_source_content(source_id: str):
         """Read the full text content of a source document (tr032e RPC).
@@ -2239,7 +3199,14 @@ def create_nlm_proxy_app() -> Flask:
             return jsonify(result), 502
         return jsonify(result)
 
-    # ── CDP Cookie Capture ──────────────────────────────────────────────
+    # ── CDP Cookie Capture & Meta Routes ─────────────────────────────────
+    # POST /cookies/capture  — auto-capture via Chrome CDP
+    # GET  /meta             — return current bl, f.sid, at-presence
+    # POST /meta             — manually update bl or f.sid
+    # GET  /rate_limit       — current rate limit config
+    # POST /rate_limit       — override rate limit for session
+    # POST /rpc/<id>         — generic batchexecute passthrough
+    # GET  /rpc_registry     — RPC ID registry status
 
     @app.route("/cookies/capture", methods=["POST"])
     def capture_cookies():
@@ -2723,6 +3690,116 @@ def create_nlm_proxy_app() -> Flask:
             return jsonify({"available": True, **reg.report()})
         except Exception as exc:
             return jsonify({"available": False, "error": str(exc)}), 200
+
+    # ════════════════════════════════════════════════════════════════════════════
+    # DOWNLOAD & ARCHIVE ROUTES
+    # Bulk export of notebook content, sources, and full archives.
+    # These routes use tr032e (read_source) per source, which is slow for large
+    # notebooks — each source call respects the rate limiter (1.5s gap default).
+    # ════════════════════════════════════════════════════════════════════════════
+
+    @app.route("/notebooks/<notebook_id>/sources/content", methods=["GET"])
+    def download_sources_content(notebook_id: str):
+        """Download full text content of ALL sources in a notebook.
+
+        Uses wXbhsf to list sources, then tr032e per source to read content.
+        Slow for large notebooks — each source is a separate rate-limited call.
+
+        Query params:
+            source_ids  — comma-separated UUIDs to read (default: all sources)
+
+        Returns: {notebook_id, sources: [{source_id, title, url, word_count, content}],
+                  total_sources, total_words}
+        """
+        cookies = _cookies()
+        if not cookies:
+            return _no_cookies()
+        raw_ids = request.args.get("source_ids", "")
+        sid_filter = [s.strip() for s in raw_ids.split(",") if s.strip()] if raw_ids else None
+        results = download_all_sources(notebook_id, cookies, sid_filter)
+        total_words = sum(r.get("word_count", 0) for r in results)
+        return jsonify({
+            "notebook_id": notebook_id,
+            "sources": results,
+            "total_sources": len(results),
+            "total_words": total_words,
+        })
+
+    @app.route("/sources/<source_id>/export", methods=["GET"])
+    def export_source_text(source_id: str):
+        """Export a single source as a plain text file download.
+
+        Uses tr032e to read the full source content and streams it as a
+        text/plain attachment. Useful for piping source content into other tools.
+
+        Query params:
+            filename  — override the download filename (default: <source_id>.txt)
+
+        Returns: text/plain file download
+        """
+        cookies = _cookies()
+        if not cookies:
+            return _no_cookies()
+        from flask import Response
+        result = read_source(source_id, cookies)
+        if result.get("error") and not result.get("content"):
+            return jsonify(result), 502
+        filename = request.args.get("filename") or f"{source_id}.txt"
+        content = result.get("content", "")
+        return Response(
+            content,
+            mimetype="text/plain",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+
+    @app.route("/notebooks/<notebook_id>/archive", methods=["GET"])
+    def export_notebook_archive(notebook_id: str):
+        """Export a complete notebook archive — all data in one JSON response.
+
+        Combines: summary (VfAZjd), sources + content (wXbhsf + tr032e),
+        notes (gArtLc), conversation threads (hPTbtc + khqZz), mind map (cFji9).
+
+        This is the canonical "download everything" endpoint for a single notebook.
+        Source content reading is ON by default — disable with include_content=false
+        for faster metadata-only export.
+
+        Query params:
+            include_content  — read full source text (default: true)
+            include_threads  — read conversation threads (default: true)
+
+        Returns: Full notebook archive JSON (notebook_id, notebook_name, summary,
+                 sources, notes, threads, mindmap, stats, exported_at)
+        """
+        cookies = _cookies()
+        if not cookies:
+            return _no_cookies()
+        include_content = request.args.get("include_content", "true").lower() != "false"
+        include_threads = request.args.get("include_threads", "true").lower() != "false"
+        result = export_notebook(notebook_id, cookies, include_content, include_threads)
+        return jsonify(result)
+
+    @app.route("/notebooks/archive", methods=["GET"])
+    def export_all_notebooks_archive():
+        """Export all notebooks for the authenticated user as a single JSON archive.
+
+        Lists all notebooks (ub2Bae) then exports each via export_notebook().
+        Source content is OFF by default (metadata-only) for bulk exports since
+        large accounts may have hundreds of sources.
+        Enable with include_content=true but expect long response times.
+
+        Query params:
+            include_content  — read full source text per source (default: false)
+            include_threads  — read conversation threads per notebook (default: true)
+
+        Returns: {count, notebooks: [...], exported_at}
+        """
+        cookies = _cookies()
+        if not cookies:
+            return _no_cookies()
+        include_content = request.args.get("include_content", "false").lower() == "true"
+        include_threads = request.args.get("include_threads", "true").lower() != "false"
+        result = export_all_notebooks(cookies, include_content, include_threads)
+        return jsonify(result)
 
     return app
 
