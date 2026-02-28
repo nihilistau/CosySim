@@ -544,6 +544,7 @@ notebooklm:
   default_notebook_id: ""              # default notebook for queries
   timeout: 120                         # per-request timeout seconds
   metadata_path: "data/nlm_notebooks.json"  # notebook metadata persistence
+  rate_limit_seconds: 1.5              # minimum gap between outbound NLM calls
 
 comms:
   governance_enabled: true      # route CharacterAgent.reply() through interceptors

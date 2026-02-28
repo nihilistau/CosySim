@@ -39,7 +39,8 @@
 | [TTS](TTS.md) | Qwen3-TTS server, voice design, streaming |
 | [NotebookLM & Nexus](NOTEBOOKLM.md) | NotebookLM integration via Nexus dual-backend |
 | [NotebookLM HAR SDK](NOTEBOOKLM_HAR_SDK.md) | Batchexecute protocol, RPC endpoints, HAR extraction script |
-| [NotebookLM SDK v2.1](NOTEBOOKLM_SDK.md) | Full 18-RPC catalogue, Configure Chat, source management, multi-question batching |
+| [NotebookLM SDK v3.0](NOTEBOOKLM_SDK.md) | Full 21-RPC catalogue, rate limiter, complete :8800 proxy API reference, source schema |
+| [NotebookLM Protocol](NOTEBOOKLM_PROTOCOL.md) | Deep dive — batchexecute wire protocol, auth, all 21 RPCs with examples, discovery methodology, notebook lifecycle |
 | [Nexus Integration](NEXUS_INTEGRATION.md) | NexusClient, 16 skills, namespaces, memory, distillers, training, workflows |
 
 ## External Systems

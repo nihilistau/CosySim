@@ -2,7 +2,92 @@
 
 All notable changes to CosySim are documented here.
 
-## v0.60.2 — System Control Panel + NLM Client Class
+## v0.60.3 — NLM Proxy v3.0: Complete Write API + Rate Limiting
+
+### NLM Live Proxy v3.0 (engine/mcp/nlm_live_proxy.py)
+- **21 confirmed RPCs** — upgraded from 18 via 8-HAR cross-session analysis
+- **6 RPC descriptions corrected** (were misidentified in v2.1):
+  - `sqTeoe` → "List Audio Overview Types" (was "List All Notebooks")
+  - `hPTbtc` → "Get Conversation Thread IDs" (was "List Sources Paginated")
+  - `khqZz` → "Read Conversation Thread Messages" (was "Sub-notebook sources")
+  - `JFMDGd` → "User Profile + Queries Remaining" (was "Sources Condensed")
+  - `cFji9` → "Generate/Get Mind Map" (was "Conversation History")
+  - `CYK0Xb` → "Save Notebook Note" (was "Legacy Chat RPC")
+- **3 newly decoded write RPCs**:
+  - `CCqFvf` — Resume Session / Load Last Active Notebook
+  - `Ljjv0c` — Start Fast Research Session (returns session_id)
+  - `LBwxtb` — Add URL Sources batch (uses session_id from Ljjv0c)
+- **`_RateLimiter` class** — thread-safe per-host rate limiter (default 1.5s gap)
+  - Applied to every outbound NLM batchexecute call
+  - Configurable via `notebooklm.rate_limit_seconds` in config
+  - Runtime control via `GET/POST /rate_limit`
+- **RPC registry integration** — imports `engine.nexus.nlm_rpc_mapper.get_rpc_id()`
+  - Loads live IDs from `data/nlm_rpc_registry.json` (updated by automation)
+  - Falls back to hardcoded constants when registry unavailable
+- **10 new REST API routes**:
+  - `POST /notebooks` — create notebook (UUID v4, lazy backend creation)
+  - `POST /notebooks/<id>/sources` — add URL sources (Ljjv0c + LBwxtb flow)
+  - `GET /notebooks/<id>/sources/wait` — poll until sources processed (rLM1Ne)
+  - `POST /notebooks/<id>/research` — start fast research session (Ljjv0c)
+  - `GET /notebooks/<id>/threads` — get conversation thread IDs (hPTbtc)
+  - `GET /notebooks/<id>/threads/<tid>` — read thread messages (khqZz)
+  - `GET /notebooks/<id>/mindmap` — get/generate mind map D3 JSON (cFji9)
+  - `GET /user/profile` — user profile + queries remaining (JFMDGd)
+  - `GET/POST /rate_limit` — rate limiter status and control
+  - `GET /rpc_registry` — RPC registry status (sources, staleness)
+- **`/health` updated**: `rpc_catalog_version: v3.0`, `known_rpcs: 21`, rate limit + registry status
+- **`/history` route rewritten**: now returns `{threads: [...]}` using hPTbtc+khqZz correctly
+
+### New Modules
+- **`engine/nexus/nlm_rpc_mapper.py`** — Dynamic RPC ID registry:
+  - `NLMRPCRegistry` class with hardcoded fallbacks for all 24 operations
+  - File-backed persistence at `data/nlm_rpc_registry.json` (auto-created by automation)
+  - Staleness detection (10-day TTL)
+  - `get_rpc_id(operation)` convenience function used by proxy
+  - `update_from_automation()` merges results from nlm_automation.py
+  - `invalidate()` forces singleton reload
+  - CLI: `python -m engine.nexus.nlm_rpc_mapper` for status report
+- **`engine/nexus/nlm_automation.py`** — Playwright automation for RPC discovery:
+  - Launches Chrome with user profile, intercepts all network traffic
+  - Performs every known NLM operation with 3s delays between ops
+  - Captures batchexecute request/response pairs with operation labels
+  - Saves structured JSON log to `data/nlm_automation_log.json`
+  - Updates `data/nlm_rpc_registry.json` after each run
+  - CLI: `python -m engine.nexus.nlm_automation [--headless] [--ops op1,op2]`
+
+### Documentation
+- **`docs/NOTEBOOKLM_SDK.md`** — Updated to v3.0:
+  - Complete REST API reference (35+ routes with curl examples)
+  - Corrected RPC catalogue (21 RPCs with descriptions)
+  - Source data structure schema (all JSPB fields)
+  - GenerateFreeFormStreamed proto endpoint
+  - Rate limiter behaviour section
+- **`docs/NOTEBOOKLM_PROTOCOL.md`** — New 1,100-line deep-dive:
+  - batchexecute wire protocol (f.req format, wrb.fr parsing, JSPB)
+  - Authentication deep dive (SAPISIDHASH, BL management, session tokens)
+  - All 21 RPCs with examples, args, response structures
+  - Source data schema with all field positions
+  - Notebook lifecycle (create → add → poll → ask → read)
+  - RPC ID rotation and 3-layer resilience architecture
+  - Known gaps table (10 uncaptured operations)
+  - CosySim proxy architecture diagram
+
+### Config
+- **`config/default.yaml`**: Added `notebooklm.rate_limit_seconds: 1.5`
+
+### Nexus Knowledge Base
+- Stored 9 new entries: full RPC catalogue document + 8 Q&A pairs covering
+  authentication, source adding, fast research, RPC rotation, notebook creation
+
+### Tests
+- **`tests/test_nlm_live_proxy.py`**: 88 → **109 tests** (+21)
+  - New: `TestCreateNotebook`, `TestAddSources`, `TestStartResearch`,
+    `TestThreadRoutes`, `TestRateLimiterRoute`, `TestRPCRegistryRoute`, `TestRateLimiter`
+- **`tests/test_nlm_rpc_mapper.py`**: New test file for RPC registry
+- **`tests/test_nlm_automation.py`**: New test file for automation/capture
+
+
+
 
 ### System Control Panel (NEW — port 5575)
 - **`content/scenes/system_control/system_control_scene.py`** — New Flask scene (20+ API routes):

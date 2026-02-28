@@ -4,68 +4,31 @@ NLM Live Proxy — Full batchexecute API bridge for NotebookLM.
 Architecture
 ~~~~~~~~~~~~
 This proxy provides complete read AND write access to NotebookLM's private
-batchexecute API, reverse-engineered from multi-session HAR analysis (11 HARs
-across 5 NLM sessions). It exposes a REST API at :8800 for CosySim agents.
+batchexecute API, reverse-engineered from multi-session HAR analysis (8 HARs,
+21 confirmed RPCs). It exposes a REST API at :8800 for CosySim agents.
 
 Auth is handled via Google session cookies extracted from either:
-  1. A manually captured HAR file (DevTools → Save all as HAR)
+  1. A manually captured HAR file (DevTools → Save all as HAR with sensitive data)
   2. Automatically via Chrome DevTools Protocol (CDP) — preferred
 
-Complete Reverse-Engineered RPC Catalogue
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-RPC IDs are **STABLE within a build label** but MAY change when Google
-deploys a new frontend (BL changes approx. weekly). The BL is tracked in
-data/nlm_meta.json and auto-extracted from imported HARs.
+RPC ID Management
+~~~~~~~~~~~~~~~~~
+RPC IDs are **STABLE within a build label** but MAY change when Google deploys
+a new frontend (BL changes approx. weekly). IDs are loaded from:
+  1. data/nlm_rpc_registry.json   — updated by nlm_automation.py
+  2. nlm_rpc_mapper._FALLBACK_RPC_IDS   — hardcoded confirmed IDs (fallback)
 
-Read RPCs (stable across all observed builds):
-| RPC ID  | Function                   | Payload signature                             |
-|---------|----------------------------|-----------------------------------------------|
-| ZwVcOc  | Session init               | [null,[1,...,[1]]]                            |
-| wXbhsf  | List sources (full)        | [null,1,null,[2]]                             |
-| ub2Bae  | List notebooks             | [[2]]                                         |
-| sqTeoe  | List all notebooks         | [[2,...],null,1]                              |
-| rLM1Ne  | Load notebook by ID        | [nb_id,null,[2],null,0]                       |
-| e3bVqc  | Notebook extended info     | [null,null,nb_id]                             |
-| hPTbtc  | List sources (paginated)   | [[],null,nb_id,page_size]                     |
-| khqZz   | Sources for sub-notebook   | [[],null,null,nb_id,page_size]                |
-| JFMDGd  | Sources list (condensed)   | [nb_id,[2]]                                   |
-| VfAZjd  | AI overview/summary        | [nb_id,[2]]                                   |
-| gArtLc  | List notes/artifacts       | [[2,...],nb_id,"NOT...SUGGESTED"]             |
-| cFji9   | Conversation history       | [nb_id,null,cursor_ts,[2]]                    |
-| ozz5Z   | User quota / account info  | [[[[null,"1",count],...,1]]]                  |
-| tr032e  | Read source content        | [[[[source_id]]]]                             |
+Run ``python -m engine.nexus.nlm_automation`` to re-discover all IDs.
+Run ``python -m engine.nexus.nlm_rpc_mapper`` to check registry status.
 
-Write RPCs:
-| RPC ID  | Function                   | Notes                                         |
-|---------|----------------------------|-----------------------------------------------|
-| s0tc2d  | Chat message (CURRENT)     | [nb_id,[[null*7,[[2,"question"],[resp_len]]]]]|
-| CYK0Xb  | Annotate text w/ citations | [nb_id,"context_text"] → [[id, cited_text]]   |
-| ciyUvf  | Generate deep-research doc | [WRITE_CONFIG,nb_id,[[src_id],...]]           |
-| R7cb6c  | Save note/brief            | [WRITE_CONFIG,nb_id,[null,null,type,srcs]]    |
+Rate Limiting
+~~~~~~~~~~~~~
+All outbound NLM calls are rate-limited (default 1.5s between requests).
+Configure via ``notebooklm.rate_limit_seconds`` in config/default.yaml.
+Batch calls count as ONE request for rate-limiting purposes.
 
-RPC Change History:
-  - CYK0Xb was the ORIGINAL chat-ask RPC (still valid for citation annotation)
-  - s0tc2d is the CURRENT chat-ask RPC as of build 20260226.08_p0+
-  - Both can be used; s0tc2d supports response length + configure-chat
-
-Document/Note Types for R7cb6c and save_note:
-  2 = Standard research brief
-  9 = Notes (free-form)
-  (Other types: study guide, FAQ, timeline — test with /rpc/R7cb6c)
-
-Configure Chat (s0tc2d position 0):
-  The inner message array null[0] is the "configure chat" goal/role string.
-  Injecting a role here affects how NLM responds to all messages in the session.
-  Example: "Act as a PhD researcher. Provide thorough analysis with citations."
-
-Response Length for s0tc2d (position [resp_len]):
-  4 = Default length (confirmed from HAR)
-  1 = Longer (hypothesis — test required)
-  2 = Shorter (hypothesis — test required)
-
-Multi-question batching:
-  Up to 5 CYK0Xb or s0tc2d calls can be packed into a single batchexecute
-  f.req array, reducing total API round-trips by 5×.
+Complete RPC Catalogue (v3.0, 21 RPCs + 1 proto endpoint):
+  See docs/NOTEBOOKLM_SDK.md for full documentation.
 
 Usage::
 
@@ -110,40 +73,90 @@ _COOKIES_LOCK = threading.Lock()
 _DEFAULT_BL = "boq_labs-tailwind-frontend_20260226.08_p0"
 _DEFAULT_BL_DATE = "2026-02-26"  # for staleness calculation
 
+# ── Rate limiter ─────────────────────────────────────────────────────────
+
+class _RateLimiter:
+    """Simple per-host rate limiter. Enforces a minimum gap between requests."""
+
+    def __init__(self, min_gap_seconds: float = 1.5) -> None:
+        self._last_call: float = 0.0
+        self._min_gap = min_gap_seconds
+        self._lock = threading.Lock()
+
+    def wait(self) -> None:
+        """Block until the minimum gap has elapsed since the last call."""
+        with self._lock:
+            elapsed = time.time() - self._last_call
+            if elapsed < self._min_gap:
+                time.sleep(self._min_gap - elapsed)
+            self._last_call = time.time()
+
+    def set_gap(self, seconds: float) -> None:
+        self._min_gap = seconds
+
+
+def _get_rate_limit() -> float:
+    try:
+        return float(get_config().get("notebooklm.rate_limit_seconds", 1.5))
+    except Exception:
+        return 1.5
+
+
+_rate_limiter = _RateLimiter(min_gap_seconds=1.5)
+
 # ── RPC ID Registry ──────────────────────────────────────────────────────
-# Stable within a build, may change across builds. Monitor /meta for age.
-RPC_SESSION_INIT = "ZwVcOc"
-RPC_LIST_SOURCES = "wXbhsf"
-RPC_LIST_NOTEBOOKS = "ub2Bae"
-RPC_LIST_NOTEBOOKS_ALL = "sqTeoe"
-RPC_LOAD_NOTEBOOK = "rLM1Ne"
-RPC_NOTEBOOK_INFO = "e3bVqc"
-RPC_LIST_SOURCES_PAGED = "hPTbtc"
-RPC_LIST_SOURCES_SUB = "khqZz"
-RPC_SOURCES_CONDENSED = "JFMDGd"
-RPC_AI_SUMMARY = "VfAZjd"
-RPC_LIST_ARTIFACTS = "gArtLc"
-RPC_CONVERSATION_HISTORY = "cFji9"
-RPC_USER_QUOTA = "ozz5Z"
-RPC_READ_SOURCE = "tr032e"       # Read full source text content
-RPC_CHAT_MESSAGE = "s0tc2d"      # Current chat/ask RPC (replaces CYK0Xb)
-RPC_ANNOTATE_TEXT = "CYK0Xb"    # Annotate text with notebook citations
-RPC_GENERATE_DOC = "ciyUvf"     # Generate deep-research document
-RPC_SAVE_NOTE = "R7cb6c"        # Save note/brief to notebook
+# Loaded from nlm_rpc_mapper at runtime; hardcoded constants kept as
+# readable aliases for use in this module.
+
+try:
+    from engine.nexus.nlm_rpc_mapper import get_rpc_id as _get_rpc_id
+    _registry_available = True
+except ImportError:
+    _registry_available = False
+    def _get_rpc_id(op: str) -> Optional[str]:  # type: ignore[misc]
+        return None
+
+def _rpc(operation: str, fallback: str) -> str:
+    """Get RPC ID from registry, falling back to hardcoded value."""
+    if _registry_available:
+        rid = _get_rpc_id(operation)
+        if rid:
+            return rid
+    return fallback
+
+# Readable aliases (resolved at call time via _rpc() in actual calls)
+RPC_SESSION_INIT        = "ZwVcOc"
+RPC_LIST_SOURCES        = "wXbhsf"
+RPC_LIST_NOTEBOOKS      = "ub2Bae"
+RPC_LIST_AUDIO_TYPES    = "sqTeoe"   # ⚠️ v3.0: was "list all notebooks", is audio types
+RPC_LOAD_NOTEBOOK       = "rLM1Ne"
+RPC_NOTEBOOK_INFO       = "e3bVqc"
+RPC_GET_THREAD_IDS      = "hPTbtc"   # ⚠️ v3.0: was "list sources paged", is thread IDs
+RPC_READ_THREAD         = "khqZz"    # ⚠️ v3.0: was "sub-notebook sources", is thread msgs
+RPC_USER_PROFILE        = "JFMDGd"   # ⚠️ v3.0: was "sources condensed", is user profile
+RPC_AI_SUMMARY          = "VfAZjd"
+RPC_LIST_ARTIFACTS      = "gArtLc"
+RPC_MIND_MAP            = "cFji9"    # ⚠️ v3.0: was "conversation history", is mind map
+RPC_ACCOUNT_STATE       = "ozz5Z"
+RPC_READ_SOURCE         = "tr032e"
+RPC_RESUME_SESSION      = "CCqFvf"   # ⭐ v3.0 new: load last active notebook
+RPC_CHAT_MESSAGE        = "s0tc2d"
+RPC_SAVE_NOTE           = "CYK0Xb"   # ⚠️ v3.0: was "legacy chat", is save note
+RPC_GENERATE_DOC        = "ciyUvf"
+RPC_SAVE_REPORT         = "R7cb6c"
+RPC_FAST_RESEARCH_START = "Ljjv0c"   # ⭐ v3.0 new: start fast research
+RPC_ADD_URL_SOURCES     = "LBwxtb"   # ⭐ v3.0 new: add URL sources batch
 
 # ── Response Length Constants ────────────────────────────────────────────
-# Used as the second element in s0tc2d message array [[2,"question"],[RESP_LEN]]
-RESP_LEN_DEFAULT = 4   # Confirmed from HAR analysis
-RESP_LEN_LONGER  = 1   # Hypothesis — test via /rpc/s0tc2d
-RESP_LEN_SHORTER = 2   # Hypothesis — test via /rpc/s0tc2d
+RESP_LEN_DEFAULT = 4
+RESP_LEN_LONGER  = 1
+RESP_LEN_SHORTER = 2
 
 # ── Document/Note Types ──────────────────────────────────────────────────
-# Used in R7cb6c save_note calls
-DOC_TYPE_BRIEF   = 2   # Research brief (confirmed)
-DOC_TYPE_NOTE    = 9   # Notes (confirmed)
-# Study guide, FAQ, timeline may be 3-8 — use /rpc/R7cb6c to test
+DOC_TYPE_BRIEF   = 2
+DOC_TYPE_NOTE    = 9
 
-# Document/note config object used for write RPCs (from HAR analysis)
+# Write config object shared by several write RPCs (from HAR analysis)
 _WRITE_CONFIG = [2, None, None,
                  [1, None, None, None, None, None, None, None, None, None, [1]],
                  [[2, 1]]]
@@ -507,7 +520,7 @@ def _batchexecute_multi(
     }
     url = f"{_BATCH_URL}?" + urllib.parse.urlencode(params)
 
-    # Pack all calls into a single f.req array — 2-level format per SDK v2.1:
+    # Pack all calls into a single f.req array — 2-level format per SDK v3.0:
     # [["rpc_id", "args_json", null, "generic"], ...]
     f_req_calls = [[rpc_id, args_json, None, "generic"] for rpc_id, args_json in calls]
     body_dict: Dict[str, str] = {"f.req": json.dumps(f_req_calls)}
@@ -518,6 +531,11 @@ def _batchexecute_multi(
 
     headers = _build_headers(cookies)
     req = urllib.request.Request(url, data=body, headers=headers, method="POST")
+
+    # Enforce rate limit before every outbound NLM call
+    _rate_limiter.set_gap(_get_rate_limit())
+    _rate_limiter.wait()
+
     try:
         with urllib.request.urlopen(req, timeout=_REQUEST_TIMEOUT) as resp:
             raw = resp.read().decode("utf-8", errors="replace")
@@ -654,7 +672,7 @@ def ask_question(
         Dict with keys: answer_id, answer (markdown with [citations]), sources.
     """
     args = json.dumps([notebook_id, question])
-    _, data = _batchexecute(RPC_ANNOTATE_TEXT, args, cookies, notebook_id)
+    _, data = _batchexecute(RPC_SAVE_NOTE, args, cookies, notebook_id)
     return _parse_ask_response(data)
 
 
@@ -802,7 +820,7 @@ def ask_questions_batch(
     for i in range(0, len(questions), max_batch):
         batch = questions[i:i + max_batch]
         calls = [
-            (RPC_ANNOTATE_TEXT, json.dumps([notebook_id, q]))
+            (RPC_SAVE_NOTE, json.dumps([notebook_id, q]))
             for q in batch
         ]
         raw_results = _batchexecute_multi(calls, cookies, notebook_id)
@@ -1400,8 +1418,10 @@ def create_nlm_proxy_app() -> Flask:
             "bl": bl,
             "bl_age_days": bl_age_days,
             "bl_stale": bl_age_days is not None and bl_age_days >= 8,
-            "rpc_catalog_version": "v2.1",
-            "known_rpcs": 18,
+            "rpc_catalog_version": "v3.0",
+            "known_rpcs": 21,
+            "rate_limit_seconds": _rate_limiter._min_gap,
+            "registry_available": _registry_available,
         }), 200 if cookies else 503
 
     # ── Cookie management ───────────────────────────────────────────────
@@ -1911,27 +1931,336 @@ def create_nlm_proxy_app() -> Flask:
 
     @app.route("/notebooks/<notebook_id>/history", methods=["GET"])
     def get_history(notebook_id: str):
-        """Get conversation/chat history for a notebook (hPTbtc RPC).
+        """Get conversation/chat history for a notebook.
 
+        Uses hPTbtc to get thread IDs, then khqZz to read messages.
         Query params: page_size (default 20)
-        Returns: {messages: [{content, type}], count, notebook_id}
+        Returns: {threads: [{thread_id, messages}], count, notebook_id}
+        """
+        cookies = _cookies()
+        if not cookies:
+            return _no_cookies()
+        page_size = request.args.get("page_size", 20, type=int)
+        # Step 1: get thread IDs via hPTbtc
+        args = json.dumps([[], None, notebook_id, page_size])
+        _, data = _batchexecute(RPC_GET_THREAD_IDS, args, cookies, notebook_id)
+        if data is None or (isinstance(data, dict) and "error" in data):
+            return jsonify(data or {"error": "no_data"}), 502
+        thread_ids: List[str] = []
+        try:
+            if isinstance(data, list) and data:
+                for item in data[0]:
+                    if isinstance(item, list) and item and isinstance(item[0], str):
+                        thread_ids.append(item[0])
+        except (IndexError, TypeError):
+            pass
+        threads = []
+        for tid in thread_ids[:10]:  # cap at 10 threads per request
+            t_args = json.dumps([[], None, None, tid, page_size])
+            _, t_data = _batchexecute(RPC_READ_THREAD, t_args, cookies, notebook_id)
+            messages = []
+            if t_data and isinstance(t_data, list):
+                for s in _extract_strings(t_data, min_len=10):
+                    if len(s) > 20:
+                        messages.append(s)
+            threads.append({"thread_id": tid, "messages": messages})
+        return jsonify({"threads": threads, "count": len(threads), "notebook_id": notebook_id})
+
+    # ── Write: create notebook ───────────────────────────────────────────
+
+    @app.route("/notebooks", methods=["POST"])
+    def create_notebook():
+        """Create a new notebook (client-side UUID, backend created on first source add).
+
+        Body (JSON): {"title": "My Notebook"}
+        Returns: {notebook_id, title, message}
+
+        NLM creates the backend record lazily when the first source is added via
+        LBwxtb. We generate a UUID v4 here and return it — the caller should
+        immediately add sources to materialise the notebook.
+        """
+        import uuid
+        body = request.json or {}
+        title = body.get("title", "New Notebook")
+        notebook_id = str(uuid.uuid4())
+        logger.info("Created client-side notebook UUID %s (title=%r)", notebook_id, title)
+        return jsonify({
+            "notebook_id": notebook_id,
+            "title": title,
+            "message": "Notebook UUID reserved. Add sources to materialise on NLM backend.",
+            "warning": "Backend record is created lazily — call POST /notebooks/<id>/sources next.",
+        }), 201
+
+    # ── Write: add URL sources ───────────────────────────────────────────
+
+    @app.route("/notebooks/<notebook_id>/sources", methods=["POST"])
+    def add_sources(notebook_id: str):
+        """Add URL sources to a notebook via LBwxtb RPC.
+
+        Body (JSON):
+            {
+              "urls": [{"url": "https://...", "title": "optional title"}],
+              "session_id": "optional — if omitted, a fast research session is started first"
+            }
+
+        Returns: {added, session_id, notebook_id, poll_url}
+
+        Flow:
+          1. If session_id not provided, call Ljjv0c to start a fast research session
+          2. Call LBwxtb with the session ID + URL array
+          3. Return poll URL (/notebooks/<id>/sources/wait) to check processing status
+        """
+        cookies = _cookies()
+        if not cookies:
+            return _no_cookies()
+        body = request.json or {}
+        urls = body.get("urls", [])
+        if not urls:
+            return jsonify({"error": "urls array is required"}), 400
+
+        session_id = body.get("session_id", "")
+
+        # Step 1: start fast research session if no session_id provided
+        if not session_id:
+            query = body.get("query", "research")
+            rs_args = json.dumps([[query, 1], None, 1, notebook_id])
+            _, rs_data = _batchexecute(RPC_FAST_RESEARCH_START, rs_args, cookies, notebook_id)
+            if rs_data is None or (isinstance(rs_data, dict) and "error" in rs_data):
+                return jsonify({"error": "failed to start research session",
+                                "detail": rs_data}), 502
+            try:
+                session_id = rs_data[0] if isinstance(rs_data, list) else ""
+            except (IndexError, TypeError):
+                session_id = ""
+            if not session_id:
+                return jsonify({"error": "no session_id returned from Ljjv0c",
+                                "raw": rs_data}), 502
+            logger.info("Started fast research session %s for notebook %s", session_id, notebook_id)
+
+        # Step 2: build sources array for LBwxtb
+        # Web URL format: [None, None, [url, title], None, None, None, None, None, None, None, 2]
+        sources_array = []
+        for item in urls:
+            url_str = item.get("url", "") if isinstance(item, dict) else str(item)
+            title_str = item.get("title", url_str[:80]) if isinstance(item, dict) else url_str[:80]
+            sources_array.append([None, None, [url_str, title_str],
+                                   None, None, None, None, None, None, None, 2])
+
+        lbw_args = json.dumps([None, [1], session_id, notebook_id, sources_array])
+        _, lbw_data = _batchexecute(RPC_ADD_URL_SOURCES, lbw_args, cookies, notebook_id)
+        if isinstance(lbw_data, dict) and "error" in lbw_data:
+            return jsonify({"error": "LBwxtb failed", "detail": lbw_data}), 502
+
+        return jsonify({
+            "added": len(sources_array),
+            "session_id": session_id,
+            "notebook_id": notebook_id,
+            "poll_url": f"/notebooks/{notebook_id}/sources/wait",
+            "message": f"Added {len(sources_array)} URL(s). Poll poll_url to wait for processing.",
+        })
+
+    # ── Write: poll source processing ───────────────────────────────────
+
+    @app.route("/notebooks/<notebook_id>/sources/wait", methods=["GET"])
+    def wait_for_sources(notebook_id: str):
+        """Poll rLM1Ne until all sources have a non-zero word_count.
+
+        Query params:
+            timeout   — max seconds to wait (default 60, max 300)
+            interval  — poll interval in seconds (default 3, min 2)
+
+        Returns: {ready, sources, elapsed_seconds}
+
+        Uses the rate limiter — each poll respects the configured min gap.
+        """
+        cookies = _cookies()
+        if not cookies:
+            return _no_cookies()
+        timeout = min(request.args.get("timeout", 60, type=int), 300)
+        interval = max(request.args.get("interval", 3, type=int), 2)
+        start = time.time()
+        while True:
+            args = json.dumps([notebook_id, None, [2], None, 0])
+            _, data = _batchexecute(RPC_LOAD_NOTEBOOK, args, cookies, notebook_id)
+            if data is None or (isinstance(data, dict) and "error" in data):
+                return jsonify({"error": "poll failed", "detail": data}), 502
+            # Parse sources — check if any are still processing (word_count == 0)
+            _, sources = _extract_sources(data)
+            pending = [s for s in sources if s.get("word_count", 0) == 0]
+            elapsed = time.time() - start
+            if not pending or elapsed >= timeout:
+                return jsonify({
+                    "ready": len(pending) == 0,
+                    "sources": sources,
+                    "pending_count": len(pending),
+                    "elapsed_seconds": round(elapsed, 1),
+                })
+            time.sleep(interval)
+
+    # ── Write: start fast research ───────────────────────────────────────
+
+    @app.route("/notebooks/<notebook_id>/research", methods=["POST"])
+    def start_research(notebook_id: str):
+        """Start a fast research session for a notebook (Ljjv0c RPC).
+
+        Body (JSON): {"query": "multi-agent frameworks"}
+        Returns: {session_id, notebook_id}
+        """
+        cookies = _cookies()
+        if not cookies:
+            return _no_cookies()
+        body = request.json or {}
+        query = body.get("query", "")
+        if not query:
+            return jsonify({"error": "query is required"}), 400
+        args = json.dumps([[query, 1], None, 1, notebook_id])
+        _, data = _batchexecute(RPC_FAST_RESEARCH_START, args, cookies, notebook_id)
+        if data is None or (isinstance(data, dict) and "error" in data):
+            return jsonify({"error": "Ljjv0c failed", "detail": data}), 502
+        try:
+            session_id = data[0] if isinstance(data, list) else ""
+        except (IndexError, TypeError):
+            session_id = ""
+        return jsonify({"session_id": session_id, "notebook_id": notebook_id, "query": query})
+
+    # ── Read: conversation threads ───────────────────────────────────────
+
+    @app.route("/notebooks/<notebook_id>/threads", methods=["GET"])
+    def get_threads(notebook_id: str):
+        """Get conversation thread IDs for a notebook (hPTbtc RPC).
+
+        Returns: {threads: [{thread_id}], count, notebook_id}
         """
         cookies = _cookies()
         if not cookies:
             return _no_cookies()
         page_size = request.args.get("page_size", 20, type=int)
         args = json.dumps([[], None, notebook_id, page_size])
-        _, data = _batchexecute("hPTbtc", args, cookies, notebook_id)
+        _, data = _batchexecute(RPC_GET_THREAD_IDS, args, cookies, notebook_id)
         if data is None or (isinstance(data, dict) and "error" in data):
             return jsonify(data or {"error": "no_data"}), 502
-        messages = []
+        thread_ids: List[str] = []
         try:
-            for s in _extract_strings(data, min_len=20):
-                if len(s) > 50:
-                    messages.append({"content": s, "type": "message"})
+            if isinstance(data, list) and data:
+                for item in data[0]:
+                    if isinstance(item, list) and item and isinstance(item[0], str):
+                        thread_ids.append(item[0])
         except (IndexError, TypeError):
             pass
-        return jsonify({"messages": messages, "count": len(messages), "notebook_id": notebook_id})
+        return jsonify({"threads": [{"thread_id": tid} for tid in thread_ids],
+                        "count": len(thread_ids), "notebook_id": notebook_id})
+
+    @app.route("/notebooks/<notebook_id>/threads/<thread_id>", methods=["GET"])
+    def get_thread_messages(notebook_id: str, thread_id: str):
+        """Read all messages in a conversation thread (khqZz RPC).
+
+        Returns: {thread_id, messages: [str], count}
+        """
+        cookies = _cookies()
+        if not cookies:
+            return _no_cookies()
+        page_size = request.args.get("page_size", 20, type=int)
+        args = json.dumps([[], None, None, thread_id, page_size])
+        _, data = _batchexecute(RPC_READ_THREAD, args, cookies, notebook_id)
+        if data is None or (isinstance(data, dict) and "error" in data):
+            return jsonify(data or {"error": "no_data"}), 502
+        messages = [s for s in _extract_strings(data, min_len=10) if len(s) > 20]
+        return jsonify({"thread_id": thread_id, "messages": messages, "count": len(messages)})
+
+    # ── Read: mind map ───────────────────────────────────────────────────
+
+    @app.route("/notebooks/<notebook_id>/mindmap", methods=["GET"])
+    def get_mindmap(notebook_id: str):
+        """Get or generate the mind map for a notebook (cFji9 RPC).
+
+        Returns: {notebook_id, mindmap_json} where mindmap_json is D3 hierarchical JSON.
+        """
+        cookies = _cookies()
+        if not cookies:
+            return _no_cookies()
+        args = json.dumps([notebook_id, None, None, [2]])
+        _, data = _batchexecute(RPC_MIND_MAP, args, cookies, notebook_id)
+        if data is None or (isinstance(data, dict) and "error" in data):
+            return jsonify(data or {"error": "no_data"}), 502
+        # cFji9 returns a JSON string of the D3 hierarchy inside the response
+        mindmap_str = ""
+        try:
+            mindmap_str = _extract_strings(data, min_len=5)[0] if _extract_strings(data, min_len=5) else ""
+        except (IndexError, TypeError):
+            pass
+        try:
+            mindmap = json.loads(mindmap_str)
+        except (json.JSONDecodeError, TypeError):
+            mindmap = mindmap_str
+        return jsonify({"notebook_id": notebook_id, "mindmap": mindmap})
+
+    # ── Read: user profile ───────────────────────────────────────────────
+
+    @app.route("/user/profile", methods=["GET"])
+    def get_user_profile():
+        """Get user profile and queries remaining (JFMDGd RPC).
+
+        Returns: {email, name, queries_remaining, notebook_id}
+        """
+        cookies = _cookies()
+        if not cookies:
+            return _no_cookies()
+        notebook_id = request.args.get("notebook_id", "")
+        args = json.dumps([notebook_id, [2]])
+        _, data = _batchexecute(RPC_USER_PROFILE, args, cookies, notebook_id)
+        if data is None or (isinstance(data, dict) and "error" in data):
+            return jsonify(data or {"error": "no_data"}), 502
+        profile: Dict[str, Any] = {"notebook_id": notebook_id}
+        try:
+            if isinstance(data, list) and data and isinstance(data[0], list):
+                inner = data[0][0]
+                strings = _extract_strings(inner, min_len=3)
+                if strings:
+                    profile["email"] = strings[0] if "@" in strings[0] else ""
+                    profile["name"] = strings[1] if len(strings) > 1 else ""
+            # queries_remaining is typically at data[2] as an integer
+            if isinstance(data, list) and len(data) > 2 and isinstance(data[2], (int, float)):
+                profile["queries_remaining"] = int(data[2])
+        except (IndexError, TypeError):
+            pass
+        return jsonify(profile)
+
+    # ── Read/Write: rate limiter control ────────────────────────────────
+
+    @app.route("/rate_limit", methods=["GET"])
+    def get_rate_limit_status():
+        """Return current rate limit configuration."""
+        return jsonify({
+            "min_gap_seconds": _rate_limiter._min_gap,
+            "config_key": "notebooklm.rate_limit_seconds",
+        })
+
+    @app.route("/rate_limit", methods=["POST"])
+    def set_rate_limit():
+        """Override rate limit for this session.
+
+        Body (JSON): {"seconds": 2.0}
+        """
+        body = request.json or {}
+        seconds = float(body.get("seconds", 1.5))
+        seconds = max(0.5, min(seconds, 30.0))  # clamp to sane range
+        _rate_limiter.set_gap(seconds)
+        logger.info("Rate limit set to %.1fs via API", seconds)
+        return jsonify({"min_gap_seconds": seconds})
+
+    # ── Read: RPC registry status ────────────────────────────────────────
+
+    @app.route("/rpc_registry", methods=["GET"])
+    def get_rpc_registry():
+        """Return RPC registry status — which IDs are loaded and their source."""
+        if not _registry_available:
+            return jsonify({"available": False, "message": "nlm_rpc_mapper not installed"})
+        try:
+            from engine.nexus.nlm_rpc_mapper import NLMRPCRegistry
+            reg = NLMRPCRegistry()
+            return jsonify({"available": True, **reg.report()})
+        except Exception as exc:
+            return jsonify({"available": False, "error": str(exc)}), 200
 
     return app
 

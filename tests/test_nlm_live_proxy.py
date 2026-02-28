@@ -1104,14 +1104,15 @@ class TestHistoryFlaskRoute:
 
     def test_history_returns_200_with_mocked_rpc(self, client_with_cookies) -> None:
         from unittest.mock import patch
-        # The history route calls _batchexecute("hPTbtc", ...) directly
-        mock_data = [["message content here for testing purposes"]]
+        # The history route calls hPTbtc for thread IDs, then khqZz per thread.
+        # Return empty thread list — valid 200 response.
+        mock_data: List = [[]]
         with patch("engine.mcp.nlm_live_proxy._batchexecute",
                    return_value=("hPTbtc", mock_data)):
             resp = client_with_cookies.get("/notebooks/nb-123/history")
         assert resp.status_code == 200
         data = json.loads(resp.data)
-        assert "messages" in data
+        assert "threads" in data
         assert "notebook_id" in data
 
     def test_history_returns_502_on_rpc_error(self, client_with_cookies) -> None:
@@ -1133,3 +1134,341 @@ class TestHistoryFlaskRoute:
         mock_rpc.assert_called_once()
         call_args = mock_rpc.call_args[0]
         assert "50" in call_args[1]  # page_size 50 in serialized args string
+
+
+# ── New v3.0 write routes ───────────────────────────────────────────────
+
+class TestCreateNotebook:
+    """POST /notebooks — client-side UUID creation."""
+
+    @pytest.fixture
+    def client_with_cookies(self, tmp_path: Path):
+        from engine.mcp.nlm_live_proxy import create_nlm_proxy_app
+        import engine.mcp.nlm_live_proxy as proxy_mod
+        cookie_file = tmp_path / "cookies.json"
+        cookie_file.write_text('{"SID": "test123"}')
+        original = proxy_mod._COOKIES_FILE
+        proxy_mod._COOKIES_FILE = cookie_file
+        app = create_nlm_proxy_app()
+        app.config["TESTING"] = True
+        with app.test_client() as c:
+            yield c
+        proxy_mod._COOKIES_FILE = original
+
+    def test_create_returns_201(self, client_with_cookies) -> None:
+        resp = client_with_cookies.post("/notebooks",
+                                        json={"title": "Test NB"},
+                                        content_type="application/json")
+        assert resp.status_code == 201
+        data = json.loads(resp.data)
+        assert "notebook_id" in data
+        assert data["title"] == "Test NB"
+        import re
+        assert re.match(r"[a-f0-9-]{36}", data["notebook_id"])
+
+    def test_create_default_title(self, client_with_cookies) -> None:
+        resp = client_with_cookies.post("/notebooks",
+                                        json={},
+                                        content_type="application/json")
+        assert resp.status_code == 201
+        data = json.loads(resp.data)
+        assert data["title"] == "New Notebook"
+
+    def test_create_no_cookies_returns_201(self, tmp_path) -> None:
+        """Create notebook is cookies-free — it only generates a local UUID."""
+        from engine.mcp.nlm_live_proxy import create_nlm_proxy_app
+        import engine.mcp.nlm_live_proxy as proxy_mod
+        original = proxy_mod._COOKIES_FILE
+        proxy_mod._COOKIES_FILE = tmp_path / "no.json"  # no cookies
+        app = create_nlm_proxy_app()
+        app.config["TESTING"] = True
+        with app.test_client() as c:
+            resp = c.post("/notebooks", json={"title": "x"})
+        proxy_mod._COOKIES_FILE = original
+        # No cookies needed — UUID creation is local only
+        assert resp.status_code == 201
+
+
+class TestAddSources:
+    """POST /notebooks/<id>/sources — LBwxtb write RPC."""
+
+    @pytest.fixture
+    def client_with_cookies(self, tmp_path: Path):
+        from engine.mcp.nlm_live_proxy import create_nlm_proxy_app
+        import engine.mcp.nlm_live_proxy as proxy_mod
+        cookie_file = tmp_path / "cookies.json"
+        cookie_file.write_text('{"SID": "test123"}')
+        original = proxy_mod._COOKIES_FILE
+        proxy_mod._COOKIES_FILE = cookie_file
+        app = create_nlm_proxy_app()
+        app.config["TESTING"] = True
+        with app.test_client() as c:
+            yield c
+        proxy_mod._COOKIES_FILE = original
+
+    def test_add_sources_requires_cookies(self, tmp_path) -> None:
+        from engine.mcp.nlm_live_proxy import create_nlm_proxy_app
+        import engine.mcp.nlm_live_proxy as proxy_mod
+        original = proxy_mod._COOKIES_FILE
+        proxy_mod._COOKIES_FILE = tmp_path / "no.json"
+        app = create_nlm_proxy_app()
+        app.config["TESTING"] = True
+        with app.test_client() as c:
+            resp = c.post("/notebooks/nb-123/sources",
+                          json={"urls": [{"url": "https://example.com"}]})
+        proxy_mod._COOKIES_FILE = original
+        assert resp.status_code == 401
+
+    def test_add_sources_requires_urls(self, client_with_cookies) -> None:
+        resp = client_with_cookies.post("/notebooks/nb-123/sources",
+                                        json={},
+                                        content_type="application/json")
+        assert resp.status_code == 400
+
+    def test_add_sources_with_session_id(self, client_with_cookies) -> None:
+        """If session_id is provided, skip Ljjv0c and call LBwxtb directly."""
+        from unittest.mock import patch
+        with patch("engine.mcp.nlm_live_proxy._batchexecute",
+                   return_value=("LBwxtb", [[1]])) as mock_rpc:
+            resp = client_with_cookies.post(
+                "/notebooks/nb-123/sources",
+                json={"urls": [{"url": "https://example.com", "title": "Example"}],
+                      "session_id": "sess-abc"},
+                content_type="application/json",
+            )
+        assert resp.status_code == 200
+        data = json.loads(resp.data)
+        assert data["added"] == 1
+        assert data["session_id"] == "sess-abc"
+        # Should only call LBwxtb (not Ljjv0c) since session_id was provided
+        mock_rpc.assert_called_once()
+        call_args = mock_rpc.call_args[0]
+        assert call_args[0] == "LBwxtb"
+
+    def test_add_sources_without_session_starts_research(self, client_with_cookies) -> None:
+        """Without session_id, Ljjv0c should be called first."""
+        from unittest.mock import patch, call
+        call_results = [
+            ("Ljjv0c", ["new-session-id"]),   # first call → research start
+            ("LBwxtb", [[1]]),                  # second call → add sources
+        ]
+        call_iter = iter(call_results)
+        with patch("engine.mcp.nlm_live_proxy._batchexecute",
+                   side_effect=lambda *a, **kw: next(call_iter)):
+            resp = client_with_cookies.post(
+                "/notebooks/nb-123/sources",
+                json={"urls": [{"url": "https://example.com"}], "query": "test"},
+                content_type="application/json",
+            )
+        assert resp.status_code == 200
+        data = json.loads(resp.data)
+        assert data["session_id"] == "new-session-id"
+
+    def test_add_sources_ljjv0c_failure_returns_502(self, client_with_cookies) -> None:
+        from unittest.mock import patch
+        with patch("engine.mcp.nlm_live_proxy._batchexecute",
+                   return_value=("Ljjv0c", {"error": "timeout"})):
+            resp = client_with_cookies.post(
+                "/notebooks/nb-123/sources",
+                json={"urls": [{"url": "https://x.com"}]},
+                content_type="application/json",
+            )
+        assert resp.status_code == 502
+
+
+class TestStartResearch:
+    """POST /notebooks/<id>/research — Ljjv0c RPC."""
+
+    @pytest.fixture
+    def client_with_cookies(self, tmp_path: Path):
+        from engine.mcp.nlm_live_proxy import create_nlm_proxy_app
+        import engine.mcp.nlm_live_proxy as proxy_mod
+        cookie_file = tmp_path / "cookies.json"
+        cookie_file.write_text('{"SID": "test123"}')
+        original = proxy_mod._COOKIES_FILE
+        proxy_mod._COOKIES_FILE = cookie_file
+        app = create_nlm_proxy_app()
+        app.config["TESTING"] = True
+        with app.test_client() as c:
+            yield c
+        proxy_mod._COOKIES_FILE = original
+
+    def test_research_requires_query(self, client_with_cookies) -> None:
+        resp = client_with_cookies.post("/notebooks/nb-123/research",
+                                        json={},
+                                        content_type="application/json")
+        assert resp.status_code == 400
+
+    def test_research_returns_session_id(self, client_with_cookies) -> None:
+        from unittest.mock import patch
+        with patch("engine.mcp.nlm_live_proxy._batchexecute",
+                   return_value=("Ljjv0c", ["sess-xyz"])):
+            resp = client_with_cookies.post(
+                "/notebooks/nb-123/research",
+                json={"query": "local LLMs"},
+                content_type="application/json",
+            )
+        assert resp.status_code == 200
+        data = json.loads(resp.data)
+        assert data["session_id"] == "sess-xyz"
+        assert data["notebook_id"] == "nb-123"
+        assert data["query"] == "local LLMs"
+
+    def test_research_failure_returns_502(self, client_with_cookies) -> None:
+        from unittest.mock import patch
+        with patch("engine.mcp.nlm_live_proxy._batchexecute",
+                   return_value=("Ljjv0c", {"error": "bad"})):
+            resp = client_with_cookies.post(
+                "/notebooks/nb-123/research",
+                json={"query": "test"},
+                content_type="application/json",
+            )
+        assert resp.status_code == 502
+
+
+class TestThreadRoutes:
+    """GET /notebooks/<id>/threads — hPTbtc + khqZz."""
+
+    @pytest.fixture
+    def client_with_cookies(self, tmp_path: Path):
+        from engine.mcp.nlm_live_proxy import create_nlm_proxy_app
+        import engine.mcp.nlm_live_proxy as proxy_mod
+        cookie_file = tmp_path / "cookies.json"
+        cookie_file.write_text('{"SID": "test123"}')
+        original = proxy_mod._COOKIES_FILE
+        proxy_mod._COOKIES_FILE = cookie_file
+        app = create_nlm_proxy_app()
+        app.config["TESTING"] = True
+        with app.test_client() as c:
+            yield c
+        proxy_mod._COOKIES_FILE = original
+
+    def test_threads_returns_ids(self, client_with_cookies) -> None:
+        from unittest.mock import patch
+        mock_data = [[["thread-1"], ["thread-2"]]]
+        with patch("engine.mcp.nlm_live_proxy._batchexecute",
+                   return_value=("hPTbtc", mock_data)):
+            resp = client_with_cookies.get("/notebooks/nb-123/threads")
+        assert resp.status_code == 200
+        data = json.loads(resp.data)
+        assert data["count"] == 2
+        assert data["threads"][0]["thread_id"] == "thread-1"
+
+    def test_threads_no_cookies_returns_401(self, tmp_path) -> None:
+        from engine.mcp.nlm_live_proxy import create_nlm_proxy_app
+        import engine.mcp.nlm_live_proxy as proxy_mod
+        original = proxy_mod._COOKIES_FILE
+        proxy_mod._COOKIES_FILE = tmp_path / "no.json"
+        app = create_nlm_proxy_app()
+        app.config["TESTING"] = True
+        with app.test_client() as c:
+            resp = c.get("/notebooks/nb-123/threads")
+        proxy_mod._COOKIES_FILE = original
+        assert resp.status_code == 401
+
+    def test_thread_messages_route(self, client_with_cookies) -> None:
+        from unittest.mock import patch
+        mock_data = [[None, [["hello from thread", None, None]]]]
+        with patch("engine.mcp.nlm_live_proxy._batchexecute",
+                   return_value=("khqZz", mock_data)):
+            resp = client_with_cookies.get("/notebooks/nb-123/threads/t-99")
+        assert resp.status_code == 200
+        data = json.loads(resp.data)
+        assert data["thread_id"] == "t-99"
+        assert "messages" in data
+
+
+class TestRateLimiterRoute:
+    """GET/POST /rate_limit."""
+
+    @pytest.fixture
+    def client_with_cookies(self, tmp_path: Path):
+        from engine.mcp.nlm_live_proxy import create_nlm_proxy_app
+        import engine.mcp.nlm_live_proxy as proxy_mod
+        cookie_file = tmp_path / "cookies.json"
+        cookie_file.write_text('{"SID": "test123"}')
+        original = proxy_mod._COOKIES_FILE
+        proxy_mod._COOKIES_FILE = cookie_file
+        app = create_nlm_proxy_app()
+        app.config["TESTING"] = True
+        with app.test_client() as c:
+            yield c
+        proxy_mod._COOKIES_FILE = original
+
+    def test_get_rate_limit(self, client_with_cookies) -> None:
+        resp = client_with_cookies.get("/rate_limit")
+        assert resp.status_code == 200
+        data = json.loads(resp.data)
+        assert "min_gap_seconds" in data
+
+    def test_set_rate_limit(self, client_with_cookies) -> None:
+        resp = client_with_cookies.post("/rate_limit",
+                                        json={"seconds": 2.5},
+                                        content_type="application/json")
+        assert resp.status_code == 200
+        data = json.loads(resp.data)
+        assert abs(data["min_gap_seconds"] - 2.5) < 0.01
+
+    def test_rate_limit_clamped_to_min(self, client_with_cookies) -> None:
+        resp = client_with_cookies.post("/rate_limit",
+                                        json={"seconds": 0.0},
+                                        content_type="application/json")
+        assert resp.status_code == 200
+        data = json.loads(resp.data)
+        assert data["min_gap_seconds"] >= 0.5  # clamped to minimum
+
+
+class TestRPCRegistryRoute:
+    """GET /rpc_registry."""
+
+    @pytest.fixture
+    def client_with_cookies(self, tmp_path: Path):
+        from engine.mcp.nlm_live_proxy import create_nlm_proxy_app
+        import engine.mcp.nlm_live_proxy as proxy_mod
+        cookie_file = tmp_path / "cookies.json"
+        cookie_file.write_text('{"SID": "test123"}')
+        original = proxy_mod._COOKIES_FILE
+        proxy_mod._COOKIES_FILE = cookie_file
+        app = create_nlm_proxy_app()
+        app.config["TESTING"] = True
+        with app.test_client() as c:
+            yield c
+        proxy_mod._COOKIES_FILE = original
+
+    def test_rpc_registry_returns_status(self, client_with_cookies) -> None:
+        resp = client_with_cookies.get("/rpc_registry")
+        assert resp.status_code == 200
+        data = json.loads(resp.data)
+        assert "available" in data
+
+
+class TestRateLimiter:
+    """Unit tests for _RateLimiter class."""
+
+    def test_rate_limiter_waits(self) -> None:
+        import time
+        import engine.mcp.nlm_live_proxy as proxy_mod
+        rl = proxy_mod._RateLimiter(min_gap_seconds=0.05)
+        rl.wait()
+        t0 = time.time()
+        rl.wait()
+        elapsed = time.time() - t0
+        assert elapsed >= 0.04  # allow tiny margin
+
+    def test_rate_limiter_no_wait_if_enough_time(self) -> None:
+        import time
+        import engine.mcp.nlm_live_proxy as proxy_mod
+        rl = proxy_mod._RateLimiter(min_gap_seconds=0.01)
+        rl.wait()
+        time.sleep(0.05)
+        t0 = time.time()
+        rl.wait()
+        elapsed = time.time() - t0
+        # Should complete almost instantly since gap was already satisfied
+        assert elapsed < 0.04
+
+    def test_set_gap_updates_min_gap(self) -> None:
+        import engine.mcp.nlm_live_proxy as proxy_mod
+        rl = proxy_mod._RateLimiter(min_gap_seconds=1.0)
+        rl.set_gap(2.5)
+        assert rl._min_gap == 2.5
