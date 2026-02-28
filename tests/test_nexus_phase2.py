@@ -210,19 +210,21 @@ class TestNexusMemory:
         result = mem.forget("mem-789")
         assert result is True
 
+    @patch("requests.post")
     @patch("requests.delete")
     @patch("requests.get")
-    def test_compact_reduces_memories(self, mock_get, mock_delete):
+    def test_compact_reduces_memories(self, mock_get, mock_delete, mock_post):
         from engine.nexus.nexus_memory import NexusMemory
         mock_get.return_value = MagicMock(
             ok=True,
             json=lambda: {"data": [
-                {"id": f"m{i}", "title": f"Memory: test {i}", "content": f"content {i}",
+                {"id": f"m{i}", "title": f"Memory: test {i}", "content": f"memory content {i}",
                  "tags": f"copilot,memory,agent:copilot,importance:{0.1 + i*0.1}"}
                 for i in range(5)
             ]}
         )
         mock_delete.return_value = MagicMock(ok=True)
+        mock_post.return_value = MagicMock(ok=True, json=lambda: {"id": "new-memory-id"})
         mem = NexusMemory(namespace="copilot", agent_id="copilot")
         result = mem.compact(max_memories=3)
         assert isinstance(result, int)

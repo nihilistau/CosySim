@@ -476,12 +476,13 @@ class TestNexusStorage:
         reflection._store_report(report)
         client.add_entry.assert_called_once()
 
-    def test_store_insights_no_nexus(self, reflection):
-        """Storage failure is handled gracefully."""
+    @patch("engine.nexus.client.get_nexus_client", side_effect=Exception("Nexus unavailable"))
+    def test_store_insights_no_nexus(self, mock_client, reflection):
+        """Storage failure is handled gracefully when Nexus is down."""
         insights = [
             ReflectionInsight(
-                insight_id="i1", category="pattern", title="T",
-                description="D", confidence=0.5, priority="low",
+                insight_id="i1", category="pattern", title="Test insight",
+                description="Test description", confidence=0.5, priority="low",
                 actionable=False,
             )
         ]
