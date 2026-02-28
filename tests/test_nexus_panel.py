@@ -254,6 +254,45 @@ class TestNexusPanelRoutes:
         resp = c.get("/api/rules")
         assert resp.status_code == 200
 
+    def test_har_ingest_no_file(self, client):
+        """POST /api/ingest/har without file returns 400."""
+        c, _ = client
+        resp = c.post("/api/ingest/har")
+        assert resp.status_code == 400
+        assert "error" in resp.get_json()
+
+    def test_har_commit_starts_job(self, client):
+        """POST /api/ingest/har/commit returns job_id immediately."""
+        c, scene = client
+        with patch("engine.nexus.har_extractor.HARExtractor") as mock_ext_cls:
+            mock_ext = MagicMock()
+            mock_ext_cls.return_value = mock_ext
+            mock_ext.extract.return_value = []
+            resp = c.post(
+                "/api/ingest/har/commit",
+                json={"tmp_path": "/tmp/test.har", "items": ["sources"]},
+                content_type="application/json",
+            )
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert "job_id" in data
+        assert data["status"] == "running"
+
+    def test_har_status_unknown_job(self, client):
+        """GET /api/ingest/har/status/<unknown> returns 404."""
+        c, _ = client
+        resp = c.get("/api/ingest/har/status/nonexistent_job")
+        assert resp.status_code == 404
+
+    def test_har_status_known_job(self, client):
+        """GET /api/ingest/har/status/<id> returns job state."""
+        c, scene = client
+        scene._ingest_jobs["test_job_123"] = {"status": "done", "results": [], "error": None}
+        resp = c.get("/api/ingest/har/status/test_job_123")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["status"] == "done"
+
 
 # ── Skills tests ─────────────────────────────────────────────────────────
 
