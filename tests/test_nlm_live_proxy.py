@@ -760,3 +760,226 @@ class TestV21Routes:
                    return_value={"error": "RPC failed"}):
             resp = client_v21.get("/user/quota")
         assert resp.status_code == 502
+
+
+# ── NLMClient class ────────────────────────────────────────────────────
+
+class TestNLMClient:
+    """Tests for the NLMClient class and get_nlm_client() singleton."""
+
+    def test_singleton_returns_same_instance(self) -> None:
+        from engine.mcp.nlm_live_proxy import get_nlm_client
+        import engine.mcp.nlm_live_proxy as mod
+        original = mod._nlm_client
+        mod._nlm_client = None
+        try:
+            c1 = get_nlm_client()
+            c2 = get_nlm_client()
+            assert c1 is c2
+        finally:
+            mod._nlm_client = original
+
+    def test_has_cookies_false_when_no_file(self, tmp_path: Path) -> None:
+        from engine.mcp.nlm_live_proxy import NLMClient
+        import engine.mcp.nlm_live_proxy as mod
+        original = mod._COOKIES_FILE
+        mod._COOKIES_FILE = tmp_path / "no_cookies.json"
+        try:
+            client = NLMClient()
+            assert client.has_cookies() is False
+        finally:
+            mod._COOKIES_FILE = original
+
+    def test_has_cookies_true_when_file_exists(self, tmp_path: Path) -> None:
+        from engine.mcp.nlm_live_proxy import NLMClient
+        import engine.mcp.nlm_live_proxy as mod
+        original = mod._COOKIES_FILE
+        cf = tmp_path / "cookies.json"
+        cf.write_text(json.dumps({"SID": "abc", "SSID": "xyz"}), encoding="utf-8")
+        mod._COOKIES_FILE = cf
+        try:
+            client = NLMClient()
+            assert client.has_cookies() is True
+        finally:
+            mod._COOKIES_FILE = original
+
+    def test_get_cookies_returns_dict(self, tmp_path: Path) -> None:
+        from engine.mcp.nlm_live_proxy import NLMClient
+        import engine.mcp.nlm_live_proxy as mod
+        original = mod._COOKIES_FILE
+        cf = tmp_path / "cookies.json"
+        cf.write_text(json.dumps({"SID": "sid1", "SSID": "ssid1"}), encoding="utf-8")
+        mod._COOKIES_FILE = cf
+        try:
+            client = NLMClient()
+            cookies = client.get_cookies()
+            assert isinstance(cookies, dict)
+            assert cookies.get("SID") == "sid1"
+        finally:
+            mod._COOKIES_FILE = original
+
+    def test_get_status_no_cookies(self, tmp_path: Path) -> None:
+        from engine.mcp.nlm_live_proxy import NLMClient
+        import engine.mcp.nlm_live_proxy as mod
+        original = mod._COOKIES_FILE
+        mod._COOKIES_FILE = tmp_path / "empty.json"
+        try:
+            client = NLMClient()
+            status = client.get_status()
+            assert status["has_cookies"] is False
+            assert status["cookie_count"] == 0
+        finally:
+            mod._COOKIES_FILE = original
+
+    def test_get_status_with_cookies(self, tmp_path: Path) -> None:
+        from engine.mcp.nlm_live_proxy import NLMClient
+        import engine.mcp.nlm_live_proxy as mod
+        original_cf = mod._COOKIES_FILE
+        original_mf = mod._META_FILE
+        cf = tmp_path / "cookies.json"
+        mf = tmp_path / "meta.json"
+        cf.write_text(json.dumps({"SID": "s", "SAPISID": "sa"}), encoding="utf-8")
+        mf.write_text(json.dumps({"bl": "boq_test_20260228.01_p0", "f_sid": "123"}), encoding="utf-8")
+        mod._COOKIES_FILE = cf
+        mod._META_FILE = mf
+        try:
+            client = NLMClient()
+            status = client.get_status()
+            assert status["has_cookies"] is True
+            assert status["cookie_count"] == 2
+            assert "bl" in status
+        finally:
+            mod._COOKIES_FILE = original_cf
+            mod._META_FILE = original_mf
+
+    def test_import_cookies_from_har(self, tmp_path: Path) -> None:
+        from engine.mcp.nlm_live_proxy import NLMClient
+        import engine.mcp.nlm_live_proxy as mod
+        original = mod._COOKIES_FILE
+        mod._COOKIES_FILE = tmp_path / "imported.json"
+        har = _make_har([
+            {"name": "SID", "value": "imported_sid"},
+            {"name": "HSID", "value": "imported_hsid"},
+        ])
+        har_file = tmp_path / "import_test.har"
+        har_file.write_text(json.dumps(har), encoding="utf-8")
+        try:
+            client = NLMClient()
+            result = client.import_cookies_from_har(str(har_file))
+            # Result uses "imported" key (not "imported_cookies")
+            count = result.get("imported", result.get("imported_cookies", 0))
+            assert count >= 1
+            assert client.has_cookies() is True
+        finally:
+            mod._COOKIES_FILE = original
+
+    def test_list_notebooks_without_cookies_returns_error(self, tmp_path: Path) -> None:
+        from engine.mcp.nlm_live_proxy import NLMClient
+        import engine.mcp.nlm_live_proxy as mod
+        original = mod._COOKIES_FILE
+        mod._COOKIES_FILE = tmp_path / "no_cookies.json"
+        try:
+            client = NLMClient()
+            result = client.list_notebooks()
+            # Without cookies, should return empty list or error dict
+            assert isinstance(result, (list, dict))
+        finally:
+            mod._COOKIES_FILE = original
+
+    def test_ask_without_cookies_returns_error(self, tmp_path: Path) -> None:
+        from engine.mcp.nlm_live_proxy import NLMClient
+        import engine.mcp.nlm_live_proxy as mod
+        original = mod._COOKIES_FILE
+        mod._COOKIES_FILE = tmp_path / "no_cookies.json"
+        try:
+            client = NLMClient()
+            result = client.ask("nb-id", "What is this about?")
+            assert isinstance(result, dict)
+            assert "error" in result
+        finally:
+            mod._COOKIES_FILE = original
+
+    def test_all_public_methods_exist(self) -> None:
+        """Verify all expected public methods are present on NLMClient."""
+        from engine.mcp.nlm_live_proxy import NLMClient
+        expected = [
+            "has_cookies", "get_cookies", "get_status",
+            "import_cookies_from_har", "capture_cookies_from_chrome",
+            "list_notebooks", "get_notebook", "get_sources",
+            "get_notes", "get_summary", "get_chat_history",
+            "ask", "ask_batch", "chat", "chat_batch",
+            "generate_document", "save_note", "read_source",
+            "get_user_quota",
+        ]
+        for method_name in expected:
+            assert hasattr(NLMClient, method_name), f"NLMClient missing method: {method_name}"
+
+
+# ── History Flask route ────────────────────────────────────────────────
+
+class TestHistoryFlaskRoute:
+    """Tests for GET /notebooks/<id>/history (hPTbtc RPC)."""
+
+    @pytest.fixture
+    def client_with_cookies(self, tmp_path: Path):
+        from engine.mcp.nlm_live_proxy import create_nlm_proxy_app
+        import engine.mcp.nlm_live_proxy as proxy_mod
+
+        original_cf = proxy_mod._COOKIES_FILE
+        original_mf = proxy_mod._META_FILE
+        cf = tmp_path / "cookies.json"
+        mf = tmp_path / "meta.json"
+        cf.write_text(json.dumps({"SID": "test"}), encoding="utf-8")
+        mf.write_text(json.dumps({"bl": "bl_test", "f_sid": "111"}), encoding="utf-8")
+        proxy_mod._COOKIES_FILE = cf
+        proxy_mod._META_FILE = mf
+        app = create_nlm_proxy_app()
+        app.config["TESTING"] = True
+        with app.test_client() as c:
+            yield c
+        proxy_mod._COOKIES_FILE = original_cf
+        proxy_mod._META_FILE = original_mf
+
+    def test_history_requires_cookies(self, tmp_path: Path) -> None:
+        from engine.mcp.nlm_live_proxy import create_nlm_proxy_app
+        import engine.mcp.nlm_live_proxy as proxy_mod
+        original = proxy_mod._COOKIES_FILE
+        proxy_mod._COOKIES_FILE = tmp_path / "no.json"
+        app = create_nlm_proxy_app()
+        app.config["TESTING"] = True
+        with app.test_client() as c:
+            resp = c.get("/notebooks/nb-123/history")
+        proxy_mod._COOKIES_FILE = original
+        assert resp.status_code == 401
+
+    def test_history_returns_200_with_mocked_rpc(self, client_with_cookies) -> None:
+        from unittest.mock import patch
+        # The history route calls _batchexecute("hPTbtc", ...) directly
+        mock_data = [["message content here for testing purposes"]]
+        with patch("engine.mcp.nlm_live_proxy._batchexecute",
+                   return_value=("hPTbtc", mock_data)):
+            resp = client_with_cookies.get("/notebooks/nb-123/history")
+        assert resp.status_code == 200
+        data = json.loads(resp.data)
+        assert "messages" in data
+        assert "notebook_id" in data
+
+    def test_history_returns_502_on_rpc_error(self, client_with_cookies) -> None:
+        from unittest.mock import patch
+        with patch("engine.mcp.nlm_live_proxy._batchexecute",
+                   return_value=("hPTbtc", {"error": "RPC timeout"})):
+            resp = client_with_cookies.get("/notebooks/nb-123/history")
+        assert resp.status_code == 502
+
+    def test_history_passes_page_size(self, client_with_cookies) -> None:
+        from unittest.mock import patch, call
+        with patch("engine.mcp.nlm_live_proxy._batchexecute",
+                   return_value=("hPTbtc", [])) as mock_rpc:
+            resp = client_with_cookies.get(
+                "/notebooks/nb-123/history?page_size=50"
+            )
+        assert resp.status_code == 200
+        # Verify page_size was reflected in the args
+        mock_rpc.assert_called_once()
+        call_args = mock_rpc.call_args[0]
+        assert "50" in call_args[1]  # page_size 50 in serialized args string

@@ -1044,3 +1044,95 @@ body {
   white-space: pre-wrap;
   overflow-x: auto;
 }
+
+/* ── Notebook Browser ───────────────────────────────────────────── */
+.notebook-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border: 1px solid var(--border, #313244);
+  border-radius: 6px;
+  margin-bottom: 6px;
+  background: var(--bg-card, #1e1e2e);
+  gap: 8px;
+}
+.notebook-card-main {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+.notebook-card-main .nb-id {
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.notebook-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.nb-source-count { font-size: 12px; }
+
+/* ── Modal ─────────────────────────────────────────────────────── */
+.modal-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  z-index: 1000;
+  align-items: center;
+  justify-content: center;
+}
+.modal-box {
+  background: var(--bg-card, #1e1e2e);
+  border: 1px solid var(--border, #313244);
+  border-radius: 10px;
+  width: min(700px, 90vw);
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border, #313244);
+}
+.modal-header h3 { margin: 0; font-size: 15px; }
+.modal-body {
+  padding: 14px 16px;
+  overflow-y: auto;
+  flex: 1;
+}
+.history-msg {
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  border-radius: 6px;
+  border-left: 3px solid var(--primary, #89b4fa);
+}
+.history-msg.history-human {
+  border-left-color: var(--success, #a6e3a1);
+  background: rgba(166,227,161,0.08);
+}
+.history-msg.history-ai, .history-msg.history-assistant {
+  border-left-color: var(--primary, #89b4fa);
+  background: rgba(137,180,250,0.06);
+}
+.history-type {
+  font-size: 11px;
+  font-weight: 600;
+  opacity: 0.7;
+  display: block;
+  margin-bottom: 4px;
+}
+.history-content {
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}

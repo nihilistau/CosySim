@@ -144,6 +144,22 @@ class NexusPanelScene(BaseScene, NexusSceneMixin):
         except Exception:
             return None
 
+    def _nlm_proxy_url(self) -> str:
+        """Return the configured NLM proxy base URL."""
+        return get_config().get("notebooklm.proxy_url", "http://localhost:8800")
+
+    def _nlm_proxy_get(self, path: str) -> Optional[Any]:
+        """GET request to NLM proxy. Returns parsed JSON or None on error."""
+        import urllib.request
+        try:
+            url = f"{self._nlm_proxy_url()}{path}"
+            req = urllib.request.Request(url, method="GET")
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                return json.loads(resp.read().decode())
+        except Exception as exc:
+            logger.debug("NLM proxy GET %s failed: %s", path, exc)
+            return None
+
     # ── Routes ──────────────────────────────────────────────────────────
 
     def _register_routes(self) -> None:
@@ -509,13 +525,19 @@ class NexusPanelScene(BaseScene, NexusSceneMixin):
 
         @app.route("/api/nlm/notebooks")
         def api_nlm_notebooks():
+            """List live NLM notebooks from the proxy (with Nexus fallback)."""
+            # Try live proxy first
+            data = self._nlm_proxy_get("/notebooks")
+            if data and not data.get("error"):
+                return jsonify(data)
+            # Fallback to Nexus client stored metadata
             client = self._get_client()
             if not client:
-                return jsonify({"error": "Nexus unavailable"}), 503
+                return jsonify({"error": "NLM proxy offline and Nexus unavailable", "notebooks": []}), 503
             try:
                 return jsonify(client.nlm_list_notebooks())
             except Exception as exc:
-                return jsonify({"error": str(exc)}), 500
+                return jsonify({"error": str(exc), "notebooks": []}), 500
 
         # ── Copilot Panel ───────────────────────────────────────────
 
@@ -861,6 +883,22 @@ class NexusPanelScene(BaseScene, NexusSceneMixin):
                 return jsonify(result)
             except Exception as exc:
                 return jsonify({"error": str(exc)}), 500
+
+        @app.route("/api/nlm/notebook/<nb_id>/sources", methods=["GET"])
+        def api_nlm_get_sources(nb_id: str):
+            """Get sources for an NLM notebook from live proxy."""
+            data = self._nlm_proxy_get(f"/notebooks/{nb_id}/sources")
+            if data is None:
+                return jsonify({"error": "NLM proxy offline or notebook not found"}), 502
+            return jsonify(data)
+
+        @app.route("/api/nlm/notebook/<nb_id>/history")
+        def api_nlm_notebook_history(nb_id: str):
+            """Get chat history for an NLM notebook from live proxy."""
+            data = self._nlm_proxy_get(f"/notebooks/{nb_id}/history")
+            if data is None:
+                return jsonify({"error": "NLM proxy offline or history unavailable"}), 502
+            return jsonify(data)
 
         @app.route("/api/nlm/ask", methods=["POST"])
         def api_nlm_ask():

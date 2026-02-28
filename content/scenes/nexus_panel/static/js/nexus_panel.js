@@ -1068,16 +1068,37 @@ async function loadNotebooks() {
   }
   const notebooks = Array.isArray(data) ? data : (data.notebooks || []);
   if (notebooks.length === 0) {
-    listEl.innerHTML = '<p class="muted">No notebooks found.</p>';
+    listEl.innerHTML = '<p class="muted">No notebooks found. Ensure NLM proxy is running and cookies are imported.</p>';
     return;
   }
   listEl.innerHTML = notebooks.map(nb => `
-    <div class="notebook-card">
-      <strong>${esc(nb.name || nb.id)}</strong>
-      <span class="muted">${esc(nb.id || '')}</span>
-      <button class="btn-icon btn-danger nb-delete" data-id="${esc(nb.id)}" title="Delete">🗑</button>
+    <div class="notebook-card" data-id="${esc(nb.id)}">
+      <div class="notebook-card-main">
+        <strong>${esc(nb.name || nb.id)}</strong>
+        <span class="muted nb-id">${esc(nb.id || '')}</span>
+      </div>
+      <div class="notebook-card-actions">
+        <span class="nb-source-count muted" id="nb-src-${esc(nb.id)}">⏳ sources</span>
+        <button class="btn-icon nb-history" data-id="${esc(nb.id)}" data-name="${esc(nb.name || nb.id)}" title="Chat History">📋</button>
+        <button class="btn-icon btn-danger nb-delete" data-id="${esc(nb.id)}" title="Delete">🗑</button>
+      </div>
     </div>
   `).join('');
+
+  // Load source counts asynchronously
+  notebooks.forEach(nb => {
+    if (!nb.id) return;
+    api(`/api/nlm/notebook/${nb.id}/sources`).then(src => {
+      const el = document.getElementById(`nb-src-${nb.id}`);
+      if (!el) return;
+      if (src.error) {
+        el.textContent = '— sources';
+      } else {
+        el.textContent = `📎 ${src.count ?? (src.sources || []).length} sources`;
+      }
+    });
+  });
+
   listEl.querySelectorAll('.nb-delete').forEach(btn => {
     btn.addEventListener('click', async () => {
       if (!confirm('Delete this notebook?')) return;
@@ -1085,6 +1106,55 @@ async function loadNotebooks() {
       loadNotebooks();
     });
   });
+
+  listEl.querySelectorAll('.nb-history').forEach(btn => {
+    btn.addEventListener('click', () => showNotebookHistory(btn.dataset.id, btn.dataset.name));
+  });
+}
+
+async function showNotebookHistory(nbId, nbName) {
+  let modal = document.getElementById('nb-history-modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'nb-history-modal';
+    modal.className = 'modal-overlay';
+    modal.innerHTML = `
+      <div class="modal-box">
+        <div class="modal-header">
+          <h3 id="nb-history-title">Chat History</h3>
+          <button id="nb-history-close" class="btn-icon">✕</button>
+        </div>
+        <div id="nb-history-body" class="modal-body"></div>
+      </div>`;
+    document.body.appendChild(modal);
+    document.getElementById('nb-history-close').addEventListener('click', () => {
+      modal.style.display = 'none';
+    });
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) modal.style.display = 'none';
+    });
+  }
+  document.getElementById('nb-history-title').textContent = `Chat History — ${nbName}`;
+  document.getElementById('nb-history-body').innerHTML = '<p class="muted">Loading history...</p>';
+  modal.style.display = 'flex';
+
+  const data = await api(`/api/nlm/notebook/${nbId}/history`);
+  const body = document.getElementById('nb-history-body');
+  if (data.error) {
+    body.innerHTML = `<p style="color:var(--danger)">${esc(data.error)}</p>`;
+    return;
+  }
+  const messages = data.messages || [];
+  if (messages.length === 0) {
+    body.innerHTML = '<p class="muted">No chat history found for this notebook.</p>';
+    return;
+  }
+  body.innerHTML = messages.map(m => `
+    <div class="history-msg history-${esc(m.type || 'unknown')}">
+      <span class="history-type">${m.type === 'human' ? '👤 You' : '🧠 NLM'}</span>
+      <div class="history-content">${esc(m.content || '')}</div>
+    </div>
+  `).join('');
 }
 
 document.getElementById('refresh-notebooks-btn')?.addEventListener('click', loadNotebooks);
