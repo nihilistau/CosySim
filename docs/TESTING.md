@@ -15,9 +15,9 @@ python -m pytest tests/ --cov=engine --cov=content --tb=short
 
 Test configuration is defined in `pyproject.toml` under `[tool.pytest.ini_options]`.
 
-## Test Inventory
+**Test Inventory**
 
-**54 test files** · **1,781 test functions**
+**176 test files** · **4,827 test functions**
 
 ### Scenes (11 files, ~370 tests)
 
