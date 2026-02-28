@@ -1020,3 +1020,87 @@ def nlm_distill_notebook(
         }, default=str)
     except Exception as exc:
         return json.dumps({"error": str(exc)})
+
+
+@skill(
+    pack="autonomy",
+    description="Chat with a NLM notebook using configure-chat role injection (s0tc2d RPC). Async — poll conversations after ~3s.",
+    tags=["nlm", "notebooklm", "chat", "configure", "role", "autonomy"],
+    category=SkillCategory.MEMORY,
+    cooldown=3.0,
+)
+def nlm_chat(
+    notebook_id: str,
+    question: str,
+    role: str = "",
+    response_length: int = 4,
+) -> str:
+    """Send a chat message to NLM with optional configure-chat role.
+
+    Args:
+        notebook_id: UUID of the NLM notebook.
+        question: The question or prompt to send.
+        role: Optional configure-chat persona (e.g. 'Act as a PhD researcher').
+        response_length: 4=Default, 1=Longer, 2=Shorter.
+    """
+    result = _nlm_proxy().chat_message(notebook_id, question, role, response_length)
+    return json.dumps(result, default=str)
+
+
+@skill(
+    pack="autonomy",
+    description="Send multiple chat messages to a NLM notebook in parallel (batched s0tc2d). Up to 5 per batch.",
+    tags=["nlm", "notebooklm", "chat", "batch", "configure", "autonomy"],
+    category=SkillCategory.MEMORY,
+    cooldown=5.0,
+)
+def nlm_chat_batch(
+    notebook_id: str,
+    questions: str,
+    role: str = "",
+    response_length: int = 4,
+) -> str:
+    """Send multiple chat messages to NLM with optional role injection. Pass questions as JSON array string.
+
+    Args:
+        notebook_id: UUID of the NLM notebook.
+        questions: JSON array of question strings, e.g. '["Q1?", "Q2?"]'.
+        role: Optional configure-chat persona.
+        response_length: 4=Default, 1=Longer, 2=Shorter.
+    """
+    try:
+        q_list = json.loads(questions) if isinstance(questions, str) else questions
+    except json.JSONDecodeError:
+        q_list = [questions]
+    result = _nlm_proxy().chat_messages_batch(notebook_id, q_list, role, response_length)
+    return json.dumps(result, default=str)
+
+
+@skill(
+    pack="autonomy",
+    description="Read the full text content of a NLM source document (tr032e RPC). Use to extract sources into Nexus.",
+    tags=["nlm", "notebooklm", "source", "read", "extract", "autonomy"],
+    category=SkillCategory.MEMORY,
+    cooldown=3.0,
+)
+def nlm_read_source(source_id: str) -> str:
+    """Read the full markdown content of a NotebookLM source document.
+
+    Args:
+        source_id: UUID of the source document to read.
+    """
+    result = _nlm_proxy().read_source(source_id)
+    return json.dumps(result, default=str)
+
+
+@skill(
+    pack="autonomy",
+    description="Fetch user account info and storage quota from NotebookLM (ozz5Z RPC).",
+    tags=["nlm", "notebooklm", "quota", "account", "status", "autonomy"],
+    category=SkillCategory.SYSTEM,
+    cooldown=60.0,
+)
+def nlm_user_quota() -> str:
+    """Fetch NotebookLM user quota and account information."""
+    result = _nlm_proxy().get_user_quota()
+    return json.dumps(result, default=str)

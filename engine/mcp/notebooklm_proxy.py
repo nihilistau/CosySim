@@ -238,6 +238,85 @@ class NotebookLMProxy:
         """List all notebooks (search is not exposed via batchexecute)."""
         return self.list_notebooks()
 
+    # ── v2.1: Configure Chat, Source Reader, Quota ────────────────────
+
+    def chat_message(
+        self,
+        notebook_id: str,
+        question: str,
+        role: str = "",
+        response_length: int = 4,
+    ) -> Dict[str, Any]:
+        """Send a chat message with optional role injection (s0tc2d RPC).
+
+        This RPC is asynchronous — the response is queued. Poll
+        get_conversations() after ~2-5 seconds to retrieve the answer.
+
+        Args:
+            notebook_id: UUID of the notebook to chat with.
+            question: The question or prompt to send.
+            role: Optional configure-chat role string (e.g. "Act as a PhD researcher").
+            response_length: 4=Default, 1=Longer, 2=Shorter.
+
+        Returns:
+            Dict with: queued, notebook_id, question.
+        """
+        return self._post(
+            f"/notebooks/{notebook_id}/chat",
+            {"question": question, "role": role, "response_length": response_length},
+        )
+
+    def chat_messages_batch(
+        self,
+        notebook_id: str,
+        questions: list,
+        role: str = "",
+        response_length: int = 4,
+        max_batch: int = 5,
+    ) -> Dict[str, Any]:
+        """Send multiple chat messages in parallel (batched s0tc2d).
+
+        Args:
+            notebook_id: UUID of the notebook.
+            questions: List of question strings.
+            role: Optional configure-chat role string.
+            response_length: 4=Default, 1=Longer, 2=Shorter.
+            max_batch: Maximum concurrent requests per batch.
+
+        Returns:
+            Dict with: results, queued_count, count, questions.
+        """
+        return self._post(
+            f"/notebooks/{notebook_id}/chat_batch",
+            {
+                "questions": questions,
+                "role": role,
+                "response_length": response_length,
+                "max_batch": max_batch,
+            },
+        )
+
+    def read_source(self, source_id: str) -> Dict[str, Any]:
+        """Read the full text content of a source document (tr032e RPC).
+
+        Use this to extract all source content from NLM into Nexus for offline analysis.
+
+        Args:
+            source_id: UUID of the source document.
+
+        Returns:
+            Dict with: source_id, content, word_count.
+        """
+        return self._get(f"/sources/{source_id}/content")
+
+    def get_user_quota(self) -> Dict[str, Any]:
+        """Fetch user account info and storage quota (ozz5Z RPC).
+
+        Returns:
+            Dict with: quota_data, extracted.
+        """
+        return self._get("/user/quota")
+
     # ── internal helpers ───────────────────────────────────────────────
 
     def _get(self, path: str) -> dict:
