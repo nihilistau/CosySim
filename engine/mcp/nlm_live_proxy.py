@@ -4,29 +4,68 @@ NLM Live Proxy — Full batchexecute API bridge for NotebookLM.
 Architecture
 ~~~~~~~~~~~~
 This proxy provides complete read AND write access to NotebookLM's private
-batchexecute API, reverse-engineered from HAR captures. It exposes a REST
-API at :8800 for CosySim skills and agents to consume.
+batchexecute API, reverse-engineered from multi-session HAR analysis (11 HARs
+across 5 NLM sessions). It exposes a REST API at :8800 for CosySim agents.
 
 Auth is handled via Google session cookies extracted from either:
   1. A manually captured HAR file (DevTools → Save all as HAR)
   2. Automatically via Chrome DevTools Protocol (CDP) — preferred
 
-Reverse-Engineered RPC Catalogue
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-| RPC ID  | Function                | Mode  |
-|---------|------------------------|-------|
-| CYK0Xb  | Ask question           | WRITE |
-| cFji9   | Get conversation hist  | READ  |
-| ciyUvf  | Generate document      | WRITE |
-| R7cb6c  | Create/save note       | WRITE |
-| gArtLc  | List notes/artifacts   | READ  |
-| ub2Bae  | List notebooks         | READ  |
-| wXbhsf  | List sources           | READ  |
-| e3bVqc  | Get source content     | READ  |
-| VfAZjd  | Get AI summary         | READ  |
+Complete Reverse-Engineered RPC Catalogue
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+RPC IDs are **STABLE within a build label** but MAY change when Google
+deploys a new frontend (BL changes approx. weekly). The BL is tracked in
+data/nlm_meta.json and auto-extracted from imported HARs.
 
-Multi-question batching is supported — up to 5 questions per HTTP request
-by packing multiple CYK0Xb calls in a single batchexecute f.req array.
+Read RPCs (stable across all observed builds):
+| RPC ID  | Function                   | Payload signature                             |
+|---------|----------------------------|-----------------------------------------------|
+| ZwVcOc  | Session init               | [null,[1,...,[1]]]                            |
+| wXbhsf  | List sources (full)        | [null,1,null,[2]]                             |
+| ub2Bae  | List notebooks             | [[2]]                                         |
+| sqTeoe  | List all notebooks         | [[2,...],null,1]                              |
+| rLM1Ne  | Load notebook by ID        | [nb_id,null,[2],null,0]                       |
+| e3bVqc  | Notebook extended info     | [null,null,nb_id]                             |
+| hPTbtc  | List sources (paginated)   | [[],null,nb_id,page_size]                     |
+| khqZz   | Sources for sub-notebook   | [[],null,null,nb_id,page_size]                |
+| JFMDGd  | Sources list (condensed)   | [nb_id,[2]]                                   |
+| VfAZjd  | AI overview/summary        | [nb_id,[2]]                                   |
+| gArtLc  | List notes/artifacts       | [[2,...],nb_id,"NOT...SUGGESTED"]             |
+| cFji9   | Conversation history       | [nb_id,null,cursor_ts,[2]]                    |
+| ozz5Z   | User quota / account info  | [[[[null,"1",count],...,1]]]                  |
+| tr032e  | Read source content        | [[[[source_id]]]]                             |
+
+Write RPCs:
+| RPC ID  | Function                   | Notes                                         |
+|---------|----------------------------|-----------------------------------------------|
+| s0tc2d  | Chat message (CURRENT)     | [nb_id,[[null*7,[[2,"question"],[resp_len]]]]]|
+| CYK0Xb  | Annotate text w/ citations | [nb_id,"context_text"] → [[id, cited_text]]   |
+| ciyUvf  | Generate deep-research doc | [WRITE_CONFIG,nb_id,[[src_id],...]]           |
+| R7cb6c  | Save note/brief            | [WRITE_CONFIG,nb_id,[null,null,type,srcs]]    |
+
+RPC Change History:
+  - CYK0Xb was the ORIGINAL chat-ask RPC (still valid for citation annotation)
+  - s0tc2d is the CURRENT chat-ask RPC as of build 20260226.08_p0+
+  - Both can be used; s0tc2d supports response length + configure-chat
+
+Document/Note Types for R7cb6c and save_note:
+  2 = Standard research brief
+  9 = Notes (free-form)
+  (Other types: study guide, FAQ, timeline — test with /rpc/R7cb6c)
+
+Configure Chat (s0tc2d position 0):
+  The inner message array null[0] is the "configure chat" goal/role string.
+  Injecting a role here affects how NLM responds to all messages in the session.
+  Example: "Act as a PhD researcher. Provide thorough analysis with citations."
+
+Response Length for s0tc2d (position [resp_len]):
+  4 = Default length (confirmed from HAR)
+  1 = Longer (hypothesis — test required)
+  2 = Shorter (hypothesis — test required)
+
+Multi-question batching:
+  Up to 5 CYK0Xb or s0tc2d calls can be packed into a single batchexecute
+  f.req array, reducing total API round-trips by 5×.
 
 Usage::
 
@@ -62,11 +101,47 @@ _COOKIES_FILE = _PROJECT_ROOT / "data" / "nlm_cookies.json"
 _META_FILE = _PROJECT_ROOT / "data" / "nlm_meta.json"
 _NLM_HOST = "notebooklm.google.com"
 _BATCH_URL = f"https://{_NLM_HOST}/_/LabsTailwindUi/data/batchexecute"
-_REQUEST_TIMEOUT = 45
+_REQUEST_TIMEOUT = 60
 _COOKIES_LOCK = threading.Lock()
 
 # Known-good build label — updated automatically on HAR import
+# Format: boq_labs-tailwind-frontend_YYYYMMDD.NN_p0
+# Changes roughly weekly when Google deploys a new frontend build.
 _DEFAULT_BL = "boq_labs-tailwind-frontend_20260226.08_p0"
+_DEFAULT_BL_DATE = "2026-02-26"  # for staleness calculation
+
+# ── RPC ID Registry ──────────────────────────────────────────────────────
+# Stable within a build, may change across builds. Monitor /meta for age.
+RPC_SESSION_INIT = "ZwVcOc"
+RPC_LIST_SOURCES = "wXbhsf"
+RPC_LIST_NOTEBOOKS = "ub2Bae"
+RPC_LIST_NOTEBOOKS_ALL = "sqTeoe"
+RPC_LOAD_NOTEBOOK = "rLM1Ne"
+RPC_NOTEBOOK_INFO = "e3bVqc"
+RPC_LIST_SOURCES_PAGED = "hPTbtc"
+RPC_LIST_SOURCES_SUB = "khqZz"
+RPC_SOURCES_CONDENSED = "JFMDGd"
+RPC_AI_SUMMARY = "VfAZjd"
+RPC_LIST_ARTIFACTS = "gArtLc"
+RPC_CONVERSATION_HISTORY = "cFji9"
+RPC_USER_QUOTA = "ozz5Z"
+RPC_READ_SOURCE = "tr032e"       # Read full source text content
+RPC_CHAT_MESSAGE = "s0tc2d"      # Current chat/ask RPC (replaces CYK0Xb)
+RPC_ANNOTATE_TEXT = "CYK0Xb"    # Annotate text with notebook citations
+RPC_GENERATE_DOC = "ciyUvf"     # Generate deep-research document
+RPC_SAVE_NOTE = "R7cb6c"        # Save note/brief to notebook
+
+# ── Response Length Constants ────────────────────────────────────────────
+# Used as the second element in s0tc2d message array [[2,"question"],[RESP_LEN]]
+RESP_LEN_DEFAULT = 4   # Confirmed from HAR analysis
+RESP_LEN_LONGER  = 1   # Hypothesis — test via /rpc/s0tc2d
+RESP_LEN_SHORTER = 2   # Hypothesis — test via /rpc/s0tc2d
+
+# ── Document/Note Types ──────────────────────────────────────────────────
+# Used in R7cb6c save_note calls
+DOC_TYPE_BRIEF   = 2   # Research brief (confirmed)
+DOC_TYPE_NOTE    = 9   # Notes (confirmed)
+# Study guide, FAQ, timeline may be 3-8 — use /rpc/R7cb6c to test
 
 # Document/note config object used for write RPCs (from HAR analysis)
 _WRITE_CONFIG = [2, None, None,
@@ -88,13 +163,40 @@ def _load_meta() -> Dict[str, str]:
 
 def _save_meta(meta: Dict[str, str]) -> None:
     """Persist build label and session meta to disk."""
+    import datetime
+    # Stamp BL update time when BL changes
+    existing = _load_meta()
+    if meta.get("bl") and meta.get("bl") != existing.get("bl"):
+        meta["bl_updated_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
     _META_FILE.parent.mkdir(parents=True, exist_ok=True)
     _META_FILE.write_text(json.dumps(meta, indent=2), encoding="utf-8")
 
 
 def _get_bl() -> str:
-    """Return the current build label, falling back to default."""
-    return _load_meta().get("bl", _DEFAULT_BL)
+    """Return the current build label, falling back to default.
+
+    Logs a warning when the stored BL is more than 8 days old since
+    Google typically deploys new frontends weekly.
+    """
+    meta = _load_meta()
+    bl = meta.get("bl", _DEFAULT_BL)
+    # Check staleness using bl_updated_at if present
+    updated_at = meta.get("bl_updated_at")
+    if updated_at:
+        try:
+            import datetime
+            age_days = (datetime.datetime.now(datetime.timezone.utc) -
+                        datetime.datetime.fromisoformat(updated_at)).days
+            if age_days >= 8:
+                logger.warning(
+                    "NLM build label is %d days old (%s). "
+                    "Google may have deployed a new frontend — "
+                    "consider importing a fresh HAR or CDP capture.",
+                    age_days, bl,
+                )
+        except Exception:
+            pass
+    return bl
 
 
 def _get_fsid() -> str:
@@ -424,19 +526,142 @@ def ask_question(
     question: str,
     cookies: Dict[str, str],
 ) -> Dict[str, Any]:
-    """Ask a single question to a NotebookLM notebook (CYK0Xb RPC).
+    """Ask a single question using CYK0Xb (citation-annotate mode).
+
+    CYK0Xb annotates the provided text with source citations from the notebook.
+    This is best for Q&A distillation where you want cited answers.
 
     Args:
         notebook_id: UUID of the target notebook.
-        question:    The question text to ask.
+        question:    The question/context text to annotate.
         cookies:     Google auth cookies.
 
     Returns:
-        Dict with keys: answer_id, answer, sources (list of cited source IDs).
+        Dict with keys: answer_id, answer (markdown with [citations]), sources.
     """
     args = json.dumps([notebook_id, question])
-    _, data = _batchexecute("CYK0Xb", args, cookies, notebook_id)
+    _, data = _batchexecute(RPC_ANNOTATE_TEXT, args, cookies, notebook_id)
     return _parse_ask_response(data)
+
+
+def chat_message(
+    notebook_id: str,
+    question: str,
+    cookies: Dict[str, str],
+    role: str = "",
+    response_length: int = RESP_LEN_DEFAULT,
+) -> Dict[str, Any]:
+    """Send a chat message using s0tc2d (current NLM chat RPC).
+
+    This is the proper chat interface. Unlike CYK0Xb (which annotates text),
+    s0tc2d triggers NLM's conversational Gemini model to generate an answer.
+
+    Configure Chat support: pass a ``role`` string to set the chat persona,
+    e.g. "Act as a PhD researcher providing citations" or
+    "You are a patient teacher explaining concepts step by step."
+    The role is injected at position 0 of the message structure.
+
+    Response length: use RESP_LEN_DEFAULT (4), RESP_LEN_LONGER (1, hypothesis),
+    or RESP_LEN_SHORTER (2, hypothesis).
+
+    Args:
+        notebook_id:     UUID of the target notebook.
+        question:        The question to ask.
+        cookies:         Google auth cookies.
+        role:            Optional configure-chat role/goal string.
+        response_length: Response length hint (default 4).
+
+    Returns:
+        Dict with keys: answer_id, answer, sources, notebook_name, raw.
+    """
+    # Build message structure: [[role_or_null, null*6, [[2,question],[resp_len]]]]
+    inner_msg = [[2, question], [response_length]]
+    chat_config = [role if role else None,
+                   None, None, None, None, None, None,
+                   inner_msg]
+    args = json.dumps([notebook_id, [chat_config]])
+    _, data = _batchexecute(RPC_CHAT_MESSAGE, args, cookies, notebook_id)
+    return _parse_chat_response(data, question)
+
+
+def chat_messages_batch(
+    notebook_id: str,
+    questions: List[str],
+    cookies: Dict[str, str],
+    role: str = "",
+    response_length: int = RESP_LEN_DEFAULT,
+    max_batch: int = 5,
+) -> List[Dict[str, Any]]:
+    """Send multiple chat messages in parallel batches using s0tc2d.
+
+    Args:
+        notebook_id:     UUID of the target notebook.
+        questions:       List of question strings.
+        cookies:         Google auth cookies.
+        role:            Optional configure-chat role/goal for all messages.
+        response_length: Response length hint (default 4).
+        max_batch:       Max questions per HTTP request (default 5).
+
+    Returns:
+        List of chat response dicts in question order.
+    """
+    results: List[Dict[str, Any]] = []
+    for i in range(0, len(questions), max_batch):
+        batch = questions[i:i + max_batch]
+        calls = []
+        for q in batch:
+            inner_msg = [[2, q], [response_length]]
+            chat_config = [role if role else None,
+                           None, None, None, None, None, None,
+                           inner_msg]
+            calls.append((RPC_CHAT_MESSAGE, json.dumps([notebook_id, [chat_config]])))
+        raw_results = _batchexecute_multi(calls, cookies, notebook_id)
+        for j, (_, data) in enumerate(raw_results):
+            results.append(_parse_chat_response(data, batch[j] if j < len(batch) else ""))
+    return results
+
+
+def _parse_chat_response(data: Any, question: str = "") -> Dict[str, Any]:
+    """Parse an s0tc2d response.
+
+    s0tc2d returns: [notebook_title, null, notebook_id, emoji, null,
+                     [status_flags...], null, [[2,"question"],[resp_len]]]
+
+    The response echoes the question metadata but does NOT contain the answer
+    inline — the answer is generated asynchronously. For synchronous answers,
+    use CYK0Xb (ask_question) or poll the conversation history (cFji9).
+
+    Args:
+        data: Parsed inner data from batchexecute response.
+        question: Original question for context.
+
+    Returns:
+        Dict with: notebook_title, notebook_id, question, status, queued.
+    """
+    if data is None:
+        return {"queued": False, "question": question, "error": "no_data",
+                "answer": "", "answer_id": None, "sources": []}
+    if isinstance(data, dict) and "error" in data:
+        return {"queued": False, "question": question, "answer": "",
+                "answer_id": None, "sources": [], **data}
+    try:
+        if isinstance(data, list) and len(data) >= 3:
+            notebook_title = data[0] if isinstance(data[0], str) else ""
+            notebook_id = data[2] if isinstance(data[2], str) else ""
+            return {
+                "queued": True,
+                "notebook_title": notebook_title,
+                "notebook_id": notebook_id,
+                "question": question,
+                "answer": "",        # Answer arrives asynchronously
+                "answer_id": None,
+                "sources": [],
+                "note": "s0tc2d queues the response. Poll /conversations for answer.",
+            }
+    except (IndexError, TypeError) as exc:
+        logger.warning("parse chat response: %s | data=%s", exc, str(data)[:200])
+    return {"queued": False, "question": question, "answer": "",
+            "answer_id": None, "sources": [], "raw": str(data)[:500]}
 
 
 def ask_questions_batch(
@@ -445,16 +670,16 @@ def ask_questions_batch(
     cookies: Dict[str, str],
     max_batch: int = 5,
 ) -> List[Dict[str, Any]]:
-    """Ask multiple questions to a notebook in a single HTTP request.
+    """Ask multiple questions using CYK0Xb (citation-annotate) in batches.
 
-    NotebookLM supports batching up to ~5 CYK0Xb calls per request,
-    reducing total round-trips significantly.
+    Packs up to max_batch CYK0Xb calls per HTTP request. This is the primary
+    Q&A distillation method — answers come back with inline source citations.
 
     Args:
         notebook_id: UUID of the target notebook.
-        questions:   List of question strings.
+        questions:   List of question/context strings.
         cookies:     Google auth cookies.
-        max_batch:   Maximum questions per HTTP request (default 5).
+        max_batch:   Max questions per HTTP request (default 5).
 
     Returns:
         List of answer dicts in the same order as questions.
@@ -463,7 +688,7 @@ def ask_questions_batch(
     for i in range(0, len(questions), max_batch):
         batch = questions[i:i + max_batch]
         calls = [
-            ("CYK0Xb", json.dumps([notebook_id, q]))
+            (RPC_ANNOTATE_TEXT, json.dumps([notebook_id, q]))
             for q in batch
         ]
         raw_results = _batchexecute_multi(calls, cookies, notebook_id)
@@ -508,6 +733,65 @@ def _parse_ask_response(data: Any) -> Dict[str, Any]:
         logger.warning("parse ask response: %s | data=%s", exc, str(data)[:200])
         return {"answer_id": None, "answer": "", "sources": [],
                 "error": str(exc), "raw": str(data)[:500]}
+
+
+def read_source(
+    source_id: str,
+    cookies: Dict[str, str],
+) -> Dict[str, Any]:
+    """Read the full text content of a notebook source (tr032e RPC).
+
+    Returns the complete markdown-formatted text of a source document.
+    This is powerful for offline analysis — you can extract all content
+    from NLM sources into Nexus without re-uploading.
+
+    Args:
+        source_id: UUID of the source to read.
+        cookies:   Google auth cookies.
+
+    Returns:
+        Dict with: source_id, content (markdown text), word_count.
+    """
+    args = json.dumps([[[[source_id]]]])
+    _, data = _batchexecute(RPC_READ_SOURCE, args, cookies)
+    return _parse_read_source_response(data, source_id)
+
+
+def _parse_read_source_response(data: Any, source_id: str) -> Dict[str, Any]:
+    """Parse a tr032e response → source content."""
+    if data is None:
+        return {"source_id": source_id, "content": "", "word_count": 0, "error": "no_data"}
+    if isinstance(data, dict) and "error" in data:
+        return {"source_id": source_id, "content": "", "word_count": 0, **data}
+    texts = _extract_strings(data, min_len=10)
+    content = "\n\n".join(texts)
+    return {
+        "source_id": source_id,
+        "content": content,
+        "word_count": len(content.split()),
+    }
+
+
+def get_user_quota(cookies: Dict[str, str]) -> Dict[str, Any]:
+    """Fetch user account info and storage quota (ozz5Z RPC).
+
+    Returns quota usage, plan type, and account metadata.
+
+    Args:
+        cookies: Google auth cookies.
+
+    Returns:
+        Dict with: raw_data (nested structure), extracted_text.
+    """
+    args = json.dumps([[[[None, "1", 627],
+                         [None, None, None, None, None, None, None,
+                          None, None, [None, None, 4]],
+                         1]]])
+    _, data = _batchexecute(RPC_USER_QUOTA, args, cookies)
+    if data is None or (isinstance(data, dict) and "error" in data):
+        return data or {"error": "no_data"}
+    texts = _extract_strings(data, min_len=5)
+    return {"quota_data": data, "extracted": texts[:10]}
 
 
 def generate_document(
@@ -621,12 +905,31 @@ def create_nlm_proxy_app() -> Flask:
     @app.route("/health")
     def health():
         cookies = _cookies()
+        meta = _load_meta()
+        bl = meta.get("bl", _DEFAULT_BL)
+
+        # Calculate BL age
+        bl_age_days: Optional[int] = None
+        try:
+            import datetime
+            updated_at = meta.get("bl_updated_at")
+            if updated_at:
+                bl_age_days = (datetime.datetime.now(datetime.timezone.utc) -
+                               datetime.datetime.fromisoformat(updated_at)).days
+        except Exception:
+            pass
+
         return jsonify({
             "status": "ok" if cookies else "no_cookies",
             "has_cookies": bool(cookies),
             "cookie_count": len(cookies),
             "cookie_file": str(_COOKIES_FILE),
             "service": "nlm-live-proxy",
+            "bl": bl,
+            "bl_age_days": bl_age_days,
+            "bl_stale": bl_age_days is not None and bl_age_days >= 8,
+            "rpc_catalog_version": "v2.1",
+            "known_rpcs": 18,
         }), 200 if cookies else 503
 
     # ── Cookie management ───────────────────────────────────────────────
@@ -844,8 +1147,18 @@ def create_nlm_proxy_app() -> Flask:
     def ask_single(notebook_id: str):
         """Ask a single question to a NotebookLM notebook.
 
-        Body (JSON): {"question": "What is the main argument?"}
-        Returns: {answer_id, answer, sources}
+        Two modes via ``mode`` parameter:
+        - "annotate" (default): CYK0Xb — synchronous, returns cited answer
+        - "chat": s0tc2d — asynchronous, queues response, supports role config
+
+        Body (JSON):
+          {
+            "question": "What is the main argument?",
+            "mode": "annotate",
+            "role": "",
+            "response_length": 4
+          }
+        Returns: {answer_id, answer, sources} or {queued, notebook_title}
         """
         cookies = _cookies()
         if not cookies:
@@ -854,16 +1167,31 @@ def create_nlm_proxy_app() -> Flask:
         question = body.get("question", "").strip()
         if not question:
             return jsonify({"error": "missing question"}), 400
-        result = ask_question(notebook_id, question, cookies)
-        if result.get("error"):
+        mode = body.get("mode", "annotate")
+        if mode == "chat":
+            role = body.get("role", "")
+            resp_len = body.get("response_length", RESP_LEN_DEFAULT)
+            result = chat_message(notebook_id, question, cookies, role, resp_len)
+        else:
+            result = ask_question(notebook_id, question, cookies)
+        if result.get("error") and not result.get("queued"):
             return jsonify(result), 502
         return jsonify(result)
 
     @app.route("/notebooks/<notebook_id>/ask_batch", methods=["POST"])
     def ask_batch(notebook_id: str):
-        """Ask multiple questions in a single HTTP request (up to 5 at once).
+        """Ask multiple questions in parallel (up to max_batch at once).
 
-        Body (JSON): {"questions": ["Q1?", "Q2?", "Q3?"]}
+        Two modes: "annotate" (CYK0Xb, default) or "chat" (s0tc2d).
+
+        Body (JSON):
+          {
+            "questions": ["Q1?", "Q2?", "Q3?"],
+            "mode": "annotate",
+            "role": "",
+            "response_length": 4,
+            "max_batch": 5
+          }
         Returns: {answers: [{answer_id, answer, sources}, ...]}
         """
         cookies = _cookies()
@@ -874,11 +1202,19 @@ def create_nlm_proxy_app() -> Flask:
         if not questions or not isinstance(questions, list):
             return jsonify({"error": "missing or invalid questions array"}), 400
         max_batch = body.get("max_batch", 5)
-        results = ask_questions_batch(notebook_id, questions, cookies, max_batch)
+        mode = body.get("mode", "annotate")
+        if mode == "chat":
+            role = body.get("role", "")
+            resp_len = body.get("response_length", RESP_LEN_DEFAULT)
+            results = chat_messages_batch(notebook_id, questions, cookies,
+                                          role, resp_len, max_batch)
+        else:
+            results = ask_questions_batch(notebook_id, questions, cookies, max_batch)
         return jsonify({
             "answers": results,
             "count": len(results),
             "questions": questions,
+            "mode": mode,
         })
 
     @app.route("/notebooks/<notebook_id>/generate", methods=["POST"])
@@ -914,6 +1250,99 @@ def create_nlm_proxy_app() -> Flask:
         note_type = body.get("note_type", 2)
         result = save_note(notebook_id, source_ids, cookies, note_type)
         if result.get("error"):
+            return jsonify(result), 502
+        return jsonify(result)
+
+    @app.route("/notebooks/<notebook_id>/chat", methods=["POST"])
+    def chat_single(notebook_id: str):
+        """Send a chat message using the current s0tc2d RPC.
+
+        Supports configure-chat role injection and response length control.
+        Note: s0tc2d queues the response asynchronously. The answer arrives
+        via the conversation history — poll GET /conversations after calling.
+
+        Body (JSON):
+          {
+            "question": "What is the main argument?",
+            "role": "Act as a PhD researcher providing thorough analysis",
+            "response_length": 4
+          }
+        Returns: {queued, notebook_title, notebook_id, question}
+        """
+        cookies = _cookies()
+        if not cookies:
+            return _no_cookies()
+        body = request.json or {}
+        question = body.get("question", "").strip()
+        if not question:
+            return jsonify({"error": "missing question"}), 400
+        role = body.get("role", "")
+        resp_len = body.get("response_length", RESP_LEN_DEFAULT)
+        result = chat_message(notebook_id, question, cookies, role, resp_len)
+        if result.get("error") and not result.get("queued"):
+            return jsonify(result), 502
+        return jsonify(result)
+
+    @app.route("/notebooks/<notebook_id>/chat_batch", methods=["POST"])
+    def chat_batch(notebook_id: str):
+        """Send multiple chat messages using s0tc2d in parallel batches.
+
+        Body (JSON):
+          {
+            "questions": ["Q1?", "Q2?", ...],
+            "role": "Act as a researcher",
+            "response_length": 4,
+            "max_batch": 5
+          }
+        Returns: {queued_count, questions}
+        """
+        cookies = _cookies()
+        if not cookies:
+            return _no_cookies()
+        body = request.json or {}
+        questions = body.get("questions", [])
+        if not questions:
+            return jsonify({"error": "missing questions array"}), 400
+        role = body.get("role", "")
+        resp_len = body.get("response_length", RESP_LEN_DEFAULT)
+        max_batch = body.get("max_batch", 5)
+        results = chat_messages_batch(notebook_id, questions, cookies,
+                                      role, resp_len, max_batch)
+        return jsonify({
+            "results": results,
+            "queued_count": sum(1 for r in results if r.get("queued")),
+            "count": len(results),
+            "questions": questions,
+        })
+
+    @app.route("/sources/<source_id>/content", methods=["GET"])
+    def read_source_content(source_id: str):
+        """Read the full text content of a source document (tr032e RPC).
+
+        Returns the complete markdown text of the source. Use this to extract
+        all source content from NLM into Nexus for offline analysis.
+
+        Returns: {source_id, content, word_count}
+        """
+        cookies = _cookies()
+        if not cookies:
+            return _no_cookies()
+        result = read_source(source_id, cookies)
+        if result.get("error"):
+            return jsonify(result), 502
+        return jsonify(result)
+
+    @app.route("/user/quota", methods=["GET"])
+    def user_quota():
+        """Fetch user account info and storage quota (ozz5Z RPC).
+
+        Returns: {quota_data, extracted}
+        """
+        cookies = _cookies()
+        if not cookies:
+            return _no_cookies()
+        result = get_user_quota(cookies)
+        if isinstance(result, dict) and result.get("error"):
             return jsonify(result), 502
         return jsonify(result)
 

@@ -1,7 +1,9 @@
 # NotebookLM SDK — Complete Protocol Documentation
 
-> **Version:** 2.0 (based on HAR analysis of `notebooklm.google.com3.har`, 2026-02-26)
+> **Version:** 2.1 (based on HAR analysis of 11 HAR files across 5 NLM sessions, 2026-02-26/28)
 > **Status:** Production implementation in `engine/mcp/nlm_live_proxy.py`
+> **New in 2.1:** Full RPC catalogue (18 RPCs), s0tc2d chat, tr032e source reader,
+> Configure Chat, response length control, BL staleness tracking.
 
 ---
 
@@ -12,9 +14,37 @@ used across Google Search, Docs, and other G-Suite products. All API calls
 go to a single endpoint via HTTP POST, with RPC functions identified by
 short 5–7 character IDs.
 
-**Key insight:** This API is stateless (after auth). Every call is self-contained
-and returns full structured data. No WebSocket, no streaming, no session state
-beyond auth cookies.
+**Key insights from multi-session HAR analysis:**
+- The API is stateless (after auth). Every call is self-contained.
+- RPC IDs are **STABLE within a Google frontend build** (build label / BL).
+- RPC IDs **CAN change** when Google deploys a new frontend (~weekly).
+- `CYK0Xb` (old chat) → replaced by `s0tc2d` (current chat) after build 20260226.
+- `CYK0Xb` still works as "annotate text with citations" — different use case.
+- Multi-question batching: 5 RPCs per HTTP request → 5× throughput.
+- The proxy at :8800 wraps all of this in a clean REST API.
+
+---
+
+## Build Label (BL) Management
+
+The BL is the most critical operational parameter:
+
+```
+boq_labs-tailwind-frontend_YYYYMMDD.NN_p0
+```
+
+- Changes roughly weekly with Google frontend deployments
+- If BL is stale (>8 days), requests may return 404 or malformed responses
+- BL is stored in `data/nlm_meta.json` alongside `bl_updated_at`
+- Auto-extracted from imported HARs
+- Check staleness: `GET /health` returns `bl_age_days` and `bl_stale: true/false`
+- If stale: import a fresh HAR via `POST /cookies/import` or run `POST /cookies/capture`
+
+**Monitoring BL health:**
+```bash
+curl http://localhost:8800/health
+# Response includes: {"bl": "boq_labs-...", "bl_age_days": 3, "bl_stale": false}
+```
 
 ---
 
@@ -79,18 +109,15 @@ POST https://notebooklm.google.com/_/LabsTailwindUi/data/batchexecute
 
 ### URL Parameters
 
-| Parameter | Required | Description |
-|-----------|----------|-------------|
-| `rpcids` | Yes | Semicolon-separated RPC ID(s) |
-| `source-path` | Yes | `/notebook/<notebook_id>` |
-| `bl` | Yes | Build label (changes periodically) |
-| `f.sid` | Yes | Session ID (extract from page load) |
-| `hl` | No | Language code, default `en` |
-| `_reqid` | No | Incrementing request counter |
-| `rt` | No | Response type, always `c` |
-
-**Current build label:** `boq_labs-tailwind-frontend_20260226.08_p0`
-*(Updated automatically when importing a fresh HAR)*
+| Parameter   | Example                             | Notes                          |
+|-------------|-------------------------------------|--------------------------------|
+| `rpcids`    | `CYK0Xb` or `CYK0Xb;s0tc2d`       | Semicolon-separated for batch  |
+| `source-path` | `/notebook/<nb_id>`              | Optional — sets auth context   |
+| `bl`        | `boq_labs-tailwind-frontend_...`   | Build label — CRITICAL         |
+| `f.sid`     | `-1` or extracted from HAR         | Session ID                     |
+| `hl`        | `en`                               | Language                       |
+| `_reqid`    | `100000`                           | Auto-incrementing request ID   |
+| `rt`        | `c`                                | Response type (always `c`)     |
 
 ### Request Body
 
@@ -98,551 +125,699 @@ POST https://notebooklm.google.com/_/LabsTailwindUi/data/batchexecute
 f.req=<url_encoded_json>
 ```
 
-Where the JSON is a list of RPC call tuples:
-```json
-[
-  ["RPC_ID", "{\"escaped\":\"json_args\"}", null, "generic"]
-]
-```
+Where the JSON is an array of `[rpc_id, args_json, null, "generic"]` tuples.
 
 ### Response Format
 
-The response uses a 5-layer decode:
+Responses start with `)]}'` (XSSI protection), followed by newline-delimited
+chunks. Each `wrb.fr` chunk is a JSON array:
 
-1. Strip XSSI prefix: `)]}'\n`
-2. Split by newlines
-3. Find lines starting with `[["wrb.fr","RPC_ID",`
-4. `outer[0][2]` = inner JSON string
-5. Parse inner JSON for actual data
-
-Multi-call responses contain multiple `wrb.fr` lines, one per call.
-
----
-
-## RPC Catalogue
-
-### READ Operations
-
-#### `ub2Bae` — List All Notebooks
-
-```python
-args = "[[2]]"
-# Returns: list of notebooks in the account
-# Response structure: [[notebook_list], ...]
-```
-
-**Returns:** Array of notebook objects with id, name, created_at, source_count.
-
----
-
-#### `wXbhsf` — List Sources
-
-```python
-args = json.dumps([None, 1, None, [2]])
-# Returns: sources for the current notebook
-# Response: [[notebook_name, [source_list]], ...]
-```
-
-**Source object:**
 ```json
-{
-  "id": "uuid-v4",
-  "title": "Source Title",
-  "url": "https://...",
-  "word_count": 1500,
-  "source_type": 1
-}
+[["wrb.fr", "RPC_ID", "inner_json_string", null, null, null, "generic"],
+ ["di", 457],
+ ["af.httprm", ...]]
+```
+
+The inner JSON string must be `json.loads()`'d again to get the actual data.
+
+---
+
+## Complete RPC Catalogue
+
+### Read RPCs
+
+#### `ZwVcOc` — Session Initialization
+```python
+args = [None, [1, None, None, None, None, None, None, None, None, None, [1]]]
+```
+Called on page load to initialize the session context.
+
+#### `wXbhsf` — List Sources (Full)
+```python
+args = [None, 1, None, [2]]
+```
+Returns the full list of sources for the current notebook including title, URL,
+word count, and source type. Also returns the notebook name.
+
+**Response structure:** `[[[notebook_name, [source_array]...]]]`
+
+#### `ub2Bae` — List Notebooks
+```python
+args = [[2]]
+```
+Returns all user notebooks with IDs and names.
+
+#### `sqTeoe` — List All Notebooks (Extended)
+```python
+args = [[2, None, None, [1,...,[1]], [[2,1]]], None, 1]
+```
+Extended notebook list with more metadata.
+
+#### `rLM1Ne` — Load Notebook by ID
+```python
+args = [notebook_id, None, [2], None, 0]
+```
+Load a specific notebook by UUID. Returns notebook metadata.
+
+#### `e3bVqc` — Notebook Extended Info
+```python
+args = [None, None, notebook_id]
+```
+Returns extended notebook information including content metadata.
+
+#### `hPTbtc` — List Sources (Paginated)
+```python
+args = [[], None, notebook_id, page_size]  # page_size default: 20
+```
+Paginated source listing for large notebooks.
+
+#### `khqZz` — List Sources (Sub-notebook)
+```python
+args = [[], None, None, source_notebook_id, page_size]
+```
+Sources list for a nested/sub notebook context.
+
+#### `JFMDGd` — Sources Condensed
+```python
+args = [notebook_id, [2]]
+```
+Compact source list — lighter payload than `wXbhsf`.
+
+#### `VfAZjd` — AI Overview / Summary
+```python
+args = [notebook_id, [2]]
+```
+Returns the AI-generated overview/summary for a notebook. This is the
+"Notebook Guide" section visible in the NLM UI.
+
+#### `gArtLc` — List Artifacts (Notes/Docs)
+```python
+args = [_WRITE_CONFIG, notebook_id, 'NOT artifact.status = "ARTIFACT_STATUS_SUGGESTED"']
+```
+Returns all user-created notes, study guides, briefs, and other artifacts.
+The filter string excludes auto-suggested artifacts (AI suggestions).
+
+#### `cFji9` — Conversation History
+```python
+args = [notebook_id, None, cursor_timestamp, [2]]
+# cursor_timestamp: [unix_seconds, nanoseconds] for pagination, or None for latest
+```
+Returns the conversation history for a notebook. Used after `s0tc2d` to
+retrieve the generated answer.
+
+#### `ozz5Z` — User Quota / Account Info
+```python
+args = [[[[None, "1", 627], [None, None, None, None, None, None, None,
+           None, None, [None, None, 4]], 1]]]
+```
+Returns user account metadata, storage quota, and plan information.
+The `627` appears to be a notebook count or content size indicator.
+
+#### `tr032e` — Read Source Content ⭐ **New in v2.1**
+```python
+args = [[[[source_id]]]]
+```
+Returns the **complete markdown text** of a source document. This is
+extremely valuable for offline analysis and Nexus ingestion:
+
+```python
+# Read all source content from a notebook
+sources = get_sources(notebook_id, cookies)
+for source in sources:
+    result = read_source(source["id"], cookies)
+    # result["content"] = full markdown text
+    # result["word_count"] = word count
+    nexus_client.add_entry(source["title"], result["content"], "document")
 ```
 
 ---
 
-#### `VfAZjd` — Get AI Summary / Study Guide
+### Write RPCs
 
+#### `s0tc2d` — Chat Message (CURRENT) ⭐ **Primary chat RPC**
+
+The current chat interface as of build `20260226.08_p0`. Triggers NLM's
+Gemini model to generate a response asynchronously.
+
+**Full payload structure:**
 ```python
-args = json.dumps([notebook_id, [2]])
-# Returns: AI-generated summary and study guide
-```
-
----
-
-#### `e3bVqc` — Get Full Source Content
-
-```python
-args = json.dumps([None, None, notebook_id])
-# Returns: full text content of all sources
-```
-
----
-
-#### `gArtLc` — List Notes / Artifacts
-
-```python
-args = json.dumps([
-    [2], notebook_id,
-    "NOT artifact.status = \"ARTIFACT_STATUS_SUGGESTED\""
-])
-# Returns: list of user-created notes and generated artifacts
-```
-
----
-
-#### `cFji9` — Get Conversation History
-
-```python
-args = json.dumps([notebook_id, None, None, [2]])
-# Returns: full conversation thread with Q&A pairs
-```
-
-**Response structure:** Array of conversation turns:
-```json
-[
-  {"role": "user", "text": "Question?"},
-  {"role": "assistant", "text": "Answer with citations [source-id]"}
+inner_msg = [[2, question_text], [response_length]]
+chat_config = [
+    role_or_none,      # position 0: Configure Chat goal/role string
+    None,              # position 1: reserved
+    None,              # position 2: reserved
+    None,              # position 3: reserved
+    None,              # position 4: reserved
+    None,              # position 5: reserved
+    None,              # position 6: reserved
+    inner_msg,         # position 7: the message content
 ]
+args = [notebook_id, [chat_config]]
 ```
+
+**Response length constants:**
+| Value | Meaning | Source |
+|-------|---------|--------|
+| `4`   | Default | Confirmed from HAR |
+| `1`   | Longer  | Hypothesis — test with `/rpc/s0tc2d` |
+| `2`   | Shorter | Hypothesis — test with `/rpc/s0tc2d` |
+
+**Response:** Echoes question metadata + notebook title. The actual answer
+arrives asynchronously — poll `cFji9` (conversation history) to retrieve it.
+
+**Configure Chat — Role Injection:**
+Inject a role/persona at position 0 of `chat_config`:
+```python
+# Teacher mode
+role = "Act as a patient teacher. Explain concepts clearly with examples."
+
+# Researcher mode
+role = "You are a PhD researcher. Provide thorough analysis with source citations."
+
+# Q&A Distiller mode
+role = "Extract key facts and generate structured Q&A pairs from the sources."
+
+# Code Helper mode
+role = "You are an expert Python developer. Provide working code examples."
+
+# Critic mode
+role = "Critically analyze the claims and identify gaps or weaknesses."
+```
+
+**Important:** s0tc2d is ASYNCHRONOUS — the response does not contain the
+answer. Use `cFji9` to poll for the answer after calling s0tc2d.
 
 ---
 
-### WRITE Operations
+#### `CYK0Xb` — Annotate Text with Citations (LEGACY + STILL VALID)
 
-#### `CYK0Xb` — Ask Question ⭐ (Most Important)
+Older chat RPC, still valid. Different behavior from s0tc2d:
+- Takes text as input instead of a structured question
+- Returns the answer WITH inline source citations immediately (synchronous)
+- Ideal for Q&A distillation where you want cited answers
 
 ```python
-args = json.dumps([notebook_id, "What is the main argument?"])
-# Returns: [[answer_id, markdown_answer_with_citations], ...]
+args = [notebook_id, question_or_context_text]
+# Response: [[answer_id, markdown_text_with_citations]]
 ```
 
-**Answer format:**
-- Markdown text with inline citations like `[source-id]`
-- `answer_id` is a UUID for referencing in follow-up operations
-- Response is typically 200-800 words with 2-8 citations
-
-**Multi-question batch (single HTTP request):**
-```python
-f_req = json.dumps([
-    ["CYK0Xb", json.dumps([notebook_id, "Question 1?"]), None, "generic"],
-    ["CYK0Xb", json.dumps([notebook_id, "Question 2?"]), None, "generic"],
-    ["CYK0Xb", json.dumps([notebook_id, "Question 3?"]), None, "generic"],
-])
-# URL: ?rpcids=CYK0Xb;CYK0Xb;CYK0Xb
-# Returns 3 separate wrb.fr blocks in the response
-```
-
-**Maximum batch size:** 5 questions per HTTP request (tested up to 3 in HAR, 5 seems stable).
+**When to use CYK0Xb vs s0tc2d:**
+| Use Case | RPC | Reason |
+|----------|-----|--------|
+| Q&A distillation (need citations) | `CYK0Xb` | Synchronous, cited |
+| Batch Q&A (5 per request) | `CYK0Xb` | Works with multi-batch |
+| Conversational chat | `s0tc2d` | Proper chat interface |
+| Configure Chat + role | `s0tc2d` | Supports role injection |
+| Response length control | `s0tc2d` | Supports length hint |
 
 ---
 
-#### `ciyUvf` — Generate Document / Deep Research
+#### `ciyUvf` — Generate Deep Research Document
+
+Generates a comprehensive document from selected sources. This is the
+"Deep Research" or "Study Guide" generation feature.
 
 ```python
-config = [2, None, None,
-          [1, None, None, None, None, None, None, None, None, None, [1]],
-          [[2, 1]]]
 source_array = [[src_id] for src_id in source_ids]
-args = json.dumps([config, notebook_id, source_array])
-# Returns: [[title, description, null, [[source_ids]]], ...]
+args = [_WRITE_CONFIG, notebook_id, source_array]
+# Response: [[title, description, null, [[source_id], ...]]]
+```
+
+The response provides a preview (title + description) before saving.
+Follow with `R7cb6c` to save to the notebook.
+
+---
+
+#### `R7cb6c` — Save Note / Brief
+
+Saves a note or brief to the notebook. Used after `ciyUvf` to persist a
+generated document, or standalone to create a custom note.
+
+```python
+source_array = [[[src_id]] for src_id in source_ids]
+note_body = [None, None, doc_type, source_array]
+args = [_WRITE_CONFIG, notebook_id, note_body]
+# Response: [[note_id, title, type_int, [[source_ids]]]]
 ```
 
 **Document types:**
-- `doc_type=2`: Standard implementation strategy document
-- `doc_type=9`: Deep research report
-
-**Example response:**
-```json
-[["Implementation Strategy",
-  "A comprehensive analysis of deployment pathways...",
-  null,
-  [["source-uuid-1"], ["source-uuid-2"]]]]
-```
+| `doc_type` | Format | Confirmed? |
+|-----------|--------|-----------|
+| `2`       | Research brief | ✅ Confirmed from HAR |
+| `9`       | Notes (free-form) | ✅ Confirmed from HAR |
+| `3`–`8`   | Study guide, FAQ, Timeline, etc. | Hypothesis — test with `/rpc/R7cb6c` |
 
 ---
 
-#### `R7cb6c` — Create / Save Note
+## Multi-Question Batching
+
+Up to 5 RPCs can be packed into a single batchexecute request:
 
 ```python
-config = [2, None, None,
-          [1, None, None, None, None, None, None, None, None, None, [1]],
-          [[2, 1]]]
-source_array = [[src_id] for src_id in source_ids]
-note_body = [None, None, note_type, source_array]
-args = json.dumps([config, notebook_id, note_body])
-# Returns: [[note_id, title, note_type_int, [[source_ids]]], ...]
-```
-
-**Note types:**
-- `2`: Standard note/summary
-- `9`: Deep research artifact
-
-**Example response:**
-```json
-[["674b1362-9653-4b52-8193-a17dfd89a08f",
-  "Modern AI Infrastructure: Local Inference, Agents, and Optimization",
-  2,
-  [["source-uuid-1"], ["source-uuid-2"]]]]
-```
-
----
-
-## CosySim REST API (nlm_live_proxy.py)
-
-The proxy runs at `http://localhost:8800` and exposes these endpoints:
-
-### Cookie Management
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/health` | Service status + cookie status |
-| GET | `/cookies` | List stored cookie names |
-| DELETE | `/cookies` | Clear all stored cookies |
-| POST | `/cookies/import` | Import cookies from HAR file |
-| POST | `/cookies/capture` | Auto-capture via Chrome CDP |
-| GET | `/meta` | Get bl and f.sid values |
-| POST | `/meta` | Manually update bl/f.sid |
-
-### Read Operations
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/notebooks` | List all notebooks |
-| GET | `/notebooks/<id>` | Full notebook data |
-| GET | `/notebooks/<id>/sources` | List sources |
-| GET | `/notebooks/<id>/summary` | AI summary |
-| GET | `/notebooks/<id>/notes` | List notes |
-| GET | `/notebooks/<id>/conversations` | Conversation history |
-| GET | `/notebooks/<id>/content` | Source full text |
-
-### Write Operations
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/notebooks/<id>/ask` | Ask single question |
-| POST | `/notebooks/<id>/ask_batch` | Ask multiple questions (batched) |
-| POST | `/notebooks/<id>/generate` | Generate document |
-| POST | `/notebooks/<id>/save_note` | Save note artifact |
-| POST | `/rpc/<rpc_id>` | Raw RPC passthrough |
-
-### Example: Ask a Question
-
-```bash
-curl -X POST http://localhost:8800/notebooks/de7fee37-1c07-406f-85ec-108c530dc3ea/ask \
-     -H "Content-Type: application/json" \
-     -d '{"question": "What are the key benefits of multi-token prediction?"}'
-```
-
-Response:
-```json
-{
-  "answer_id": "d4e015e3-b6f0-4deb-9abc-123",
-  "answer": "Multi-token prediction (MTP) provides several benefits...\n\nCited from [source-uuid]",
-  "sources": ["ec27acaf-72f5-47a6-9c7d-629725a17927"]
-}
-```
-
-### Example: Batch Ask (Most Efficient)
-
-```bash
-curl -X POST http://localhost:8800/notebooks/de7fee37.../ask_batch \
-     -H "Content-Type: application/json" \
-     -d '{
-       "questions": [
-         "What is the main architecture of the system?",
-         "How does the interceptor pipeline work?",
-         "What are the key failure modes?",
-         "What optimizations are recommended?",
-         "How should agents be structured?"
-       ]
-     }'
-```
-
-Response:
-```json
-{
-  "answers": [
-    {"answer_id": "...", "answer": "...", "sources": ["..."]},
-    {"answer_id": "...", "answer": "...", "sources": ["..."]},
-    ...
-  ],
-  "count": 5,
-  "questions": ["..."]
-}
-```
-
----
-
-## CosySim Python API
-
-```python
-from engine.mcp.notebooklm_proxy import NotebookLMProxy
-
-proxy = NotebookLMProxy()
-
-# Check if proxy is running
-if proxy.is_running():
-    # List notebooks
-    notebooks = proxy.list_notebooks()
-
-    # Ask a question
-    result = proxy.ask_question("notebook-id", "What is the main topic?")
-    print(result["answer"])
-
-    # Batch ask (efficient — 1 HTTP request per 5 questions)
-    results = proxy.batch_ask("notebook-id", [
-        "What are the key components?",
-        "How does authentication work?",
-        "What are the performance characteristics?",
-    ])
-    for q, r in zip(questions, results):
-        print(f"Q: {q}\nA: {r['answer'][:200]}\n")
-
-    # Generate a document
-    doc = proxy.generate_document("notebook-id", source_ids=["uuid1", "uuid2"])
-    print(f"Generated: {doc['title']}")
-
-    # Save a note
-    note = proxy.save_note("notebook-id", source_ids=["uuid1"])
-    print(f"Saved note: {note['note_id']}")
-```
-
----
-
-## NLM Skills (MCP Tools)
-
-Available via `engine/skills/builtin/autonomy_skills.py`:
-
-| Skill | Description |
-|-------|-------------|
-| `nlm_ask` | Ask a question to a notebook |
-| `nlm_batch_ask` | Batch ask multiple questions |
-| `nlm_create_notebook` | Create a new research notebook |
-| `nlm_add_source` | Add a URL/file as a source |
-| `nlm_generate_doc` | Generate a document from sources |
-| `nlm_save_note` | Save a note artifact |
-| `nlm_list_notebooks` | List all notebooks |
-| `nlm_distill` | Full distillation pipeline |
-| `nlm_decompose` | Break task into subtasks |
-
----
-
-## Strategies for Maximum Effectiveness
-
-### Strategy 1: Deliberate Question Batching
-
-Design question sets that cover a topic from multiple angles. Ask 5 at once:
-
-```python
-questions = [
-    # Understanding questions
-    "What is the core architecture and how do the main components interact?",
-    # Problem questions
-    "What are the main failure modes and edge cases to handle?",
-    # Implementation questions
-    "What is the recommended implementation approach and why?",
-    # Quality questions
-    "What are the key quality metrics and how should they be measured?",
-    # Future questions
-    "What improvements would have the highest impact?",
+# 5 questions in one HTTP request
+calls = [
+    ("CYK0Xb", json.dumps([notebook_id, q]))
+    for q in questions[:5]
 ]
-results = proxy.batch_ask(notebook_id, questions)
+# Pack into f.req:
+f_req = [[rpc_id, args_json, None, "generic"] for rpc_id, args_json in calls]
+# rpcids URL param: "CYK0Xb;CYK0Xb;CYK0Xb;CYK0Xb;CYK0Xb"
 ```
 
-### Strategy 2: Progressive Deepening
-
-Start broad, then drill into specific areas:
-
-```
-Round 1: 5 broad architecture questions → get overview
-Round 2: 5 detailed questions on the most complex component
-Round 3: 5 edge case / failure mode questions
-Round 4: 5 implementation detail questions
-```
-
-Each round builds on answers from the previous.
-
-### Strategy 3: Knowledge Extraction Pipeline
-
-For research notebooks:
-
-1. **Seed notebook** with 10-20 sources (papers, docs, articles)
-2. **Ask 20 questions** in 4 batches of 5
-3. **Generate document** — creates titled summary
-4. **Save note** — creates persistent artifact
-5. **Store all Q&A in Nexus** — cache for future retrieval
-6. **Delete notebook** — frees quota
-
-### Strategy 4: Code Analysis
-
-For analyzing a codebase module:
-
-1. Create notebook with source files as uploads
-2. Ask architecture questions
-3. Ask quality/testing questions
-4. Ask improvement questions
-5. Store findings in Nexus with `content_type="code_analysis"`
-
-### Strategy 5: News Distillation
-
-For the news pipeline:
-
-1. Create rotating daily notebook
-2. Add 15-20 articles as URL sources
-3. Batch ask: "Summarize the 3 most important developments"
-4. Batch ask: "What are the implications for local AI systems?"
-5. Store summaries in Nexus as `content_type="news"`
-6. Delete notebook (or archive)
+**Response parsing:** Each `wrb.fr` block in the response corresponds to
+one call, in order. Our `_parse_batchexecute_multi()` handles this automatically.
 
 ---
 
-## Protocol Observations from HAR Analysis
+## CosySim REST API (via :8800 proxy)
 
-### Complete HAR Statistics
+### Authentication & Setup
 
-| Metric | Value |
-|--------|-------|
-| Total entries | 162 |
-| batchexecute calls | 19 |
-| Unique RPC IDs | 5 |
-| Notebook ID | `de7fee37-1c07-406f-85ec-108c530dc3ea` |
-| Build label | `boq_labs-tailwind-frontend_20260226.08_p0` |
-| f.sid | `5167585844626553481` |
-| Chrome version | 145.0.7632.117 |
+```bash
+# Check health and BL staleness
+GET http://localhost:8800/health
 
-### RPC Call Distribution
+# Import cookies from HAR
+POST http://localhost:8800/cookies/import
+Body: {"har_path": "/path/to/notebooklm.har"}
 
-| RPC | Count | Type |
-|-----|-------|------|
-| `CYK0Xb` | 9 | WRITE — Ask question |
-| `cFji9` | 5 | READ — Get conversation |
-| `gArtLc` | 5 | READ — List artifacts |
-| `R7cb6c` | 2 | WRITE — Save note |
-| `ciyUvf` | 1 | WRITE — Generate document |
+# Auto-capture cookies via Chrome CDP (recommended)
+POST http://localhost:8800/cookies/capture
 
-### Key Findings
+# Check/update build label
+GET http://localhost:8800/meta
+POST http://localhost:8800/meta
+Body: {"bl": "boq_labs-tailwind-frontend_YYYYMMDD.NN_p0"}
+```
 
-1. **CYK0Xb answers synchronously** — No polling needed. One request → one response
-   with the complete answer. Average response time: ~3-8 seconds.
+### Reading Notebook Data
 
-2. **Multi-question batching works** — The HAR shows 9 separate CYK0Xb calls,
-   but they could all be sent in 2 batched HTTP requests (5+4). The batchexecute
-   f.req format explicitly supports multiple RPCs in one call.
+```bash
+# List all notebooks
+GET http://localhost:8800/notebooks
 
-3. **Cookies are NOT required in the f.req** — The session token (`f.sid`) extracted
-   from the page on initial load provides some auth context. However, full write
-   operations (CYK0Xb, R7cb6c, ciyUvf) require valid session cookies.
+# Get all notebook data (sources, notes, conversations)
+GET http://localhost:8800/notebooks/<notebook_id>
 
-4. **Config object is constant** — The `_WRITE_CONFIG` pattern
-   `[2, None, None, [1, None, None, ..., [1]], [[2, 1]]]` appears identically
-   in both ciyUvf and R7cb6c calls. It appears to control document type formatting.
+# Get sources only
+GET http://localhost:8800/notebooks/<notebook_id>/sources
 
-5. **Note types**: `2` = standard note, `9` = deep research report. Other types
-   likely exist but weren't observed in HAR.
+# Get AI overview summary
+GET http://localhost:8800/notebooks/<notebook_id>/summary
 
-6. **Source IDs are UUIDs** — All source references use v4 UUIDs. The nested
-   structure `[[src_id], [src_id], ...]` is required for write operations.
+# Get notes/artifacts
+GET http://localhost:8800/notebooks/<notebook_id>/notes
 
-7. **Answer IDs chain into conversations** — The `answer_id` from CYK0Xb can be
-   used in cFji9 to retrieve the conversation thread, enabling follow-up Q&A.
+# Get conversation history
+GET http://localhost:8800/notebooks/<notebook_id>/conversations
 
-8. **cFji9 timestamp format** — The `[ts_sec, ts_ns]` parameter is Unix timestamp
-   split into seconds and nanoseconds. Pass `[0, 0]` to get full history.
+# Read full text of a source ⭐ New
+GET http://localhost:8800/sources/<source_id>/content
+
+# Check user quota ⭐ New
+GET http://localhost:8800/user/quota
+```
+
+### Ask / Chat (Write)
+
+```bash
+# Ask with citations (CYK0Xb — synchronous, recommended for Q&A)
+POST http://localhost:8800/notebooks/<nb_id>/ask
+Body: {"question": "What is the main argument?", "mode": "annotate"}
+
+# Chat with role config (s0tc2d — asynchronous) ⭐ New
+POST http://localhost:8800/notebooks/<nb_id>/ask
+Body: {
+  "question": "Summarize the key findings",
+  "mode": "chat",
+  "role": "Act as a researcher providing thorough analysis",
+  "response_length": 4
+}
+
+# Batch ask (5 at once)
+POST http://localhost:8800/notebooks/<nb_id>/ask_batch
+Body: {
+  "questions": ["Q1?", "Q2?", "Q3?", "Q4?", "Q5?"],
+  "mode": "annotate",
+  "max_batch": 5
+}
+
+# Chat endpoint (s0tc2d specific) ⭐ New
+POST http://localhost:8800/notebooks/<nb_id>/chat
+Body: {
+  "question": "What are the key techniques?",
+  "role": "You are a PhD researcher",
+  "response_length": 4
+}
+
+# Batch chat ⭐ New
+POST http://localhost:8800/notebooks/<nb_id>/chat_batch
+Body: {
+  "questions": ["Q1?", "Q2?", "Q3?"],
+  "role": "Act as a teacher",
+  "max_batch": 5
+}
+```
+
+### Generate & Save
+
+```bash
+# Generate deep research document
+POST http://localhost:8800/notebooks/<nb_id>/generate
+Body: {"source_ids": ["uuid1", "uuid2", ...], "doc_type": 2}
+
+# Save note/brief
+POST http://localhost:8800/notebooks/<nb_id>/save_note
+Body: {"source_ids": ["uuid1", ...], "note_type": 9}
+
+# Call any RPC directly (for testing/exploration)
+POST http://localhost:8800/rpc/<rpc_id>
+Body: {"args": "[\"nb_id\", ...]", "notebook_id": "uuid"}
+```
 
 ---
 
-## Session Refresh Strategy
+## Use Case Playbooks
 
-Google session cookies typically last **1-24 hours**. When they expire:
+### 1. Q&A Distillation (Nexus Feed)
 
-1. **Automatic (preferred):** CDP capture via `POST /cookies/capture`
-2. **Scheduled:** Run `nlm_har_capture.py` every 8 hours via scheduler_daemon
-3. **Manual:** Save new HAR and call `POST /cookies/import`
-4. **Detection:** HTTP 401 from proxy → trigger auto-recapture
+The most valuable use case: extract Q&A knowledge from notebooks into Nexus.
 
 ```python
-# In scheduler_daemon.py callback:
-def _refresh_nlm_cookies() -> None:
-    """Auto-refresh NLM cookies every 8 hours."""
-    try:
-        resp = requests.post("http://localhost:8800/cookies/capture", timeout=30)
-        if resp.ok:
-            logger.info("NLM cookies refreshed successfully")
-        else:
-            logger.warning("NLM cookie refresh failed: %s", resp.text)
-    except Exception as exc:
-        logger.error("NLM cookie refresh error: %s", exc)
-```
+from engine.mcp.nlm_live_proxy import ask_questions_batch, _load_cookies
 
----
+cookies = _load_cookies()
+notebook_id = "your-notebook-uuid"
 
-## Build Label Maintenance
+# Prepare 25 topic questions (5 batches of 5)
+questions = [
+    "What is the core architecture?",
+    "How does the training process work?",
+    # ... 23 more questions
+]
 
-The `bl` parameter changes periodically (roughly weekly). When it changes,
-all batchexecute calls return HTTP 400 until updated.
+# Run all in 5 HTTP requests
+answers = ask_questions_batch(notebook_id, questions, cookies, max_batch=5)
 
-**Detection:** HTTP 400 response from proxy
-**Fix:** Import a fresh HAR (automatically extracts new bl) or visit NLM page
-and capture via CDP (extracts bl from page JavaScript).
-
-The proxy stores `bl` in `data/nlm_meta.json`. The last known good value is
-hardcoded as fallback in `nlm_live_proxy.py`.
-
----
-
-## Integration with Nexus
-
-All NLM interactions should be stored in Nexus:
-
-```python
+# Store in Nexus
 from engine.nexus.client import get_nexus_client
-
 client = get_nexus_client()
+for q, a in zip(questions, answers):
+    if a.get("answer"):
+        client.add_qa(q, a["answer"])
+```
 
-# Store Q&A pair from NLM answer
-client.add_qa(
-    question="What is the main architecture?",
-    answer=result["answer"],
-    category="architecture",
+### 2. Configure Chat Persona for Specialized Output
+
+```python
+from engine.mcp.nlm_live_proxy import chat_message, _load_cookies
+
+cookies = _load_cookies()
+
+# Teacher mode — generates educational content
+answer = chat_message(
+    notebook_id,
+    "Explain the key concepts step by step",
+    cookies,
+    role="You are a patient teacher. Use simple language and concrete examples. "
+         "Structure your answer with clear headings and bullet points.",
 )
 
-# Store research session
-client.add_entry(
-    title=f"NLM Research: {topic}",
-    content="\n\n".join(f"Q: {q}\nA: {a['answer']}" for q, a in zip(questions, answers)),
-    content_type="research",
-    category="architecture",
+# Researcher mode — generates cited academic-style analysis
+answer = chat_message(
+    notebook_id,
+    "What are the main contributions of this work?",
+    cookies,
+    role="You are a PhD researcher. Provide thorough analysis. "
+         "Cite specific sections and quote key passages.",
+)
+
+# Code generator mode
+answer = chat_message(
+    notebook_id,
+    "Show me how to implement this in Python",
+    cookies,
+    role="You are an expert Python developer. Always provide working, "
+         "tested code with type hints and docstrings.",
 )
 ```
 
----
+### 3. Source Content Extraction to Nexus
 
-## Files
+```python
+from engine.mcp.nlm_live_proxy import _load_cookies, read_source
+import requests
 
-| File | Purpose |
-|------|---------|
-| `engine/mcp/nlm_live_proxy.py` | Flask proxy at :8800, full RPC implementation |
-| `engine/mcp/notebooklm_proxy.py` | High-level Python client for the proxy |
-| `engine/nexus/nlm_har_capture.py` | Chrome CDP cookie extraction |
-| `engine/nexus/nlm_qa_distiller.py` | NLM-powered Q&A generation for Nexus |
-| `engine/nexus/nlm_notebook_manager.py` | Research notebook fleet management |
-| `engine/nexus/nlm_research_pipeline.py` | Structured research workflows |
-| `data/nlm_cookies.json` | Stored Google auth cookies |
-| `data/nlm_meta.json` | Build label, session ID |
-| `tests/test_nlm_live_proxy.py` | Test suite (35+ tests) |
+cookies = _load_cookies()
 
----
+# Get all sources
+resp = requests.get(f"http://localhost:8800/notebooks/{nb_id}/sources")
+sources = resp.json()["sources"]
 
-## Dependencies
-
+# Extract content from each source into Nexus
+from engine.nexus.client import get_nexus_client
+client = get_nexus_client()
+for source in sources:
+    content = read_source(source["id"], cookies)
+    if content.get("content"):
+        client.add_entry(
+            source["title"],
+            content["content"],
+            content_type="document",
+            category="research",
+        )
 ```
-pip install websocket-client   # For Chrome CDP capture (nlm_har_capture.py)
-flask                           # Already installed (proxy server)
-requests                        # Already installed (HTTP client)
+
+### 4. Document Generation Pipeline
+
+Generate a full research brief and save to notebook:
+
+```python
+from engine.mcp.nlm_live_proxy import generate_document, save_note, _load_cookies
+import requests
+
+cookies = _load_cookies()
+nb_id = "your-notebook-uuid"
+
+# Get source IDs
+resp = requests.get(f"http://localhost:8800/notebooks/{nb_id}/sources")
+source_ids = [s["id"] for s in resp.json()["sources"]]
+
+# Preview the generated document
+preview = generate_document(nb_id, source_ids, cookies, doc_type=2)
+print(f"Title: {preview['title']}")
+print(f"Description: {preview['description'][:200]}")
+
+# Save as research brief
+saved = save_note(nb_id, source_ids, cookies, note_type=2)
+print(f"Saved: {saved['title']} (ID: {saved['note_id']})")
+
+# Or save as notes
+notes = save_note(nb_id, source_ids, cookies, note_type=9)
+```
+
+### 5. News Research Workflow
+
+Use NLM notebooks as research agents for the news feed system:
+
+```python
+# 1. Create a notebook for the news topic (via /rpc/ub2Bae + notebook creation)
+# 2. Add news sources (article URLs)
+# 3. Run Q&A distillation on the sources
+# 4. Generate a research brief
+# 5. Store Q&A + brief in Nexus with news category
+
+RESEARCHER_ROLE = (
+    "You are an expert analyst covering breaking AI/tech news. "
+    "Identify the most important developments, their implications, "
+    "and how they connect to existing knowledge. Be concise and factual."
+)
+
+questions = [
+    "What are the key announcements or findings in these sources?",
+    "What is the immediate impact on the field?",
+    "What questions does this raise for future research?",
+    "How does this compare to previous approaches?",
+    "What should practitioners implement based on this?",
+]
+
+answers = chat_messages_batch(nb_id, questions, cookies,
+                               role=RESEARCHER_ROLE, max_batch=5)
+```
+
+### 6. Maximizing Output Efficiency
+
+```python
+# Strategy: 5 questions per request → 5× throughput vs sequential
+
+# BAD: Sequential (5 requests)
+for q in questions:
+    answer = ask_question(nb_id, q, cookies)
+
+# GOOD: Batch (1 request for 5 questions)
+answers = ask_questions_batch(nb_id, questions, cookies, max_batch=5)
+
+# Even better: Pre-plan 20 questions, 4 batches of 5
+# Total: 4 HTTP requests instead of 20
+questions = generate_20_questions_for_topic("local AI systems")
+answers = ask_questions_batch(nb_id, questions, cookies, max_batch=5)
 ```
 
 ---
 
-## Changelog
+## BL Discovery and RPC Health Monitoring
 
-| Version | Date | Changes |
-|---------|------|---------|
-| 2.0 | 2026-02 | Complete rewrite — CYK0Xb (ask), ciyUvf (generate), R7cb6c (save note), multi-batch |
-| 1.5 | 2025-12 | Added HAR ingestion to Nexus Panel, 464 entries ingested |
-| 1.0 | 2025-11 | Initial NLM proxy — read-only operations |
+### Detecting Stale BL
+
+```bash
+# Check health
+curl http://localhost:8800/health
+# {"bl": "boq_labs-...", "bl_age_days": 5, "bl_stale": false}
+
+# If bl_stale: true, refresh immediately:
+curl -X POST http://localhost:8800/cookies/capture
+# Or import a new HAR from a fresh NLM session
+```
+
+### Testing RPC Availability
+
+```bash
+# Test if a specific RPC still works
+curl -X POST http://localhost:8800/rpc/CYK0Xb \
+  -H "Content-Type: application/json" \
+  -d '{"args": "[\"nb_id\", \"test question\"]", "notebook_id": "nb_id"}'
+
+# If you get HTTP 404 or error → RPC ID changed after build update
+# Import fresh HAR and re-extract BL
+```
+
+### Discovering New RPC IDs After Build Update
+
+When Google deploys a new frontend:
+1. Import a fresh HAR captured from the new build
+2. The new BL is auto-extracted and saved
+3. Old RPC IDs remain valid until the old build is decommissioned (~2–4 weeks)
+4. Monitor for HTTP 404 responses on write RPCs (reads tend to be more stable)
+
+---
+
+## Protocol Deep Dive
+
+### Full Request Example (CYK0Xb)
+
+```python
+import urllib.parse, urllib.request, json
+
+notebook_id = "bec06e03-7cf2-4989-bf17-bcb0ac9927a0"
+question = "What are the main contributions?"
+bl = "boq_labs-tailwind-frontend_20260226.08_p0"
+
+# Build URL
+params = urllib.parse.urlencode({
+    "rpcids": "CYK0Xb",
+    "source-path": f"/notebook/{notebook_id}",
+    "bl": bl,
+    "f.sid": "-1",
+    "hl": "en",
+    "_reqid": "100000",
+    "rt": "c",
+})
+url = f"https://notebooklm.google.com/_/LabsTailwindUi/data/batchexecute?{params}"
+
+# Build body
+f_req = [["CYK0Xb", json.dumps([notebook_id, question]), None, "generic"]]
+body = urllib.parse.urlencode({"f.req": json.dumps(f_req)}).encode()
+
+# Send
+req = urllib.request.Request(url, data=body, headers=headers)
+with urllib.request.urlopen(req, timeout=60) as resp:
+    raw = resp.read().decode("utf-8")
+```
+
+### Full Request Example (s0tc2d with Configure Chat)
+
+```python
+question = "Explain the key architecture"
+role = "You are a PhD researcher. Be thorough and cite sources."
+resp_len = 4  # Default
+
+inner_msg = [[2, question], [resp_len]]
+chat_config = [role, None, None, None, None, None, None, inner_msg]
+args = json.dumps([notebook_id, [chat_config]])
+
+f_req = [["s0tc2d", args, None, "generic"]]
+# ... same URL construction and send as above
+```
+
+### Response Parsing
+
+```python
+raw = ")]}'\\n530\\n[...]\\n25\\n[...]\\n"
+body = raw.lstrip(")]}'").lstrip("\\n")
+
+for line in body.split("\\n"):
+    line = line.strip()
+    if not line.startswith('[["wrb.fr"'):
+        continue
+    outer = json.loads(line)
+    rpc_id = outer[0][1]           # "CYK0Xb"
+    inner_raw = outer[0][2]        # string-encoded inner JSON
+    inner = json.loads(inner_raw)  # [[answer_id, answer_text]]
+```
+
+---
+
+## Known Limitations and Gotchas
+
+1. **s0tc2d is asynchronous** — the response does NOT contain the answer.
+   Use `cFji9` (conversation history) to retrieve it after ~2–5 seconds.
+
+2. **CYK0Xb is synchronous** — better for programmatic Q&A where you need
+   the answer immediately.
+
+3. **Chrome 130+ redacts cookies from HAR exports** — always use CDP capture
+   (`POST /cookies/capture`) or extract via the `data/nlm_cookies.json` manual method.
+
+4. **Build label changes weekly** — implement BL monitoring and auto-refresh.
+   The `bl_stale` field in `/health` is your early warning system.
+
+5. **Batch limit** — 5 RPCs per request appears to be the practical limit.
+   Exceeding this may cause malformed responses.
+
+6. **Rate limiting** — No hard rate limit observed, but aggressive batching
+   (>50 questions/minute) may trigger soft limits. Add 1–2s delays between
+   large batch groups.
+
+7. **Source UUIDs** — Source IDs are per-notebook and do not transfer between
+   notebooks. Always fetch source IDs from `wXbhsf` before using them in
+   `ciyUvf` or `R7cb6c`.
+
+---
+
+## Integration with CosySim Nexus
+
+The NLM proxy is fully integrated with the CosySim Nexus knowledge system:
+
+```python
+# Via MCP skills (agents can call these directly)
+nlm_live_ask(notebook_id, "What is X?")
+nlm_live_batch_ask(notebook_id, ["Q1?", "Q2?", "Q3?"])
+nlm_generate_document(notebook_id, source_ids)
+nlm_save_note(notebook_id, source_ids)
+nlm_capture_cookies()
+nlm_proxy_meta()
+nlm_distill_notebook(notebook_id)  # Full Q&A distillation workflow
+
+# Via NLM Forge skills (routes through 4-tier Nexus pipeline first)
+nlm_ask("question")         # Cache → FTS → NLM → LLM
+nlm_batch_ask(questions)    # Same but batched
+nlm_generate_doc(nb_id)     # Full document generation
+
+# Via QA Distiller CLI
+python -m engine.nexus.nlm_qa_distiller --bulk --notebook <id>
+```
+
+---
+
+*Last updated: 2026-02-28 | Version 2.1 | 18 RPCs catalogued across 11 HAR files*
+
