@@ -103,7 +103,7 @@ SERVICES: Dict[str, Dict[str, Any]] = {
     },
     "nlm_proxy": {
         "type": "flask",
-        "factory": "engine.mcp.nlm_live_proxy.get_nlm_proxy_app",
+        "cls":  "engine.mcp.nlm_live_proxy.NLMProxyServer",
         "port": 8800, "label": "NLM Live Proxy",
         "auto_start": False,
     },

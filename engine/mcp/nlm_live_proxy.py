@@ -1807,6 +1807,38 @@ def get_nlm_proxy_app() -> Flask:
     return _proxy_app
 
 
+# ── Launcher-compatible server class ─────────────────────────────────────
+
+
+class NLMProxyServer:
+    """Thin wrapper so the launcher can start the proxy via `.start()`.
+
+    Follows the same contract as Flask-based scene classes:
+      NLMProxyServer().start()  — blocks serving until process dies.
+    """
+
+    def __init__(self, host: str = "0.0.0.0", port: int = 8800) -> None:
+        cfg = get_config()
+        self.host = host
+        self.port = cfg.get("notebooklm.proxy_port", port)
+
+    def start(self) -> None:
+        """Start the NLM proxy Flask server (blocking)."""
+        has_cookies = bool(_load_cookies())
+        if has_cookies:
+            logger.info("NLM Proxy: cookies loaded — live NLM access active")
+        else:
+            logger.warning(
+                "NLM Proxy: no auth cookies found. "
+                "POST /cookies/import with a NotebookLM HAR file to enable live access. "
+                "Cookie file: %s",
+                _COOKIES_FILE,
+            )
+        app = get_nlm_proxy_app()
+        logger.info("NLM Live Proxy starting on %s:%d", self.host, self.port)
+        app.run(host=self.host, port=self.port, debug=False, threaded=True)
+
+
 # ── CLI ──────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":

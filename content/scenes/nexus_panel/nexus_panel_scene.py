@@ -1826,11 +1826,31 @@ class NexusPanelScene(BaseScene, NexusSceneMixin):
         """Start the Nexus Control Panel."""
         self._log_activity("panel_start", f"port={self.port}")
         logger.info("Starting Nexus Control Panel on port %s", self.port)
+        self._check_nlm_proxy_health()
         if self.socketio is not None:
             self.socketio.run(self.app, host=self.host, port=self.port,
                               debug=False, use_reloader=False)
         else:
             self.app.run(host=self.host, port=self.port, debug=False, use_reloader=False)
+
+    def _check_nlm_proxy_health(self) -> None:
+        """Warn at startup if NLM proxy is unreachable."""
+        import urllib.request
+        proxy_url = self._nlm_proxy_url()
+        try:
+            req = urllib.request.Request(f"{proxy_url}/health", method="GET")
+            with urllib.request.urlopen(req, timeout=3) as resp:
+                if resp.status == 200:
+                    logger.info("NLM proxy online at %s — NLM intelligence active", proxy_url)
+                    return
+        except Exception:
+            pass
+        logger.warning(
+            "NLM proxy OFFLINE at %s — NLM Lab features will degrade to cache/FTS only. "
+            "Start it with: python -m engine.mcp.nlm_live_proxy  "
+            "Or launch with: python launcher.py nlm_proxy",
+            proxy_url,
+        )
 
     def stop(self) -> None:
         """Stop the panel and flush Nexus events."""
