@@ -401,7 +401,7 @@ RPC_RENAME_NOTEBOOK = "s0tc2d"
 # Payload: [notebook_id, [[null, null, null, [null, "new_name"]]]]
 # Response: [new_name, null, notebook_id, emoji_char, ...]
 
-RPC_SAVE_NOTE = "CYK0Xb"
+RPC_CREATE_NOTE = "CYK0Xb"
 # HAR-confirmed 2026-02-22.  Citation-annotate Q&A (was called "legacy chat" in v2.x).
 # ⚠️ v3.0 correction: this is NOT real chat — it annotates text with source citations.
 # Used for Q&A distillation: returns cited answers grounded in notebook sources.
@@ -457,6 +457,27 @@ RPC_DELETE_SOURCE = "tGMBJ"
 RPC_USER_QUOTA = "ozz5Z"
 # Same ID as RPC_ACCOUNT_STATE — used in get_user_quota() specifically for
 # the quota/storage usage payload variant.
+
+# ── New RPCs confirmed from HAR 2026-03-01 manual_testing.har ──────────────
+RPC_USER_PLAN        = "ZwVcOc"   # GET_USER_PLAN — quota limits (NOT delete_notebook — has no nb_id arg)
+RPC_OPEN_NOTEBOOK    = "CCqFvf"   # OPEN_NOTEBOOK — called when entering a notebook, returns state
+RPC_SOURCE_STATUS    = "rLM1Ne"   # POLL_SOURCE_STATUS — poll until source indexed (arg[4]=0 first, 1=continuing)
+RPC_PENDING_SOURCES  = "hPTbtc"   # GET_PENDING_SOURCES — [[], null, nb_id, 20]
+RPC_NOTEBOOK_DETAILS = "JFMDGd"   # GET_NOTEBOOK_DETAILS — [nb_id, [2]]
+RPC_NOTEBOOK_CONTENT = "VfAZjd"   # GET_NOTEBOOK_CONTENT — [nb_id, [2]]
+RPC_SAVE_NOTE = "cYAfTb"  # SAVE_NOTE — live auto-save as you type [nb_id, note_id, [[["<html>","title",[],0]]], [2]]
+RPC_SOURCE_DETAIL    = "hizoJc"   # GET_SOURCE_DETAIL — [[src_id], [2], [2]]
+RPC_REGISTER_FILES   = "o4cbdc"   # REGISTER_FILE_UPLOAD — [[[fn1],[fn2]], nb_id, [2], [1,...,[1]]]
+RPC_SYNC_NOTES = "cFji9"  # SYNC_NOTES — delta poll for note changes [nb_id, null, [prev_ts_sec, prev_ts_nano], [2]]. Returns [[note_objects], [current_ts]]. No prev_ts on first call.
+RPC_NOTEBOOK_STATE   = "e3bVqc"   # GET_NOTEBOOK_STATE — [null, null, nb_id]
+
+# ── New RPCs confirmed from HAR 2026-03-01 addnote-saveresptonote-convsource.har ──
+RPC_CREATE_NOTE      = "CYK0Xb"   # CREATE_NOTE — [nb_id, content_html, [1], null, title, null, [2]]. Also used for "save response to note" (pass AI response as content).
+RPC_LIST_NOTES       = "khqZz"    # LIST_NOTES — [[],null,null,notes_container_id,20]. Returns notes with full markdown content.
+RPC_LIST_SOURCES     = "wXbhsf"   # LIST_SOURCES — [null,1,null,[2]]. Returns all sources in all notebooks (sidebar list).
+RPC_GET_AUDIO_OPTIONS = "sqTeoe"  # GET_AUDIO_OPTIONS — [[2,null,null,[1,...],[[2,1]]],null,1]. Returns audio format types: Deep dive, Brief, Critique, Debate.
+RPC_GET_ARTIFACTS    = "gArtLc"   # GET_ARTIFACTS — [[2,...],nb_id,filter_str]. filter_str uses SQL-like syntax e.g. 'NOT artifact.status = "ARTIFACT_STATUS_SUGGESTED"'
+RPC_GET_SOURCE_SUMMARY = "tr032e" # GET_SOURCE_SUMMARY — [[[[source_id]]]]. Returns AI-generated markdown summary of a source. NEW — never seen in prior HARs.
 
 # ── Response Length Constants ────────────────────────────────────────────
 # Passed as second element of response-config arrays in several RPCs.
@@ -1246,7 +1267,7 @@ def ask_question(
         Dict with keys: answer_id, answer (markdown with [citations]), sources.
     """
     args = json.dumps([notebook_id, question])
-    _, data = _batchexecute(RPC_SAVE_NOTE, args, cookies, notebook_id)
+    _, data = _batchexecute(RPC_CREATE_NOTE, args, cookies, notebook_id)
     return _parse_ask_response(data)
 
 
@@ -1358,6 +1379,444 @@ def _parse_add_source_response(data: Any, url: str = "") -> Dict[str, Any]:
     return {"source_id": source_id, "url": url, "status": "processing"}
 
 
+def add_text_source(
+    notebook_id: str,
+    title: str,
+    content: str,
+    cookies: Dict[str, str],
+) -> Dict[str, Any]:
+    """Add an inline text/markdown source to a notebook via izAoDd RPC.
+
+    Confirmed from HAR 2026-03-01 (notebooklm_manual_testing.har).
+    Text sources use position 1 = ["title", "content"] and position 3 = 3
+    (format type for paste/text), unlike URL sources which use position 2.
+
+    Args:
+        notebook_id: Target notebook UUID.
+        title:       Display name for the source.
+        content:     Markdown or plain-text content (can be large).
+        cookies:     Google auth cookies.
+
+    Returns:
+        Dict with source_id on success, or error dict on failure.
+    """
+    # Build the source object: pos[1]=[title,content], pos[3]=3 (text format)
+    # Confirmed payload structure from HAR:
+    # [[[null, ["title", "content"], null, 3, null,null,null,null,null,null, 1]],
+    #   notebook_id, [2], [1,null,null,null,null,null,null,null,null,null,[1]]]
+    source_obj = [None, [title, content], None, 3, None, None, None, None, None, None, 1]
+    args = json.dumps([
+        [[source_obj]],
+        notebook_id,
+        [2],
+        [1, None, None, None, None, None, None, None, None, None, [1]],
+    ], separators=(",", ":"))
+
+    _rpc_id, data = _batchexecute(RPC_ADD_SOURCE, args, cookies, notebook_id)
+    if data is None:
+        return {"error": "null_response", "detail": "No data returned from add_text_source"}
+    if isinstance(data, dict) and data.get("error"):
+        return data
+
+    # Response mirrors add_source_url — extract first source_id from data[0][0][0]
+    try:
+        source_id = data[0][0][0]
+        return {"source_id": source_id, "title": title, "status": "added"}
+    except (TypeError, IndexError, KeyError):
+        return {"source_id": None, "title": title, "status": "added", "raw": data}
+
+
+def poll_source_status(
+    notebook_id: str,
+    cookies: Dict[str, str],
+    first_poll: bool = True,
+) -> Dict[str, Any]:
+    """Poll source processing status for a notebook via rLM1Ne RPC.
+
+    Confirmed from HAR 2026-03-01. Called repeatedly after adding sources
+    until all sources are indexed. last arg 0 = first poll, 1 = continuing.
+
+    Args:
+        notebook_id: Target notebook UUID.
+        cookies:     Google auth cookies.
+        first_poll:  True for first call (arg[4]=0), False for subsequent (arg[4]=1).
+
+    Returns:
+        Dict with processing status info.
+    """
+    poll_flag = 0 if first_poll else 1
+    args = json.dumps([notebook_id, None, [2], None, poll_flag], separators=(",", ":"))
+    _rpc_id, data = _batchexecute(RPC_SOURCE_STATUS, args, cookies, notebook_id)
+    if data is None:
+        return {"error": "null_response"}
+    if isinstance(data, dict) and data.get("error"):
+        return data
+    return {"status": "ok", "data": data}
+
+
+def wait_for_sources(
+    notebook_id: str,
+    cookies: Dict[str, str],
+    timeout: int = 120,
+    poll_interval: float = 3.0,
+) -> bool:
+    """Poll rLM1Ne until all sources are processed or timeout reached.
+
+    Args:
+        notebook_id:   Target notebook UUID.
+        cookies:       Google auth cookies.
+        timeout:       Maximum seconds to wait (default 120).
+        poll_interval: Seconds between polls (default 3.0).
+
+    Returns:
+        True if sources appear ready, False on timeout.
+    """
+    import time as _time
+    deadline = _time.time() + timeout
+    first = True
+    while _time.time() < deadline:
+        result = poll_source_status(notebook_id, cookies, first_poll=first)
+        first = False
+        # If data contains no pending indicators, consider it done.
+        # rLM1Ne returns null data when all sources are ready.
+        data = result.get("data")
+        if data is None:
+            return True
+        # Check for any active processing indicators (non-null nested lists)
+        try:
+            if not any(item for item in data if item is not None):
+                return True
+        except TypeError:
+            pass
+        _time.sleep(poll_interval)
+    logger.warning("wait_for_sources timed out after %ss for notebook %s", timeout, notebook_id)
+    return False
+
+
+def register_file_sources(
+    notebook_id: str,
+    filenames: List[str],
+    cookies: Dict[str, str],
+) -> List[Dict[str, Any]]:
+    """Register filenames for upload and get source IDs via o4cbdc RPC.
+
+    Step 1 of 2 for file upload. After calling this, upload each file's
+    bytes to POST /upload/_/?authuser=0 using the returned source_id as
+    the upload identifier.
+
+    Confirmed from HAR 2026-03-01. Payload: [[[fn1],[fn2]], nb_id, [2], [1,...,[1]]]
+    Response: [[source_id], filename, [null,null,null,null,0]] per file.
+
+    Args:
+        notebook_id: Target notebook UUID.
+        filenames:   List of filenames (e.g. ["ARCHITECTURE.md", "API.md"]).
+        cookies:     Google auth cookies.
+
+    Returns:
+        List of dicts: [{source_id, filename}]
+    """
+    fn_list = [[fn] for fn in filenames]
+    args = json.dumps([
+        fn_list,
+        notebook_id,
+        [2],
+        [1, None, None, None, None, None, None, None, None, None, [1]],
+    ], separators=(",", ":"))
+
+    _rpc_id, data = _batchexecute(RPC_REGISTER_FILES, args, cookies, notebook_id)
+    if data is None:
+        return [{"error": "null_response", "filename": fn} for fn in filenames]
+    if isinstance(data, dict) and data.get("error"):
+        return [{"error": data, "filename": fn} for fn in filenames]
+
+    results = []
+    try:
+        # data[0] = list of [[[source_id], filename, [...]]]
+        entries = data[0]
+        for item in entries:
+            source_id = item[0][0] if item[0] else None
+            fname = item[1] if len(item) > 1 else None
+            results.append({"source_id": source_id, "filename": fname})
+    except (TypeError, IndexError):
+        results = [{"source_id": None, "filename": fn, "raw": data} for fn in filenames]
+    return results
+
+
+def upload_file_to_nlm(
+    filename: str,
+    content_bytes: bytes,
+    cookies: Dict[str, str],
+    mime_type: str = "text/plain",
+) -> Dict[str, Any]:
+    """Upload file bytes to NotebookLM via the resumable upload endpoint.
+
+    2-step process confirmed from HAR 2026-03-01:
+      Step 1: POST /upload/_/?authuser=0  (no body or empty body) → X-GUploader header = upload_id
+      Step 2: POST /upload/_/?authuser=0&upload_id=<id>  (with file bytes) → 'OK: Enqueued...'
+
+    Args:
+        filename:      Original filename (for Content-Disposition).
+        content_bytes: Raw file bytes to upload.
+        cookies:       Google auth cookies.
+        mime_type:     MIME type (default text/plain; use text/markdown for .md files).
+
+    Returns:
+        Dict with upload_id and status.
+    """
+    _rate_limiter.set_gap(_get_rate_limit())
+    _rate_limiter.wait()
+
+    cookie_str = _cookies_header(cookies)
+    base_url = f"https://{_NLM_HOST}/upload/_/?authuser=0"
+    upload_headers = {
+        "Cookie": cookie_str,
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+        ),
+        "Origin": f"https://{_NLM_HOST}",
+        "Referer": f"https://{_NLM_HOST}/",
+        "X-Same-Domain": "1",
+    }
+
+    # Step 1: register upload, get upload_id from X-GUploader response header
+    try:
+        req1 = urllib.request.Request(base_url, data=b"", headers=upload_headers, method="POST")
+        with urllib.request.urlopen(req1, timeout=30) as resp1:
+            upload_id = resp1.headers.get("X-GUploader-UploadID") or resp1.headers.get("x-guploader-uploadid", "")
+            _ = resp1.read()
+    except Exception as exc:
+        return {"error": "upload_register_failed", "detail": str(exc)}
+
+    if not upload_id:
+        return {"error": "no_upload_id", "detail": "Step 1 did not return X-GUploader header"}
+
+    # Step 2: upload file bytes
+    upload_url = f"{base_url}&upload_id={upload_id}"
+    upload_headers["Content-Type"] = mime_type
+    upload_headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+    upload_headers["Content-Length"] = str(len(content_bytes))
+
+    try:
+        req2 = urllib.request.Request(upload_url, data=content_bytes, headers=upload_headers, method="POST")
+        with urllib.request.urlopen(req2, timeout=60) as resp2:
+            body = resp2.read().decode("utf-8", errors="replace")
+    except Exception as exc:
+        return {"error": "upload_bytes_failed", "detail": str(exc), "upload_id": upload_id}
+
+    return {
+        "upload_id": upload_id,
+        "filename": filename,
+        "status": "enqueued" if "Enqueued" in body else "uploaded",
+        "response": body,
+    }
+
+
+def create_note(
+    notebook_id: str,
+    title: str,
+    content_html: str,
+    cookies: Dict[str, str],
+) -> Dict[str, Any]:
+    """Create a new note in a notebook via CYK0Xb RPC.
+
+    Confirmed from HAR 2026-03-01 (addnote-saveresptonote-convsource.har).
+    Also used for "save AI response to note" — pass the AI response markdown
+    as content_html to save it directly as a note.
+
+    Payload: [nb_id, content_html, [1], null, title, null, [2]]
+    Response: [[note_id, content, [1, version_id, [ts_sec, ts_nano]], null, title]]
+
+    Args:
+        notebook_id:  Target notebook UUID.
+        title:        Note title.
+        content_html: Note body as HTML string (e.g. "<p>Hello world</p>").
+                      Pass empty string "" for a blank note.
+        cookies:      Google auth cookies.
+
+    Returns:
+        Dict with note_id, title, and status.
+    """
+    args = json.dumps(
+        [notebook_id, content_html, [1], None, title, None, [2]],
+        separators=(",", ":"),
+    )
+    _rpc_id, data = _batchexecute(RPC_CREATE_NOTE, args, cookies, notebook_id)
+    if data is None:
+        return {"error": "null_response", "detail": "No data from create_note"}
+    if isinstance(data, dict) and data.get("error"):
+        return data
+    try:
+        note = data[0]
+        note_id = note[0]
+        return {"note_id": note_id, "title": title, "status": "created"}
+    except (TypeError, IndexError):
+        return {"note_id": None, "title": title, "status": "created", "raw": data}
+
+
+def save_note(
+    notebook_id: str,
+    note_id: str,
+    title: str,
+    content_html: str,
+    cookies: Dict[str, str],
+) -> Dict[str, Any]:
+    """Save/update a note's content via cYAfTb RPC (live auto-save).
+
+    Confirmed from HAR 2026-03-01. This is the same RPC NLM fires on every
+    keystroke as you type. Safe to call as often as needed.
+
+    Payload: [nb_id, note_id, [[["<html>", "title", [], 0]]], [2]]
+    Response: [[note_id, content, [1, version_id, [ts_sec, ts_nano]], null, title]]
+
+    Note: Previously this constant was incorrectly labelled GET_SOURCE_STATUS_DETAIL.
+    The payload structure was misread — pos[2][0] = ["html","title",[],0], not source status.
+
+    Args:
+        notebook_id:  Target notebook UUID.
+        note_id:      UUID of the note to update.
+        title:        Note title (can be unchanged).
+        content_html: New HTML content for the note.
+        cookies:      Google auth cookies.
+
+    Returns:
+        Dict with note_id, title, and status.
+    """
+    args = json.dumps(
+        [notebook_id, note_id, [[[content_html, title, [], 0]]], [2]],
+        separators=(",", ":"),
+    )
+    _rpc_id, data = _batchexecute(RPC_SAVE_NOTE, args, cookies, notebook_id)
+    if data is None:
+        return {"error": "null_response"}
+    if isinstance(data, dict) and data.get("error"):
+        return data
+    try:
+        note = data[0]
+        return {"note_id": note[0], "title": title, "status": "saved"}
+    except (TypeError, IndexError):
+        return {"note_id": note_id, "title": title, "status": "saved", "raw": data}
+
+
+def get_source_summary(
+    source_id: str,
+    cookies: Dict[str, str],
+) -> Dict[str, Any]:
+    """Get an AI-generated markdown summary of a source via tr032e RPC.
+
+    Confirmed from HAR 2026-03-01. NEW RPC — never seen in prior HAR captures.
+    Called with just a source_id; returns a full markdown summary generated by NLM.
+    Extremely useful for indexing source content without reading the raw text.
+
+    Payload: [[[[source_id]]]]
+    Response: [[[[source_id]], "### Markdown summary text..."]]
+
+    Args:
+        source_id: UUID of the source to summarize.
+        cookies:   Google auth cookies.
+
+    Returns:
+        Dict with source_id, summary (markdown), and status.
+    """
+    args = json.dumps([[[[source_id]]]], separators=(",", ":"))
+    _rpc_id, data = _batchexecute(RPC_GET_SOURCE_SUMMARY, args, cookies)
+    if data is None:
+        return {"error": "null_response"}
+    if isinstance(data, dict) and data.get("error"):
+        return data
+    try:
+        summary = data[0][1] if data[0] and len(data[0]) > 1 else str(data)
+        return {"source_id": source_id, "summary": summary, "status": "ok"}
+    except (TypeError, IndexError):
+        return {"source_id": source_id, "summary": None, "status": "ok", "raw": data}
+
+
+def get_audio_options(
+    notebook_id: str,
+    cookies: Dict[str, str],
+) -> Dict[str, Any]:
+    """List available audio overview formats via sqTeoe RPC.
+
+    Confirmed from HAR 2026-03-01. Returns the list of audio types:
+    1=Deep dive, 2=Brief, 3=Critique, 4=Debate.
+
+    Payload: [[2,null,null,[1,null,null,null,null,null,null,null,null,null,[1]],[[2,1]]],null,1]
+
+    Args:
+        notebook_id: Target notebook UUID (used in request context).
+        cookies:     Google auth cookies.
+
+    Returns:
+        Dict with options list [{id, label, description}].
+    """
+    args = json.dumps(
+        [[2, None, None, [1, None, None, None, None, None, None, None, None, None, [1]], [[2, 1]]], None, 1],
+        separators=(",", ":"),
+    )
+    _rpc_id, data = _batchexecute(RPC_GET_AUDIO_OPTIONS, args, cookies, notebook_id)
+    if data is None:
+        return {"error": "null_response"}
+    if isinstance(data, dict) and data.get("error"):
+        return data
+    try:
+        raw_options = data[0][0][0]
+        options = [
+            {"id": opt[0], "label": opt[1], "description": opt[2]}
+            for opt in raw_options
+        ]
+        return {"options": options, "status": "ok"}
+    except (TypeError, IndexError):
+        return {"options": [], "status": "ok", "raw": data}
+
+
+def sync_notes(
+    notebook_id: str,
+    cookies: Dict[str, str],
+    prev_timestamp: Optional[List[int]] = None,
+) -> Dict[str, Any]:
+    """Poll for note changes since a given timestamp via cFji9 RPC.
+
+    Confirmed from HAR 2026-03-01. NLM uses this as a delta sync — on first
+    call (no prev_timestamp) returns all notes. Subsequent calls return only
+    notes changed since prev_timestamp. Returns a new timestamp for the next poll.
+
+    Payload: [nb_id, null, [prev_ts_sec, prev_ts_nano], [2]]  (or [nb_id, null, null, [2]] first call)
+    Response: [[[note_id, note_object], ...], [current_ts_sec, current_ts_nano]]
+
+    Args:
+        notebook_id:    Target notebook UUID.
+        cookies:        Google auth cookies.
+        prev_timestamp: [sec, nanosec] from last sync response. None for first call.
+
+    Returns:
+        Dict with notes list and next_timestamp for continued polling.
+    """
+    args = json.dumps(
+        [notebook_id, None, prev_timestamp, [2]],
+        separators=(",", ":"),
+    )
+    _rpc_id, data = _batchexecute(RPC_SYNC_NOTES, args, cookies, notebook_id)
+    if data is None:
+        return {"notes": [], "next_timestamp": None}
+    if isinstance(data, dict) and data.get("error"):
+        return data
+    try:
+        notes_raw = data[0] if data else []
+        next_ts = data[1] if len(data) > 1 else None
+        notes = []
+        for entry in (notes_raw or []):
+            if entry and len(entry) >= 2:
+                note_obj = entry[1]
+                notes.append({
+                    "note_id": note_obj[0] if note_obj else entry[0],
+                    "content": note_obj[1] if note_obj and len(note_obj) > 1 else None,
+                    "title": note_obj[4] if note_obj and len(note_obj) > 4 else None,
+                })
+        return {"notes": notes, "next_timestamp": next_ts, "status": "ok"}
+    except (TypeError, IndexError):
+        return {"notes": [], "next_timestamp": None, "status": "ok", "raw": data}
+
+
 def ask_questions_batch(
     notebook_id: str,
     questions: List[str],
@@ -1382,7 +1841,7 @@ def ask_questions_batch(
     for i in range(0, len(questions), max_batch):
         batch = questions[i:i + max_batch]
         calls = [
-            (RPC_SAVE_NOTE, json.dumps([notebook_id, q]))
+            (RPC_CREATE_NOTE, json.dumps([notebook_id, q]))
             for q in batch
         ]
         raw_results = _batchexecute_multi(calls, cookies, notebook_id)
@@ -2101,7 +2560,7 @@ def _parse_generate_response(data: Any, source_ids: List[str]) -> Dict[str, Any]
     return {"title": "", "description": "", "source_ids": source_ids}
 
 
-def save_note(
+def save_note_report(
     notebook_id: str,
     source_ids: List[str],
     cookies: Dict[str, str],
@@ -2554,7 +3013,7 @@ class NLMClient:
         Returns:
             Dict with note_id, title, and note_type.
         """
-        return save_note(notebook_id, source_ids, _load_cookies(), note_type)
+        return save_note_report(notebook_id, source_ids, _load_cookies(), note_type)
 
     def read_source(self, source_id: str) -> Dict[str, Any]:
         """Read the full text content of a source (tr032e RPC).
@@ -3067,7 +3526,7 @@ def create_nlm_proxy_app() -> Flask:
         return jsonify(result)
 
     @app.route("/notebooks/<notebook_id>/save_note", methods=["POST"])
-    def save_note_route(notebook_id: str):
+    def save_note_report_route(notebook_id: str):
         """Create/save a note artifact in a notebook.
 
         Body (JSON): {"source_ids": ["uuid1", ...], "note_type": 2}
@@ -3079,7 +3538,7 @@ def create_nlm_proxy_app() -> Flask:
         body = request.json or {}
         source_ids = body.get("source_ids", [])
         note_type = body.get("note_type", 2)
-        result = save_note(notebook_id, source_ids, cookies, note_type)
+        result = save_note_report(notebook_id, source_ids, cookies, note_type)
         if result.get("error"):
             return jsonify(result), 502
         return jsonify(result)
@@ -3414,6 +3873,99 @@ def create_nlm_proxy_app() -> Flask:
         if result.get("error"):
             return jsonify(result), 502
         return jsonify(result)
+
+    @app.route("/notebooks/<notebook_id>/sources/text", methods=["POST"])
+    def add_text_source_route(notebook_id: str):
+        """Add an inline text/markdown source to a notebook (izAoDd RPC, text format).
+
+        Confirmed from HAR 2026-03-01. No external URL needed — content is
+        passed directly. NLM indexes it as a paste/text source.
+
+        Body (JSON):
+            {
+              "title": "ARCHITECTURE.md",
+              "content": "# Architecture\\n\\nCosySim is..."
+            }
+
+        Returns: {source_id, title, status}
+        """
+        cookies = _cookies()
+        if not cookies:
+            return _no_cookies()
+        body = request.json or {}
+        title = body.get("title", "").strip()
+        content = body.get("content", "").strip()
+        if not title or not content:
+            return jsonify({"error": "title and content are required"}), 400
+        result = add_text_source(notebook_id, title, content, cookies)
+        if result.get("error"):
+            return jsonify(result), 502
+        return jsonify(result)
+
+    @app.route("/notebooks/<notebook_id>/sources/status", methods=["GET"])
+    def source_status_route(notebook_id: str):
+        """Poll source processing status via rLM1Ne RPC.
+
+        Query params:
+            first=true  (default) for first poll, first=false for continuing.
+
+        Returns: {status, data}
+        """
+        cookies = _cookies()
+        if not cookies:
+            return _no_cookies()
+        first = request.args.get("first", "true").lower() != "false"
+        result = poll_source_status(notebook_id, cookies, first_poll=first)
+        return jsonify(result)
+
+    @app.route("/notebooks/<notebook_id>/sources/file", methods=["POST"])
+    def upload_file_source_route(notebook_id: str):
+        """Upload a file as a notebook source (o4cbdc + /upload/_/ flow).
+
+        Accepts multipart/form-data with a 'file' field, or JSON with
+        {"filename": "...", "content": "...", "mime_type": "text/plain"}.
+
+        For text/markdown files, prefer POST /sources/text (simpler, no upload step).
+        Use this route for PDFs and binary files.
+
+        Returns: {source_id, filename, upload_id, status}
+        """
+        cookies = _cookies()
+        if not cookies:
+            return _no_cookies()
+
+        # Support both multipart and JSON
+        if request.content_type and "multipart" in request.content_type:
+            if "file" not in request.files:
+                return jsonify({"error": "file field required"}), 400
+            f = request.files["file"]
+            filename = f.filename
+            content_bytes = f.read()
+            mime_type = f.content_type or "application/octet-stream"
+        else:
+            body = request.json or {}
+            filename = body.get("filename", "upload.txt")
+            content = body.get("content", "")
+            content_bytes = content.encode("utf-8")
+            mime_type = body.get("mime_type", "text/plain")
+
+        # Step 1: register filename with NLM to get source_id
+        registrations = register_file_sources(notebook_id, [filename], cookies)
+        if not registrations or registrations[0].get("error"):
+            return jsonify(registrations[0] if registrations else {"error": "registration_failed"}), 502
+        source_id = registrations[0].get("source_id")
+
+        # Step 2: upload bytes
+        upload_result = upload_file_to_nlm(filename, content_bytes, cookies, mime_type)
+        if upload_result.get("error"):
+            return jsonify(upload_result), 502
+
+        return jsonify({
+            "source_id": source_id,
+            "filename": filename,
+            "upload_id": upload_result.get("upload_id"),
+            "status": upload_result.get("status", "uploaded"),
+        })
 
     @app.route("/notebooks/<notebook_id>/sources/<source_id>", methods=["DELETE"])
     def delete_source_route(notebook_id: str, source_id: str):
@@ -3816,6 +4368,82 @@ def create_nlm_proxy_app() -> Flask:
         include_content = request.args.get("include_content", "false").lower() == "true"
         include_threads = request.args.get("include_threads", "true").lower() != "false"
         result = export_all_notebooks(cookies, include_content, include_threads)
+        return jsonify(result)
+
+    @app.route("/notebooks/<notebook_id>/notes", methods=["POST"])
+    def create_note_route(notebook_id: str):
+        """Create a new note (CYK0Xb). Also use to save AI response as a note.
+
+        Body (JSON): {"title": "My Note", "content": "<p>html</p>"}
+        Returns: {note_id, title, status}
+        """
+        cookies = _cookies()
+        if not cookies:
+            return _no_cookies()
+        body = request.json or {}
+        title = body.get("title", "New note")
+        content = body.get("content", "")
+        result = create_note(notebook_id, title, content, cookies)
+        if result.get("error"):
+            return jsonify(result), 502
+        return jsonify(result), 201
+
+    @app.route("/notebooks/<notebook_id>/notes/<note_id>", methods=["PUT"])
+    def save_note_route(notebook_id: str, note_id: str):
+        """Save/update a note's content (cYAfTb live save).
+
+        Body (JSON): {"title": "My Note", "content": "<p>updated html</p>"}
+        Returns: {note_id, title, status}
+        """
+        cookies = _cookies()
+        if not cookies:
+            return _no_cookies()
+        body = request.json or {}
+        title = body.get("title", "")
+        content = body.get("content", "")
+        result = save_note(notebook_id, note_id, title, content, cookies)
+        if result.get("error"):
+            return jsonify(result), 502
+        return jsonify(result)
+
+    @app.route("/notebooks/<notebook_id>/notes/sync", methods=["GET"])
+    def sync_notes_route(notebook_id: str):
+        """Delta-sync notes since a timestamp (cFji9).
+
+        Query params: ts_sec=<int>&ts_nano=<int> for continuation (omit for first call).
+        Returns: {notes, next_timestamp, status}
+        """
+        cookies = _cookies()
+        if not cookies:
+            return _no_cookies()
+        ts_sec = request.args.get("ts_sec")
+        ts_nano = request.args.get("ts_nano")
+        prev_ts = [int(ts_sec), int(ts_nano)] if ts_sec and ts_nano else None
+        result = sync_notes(notebook_id, cookies, prev_timestamp=prev_ts)
+        return jsonify(result)
+
+    @app.route("/notebooks/<notebook_id>/audio-options", methods=["GET"])
+    def audio_options_route(notebook_id: str):
+        """List available audio overview formats (sqTeoe).
+
+        Returns: {options: [{id, label, description}], status}
+        """
+        cookies = _cookies()
+        if not cookies:
+            return _no_cookies()
+        result = get_audio_options(notebook_id, cookies)
+        return jsonify(result)
+
+    @app.route("/sources/<source_id>/summary", methods=["GET"])
+    def source_summary_route(source_id: str):
+        """Get AI-generated markdown summary of a source (tr032e).
+
+        Returns: {source_id, summary, status}
+        """
+        cookies = _cookies()
+        if not cookies:
+            return _no_cookies()
+        result = get_source_summary(source_id, cookies)
         return jsonify(result)
 
     return app

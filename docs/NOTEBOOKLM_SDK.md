@@ -1,7 +1,18 @@
 # NotebookLM SDK — Complete Protocol Documentation
 
-> **Version:** 3.1 (2026-02-28 — critical RPC corrections + 2 new RPCs + proto chat breakdown)
+> **Version:** 3.3 (2026-03-01 — CREATE_NOTE/SAVE_NOTE confirmed, SYNC_NOTES corrected, tr032e GET_SOURCE_SUMMARY discovered)
 > **Status:** Production implementation in `engine/mcp/nlm_live_proxy.py`
+> **New in 3.3:** `CYK0Xb`=CREATE_NOTE confirmed `[nb_id,html,[1],null,title,null,[2]]`;
+> `cYAfTb`=SAVE_NOTE (live auto-save, CORRECTION — was mislabelled GET_SOURCE_STATUS_DETAIL);
+> `cFji9`=SYNC_NOTES delta poll (CORRECTION — was labelled NOTEBOOK_HEARTBEAT);
+> `tr032e`=GET_SOURCE_SUMMARY `[[[[source_id]]]]` → AI markdown summary (NEW — never seen before);
+> `sqTeoe`=GET_AUDIO_OPTIONS → Deep dive/Brief/Critique/Debate formats;
+> `gArtLc`=GET_ARTIFACTS with SQL-like filter string; `khqZz`=LIST_NOTES;
+> New routes: `POST /notebooks/<id>/notes`, `PUT /notebooks/<id>/notes/<note_id>`,
+> `GET /notebooks/<id>/notes/sync`, `GET /notebooks/<id>/audio-options`,
+> `GET /sources/<id>/summary`. 22 RPCs now fully mapped (3 still unconfirmed).
+> **New in 3.2:** `izAoDd` text paste sources, file upload flow (o4cbdc + /upload/_/),
+> 10 new RPCs, ZwVcOc corrected to GET_USER_PLAN.
 > **New in 3.1:** 3 RPC mappings corrected (`s0tc2d`, `LBwxtb`, `QA9ei`), 2 new RPCs discovered
 > (`izAoDd`, `tGMBJ`), `GenerateFreeFormStreamed` confirmed as the real chat endpoint,
 > Deep Research flow documented, Download/Archive routes added, YouTube encoding clarified.
