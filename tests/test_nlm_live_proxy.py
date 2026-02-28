@@ -116,6 +116,35 @@ class TestCookieExtraction:
         assert meta.get("f_sid") == "5167585844626553481"
 
 
+    def test_extracts_at_token_from_har_postdata(self, tmp_path: Path) -> None:
+        """HAR postData should yield the at anti-forgery token."""
+        from engine.mcp.nlm_live_proxy import extract_cookies_from_har
+        import urllib.parse
+
+        post_body = urllib.parse.urlencode({
+            "f.req": "[[]]",
+            "at": "AIXQIkaQJ-TlmwdNT-jCU_Kh842W:1772273952751",
+        })
+        har = {
+            "log": {
+                "entries": [{
+                    "request": {
+                        "url": ("https://notebooklm.google.com/_/LabsTailwindUi/data/batchexecute"
+                                "?rpcids=CYK0Xb&bl=boq_labs-tailwind-frontend_20260226.08_p0"
+                                "&f.sid=-1&rt=c"),
+                        "headers": [],
+                        "cookies": [],
+                        "postData": {"text": post_body},
+                    },
+                }]
+            }
+        }
+        har_file = tmp_path / "test_at.har"
+        har_file.write_text(json.dumps(har), encoding="utf-8")
+        cookies, meta = extract_cookies_from_har(str(har_file))
+        assert meta.get("at") == "AIXQIkaQJ-TlmwdNT-jCU_Kh842W:1772273952751"
+
+
 # ── Cookie formatting ──────────────────────────────────────────────────
 
 class TestCookieFormatting:
@@ -276,7 +305,38 @@ class TestFlaskEndpoints:
         resp = client.post("/rpc/VfAZjd", json={"args": "[]"})
         assert resp.status_code == 401
 
-    def test_import_cookies_from_har_file(self, client, tmp_path: Path) -> None:
+    def test_cookies_refresh_no_cookies_returns_422(self, client) -> None:
+        resp = client.post("/cookies/refresh")
+        assert resp.status_code == 422
+        data = json.loads(resp.data)
+        assert data["error"] == "no_cookies"
+
+    def test_cookies_refresh_calls_refresh_tokens(self, client, tmp_path: Path) -> None:
+        import engine.mcp.nlm_live_proxy as proxy_mod
+        from unittest.mock import patch
+        proxy_mod._COOKIES_FILE.write_text(
+            json.dumps({"SID": "test", "SSID": "test2"}), encoding="utf-8"
+        )
+        with patch.object(proxy_mod, "refresh_session_tokens", return_value=True) as mock_refresh:
+            resp = client.post("/cookies/refresh")
+        assert resp.status_code == 200
+        data = json.loads(resp.data)
+        assert data["refreshed"] is True
+        mock_refresh.assert_called_once()
+
+    def test_cookies_refresh_returns_false_when_refresh_fails(self, client, tmp_path: Path) -> None:
+        import engine.mcp.nlm_live_proxy as proxy_mod
+        from unittest.mock import patch
+        proxy_mod._COOKIES_FILE.write_text(
+            json.dumps({"SID": "test"}), encoding="utf-8"
+        )
+        with patch.object(proxy_mod, "refresh_session_tokens", return_value=False):
+            resp = client.post("/cookies/refresh")
+        assert resp.status_code == 200
+        data = json.loads(resp.data)
+        assert data["refreshed"] is False
+
+
         import engine.mcp.nlm_live_proxy as proxy_mod
         har = _make_har([
             {"name": "SID", "value": "my_sid"},
@@ -760,6 +820,65 @@ class TestV21Routes:
                    return_value={"error": "RPC failed"}):
             resp = client_v21.get("/user/quota")
         assert resp.status_code == 502
+
+
+# ── refresh_session_tokens ────────────────────────────────────────────
+
+class TestRefreshSessionTokens:
+    """Tests for refresh_session_tokens() — extracts at/f.sid from live NLM page."""
+
+    def test_returns_false_when_no_cookies(self, tmp_path: Path) -> None:
+        import engine.mcp.nlm_live_proxy as proxy_mod
+        original = proxy_mod._COOKIES_FILE
+        proxy_mod._COOKIES_FILE = tmp_path / "empty_cookies.json"
+        try:
+            result = proxy_mod.refresh_session_tokens()
+            assert result is False
+        finally:
+            proxy_mod._COOKIES_FILE = original
+
+    def test_returns_false_on_http_error(self, tmp_path: Path) -> None:
+        import engine.mcp.nlm_live_proxy as proxy_mod
+        from unittest.mock import patch
+        original = proxy_mod._COOKIES_FILE
+        proxy_mod._COOKIES_FILE = tmp_path / "cookies.json"
+        proxy_mod._COOKIES_FILE.write_text(json.dumps({"SID": "test"}), encoding="utf-8")
+        try:
+            import urllib.error
+            with patch("urllib.request.urlopen", side_effect=urllib.error.URLError("timeout")):
+                result = proxy_mod.refresh_session_tokens()
+            assert result is False
+        finally:
+            proxy_mod._COOKIES_FILE = original
+
+    def test_extracts_tokens_from_wiz_global_data(self, tmp_path: Path) -> None:
+        import engine.mcp.nlm_live_proxy as proxy_mod
+        from unittest.mock import patch, MagicMock
+        original_cookies = proxy_mod._COOKIES_FILE
+        original_meta = proxy_mod._META_FILE
+        proxy_mod._COOKIES_FILE = tmp_path / "cookies.json"
+        proxy_mod._META_FILE = tmp_path / "meta.json"
+        proxy_mod._COOKIES_FILE.write_text(json.dumps({"SID": "test"}), encoding="utf-8")
+        proxy_mod._META_FILE.write_text(json.dumps({"bl": "boq_labs-tailwind-frontend_20260226.08_p0"}), encoding="utf-8")
+
+        fake_html = (
+            'WIZ_global_data = {"FdrFJe": "fresh_fsid_value", "SNlM0e": "fresh_at_token"};'
+        )
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = fake_html.encode()
+        mock_resp.__enter__ = lambda s: s
+        mock_resp.__exit__ = MagicMock(return_value=False)
+
+        try:
+            with patch("urllib.request.urlopen", return_value=mock_resp):
+                result = proxy_mod.refresh_session_tokens()
+            assert result is True
+            meta = json.loads(proxy_mod._META_FILE.read_text())
+            assert meta["f_sid"] == "fresh_fsid_value"
+            assert meta["at"] == "fresh_at_token"
+        finally:
+            proxy_mod._COOKIES_FILE = original_cookies
+            proxy_mod._META_FILE = original_meta
 
 
 # ── NLMClient class ────────────────────────────────────────────────────

@@ -204,6 +204,72 @@ def _get_fsid() -> str:
     return _load_meta().get("f_sid", "-1")
 
 
+def refresh_session_tokens() -> bool:
+    """Refresh f.sid and at token by loading the NLM main page with stored cookies.
+
+    Call this when batchexecute returns null data (stale f.sid / at token).
+    Extracts ``WIZ_global_data.FdrFJe`` (f.sid) and ``SNlM0e`` (at) from the
+    page HTML and persists them to ``data/nlm_meta.json``.
+
+    Returns:
+        True if at least one token was refreshed, False otherwise.
+    """
+    cookies = _load_cookies()
+    if not cookies:
+        logger.warning("No cookies stored — cannot refresh session tokens")
+        return False
+    headers = {
+        "Cookie": _cookies_header(cookies),
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+        ),
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    }
+    try:
+        req = urllib.request.Request(f"https://{_NLM_HOST}/", headers=headers, method="GET")
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            html = resp.read().decode("utf-8", errors="replace")
+    except Exception as exc:
+        logger.error("Failed to load NLM page for token refresh: %s", exc)
+        return False
+
+    m = re.search(r"WIZ_global_data\s*=\s*({.*?});", html, re.DOTALL)
+    if not m:
+        logger.warning("WIZ_global_data not found in NLM page — cannot refresh tokens")
+        return False
+    try:
+        wiz = json.loads(m.group(1))
+    except Exception as exc:
+        logger.warning("Failed to parse WIZ_global_data: %s", exc)
+        return False
+
+    meta = _load_meta()
+    updated = False
+    if wiz.get("FdrFJe"):
+        meta["f_sid"] = str(wiz["FdrFJe"])
+        updated = True
+    if wiz.get("SNlM0e"):
+        meta["at"] = wiz["SNlM0e"]
+        updated = True
+
+    bl_match = re.search(r'"(boq_labs-tailwind-frontend_[^"]+)"', html)
+    if bl_match:
+        new_bl = bl_match.group(1)
+        if new_bl != meta.get("bl"):
+            meta["bl"] = new_bl
+            updated = True
+            logger.info("Updated build label from live page: %s", new_bl)
+
+    if updated:
+        _save_meta(meta)
+        logger.info(
+            "Session tokens refreshed: f.sid=%s at=%.20s...",
+            meta.get("f_sid"), meta.get("at", ""),
+        )
+    return updated
+
+
 # ── Cookie management ────────────────────────────────────────────────────
 
 def _load_cookies() -> Dict[str, str]:
@@ -239,7 +305,7 @@ def extract_cookies_from_har(har_path: str) -> Tuple[Dict[str, str], Dict[str, s
         har_path: Path to the .har file.
 
     Returns:
-        Tuple of (cookies_dict, meta_dict) where meta has keys 'bl', 'f_sid'.
+        Tuple of (cookies_dict, meta_dict) where meta has keys 'bl', 'f_sid', 'at'.
     """
     try:
         with open(har_path, "r", encoding="utf-8", errors="replace") as fh:
@@ -266,6 +332,15 @@ def extract_cookies_from_har(har_path: str) -> Tuple[Dict[str, str], Dict[str, s
             if "f.sid" in params and not meta.get("f_sid"):
                 meta["f_sid"] = params["f.sid"][0]
                 logger.info("Extracted f.sid from HAR: %s", meta["f_sid"])
+            # Extract 'at' anti-forgery token from POST body
+            if not meta.get("at"):
+                post_data = entry.get("request", {}).get("postData", {})
+                post_text = post_data.get("text", "")
+                if post_text:
+                    parsed_body = urllib.parse.parse_qs(post_text)
+                    if "at" in parsed_body:
+                        meta["at"] = parsed_body["at"][0]
+                        logger.info("Extracted at token from HAR postData")
 
         # Cookies in request headers
         for header in entry.get("request", {}).get("headers", []):
@@ -369,6 +444,7 @@ def _batchexecute_multi(
     calls: List[Tuple[str, str]],
     cookies: Dict[str, str],
     notebook_id: str = "",
+    _refreshed: bool = False,
 ) -> List[Tuple[Optional[str], Any]]:
     """Make multiple batchexecute RPC calls in a single HTTP request.
 
@@ -404,11 +480,14 @@ def _batchexecute_multi(
     }
     url = f"{_BATCH_URL}?" + urllib.parse.urlencode(params)
 
-    # Pack all calls into a single f.req array
-    f_req_inner = [[rpc_id, args_json, None, "generic"] for rpc_id, args_json in calls]
-    body = urllib.parse.urlencode({
-        "f.req": json.dumps(f_req_inner)
-    }).encode()
+    # Pack all calls into a single f.req array — 2-level format per SDK v2.1:
+    # [["rpc_id", "args_json", null, "generic"], ...]
+    f_req_calls = [[rpc_id, args_json, None, "generic"] for rpc_id, args_json in calls]
+    body_dict: Dict[str, str] = {"f.req": json.dumps(f_req_calls)}
+    at_token = _load_meta().get("at", "")
+    if at_token:
+        body_dict["at"] = at_token
+    body = urllib.parse.urlencode(body_dict).encode()
 
     headers = _build_headers(cookies)
     req = urllib.request.Request(url, data=body, headers=headers, method="POST")
@@ -428,7 +507,15 @@ def _batchexecute_multi(
         err = {"error": "connection_error", "detail": str(exc)}
         return [(None, err)] * len(calls)
 
-    return _parse_batchexecute_multi(raw)
+    results = _parse_batchexecute_multi(raw)
+
+    # Auto-retry once if all results are null (likely stale at/f.sid token)
+    if not _refreshed and all(data is None for _, data in results):
+        logger.info("All batchexecute results null — refreshing session tokens and retrying")
+        if refresh_session_tokens():
+            return _batchexecute_multi(calls, cookies, notebook_id, _refreshed=True)
+
+    return results
 
 
 def _parse_batchexecute_multi(raw: str) -> List[Tuple[Optional[str], Any]]:
@@ -1292,6 +1379,25 @@ def create_nlm_proxy_app() -> Flask:
 
     # ── Cookie management ───────────────────────────────────────────────
 
+    @app.route("/cookies/refresh", methods=["POST"])
+    def refresh_cookies():
+        """Refresh f.sid and at token by loading the NLM page with stored cookies.
+
+        Call this when batchexecute returns null data due to stale session tokens.
+        Does NOT require a new HAR — uses the existing stored cookies to fetch
+        fresh tokens from the live NLM page.
+        """
+        if not _cookies():
+            return jsonify({"error": "no_cookies", "detail": "No cookies stored. Import a HAR first."}), 422
+        ok = refresh_session_tokens()
+        meta = _load_meta()
+        return jsonify({
+            "refreshed": ok,
+            "f_sid": meta.get("f_sid", "-1"),
+            "at_present": bool(meta.get("at")),
+            "bl": meta.get("bl", _DEFAULT_BL),
+        })
+
     @app.route("/cookies/import", methods=["POST"])
     def import_cookies():
         """Extract and store auth cookies from an uploaded or local HAR file.
@@ -1326,12 +1432,14 @@ def create_nlm_proxy_app() -> Flask:
         merged = {**existing, **new_cookies}
         _save_cookies(merged)
 
-        # Update meta (bl, f.sid) if found
+        # Update meta (bl, f.sid, at) if found
         existing_meta = _load_meta()
         if new_meta.get("bl"):
             existing_meta["bl"] = new_meta["bl"]
         if new_meta.get("f_sid"):
             existing_meta["f_sid"] = new_meta["f_sid"]
+        if new_meta.get("at"):
+            existing_meta["at"] = new_meta["at"]
         _save_meta(existing_meta)
 
         return jsonify({
