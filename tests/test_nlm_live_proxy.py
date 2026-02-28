@@ -554,3 +554,209 @@ class TestNLMQADistiller:
         distiller = NLMQADistiller(proxy_url="http://localhost:9999")
         pairs = distiller.distill_topic("nb-123", "test", num_questions=5)
         assert pairs == []
+
+
+class TestV21Routes:
+    """Tests for v2.1 routes: /chat, /chat_batch, /sources/<id>/content, /user/quota."""
+
+    @pytest.fixture
+    def client_v21(self, tmp_path: Path):
+        from engine.mcp.nlm_live_proxy import create_nlm_proxy_app
+        import engine.mcp.nlm_live_proxy as proxy_mod
+
+        original_cookies = proxy_mod._COOKIES_FILE
+        original_meta = proxy_mod._META_FILE
+        cookies_file = tmp_path / "cookies.json"
+        meta_file = tmp_path / "meta.json"
+        cookies_file.write_text(json.dumps({"SID": "test_sid"}), encoding="utf-8")
+        meta_file.write_text(
+            json.dumps({"bl": "boq_test_20260101.01_p0", "f_sid": "99999"}),
+            encoding="utf-8",
+        )
+        proxy_mod._COOKIES_FILE = cookies_file
+        proxy_mod._META_FILE = meta_file
+        app = create_nlm_proxy_app()
+        app.config["TESTING"] = True
+        with app.test_client() as c:
+            yield c
+        proxy_mod._COOKIES_FILE = original_cookies
+        proxy_mod._META_FILE = original_meta
+
+    # ── /chat ──────────────────────────────────────────────────────────
+
+    def test_chat_requires_question(self, client_v21) -> None:
+        """POST /notebooks/<id>/chat with empty body returns 400."""
+        resp = client_v21.post(
+            "/notebooks/nb-xyz/chat",
+            json={},
+            content_type="application/json",
+        )
+        assert resp.status_code == 400
+        data = json.loads(resp.data)
+        assert "question" in data.get("error", "")
+
+    def test_chat_no_cookies_returns_401(self, tmp_path: Path) -> None:
+        """POST /notebooks/<id>/chat without cookies returns 401."""
+        from engine.mcp.nlm_live_proxy import create_nlm_proxy_app
+        import engine.mcp.nlm_live_proxy as proxy_mod
+
+        original = proxy_mod._COOKIES_FILE
+        proxy_mod._COOKIES_FILE = tmp_path / "missing.json"
+        app = create_nlm_proxy_app()
+        app.config["TESTING"] = True
+        with app.test_client() as c:
+            resp = c.post(
+                "/notebooks/nb-xyz/chat",
+                json={"question": "What is the main theme?"},
+                content_type="application/json",
+            )
+        proxy_mod._COOKIES_FILE = original
+        assert resp.status_code == 401
+
+    def test_chat_returns_queued_on_success(self, client_v21) -> None:
+        """POST /notebooks/<id>/chat with mocked batchexecute returns queued result."""
+        from engine.mcp.nlm_live_proxy import RESP_LEN_DEFAULT
+
+        mock_result = {
+            "queued": True,
+            "notebook_id": "nb-xyz",
+            "question": "What is the main theme?",
+        }
+        with patch("engine.mcp.nlm_live_proxy.chat_message", return_value=mock_result):
+            resp = client_v21.post(
+                "/notebooks/nb-xyz/chat",
+                json={"question": "What is the main theme?", "role": "Act as a teacher"},
+                content_type="application/json",
+            )
+        assert resp.status_code == 200
+        data = json.loads(resp.data)
+        assert data.get("queued") is True
+
+    def test_chat_returns_502_on_error(self, client_v21) -> None:
+        """POST /notebooks/<id>/chat returns 502 when chat_message errors."""
+        with patch("engine.mcp.nlm_live_proxy.chat_message",
+                   return_value={"error": "network timeout", "queued": False}):
+            resp = client_v21.post(
+                "/notebooks/nb-xyz/chat",
+                json={"question": "Q?"},
+                content_type="application/json",
+            )
+        assert resp.status_code == 502
+
+    # ── /chat_batch ────────────────────────────────────────────────────
+
+    def test_chat_batch_requires_questions(self, client_v21) -> None:
+        """POST /notebooks/<id>/chat_batch with empty body returns 400."""
+        resp = client_v21.post(
+            "/notebooks/nb-xyz/chat_batch",
+            json={},
+            content_type="application/json",
+        )
+        assert resp.status_code == 400
+
+    def test_chat_batch_no_cookies_returns_401(self, tmp_path: Path) -> None:
+        """POST /notebooks/<id>/chat_batch without cookies returns 401."""
+        from engine.mcp.nlm_live_proxy import create_nlm_proxy_app
+        import engine.mcp.nlm_live_proxy as proxy_mod
+
+        original = proxy_mod._COOKIES_FILE
+        proxy_mod._COOKIES_FILE = tmp_path / "missing.json"
+        app = create_nlm_proxy_app()
+        app.config["TESTING"] = True
+        with app.test_client() as c:
+            resp = c.post(
+                "/notebooks/nb-xyz/chat_batch",
+                json={"questions": ["Q1?", "Q2?"]},
+                content_type="application/json",
+            )
+        proxy_mod._COOKIES_FILE = original
+        assert resp.status_code == 401
+
+    def test_chat_batch_returns_results(self, client_v21) -> None:
+        """POST /notebooks/<id>/chat_batch returns list of queued results."""
+        mock_results = [
+            {"queued": True, "question": "Q1?"},
+            {"queued": True, "question": "Q2?"},
+        ]
+        with patch("engine.mcp.nlm_live_proxy.chat_messages_batch",
+                   return_value=mock_results):
+            resp = client_v21.post(
+                "/notebooks/nb-xyz/chat_batch",
+                json={"questions": ["Q1?", "Q2?"]},
+                content_type="application/json",
+            )
+        assert resp.status_code == 200
+        data = json.loads(resp.data)
+        assert data["count"] == 2
+        assert data["queued_count"] == 2
+        assert len(data["results"]) == 2
+
+    # ── /sources/<id>/content ─────────────────────────────────────────
+
+    def test_read_source_no_cookies_returns_401(self, tmp_path: Path) -> None:
+        """GET /sources/<id>/content without cookies returns 401."""
+        from engine.mcp.nlm_live_proxy import create_nlm_proxy_app
+        import engine.mcp.nlm_live_proxy as proxy_mod
+
+        original = proxy_mod._COOKIES_FILE
+        proxy_mod._COOKIES_FILE = tmp_path / "missing.json"
+        app = create_nlm_proxy_app()
+        app.config["TESTING"] = True
+        with app.test_client() as c:
+            resp = c.get("/sources/src-abc/content")
+        proxy_mod._COOKIES_FILE = original
+        assert resp.status_code == 401
+
+    def test_read_source_returns_content(self, client_v21) -> None:
+        """GET /sources/<id>/content returns source text."""
+        mock_result = {
+            "source_id": "src-abc",
+            "content": "# Document Title\n\nFull content here.",
+            "word_count": 4,
+        }
+        with patch("engine.mcp.nlm_live_proxy.read_source", return_value=mock_result):
+            resp = client_v21.get("/sources/src-abc/content")
+        assert resp.status_code == 200
+        data = json.loads(resp.data)
+        assert data["source_id"] == "src-abc"
+        assert "content" in data
+        assert data["word_count"] == 4
+
+    def test_read_source_returns_502_on_error(self, client_v21) -> None:
+        """GET /sources/<id>/content returns 502 on read_source error."""
+        with patch("engine.mcp.nlm_live_proxy.read_source",
+                   return_value={"error": "source not found"}):
+            resp = client_v21.get("/sources/bad-id/content")
+        assert resp.status_code == 502
+
+    # ── /user/quota ────────────────────────────────────────────────────
+
+    def test_user_quota_no_cookies_returns_401(self, tmp_path: Path) -> None:
+        """GET /user/quota without cookies returns 401."""
+        from engine.mcp.nlm_live_proxy import create_nlm_proxy_app
+        import engine.mcp.nlm_live_proxy as proxy_mod
+
+        original = proxy_mod._COOKIES_FILE
+        proxy_mod._COOKIES_FILE = tmp_path / "missing.json"
+        app = create_nlm_proxy_app()
+        app.config["TESTING"] = True
+        with app.test_client() as c:
+            resp = c.get("/user/quota")
+        proxy_mod._COOKIES_FILE = original
+        assert resp.status_code == 401
+
+    def test_user_quota_returns_data(self, client_v21) -> None:
+        """GET /user/quota returns quota dict."""
+        mock_result = {"quota_data": {"notebooks": 12, "sources": 150}, "extracted": True}
+        with patch("engine.mcp.nlm_live_proxy.get_user_quota", return_value=mock_result):
+            resp = client_v21.get("/user/quota")
+        assert resp.status_code == 200
+        data = json.loads(resp.data)
+        assert "quota_data" in data
+
+    def test_user_quota_returns_502_on_error(self, client_v21) -> None:
+        """GET /user/quota returns 502 on RPC error."""
+        with patch("engine.mcp.nlm_live_proxy.get_user_quota",
+                   return_value={"error": "RPC failed"}):
+            resp = client_v21.get("/user/quota")
+        assert resp.status_code == 502
