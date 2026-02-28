@@ -1,6 +1,6 @@
 # CosySim Documentation Index
 
-> All project documentation in one place. v0.59b — 4,747 tests, 214 MCP tools, 18 scenes.
+> All project documentation in one place. v0.60.1 — 4,827 tests, 214 MCP tools, 18 scenes.
 
 ## Getting Started
 
@@ -27,7 +27,7 @@
 | Doc | Description |
 |-----|-------------|
 | [Scenes Guide](SCENES.md) | All 18 game scenes — mechanics, APIs, rules |
-| [Skills](SKILLS.md) | @skill decorator, 21 built-in packs (188 skills) |
+| [Skills](SKILLS.md) | @skill decorator, 21 built-in packs (195 skills) |
 | [Admin Guide](ADMIN_GUIDE.md) | Admin panel pages and operations |
 
 ## APIs & Integration
@@ -38,6 +38,7 @@
 | [TTS](TTS.md) | Qwen3-TTS server, voice design, streaming |
 | [NotebookLM & Nexus](NOTEBOOKLM.md) | NotebookLM integration via Nexus dual-backend |
 | [NotebookLM HAR SDK](NOTEBOOKLM_HAR_SDK.md) | Batchexecute protocol, RPC endpoints, HAR extraction script |
+| [NotebookLM SDK v2.1](NOTEBOOKLM_SDK.md) | Full 18-RPC catalogue, Configure Chat, source management, multi-question batching |
 | [Nexus Integration](NEXUS_INTEGRATION.md) | NexusClient, 16 skills, namespaces, memory, distillers, training, workflows |
 
 ## External Systems
@@ -60,7 +61,7 @@
 |-----|-------------|
 | [Training](TRAINING.md) | Gemma 270M fine-tuning pipeline, datasets, Colab |
 | [Router Training Data](ROUTER_TRAINING.md) | RouterDataCollector, inference capture, tier label export |
-| [Testing](TESTING.md) | Test commands, fixtures, writing tests (4,747 tests, 176 files) |
+| [Testing](TESTING.md) | Test commands, fixtures, writing tests (4,827 tests, 176 files) |
 
 ## Development
 

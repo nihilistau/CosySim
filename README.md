@@ -1,10 +1,10 @@
 # CosySim
 
-> v0.59b — Multi-scene AI simulation framework
+> v0.60.1 — Multi-scene AI simulation framework
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Tests: 4747](https://img.shields.io/badge/tests-4%2C747%20passing-brightgreen.svg)]()
+[![Tests: 4827](https://img.shields.io/badge/tests-4%2C827%20passing-brightgreen.svg)]()
 
 ## Overview
 
@@ -49,7 +49,7 @@ User / Browser
 - Character system with traits, emotions (0–100), relationships, speech patterns
 
 **MCP Framework**
-- 188 skills across 21 packs via `@skill` decorator
+- 195 skills across 21 packs via `@skill` decorator
 - 214 tools exposed via CosySim MCP server (106 main + 108 devtools)
 - 22-interceptor governance pipeline (10 active, pre/post inference)
 - `AgentGovernor` + `InterceptorPipeline` for personality enforcement
@@ -64,6 +64,9 @@ User / Browser
 **Nexus Knowledge System**
 - FTS5 search, NLM intelligence layer (4-tier: cache → FTS → synthesis → deep research)
 - Prompt versioning, Q&A distillation, YouTube transcript ingestion
+- NLM v2.1: 18 catalogued RPCs, Configure Chat API, source management, multi-question batching
+- NLM proxy auto-start with CDP cookie capture, bl/f.sid management
+- HAR ingestion background processing (large files, no timeout)
 - NLM deep storage (3-tier notebook archival with HAR extraction)
 - 10 NLM forge skills, NLM CLI (16 commands), Knowledge Forge
 - Rules engine, session tracking, namespace separation
@@ -77,7 +80,7 @@ User / Browser
 - System Assistant Aria with cosysim-navbar floating navigation
 
 **DevOps**
-- 4,747 tests, 0 failures across 176 files
+- 4,827 tests, 0 failures across 176 files
 - 18 Copilot custom agents, 9 instruction files
 - Config hardening — all 18 scenes in production.yaml
 - Central CORS and health routes on all scenes
@@ -121,7 +124,7 @@ CosySim/
 │   ├── scenes/          # 18 scene implementations
 │   └── simulation/      # Database, character system, services
 ├── config/              # YAML/JSON config (default, dev, prod, voices, skills)
-├── tests/               # pytest suite (176 files, 4,747 tests)
+├── tests/               # pytest suite (176 files, 4,827 tests)
 ├── docs/                # Documentation (INDEX.md entry point)
 ├── training/            # Fine-tuning pipelines and data
 ├── main.py              # Application entry point
@@ -159,7 +162,7 @@ CosySim/
 ## Testing
 
 ```bash
-# Full suite — 4,747 tests
+# Full suite — 4,827 tests
 python -m pytest tests/ -v --tb=short --ignore=tests/test_agent_loop.py --ignore=tests/live_wire_test.py
 
 # Single file

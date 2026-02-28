@@ -110,7 +110,7 @@ CosySim is a **meta-system** — a playground for designing, testing, benchmarki
 - [x] 188 skills across 21 packs, 214 MCP server tools
 - [x] 4,747 tests across 176 files
 
-### v0.60 — NLM v2: Live Write API, CDP Auth & QA Distiller ✅ ← CURRENT
+### v0.60 — NLM v2: Live Write API, CDP Auth & QA Distiller ✅
 - [x] NLM batchexecute write RPCs: CYK0Xb (ask), ciyUvf (generate doc), R7cb6c (save note)
 - [x] Multi-question batching — 5 questions per HTTP request
 - [x] Chrome CDP automated cookie capture (`engine/nexus/nlm_har_capture.py`)
@@ -119,6 +119,16 @@ CosySim is a **meta-system** — a playground for designing, testing, benchmarki
 - [x] 7 new NLM live skills in autonomy pack
 - [x] Comprehensive NLM SDK documentation (`docs/NOTEBOOKLM_SDK.md`)
 - [x] 195 skills across 21 packs, 4,800 tests
+
+### v0.60.1 — Bug Fixes, NLM v2.1, HAR Ingestion ✅ ← CURRENT
+- [x] NLM v2.1: 18 fully catalogued RPCs with response schemas
+- [x] Configure Chat API — set conversation goals, roles, response length per notebook
+- [x] Source management RPCs: list, rename, delete, get content
+- [x] NLM proxy auto-start (`config/launcher.yaml`) with bl staleness detection
+- [x] HAR ingestion background thread — no timeout on large files, polling progress
+- [x] Fixed command_center and heist scenes (incorrect `scene_name` kwarg)
+- [x] Fixed nexus bridge `seed` command (function-based API, no class)
+- [x] 4,827 tests across 176 files
 
 ---
 
@@ -154,7 +164,7 @@ CosySim is a **meta-system** — a playground for designing, testing, benchmarki
 1. **Everything through MCP** — Skills, state, events, and cross-system communication all go through the MCP pipeline
 2. **Nexus as truth** — Prompts, rules, configurations, session history, and experiment results live in Nexus
 3. **Local-first** — No cloud dependencies. LMStudio, ChromaDB, ComfyUI, TTS all run locally
-4. **Test-driven** — Every feature gets tests. Current: 4,747 CosySim tests
+4. **Test-driven** — Every feature gets tests. Current: 4,827 CosySim tests
 5. **Scene independence** — Scenes are self-contained. Adding a scene shouldn't break others
 6. **Agent freedom within rails** — Governance pipeline enforces consistency without killing creativity
 7. **Nexus-first workflow** — Search Nexus before coding, store decisions after. Audit results always go to Nexus
