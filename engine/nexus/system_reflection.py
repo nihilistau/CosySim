@@ -272,7 +272,7 @@ class SystemReflection:
                     trend = mm.trend(name, days=days)
                     if trend.get("count", 0) > 0:
                         result["trends"][name] = {
-                            "current": trend.get("latest"),
+                            "current": trend.get("last"),
                             "mean": trend.get("mean"),
                             "min": trend.get("min"),
                             "max": trend.get("max"),
