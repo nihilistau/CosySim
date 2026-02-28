@@ -825,7 +825,15 @@ def _sapisid_hash(cookies: Dict[str, str]) -> str:
 # ════════════════════════════════════════════════════════════════════════════
 
 def _build_headers(cookies: Dict[str, str]) -> Dict[str, str]:
-    """Build the HTTP headers required for NLM batchexecute requests."""
+    """Build the HTTP headers required for NLM batchexecute requests.
+
+    HAR analysis (2026-03-01) confirmed the real Chrome browser does NOT send
+    an Authorization: SAPISIDHASH header — NLM batchexecute authenticates via
+    Cookie + 'at' CSRF token in the POST body only.  Adding SAPISIDHASH causes
+    HTTP 400 (error code 3 in the er response block).
+
+    The sec-fetch-* headers are required for CORS compliance.
+    """
     headers = {
         "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
         "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -834,15 +842,21 @@ def _build_headers(cookies: Dict[str, str]) -> Dict[str, str]:
         "Referer": f"https://{_NLM_HOST}/",
         "Origin": f"https://{_NLM_HOST}",
         "X-Same-Domain": "1",
-        "sec-ch-ua": '"Not:A-Brand";v="99", "Google Chrome";v="145"',
+        "sec-ch-ua": '"Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"',
         "sec-ch-ua-mobile": "?0",
         "sec-ch-ua-platform": '"Windows"',
+        "sec-fetch-dest": "empty",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-site": "same-origin",
+        "x-browser-channel": "stable",
+        "x-browser-year": "2026",
+        "DNT": "1",
     }
     if cookies:
         headers["Cookie"] = _cookies_header(cookies)
-        sapisid_hash = _sapisid_hash(cookies)
-        if sapisid_hash:
-            headers["Authorization"] = sapisid_hash
+        # NOTE: Do NOT add Authorization: SAPISIDHASH here.
+        # NLM batchexecute authenticates via Cookie + 'at' body token only.
+        # SAPISIDHASH is used by other Google APIs (Maps, Docs) but causes 400 on NLM.
     return headers
 
 
@@ -959,7 +973,10 @@ def _batchexecute_multi(
     # The 3rd element (null) and 4th element ("generic") are required padding
     # observed in every HAR capture — their meaning is not fully understood,
     # but omitting them causes the server to reject the request.
-    f_req_calls = [[rpc_id, args_json, None, "generic"] for rpc_id, args_json in calls]
+    # HAR-confirmed format (2026-03-01): f.req must be triple-nested.
+    # Correct:  [[[rpc_id, args, null, "generic"], ...]]   ← three levels
+    # Wrong:    [[rpc_id, args, null, "generic"], ...]     ← two levels (causes HTTP 400)
+    f_req_calls = [[[rpc_id, args_json, None, "generic"] for rpc_id, args_json in calls]]
     body_dict: Dict[str, str] = {"f.req": json.dumps(f_req_calls)}
 
     # Include 'at' anti-forgery token if available.
