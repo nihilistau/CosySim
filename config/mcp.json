@@ -4,11 +4,6 @@
       "command": "python",
       "args": ["-m", "engine.mcp.cosysim_server"]
     },
-    "notebooklm": {
-      "command": "npx",
-      "args": ["notebooklm-mcp"],
-      "env": {}
-    },
     "nexus": {
       "command": "python",
       "args": ["-m", "nexus.mcp.server"],

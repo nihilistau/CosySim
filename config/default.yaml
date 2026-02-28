@@ -536,19 +536,12 @@ anythingllm:
       url: ""
       api_key: ""
 
-# NotebookLM MCP integration
+# NotebookLM integration — via NLM Live Proxy at :8800 (HAR-based auth)
 notebooklm:
-  enabled: true                        # enable NotebookLM MCP bridge
-  proxy_url: "http://localhost:8800"    # CosySim-side proxy URL
-  base_url: "http://localhost:8800"    # NLM HTTP bridge URL (alias)
-  node_cmd: "node"                     # Node.js command
-  server_path: "node_modules/notebooklm-mcp/dist/index.js"  # relative to project root
+  enabled: true                        # enable NLM Live Proxy
+  proxy_url: "http://localhost:8800"    # NLM Live Proxy URL
+  base_url: "http://localhost:8800"    # alias for proxy_url
   default_notebook_id: ""              # default notebook for queries
-  default_notebook_url: ""            # NOTEBOOK_URL env var for auto-login
-  auth_profile_dir: ""                 # Chrome profile directory for Google auth
-  login_email: ""                      # Google account email (set via env NLM_LOGIN_EMAIL)
-  login_password: ""                   # Google account password (set via env NLM_LOGIN_PASSWORD)
-  startup_timeout: 15                  # seconds to wait for server startup
   timeout: 120                         # per-request timeout seconds
   metadata_path: "data/nlm_notebooks.json"  # notebook metadata persistence
 

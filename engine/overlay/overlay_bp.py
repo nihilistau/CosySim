@@ -898,7 +898,6 @@ def api_notebooklm_status():
             "enabled": nlm_cfg.get("enabled", False),
             "running": running,
             "proxy_url": nlm_cfg.get("proxy_url", ""),
-            "server_path": nlm_cfg.get("server_path", ""),
         })
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 500

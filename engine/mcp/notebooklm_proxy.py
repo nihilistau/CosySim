@@ -5,8 +5,7 @@ Architecture
 ~~~~~~~~~~~~
 This proxy talks to ``nlm_live_proxy.py`` (a Flask server at :8800) which
 uses HAR-extracted Google auth cookies to make direct batchexecute calls to
-NotebookLM.  The Node.js ``notebooklm-mcp`` approach was abandoned because it
-cannot authenticate on Windows (WebAuthn / DPAPI limitations).
+NotebookLM.
 
 Flow::
 

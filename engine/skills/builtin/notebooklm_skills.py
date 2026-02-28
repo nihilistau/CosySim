@@ -1,10 +1,10 @@
 """
-notebooklm_skills.py — Google NotebookLM integration via notebooklm-mcp bridge
+notebooklm_skills.py — Google NotebookLM integration via CosySim NLM Live Proxy.
 
-These skills communicate with a locally-running notebooklm-mcp server (npm
-package) that proxies requests to Google NotebookLM.  The bridge exposes an
-HTTP REST API; these wrappers call it with ``urllib.request`` so no extra
-dependencies are needed.
+These skills communicate with the NLM Live Proxy (``engine/mcp/nlm_live_proxy.py``)
+at ``http://localhost:8800``.  The proxy makes direct batchexecute calls to
+NotebookLM using HAR-extracted Google auth cookies — no Node.js or browser
+automation required.
 
 The proxy URL defaults to ``http://localhost:8800`` and can be overridden via
 the ``notebooklm.proxy_url`` configuration key.
@@ -15,7 +15,7 @@ from engine.skills.skill import skill
 
 
 def _proxy_url() -> str:
-    """Return the configured notebooklm-mcp proxy base URL."""
+    """Return the NLM Live Proxy base URL."""
     from engine.config import get_config
     return get_config().get("notebooklm.proxy_url", "http://localhost:8800")
 
@@ -58,7 +58,7 @@ def _get(endpoint: str) -> str:
 def notebooklm_ask(question: str, notebook_id: str = "") -> str:
     """Send a question to a NotebookLM notebook and return the answer.
 
-    Requires the notebooklm-mcp proxy server to be running.
+    Requires the NLM Live Proxy to be running at :8800.
 
     Args:
         question:    Natural-language question to ask.
@@ -96,7 +96,7 @@ def notebooklm_add_source(
 ) -> str:
     """Add a source to a NotebookLM notebook.
 
-    Requires the notebooklm-mcp proxy server to be running.
+    Requires the NLM Live Proxy to be running at :8800.
 
     Args:
         notebook_id:  Target notebook ID.
@@ -134,7 +134,7 @@ def notebooklm_generate_audio(
 ) -> str:
     """Request an audio overview for a notebook.
 
-    Requires the notebooklm-mcp proxy server to be running.
+    Requires the NLM Live Proxy to be running at :8800.
     The operation is asynchronous — poll the returned ``job_id`` for progress.
 
     Args:
@@ -168,7 +168,7 @@ def notebooklm_generate_audio(
 def notebooklm_list_notebooks() -> str:
     """List every notebook visible to the authenticated user.
 
-    Requires the notebooklm-mcp proxy server to be running.
+    Requires the NLM Live Proxy to be running at :8800.
 
     Returns:
         JSON array of ``{id, title, source_count}`` objects.
@@ -194,7 +194,7 @@ def notebooklm_list_notebooks() -> str:
 def notebooklm_search(query: str) -> str:
     """Search across notebooks for content matching a keyword query.
 
-    Requires the notebooklm-mcp proxy server to be running.
+    Requires the NLM Live Proxy to be running at :8800.
 
     Args:
         query: Search terms / keywords.

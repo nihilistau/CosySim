@@ -53,13 +53,11 @@ all authentication challenges by using the browser's own authenticated session.
 ### Discovery Story
 
 This methodology was discovered during Sprint 14 of CosySim when attempting to extract
-content from a NotebookLM notebook (ID: `04168cf3-04a0-46bb-ba58-fec66458aab9`) titled
-"Finetune Gemma3 270m". Multiple authentication approaches failed:
+content from a NotebookLM notebook. Multiple authentication approaches failed:
 
-1. **NLM MCP HTTP server** (`@roomi-fields/notebooklm-mcp@1.5.3`) — required browser auth
+1. **Chrome cookie copy** — Chrome encrypts cookies with per-instance DPAPI keys
 2. **Patchright Chromium** — doesn't support WebAuthn/FIDO2 passkeys
-3. **Chrome cookie copy** — Chrome encrypts cookies with per-instance DPAPI keys
-4. **Archived Python skill** (`channel="chrome"`) — conflicts with running Chrome instances
+3. **VSS / esentutl** — JET_errFileAccessDenied on Windows
 
 The HAR approach was discovered when the user captured network traffic from their
 authenticated browser session, providing a complete snapshot of all notebook data
@@ -82,7 +80,6 @@ notebook data programmatically, you must either:
 
 | Method | Failure Point |
 |:---|:---|
-| `@roomi-fields/notebooklm-mcp` | Uses Patchright Chromium which lacks WebAuthn support |
 | Cookie copy while Chrome running | Chrome holds exclusive lock on SQLite Cookies DB |
 | Cookie copy after closing Chrome | Chrome encrypts cookie values with DPAPI per-instance keys |
 | `esentutl /y` (VSS copy) | JET_errFileAccessDenied on Windows |

@@ -1452,18 +1452,20 @@ lore documents, user-uploaded references — but CosySim had no retrieval-augmen
 generation (RAG) capability. Google NotebookLM provides notebook-based knowledge
 management with citation support, but it's a browser-based tool with no direct API.
 
-**Fix:** Built a proxy bridge:
-1. **notebooklm_proxy.py**: HTTP proxy that manages a NotebookLM MCP Node.js server
-   process. Thread-safe singleton, health-check polling, configurable via default.yaml.
-2. **notebooklm_skills.py**: 5 @skill functions — `notebooklm_ask` (query with citations),
-   `notebooklm_add_source` (URL/text/PDF/YouTube), `notebooklm_generate_audio`
-   (podcast-style overview), `notebooklm_list_notebooks`, `notebooklm_search`.
-3. **Config**: `notebooklm:` section in default.yaml (proxy_url, node_cmd, server_path,
-   auth_profile_dir, startup_timeout).
+**Fix:** Built a direct batchexecute proxy:
+1. **nlm_live_proxy.py**: Flask server at :8800 that makes authenticated batchexecute
+   calls directly to NotebookLM using HAR-extracted Google session cookies. 18 RPCs
+   fully reverse-engineered from HAR analysis.
+2. **notebooklm_proxy.py**: HTTP client wrapper that talks to the live proxy.
+3. **notebooklm_skills.py**: 5 @skill functions — `notebooklm_ask`, `notebooklm_add_source`,
+   `notebooklm_generate_audio`, `notebooklm_list_notebooks`, `notebooklm_search`.
+4. **Config**: `notebooklm:` section in default.yaml (proxy_url, base_url, timeout).
 
-**Pattern:** External tool integration via MCP proxy + @skill wrapper. The proxy handles
-process lifecycle; skills provide the agent-callable interface. Same pattern can wrap
-any Node.js MCP server.
+**Auth:** Capture a HAR from Chrome DevTools while on notebooklm.google.com.
+POST the HAR path to `:8800/cookies/import`. Cookies last weeks to months.
+
+**Pattern:** Direct API reverse-engineering via HAR analysis. No browser automation,
+no Node.js, no external dependencies — just Python + urllib.
 
 ---
 

@@ -271,11 +271,12 @@ Defines resolution, format, and constraints for generated media:
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `enabled` | false | Enable NotebookLM proxy |
-| `proxy_url` | `http://localhost:8800` | Proxy URL |
-| `node_cmd` | node | Node.js command |
-| `server_path` | (empty) | Server script path |
-| `startup_timeout` | 15 | Startup timeout (seconds) |
+| `enabled` | true | Enable NLM Live Proxy |
+| `proxy_url` | `http://localhost:8800` | NLM Live Proxy URL |
+| `base_url` | `http://localhost:8800` | Alias for proxy_url |
+| `default_notebook_id` | (empty) | Default notebook for queries |
+| `timeout` | 120 | Per-request timeout (seconds) |
+| `metadata_path` | `data/nlm_notebooks.json` | Notebook metadata persistence |
 
 ### comms
 
@@ -377,9 +378,10 @@ Defines MCP server launch commands:
       "command": "python",
       "args": ["-m", "engine.mcp.cosysim_server"]
     },
-    "notebooklm": {
-      "command": "npx",
-      "args": ["notebooklm-mcp"]
+    "nexus": {
+      "command": "python",
+      "args": ["-m", "nexus.mcp.server"],
+      "cwd": "C:\\Files\\Nexus"
     }
   }
 }
