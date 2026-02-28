@@ -14,6 +14,7 @@ Usage:
 import json
 import logging
 import time
+import urllib.parse
 import urllib.request
 import urllib.error
 import threading
@@ -37,7 +38,8 @@ class NexusClient:
     # ─── Knowledge Entries ─────────────────────────────────────
     
     def search(self, query: str, limit: int = 10) -> List[Dict]:
-        result = self._get(f"/api/search?q={query}&limit={limit}")
+        encoded = urllib.parse.urlencode({"q": query, "limit": limit})
+        result = self._get(f"/api/search?{encoded}")
         return result.get("data", []) if result.get("ok") else []
     
     def add_entry(self, title: str, content: str, content_type: str = "note",
@@ -242,7 +244,8 @@ class NexusClient:
 
     def find_qa(self, question: str, limit: int = 5) -> List[Dict]:
         """Search the Q&A cache for existing answers."""
-        result = self._get(f"/api/qa/ask?q={question}&limit={limit}")
+        encoded = urllib.parse.urlencode({"q": question, "limit": limit})
+        result = self._get(f"/api/qa/ask?{encoded}")
         return result.get("data", []) if result.get("ok") else []
 
     def add_qa(self, question: str, answer: str,
