@@ -46,11 +46,11 @@ class TestCookieExtraction:
         har_file = tmp_path / "test.har"
         har_file.write_text(json.dumps(har), encoding="utf-8")
 
-        result = extract_cookies_from_har(str(har_file))
-        assert result.get("SID") == "test_sid"
-        assert result.get("SSID") == "test_ssid"
+        cookies, meta = extract_cookies_from_har(str(har_file))
+        assert cookies.get("SID") == "test_sid"
+        assert cookies.get("SSID") == "test_ssid"
         # non-auth cookies should be filtered out
-        assert "some_random_cookie" not in result
+        assert "some_random_cookie" not in cookies
 
     def test_extracts_secure_prefix_cookies(self, tmp_path: Path) -> None:
         from engine.mcp.nlm_live_proxy import extract_cookies_from_har
@@ -62,9 +62,9 @@ class TestCookieExtraction:
         har_file = tmp_path / "test2.har"
         har_file.write_text(json.dumps(har), encoding="utf-8")
 
-        result = extract_cookies_from_har(str(har_file))
-        assert result.get("__Secure-3PAPISID") == "secure_value"
-        assert result.get("SAPISID") == "sapi_value"
+        cookies, meta = extract_cookies_from_har(str(har_file))
+        assert cookies.get("__Secure-3PAPISID") == "secure_value"
+        assert cookies.get("SAPISID") == "sapi_value"
 
     def test_returns_empty_for_non_nlm_entries(self, tmp_path: Path) -> None:
         from engine.mcp.nlm_live_proxy import extract_cookies_from_har
@@ -84,13 +84,36 @@ class TestCookieExtraction:
         }
         har_file = tmp_path / "test3.har"
         har_file.write_text(json.dumps(har), encoding="utf-8")
-        result = extract_cookies_from_har(str(har_file))
-        assert result == {}
+        cookies, meta = extract_cookies_from_har(str(har_file))
+        assert cookies == {}
 
     def test_returns_empty_for_missing_file(self) -> None:
         from engine.mcp.nlm_live_proxy import extract_cookies_from_har
-        result = extract_cookies_from_har("/nonexistent/path/file.har")
-        assert result == {}
+        cookies, meta = extract_cookies_from_har("/nonexistent/path/file.har")
+        assert cookies == {}
+
+    def test_extracts_bl_from_batchexecute_url(self, tmp_path: Path) -> None:
+        """HAR should extract bl (build label) and f.sid from batchexecute URLs."""
+        from engine.mcp.nlm_live_proxy import extract_cookies_from_har
+
+        har = {
+            "log": {
+                "entries": [{
+                    "request": {
+                        "url": ("https://notebooklm.google.com/_/LabsTailwindUi/data/batchexecute"
+                                "?rpcids=VfAZjd&bl=boq_labs-tailwind-frontend_20260226.08_p0"
+                                "&f.sid=5167585844626553481&rt=c"),
+                        "headers": [{"name": "X-Same-Domain", "value": "1"}],
+                        "cookies": [],
+                    },
+                }]
+            }
+        }
+        har_file = tmp_path / "test_bl.har"
+        har_file.write_text(json.dumps(har), encoding="utf-8")
+        cookies, meta = extract_cookies_from_har(str(har_file))
+        assert meta.get("bl") == "boq_labs-tailwind-frontend_20260226.08_p0"
+        assert meta.get("f_sid") == "5167585844626553481"
 
 
 # ── Cookie formatting ──────────────────────────────────────────────────
@@ -269,7 +292,7 @@ class TestFlaskEndpoints:
         )
         data = json.loads(resp.data)
         assert resp.status_code == 200
-        assert data["imported"] >= 1
+        assert data.get("imported_cookies", data.get("imported", 0)) >= 1
 
         # Verify cookies persisted
         stored = json.loads(proxy_mod._COOKIES_FILE.read_text())
@@ -341,3 +364,193 @@ class TestNotebookLMProxy:
             assert p1 is p2
         finally:
             mod._proxy = original
+
+
+# ── Write operation parsing ────────────────────────────────────────────
+
+class TestWriteOperationParsing:
+    """Tests for the new write RPC response parsers."""
+
+    def test_parse_ask_response_valid(self) -> None:
+        from engine.mcp.nlm_live_proxy import _parse_ask_response
+        data = [["answer-uuid-123", "This is the answer with some details."]]
+        result = _parse_ask_response(data)
+        assert result["answer_id"] == "answer-uuid-123"
+        assert "answer with some details" in result["answer"]
+        assert isinstance(result["sources"], list)
+
+    def test_parse_ask_response_none(self) -> None:
+        from engine.mcp.nlm_live_proxy import _parse_ask_response
+        result = _parse_ask_response(None)
+        assert result["answer"] == ""
+        assert result["answer_id"] is None
+        assert "error" in result
+
+    def test_parse_ask_response_error(self) -> None:
+        from engine.mcp.nlm_live_proxy import _parse_ask_response
+        result = _parse_ask_response({"error": "HTTP 401", "detail": "auth expired"})
+        assert result["error"] == "HTTP 401"
+
+    def test_parse_generate_response_valid(self) -> None:
+        from engine.mcp.nlm_live_proxy import _parse_generate_response
+        data = [["Implementation Strategy", "A comprehensive analysis...", None, []]]
+        result = _parse_generate_response(data, ["src-1"])
+        assert result["title"] == "Implementation Strategy"
+        assert "comprehensive" in result["description"]
+
+    def test_parse_generate_response_none(self) -> None:
+        from engine.mcp.nlm_live_proxy import _parse_generate_response
+        result = _parse_generate_response(None, [])
+        assert result["title"] == ""
+        assert "error" in result
+
+    def test_parse_save_note_response_valid(self) -> None:
+        from engine.mcp.nlm_live_proxy import _parse_save_note_response
+        data = [["note-uuid-456", "My Research Note", 2, [["src-1"]]]]
+        result = _parse_save_note_response(data)
+        assert result["note_id"] == "note-uuid-456"
+        assert result["title"] == "My Research Note"
+        assert result["note_type"] == 2
+
+    def test_parse_save_note_response_none(self) -> None:
+        from engine.mcp.nlm_live_proxy import _parse_save_note_response
+        result = _parse_save_note_response(None)
+        assert result["note_id"] is None
+        assert "error" in result
+
+
+class TestMultiBatchParsing:
+    """Tests for multi-question batchexecute parsing."""
+
+    def test_parse_multi_wrb_fr(self) -> None:
+        from engine.mcp.nlm_live_proxy import _parse_batchexecute_multi
+        import json as _json
+
+        inner1 = [["id-1", "Answer to question 1"]]
+        inner2 = [["id-2", "Answer to question 2"]]
+        line1 = _json.dumps([["wrb.fr", "CYK0Xb", _json.dumps(inner1)]])
+        line2 = _json.dumps([["wrb.fr", "CYK0Xb", _json.dumps(inner2)]])
+        raw = ")]}'\n" + line1 + "\n" + line2 + "\n"
+
+        results = _parse_batchexecute_multi(raw)
+        assert len(results) == 2
+        assert results[0][0] == "CYK0Xb"
+        assert results[1][0] == "CYK0Xb"
+
+    def test_parse_multi_single(self) -> None:
+        from engine.mcp.nlm_live_proxy import _parse_batchexecute_multi
+        import json as _json
+        inner = {"key": "value"}
+        line = _json.dumps([["wrb.fr", "VfAZjd", _json.dumps(inner)]])
+        raw = ")]}'\n" + line
+        results = _parse_batchexecute_multi(raw)
+        assert len(results) == 1
+        assert results[0][1] == inner
+
+
+class TestWriteFlaskEndpoints:
+    """Tests for the new write-operation Flask routes."""
+
+    @pytest.fixture
+    def client_with_cookies(self, tmp_path: Path):
+        from engine.mcp.nlm_live_proxy import create_nlm_proxy_app
+        import engine.mcp.nlm_live_proxy as proxy_mod
+        from unittest.mock import patch
+
+        original_cookies = proxy_mod._COOKIES_FILE
+        original_meta = proxy_mod._META_FILE
+        cookies_file = tmp_path / "cookies.json"
+        meta_file = tmp_path / "meta.json"
+        cookies_file.write_text(json.dumps({"SID": "test"}), encoding="utf-8")
+        meta_file.write_text(json.dumps({"bl": "test_bl", "f_sid": "12345"}), encoding="utf-8")
+        proxy_mod._COOKIES_FILE = cookies_file
+        proxy_mod._META_FILE = meta_file
+        app = create_nlm_proxy_app()
+        app.config["TESTING"] = True
+        with app.test_client() as c:
+            yield c
+        proxy_mod._COOKIES_FILE = original_cookies
+        proxy_mod._META_FILE = original_meta
+
+    def test_ask_requires_question(self, client_with_cookies) -> None:
+        from unittest.mock import patch
+        with patch("engine.mcp.nlm_live_proxy._batchexecute_multi",
+                   return_value=[(None, {"error": "mocked"})]):
+            resp = client_with_cookies.post(
+                "/notebooks/nb-123/ask",
+                json={},
+                content_type="application/json",
+            )
+        assert resp.status_code == 400
+
+    def test_ask_batch_requires_questions_list(self, client_with_cookies) -> None:
+        from unittest.mock import patch
+        with patch("engine.mcp.nlm_live_proxy._batchexecute_multi",
+                   return_value=[(None, {"error": "mocked"})]):
+            resp = client_with_cookies.post(
+                "/notebooks/nb-123/ask_batch",
+                json={"questions": "not a list"},
+                content_type="application/json",
+            )
+        assert resp.status_code == 400
+
+    def test_ask_no_cookies_returns_401(self, tmp_path: Path) -> None:
+        from engine.mcp.nlm_live_proxy import create_nlm_proxy_app
+        import engine.mcp.nlm_live_proxy as proxy_mod
+        original = proxy_mod._COOKIES_FILE
+        proxy_mod._COOKIES_FILE = tmp_path / "empty.json"
+        app = create_nlm_proxy_app()
+        app.config["TESTING"] = True
+        with app.test_client() as c:
+            resp = c.post("/notebooks/nb/ask", json={"question": "Q?"})
+        proxy_mod._COOKIES_FILE = original
+        assert resp.status_code == 401
+
+    def test_meta_get(self, client_with_cookies) -> None:
+        resp = client_with_cookies.get("/meta")
+        data = json.loads(resp.data)
+        assert "bl" in data
+        assert "f_sid" in data
+
+    def test_meta_post_updates_bl(self, client_with_cookies) -> None:
+        resp = client_with_cookies.post(
+            "/meta",
+            json={"bl": "boq_new_label"},
+            content_type="application/json",
+        )
+        data = json.loads(resp.data)
+        assert data.get("bl") == "boq_new_label"
+        assert data.get("updated") is True
+
+
+class TestNLMQADistiller:
+    """Tests for the NLM QA Distiller module."""
+
+    def test_question_templates_populated(self) -> None:
+        from engine.nexus.nlm_qa_distiller import QUESTION_TEMPLATES
+        assert len(QUESTION_TEMPLATES) >= 5
+        for key, batches in QUESTION_TEMPLATES.items():
+            assert len(batches) >= 1
+            for batch in batches:
+                assert len(batch) >= 3
+                assert len(batch) <= 5
+
+    def test_get_questions_from_template(self) -> None:
+        from engine.nexus.nlm_qa_distiller import NLMQADistiller
+        distiller = NLMQADistiller()
+        questions = distiller._get_questions("cosysim_architecture", 10, "cosysim_architecture")
+        assert len(questions) <= 10
+        assert all(isinstance(q, str) and len(q) > 20 for q in questions)
+
+    def test_get_questions_generic_fallback(self) -> None:
+        from engine.nexus.nlm_qa_distiller import NLMQADistiller
+        distiller = NLMQADistiller()
+        questions = distiller._get_questions("unknown_topic_xyz", 5, None)
+        assert len(questions) == 5
+        assert all("unknown_topic_xyz" in q for q in questions)
+
+    def test_proxy_not_ready_returns_empty(self) -> None:
+        from engine.nexus.nlm_qa_distiller import NLMQADistiller
+        distiller = NLMQADistiller(proxy_url="http://localhost:9999")
+        pairs = distiller.distill_topic("nb-123", "test", num_questions=5)
+        assert pairs == []

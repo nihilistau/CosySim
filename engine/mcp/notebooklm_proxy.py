@@ -100,13 +100,100 @@ class NotebookLMProxy:
 
     # ── API methods ────────────────────────────────────────────────────
 
-    def ask(self, notebook_id: str, question: str) -> dict:
-        """Conversations are read-only via batchexecute.
+    def ask(self, notebook_id: str, question: str) -> Dict[str, Any]:
+        """Ask a question to a NotebookLM notebook (CYK0Xb RPC).
 
-        Returns the stored conversation history for the notebook.
-        NOTE: live question-asking (write) is not supported via batchexecute.
+        Args:
+            notebook_id: UUID of the target notebook.
+            question: The question to ask.
+
+        Returns:
+            Dict with: answer_id, answer (markdown text), sources (list).
         """
-        return self._get(f"/notebooks/{notebook_id}/conversations")
+        return self._post(f"/notebooks/{notebook_id}/ask", {"question": question})
+
+    def batch_ask(
+        self,
+        notebook_id: str,
+        questions: List[str],
+        max_batch: int = 5,
+    ) -> List[Dict[str, Any]]:
+        """Ask multiple questions in a single HTTP request (up to max_batch per call).
+
+        This is the most efficient way to interact with NotebookLM — up to 5
+        questions per HTTP request instead of 5 sequential requests.
+
+        Args:
+            notebook_id: UUID of the target notebook.
+            questions: List of question strings.
+            max_batch: Max questions per HTTP request (default 5).
+
+        Returns:
+            List of answer dicts in the same order as questions.
+        """
+        result = self._post(
+            f"/notebooks/{notebook_id}/ask_batch",
+            {"questions": questions, "max_batch": max_batch},
+        )
+        if isinstance(result, dict) and "answers" in result:
+            return result["answers"]
+        return [result] if result else []
+
+    def generate_document(
+        self,
+        notebook_id: str,
+        source_ids: List[str],
+        doc_type: int = 2,
+    ) -> Dict[str, Any]:
+        """Generate a document/report from selected notebook sources.
+
+        Args:
+            notebook_id: UUID of the target notebook.
+            source_ids: List of source UUIDs to include.
+            doc_type: Document type (2=standard, 9=deep research).
+
+        Returns:
+            Dict with: title, description, source_ids.
+        """
+        return self._post(
+            f"/notebooks/{notebook_id}/generate",
+            {"source_ids": source_ids, "doc_type": doc_type},
+        )
+
+    def save_note(
+        self,
+        notebook_id: str,
+        source_ids: List[str],
+        note_type: int = 2,
+    ) -> Dict[str, Any]:
+        """Create/save a note artifact in a notebook.
+
+        Args:
+            notebook_id: UUID of the target notebook.
+            source_ids: List of source UUIDs to associate.
+            note_type: Note type (2=standard, 9=deep research).
+
+        Returns:
+            Dict with: note_id, title, note_type.
+        """
+        return self._post(
+            f"/notebooks/{notebook_id}/save_note",
+            {"source_ids": source_ids, "note_type": note_type},
+        )
+
+    def capture_cookies(self) -> Dict[str, Any]:
+        """Automatically capture auth cookies from Chrome via CDP.
+
+        Requires Chrome to be running or will attempt to launch it.
+
+        Returns:
+            Dict with: imported_cookies, bl, f_sid, status.
+        """
+        return self._post("/cookies/capture", {})
+
+    def get_meta(self) -> Dict[str, Any]:
+        """Return current build label and session metadata."""
+        return self._get("/meta")
 
     def list_notebooks(self) -> list:
         """List available notebooks from the user's Google account."""
@@ -137,15 +224,15 @@ class NotebookLMProxy:
         """Extract and store auth cookies from a HAR file."""
         return self._post("/cookies/import", {"har_path": har_path})
 
-    def add_source(self, notebook_id: str, source_type: str, source_value: str) -> dict:
-        """Not supported via batchexecute (read-only API)."""
+    def add_source(self, notebook_id: str, source_type: str, source_value: str) -> Dict[str, Any]:
+        """Not supported via batchexecute reverse-engineered API."""
         return {"error": "not_supported",
-                "detail": "add_source requires write access; batchexecute is read-only"}
+                "detail": "add_source requires the NotebookLM web UI or official API"}
 
-    def generate_audio(self, notebook_id: str, customization: str = "") -> dict:
-        """Not supported via batchexecute (read-only API)."""
+    def generate_audio(self, notebook_id: str, customization: str = "") -> Dict[str, Any]:
+        """Not supported via batchexecute reverse-engineered API."""
         return {"error": "not_supported",
-                "detail": "generate_audio requires write access; batchexecute is read-only"}
+                "detail": "generate_audio requires the NotebookLM web UI"}
 
     def search(self, query: str) -> list:
         """List all notebooks (search is not exposed via batchexecute)."""

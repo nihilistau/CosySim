@@ -1,30 +1,32 @@
 """
-NLM Live Proxy — Direct batchexecute API bridge for NotebookLM.
+NLM Live Proxy — Full batchexecute API bridge for NotebookLM.
 
 Architecture
 ~~~~~~~~~~~~
-Rather than trying to automate a browser (which fails due to WebAuthn/passkeys
-and Chrome's DPAPI cookie encryption), this proxy works by:
+This proxy provides complete read AND write access to NotebookLM's private
+batchexecute API, reverse-engineered from HAR captures. It exposes a REST
+API at :8800 for CosySim skills and agents to consume.
 
-1. Extracting Google auth cookies from a user-captured HAR file
-2. Using those cookies to make direct batchexecute HTTP calls to NotebookLM
-3. Exposing a REST API at :8800 for CosySim skills to consume
+Auth is handled via Google session cookies extracted from either:
+  1. A manually captured HAR file (DevTools → Save all as HAR)
+  2. Automatically via Chrome DevTools Protocol (CDP) — preferred
 
-This approach works because the HAR was captured from an already-authenticated
-browser session. The session cookies remain valid until they expire (typically
-1–24 hours for Google sessions).
+Reverse-Engineered RPC Catalogue
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+| RPC ID  | Function                | Mode  |
+|---------|------------------------|-------|
+| CYK0Xb  | Ask question           | WRITE |
+| cFji9   | Get conversation hist  | READ  |
+| ciyUvf  | Generate document      | WRITE |
+| R7cb6c  | Create/save note       | WRITE |
+| gArtLc  | List notes/artifacts   | READ  |
+| ub2Bae  | List notebooks         | READ  |
+| wXbhsf  | List sources           | READ  |
+| e3bVqc  | Get source content     | READ  |
+| VfAZjd  | Get AI summary         | READ  |
 
-Workflow:
-    1. User visits notebooklm.google.com in Chrome, does some interactions
-    2. User saves HAR: DevTools → Network → right-click → "Save all as HAR"
-    3. User uploads HAR to Nexus Panel (or calls POST /cookies/import)
-    4. This proxy extracts cookies and starts serving live NLM requests
-    5. When cookies expire, user captures a new HAR
-
-Limitations:
-    - READ only — batchexecute RPCs are read operations
-    - Cannot ask new questions (write operations need a different API)
-    - Cookies expire; requires periodic HAR re-capture
+Multi-question batching is supported — up to 5 questions per HTTP request
+by packing multiple CYK0Xb calls in a single batchexecute f.req array.
 
 Usage::
 
@@ -37,7 +39,6 @@ Usage::
 """
 from __future__ import annotations
 
-import base64
 import json
 import logging
 import os
@@ -58,22 +59,47 @@ logger = logging.getLogger(__name__)
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 _COOKIES_FILE = _PROJECT_ROOT / "data" / "nlm_cookies.json"
+_META_FILE = _PROJECT_ROOT / "data" / "nlm_meta.json"
 _NLM_HOST = "notebooklm.google.com"
 _BATCH_URL = f"https://{_NLM_HOST}/_/LabsTailwindUi/data/batchexecute"
-_REQUEST_TIMEOUT = 30
+_REQUEST_TIMEOUT = 45
 _COOKIES_LOCK = threading.Lock()
 
-# RPC IDs we expose via HTTP API
-_RPC_IDS = {
-    "notebooks":     "ub2Bae",   # list all notebooks (account-wide)
-    "sources":       "wXbhsf",   # source listing for a notebook
-    "content":       "e3bVqc",   # full source text content
-    "notes":         "gArtLc",   # notes/blueprints
-    "summary":       "VfAZjd",   # AI summary/guide
-    "conversations": "cFji9",    # Q&A chat history
-    "thread":        "khqZz",    # full conversation thread
-    "config":        "rLM1Ne",   # notebook configuration
-}
+# Known-good build label — updated automatically on HAR import
+_DEFAULT_BL = "boq_labs-tailwind-frontend_20260226.08_p0"
+
+# Document/note config object used for write RPCs (from HAR analysis)
+_WRITE_CONFIG = [2, None, None,
+                 [1, None, None, None, None, None, None, None, None, None, [1]],
+                 [[2, 1]]]
+
+
+# ── Meta (bl, f.sid) management ─────────────────────────────────────────
+
+def _load_meta() -> Dict[str, str]:
+    """Load stored build label and session meta from disk."""
+    try:
+        if _META_FILE.exists():
+            return json.loads(_META_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        pass
+    return {"bl": _DEFAULT_BL, "f_sid": "-1"}
+
+
+def _save_meta(meta: Dict[str, str]) -> None:
+    """Persist build label and session meta to disk."""
+    _META_FILE.parent.mkdir(parents=True, exist_ok=True)
+    _META_FILE.write_text(json.dumps(meta, indent=2), encoding="utf-8")
+
+
+def _get_bl() -> str:
+    """Return the current build label, falling back to default."""
+    return _load_meta().get("bl", _DEFAULT_BL)
+
+
+def _get_fsid() -> str:
+    """Return the current f.sid session ID."""
+    return _load_meta().get("f_sid", "-1")
 
 
 # ── Cookie management ────────────────────────────────────────────────────
@@ -99,30 +125,46 @@ def _save_cookies(cookies: Dict[str, str]) -> None:
         )
 
 
-def extract_cookies_from_har(har_path: str) -> Dict[str, str]:
-    """Extract Google auth cookies from a HAR file.
+def extract_cookies_from_har(har_path: str) -> Tuple[Dict[str, str], Dict[str, str]]:
+    """Extract Google auth cookies AND metadata (bl, f.sid) from a HAR file.
 
-    Looks for requests to notebooklm.google.com and extracts the cookies
-    sent with those requests.
+    Looks for requests to notebooklm.google.com and extracts:
+    - Auth cookies sent with requests
+    - Build label (bl) from URL parameters
+    - Session ID (f.sid) from URL parameters
 
     Args:
         har_path: Path to the .har file.
 
     Returns:
-        Dict of cookie_name → cookie_value for NLM-scoped cookies.
+        Tuple of (cookies_dict, meta_dict) where meta has keys 'bl', 'f_sid'.
     """
     try:
         with open(har_path, "r", encoding="utf-8", errors="replace") as fh:
             har = json.load(fh)
     except Exception as exc:
         logger.error("Could not read HAR file %s: %s", har_path, exc)
-        return {}
+        return {}, {}
 
     cookies: Dict[str, str] = {}
+    meta: Dict[str, str] = {}
+
     for entry in har.get("log", {}).get("entries", []):
         url = entry.get("request", {}).get("url", "")
         if _NLM_HOST not in url:
             continue
+
+        # Extract bl and f.sid from batchexecute URLs
+        if "batchexecute" in url:
+            parsed = urllib.parse.urlparse(url)
+            params = urllib.parse.parse_qs(parsed.query)
+            if "bl" in params and not meta.get("bl"):
+                meta["bl"] = params["bl"][0]
+                logger.info("Extracted bl from HAR: %s", meta["bl"])
+            if "f.sid" in params and not meta.get("f_sid"):
+                meta["f_sid"] = params["f.sid"][0]
+                logger.info("Extracted f.sid from HAR: %s", meta["f_sid"])
+
         # Cookies in request headers
         for header in entry.get("request", {}).get("headers", []):
             if header.get("name", "").lower() == "cookie":
@@ -136,15 +178,23 @@ def extract_cookies_from_har(har_path: str) -> Dict[str, str]:
             if isinstance(c, dict) and c.get("name"):
                 cookies[c["name"]] = c.get("value", "")
 
-    # Keep only the auth-relevant cookies (Google session cookies)
+        # Also check response Set-Cookie headers for fresh tokens
+        for header in entry.get("response", {}).get("headers", []):
+            if header.get("name", "").lower() == "set-cookie":
+                parts = header["value"].split(";")[0].strip()
+                if "=" in parts:
+                    name, _, value = parts.partition("=")
+                    cookies[name.strip()] = value.strip()
+
+    # Keep only the auth-relevant Google session cookies
     _AUTH_PREFIXES = ("SID", "SSID", "APISID", "SAPISID", "HSID", "OSID",
                       "__Secure-", "NID", "1P_JAR", "AEC", "SOCS",
-                      "CONSENT", "SEARCH_SAMESITE")
+                      "CONSENT", "SEARCH_SAMESITE", "LSID", "SIDCC")
     filtered = {k: v for k, v in cookies.items()
                 if any(k.startswith(p) for p in _AUTH_PREFIXES)}
     logger.info("Extracted %d auth cookies from HAR (kept %d after filter)",
                 len(cookies), len(filtered))
-    return filtered
+    return filtered, meta
 
 
 def _cookies_header(cookies: Dict[str, str]) -> str:
@@ -166,6 +216,28 @@ def _sapisid_hash(cookies: Dict[str, str]) -> str:
 
 # ── batchexecute caller ──────────────────────────────────────────────────
 
+def _build_headers(cookies: Dict[str, str]) -> Dict[str, str]:
+    """Build the HTTP headers required for NLM batchexecute requests."""
+    headers = {
+        "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+        "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                       "AppleWebKit/537.36 (KHTML, like Gecko) "
+                       "Chrome/145.0.0.0 Safari/537.36"),
+        "Referer": f"https://{_NLM_HOST}/",
+        "Origin": f"https://{_NLM_HOST}",
+        "X-Same-Domain": "1",
+        "sec-ch-ua": '"Not:A-Brand";v="99", "Google Chrome";v="145"',
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": '"Windows"',
+    }
+    if cookies:
+        headers["Cookie"] = _cookies_header(cookies)
+        sapisid_hash = _sapisid_hash(cookies)
+        if sapisid_hash:
+            headers["Authorization"] = sapisid_hash
+    return headers
+
+
 def _batchexecute(
     rpc_id: str,
     args_json: str,
@@ -175,74 +247,117 @@ def _batchexecute(
     """Make a single batchexecute RPC call to NotebookLM.
 
     Args:
-        rpc_id:      The RPC function ID (e.g. "VfAZjd").
-        args_json:   JSON-stringified argument array (e.g. '["nb-id",[2]]').
+        rpc_id:      The RPC function ID (e.g. "VfAZjd", "CYK0Xb").
+        args_json:   JSON-stringified argument array.
         cookies:     Google auth cookies dict.
         notebook_id: Optional notebook ID for the source-path URL param.
 
     Returns:
         Tuple of (rpc_id_returned, parsed_inner_data) or (None, None).
     """
+    results = _batchexecute_multi(
+        [(rpc_id, args_json)], cookies, notebook_id
+    )
+    if results:
+        return results[0]
+    return None, None
+
+
+def _batchexecute_multi(
+    calls: List[Tuple[str, str]],
+    cookies: Dict[str, str],
+    notebook_id: str = "",
+) -> List[Tuple[Optional[str], Any]]:
+    """Make multiple batchexecute RPC calls in a single HTTP request.
+
+    This is the core of multi-question batching — up to 5 questions
+    can be sent simultaneously by packing multiple CYK0Xb calls.
+
+    Args:
+        calls:       List of (rpc_id, args_json) tuples.
+        cookies:     Google auth cookies dict.
+        notebook_id: Optional notebook context.
+
+    Returns:
+        List of (rpc_id_returned, parsed_inner_data) tuples, one per call.
+    """
+    if not calls:
+        return []
+
+    bl = _get_bl()
+    fsid = _get_fsid()
+    req_id = str(int(time.time()) % 100000 * 100)
+
+    # Build rpcids param — semicolon-separated when batching
+    rpc_ids_param = ";".join(rpc_id for rpc_id, _ in calls)
+
     params: Dict[str, str] = {
-        "rpcids": rpc_id,
+        "rpcids": rpc_ids_param,
         "source-path": f"/notebook/{notebook_id}" if notebook_id else "/",
-        "bl": "boq_labs-tailwind-frontend_20250101.00_p0",
-        "f.sid": "-1",
+        "bl": bl,
+        "f.sid": fsid,
         "hl": "en",
-        "_reqid": "1",
+        "_reqid": req_id,
         "rt": "c",
     }
     url = f"{_BATCH_URL}?" + urllib.parse.urlencode(params)
+
+    # Pack all calls into a single f.req array
+    f_req_inner = [[rpc_id, args_json, None, "generic"] for rpc_id, args_json in calls]
     body = urllib.parse.urlencode({
-        "f.req": json.dumps([[
-            [rpc_id, args_json, None, "generic"]
-        ]])
+        "f.req": json.dumps(f_req_inner)
     }).encode()
 
-    headers = {
-        "Content-Type": "application/x-www-form-urlencoded",
-        "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                       "AppleWebKit/537.36 (KHTML, like Gecko) "
-                       "Chrome/131.0.0.0 Safari/537.36"),
-        "Referer": f"https://{_NLM_HOST}/",
-        "Origin": f"https://{_NLM_HOST}",
-        "X-Same-Domain": "1",
-        "Cookie": _cookies_header(cookies),
-    }
-    sapisid_hash = _sapisid_hash(cookies)
-    if sapisid_hash:
-        headers["Authorization"] = sapisid_hash
-
+    headers = _build_headers(cookies)
     req = urllib.request.Request(url, data=body, headers=headers, method="POST")
     try:
         with urllib.request.urlopen(req, timeout=_REQUEST_TIMEOUT) as resp:
             raw = resp.read().decode("utf-8", errors="replace")
     except urllib.error.HTTPError as exc:
         body_text = exc.read().decode(errors="replace") if exc.fp else ""
-        logger.error("batchexecute HTTP %s for %s: %s", exc.code, rpc_id, body_text[:200])
-        return None, {"error": f"HTTP {exc.code}", "detail": body_text[:500]}
+        status = exc.code
+        logger.error("batchexecute HTTP %s for %s: %s", status, rpc_ids_param, body_text[:200])
+        err = {"error": f"HTTP {status}", "detail": body_text[:500]}
+        if status == 401:
+            err["detail"] = "Auth expired — import a new HAR or capture cookies via CDP"
+        return [(None, err)] * len(calls)
     except (urllib.error.URLError, OSError) as exc:
-        logger.error("batchexecute connection error for %s: %s", rpc_id, exc)
-        return None, {"error": "connection_error", "detail": str(exc)}
+        logger.error("batchexecute connection error for %s: %s", rpc_ids_param, exc)
+        err = {"error": "connection_error", "detail": str(exc)}
+        return [(None, err)] * len(calls)
 
-    return _parse_batchexecute(raw)
+    return _parse_batchexecute_multi(raw)
 
 
-def _parse_batchexecute(raw: str) -> Tuple[Optional[str], Any]:
-    """Decode the full batchexecute response pipeline (5 layers)."""
+def _parse_batchexecute_multi(raw: str) -> List[Tuple[Optional[str], Any]]:
+    """Decode ALL batchexecute wrb.fr blocks from a multi-RPC response.
+
+    A batched response contains multiple ``wrb.fr`` blocks, one per call.
+
+    Returns:
+        List of (rpc_id, parsed_data) tuples in response order.
+    """
+    results: List[Tuple[Optional[str], Any]] = []
     body = raw.lstrip(")]}'").lstrip("\n")
     for line in body.split("\n"):
         line = line.strip()
-        if line.startswith('[["wrb.fr"'):
-            try:
-                outer = json.loads(line)
-                rpc_id = outer[0][1]
-                inner_raw = outer[0][2]
-                inner = json.loads(inner_raw) if isinstance(inner_raw, str) else inner_raw
-                return rpc_id, inner
-            except (json.JSONDecodeError, IndexError, TypeError):
-                continue
-    return None, None
+        if not line.startswith('[["wrb.fr"'):
+            continue
+        try:
+            outer = json.loads(line)
+            rpc_id = outer[0][1]
+            inner_raw = outer[0][2]
+            inner = json.loads(inner_raw) if isinstance(inner_raw, str) else inner_raw
+            results.append((rpc_id, inner))
+        except (json.JSONDecodeError, IndexError, TypeError):
+            continue
+    return results or [(None, None)]
+
+
+def _parse_batchexecute(raw: str) -> Tuple[Optional[str], Any]:
+    """Decode a single batchexecute response (backward compat wrapper)."""
+    results = _parse_batchexecute_multi(raw)
+    return results[0] if results else (None, None)
 
 
 # ── Content extraction helpers ───────────────────────────────────────────
@@ -302,6 +417,186 @@ def _extract_sources(data: Any) -> Tuple[str, List[Dict]]:
     return notebook_name, sources
 
 
+# ── Write operation helpers ───────────────────────────────────────────────
+
+def ask_question(
+    notebook_id: str,
+    question: str,
+    cookies: Dict[str, str],
+) -> Dict[str, Any]:
+    """Ask a single question to a NotebookLM notebook (CYK0Xb RPC).
+
+    Args:
+        notebook_id: UUID of the target notebook.
+        question:    The question text to ask.
+        cookies:     Google auth cookies.
+
+    Returns:
+        Dict with keys: answer_id, answer, sources (list of cited source IDs).
+    """
+    args = json.dumps([notebook_id, question])
+    _, data = _batchexecute("CYK0Xb", args, cookies, notebook_id)
+    return _parse_ask_response(data)
+
+
+def ask_questions_batch(
+    notebook_id: str,
+    questions: List[str],
+    cookies: Dict[str, str],
+    max_batch: int = 5,
+) -> List[Dict[str, Any]]:
+    """Ask multiple questions to a notebook in a single HTTP request.
+
+    NotebookLM supports batching up to ~5 CYK0Xb calls per request,
+    reducing total round-trips significantly.
+
+    Args:
+        notebook_id: UUID of the target notebook.
+        questions:   List of question strings.
+        cookies:     Google auth cookies.
+        max_batch:   Maximum questions per HTTP request (default 5).
+
+    Returns:
+        List of answer dicts in the same order as questions.
+    """
+    results: List[Dict[str, Any]] = []
+    for i in range(0, len(questions), max_batch):
+        batch = questions[i:i + max_batch]
+        calls = [
+            ("CYK0Xb", json.dumps([notebook_id, q]))
+            for q in batch
+        ]
+        raw_results = _batchexecute_multi(calls, cookies, notebook_id)
+        for _, data in raw_results:
+            results.append(_parse_ask_response(data))
+    return results
+
+
+def _parse_ask_response(data: Any) -> Dict[str, Any]:
+    """Parse a CYK0Xb response into a structured answer dict.
+
+    Args:
+        data: Parsed inner data from batchexecute response.
+
+    Returns:
+        Dict with: answer_id, answer (markdown text), sources (list).
+    """
+    if data is None:
+        return {"answer_id": None, "answer": "", "sources": [], "error": "no_data"}
+    if isinstance(data, dict) and "error" in data:
+        return {"answer_id": None, "answer": "", "sources": [], **data}
+    try:
+        # CYK0Xb returns [[answer_id, markdown_answer_with_citations], ...]
+        answer_id = None
+        answer_text = ""
+        sources: List[str] = []
+
+        if isinstance(data, list) and data:
+            first = data[0]
+            if isinstance(first, list) and len(first) >= 2:
+                answer_id = first[0] if isinstance(first[0], str) else None
+                answer_text = first[1] if isinstance(first[1], str) else ""
+                # Extract source IDs from citation markers in answer
+                sources = re.findall(r"\[([a-f0-9-]{36})\]", answer_text)
+
+        return {
+            "answer_id": answer_id,
+            "answer": answer_text,
+            "sources": sources,
+        }
+    except (IndexError, TypeError) as exc:
+        logger.warning("parse ask response: %s | data=%s", exc, str(data)[:200])
+        return {"answer_id": None, "answer": "", "sources": [],
+                "error": str(exc), "raw": str(data)[:500]}
+
+
+def generate_document(
+    notebook_id: str,
+    source_ids: List[str],
+    cookies: Dict[str, str],
+    doc_type: int = 2,
+) -> Dict[str, Any]:
+    """Generate a document/report from selected sources (ciyUvf RPC).
+
+    Args:
+        notebook_id: UUID of the target notebook.
+        source_ids:  List of source UUIDs to include in the document.
+        cookies:     Google auth cookies.
+        doc_type:    Document type integer (2=standard, 9=deep research).
+
+    Returns:
+        Dict with: title, description, source_ids.
+    """
+    source_array = [[sid] for sid in source_ids]
+    args = json.dumps([_WRITE_CONFIG, notebook_id, source_array])
+    _, data = _batchexecute("ciyUvf", args, cookies, notebook_id)
+    return _parse_generate_response(data, source_ids)
+
+
+def _parse_generate_response(data: Any, source_ids: List[str]) -> Dict[str, Any]:
+    """Parse a ciyUvf response."""
+    if data is None:
+        return {"title": "", "description": "", "source_ids": source_ids, "error": "no_data"}
+    if isinstance(data, dict) and "error" in data:
+        return {"title": "", "description": "", "source_ids": source_ids, **data}
+    try:
+        # ciyUvf returns [[title, description, null, [[source_id], ...]], ...]
+        if isinstance(data, list) and data:
+            first = data[0]
+            if isinstance(first, list):
+                title = first[0] if isinstance(first[0], str) else ""
+                description = first[1] if len(first) > 1 and isinstance(first[1], str) else ""
+                return {"title": title, "description": description, "source_ids": source_ids}
+    except (IndexError, TypeError) as exc:
+        logger.warning("parse generate: %s", exc)
+    return {"title": "", "description": "", "source_ids": source_ids}
+
+
+def save_note(
+    notebook_id: str,
+    source_ids: List[str],
+    cookies: Dict[str, str],
+    note_type: int = 2,
+) -> Dict[str, Any]:
+    """Create/save a note artifact in a notebook (R7cb6c RPC).
+
+    Args:
+        notebook_id: UUID of the target notebook.
+        source_ids:  List of source UUIDs to associate with the note.
+        cookies:     Google auth cookies.
+        note_type:   Note type (2=standard note, 9=deep research).
+
+    Returns:
+        Dict with: note_id, title, note_type.
+    """
+    # Build nested source array as observed in HAR: [[[src_id]], [[src_id]], ...]
+    source_array = [[sid] for sid in source_ids]
+    note_body = [None, None, note_type, source_array]
+    args = json.dumps([_WRITE_CONFIG, notebook_id, note_body])
+    _, data = _batchexecute("R7cb6c", args, cookies, notebook_id)
+    return _parse_save_note_response(data)
+
+
+def _parse_save_note_response(data: Any) -> Dict[str, Any]:
+    """Parse an R7cb6c response."""
+    if data is None:
+        return {"note_id": None, "title": "", "note_type": 2, "error": "no_data"}
+    if isinstance(data, dict) and "error" in data:
+        return {"note_id": None, "title": "", "note_type": 2, **data}
+    try:
+        # R7cb6c returns [[note_id, title, type_int, [[source_ids]]], ...]
+        if isinstance(data, list) and data:
+            first = data[0]
+            if isinstance(first, list) and len(first) >= 3:
+                note_id = first[0] if isinstance(first[0], str) else None
+                title = first[1] if isinstance(first[1], str) else ""
+                note_type = first[2] if isinstance(first[2], int) else 2
+                return {"note_id": note_id, "title": title, "note_type": note_type}
+    except (IndexError, TypeError) as exc:
+        logger.warning("parse save_note: %s", exc)
+    return {"note_id": None, "title": "", "note_type": 2}
+
+
 # ── Flask app ────────────────────────────────────────────────────────────
 
 def create_nlm_proxy_app() -> Flask:
@@ -359,19 +654,34 @@ def create_nlm_proxy_app() -> Flask:
         if not Path(har_path).exists():
             return jsonify({"error": "file_not_found", "path": har_path}), 404
 
-        new_cookies = extract_cookies_from_har(har_path)
-        if not new_cookies:
+        new_cookies, new_meta = extract_cookies_from_har(har_path)
+        if not new_cookies and not new_meta:
             return jsonify({"error": "no_nlm_cookies_found",
-                            "detail": "No Google auth cookies for notebooklm.google.com found in HAR"}), 422
+                            "detail": "No Google auth cookies or metadata for notebooklm.google.com found in HAR. "
+                                      "Note: some HAR exports redact cookies. Try Chrome CDP capture instead."}), 422
 
-        # Merge with existing cookies
+        # Merge with existing
         existing = _load_cookies()
         merged = {**existing, **new_cookies}
         _save_cookies(merged)
+
+        # Update meta (bl, f.sid) if found
+        existing_meta = _load_meta()
+        if new_meta.get("bl"):
+            existing_meta["bl"] = new_meta["bl"]
+        if new_meta.get("f_sid"):
+            existing_meta["f_sid"] = new_meta["f_sid"]
+        _save_meta(existing_meta)
+
         return jsonify({
-            "imported": len(new_cookies),
-            "total": len(merged),
+            "imported_cookies": len(new_cookies),
+            "total_cookies": len(merged),
+            "bl": existing_meta.get("bl", _DEFAULT_BL),
+            "f_sid": existing_meta.get("f_sid", "-1"),
             "status": "ok",
+            "note": "No cookies found in HAR (Chrome may have redacted them). "
+                    "Use POST /cookies/capture for automatic Chrome CDP extraction."
+            if not new_cookies else None,
         })
 
     @app.route("/cookies", methods=["GET"])
@@ -527,6 +837,129 @@ def create_nlm_proxy_app() -> Flask:
             "conversations": len(result["conversations"]),
         }
         return jsonify(result)
+
+    # ── Write operations ────────────────────────────────────────────────
+
+    @app.route("/notebooks/<notebook_id>/ask", methods=["POST"])
+    def ask_single(notebook_id: str):
+        """Ask a single question to a NotebookLM notebook.
+
+        Body (JSON): {"question": "What is the main argument?"}
+        Returns: {answer_id, answer, sources}
+        """
+        cookies = _cookies()
+        if not cookies:
+            return _no_cookies()
+        body = request.json or {}
+        question = body.get("question", "").strip()
+        if not question:
+            return jsonify({"error": "missing question"}), 400
+        result = ask_question(notebook_id, question, cookies)
+        if result.get("error"):
+            return jsonify(result), 502
+        return jsonify(result)
+
+    @app.route("/notebooks/<notebook_id>/ask_batch", methods=["POST"])
+    def ask_batch(notebook_id: str):
+        """Ask multiple questions in a single HTTP request (up to 5 at once).
+
+        Body (JSON): {"questions": ["Q1?", "Q2?", "Q3?"]}
+        Returns: {answers: [{answer_id, answer, sources}, ...]}
+        """
+        cookies = _cookies()
+        if not cookies:
+            return _no_cookies()
+        body = request.json or {}
+        questions = body.get("questions", [])
+        if not questions or not isinstance(questions, list):
+            return jsonify({"error": "missing or invalid questions array"}), 400
+        max_batch = body.get("max_batch", 5)
+        results = ask_questions_batch(notebook_id, questions, cookies, max_batch)
+        return jsonify({
+            "answers": results,
+            "count": len(results),
+            "questions": questions,
+        })
+
+    @app.route("/notebooks/<notebook_id>/generate", methods=["POST"])
+    def generate(notebook_id: str):
+        """Generate a document/report from selected notebook sources.
+
+        Body (JSON): {"source_ids": ["uuid1", "uuid2", ...], "doc_type": 2}
+        Returns: {title, description, source_ids}
+        """
+        cookies = _cookies()
+        if not cookies:
+            return _no_cookies()
+        body = request.json or {}
+        source_ids = body.get("source_ids", [])
+        doc_type = body.get("doc_type", 2)
+        result = generate_document(notebook_id, source_ids, cookies, doc_type)
+        if result.get("error"):
+            return jsonify(result), 502
+        return jsonify(result)
+
+    @app.route("/notebooks/<notebook_id>/save_note", methods=["POST"])
+    def save_note_route(notebook_id: str):
+        """Create/save a note artifact in a notebook.
+
+        Body (JSON): {"source_ids": ["uuid1", ...], "note_type": 2}
+        Returns: {note_id, title, note_type}
+        """
+        cookies = _cookies()
+        if not cookies:
+            return _no_cookies()
+        body = request.json or {}
+        source_ids = body.get("source_ids", [])
+        note_type = body.get("note_type", 2)
+        result = save_note(notebook_id, source_ids, cookies, note_type)
+        if result.get("error"):
+            return jsonify(result), 502
+        return jsonify(result)
+
+    # ── CDP Cookie Capture ──────────────────────────────────────────────
+
+    @app.route("/cookies/capture", methods=["POST"])
+    def capture_cookies():
+        """Automatically capture auth cookies from Chrome via CDP.
+
+        Requires Chrome to be running with --remote-debugging-port=9222,
+        OR launches Chrome automatically using the existing user profile.
+
+        Body (JSON): {} (no params needed)
+        Returns: {imported_cookies, bl, f_sid, status}
+        """
+        try:
+            from engine.nexus.nlm_har_capture import capture_nlm_cookies
+            result = capture_nlm_cookies()
+            if result.get("error"):
+                return jsonify(result), 500
+            return jsonify(result)
+        except ImportError:
+            return jsonify({
+                "error": "nlm_har_capture module not available",
+                "detail": "engine/nexus/nlm_har_capture.py not found"
+            }), 501
+
+    @app.route("/meta", methods=["GET"])
+    def get_meta():
+        """Return current build label and session metadata."""
+        return jsonify(_load_meta())
+
+    @app.route("/meta", methods=["POST"])
+    def update_meta():
+        """Manually update build label and session metadata.
+
+        Body (JSON): {"bl": "boq_labs-...", "f_sid": "12345..."}
+        """
+        body = request.json or {}
+        meta = _load_meta()
+        if "bl" in body:
+            meta["bl"] = body["bl"]
+        if "f_sid" in body:
+            meta["f_sid"] = body["f_sid"]
+        _save_meta(meta)
+        return jsonify({"updated": True, **meta})
 
     # ── Generic batchexecute passthrough ────────────────────────────────
 
