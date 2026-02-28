@@ -101,6 +101,12 @@ SERVICES: Dict[str, Dict[str, Any]] = {
         "port": 8601, "label": "MCP Bridge",
         "auto_start": False,
     },
+    "nlm_proxy": {
+        "type": "flask",
+        "factory": "engine.mcp.nlm_live_proxy.get_nlm_proxy_app",
+        "port": 8800, "label": "NLM Live Proxy",
+        "auto_start": False,
+    },
 }
 
 SCENES: Dict[str, Dict[str, Any]] = {
