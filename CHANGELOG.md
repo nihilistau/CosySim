@@ -2,7 +2,58 @@
 
 All notable changes to CosySim are documented here.
 
-## v0.61 — Copilot Session Memory, Knowledge Distillation, NLM Quota API
+## v0.62 — Local Agent Bridge, Master Notebook Builder, NLM Panel Skills
+
+### New: LocalAgentBridge (`engine/nexus/local_agent_bridge.py`)
+- Enables local LMStudio agents to discover, claim, execute, and complete tasks
+- `get_ready_tasks(model_size, limit, tags)` — filters by complexity tier (router/mini/worker/expert)
+- `claim_task(task_id, agent_id)` — atomically claims a specific task
+- `get_task_context(task_id)` — loads task + Nexus knowledge + coding rules + execution steps
+- `complete_task(task_id, result, files_changed, store_to_nexus)` — marks complete, optionally stores in Nexus
+- `fail_task(task_id, reason, retry)` — marks failed or resets to pending for retry
+- `get_agent_manifest(model_size)` — produces formatted system prompt fragment for LLM injection
+- 6 MCP tools in `devtools_server.py`: `local_agent_get_tasks`, `local_agent_claim_task`, `local_agent_task_context`, `local_agent_complete_task`, `local_agent_fail_task`, `local_agent_manifest`
+
+### New: MasterNotebookBuilder (`engine/nexus/master_notebook_builder.py`)
+- Builds the "CosySim Master Intelligence" notebook in NotebookLM with full system knowledge
+- 13 categorised text bundles (hardware spec, engine source, nexus, lmstudio, MCP, skills, services, scenes, config/rules, docs, frontend JS, tests, dependencies)
+- 19 official SDK/API URL sources (LMStudio Python+REST API, Flask, Python stdlib, pytest, requests, Pydantic, MCP Protocol, HuggingFace, ONNX Runtime, GitHub Copilot CLI)
+- Runs all NotebookLM generators: audio (standard + deep dive), video, study guide, briefing, FAQ, data tables
+- 35-question Q&A distillation → stored in Nexus for cache hits
+- State persistence in `.github/hooks/logs/master_notebook_state.json` — resumable builds
+- CLI: `python -m engine.nexus.master_notebook_builder [--dry-run] [--sources-only] [--generators-only]`
+- 4 MCP tools: `master_notebook_build`, `master_notebook_status`, `master_notebook_reset`, `master_notebook_list_sources`
+- Weekly scheduler task: `master-notebook-refresh`
+
+### Updated: Nexus Panel NLM Skills (`content/scenes/nexus_panel/nexus_panel_skills.py`)
+- `librarian_ask` upgraded with confidence-based NLM escalation (threshold 0.35)
+  - When Nexus confidence is low, escalates to NLM hybrid, stores answer back for future cache hits
+  - Returns `[Routed to NLM]` tag in response when escalation occurs
+- `librarian_route_stats` — new skill showing routing breakdown and tokens saved
+- `nlm_panel_list_notebooks` — lists all NLM notebooks with IDs and source counts
+- `nlm_panel_distill` — triggers knowledge_forge distillation into Q&A pairs
+- `nlm_panel_audio` — generates NLM audio overview (standard/deep_dive)
+- `nlm_panel_bulk_ask` — bulk-asks questions to NLM, optionally stores to Nexus
+- `nlm_panel_news_digest` — manually triggers news NLM pipeline
+- `nlm_panel_setup_auth` — sets up/refreshes NLM browser authentication
+
+### Updated: TaskScheduler (`engine/nexus/task_scheduler.py`)
+- Added `claim_task_by_id(task_id, agent_id)` — claim a specific task by ID
+- Added `get_pending_tasks()` — returns all pending tasks sorted by priority
+- Updated `fail_task(retry=True)` — resets task to pending, clears agent assignment for retry
+
+### Updated: SchedulerDaemon — 19→20 tasks
+- Added `master-notebook-refresh` (weekly) — calls `refresh_master_notebook()`
+- Fixed missing `def complete_task(...)` signature in `task_scheduler.py`
+- Fixed `news_nlm_pipeline._run_distillation()` exception handling (moved `_get_hybrid()` inside try block)
+
+### Tests
+- `tests/test_master_notebook_builder.py` — 39 new tests for master notebook builder, state persistence, scheduler integration, singleton
+- `tests/test_local_agent_bridge.py` — 60 new tests for local agent bridge
+- `tests/test_nexus_panel.py` — ~40 new tests for NLM panel skills and librarian routing
+- Scheduler task count assertions updated 19→20
+
+
 
 ### New: Session → Nexus → NLM Knowledge Pipeline
 

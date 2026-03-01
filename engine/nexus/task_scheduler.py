@@ -273,6 +273,37 @@ class TaskScheduler:
         logger.info("Task %s claimed by %s", task.id, agent_id)
         return task
 
+    def claim_task_by_id(self, task_id: str, agent_id: str) -> Optional[AgentTask]:
+        """Claim a specific task by ID for an agent.
+
+        Args:
+            task_id: Exact task ID to claim.
+            agent_id: Unique identifier for the claiming agent.
+
+        Returns:
+            The claimed AgentTask, or None if not found / already claimed.
+        """
+        task = self._tasks.get(task_id)
+        if not task or task.status not in (TaskStatus.PENDING, TaskStatus.BLOCKED):
+            return None
+
+        task.status = TaskStatus.CLAIMED
+        task.assigned_agent = agent_id
+        task.claimed_at = time.time()
+        self._sync_to_nexus(task)
+        logger.info("Task %s claimed by %s (direct)", task_id, agent_id)
+        return task
+
+    def get_pending_tasks(self) -> List[AgentTask]:
+        """Return all pending (unclaimed) tasks sorted by priority."""
+        pending = [
+            t for t in self._tasks.values()
+            if t.status == TaskStatus.PENDING
+        ]
+        pending.sort(key=lambda t: (t.priority, t.created_at))
+        return pending
+
+
     def complete_task(
         self,
         task_id: str,
@@ -293,16 +324,21 @@ class TaskScheduler:
         logger.info("Task %s completed: %s", task_id, summary[:60])
         return True
 
-    def fail_task(self, task_id: str, reason: str = "") -> bool:
-        """Mark a task as failed."""
+    def fail_task(self, task_id: str, reason: str = "", retry: bool = False) -> bool:
+        """Mark a task as failed (or reset to pending if retry=True)."""
         task = self._tasks.get(task_id)
         if not task:
             return False
 
-        task.status = TaskStatus.FAILED
+        if retry:
+            task.status = TaskStatus.PENDING
+            task.assigned_agent = ""
+            task.claimed_at = 0.0
+        else:
+            task.status = TaskStatus.FAILED
         task.result_summary = f"FAILED: {reason}"
         self._sync_to_nexus(task)
-        logger.warning("Task %s failed: %s", task_id, reason)
+        logger.warning("Task %s failed (retry=%s): %s", task_id, retry, reason)
         return True
 
     def block_task(self, task_id: str, reason: str = "") -> bool:

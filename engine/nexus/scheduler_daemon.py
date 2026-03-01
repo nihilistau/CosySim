@@ -519,24 +519,38 @@ def _news_fetch_callback() -> Dict[str, Any]:
     stored = registry.store_to_nexus(filtered[:30])
 
     # Generate daily digest and store it
+    digest_text = ""
     if filtered:
-        digest = registry.generate_digest(filtered[:20])
+        digest_text = registry.generate_digest(filtered[:20])
         try:
             from engine.nexus.client import get_nexus_client
             client = get_nexus_client()
             client.add_entry(
                 title=f"News Digest: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M')}",
-                content=digest,
+                content=digest_text,
                 content_type="document",
                 category="news",
             )
         except Exception as exc:
             logger.debug("Could not store news digest: %s", exc)
 
+    # Best-effort NLM distillation (skips gracefully if NLM offline)
+    nlm_result: Dict[str, Any] = {"skipped": True}
+    try:
+        from engine.nexus.news_nlm_pipeline import get_news_nlm_pipeline
+        pipeline = get_news_nlm_pipeline()
+        nlm_result = pipeline.run(
+            articles=filtered[:20],
+            digest_text=digest_text or None,
+        )
+    except Exception as exc:
+        logger.debug("News NLM distillation skipped: %s", exc)
+
     return {
         "fetched": len(articles),
         "filtered": len(filtered),
         "stored": stored,
+        "nlm": nlm_result,
     }
 
 
@@ -843,7 +857,37 @@ def _session_distillation_callback() -> Dict[str, Any]:
         return {"error": str(exc)}
 
 
-def _register_builtin_tasks(daemon: TaskSchedulerDaemon) -> None:
+def _qa_generation_callback() -> Dict[str, Any]:
+    """Daily rule-based QA pair generation from Nexus knowledge entries.
+
+    Generates Q&A pairs from entry titles and content using pattern matching.
+    Significantly increases cache hit rate over time.
+    """
+    try:
+        from engine.nexus.qa_generator import run_rule_based
+        added = run_rule_based(limit=200, dry_run=False)
+        return {"qa_pairs_added": added}
+    except Exception as exc:
+        logger.error("QA generation failed: %s", exc)
+        return {"error": str(exc)}
+
+
+def _copilot_self_sync_callback() -> Dict[str, Any]:
+    """Weekly sync of Copilot instructions, agents, and hooks to Nexus.
+
+    Ensures local agents always have access to the latest Copilot rules,
+    agent definitions, and hook configurations via Nexus search.
+    """
+    try:
+        from engine.nexus.copilot_self_config import get_copilot_config
+        result = get_copilot_config().sync_all_to_nexus()
+        return result
+    except Exception as exc:
+        logger.error("Copilot self sync failed: %s", exc)
+        return {"error": str(exc)}
+
+
+def _register_builtin_tasks(daemon: "SchedulerDaemon") -> None:
     """Register all built-in autonomous tasks."""
     daemon.register(
         "nexus-maintenance",
@@ -947,11 +991,41 @@ def _register_builtin_tasks(daemon: TaskSchedulerDaemon) -> None:
         "daily",
         _session_distillation_callback,
     )
+    daemon.register(
+        "qa-generation",
+        "Nexus QA Pair Generation",
+        "daily",
+        _qa_generation_callback,
+    )
+    daemon.register(
+        "copilot-self-sync",
+        "Copilot Config Sync to Nexus",
+        "weekly",
+        _copilot_self_sync_callback,
+    )
+    daemon.register(
+        "master-notebook-refresh",
+        "Master Notebook Weekly Refresh",
+        "weekly",
+        _master_notebook_refresh_callback,
+    )
+
+
+def _master_notebook_refresh_callback() -> Dict[str, Any]:
+    """Weekly refresh of the CosySim Master Intelligence notebook.
+
+    Re-uploads all source bundles (picking up code changes) and
+    runs a fresh Q&A distillation pass to capture new knowledge.
+    """
+    try:
+        from engine.nexus.master_notebook_builder import refresh_master_notebook
+        return refresh_master_notebook()
+    except Exception as exc:
+        logger.error("Master notebook refresh failed: %s", exc)
+        return {"error": str(exc)}
 
 
 # ──── CLI ────
-
-def _cli_status() -> None:
     """Print status of all tasks."""
     daemon = get_scheduler_daemon()
     info = daemon.status()

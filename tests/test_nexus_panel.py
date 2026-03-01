@@ -367,3 +367,252 @@ class TestNexusPanelSkills:
         result = librarian_stats()
         assert "total_entries" in result
         assert "100" in result
+
+    # ── librarian_ask smart routing ───────────────────────────────────────
+
+    @patch("content.scenes.nexus_panel.nexus_panel_skills._get_hybrid")
+    @patch("content.scenes.nexus_panel.nexus_panel_skills._get_node_bridge")
+    @patch("content.scenes.nexus_panel.nexus_panel_skills._get_client")
+    def test_librarian_ask_low_confidence_escalates_to_nlm(
+        self, mock_client_fn, mock_bridge_fn, mock_hybrid_fn
+    ):
+        """When Nexus confidence is below threshold, escalate to NLM."""
+        from content.scenes.nexus_panel.nexus_panel_skills import librarian_ask
+        mock_nx = MagicMock()
+        mock_nx.ask.return_value = {"answer": "", "source": "cache", "confidence": 0.1}
+        mock_client_fn.return_value = mock_nx
+
+        mock_bridge = MagicMock()
+        mock_bridge.list_notebooks.return_value = [{"notebook_id": "nb-1", "title": "Main"}]
+        mock_bridge_fn.return_value = mock_bridge
+
+        mock_hybrid = MagicMock()
+        mock_hybrid.ask.return_value = {"answer": "NLM says: X works by Y."}
+        mock_hybrid_fn.return_value = mock_hybrid
+
+        result = librarian_ask("How does X work?")
+        assert "NLM says" in result
+        assert "Routed to NLM" in result
+
+    @patch("content.scenes.nexus_panel.nexus_panel_skills._get_client")
+    def test_librarian_ask_high_confidence_uses_nexus(self, mock_client_fn):
+        """When Nexus confidence >= threshold, use Nexus answer directly."""
+        from content.scenes.nexus_panel.nexus_panel_skills import librarian_ask
+        mock_nx = MagicMock()
+        mock_nx.ask.return_value = {"answer": "Nexus knows this.", "source": "fts", "confidence": 0.8}
+        mock_client_fn.return_value = mock_nx
+
+        result = librarian_ask("What is the MCP?")
+        assert "Nexus knows this." in result
+        assert "fts" in result
+
+    @patch("content.scenes.nexus_panel.nexus_panel_skills._get_hybrid")
+    @patch("content.scenes.nexus_panel.nexus_panel_skills._get_node_bridge")
+    @patch("content.scenes.nexus_panel.nexus_panel_skills._get_client")
+    def test_librarian_ask_nlm_stores_answer_in_nexus(
+        self, mock_client_fn, mock_bridge_fn, mock_hybrid_fn
+    ):
+        """NLM escalation stores the answer back in Nexus for future cache hits."""
+        from content.scenes.nexus_panel.nexus_panel_skills import librarian_ask
+        mock_nx = MagicMock()
+        mock_nx.ask.return_value = {"answer": "", "source": "cache", "confidence": 0.0}
+        mock_client_fn.return_value = mock_nx
+
+        mock_bridge = MagicMock()
+        mock_bridge.list_notebooks.return_value = [{"notebook_id": "nb-1"}]
+        mock_bridge_fn.return_value = mock_bridge
+
+        mock_hybrid = MagicMock()
+        mock_hybrid.ask.return_value = {"answer": "The answer is 42."}
+        mock_hybrid_fn.return_value = mock_hybrid
+
+        librarian_ask("What is the meaning?")
+        mock_nx.add_qa.assert_called_once()
+
+    @patch("content.scenes.nexus_panel.nexus_panel_skills._get_hybrid")
+    @patch("content.scenes.nexus_panel.nexus_panel_skills._get_node_bridge")
+    @patch("content.scenes.nexus_panel.nexus_panel_skills._get_client")
+    def test_librarian_ask_nlm_failure_falls_back_gracefully(
+        self, mock_client_fn, mock_bridge_fn, mock_hybrid_fn
+    ):
+        """If NLM escalation throws, return Nexus result regardless."""
+        from content.scenes.nexus_panel.nexus_panel_skills import librarian_ask
+        mock_nx = MagicMock()
+        mock_nx.ask.return_value = {"answer": "", "source": "cache", "confidence": 0.0}
+        mock_client_fn.return_value = mock_nx
+
+        mock_bridge = MagicMock()
+        mock_bridge.list_notebooks.side_effect = RuntimeError("NLM offline")
+        mock_bridge_fn.return_value = mock_bridge
+        mock_hybrid_fn.return_value = MagicMock()
+
+        result = librarian_ask("What is X?")
+        assert "No answer found" in result or "Source" in result  # graceful fallback
+
+    # ── librarian_route_stats ─────────────────────────────────────────────
+
+    @patch("content.scenes.nexus_panel.nexus_panel_skills._get_client")
+    def test_librarian_route_stats_no_router(self, _mock):
+        """Returns graceful message when query_router is unavailable."""
+        from content.scenes.nexus_panel.nexus_panel_skills import librarian_route_stats
+        with patch("engine.nexus.query_router.get_query_router", side_effect=ImportError):
+            result = librarian_route_stats()
+        assert "stats" in result.lower() or "routing" in result.lower()
+
+    # ── NLM panel skills ──────────────────────────────────────────────────
+
+    @patch("content.scenes.nexus_panel.nexus_panel_skills._get_node_bridge")
+    def test_nlm_panel_list_notebooks_returns_names(self, mock_bridge_fn):
+        from content.scenes.nexus_panel.nexus_panel_skills import nlm_panel_list_notebooks
+        mock_bridge = MagicMock()
+        mock_bridge.list_notebooks.return_value = [
+            {"notebook_id": "nb-1", "title": "News Intelligence", "source_count": 5},
+            {"notebook_id": "nb-2", "title": "Architecture", "source_count": 12},
+        ]
+        mock_bridge_fn.return_value = mock_bridge
+
+        result = nlm_panel_list_notebooks()
+        assert "nb-1" in result
+        assert "News Intelligence" in result
+        assert "nb-2" in result
+        assert "12" in result
+
+    @patch("content.scenes.nexus_panel.nexus_panel_skills._get_node_bridge")
+    def test_nlm_panel_list_notebooks_empty(self, mock_bridge_fn):
+        from content.scenes.nexus_panel.nexus_panel_skills import nlm_panel_list_notebooks
+        mock_bridge = MagicMock()
+        mock_bridge.list_notebooks.return_value = []
+        mock_bridge_fn.return_value = mock_bridge
+
+        result = nlm_panel_list_notebooks()
+        assert "No notebooks" in result
+
+    @patch("content.scenes.nexus_panel.nexus_panel_skills._get_node_bridge")
+    def test_nlm_panel_list_notebooks_error(self, mock_bridge_fn):
+        from content.scenes.nexus_panel.nexus_panel_skills import nlm_panel_list_notebooks
+        mock_bridge = MagicMock()
+        mock_bridge.list_notebooks.side_effect = RuntimeError("Connection refused")
+        mock_bridge_fn.return_value = mock_bridge
+
+        result = nlm_panel_list_notebooks()
+        assert "Error" in result
+
+    def test_nlm_panel_distill_calls_forge(self):
+        from content.scenes.nexus_panel.nexus_panel_skills import nlm_panel_distill
+        mock_result = MagicMock()
+        mock_result.qa_pairs = [{"q": "Q1", "a": "A1"}, {"q": "Q2", "a": "A2"}]
+        mock_result.nexus_ids = ["id1", "id2"]
+        with patch("engine.nexus.knowledge_forge.get_knowledge_forge") as mock_forge_fn:
+            mock_forge = MagicMock()
+            mock_forge.distill.return_value = mock_result
+            mock_forge_fn.return_value = mock_forge
+            result = nlm_panel_distill("nb-1", topic="MCP", count=20)
+        assert "2" in result
+        assert "nb-1" in result
+        assert "MCP" in result
+
+    def test_nlm_panel_distill_error(self):
+        from content.scenes.nexus_panel.nexus_panel_skills import nlm_panel_distill
+        with patch("engine.nexus.knowledge_forge.get_knowledge_forge",
+                   side_effect=RuntimeError("NLM offline")):
+            result = nlm_panel_distill("nb-1")
+        assert "failed" in result.lower()
+
+    @patch("content.scenes.nexus_panel.nexus_panel_skills._get_hybrid")
+    def test_nlm_panel_audio_success(self, mock_hybrid_fn):
+        from content.scenes.nexus_panel.nexus_panel_skills import nlm_panel_audio
+        mock_hybrid = MagicMock()
+        mock_hybrid.generate_audio.return_value = {"status": "generating", "audio_url": ""}
+        mock_hybrid_fn.return_value = mock_hybrid
+
+        result = nlm_panel_audio("nb-1")
+        assert "generating" in result or "pending" in result
+
+    @patch("content.scenes.nexus_panel.nexus_panel_skills._get_hybrid")
+    def test_nlm_panel_audio_error(self, mock_hybrid_fn):
+        from content.scenes.nexus_panel.nexus_panel_skills import nlm_panel_audio
+        mock_hybrid = MagicMock()
+        mock_hybrid.generate_audio.return_value = {"error": "Quota exceeded"}
+        mock_hybrid_fn.return_value = mock_hybrid
+
+        result = nlm_panel_audio("nb-1")
+        assert "failed" in result.lower() or "Quota" in result
+
+    @patch("content.scenes.nexus_panel.nexus_panel_skills._get_client")
+    @patch("content.scenes.nexus_panel.nexus_panel_skills._get_hybrid")
+    def test_nlm_panel_bulk_ask_returns_answers(self, mock_hybrid_fn, mock_client_fn):
+        from content.scenes.nexus_panel.nexus_panel_skills import nlm_panel_bulk_ask
+        mock_hybrid = MagicMock()
+        mock_hybrid.ask_batch.return_value = [
+            {"answer": "Answer 1"},
+            {"answer": "Answer 2"},
+        ]
+        mock_hybrid_fn.return_value = mock_hybrid
+        mock_client_fn.return_value = MagicMock()
+
+        result = nlm_panel_bulk_ask("nb-1", "Q1\nQ2", store_to_nexus=False)
+        assert "Q1" in result
+        assert "Answer 1" in result
+        assert "Q2" in result
+        assert "Answer 2" in result
+
+    @patch("content.scenes.nexus_panel.nexus_panel_skills._get_client")
+    @patch("content.scenes.nexus_panel.nexus_panel_skills._get_hybrid")
+    def test_nlm_panel_bulk_ask_stores_to_nexus(self, mock_hybrid_fn, mock_client_fn):
+        from content.scenes.nexus_panel.nexus_panel_skills import nlm_panel_bulk_ask
+        mock_hybrid = MagicMock()
+        mock_hybrid.ask_batch.return_value = [{"answer": "Great answer."}]
+        mock_hybrid_fn.return_value = mock_hybrid
+        mock_nx = MagicMock()
+        mock_client_fn.return_value = mock_nx
+
+        nlm_panel_bulk_ask("nb-1", "What is X?", store_to_nexus=True)
+        mock_nx.add_qa.assert_called_once()
+
+    def test_nlm_panel_bulk_ask_empty_questions(self):
+        from content.scenes.nexus_panel.nexus_panel_skills import nlm_panel_bulk_ask
+        result = nlm_panel_bulk_ask("nb-1", "   \n  ", store_to_nexus=False)
+        assert "No questions" in result
+
+    def test_nlm_panel_news_digest_calls_pipeline(self):
+        from content.scenes.nexus_panel.nexus_panel_skills import nlm_panel_news_digest
+        with patch("engine.nexus.news_nlm_pipeline.get_news_nlm_pipeline") as mock_pl_fn:
+            mock_pl = MagicMock()
+            mock_pl.run.return_value = {
+                "notebook_id": "nb-news-1",
+                "uploaded": True,
+                "qa_count": 10,
+                "stored": 8,
+            }
+            mock_pl_fn.return_value = mock_pl
+            result = nlm_panel_news_digest(max_articles=15)
+        assert "nb-news-1" in result
+        assert "10" in result
+        assert "8" in result
+
+    def test_nlm_panel_news_digest_error(self):
+        from content.scenes.nexus_panel.nexus_panel_skills import nlm_panel_news_digest
+        with patch("engine.nexus.news_nlm_pipeline.get_news_nlm_pipeline",
+                   side_effect=RuntimeError("NLM offline")):
+            result = nlm_panel_news_digest()
+        assert "failed" in result.lower()
+
+    @patch("content.scenes.nexus_panel.nexus_panel_skills._get_hybrid")
+    def test_nlm_panel_setup_auth_success(self, mock_hybrid_fn):
+        from content.scenes.nexus_panel.nexus_panel_skills import nlm_panel_setup_auth
+        mock_hybrid = MagicMock()
+        mock_hybrid.setup_auth.return_value = {"status": "authenticated", "message": "Browser opened."}
+        mock_hybrid_fn.return_value = mock_hybrid
+
+        result = nlm_panel_setup_auth()
+        assert "authenticated" in result
+
+    @patch("content.scenes.nexus_panel.nexus_panel_skills._get_hybrid")
+    def test_nlm_panel_setup_auth_error(self, mock_hybrid_fn):
+        from content.scenes.nexus_panel.nexus_panel_skills import nlm_panel_setup_auth
+        mock_hybrid = MagicMock()
+        mock_hybrid.setup_auth.return_value = {"error": "Browser launch failed"}
+        mock_hybrid_fn.return_value = mock_hybrid
+
+        result = nlm_panel_setup_auth()
+        assert "failed" in result.lower() or "Browser launch" in result

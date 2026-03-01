@@ -1874,7 +1874,188 @@ async def notebooklm_node_sync_nexus(notebook_id: str, questions: str) -> str:
     except Exception as exc:
         return json.dumps({"error": str(exc)})
 
-def run_server(mode: str = "stdio"):
+
+# ── Local Agent Bridge Tools ──────────────────────────────────────────────
+
+@mcp.tool()
+async def local_agent_get_tasks(model_size: str = "worker", limit: int = 10,
+                                 tags: str = "") -> str:
+    """Get pending tasks for a local agent by model size.
+
+    model_size: 'router', 'mini', 'worker', or 'expert'.
+    tags: optional comma-separated tag filter.
+    Returns JSON list of task dicts sorted by priority.
+    """
+    from engine.nexus.local_agent_bridge import get_local_agent_bridge
+    tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else None
+    tasks = get_local_agent_bridge().get_ready_tasks(model_size=model_size, limit=limit,
+                                                      tags=tag_list)
+    return json.dumps({"tasks": tasks, "count": len(tasks)})
+
+
+@mcp.tool()
+async def local_agent_claim_task(task_id: str, agent_id: str) -> str:
+    """Claim a task for execution by this agent.
+
+    task_id: ID of the task to claim.
+    agent_id: Unique identifier for this agent (e.g. 'worker-qwen-7b-1').
+    Returns claimed task dict or error.
+    """
+    from engine.nexus.local_agent_bridge import get_local_agent_bridge
+    result = get_local_agent_bridge().claim_task(task_id=task_id, agent_id=agent_id)
+    return json.dumps(result)
+
+
+@mcp.tool()
+async def local_agent_task_context(task_id: str) -> str:
+    """Get full execution context for a claimed task.
+
+    Includes: task metadata, relevant Nexus knowledge, coding rules, and
+    step-by-step execution guide. Inject this into the agent's system prompt.
+    """
+    from engine.nexus.local_agent_bridge import get_local_agent_bridge
+    ctx = get_local_agent_bridge().get_task_context(task_id=task_id)
+    return json.dumps(ctx)
+
+
+@mcp.tool()
+async def local_agent_complete_task(task_id: str, result: str,
+                                     files_changed: str = "") -> str:
+    """Mark a task as completed and store the result in Nexus.
+
+    task_id: ID of the completed task.
+    result: 1-2 sentence summary of what was accomplished.
+    files_changed: optional comma-separated list of files modified.
+    """
+    from engine.nexus.local_agent_bridge import get_local_agent_bridge
+    file_list = [f.strip() for f in files_changed.split(",") if f.strip()] if files_changed else []
+    out = get_local_agent_bridge().complete_task(task_id=task_id, result=result,
+                                                  files_changed=file_list)
+    return json.dumps(out)
+
+
+@mcp.tool()
+async def local_agent_fail_task(task_id: str, reason: str, retry: bool = False) -> str:
+    """Mark a task as failed.
+
+    task_id: ID of the failed task.
+    reason: Explanation of why it failed.
+    retry: If True, reset to 'pending' so another agent can pick it up.
+    """
+    from engine.nexus.local_agent_bridge import get_local_agent_bridge
+    out = get_local_agent_bridge().fail_task(task_id=task_id, reason=reason, retry=retry)
+    return json.dumps(out)
+
+
+@mcp.tool()
+async def local_agent_manifest(model_size: str = "worker") -> str:
+    """Get the system prompt manifest for a local agent of the specified size.
+
+    Returns a formatted string ready to inject into an LLM system prompt.
+    model_size: 'router', 'mini', 'worker', or 'expert'.
+    """
+    from engine.nexus.local_agent_bridge import get_local_agent_bridge
+    return get_local_agent_bridge().get_agent_manifest(model_size=model_size)
+
+
+# ── Master Notebook Builder Tools ─────────────────────────────────────────
+
+@mcp.tool()
+async def master_notebook_build(
+    sources_only: bool = False,
+    generators_only: bool = False,
+    notebook_id: str = "",
+    dry_run: bool = False,
+) -> str:
+    """Build or refresh the CosySim Master Intelligence notebook.
+
+    Bundles all engine code, docs, configs, JS, and SDK URLs into NotebookLM,
+    then runs all generators (audio, video, study guide, FAQ, briefing, Q&A).
+
+    sources_only: Only upload sources, skip generators.
+    generators_only: Skip upload, only run generators.
+    notebook_id: Use existing notebook ID (skips creation).
+    dry_run: Print plan without making NLM calls.
+    """
+    from engine.nexus.master_notebook_builder import MasterNotebookBuilder
+    builder = MasterNotebookBuilder(dry_run=dry_run)
+    result = builder.build(
+        notebook_id=notebook_id or None,
+        sources_only=sources_only,
+        generators_only=generators_only,
+    )
+    return json.dumps(result, indent=2, default=str)
+
+
+@mcp.tool()
+async def master_notebook_status() -> str:
+    """Get status of the master notebook build (what's been done, what's pending)."""
+    from engine.nexus.master_notebook_builder import _load_state, DISTILLATION_QUESTIONS
+    state = _load_state()
+    nb_id = state.get("notebook_id", "not created yet")
+    sources_done = len(state.get("sources_uploaded", []))
+    gens_done = state.get("generators_done", [])
+    qa_done = state.get("qa_done_index", 0)
+    qa_total = len(DISTILLATION_QUESTIONS)
+    lines = [
+        "=== Master Notebook Status ===",
+        f"Notebook ID   : {nb_id}",
+        f"Last build    : {state.get('last_build', 'never')}",
+        f"Sources done  : {sources_done}",
+        f"Generators    : {', '.join(gens_done) or 'none yet'}",
+        f"Q&A distilled : {qa_done}/{qa_total}",
+    ]
+    return "\n".join(lines)
+
+
+@mcp.tool()
+async def master_notebook_reset() -> str:
+    """Reset master notebook build state (forces fresh creation and full re-upload).
+
+    WARNING: This will delete the stored notebook ID. A new notebook will be
+    created on the next build. Use this when you want a completely fresh start.
+    """
+    from engine.nexus.master_notebook_builder import _STATE_FILE
+    try:
+        if _STATE_FILE.exists():
+            _STATE_FILE.unlink()
+        return "Master notebook state reset. Next build will create a fresh notebook."
+    except Exception as exc:
+        return f"Reset failed: {exc}"
+
+
+@mcp.tool()
+async def master_notebook_list_sources() -> str:
+    """List all sources that will be included in the master notebook.
+
+    Shows all 13 code bundles + 19 SDK documentation URLs.
+    """
+    from engine.nexus.master_notebook_builder import SDK_URLS
+    lines = ["=== Master Notebook Source Manifest ===\n", "TEXT BUNDLES (code + docs):"]
+    text_bundles = [
+        "CosySim Hardware & System Specification",
+        "Engine Framework: Config, MCP, Scenes, Agents",
+        "Engine Nexus: Knowledge Management System",
+        "Engine LMStudio: LLM Inference Integration",
+        "Engine MCP Servers: DevTools, NLM Hybrid, Bridges",
+        "Engine Skills: @skill Decorator + All Builtin Packs",
+        "Engine Services: TTS, Integrations, Assistant",
+        "Scene Implementations: Top 8 Scenes",
+        "Config Files, Governance Rules & Copilot Instructions",
+        "Documentation: Architecture, Guides, Protocols",
+        "Frontend JavaScript: All Scene + Shared JS",
+        "Test Suite: Patterns and Conventions",
+        "Dependencies: requirements.txt, package.json, pyproject.toml",
+    ]
+    for i, b in enumerate(text_bundles, 1):
+        lines.append(f"  {i:2}. {b}")
+    lines.append(f"\nSDK / API DOCUMENTATION URLs ({len(SDK_URLS)} sources):")
+    for i, sdk in enumerate(SDK_URLS, 1):
+        lines.append(f"  {i:2}. {sdk['label']} → {sdk['url']}")
+    lines.append(f"\nTotal sources: {len(text_bundles) + len(SDK_URLS)}")
+    return "\n".join(lines)
+
+
     """Start the DevTools MCP server."""
     if mode == "http":
         logger.info("Starting CosySim DevTools MCP server in HTTP mode...")
