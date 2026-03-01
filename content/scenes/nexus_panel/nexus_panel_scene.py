@@ -2020,6 +2020,136 @@ class NexusPanelScene(BaseScene, NexusSceneMixin):
             except Exception as e:
                 return jsonify({"ready": False, "error": str(e)})
 
+        # ── Training Pipeline v0.64 ───────────────────────────────────────────
+
+        @app.route("/api/nexus/router-stats")
+        def api_nexus_router_stats():
+            """Alias for /api/nlm/router/stats — finetuned router + NLM savings."""
+            try:
+                from engine.nexus.nlm_router import get_nlm_router
+                stats = get_nlm_router().savings_report()
+                try:
+                    from engine.lmstudio.finetuned_router import get_finetuned_router
+                    fr = get_finetuned_router()
+                    stats["finetuned_active"] = fr.get_active_models()
+                except Exception:
+                    stats["finetuned_active"] = {}
+                return jsonify(stats)
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @app.route("/api/training/model-registry")
+        def api_finetune_registry():
+            """List all registered fine-tuned models."""
+            try:
+                from training.model_registry import get_model_registry
+                reg = get_model_registry()
+                return jsonify({"models": reg.list_models(), "summary": reg.summary()})
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @app.route("/api/training/leaderboard")
+        def api_finetune_leaderboard():
+            """Benchmark leaderboard — best score per model type."""
+            try:
+                from training.benchmark_runner import get_benchmark_runner
+                return jsonify(get_benchmark_runner().get_leaderboard())
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @app.route("/api/training/promote", methods=["POST"])
+        def api_finetune_promote():
+            """Promote a fine-tuned model to active."""
+            try:
+                data = request.get_json(force=True) or {}
+                model_type = data.get("model_type", "")
+                model_id = data.get("model_id", "")
+                if not model_type or not model_id:
+                    return jsonify({"error": "model_type and model_id required"}), 400
+                from training.model_registry import get_model_registry
+                reg = get_model_registry()
+                reg.promote(model_type, model_id)
+                return jsonify({"status": "promoted", "model_type": model_type, "model_id": model_id})
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @app.route("/api/training/jobs")
+        def api_finetune_jobs():
+            """List all fine-tune jobs."""
+            try:
+                from training.finetune_orchestrator import get_finetune_orchestrator
+                return jsonify({"jobs": get_finetune_orchestrator().list_jobs()})
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @app.route("/api/training/jobs/run-next", methods=["POST"])
+        def api_finetune_run_next():
+            """Run the next pending fine-tune job."""
+            try:
+                from training.finetune_orchestrator import get_finetune_orchestrator
+                job = get_finetune_orchestrator().run_next()
+                if job is None:
+                    return jsonify({"status": "empty", "message": "No pending jobs"})
+                return jsonify({"status": "started", "job_id": job.job_id, "model_type": job.model_type})
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @app.route("/api/training/submit-job", methods=["POST"])
+        def api_finetune_submit():
+            """Submit a new fine-tune job."""
+            try:
+                data = request.get_json(force=True) or {}
+                model_type = data.get("model_type", "qa_evaluator")
+                base_model = data.get("base_model", "qwen-270m")
+                from training.finetune_orchestrator import get_finetune_orchestrator
+                job = get_finetune_orchestrator().submit(model_type, base_model=base_model)
+                return jsonify({"status": "queued", "job_id": job.job_id, "model_type": job.model_type})
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @app.route("/api/training/build-dataset", methods=["POST"])
+        def api_finetune_build_dataset():
+            """Build/refresh dataset for a model type."""
+            try:
+                data = request.get_json(force=True) or {}
+                model_type = data.get("model_type", "qa_evaluator")
+                from training.micro_datasets import MicroDatasetManager
+                mgr = MicroDatasetManager()
+                result = mgr.build(model_type)
+                return jsonify(result)
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @app.route("/api/scheduler/trigger", methods=["POST"])
+        def api_scheduler_trigger():
+            """Manually trigger a scheduler task by ID."""
+            try:
+                data = request.get_json(force=True) or {}
+                task_id = data.get("task_id", "")
+                if not task_id:
+                    return jsonify({"error": "task_id required"}), 400
+                from engine.nexus.scheduler_daemon import get_scheduler_daemon
+                daemon = get_scheduler_daemon()
+                result = daemon.run_task(task_id)
+                return jsonify({"status": "triggered", "task_id": task_id, "result": result})
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @app.route("/api/scheduler/recent")
+        def api_scheduler_recent():
+            """Get recent scheduler task run history (tasks with last_run set)."""
+            try:
+                from engine.nexus.scheduler_daemon import get_scheduler_daemon
+                daemon = get_scheduler_daemon()
+                tasks = daemon.list_tasks()
+                # Return tasks that have run at least once, sorted by last_run desc
+                run_tasks = [t for t in tasks if t.get("last_run")]
+                run_tasks.sort(key=lambda t: t.get("last_run", ""), reverse=True)
+                limit = int(request.args.get("limit", 20))
+                return jsonify({"history": run_tasks[:limit]})
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
     def _generate_suggestions(
         self, question: str, answer: str, notebook_id: Optional[str] = None
     ) -> List[Dict[str, str]]:

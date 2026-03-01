@@ -1042,6 +1042,80 @@ class CommandCenterScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id
             except Exception as exc:
                 return jsonify({"error": str(exc)}), 500
 
+        # ── Training Pipeline v0.64 ───────────────────────────────────────────
+
+        @app.route("/api/nexus/router-stats")
+        def api_nexus_router_stats():
+            try:
+                from engine.nexus.nlm_router import get_nlm_router
+                stats = get_nlm_router().savings_report()
+                try:
+                    from engine.lmstudio.finetuned_router import get_finetuned_router
+                    stats["finetuned_active"] = get_finetuned_router().get_active_models()
+                except Exception:
+                    stats["finetuned_active"] = {}
+                return jsonify(stats)
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @app.route("/api/training/model-registry")
+        def api_cc_finetune_registry():
+            try:
+                from training.model_registry import get_model_registry
+                reg = get_model_registry()
+                return jsonify({"models": reg.list_models(), "summary": reg.summary()})
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @app.route("/api/training/leaderboard")
+        def api_cc_finetune_leaderboard():
+            try:
+                from training.benchmark_runner import get_benchmark_runner
+                return jsonify(get_benchmark_runner().get_leaderboard())
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @app.route("/api/training/jobs")
+        def api_cc_finetune_jobs():
+            try:
+                from training.finetune_orchestrator import get_finetune_orchestrator
+                return jsonify({"jobs": get_finetune_orchestrator().list_jobs()})
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @app.route("/api/training/jobs/run-next", methods=["POST"])
+        def api_cc_finetune_run_next():
+            try:
+                from training.finetune_orchestrator import get_finetune_orchestrator
+                job = get_finetune_orchestrator().run_next()
+                if job is None:
+                    return jsonify({"status": "empty", "message": "No pending jobs"})
+                return jsonify({"status": "started", "job_id": job.job_id, "model_type": job.model_type})
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @app.route("/api/training/model-registry/load", methods=["POST"])
+        def api_cc_registry_load():
+            try:
+                from engine.lmstudio.finetuned_router import get_finetuned_router
+                count = get_finetuned_router().load_from_registry()
+                return jsonify({"status": "loaded", "count": count})
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @app.route("/api/scheduler/trigger", methods=["POST"])
+        def api_cc_scheduler_trigger():
+            try:
+                data = request.get_json(force=True) or {}
+                task_id = data.get("task_id", "")
+                if not task_id:
+                    return jsonify({"error": "task_id required"}), 400
+                from engine.nexus.scheduler_daemon import get_scheduler_daemon
+                result = get_scheduler_daemon().run_task(task_id)
+                return jsonify({"status": "triggered", "task_id": task_id, "result": result})
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
     def _register_socketio(self):
         @self.socketio.on("connect")
         def on_connect():
