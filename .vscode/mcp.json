@@ -68,7 +68,8 @@
 				"HEADLESS": "true",
 				"STEALTH_ENABLED": "true",
 				"MAX_SESSIONS": "5",
-				"NOTEBOOKLM_NO_GEMINI": "false"
+				"NOTEBOOKLM_NO_GEMINI": "false",
+				"NLM_TIER": "pro"
 			},
 			"autoStart": true
 		}

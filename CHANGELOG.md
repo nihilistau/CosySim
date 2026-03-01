@@ -2,6 +2,31 @@
 
 All notable changes to CosySim are documented here.
 
+## v0.60.7 — NLM Studio Generation Tools, Quota Pro Fix, Auth Backup
+
+### NLM Studio Generation (`C:\Files\MCP\notebooklm-mcp`)
+- Live DOM discovery confirmed all 9 current Studio tiles (Audio Overview, Video Overview, Mind Map, Reports, Flashcards, Quiz, Infographic, Slide deck, Data table)
+- OLD tiles (Study Guide, FAQ, Briefing Doc) confirmed REMOVED from current NotebookLM
+- New `src/notebook-creation/studio-generator.ts` — `StudioGenerator` class for all text-based Studio tiles
+- New MCP tools: `generate_studio_artifact`, `get_studio_artifact`, `generate_and_get_studio_artifact`
+- Studio generation is **quota-free** (bypasses /chat RPC entirely)
+
+### Quota Pro Fix
+- `NLM_TIER=pro` env var added to `.vscode/mcp.json` — forces 500 queries/day
+- `config.ts` — new `nlmTier` field, applied in `applyEnvOverrides()`
+- `quota-manager.ts` — `loadSettings()` applies tier override; `updateFromUI()` skips auto-detection when `NLM_TIER` is set
+
+### Auth Backup System
+- New `backup-auth.ps1` — backs up `state.json.pqenc`, `quota.json`, `library.json`
+- Keeps 14 rolling daily backups under `Data/backups/YYYY-MM-DD/`
+- `-Check` flag for health check, `-Install` for weekly Windows Scheduled Task
+- Weekly `NLM-AuthBackup` task installed (Monday 6AM)
+
+### Nexus Knowledge Stored
+- Studio tile discovery (all 9 tiles with icon/jslog/aria-label) — entry `eba21dc68b6e480e`
+- Quota system internals + NLM_TIER override — entry `561f37c7bbbc4f2c`
+- Auth/cookie methods + subprocess deadlock pattern — entry `16ffff5f583b47aa`
+
 ## v0.60.6 — NLM Governance Gating, Devtools Tools, Auto-Doc Agent
 
 ### Governance Gating (`engine/skills/builtin/notebooklm_skills.py`)
