@@ -526,11 +526,11 @@ class TestIntegrationFlow:
 
     @patch("engine.nexus.scheduler_daemon.get_scheduler_daemon")
     def test_scheduler_registers_all_builtin_tasks(self, mock_get):
-        """Scheduler daemon registers 12 builtin tasks."""
+        """Scheduler daemon registers 13 builtin tasks."""
         from engine.nexus.scheduler_daemon import _register_builtin_tasks
         daemon = MagicMock()
         _register_builtin_tasks(daemon)
-        assert daemon.register.call_count == 12
+        assert daemon.register.call_count == 13
 
         task_ids = [call.args[0] for call in daemon.register.call_args_list]
         assert "nexus-maintenance" in task_ids
@@ -609,7 +609,7 @@ class TestIntegrationFlow:
         from engine.nexus.scheduler_daemon import get_scheduler_daemon
         daemon = get_scheduler_daemon()
         status = daemon.status()
-        assert status["task_count"] == 12
+        assert status["task_count"] == 13
 
     def test_scheduler_daemon_task_ids(self):
         """SchedulerDaemon has the expected task IDs."""

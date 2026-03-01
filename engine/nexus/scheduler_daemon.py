@@ -24,6 +24,8 @@ from typing import Any, Callable, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+
 # ──── Schedule Constants ────
 
 _SCHEDULE_PATTERNS = {
@@ -762,6 +764,45 @@ def _ha_news_push_callback() -> Dict[str, Any]:
     return {"pushed": pushed, "errors": errors, "checked": len(results)}
 
 
+def _doc_sync_callback() -> Dict[str, Any]:
+    """Detect recent git changes and trigger documentation updates via Nexus."""
+    import subprocess
+    try:
+        result = subprocess.run(
+            ["git", "--no-pager", "diff", "--name-only", "HEAD~1", "HEAD"],
+            capture_output=True, text=True, cwd=str(_REPO_ROOT), timeout=15,
+        )
+        changed = [f for f in result.stdout.strip().splitlines() if f]
+    except Exception as exc:
+        return {"error": f"git diff failed: {exc}"}
+
+    if not changed:
+        return {"skipped": True, "reason": "no changes since last commit"}
+
+    doc_paths = {"engine/mcp", "engine/skills", "engine/lmstudio", "engine/nexus",
+                 "engine/tts", "engine/agents", "content/scenes", "config"}
+    relevant = [f for f in changed if any(f.startswith(p) for p in doc_paths)]
+
+    if not relevant:
+        return {"skipped": True, "reason": "no doc-relevant changes"}
+
+    try:
+        from engine.nexus.client import get_nexus_client
+        client = get_nexus_client()
+        summary = f"Changed files requiring doc update:\n" + "\n".join(f"  - {f}" for f in relevant)
+        client.add_entry(
+            title="Doc Sync: Pending Updates",
+            content=summary,
+            content_type="note",
+            category="architecture",
+            tags=["doc-sync", "pending"],
+        )
+    except Exception as exc:
+        return {"error": f"Nexus store failed: {exc}"}
+
+    return {"files_changed": len(changed), "doc_relevant": len(relevant), "queued": True}
+
+
 def _register_builtin_tasks(daemon: TaskSchedulerDaemon) -> None:
     """Register all built-in autonomous tasks."""
     daemon.register(
@@ -835,6 +876,12 @@ def _register_builtin_tasks(daemon: TaskSchedulerDaemon) -> None:
         "Push News to Home Assistant",
         "every_8h",
         _ha_news_push_callback,
+    )
+    daemon.register(
+        "doc-sync",
+        "Auto Documentation Sync",
+        "daily",
+        _doc_sync_callback,
     )
 
 

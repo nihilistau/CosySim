@@ -200,6 +200,52 @@ class NLMCapture:
         return op_map
 
 
+async def _refresh_stored_cookies(ctx: Any) -> None:
+    """Extract live cookies from authenticated browser context and update nlm_cookies.json."""
+    try:
+        from engine.mcp.nlm_live_proxy import _COOKIES_FILE, _COOKIES_LOCK
+        import json as _json
+        playwright_cookies = await ctx.cookies("https://notebooklm.google.com")
+        cookie_dict = {c["name"]: c["value"] for c in playwright_cookies}
+        if cookie_dict:
+            with _COOKIES_LOCK:
+                _COOKIES_FILE.write_text(
+                    _json.dumps(cookie_dict, indent=2), encoding="utf-8"
+                )
+            logger.info("Refreshed %d NLM cookies to %s", len(cookie_dict), _COOKIES_FILE)
+    except Exception as exc:
+        logger.warning("Could not refresh cookies: %s", exc)
+
+
+async def _inject_cookies(ctx: Any) -> None:
+    """Inject stored NLM cookies into the Playwright browser context.
+
+    This ensures authentication works even when the Chrome profile's cookie
+    store isn't loaded (e.g., profile locked by running Chrome instance).
+    """
+    try:
+        from engine.mcp.nlm_live_proxy import _load_cookies
+        cookies = _load_cookies()
+        if not cookies:
+            logger.warning("No stored NLM cookies — browser may not be authenticated")
+            return
+        playwright_cookies = []
+        for name, value in cookies.items():
+            playwright_cookies.append({
+                "name": name,
+                "value": value,
+                "domain": ".google.com",
+                "path": "/",
+                "httpOnly": False,
+                "secure": True,
+                "sameSite": "None",
+            })
+        await ctx.add_cookies(playwright_cookies)
+        logger.info("Injected %d cookies into Playwright context", len(playwright_cookies))
+    except Exception as exc:
+        logger.warning("Could not inject cookies: %s", exc)
+
+
 async def _wait(page: Any, seconds: float, reason: str = "") -> None:
     """Polite wait with logging."""
     if reason:
@@ -262,26 +308,32 @@ async def run_automation(
         logger.info("Launching Chrome with user profile...")
         # Use real Chrome with user profile — already logged into Google
         try:
+            # user_data_dir must be the PARENT "User Data" dir, not the "Default" subfolder
             ctx = await p.chromium.launch_persistent_context(
-                user_data_dir=str(_CHROME_PROFILE / "Default"),
+                user_data_dir=str(_CHROME_PROFILE),
                 executable_path=_CHROME_PATH,
                 headless=headless,
                 args=[
                     "--no-first-run",
                     "--no-default-browser-check",
-                    "--disable-extensions-except=",
                     "--disable-blink-features=AutomationControlled",
                 ],
                 ignore_https_errors=True,
                 viewport={"width": 1280, "height": 900},
             )
+            _profile_loaded = True
         except Exception as e:
             logger.warning("Chrome profile launch failed (%s), falling back to Playwright Chromium", e)
+            _profile_loaded = False
             # Fallback: use Playwright's Chromium (won't have Google session)
             browser = await p.chromium.launch(headless=headless)
             ctx = await browser.new_context(viewport={"width": 1280, "height": 900})
 
         page = await ctx.new_page()
+
+        # Only inject stored cookies when the profile didn't load (fallback path)
+        if not _profile_loaded:
+            await _inject_cookies(ctx)
 
         # Wire up network capture — response body needs async handler
         page.on("request", capture.on_request)
@@ -299,6 +351,15 @@ async def run_automation(
             await page.goto(_NLM_URL, wait_until="networkidle")
             await _wait(page, _WAIT_AFTER_NAV, "homepage load")
             await _screenshot(page, "homepage")
+            # If redirected to login, try injecting cookies and retry once
+            if "accounts.google.com" in page.url:
+                logger.warning("Redirected to Google login — injecting stored cookies and retrying")
+                await _inject_cookies(ctx)
+                await page.goto(_NLM_URL, wait_until="networkidle")
+                await _wait(page, _WAIT_AFTER_NAV, "homepage reload")
+            if "accounts.google.com" not in page.url:
+                # Refresh stored cookies from live session
+                await _refresh_stored_cookies(ctx)
 
         # ── LIST NOTEBOOKS ─────────────────────────────────────────────────
         if _should_run("LIST_NOTEBOOKS"):

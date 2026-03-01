@@ -57,6 +57,20 @@
 		"gh-github_support_docs_search": {
 			"type": "http",
 			"url": "https://api.githubcopilot.com/mcp/x/github_support_docs_search"
+		},
+		"notebooklm": {
+			"type": "stdio",
+			"command": "node",
+			"args": [
+				"C:\\Files\\MCP\\notebooklm-mcp\\dist\\index.js"
+			],
+			"env": {
+				"HEADLESS": "true",
+				"STEALTH_ENABLED": "true",
+				"MAX_SESSIONS": "5",
+				"NOTEBOOKLM_NO_GEMINI": "false"
+			},
+			"autoStart": true
 		}
 	},
 	"inputs": [

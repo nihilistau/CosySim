@@ -1,16 +1,19 @@
 """
-notebooklm_skills.py — Google NotebookLM integration via CosySim NLM Live Proxy.
+notebooklm_skills.py — Google NotebookLM integration via CosySim NLM Live Proxy
+and Node MCP bridge (hybrid router).
 
-These skills communicate with the NLM Live Proxy (``engine/mcp/nlm_live_proxy.py``)
-at ``http://localhost:8800``.  The proxy makes direct batchexecute calls to
-NotebookLM using HAR-extracted Google auth cookies — no Node.js or browser
-automation required.
+Low-latency source ops route through the batchexecute proxy (:8800).
+Chat/Q&A, audio, video, and data extraction route through the Node MCP bridge
+(Patchright browser automation) which is always reliable.
 
-The proxy URL defaults to ``http://localhost:8800`` and can be overridden via
-the ``notebooklm.proxy_url`` configuration key.
+Governance gates:
+  read  — any agent (sub-1B: allowed)
+  write — 1B+ models and copilot
+  admin — copilot only (setup_auth)
 """
 from __future__ import annotations
 
+from engine.nexus.governance_rules import governed
 from engine.skills.skill import skill
 
 
@@ -55,6 +58,7 @@ def _get(endpoint: str) -> str:
     ),
     tags=["notebooklm", "research", "qa"],
 )
+@governed(operation="read")
 def notebooklm_ask(question: str, notebook_id: str = "") -> str:
     """Send a question to a NotebookLM notebook and return the answer.
 
@@ -89,6 +93,7 @@ def notebooklm_ask(question: str, notebook_id: str = "") -> str:
     ),
     tags=["notebooklm", "sources", "ingest"],
 )
+@governed(operation="write")
 def notebooklm_add_source(
     notebook_id: str,
     source_type: str = "url",
@@ -128,6 +133,7 @@ def notebooklm_add_source(
     ),
     tags=["notebooklm", "audio", "podcast"],
 )
+@governed(operation="write")
 def notebooklm_generate_audio(
     notebook_id: str,
     customization: str = "",
@@ -165,6 +171,7 @@ def notebooklm_generate_audio(
     ),
     tags=["notebooklm", "list", "notebooks"],
 )
+@governed(operation="read")
 def notebooklm_list_notebooks() -> str:
     """List every notebook visible to the authenticated user.
 
@@ -191,6 +198,7 @@ def notebooklm_list_notebooks() -> str:
     ),
     tags=["notebooklm", "search", "research"],
 )
+@governed(operation="read")
 def notebooklm_search(query: str) -> str:
     """Search across notebooks for content matching a keyword query.
 
@@ -211,4 +219,224 @@ def notebooklm_search(query: str) -> str:
         return body
     except Exception as exc:
         import json
+        return json.dumps({"error": str(exc)})
+
+
+# ──── Node MCP Bridge Skills (browser-based, auth-stable) ─────────────────────
+
+def _hybrid():
+    """Lazy-load the NLM hybrid router singleton."""
+    from engine.mcp.nlm_hybrid import get_nlm_hybrid
+    return get_nlm_hybrid()
+
+
+@skill(
+    pack="notebooklm",
+    description=(
+        "Ask a question against a NotebookLM notebook using the Node MCP bridge "
+        "(browser-based). More reliable than the proxy — handles auth automatically. "
+        "Returns JSON with answer, sources, and session_id. Pass session_id from a "
+        "prior response to continue a multi-turn conversation."
+    ),
+    tags=["notebooklm", "research", "qa", "node-bridge"],
+)
+@governed(operation="read")
+def notebooklm_ask_node(
+    notebook_id: str,
+    question: str,
+    session_id: str = "",
+    reset_history: bool = False,
+) -> str:
+    """Ask a question via the Node MCP bridge (Patchright browser automation).
+
+    This is the preferred method for Q&A — the batchexecute RPC is unreliable
+    but the Node bridge types into the real NotebookLM UI and always works.
+
+    Args:
+        notebook_id:   NLM notebook UUID.
+        question:      Question to ask.
+        session_id:    Optional prior session ID for conversation continuity.
+        reset_history: If True, start a fresh session ignoring session_id.
+
+    Returns:
+        JSON string with ``answer``, ``sources``, ``session_id``.
+    """
+    import json
+    try:
+        result = _hybrid().ask(
+            notebook_id, question,
+            session_id=session_id or None,
+            reset_history=reset_history,
+        )
+        return json.dumps(result)
+    except Exception as exc:
+        return json.dumps({"error": str(exc)})
+
+
+@skill(
+    pack="notebooklm",
+    description=(
+        "Ask multiple questions against a NotebookLM notebook in one batch. "
+        "Uses session continuity so later questions benefit from earlier answers. "
+        "Returns JSON array of {answer, sources, session_id} objects."
+    ),
+    tags=["notebooklm", "research", "batch", "node-bridge"],
+    cooldown=5.0,
+)
+@governed(operation="read")
+def notebooklm_batch_ask(notebook_id: str, questions: str) -> str:
+    """Batch ask multiple questions via Node bridge with session continuity.
+
+    Args:
+        notebook_id: NLM notebook UUID.
+        questions:   JSON array of question strings, e.g. '["Q1?", "Q2?"]'.
+
+    Returns:
+        JSON array of result dicts, one per question.
+    """
+    import json
+    try:
+        q_list = json.loads(questions) if isinstance(questions, str) else questions
+        if not isinstance(q_list, list):
+            return json.dumps({"error": "questions must be a JSON array"})
+        results = _hybrid().ask_batch(notebook_id, q_list)
+        return json.dumps(results)
+    except Exception as exc:
+        return json.dumps({"error": str(exc)})
+
+
+@skill(
+    pack="notebooklm",
+    description=(
+        "Generate an audio overview (podcast-style) of a NotebookLM notebook "
+        "via the Node MCP bridge. Returns JSON with status and generation progress."
+    ),
+    tags=["notebooklm", "audio", "podcast", "node-bridge"],
+    cooldown=10.0,
+)
+@governed(operation="write")
+def notebooklm_generate_audio_node(notebook_id: str, style: str = "standard") -> str:
+    """Trigger audio overview generation via Node bridge.
+
+    Args:
+        notebook_id: NLM notebook UUID or library ID.
+        style:       Audio style (standard, deep_dive). NLM controls the actual style.
+
+    Returns:
+        JSON string with ``status``, ``progress``.
+    """
+    import json
+    try:
+        result = _hybrid().generate_audio(notebook_id, style)
+        return json.dumps(result)
+    except Exception as exc:
+        return json.dumps({"error": str(exc)})
+
+
+@skill(
+    pack="notebooklm",
+    description=(
+        "Generate a video overview of a NotebookLM notebook. "
+        "Supports 10 visual styles: cinematic, documentary, minimalist, etc. "
+        "Returns JSON with video_id and status."
+    ),
+    tags=["notebooklm", "video", "overview", "node-bridge"],
+    cooldown=10.0,
+)
+@governed(operation="write")
+def notebooklm_generate_video(notebook_id: str, style: str = "cinematic") -> str:
+    """Trigger video overview generation via Node bridge.
+
+    Args:
+        notebook_id: NLM notebook UUID or library ID.
+        style:       Video style ("cinematic", "documentary", "minimalist",
+                     "energetic", "calm", "data_viz", etc.).
+
+    Returns:
+        JSON string with ``video_id``, ``status``, ``style``.
+    """
+    import json
+    try:
+        result = _hybrid().generate_video(notebook_id, style)
+        return json.dumps(result)
+    except Exception as exc:
+        return json.dumps({"error": str(exc)})
+
+
+@skill(
+    pack="notebooklm",
+    description=(
+        "Extract structured data tables from a NotebookLM notebook's sources. "
+        "Returns JSON with a tables array, each table having headers and rows."
+    ),
+    tags=["notebooklm", "data", "tables", "extraction", "node-bridge"],
+)
+@governed(operation="read")
+def notebooklm_extract_tables(notebook_id: str, query: str = "") -> str:
+    """Extract data tables from notebook sources via Node bridge.
+
+    Args:
+        notebook_id: NLM notebook UUID or library ID.
+        query:       Optional filter to focus on specific data topics.
+
+    Returns:
+        JSON string with ``tables`` list.
+    """
+    import json
+    try:
+        result = _hybrid().extract_tables(notebook_id, query)
+        return json.dumps(result)
+    except Exception as exc:
+        return json.dumps({"error": str(exc)})
+
+
+@skill(
+    pack="notebooklm",
+    description=(
+        "Get combined health status of both NLM backends: "
+        "Node MCP bridge (Patchright) and batchexecute proxy. "
+        "Returns JSON with auth state, available tools, and proxy reachability."
+    ),
+    tags=["notebooklm", "health", "status", "node-bridge"],
+)
+@governed(operation="read")
+def notebooklm_hybrid_health() -> str:
+    """Return combined health status of Node bridge + batchexecute proxy.
+
+    Returns:
+        JSON string with ``node_bridge``, ``batchexecute_proxy``,
+        ``chrome_profile_exists``, ``node_tools_available``.
+    """
+    import json
+    try:
+        result = _hybrid().health()
+        return json.dumps(result)
+    except Exception as exc:
+        return json.dumps({"error": str(exc)})
+
+
+@skill(
+    pack="notebooklm",
+    description=(
+        "Run first-time Google auth setup for the Node MCP bridge. "
+        "Opens Chrome visibly — user must log in to Google once. "
+        "After login, all subsequent calls work in headless mode automatically."
+    ),
+    tags=["notebooklm", "auth", "setup", "node-bridge"],
+)
+@governed(operation="admin")
+def notebooklm_setup_auth() -> str:
+    """Open Chrome for interactive Google login (first-time auth setup).
+
+    Run this once after initial installation. The Chrome profile is saved
+    permanently so you never need to do this again.
+
+    Returns:
+        JSON string with ``status`` and auth result.
+    """
+    import json
+    try:
+        result = _hybrid().setup_auth()
+        return json.dumps(result)
+    except Exception as exc:
         return json.dumps({"error": str(exc)})

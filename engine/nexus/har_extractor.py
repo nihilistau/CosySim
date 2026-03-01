@@ -244,10 +244,19 @@ def _extract_sources(data: Any) -> tuple[str, List[Dict[str, Any]]]:
 # ──── Cookie Extraction ────
 
 _NLM_COOKIE_NAMES = {
+    # Core session
     "SID", "HSID", "SSID", "APISID", "SAPISID",
     "__Secure-1PSID", "__Secure-3PSID",
     "__Secure-1PAPISID", "__Secure-3PAPISID",
-    "NID", "CONSENT",
+    # One-tap / signed-in session
+    "OSID", "__Secure-OSID", "__Secure-BUCKET",
+    # Session timestamp (required for validation)
+    "__Secure-1PSIDTS", "__Secure-1PSIDRTS",
+    "__Secure-3PSIDTS", "__Secure-3PSIDRTS",
+    # Session code
+    "SIDCC", "__Secure-1PSIDCC", "__Secure-3PSIDCC",
+    # Misc auth
+    "NID", "LSID", "AEC", "CONSENT", "SEARCH_SAMESITE",
 }
 
 
@@ -592,3 +601,61 @@ class HARExtractor:
             nb_tag, result.entries_created, len(result.errors),
         )
         return result
+
+
+# ──── CLI Entry Point ────
+
+def _cmd_refresh_cookies(har_path: str) -> None:
+    """Extract cookies from a HAR file and save to data/nlm_cookies.json."""
+    import requests as _requests
+    extractor = HARExtractor()
+    cookies = extractor.extract_cookies(har_path)
+    if not cookies:
+        print(f"ERROR: No auth cookies found in {har_path}")
+        raise SystemExit(1)
+
+    cookies_file = Path(__file__).resolve().parents[2] / "data" / "nlm_cookies.json"
+    cookies_file.parent.mkdir(parents=True, exist_ok=True)
+    cookies_file.write_text(json.dumps(cookies, indent=2), encoding="utf-8")
+    print(f"Saved {len(cookies)} cookies to {cookies_file}")
+
+    # Verify cookies work
+    try:
+        resp = _requests.get(
+            "https://notebooklm.google.com/",
+            cookies=cookies,
+            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
+            allow_redirects=False,
+            timeout=10,
+        )
+        if resp.status_code == 302:
+            print("WARNING: Cookies may be expired (302 redirect to login)")
+        else:
+            print(f"OK: Cookies verified (HTTP {resp.status_code})")
+    except Exception as exc:
+        print(f"Could not verify: {exc}")
+
+
+if __name__ == "__main__":
+    import sys
+    if len(sys.argv) < 2:
+        print("Usage:")
+        print("  python -m engine.nexus.har_extractor refresh-cookies <file.har>")
+        print("  python -m engine.nexus.har_extractor preview <file.har>")
+        sys.exit(1)
+
+    cmd = sys.argv[1]
+    if cmd == "refresh-cookies":
+        if len(sys.argv) < 3:
+            print("Usage: python -m engine.nexus.har_extractor refresh-cookies <file.har>")
+            sys.exit(1)
+        _cmd_refresh_cookies(sys.argv[2])
+    elif cmd == "preview":
+        if len(sys.argv) < 3:
+            print("Usage: python -m engine.nexus.har_extractor preview <file.har>")
+            sys.exit(1)
+        result = HARExtractor().preview(sys.argv[2])
+        print(json.dumps(result, indent=2))
+    else:
+        print(f"Unknown command: {cmd}")
+        sys.exit(1)

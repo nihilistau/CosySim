@@ -2,7 +2,61 @@
 
 All notable changes to CosySim are documented here.
 
-## v0.60.3 — NLM Proxy v3.0: Complete Write API + Rate Limiting
+## v0.60.5 — NLM Node MCP Integration + Hybrid Router
+
+### Node MCP Server (C:\Files\MCP\notebooklm-mcp\)
+- Cloned and built `@pan-sec/notebooklm-mcp` v2026.2.9 (47 tools)
+- Registered in `.vscode/mcp.json` — Copilot gets all 47 NLM tools directly
+- Uses Patchright (undetectable Playwright) + persistent Chrome profile auth
+- First-time setup: run `notebooklm_setup_auth` skill once, then headless forever
+
+### Python Bridge (`engine/mcp/nlm_node_bridge.py`)
+- Full JSON-RPC 2.0 stdio bridge to the Node MCP process
+- Singleton `get_nlm_node_bridge()`, thread-safe with background reader thread
+- `ask_question(notebook_id, question, session_id)` — session continuity via `session_id`
+- `ask_batch(notebook_id, questions, keep_session=True)` — Q&A chain with session reuse
+- `create_notebook(name, sources)`, `add_notebook(url, name, ...)`, `select_notebook(id)`
+- `add_source(nb_id, url|text)` — uses `{type, value}` source schema
+- `generate_audio_overview(nb_id)`, `get_audio_status(nb_id)`
+- `generate_video_overview(nb_id, style)` — 10 visual styles
+- `extract_data_tables(nb_id, query)`, `get_chat_history(nb_id, limit)`
+- Parameter corrections from Node tool definitions (e.g. `id` not `notebook_id` for select_notebook)
+
+### Hybrid Router (`engine/mcp/nlm_hybrid.py`)
+- Routes ops to correct backend automatically:
+  - **Chat/Q&A** → Node bridge (browser-based, 400-error-free)
+  - **Audio/Video/Data tables** → Node bridge (only available there)
+  - **Source add / rename** → batchexecute proxy (fast HTTP, with Node fallback)
+- Singleton `get_nlm_hybrid()`, lazy-imports Node bridge on first use
+- `ask(notebook_id, question, session_id, reset_history)` — multi-turn capable
+- `ask_batch(notebook_id, questions)` — delegates to `node.ask_batch`
+
+### Chrome Auth Extractor (`engine/mcp/nlm_chrome_auth.py`)
+- Reads Chrome Cookies SQLite DB from Node server's profile
+- Windows DPAPI decryption for legacy cookies + AES-256-GCM for Chrome v80+
+- `get_cookies_from_chrome_profile()` → dict of auth cookie name → value
+- `update_proxy_cookies_from_chrome()` → writes to proxy cookie file (no more HAR!)
+
+### NLM Live Proxy Fix (`engine/mcp/nlm_live_proxy.py`)
+- `/chat` endpoint now delegates to `get_nlm_hybrid().ask()` instead of broken `_grpc_ask`
+- `/chat_batch` endpoint delegates to `get_nlm_hybrid().ask_batch()`
+- Eliminates HTTP 400 errors — all Q&A now goes through browser automation
+
+### New Skills (`engine/skills/builtin/notebooklm_skills.py`)
+- `notebooklm_ask_node` — Q&A via Node bridge with session_id continuity
+- `notebooklm_batch_ask` — batch Q&A with session threading
+- `notebooklm_generate_audio_node` — trigger audio overview
+- `notebooklm_generate_video` — trigger video overview (10 styles)
+- `notebooklm_extract_tables` — extract structured data tables
+- `notebooklm_hybrid_health` — combined health check (Node + proxy)
+- `notebooklm_setup_auth` — one-time Chrome login setup
+
+### Tests
+- `tests/test_nlm_node_bridge.py` — 23 tests covering all bridge methods
+- `tests/test_nlm_hybrid.py` — 18 tests covering routing logic and fallbacks
+- 41 new tests total, all passing
+
+
 
 ### NLM Live Proxy v3.0 (engine/mcp/nlm_live_proxy.py)
 - **21 confirmed RPCs** — upgraded from 18 via 8-HAR cross-session analysis

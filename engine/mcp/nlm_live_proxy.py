@@ -437,7 +437,7 @@ RPC_ADD_SOURCE = "izAoDd"
 # The source object shape differs by content type (see add_source_url docstring):
 #   Regular URL: source_obj[2] = url
 #   YouTube URL: source_obj[7] = [url]   (list, at position 7, not 2)
-# Payload: [[[source_obj]], notebook_id, [2], _SOURCE_CONFIG]
+# Payload: [[source_obj], notebook_id, [2], _SOURCE_CONFIG]
 # Response: new source metadata including UUID.  Status is "processing" initially.
 
 RPC_START_DEEP_RESEARCH = "QA9ei"
@@ -639,9 +639,11 @@ def refresh_session_tokens() -> bool:
         logger.debug("Extracted at from WIZ_global_data.SNlM0e")
 
     # bl — try WIZ_global_data keys, then fall back to boq_ string scan
+    # Only accept values that look like real build labels (boq_ prefix)
     for key in ("QrtxK", "cfb2h"):
-        if wiz.get(key):
-            new_bl = str(wiz[key])
+        val = wiz.get(key)
+        if val and isinstance(val, str) and val.startswith("boq_"):
+            new_bl = val
             if new_bl != meta.get("bl"):
                 meta["bl"] = new_bl
                 updated = True
@@ -1401,12 +1403,14 @@ def add_text_source(
         Dict with source_id on success, or error dict on failure.
     """
     # Build the source object: pos[1]=[title,content], pos[3]=3 (text format)
-    # Confirmed payload structure from HAR:
-    # [[[null, ["title", "content"], null, 3, null,null,null,null,null,null, 1]],
+    # Confirmed payload structure from HAR (notebooklm_manual_testing.har, 2026-02-28):
+    # [[null, ["title", "content"], null, 3, null,null,null,null,null,null, 1]],
     #   notebook_id, [2], [1,null,null,null,null,null,null,null,null,null,[1]]]
+    # Note: source_obj is wrapped in ONE list [source_obj], not [[source_obj]].
+    # Double-wrapping causes INVALID_ARGUMENT ([3] in wrb.fr pos[5]).
     source_obj = [None, [title, content], None, 3, None, None, None, None, None, None, 1]
     args = json.dumps([
-        [[source_obj]],
+        [source_obj],
         notebook_id,
         [2],
         [1, None, None, None, None, None, None, None, None, None, [1]],
@@ -2664,6 +2668,9 @@ class NLMClient:
             existing_meta["bl"] = new_meta["bl"]
         if new_meta.get("f_sid"):
             existing_meta["f_sid"] = new_meta["f_sid"]
+        if new_meta.get("at"):
+            existing_meta["at"] = new_meta["at"]
+            logger.info("import_cookies_from_har: updated at token from HAR")
         _save_meta(existing_meta)
         return {"imported": len(new_cookies), "total": len(merged), **existing_meta}
 
@@ -3545,77 +3552,57 @@ def create_nlm_proxy_app() -> Flask:
 
     @app.route("/notebooks/<notebook_id>/chat", methods=["POST"])
     def chat_single(notebook_id: str):
-        """Send a chat message via GenerateFreeFormStreamed (real NLM chat).
+        """Send a chat message — delegates to NLM Node bridge (browser-based).
 
-        This uses the confirmed GenerateFreeFormStreamed gRPC endpoint — NLM's
-        actual conversational Gemini interface. Supports multi-turn conversation
-        via thread_id. Source IDs are auto-fetched if not provided.
+        The batchexecute GenerateFreeFormStreamed RPC returns 400 (payload
+        undecoded). The Node bridge uses real browser automation — always works.
 
         Body (JSON):
           {
             "question": "What is the main argument?",
-            "thread_id": null,
-            "source_ids": ["uuid1", "uuid2"]
+            "reset_history": false
           }
         Returns: {answer, thread_id, message_id, question, sources}
         """
-        cookies = _cookies()
-        if not cookies:
-            return _no_cookies()
+        if not _COOKIES_FILE.exists():
+            return jsonify({"error": "not authenticated — run setup_auth first"}), 401
         body = request.json or {}
         question = body.get("question", "").strip()
         if not question:
             return jsonify({"error": "missing question"}), 400
-        thread_id = body.get("thread_id") or None
-        source_ids = body.get("source_ids") or None
-        if source_ids is None:
-            _, data = _batchexecute(
-                RPC_LIST_SOURCES,
-                json.dumps([None, 1, None, [2]]),
-                cookies,
-                notebook_id,
-            )
-            _, srcs = _extract_sources(data) if data and not isinstance(data, dict) else (None, [])
-            source_ids = [s["id"] for s in srcs if s.get("id")]
-        result = _grpc_ask(notebook_id, question, source_ids, cookies, thread_id)
+        reset_history = bool(body.get("reset_history", False))
+        try:
+            from engine.mcp.nlm_hybrid import get_nlm_hybrid
+            result = get_nlm_hybrid().ask(notebook_id, question, reset_history=reset_history)
+        except Exception as exc:
+            logger.error("chat_single hybrid error: %s", exc)
+            result = {"error": str(exc)}
         if result.get("error"):
             return jsonify(result), 502
         return jsonify(result)
 
     @app.route("/notebooks/<notebook_id>/chat_batch", methods=["POST"])
     def chat_batch_route(notebook_id: str):
-        """Send multiple chat messages via GenerateFreeFormStreamed.
-
-        Source IDs are auto-fetched if not provided. Pass thread_id to link
-        all questions in a single conversation thread.
+        """Send multiple chat messages — delegates to NLM Node bridge.
 
         Body (JSON):
           {
-            "questions": ["Q1?", "Q2?", ...],
-            "thread_id": null,
-            "source_ids": ["uuid1", "uuid2"]
+            "questions": ["Q1?", "Q2?", ...]
           }
-        Returns: {results: [{answer, thread_id, ...}], count}
+        Returns: {results: [{answer, ...}], count, questions}
         """
-        cookies = _cookies()
-        if not cookies:
-            return _no_cookies()
+        if not _COOKIES_FILE.exists():
+            return jsonify({"error": "not authenticated — run setup_auth first"}), 401
         body = request.json or {}
         questions = body.get("questions", [])
         if not questions:
             return jsonify({"error": "missing questions array"}), 400
-        thread_id = body.get("thread_id") or None
-        source_ids = body.get("source_ids") or None
-        if source_ids is None:
-            _, data = _batchexecute(
-                RPC_LIST_SOURCES,
-                json.dumps([None, 1, None, [2]]),
-                cookies,
-                notebook_id,
-            )
-            _, srcs = _extract_sources(data) if data and not isinstance(data, dict) else (None, [])
-            source_ids = [s["id"] for s in srcs if s.get("id")]
-        results = grpc_ask_batch(notebook_id, questions, source_ids, cookies, thread_id)
+        try:
+            from engine.mcp.nlm_hybrid import get_nlm_hybrid
+            results = get_nlm_hybrid().ask_batch(notebook_id, questions)
+        except Exception as exc:
+            logger.error("chat_batch_route hybrid error: %s", exc)
+            results = [{"error": str(exc)}] * len(questions)
         return jsonify({
             "results": results,
             "count": len(results),
@@ -3729,6 +3716,8 @@ def create_nlm_proxy_app() -> Flask:
             meta["bl"] = body["bl"]
         if "f_sid" in body:
             meta["f_sid"] = body["f_sid"]
+        if "at" in body and body["at"]:
+            meta["at"] = body["at"]
         _save_meta(meta)
         return jsonify({"updated": True, **meta})
 

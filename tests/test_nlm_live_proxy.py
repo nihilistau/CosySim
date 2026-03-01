@@ -674,7 +674,7 @@ class TestV21Routes:
         assert resp.status_code == 401
 
     def test_chat_returns_answer_on_success(self, client_v21) -> None:
-        """POST /notebooks/<id>/chat with mocked _grpc_ask returns answer."""
+        """POST /notebooks/<id>/chat with mocked hybrid router returns answer."""
         mock_result = {
             "answer": "The main theme is persistence.",
             "thread_id": "thread-abc",
@@ -682,9 +682,9 @@ class TestV21Routes:
             "question": "What is the main theme?",
             "sources": [],
         }
-        with patch("engine.mcp.nlm_live_proxy._grpc_ask", return_value=mock_result), \
-             patch("engine.mcp.nlm_live_proxy._batchexecute",
-                   return_value=("wXbhsf", [[[["src-1", None, [None, None, None, None, None, None, None], None]]]])):
+        mock_hybrid = MagicMock()
+        mock_hybrid.ask.return_value = mock_result
+        with patch("engine.mcp.nlm_hybrid.get_nlm_hybrid", return_value=mock_hybrid):
             resp = client_v21.post(
                 "/notebooks/nb-xyz/chat",
                 json={"question": "What is the main theme?"},
