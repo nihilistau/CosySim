@@ -320,6 +320,13 @@ def launch_multi(service_names: List[str], scene_names: List[str]) -> None:
     except Exception as exc:
         print(f"  ⚠️  WorldSim start failed: {exc}")
 
+    try:
+        from engine.events.cross_scene_relay import get_cross_scene_relay
+        get_cross_scene_relay().start()
+        print("  🔗 Cross-scene relay active")
+    except Exception as exc:
+        print(f"  ⚠️  Cross-scene relay: {exc}")
+
     time.sleep(5)
     print("\n  Health check:")
     for name in service_names + scene_names:

@@ -127,6 +127,52 @@ _BEAT_COOLDOWN_SECONDS: float = 60.0
 # Turn counts that trigger REVELATION beats
 _MILESTONE_TURNS = {10, 25, 50, 100, 200}
 
+# ---------------------------------------------------------------------------
+# Per-scene beat configuration
+# ---------------------------------------------------------------------------
+
+#: Per-scene overrides for beat selection.  Each entry may contain:
+#:   ``preferred_beats``      – ordered list of :class:`BeatType` biases
+#:   ``avoid_beats``          – beat types that should never be auto-selected
+#:   ``escalation_threshold`` – arousal level at which ESCALATION fires (default 80)
+SCENE_BEAT_CONFIGS: Dict[str, Dict] = {
+    "bedroom": {
+        "preferred_beats": [BeatType.ESCALATION, BeatType.COOL_DOWN, BeatType.REWARD],
+        "avoid_beats": [BeatType.WORLD_EVENT],
+        "escalation_threshold": 70,
+    },
+    "arena": {
+        "preferred_beats": [BeatType.WORLD_EVENT, BeatType.CHARACTER_ACTION, BeatType.ESCALATION],
+        "avoid_beats": [],
+        "escalation_threshold": 85,
+    },
+    "casino": {
+        "preferred_beats": [BeatType.REWARD, BeatType.COMPLICATION, BeatType.CHARACTER_ACTION],
+        "avoid_beats": [],
+        "escalation_threshold": 90,
+    },
+    "lounge": {
+        "preferred_beats": [BeatType.STORY_BEAT, BeatType.REVELATION, BeatType.CHARACTER_ACTION],
+        "avoid_beats": [],
+        "escalation_threshold": 90,
+    },
+    "neoncity": {
+        "preferred_beats": [BeatType.WORLD_EVENT, BeatType.COMPLICATION, BeatType.STORY_BEAT],
+        "avoid_beats": [],
+        "escalation_threshold": 90,
+    },
+    "heist": {
+        "preferred_beats": [BeatType.COMPLICATION, BeatType.CHARACTER_ACTION, BeatType.ESCALATION],
+        "avoid_beats": [],
+        "escalation_threshold": 80,
+    },
+    "tavern": {
+        "preferred_beats": [BeatType.STORY_BEAT, BeatType.CHARACTER_ACTION, BeatType.REVELATION],
+        "avoid_beats": [],
+        "escalation_threshold": 85,
+    },
+}
+
 
 # ---------------------------------------------------------------------------
 # DirectorBeat
@@ -356,13 +402,18 @@ class SceneDirector:
         last_beat_type_raw: Optional[str] = scene_state.get("last_beat_type")
         arousal: float = emotion_levels.get("arousal", 0.0)
 
+        # Per-scene config (avoid_beats, escalation_threshold)
+        scene_cfg = SCENE_BEAT_CONFIGS.get(scene, {})
+        avoid_beats = set(scene_cfg.get("avoid_beats", []))
+        escalation_threshold: float = scene_cfg.get("escalation_threshold", 80.0)
+
         # 1. Milestone revelation
         if turn_count in _MILESTONE_TURNS:
             logger.debug("Scene %r hit milestone turn %d → REVELATION.", scene, turn_count)
             return BeatType.REVELATION
 
-        # 2. High arousal → escalation
-        if arousal > 80:
+        # 2. High arousal → escalation (per-scene threshold)
+        if arousal > escalation_threshold and BeatType.ESCALATION not in avoid_beats:
             logger.debug("Scene %r arousal=%.1f → ESCALATION.", scene, arousal)
             return BeatType.ESCALATION
 
@@ -372,7 +423,7 @@ class SceneDirector:
             return BeatType.COOL_DOWN
 
         # 4. Economy opportunity
-        if credits < 100:
+        if credits < 100 and BeatType.REWARD not in avoid_beats:
             logger.debug("Scene %r credits=%.1f → REWARD.", scene, credits)
             return BeatType.REWARD
 
@@ -393,9 +444,12 @@ class SceneDirector:
                 if last_auto == BeatType.STORY_BEAT
                 else BeatType.STORY_BEAT
             )
-            logger.debug(
-                "Scene %r idle %.1fs → %s.", scene, idle_seconds, chosen.value
-            )
+            if chosen in avoid_beats:
+                chosen = BeatType.WORLD_EVENT if BeatType.WORLD_EVENT not in avoid_beats else None
+            if chosen is not None:
+                logger.debug(
+                    "Scene %r idle %.1fs → %s.", scene, idle_seconds, chosen.value
+                )
             return chosen
 
         return None

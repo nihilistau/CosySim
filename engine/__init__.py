@@ -69,6 +69,7 @@ from engine.content.content_gate import ContentIntensityInterceptor, get_content
 from engine.mechanics.consequences import ConsequenceStore, get_consequence_store  # noqa: F401
 from engine.mechanics.investigation import InvestigationBoard, get_investigation_board  # noqa: F401
 from engine.events.event_bus import EventBus, get_event_bus  # noqa: F401
+from engine.events.cross_scene_relay import CrossSceneRelay, get_cross_scene_relay  # noqa: F401
 from engine.arena.arena_engine import ArenaEngine, get_arena_engine  # noqa: F401
 
 __all__ = [
@@ -92,5 +93,6 @@ __all__ = [
     "ConsequenceStore", "get_consequence_store",
     "InvestigationBoard", "get_investigation_board",
     "EventBus", "get_event_bus",
+    "CrossSceneRelay", "get_cross_scene_relay",
     "ArenaEngine", "get_arena_engine",
 ]

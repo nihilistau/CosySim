@@ -77,6 +77,7 @@ class LoungeScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
     SCENE_METADATA = {
         "name":         "lounge",
         "display_name": "THE VELVET PIT",
+        "title":        "The Lounge",
         "port":         5557,
         "type":         "social",
         "accent_color": "#f59e0b",
@@ -85,10 +86,11 @@ class LoungeScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
         "version":      "0.68",
         "codename":     "Dark Renaissance",
         "genre":        "social",
-        "max_characters": 8,
+        "max_characters": 5,
         "features": [
             "heat_system", "trust_economy", "seating_map", "world_time",
             "smoke_particles", "mcp_framework", "multi_agent",
+            "music_system", "conversation_heat",
         ],
     }
 
@@ -103,11 +105,11 @@ class LoungeScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
         )
         register_shared_assets(self.app)
         self.register_health_route(self.app)
-        self.register_bench_route(self.app, self.socketio)
         self.register_tts_route(self.app)
         self.app.config["SECRET_KEY"] = "velvet_lounge_secret_1920s"
         CORS(self.app)
         self.socketio = SocketIO(self.app, cors_allowed_origins="*", manage_session=False)
+        self.register_bench_route(self.app, self.socketio)
 
         # Mount control overlay
         from engine.overlay import mount_overlay
@@ -1393,7 +1395,7 @@ class LoungeScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
     def get_plugin_info(self) -> dict:
         """Return metadata consumed by the admin panel and launcher."""
         return {
-            "name":        "THE VELVET PIT",
+            "name":        "The Velvet Lounge",
             "description": "Below the streets. Above the law. The heat never leaves.",
             "version":     "0.68",
             "codename":    "Dark Renaissance",
