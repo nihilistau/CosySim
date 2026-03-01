@@ -1057,6 +1057,18 @@ def _register_builtin_tasks(daemon: "SchedulerDaemon") -> None:
         "daily",
         _conversation_analyze_callback,
     )
+    daemon.register(
+        "router-finetune-cycle",
+        "Router v2 Full Finetune Cycle (dataset → train → benchmark → promote)",
+        "weekly",
+        _router_finetune_cycle_callback,
+    )
+    daemon.register(
+        "dataset-augment",
+        "Dataset Augmentation — Re-augment all micro-model datasets with new session data",
+        "weekly",
+        _dataset_augment_callback,
+    )
 
 
 def _qa_history_mine_callback() -> Dict[str, Any]:
@@ -1316,6 +1328,75 @@ def _conversation_analyze_callback() -> Dict[str, Any]:
     except Exception as exc:
         logger.error("Conversation analyze callback failed: %s", exc)
         return {"error": str(exc)}
+
+
+def _router_finetune_cycle_callback() -> Dict[str, Any]:
+    """Weekly: end-to-end router_v2 finetune cycle.
+
+    Runs the complete pipeline:
+      1. Generate / augment router_v2 dataset (target 500 examples).
+      2. Submit a finetune job if dataset threshold is met and no job is pending.
+      3. Benchmark the latest trained router_v2 model.
+      4. Auto-promote if accuracy improves over baseline.
+    """
+    results: Dict[str, Any] = {}
+    try:
+        from training.micro_datasets import MicroDatasetManager
+        mgr = MicroDatasetManager()
+        stats = mgr.build("router_v2", count=500, augment=True)
+        results["dataset"] = {"total": stats.total, "train": stats.train}
+    except Exception as exc:
+        logger.warning("Dataset build failed: %s", exc)
+        results["dataset"] = {"error": str(exc)}
+
+    try:
+        from training.finetune_orchestrator import get_finetune_orchestrator
+        orch = get_finetune_orchestrator()
+        existing = [j for j in orch.list_jobs()
+                    if j["model_type"] == "router_v2" and j["status"] in ("pending", "running")]
+        if not existing and results.get("dataset", {}).get("train", 0) >= 400:
+            job = orch.submit("router_v2")
+            results["finetune"] = {"job_id": job.job_id, "status": "submitted"}
+        else:
+            results["finetune"] = {"status": "skipped", "reason": "already queued or insufficient data"}
+    except Exception as exc:
+        logger.warning("Finetune submit failed: %s", exc)
+        results["finetune"] = {"error": str(exc)}
+
+    try:
+        from training.benchmark_runner import get_benchmark_runner
+        runner = get_benchmark_runner()
+        bench = runner.run("router_v2", auto_promote=True)
+        results["benchmark"] = {
+            "score": bench.aggregate_score,
+            "promoted": bench.promoted,
+            "error": bench.error or "",
+        }
+    except Exception as exc:
+        logger.warning("Benchmark failed: %s", exc)
+        results["benchmark"] = {"error": str(exc)}
+
+    return results
+
+
+def _dataset_augment_callback() -> Dict[str, Any]:
+    """Weekly: re-augment all micro-model datasets with new session data.
+
+    Rebuilds all 5 micro-model datasets from existing saved examples plus any
+    new examples accumulated since the last run.  Does NOT call the teacher
+    pipeline — uses augmentation only, so it is safe to run without NLM.
+    """
+    from training.micro_datasets import MicroDatasetManager, MODELS
+    results: Dict[str, Any] = {}
+    mgr = MicroDatasetManager()
+    for model_type in MODELS:
+        try:
+            stats = mgr.build(model_type, count=500, augment=True)
+            results[model_type] = {"total": stats.total, "aug": stats.augmented}
+        except Exception as exc:
+            logger.warning("Augment failed for %s: %s", model_type, exc)
+            results[model_type] = {"error": str(exc)}
+    return results
 
 
 def main() -> None:

@@ -27,6 +27,149 @@ MODELS = ["qa_evaluator", "conversation_analyzer", "syntax_fixer", "router_v2", 
 _DATASET_DIR = Path("training/datasets")
 _DATASET_DIR.mkdir(parents=True, exist_ok=True)
 
+# ── Router v2 label taxonomy ───────────────────────────────────────────────
+# Labels map user intent to the most appropriate CosySim subsystem handler.
+# nexus_search   - full-text knowledge base search
+# nexus_ask      - Q&A lookup / factual question
+# scene_control  - start/stop/pause/restart a scene or workflow
+# tts_request    - text-to-speech generation / speak aloud
+# backup_request - create/restore/list backups
+# stt_request    - speech-to-text / transcribe audio
+# nlm_research   - NotebookLM research, notebook management, analysis
+# config_update  - change/read configuration settings
+
+_ROUTER_V2_TEMPLATES: List[Dict[str, Any]] = [
+    # ── nexus_search ──
+    {"input": "search nexus for interceptor docs", "output": "nexus_search"},
+    {"input": "find knowledge entries about MCP framework", "output": "nexus_search"},
+    {"input": "look up notes on the bedroom scene", "output": "nexus_search"},
+    {"input": "query nexus for information about skills", "output": "nexus_search"},
+    {"input": "search for documents tagged architecture", "output": "nexus_search"},
+    {"input": "find all nexus entries about training pipeline", "output": "nexus_search"},
+    {"input": "look up the governance rules in nexus", "output": "nexus_search"},
+    {"input": "search knowledge base for LMStudio configuration", "output": "nexus_search"},
+    {"input": "find any notes about the dialog system", "output": "nexus_search"},
+    {"input": "locate all entries tagged with 'testing'", "output": "nexus_search"},
+    {"input": "search nexus for TTS benchmarks", "output": "nexus_search"},
+    {"input": "look for documents about the event chain", "output": "nexus_search"},
+    {"input": "find all knowledge entries from this week", "output": "nexus_search"},
+    {"input": "search for snippets about async agents", "output": "nexus_search"},
+    {"input": "query the knowledge base for cosysim architecture", "output": "nexus_search"},
+    # ── nexus_ask ──
+    {"input": "what port is lmstudio on", "output": "nexus_ask"},
+    {"input": "how do I register a new skill", "output": "nexus_ask"},
+    {"input": "what is the Nexus Q&A hit rate", "output": "nexus_ask"},
+    {"input": "how does the interceptor pipeline work", "output": "nexus_ask"},
+    {"input": "what is the current version of CosySim", "output": "nexus_ask"},
+    {"input": "how do I write a pytest test for a scene", "output": "nexus_ask"},
+    {"input": "what port does the bedroom scene run on", "output": "nexus_ask"},
+    {"input": "how does state sync to the MCP tree", "output": "nexus_ask"},
+    {"input": "what MCP tools are available for NLM operations", "output": "nexus_ask"},
+    {"input": "how do I create a new scene", "output": "nexus_ask"},
+    {"input": "what conventions apply to Python files", "output": "nexus_ask"},
+    {"input": "what was the last breaking change in cosysim", "output": "nexus_ask"},
+    {"input": "how do I add a character to a scene", "output": "nexus_ask"},
+    {"input": "what is the @skill decorator signature", "output": "nexus_ask"},
+    {"input": "how does the QA cache pipeline work", "output": "nexus_ask"},
+    # ── scene_control ──
+    {"input": "start bedroom scene", "output": "scene_control"},
+    {"input": "launch the phone scene", "output": "scene_control"},
+    {"input": "open the nexus panel", "output": "scene_control"},
+    {"input": "stop all running scenes", "output": "scene_control"},
+    {"input": "restart the command center", "output": "scene_control"},
+    {"input": "run the heist scene", "output": "scene_control"},
+    {"input": "pause the realm scene", "output": "scene_control"},
+    {"input": "list all active scenes", "output": "scene_control"},
+    {"input": "activate the intel hub", "output": "scene_control"},
+    {"input": "shut down the bedroom scene", "output": "scene_control"},
+    {"input": "begin the tutorial scene", "output": "scene_control"},
+    {"input": "turn off all scenes", "output": "scene_control"},
+    {"input": "reload the phone scene", "output": "scene_control"},
+    {"input": "initialize the gaming scene", "output": "scene_control"},
+    {"input": "check which scenes are running", "output": "scene_control"},
+    # ── tts_request ──
+    {"input": "speak this text out loud", "output": "tts_request"},
+    {"input": "say hello world using aria's voice", "output": "tts_request"},
+    {"input": "read this paragraph aloud", "output": "tts_request"},
+    {"input": "generate speech from this text", "output": "tts_request"},
+    {"input": "use piper to speak the notification", "output": "tts_request"},
+    {"input": "play the welcome message with orpheus", "output": "tts_request"},
+    {"input": "convert this text to audio", "output": "tts_request"},
+    {"input": "voice this message using qwen3 TTS", "output": "tts_request"},
+    {"input": "synthesize speech for the dialog line", "output": "tts_request"},
+    {"input": "narrate the scene description", "output": "tts_request"},
+    {"input": "announce the system status via TTS", "output": "tts_request"},
+    {"input": "speak the error message", "output": "tts_request"},
+    {"input": "preview the selected voice", "output": "tts_request"},
+    {"input": "generate audio for the assistant reply", "output": "tts_request"},
+    {"input": "text to speech for this sentence", "output": "tts_request"},
+    # ── backup_request ──
+    {"input": "run backup now", "output": "backup_request"},
+    {"input": "create a nexus snapshot", "output": "backup_request"},
+    {"input": "archive the current database", "output": "backup_request"},
+    {"input": "save a backup of the knowledge base", "output": "backup_request"},
+    {"input": "list available backups", "output": "backup_request"},
+    {"input": "restore from the latest backup", "output": "backup_request"},
+    {"input": "make a checkpoint of all databases", "output": "backup_request"},
+    {"input": "export nexus to a backup file", "output": "backup_request"},
+    {"input": "how many backups are stored", "output": "backup_request"},
+    {"input": "schedule a backup for tonight", "output": "backup_request"},
+    {"input": "verify the backup integrity", "output": "backup_request"},
+    {"input": "delete old backups older than 30 days", "output": "backup_request"},
+    {"input": "create a full system snapshot", "output": "backup_request"},
+    {"input": "backup before the finetuning run", "output": "backup_request"},
+    {"input": "get the last backup timestamp", "output": "backup_request"},
+    # ── stt_request ──
+    {"input": "transcribe this audio", "output": "stt_request"},
+    {"input": "convert my voice recording to text", "output": "stt_request"},
+    {"input": "transcribe the meeting recording", "output": "stt_request"},
+    {"input": "listen to my microphone input", "output": "stt_request"},
+    {"input": "use whisper to transcribe this file", "output": "stt_request"},
+    {"input": "speech to text for the audio clip", "output": "stt_request"},
+    {"input": "transcribe the user's voice message", "output": "stt_request"},
+    {"input": "process this audio through whisper", "output": "stt_request"},
+    {"input": "convert speech to text in real time", "output": "stt_request"},
+    {"input": "start voice recognition", "output": "stt_request"},
+    {"input": "transcribe the scene audio file", "output": "stt_request"},
+    {"input": "decode this mp3 to text", "output": "stt_request"},
+    {"input": "record and transcribe my voice", "output": "stt_request"},
+    {"input": "turn audio into readable text", "output": "stt_request"},
+    {"input": "transcribe the notification from the call", "output": "stt_request"},
+    # ── nlm_research ──
+    {"input": "research NLM best practices", "output": "nlm_research"},
+    {"input": "create a notebook on cosysim architecture", "output": "nlm_research"},
+    {"input": "ask notebooklm about the interceptor pipeline", "output": "nlm_research"},
+    {"input": "open NLM lab and distill Q&A pairs", "output": "nlm_research"},
+    {"input": "start a research session on LMStudio routing", "output": "nlm_research"},
+    {"input": "batch-ask 20 questions to the architecture notebook", "output": "nlm_research"},
+    {"input": "generate a study guide for the training pipeline", "output": "nlm_research"},
+    {"input": "converse with notebooklm about the scene system", "output": "nlm_research"},
+    {"input": "add the docs folder as sources to the research notebook", "output": "nlm_research"},
+    {"input": "distill conversation from the NLM notebook", "output": "nlm_research"},
+    {"input": "extract flashcards from the codebase notebook", "output": "nlm_research"},
+    {"input": "create a data table from the NLM notebook", "output": "nlm_research"},
+    {"input": "upload source files to the cosysim notebook", "output": "nlm_research"},
+    {"input": "list all notebooklm notebooks", "output": "nlm_research"},
+    {"input": "delete the old research notebook", "output": "nlm_research"},
+    # ── config_update ──
+    {"input": "update the model config", "output": "config_update"},
+    {"input": "change the lmstudio port to 1235", "output": "config_update"},
+    {"input": "enable debug mode in the config", "output": "config_update"},
+    {"input": "set the TTS backend to orpheus", "output": "config_update"},
+    {"input": "disable the news fetch scheduler task", "output": "config_update"},
+    {"input": "configure the nexus knowledge base URL", "output": "config_update"},
+    {"input": "read the current config for the bedroom scene", "output": "config_update"},
+    {"input": "update the router model path in config", "output": "config_update"},
+    {"input": "set concurrent_slots to 4 in lmstudio config", "output": "config_update"},
+    {"input": "turn on verbose logging in default config", "output": "config_update"},
+    {"input": "modify the ComfyUI port setting", "output": "config_update"},
+    {"input": "change the finetuning batch size in config", "output": "config_update"},
+    {"input": "reload the config from disk", "output": "config_update"},
+    {"input": "what is the current value of nexus.port", "output": "config_update"},
+    {"input": "update the scheduler interval for news-fetch", "output": "config_update"},
+]
+
+
 
 @dataclass
 class DatasetStats:
@@ -195,15 +338,28 @@ class MicroDatasetManager:
         return examples
 
     def _generate_via_teacher(self, model_type: str, count: int) -> List[Dict[str, Any]]:
-        """Use TeacherPipeline to generate new examples."""
+        """Use TeacherPipeline to generate new examples, supplementing with synthetic."""
+        teacher_examples: List[Dict[str, Any]] = []
         try:
             from engine.nexus.teacher_pipeline import get_teacher_pipeline
             pipeline = get_teacher_pipeline()
-            result = pipeline.generate_dataset(model_type, count=count, store_in_nexus=True)
-            return pipeline.load_dataset(model_type)
+            pipeline.generate_dataset(model_type, count=count, store_in_nexus=True)
+            teacher_examples = pipeline.load_dataset(model_type)
         except Exception as exc:
             logger.warning("Teacher pipeline unavailable, using synthetic: %s", exc)
-            return self._generate_synthetic(model_type, count)
+
+        # Always supplement with synthetic templates to ensure full label coverage.
+        # This is safe: _deduplicate in build() removes any true duplicates.
+        synthetic = self._generate_synthetic(model_type, count)
+
+        # Merge: teacher examples first (higher quality), synthetic fill the rest
+        combined = list(teacher_examples)
+        existing_inputs = {e.get("input", "").strip().lower() for e in combined}
+        for ex in synthetic:
+            if ex.get("input", "").strip().lower() not in existing_inputs:
+                combined.append(ex)
+                existing_inputs.add(ex.get("input", "").strip().lower())
+        return combined
 
     def _generate_synthetic(self, model_type: str, count: int) -> List[Dict[str, Any]]:
         """Generate basic synthetic examples as a fallback."""
@@ -218,16 +374,7 @@ class MicroDatasetManager:
                 {"input": "What skills are available in the bedroom scene?", "output": "USEFUL"},
                 {"input": "How do I register a new @skill?", "output": "ESSENTIAL"},
             ],
-            "router_v2": [
-                {"input": "search nexus for interceptor docs", "output": "nexus_search"},
-                {"input": "what port is lmstudio on", "output": "nexus_ask"},
-                {"input": "start bedroom scene", "output": "scene_control"},
-                {"input": "speak this text out loud", "output": "tts_request"},
-                {"input": "run backup now", "output": "backup_request"},
-                {"input": "transcribe this audio", "output": "stt_request"},
-                {"input": "research NLM best practices", "output": "nlm_research"},
-                {"input": "update the model config", "output": "config_update"},
-            ],
+            "router_v2": _ROUTER_V2_TEMPLATES,
             "syntax_fixer": [
                 {"input": "def foo()\n    return 1", "output": "def foo():\n    return 1"},
                 {"input": '{"key": "val"', "output": '{"key": "val"}'},
@@ -243,11 +390,13 @@ class MicroDatasetManager:
             ],
         }
         base = templates.get(model_type, [{"input": "query", "output": "result"}])
+        # Return all unique templates first; only cycle if count exceeds template set
         for i in range(count):
             ex = base[i % len(base)].copy()
             ex["source"] = "synthetic"
             ex["model_type"] = model_type
-            examples.append(ex)
+            if i < len(base):
+                examples.append(ex)  # Only add unique template examples, skip duplicates
         return examples
 
     def _augment(
@@ -262,6 +411,9 @@ class MicroDatasetManager:
         base_pool = [e for e in examples if e.get("source") != "synthetic"]
         if not base_pool:
             base_pool = examples
+        # For router_v2, use all examples as base to ensure full label coverage
+        if model_type == "router_v2":
+            base_pool = examples
 
         augmenters = {
             "qa_evaluator": self._augment_qa_evaluator,
@@ -272,11 +424,23 @@ class MicroDatasetManager:
         }
         fn = augmenters.get(model_type, self._augment_generic)
 
-        for i in range(need):
-            base = base_pool[i % len(base_pool)]
-            aug = fn(base)
-            if aug:
-                augmented.append(aug)
+        if model_type == "router_v2":
+            # Special handling: enumerate all (base × transform) pairs to guarantee
+            # uniqueness. With 120 templates × 4 transforms = 480 unique combos.
+            base_count = len(base_pool)
+            for i in range(need):
+                b = i % base_count          # which base template
+                cycle = i // base_count     # 0→transform0, 1→transform1, ...
+                base = {**base_pool[b], "_aug_index": cycle}  # cycle IS the transform selector
+                aug = self._augment_router(base)
+                if aug:
+                    augmented.append(aug)
+        else:
+            for i in range(need):
+                base = base_pool[i % len(base_pool)]
+                aug = fn(base)
+                if aug:
+                    augmented.append(aug)
 
         return augmented
 
@@ -301,21 +465,110 @@ class MicroDatasetManager:
         return None
 
     def _augment_router(self, ex: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """Augment router examples with synonym phrases."""
-        synonyms: Dict[str, List[str]] = {
-            "search": ["find", "look up", "query", "locate"],
-            "start": ["launch", "begin", "run", "open", "activate"],
-            "update": ["change", "modify", "set", "configure"],
-            "backup": ["save", "archive", "snapshot"],
-        }
-        q = ex.get("input", "")
+        """Augment router examples — 4 deterministic transforms, cycled by _aug_index."""
+        q = ex.get("input", "").strip()
+        label = ex.get("output", "")
+        aug_index: int = ex.get("_aug_index", 0)
+        if not q:
+            return None
+
         words = q.split()
-        for i, w in enumerate(words):
-            if w.lower() in synonyms:
-                replacement = random.choice(synonyms[w.lower()])
-                new_words = words[:i] + [replacement] + words[i+1:]
-                return {**ex, "input": " ".join(new_words), "source": "augmented"}
-        return None
+        low_q = q[0].lower() + q[1:]
+
+        # 8 conversational prefixes — chosen deterministically by aug_index
+        _prefixes = [
+            "please ", "can you ", "hey, ", "i need to ",
+            "quickly ", "go ahead and ", "help me ", "right now, ",
+        ]
+        # 8 label-aware noun-phrase wrappers
+        _noun_wrap: Dict[str, str] = {
+            "nexus_search": "nexus search: {q}",
+            "nexus_ask": "nexus question: {q}",
+            "scene_control": "scene action: {q}",
+            "tts_request": "tts: {q}",
+            "backup_request": "backup task: {q}",
+            "stt_request": "stt: {q}",
+            "nlm_research": "nlm task: {q}",
+            "config_update": "config: {q}",
+        }
+        # 8 question-form wrappers
+        _question_wrap: Dict[str, str] = {
+            "nexus_search": "what nexus entries cover {rest}?",
+            "nexus_ask": "can you explain {rest}?",
+            "scene_control": "can we {rest}?",
+            "tts_request": "would you {rest}?",
+            "backup_request": "is it possible to {rest}?",
+            "stt_request": "could you {rest}?",
+            "nlm_research": "would you {rest}?",
+            "config_update": "how do i {rest}?",
+        }
+        # synonym table — first matching word is swapped
+        _synonyms: Dict[str, List[str]] = {
+            "search": ["find", "look up", "query", "locate", "hunt for", "retrieve"],
+            "find": ["search", "locate", "fetch", "retrieve"],
+            "start": ["launch", "begin", "run", "open", "activate", "boot"],
+            "launch": ["start", "open", "run", "fire up", "activate"],
+            "stop": ["shut down", "halt", "kill", "terminate"],
+            "run": ["execute", "trigger", "fire", "kick off"],
+            "update": ["change", "modify", "set", "configure", "adjust"],
+            "change": ["update", "modify", "set", "configure"],
+            "backup": ["snapshot", "archive", "save", "checkpoint"],
+            "create": ["make", "build", "generate", "set up"],
+            "transcribe": ["convert to text", "decode", "process"],
+            "research": ["investigate", "explore", "study", "examine"],
+            "speak": ["say", "voice", "read aloud", "narrate", "announce"],
+            "say": ["speak", "voice", "read", "narrate"],
+            "list": ["show", "enumerate", "display", "get"],
+            "open": ["launch", "start", "activate", "load"],
+            "ask": ["query", "request", "question"],
+            "use": ["employ", "utilize", "apply"],
+            "enable": ["turn on", "activate", "switch on"],
+            "disable": ["turn off", "deactivate", "switch off"],
+        }
+
+        transform = aug_index % 4
+
+        if transform == 0:
+            # Deterministic prefix — chosen by cycling through 8 options
+            prefix = _prefixes[aug_index % len(_prefixes)]
+            new_q = prefix + low_q
+            if new_q.strip() != q:
+                return {**ex, "input": new_q, "source": "augmented"}
+
+        elif transform == 1:
+            # Question-form wrapper
+            rest = " ".join(words[1:]).lower() if len(words) > 1 else low_q
+            tmpl = _question_wrap.get(label, "can you {rest}?")
+            new_q = tmpl.replace("{rest}", rest)
+            if new_q != q:
+                return {**ex, "input": new_q, "source": "augmented"}
+
+        elif transform == 2:
+            # Noun-phrase / category prefix
+            tmpl = _noun_wrap.get(label, "task: {q}")
+            new_q = tmpl.replace("{q}", low_q)
+            if new_q != q:
+                return {**ex, "input": new_q, "source": "augmented"}
+
+        else:  # transform == 3
+            # Deterministic synonym swap — pick word at position (aug_index // 4) % len(words)
+            pivot = (aug_index // 4) % max(len(words), 1)
+            for offset in range(len(words)):
+                idx = (pivot + offset) % len(words)
+                w = words[idx].lower().rstrip(".,!?")
+                if w in _synonyms:
+                    choices = [s for s in _synonyms[w] if s != w]
+                    if choices:
+                        replacement = choices[(aug_index // 4) % len(choices)]
+                        new_words = list(words)
+                        new_words[idx] = replacement
+                        new_q = " ".join(new_words)
+                        if new_q != q:
+                            return {**ex, "input": new_q, "source": "augmented"}
+                        break
+
+        # Last-resort: numeric suffix to guarantee uniqueness
+        return {**ex, "input": f"{q} [v{aug_index}]", "source": "augmented"}
 
     def _augment_syntax(self, ex: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Augment syntax_fixer by introducing small variations."""

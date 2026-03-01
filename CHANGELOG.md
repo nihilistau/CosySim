@@ -2,6 +2,36 @@
 
 All notable changes to CosySim are documented here.
 
+## v0.66 — The Living Loop (Track A)
+
+### Improved: `training/micro_datasets.py` — Router V2 Dataset Generation
+
+- Expanded `_ROUTER_V2_TEMPLATES` from 8 → 120 entries (15 per label × 8 labels)
+- Labels: `nexus_search`, `nexus_ask`, `scene_control`, `tts_request`, `backup_request`, `stt_request`, `nlm_research`, `config_update`
+- Fixed `_generate_synthetic` cycling bug — only unique template examples are returned (no duplicates from `i % len(base)` cycling)
+- Rewrote `_augment_router` with 4 deterministic transforms: prefix, question-form, noun-wrap, synonym-swap
+- Fixed `_augment` loop to pass `_aug_index = cycle` so each base × cycle combination is unique
+- Router-v2 uses all examples as `base_pool` to ensure full label coverage during augmentation
+- Fixed `_generate_via_teacher` to always supplement teacher output with synthetic templates for full label coverage
+- Result: 364 examples (291 train / 36 val / 37 test) with all 8 labels balanced (~30–42 per label)
+
+### Updated: Scheduler Daemon (28 → 30 tasks)
+
+- Added `router-finetune-cycle` (weekly): end-to-end router_v2 pipeline (dataset gen → finetune submit → benchmark)
+- Added `dataset-augment` (weekly): re-augments all 5 micro-model datasets without teacher pipeline
+- Added `_router_finetune_cycle_callback()` and `_dataset_augment_callback()` implementations
+
+### New Tests (17 new, 5,609 total)
+
+- `tests/test_router_finetune_cycle.py` — 17 tests for router v2 finetune cycle
+  - `TestRouterV2Templates` (4): label coverage, min examples/label, no duplicates, required keys
+  - `TestMicroDatasetManagerRouterV2` (4): synthetic labels, 3 splits, Alpaca format, dedup
+  - `TestRouterFinetuneSchedulerCallbacks` (4): success path, queued skip, all models, error tolerance
+  - `TestAutoPromoteWiring` (5): auto-promote flow, router registration, singleton, 30 tasks, new tasks registered
+- Updated 4 existing scheduler task count assertions: 28 → 30
+
+---
+
 ## v0.65 — Profile Skills, Conversation Analyzer, Backup Manager
 
 ### New: `engine/skills/builtin/profile_skills.py`
