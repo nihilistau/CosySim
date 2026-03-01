@@ -19,9 +19,17 @@
     </div>
 
     <nav class="sidebar-nav">
-      <button class="nav-item active" data-section="assistant">
+      <button class="nav-item active" data-section="overview">
+        <span class="nav-icon">⬡</span>
+        <span class="nav-label">Overview</span>
+      </button>
+      <button class="nav-item" data-section="assistant">
         <span class="nav-icon">🤖</span>
         <span class="nav-label">Assistant</span>
+      </button>
+      <button class="nav-item" data-section="profile">
+        <span class="nav-icon">👤</span>
+        <span class="nav-label">Profile</span>
       </button>
       <button class="nav-item" data-section="nexus">
         <span class="nav-icon">🧠</span>
@@ -62,15 +70,78 @@
     </nav>
 
     <div class="sidebar-footer">
-      <span class="version-badge">v0.64</span>
+      <span class="version-badge">v0.66</span>
     </div>
   </aside>
 
   <!-- ══════════════════════ MAIN ══════════════════════ -->
   <main class="main-content">
 
+    <!-- ─── OVERVIEW ─── -->
+    <section id="sec-overview" class="section active">
+      <div class="section-title"><span class="title-icon">⬡</span> Overview</div>
+
+      <div class="stats-grid">
+        <div class="stat-card stat-violet">
+          <div class="stat-value" id="ov-nexus-entries">—</div>
+          <div class="stat-label">Knowledge Entries</div>
+        </div>
+        <div class="stat-card stat-cyan">
+          <div class="stat-value" id="ov-qa-pairs">—</div>
+          <div class="stat-label">QA Pairs</div>
+        </div>
+        <div class="stat-card stat-emerald">
+          <div class="stat-value" id="ov-tasks">—</div>
+          <div class="stat-label">Scheduler Tasks</div>
+        </div>
+        <div class="stat-card stat-amber">
+          <div class="stat-value" id="ov-hit-rate">—</div>
+          <div class="stat-label">Cache Hit Rate</div>
+        </div>
+      </div>
+
+      <div class="two-col-layout">
+        <div class="panel">
+          <div class="panel-header">
+            <span>Services</span>
+            <button id="btn-refresh-services" class="btn btn-secondary" style="font-size:11px;padding:4px 10px;">↻ Refresh</button>
+          </div>
+          <div class="panel-body">
+            <div id="ov-services-list" class="services-compact"></div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <span>Recent Activity</span>
+          </div>
+          <div class="panel-body" style="padding:12px;">
+            <div id="ov-activity-feed" class="activity-feed">
+              <div class="activity-empty">Loading activity...</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header"><span>Quick Actions</span></div>
+        <div class="panel-body">
+          <div class="quick-actions">
+            <button class="quick-action" data-goto="assistant">🤖 Chat with Aria</button>
+            <button class="quick-action" data-goto="scheduler">⏱ Scheduler</button>
+            <button class="quick-action" data-goto="cache">⚡ QA Pipeline</button>
+            <button class="quick-action" data-goto="finetuning">🔬 Fine-Tuning</button>
+            <button class="quick-action" data-goto="nexus">🧠 Nexus Search</button>
+            <button class="quick-action" data-goto="system">⚙️ System</button>
+            <button class="quick-action" data-goto="profile">👤 My Profile</button>
+            <button class="quick-action" data-goto="nlm">📓 NLM Lab</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- ─── ASSISTANT ─── -->
-    <section id="sec-assistant" class="section active">
+    <section id="sec-assistant" class="section">
       <div class="assistant-layout">
 
         <!-- LEFT: Avatar Panel -->
@@ -316,6 +387,81 @@
         </div><!-- /chat-panel -->
 
       </div><!-- /assistant-layout -->
+    </section>
+
+    <!-- ─── PROFILE ─── -->
+    <section id="sec-profile" class="section">
+      <div class="section-title">
+        <span class="title-icon">👤</span> User Profile
+        <div style="margin-left:auto;display:flex;gap:10px;align-items:center;">
+          <span id="profile-last-analyzed" style="font-size:12px;color:var(--text-mute);font-weight:400;"></span>
+          <button id="btn-reanalyze" class="btn btn-secondary" style="font-size:12px;padding:5px 12px;">↻ Re-analyze</button>
+        </div>
+      </div>
+
+      <!-- Profile Header Card -->
+      <div class="panel profile-header-card" style="margin-bottom:16px;">
+        <div class="panel-body" style="padding:20px;">
+          <div class="profile-header-inner">
+            <div class="profile-avatar-circle" id="profile-avatar-initial">?</div>
+            <div class="profile-info">
+              <div class="profile-name" id="profile-name">—</div>
+              <div class="profile-tech-bg" id="profile-tech-bg">Loading...</div>
+            </div>
+            <div style="margin-left:auto;">
+              <span class="badge badge-success" id="profile-status-badge">Profile Active</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Two columns: Facts + Preferences -->
+      <div class="two-col-layout" style="align-items:start;">
+
+        <!-- Facts -->
+        <div class="panel">
+          <div class="panel-header">
+            <span>Facts <span class="badge badge-info" id="facts-count">0</span></span>
+            <button id="btn-add-fact" class="btn btn-primary" style="font-size:11px;padding:4px 10px;">＋ Add Fact</button>
+          </div>
+          <div class="panel-body">
+            <div id="facts-add-form" style="display:none;margin-bottom:12px;padding:12px;background:rgba(0,0,0,0.2);border-radius:8px;border:1px solid var(--border);">
+              <input type="text" id="new-fact-input" class="form-input" placeholder="Enter fact about yourself..." style="margin-bottom:8px;">
+              <div style="display:flex;gap:8px;">
+                <button id="btn-save-fact" class="btn btn-primary" style="font-size:12px;padding:5px 12px;">Save</button>
+                <button id="btn-cancel-fact" class="btn btn-secondary" style="font-size:12px;padding:5px 12px;">Cancel</button>
+              </div>
+            </div>
+            <div id="profile-facts-list" class="facts-list">
+              <div class="loading-text">Loading facts...</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Preferences -->
+        <div class="panel">
+          <div class="panel-header">
+            <span>Preferences <span class="badge badge-info" id="prefs-count">0</span></span>
+            <button id="btn-add-pref" class="btn btn-primary" style="font-size:11px;padding:4px 10px;">＋ Add</button>
+          </div>
+          <div class="panel-body">
+            <div id="prefs-add-form" style="display:none;margin-bottom:12px;padding:12px;background:rgba(0,0,0,0.2);border-radius:8px;border:1px solid var(--border);">
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+                <input type="text" id="new-pref-key" class="form-input" placeholder="Key (e.g. coding_style)">
+                <input type="text" id="new-pref-value" class="form-input" placeholder="Value">
+              </div>
+              <div style="display:flex;gap:8px;">
+                <button id="btn-save-pref" class="btn btn-primary" style="font-size:12px;padding:5px 12px;">Save</button>
+                <button id="btn-cancel-pref" class="btn btn-secondary" style="font-size:12px;padding:5px 12px;">Cancel</button>
+              </div>
+            </div>
+            <div id="profile-prefs-dict" class="prefs-dict">
+              <div class="loading-text">Loading preferences...</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
     </section>
 
     <!-- ─── NEXUS KMS ─── -->

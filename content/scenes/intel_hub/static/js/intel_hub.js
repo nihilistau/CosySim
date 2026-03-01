@@ -1,5 +1,5 @@
 // Intel Hub — Main JavaScript
-// CosySim v0.64
+// CosySim v0.66
 
 'use strict';
 
@@ -8,7 +8,7 @@
 // ══════════════════════════════════════════════════
 
 const state = {
-  activeSection: 'assistant',
+  activeSection: 'overview',
   activeTtsBackend: 'piper',
   activeVttBackend: 'web_speech',
   activeMediaMode: 'image',
@@ -102,7 +102,9 @@ function toast(msg, type = 'info') {
 // ══════════════════════════════════════════════════
 
 const sectionLoaders = {
+  overview: loadOverview,
   assistant: () => {},
+  profile: loadProfile,
   nexus: loadNexus,
   nlm: loadNlm,
   cache: loadCache,
@@ -1529,7 +1531,352 @@ document.addEventListener('DOMContentLoaded', () => {
   initBackupsSection();
   initCopilotSection();
   initSystemSection();
+  initProfileSection();
+  initOverviewSection();
 
-  // Show assistant section by default
-  navigateTo('assistant');
+  // Show overview section by default
+  navigateTo('overview');
 });
+
+// ══════════════════════════════════════════════════
+// OVERVIEW SECTION
+// ══════════════════════════════════════════════════
+
+const OV_SERVICES = [
+  { id: 'lmstudio', name: 'LMStudio',  port: '1234', url: 'http://localhost:1234/api/v1/models' },
+  { id: 'nexus',    name: 'Nexus KMS', port: '8700', url: 'http://localhost:8700/api/health' },
+  { id: 'tts',      name: 'TTS Server',port: '8600', url: 'http://localhost:8600/health' },
+  { id: 'hub',      name: 'Hub',       port: '8500', url: 'http://localhost:8500/api/health' },
+  { id: 'comfyui',  name: 'ComfyUI',   port: '8188', url: 'http://localhost:8188/system_stats' },
+  { id: 'nexus_panel', name: 'Nexus Panel', port: '5570', url: 'http://localhost:5570/api/health' },
+];
+
+async function loadOverview() {
+  // Nexus stats
+  try {
+    const stats = await api('/api/nexus/stats');
+    document.getElementById('ov-nexus-entries').textContent = stats.total_entries ?? '—';
+    document.getElementById('ov-qa-pairs').textContent = stats.qa_pairs ?? '—';
+    const hr = stats.hit_rate_24h != null ? `${(stats.hit_rate_24h * 100).toFixed(1)}%` : '—';
+    document.getElementById('ov-hit-rate').textContent = hr;
+  } catch {}
+
+  // Scheduler task count
+  try {
+    const sched = await api('/api/scheduler/tasks');
+    document.getElementById('ov-tasks').textContent = (sched.tasks || []).length;
+  } catch {}
+
+  checkOverviewServices();
+  loadActivityFeed();
+}
+
+function checkOverviewServices() {
+  const container = document.getElementById('ov-services-list');
+  container.innerHTML = OV_SERVICES.map(s => `
+    <div class="service-mini-row">
+      <span class="service-mini-dot checking" id="ov-dot-${s.id}"></span>
+      <span class="service-mini-name">${escHtml(s.name)}</span>
+      <span class="service-mini-port">${escHtml(s.port)}</span>
+      <span class="service-mini-latency" id="ov-lat-${s.id}">...</span>
+    </div>
+  `).join('');
+
+  OV_SERVICES.forEach(s => {
+    const t0 = Date.now();
+    fetch(s.url, { mode: 'no-cors', cache: 'no-cache', signal: AbortSignal.timeout(3000) })
+      .then(() => {
+        const dot = document.getElementById(`ov-dot-${s.id}`);
+        const lat = document.getElementById(`ov-lat-${s.id}`);
+        if (dot) dot.className = 'service-mini-dot online';
+        if (lat) lat.textContent = `${Date.now() - t0}ms`;
+      })
+      .catch(() => {
+        const dot = document.getElementById(`ov-dot-${s.id}`);
+        if (dot) dot.className = 'service-mini-dot offline';
+        const lat = document.getElementById(`ov-lat-${s.id}`);
+        if (lat) lat.textContent = 'offline';
+      });
+  });
+}
+
+async function loadActivityFeed() {
+  const container = document.getElementById('ov-activity-feed');
+  try {
+    const data = await api('/api/scheduler/history?limit=8');
+    const items = data.history || [];
+    if (!items.length) {
+      container.innerHTML = '<div class="activity-empty">No recent activity.</div>';
+      return;
+    }
+    container.innerHTML = items.map(item => {
+      const t = item.run_at || item.time || '';
+      const name = item.task_id || item.task_name || item.message || JSON.stringify(item);
+      const status = item.status || '';
+      const statusCol = status === 'ok' ? 'var(--emerald)' : status === 'error' ? 'var(--rose)' : 'var(--text-mute)';
+      return `
+        <div class="activity-item">
+          <span class="activity-item-time">${escHtml(String(t).slice(0, 16))}</span>
+          <span style="flex:1">${escHtml(String(name))}</span>
+          ${status ? `<span style="color:${statusCol};font-size:11px;">${escHtml(status)}</span>` : ''}
+        </div>
+      `;
+    }).join('');
+  } catch {
+    container.innerHTML = '<div class="activity-empty">Could not load activity.</div>';
+  }
+}
+
+function initOverviewSection() {
+  document.getElementById('btn-refresh-services')?.addEventListener('click', () => {
+    checkOverviewServices();
+  });
+
+  // Quick-action buttons navigate to sections
+  document.querySelectorAll('.quick-action[data-goto]').forEach(btn => {
+    btn.addEventListener('click', () => navigateTo(btn.dataset.goto));
+  });
+}
+
+// ══════════════════════════════════════════════════
+// PROFILE SECTION
+// ══════════════════════════════════════════════════
+
+let profileData = null;
+
+async function loadProfile() {
+  try {
+    profileData = await api('/api/user-profile');
+    renderProfile(profileData);
+    const ts = profileData.last_analyzed;
+    const tsEl = document.getElementById('profile-last-analyzed');
+    if (tsEl) {
+      tsEl.textContent = ts
+        ? `Last analyzed: ${new Date(ts).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`
+        : '';
+    }
+  } catch {
+    toast('Failed to load profile', 'error');
+    document.getElementById('profile-facts-list').innerHTML = '<div class="loading-text">Profile unavailable.</div>';
+    document.getElementById('profile-prefs-dict').innerHTML = '<div class="loading-text">—</div>';
+  }
+}
+
+function renderProfile(data) {
+  if (!data) return;
+
+  // Header
+  const name = data.name || 'User';
+  const nameEl = document.getElementById('profile-name');
+  if (nameEl) nameEl.textContent = name;
+
+  const initEl = document.getElementById('profile-avatar-initial');
+  if (initEl) initEl.textContent = name.charAt(0).toUpperCase();
+
+  const techBg = (data.preferences && data.preferences.tech_background)
+    || data.tech_background
+    || 'No tech background set.';
+  const techEl = document.getElementById('profile-tech-bg');
+  if (techEl) techEl.textContent = techBg;
+
+  // Facts
+  const facts = data.facts || [];
+  const factsCountEl = document.getElementById('facts-count');
+  if (factsCountEl) factsCountEl.textContent = facts.length;
+  renderFactsList(facts);
+
+  // Preferences
+  const prefs = data.preferences || {};
+  const prefsCountEl = document.getElementById('prefs-count');
+  if (prefsCountEl) prefsCountEl.textContent = Object.keys(prefs).length;
+  renderPrefsDict(prefs);
+}
+
+function renderFactsList(facts) {
+  const container = document.getElementById('profile-facts-list');
+  if (!container) return;
+  if (!facts.length) {
+    container.innerHTML = '<div class="loading-text">No facts recorded yet. Re-analyze to populate.</div>';
+    return;
+  }
+  container.innerHTML = facts.map((fact, i) => `
+    <div class="fact-item" data-index="${i}">
+      <span class="fact-item-bullet"></span>
+      <span class="fact-item-text">${escHtml(String(fact))}</span>
+      <button class="fact-item-del" data-index="${i}" title="Note: re-analyze to update facts">✕</button>
+    </div>
+  `).join('');
+}
+
+function renderPrefsDict(prefs) {
+  const container = document.getElementById('profile-prefs-dict');
+  if (!container) return;
+  const entries = Object.entries(prefs);
+  if (!entries.length) {
+    container.innerHTML = '<div class="loading-text">No preferences set yet.</div>';
+    return;
+  }
+  container.innerHTML = entries.map(([key, val]) => `
+    <div class="pref-row" data-key="${escHtml(key)}">
+      <span class="pref-key">${escHtml(key)}</span>
+      <span class="pref-value" contenteditable="false" data-original="${escHtml(String(val))}">${escHtml(String(val))}</span>
+      <div class="pref-actions">
+        <button class="pref-edit-btn" title="Edit value">✏</button>
+        <button class="pref-del-btn" title="Delete preference">✕</button>
+      </div>
+    </div>
+  `).join('');
+
+  container.querySelectorAll('.pref-edit-btn').forEach(btn => {
+    btn.addEventListener('click', () => togglePrefEdit(btn));
+  });
+  container.querySelectorAll('.pref-del-btn').forEach(btn => {
+    btn.addEventListener('click', () => deletePreference(btn.closest('.pref-row').dataset.key));
+  });
+}
+
+function togglePrefEdit(btn) {
+  const row = btn.closest('.pref-row');
+  const valEl = row.querySelector('.pref-value');
+  const editing = valEl.contentEditable === 'true';
+  if (editing) {
+    const key = row.dataset.key;
+    const newVal = valEl.textContent.trim();
+    valEl.contentEditable = 'false';
+    btn.textContent = '✏';
+    valEl.onblur = null;
+    savePreference(key, newVal);
+  } else {
+    valEl.contentEditable = 'true';
+    valEl.focus();
+    // Place cursor at end
+    const range = document.createRange();
+    const sel = window.getSelection();
+    range.selectNodeContents(valEl);
+    range.collapse(false);
+    sel.removeAllRanges();
+    sel.addRange(range);
+    btn.textContent = '✓';
+    valEl.onblur = () => { if (valEl.contentEditable === 'true') togglePrefEdit(btn); };
+  }
+}
+
+async function savePreference(key, value) {
+  try {
+    await api('/api/user-profile/preference', {
+      method: 'POST',
+      body: JSON.stringify({ key, value }),
+    });
+    if (profileData) {
+      profileData.preferences = profileData.preferences || {};
+      profileData.preferences[key] = value;
+    }
+    toast(`Saved: ${key}`, 'success');
+  } catch {
+    toast('Failed to save preference', 'error');
+  }
+}
+
+async function deletePreference(key) {
+  try {
+    // Set empty string to effectively clear it (server stores it; future: add DELETE endpoint)
+    await api('/api/user-profile/preference', {
+      method: 'POST',
+      body: JSON.stringify({ key, value: '' }),
+    });
+    if (profileData?.preferences) {
+      delete profileData.preferences[key];
+    }
+    renderPrefsDict(profileData?.preferences || {});
+    const prefsCountEl = document.getElementById('prefs-count');
+    if (prefsCountEl) prefsCountEl.textContent = Object.keys(profileData?.preferences || {}).length;
+    toast(`Removed: ${key}`, 'success');
+  } catch {
+    toast('Failed to remove preference', 'error');
+  }
+}
+
+function initProfileSection() {
+  document.getElementById('btn-add-fact')?.addEventListener('click', () => {
+    const form = document.getElementById('facts-add-form');
+    form.style.display = form.style.display === 'none' ? 'block' : 'none';
+    if (form.style.display === 'block') document.getElementById('new-fact-input').focus();
+  });
+
+  document.getElementById('btn-cancel-fact')?.addEventListener('click', () => {
+    document.getElementById('facts-add-form').style.display = 'none';
+    document.getElementById('new-fact-input').value = '';
+  });
+
+  document.getElementById('btn-save-fact')?.addEventListener('click', async () => {
+    const fact = document.getElementById('new-fact-input').value.trim();
+    if (!fact) { toast('Enter a fact first', 'error'); return; }
+    try {
+      await api('/api/user-profile/fact', {
+        method: 'POST',
+        body: JSON.stringify({ fact }),
+      });
+      document.getElementById('facts-add-form').style.display = 'none';
+      document.getElementById('new-fact-input').value = '';
+      toast('Fact saved', 'success');
+      await loadProfile();
+    } catch {
+      toast('Failed to save fact', 'error');
+    }
+  });
+
+  document.getElementById('new-fact-input')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') document.getElementById('btn-save-fact').click();
+    if (e.key === 'Escape') document.getElementById('btn-cancel-fact').click();
+  });
+
+  document.getElementById('btn-add-pref')?.addEventListener('click', () => {
+    const form = document.getElementById('prefs-add-form');
+    form.style.display = form.style.display === 'none' ? 'block' : 'none';
+    if (form.style.display === 'block') document.getElementById('new-pref-key').focus();
+  });
+
+  document.getElementById('btn-cancel-pref')?.addEventListener('click', () => {
+    document.getElementById('prefs-add-form').style.display = 'none';
+    document.getElementById('new-pref-key').value = '';
+    document.getElementById('new-pref-value').value = '';
+  });
+
+  document.getElementById('btn-save-pref')?.addEventListener('click', async () => {
+    const key   = document.getElementById('new-pref-key').value.trim();
+    const value = document.getElementById('new-pref-value').value.trim();
+    if (!key || !value) { toast('Key and value required', 'error'); return; }
+    try {
+      await api('/api/user-profile/preference', {
+        method: 'POST',
+        body: JSON.stringify({ key, value }),
+      });
+      document.getElementById('prefs-add-form').style.display = 'none';
+      document.getElementById('new-pref-key').value = '';
+      document.getElementById('new-pref-value').value = '';
+      toast('Preference saved', 'success');
+      await loadProfile();
+    } catch {
+      toast('Failed to save preference', 'error');
+    }
+  });
+
+  document.getElementById('btn-reanalyze')?.addEventListener('click', async () => {
+    const btn = document.getElementById('btn-reanalyze');
+    btn.disabled = true;
+    btn.textContent = 'Analyzing...';
+    try {
+      await api('/api/analyzer/recent', {
+        method: 'POST',
+        body: JSON.stringify({ lookback_sessions: 5 }),
+      });
+      toast('Re-analysis complete', 'success');
+      await loadProfile();
+    } catch {
+      toast('Re-analysis failed — check scheduler', 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '↻ Re-analyze';
+    }
+  });
+}
