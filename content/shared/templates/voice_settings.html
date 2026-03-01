@@ -1,0 +1,101 @@
+{% comment %}
+  CosySim Voice Settings Panel — v0.68
+  =====================================
+  Jinja2 partial template. Include in any scene template:
+
+      {% include 'voice_settings.html' %}
+
+  Requires:
+    - /shared/static/css/voice_settings.css
+    - /shared/static/js/cosysim-voice.js
+    - /shared/static/js/voice_settings.js
+{% endcomment %}
+
+<div class="cs-voice-settings cs-glass-panel" id="cs-voice-settings"
+     data-voice-enabled="true" role="region" aria-label="Voice settings">
+
+  <h3 class="cs-glass-panel__title">Voice Settings</h3>
+
+  <!-- ── Master TTS toggle ─────────────────────────────────── -->
+  <div class="cs-voice-row">
+    <label class="cs-voice-label" for="cs-voice-master-toggle">TTS / Voice</label>
+    <button class="cs-voice-toggle"
+            id="cs-voice-master-toggle"
+            role="switch"
+            aria-checked="false"
+            aria-label="Toggle voice">
+      <span class="cs-voice-toggle-track"></span>
+      <span class="cs-voice-toggle-thumb"></span>
+    </button>
+  </div>
+
+  <!-- ── Backend selection ──────────────────────────────────── -->
+  <div class="cs-voice-row cs-voice-row--stacked">
+    <label class="cs-voice-label">Backend</label>
+    <div class="cs-backend-group" role="radiogroup" aria-label="TTS backend">
+
+      <label class="cs-backend-option">
+        <input type="radio" name="cs-backend" value="piper" checked
+               aria-label="Piper backend">
+        <div class="cs-backend-card">
+          <div class="cs-backend-name">Piper</div>
+          <div class="cs-backend-desc">Fast · CPU · 50ms</div>
+        </div>
+      </label>
+
+      <label class="cs-backend-option">
+        <input type="radio" name="cs-backend" value="orpheus"
+               aria-label="Orpheus backend">
+        <div class="cs-backend-card">
+          <div class="cs-backend-name">Orpheus</div>
+          <div class="cs-backend-desc">Quality · LMStudio</div>
+        </div>
+      </label>
+
+      <label class="cs-backend-option">
+        <input type="radio" name="cs-backend" value="qwen3"
+               aria-label="Qwen3 backend">
+        <div class="cs-backend-card">
+          <div class="cs-backend-name">Qwen3 TTS</div>
+          <div class="cs-backend-desc">Neural · GPU</div>
+        </div>
+      </label>
+
+    </div>
+  </div>
+
+  <!-- ── Speed slider ───────────────────────────────────────── -->
+  <div class="cs-voice-row">
+    <label class="cs-voice-label" for="cs-voice-speed">Speed</label>
+    <div class="cs-slider-group">
+      <input type="range"
+             class="cs-voice-slider"
+             id="cs-voice-speed"
+             min="0.5" max="2.0" step="0.1" value="1.0"
+             aria-label="Playback speed"
+             aria-valuemin="0.5" aria-valuemax="2.0" aria-valuenow="1.0">
+      <span class="cs-slider-value" id="cs-speed-value" aria-live="polite">1.0x</span>
+    </div>
+  </div>
+
+  <!-- ── STT toggle ─────────────────────────────────────────── -->
+  <div class="cs-voice-row">
+    <label class="cs-voice-label" for="cs-stt-toggle">Speech Input (STT)</label>
+    <button class="cs-voice-toggle cs-voice-toggle--small"
+            id="cs-stt-toggle"
+            role="switch"
+            aria-checked="false"
+            aria-label="Toggle speech input">
+      <span class="cs-voice-toggle-track"></span>
+      <span class="cs-voice-toggle-thumb"></span>
+    </button>
+  </div>
+
+  <!-- ── Preview button ─────────────────────────────────────── -->
+  <div class="cs-voice-row">
+    <button class="cs-glass-btn" id="cs-voice-preview" type="button">
+      ▶ Preview Voice
+    </button>
+  </div>
+
+</div>

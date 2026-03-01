@@ -1,0 +1,329 @@
+/*
+ * CosySim Voice Settings Panel — v0.68
+ * ======================================
+ * Styles for the voice settings panel, toggle switches, backend cards,
+ * and speed slider. Requires: design_tokens.css
+ *
+ * Components:
+ *   .cs-voice-settings     — glass panel container
+ *   .cs-voice-row          — row layout
+ *   .cs-voice-label        — row label
+ *   .cs-voice-toggle       — iOS-style toggle switch
+ *   .cs-backend-group      — backend radio group
+ *   .cs-backend-card       — individual backend option card
+ *   .cs-voice-slider       — styled range input
+ *   .cs-slider-group       — slider + value display
+ */
+
+/* ══════════════════════════════════════════════════════════════
+   PANEL CONTAINER
+   ══════════════════════════════════════════════════════════════ */
+
+.cs-voice-settings {
+    background: var(--cs-glass-bg);
+    backdrop-filter: blur(var(--cs-glass-blur));
+    -webkit-backdrop-filter: blur(var(--cs-glass-blur));
+    border: 1px solid var(--cs-glass-border);
+    border-radius: var(--cs-radius-xl, 16px);
+    box-shadow: var(--cs-glass-shadow);
+    padding: 1.25rem 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    min-width: 280px;
+    max-width: 360px;
+}
+
+.cs-voice-settings .cs-glass-panel__title {
+    margin: 0 0 0.25rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--cs-text-secondary, #9ca3af);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   ROW LAYOUT
+   ══════════════════════════════════════════════════════════════ */
+
+.cs-voice-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    min-height: 2rem;
+}
+
+.cs-voice-row--stacked {
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+.cs-voice-label {
+    font-size: 0.8125rem;
+    color: var(--cs-text-secondary, #9ca3af);
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   TOGGLE SWITCH  (iOS-style, CSS-only animation)
+   ══════════════════════════════════════════════════════════════ */
+
+.cs-voice-toggle {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    width: 44px;
+    height: 24px;
+    padding: 0;
+    border: none;
+    border-radius: 999px;
+    background: transparent;
+    cursor: pointer;
+    flex-shrink: 0;
+    outline: none;
+    -webkit-tap-highlight-color: transparent;
+    transition: none;
+}
+
+.cs-voice-toggle--small {
+    width: 36px;
+    height: 20px;
+}
+
+/* Track */
+.cs-voice-toggle-track {
+    position: absolute;
+    inset: 0;
+    border-radius: 999px;
+    background: var(--cs-bg-hover, #1c2436);
+    border: 1px solid var(--cs-glass-border, rgba(255,255,255,0.06));
+    transition: background 0.22s ease, border-color 0.22s ease;
+}
+
+/* Thumb */
+.cs-voice-toggle-thumb {
+    position: absolute;
+    left: 3px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--cs-text-muted, #6b7280);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.5);
+    transition: transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1),
+                background 0.22s ease;
+    pointer-events: none;
+    z-index: 1;
+}
+
+.cs-voice-toggle--small .cs-voice-toggle-thumb {
+    width: 14px;
+    height: 14px;
+}
+
+/* ON state */
+.cs-voice-toggle[aria-checked="true"] .cs-voice-toggle-track {
+    background: var(--cs-accent, #3b82f6);
+    border-color: var(--cs-accent, #3b82f6);
+}
+
+.cs-voice-toggle[aria-checked="true"] .cs-voice-toggle-thumb {
+    background: #ffffff;
+    transform: translateX(20px);
+}
+
+.cs-voice-toggle--small[aria-checked="true"] .cs-voice-toggle-thumb {
+    transform: translateX(16px);
+}
+
+/* Focus ring */
+.cs-voice-toggle:focus-visible .cs-voice-toggle-track {
+    box-shadow: 0 0 0 2px var(--cs-accent-soft, rgba(59,130,246,0.25));
+}
+
+/* Hover hint */
+.cs-voice-toggle:hover .cs-voice-toggle-track {
+    border-color: rgba(255,255,255,0.12);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   BACKEND SELECTION  (radio cards)
+   ══════════════════════════════════════════════════════════════ */
+
+.cs-backend-group {
+    display: flex;
+    gap: 0.5rem;
+    width: 100%;
+    flex-wrap: wrap;
+}
+
+.cs-backend-option {
+    flex: 1;
+    min-width: 80px;
+    cursor: pointer;
+}
+
+/* Hide the native radio button */
+.cs-backend-option input[type="radio"] {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+    pointer-events: none;
+}
+
+.cs-backend-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 0.5rem 0.375rem;
+    border-radius: var(--cs-radius-lg, 10px);
+    border: 1px solid var(--cs-glass-border, rgba(255,255,255,0.06));
+    background: var(--cs-bg-card, #111520);
+    text-align: center;
+    transition: border-color 0.18s ease,
+                background   0.18s ease,
+                box-shadow   0.18s ease;
+    cursor: pointer;
+    user-select: none;
+}
+
+.cs-backend-card:hover {
+    border-color: rgba(255,255,255,0.12);
+    background: var(--cs-bg-elevated, #161c2a);
+}
+
+.cs-backend-option input[type="radio"]:checked + .cs-backend-card {
+    border-color: var(--cs-accent, #3b82f6);
+    background: var(--cs-accent-soft, rgba(59,130,246,0.12));
+    box-shadow: 0 0 0 1px var(--cs-accent, #3b82f6);
+}
+
+.cs-backend-name {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--cs-text-primary, #e5e7eb);
+    white-space: nowrap;
+}
+
+.cs-backend-desc {
+    font-size: 0.6rem;
+    color: var(--cs-text-muted, #6b7280);
+    margin-top: 0.15rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+}
+
+.cs-backend-option input[type="radio"]:checked + .cs-backend-card .cs-backend-name {
+    color: var(--cs-accent, #3b82f6);
+}
+
+.cs-backend-option input[type="radio"]:checked + .cs-backend-card .cs-backend-desc {
+    color: var(--cs-text-secondary, #9ca3af);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   SPEED SLIDER
+   ══════════════════════════════════════════════════════════════ */
+
+.cs-slider-group {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    flex: 1;
+}
+
+.cs-voice-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    flex: 1;
+    height: 4px;
+    border-radius: 999px;
+    background: var(--cs-bg-hover, #1c2436);
+    outline: none;
+    cursor: pointer;
+    transition: background 0.18s ease;
+}
+
+.cs-voice-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--cs-accent, #3b82f6);
+    box-shadow: 0 0 6px var(--cs-accent-soft, rgba(59,130,246,0.4));
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.cs-voice-slider::-webkit-slider-thumb:hover {
+    transform: scale(1.25);
+    box-shadow: 0 0 10px var(--cs-accent, #3b82f6);
+}
+
+.cs-voice-slider::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: none;
+    background: var(--cs-accent, #3b82f6);
+    cursor: pointer;
+}
+
+.cs-voice-slider::-moz-range-track {
+    background: var(--cs-bg-hover, #1c2436);
+    height: 4px;
+    border-radius: 999px;
+}
+
+.cs-slider-value {
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--cs-text-secondary, #9ca3af);
+    min-width: 2.5rem;
+    text-align: right;
+    white-space: nowrap;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   PREVIEW BUTTON  (reuse .cs-glass-btn if available)
+   ══════════════════════════════════════════════════════════════ */
+
+.cs-voice-settings .cs-glass-btn {
+    width: 100%;
+    padding: 0.5rem;
+    font-size: 0.8125rem;
+    border-radius: var(--cs-radius-lg, 10px);
+    background: var(--cs-bg-card, #111520);
+    border: 1px solid var(--cs-glass-border, rgba(255,255,255,0.06));
+    color: var(--cs-text-secondary, #9ca3af);
+    cursor: pointer;
+    transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+    text-align: center;
+}
+
+.cs-voice-settings .cs-glass-btn:hover {
+    background: var(--cs-bg-elevated, #161c2a);
+    border-color: var(--cs-accent, #3b82f6);
+    color: var(--cs-accent, #3b82f6);
+}
+
+.cs-voice-settings .cs-glass-btn:active {
+    transform: scale(0.98);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   DISABLED STATE
+   ══════════════════════════════════════════════════════════════ */
+
+.cs-voice-settings[data-voice-enabled="false"] .cs-backend-group,
+.cs-voice-settings[data-voice-enabled="false"] .cs-slider-group,
+.cs-voice-settings[data-voice-enabled="false"] .cs-glass-btn {
+    opacity: 0.4;
+    pointer-events: none;
+}

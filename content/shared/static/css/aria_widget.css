@@ -1,0 +1,583 @@
+/*
+ * CosySim Aria Floating Widget — aria_widget.css
+ * ===============================================
+ * Bottom-right floating glass circle with expandable chat/voice panel.
+ * Depends on: design_tokens.css · cosysim-components.css
+ *
+ * z-index: 9200 (below admin overlay 9500, below stats HUD 9999)
+ *
+ * Aria states (set via data-state on #cs-aria-widget):
+ *   idle       — dim blue ring pulse (1s)
+ *   talking    — bright cyan ring fast pulse (0.4s)
+ *   thinking   — amber glow slow breathe (2s)
+ *   listening  — solid green ring
+ */
+
+/* ══════════════════════════════════════════════════════════════
+   WIDGET ROOT
+   ══════════════════════════════════════════════════════════════ */
+
+.cs-aria-widget {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 9200;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--cs-space-md);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   TOGGLE BUTTON (collapsed state)
+   ══════════════════════════════════════════════════════════════ */
+
+.cs-aria-toggle {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: var(--cs-glass-bg-strong);
+  border: 1px solid var(--cs-glass-border);
+  backdrop-filter: blur(var(--cs-blur-lg));
+  -webkit-backdrop-filter: blur(var(--cs-blur-lg));
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
+  transition: border-color 200ms, box-shadow 200ms, transform 150ms;
+  flex-shrink: 0;
+}
+
+.cs-aria-toggle:hover {
+  transform: scale(1.04);
+  border-color: rgba(255, 255, 255, 0.15);
+  box-shadow: 0 6px 32px rgba(0, 0, 0, 0.6);
+}
+
+.cs-aria-toggle:active {
+  transform: scale(0.97);
+}
+
+/* ── Portrait image ── */
+
+.cs-aria-portrait {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  overflow: hidden;
+  position: relative;
+  z-index: 1;
+}
+
+.cs-aria-portrait img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.cs-aria-fallback {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  background: var(--cs-glass-bg);
+}
+
+/* ── State ring ── */
+
+.cs-aria-state-ring {
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  pointer-events: none;
+  z-index: 2;
+  transition: border-color 400ms;
+}
+
+/* idle — dim blue 1s pulse */
+.cs-aria-widget[data-state="idle"] .cs-aria-state-ring {
+  border-color: rgba(0, 168, 255, 0.5);
+  animation: cs-aria-ring-idle 1s ease-in-out infinite;
+}
+
+/* talking — cyan fast pulse 0.4s */
+.cs-aria-widget[data-state="talking"] .cs-aria-state-ring {
+  border-color: var(--cs-neon-cyan);
+  animation: cs-aria-ring-talking 0.4s ease-in-out infinite;
+  box-shadow: 0 0 16px var(--cs-neon-cyan-glow);
+}
+
+/* thinking — amber slow breathe 2s */
+.cs-aria-widget[data-state="thinking"] .cs-aria-state-ring {
+  border-color: var(--cs-neon-amber);
+  animation: cs-aria-ring-thinking 2s ease-in-out infinite;
+}
+
+/* listening — solid green */
+.cs-aria-widget[data-state="listening"] .cs-aria-state-ring {
+  border-color: var(--cs-green);
+  box-shadow: 0 0 12px var(--cs-green-soft);
+  animation: none;
+}
+
+@keyframes cs-aria-ring-idle {
+  0%, 100% { opacity: 0.4; transform: scale(1); }
+  50%       { opacity: 0.9; transform: scale(1.05); }
+}
+
+@keyframes cs-aria-ring-talking {
+  0%, 100% { opacity: 0.7; transform: scale(1); }
+  50%       { opacity: 1;   transform: scale(1.08); }
+}
+
+@keyframes cs-aria-ring-thinking {
+  0%, 100% { opacity: 0.3; transform: scale(1); }
+  50%       { opacity: 0.85; transform: scale(1.06); }
+}
+
+/* ── Notification badge ── */
+
+.cs-aria-notif {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--cs-neon-red);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  font-family: var(--cs-font-sans);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 3;
+  box-shadow: 0 0 6px var(--cs-neon-red-glow);
+  animation: cs-aria-notif-pop 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes cs-aria-notif-pop {
+  from { transform: scale(0); }
+  to   { transform: scale(1); }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   EXPANDED PANEL
+   ══════════════════════════════════════════════════════════════ */
+
+.cs-aria-panel {
+  width: 360px;
+  background: var(--cs-glass-bg-strong);
+  border: 1px solid var(--cs-glass-border);
+  border-radius: var(--cs-radius-xl);
+  backdrop-filter: blur(var(--cs-blur-lg));
+  -webkit-backdrop-filter: blur(var(--cs-blur-lg));
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  display: flex;
+  flex-direction: column;
+  max-height: 520px;
+  overflow: hidden;
+  animation: cs-aria-panel-open 250ms cubic-bezier(0.34, 1.2, 0.64, 1);
+  transform-origin: bottom right;
+}
+
+@keyframes cs-aria-panel-open {
+  from {
+    opacity: 0;
+    transform: scale(0.85) translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* ── Panel header ── */
+
+.cs-aria-panel-header {
+  display: flex;
+  align-items: center;
+  gap: var(--cs-space-sm);
+  padding: 12px var(--cs-space-lg);
+  border-bottom: 1px solid var(--cs-glass-border);
+  flex-shrink: 0;
+}
+
+.cs-aria-name {
+  font-size: var(--cs-text-sm);
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  color: var(--cs-neon-cyan);
+  text-shadow: 0 0 8px var(--cs-neon-cyan-glow);
+  font-family: var(--cs-terminal-font);
+}
+
+.cs-aria-modes {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.cs-aria-mode-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--cs-radius-md);
+  background: transparent;
+  border: 1px solid var(--cs-glass-border);
+  color: var(--cs-text-muted);
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 150ms, border-color 150ms, color 150ms;
+}
+
+.cs-aria-mode-btn:hover {
+  background: var(--cs-glass-bg-light);
+  border-color: rgba(255, 255, 255, 0.12);
+  color: var(--cs-text-primary);
+}
+
+.cs-aria-mode-btn--active,
+.cs-aria-mode-btn[aria-pressed="true"] {
+  background: rgba(0, 229, 255, 0.1);
+  border-color: var(--cs-neon-cyan);
+  color: var(--cs-neon-cyan);
+  box-shadow: 0 0 8px var(--cs-neon-cyan-glow);
+}
+
+.cs-aria-close-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--cs-radius-sm);
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--cs-text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 150ms, color 150ms;
+}
+
+.cs-aria-close-btn:hover {
+  background: var(--cs-glass-bg-light);
+  color: var(--cs-text-primary);
+}
+
+/* ── Content regions ── */
+
+.cs-aria-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   MESSENGER MODE
+   ══════════════════════════════════════════════════════════════ */
+
+.cs-aria-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--cs-space-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--cs-space-md);
+  scrollbar-width: thin;
+  scrollbar-color: var(--cs-glass-border) transparent;
+}
+
+.cs-aria-messages::-webkit-scrollbar {
+  width: 3px;
+}
+
+.cs-aria-messages::-webkit-scrollbar-thumb {
+  background: var(--cs-glass-border);
+  border-radius: 2px;
+}
+
+/* Chat bubbles */
+
+.cs-aria-message {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 85%;
+  animation: cs-aria-msg-in 200ms ease-out;
+}
+
+@keyframes cs-aria-msg-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.cs-aria-message--user {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+
+.cs-aria-message--aria {
+  align-self: flex-start;
+  align-items: flex-start;
+}
+
+.cs-aria-message__bubble {
+  padding: 8px 12px;
+  border-radius: 16px;
+  font-size: var(--cs-text-sm);
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.cs-aria-message--user .cs-aria-message__bubble {
+  background: rgba(0, 168, 255, 0.15);
+  border: 1px solid rgba(0, 168, 255, 0.3);
+  border-bottom-right-radius: 4px;
+  color: var(--cs-text-primary);
+}
+
+.cs-aria-message--aria .cs-aria-message__bubble {
+  background: var(--cs-glass-bg-light);
+  border: 1px solid var(--cs-glass-border);
+  border-bottom-left-radius: 4px;
+  color: var(--cs-text-primary);
+}
+
+.cs-aria-message__ts {
+  font-size: 10px;
+  color: var(--cs-text-dim);
+  padding: 0 4px;
+}
+
+/* Thinking dots indicator */
+
+.cs-aria-thinking-dots {
+  display: flex;
+  gap: 4px;
+  padding: 10px 14px;
+}
+
+.cs-aria-thinking-dots span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--cs-text-muted);
+  animation: cs-aria-dot-bounce 1.2s ease-in-out infinite;
+}
+
+.cs-aria-thinking-dots span:nth-child(2) { animation-delay: 0.2s; }
+.cs-aria-thinking-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes cs-aria-dot-bounce {
+  0%, 80%, 100% { transform: translateY(0); opacity: 0.5; }
+  40%            { transform: translateY(-6px); opacity: 1; }
+}
+
+/* Input row */
+
+.cs-aria-input-row {
+  display: flex;
+  gap: var(--cs-space-sm);
+  padding: var(--cs-space-md) var(--cs-space-lg);
+  border-top: 1px solid var(--cs-glass-border);
+  flex-shrink: 0;
+}
+
+.cs-aria-input {
+  flex: 1;
+  padding: 8px 12px;
+  background: var(--cs-glass-bg);
+  border: 1px solid var(--cs-glass-border);
+  border-radius: var(--cs-radius-full);
+  color: var(--cs-text-primary);
+  font-family: var(--cs-font-sans);
+  font-size: var(--cs-text-sm);
+  outline: none;
+  caret-color: var(--cs-neon-cyan);
+  transition: border-color 150ms, box-shadow 150ms;
+}
+
+.cs-aria-input::placeholder {
+  color: var(--cs-text-dim);
+}
+
+.cs-aria-input:focus {
+  border-color: rgba(0, 229, 255, 0.35);
+  box-shadow: 0 0 0 2px rgba(0, 229, 255, 0.08);
+}
+
+.cs-aria-send {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(0, 229, 255, 0.12);
+  border: 1px solid rgba(0, 229, 255, 0.3);
+  color: var(--cs-neon-cyan);
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 150ms, box-shadow 150ms, transform 100ms;
+}
+
+.cs-aria-send:hover {
+  background: rgba(0, 229, 255, 0.22);
+  box-shadow: 0 0 10px var(--cs-neon-cyan-glow);
+}
+
+.cs-aria-send:active {
+  transform: scale(0.92);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   VOICE MODE
+   ══════════════════════════════════════════════════════════════ */
+
+.cs-aria-content[data-mode-panel="voice"] {
+  align-items: center;
+  justify-content: center;
+  gap: var(--cs-space-xl);
+  padding: var(--cs-space-xl);
+}
+
+.cs-aria-portrait-large {
+  position: relative;
+  width: 200px;
+  height: 200px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.cs-aria-portrait-large img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Voice waveform overlay on portrait */
+
+.cs-aria-waveform {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 48px;
+  background: linear-gradient(to top, rgba(0, 10, 14, 0.85), transparent);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 4px;
+  padding-bottom: 8px;
+}
+
+.cs-waveform-bar {
+  width: 4px;
+  background: var(--cs-neon-cyan);
+  border-radius: 2px;
+  height: 6px;
+  opacity: 0.4;
+  transition: height 100ms ease, opacity 100ms;
+}
+
+/* Animated bars when listening */
+.cs-aria-widget[data-state="listening"] .cs-waveform-bar,
+.cs-aria-widget[data-state="talking"]   .cs-waveform-bar {
+  opacity: 1;
+  animation: cs-waveform-bounce 600ms ease-in-out infinite;
+}
+
+.cs-aria-widget[data-state="listening"] .cs-waveform-bar:nth-child(1),
+.cs-aria-widget[data-state="talking"]   .cs-waveform-bar:nth-child(1) {
+  animation-delay: 0ms;
+}
+
+.cs-aria-widget[data-state="listening"] .cs-waveform-bar:nth-child(2),
+.cs-aria-widget[data-state="talking"]   .cs-waveform-bar:nth-child(2) {
+  animation-delay: 100ms;
+}
+
+.cs-aria-widget[data-state="listening"] .cs-waveform-bar:nth-child(3),
+.cs-aria-widget[data-state="talking"]   .cs-waveform-bar:nth-child(3) {
+  animation-delay: 200ms;
+}
+
+.cs-aria-widget[data-state="listening"] .cs-waveform-bar:nth-child(4),
+.cs-aria-widget[data-state="talking"]   .cs-waveform-bar:nth-child(4) {
+  animation-delay: 100ms;
+}
+
+.cs-aria-widget[data-state="listening"] .cs-waveform-bar:nth-child(5),
+.cs-aria-widget[data-state="talking"]   .cs-waveform-bar:nth-child(5) {
+  animation-delay: 0ms;
+}
+
+@keyframes cs-waveform-bounce {
+  0%, 100% { height: 6px; }
+  50%       { height: 28px; }
+}
+
+/* Voice status text */
+
+.cs-aria-voice-status {
+  font-size: var(--cs-text-sm);
+  color: var(--cs-text-secondary);
+  letter-spacing: 0.04em;
+  text-align: center;
+}
+
+/* Mic button */
+
+.cs-aria-mic-btn {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: rgba(0, 229, 255, 0.1);
+  border: 2px solid rgba(0, 229, 255, 0.3);
+  color: var(--cs-neon-cyan);
+  font-size: 28px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 200ms, border-color 200ms, box-shadow 200ms, transform 100ms;
+}
+
+.cs-aria-mic-btn:hover {
+  background: rgba(0, 229, 255, 0.2);
+  border-color: var(--cs-neon-cyan);
+  box-shadow: 0 0 20px var(--cs-neon-cyan-glow);
+}
+
+.cs-aria-mic-btn:active {
+  transform: scale(0.94);
+}
+
+/* Active / recording state */
+.cs-aria-mic-btn[aria-pressed="true"] {
+  background: rgba(34, 197, 94, 0.15);
+  border-color: var(--cs-green);
+  color: var(--cs-green);
+  box-shadow: 0 0 20px var(--cs-green-soft);
+  animation: cs-mic-pulse 800ms ease-in-out infinite;
+}
+
+@keyframes cs-mic-pulse {
+  0%, 100% { box-shadow: 0 0 20px var(--cs-green-soft); }
+  50%       { box-shadow: 0 0 36px rgba(34, 197, 94, 0.5); }
+}
