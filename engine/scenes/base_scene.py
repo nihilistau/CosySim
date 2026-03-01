@@ -518,6 +518,137 @@ class BaseScene(ABC):
             _bslogger.debug("BaseScene: skills server mounted on port %d", self.port)
         except Exception as _exc:
             _bslogger.debug("BaseScene.mount_skills_server failed: %s", _exc)
+
+    def register_tts_route(self, app) -> None:
+        """Register TTS/speech endpoints on a Flask app.
+
+        Routes added:
+
+        - ``POST /api/tts/speak``   — synthesize text and return audio URL
+        - ``GET  /api/tts/voices``  — list available voice/backend profiles
+        - ``GET  /api/tts/audio/<file_id>`` — serve a cached WAV file
+
+        Call in ``start()`` after creating the Flask app::
+
+            self.register_tts_route(self.app)
+
+        Request body for ``/api/tts/speak``::
+
+            {
+                "text":    "Hello!",
+                "char_id": "luna",      # optional — used for voice lookup
+                "backend": "piper",     # optional — piper|orpheus|qwen3|auto
+                "speed":   1.0,         # optional — 0.5–2.0
+                "pitch":   1.0,         # optional — reserved
+            }
+
+        Response::
+
+            {
+                "audio_url":   "/api/tts/audio/<uuid>",
+                "duration_ms": 1200,
+                "text":        "Hello!"
+            }
+        """
+        import uuid as _uuid
+        import json as _json
+        from pathlib import Path as _Path
+        from flask import request, Response, send_file
+
+        _cache_dir = _Path(__file__).resolve().parents[2] / "data" / "tts_cache"
+        _cache_dir.mkdir(parents=True, exist_ok=True)
+
+        @app.route("/api/tts/speak", methods=["POST"])
+        def _tts_speak():
+            try:
+                # Lazy import to avoid startup errors if TTS deps are missing
+                from engine.tts.tts_manager import get_tts_manager
+
+                data: Dict[str, Any] = request.get_json(silent=True) or {}
+                text: str = str(data.get("text", "")).strip()
+                if not text:
+                    return Response(
+                        _json.dumps({"error": "text is required"}),
+                        status=400,
+                        mimetype="application/json",
+                    )
+
+                char_id: Optional[str] = data.get("char_id")
+                backend: str = str(data.get("backend", "auto"))
+                speed: float = float(data.get("speed", 1.0))
+
+                # Resolve character → voice via Nexus (best-effort)
+                voice: str = "default"
+                if char_id:
+                    try:
+                        from engine.nexus.client import get_nexus_client
+                        nexus = get_nexus_client()
+                        if nexus.is_available():
+                            answer = nexus.ask(
+                                f"What voice does {char_id} use?",
+                                category="character",
+                            )
+                            resolved = (answer or {}).get("answer", "")
+                            if resolved and resolved.lower() not in ("unknown", "none", ""):
+                                voice = resolved
+                    except Exception:
+                        pass  # Nexus miss is non-fatal
+
+                mgr = get_tts_manager()
+                result = mgr.synthesize(text, backend=backend, voice=voice)
+
+                # Persist WAV to cache
+                file_id: str = str(_uuid.uuid4())
+                wav_path: _Path = _cache_dir / f"{file_id}.wav"
+                wav_path.write_bytes(result.audio_bytes)
+
+                duration_ms: int = int(result.duration * 1000)
+
+                return Response(
+                    _json.dumps({
+                        "audio_url":   f"/api/tts/audio/{file_id}",
+                        "duration_ms": duration_ms,
+                        "text":        text,
+                    }),
+                    mimetype="application/json",
+                )
+            except Exception as exc:
+                _bslogger.warning("TTS speak endpoint failed: %s", exc)
+                return Response(
+                    _json.dumps({"error": "TTS unavailable"}),
+                    status=503,
+                    mimetype="application/json",
+                )
+
+        @app.route("/api/tts/voices", methods=["GET"])
+        def _tts_voices():
+            try:
+                from engine.tts.tts_manager import get_tts_manager
+
+                mgr = get_tts_manager()
+                return Response(
+                    _json.dumps({"voices": mgr.list_backends()}),
+                    mimetype="application/json",
+                )
+            except Exception as exc:
+                _bslogger.warning("TTS voices endpoint failed: %s", exc)
+                return Response(
+                    _json.dumps({"voices": [], "error": str(exc)}),
+                    mimetype="application/json",
+                )
+
+        @app.route("/api/tts/audio/<file_id>", methods=["GET"])
+        def _tts_audio(file_id: str):
+            # Sanitise: only hex UUIDs (no path traversal)
+            safe = "".join(c for c in file_id if c.isalnum() or c == "-")
+            wav_path: _Path = _cache_dir / f"{safe}.wav"
+            if not wav_path.exists():
+                return Response(
+                    _json.dumps({"error": "audio not found"}),
+                    status=404,
+                    mimetype="application/json",
+                )
+            return send_file(str(wav_path), mimetype="audio/wav")
     
     # ============= LIFECYCLE HOOKS =============
     # Override these in subclasses to react to scene events.
