@@ -728,18 +728,19 @@ class TestBridgeSeed:
     """Tests for cmd_seed."""
 
     def test_seed_dispatches_to_seeder(self, capsys):
-        """cmd_seed imports NexusSeeder and calls seed()."""
+        """cmd_seed calls seed_all() and outputs ok status."""
+        import engine.nexus as _nexus_pkg
         from engine.nexus.bridge import cmd_seed
 
-        # NexusSeeder is imported inside cmd_seed — mock the import target
-        mock_seeder_cls = MagicMock()
-        mock_seeder_instance = MagicMock()
-        mock_seeder_instance.seed.return_value = {"docs": 5, "qa": 3}
-        mock_seeder_cls.return_value = mock_seeder_instance
+        # cmd_seed uses `import engine.nexus.nexus_seeder as seeder_mod` which resolves
+        # via IMPORT_FROM (attribute access on the package), not sys.modules.  Patch both
+        # sys.modules AND the package attribute so the mock is picked up regardless of
+        # whether the real module was already loaded by an earlier test.
+        mock_seeder_mod = MagicMock()
+        mock_seeder_mod.seed_all.return_value = {"docs": 5, "qa": 3}
 
-        with patch.dict("sys.modules", {
-            "engine.nexus.nexus_seeder": MagicMock(NexusSeeder=mock_seeder_cls)
-        }):
+        with patch.dict("sys.modules", {"engine.nexus.nexus_seeder": mock_seeder_mod}), \
+             patch.object(_nexus_pkg, "nexus_seeder", mock_seeder_mod, create=True):
             args = Namespace(source="all")
             cmd_seed(args)
 

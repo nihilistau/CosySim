@@ -813,6 +813,26 @@ def _coverage_eval_callback() -> Dict[str, Any]:
         return {"error": str(exc)}
 
 
+def _copilot_rules_refresh_callback() -> Dict[str, Any]:
+    """Weekly re-seed of all Copilot rules, instructions, and agent defs into Nexus."""
+    try:
+        from engine.nexus.seed_copilot_rules import run_copilot_rules_refresh
+        return run_copilot_rules_refresh()
+    except Exception as exc:
+        logger.error("Copilot rules refresh failed: %s", exc)
+        return {"error": str(exc)}
+
+
+def _notebook_bootstrap_callback() -> Dict[str, Any]:
+    """Weekly refresh of architecture/instructions/history NLM notebooks."""
+    try:
+        from engine.nexus.bootstrap_notebooks import run_notebook_bootstrap
+        return run_notebook_bootstrap()
+    except Exception as exc:
+        logger.error("Notebook bootstrap failed: %s", exc)
+        return {"error": str(exc)}
+
+
 def _register_builtin_tasks(daemon: TaskSchedulerDaemon) -> None:
     """Register all built-in autonomous tasks."""
     daemon.register(
@@ -898,6 +918,18 @@ def _register_builtin_tasks(daemon: TaskSchedulerDaemon) -> None:
         "Knowledge Coverage Evaluation",
         "daily",
         _coverage_eval_callback,
+    )
+    daemon.register(
+        "copilot-rules-refresh",
+        "Copilot Rules Refresh",
+        "weekly",
+        _copilot_rules_refresh_callback,
+    )
+    daemon.register(
+        "notebook-bootstrap",
+        "NLM Notebook Bootstrap",
+        "weekly",
+        _notebook_bootstrap_callback,
     )
 
 

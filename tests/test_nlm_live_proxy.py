@@ -362,6 +362,13 @@ class TestFlaskEndpoints:
 # ── NotebookLMProxy client (updated) ──────────────────────────────────
 
 class TestNotebookLMProxy:
+    @pytest.fixture(autouse=True)
+    def _offline(self):
+        """Mock urlopen to fail instantly so offline tests don't wait for real timeouts."""
+        import urllib.error
+        with patch("urllib.request.urlopen", side_effect=urllib.error.URLError("offline")):
+            yield
+
     def test_proxy_not_running_without_server(self) -> None:
         from engine.mcp.notebooklm_proxy import NotebookLMProxy
         proxy = NotebookLMProxy({"base_url": "http://localhost:9999"})
@@ -610,9 +617,11 @@ class TestNLMQADistiller:
         assert all("unknown_topic_xyz" in q for q in questions)
 
     def test_proxy_not_ready_returns_empty(self) -> None:
-        from engine.nexus.nlm_qa_distiller import NLMQADistiller
-        distiller = NLMQADistiller(proxy_url="http://localhost:9999")
-        pairs = distiller.distill_topic("nb-123", "test", num_questions=5)
+        import urllib.error
+        with patch("urllib.request.urlopen", side_effect=urllib.error.URLError("offline")):
+            from engine.nexus.nlm_qa_distiller import NLMQADistiller
+            distiller = NLMQADistiller(proxy_url="http://localhost:9999")
+            pairs = distiller.distill_topic("nb-123", "test", num_questions=5)
         assert pairs == []
 
 
@@ -696,11 +705,10 @@ class TestV21Routes:
         assert data.get("thread_id") == "thread-abc"
 
     def test_chat_returns_502_on_error(self, client_v21) -> None:
-        """POST /notebooks/<id>/chat returns 502 when _grpc_ask errors."""
-        with patch("engine.mcp.nlm_live_proxy._grpc_ask",
-                   return_value={"error": "network timeout", "answer": ""}), \
-             patch("engine.mcp.nlm_live_proxy._batchexecute",
-                   return_value=("wXbhsf", None)):
+        """POST /notebooks/<id>/chat returns 502 when hybrid returns error."""
+        mock_hybrid = MagicMock()
+        mock_hybrid.ask.return_value = {"error": "network timeout", "answer": ""}
+        with patch("engine.mcp.nlm_hybrid.get_nlm_hybrid", return_value=mock_hybrid):
             resp = client_v21.post(
                 "/notebooks/nb-xyz/chat",
                 json={"question": "Q?"},
@@ -743,10 +751,13 @@ class TestV21Routes:
             {"answer": "Answer 1", "thread_id": "t1", "question": "Q1?", "sources": []},
             {"answer": "Answer 2", "thread_id": "t1", "question": "Q2?", "sources": []},
         ]
+        mock_hybrid = MagicMock()
+        mock_hybrid.ask_batch.return_value = mock_results
         with patch("engine.mcp.nlm_live_proxy.grpc_ask_batch",
                    return_value=mock_results), \
              patch("engine.mcp.nlm_live_proxy._batchexecute",
-                   return_value=("wXbhsf", None)):
+                   return_value=("wXbhsf", None)), \
+             patch("engine.mcp.nlm_hybrid.get_nlm_hybrid", return_value=mock_hybrid):
             resp = client_v21.post(
                 "/notebooks/nb-xyz/chat_batch",
                 json={"questions": ["Q1?", "Q2?"], "source_ids": []},

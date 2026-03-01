@@ -1,0 +1,18 @@
+{
+  "last_check": 1772346833.3275142,
+  "last_train": {},
+  "history": [
+    {
+      "timestamp": 1772346800.6429338,
+      "results": {
+        "tag_extraction": "would_train"
+      }
+    },
+    {
+      "timestamp": 1772346833.327515,
+      "results": {
+        "tag_extraction": "would_train"
+      }
+    }
+  ]
+}

@@ -285,6 +285,16 @@ class TestHeuristics:
 class TestFullPipeline:
     """Test the complete diagnosis pipeline."""
 
+    @pytest.fixture(autouse=True)
+    def _no_nlm(self):
+        """Prevent real network calls to NLM engine or Nexus task sync."""
+        mock_engine = MagicMock()
+        mock_engine.list_notebooks.return_value = []
+        with patch("engine.nexus.nlm_engine.get_nlm_engine", return_value=mock_engine), \
+             patch("engine.nexus.task_scheduler.requests.post"), \
+             patch("engine.nexus.task_scheduler.requests.get"):
+            yield
+
     def setup_method(self):
         """Create fresh AutoDiagnosis."""
         self.diag = AutoDiagnosis()

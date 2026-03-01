@@ -203,19 +203,20 @@ def test_snapshot_handles_nexus_failure(mock_post, monitor):
 
 def test_start_stop_lifecycle(monitor):
     """Monitor can start and stop without errors."""
-    monitor.start()
-    assert monitor._running is True
-
-    monitor.stop()
+    with patch("engine.lmstudio.inference_monitor.time.sleep"):
+        monitor.start()
+        assert monitor._running is True
+        monitor.stop()
     assert monitor._running is False
 
 
 def test_double_start_is_safe(monitor):
     """Starting monitor twice doesn't create duplicate threads."""
-    monitor.start()
-    monitor.start()
-    assert monitor._running is True
-    monitor.stop()
+    with patch("engine.lmstudio.inference_monitor.time.sleep"):
+        monitor.start()
+        monitor.start()
+        assert monitor._running is True
+        monitor.stop()
 
 
 # ── get_status structure ────────────────────────────────────────────────

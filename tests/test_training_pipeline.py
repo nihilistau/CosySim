@@ -150,7 +150,8 @@ class TestAutoTrain:
         mock_db.get_training_candidates.return_value = [{"id": i} for i in range(200)]
 
         try:
-            with patch("training.auto_train._get_metrics_db", return_value=mock_db):
+            with patch("training.auto_train._get_metrics_db", return_value=mock_db), \
+                 patch("training.auto_train._log_training_to_nexus"):
                 results = check_and_train(
                     thresholds={"tag_extraction": 50},
                     dry_run=True,
@@ -333,6 +334,12 @@ class TestNotebookLMSkills:
 
 class TestNotebookLMProxy:
     """Tests for engine.mcp.notebooklm_proxy.NotebookLMProxy."""
+
+    @pytest.fixture(autouse=True)
+    def _offline(self):
+        import urllib.error
+        with patch("urllib.request.urlopen", side_effect=urllib.error.URLError("offline")):
+            yield
 
     def test_proxy_not_running(self):
         """Freshly created proxy reports not running."""
