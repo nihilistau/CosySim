@@ -2,7 +2,38 @@
 
 All notable changes to CosySim are documented here.
 
-## v0.60.7 — NLM Studio Generation Tools, Quota Pro Fix, Auth Backup
+## v0.60.8 — NLM Advanced Extraction: Quota-Free Distillation + Multi-Ask
+
+### NLM Structured Extraction (`C:\Files\MCP\notebooklm-mcp`)
+
+#### New: Quota-Free Q&A Distillation
+- **`extract_flashcards`** — Generates flashcards via Studio tile (quota-free), parses into `{front, back}[]` pairs, optionally stores all pairs directly in Nexus KMS
+- **`extract_quiz`** — Generates quiz via Studio tile (quota-free), parses into `{question, answer, options[], explanation}[]` items, with Nexus auto-store
+- **`distill_to_nexus`** — One-shot pipeline: generates flashcards + quiz, parses everything, stores all Q&A pairs in Nexus atomically. This replaces the old sprint distillation scripts.
+
+#### New: Custom-Prompted Report Generation
+- **`generate_report_with_prompt`** — Injects a custom text prompt into the Reports Studio tile dialog before generation fires. Enables: "Generate 20 Q&A pairs", "Write a Python script that...", "Rank these concepts by complexity" — anything Gemini 3 can produce.
+
+#### New: Multi-Question Sessions
+- **`ask_multi`** — Ask 3-10 questions in a single call, all within the same conversation thread (same session_id). Questions build on each other's context. Great for drill-down sequences and progressive knowledge extraction.
+
+#### New: Content Parsers (`src/notebook-creation/studio-extractor.ts`)
+- `parseFlashcards(text)` — 5 parsing strategies: Front/Back blocks, Card N dividers, Q/A pairs, paragraph pairs, line-pair fallback
+- `parseQuiz(text)` — 3 strategies: Question blocks with lettered options, numbered blocks, Q/A simple pairs  
+- `parseMindMap(text)` — Indented hierarchy parser returning `{topic, subtopics[], depth}[]`
+- `storeQaPairsInNexus(pairs, nexusUrl, category, tags)` — HTTP poster to Nexus KMS API
+
+#### Extended: Studio Generator
+- `StudioGenerator.generateWithCustomPrompt()` — tiles with prompt dialog support
+- `StudioGenerator.generateAndGetStructured()` — end-to-end: generate → wait → extract → parse → return structured data
+- `GetArtifactStructuredResult` type with `parsed` field containing typed flashcards/quiz/mind_map arrays
+
+### Key Benefits
+- **Zero quota usage** for flashcard/quiz distillation — replaces all chat-based Q&A extraction
+- **25-40 Q&A pairs per notebook** from a single `distill_to_nexus` call
+- **Context continuity** via `ask_multi` — all questions share same NLM thread
+
+
 
 ### NLM Studio Generation (`C:\Files\MCP\notebooklm-mcp`)
 - Live DOM discovery confirmed all 9 current Studio tiles (Audio Overview, Video Overview, Mind Map, Reports, Flashcards, Quiz, Infographic, Slide deck, Data table)
