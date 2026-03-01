@@ -148,6 +148,11 @@ class NLMNodeBridge:
         return self._initialized and self._process is not None and self._process.poll() is None
 
     @property
+    def is_initialized(self) -> bool:
+        """True if the Node process has completed initialization."""
+        return self._initialized
+
+    @property
     def chrome_profile_exists(self) -> bool:
         """True if the Chrome profile directory exists (auth has been set up)."""
         return _CHROME_PROFILE.exists() and any(_CHROME_PROFILE.iterdir())
@@ -599,6 +604,163 @@ class NLMNodeBridge:
         if not self.ensure_started():
             return {"error": "Node server not running"}
         return self.call_tool("get_quota", {})
+
+    def set_quota_tier(self, tier: str) -> Dict[str, Any]:
+        """Override the quota tier (none/basic/pro/team/enterprise).
+
+        Args:
+            tier: Target tier string.
+
+        Returns:
+            Updated quota dict.
+        """
+        if not self.ensure_started():
+            return {"error": "Node server not running"}
+        return self.call_tool("set_quota_tier", {"tier": tier})
+
+    # ──── Studio Extraction (Quota-Free) ──────────────────────────────────────
+
+    def extract_flashcards(
+        self,
+        notebook_id: str,
+        store_in_nexus: bool = False,
+        nexus_category: str = "",
+        nexus_url: str = "http://localhost:8700",
+    ) -> Dict[str, Any]:
+        """Generate flashcards via Studio tile and parse into {front, back}[] pairs.
+
+        This is quota-free — uses the Flashcards Studio tile, not the chat RPC.
+
+        Args:
+            notebook_id: Library notebook ID or full URL.
+            store_in_nexus: If True, POST all Q&A pairs to Nexus KMS.
+            nexus_category: Nexus category for stored pairs.
+            nexus_url: Base URL of the Nexus KMS server.
+
+        Returns:
+            Dict with flashcards list, count, parse_method, nexus_ids.
+        """
+        if not self.ensure_started():
+            return {"error": "Node server not running"}
+        args: Dict[str, Any] = {"notebook_id": notebook_id}
+        if store_in_nexus:
+            args["store_in_nexus"] = True
+            args["nexus_url"] = nexus_url
+            if nexus_category:
+                args["nexus_category"] = nexus_category
+        return self.call_tool("extract_flashcards", args, timeout=180.0)
+
+    def extract_quiz(
+        self,
+        notebook_id: str,
+        store_in_nexus: bool = False,
+        nexus_category: str = "",
+        nexus_url: str = "http://localhost:8700",
+    ) -> Dict[str, Any]:
+        """Generate quiz via Studio tile and parse into {question, answer, options[]}[] items.
+
+        Quota-free.
+
+        Args:
+            notebook_id: Library notebook ID or full URL.
+            store_in_nexus: If True, POST all Q&A pairs to Nexus KMS.
+            nexus_category: Nexus category for stored pairs.
+            nexus_url: Base URL of the Nexus KMS server.
+
+        Returns:
+            Dict with questions list, count, parse_method, nexus_ids.
+        """
+        if not self.ensure_started():
+            return {"error": "Node server not running"}
+        args: Dict[str, Any] = {"notebook_id": notebook_id}
+        if store_in_nexus:
+            args["store_in_nexus"] = True
+            args["nexus_url"] = nexus_url
+            if nexus_category:
+                args["nexus_category"] = nexus_category
+        return self.call_tool("extract_quiz", args, timeout=180.0)
+
+    def generate_report_with_prompt(
+        self,
+        notebook_id: str,
+        custom_prompt: str,
+        content_type: str = "report",
+    ) -> Dict[str, Any]:
+        """Generate a Studio report with a custom injected prompt.
+
+        Quota-free. Can instruct Gemini to produce: Q&A pairs, code, tables,
+        rankings, Python scripts, comparisons — anything it can generate.
+
+        Args:
+            notebook_id: Library notebook ID or full URL.
+            custom_prompt: Text to inject into the report dialog.
+            content_type: Studio tile type (default "report").
+
+        Returns:
+            Dict with content (raw generated text), prompt_injected flag.
+        """
+        if not self.ensure_started():
+            return {"error": "Node server not running"}
+        return self.call_tool("generate_report_with_prompt", {
+            "notebook_id": notebook_id,
+            "custom_prompt": custom_prompt,
+            "content_type": content_type,
+        }, timeout=240.0)
+
+    def ask_multi(
+        self,
+        notebook_id: str,
+        questions: List[str],
+        session_id: str = "",
+    ) -> Dict[str, Any]:
+        """Ask multiple questions in a single NLM conversation thread.
+
+        Questions share context — each answer builds on previous ones.
+        DOES count against chat quota (unlike Studio tiles).
+
+        Args:
+            notebook_id: Library notebook ID or full URL.
+            questions: List of 2–10 question strings.
+            session_id: Existing session ID to continue (optional).
+
+        Returns:
+            Dict with answers list [{question, answer, session_id, tier}].
+        """
+        if not self.ensure_started():
+            return {"error": "Node server not running"}
+        args: Dict[str, Any] = {
+            "notebook_id": notebook_id,
+            "questions": questions,
+        }
+        if session_id:
+            args["session_id"] = session_id
+        return self.call_tool("ask_multi", args, timeout=300.0)
+
+    def distill_to_nexus(
+        self,
+        notebook_id: str,
+        nexus_category: str = "distillation",
+        nexus_url: str = "http://localhost:8700",
+    ) -> Dict[str, Any]:
+        """One-shot: generate flashcards + quiz, parse, store all Q&A pairs in Nexus.
+
+        Quota-free. Typically yields 25-40 Q&A pairs per notebook.
+
+        Args:
+            notebook_id: Library notebook ID or full URL.
+            nexus_category: Nexus category for stored pairs.
+            nexus_url: Base URL of the Nexus KMS server.
+
+        Returns:
+            Dict with flashcard_count, quiz_count, nexus_count, nexus_ids.
+        """
+        if not self.ensure_started():
+            return {"error": "Node server not running"}
+        return self.call_tool("distill_to_nexus", {
+            "notebook_id": notebook_id,
+            "nexus_category": nexus_category,
+            "nexus_url": nexus_url,
+        }, timeout=360.0)
 
     def list_available_tools(self) -> List[str]:
         """Return list of tool names available on the Node server."""

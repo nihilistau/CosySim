@@ -1098,8 +1098,256 @@ class NexusPanelScene(BaseScene, NexusSceneMixin):
             except Exception as exc:
                 return jsonify({"error": str(exc)}), 500
 
-        @app.route("/api/questions/generate", methods=["POST"])
-        def api_generate_questions():
+        # ── Studio Extraction (Quota-Free) ─────────────────────────────────────
+
+        @app.route("/api/nlm/studio/extract-flashcards", methods=["POST"])
+        def api_nlm_studio_flashcards():
+            """Extract flashcards from a notebook via quota-free Studio tile."""
+            data = request.get_json(force=True)
+            nb_id = data.get("notebook_id", "")
+            if not nb_id:
+                return jsonify({"error": "notebook_id required"}), 400
+            try:
+                from engine.mcp.nlm_node_bridge import get_nlm_node_bridge
+                result = get_nlm_node_bridge().extract_flashcards(
+                    notebook_id=nb_id,
+                    store_in_nexus=data.get("store_in_nexus", False),
+                    nexus_category=data.get("nexus_category", "distillation"),
+                    nexus_url=get_config().get("nexus.url", "http://localhost:8700"),
+                )
+                self._log_activity("studio_flashcards",
+                                   f"{result.get('count', 0)} cards from {nb_id}", "studio")
+                return jsonify(result)
+            except Exception as exc:
+                logger.exception("extract_flashcards failed")
+                return jsonify({"error": str(exc)}), 500
+
+        @app.route("/api/nlm/studio/extract-quiz", methods=["POST"])
+        def api_nlm_studio_quiz():
+            """Extract quiz Q&A from a notebook via quota-free Studio tile."""
+            data = request.get_json(force=True)
+            nb_id = data.get("notebook_id", "")
+            if not nb_id:
+                return jsonify({"error": "notebook_id required"}), 400
+            try:
+                from engine.mcp.nlm_node_bridge import get_nlm_node_bridge
+                result = get_nlm_node_bridge().extract_quiz(
+                    notebook_id=nb_id,
+                    store_in_nexus=data.get("store_in_nexus", False),
+                    nexus_category=data.get("nexus_category", "distillation"),
+                    nexus_url=get_config().get("nexus.url", "http://localhost:8700"),
+                )
+                self._log_activity("studio_quiz",
+                                   f"{result.get('count', 0)} questions from {nb_id}", "studio")
+                return jsonify(result)
+            except Exception as exc:
+                logger.exception("extract_quiz failed")
+                return jsonify({"error": str(exc)}), 500
+
+        @app.route("/api/nlm/studio/generate-report", methods=["POST"])
+        def api_nlm_studio_report():
+            """Generate a Studio report with a custom prompt injection."""
+            data = request.get_json(force=True)
+            nb_id = data.get("notebook_id", "")
+            prompt = data.get("prompt", "")
+            if not nb_id or not prompt:
+                return jsonify({"error": "notebook_id and prompt required"}), 400
+            try:
+                from engine.mcp.nlm_node_bridge import get_nlm_node_bridge
+                result = get_nlm_node_bridge().generate_report_with_prompt(
+                    notebook_id=nb_id,
+                    custom_prompt=prompt,
+                    content_type=data.get("content_type", "report"),
+                )
+                self._log_activity("studio_report", prompt[:60], "studio")
+                return jsonify(result)
+            except Exception as exc:
+                logger.exception("generate_report_with_prompt failed")
+                return jsonify({"error": str(exc)}), 500
+
+        @app.route("/api/nlm/studio/ask-multi", methods=["POST"])
+        def api_nlm_studio_ask_multi():
+            """Ask multiple questions in a single NLM session thread."""
+            data = request.get_json(force=True)
+            nb_id = data.get("notebook_id", "")
+            questions = data.get("questions", [])
+            if not nb_id or not questions:
+                return jsonify({"error": "notebook_id and questions required"}), 400
+            if len(questions) > 10:
+                return jsonify({"error": "Maximum 10 questions per session"}), 400
+            try:
+                from engine.mcp.nlm_node_bridge import get_nlm_node_bridge
+                result = get_nlm_node_bridge().ask_multi(
+                    notebook_id=nb_id,
+                    questions=questions,
+                    session_id=data.get("session_id", ""),
+                )
+                self._log_activity("ask_multi",
+                                   f"{len(questions)} questions on {nb_id}", "query")
+                return jsonify(result)
+            except Exception as exc:
+                logger.exception("ask_multi failed")
+                return jsonify({"error": str(exc)}), 500
+
+        @app.route("/api/nlm/studio/distill", methods=["POST"])
+        def api_nlm_studio_distill():
+            """One-shot: flashcards + quiz → parse → store all Q&A in Nexus (quota-free)."""
+            data = request.get_json(force=True)
+            nb_id = data.get("notebook_id", "")
+            if not nb_id:
+                return jsonify({"error": "notebook_id required"}), 400
+            try:
+                from engine.mcp.nlm_node_bridge import get_nlm_node_bridge
+                result = get_nlm_node_bridge().distill_to_nexus(
+                    notebook_id=nb_id,
+                    nexus_category=data.get("nexus_category", "distillation"),
+                    nexus_url=get_config().get("nexus.url", "http://localhost:8700"),
+                )
+                total = result.get("nexus_count", 0)
+                self._log_activity("distill_to_nexus",
+                                   f"{total} pairs stored from {nb_id}", "studio")
+                self._stats["entries_added"] += total
+                return jsonify(result)
+            except Exception as exc:
+                logger.exception("distill_to_nexus failed")
+                return jsonify({"error": str(exc)}), 500
+
+        # ── Quota & Auth ───────────────────────────────────────────────────────
+
+        @app.route("/api/nlm/quota")
+        def api_nlm_quota():
+            """Get current NLM quota: tier, usage, limits."""
+            try:
+                from engine.mcp.nlm_node_bridge import get_nlm_node_bridge
+                return jsonify(get_nlm_node_bridge().get_quota())
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @app.route("/api/nlm/quota/set-tier", methods=["POST"])
+        def api_nlm_quota_set_tier():
+            """Override quota tier (none/basic/pro/team/enterprise)."""
+            data = request.get_json(force=True)
+            tier = data.get("tier", "")
+            if tier not in ("none", "basic", "pro", "team", "enterprise"):
+                return jsonify({"error": "tier must be one of: none, basic, pro, team, enterprise"}), 400
+            try:
+                from engine.mcp.nlm_node_bridge import get_nlm_node_bridge
+                result = get_nlm_node_bridge().set_quota_tier(tier)
+                self._log_activity("set_quota_tier", tier, "admin")
+                return jsonify(result)
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @app.route("/api/nlm/auth/status")
+        def api_nlm_auth_status():
+            """Get Node server health + auth state."""
+            try:
+                from engine.mcp.nlm_node_bridge import get_nlm_node_bridge
+                bridge = get_nlm_node_bridge()
+                health = bridge.get_health()
+                return jsonify({
+                    "server_running": bridge.is_running,
+                    "initialized": bridge.is_initialized,
+                    **health,
+                })
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @app.route("/api/nlm/auth/setup", methods=["POST"])
+        def api_nlm_auth_setup():
+            """Open browser for interactive NLM auth setup."""
+            try:
+                from engine.mcp.nlm_node_bridge import get_nlm_node_bridge
+                result = get_nlm_node_bridge().setup_auth(show_browser=True)
+                self._log_activity("auth_setup", "browser auth triggered", "admin")
+                return jsonify(result)
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @app.route("/api/nlm/export-nexus", methods=["POST"])
+        def api_nlm_export_nexus():
+            """Assemble Nexus knowledge entries and upload as a source to an NLM notebook.
+
+            Body params:
+                notebook_id: Target notebook ID (null = use configured default or create).
+                category: Nexus category to export (null = all).
+                limit: Max entries to include (default 200).
+            """
+            data = request.get_json(force=True)
+            nb_id: Optional[str] = data.get("notebook_id") or None
+            category: Optional[str] = data.get("category") or None
+            limit: int = min(int(data.get("limit", 200)), 2000)
+
+            try:
+                # Fetch entries from Nexus
+                from engine.nexus.client import get_nexus_client
+                client = get_nexus_client()
+                if category:
+                    entries = client.search(category, limit=limit)
+                    if isinstance(entries, dict):
+                        entries = entries.get("results", [])
+                else:
+                    entries = client.list_entries(limit=limit)
+                    if isinstance(entries, dict):
+                        entries = entries.get("data", [])
+
+                if not entries:
+                    return jsonify({"error": "No entries found to export", "ok": False}), 404
+
+                # Assemble as markdown document
+                lines: List[str] = [
+                    f"# Nexus Knowledge Export",
+                    f"Category: {category or 'all'} | Entries: {len(entries)} | "
+                    f"Generated: {datetime.now().isoformat()}\n",
+                    "---\n",
+                ]
+                for i, e in enumerate(entries):
+                    title = e.get("title", f"Entry {i+1}")
+                    content = e.get("content", "")
+                    cat = e.get("category", "")
+                    content_type = e.get("content_type", "note")
+                    lines.append(f"## {title}")
+                    lines.append(f"*Category: {cat} | Type: {content_type}*\n")
+                    lines.append(content.strip())
+                    lines.append("\n---\n")
+
+                assembled = "\n".join(lines)
+
+                # Upload as text source to NLM notebook
+                from engine.mcp.nlm_node_bridge import get_nlm_node_bridge
+                bridge = get_nlm_node_bridge()
+
+                if not nb_id:
+                    nb_id = get_config().get("notebooklm.librarian_notebook_id", "")
+
+                if not nb_id:
+                    return jsonify({
+                        "error": "No notebook_id provided and no librarian_notebook_id configured",
+                        "ok": False,
+                    }), 400
+
+                source_title = f"Nexus Export — {category or 'all'} ({len(entries)} entries)"
+                result = bridge.add_source(nb_id, source_type="text", source_value=assembled)
+                ok = not result.get("error")
+
+                self._log_activity(
+                    "nexus_export_to_nlm",
+                    f"{len(entries)} entries → notebook {nb_id}",
+                    "admin",
+                )
+                return jsonify({
+                    "ok": ok,
+                    "notebook_id": nb_id,
+                    "entries_count": len(entries),
+                    "source_title": source_title,
+                    "message": f"Uploaded {len(entries)} entries as text source to {nb_id}",
+                    **result,
+                })
+            except Exception as exc:
+                logger.exception("export-nexus failed")
+                return jsonify({"error": str(exc), "ok": False}), 500
+
+
             """Generate questions for batch asking."""
             data = request.get_json(force=True)
             topic = data.get("topic", "")

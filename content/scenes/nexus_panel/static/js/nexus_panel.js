@@ -1162,6 +1162,19 @@ document.getElementById('refresh-notebooks-btn')?.addEventListener('click', load
 // ── NLM Lab Panel ───────────────────────────────────────────────────
 function loadNLMLabPanel() {
   loadSavings();
+  loadQuotaDisplay();
+  loadAuthStatus();
+
+  // Sub-navigation
+  document.querySelectorAll('.subnav-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.subnav-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.nlmsub').forEach(s => { s.classList.add('hidden'); s.classList.remove('active'); });
+      btn.classList.add('active');
+      const sub = document.getElementById(`nlmsub-${btn.dataset.sub}`);
+      if (sub) { sub.classList.remove('hidden'); sub.classList.add('active'); }
+    });
+  });
 }
 
 // NLM Ask
@@ -1334,9 +1347,255 @@ async function loadSavings() {
   set('sav-llm', data.llm_fallbacks || 0);
   const pct = data.compute_saved_pct != null ? (data.compute_saved_pct * 100).toFixed(1) : '0';
   set('sav-pct', pct + '%');
+  set('sav-tokens', data.tokens_saved || 0);
 }
 
 document.getElementById('refresh-savings-btn')?.addEventListener('click', loadSavings);
+
+// Quota display
+async function loadQuotaDisplay() {
+  const el = document.getElementById('quota-display');
+  if (!el) return;
+  el.innerHTML = '<p class="muted">Loading...</p>';
+  const data = await api('/api/nlm/quota');
+  if (data.error) { el.innerHTML = `<p style="color:var(--danger)">${esc(data.error)}</p>`; return; }
+  const tier = data.tier || data.nlm_tier || 'unknown';
+  const used = data.queries_today ?? data.used ?? '?';
+  const limit = data.daily_limit ?? data.limit ?? '?';
+  el.innerHTML = `
+    <div class="auth-field"><span>Tier</span><span class="auth-ok">${esc(tier)}</span></div>
+    <div class="auth-field"><span>Queries today</span><span>${used} / ${limit}</span></div>
+    <div class="auth-field"><span>Notebooks</span><span>${data.notebooks_used ?? '?'}</span></div>
+  `;
+}
+
+document.getElementById('refresh-quota-btn')?.addEventListener('click', loadQuotaDisplay);
+
+// Auth status
+async function loadAuthStatus() {
+  const el = document.getElementById('auth-status-display');
+  if (!el) return;
+  const data = await api('/api/nlm/auth/status');
+  if (data.error) { el.innerHTML = `<p style="color:var(--danger)">${esc(data.error)}</p>`; return; }
+  const ok = v => `<span class="${v ? 'auth-ok' : 'auth-err'}">${v ? '✓ Yes' : '✗ No'}</span>`;
+  el.innerHTML = `
+    <div class="auth-field"><span>Server running</span>${ok(data.server_running)}</div>
+    <div class="auth-field"><span>Initialized</span>${ok(data.initialized)}</div>
+    <div class="auth-field"><span>Authenticated</span>${ok(data.authenticated ?? data.auth_ok)}</div>
+    <div class="auth-field"><span>Profile path</span><span style="font-size:11px;color:var(--text-muted)">${esc(data.profile_path || 'default')}</span></div>
+  `;
+}
+
+document.getElementById('auth-check-btn')?.addEventListener('click', loadAuthStatus);
+
+document.getElementById('auth-setup-btn')?.addEventListener('click', async () => {
+  const btn = document.getElementById('auth-setup-btn');
+  btn.textContent = 'Opening browser...';
+  btn.disabled = true;
+  const data = await api('/api/nlm/auth/setup', { method: 'POST', headers: {'Content-Type':'application/json'}, body: '{}' });
+  btn.disabled = false;
+  btn.textContent = 'Setup Auth (opens browser)';
+  if (data.error) alert('Auth setup error: ' + data.error);
+  else { await loadAuthStatus(); }
+});
+
+// Quota tier override
+document.getElementById('quota-tier-btn')?.addEventListener('click', async () => {
+  const tier = document.getElementById('quota-tier-select')?.value;
+  const statusEl = document.getElementById('quota-tier-status');
+  statusEl.textContent = 'Setting...';
+  const data = await api('/api/nlm/quota/set-tier', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ tier })
+  });
+  if (data.error) statusEl.textContent = '✗ ' + data.error;
+  else { statusEl.textContent = '✓ Tier set to ' + tier; loadQuotaDisplay(); }
+});
+
+// ── Studio: Extract Flashcards ───────────────────────────────────────
+document.getElementById('fc-extract-btn')?.addEventListener('click', async () => {
+  const nbId = document.getElementById('fc-nb-id')?.value.trim();
+  const category = document.getElementById('fc-category')?.value.trim() || 'distillation';
+  const store = document.getElementById('fc-store')?.checked;
+  const resultsEl = document.getElementById('fc-results');
+  if (!nbId) { alert('Notebook ID required'); return; }
+
+  resultsEl.innerHTML = '<p class="muted">⏳ Generating flashcards (quota-free)...</p>';
+  resultsEl.classList.remove('hidden');
+
+  const data = await api('/api/nlm/studio/extract-flashcards', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ notebook_id: nbId, store_in_nexus: store, nexus_category: category })
+  });
+
+  if (data.error) { resultsEl.innerHTML = `<p style="color:var(--danger)">${esc(data.error)}</p>`; return; }
+
+  const items = data.flashcards || data.items || [];
+  const nexusInfo = data.nexus_count ? `<p style="color:#a6e3a1">✓ ${data.nexus_count} pairs stored in Nexus</p>` : '';
+  resultsEl.innerHTML = `
+    <p><strong>${items.length}</strong> flashcards extracted (method: ${esc(data.parse_method || 'auto')}) ${nexusInfo}</p>
+    ${items.slice(0, 20).map(c => `
+      <div class="fc-item">
+        <strong>Front:</strong> ${esc(c.front || c.question || '')}
+        <br><span style="color:var(--text-secondary)">Back: ${esc(c.back || c.answer || '')}</span>
+      </div>
+    `).join('')}
+    ${items.length > 20 ? `<p class="muted">…and ${items.length - 20} more</p>` : ''}
+  `;
+});
+
+// ── Studio: Extract Quiz ─────────────────────────────────────────────
+document.getElementById('qz-extract-btn')?.addEventListener('click', async () => {
+  const nbId = document.getElementById('qz-nb-id')?.value.trim();
+  const category = document.getElementById('qz-category')?.value.trim() || 'distillation';
+  const store = document.getElementById('qz-store')?.checked;
+  const resultsEl = document.getElementById('qz-results');
+  if (!nbId) { alert('Notebook ID required'); return; }
+
+  resultsEl.innerHTML = '<p class="muted">⏳ Generating quiz (quota-free)...</p>';
+  resultsEl.classList.remove('hidden');
+
+  const data = await api('/api/nlm/studio/extract-quiz', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ notebook_id: nbId, store_in_nexus: store, nexus_category: category })
+  });
+
+  if (data.error) { resultsEl.innerHTML = `<p style="color:var(--danger)">${esc(data.error)}</p>`; return; }
+
+  const items = data.questions || data.items || [];
+  const nexusInfo = data.nexus_count ? `<p style="color:#a6e3a1">✓ ${data.nexus_count} pairs stored in Nexus</p>` : '';
+  resultsEl.innerHTML = `
+    <p><strong>${items.length}</strong> quiz questions extracted ${nexusInfo}</p>
+    ${items.slice(0, 15).map((q, i) => `
+      <div class="qz-item">
+        <strong>Q${i+1}:</strong> ${esc(q.question || '')}
+        <br><span style="color:#a6e3a1">A: ${esc(q.answer || '')}</span>
+        ${(q.options || []).length ? `<br><span class="muted" style="font-size:11px">Options: ${q.options.map(esc).join(' · ')}</span>` : ''}
+      </div>
+    `).join('')}
+    ${items.length > 15 ? `<p class="muted">…and ${items.length - 15} more</p>` : ''}
+  `;
+});
+
+// ── Studio: Generate Report with Prompt ─────────────────────────────
+document.getElementById('rpt-generate-btn')?.addEventListener('click', async () => {
+  const nbId = document.getElementById('rpt-nb-id')?.value.trim();
+  const prompt = document.getElementById('rpt-prompt')?.value.trim();
+  const contentType = document.getElementById('rpt-type')?.value || 'report';
+  const resultsEl = document.getElementById('rpt-results');
+  if (!nbId || !prompt) { alert('Notebook ID and prompt required'); return; }
+
+  resultsEl.innerHTML = '<p class="muted">⏳ Generating report...</p>';
+  resultsEl.classList.remove('hidden');
+
+  const data = await api('/api/nlm/studio/generate-report', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ notebook_id: nbId, prompt, content_type: contentType })
+  });
+
+  if (data.error) { resultsEl.innerHTML = `<p style="color:var(--danger)">${esc(data.error)}</p>`; return; }
+
+  const injected = data.prompt_injected ? '✓ Custom prompt injected' : '⚠ Auto-generated (no dialog found)';
+  resultsEl.innerHTML = `
+    <p style="color:#a6e3a1">${injected}</p>
+    <pre style="white-space:pre-wrap;font-size:13px;background:#1e1e2e;padding:12px;border-radius:6px;overflow-x:auto;max-height:400px">${esc(data.content || data.result || 'No content returned')}</pre>
+  `;
+});
+
+// ── Studio: Distill to Nexus (one-shot) ─────────────────────────────
+document.getElementById('dtx-run-btn')?.addEventListener('click', async () => {
+  const nbId = document.getElementById('dtx-nb-id')?.value.trim();
+  const category = document.getElementById('dtx-category')?.value.trim() || 'distillation';
+  const progressEl = document.getElementById('dtx-progress');
+  const resultsEl = document.getElementById('dtx-results');
+  if (!nbId) { alert('Notebook ID required'); return; }
+
+  progressEl.textContent = '⏳ Running full distillation pipeline (quota-free)…';
+  resultsEl.classList.add('hidden');
+
+  const data = await api('/api/nlm/studio/distill', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ notebook_id: nbId, nexus_category: category })
+  });
+
+  progressEl.textContent = '';
+  if (data.error) { progressEl.textContent = '✗ ' + data.error; return; }
+
+  resultsEl.classList.remove('hidden');
+  resultsEl.innerHTML = `
+    <div class="dtx-result-row"><span>Flashcards extracted</span><strong>${data.flashcard_count ?? 0}</strong></div>
+    <div class="dtx-result-row"><span>Quiz questions extracted</span><strong>${data.quiz_count ?? 0}</strong></div>
+    <div class="dtx-result-row"><span>Total Q&amp;A pairs stored in Nexus</span><strong style="color:#a6e3a1">${data.nexus_count ?? 0}</strong></div>
+    ${data.nexus_ids?.length ? `<p class="muted" style="font-size:11px">IDs: ${data.nexus_ids.slice(0,5).join(', ')}${data.nexus_ids.length > 5 ? '…' : ''}</p>` : ''}
+  `;
+  loadSavings();
+});
+
+// ── Query: Multi-Question Session ────────────────────────────────────
+document.getElementById('multi-ask-btn')?.addEventListener('click', async () => {
+  const nbId = document.getElementById('multi-nb-id')?.value.trim();
+  const text = document.getElementById('multi-questions')?.value.trim();
+  const statusEl = document.getElementById('multi-status');
+  const resultsEl = document.getElementById('multi-results');
+  if (!nbId || !text) { alert('Notebook ID and questions required'); return; }
+
+  const questions = text.split('\n').map(q => q.trim()).filter(Boolean).slice(0, 10);
+  statusEl.textContent = `Asking ${questions.length} questions in one session…`;
+  resultsEl.classList.add('hidden');
+
+  const data = await api('/api/nlm/studio/ask-multi', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ notebook_id: nbId, questions })
+  });
+
+  statusEl.textContent = '';
+  if (data.error) { statusEl.textContent = '✗ ' + data.error; return; }
+
+  const answers = data.answers || [];
+  resultsEl.classList.remove('hidden');
+  resultsEl.innerHTML = answers.map((a, i) => `
+    <div class="multi-answer">
+      <div class="multi-q">Q${i+1}: ${esc(a.question || questions[i] || '')}</div>
+      <div class="multi-a">${esc(a.answer || 'No answer')}</div>
+    </div>
+  `).join('');
+  loadSavings();
+});
+
+// ── Admin: Export Nexus → NLM ────────────────────────────────────────
+document.getElementById('exp-run-btn')?.addEventListener('click', async () => {
+  const nbId = document.getElementById('exp-nb-id')?.value.trim();
+  const category = document.getElementById('exp-category')?.value.trim();
+  const limit = parseInt(document.getElementById('exp-limit')?.value || '200');
+  const statusEl = document.getElementById('exp-status');
+  const resultEl = document.getElementById('exp-result');
+
+  statusEl.textContent = '⏳ Exporting Nexus entries to NLM…';
+  resultEl.classList.add('hidden');
+
+  const data = await api('/api/nlm/export-nexus', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ notebook_id: nbId || null, category: category || null, limit })
+  });
+
+  statusEl.textContent = '';
+  if (data.error) { statusEl.textContent = '✗ ' + data.error; return; }
+
+  resultEl.classList.remove('hidden');
+  resultEl.innerHTML = `
+    <div class="dtx-result-row"><span>Entries exported</span><strong>${data.entries_count ?? 0}</strong></div>
+    <div class="dtx-result-row"><span>Notebook ID</span><code>${esc(data.notebook_id || nbId || 'new')}</code></div>
+    <div class="dtx-result-row"><span>Source uploaded</span><strong class="${data.ok ? 'auth-ok' : 'auth-err'}">${data.ok ? '✓ Yes' : '✗ No'}</strong></div>
+    ${data.message ? `<p class="muted" style="font-size:12px">${esc(data.message)}</p>` : ''}
+  `;
+});
 
 // ── Utilities ───────────────────────────────────────────────────────
 function esc(str) {

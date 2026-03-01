@@ -386,8 +386,18 @@
 
       <!-- ══ NLM Lab Panel ═════════════════════════════════════ -->
       <section id="panel-nlmlab" class="panel">
-        <div class="nlmlab-layout">
-          <!-- NLM Ask (Router) -->
+        <!-- Sub-navigation -->
+        <div class="nlmlab-subnav">
+          <button class="subnav-btn active" data-sub="query">🧠 Query</button>
+          <button class="subnav-btn" data-sub="studio">🎴 Studio</button>
+          <button class="subnav-btn" data-sub="batch">📋 Batch</button>
+          <button class="subnav-btn" data-sub="analysis">🔬 Analysis</button>
+          <button class="subnav-btn" data-sub="metrics">📊 Metrics</button>
+          <button class="subnav-btn" data-sub="admin">⚙️ Admin</button>
+        </div>
+
+        <!-- ── Query sub-panel ── -->
+        <div id="nlmsub-query" class="nlmsub active nlmlab-layout">
           <div class="card wide">
             <h3>🧠 NLM-First Query</h3>
             <p>Ask a question — routes through cache → FTS → NLM → LLM. Answers auto-stored.</p>
@@ -405,7 +415,80 @@
             </div>
           </div>
 
-          <!-- Batch Q&A Workshop -->
+          <div class="card wide">
+            <h3>💬 Multi-Question Session</h3>
+            <p>Ask 2–10 questions in one NLM thread — answers build on each other's context. Uses quota.</p>
+            <input type="text" id="multi-nb-id" placeholder="Notebook ID (required)..." class="input-full">
+            <textarea id="multi-questions" placeholder="Enter questions (one per line, 2–10)..." class="textarea-full" rows="5"></textarea>
+            <div class="row-actions">
+              <button id="multi-ask-btn" class="btn primary">Run Session</button>
+              <span id="multi-status" class="muted"></span>
+            </div>
+            <div id="multi-results" class="hidden"></div>
+          </div>
+        </div>
+
+        <!-- ── Studio sub-panel (Quota-Free) ── -->
+        <div id="nlmsub-studio" class="nlmsub hidden nlmlab-layout">
+          <div class="card wide studio-banner">
+            <span class="quota-free-badge">⚡ QUOTA-FREE</span>
+            <p>All Studio tile operations bypass the chat RPC entirely — unlimited use.</p>
+          </div>
+
+          <div class="card">
+            <h3>🃏 Extract Flashcards</h3>
+            <p>Generate flashcards tile → parse into <code>{front, back}</code> pairs.</p>
+            <input type="text" id="fc-nb-id" placeholder="Notebook ID..." class="input-full">
+            <input type="text" id="fc-category" placeholder="Nexus category (default: distillation)" class="input-full">
+            <label class="toggle-row">
+              <input type="checkbox" id="fc-store"> Store pairs in Nexus
+            </label>
+            <button id="fc-extract-btn" class="btn primary">Extract Flashcards</button>
+            <div id="fc-results" class="hidden"></div>
+          </div>
+
+          <div class="card">
+            <h3>❓ Extract Quiz</h3>
+            <p>Generate quiz tile → parse into <code>{question, answer, options[]}</code> items.</p>
+            <input type="text" id="qz-nb-id" placeholder="Notebook ID..." class="input-full">
+            <input type="text" id="qz-category" placeholder="Nexus category (default: distillation)" class="input-full">
+            <label class="toggle-row">
+              <input type="checkbox" id="qz-store"> Store Q&A in Nexus
+            </label>
+            <button id="qz-extract-btn" class="btn primary">Extract Quiz</button>
+            <div id="qz-results" class="hidden"></div>
+          </div>
+
+          <div class="card">
+            <h3>📝 Report with Custom Prompt</h3>
+            <p>Inject a custom prompt into the Reports tile. Ask Gemini to generate Q&A pairs, code, tables, scripts…</p>
+            <input type="text" id="rpt-nb-id" placeholder="Notebook ID..." class="input-full">
+            <textarea id="rpt-prompt" placeholder="e.g. Generate 20 Q&amp;A pairs covering the main concepts. Return as numbered list with Q: and A: prefix." class="textarea-full" rows="4"></textarea>
+            <div class="row-actions">
+              <select id="rpt-type" class="input-sm">
+                <option value="report">Report</option>
+                <option value="study_guide">Study Guide</option>
+                <option value="faq">FAQ</option>
+                <option value="briefing">Briefing Doc</option>
+              </select>
+              <button id="rpt-generate-btn" class="btn primary">Generate</button>
+            </div>
+            <div id="rpt-results" class="hidden"></div>
+          </div>
+
+          <div class="card wide">
+            <h3>🚀 Distill to Nexus (One-Shot)</h3>
+            <p>Full pipeline: flashcards + quiz tiles → parse everything → store all Q&A pairs in Nexus atomically. Typically yields <strong>25–40 pairs</strong> per notebook. Zero quota cost.</p>
+            <input type="text" id="dtx-nb-id" placeholder="Notebook ID..." class="input-full">
+            <input type="text" id="dtx-category" placeholder="Nexus category (default: distillation)" class="input-full">
+            <button id="dtx-run-btn" class="btn success">⚡ Distill to Nexus</button>
+            <div id="dtx-progress" class="muted"></div>
+            <div id="dtx-results" class="hidden"></div>
+          </div>
+        </div>
+
+        <!-- ── Batch sub-panel ── -->
+        <div id="nlmsub-batch" class="nlmsub hidden nlmlab-layout">
           <div class="card wide">
             <h3>📋 Batch Q&A Workshop</h3>
             <p>Write questions or auto-generate, then batch-send to NLM. All answers stored in Nexus.</p>
@@ -425,8 +508,10 @@
               <div id="batch-results-list"></div>
             </div>
           </div>
+        </div>
 
-          <!-- Plan Decomposer -->
+        <!-- ── Analysis sub-panel ── -->
+        <div id="nlmsub-analysis" class="nlmsub hidden nlmlab-layout">
           <div class="card">
             <h3>🧩 Plan Decomposer</h3>
             <p>Break a complex plan into small-model implementation steps.</p>
@@ -435,7 +520,6 @@
             <div id="decompose-result"></div>
           </div>
 
-          <!-- Code Analyzer -->
           <div class="card">
             <h3>🔬 Code Analyzer</h3>
             <p>Send source files to NLM for expert analysis.</p>
@@ -445,8 +529,7 @@
             <div id="analyze-result"></div>
           </div>
 
-          <!-- Topic Builder -->
-          <div class="card">
+          <div class="card wide">
             <h3>📚 Topic Builder</h3>
             <p>End-to-end: create notebook → generate questions → batch-ask → store in Nexus.</p>
             <input type="text" id="topic-name" placeholder="Topic name..." class="input-full">
@@ -456,8 +539,10 @@
             <button id="topic-build-btn" class="btn primary">Build Knowledge</button>
             <div id="topic-result"></div>
           </div>
+        </div>
 
-          <!-- Savings Dashboard -->
+        <!-- ── Metrics sub-panel ── -->
+        <div id="nlmsub-metrics" class="nlmsub hidden nlmlab-layout">
           <div class="card wide">
             <h3>📊 NLM Savings Metrics</h3>
             <div id="savings-dashboard">
@@ -482,12 +567,69 @@
                   <div class="savings-value" id="sav-pct">0%</div>
                   <div class="savings-label">Compute Saved</div>
                 </div>
+                <div class="savings-card accent">
+                  <div class="savings-value" id="sav-tokens">0</div>
+                  <div class="savings-label">Tokens Saved</div>
+                </div>
               </div>
               <button id="refresh-savings-btn" class="btn">Refresh Stats</button>
             </div>
           </div>
+
+          <div class="card wide">
+            <h3>📈 Quota Usage</h3>
+            <div id="quota-display">
+              <p class="muted">Click Refresh to load quota info.</p>
+            </div>
+            <button id="refresh-quota-btn" class="btn">Refresh Quota</button>
+          </div>
+        </div>
+
+        <!-- ── Admin sub-panel ── -->
+        <div id="nlmsub-admin" class="nlmsub hidden nlmlab-layout">
+          <div class="card">
+            <h3>🔑 Auth Status</h3>
+            <div id="auth-status-display">
+              <p class="muted">Click Check to load auth info.</p>
+            </div>
+            <div class="row-actions">
+              <button id="auth-check-btn" class="btn">Check Auth</button>
+              <button id="auth-setup-btn" class="btn warning">Setup Auth (opens browser)</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3>🎚️ Quota Tier Override</h3>
+            <p>Override the detected quota tier manually.</p>
+            <div class="row-actions">
+              <select id="quota-tier-select" class="input-sm">
+                <option value="none">None (20/day)</option>
+                <option value="basic">Basic (100/day)</option>
+                <option value="pro" selected>Pro (500/day)</option>
+                <option value="team">Team (1000/day)</option>
+                <option value="enterprise">Enterprise (5000/day)</option>
+              </select>
+              <button id="quota-tier-btn" class="btn primary">Set Tier</button>
+              <span id="quota-tier-status" class="muted"></span>
+            </div>
+          </div>
+
+          <div class="card wide">
+            <h3>📤 Export Nexus → NLM Notebook</h3>
+            <p>Assemble Nexus knowledge entries and upload as a source to an NLM notebook. Creates a "living notebook" backed by your local knowledge base.</p>
+            <div class="export-form">
+              <input type="text" id="exp-nb-id" placeholder="Target notebook ID (leave blank to create new)..." class="input-full">
+              <input type="text" id="exp-category" placeholder="Nexus category to export (blank = all)..." class="input-full">
+              <input type="number" id="exp-limit" value="200" min="10" max="2000" class="input-xs">
+              <span class="muted">max entries</span>
+              <button id="exp-run-btn" class="btn primary">Export to Notebook</button>
+              <span id="exp-status" class="muted"></span>
+            </div>
+            <div id="exp-result" class="hidden"></div>
+          </div>
         </div>
       </section>
+
 
       <!-- ══ Copilot Panel ═════════════════════════════════════ -->
       <section id="panel-copilot" class="panel">
