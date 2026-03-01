@@ -2,6 +2,67 @@
 
 All notable changes to CosySim are documented here.
 
+## v0.67 — Curated World
+
+### Track A: News System Expansion
+
+- **`config/news_sources.yaml`**: Expanded from 5 → 26 curated sources across 7 categories
+  - `ai_ml` (9): ArXiv cs.AI/cs.LG/cs.CL, HN Top/Best, Reddit r/ML/r/artificial/r/singularity, VentureBeat AI
+  - `local_inference` (3): Reddit r/LocalLLaMA, r/ollama, r/Oobabooga
+  - `open_source` (4): GitHub Trending (all + Python), Lobsters, Changelog
+  - `python` (4): Reddit r/Python, Real Python, Python Insider, PyPI Updates
+  - `security` (3): Reddit r/netsec, Krebs on Security, Schneier on Security
+  - `science` (2): ScienceAlert, MIT Technology Review
+  - `dev_tools` (1): Dev.to Top Posts
+  - Added `category_filters` with per-category include keyword lists
+  - Added `keyword_filters.exclude` (crypto/blockchain/nft/bitcoin/etc.)
+
+- **`engine/nexus/news_sources.py`**: Category-aware filtering + reliability fixes
+  - `NewsSource` dataclass: added `last_fetch_status: str = "pending"` field
+  - `filter_articles()`: rewritten to be category-aware — each category uses its own include keywords; categories without a filter only have global excludes applied (enables python/security/science to pass without AI keywords)
+  - `score_relevance()`: uses category-specific keywords with source quality_score as base
+  - `store_to_nexus()`: fixed `content_type="news"` (was `"note"`)
+  - `stats()`: now includes `category`, `quality_score`, `last_fetch_status` per source
+
+### Track B: Intel Hub News Section
+
+- **`content/scenes/intel_hub/intel_hub_scene.py`**: 3 new news API endpoints
+  - `GET /api/news/latest?limit=&category=` — articles from Nexus content_type=news
+  - `POST /api/news/fetch-now` — trigger full fetch cycle, returns stats + digest preview
+  - `GET /api/news/sources` — all configured sources with status
+
+- **`content/scenes/intel_hub/templates/intel_hub.html`**: Full news section added
+  - Nav button: 📰 News (between Overview and Assistant)
+  - Category tabs: All / AI-ML / Inference / Python / Security / Science / Open Source / Dev Tools
+  - Source panel (left) + article cards feed (right)
+  - Search/filter bar, Fetch Now button, empty-state handling
+  - Version badge: v0.66 → v0.67
+
+- **`content/scenes/intel_hub/static/js/intel_hub.js`**: News section wired
+  - `initNewsSection()`, `loadNewsSources()`, `loadNewsArticles()`, `renderNewsArticles()`
+  - `sectionLoaders` dict updated: `news: initNewsSection`
+
+- **`content/scenes/intel_hub/static/css/intel_hub.css`**: News styles added
+  - `.cat-tab`, `.news-article-card`, `.news-article-meta`, `.news-cat-chip`, `.news-score-bar`
+  - `.source-row`, `.source-dot-ok/error/pending`
+
+### Track C: Scene Health Audit
+
+- All 18 scene modules verified to import cleanly post-v0.66 engine changes
+- `tests/test_scene_imports.py`: parametrized import test for all 18 scenes (19 tests)
+
+### New Tests (+42, total 5,695)
+
+- `tests/test_news_system.py` (28 tests): config structure, registry load, category-aware filtering, scoring, Nexus storage
+- `tests/test_scene_imports.py` (19 tests): all 18 scene imports + count guard
+- Updated `tests/test_news_sources.py`: aligned to category-aware filter design
+
+### Nexus Knowledge
+
+- Stored 3 v0.67 architecture decisions: category-aware filtering design, sources inventory, Intel Hub news API
+
+---
+
 ## v0.66 — The Living Loop (Track A)
 
 ### Improved: `training/micro_datasets.py` — Router V2 Dataset Generation

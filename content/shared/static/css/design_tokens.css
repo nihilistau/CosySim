@@ -1,22 +1,27 @@
 /*
- * CosySim Design Tokens
- * =====================
+ * CosySim Design Tokens — v0.68 "Dark Renaissance"
+ * =================================================
  * Centralized CSS custom properties for consistent theming across all scenes.
  * Import via: @import url('/shared/static/css/design_tokens.css');
  * Or link:   <link rel="stylesheet" href="/shared/static/css/design_tokens.css">
+ *
+ * Token Groups:
+ *   Backgrounds · Text · Accents · Neon · Glass · Scene · Hacker ·
+ *   Adult Stats · Borders · Spacing · Typography · Radius · Shadows ·
+ *   Transitions · Z-Index · Benchmark · Status
  */
 
 :root {
     /* ── Color Palette ──────────────────────────────────────── */
 
-    /* Backgrounds */
-    --cs-bg-deepest:    #060a12;
-    --cs-bg-dark:       #0a0e17;
-    --cs-bg-panel:      #111827;
-    --cs-bg-card:       #14141e;
-    --cs-bg-elevated:   #1a2332;
-    --cs-bg-hover:      #1f2937;
-    --cs-bg-active:     #374151;
+    /* Backgrounds — deep black glass foundation */
+    --cs-bg-deepest:    #040608;
+    --cs-bg-dark:       #070a10;
+    --cs-bg-panel:      #0d1117;
+    --cs-bg-card:       #111520;
+    --cs-bg-elevated:   #161c2a;
+    --cs-bg-hover:      #1c2436;
+    --cs-bg-active:     #253047;
 
     /* Text */
     --cs-text-primary:  #e5e7eb;
@@ -43,14 +48,132 @@
     --cs-pink:          #ec4899;
     --cs-pink-soft:     rgba(236, 72, 153, 0.15);
 
-    /* Scene-specific (override in scene CSS) */
+    /* Scene-specific (override in scene CSS) — 3 vars, each scene customises */
     --cs-scene-accent:  var(--cs-accent);
-    --cs-scene-bg:      var(--cs-bg-dark);
+    --cs-scene-glow:    rgba(59, 130, 246, 0.35);
+    --cs-scene-bg-deep: var(--cs-bg-deepest);
+    --cs-scene-bg:      var(--cs-bg-dark);   /* legacy compat */
+
+    /* ── Neon Palette ───────────────────────────────────────── */
+    --cs-neon-blue:     #00a8ff;
+    --cs-neon-blue-glow:rgba(0, 168, 255, 0.4);
+    --cs-neon-cyan:     #00e5ff;
+    --cs-neon-cyan-glow:rgba(0, 229, 255, 0.4);
+    --cs-neon-pink:     #ff006e;
+    --cs-neon-pink-glow:rgba(255, 0, 110, 0.4);
+    --cs-neon-red:      #ff1744;
+    --cs-neon-red-glow: rgba(255, 23, 68, 0.4);
+    --cs-neon-green:    #39ff14;
+    --cs-neon-green-glow:rgba(57, 255, 20, 0.3);
+    --cs-neon-amber:    #ffab00;
+    --cs-neon-amber-glow:rgba(255, 171, 0, 0.35);
+    --cs-neon-violet:   #d500f9;
+    --cs-neon-violet-glow:rgba(213, 0, 249, 0.35);
+
+    /* ── Black Glass System ─────────────────────────────────── */
+    --cs-glass-bg:          rgba(10, 14, 23, 0.75);
+    --cs-glass-bg-strong:   rgba(6, 8, 16, 0.88);
+    --cs-glass-bg-light:    rgba(22, 28, 42, 0.55);
+    --cs-glass-border:      rgba(255, 255, 255, 0.06);
+    --cs-glass-border-glow: rgba(var(--cs-scene-accent-rgb, 59 130 246), 0.25);
+    --cs-glass-blur:        12px;
+    --cs-glass-shadow:      0 8px 32px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    --cs-glass-shadow-glow: 0 0 24px var(--cs-scene-glow), 0 8px 32px rgba(0, 0, 0, 0.6);
+
+    /* Backdrop blur levels */
+    --cs-blur-sm:   4px;
+    --cs-blur-md:   12px;
+    --cs-blur-lg:   24px;
+    --cs-blur-xl:   40px;
+
+    /* ── Hacker / Admin Loft Theme ──────────────────────────── */
+    --cs-hack-green:        #00ff41;
+    --cs-hack-green-dim:    #00cc33;
+    --cs-hack-green-glow:   rgba(0, 255, 65, 0.4);
+    --cs-hack-green-soft:   rgba(0, 255, 65, 0.08);
+    --cs-hack-bg:           #020c02;
+    --cs-hack-bg-panel:     #040d04;
+    --cs-hack-border:       rgba(0, 255, 65, 0.15);
+    --cs-hack-red:          #ff1744;
+    --cs-hack-red-glow:     rgba(255, 23, 68, 0.5);
+    --cs-crt-scanline:      repeating-linear-gradient(
+                                to bottom,
+                                transparent 0px,
+                                transparent 2px,
+                                rgba(0, 0, 0, 0.12) 2px,
+                                rgba(0, 0, 0, 0.12) 4px
+                            );
+    --cs-crt-flicker:       crt-flicker 8s infinite;
+    --cs-crt-noise:         url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+
+    /* ── Pixel Art Support ──────────────────────────────────── */
+    --cs-pixel-font:    'Press Start 2P', 'Courier New', monospace;
+    --cs-terminal-font: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+    --cs-pixel-border:  2px solid var(--cs-hack-green);
+    --cs-pixel-shadow:  4px 4px 0 rgba(0, 0, 0, 0.8), 0 0 8px var(--cs-hack-green-glow);
+
+    /* ── Adult Stat Colors (emotion bars) ───────────────────── */
+    --cs-stat-arousal:      #ff006e;
+    --cs-stat-arousal-glow: rgba(255, 0, 110, 0.5);
+    --cs-stat-pleasure:     #ec4899;
+    --cs-stat-pleasure-glow:rgba(236, 72, 153, 0.5);
+    --cs-stat-horniness:    #f43f5e;
+    --cs-stat-horniness-glow:rgba(244, 63, 94, 0.5);
+    --cs-stat-happiness:    #22c55e;
+    --cs-stat-happiness-glow:rgba(34, 197, 94, 0.4);
+    --cs-stat-drunkenness:  #f59e0b;
+    --cs-stat-drunkenness-glow:rgba(245, 158, 11, 0.4);
+    --cs-stat-tiredness:    #6b7280;
+    --cs-stat-tiredness-glow:rgba(107, 114, 128, 0.3);
+    --cs-stat-fear:         #8b5cf6;
+    --cs-stat-fear-glow:    rgba(139, 92, 246, 0.5);
+    --cs-stat-anger:        #ef4444;
+    --cs-stat-anger-glow:   rgba(239, 68, 68, 0.5);
+    --cs-stat-dominance:    #dc2626;
+    --cs-stat-dominance-glow:rgba(220, 38, 38, 0.5);
+    --cs-stat-openness:     #06b6d4;
+    --cs-stat-openness-glow:rgba(6, 182, 212, 0.4);
+
+    /* ── Benchmark / System Monitoring Colors ───────────────── */
+    --cs-bench-fast:        #22c55e;    /* < 1s */
+    --cs-bench-ok:          #84cc16;    /* 1-2s */
+    --cs-bench-warn:        #f59e0b;    /* 2-5s */
+    --cs-bench-slow:        #ef4444;    /* > 5s */
+    --cs-bench-cache:       #22c55e;    /* Nexus CACHE hit */
+    --cs-bench-fts:         #84cc16;    /* Nexus FTS hit */
+    --cs-bench-nlm:         #f59e0b;    /* Nexus NLM hit */
+    --cs-bench-llm:         #ef4444;    /* LLM fallback */
+    --cs-bench-bg:          rgba(4, 8, 4, 0.85);
+    --cs-bench-border:      rgba(34, 197, 94, 0.2);
+
+    /* ── Economy / Credits ──────────────────────────────────── */
+    --cs-credit-color:      #f59e0b;
+    --cs-credit-glow:       rgba(245, 158, 11, 0.4);
+    --cs-credit-symbol:     "₵";
+
+    /* ── Scene Accent Presets (apply via scene CSS) ─────────── */
+    /* Usage: scene file sets --cs-scene-accent to one of these  */
+    /* --cs-scene-accent: var(--cs-scene-bedroom);               */
+    --cs-scene-bedroom:     #ec4899;   /* Rose-pink — The Penthouse */
+    --cs-scene-lounge:      #f59e0b;   /* Amber — The Velvet Pit */
+    --cs-scene-tavern:      #92400e;   /* Dark amber — The Rusty Anchor */
+    --cs-scene-casino:      #f97316;   /* Neon orange — Club Noir */
+    --cs-scene-gallery:     #7c3aed;   /* Violet — The Obscura */
+    --cs-scene-heist:       #e11d48;   /* Crimson — The Score */
+    --cs-scene-realm:       #059669;   /* Emerald — Shattered Throne */
+    --cs-scene-neoncity:    #06b6d4;   /* Cyan — NeonCity */
+    --cs-scene-arena:       #dc2626;   /* Blood red — The Colosseum */
+    --cs-scene-phone:       #10b981;   /* Emerald — Signal */
+    --cs-scene-coders:      #4ade80;   /* Matrix green — The Lab */
+    --cs-scene-games:       #8b5cf6;   /* Violet — The Arcade */
+    --cs-scene-hub:         #3b82f6;   /* Blue — The Terminal */
+    --cs-scene-intel:       #06b6d4;   /* Cyan — The Briefing Room */
+    --cs-scene-admin:       #00ff41;   /* Hack green — The Loft */
 
     /* ── Borders ────────────────────────────────────────────── */
-    --cs-border:        #1f2937;
-    --cs-border-light:  #374151;
-    --cs-border-focus:  var(--cs-accent);
+    --cs-border:        rgba(255, 255, 255, 0.06);
+    --cs-border-light:  rgba(255, 255, 255, 0.12);
+    --cs-border-focus:  var(--cs-scene-accent);
 
     /* ── Spacing Scale ──────────────────────────────────────── */
     --cs-space-xs:      4px;
@@ -90,16 +213,21 @@
     --cs-radius-full:   9999px;
 
     /* ── Shadows ────────────────────────────────────────────── */
-    --cs-shadow-sm:     0 1px 3px rgba(0, 0, 0, 0.3);
-    --cs-shadow-md:     0 4px 12px rgba(0, 0, 0, 0.4);
-    --cs-shadow-lg:     0 8px 24px rgba(0, 0, 0, 0.5);
-    --cs-shadow-glow:   0 0 12px rgba(59, 130, 246, 0.3);
+    --cs-shadow-sm:     0 1px 3px rgba(0, 0, 0, 0.5);
+    --cs-shadow-md:     0 4px 16px rgba(0, 0, 0, 0.6);
+    --cs-shadow-lg:     0 8px 32px rgba(0, 0, 0, 0.7);
+    --cs-shadow-xl:     0 16px 48px rgba(0, 0, 0, 0.8);
+    --cs-shadow-glow:   0 0 16px var(--cs-scene-glow);
+    --cs-shadow-neon:   0 0 8px var(--cs-scene-accent), 0 0 24px var(--cs-scene-glow);
 
     /* ── Transitions ────────────────────────────────────────── */
     --cs-duration-fast: 150ms;
     --cs-duration-base: 250ms;
     --cs-duration-slow: 500ms;
+    --cs-duration-xslow:800ms;
     --cs-ease:          cubic-bezier(0.4, 0, 0.2, 1);
+    --cs-ease-bounce:   cubic-bezier(0.34, 1.56, 0.64, 1);
+    --cs-ease-sharp:    cubic-bezier(0.0, 0, 0.2, 1);
 
     /* ── Z-Index Scale ──────────────────────────────────────── */
     --cs-z-base:        0;
@@ -108,41 +236,151 @@
     --cs-z-overlay:     300;
     --cs-z-modal:       400;
     --cs-z-toast:       500;
+    --cs-z-navbar:      600;
+    --cs-z-panel:       700;
+    --cs-z-admin:       800;
+    --cs-z-aria:        900;
 
     /* ── Status Indicators ──────────────────────────────────── */
     --cs-status-green:  var(--cs-green);
     --cs-status-yellow: var(--cs-yellow);
     --cs-status-red:    var(--cs-red);
+
+    /* ── Arena Specific ─────────────────────────────────────── */
+    --cs-arena-blood:       #8b0000;
+    --cs-arena-blood-mist:  rgba(139, 0, 0, 0.3);
+    --cs-arena-gold:        #ffd700;
+    --cs-arena-gold-glow:   rgba(255, 215, 0, 0.5);
+    --cs-arena-hp-high:     #22c55e;
+    --cs-arena-hp-med:      #f59e0b;
+    --cs-arena-hp-low:      #ef4444;
+    --cs-arena-crowd:       rgba(220, 38, 38, 0.15);
+
+    /* ── Hacker Story ───────────────────────────────────────── */
+    --cs-ghost-green:       #00ff41;
+    --cs-ghost-bg:          rgba(0, 20, 0, 0.9);
+    --cs-ghost-border:      rgba(0, 255, 65, 0.3);
+    --cs-ghost-glitch:      rgba(255, 0, 0, 0.5);
 }
 
 /* ── Utility Classes ────────────────────────────────────────── */
 
+/* Text color utilities */
 .cs-text-muted { color: var(--cs-text-muted); }
 .cs-text-accent { color: var(--cs-accent); }
+.cs-text-scene { color: var(--cs-scene-accent); }
 .cs-text-green { color: var(--cs-green); }
 .cs-text-yellow { color: var(--cs-yellow); }
 .cs-text-red { color: var(--cs-red); }
+.cs-text-hack { color: var(--cs-hack-green); font-family: var(--cs-terminal-font); }
+.cs-text-pixel { font-family: var(--cs-pixel-font); }
+.cs-text-credits { color: var(--cs-credit-color); }
 
+/* Background utilities */
 .cs-bg-panel { background: var(--cs-bg-panel); }
 .cs-bg-card { background: var(--cs-bg-card); }
 .cs-bg-elevated { background: var(--cs-bg-elevated); }
+.cs-bg-glass { background: var(--cs-glass-bg); backdrop-filter: blur(var(--cs-glass-blur)); }
+.cs-bg-glass-strong { background: var(--cs-glass-bg-strong); backdrop-filter: blur(var(--cs-blur-lg)); }
+.cs-bg-hack { background: var(--cs-hack-bg); }
 
+/* Border utilities */
 .cs-border { border: 1px solid var(--cs-border); }
+.cs-border-glass { border: 1px solid var(--cs-glass-border); }
+.cs-border-scene { border: 1px solid var(--cs-scene-accent); }
+.cs-border-hack { border: 1px solid var(--cs-hack-border); }
 .cs-rounded { border-radius: var(--cs-radius-md); }
 .cs-shadow { box-shadow: var(--cs-shadow-md); }
+.cs-shadow-glass { box-shadow: var(--cs-glass-shadow); }
+.cs-shadow-neon { box-shadow: var(--cs-shadow-neon); }
 
 /* Status dots */
 .cs-dot {
     width: 8px; height: 8px;
     border-radius: 50%;
     display: inline-block;
+    flex-shrink: 0;
 }
-.cs-dot-green { background: var(--cs-green); box-shadow: 0 0 6px var(--cs-green); }
+.cs-dot-green  { background: var(--cs-green);  box-shadow: 0 0 6px var(--cs-green); }
 .cs-dot-yellow { background: var(--cs-yellow); box-shadow: 0 0 6px var(--cs-yellow); }
-.cs-dot-red { background: var(--cs-red); box-shadow: 0 0 6px var(--cs-red); }
+.cs-dot-red    { background: var(--cs-red);    box-shadow: 0 0 6px var(--cs-red); }
+.cs-dot-scene  { background: var(--cs-scene-accent); box-shadow: 0 0 6px var(--cs-scene-glow); }
+.cs-dot-hack   { background: var(--cs-hack-green);   box-shadow: 0 0 6px var(--cs-hack-green-glow); }
+
+/* Glass panel base */
+.cs-glass {
+    background: var(--cs-glass-bg);
+    backdrop-filter: blur(var(--cs-glass-blur));
+    -webkit-backdrop-filter: blur(var(--cs-glass-blur));
+    border: 1px solid var(--cs-glass-border);
+    box-shadow: var(--cs-glass-shadow);
+}
+
+/* Neon glow text */
+.cs-glow-scene {
+    text-shadow: 0 0 8px var(--cs-scene-accent), 0 0 20px var(--cs-scene-glow);
+}
+.cs-glow-hack {
+    text-shadow: 0 0 8px var(--cs-hack-green), 0 0 20px var(--cs-hack-green-glow);
+}
+
+/* CRT overlay — apply to container for scanlines */
+.cs-crt::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: var(--cs-crt-scanline);
+    pointer-events: none;
+    z-index: var(--cs-z-toast);
+    animation: var(--cs-crt-flicker);
+}
+
+/* Benchmark tier badges */
+.cs-tier-cache { color: var(--cs-bench-cache); }
+.cs-tier-fts   { color: var(--cs-bench-fts); }
+.cs-tier-nlm   { color: var(--cs-bench-nlm); }
+.cs-tier-llm   { color: var(--cs-bench-llm); }
 
 /* Scrollbar (webkit) */
-.cs-scrollbar::-webkit-scrollbar { width: 6px; }
+.cs-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
 .cs-scrollbar::-webkit-scrollbar-track { background: transparent; }
-.cs-scrollbar::-webkit-scrollbar-thumb { background: var(--cs-bg-active); border-radius: 3px; }
-.cs-scrollbar::-webkit-scrollbar-thumb:hover { background: var(--cs-text-dim); }
+.cs-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,0.1);
+    border-radius: 3px;
+}
+.cs-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+
+/* CRT keyframe */
+@keyframes crt-flicker {
+    0%, 97%   { opacity: 1; }
+    98%        { opacity: 0.92; }
+    99%        { opacity: 1; }
+    99.5%      { opacity: 0.95; }
+    100%       { opacity: 1; }
+}
+
+/* Ghost / hacker message style */
+.cs-ghost-message {
+    font-family: var(--cs-terminal-font);
+    color: var(--cs-ghost-green);
+    background: var(--cs-ghost-bg);
+    border: 1px solid var(--cs-ghost-border);
+    text-shadow: 0 0 6px var(--cs-ghost-green);
+}
+
+/* Scene-scoped accent override helpers */
+[data-scene="bedroom"]  { --cs-scene-accent: var(--cs-scene-bedroom);  --cs-scene-glow: rgba(236, 72, 153, 0.35); }
+[data-scene="lounge"]   { --cs-scene-accent: var(--cs-scene-lounge);   --cs-scene-glow: rgba(245, 158, 11, 0.35); }
+[data-scene="tavern"]   { --cs-scene-accent: var(--cs-scene-tavern);   --cs-scene-glow: rgba(146, 64, 14, 0.35); }
+[data-scene="casino"]   { --cs-scene-accent: var(--cs-scene-casino);   --cs-scene-glow: rgba(249, 115, 22, 0.35); }
+[data-scene="gallery"]  { --cs-scene-accent: var(--cs-scene-gallery);  --cs-scene-glow: rgba(124, 58, 237, 0.35); }
+[data-scene="heist"]    { --cs-scene-accent: var(--cs-scene-heist);    --cs-scene-glow: rgba(225, 29, 72, 0.35); }
+[data-scene="realm"]    { --cs-scene-accent: var(--cs-scene-realm);    --cs-scene-glow: rgba(5, 150, 105, 0.35); }
+[data-scene="neoncity"] { --cs-scene-accent: var(--cs-scene-neoncity); --cs-scene-glow: rgba(6, 182, 212, 0.35); }
+[data-scene="arena"]    { --cs-scene-accent: var(--cs-scene-arena);    --cs-scene-glow: rgba(220, 38, 38, 0.35); }
+[data-scene="phone"]    { --cs-scene-accent: var(--cs-scene-phone);    --cs-scene-glow: rgba(16, 185, 129, 0.35); }
+[data-scene="coders"]   { --cs-scene-accent: var(--cs-scene-coders);   --cs-scene-glow: rgba(74, 222, 128, 0.35); }
+[data-scene="games"]    { --cs-scene-accent: var(--cs-scene-games);    --cs-scene-glow: rgba(139, 92, 246, 0.35); }
+[data-scene="hub"]      { --cs-scene-accent: var(--cs-scene-hub);      --cs-scene-glow: rgba(59, 130, 246, 0.35); }
+[data-scene="intel"]    { --cs-scene-accent: var(--cs-scene-intel);    --cs-scene-glow: rgba(6, 182, 212, 0.35); }
+[data-scene="admin"]    { --cs-scene-accent: var(--cs-scene-admin);    --cs-scene-glow: rgba(0, 255, 65, 0.35); }

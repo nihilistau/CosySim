@@ -1,0 +1,398 @@
+<!--
+  CosySim Admin Loft Overlay (B3)
+  ================================
+  Full-screen glass panel with "hacker loft" aesthetic.
+  Hidden by default. Shown when data-admin-open="true" is set on <body>.
+
+  Include in any scene template:
+    {% include 'shared/templates/admin_overlay.html' %}
+  Or inject via JS (admin_overlay.js auto-injects this markup).
+
+  Dependencies:
+    design_tokens.css · cosysim-components.css · admin_overlay.css · admin_overlay.js
+-->
+
+<div
+  id="cs-admin-overlay"
+  class="cs-admin-overlay"
+  role="dialog"
+  aria-modal="true"
+  aria-label="Admin Loft"
+>
+  <!-- CRT scanline pseudo-element applied via CSS -->
+
+  <!-- ── Header ─────────────────────────────────────────────── -->
+  <div class="cs-admin-header">
+    <div class="cs-admin-logo">⬡ THE LOFT</div>
+
+    <nav class="cs-admin-tabs" role="tablist" aria-label="Admin sections">
+      <button
+        class="cs-admin-tab cs-admin-tab--active"
+        role="tab"
+        aria-selected="true"
+        aria-controls="cs-admin-panel-monitors"
+        data-tab="monitors"
+      >[MONITORS]</button>
+      <button
+        class="cs-admin-tab"
+        role="tab"
+        aria-selected="false"
+        aria-controls="cs-admin-panel-config"
+        data-tab="config"
+      >[CONFIG]</button>
+      <button
+        class="cs-admin-tab"
+        role="tab"
+        aria-selected="false"
+        aria-controls="cs-admin-panel-agents"
+        data-tab="agents"
+      >[AGENTS]</button>
+      <button
+        class="cs-admin-tab"
+        role="tab"
+        aria-selected="false"
+        aria-controls="cs-admin-panel-nexus"
+        data-tab="nexus"
+      >[NEXUS]</button>
+      <button
+        class="cs-admin-tab"
+        role="tab"
+        aria-selected="false"
+        aria-controls="cs-admin-panel-training"
+        data-tab="training"
+      >[TRAINING]</button>
+      <button
+        class="cs-admin-tab"
+        role="tab"
+        aria-selected="false"
+        aria-controls="cs-admin-panel-logs"
+        data-tab="logs"
+      >[LOGS]</button>
+      <button
+        class="cs-admin-tab"
+        role="tab"
+        aria-selected="false"
+        aria-controls="cs-admin-panel-content"
+        data-tab="content"
+      >[CONTENT]</button>
+      <button
+        class="cs-admin-tab"
+        role="tab"
+        aria-selected="false"
+        aria-controls="cs-admin-panel-economy"
+        data-tab="economy"
+      >[ECONOMY]</button>
+    </nav>
+
+    <button
+      class="cs-admin-close"
+      id="cs-admin-close"
+      aria-label="Close admin overlay"
+    >✕</button>
+  </div>
+
+  <!-- ── Tab Panels ──────────────────────────────────────────── -->
+  <div class="cs-admin-panels">
+
+    <!-- MONITORS ─────────────────────────────────────────────── -->
+    <div
+      class="cs-admin-panel"
+      id="cs-admin-panel-monitors"
+      data-tab="monitors"
+      role="tabpanel"
+      aria-label="Monitors"
+    >
+      <div class="cs-monitor-grid">
+
+        <!-- Agent Latency -->
+        <div class="cs-monitor-card">
+          <div class="cs-monitor-card__title">Agent Latency</div>
+          <div class="cs-monitor-card__body">
+            <canvas
+              class="cs-monitor-canvas"
+              id="cs-monitor-latency"
+              width="240"
+              height="80"
+              aria-label="Agent latency chart"
+            ></canvas>
+          </div>
+        </div>
+
+        <!-- Nexus Hit Rates -->
+        <div class="cs-monitor-card">
+          <div class="cs-monitor-card__title">Nexus Hit Rates</div>
+          <div class="cs-monitor-card__body cs-monitor-card__body--bars">
+            <div class="cs-monitor-bar-row">
+              <span class="cs-monitor-bar-label">CACHE</span>
+              <div class="cs-monitor-bar-track">
+                <div class="cs-monitor-bar-fill cs-monitor-bar-fill--cache" id="admin-hit-cache" style="width:0%"></div>
+              </div>
+              <span class="cs-monitor-bar-pct" id="admin-hit-cache-pct">—</span>
+            </div>
+            <div class="cs-monitor-bar-row">
+              <span class="cs-monitor-bar-label">FTS</span>
+              <div class="cs-monitor-bar-track">
+                <div class="cs-monitor-bar-fill cs-monitor-bar-fill--fts" id="admin-hit-fts" style="width:0%"></div>
+              </div>
+              <span class="cs-monitor-bar-pct" id="admin-hit-fts-pct">—</span>
+            </div>
+            <div class="cs-monitor-bar-row">
+              <span class="cs-monitor-bar-label">NLM</span>
+              <div class="cs-monitor-bar-track">
+                <div class="cs-monitor-bar-fill cs-monitor-bar-fill--nlm" id="admin-hit-nlm" style="width:0%"></div>
+              </div>
+              <span class="cs-monitor-bar-pct" id="admin-hit-nlm-pct">—</span>
+            </div>
+            <div class="cs-monitor-bar-row">
+              <span class="cs-monitor-bar-label">LLM</span>
+              <div class="cs-monitor-bar-track">
+                <div class="cs-monitor-bar-fill cs-monitor-bar-fill--llm" id="admin-hit-llm" style="width:0%"></div>
+              </div>
+              <span class="cs-monitor-bar-pct" id="admin-hit-llm-pct">—</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Economy Flow -->
+        <div class="cs-monitor-card">
+          <div class="cs-monitor-card__title">Economy Flow</div>
+          <div class="cs-monitor-card__body">
+            <div class="cs-economy-flow-row">
+              <span class="cs-economy-flow-label">IN</span>
+              <span class="cs-economy-flow-val cs-economy-flow-val--in" id="admin-flow-in">₵ —</span>
+            </div>
+            <div class="cs-economy-flow-row">
+              <span class="cs-economy-flow-label">OUT</span>
+              <span class="cs-economy-flow-val cs-economy-flow-val--out" id="admin-flow-out">₵ —</span>
+            </div>
+            <div class="cs-economy-flow-row">
+              <span class="cs-economy-flow-label">NET</span>
+              <span class="cs-economy-flow-val" id="admin-flow-net">₵ —</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Active Scenes -->
+        <div class="cs-monitor-card">
+          <div class="cs-monitor-card__title">Active Scenes</div>
+          <div class="cs-monitor-card__body">
+            <ul class="cs-scene-status-list" id="admin-scene-status" aria-live="polite">
+              <li class="cs-scene-status-item cs-scene-status-item--loading">Loading…</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Consequence Queue -->
+        <div class="cs-monitor-card">
+          <div class="cs-monitor-card__title">Consequence Queue</div>
+          <div class="cs-monitor-card__body">
+            <ul class="cs-consequence-list" id="admin-consequence-queue" aria-live="polite">
+              <li class="cs-consequence-item cs-consequence-item--empty">Queue empty</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- World Events Timeline -->
+        <div class="cs-monitor-card">
+          <div class="cs-monitor-card__title">World Events</div>
+          <div class="cs-monitor-card__body">
+            <ol class="cs-event-timeline" id="admin-event-timeline" aria-live="polite">
+              <li class="cs-event-item cs-event-item--empty">No events</li>
+            </ol>
+          </div>
+        </div>
+
+      </div>
+    </div><!-- /MONITORS -->
+
+    <!-- CONFIG ───────────────────────────────────────────────── -->
+    <div
+      class="cs-admin-panel"
+      id="cs-admin-panel-config"
+      data-tab="config"
+      role="tabpanel"
+      aria-label="Config editor"
+      style="display:none"
+    >
+      <div class="cs-config-wrap">
+        <textarea
+          class="cs-config-editor"
+          id="cs-config-editor"
+          spellcheck="false"
+          aria-label="YAML config editor"
+        ># Config loading…</textarea>
+      </div>
+      <div class="cs-admin-actions">
+        <button class="cs-glass-btn cs-glass-btn--hack" id="cs-config-save">Save Config</button>
+        <button class="cs-glass-btn" id="cs-config-reload">Reload</button>
+        <span class="cs-admin-status" id="cs-config-status" aria-live="polite"></span>
+      </div>
+    </div><!-- /CONFIG -->
+
+    <!-- AGENTS ───────────────────────────────────────────────── -->
+    <div
+      class="cs-admin-panel"
+      id="cs-admin-panel-agents"
+      data-tab="agents"
+      role="tabpanel"
+      aria-label="Agents"
+      style="display:none"
+    >
+      <div id="cs-agents-list" class="cs-agents-grid" aria-live="polite">
+        <div class="cs-admin-loading">Loading agents…</div>
+      </div>
+    </div><!-- /AGENTS -->
+
+    <!-- NEXUS ────────────────────────────────────────────────── -->
+    <div
+      class="cs-admin-panel"
+      id="cs-admin-panel-nexus"
+      data-tab="nexus"
+      role="tabpanel"
+      aria-label="Nexus knowledge base"
+      style="display:none"
+    >
+      <div class="cs-nexus-stats" id="cs-nexus-stats" aria-live="polite">
+        <div class="cs-admin-loading">Loading stats…</div>
+      </div>
+
+      <div id="cs-nexus-search-form" class="cs-nexus-search-form">
+        <input
+          type="text"
+          class="cs-hack-input"
+          id="cs-nexus-query"
+          placeholder="Search knowledge…"
+          aria-label="Nexus search query"
+        >
+        <button class="cs-glass-btn cs-glass-btn--hack" id="cs-nexus-search-btn">
+          Search
+        </button>
+      </div>
+
+      <div
+        id="cs-nexus-results"
+        class="cs-nexus-results"
+        aria-live="polite"
+        aria-label="Nexus search results"
+      ></div>
+    </div><!-- /NEXUS -->
+
+    <!-- TRAINING ─────────────────────────────────────────────── -->
+    <div
+      class="cs-admin-panel"
+      id="cs-admin-panel-training"
+      data-tab="training"
+      role="tabpanel"
+      aria-label="Training"
+      style="display:none"
+    >
+      <div class="cs-training-stats" id="cs-training-stats" aria-live="polite">
+        <div class="cs-admin-loading">Loading training stats…</div>
+      </div>
+      <div class="cs-training-controls">
+        <button class="cs-glass-btn cs-glass-btn--hack" id="cs-trigger-seed">
+          Seed Content
+        </button>
+        <button class="cs-glass-btn" id="cs-trigger-prune">Prune Memory</button>
+        <span class="cs-admin-status" id="cs-training-status" aria-live="polite"></span>
+      </div>
+    </div><!-- /TRAINING -->
+
+    <!-- LOGS ─────────────────────────────────────────────────── -->
+    <div
+      class="cs-admin-panel"
+      id="cs-admin-panel-logs"
+      data-tab="logs"
+      role="tabpanel"
+      aria-label="System logs"
+      style="display:none"
+    >
+      <div class="cs-log-toolbar">
+        <button class="cs-glass-btn cs-glass-btn--hack" id="cs-log-refresh">↻ Refresh</button>
+        <button class="cs-glass-btn" id="cs-log-clear">Clear</button>
+        <label class="cs-log-follow-label">
+          <input type="checkbox" id="cs-log-follow" checked>
+          Auto-follow
+        </label>
+      </div>
+      <div
+        class="cs-log-stream"
+        id="cs-log-stream"
+        role="log"
+        aria-live="polite"
+        aria-label="Log output"
+      >
+        <!-- Log lines injected by JS -->
+      </div>
+    </div><!-- /LOGS -->
+
+    <!-- CONTENT ──────────────────────────────────────────────── -->
+    <div
+      class="cs-admin-panel"
+      id="cs-admin-panel-content"
+      data-tab="content"
+      role="tabpanel"
+      aria-label="Content intensity"
+      style="display:none"
+    >
+      <div class="cs-content-controls">
+        <h3 class="cs-hack-text">Content Intensity Settings</h3>
+        <p class="cs-content-desc">
+          0 = disabled · 1 = mild · 2 = moderate · 3 = explicit
+        </p>
+
+        <div class="cs-intensity-row">
+          <label for="ci-sexual">Sexual</label>
+          <input type="range" min="0" max="3" value="2" id="ci-sexual" aria-label="Sexual intensity">
+          <span class="cs-intensity-val" id="ci-sexual-val">2</span>
+        </div>
+        <div class="cs-intensity-row">
+          <label for="ci-violence">Violence</label>
+          <input type="range" min="0" max="3" value="2" id="ci-violence" aria-label="Violence intensity">
+          <span class="cs-intensity-val" id="ci-violence-val">2</span>
+        </div>
+        <div class="cs-intensity-row">
+          <label for="ci-horror">Horror</label>
+          <input type="range" min="0" max="3" value="2" id="ci-horror" aria-label="Horror intensity">
+          <span class="cs-intensity-val" id="ci-horror-val">2</span>
+        </div>
+        <div class="cs-intensity-row">
+          <label for="ci-gambling">Gambling</label>
+          <input type="range" min="0" max="3" value="2" id="ci-gambling" aria-label="Gambling intensity">
+          <span class="cs-intensity-val" id="ci-gambling-val">2</span>
+        </div>
+        <div class="cs-intensity-row">
+          <label for="ci-language">Language</label>
+          <input type="range" min="0" max="3" value="3" id="ci-language" aria-label="Language intensity">
+          <span class="cs-intensity-val" id="ci-language-val">3</span>
+        </div>
+
+        <div class="cs-admin-actions">
+          <button class="cs-glass-btn cs-glass-btn--hack" id="cs-content-save">Apply</button>
+          <span class="cs-admin-status" id="cs-content-status" aria-live="polite"></span>
+        </div>
+      </div>
+    </div><!-- /CONTENT -->
+
+    <!-- ECONOMY ──────────────────────────────────────────────── -->
+    <div
+      class="cs-admin-panel"
+      id="cs-admin-panel-economy"
+      data-tab="economy"
+      role="tabpanel"
+      aria-label="Economy dashboard"
+      style="display:none"
+    >
+      <div id="cs-economy-dashboard" class="cs-economy-dashboard">
+        <div class="cs-economy-balance">
+          <span class="cs-hack-text">BALANCE</span>
+          <span class="cs-economy-big-num" id="admin-credits">₵ —</span>
+        </div>
+        <div id="cs-transaction-log" class="cs-transaction-log" aria-live="polite">
+          <div class="cs-admin-loading">Loading transactions…</div>
+        </div>
+      </div>
+    </div><!-- /ECONOMY -->
+
+  </div><!-- /.cs-admin-panels -->
+</div><!-- /#cs-admin-overlay -->

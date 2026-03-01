@@ -1,0 +1,457 @@
+/*
+ * navbar_v2.css — Universal Navbar v2 (B1 track)
+ * ================================================
+ * Fixed top chrome injected into all 18 CosySim scenes.
+ *
+ * Depends on: design_tokens.css (imported by the scene)
+ * BEM naming: .cs-navbar__element--modifier
+ */
+
+/* ── Bar ──────────────────────────────────────────────────────────── */
+
+.cs-navbar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 52px;
+    z-index: 9100;
+
+    display: flex;
+    align-items: center;
+    gap: 0;
+    padding: 0 12px;
+
+    background: rgba(5, 8, 15, 0.92);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-bottom: 1px solid rgba(0, 229, 255, 0.12);
+
+    font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+    font-size: 11px;
+    user-select: none;
+}
+
+/* Reserve vertical space so fixed bar doesn't overlay content */
+.cs-navbar__spacer {
+    height: 52px;
+    flex-shrink: 0;
+}
+
+/* ── Left cluster ─────────────────────────────────────────────────── */
+
+.cs-navbar__left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+    margin-right: 16px;
+}
+
+/* Logo mark */
+.cs-navbar__logo {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    background: rgba(0, 229, 255, 0.12);
+    border: 1px solid rgba(0, 229, 255, 0.35);
+    border-radius: 4px;
+    text-decoration: none;
+    flex-shrink: 0;
+    transition: background 0.18s ease, border-color 0.18s ease;
+}
+
+.cs-navbar__logo:hover {
+    background: rgba(0, 229, 255, 0.22);
+    border-color: rgba(0, 229, 255, 0.6);
+}
+
+.cs-navbar__logo-mark {
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    color: #00e5ff;
+    line-height: 1;
+}
+
+/* Scene name */
+.cs-navbar__scene-name {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    /* Colour injected inline via style="color: {{ scene_accent }}" */
+}
+
+/* Connection status dot */
+.cs-navbar__dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #4b5563;       /* grey = disconnected (default) */
+    flex-shrink: 0;
+    transition: background 0.3s ease;
+}
+
+.cs-navbar__dot--connected {
+    background: #22c55e;
+    box-shadow: 0 0 6px rgba(34, 197, 94, 0.7);
+    animation: cs-navbar-pulse 2s ease-in-out infinite;
+}
+
+@keyframes cs-navbar-pulse {
+    0%, 100% { box-shadow: 0 0 4px rgba(34, 197, 94, 0.5); }
+    50%       { box-shadow: 0 0 10px rgba(34, 197, 94, 0.9); }
+}
+
+/* ── Centre nav ───────────────────────────────────────────────────── */
+
+.cs-navbar__nav {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.cs-navbar__nav-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 9px;
+    border-radius: 5px;
+    border: 1px solid transparent;
+    text-decoration: none;
+    color: var(--cs-text-secondary, #9ca3af);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+    flex-shrink: 0;
+}
+
+.cs-navbar__nav-item:hover {
+    color: var(--item-accent, #00e5ff);
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.08);
+}
+
+.cs-navbar__nav-item--active {
+    color: var(--item-accent, #00e5ff) !important;
+    background: rgba(0, 229, 255, 0.08);
+    border-color: rgba(0, 229, 255, 0.2);
+}
+
+.cs-navbar__nav-item--active:hover {
+    background: rgba(0, 229, 255, 0.13);
+}
+
+/* Scene status micro-dot inside nav item */
+.cs-navbar__nav-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: #4b5563;   /* default: offline/unknown */
+    flex-shrink: 0;
+    transition: background 0.3s ease;
+}
+
+.cs-navbar__nav-dot--online {
+    background: #22c55e;
+    box-shadow: 0 0 4px rgba(34, 197, 94, 0.6);
+}
+
+/* ── MORE dropdown ────────────────────────────────────────────────── */
+
+.cs-navbar__nav-item--more {
+    position: relative;
+    color: var(--cs-text-muted, #6b7280);
+}
+
+.cs-navbar__nav-item--more:hover {
+    color: var(--cs-text-secondary, #9ca3af);
+}
+
+.cs-navbar__more-dropdown {
+    display: none;
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    min-width: 180px;
+    background: rgba(5, 8, 15, 0.96);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(0, 229, 255, 0.15);
+    border-radius: 7px;
+    padding: 5px 0;
+    list-style: none;
+    margin: 0;
+    z-index: 9200;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+    animation: cs-navbar-dropdown-in 0.12s ease;
+}
+
+@keyframes cs-navbar-dropdown-in {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: translateY(0);    }
+}
+
+.cs-navbar__nav-item--more[aria-expanded="true"] .cs-navbar__more-dropdown {
+    display: block;
+}
+
+.cs-navbar__more-item {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 7px 14px;
+    text-decoration: none;
+    color: var(--cs-text-secondary, #9ca3af);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    white-space: nowrap;
+    transition: color 0.12s ease, background 0.12s ease;
+}
+
+.cs-navbar__more-item:hover {
+    color: var(--cs-text-primary, #e5e7eb);
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.cs-navbar__more-item.cs-navbar__nav-item--active {
+    color: #00e5ff;
+}
+
+/* ── Credits display ──────────────────────────────────────────────── */
+
+.cs-credits-display {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    margin: 0 8px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 5px;
+    flex-shrink: 0;
+    transition: background 0.2s ease;
+}
+
+.cs-credits-icon {
+    color: #eab308;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.cs-credits-value {
+    color: var(--cs-text-primary, #e5e7eb);
+    font-size: 11px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    min-width: 30px;
+    text-align: right;
+}
+
+/* Gold flash on credit update */
+.cs-credits-display--flash {
+    background: rgba(234, 179, 8, 0.18) !important;
+    border-color: rgba(234, 179, 8, 0.5) !important;
+    animation: cs-navbar-credits-flash 0.6s ease forwards;
+}
+
+@keyframes cs-navbar-credits-flash {
+    0%   { background: rgba(234, 179, 8, 0.35); border-color: rgba(234, 179, 8, 0.7); }
+    60%  { background: rgba(234, 179, 8, 0.18); border-color: rgba(234, 179, 8, 0.4); }
+    100% { background: rgba(255, 255, 255, 0.04); border-color: rgba(255, 255, 255, 0.07); }
+}
+
+/* ── Right action buttons ─────────────────────────────────────────── */
+
+.cs-navbar__actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+    margin-left: 8px;
+}
+
+.cs-navbar__action-btn {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 7px;
+    cursor: pointer;
+    padding: 0;
+    transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+    flex-shrink: 0;
+}
+
+.cs-navbar__action-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.18);
+    transform: translateY(-1px);
+}
+
+.cs-navbar__action-btn:active {
+    transform: translateY(0);
+}
+
+.cs-navbar__action-btn:focus-visible {
+    outline: 2px solid rgba(0, 229, 255, 0.6);
+    outline-offset: 2px;
+}
+
+.cs-navbar__action-icon {
+    font-size: 16px;
+    line-height: 1;
+    pointer-events: none;
+}
+
+/* Voice active state — green tint */
+.cs-navbar__action-btn--active {
+    background: rgba(34, 197, 94, 0.12) !important;
+    border-color: rgba(34, 197, 94, 0.4) !important;
+}
+
+.cs-navbar__action-btn--active:hover {
+    background: rgba(34, 197, 94, 0.2) !important;
+}
+
+/* Notification badge */
+.cs-navbar__badge {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    min-width: 16px;
+    height: 16px;
+    background: #ef4444;
+    color: #fff;
+    font-size: 9px;
+    font-weight: 700;
+    line-height: 16px;
+    text-align: center;
+    border-radius: 8px;
+    padding: 0 3px;
+    pointer-events: none;
+    /* Shown/hidden via JS: el.hidden = false */
+}
+
+/* ── Hamburger (mobile) ───────────────────────────────────────────── */
+
+.cs-navbar__hamburger {
+    display: none;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 4px;
+    width: 34px;
+    height: 34px;
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 7px;
+    cursor: pointer;
+    padding: 0;
+    margin-left: 8px;
+    flex-shrink: 0;
+    transition: background 0.15s ease;
+}
+
+.cs-navbar__hamburger:hover {
+    background: rgba(255, 255, 255, 0.07);
+}
+
+.cs-navbar__hamburger-line {
+    display: block;
+    width: 16px;
+    height: 1.5px;
+    background: var(--cs-text-secondary, #9ca3af);
+    border-radius: 2px;
+    transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+/* Hamburger open state → X */
+.cs-navbar__hamburger[aria-expanded="true"] .cs-navbar__hamburger-line:nth-child(1) {
+    transform: translateY(5.5px) rotate(45deg);
+}
+.cs-navbar__hamburger[aria-expanded="true"] .cs-navbar__hamburger-line:nth-child(2) {
+    opacity: 0;
+}
+.cs-navbar__hamburger[aria-expanded="true"] .cs-navbar__hamburger-line:nth-child(3) {
+    transform: translateY(-5.5px) rotate(-45deg);
+}
+
+/* ── Responsive ───────────────────────────────────────────────────── */
+
+@media (max-width: 768px) {
+    .cs-navbar {
+        flex-wrap: wrap;
+        height: auto;
+        padding: 6px 10px;
+        gap: 6px;
+    }
+
+    .cs-navbar__spacer {
+        height: 52px; /* keep at single-row estimate; JS can correct */
+    }
+
+    /* Hide centre nav by default on mobile */
+    .cs-navbar__nav {
+        display: none;
+        order: 10;               /* push below top row */
+        width: 100%;
+        flex-wrap: wrap;
+        gap: 4px;
+        padding: 6px 0 4px;
+        border-top: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .cs-navbar__nav--open {
+        display: flex;
+    }
+
+    .cs-navbar__hamburger {
+        display: flex;
+    }
+
+    /* Credits collapse to just the icon on narrow screens */
+    .cs-credits-value {
+        display: none;
+    }
+
+    .cs-credits-display {
+        padding: 4px 7px;
+    }
+
+    .cs-navbar__scene-name {
+        display: none;
+    }
+}
+
+@media (max-width: 480px) {
+    .cs-navbar__nav-label {
+        font-size: 9px;
+    }
+
+    .cs-navbar__action-btn {
+        width: 30px;
+        height: 30px;
+    }
+
+    .cs-navbar__action-icon {
+        font-size: 14px;
+    }
+}

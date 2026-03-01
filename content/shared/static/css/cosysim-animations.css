@@ -1,0 +1,428 @@
+/*
+ * CosySim Animations Library — v0.68 "Dark Renaissance"
+ * ======================================================
+ * Reusable keyframe animations for all scenes.
+ * Categories: Entrance · Idle · Feedback · Stat · Loading · Hacker · Special
+ *
+ * Usage:
+ *   animation: cs-fade-in 0.3s var(--cs-ease) forwards;
+ *   animation: cs-pulse-glow 2s ease-in-out infinite;
+ */
+
+/* ══════════════════════════════════════════════════════════════
+   KEYFRAME DEFINITIONS
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── Entrance ──────────────────────────────────────────────── */
+
+@keyframes cs-fade-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+@keyframes cs-fade-out {
+    from { opacity: 1; }
+    to   { opacity: 0; }
+}
+
+@keyframes cs-slide-up {
+    from { opacity: 0; transform: translateY(20px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes cs-slide-down {
+    from { opacity: 0; transform: translateY(-20px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes cs-slide-right {
+    from { opacity: 0; transform: translateX(-24px); }
+    to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes cs-slide-left {
+    from { opacity: 0; transform: translateX(24px); }
+    to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes cs-scale-in {
+    from { opacity: 0; transform: scale(0.92); }
+    to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes cs-scale-in-bounce {
+    0%   { opacity: 0; transform: scale(0.7); }
+    70%  { transform: scale(1.06); }
+    100% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes cs-glass-appear {
+    from { opacity: 0; transform: translateY(16px) scale(0.96); backdrop-filter: blur(0); }
+    to   { opacity: 1; transform: translateY(0) scale(1); backdrop-filter: blur(var(--cs-blur-md, 12px)); }
+}
+
+@keyframes cs-panel-slide-in-right {
+    from { transform: translateX(100%); opacity: 0; }
+    to   { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes cs-panel-slide-out-right {
+    from { transform: translateX(0); opacity: 1; }
+    to   { transform: translateX(100%); opacity: 0; }
+}
+
+@keyframes cs-panel-slide-in-bottom {
+    from { transform: translateY(100%); opacity: 0; }
+    to   { transform: translateY(0); opacity: 1; }
+}
+
+/* ── Idle / Ambient ────────────────────────────────────────── */
+
+@keyframes cs-pulse-glow {
+    0%, 100% { box-shadow: 0 0 8px var(--cs-scene-glow, rgba(59,130,246,0.3)); }
+    50%       { box-shadow: 0 0 24px var(--cs-scene-glow, rgba(59,130,246,0.5)), 0 0 48px var(--cs-scene-glow, rgba(59,130,246,0.2)); }
+}
+
+@keyframes cs-pulse-glow-text {
+    0%, 100% { text-shadow: 0 0 8px currentColor; }
+    50%       { text-shadow: 0 0 20px currentColor, 0 0 40px currentColor; }
+}
+
+@keyframes cs-breathe {
+    0%, 100% { transform: scale(1); }
+    50%       { transform: scale(1.02); }
+}
+
+@keyframes cs-float {
+    0%, 100% { transform: translateY(0); }
+    50%       { transform: translateY(-8px); }
+}
+
+@keyframes cs-shimmer {
+    0%   { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+}
+
+@keyframes cs-neon-flicker {
+    0%, 92%, 100% { opacity: 1; }
+    93%            { opacity: 0.7; }
+    94%            { opacity: 1; }
+    96%            { opacity: 0.4; }
+    97%            { opacity: 1; }
+    98%            { opacity: 0.85; }
+}
+
+@keyframes cs-rotate {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+}
+
+@keyframes cs-sway {
+    0%, 100% { transform: rotate(-1.5deg); }
+    50%       { transform: rotate(1.5deg); }
+}
+
+/* Speaking ring animation for portraits */
+@keyframes cs-speaking-ring {
+    0%, 100% { box-shadow: 0 0 0 2px var(--cs-scene-accent, #3b82f6), 0 0 0 4px transparent; }
+    50%       { box-shadow: 0 0 0 3px var(--cs-scene-accent, #3b82f6), 0 0 0 8px rgba(59,130,246,0.2), 0 0 16px var(--cs-scene-glow, rgba(59,130,246,0.3)); }
+}
+
+/* ── Feedback / Interaction ────────────────────────────────── */
+
+@keyframes cs-flash-green {
+    0%   { background-color: rgba(34, 197, 94, 0.3); }
+    100% { background-color: transparent; }
+}
+
+@keyframes cs-flash-red {
+    0%   { background-color: rgba(239, 68, 68, 0.3); }
+    100% { background-color: transparent; }
+}
+
+@keyframes cs-flash-gold {
+    0%   { background-color: rgba(255, 215, 0, 0.35); }
+    100% { background-color: transparent; }
+}
+
+@keyframes cs-ripple {
+    0%   { box-shadow: 0 0 0 0 var(--cs-scene-glow, rgba(59,130,246,0.5)); }
+    100% { box-shadow: 0 0 0 16px transparent; }
+}
+
+@keyframes cs-shake {
+    0%, 100% { transform: translateX(0); }
+    20%        { transform: translateX(-6px) rotate(-0.5deg); }
+    40%        { transform: translateX(6px) rotate(0.5deg); }
+    60%        { transform: translateX(-4px); }
+    80%        { transform: translateX(4px); }
+}
+
+@keyframes cs-glitch {
+    0%   { transform: translate(0); clip-path: none; }
+    5%   { transform: translate(-3px, 1px); clip-path: inset(40% 0 60% 0); }
+    10%  { transform: translate(3px, -1px); clip-path: inset(20% 0 40% 0); }
+    15%  { transform: translate(0); clip-path: none; }
+    25%  { transform: translate(0); }
+    30%  { transform: translate(2px, -2px); clip-path: inset(70% 0 10% 0); }
+    35%  { transform: translate(0); clip-path: none; }
+    100% { transform: translate(0); }
+}
+
+@keyframes cs-damage-flash {
+    0%   { filter: brightness(1); }
+    20%  { filter: brightness(2) saturate(0) sepia(1) hue-rotate(0deg); }
+    40%  { filter: brightness(1.5); }
+    60%  { filter: brightness(1.2); }
+    100% { filter: brightness(1); }
+}
+
+/* ── Stat Bars (emotion deltas) ────────────────────────────── */
+
+@keyframes cs-stat-rise {
+    0%   { opacity: 0; transform: translateY(0) scale(0.9); color: var(--cs-green); }
+    30%  { opacity: 1; transform: translateY(-8px) scale(1.1); }
+    80%  { opacity: 1; transform: translateY(-16px); }
+    100% { opacity: 0; transform: translateY(-24px); }
+}
+
+@keyframes cs-stat-fall {
+    0%   { opacity: 0; transform: translateY(0) scale(0.9); color: var(--cs-red); }
+    30%  { opacity: 1; transform: translateY(8px) scale(1.1); }
+    80%  { opacity: 1; transform: translateY(16px); }
+    100% { opacity: 0; transform: translateY(24px); }
+}
+
+@keyframes cs-bar-fill {
+    from { width: 0; }
+    to   { width: var(--cs-bar-target, 100%); }
+}
+
+@keyframes cs-bar-pulse-high {
+    0%, 100% { box-shadow: 0 0 4px currentColor; }
+    50%       { box-shadow: 0 0 12px currentColor, 0 0 24px currentColor; }
+}
+
+/* HP bar danger flicker */
+@keyframes cs-hp-danger {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.6; }
+}
+
+/* ── Loading ───────────────────────────────────────────────── */
+
+@keyframes cs-skeleton {
+    0%   { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+}
+
+@keyframes cs-spinner-ring {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+}
+
+@keyframes cs-typing-dot {
+    0%, 80%, 100% { transform: scale(0.8); opacity: 0.4; }
+    40%            { transform: scale(1); opacity: 1; }
+}
+
+/* ── Hacker / Terminal ─────────────────────────────────────── */
+
+@keyframes cs-scan-line {
+    0%   { top: -10%; }
+    100% { top: 110%; }
+}
+
+@keyframes cs-crt-flicker {
+    0%, 97%   { opacity: 1; }
+    97.5%      { opacity: 0.90; }
+    98%        { opacity: 1; }
+    98.8%      { opacity: 0.95; }
+    99%        { opacity: 1; }
+    99.6%      { opacity: 0.85; }
+    100%       { opacity: 1; }
+}
+
+@keyframes cs-terminal-type {
+    from { width: 0; }
+    to   { width: 100%; }
+}
+
+@keyframes cs-cursor-blink {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0; }
+}
+
+@keyframes cs-matrix-fall {
+    0%   { transform: translateY(-100vh); opacity: 1; }
+    90%  { opacity: 1; }
+    100% { transform: translateY(100vh); opacity: 0; }
+}
+
+@keyframes cs-data-stream {
+    0%   { transform: translateX(-100%); opacity: 0; }
+    10%  { opacity: 1; }
+    90%  { opacity: 1; }
+    100% { transform: translateX(100%); opacity: 0; }
+}
+
+@keyframes cs-decrypt {
+    0%   { letter-spacing: 0.5em; opacity: 0.3; filter: blur(4px); }
+    50%  { letter-spacing: 0.1em; opacity: 0.7; filter: blur(1px); }
+    100% { letter-spacing: normal; opacity: 1; filter: blur(0); }
+}
+
+/* ── Arena / Combat ────────────────────────────────────────── */
+
+@keyframes cs-card-flip-3d {
+    0%   { transform: perspective(600px) rotateY(0deg); }
+    50%  { transform: perspective(600px) rotateY(90deg); }
+    100% { transform: perspective(600px) rotateY(0deg); }
+}
+
+@keyframes cs-card-deal {
+    0%   { transform: translateX(-120%) rotate(-15deg); opacity: 0; }
+    70%  { transform: translateX(5%) rotate(1deg); }
+    100% { transform: translateX(0) rotate(0deg); opacity: 1; }
+}
+
+@keyframes cs-arena-clash {
+    0%   { transform: scale(1); filter: brightness(1); }
+    15%  { transform: scale(1.08) rotate(1deg); filter: brightness(1.8) saturate(2); }
+    30%  { transform: scale(0.96) rotate(-0.5deg); filter: brightness(1.4); }
+    50%  { transform: scale(1.04); filter: brightness(1.6); }
+    100% { transform: scale(1); filter: brightness(1); }
+}
+
+@keyframes cs-crowd-roar {
+    0%   { box-shadow: none; }
+    50%  { box-shadow: inset 0 0 60px rgba(220, 38, 38, 0.25), 0 0 40px rgba(220, 38, 38, 0.2); }
+    100% { box-shadow: none; }
+}
+
+@keyframes cs-explosion-burst {
+    0%   { transform: scale(0.3); opacity: 1; }
+    60%  { transform: scale(1.4); opacity: 0.8; }
+    100% { transform: scale(2.0); opacity: 0; }
+}
+
+/* ── Special ──────────────────────────────────────────────── */
+
+@keyframes cs-hologram {
+    0%, 100% { opacity: 1; transform: translateY(0) scaleY(1); filter: brightness(1); }
+    20%        { opacity: 0.8; transform: translateY(-1px) scaleY(0.99); filter: brightness(1.2) hue-rotate(10deg); }
+    40%        { opacity: 1; transform: translateY(1px) scaleY(1.01); filter: brightness(0.9); }
+    60%        { opacity: 0.85; transform: translateY(0) scaleY(1); filter: brightness(1.1) hue-rotate(-5deg); }
+    80%        { opacity: 1; filter: brightness(1); }
+}
+
+@keyframes cs-level-up-burst {
+    0%   { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 215, 0, 0.8); }
+    50%  { transform: scale(1.12); box-shadow: 0 0 0 24px rgba(255, 215, 0, 0); }
+    100% { transform: scale(1); box-shadow: 0 0 0 0 transparent; }
+}
+
+@keyframes cs-economy-tick {
+    0%   { transform: translateY(0); opacity: 1; }
+    50%  { transform: translateY(-12px); opacity: 1; }
+    100% { transform: translateY(-20px); opacity: 0; }
+}
+
+@keyframes cs-portrait-reveal {
+    0%   { clip-path: inset(0 100% 0 0); }
+    100% { clip-path: inset(0 0% 0 0); }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   UTILITY ANIMATION CLASSES
+   ══════════════════════════════════════════════════════════════ */
+
+/* Entrance */
+.cs-anim-fade-in      { animation: cs-fade-in var(--cs-duration-base, 250ms) var(--cs-ease) both; }
+.cs-anim-fade-out     { animation: cs-fade-out var(--cs-duration-base, 250ms) var(--cs-ease) both; }
+.cs-anim-slide-up     { animation: cs-slide-up var(--cs-duration-base, 250ms) var(--cs-ease) both; }
+.cs-anim-slide-right  { animation: cs-slide-right var(--cs-duration-base, 250ms) var(--cs-ease) both; }
+.cs-anim-scale-in     { animation: cs-scale-in var(--cs-duration-base, 250ms) var(--cs-ease) both; }
+.cs-anim-glass-appear { animation: cs-glass-appear 350ms var(--cs-ease) both; }
+.cs-anim-panel-right  { animation: cs-panel-slide-in-right 300ms var(--cs-ease) both; }
+.cs-anim-panel-right-out { animation: cs-panel-slide-out-right 250ms var(--cs-ease) both; }
+
+/* Idle */
+.cs-anim-pulse-glow   { animation: cs-pulse-glow 2.5s ease-in-out infinite; }
+.cs-anim-breathe      { animation: cs-breathe 3s ease-in-out infinite; }
+.cs-anim-float        { animation: cs-float 3s ease-in-out infinite; }
+.cs-anim-neon-flicker { animation: cs-neon-flicker 4s ease-in-out infinite; }
+.cs-anim-speaking     { animation: cs-speaking-ring 0.8s ease-in-out infinite; }
+.cs-anim-rotate       { animation: cs-rotate 2s linear infinite; }
+
+/* Feedback */
+.cs-anim-flash-green  { animation: cs-flash-green 600ms var(--cs-ease) both; }
+.cs-anim-flash-red    { animation: cs-flash-red 600ms var(--cs-ease) both; }
+.cs-anim-flash-gold   { animation: cs-flash-gold 600ms var(--cs-ease) both; }
+.cs-anim-shake        { animation: cs-shake 400ms var(--cs-ease); }
+.cs-anim-glitch       { animation: cs-glitch 500ms steps(1); }
+.cs-anim-damage       { animation: cs-damage-flash 400ms var(--cs-ease); }
+
+/* Hacker */
+.cs-anim-terminal     { animation: cs-terminal-type 1.2s steps(30) both; overflow: hidden; white-space: nowrap; }
+.cs-anim-cursor       { animation: cs-cursor-blink 1s step-end infinite; }
+.cs-anim-decrypt      { animation: cs-decrypt 800ms var(--cs-ease) both; }
+.cs-anim-crt-flicker  { animation: cs-crt-flicker 8s ease-in-out infinite; }
+
+/* Arena */
+.cs-anim-card-flip    { animation: cs-card-flip-3d 500ms var(--cs-ease); }
+.cs-anim-card-deal    { animation: cs-card-deal 400ms var(--cs-ease-bounce) both; }
+.cs-anim-arena-clash  { animation: cs-arena-clash 600ms var(--cs-ease); }
+.cs-anim-crowd-roar   { animation: cs-crowd-roar 1.2s ease-in-out; }
+
+/* Special */
+.cs-anim-hologram     { animation: cs-hologram 3s ease-in-out infinite; }
+.cs-anim-level-up     { animation: cs-level-up-burst 600ms var(--cs-ease-bounce); }
+
+/* Loading */
+.cs-anim-spin         { animation: cs-spinner-ring 1s linear infinite; }
+.cs-anim-skeleton {
+    background: linear-gradient(90deg, var(--cs-bg-elevated) 25%, var(--cs-bg-hover) 50%, var(--cs-bg-elevated) 75%);
+    background-size: 200% 100%;
+    animation: cs-skeleton 1.5s ease-in-out infinite;
+}
+
+/* Shimmer (for glass panels, cards) */
+.cs-anim-shimmer {
+    background: linear-gradient(
+        120deg,
+        transparent 0%,
+        transparent 40%,
+        rgba(255, 255, 255, 0.04) 50%,
+        transparent 60%,
+        transparent 100%
+    );
+    background-size: 200% 100%;
+    animation: cs-shimmer 2.5s ease-in-out infinite;
+}
+
+/* Typing indicator dots */
+.cs-typing-dots {
+    display: inline-flex;
+    gap: 4px;
+    align-items: center;
+}
+.cs-typing-dots span {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--cs-text-muted);
+    animation: cs-typing-dot 1.2s ease-in-out infinite;
+}
+.cs-typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+.cs-typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+/* Stagger helpers — apply to parent, children get offset */
+.cs-stagger > *:nth-child(1) { animation-delay: 0ms; }
+.cs-stagger > *:nth-child(2) { animation-delay: 50ms; }
+.cs-stagger > *:nth-child(3) { animation-delay: 100ms; }
+.cs-stagger > *:nth-child(4) { animation-delay: 150ms; }
+.cs-stagger > *:nth-child(5) { animation-delay: 200ms; }
+.cs-stagger > *:nth-child(6) { animation-delay: 250ms; }
+.cs-stagger > *:nth-child(7) { animation-delay: 300ms; }
+.cs-stagger > *:nth-child(8) { animation-delay: 350ms; }
+.cs-stagger > *:nth-child(n+9) { animation-delay: 400ms; }

@@ -1,14 +1,134 @@
 # CosySim Roadmap
 
-> Current: **v0.65** | Last updated: 2026-03-01
+> Current: **v0.67** | Last updated: 2026-03-15
 
 ## Philosophy
 
 CosySim is a **meta-system** — a playground for designing, testing, benchmarking, and evolving AI agent interactions. Every scene is a self-contained experiment combining agents, state, game logic, and UI. The framework exists so that agents (and humans) can methodically explore what works, feed results back into the system, and continuously improve.
 
+The system's ultimate goal: **inhabit itself** — AI agents that maintain, improve, and expand CosySim autonomously, guided by Nexus knowledge, NotebookLM intelligence, and fine-tuned local models.
+
 ---
 
 ## Completed
+
+### v0.50a–v0.65 — Foundation, Integration, Training Pipeline ✅
+*(All previous milestones shipped — see CHANGELOG.md for full details)*
+
+**Key milestones:**
+- v0.55b: Full 18-scene framework, 188 skills, 21 packs, 4,747 tests, Grade A
+- v0.58b: Project Autonomy — scheduler daemon, self-maintenance, autonomous skills
+- v0.59b: Connected System — phone, Home Assistant, AnythingLLM, NLM deep storage
+- v0.60–v0.63: NLM v2 live API, QA cache pipeline (10-stage, Stages A–J), review sheets
+- v0.64: Training pipeline — FinetuneOrchestrator, ModelRegistry, BenchmarkRunner, Intel Hub
+- v0.65: Profile system, conversation analyzer, backup manager, 5,582 tests
+- v0.66: First finetuning cycle, router_v2 dataset (364 examples), Master Control Panel revamp, 5,609 tests
+- v0.67: 26 news sources, category-aware filtering, Intel Hub news UI, 5,695 tests
+
+---
+
+## Active: v0.68 — "The Grand Revamp"
+
+> **The biggest CosySim update ever.** Every scene redesigned. Every character voiced.
+> The system starts eating information and improving itself.
+
+### Track A: Unified Design System
+- [ ] `design_tokens.css` full extension + `cosysim-components.css` library
+- [ ] `cosysim-animations.css` shared animations library
+- [ ] Apply design tokens consistently to all 18 scenes
+
+### Track B: Navigation, Phone Panel & Admin Overlay
+- [ ] Navbar enhancement: Phone/Admin/Aria quick-action buttons
+- [ ] **Phone scene as universal slide-in panel** — available on every scene
+- [ ] **Admin panel slide-in overlay** — Flask-based, replaces Streamlit admin
+
+### Track C: TTS & Voice Integration
+- [ ] Universal TTS component (`cosysim-tts.js`) + base_scene TTS endpoint
+- [ ] Wire TTS into all 14 game scenes (character dialogue + voice selector)
+- [ ] STT microphone component (Web Speech API + Whisper fallback)
+
+### Track D: Aria Advanced Portrait Interface
+- [ ] Video-call / messenger / phone-call mode toggle
+- [ ] Animated portrait: idle / talking / thinking / listening states
+- [ ] Aria floating widget on all scenes
+
+### Track E: Scene Visual Overhaul (all 11 game scenes)
+- [ ] Bedroom: luxury dark intimate (emotion bars, scenario progress, particle effects)
+- [ ] Lounge: jazz noir (ambient particles, seating map, heat meter animation)
+- [ ] Tavern: fantasy warm (fireplace glow, quest pinboard, dice animation)
+- [ ] Casino: vegas neon (card animations, chip counter, confetti effects)
+- [ ] Realm: LitRPG fantasy (parchment, typewriter, RPG stat bars, inventory)
+- [ ] NeonCity: cyberpunk (neon grid, scan lines, faction color-coding)
+- [ ] Heist: thriller blueprint (blueprint bg, crew dossiers, tension meter)
+- [ ] Coders: hacker terminal (matrix rain, syntax highlight, pipeline stepper)
+- [ ] Games: arcade neon (score ticker, 3D dice, mystery board)
+- [ ] Warzone: military command (HUD overlay, weather effects)
+- [ ] Gallery: dark museum (spotlit artwork, smooth transitions)
+
+### Track F: Gameplay & Story Enhancement (5×)
+- [ ] Emotion visualization in all character scenes
+- [ ] Story content expansion: 10 new bedroom scenarios, 5 lounge events, 10 tavern quests, 5 realm arcs
+- [ ] Gameplay loop polish: objectives, progress, win/lose, session persistence
+- [ ] Phone scene: per-character story arcs, read receipts, photo gallery
+
+### Track G: Hub & Navigation
+- [ ] Hub redesign: scene cards with thumbnails, live stats, categories
+- [ ] Cross-scene navigation audit: navbar in all 18 scenes, phone panel, Aria widget
+
+### Track H: Documentation (A++ Quality)
+- [ ] Full audit of all 26 docs
+- [ ] Rewrite: ARCHITECTURE, SCENES, API, NEXUS_GUIDE, TRAINING_GUIDE
+- [ ] New: CHARACTER_SYSTEM, TTS_GUIDE, ASSISTANT_GUIDE, GETTING_STARTED, CONTRIBUTING
+
+### Track I: Nexus Automation & Self-Improvement
+- [ ] Nexus-driven Copilot rules (governance entries → .github/instructions/)
+- [ ] Activate self-generating data loop (all scheduler tasks running + verified)
+- [ ] Codebase seeding (300+ code reference entries in Nexus)
+- [ ] Full NLM distillation cycle → 2,000+ Q&A pairs
+
+---
+
+## v0.69+ — Advanced Automation
+
+### Scene Intelligence
+- [ ] Per-scene AI director that generates story beats autonomously
+- [ ] Cross-scene character travel (characters move between scenes with persistent state)
+- [ ] Scene interconnection: actions in one scene affect another
+- [ ] NLM-generated content: story, quests, dialogue written by Gemini and stored in Nexus
+
+### Agent Autonomy
+- [ ] Local agents pick up tasks from scheduler, implement code changes, run tests, commit
+- [ ] Bug-fixer agent loop: detect test failure → diagnose via NLM → fix → test → commit
+- [ ] Content generation agent: reads Nexus → generates new story content → stores back
+- [ ] Quality monitor: nightly benchmark run, stores trend in Nexus, creates improvement tasks
+
+### Fine-Tuning Pipeline Maturation
+- [ ] Router v3: expanded 16-class taxonomy, 5,000+ training examples
+- [ ] Scene-specific dialogue models (fine-tune per character personality)
+- [ ] Evaluator model for NLM output quality scoring
+- [ ] Continuous improvement: deployed models retrain on new data weekly
+
+### Mobile & Remote
+- [ ] Progressive Web App for phone scenes (installable on Android/iOS)
+- [ ] Remote agent support (agents running on phone Edge Gallery)
+- [ ] Home Assistant deep integration (CosySim as HA dashboard component)
+- [ ] Offline mode: cached knowledge + on-device models when disconnected
+
+---
+
+## Architecture Principles
+
+1. **Everything through MCP** — Skills, state, events, and cross-system communication all go through the MCP pipeline
+2. **Nexus as truth** — Prompts, rules, configurations, session history, and experiment results live in Nexus
+3. **NLM-first** — Research, analysis, and knowledge generation go through NotebookLM (free Gemini) before LMStudio
+4. **Local-first** — No cloud dependencies. LMStudio, ChromaDB, ComfyUI, TTS all run locally
+5. **Test-driven** — Every feature gets tests. Target: 6,000+ tests post-v0.68
+6. **Scene independence** — Scenes are self-contained. Adding a scene shouldn't break others
+7. **Agent freedom within rails** — Governance pipeline enforces consistency without killing creativity
+8. **Profile-aware** — Conversation analyzer builds persistent user profile; all agents use it
+9. **Self-improving** — Scheduler runs autonomously: news fetch, QA mining, benchmark cycles, fine-tuning
+10. **Voice-first** — Every character speaks. Every input has a mic. TTS/STT on every scene
+
 
 ### v0.50a — Master Consolidation & Nexus Integration
 - Unified 13 scenes on BaseScene + MCP pipeline

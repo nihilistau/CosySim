@@ -356,6 +356,143 @@ class BaseScene(ABC):
                 mimetype="application/json",
             )
 
+    def register_bench_route(self, app, socketio=None) -> None:
+        """Register ``/api/bench/metrics`` on a Flask app.
+
+        Provides live benchmark data for the Benchmark HUD (cosysim-bench.js).
+        Call this in ``start()`` after creating the Flask app.
+        If *socketio* is provided, also sets up ``bench:update`` emission
+        after each agent reply so the HUD gets real-time pushes.
+        """
+        import json as _json
+        import time as _time
+        from flask import Response
+
+        scene_ref = self
+
+        @app.route("/api/bench/metrics")
+        def _bench_metrics():
+            data = scene_ref._collect_bench_metrics()
+            return Response(_json.dumps(data), mimetype="application/json")
+
+        if socketio:
+            # Expose a helper so scenes can push updates after agent replies
+            def _emit_bench(data: dict) -> None:
+                try:
+                    socketio.emit("bench:update", data)
+                except Exception:
+                    pass
+            scene_ref._emit_bench = _emit_bench
+
+    def _collect_bench_metrics(self) -> dict:
+        """Collect current benchmark metrics for the HUD endpoint."""
+        import time as _time
+
+        metrics: dict = {
+            "response_ms": getattr(self, "_last_response_ms", 0),
+            "model_id": getattr(self, "_last_model_id", None),
+            "tts_ms": getattr(self, "_last_tts_ms", 0),
+            "nexus_tier": getattr(self, "_last_nexus_tier", "none"),
+            "tokens_in": getattr(self, "_last_tokens_in", 0),
+            "tokens_out": getattr(self, "_last_tokens_out", 0),
+            "consequences_pending": 0,
+            "economy_balance": None,
+            "world_time": None,
+            "active_events": [],
+            "scene": getattr(self, "scene_name", None),
+            "updated_at": int(_time.time() * 1000),
+        }
+
+        # Economy balance
+        try:
+            from engine.economy.economy import get_economy_manager
+            mgr = get_economy_manager()
+            metrics["economy_balance"] = mgr.get_balance("player")
+        except Exception:
+            pass
+
+        # Consequences pending
+        try:
+            from engine.mechanics.consequences import get_consequence_store
+            store = get_consequence_store()
+            due = store.poll(scene=getattr(self, "scene_name", None), peek=True)
+            metrics["consequences_pending"] = len(due)
+        except Exception:
+            pass
+
+        # World time
+        try:
+            from engine.world.world_state import get_world_state
+            ws = get_world_state()
+            wt = ws.get_time()
+            metrics["world_time"] = f"D{wt.day} {wt.hour:02d}:{wt.minute:02d}"
+            metrics["active_events"] = [
+                {"id": e.id, "title": e.title}
+                for e in ws.get_active_events()[:3]
+            ]
+        except Exception:
+            pass
+
+        return metrics
+
+    def record_bench(
+        self,
+        response_ms: int = 0,
+        model_id: str = None,
+        tts_ms: int = 0,
+        nexus_tier: str = "none",
+        tokens_in: int = 0,
+        tokens_out: int = 0,
+    ) -> None:
+        """Record benchmark data from an agent reply.
+
+        Call this after processing an agent response to feed the Benchmark HUD.
+        Then push via Socket.IO if registered::
+
+            self.record_bench(response_ms=420, model_id='qwen3-4b', nexus_tier='cache')
+        """
+        self._last_response_ms = response_ms
+        if model_id:
+            self._last_model_id = model_id
+        if tts_ms:
+            self._last_tts_ms = tts_ms
+        if nexus_tier:
+            self._last_nexus_tier = nexus_tier
+        if tokens_in:
+            self._last_tokens_in = tokens_in
+        if tokens_out:
+            self._last_tokens_out = tokens_out
+
+        if hasattr(self, "_emit_bench"):
+            try:
+                self._emit_bench(self._collect_bench_metrics())
+            except Exception:
+                pass
+
+    def inject_navbar_context(self) -> Dict[str, Any]:
+        """Return template context variables for navbar_v2.html.
+
+        Call inside a Flask ``render_template`` invocation to provide the
+        universal navbar with scene identity information::
+
+            return render_template(
+                "my_scene.html",
+                **self.inject_navbar_context(),
+                ...scene-specific vars...
+            )
+
+        Returns:
+            Dict with keys ``current_scene``, ``scene_name``, and
+            ``scene_accent``.  All values have safe defaults so the method
+            is safe to call even on a bare ``BaseScene`` instance.
+        """
+        metadata: Dict[str, Any] = getattr(self.__class__, "SCENE_METADATA", {})
+        return {
+            "current_scene": getattr(self, "scene_name", ""),
+            "scene_name": metadata.get("display_name", "CosySim"),
+            "scene_accent": metadata.get("accent_color", "#00e5ff"),
+        }
+
     def mount_overlay(self, app, socketio=None) -> None:
         """Auto-mount the control overlay Blueprint on a Flask scene.
 

@@ -1,0 +1,216 @@
+{#
+  navbar_v2.html — Universal Navbar v2 (B1 track)
+  ================================================
+  Inject into every scene template via:
+      {% include 'navbar_v2.html' %}
+
+  Required context variables (with safe defaults below):
+      current_scene  — machine key, e.g. "bedroom"
+      scene_name     — display label, e.g. "THE PENTHOUSE"
+      scene_accent   — CSS hex/rgb colour, e.g. "#c084fc"
+
+  The template is self-contained: it emits its own <link> and <script>
+  tags so scenes only need the single {% include %}.
+#}
+{% set current_scene = current_scene | default('') %}
+{% set scene_name    = scene_name    | default('CosySim') %}
+{% set scene_accent  = scene_accent  | default('#00e5ff') %}
+
+{# ── Asset URLs ───────────────────────────────────────────────── #}
+{% set _css_url = '/shared/static/css/navbar_v2.css' %}
+{% set _js_url  = '/shared/static/js/navbar_v2.js'  %}
+
+<link rel="stylesheet" href="{{ _css_url }}">
+
+{#
+  Scene registry — display name, machine key, port, accent colour.
+  The first 8 entries are shown inline; the rest collapse into MORE ▼.
+#}
+{% set _scenes = [
+  { "key": "bedroom",   "label": "THE PENTHOUSE",     "port": 5556, "accent": "#c084fc" },
+  { "key": "phone",     "label": "SIGNAL",            "port": 5555, "accent": "#00e5ff" },
+  { "key": "lounge",    "label": "VELVET PIT",        "port": 5557, "accent": "#f43f5e" },
+  { "key": "tavern",    "label": "RUSTY ANCHOR",      "port": 5558, "accent": "#f97316" },
+  { "key": "casino",    "label": "CLUB NOIR",         "port": 5559, "accent": "#eab308" },
+  { "key": "gallery",   "label": "THE OBSCURA",       "port": 5560, "accent": "#a78bfa" },
+  { "key": "arena",     "label": "THE SCORE",         "port": 5561, "accent": "#22c55e" },
+  { "key": "realm",     "label": "SHATTERED THRONE",  "port": 5562, "accent": "#e879f9" },
+  { "key": "coders",    "label": "CODERS LAB",        "port": 5564, "accent": "#34d399" },
+  { "key": "games",     "label": "THE ARCADE",        "port": 5567, "accent": "#fb7185" },
+  { "key": "intel",     "label": "THE BRIEFING",      "port": 5580, "accent": "#38bdf8" },
+  { "key": "hub",       "label": "THE LOFT",          "port": 8500, "accent": "#94a3b8" },
+  { "key": "neoncity",  "label": "NEON CITY",         "port": 5563, "accent": "#00e5ff" },
+  { "key": "warzone",   "label": "THE COLOSSEUM",     "port": 5565, "accent": "#ef4444" },
+] %}
+
+{# ─────────────────────────────────────────────────────────────── #}
+<nav
+  class="cs-navbar"
+  id="cs-navbar"
+  role="navigation"
+  aria-label="CosySim global navigation"
+  data-current-scene="{{ current_scene }}"
+  data-scene-accent="{{ scene_accent }}"
+>
+
+  {# ── Left cluster: logo + scene identity ──────────────────── #}
+  <div class="cs-navbar__left">
+
+    <a class="cs-navbar__logo" href="/" aria-label="CosySim home">
+      <span class="cs-navbar__logo-mark" aria-hidden="true">CS</span>
+    </a>
+
+    <span
+      class="cs-navbar__scene-name"
+      style="color: {{ scene_accent }};"
+    >{{ scene_name }}</span>
+
+    <span
+      class="cs-navbar__dot cs-navbar__dot--own"
+      id="navbar-own-dot"
+      aria-label="Connection status"
+      title="Socket connection"
+    ></span>
+
+  </div>{# /.cs-navbar__left #}
+
+  {# ── Centre: scene navigation ──────────────────────────────── #}
+  <nav class="cs-navbar__nav" aria-label="Scene links" id="navbar-scene-nav">
+
+    {% for scene in _scenes[:8] %}
+    <a
+      class="cs-navbar__nav-item{% if scene.key == current_scene %} cs-navbar__nav-item--active{% endif %}"
+      href="http://localhost:{{ scene.port }}/"
+      data-scene-key="{{ scene.key }}"
+      data-scene-port="{{ scene.port }}"
+      data-scene-accent="{{ scene.accent }}"
+      style="--item-accent: {{ scene.accent }};"
+      aria-current="{% if scene.key == current_scene %}page{% else %}false{% endif %}"
+    >
+      <span class="cs-navbar__nav-dot" data-status-dot="{{ scene.key }}" aria-hidden="true"></span>
+      <span class="cs-navbar__nav-label">{{ scene.label }}</span>
+    </a>
+    {% endfor %}
+
+    {# MORE dropdown (scenes 9-14) #}
+    {% if _scenes | length > 8 %}
+    <div class="cs-navbar__nav-item cs-navbar__nav-item--more" id="navbar-more-btn" tabindex="0" role="button" aria-haspopup="true" aria-expanded="false">
+      <span class="cs-navbar__nav-label">MORE ▼</span>
+
+      <ul class="cs-navbar__more-dropdown" id="navbar-more-dropdown" role="menu">
+        {% for scene in _scenes[8:] %}
+        <li role="none">
+          <a
+            class="cs-navbar__more-item{% if scene.key == current_scene %} cs-navbar__nav-item--active{% endif %}"
+            href="http://localhost:{{ scene.port }}/"
+            data-scene-key="{{ scene.key }}"
+            data-scene-port="{{ scene.port }}"
+            data-scene-accent="{{ scene.accent }}"
+            role="menuitem"
+            aria-current="{% if scene.key == current_scene %}page{% else %}false{% endif %}"
+          >
+            <span class="cs-navbar__nav-dot" data-status-dot="{{ scene.key }}" aria-hidden="true"></span>
+            {{ scene.label }}
+          </a>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+  </nav>{# /.cs-navbar__nav #}
+
+  {# ── Credits counter ───────────────────────────────────────── #}
+  <div class="cs-credits-display" id="navbar-credits-display" title="Current credit balance" aria-live="polite">
+    <span class="cs-credits-icon" aria-hidden="true">₵</span>
+    <span class="cs-credits-value" id="navbar-credits">—</span>
+  </div>
+
+  {# ── Right cluster: action buttons ────────────────────────── #}
+  <div class="cs-navbar__actions" role="group" aria-label="Quick actions">
+
+    {# Phone #}
+    <button
+      class="cs-navbar__action-btn"
+      id="navbar-phone-btn"
+      type="button"
+      aria-label="Open phone panel (Ctrl+P)"
+      data-shortcut="ctrl+p"
+      data-action="phone"
+      title="Phone  Ctrl+P"
+    >
+      <span class="cs-navbar__action-icon" aria-hidden="true">📱</span>
+      <span class="cs-navbar__badge" id="navbar-phone-badge" aria-label="0 notifications" hidden>0</span>
+    </button>
+
+    {# Aria #}
+    <button
+      class="cs-navbar__action-btn"
+      id="navbar-aria-btn"
+      type="button"
+      aria-label="Open Aria assistant (Ctrl+I)"
+      data-shortcut="ctrl+i"
+      data-action="aria"
+      title="Aria  Ctrl+I"
+    >
+      <span class="cs-navbar__action-icon" aria-hidden="true">🤖</span>
+    </button>
+
+    {# Voice / TTS toggle #}
+    <button
+      class="cs-navbar__action-btn"
+      id="navbar-voice-btn"
+      type="button"
+      aria-label="Toggle voice (Ctrl+V)"
+      data-shortcut="ctrl+v"
+      data-action="voice"
+      aria-pressed="false"
+      title="Voice TTS  Ctrl+V"
+    >
+      <span class="cs-navbar__action-icon" aria-hidden="true">🔊</span>
+    </button>
+
+    {# Admin #}
+    <button
+      class="cs-navbar__action-btn"
+      id="navbar-admin-btn"
+      type="button"
+      aria-label="Open admin overlay (Ctrl+K)"
+      data-shortcut="ctrl+k"
+      data-action="admin"
+      title="Admin  Ctrl+K"
+    >
+      <span class="cs-navbar__action-icon" aria-hidden="true">⚙️</span>
+    </button>
+
+  </div>{# /.cs-navbar__actions #}
+
+  {# ── Mobile hamburger ──────────────────────────────────────── #}
+  <button
+    class="cs-navbar__hamburger"
+    id="navbar-hamburger"
+    type="button"
+    aria-label="Toggle navigation menu"
+    aria-expanded="false"
+    aria-controls="navbar-scene-nav"
+  >
+    <span class="cs-navbar__hamburger-line" aria-hidden="true"></span>
+    <span class="cs-navbar__hamburger-line" aria-hidden="true"></span>
+    <span class="cs-navbar__hamburger-line" aria-hidden="true"></span>
+  </button>
+
+</nav>{# /.cs-navbar #}
+
+{# Spacer so page content isn't hidden under the fixed bar #}
+<div class="cs-navbar__spacer" aria-hidden="true"></div>
+
+<script src="{{ _js_url }}" defer></script>
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    window.cosyNavbar = new CosyNavbar({
+      currentScene: {{ current_scene | tojson }},
+      sceneAccent:  {{ scene_accent  | tojson }},
+    });
+    window.cosyNavbar.init();
+  });
+</script>

@@ -65,6 +65,12 @@ scenes:
     host: "localhost"
     port: 5561
     debug: false
+    enabled: false  # archived — replaced by Arena
+
+  arena:
+    host: "localhost"
+    port: 5561
+    debug: false
 
   realm:
     host: "localhost"
@@ -556,6 +562,7 @@ comms:
   skill_manifest_path: "config/skill_manifests.yaml"
   interceptors:
     nexus_prompt:              true    # inject Nexus knowledge/rules into agent context
+    content_intensity:         true    # adult content gate (ContentIntensityInterceptor)
     router_message_injector:  true
     auto_result_injector:     true
     skill_awareness:          true
