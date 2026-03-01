@@ -349,11 +349,11 @@ class TestSchedulerIntegration:
         assert "master-notebook-refresh" in registered_ids
 
     def test_master_notebook_task_count_is_20(self) -> None:
-        """Total builtin tasks count is 20 after adding master-notebook-refresh."""
+        """master-notebook-refresh task is present (one of 23 total)."""
         from engine.nexus.scheduler_daemon import _register_builtin_tasks
         daemon = MagicMock()
         _register_builtin_tasks(daemon)
-        assert daemon.register.call_count == 20
+        assert daemon.register.call_count == 23
 
     def test_master_notebook_callback_calls_refresh(self) -> None:
         """_master_notebook_refresh_callback calls refresh_master_notebook."""

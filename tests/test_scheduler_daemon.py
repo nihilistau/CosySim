@@ -308,12 +308,12 @@ class TestBuiltinTasks:
     """Tests for the 14 builtin scheduler tasks."""
 
     def test_builtin_task_count(self) -> None:
-        """Scheduler daemon registers exactly 20 builtin tasks."""
+        """Scheduler daemon registers exactly 23 builtin tasks."""
         from engine.nexus.scheduler_daemon import _register_builtin_tasks
 
         daemon = MagicMock()
         _register_builtin_tasks(daemon)
-        assert daemon.register.call_count == 20
+        assert daemon.register.call_count == 23
 
     def test_doc_sync_task_registered(self) -> None:
         """doc-sync task is registered in builtin tasks."""

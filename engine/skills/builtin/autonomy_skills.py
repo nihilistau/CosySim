@@ -1104,3 +1104,131 @@ def nlm_user_quota() -> str:
     """Fetch NotebookLM user quota and account information."""
     result = _nlm_proxy().get_user_quota()
     return json.dumps(result, default=str)
+
+
+# ═══════════════════════════════════════════════════════════════════
+# QA CACHE PIPELINE SKILLS
+# ═══════════════════════════════════════════════════════════════════
+
+def _cache_pipeline():
+    """Lazy accessor for the CachePipeline singleton."""
+    from engine.nexus.cache_pipeline import get_cache_pipeline
+    return get_cache_pipeline()
+
+
+def _review_sheet():
+    """Lazy accessor for the ReviewSheet singleton."""
+    from engine.nexus.review_sheet import get_review_sheet
+    return get_review_sheet()
+
+
+@skill(
+    pack="autonomy",
+    description="Generate targeted Q&A pairs for a specific consumer class using NLM and store in Nexus",
+    tags=["qa", "cache", "nlm", "generate", "nexus", "autonomy"],
+    category=SkillCategory.MEMORY,
+    cooldown=30.0,
+)
+def cache_generate_pairs(
+    consumer_focus: str = "all",
+    count: int = 100,
+) -> str:
+    """Run the NLM-driven QA cache pipeline for a specific consumer class.
+
+    Generates Q&A pairs via Gemini 3.0 quota-free Studio tiles, evaluates
+    them (ESSENTIAL/USEFUL/SKIP), and stores approved pairs in Nexus.
+
+    Args:
+        consumer_focus: Consumer class to target — "copilot", "agent",
+            "governance", "developer", "news", or "all".
+        count: Target number of pairs to generate per run.
+
+    Returns:
+        JSON with stored, skipped, gaps, duration_s.
+    """
+    try:
+        pipeline = _cache_pipeline()
+        from engine.nexus.consumer_briefing import get_consumer_briefing
+        briefing = get_consumer_briefing()
+
+        # Adjust CSV prompt for the targeted consumer
+        pipeline._consumer_focus = consumer_focus
+        pipeline._target_count = count
+
+        result = pipeline.run_full_cycle()
+        return json.dumps({
+            "stored": result.stored,
+            "direct_seeded": result.direct_seeded,
+            "essential": result.essential,
+            "useful": result.useful,
+            "skipped": result.skipped,
+            "gaps": result.gaps[:10],
+            "duration_s": round(result.duration_s, 1),
+            "errors": result.errors[:5],
+        }, default=str)
+    except Exception as exc:
+        logger.error("cache_generate_pairs failed: %s", exc)
+        return json.dumps({"error": str(exc)})
+
+
+@skill(
+    pack="autonomy",
+    description="Generate an Excel review sheet for pending Q&A cache pairs so a human can approve/reject",
+    tags=["qa", "cache", "review", "excel", "autonomy"],
+    category=SkillCategory.SYSTEM,
+    cooldown=10.0,
+)
+def cache_review_sheet(output_path: str = "") -> str:
+    """Generate an Excel (.xlsx) review sheet for Nexus Q&A pairs awaiting human review.
+
+    Creates a workbook with formulas, dropdown validation, and conditional
+    formatting. Include? column is formula-driven (ESSENTIAL/USEFUL → YES).
+    Reviewer edits the sheet and re-imports with review_sheet_import.
+
+    Args:
+        output_path: Where to save the xlsx. Defaults to
+            data/qa_review_{YYYY-MM-DD}.xlsx in the project root.
+
+    Returns:
+        JSON with saved_path and row_count.
+    """
+    try:
+        from datetime import datetime
+        from engine.nexus.cache_pipeline import get_cache_pipeline, CandidatePair
+
+        if not output_path:
+            date_str = datetime.now().strftime("%Y-%m-%d")
+            output_path = f"data/qa_review_{date_str}.xlsx"
+
+        # Load recent pairs from state file if available
+        pipeline = get_cache_pipeline()
+        pending_pairs: list = []
+        try:
+            import json as _json
+            from pathlib import Path
+            state_file = Path(pipeline._state_path) if hasattr(pipeline, "_state_path") else None
+            if state_file and state_file.exists():
+                state = _json.loads(state_file.read_text())
+                raw = state.get("last_candidates", [])
+                pending_pairs = [
+                    CandidatePair(
+                        q=p.get("q", ""),
+                        a=p.get("a", ""),
+                        consumer=p.get("consumer", "developer"),
+                        priority=int(p.get("priority", 3)),
+                        category=p.get("category", "general"),
+                    )
+                    for p in raw
+                ]
+        except Exception:
+            pass
+
+        rs = _review_sheet()
+        saved_path = rs.generate(pending_pairs, output_path)
+        return json.dumps({
+            "saved_path": saved_path,
+            "row_count": len(pending_pairs),
+        })
+    except Exception as exc:
+        logger.error("cache_review_sheet failed: %s", exc)
+        return json.dumps({"error": str(exc)})

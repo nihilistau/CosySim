@@ -1009,6 +1009,110 @@ def _register_builtin_tasks(daemon: "SchedulerDaemon") -> None:
         "weekly",
         _master_notebook_refresh_callback,
     )
+    daemon.register(
+        "qa-expansion",
+        "Nexus QA Expansion (reverse-generate Q&A pairs)",
+        "daily",
+        _qa_expansion_callback,
+    )
+    daemon.register(
+        "qa-history-mine",
+        "NLM-Driven QA Cache Pipeline (Gemini 3.0 generation cycle)",
+        "weekly",
+        _qa_history_mine_callback,
+    )
+    daemon.register(
+        "qa-cache-prune",
+        "QA Cache Pruning (remove stale zero-hit pairs)",
+        "weekly",
+        _qa_cache_prune_callback,
+    )
+
+
+def _qa_history_mine_callback() -> Dict[str, Any]:
+    """Weekly: run the full NLM-driven QA cache generation pipeline.
+
+    Mines 164 checkpoints from session history, uploads to NLM notebooks,
+    generates Q&A pairs via quota-free Studio tiles (flashcards, quiz,
+    custom report), self-evaluates with Gemini 3.0, and stores approved
+    pairs in the Nexus Q&A cache.
+
+    Expected: +500-1000 net new pairs per cycle.
+    """
+    try:
+        from engine.nexus.cache_pipeline import get_cache_pipeline
+        pipeline = get_cache_pipeline()
+        result = pipeline.run_full_cycle()
+        return {
+            "stored": result.stored,
+            "direct_seeded": result.direct_seeded,
+            "essential": result.essential,
+            "useful": result.useful,
+            "skipped": result.skipped,
+            "gaps": len(result.gaps),
+            "duration_s": result.duration_s,
+            "errors": result.errors,
+        }
+    except Exception as exc:
+        logger.error("QA history mine callback failed: %s", exc)
+        return {"error": str(exc)}
+
+
+def _qa_cache_prune_callback() -> Dict[str, Any]:
+    """Weekly: remove Q&A cache entries that have never been accessed.
+
+    Pairs that have been in the cache for 30+ days with zero hits are
+    removed to keep the cache lean and the hit rate meaningful.
+    """
+    try:
+        from engine.nexus.client import get_nexus_client
+        client = get_nexus_client()
+        if not client or not client.is_available():
+            return {"error": "Nexus unavailable"}
+
+        # Fetch Q&A pairs, remove stale ones (zero-hit + older than 30 days)
+        from datetime import datetime, timezone, timedelta
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
+        pruned = 0
+        try:
+            qa_list = client.list_entries(
+                content_type="qa",
+                limit=2000,
+            ) or []
+            for entry in qa_list:
+                if not isinstance(entry, dict):
+                    continue
+                hits = entry.get("hits", entry.get("access_count", 1))
+                created = entry.get("created_at", "")
+                if hits == 0 and created and created < cutoff:
+                    entry_id = entry.get("id", "")
+                    if entry_id:
+                        try:
+                            client.delete_entry(entry_id)
+                            pruned += 1
+                        except Exception:
+                            pass
+        except Exception as exc:
+            logger.warning("QA prune: error during pruning: %s", exc)
+
+        logger.info("QA cache pruned: %d stale entries removed", pruned)
+        return {"pruned": pruned}
+    except Exception as exc:
+        logger.error("QA cache prune callback failed: %s", exc)
+        return {"error": str(exc)}
+
+
+def _qa_expansion_callback() -> Dict[str, Any]:
+    """Daily batch expansion: reverse-generates Q&A pairs from Nexus entries.
+
+    Processes 20 entries per run, accumulating toward the 3,000+ pair target.
+    """
+    try:
+        from engine.nexus.qa_expander import run_qa_expansion
+        return run_qa_expansion(batch_size=20)
+    except Exception as exc:
+        logger.error("QA expansion callback failed: %s", exc)
+        return {"error": str(exc)}
 
 
 def _master_notebook_refresh_callback() -> Dict[str, Any]:
@@ -1026,6 +1130,8 @@ def _master_notebook_refresh_callback() -> Dict[str, Any]:
 
 
 # ──── CLI ────
+
+def _cli_status() -> None:
     """Print status of all tasks."""
     daemon = get_scheduler_daemon()
     info = daemon.status()

@@ -2,7 +2,82 @@
 
 All notable changes to CosySim are documented here.
 
-## v0.62 — Local Agent Bridge, Master Notebook Builder, NLM Panel Skills
+## v0.63 — NLM-Driven QA Cache Pipeline
+
+### New: CachePipeline (`engine/nexus/cache_pipeline.py`)
+- 10-stage orchestrator (A–J) for NLM-driven Q&A cache generation
+- Stage A: Direct seed from high-quality session turns (200–400 pairs, no NLM)
+- Stage B: Upload source pyramid + themed history chunks to Notebook A
+- Stage C: Raw generation — `extract_flashcards`, `extract_quiz`, `extract_data_tables`
+- Stage D: Structured generation — CSV mode × 3 consumer focuses + Python code-gen mode
+- Stage E: Parse + deduplicate candidates (normalise, length filter, Nexus dedup)
+- Stage F: NLM self-evaluation — ESSENTIAL / USEFUL / SKIP rating + gap list
+- Stage G: Store approved pairs in Nexus Q&A cache with consumer/priority/category metadata
+- Stage H: Generate Excel review sheet for human approval
+- Stage I: Upload approved pairs back as source (compounding — each cycle improves next)
+- Stage J: Log gap list → create scheduler tasks for gap-fill notebooks
+- `CycleResult` dataclass with full accounting per stage
+- `CandidatePair` and `EvalResult` dataclasses for typed pipeline data
+- Sandbox `_exec_code_mode()` — executes Gemini-generated `build_qa_pairs()` safely
+
+### New: HistoryMiner (`engine/nexus/history_miner.py`)
+- Reads `~/.copilot/session-store.db` via sqlite3 (read-only URI mode)
+- `mine_checkpoints(theme)` → themed `SourceDocument` (keyword-matched, markdown)
+- `mine_all_themes()` → 10 themed documents for full pyramid upload
+- `mine_turns(min_answer_len)` → direct-seed `QAPair` list from real session history
+- `mine_full_dump()` → all checkpoints concatenated for mega-notebook upload
+- `get_stats()` → session/checkpoint/turn counts + store size
+
+### New: SourcePyramid (`engine/nexus/source_pyramid.py`)
+- Builds 6 meta-documents that shape all NLM generation tile output
+- Layer 0: Consumer Briefing, Layer 1: Output Schema, Layer 2: Good Examples
+- Layer 3: Bad Examples, Layer 4: Existing Coverage, Layer 5: Priority Rubric
+- `build_all(existing_questions)` → `{layer_name: content}` dict
+- `upload_pyramid(notebook_id, skip_layer_4, existing_questions)` → count
+- `upload_content(notebook_id, docs)` → count
+- `refresh_coverage(notebook_id, client)` → skips if client unavailable (fixed)
+
+### New: ConsumerBriefing (`engine/nexus/consumer_briefing.py`)
+- Living query taxonomy for 5 consumer classes (copilot-startup, agent-task, governance, developer, news-retrieval)
+- `build_briefing()`, `get_schema_doc()`, `get_good_examples()`, `get_bad_examples()`, `build_priority_rubric()`
+- `build_csv_prompt(consumer_focus)` — targeted CSV generation per consumer class
+- `build_code_gen_prompt()` — Gemini generates `build_qa_pairs() -> list[dict]`
+- `build_evaluation_prompt(pairs_csv)` — self-evaluation: ESSENTIAL/USEFUL/SKIP
+- `build_gap_prompt(covered_questions)` — identifies missing query patterns
+- Stored in Nexus as governance document; editable without code changes
+
+### New: ReviewSheet (`engine/nexus/review_sheet.py`)
+- openpyxl Excel review sheet for human Q&A pair approval
+- Columns: Question, Answer, Consumer, Priority, Category, NLM_Rating, Include, Duplicate, Notes
+- `Include` formula: `=IF(OR(F{r}="ESSENTIAL",F{r}="USEFUL"),"YES","REVIEW")`
+- `Duplicate` formula: `=COUNTIF($A$1:A{prev},A{r})>0`
+- Data validation dropdowns for Consumer, Category, NLM_Rating
+- Conditional formatting: SKIP rows → grey; Priority color scale red→yellow→green
+- `import_reviewed(path, client)` — reads Include=="YES" rows back to Nexus
+
+### Updated: SchedulerDaemon — 21→23 tasks
+- Added `qa-history-mine` (weekly) — runs full cache pipeline cycle
+- Added `qa-cache-prune` (weekly) — removes zero-hit pairs older than 30 days
+
+### Updated: DevTools MCP Server — 4 new tools
+- `cache_pipeline_run(stages)` — run full cycle or specific stages
+- `cache_pipeline_status()` — last cycle result + gap list
+- `review_sheet_generate(output_path)` — generate Excel from pending pairs
+- `review_sheet_import(path)` — import reviewed xlsx back to Nexus
+
+### Updated: Autonomy Skills — 2 new @skills
+- `cache_generate_pairs(consumer_focus, count)` — targeted NLM generation for one consumer
+- `cache_review_sheet(output_path)` — generate Excel review sheet on demand
+
+### Tests
+- `tests/test_history_miner.py` — 19 tests for HistoryMiner (themes, mine_checkpoints, mine_turns, full_dump, get_stats)
+- `tests/test_source_pyramid.py` — 21 tests for SourcePyramid (build_all, upload_pyramid, upload_content, refresh_coverage)
+- `tests/test_consumer_briefing.py` — 27 tests for ConsumerBriefing (briefing, prompts, schema, Nexus persistence)
+- `tests/test_cache_pipeline.py` — 27 tests for CachePipeline (stages, code_mode sandbox, dedup, full cycle dry run)
+- `tests/test_review_sheet.py` — 27 tests for ReviewSheet (generate xlsx, formulas, import_reviewed)
+- Scheduler task count assertions updated 21→23
+
+
 
 ### New: LocalAgentBridge (`engine/nexus/local_agent_bridge.py`)
 - Enables local LMStudio agents to discover, claim, execute, and complete tasks

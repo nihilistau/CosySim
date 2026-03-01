@@ -530,9 +530,8 @@ class TestIntegrationFlow:
         from engine.nexus.scheduler_daemon import _register_builtin_tasks
         daemon = MagicMock()
         _register_builtin_tasks(daemon)
-        assert daemon.register.call_count == 20
-
-        task_ids = [call.args[0] for call in daemon.register.call_args_list]
+        task_ids = [c.args[0] for c in daemon.register.call_args_list]
+        assert daemon.register.call_count == 23
         assert "nexus-maintenance" in task_ids
         assert "nexus-dedup" in task_ids
         assert "knowledge-quality" in task_ids
@@ -545,6 +544,7 @@ class TestIntegrationFlow:
         assert "experiment-scan" in task_ids
         assert "ha-news-push" in task_ids
         assert "master-notebook-refresh" in task_ids
+        assert "qa-expansion" in task_ids
 
     @patch("engine.nexus.self_maintenance.quality_report")
     def test_knowledge_quality_callback_calls_quality_report(self, mock_report):
@@ -610,7 +610,7 @@ class TestIntegrationFlow:
         from engine.nexus.scheduler_daemon import get_scheduler_daemon
         daemon = get_scheduler_daemon()
         status = daemon.status()
-        assert status["task_count"] == 20
+        assert status["task_count"] == 23
 
     def test_scheduler_daemon_task_ids(self):
         """SchedulerDaemon has the expected task IDs."""
@@ -624,7 +624,7 @@ class TestIntegrationFlow:
             "system-reflection", "experiment-scan",
             "governance-audit", "ha-news-push",
             "session-distillation", "qa-generation", "copilot-self-sync",
-            "master-notebook-refresh",
+            "master-notebook-refresh", "qa-history-mine", "qa-cache-prune",
         ]
         for tid in expected:
             assert tid in task_ids, f"Missing task: {tid}"

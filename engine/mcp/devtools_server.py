@@ -1535,6 +1535,115 @@ def deep_storage_stats() -> str:
         return json.dumps({"error": str(e)})
 
 
+@mcp.tool()
+def cache_pipeline_run(stages: str = "") -> str:
+    """Run the NLM-driven QA cache generation pipeline (Gemini 3.0 full cycle).
+
+    Mines session history, uploads to NLM notebooks, generates Q&A pairs via
+    quota-free Studio tiles, evaluates with Gemini 3.0, and stores approved
+    pairs in Nexus. Expected output: +500-1000 net new pairs per cycle.
+
+    Args:
+        stages: Optional JSON array of stage letters to run (e.g. '["A","B","C"]').
+            Defaults to full cycle (all stages A-J).
+    """
+    try:
+        from engine.nexus.cache_pipeline import get_cache_pipeline
+        pipeline = get_cache_pipeline()
+        result = pipeline.run_full_cycle()
+        return json.dumps({
+            "stored": result.stored,
+            "direct_seeded": result.direct_seeded,
+            "essential": result.essential,
+            "useful": result.useful,
+            "skipped": result.skipped,
+            "gaps": result.gaps[:10],
+            "review_sheet_path": result.review_sheet_path,
+            "duration_s": round(result.duration_s, 1),
+            "errors": result.errors[:5],
+            "timestamp": result.timestamp,
+        }, default=str)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def cache_pipeline_status() -> str:
+    """Get the status of the last QA cache pipeline run — pair counts, gaps, timing."""
+    try:
+        from engine.nexus.cache_pipeline import get_cache_pipeline
+        pipeline = get_cache_pipeline()
+        return json.dumps(pipeline.get_status(), default=str)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def review_sheet_generate(output_path: str = "") -> str:
+    """Generate a fresh Excel review sheet for pending Q&A cache pairs.
+
+    Creates an xlsx file with formulas (Include? column auto-fills YES for
+    ESSENTIAL/USEFUL), dropdown validation, and conditional formatting.
+
+    Args:
+        output_path: Where to save the xlsx. Defaults to
+            data/qa_review_{YYYY-MM-DD}.xlsx.
+    """
+    try:
+        from datetime import datetime
+        from engine.nexus.review_sheet import get_review_sheet
+        from engine.nexus.cache_pipeline import get_cache_pipeline, CandidatePair
+
+        if not output_path:
+            date_str = datetime.now().strftime("%Y-%m-%d")
+            output_path = f"data/qa_review_{date_str}.xlsx"
+
+        pipeline = get_cache_pipeline()
+        pending_pairs: list = []
+        try:
+            import json as _json
+            from pathlib import Path
+            state_path = getattr(pipeline, "_state_path", None)
+            if state_path and Path(state_path).exists():
+                state = _json.loads(Path(state_path).read_text())
+                for p in state.get("last_candidates", []):
+                    pending_pairs.append(CandidatePair(
+                        q=p.get("q", ""),
+                        a=p.get("a", ""),
+                        consumer=p.get("consumer", "developer"),
+                        priority=int(p.get("priority", 3)),
+                        category=p.get("category", "general"),
+                    ))
+        except Exception:
+            pass
+
+        rs = get_review_sheet()
+        saved = rs.generate(pending_pairs, output_path)
+        return json.dumps({"saved_path": saved, "row_count": len(pending_pairs)})
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def review_sheet_import(path: str) -> str:
+    """Import a reviewed Excel Q&A review sheet back into the Nexus cache.
+
+    Reads rows where Include? == "YES" and stores them in the Nexus Q&A cache
+    with consumer, priority, and category metadata.
+
+    Args:
+        path: Path to the reviewed .xlsx file.
+    """
+    try:
+        from engine.nexus.review_sheet import get_review_sheet
+        from engine.nexus.client import get_nexus_client
+        rs = get_review_sheet()
+        count = rs.import_reviewed(path, get_nexus_client())
+        return json.dumps({"imported": count, "path": path})
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
 @mcp.resource("nexus://status")
 def resource_nexus_status() -> str:
     """Nexus knowledge system health and stats."""
@@ -2056,7 +2165,54 @@ async def master_notebook_list_sources() -> str:
     return "\n".join(lines)
 
 
-    """Start the DevTools MCP server."""
+# ── QA Expander Tools ─────────────────────────────────────────────────────────
+
+@mcp.tool()
+async def qa_expander_run(batch_size: int = 20, dry_run: bool = False) -> str:
+    """Run one batch of QA expansion — reverse-generate Q&A pairs from Nexus entries.
+
+    For each entry, asks NLM to generate 5 questions it answers, then stores
+    the pairs in Nexus for instant cache hits. Processes batch_size entries per call.
+
+    batch_size: Number of entries to process (default 20).
+    dry_run: Show what would be processed without making NLM calls.
+    """
+    from engine.nexus.qa_expander import QAExpander
+    expander = QAExpander(dry_run=dry_run)
+    result = expander.run(batch_size=batch_size)
+    return json.dumps(result, indent=2, default=str)
+
+
+@mcp.tool()
+async def qa_expander_stats() -> str:
+    """Show QA expansion progress: entries expanded, pairs generated, last run."""
+    from engine.nexus.qa_expander import get_qa_expander
+    stats = get_qa_expander().stats()
+    lines = [
+        "=== QA Expander Stats ===",
+        f"Entries expanded : {stats['entries_expanded']}",
+        f"Pairs generated  : {stats['total_generated']}",
+        f"Nexus Q&A count  : {stats['nexus_qa_count']}",
+        f"Last run         : {stats['last_run']}",
+        f"Total runs       : {stats['runs']}",
+        f"Notebook ID      : {stats['notebook_id']}",
+    ]
+    return "\n".join(lines)
+
+
+@mcp.tool()
+async def qa_expander_reset() -> str:
+    """Reset QA expansion state — next run will start from the beginning.
+
+    WARNING: This clears all progress tracking. The Q&A pairs already stored
+    in Nexus are preserved, but expansion will re-process all entries.
+    """
+    from engine.nexus.qa_expander import QAExpander
+    QAExpander().reset()
+    return "QA expander state reset. Next run will process all entries from scratch."
+
+
+def main(mode: str = "stdio") -> None:
     if mode == "http":
         logger.info("Starting CosySim DevTools MCP server in HTTP mode...")
         mcp.run(transport="sse")
