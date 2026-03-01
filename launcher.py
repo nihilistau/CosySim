@@ -311,6 +311,15 @@ def launch_multi(service_names: List[str], scene_names: List[str]) -> None:
         time.sleep(2)
     _launch_group(scene_names, "Scenes")
 
+    # After all scenes are started, activate the living world
+    try:
+        from engine.world.world_sim import get_world_sim
+        _world_sim = get_world_sim()
+        _world_sim.start()
+        print("  🌍 WorldSim daemon started")
+    except Exception as exc:
+        print(f"  ⚠️  WorldSim start failed: {exc}")
+
     time.sleep(5)
     print("\n  Health check:")
     for name in service_names + scene_names:

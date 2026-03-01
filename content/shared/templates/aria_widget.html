@@ -1,157 +1,26 @@
 <!--
-  CosySim Aria Floating Widget (B4)
-  ===================================
-  Bottom-right floating glass circle that expands into a chat/voice panel.
+  CosySim Aria Portrait Widget
+  ============================
+  Animated Aria portrait — pure CSS, no external images required.
+  Replaces the placeholder aria_idle.png widget with a geometric SVG face
+  that reacts to voice events via CSS state animations.
 
   Include in any scene template:
     {% include 'shared/templates/aria_widget.html' %}
-  Or inject via JS (aria_widget.js auto-injects this markup).
 
-  Dependencies:
-    design_tokens.css · cosysim-components.css · aria_widget.css · aria_widget.js
+  Modes: floating | messenger | voice-call | full-portrait
+  States: idle (breathing) | talking (mouth) | thinking (eyes) | listening (glow)
 
-  data-state attribute values: idle | talking | thinking | listening
+  Public API:
+    window.AriaPortrait.setState(state)
+    window.AriaPortrait.setMode(mode)
+    window.AriaPortrait.toggleMode()
+    window.AriaPortrait.minimize()
+
+  Voice events consumed automatically:
+    voice:speaking · voice:done · voice:listening · aria:thinking
+
+  Backward-compat shim: window.ariaWidget.setState / .open / .toggle
 -->
-
-<!-- Aria Widget — bottom-right floating -->
-<div
-  id="cs-aria-widget"
-  class="cs-aria-widget"
-  data-state="idle"
->
-
-  <!-- ── Collapsed: portrait circle button ────────────────────── -->
-  <button
-    class="cs-aria-toggle"
-    id="cs-aria-toggle"
-    aria-label="Open Aria assistant"
-    aria-expanded="false"
-    aria-controls="cs-aria-panel"
-  >
-    <div class="cs-aria-portrait" id="cs-aria-portrait">
-      <img
-        src="/static/img/aria_idle.png"
-        alt="Aria"
-        id="cs-aria-img"
-        onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'"
-      >
-      <div class="cs-aria-fallback" style="display:none">🤖</div>
-    </div>
-    <div class="cs-aria-state-ring" aria-hidden="true"></div>
-    <div
-      class="cs-aria-notif"
-      id="cs-aria-notif"
-      aria-label="Unread messages"
-      style="display:none"
-    >1</div>
-  </button>
-
-  <!-- ── Expanded panel ───────────────────────────────────────── -->
-  <div
-    class="cs-aria-panel"
-    id="cs-aria-panel"
-    role="dialog"
-    aria-label="Aria assistant panel"
-    style="display:none"
-  >
-
-    <!-- Panel header -->
-    <div class="cs-aria-panel-header">
-      <span class="cs-aria-name">ARIA</span>
-
-      <div class="cs-aria-modes" role="group" aria-label="Interaction mode">
-        <button
-          class="cs-aria-mode-btn cs-aria-mode-btn--active"
-          data-mode="messenger"
-          aria-label="Messenger mode"
-          aria-pressed="true"
-          title="Chat"
-        >💬</button>
-        <button
-          class="cs-aria-mode-btn"
-          data-mode="voice"
-          aria-label="Voice mode"
-          aria-pressed="false"
-          title="Voice"
-        >📞</button>
-      </div>
-
-      <button
-        class="cs-aria-close-btn"
-        id="cs-aria-close"
-        aria-label="Close Aria panel"
-      >✕</button>
-    </div>
-
-    <!-- ── Messenger mode ─────────────────────────────────────── -->
-    <div
-      class="cs-aria-content"
-      data-mode-panel="messenger"
-      role="region"
-      aria-label="Messenger"
-    >
-      <div
-        class="cs-aria-messages"
-        id="cs-aria-messages"
-        role="log"
-        aria-live="polite"
-        aria-relevant="additions"
-      ></div>
-
-      <div class="cs-aria-input-row">
-        <input
-          type="text"
-          class="cs-aria-input"
-          id="cs-aria-input"
-          placeholder="Ask Aria…"
-          aria-label="Message to Aria"
-          autocomplete="off"
-          maxlength="500"
-        >
-        <button
-          class="cs-aria-send"
-          id="cs-aria-send"
-          aria-label="Send message"
-        >↑</button>
-      </div>
-    </div>
-
-    <!-- ── Voice mode ─────────────────────────────────────────── -->
-    <div
-      class="cs-aria-content"
-      data-mode-panel="voice"
-      role="region"
-      aria-label="Voice"
-      style="display:none"
-    >
-      <div class="cs-aria-portrait-large" id="cs-aria-portrait-large">
-        <img
-          src="/static/img/aria_idle.png"
-          alt="Aria"
-          onerror="this.style.display='none'"
-        >
-        <div class="cs-aria-waveform" id="cs-aria-waveform" aria-hidden="true">
-          <div class="cs-waveform-bar"></div>
-          <div class="cs-waveform-bar"></div>
-          <div class="cs-waveform-bar"></div>
-          <div class="cs-waveform-bar"></div>
-          <div class="cs-waveform-bar"></div>
-        </div>
-      </div>
-
-      <div
-        class="cs-aria-voice-status"
-        id="cs-aria-voice-status"
-        aria-live="polite"
-      >Press to speak</div>
-
-      <button
-        class="cs-aria-mic-btn"
-        id="cs-aria-mic"
-        aria-label="Start voice input"
-        aria-pressed="false"
-      >🎤</button>
-    </div>
-
-  </div><!-- /.cs-aria-panel -->
-</div><!-- /#cs-aria-widget -->
+<link rel="stylesheet" href="/shared/static/css/cosysim-aria-portrait.css">
+<script src="/shared/static/js/cosysim-aria-portrait.js" defer></script>

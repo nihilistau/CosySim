@@ -1,6 +1,6 @@
 # CosySim Documentation Index
 
-> All project documentation in one place. v0.65 — 5,582 tests, 214 MCP tools, 22 skill packs (206 skills), 18 scenes.
+> All project documentation in one place. v0.68 — 6,679 tests, 214 MCP tools, 22 skill packs (206 skills), 15 active scenes + Arena.
 
 ## Getting Started
 
@@ -31,6 +31,10 @@
 | [Skills](SKILLS.md) | @skill decorator, 21 built-in packs (195 skills) |
 | [Admin Guide](ADMIN_GUIDE.md) | Admin panel pages and operations |
 | [System Control Panel](SYSTEM_CONTROL.md) | Config editor, service health, launcher, NLM proxy, Git — port 5575 |
+| [World System](WORLD_SYSTEM.md) | WorldSim, WorldState, EventBus, cross-scene events |
+| [Economy Guide](ECONOMY_GUIDE.md) | EconomyManager, cross-scene credits, betting, consequences |
+| [Arena Guide](ARENA_GUIDE.md) | THE COLOSSEUM — card game mechanics, betting, NLM commentary |
+| [Content Guide](CONTENT_GUIDE.md) | ContentEngine, ContentGate, adult profiles, NLM seeding |
 
 ## APIs & Integration
 

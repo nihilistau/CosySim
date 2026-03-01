@@ -40,6 +40,13 @@ from engine.scenes.base_scene import BaseScene
 from engine.scenes.nexus_mixin import NexusSceneMixin
 from content.shared import register_shared_assets
 
+try:
+    from engine.world.world_state import get_world_state
+    from engine.events.event_bus import get_event_bus, EventBus
+    _WORLD_AVAILABLE = True
+except ImportError:
+    _WORLD_AVAILABLE = False
+
 log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -118,6 +125,15 @@ class TavernScene(BaseScene, NexusSceneMixin):
         self._ticker_thread: Optional[threading.Thread] = None
 
         self.nexus_init("tavern")
+
+        # ── World State ──────────────────────────────────────────────
+        self._world_state = None
+        self._event_bus = None
+        if _WORLD_AVAILABLE:
+            self._world_state = get_world_state()
+            self._event_bus = get_event_bus()
+            self._event_bus.subscribe("world.tick", self._on_world_tick)
+            self._event_bus.subscribe("world.time_change", self._on_time_change)
 
         log.info("TavernScene created on port %d", port)
 
@@ -503,7 +519,33 @@ class TavernScene(BaseScene, NexusSceneMixin):
     def stop(self) -> None:
         self.nexus_flush()
         log.info("Stopping TavernScene")
+        if hasattr(self, "_event_bus") and self._event_bus:
+            try:
+                self._event_bus.unsubscribe("world.tick", self._on_world_tick)
+                self._event_bus.unsubscribe("world.time_change", self._on_time_change)
+            except Exception:
+                pass
         self._stop_ticker()
+
+    # ── World State handlers ──────────────────────────────────────────
+    def _on_world_tick(self, event: dict) -> None:
+        """React to world simulation tick."""
+        if hasattr(self, "socketio") and self.socketio:
+            try:
+                time_data = self._world_state.get_time()
+                self.socketio.emit("world_tick", {
+                    "hour": getattr(time_data, "hour", 0),
+                    "day": getattr(time_data, "day", 1),
+                    "weather": str(getattr(time_data, "weather", "clear")),
+                })
+            except Exception:
+                pass
+
+    def _on_time_change(self, event: dict) -> None:
+        """Last call at 02:00 — refresh quest board at dawn (06:00)."""
+        hour = event.get("hour", 0)
+        if hour == 6 and hasattr(self, "socketio") and self.socketio:
+            self.socketio.emit("quest_refresh", {"reason": "dawn"})
 
     def get_health(self) -> Dict[str, Any]:
         return {

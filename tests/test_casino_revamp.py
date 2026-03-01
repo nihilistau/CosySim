@@ -361,3 +361,20 @@ class TestCasinoJsExists:
         p = ROOT / "content" / "scenes" / "casino" / "static" / "js" / "casino.js"
         content = p.read_text(encoding="utf-8")
         assert "window._casino" in content
+
+
+# ── World State wiring ─────────────────────────────────────────────────────
+
+def test_world_state_wired_casino():
+    """CasinoScene has _on_world_tick and _on_time_change methods."""
+    from content.scenes.casino.casino_scene import CasinoScene
+    assert hasattr(CasinoScene, "_on_world_tick")
+    assert hasattr(CasinoScene, "_on_time_change")
+
+
+def test_casino_time_change_happy_hour():
+    """_on_time_change logs happy hour message for 18:00-19:59."""
+    from content.scenes.casino.casino_scene import CasinoScene
+    src = (ROOT / "content" / "scenes" / "casino" / "casino_scene.py").read_text(encoding="utf-8")
+    assert "Happy hour" in src
+    assert "18 <= hour < 20" in src

@@ -213,3 +213,19 @@ def test_lounge_css_amber_theme():
     assert "lounge-bar"  in css
     assert "time-badge"  in css
     assert "drink-menu"  in css
+
+
+# ── World State wiring ─────────────────────────────────────────────────────
+
+def test_world_state_wired_lounge():
+    """LoungeScene has _on_world_tick and _on_time_change methods."""
+    from content.scenes.lounge.lounge_scene import LoungeScene
+    assert hasattr(LoungeScene, "_on_world_tick")
+    assert hasattr(LoungeScene, "_on_time_change")
+
+
+def test_lounge_tick_emits_ambient_update():
+    """_on_world_tick emits ambient_update socket event."""
+    src = (LOUNGE_DIR / "lounge_scene.py").read_text(encoding="utf-8")
+    assert "ambient_update" in src
+    assert "_on_world_tick" in src

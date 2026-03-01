@@ -44,6 +44,13 @@ from engine.mcp.scene_state import get_scene_state_manager
 from engine.mcp.tag_registry import TagRegistry
 from content.scenes.gallery.gallery_rules import register_gallery_rules
 
+try:
+    from engine.world.world_state import get_world_state
+    from engine.events.event_bus import get_event_bus, EventBus
+    _WORLD_AVAILABLE = True
+except ImportError:
+    _WORLD_AVAILABLE = False
+
 logger = logging.getLogger(__name__)
 
 SCENE_ID = "gallery"
@@ -367,6 +374,14 @@ class GalleryScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE
             fw.on("artwork_created", lambda evt: self._on_art_event(evt))
         except Exception as exc:
             logger.warning("MCP init skipped: %s", exc)
+        # ── World State ──────────────────────────────────────────────
+        self._world_state = None
+        self._event_bus = None
+        if _WORLD_AVAILABLE:
+            self._world_state = get_world_state()
+            self._event_bus = get_event_bus()
+            self._event_bus.subscribe("world.tick", self._on_world_tick)
+            self._event_bus.subscribe("world.time_change", self._on_time_change)
         # Start background ticker for ambient updates
         self._start_ticker()
         logger.info("GalleryScene started on %s:%s", self.host, self.port)
@@ -375,6 +390,12 @@ class GalleryScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE
     def stop(self) -> None:
         self.nexus_flush()
         self._ticker_stop.set()
+        if hasattr(self, "_event_bus") and self._event_bus:
+            try:
+                self._event_bus.unsubscribe("world.tick", self._on_world_tick)
+                self._event_bus.unsubscribe("world.time_change", self._on_time_change)
+            except Exception:
+                pass
         if self._ticker_thread and self._ticker_thread.is_alive():
             self._ticker_thread.join(timeout=3)
         try:
@@ -382,6 +403,25 @@ class GalleryScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE
         except Exception:
             pass
         logger.info("GalleryScene stopped")
+
+    # ── World State handlers ──────────────────────────────────────────
+    def _on_world_tick(self, event: dict) -> None:
+        """React to world simulation tick."""
+        if hasattr(self, "socketio") and self.socketio:
+            try:
+                time_data = self._world_state.get_time()
+                self.socketio.emit("world_tick", {
+                    "hour": getattr(time_data, "hour", 0),
+                    "day": getattr(time_data, "day", 1),
+                    "weather": str(getattr(time_data, "weather", "clear")),
+                })
+            except Exception:
+                pass
+
+    def _on_time_change(self, event: dict) -> None:
+        """Rotate featured exhibit at midnight."""
+        if event.get("hour", 0) == 0 and hasattr(self, "socketio") and self.socketio:
+            self.socketio.emit("exhibit_rotate", {})
 
     def _start_ticker(self, interval: float = 45.0) -> None:
         """Background loop for ambient gallery events."""

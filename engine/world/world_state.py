@@ -32,6 +32,7 @@ from typing import Dict, List, Optional
 
 from engine.nexus.client import get_nexus_client
 from engine.events.event_bus import get_event_bus, EventTypes
+from engine.mcp.comms_framework import InterceptorBase, ResponseContext
 
 logger = logging.getLogger(__name__)
 
@@ -595,6 +596,58 @@ def _safe_get_nexus():
     except Exception as exc:
         logger.debug("Nexus client unavailable: %s", exc)
         return None
+
+
+# ---------------------------------------------------------------------------
+# WorldStateInterceptor
+# ---------------------------------------------------------------------------
+
+
+class WorldStateInterceptor(InterceptorBase):
+    """Pre-call interceptor that injects current world state into the system prompt.
+
+    Prepends a ``[WORLD STATE]`` block containing the current game time,
+    active weather, and any live world events so characters respond with
+    awareness of the living world.
+
+    Priority 15 places this after memory (7) and before reputation (22).
+    """
+
+    name: str = "world_state"
+    priority: int = 15
+
+    def pre_call(self, ctx: ResponseContext) -> None:
+        """Inject world context into the system prompt before LLM call.
+
+        Args:
+            ctx: Mutable interaction context bag.
+        """
+        try:
+            ws = get_world_state()
+            time_str = ws.get_time().to_display()
+            scene = ctx.get("scene", "")
+            weather = ws.get_weather(scene) if scene else None
+            events = ws.get_active_events()
+
+            lines = [f"Current time: {time_str}"]
+            if weather:
+                lines.append(f"Weather: {weather.value}")
+            if events:
+                event_summaries = [e.description for e in events[:3]]
+                lines.append("Active events: " + "; ".join(event_summaries))
+
+            block = "[WORLD STATE]\n" + "\n".join(lines) + "\n[/WORLD STATE]"
+            existing = ctx.get("system_prompt", "") or ""
+            ctx["system_prompt"] = f"{block}\n{existing}"
+        except Exception as exc:
+            logger.debug("WorldStateInterceptor.pre_call skipped — %s", exc)
+
+    def post_call(self, ctx: ResponseContext) -> None:  # noqa: B027
+        """Pass-through; no post-LLM mutation needed.
+
+        Args:
+            ctx: Mutable interaction context bag.
+        """
 
 
 # ---------------------------------------------------------------------------

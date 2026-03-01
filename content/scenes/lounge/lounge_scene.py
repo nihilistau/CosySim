@@ -50,6 +50,13 @@ from content.shared import register_shared_assets
 from engine.mcp.scene_state import get_scene_state_manager
 from engine.mcp.tag_registry import TagRegistry
 
+try:
+    from engine.world.world_state import get_world_state
+    from engine.events.event_bus import get_event_bus, EventBus
+    _WORLD_AVAILABLE = True
+except ImportError:
+    _WORLD_AVAILABLE = False
+
 logger = logging.getLogger(__name__)
 
 LOUNGE_PORT = 5557
@@ -149,6 +156,15 @@ class LoungeScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
             get_event_bus().subscribe("world_sim.lounge_event", self._on_world_lounge_event)
         except Exception as exc:
             logger.debug("EventBus subscribe failed: %s", exc)
+
+        # ── World State ──────────────────────────────────────────────────────
+        self._world_state = None
+        self._event_bus = None
+        if _WORLD_AVAILABLE:
+            self._world_state = get_world_state()
+            self._event_bus = get_event_bus()
+            self._event_bus.subscribe("world.tick", self._on_world_tick)
+            self._event_bus.subscribe("world.time_change", self._on_time_change)
 
     # ══════════════════════════════════════════════════════════════════════════
     #  FRAMEWORK SHORTCUTS
@@ -969,6 +985,19 @@ class LoungeScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
         except Exception as exc:
             logger.debug("_on_world_lounge_event forward failed: %s", exc)
 
+    def _on_world_tick(self, event: dict) -> None:
+        """Push ambient time to UI on every world tick."""
+        if hasattr(self, "socketio") and self.socketio and hasattr(self, "_world_state") and self._world_state:
+            try:
+                t = self._world_state.get_time()
+                self.socketio.emit("ambient_update", {"hour": getattr(t, "hour", 0)})
+            except Exception:
+                pass
+
+    def _on_time_change(self, event: dict) -> None:
+        """React to time-of-day changes."""
+        pass  # scenes override this for time-gated content
+
     # ══════════════════════════════════════════════════════════════════════════
     #  FRAMEWORK TICK  — called each turn; fires consequences + checks timers
     # ══════════════════════════════════════════════════════════════════════════
@@ -1346,6 +1375,12 @@ class LoungeScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
         """Gracefully stop the lounge scene."""
         self.nexus_flush()
         logger.info("The Velvet Lounge closing")
+        if hasattr(self, "_event_bus") and self._event_bus:
+            try:
+                self._event_bus.unsubscribe("world.tick", self._on_world_tick)
+                self._event_bus.unsubscribe("world.time_change", self._on_time_change)
+            except Exception:
+                pass
         try:
             self._fw.save_state()
         except Exception:

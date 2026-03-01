@@ -386,3 +386,26 @@ class TestObscuraPieces:
         for piece in mod.OBSCURA_PIECES:
             assert 1 <= piece["intensity"] <= 3, \
                 f"Piece '{piece['id']}' intensity {piece['intensity']} out of 1–3 range"
+
+
+# ── World State wiring ─────────────────────────────────────────────────────
+
+class TestGalleryWorldStateWiring:
+    """GalleryScene wires world_state and EventBus."""
+
+    @classmethod
+    def _src(cls) -> str:
+        from pathlib import Path
+        return (Path(__file__).parent.parent / "content" / "scenes" / "gallery" / "gallery_scene.py").read_text(encoding="utf-8")
+
+    def test_world_state_wired(self):
+        """GalleryScene has _on_world_tick and _on_time_change methods."""
+        from content.scenes.gallery.gallery_scene import GalleryScene
+        assert hasattr(GalleryScene, "_on_world_tick")
+        assert hasattr(GalleryScene, "_on_time_change")
+
+    def test_gallery_exhibit_rotate_at_midnight(self):
+        """_on_time_change emits exhibit_rotate at hour 0 (midnight)."""
+        src = self._src()
+        assert "exhibit_rotate" in src
+        assert 'hour", 0) == 0' in src or "hour == 0" in src

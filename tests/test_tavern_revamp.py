@@ -393,3 +393,27 @@ class TestTavernSocketHandlers:
     def test_investigate_rumor_handler(self):
         src = self._scene_source()
         assert '"investigate_rumor"' in src or "'investigate_rumor'" in src
+
+
+# ── World State wiring ─────────────────────────────────────────────────────
+
+class TestWorldStateWiring:
+    """TavernScene wires world_state and EventBus."""
+
+    def test_world_state_wired(self):
+        """TavernScene has _on_world_tick and _on_time_change methods."""
+        from content.scenes.tavern.tavern_scene import TavernScene
+        assert hasattr(TavernScene, "_on_world_tick")
+        assert hasattr(TavernScene, "_on_time_change")
+
+    def _scene_source(self) -> str:
+        import os
+        p = os.path.join(os.path.dirname(__file__), "..", "content", "scenes", "tavern", "tavern_scene.py")
+        with open(p, encoding="utf-8") as fh:
+            return fh.read()
+
+    def test_tavern_quest_refresh_on_dawn(self):
+        """_on_time_change emits quest_refresh at hour 6 (dawn)."""
+        src = self._scene_source()
+        assert "quest_refresh" in src
+        assert "hour == 6" in src

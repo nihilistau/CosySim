@@ -542,3 +542,24 @@ class TestEngineWiring:
     def test_register_tts_route(self):
         """register_tts_route must be called in __init__."""
         assert "register_tts_route" in self._source
+
+
+# ── World State wiring ─────────────────────────────────────────────────────
+
+class TestHeistWorldStateWiring:
+    """HeistScene wires world_state and EventBus."""
+
+    @classmethod
+    def _src(cls) -> str:
+        from pathlib import Path
+        return (Path(__file__).parent.parent / "content" / "scenes" / "heist" / "heist_scene.py").read_text(encoding="utf-8")
+
+    def test_world_state_wired(self):
+        """HeistScene has _on_world_tick and _on_time_change methods."""
+        from content.scenes.heist.heist_scene import HeistScene
+        assert hasattr(HeistScene, "_on_world_tick")
+        assert hasattr(HeistScene, "_on_time_change")
+
+    def test_world_available_guard(self):
+        """Module defines _WORLD_AVAILABLE guard for graceful fallback."""
+        assert "_WORLD_AVAILABLE" in self._src()

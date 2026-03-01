@@ -1,0 +1,448 @@
+/* cosysim-aria-portrait.css — Animated Aria Portrait System */
+
+/* ── Portrait Container ──────────────────────────────────── */
+.aria-portrait-root {
+    position: fixed;
+    bottom: 80px;
+    right: 20px;
+    z-index: 8500;
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ── Modes ──────────────────────────────────────────────── */
+.aria-portrait-root[data-mode="floating"] {
+    width: 64px;
+    height: 64px;
+    bottom: 80px;
+    right: 20px;
+}
+
+.aria-portrait-root[data-mode="messenger"] {
+    width: 380px;
+    height: 520px;
+    bottom: 20px;
+    right: 20px;
+    border-radius: 20px;
+    overflow: hidden;
+}
+
+.aria-portrait-root[data-mode="voice-call"] {
+    width: 320px;
+    height: 460px;
+    bottom: 20px;
+    right: 20px;
+    border-radius: 24px;
+    overflow: hidden;
+}
+
+.aria-portrait-root[data-mode="full-portrait"] {
+    width: 420px;
+    height: 560px;
+    bottom: 20px;
+    right: 20px;
+    border-radius: 24px;
+    overflow: hidden;
+}
+
+/* ── Floating bubble ─────────────────────────────────────── */
+.aria-float-bubble {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, rgba(124,58,237,0.9), rgba(236,72,153,0.9));
+    border: 2px solid rgba(255,255,255,0.2);
+    backdrop-filter: blur(12px);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 24px rgba(124,58,237,0.4);
+    transition: transform 0.2s, box-shadow 0.2s;
+    position: relative;
+    overflow: hidden;
+}
+
+.aria-float-bubble:hover {
+    transform: scale(1.08);
+    box-shadow: 0 6px 32px rgba(124,58,237,0.6);
+}
+
+.aria-float-bubble[data-state="talking"] {
+    animation: aria-talk-pulse 0.4s ease-in-out infinite alternate;
+}
+
+.aria-float-bubble[data-state="listening"] {
+    animation: aria-listen-glow 1.2s ease-in-out infinite;
+}
+
+.aria-float-bubble[data-state="thinking"] {
+    animation: aria-think-blink 1.5s ease-in-out infinite;
+}
+
+/* ── SVG Face ────────────────────────────────────────────── */
+.aria-face-svg {
+    width: 40px;
+    height: 40px;
+}
+
+/* Idle breathing animation on the whole face */
+[data-state="idle"] .aria-face-svg {
+    animation: aria-breathe 4s ease-in-out infinite;
+}
+
+[data-state="talking"] .aria-face-svg {
+    animation: aria-talk-shake 0.25s ease-in-out infinite alternate;
+}
+
+[data-state="thinking"] .aria-face-svg {
+    animation: aria-think-bob 2s ease-in-out infinite;
+}
+
+/* Eye animations */
+.aria-eye-left,
+.aria-eye-right {
+    transition: d 0.1s;
+}
+
+[data-state="thinking"] .aria-eye-left,
+[data-state="thinking"] .aria-eye-right {
+    animation: aria-eye-think 1.5s ease-in-out infinite;
+}
+
+/* Mouth */
+.aria-mouth {
+    transition: d 0.15s ease;
+}
+
+[data-state="talking"] .aria-mouth {
+    animation: aria-mouth-talk 0.3s ease-in-out infinite alternate;
+}
+
+/* ── Full panel (shared across messenger/voice/portrait) ──── */
+.aria-panel {
+    width: 100%;
+    height: 100%;
+    background: rgba(8,8,20,0.97);
+    border: 1px solid rgba(124,58,237,0.3);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    display: flex;
+    flex-direction: column;
+    font-family: var(--cs-font-mono, 'JetBrains Mono', monospace);
+}
+
+/* Panel header */
+.aria-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 18px;
+    border-bottom: 1px solid rgba(255,255,255,0.07);
+    flex-shrink: 0;
+}
+
+.aria-panel-title {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    color: #a78bfa;
+    text-transform: uppercase;
+}
+
+.aria-panel-controls {
+    display: flex;
+    gap: 6px;
+}
+
+.aria-mode-btn {
+    background: none;
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 6px;
+    color: rgba(255,255,255,0.4);
+    cursor: pointer;
+    font-size: 13px;
+    padding: 3px 7px;
+    transition: all 0.2s;
+}
+
+.aria-mode-btn:hover, .aria-mode-btn.active {
+    color: #a78bfa;
+    border-color: rgba(167,139,250,0.4);
+    background: rgba(167,139,250,0.08);
+}
+
+.aria-panel-close {
+    background: none;
+    border: none;
+    color: rgba(255,255,255,0.3);
+    cursor: pointer;
+    font-size: 18px;
+    padding: 2px 6px;
+    line-height: 1;
+    transition: color 0.2s;
+}
+.aria-panel-close:hover { color: rgba(255,255,255,0.8); }
+
+/* Portrait display area (voice call / full portrait) */
+.aria-portrait-display {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    gap: 16px;
+    flex-shrink: 0;
+}
+
+.aria-portrait-face {
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, rgba(124,58,237,0.8), rgba(236,72,153,0.6));
+    border: 2px solid rgba(167,139,250,0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+}
+
+[data-state="talking"] .aria-portrait-face {
+    box-shadow: 0 0 0 0 rgba(167,139,250,0.4);
+    animation: aria-talk-ring 0.5s ease-out infinite;
+}
+
+[data-state="listening"] .aria-portrait-face {
+    box-shadow: 0 0 0 0 rgba(16,185,129,0.5);
+    animation: aria-listen-ring 1.2s ease-out infinite;
+}
+
+[data-state="thinking"] .aria-portrait-face {
+    animation: aria-portrait-think 2s ease-in-out infinite;
+}
+
+.aria-portrait-face-svg {
+    width: 72px;
+    height: 72px;
+}
+
+.aria-portrait-name {
+    font-size: 16px;
+    font-weight: 700;
+    color: rgba(255,255,255,0.9);
+    letter-spacing: 0.08em;
+}
+
+.aria-portrait-status {
+    font-size: 11px;
+    color: rgba(167,139,250,0.7);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+
+/* Voice-call waveform */
+.aria-waveform {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    height: 32px;
+}
+
+.aria-wave-bar {
+    width: 3px;
+    border-radius: 3px;
+    background: #a78bfa;
+    transition: height 0.1s ease;
+}
+
+[data-state="talking"] .aria-wave-bar {
+    animation: aria-wave 0.6s ease-in-out infinite alternate;
+}
+
+.aria-wave-bar:nth-child(1) { animation-delay: 0s;    height: 8px;  }
+.aria-wave-bar:nth-child(2) { animation-delay: 0.1s;  height: 14px; }
+.aria-wave-bar:nth-child(3) { animation-delay: 0.2s;  height: 22px; }
+.aria-wave-bar:nth-child(4) { animation-delay: 0.1s;  height: 18px; }
+.aria-wave-bar:nth-child(5) { animation-delay: 0s;    height: 10px; }
+.aria-wave-bar:nth-child(6) { animation-delay: 0.15s; height: 16px; }
+.aria-wave-bar:nth-child(7) { animation-delay: 0.05s; height: 24px; }
+.aria-wave-bar:nth-child(8) { animation-delay: 0.2s;  height: 12px; }
+
+/* Call controls */
+.aria-call-controls {
+    display: flex;
+    gap: 16px;
+    justify-content: center;
+    padding: 8px 0;
+    flex-shrink: 0;
+}
+
+.aria-call-btn {
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    border: none;
+    cursor: pointer;
+    font-size: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.15s, opacity 0.15s;
+}
+
+.aria-call-btn:hover  { transform: scale(1.1); }
+.aria-call-btn:active { transform: scale(0.95); opacity: 0.8; }
+
+.aria-call-btn-end     { background: #ef4444; }
+.aria-call-btn-mute    { background: rgba(255,255,255,0.1); }
+.aria-call-btn-speaker { background: rgba(255,255,255,0.1); }
+
+/* Messenger chat area */
+.aria-messenger-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.aria-messenger-messages::-webkit-scrollbar { width: 3px; }
+.aria-messenger-messages::-webkit-scrollbar-thumb {
+    background: rgba(167,139,250,0.2);
+    border-radius: 2px;
+}
+
+.aria-msg-bubble {
+    max-width: 80%;
+    padding: 10px 14px;
+    border-radius: 16px;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.aria-msg-aria {
+    background: rgba(124,58,237,0.15);
+    border: 1px solid rgba(124,58,237,0.2);
+    color: rgba(255,255,255,0.9);
+    border-radius: 16px 16px 16px 4px;
+    align-self: flex-start;
+}
+
+.aria-msg-user {
+    background: rgba(167,139,250,0.2);
+    border: 1px solid rgba(167,139,250,0.25);
+    color: rgba(255,255,255,0.9);
+    border-radius: 16px 16px 4px 16px;
+    align-self: flex-end;
+}
+
+.aria-msg-time {
+    font-size: 9px;
+    opacity: 0.4;
+    margin-top: 4px;
+}
+
+/* Input row */
+.aria-input-row {
+    display: flex;
+    gap: 8px;
+    padding: 12px 16px;
+    border-top: 1px solid rgba(255,255,255,0.07);
+    flex-shrink: 0;
+}
+
+.aria-input {
+    flex: 1;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(167,139,250,0.2);
+    border-radius: 20px;
+    padding: 8px 14px;
+    color: rgba(255,255,255,0.9);
+    font-size: 12px;
+    font-family: inherit;
+    outline: none;
+}
+
+.aria-input:focus { border-color: rgba(167,139,250,0.5); }
+.aria-input::placeholder { color: rgba(255,255,255,0.25); }
+
+.aria-send-btn {
+    background: rgba(124,58,237,0.8);
+    border: none;
+    border-radius: 50%;
+    width: 36px;
+    height: 36px;
+    color: white;
+    cursor: pointer;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s, transform 0.1s;
+    flex-shrink: 0;
+}
+
+.aria-send-btn:hover  { background: #7c3aed; }
+.aria-send-btn:active { transform: scale(0.9); }
+
+/* ── Keyframes ────────────────────────────────────────────── */
+@keyframes aria-breathe {
+    0%, 100% { transform: scale(1); }
+    50%       { transform: scale(1.02) translateY(-1px); }
+}
+
+@keyframes aria-talk-pulse {
+    from { box-shadow: 0 4px 24px rgba(167,139,250,0.4); transform: scale(1); }
+    to   { box-shadow: 0 4px 32px rgba(167,139,250,0.7); transform: scale(1.04); }
+}
+
+@keyframes aria-talk-shake {
+    from { transform: rotate(-0.5deg) scale(1); }
+    to   { transform: rotate(0.5deg)  scale(1.01); }
+}
+
+@keyframes aria-listen-glow {
+    0%, 100% { box-shadow: 0 0 12px rgba(16,185,129,0.3); }
+    50%       { box-shadow: 0 0 28px rgba(16,185,129,0.7); }
+}
+
+@keyframes aria-think-blink {
+    0%, 90%, 100% { opacity: 1; }
+    95%            { opacity: 0.6; }
+}
+
+@keyframes aria-think-bob {
+    0%, 100% { transform: translateY(0)   rotate(0deg); }
+    25%       { transform: translateY(-2px) rotate(0.5deg); }
+    75%       { transform: translateY(1px)  rotate(-0.5deg); }
+}
+
+@keyframes aria-eye-think {
+    0%, 80%, 100% { transform: scaleY(1); }
+    85%            { transform: scaleY(0.1); }
+}
+
+@keyframes aria-mouth-talk {
+    from { transform: scaleY(0.5); }
+    to   { transform: scaleY(1.2); }
+}
+
+@keyframes aria-talk-ring {
+    0%   { box-shadow: 0 0 0 0  rgba(167,139,250,0.6); }
+    100% { box-shadow: 0 0 0 16px rgba(167,139,250,0); }
+}
+
+@keyframes aria-listen-ring {
+    0%   { box-shadow: 0 0 0 0  rgba(16,185,129,0.6); }
+    100% { box-shadow: 0 0 0 20px rgba(16,185,129,0); }
+}
+
+@keyframes aria-portrait-think {
+    0%, 100% { filter: hue-rotate(0deg); }
+    50%       { filter: hue-rotate(30deg); }
+}
+
+@keyframes aria-wave {
+    from { transform: scaleY(0.3); }
+    to   { transform: scaleY(1); }
+}

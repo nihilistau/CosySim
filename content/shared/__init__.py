@@ -11,6 +11,8 @@ _INJECT_TAGS = (
     '\n<script src="/shared/js/cosysim-navbar.js" defer></script>'
     '\n<script src="/shared/js/cosysim-assistant.js" defer></script>'
     '\n<link rel="stylesheet" href="/shared/css/cosysim-assistant.css">'
+    '\n<link rel="stylesheet" href="/shared/css/cosysim-phone-panel.css">'
+    '\n<script src="/shared/js/cosysim-phone-panel.js" defer></script>'
 )
 
 

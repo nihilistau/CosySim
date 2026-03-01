@@ -60,6 +60,13 @@ from content.shared import register_shared_assets
 from engine.mcp.scene_state import get_scene_state_manager
 from engine.mcp.tag_registry import TagRegistry
 
+try:
+    from engine.world.world_state import get_world_state
+    from engine.events.event_bus import get_event_bus, EventBus
+    _WORLD_AVAILABLE = True
+except ImportError:
+    _WORLD_AVAILABLE = False
+
 logger = logging.getLogger(__name__)
 
 CASINO_PORT = 5559
@@ -170,6 +177,13 @@ class CasinoScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
         self._wire_reputation()
         self._wire_consequence_store()
         self._wire_new_event_bus()
+        # ── World State ──────────────────────────────────────────────
+        self._world_state = None
+        if _WORLD_AVAILABLE:
+            self._world_state = get_world_state()
+            self._event_bus = get_event_bus()
+            self._event_bus.subscribe("world.tick", self._on_world_tick)
+            self._event_bus.subscribe("world.time_change", self._on_time_change)
         self.register_bench_route(self.app, self.socketio)
         self.register_tts_route(self.app)
 
@@ -1347,10 +1361,37 @@ class CasinoScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
     def stop(self) -> None:
         self.nexus_flush()
         logger.info("The Midnight Casino closing")
+        if hasattr(self, "_event_bus") and self._event_bus:
+            try:
+                self._event_bus.unsubscribe("world.tick", self._on_world_tick)
+                self._event_bus.unsubscribe("world.time_change", self._on_time_change)
+            except Exception:
+                pass
         try:
             self._fw.save_state()
         except Exception:
             pass
+
+    # ── World State handlers ──────────────────────────────────────────
+    def _on_world_tick(self, event: dict) -> None:
+        """React to world simulation tick."""
+        if hasattr(self, "socketio") and self.socketio:
+            try:
+                time_data = self._world_state.get_time()
+                self.socketio.emit("world_tick", {
+                    "hour": getattr(time_data, "hour", 0),
+                    "day": getattr(time_data, "day", 1),
+                    "weather": str(getattr(time_data, "weather", "clear")),
+                })
+            except Exception:
+                pass
+
+    def _on_time_change(self, event: dict) -> None:
+        """Happy hour 18:00-20:00 — 2x economy multiplier."""
+        hour = event.get("hour", 0)
+        if hasattr(self, "_economy") and self._economy:
+            if 18 <= hour < 20:
+                logger.info("Casino: Happy hour active — 2x win multiplier")
 
 
 # ── Standalone entry point ────────────────────────────────────────────

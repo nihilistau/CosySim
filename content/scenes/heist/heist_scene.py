@@ -42,6 +42,13 @@ from content.shared import register_shared_assets
 from engine.mcp.scene_state import get_scene_state_manager
 from engine.mcp.tag_registry import TagRegistry, TagDef
 
+try:
+    from engine.world.world_state import get_world_state
+    from engine.events.event_bus import get_event_bus, EventBus
+    _WORLD_AVAILABLE = True
+except ImportError:
+    _WORLD_AVAILABLE = False
+
 logger = logging.getLogger(__name__)
 
 SCENE_ID = "heist"
@@ -787,6 +794,14 @@ class HeistScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_I
             fw.on("environment_change", lambda evt: None)
         except Exception:
             pass
+        # ── World State ──────────────────────────────────────────────
+        self._world_state = None
+        if _WORLD_AVAILABLE:
+            self._world_state = get_world_state()
+            if self._event_bus is None:
+                self._event_bus = get_event_bus()
+            self._event_bus.subscribe("world.tick", self._on_world_tick)
+            self._event_bus.subscribe("world.time_change", self._on_time_change)
         self.socketio.run(
             self.app, host=self.host, port=self.port,
             debug=False, allow_unsafe_werkzeug=True,
@@ -795,9 +810,33 @@ class HeistScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_I
     def stop(self) -> None:
         self.nexus_flush()
         self._ticker_stop.set()
+        if hasattr(self, "_event_bus") and self._event_bus:
+            try:
+                self._event_bus.unsubscribe("world.tick", self._on_world_tick)
+                self._event_bus.unsubscribe("world.time_change", self._on_time_change)
+            except Exception:
+                pass
         try:
             from engine.mcp.framework import get_framework
             get_framework().save_state()
         except Exception:
             pass
         print("Heist scene stopped.")
+
+    # ── World State handlers ──────────────────────────────────────────
+    def _on_world_tick(self, event: dict) -> None:
+        """React to world simulation tick."""
+        if hasattr(self, "socketio") and self.socketio:
+            try:
+                time_data = self._world_state.get_time()
+                self.socketio.emit("world_tick", {
+                    "hour": getattr(time_data, "hour", 0),
+                    "day": getattr(time_data, "day", 1),
+                    "weather": str(getattr(time_data, "weather", "clear")),
+                })
+            except Exception:
+                pass
+
+    def _on_time_change(self, event: dict) -> None:
+        """React to time-of-day changes."""
+        pass  # scenes override this for time-gated content

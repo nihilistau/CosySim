@@ -1,6 +1,6 @@
 # CosySim Roadmap
 
-> Current: **v0.67** | Last updated: 2026-03-15
+> Current: **v0.68** | Last updated: 2026-03-01
 
 ## Philosophy
 
@@ -27,92 +27,63 @@ The system's ultimate goal: **inhabit itself** — AI agents that maintain, impr
 
 ---
 
-## Active: v0.68 — "The Grand Revamp"
+### v0.68 — "Dark Renaissance" ✅ COMPLETE
 
-> **The biggest CosySim update ever.** Every scene redesigned. Every character voiced.
-> The system starts eating information and improving itself.
-
-### Track A: Unified Design System
-- [ ] `design_tokens.css` full extension + `cosysim-components.css` library
-- [ ] `cosysim-animations.css` shared animations library
-- [ ] Apply design tokens consistently to all 18 scenes
-
-### Track B: Navigation, Phone Panel & Admin Overlay
-- [ ] Navbar enhancement: Phone/Admin/Aria quick-action buttons
-- [ ] **Phone scene as universal slide-in panel** — available on every scene
-- [ ] **Admin panel slide-in overlay** — Flask-based, replaces Streamlit admin
-
-### Track C: TTS & Voice Integration
-- [ ] Universal TTS component (`cosysim-tts.js`) + base_scene TTS endpoint
-- [ ] Wire TTS into all 14 game scenes (character dialogue + voice selector)
-- [ ] STT microphone component (Web Speech API + Whisper fallback)
-
-### Track D: Aria Advanced Portrait Interface
-- [ ] Video-call / messenger / phone-call mode toggle
-- [ ] Animated portrait: idle / talking / thinking / listening states
-- [ ] Aria floating widget on all scenes
-
-### Track E: Scene Visual Overhaul (all 11 game scenes)
-- [ ] Bedroom: luxury dark intimate (emotion bars, scenario progress, particle effects)
-- [ ] Lounge: jazz noir (ambient particles, seating map, heat meter animation)
-- [ ] Tavern: fantasy warm (fireplace glow, quest pinboard, dice animation)
-- [ ] Casino: vegas neon (card animations, chip counter, confetti effects)
-- [ ] Realm: LitRPG fantasy (parchment, typewriter, RPG stat bars, inventory)
-- [ ] NeonCity: cyberpunk (neon grid, scan lines, faction color-coding)
-- [ ] Heist: thriller blueprint (blueprint bg, crew dossiers, tension meter)
-- [ ] Coders: hacker terminal (matrix rain, syntax highlight, pipeline stepper)
-- [ ] Games: arcade neon (score ticker, 3D dice, mystery board)
-- [ ] Warzone: military command (HUD overlay, weather effects)
-- [ ] Gallery: dark museum (spotlit artwork, smooth transitions)
-
-### Track F: Gameplay & Story Enhancement (5×)
-- [ ] Emotion visualization in all character scenes
-- [ ] Story content expansion: 10 new bedroom scenarios, 5 lounge events, 10 tavern quests, 5 realm arcs
-- [ ] Gameplay loop polish: objectives, progress, win/lose, session persistence
-- [ ] Phone scene: per-character story arcs, read receipts, photo gallery
-
-### Track G: Hub & Navigation
-- [ ] Hub redesign: scene cards with thumbnails, live stats, categories
-- [ ] Cross-scene navigation audit: navbar in all 18 scenes, phone panel, Aria widget
-
-### Track H: Documentation (A++ Quality)
-- [ ] Full audit of all 26 docs
-- [ ] Rewrite: ARCHITECTURE, SCENES, API, NEXUS_GUIDE, TRAINING_GUIDE
-- [ ] New: CHARACTER_SYSTEM, TTS_GUIDE, ASSISTANT_GUIDE, GETTING_STARTED, CONTRIBUTING
-
-### Track I: Nexus Automation & Self-Improvement
-- [ ] Nexus-driven Copilot rules (governance entries → .github/instructions/)
-- [ ] Activate self-generating data loop (all scheduler tasks running + verified)
-- [ ] Codebase seeding (300+ code reference entries in Nexus)
-- [ ] Full NLM distillation cycle → 2,000+ Q&A pairs
+- [x] Track A: Unified design system — design_tokens.css, cosysim-components.css, cosysim-animations.css, 3D particles
+- [x] Track B: Navbar v2, admin loft overlay (8-tab), Aria floating widget
+- [x] Track C: VoiceManager JS (Piper/Orpheus/Qwen3 backends, STT), voice settings panel, BaseScene TTS endpoint
+- [x] Track D: Aria widget wired to all scenes (portrait placeholder, modes pending v0.69)
+- [x] Track E: All 14 scenes revamped with black glass design, scene accents, adult content, BenchHUD
+- [x] Track F: 13 engine modules — EventBus, EconomyManager, ContentGate, ContentEngine, CharacterMemory,
+      ReputationManager, SceneDirector, ConsequenceStore, InvestigationBoard, SceneArtManager, WorldState, WorldSim, ArenaEngine
+- [x] Track G: Arena — THE COLOSSEUM (port 5561): tactical card game, agent betting, NLM commentary
+- [x] Track H: BaseScene bench/TTS endpoints, BenchHUD component, Nexus bench tracking
+- [x] Track I: NLM content framework wired (seeding pending v0.69)
+- [x] Tests: 6,679 passing (up from 4,747)
 
 ---
 
-## v0.69+ — Advanced Automation
+## Active: v0.69 — "The Living System"
 
-### Scene Intelligence
-- [ ] Per-scene AI director that generates story beats autonomously
-- [ ] Cross-scene character travel (characters move between scenes with persistent state)
-- [ ] Scene interconnection: actions in one scene affect another
-- [ ] NLM-generated content: story, quests, dialogue written by Gemini and stored in Nexus
+> All the machinery built in v0.68 starts actually running.
+> The world ticks. Content generates. The system benchmarks and improves itself.
 
-### Agent Autonomy
-- [ ] Local agents pick up tasks from scheduler, implement code changes, run tests, commit
-- [ ] Bug-fixer agent loop: detect test failure → diagnose via NLM → fix → test → commit
-- [ ] Content generation agent: reads Nexus → generates new story content → stores back
-- [ ] Quality monitor: nightly benchmark run, stores trend in Nexus, creates improvement tasks
+### Track A: Complete the Living World
+- [ ] Wire `world_state` to casino, lounge, tavern, heist, gallery (only neoncity complete)
+- [ ] Activate WorldSim daemon in launcher
+- [ ] Cross-scene EventBus (arena result → faction shift → lounge gossip)
 
-### Fine-Tuning Pipeline Maturation
-- [ ] Router v3: expanded 16-class taxonomy, 5,000+ training examples
-- [ ] Scene-specific dialogue models (fine-tune per character personality)
-- [ ] Evaluator model for NLM output quality scoring
-- [ ] Continuous improvement: deployed models retrain on new data weekly
+### Track B: Universal Phone Panel
+- [ ] `cosysim-phone-panel.js` — slide-in drawer from any scene via navbar phone button
+- [ ] Phone panel CSS + HTML template, included in all 14 scene templates
 
-### Mobile & Remote
-- [ ] Progressive Web App for phone scenes (installable on Android/iOS)
-- [ ] Remote agent support (agents running on phone Edge Gallery)
-- [ ] Home Assistant deep integration (CosySim as HA dashboard component)
-- [ ] Offline mode: cached knowledge + on-device models when disconnected
+### Track C: Aria Animated Portrait
+- [ ] CSS `@keyframes` states: idle-breathe, talk-pulse, think-blink, listen-glow
+- [ ] Mode toggle: floating-widget → messenger → voice-call → full-portrait
+- [ ] Wire to VoiceManager events (speaking/done/listening → CSS state classes)
+
+### Track D: Self-Improvement Activation
+- [ ] NLM TeacherPipeline → seed ContentEngine pools for all 10 content scenes
+- [ ] 10-stage QA distillation cycle → 2,000+ Q&A pairs in Nexus
+- [ ] Verify all 27+ scheduler tasks firing; add `world_sim_tick` + `director_tick`
+
+### Track E: Test Isolation Fix
+- [ ] `SKILL_REGISTRY.reset()` + conftest autouse fixture
+- [ ] Target: 0 failures, 0 errors in full suite (6,679+ clean)
+
+### Track F: Router V3 Finetuning
+- [ ] 16-class dataset (2,000+ examples) via TeacherPipeline
+- [ ] Finetune Qwen3-0.6B, benchmark, auto-promote if improved
+
+### Track G: Documentation Refresh
+- [ ] New docs: WORLD_SYSTEM.md, ECONOMY_GUIDE.md, ARENA_GUIDE.md, CONTENT_GUIDE.md
+- [ ] SYSTEM_AUDIT.md v0.68 — honest A++ assessment
+- [ ] INDEX.md and ROADMAP.md up to date
+
+### Track H: Scene Intelligence
+- [ ] Director scheduler task — SceneDirector.tick() every 5 min per active scene
+- [ ] NLM-generated content pools (dialogue, quests, arcs)
+- [ ] Cross-scene character travel skeleton
 
 ---
 
