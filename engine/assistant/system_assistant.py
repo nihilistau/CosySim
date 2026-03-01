@@ -282,13 +282,22 @@ class SystemAssistant:
         """
         try:
             from engine.agents.virtual_agent_manager import get_virtual_agent_manager
-            from engine.agents.inference_request import InferenceRequest
+            from engine.agents.virtual_agent import InferenceRequest
 
             summary = self.get_system_summary()
             system = SYSTEM_PROMPT.format(
                 scene_id=self._current_scene or "unknown",
                 system_summary=str(summary),
             )
+
+            # Prepend user profile context so Aria knows who she's talking to
+            try:
+                from engine.nexus.user_profile import get_user_profile_store
+                profile_ctx = get_user_profile_store().get_context_summary()
+                if profile_ctx:
+                    system = profile_ctx + "\n\n---\n\n" + system
+            except Exception:
+                pass  # Profile unavailable — proceed without it
 
             req = InferenceRequest(
                 agent_id=self.id,

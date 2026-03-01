@@ -1292,15 +1292,25 @@ def _conversation_analyze_callback() -> Dict[str, Any]:
     Reads recent turns from the session store, runs the ConversationAnalyzer
     cascade (NLM → LMStudio → heuristic), merges results into UserProfileStore,
     and stores action items in Nexus.
+
+    On the first run (when the profile has no facts), performs a bootstrap pass
+    over the last 10 sessions to populate the profile from historical data.
     """
     try:
         from engine.nexus.conversation_analyzer import run_conversation_analysis
-        result = run_conversation_analysis()
+        from engine.nexus.user_profile import get_user_profile_store
+
+        # Bootstrap: scan more sessions when profile is still empty
+        profile = get_user_profile_store().get_profile()
+        lookback = 10 if not profile.get("facts") else 1
+
+        result = run_conversation_analysis(lookback_sessions=lookback)
         return {
             "extraction_mode": result.get("extraction_mode", "unknown"),
             "facts_extracted": len(result.get("facts", [])),
             "action_items": len(result.get("action_items", [])),
             "topics": len(result.get("topics_of_interest", [])),
+            "lookback_sessions": lookback,
             "error": result.get("error", ""),
         }
     except Exception as exc:

@@ -364,7 +364,52 @@ class IntelHubScene(BaseScene):
 
         @app.route("/api/analyzer/recent")
         def api_analyzer_recent():
-            return jsonify(_run_recent_analysis())
+            try:
+                lookback = int(request.args.get("lookback_sessions", 1))
+            except (TypeError, ValueError):
+                lookback = 1
+            return jsonify(_run_recent_analysis(lookback_sessions=lookback))
+
+        # ── User Profile (canonical REST) ─────────────────────────────────────
+
+        @app.route("/api/user-profile")
+        def api_user_profile_get():
+            return jsonify(_get_user_profile())
+
+        @app.route("/api/user-profile/context")
+        def api_user_profile_context():
+            try:
+                from engine.nexus.user_profile import get_user_profile_store
+                return jsonify({"context": get_user_profile_store().get_context_summary()})
+            except Exception as exc:
+                return jsonify({"error": str(exc), "context": ""})
+
+        @app.route("/api/user-profile/fact", methods=["POST"])
+        def api_user_profile_add_fact():
+            data = request.json or {}
+            fact = (data.get("fact") or "").strip()
+            if not fact:
+                return jsonify({"error": "fact is required"}), 400
+            try:
+                from engine.nexus.user_profile import get_user_profile_store
+                get_user_profile_store().add_fact(fact)
+                return jsonify({"success": True, "fact": fact})
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @app.route("/api/user-profile/preference", methods=["POST"])
+        def api_user_profile_set_pref():
+            data = request.json or {}
+            key = (data.get("key") or "").strip()
+            value = data.get("value")
+            if not key:
+                return jsonify({"error": "key is required"}), 400
+            try:
+                from engine.nexus.user_profile import get_user_profile_store
+                get_user_profile_store().add_preference(key, value)
+                return jsonify({"success": True, "key": key, "value": value})
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
 
         # ── Backups ────────────────────────────────────────────────────────────
 
@@ -867,12 +912,14 @@ def _run_conversation_analysis(text: str, mode: str = "auto") -> Dict[str, Any]:
         return {"error": str(exc)}
 
 
-def _run_recent_analysis() -> Dict[str, Any]:
-    """Analyze most recent conversation session."""
+def _run_recent_analysis(lookback_sessions: int = 1) -> Dict[str, Any]:
+    """Analyze most recent conversation session(s)."""
     try:
         from engine.nexus.conversation_analyzer import get_conversation_analyzer
         analyzer = get_conversation_analyzer()
-        result = analyzer.analyze_recent_turns(store_to_profile=True)
+        result = analyzer.analyze_recent_turns(
+            store_to_profile=True, lookback_sessions=lookback_sessions
+        )
         return result.to_dict()
     except Exception as exc:
         return {"error": str(exc)}

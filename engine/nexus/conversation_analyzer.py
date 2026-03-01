@@ -203,18 +203,23 @@ class ConversationAnalyzer:
         session_id: Optional[str] = None,
         turns_back: int = 50,
         store_to_profile: bool = True,
+        lookback_sessions: int = 1,
     ) -> ExtractionResult:
         """Fetch recent turns from session store and analyze them.
 
         Args:
             session_id: Specific session to analyze (defaults to most recent).
-            turns_back: How many turns to include.
+            turns_back: How many turns per session to include.
             store_to_profile: If True, store extracted data.
+            lookback_sessions: How many recent sessions to include (1–50).
+                Use a higher value (e.g. 10) for an initial bootstrap run to
+                populate the profile from historical data.
 
         Returns:
             ExtractionResult with extracted user facts.
         """
-        text = self._fetch_recent_turns(session_id, turns_back)
+        lookback_sessions = max(1, min(50, lookback_sessions))
+        text = self._fetch_recent_turns(session_id, turns_back, lookback_sessions)
         if not text:
             return ExtractionResult(error="No turns found in session store")
         return self.analyze(text, store_to_profile=store_to_profile)
@@ -385,9 +390,15 @@ class ConversationAnalyzer:
             return None
 
     def _fetch_recent_turns(
-        self, session_id: Optional[str], turns_back: int
+        self, session_id: Optional[str], turns_back: int, lookback_sessions: int = 1
     ) -> str:
-        """Fetch recent conversation turns from the Copilot session store."""
+        """Fetch recent conversation turns from the Copilot session store.
+
+        Args:
+            session_id: Specific session to read (ignored when lookback_sessions > 1).
+            turns_back: Max turns to include per session.
+            lookback_sessions: Number of most-recent sessions to include (1–50).
+        """
         try:
             import sqlite3 as _sqlite
             from pathlib import Path as _Path
@@ -404,6 +415,23 @@ class ConversationAnalyzer:
                         "WHERE session_id = ? ORDER BY turn_index DESC LIMIT ?",
                         (session_id, turns_back),
                     ).fetchall()
+                elif lookback_sessions > 1:
+                    # Fetch from the N most-recent sessions
+                    session_rows = conn.execute(
+                        "SELECT id FROM sessions ORDER BY created_at DESC LIMIT ?",
+                        (lookback_sessions,),
+                    ).fetchall()
+                    if not session_rows:
+                        return ""
+                    all_rows: list = []
+                    for (sid,) in session_rows:
+                        session_turns = conn.execute(
+                            "SELECT user_message, assistant_response FROM turns "
+                            "WHERE session_id = ? ORDER BY turn_index DESC LIMIT ?",
+                            (sid, turns_back),
+                        ).fetchall()
+                        all_rows.extend(reversed(session_turns))
+                    rows = all_rows
                 else:
                     # Most recent session
                     row = conn.execute(
@@ -416,8 +444,9 @@ class ConversationAnalyzer:
                         "WHERE session_id = ? ORDER BY turn_index DESC LIMIT ?",
                         (row[0], turns_back),
                     ).fetchall()
+                    rows = list(reversed(rows))
                 parts = []
-                for user_msg, asst_resp in reversed(rows):
+                for user_msg, asst_resp in rows:
                     if user_msg:
                         parts.append(f"User: {user_msg[:1000]}")
                     if asst_resp:
@@ -461,12 +490,18 @@ def get_conversation_analyzer() -> ConversationAnalyzer:
     return _analyzer_instance
 
 
-def run_conversation_analysis() -> Dict[str, Any]:
-    """Scheduler callback: analyze most recent conversation session.
+def run_conversation_analysis(lookback_sessions: int = 1) -> Dict[str, Any]:
+    """Scheduler callback: analyze most recent conversation session(s).
+
+    Args:
+        lookback_sessions: Number of sessions to include. Use a higher value
+            (e.g. 10) for an initial bootstrap run when the profile is empty.
 
     Returns:
         ExtractionResult as a dict.
     """
     analyzer = get_conversation_analyzer()
-    result = analyzer.analyze_recent_turns(store_to_profile=True)
+    result = analyzer.analyze_recent_turns(
+        store_to_profile=True, lookback_sessions=lookback_sessions
+    )
     return result.to_dict()
