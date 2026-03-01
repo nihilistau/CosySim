@@ -1,6 +1,6 @@
 # CosySim Documentation Index
 
-> All project documentation in one place. v0.60.1 — 4,827 tests, 214 MCP tools, 18 scenes.
+> All project documentation in one place. v0.60.6 — 5054 tests, 225+ MCP tools, 18 scenes.
 
 ## Getting Started
 
@@ -21,6 +21,7 @@
 | [Characters](CHARACTERS.md) | Personality, stats, buffs, tags, relationships |
 | [LMStudio](LMSTUDIO.md) | InferenceOrchestrator, model management, routing, streaming, branching |
 | [Spatial System](SPATIAL.md) | SceneMap, Location, character positioning, proximity gating |
+| [Architecture Decisions](DECISIONS.md) | Key design decisions and rationale (ADRs) |
 
 ## Scenes & Content
 
@@ -41,6 +42,7 @@
 | [NotebookLM HAR SDK](NOTEBOOKLM_HAR_SDK.md) | Batchexecute protocol, RPC endpoints, HAR extraction script |
 | [NotebookLM SDK v3.0](NOTEBOOKLM_SDK.md) | Full 21-RPC catalogue, rate limiter, complete :8800 proxy API reference, source schema |
 | [NotebookLM Protocol](NOTEBOOKLM_PROTOCOL.md) | Deep dive — batchexecute wire protocol, auth, all 21 RPCs with examples, discovery methodology, notebook lifecycle |
+| [NotebookLM Journey](NOTEBOOKLM_JOURNEY.md) | Sprint log — NLM integration from HAR capture to Node bridge hybrid |
 | [Nexus Integration](NEXUS_INTEGRATION.md) | NexusClient, 16 skills, namespaces, memory, distillers, training, workflows |
 
 ## External Systems
@@ -56,6 +58,7 @@
 |-----|-------------|
 | [Logging](LOGGING.md) | CosyLogger ring buffer, SystemMonitor, structured logging patterns |
 | [KPI](KPI.md) | `@timed` decorator, LLM KPIs, benchmarking dashboard |
+| [System Audit](SYSTEM_AUDIT.md) | v0.59b system audit — grade A, all 18 scenes rated |
 
 ## Training & Testing
 
@@ -63,13 +66,15 @@
 |-----|-------------|
 | [Training](TRAINING.md) | Gemma 270M fine-tuning pipeline, datasets, Colab |
 | [Router Training Data](ROUTER_TRAINING.md) | RouterDataCollector, inference capture, tier label export |
-| [Testing](TESTING.md) | Test commands, fixtures, writing tests (4,827 tests, 176 files) |
+| [Testing](TESTING.md) | Test commands, fixtures, writing tests (5054 tests, 177 files) |
 
 ## Development
 
 | Doc | Description |
 |-----|-------------|
 | [Contributing](CONTRIBUTING.md) | Scene creation, skill writing, interceptors, tests |
+| [Agent Onboarding](AGENT_ONBOARDING.md) | How to onboard new Copilot/local agents to the project |
+| [Local Agent Guide](LOCAL_AGENT_GUIDE.md) | Running local LLM agents as sub-agents, task delegation |
 | [Changelog](../CHANGELOG.md) | Sprint history and changes |
 
 ## Internal (Development Logs)

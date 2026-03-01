@@ -2,6 +2,56 @@
 
 All notable changes to CosySim are documented here.
 
+## v0.60.6 — NLM Governance Gating, Devtools Tools, Auto-Doc Agent
+
+### Governance Gating (`engine/skills/builtin/notebooklm_skills.py`)
+- All 12 NLM skills now gated with `@governed` decorator
+- Read gate: `ask`, `list_notebooks`, `search`, `ask_node`, `batch_ask`, `extract_tables`, `hybrid_health`
+- Write gate: `add_source`, `generate_audio`, `generate_audio_node`, `generate_video`
+- Admin gate: `setup_auth`
+- Agent size enforcement: sub-1B → read-only, 1B+ → read+write, copilot → full access
+
+### Devtools MCP Tools (`engine/mcp/devtools_server.py`)
+Added 11 new NLM Node bridge tools (total MCP tool count now 225+):
+- `notebooklm_node_ask` — single Q&A with session continuity
+- `notebooklm_node_batch_ask` — JSON array of questions, returns array of answers
+- `notebooklm_node_add_source` — add URL or text source
+- `notebooklm_node_create_notebook` — create with sources + topic hints
+- `notebooklm_node_list_notebooks` — list all notebooks
+- `notebooklm_node_generate_audio` — trigger audio overview generation
+- `notebooklm_node_generate_video` — trigger video overview (style param)
+- `notebooklm_node_extract_tables` — extract data tables with optional query
+- `notebooklm_node_chat_history` — get recent chat turns
+- `notebooklm_node_health` — combined Node + proxy health check
+- `notebooklm_node_setup_auth` — one-time Chrome login trigger
+- `notebooklm_node_sync_nexus` — **key tool**: batch Q&A → auto-stores all answers in Nexus Q&A cache
+
+### Auto-Documentation Agent (`.github/agents/auto-documenter.agent.md`)
+- New autonomous agent that detects changed files via git diff
+- File→doc mapping (e.g. engine/skills/ → docs/SKILLS.md)
+- NLM research flow: loads changed code into notebook, asks targeted questions
+- Writes Nexus note flagging pending doc updates; writes CHANGELOG entries
+- Registered as 13th builtin scheduler task (`doc-sync`, daily)
+
+### VS Code MCP Config (`.vscode/mcp.json`)
+- Fixed NLM server env var names (`HEADLESS`, `STEALTH_ENABLED`, `MAX_SESSIONS`)
+- Set `autoStart: true` — VS Code now starts Node MCP server automatically
+- Copilot gets all 31 Node MCP tools on startup (31 vs 47 — secure server is leaner)
+
+### Live Proxy Auth Gate (`engine/mcp/nlm_live_proxy.py`)
+- `/chat` and `/chat_batch` routes now check cookie file exists before delegating
+- Returns 401 if not authenticated (instead of 502 from Node bridge auth failure)
+- Auth semantics preserved: missing cookie file → 401, bridge failure → 502
+
+### Tests
+- `tests/test_notebooklm_devtools.py` — 21 tests for all new devtools tools
+  - Uses `tool.fn` pattern to call underlying async functions from `FunctionTool` objects
+- `tests/test_autonomy_skills.py` — scheduler task count updated to 13
+- `tests/test_nlm_live_proxy.py` — chat tests updated for hybrid router mock pattern
+- **Total: 5054 tests, 0 failures**
+
+---
+
 ## v0.60.5 — NLM Node MCP Integration + Hybrid Router
 
 ### Node MCP Server (C:\Files\MCP\notebooklm-mcp\)

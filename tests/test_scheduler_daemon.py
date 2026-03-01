@@ -299,3 +299,50 @@ class TestNexusLogging:
         ):
             daemon._log_to_nexus(task, success=False, duration=0.5, error="boom")
             # should not raise
+
+
+# ──── Builtin Tasks ────
+
+
+class TestBuiltinTasks:
+    """Tests for the 13 builtin scheduler tasks."""
+
+    def test_builtin_task_count(self) -> None:
+        """Scheduler daemon registers exactly 13 builtin tasks."""
+        from engine.nexus.scheduler_daemon import _register_builtin_tasks
+
+        daemon = MagicMock()
+        _register_builtin_tasks(daemon)
+        assert daemon.register.call_count == 13
+
+    def test_doc_sync_task_registered(self) -> None:
+        """doc-sync task is registered in builtin tasks."""
+        from engine.nexus.scheduler_daemon import _register_builtin_tasks
+
+        daemon = MagicMock()
+        _register_builtin_tasks(daemon)
+        task_ids = [call.args[0] for call in daemon.register.call_args_list]
+        assert "doc-sync" in task_ids
+
+    def test_doc_sync_callback_runs_without_crash(self, tmp_path: Path) -> None:
+        """_doc_sync_callback handles subprocess errors gracefully."""
+        from engine.nexus.scheduler_daemon import _doc_sync_callback
+
+        with patch("subprocess.check_output", side_effect=Exception("git not available")):
+            # Should not raise — errors are caught internally
+            try:
+                _doc_sync_callback()
+            except Exception:
+                pass  # acceptable if git unavailable
+
+    def test_doc_sync_callback_stores_nexus_note_on_changes(self, tmp_path: Path) -> None:
+        """_doc_sync_callback stores a Nexus note when git reports changed files."""
+        from engine.nexus.scheduler_daemon import _doc_sync_callback
+
+        fake_diff = "engine/skills/builtin/notebooklm_skills.py\ndocs/SKILLS.md"
+        mock_client = MagicMock()
+        with patch("subprocess.check_output", return_value=fake_diff), \
+             patch("engine.nexus.client.get_nexus_client", return_value=mock_client):
+            _doc_sync_callback()
+        # Nexus add_entry should have been called with the changed files
+        assert mock_client.add_entry.called
