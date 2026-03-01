@@ -281,6 +281,115 @@
                 <div class="muted">Loading...</div>
             </div>
         </section>
+
+        <!-- AI Training Pipeline Panel -->
+        <section class="cc-panel cc-wide" id="panel-ai-training">
+            <div class="panel-header-row">
+                <h2>🎓 AI Training Pipeline</h2>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
+                <!-- 1a: Finetune Jobs -->
+                <div>
+                    <div class="panel-header-row">
+                        <h3>Finetune Jobs</h3>
+                        <div>
+                            <button class="cc-btn small" onclick="CC.refreshTrainingData()">↻ Refresh</button>
+                            <button class="cc-btn small" onclick="CC.runNextFinetuneJob()">▶ Run Next</button>
+                        </div>
+                    </div>
+                    <table style="width:100%;border-collapse:collapse;font-size:12px;">
+                        <thead>
+                            <tr style="text-align:left;border-bottom:1px solid var(--cc-border,#333);">
+                                <th style="padding:4px 6px;">Job ID</th>
+                                <th style="padding:4px 6px;">Model Type</th>
+                                <th style="padding:4px 6px;">Status</th>
+                                <th style="padding:4px 6px;">Progress</th>
+                                <th style="padding:4px 6px;">Created</th>
+                            </tr>
+                        </thead>
+                        <tbody id="finetune-jobs-body">
+                            <tr><td colspan="5" class="muted" style="padding:6px;">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <!-- 1b: Benchmark Leaderboard -->
+                <div>
+                    <div class="panel-header-row">
+                        <h3>Benchmark Leaderboard</h3>
+                        <button class="cc-btn small" onclick="CC.refreshLeaderboard()">↻ Refresh</button>
+                    </div>
+                    <table style="width:100%;border-collapse:collapse;font-size:12px;">
+                        <thead>
+                            <tr style="text-align:left;border-bottom:1px solid var(--cc-border,#333);">
+                                <th style="padding:4px 6px;">Model Type</th>
+                                <th style="padding:4px 6px;">Best Score</th>
+                                <th style="padding:4px 6px;">Model ID</th>
+                                <th style="padding:4px 6px;">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="leaderboard-body">
+                            <tr><td colspan="4" class="muted" style="padding:6px;">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <!-- 1c: Fine-tuned Models Active -->
+                <div>
+                    <div class="panel-header-row">
+                        <h3>Fine-tuned Models Active</h3>
+                        <button class="cc-btn small" onclick="CC.loadModelRegistry()">📂 Load Registry</button>
+                    </div>
+                    <div id="active-models-list">
+                        <div class="muted">Loading...</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Knowledge Engine Panel -->
+        <section class="cc-panel" id="panel-knowledge-engine">
+            <h2>🧠 Knowledge Engine</h2>
+            <div class="stat-grid" id="nexus-router-stats">
+                <div class="stat-card">
+                    <div class="stat-value" id="nexus-cache-hits">--</div>
+                    <div class="stat-label">Cache Hits</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="nexus-fts-hits">--</div>
+                    <div class="stat-label">FTS Hits</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="nexus-nlm-answers">--</div>
+                    <div class="stat-label">NLM Answers</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="nexus-llm-fallbacks">--</div>
+                    <div class="stat-label">LLM Fallbacks</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="nexus-tokens-saved">--</div>
+                    <div class="stat-label">Tokens Saved</div>
+                </div>
+            </div>
+            <h3 style="margin-top:12px;">Quick Actions</h3>
+            <div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:6px;">
+                <div>
+                    <button class="cc-btn small" onclick="CC.triggerSchedulerTask('master-notebook-refresh')">📓 Master Notebook Refresh</button>
+                    <div id="action-status-master-notebook-refresh" class="muted" style="font-size:11px;margin-top:3px;">—</div>
+                </div>
+                <div>
+                    <button class="cc-btn small" onclick="CC.triggerSchedulerTask('qa-expansion')">🔍 QA Expansion</button>
+                    <div id="action-status-qa-expansion" class="muted" style="font-size:11px;margin-top:3px;">—</div>
+                </div>
+                <div>
+                    <button class="cc-btn small" onclick="CC.triggerSchedulerTask('news-fetch')">📰 News Fetch</button>
+                    <div id="action-status-news-fetch" class="muted" style="font-size:11px;margin-top:3px;">—</div>
+                </div>
+                <div>
+                    <button class="cc-btn small" onclick="CC.triggerSchedulerTask('backup-databases')">💾 Backup Now</button>
+                    <div id="action-status-backup-databases" class="muted" style="font-size:11px;margin-top:3px;">—</div>
+                </div>
+            </div>
+        </section>
     </main>
 
     <!-- Live Event Feed -->

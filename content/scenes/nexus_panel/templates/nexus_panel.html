@@ -22,6 +22,7 @@
         <button class="tab-btn" data-panel="workflows">Workflows</button>
         <button class="tab-btn" data-panel="ingestion">Ingestion</button>
         <button class="tab-btn" data-panel="nlmlab">NLM Lab</button>
+        <button class="tab-btn" data-panel="training">Training</button>
         <button class="tab-btn" data-panel="copilot">Copilot</button>
       </nav>
     </div>
@@ -626,6 +627,204 @@
               <span id="exp-status" class="muted"></span>
             </div>
             <div id="exp-result" class="hidden"></div>
+          </div>
+        </div>
+      </section>
+
+
+      <!-- ══ Training Panel ════════════════════════════════════ -->
+      <section id="panel-training" class="panel">
+        <!-- Sub-navigation -->
+        <div class="nlmlab-subnav">
+          <button class="training-subnav-btn active" data-tsub="router-stats">📊 Router Stats</button>
+          <button class="training-subnav-btn" data-tsub="model-registry">🏆 Model Registry</button>
+          <button class="training-subnav-btn" data-tsub="finetune-jobs">⚙️ Fine-tune Jobs</button>
+          <button class="training-subnav-btn" data-tsub="cache-pipeline">🔄 Cache Pipeline</button>
+          <button class="training-subnav-btn" data-tsub="news-digest">📰 News &amp; Digest</button>
+        </div>
+
+        <!-- ── Router Stats sub-panel ── -->
+        <div id="tsub-router-stats" class="tsub active nlmlab-layout">
+          <div class="card wide">
+            <div class="row-actions" style="margin-bottom:12px">
+              <h3 style="margin:0">📊 QA Cache Pipeline Performance</h3>
+              <button id="tr-refresh-stats-btn" class="btn">Refresh Stats</button>
+            </div>
+            <div class="savings-grid">
+              <div class="savings-card">
+                <div class="savings-value" id="tr-sav-cache">—</div>
+                <div class="savings-label">Cache Hits</div>
+              </div>
+              <div class="savings-card">
+                <div class="savings-value" id="tr-sav-fts">—</div>
+                <div class="savings-label">FTS Hits</div>
+              </div>
+              <div class="savings-card">
+                <div class="savings-value" id="tr-sav-nlm">—</div>
+                <div class="savings-label">NLM Answers</div>
+              </div>
+              <div class="savings-card">
+                <div class="savings-value" id="tr-sav-llm">—</div>
+                <div class="savings-label">LLM Fallbacks</div>
+              </div>
+              <div class="savings-card accent">
+                <div class="savings-value" id="tr-sav-pct">—</div>
+                <div class="savings-label">Compute Saved</div>
+              </div>
+              <div class="savings-card accent">
+                <div class="savings-value" id="tr-sav-tokens">—</div>
+                <div class="savings-label">Tokens Saved</div>
+              </div>
+            </div>
+          </div>
+          <div class="card wide">
+            <h3>🤖 Fine-tuned Model Active</h3>
+            <div id="tr-model-active-display">
+              <p class="muted">Click Refresh Stats to load.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Model Registry sub-panel ── -->
+        <div id="tsub-model-registry" class="tsub hidden nlmlab-layout">
+          <div class="card wide">
+            <div class="row-actions" style="margin-bottom:12px">
+              <h3 style="margin:0">🏆 Fine-tuned Model Registry</h3>
+              <button id="tr-refresh-registry-btn" class="btn">Refresh</button>
+            </div>
+            <div id="tr-registry-table-wrap">
+              <p class="muted">Click Refresh to load.</p>
+            </div>
+          </div>
+          <div class="card wide">
+            <h3>🥇 Leaderboard — Best Score per Model Type</h3>
+            <div id="tr-leaderboard-display">
+              <p class="muted">Loaded with Refresh above.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Fine-tune Jobs sub-panel ── -->
+        <div id="tsub-finetune-jobs" class="tsub hidden nlmlab-layout">
+          <div class="card wide">
+            <h3>📦 Build Dataset</h3>
+            <div class="row-actions">
+              <select id="tr-ds-model-type" class="input-sm">
+                <option value="router">Router</option>
+                <option value="interceptor">Interceptor</option>
+                <option value="summarizer">Summarizer</option>
+                <option value="qa">QA</option>
+              </select>
+              <button id="tr-build-dataset-btn" class="btn primary">Build Dataset</button>
+              <span id="tr-build-dataset-status" class="muted"></span>
+            </div>
+          </div>
+          <div class="card wide">
+            <h3>🚀 Submit Fine-tune Job</h3>
+            <div class="row-actions">
+              <select id="tr-job-model-type" class="input-sm">
+                <option value="router">Router</option>
+                <option value="interceptor">Interceptor</option>
+                <option value="summarizer">Summarizer</option>
+                <option value="qa">QA</option>
+              </select>
+              <input type="text" id="tr-base-model" placeholder="Base model (e.g. qwen3-0.6b)" class="input-sm">
+              <button id="tr-submit-job-btn" class="btn primary">Submit Job</button>
+              <span id="tr-submit-job-status" class="muted"></span>
+            </div>
+          </div>
+          <div class="card wide">
+            <div class="row-actions" style="margin-bottom:12px">
+              <h3 style="margin:0">📋 Job Queue</h3>
+              <div>
+                <button id="tr-refresh-jobs-btn" class="btn">Refresh</button>
+                <button id="tr-run-next-btn" class="btn warning" style="margin-left:6px">▶ Run Next</button>
+              </div>
+            </div>
+            <div id="tr-jobs-table-wrap">
+              <p class="muted">Click Refresh to load.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Cache Pipeline sub-panel ── -->
+        <div id="tsub-cache-pipeline" class="tsub hidden nlmlab-layout">
+          <div class="card wide">
+            <div class="row-actions" style="margin-bottom:12px">
+              <h3 style="margin:0">🔄 NLM QA Cache Pipeline</h3>
+              <div>
+                <button id="tr-run-cycle-btn" class="btn primary">Run Full Cycle</button>
+                <button id="tr-run-stage-f-btn" class="btn" style="margin-left:6px">Run Stage F Only (Evaluation)</button>
+              </div>
+            </div>
+            <div id="tr-pipeline-stages">
+              <p class="muted">Run a cycle to see stage progress.</p>
+            </div>
+          </div>
+          <div class="card wide">
+            <h3>📝 Last Cycle Summary</h3>
+            <div id="tr-cycle-summary">
+              <div class="savings-grid" style="grid-template-columns:repeat(3,1fr)">
+                <div class="savings-card">
+                  <div class="savings-value" id="tr-cyc-generated">—</div>
+                  <div class="savings-label">Pairs Generated</div>
+                </div>
+                <div class="savings-card accent">
+                  <div class="savings-value" id="tr-cyc-stored">—</div>
+                  <div class="savings-label">Pairs Stored</div>
+                </div>
+                <div class="savings-card">
+                  <div class="savings-value" id="tr-cyc-skipped">—</div>
+                  <div class="savings-label">Pairs Skipped</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── News & Digest sub-panel ── -->
+        <div id="tsub-news-digest" class="tsub hidden nlmlab-layout">
+          <div class="card wide">
+            <h3>📰 Scheduler Triggers</h3>
+            <div class="ingestion-grid" style="gap:12px">
+
+              <div class="card" style="margin:0">
+                <h4>📡 News Fetch</h4>
+                <button id="tr-trigger-news-btn" class="btn primary">Trigger News Fetch</button>
+                <div class="muted" style="margin-top:6px;font-size:12px">
+                  Last run: <span id="tr-news-last-run">—</span><br>
+                  Result: <span id="tr-news-last-result">—</span>
+                </div>
+              </div>
+
+              <div class="card" style="margin:0">
+                <h4>📓 Master Notebook Refresh</h4>
+                <button id="tr-trigger-notebook-btn" class="btn primary">Trigger Master Notebook Refresh</button>
+                <div class="muted" style="margin-top:6px;font-size:12px">
+                  Last run: <span id="tr-notebook-last-run">—</span><br>
+                  Result: <span id="tr-notebook-last-result">—</span>
+                </div>
+              </div>
+
+              <div class="card" style="margin:0">
+                <h4>🔁 QA Expansion</h4>
+                <button id="tr-trigger-qa-btn" class="btn primary">Trigger QA Expansion</button>
+                <div class="muted" style="margin-top:6px;font-size:12px">
+                  Last run: <span id="tr-qa-last-run">—</span><br>
+                  Result: <span id="tr-qa-last-result">—</span>
+                </div>
+              </div>
+
+            </div>
+          </div>
+          <div class="card wide">
+            <div class="row-actions" style="margin-bottom:12px">
+              <h3 style="margin:0">🕐 Recent Scheduler Task Runs</h3>
+              <button id="tr-refresh-scheduler-btn" class="btn">Refresh</button>
+            </div>
+            <div id="tr-scheduler-runs">
+              <p class="muted">Click Refresh to load.</p>
+            </div>
           </div>
         </div>
       </section>

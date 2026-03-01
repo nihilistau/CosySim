@@ -33,6 +33,7 @@ function switchTab(name) {
   else if (name === 'workflows') loadResearchSessions();
   else if (name === 'ingestion') loadIngestionPanel();
   else if (name === 'nlmlab') loadNLMLabPanel();
+  else if (name === 'training') loadTrainingPanel();
 }
 
 document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -1613,3 +1614,339 @@ pollTimer = setInterval(() => {
   loadActivity();
 }, 15000);
 setInterval(checkNLMStatus, 30000);
+
+// ── Training Panel ──────────────────────────────────────────────────
+function loadTrainingPanel() {
+  loadTrainingRouterStats();
+
+  document.querySelectorAll('.training-subnav-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.training-subnav-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tsub').forEach(s => { s.classList.add('hidden'); s.classList.remove('active'); });
+      btn.classList.add('active');
+      const sub = document.getElementById(`tsub-${btn.dataset.tsub}`);
+      if (sub) { sub.classList.remove('hidden'); sub.classList.add('active'); }
+    });
+  });
+}
+
+// ── Training: Router Stats ──────────────────────────────────────────
+async function loadTrainingRouterStats() {
+  const data = await api('/api/nexus/router-stats');
+  if (data.error) { showToast('Router stats unavailable: ' + data.error, 'warning'); return; }
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  set('tr-sav-cache', data.cache_hits ?? data.cache_hits_total ?? '—');
+  set('tr-sav-fts', data.fts_hits ?? data.fts_hits_total ?? '—');
+  set('tr-sav-nlm', data.nlm_hits ?? data.nlm_answers ?? '—');
+  set('tr-sav-llm', data.llm_fallbacks ?? '—');
+  const pct = data.compute_saved_pct != null ? (data.compute_saved_pct * 100).toFixed(1) + '%' : '—';
+  set('tr-sav-pct', pct);
+  set('tr-sav-tokens', (data.tokens_saved ?? '—').toLocaleString?.() ?? data.tokens_saved ?? '—');
+
+  const modelsEl = document.getElementById('tr-model-active-display');
+  if (modelsEl) {
+    const models = data.active_models || data.models || {};
+    const entries = Object.entries(models);
+    if (entries.length === 0) {
+      modelsEl.innerHTML = '<p class="muted">No fine-tuned model data returned.</p>';
+    } else {
+      modelsEl.innerHTML = `<div class="auth-field" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">` +
+        entries.map(([type, info]) => {
+          const active = info === true || info?.active;
+          const model = typeof info === 'string' ? info : (info?.model || type);
+          return `<div class="savings-card" style="text-align:left;padding:10px 14px">
+            <div style="font-size:12px;color:var(--text-muted)">${esc(type)}</div>
+            <div style="font-size:13px;font-weight:600;margin:4px 0">${esc(model)}</div>
+            <span class="${active ? 'auth-ok' : 'auth-err'}" style="font-size:11px">${active ? '● Active' : '○ Inactive'}</span>
+          </div>`;
+        }).join('') +
+      `</div>`;
+    }
+  }
+}
+
+document.getElementById('tr-refresh-stats-btn')?.addEventListener('click', loadTrainingRouterStats);
+
+// ── Training: Model Registry ────────────────────────────────────────
+async function loadModelRegistry() {
+  const wrapEl = document.getElementById('tr-registry-table-wrap');
+  const lbEl = document.getElementById('tr-leaderboard-display');
+  wrapEl.innerHTML = '<p class="muted">Loading...</p>';
+
+  const [regData, lbData] = await Promise.all([
+    api('/api/training/model-registry'),
+    api('/api/training/leaderboard')
+  ]);
+
+  if (regData.error) {
+    wrapEl.innerHTML = `<p style="color:var(--danger)">${esc(regData.error)}</p>`;
+  } else {
+    const models = regData.models || regData || [];
+    if (!models.length) {
+      wrapEl.innerHTML = '<p class="muted">No fine-tuned models registered yet.</p>';
+    } else {
+      wrapEl.innerHTML = `
+        <table class="data-table">
+          <thead><tr>
+            <th>Model Type</th><th>Base Model</th><th>Benchmark Score</th><th>Status</th><th>Actions</th>
+          </tr></thead>
+          <tbody>
+            ${models.map(m => `
+              <tr>
+                <td>${esc(m.model_type || m.type || '—')}</td>
+                <td style="font-size:12px;color:var(--text-muted)">${esc(m.base_model || '—')}</td>
+                <td>${m.benchmark_score != null ? m.benchmark_score.toFixed(3) : '—'}</td>
+                <td><span class="${m.status === 'active' ? 'auth-ok' : 'auth-err'}">${esc(m.status || '—')}</span></td>
+                <td>
+                  <button class="btn btn-xs" onclick="promoteModel(${JSON.stringify(m.model_type || '')}, ${JSON.stringify(m.model_id || m.id || '')})">Promote</button>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>`;
+    }
+  }
+
+  if (lbData.error) {
+    lbEl.innerHTML = `<p style="color:var(--danger)">${esc(lbData.error)}</p>`;
+  } else {
+    const lb = lbData.leaderboard || lbData || [];
+    if (!lb.length) {
+      lbEl.innerHTML = '<p class="muted">No leaderboard data yet.</p>';
+    } else {
+      lbEl.innerHTML = `
+        <table class="data-table">
+          <thead><tr><th>Model Type</th><th>Best Score</th><th>Model ID</th></tr></thead>
+          <tbody>
+            ${lb.map(r => `
+              <tr>
+                <td>${esc(r.model_type || r.type || '—')}</td>
+                <td>${r.best_score != null ? r.best_score.toFixed(3) : '—'}</td>
+                <td style="font-size:12px;color:var(--text-muted)">${esc(r.model_id || '—')}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>`;
+    }
+  }
+}
+
+async function promoteModel(modelType, modelId) {
+  if (!modelType || !modelId) { showToast('Missing model type or ID', 'error'); return; }
+  const data = await api('/api/training/promote', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model_type: modelType, model_id: modelId })
+  });
+  if (data.error) showToast('Promote failed: ' + data.error, 'error');
+  else { showToast(`Model ${modelId} promoted`, 'success'); loadModelRegistry(); }
+}
+
+document.getElementById('tr-refresh-registry-btn')?.addEventListener('click', loadModelRegistry);
+
+// ── Training: Fine-tune Jobs ────────────────────────────────────────
+async function loadFinetuneJobs() {
+  const wrapEl = document.getElementById('tr-jobs-table-wrap');
+  wrapEl.innerHTML = '<p class="muted">Loading...</p>';
+  const data = await api('/api/training/jobs');
+  if (data.error) {
+    wrapEl.innerHTML = `<p style="color:var(--danger)">${esc(data.error)}</p>`;
+    return;
+  }
+  const jobs = data.jobs || data || [];
+  if (!jobs.length) {
+    wrapEl.innerHTML = '<p class="muted">No fine-tune jobs queued.</p>';
+    return;
+  }
+  const statusColor = { pending: 'var(--text-muted)', running: '#89b4fa', done: '#a6e3a1', failed: 'var(--danger)' };
+  wrapEl.innerHTML = `
+    <table class="data-table">
+      <thead><tr>
+        <th>Job ID</th><th>Model Type</th><th>Status</th><th>Progress</th><th>Created</th>
+      </tr></thead>
+      <tbody>
+        ${jobs.map(j => `
+          <tr>
+            <td style="font-size:11px;color:var(--text-muted)">${esc(j.job_id || j.id || '—')}</td>
+            <td>${esc(j.model_type || j.type || '—')}</td>
+            <td style="color:${statusColor[j.status] || 'inherit'}">${esc(j.status || '—')}</td>
+            <td>${j.progress != null ? (j.progress * 100).toFixed(0) + '%' : '—'}</td>
+            <td style="font-size:11px;color:var(--text-muted)">${j.created_at ? new Date(j.created_at).toLocaleString() : '—'}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>`;
+}
+
+document.getElementById('tr-refresh-jobs-btn')?.addEventListener('click', loadFinetuneJobs);
+
+document.getElementById('tr-build-dataset-btn')?.addEventListener('click', async () => {
+  const btn = document.getElementById('tr-build-dataset-btn');
+  const statusEl = document.getElementById('tr-build-dataset-status');
+  const modelType = document.getElementById('tr-ds-model-type')?.value;
+  statusEl.textContent = 'Building...';
+  await withButton(btn, async () => {
+    const data = await api('/api/training/build-dataset', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model_type: modelType })
+    });
+    if (data.error) { statusEl.textContent = '✗ ' + data.error; showToast(data.error, 'error'); }
+    else { statusEl.textContent = `✓ ${data.count ?? data.pairs ?? '?'} examples built`; showToast('Dataset built', 'success'); }
+  });
+});
+
+document.getElementById('tr-submit-job-btn')?.addEventListener('click', async () => {
+  const btn = document.getElementById('tr-submit-job-btn');
+  const statusEl = document.getElementById('tr-submit-job-status');
+  const modelType = document.getElementById('tr-job-model-type')?.value;
+  const baseModel = document.getElementById('tr-base-model')?.value.trim();
+  if (!baseModel) { showToast('Base model name required', 'warning'); return; }
+  statusEl.textContent = 'Submitting...';
+  await withButton(btn, async () => {
+    const data = await api('/api/training/submit-job', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model_type: modelType, base_model: baseModel })
+    });
+    if (data.error) { statusEl.textContent = '✗ ' + data.error; showToast(data.error, 'error'); }
+    else { statusEl.textContent = `✓ Job ${data.job_id || 'queued'}`; showToast('Job submitted', 'success'); loadFinetuneJobs(); }
+  });
+});
+
+document.getElementById('tr-run-next-btn')?.addEventListener('click', async () => {
+  const btn = document.getElementById('tr-run-next-btn');
+  await withButton(btn, async () => {
+    const data = await api('/api/training/run-next', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    if (data.error) showToast('Run next failed: ' + data.error, 'error');
+    else { showToast('Next job started', 'success'); loadFinetuneJobs(); }
+  });
+});
+
+// ── Training: Cache Pipeline ────────────────────────────────────────
+const PIPELINE_STAGES = [
+  { id: 'A', label: 'Fetch News' },
+  { id: 'B', label: 'Chunk Sources' },
+  { id: 'C', label: 'Generate Questions' },
+  { id: 'D', label: 'NLM Ask' },
+  { id: 'E', label: 'Store Raw Pairs' },
+  { id: 'F', label: 'Evaluation' },
+  { id: 'G', label: 'Dedup Check' },
+  { id: 'H', label: 'Nexus Store' },
+  { id: 'I', label: 'Index Refresh' },
+  { id: 'J', label: 'Finalize' }
+];
+
+function renderPipelineStages(stageStatuses) {
+  const el = document.getElementById('tr-pipeline-stages');
+  if (!el) return;
+  el.innerHTML = PIPELINE_STAGES.map(s => {
+    const status = stageStatuses[s.id] || stageStatuses[`stage_${s.id.toLowerCase()}`] || 'pending';
+    const icons = { done: '✅', running: '⏳', pending: '⬜', failed: '❌', skipped: '⏭️' };
+    const icon = icons[status] || '⬜';
+    return `<div class="stat-row">
+      <span>${icon} <strong>${esc(s.id)}</strong> — ${esc(s.label)}</span>
+      <span style="font-size:12px;color:var(--text-muted)">${esc(status)}</span>
+    </div>`;
+  }).join('');
+}
+
+async function triggerPipelineAction(endpoint) {
+  const data = await api(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+  if (data.error) { showToast('Pipeline error: ' + data.error, 'error'); return; }
+
+  if (data.stages) renderPipelineStages(data.stages);
+
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v ?? '—'; };
+  set('tr-cyc-generated', data.pairs_generated ?? data.generated);
+  set('tr-cyc-stored', data.pairs_stored ?? data.stored);
+  set('tr-cyc-skipped', data.pairs_skipped ?? data.skipped);
+  showToast('Pipeline run complete', 'success');
+}
+
+document.getElementById('tr-run-cycle-btn')?.addEventListener('click', async () => {
+  const btn = document.getElementById('tr-run-cycle-btn');
+  await withButton(btn, () => triggerPipelineAction('/api/scheduler/trigger'));
+});
+
+document.getElementById('tr-run-stage-f-btn')?.addEventListener('click', async () => {
+  const btn = document.getElementById('tr-run-stage-f-btn');
+  await withButton(btn, () => triggerPipelineAction('/api/scheduler/trigger'));
+});
+
+// ── Training: News & Digest ─────────────────────────────────────────
+const SCHEDULER_TASKS = {
+  news:     { id: 'news_fetch',             lastRun: 'tr-news-last-run',     lastResult: 'tr-news-last-result' },
+  notebook: { id: 'master_notebook_refresh', lastRun: 'tr-notebook-last-run', lastResult: 'tr-notebook-last-result' },
+  qa:       { id: 'qa_expansion',            lastRun: 'tr-qa-last-run',       lastResult: 'tr-qa-last-result' }
+};
+
+async function triggerSchedulerTask(taskKey) {
+  const task = SCHEDULER_TASKS[taskKey];
+  if (!task) return;
+  const data = await api('/api/scheduler/trigger', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ task_id: task.id })
+  });
+  const lastRunEl = document.getElementById(task.lastRun);
+  const lastResultEl = document.getElementById(task.lastResult);
+  const now = new Date().toLocaleTimeString();
+  if (lastRunEl) lastRunEl.textContent = now;
+  if (data.error) {
+    if (lastResultEl) lastResultEl.textContent = '✗ ' + data.error;
+    showToast('Task failed: ' + data.error, 'error');
+  } else {
+    if (lastResultEl) lastResultEl.textContent = data.message || data.result || '✓ Done';
+    showToast(`Task ${task.id} triggered`, 'success');
+    loadSchedulerRuns();
+  }
+}
+
+document.getElementById('tr-trigger-news-btn')?.addEventListener('click', async () => {
+  const btn = document.getElementById('tr-trigger-news-btn');
+  await withButton(btn, () => triggerSchedulerTask('news'));
+});
+
+document.getElementById('tr-trigger-notebook-btn')?.addEventListener('click', async () => {
+  const btn = document.getElementById('tr-trigger-notebook-btn');
+  await withButton(btn, () => triggerSchedulerTask('notebook'));
+});
+
+document.getElementById('tr-trigger-qa-btn')?.addEventListener('click', async () => {
+  const btn = document.getElementById('tr-trigger-qa-btn');
+  await withButton(btn, () => triggerSchedulerTask('qa'));
+});
+
+async function loadSchedulerRuns() {
+  const el = document.getElementById('tr-scheduler-runs');
+  if (!el) return;
+  el.innerHTML = '<p class="muted">Loading...</p>';
+  const taskIds = Object.values(SCHEDULER_TASKS).map(t => t.id);
+  const data = await api(`/api/scheduler/recent?tasks=${taskIds.join(',')}`);
+  if (data.error) {
+    el.innerHTML = `<p style="color:var(--danger)">${esc(data.error)}</p>`;
+    return;
+  }
+  const runs = data.runs || data || [];
+  if (!runs.length) {
+    el.innerHTML = '<p class="muted">No recent runs found.</p>';
+    return;
+  }
+  el.innerHTML = `
+    <table class="data-table">
+      <thead><tr><th>Task</th><th>Started</th><th>Status</th><th>Result</th></tr></thead>
+      <tbody>
+        ${runs.map(r => `
+          <tr>
+            <td>${esc(r.task_id || r.task || '—')}</td>
+            <td style="font-size:11px;color:var(--text-muted)">${r.started_at ? new Date(r.started_at).toLocaleString() : '—'}</td>
+            <td><span class="${r.status === 'success' || r.status === 'done' ? 'auth-ok' : ''}">${esc(r.status || '—')}</span></td>
+            <td style="font-size:12px;max-width:300px;overflow:hidden;text-overflow:ellipsis">${esc(r.result || r.message || '—')}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>`;
+}
+
+document.getElementById('tr-refresh-scheduler-btn')?.addEventListener('click', loadSchedulerRuns);

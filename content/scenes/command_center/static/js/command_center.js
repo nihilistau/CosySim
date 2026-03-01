@@ -874,6 +874,180 @@ const CC = (function () {
             .catch(() => {});
     }
 
+    // ── C6: AI Training Pipeline ────────────────────────────
+    function refreshTrainingData() {
+        fetch("/api/training/jobs")
+            .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+            .then(jobs => renderFinetuneJobs(jobs))
+            .catch(() => {
+                const tbody = $("#finetune-jobs-body");
+                if (tbody) tbody.innerHTML = '<tr><td colspan="5" class="muted" style="padding:6px;">Failed to load jobs</td></tr>';
+            });
+        refreshLeaderboard();
+        loadModelRegistry();
+    }
+
+    function renderFinetuneJobs(jobs) {
+        const tbody = $("#finetune-jobs-body");
+        if (!tbody) return;
+        if (!Array.isArray(jobs) || jobs.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" class="muted" style="padding:6px;">No jobs found</td></tr>';
+            return;
+        }
+        tbody.innerHTML = jobs.map(j => {
+            const jobId = (j.job_id || j.id || "").substring(0, 8);
+            const status = j.status || "unknown";
+            const bgColor = status === "running" ? "var(--cc-green,#4caf50)"
+                : status === "failed" || status === "error" ? "var(--cc-red,#f44336)"
+                : status === "done" || status === "complete" ? "var(--cc-green,#4caf50)"
+                : "var(--cc-yellow,#ffb300)";
+            const progress = j.progress != null ? `${Math.round(j.progress)}%` : "--";
+            const created = j.created_at
+                ? new Date(j.created_at * 1000).toLocaleString("en-GB", { dateStyle: "short", timeStyle: "short" })
+                : "--";
+            return `<tr style="border-bottom:1px solid var(--cc-border,#2a2a2a);">
+                <td style="padding:4px 6px;font-family:monospace;font-size:11px;" title="${j.job_id || j.id || ""}">${jobId}</td>
+                <td style="padding:4px 6px;">${j.model_type || j.type || "--"}</td>
+                <td style="padding:4px 6px;"><span style="background:${bgColor};color:#000;padding:1px 7px;border-radius:10px;font-size:11px;font-weight:bold;">${status}</span></td>
+                <td style="padding:4px 6px;">${progress}</td>
+                <td style="padding:4px 6px;" class="muted">${created}</td>
+            </tr>`;
+        }).join("");
+    }
+
+    function refreshLeaderboard() {
+        fetch("/api/training/leaderboard")
+            .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+            .then(rows => renderLeaderboard(rows))
+            .catch(() => {
+                const tbody = $("#leaderboard-body");
+                if (tbody) tbody.innerHTML = '<tr><td colspan="4" class="muted" style="padding:6px;">Failed to load leaderboard</td></tr>';
+            });
+    }
+
+    function renderLeaderboard(rows) {
+        const tbody = $("#leaderboard-body");
+        if (!tbody) return;
+        if (!Array.isArray(rows) || rows.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4" class="muted" style="padding:6px;">No benchmark data</td></tr>';
+            return;
+        }
+        tbody.innerHTML = rows.map(r => {
+            const score = r.best_score != null ? r.best_score : null;
+            let scoreHtml = "--";
+            if (score != null) {
+                const pct = Math.round(score * 100);
+                const color = score > 0.8 ? "var(--cc-green,#4caf50)"
+                    : score > 0.6 ? "var(--cc-yellow,#ffb300)"
+                    : "var(--cc-red,#f44336)";
+                scoreHtml = `<span style="background:${color};color:#000;padding:1px 7px;border-radius:10px;font-size:11px;font-weight:bold;">${pct}%</span>`;
+            }
+            const modelId = (r.model_id || "").substring(0, 12);
+            return `<tr style="border-bottom:1px solid var(--cc-border,#2a2a2a);">
+                <td style="padding:4px 6px;">${r.model_type || "--"}</td>
+                <td style="padding:4px 6px;">${scoreHtml}</td>
+                <td style="padding:4px 6px;font-family:monospace;font-size:11px;" title="${r.model_id || ""}">${modelId}</td>
+                <td style="padding:4px 6px;">${r.status || "--"}</td>
+            </tr>`;
+        }).join("");
+    }
+
+    function loadModelRegistry() {
+        fetch("/api/training/model-registry")
+            .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+            .then(models => renderActiveModels(models))
+            .catch(() => {
+                const container = $("#active-models-list");
+                if (container) container.innerHTML = '<div class="muted">Failed to load model registry</div>';
+            });
+    }
+
+    function renderActiveModels(models) {
+        const container = $("#active-models-list");
+        if (!container) return;
+        const entries = Array.isArray(models)
+            ? models
+            : Object.entries(models || {}).map(([k, v]) => ({
+                model_type: k,
+                adapter_path: typeof v === "string" ? v : (v.adapter_path || ""),
+              }));
+        if (entries.length === 0) {
+            container.innerHTML = '<div class="muted">No active fine-tuned models</div>';
+            return;
+        }
+        container.innerHTML = entries.map(m => {
+            const adapterFile = (m.adapter_path || "--").replace(/\\/g, "/").split("/").pop();
+            return `<div class="detail-stat">
+                <span>${m.model_type || m.type || "--"}</span>
+                <span class="muted" style="font-family:monospace;font-size:10px;overflow:hidden;text-overflow:ellipsis;max-width:140px;" title="${m.adapter_path || ""}">${adapterFile}</span>
+            </div>`;
+        }).join("");
+    }
+
+    function runNextFinetuneJob() {
+        fetch("/api/training/jobs/run-next", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({}),
+        })
+        .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+        .then(data => {
+            addFeedItem("system", `Training job started: ${data.job_id || data.id || "?"}`);
+            setTimeout(refreshTrainingData, 2000);
+        })
+        .catch(e => addFeedItem("alert", `Failed to start job: ${e.message}`));
+    }
+
+    // ── C7: Knowledge Engine ────────────────────────────────
+    function refreshKnowledgeEngine() {
+        fetch("/api/nexus/router-stats")
+            .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+            .then(data => {
+                if (!data) return;
+                const saved = data.tokens_saved ?? data.total_tokens_saved;
+                setText("nexus-cache-hits", data.cache_hits ?? data.tier1_hits ?? "--");
+                setText("nexus-fts-hits", data.fts_hits ?? data.tier2_hits ?? "--");
+                setText("nexus-nlm-answers", data.nlm_answers ?? data.tier3_hits ?? "--");
+                setText("nexus-llm-fallbacks", data.llm_fallbacks ?? data.tier4_hits ?? "--");
+                setText("nexus-tokens-saved", saved != null
+                    ? (saved > 999 ? `${Math.round(saved / 1000)}k` : saved)
+                    : "--");
+            })
+            .catch(() => {
+                ["nexus-cache-hits", "nexus-fts-hits", "nexus-nlm-answers",
+                 "nexus-llm-fallbacks", "nexus-tokens-saved"].forEach(id => setText(id, "Err"));
+            });
+    }
+
+    function triggerSchedulerTask(taskId) {
+        const statusEl = $(`#action-status-${taskId}`);
+        if (statusEl) statusEl.textContent = "Triggering…";
+        fetch("/api/scheduler/trigger", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ task_id: taskId }),
+        })
+        .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+        .then(data => {
+            const now = new Date().toLocaleTimeString("en-GB", { hour12: false });
+            const result = data.status || data.result || "ok";
+            if (statusEl) statusEl.textContent = `${now} — ${result}`;
+            addFeedItem("system", `Scheduler: ${taskId} → ${result}`);
+        })
+        .catch(e => {
+            const now = new Date().toLocaleTimeString("en-GB", { hour12: false });
+            if (statusEl) statusEl.textContent = `${now} — failed`;
+            addFeedItem("alert", `Scheduler trigger failed: ${taskId} — ${e.message}`);
+        });
+    }
+
+    function initTraining() {
+        refreshTrainingData();
+        refreshKnowledgeEngine();
+        setInterval(refreshTrainingData, 30000);
+        setInterval(refreshKnowledgeEngine, 30000);
+    }
+
     // ── Init ────────────────────────────────────────────────
     function init() {
         connect();
@@ -912,6 +1086,9 @@ const CC = (function () {
         // C5: Load system metrics
         refreshSystemMetrics();
         setInterval(refreshSystemMetrics, 10000);
+
+        // C6/C7: AI Training + Knowledge Engine
+        initTraining();
     }
 
     document.addEventListener("DOMContentLoaded", init);
@@ -924,5 +1101,7 @@ const CC = (function () {
         loadCharacterState, refreshSystemMetrics,
         onSceneControlSceneChange, sendDirective,
         sendBroadcast, sendTransfer,
+        refreshTrainingData, refreshLeaderboard, loadModelRegistry,
+        runNextFinetuneJob, refreshKnowledgeEngine, triggerSchedulerTask,
     };
 })();

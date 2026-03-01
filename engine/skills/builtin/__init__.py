@@ -8,6 +8,7 @@ from . import autonomy_skills
 from . import homeassistant_skills
 from . import anythingllm_skills, codespace_skills, inference_skills
 from . import nlm_forge_skills, prompts_chat_skills
+from . import profile_skills
 
 __all__ = [
     "comfyui_skills", "memory_skills", "character_skills", "voice_skills",
@@ -18,4 +19,5 @@ __all__ = [
     "homeassistant_skills",
     "anythingllm_skills", "codespace_skills", "inference_skills",
     "nlm_forge_skills", "prompts_chat_skills",
+    "profile_skills",
 ]

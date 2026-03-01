@@ -2,6 +2,29 @@
 
 All notable changes to CosySim are documented here.
 
+## v0.65 — Profile Skills, Conversation Analyzer, Backup Manager
+
+### New: `engine/skills/builtin/profile_skills.py`
+- 11 MCP skills across 3 groups: conversation analysis, user profile, backup
+- `analyze_conversation`, `analyze_recent_conversation`, `conversation_analyzer_status`
+- `user_profile_get`, `user_profile_context`, `user_profile_facts`, `user_profile_add_fact`, `user_profile_set_preference`, `user_profile_update`
+- `backup_run`, `backup_list`, `backup_restore`
+
+### Updated: Scheduler Daemon (28 tasks)
+- Added `conversation-analyze` task (#28) — daily, analyzes recent Copilot session turns
+- Auto-stores salient facts, preferences, and technical background into UserProfileStore + Nexus
+
+### New: `training/smoke_test.py`
+- 8-check end-to-end pipeline smoke test, runs without GPU
+- Verifies: dataset sizes, model registry, benchmark runner, finetune orchestrator, teacher pipeline, router
+
+### New Tests (57 new, 5,582 total)
+- `tests/test_conversation_analyzer.py` — 19 tests for ConversationAnalyzer + UserProfileStore
+- `tests/test_backup_manager.py` — 16 tests for BackupManager
+- `tests/test_profile_skills.py` — 22 tests for profile skills pack
+
+---
+
 ## v0.64 — Training Pipeline + Intelligence Hub
 
 ### New: TeacherPipeline (`engine/nexus/teacher_pipeline.py`)

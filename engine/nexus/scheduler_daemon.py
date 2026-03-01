@@ -1051,6 +1051,12 @@ def _register_builtin_tasks(daemon: "SchedulerDaemon") -> None:
         "daily",
         _backup_databases_callback,
     )
+    daemon.register(
+        "conversation-analyze",
+        "Post-Session Conversation Analysis",
+        "daily",
+        _conversation_analyze_callback,
+    )
 
 
 def _qa_history_mine_callback() -> Dict[str, Any]:
@@ -1277,6 +1283,28 @@ def _backup_databases_callback() -> Dict[str, Any]:
         result = mgr.run_backup()
         return result.to_dict() if hasattr(result, "to_dict") else {"result": str(result)}
     except Exception as exc:
+        return {"error": str(exc)}
+
+
+def _conversation_analyze_callback() -> Dict[str, Any]:
+    """Daily: analyze the most recent Copilot session and extract user facts.
+
+    Reads recent turns from the session store, runs the ConversationAnalyzer
+    cascade (NLM → LMStudio → heuristic), merges results into UserProfileStore,
+    and stores action items in Nexus.
+    """
+    try:
+        from engine.nexus.conversation_analyzer import run_conversation_analysis
+        result = run_conversation_analysis()
+        return {
+            "extraction_mode": result.get("extraction_mode", "unknown"),
+            "facts_extracted": len(result.get("facts", [])),
+            "action_items": len(result.get("action_items", [])),
+            "topics": len(result.get("topics_of_interest", [])),
+            "error": result.get("error", ""),
+        }
+    except Exception as exc:
+        logger.error("Conversation analyze callback failed: %s", exc)
         return {"error": str(exc)}
 
 
