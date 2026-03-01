@@ -1,10 +1,10 @@
 # CosySim
 
-> v0.65 — Multi-scene AI simulation framework
+> v0.68b — Multi-scene AI simulation framework
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Tests: 5582](https://img.shields.io/badge/tests-5%2C582%20passing-brightgreen.svg)]()
+[![Tests: 6679](https://img.shields.io/badge/tests-6%2C679%20passing-brightgreen.svg)]()
 
 ## Overview
 
@@ -41,6 +41,17 @@ User / Browser
 ```
 
 ## Features
+
+**Dark Renaissance** (v0.68)
+- 13 new engine modules: EventBus (cross-scene pub/sub), EconomyManager (credits), ContentGate (adult content), ContentEngine (Nexus-backed pools), CharacterMemory, ReputationManager, SceneDirector, ConsequenceStore, InvestigationBoard, SceneArtManager (ComfyUI), WorldState (game clock + NPC schedules), WorldSim (living world daemon), ArenaEngine (tactical card game)
+- New scene: Arena — THE COLOSSEUM (port 5561): card game, agent betting, NLM commentary, BenchHUD
+- Black glass design system with Three.js 3D particles (12 presets, 10k particles at 60fps)
+- Universal chrome: navbar_v2, admin_overlay (8-tab hacker loft), Aria floating widget
+- VoiceManager JS: Piper/Orpheus/Qwen3 backends, STT, localStorage persistence
+- ContentIntensityInterceptor: adult content profiles 0–3 per category
+- 14 scene revamps with new display names, scene accent system, all new engine modules wired
+- BenchHUD on every scene: live latency, model name, Nexus tier, token count
+- 6,679 tests passing
 
 **Simulation Engine**
 - 18 scenes (8 game + 10 utility/support) with independent agents, state, and UI
@@ -80,7 +91,7 @@ User / Browser
 - System Assistant Aria with cosysim-navbar floating navigation
 
 **DevOps**
-- 5,582 tests, 0 failures across 186 files
+- 6,679 tests, 0 failures across 186 files
 - 18 Copilot custom agents, 9 instruction files
 - Config hardening — all 18 scenes in production.yaml
 - Central CORS and health routes on all scenes
@@ -158,22 +169,22 @@ CosySim/
 | Service | Port | Description |
 |---------|------|-------------|
 | LMStudio | 1234 | LLM inference (v1 API) |
-| Phone | 5555 | Messaging app with mood engine |
-| Bedroom | 5556 | Multi-agent spatial environment |
-| Lounge | 5557 | Social scene with ambient characters |
-| Tavern | 5558 | Fantasy tavern with NPC patrons |
-| Casino | 5559 | Blackjack, poker, slots |
-| Gallery | 5560 | Art evaluation and image generation |
-| Warzone | 5561 | Turn-based tactical combat |
-| Realm | 5562 | Director-guided LitRPG |
-| NeonCity | 5563 | Cyberpunk strategy board game |
-| Coders | 5564 | AI coding sandbox |
-| Heist | 5565 | Cooperative multi-agent heist |
+| Phone — SIGNAL | 5555 | Messaging app with mood engine |
+| Bedroom — THE PENTHOUSE | 5556 | Multi-agent spatial environment |
+| Lounge — THE VELVET PIT | 5557 | Social scene with ambient characters |
+| Tavern — THE RUSTY ANCHOR | 5558 | Fantasy tavern with NPC patrons |
+| Casino — CLUB NOIR | 5559 | Blackjack, poker, slots |
+| Gallery — THE OBSCURA | 5560 | Art evaluation and image generation |
+| Arena — THE COLOSSEUM | 5561 | Tactical card game, agent betting |
+| Realm — THE SHATTERED THRONE | 5562 | Director-guided LitRPG |
+| NeonCity — NEON CITY | 5563 | Cyberpunk strategy board game |
+| Coders — THE LAB | 5564 | AI coding sandbox |
+| Heist — THE SCORE | 5565 | Cooperative multi-agent heist |
 | Command Center | 5566 | System monitoring dashboard |
-| Games | 5567 | Multi-game arcade |
-| Intelligence Hub | 5580 | Training, NLM lab, fine-tune, scheduler, profile, backups |
+| Games — THE ARCADE | 5567 | Multi-game arcade |
+| Intel Hub — THE BRIEFING ROOM | 5580 | Training, NLM lab, fine-tune, scheduler, profile, backups |
 | Nexus Panel | 5570 | Nexus control interface |
-| Hub | 8500 | Landing page and scene launcher |
+| Hub — THE TERMINAL | 8500 | Landing page and scene launcher |
 | Dashboard | 8501 | System metrics |
 | Admin | 8502 | Diagnostic center with GOD mode |
 | Assets | 8503 | Asset generator |
@@ -185,7 +196,7 @@ CosySim/
 ## Testing
 
 ```bash
-# Full suite — 5,582 tests
+# Full suite — 6,679 tests
 python -m pytest tests/ -v --tb=short --ignore=tests/test_agent_loop.py --ignore=tests/live_wire_test.py
 
 # Single file

@@ -46,7 +46,7 @@ for _stream in (sys.stdout, sys.stderr):
 PROJECT_ROOT = Path(__file__).parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-VERSION = "0.65b"
+VERSION = "0.68b"
 
 # ── Catalogues ────────────────────────────────────────────────────────────
 # type: "flask" | "streamlit" | "fastapi"
@@ -117,35 +117,35 @@ SERVICES: Dict[str, Dict[str, Any]] = {
 
 SCENES: Dict[str, Dict[str, Any]] = {
     "phone":          {"type": "flask", "cls": "content.scenes.phone.phone_scene_v2.PhoneSceneV2",
-                       "port": 5555, "label": "CosyPhone OS",           "auto_start": True},
+                       "port": 5555, "label": "SIGNAL",                 "auto_start": True},
     "bedroom":        {"type": "flask", "cls": "content.scenes.bedroom.bedroom_scene.BedroomScene",
-                       "port": 5556, "label": "The Bedroom",            "auto_start": True},
+                       "port": 5556, "label": "THE PENTHOUSE",          "auto_start": True},
     "lounge":         {"type": "flask", "cls": "content.scenes.lounge.lounge_scene.LoungeScene",
-                       "port": 5557, "label": "The Velvet Lounge",      "auto_start": False},
+                       "port": 5557, "label": "THE VELVET PIT",         "auto_start": False},
     "tavern":         {"type": "flask", "cls": "content.scenes.tavern.tavern_scene.TavernScene",
-                       "port": 5558, "label": "Dragon's Flagon Tavern", "auto_start": False},
+                       "port": 5558, "label": "THE RUSTY ANCHOR",       "auto_start": False},
     "casino":         {"type": "flask", "cls": "content.scenes.casino.casino_scene.CasinoScene",
-                       "port": 5559, "label": "Midnight Casino",        "auto_start": False},
+                       "port": 5559, "label": "CLUB NOIR",              "auto_start": False},
     "gallery":        {"type": "flask", "cls": "content.scenes.gallery.gallery_scene.GalleryScene",
-                       "port": 5560, "label": "The Gallery",            "auto_start": False},
-    "warzone":        {"type": "flask", "cls": "content.scenes.warzone.warzone_scene.WarzoneScene",
-                       "port": 5561, "label": "Global Strike",          "auto_start": False},
+                       "port": 5560, "label": "THE OBSCURA",            "auto_start": False},
+    "arena":          {"type": "flask", "cls": "content.scenes.arena.ArenaScene",
+                       "port": 5561, "label": "THE COLOSSEUM",          "auto_start": False},
     "realm":          {"type": "flask", "cls": "content.scenes.realm.realm_scene.RealmScene",
-                       "port": 5562, "label": "The Realm",              "auto_start": False},
+                       "port": 5562, "label": "THE SHATTERED THRONE",   "auto_start": False},
     "neoncity":       {"type": "flask", "cls": "content.scenes.neoncity.neoncity_scene.NeonCityScene",
-                       "port": 5563, "label": "NeonCity",               "auto_start": False},
+                       "port": 5563, "label": "NEON CITY",              "auto_start": False},
     "coders":         {"type": "flask", "cls": "content.scenes.coders.coders_scene.CodersRoomScene",
-                       "port": 5564, "label": "The Coders Room",        "auto_start": False},
+                       "port": 5564, "label": "THE LAB",                "auto_start": False},
     "heist":          {"type": "flask", "cls": "content.scenes.heist.heist_scene.HeistScene",
-                       "port": 5565, "label": "The Heist",              "auto_start": False},
+                       "port": 5565, "label": "THE SCORE",              "auto_start": False},
     "command_center": {"type": "flask",
                        "cls": "content.scenes.command_center.command_center_scene.CommandCenterScene",
                        "port": 5566, "label": "Command Center",         "auto_start": False},
     "games":          {"type": "flask", "cls": "content.scenes.games.games_scene.GamesScene",
-                       "port": 5567, "label": "Games Arcade",           "auto_start": False},
+                       "port": 5567, "label": "THE ARCADE",             "auto_start": False},
     "intel_hub":      {"type": "flask",
                        "cls": "content.scenes.intel_hub.intel_hub_scene.IntelHubScene",
-                       "port": 5580, "label": "Intelligence Hub",       "auto_start": False},
+                       "port": 5580, "label": "THE BRIEFING ROOM",      "auto_start": False},
 }
 
 ALL_TARGETS: Dict[str, Dict[str, Any]] = {**SERVICES, **SCENES}

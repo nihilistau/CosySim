@@ -31,6 +31,15 @@ CosySim is a framework for building AI agent simulation scenes — a game engine
 │  │BaseScene │ │Qwen3TTS  │ │SceneMap  │ │RingBuf   │              │
 │  │Registry  │ │VoiceDsgn │ │Location  │ │Benchmark │              │
 │  └──────────┘ └──────────┘ └──────────┘ └──────────┘              │
+│                                                                     │
+│  ┌─────────────────────── v0.68 ──────────────────────────────────┐│
+│  │ events/EventBus (cross-scene pub/sub backbone)                  ││
+│  │ economy/EconomyManager · content/ContentGate+ContentEngine      ││
+│  │ characters/CharacterMemory+ReputationInterceptor                ││
+│  │ director/SceneDirector · mechanics/ConsequenceStore+InvBoard    ││
+│  │ art/SceneArtManager · world/WorldState+WorldSim                 ││
+│  │ arena/ArenaEngine                                               ││
+│  └────────────────────────────────────────────────────────────────┘│
 └────────────────────────────┬────────────────────────────────────────┘
                              │ subclasses / uses
 ┌────────────────────────────▼────────────────────────────────────────┐
@@ -38,10 +47,10 @@ CosySim is a framework for building AI agent simulation scenes — a game engine
 │  content/                                                           │
 │  ┌──────────────────────────┐  ┌─────────────────────────────────┐ │
 │  │  scenes/                  │  │  simulation/                    │ │
-│  │  phone · bedroom · lounge │  │  character_system/ (Personality)│ │
-│  │  casino · gallery · realm │  │  database/ (SQLite, RAG, Events)│ │
-│  │  neoncity · coders · heist│  │  services/ (ComfyUI, media)    │ │
-│  │  warzone · command_center │  └─────────────────────────────────┘ │
+│  │  signal · penthouse · pit │  │  character_system/ (Personality)│ │
+│  │  noir · obscura · throne  │  │  database/ (SQLite, RAG, Events)│ │
+│  │  neon · lab · score       │  │  services/ (ComfyUI, media)    │ │
+│  │  anchor · colosseum       │  └─────────────────────────────────┘ │
 │  └──────────────────────────┘                                       │
 └─────────────────────────────────────────────────────────────────────┘
 ```
@@ -51,6 +60,44 @@ CosySim is a framework for building AI agent simulation scenes — a game engine
 ---
 
 ## Engine Layer
+
+### New Modules (v0.68 "Dark Renaissance")
+
+13 cross-scene engine modules added in v0.68. All live under `engine/` and are wired into scenes via BaseScene helpers.
+
+| Module | File | Key Class | Purpose |
+|--------|------|-----------|---------|
+| **EventBus** | `engine/events/event_bus.py` | `EventBus` | Cross-scene pub/sub backbone — scenes publish typed events, subscribers react without direct coupling |
+| **EconomyManager** | `engine/economy/economy.py` | `EconomyManager` | Cross-scene credit ledger — earn, spend, transfer, escrow with persistent balance |
+| **ContentGate** | `engine/content/content_gate.py` | `ContentIntensityInterceptor` | Adult content gating — intensity profiles 0–3 per category, interceptor-enforced |
+| **ContentEngine** | `engine/content/content_engine.py` | `ContentEngine` | Nexus-backed content pool management — fetch, rank, and serve dynamic content variants |
+| **CharacterMemory** | `engine/characters/memory.py` | `CharacterMemoryInterceptor` | Persistent cross-session character memory — stores and recalls facts across restarts |
+| **ReputationManager** | `engine/characters/reputation.py` | `ReputationInterceptor` | Faction/reputation standings — per-character, per-faction scores, injected into pre-call context |
+| **SceneDirector** | `engine/director/scene_director.py` | `DirectorBeat`, `BeatType` | AI scene director — emits `DirectorBeat` objects to guide narrative pacing and tone |
+| **ConsequenceStore** | `engine/mechanics/consequences.py` | `ConsequenceStore` | Scheduled cross-session consequences — fire deferred narrative/stat effects on next session start |
+| **InvestigationBoard** | `engine/mechanics/investigation.py` | `InvestigationBoard` | Investigation board + NLM reasoning — pin clues, run NLM deduction, surface conclusions |
+| **SceneArtManager** | `engine/art/scene_art.py` | `SceneArtManager` | ComfyUI portrait/scene art — request, queue, and cache generated imagery per scene context |
+| **WorldState** | `engine/world/world_state.py` | `WorldStateInterceptor` | Game clock + NPC schedules — global time-of-day and NPC availability injected every turn |
+| **WorldSim** | `engine/world/world_sim.py` | `WorldSim` | Living world daemon — background tick loop evolving NPC states, events, and economy |
+| **ArenaEngine** | `engine/arena/arena_engine.py` | `ArenaEngine` | Tactical card game engine — RPS mechanics, combos, hand management, round resolution |
+
+#### EventBus Usage
+
+```python
+from engine.events.event_bus import get_event_bus, EventType
+
+bus = get_event_bus()
+
+# Publish
+bus.publish(EventType.ECONOMY_CREDIT_EARNED, {"character_id": "luna", "amount": 50})
+
+# Subscribe
+bus.subscribe(EventType.ROUND_WON, on_round_won)
+```
+
+EventBus is the integration backbone — ArenaEngine, WorldSim, EconomyManager, and SceneDirector all publish through it.
+
+---
 
 ### Agents (`engine/agents/`)
 
@@ -297,16 +344,17 @@ All scenes inherit `BaseScene` and optionally mix in `MCPSceneMixin` for governa
 
 | Scene | Port | Description |
 |-------|------|-------------|
-| phone | 5555 | CosyPhone OS — messaging, gallery, voice studio, 52+ routes |
-| bedroom | 5556 | Multi-agent spatial — 2 characters, 7 locations, Three.js 3D |
-| lounge | 5557 | The Velvet Lounge — social scene |
-| casino | 5559 | Midnight Casino — card/table games |
-| gallery | 5560 | Art evaluation scene |
-| warzone | 5561 | Tactical combat |
-| realm | 5562 | The Realm — LitRPG, dual-agent (Director + Assistant), inventory, murder mystery |
-| neoncity | 5563 | NeonCity — cyberpunk strategy board, grid, storm, prefabs |
-| coders | 5564 | The Coders Room — AI agent code simulation, pipeline, sandbox |
-| heist | 5565 | Heist — cooperative heist planning |
+| phone (SIGNAL) | 5555 | CosyPhone OS — messaging, gallery, voice studio, 52+ routes |
+| bedroom (THE PENTHOUSE) | 5556 | Multi-agent spatial — 2 characters, 7 locations, Three.js 3D |
+| lounge (THE VELVET PIT) | 5557 | The Velvet Pit — speakeasy |
+| tavern (THE RUSTY ANCHOR) | 5558 | Fantasy tavern with gold economy, quests, reputation |
+| casino (CLUB NOIR) | 5559 | Club Noir — card/table games |
+| gallery (THE OBSCURA) | 5560 | Art evaluation and ComfyUI generation |
+| arena (THE COLOSSEUM) | 5561 | Tactical card game — agent vs agent, betting, NLM commentary |
+| realm (THE SHATTERED THRONE) | 5562 | The Shattered Throne — LitRPG, dual-agent (Director + Assistant) |
+| neoncity (NEON CITY) | 5563 | NeonCity — cyberpunk strategy board, grid, storm, prefabs |
+| coders (THE LAB) | 5564 | The Lab — AI agent code simulation, pipeline, sandbox |
+| heist (THE SCORE) | 5565 | The Score — cooperative heist planning |
 | command_center | 5566 | Command Center — operations dashboard |
 
 #### Adding a New Scene
@@ -496,17 +544,20 @@ gov.pipeline.remove("weather_injector") # remove by name
 
 | Port | Scene | Description |
 |------|-------|-------------|
-| 5555 | phone | CosyPhone OS |
-| 5556 | bedroom | Multi-agent spatial |
-| 5557 | lounge | The Velvet Lounge |
-| 5559 | casino | Midnight Casino |
-| 5560 | gallery | Art evaluation |
-| 5561 | warzone | Tactical combat |
-| 5562 | realm | The Realm (LitRPG) |
-| 5563 | neoncity | NeonCity cyberpunk |
-| 5564 | coders | The Coders Room |
-| 5565 | heist | Heist |
+| 5555 | phone (SIGNAL) | CosyPhone OS |
+| 5556 | bedroom (THE PENTHOUSE) | Multi-agent spatial |
+| 5557 | lounge (THE VELVET PIT) | Speakeasy |
+| 5558 | tavern (THE RUSTY ANCHOR) | Fantasy tavern |
+| 5559 | casino (CLUB NOIR) | Club Noir |
+| 5560 | gallery (THE OBSCURA) | Art gallery |
+| 5561 | arena (THE COLOSSEUM) | Tactical card game |
+| 5562 | realm (THE SHATTERED THRONE) | LitRPG |
+| 5563 | neoncity (NEON CITY) | Cyberpunk strategy |
+| 5564 | coders (THE LAB) | Coding simulation |
+| 5565 | heist (THE SCORE) | Cooperative heist |
 | 5566 | command_center | Command Center |
+| 5567 | games (THE ARCADE) | Games arcade |
+| 5580 | intel_hub (THE BRIEFING ROOM) | Intelligence Hub |
 
 ### Dashboard Ports (Streamlit)
 

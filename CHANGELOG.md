@@ -2,6 +2,37 @@
 
 All notable changes to CosySim are documented here.
 
+## v0.68 "Dark Renaissance" — March 2, 2026
+
+### New
+- 13 engine modules: EventBus, EconomyManager, ContentGate, ContentEngine, CharacterMemory,
+  ReputationManager, SceneDirector, ConsequenceStore, InvestigationBoard, SceneArtManager,
+  WorldState, WorldSim, ArenaEngine
+- New scene: Arena — THE COLOSSEUM (port 5561): tactical card game, agent vs agent (RPS mechanics),
+  live betting, NLM commentary, BenchHUD showing both model latencies
+- Voice system: VoiceManager JS (Piper/Orpheus/Qwen3 backends, STT, localStorage persistence)
+- Universal chrome: navbar_v2, admin_overlay (8-tab hacker loft), Aria floating widget
+- Black glass design system: extended design_tokens.css, cosysim-components.css, cosysim-animations.css
+- Three.js 3D particle system: 12 presets, 10,000 particles at 60fps
+- BenchHUD: live agent latency, model, Nexus tier, token count per scene
+- Adult content system: ContentIntensityInterceptor, intensity profiles 0–3 per category
+- BaseScene: `register_tts_route()`, `register_bench_route()`, `inject_navbar_context()`
+
+### Changed
+- 14 scene revamps with new display names, black glass UI, scene accent system,
+  adult content wired, all new engine modules integrated
+- All scenes: dark glass panels, 3D particles, TTS wired, BenchHUD, living world connected
+- `config/default.yaml`: arena scene added (5561), warzone archived, content_intensity interceptor added
+- Scene display names: THE PENTHOUSE, NEON CITY, SIGNAL, THE VELVET PIT, THE RUSTY ANCHOR,
+  CLUB NOIR, THE OBSCURA, THE SCORE, THE SHATTERED THRONE, THE LAB, THE ARCADE,
+  THE TERMINAL, THE BRIEFING ROOM, THE COLOSSEUM
+
+### Tests
+- 6,679 tests passing (up from 4,747 at v0.59b)
+- 16 new revamp test suites added
+
+---
+
 ## v0.67 — Curated World
 
 ### Track A: News System Expansion

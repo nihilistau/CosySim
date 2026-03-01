@@ -16,24 +16,25 @@ Every game scene in CosySim follows the same architecture:
 
 ### Port Map
 
-| Port | Scene | Genre |
-|------|-------|-------|
-| 5555 | Phone | Social simulation |
-| 5556 | Bedroom | Adult roleplay |
-| 5557 | Lounge | Social / speakeasy |
-| 5558 | Tavern | Fantasy RPG tavern |
-| 5559 | Casino | Gambling simulation |
-| 5560 | Gallery | Creative / art |
-| 5561 | Warzone | Military RTS |
-| 5562 | Realm | Fantasy RPG |
-| 5563 | Neon City | Cyberpunk strategy |
-| 5564 | Coders Room | Coding simulation |
-| 5565 | Heist | Crime co-op |
-| 5566 | Command Center | System monitoring |
-| 5567 | Games Arcade | Mini-games |
-| 8500 | Hub | Scene launcher (Streamlit) |
-| 8501 | Dashboard | Character management (Streamlit) |
-| 8502 | Admin Panel | System admin (Streamlit) |
+| Port | Scene | Display Name | Genre |
+|------|-------|-------------|-------|
+| 5555 | Phone | SIGNAL | Social simulation |
+| 5556 | Bedroom | THE PENTHOUSE | Adult roleplay |
+| 5557 | Lounge | THE VELVET PIT | Social / speakeasy |
+| 5558 | Tavern | THE RUSTY ANCHOR | Fantasy RPG tavern |
+| 5559 | Casino | CLUB NOIR | Gambling simulation |
+| 5560 | Gallery | THE OBSCURA | Creative / art |
+| 5561 | Arena | THE COLOSSEUM | Tactical card game |
+| 5562 | Realm | THE SHATTERED THRONE | Fantasy RPG |
+| 5563 | Neon City | NEON CITY | Cyberpunk strategy |
+| 5564 | Coders Room | THE LAB | Coding simulation |
+| 5565 | Heist | THE SCORE | Crime co-op |
+| 5566 | Command Center | — | System monitoring |
+| 5567 | Games Arcade | THE ARCADE | Mini-games |
+| 5580 | Intel Hub | THE BRIEFING ROOM | Admin / intelligence |
+| 8500 | Hub | THE TERMINAL | Scene launcher |
+| 8501 | Dashboard | — | Character management (Streamlit) |
+| 8502 | Admin Panel | — | System admin (Streamlit) |
 
 ---
 
@@ -109,13 +110,98 @@ In `__init__.py`, export the scene class. The Hub and launcher discover scenes a
 
 ---
 
+## Dark Renaissance Visual System (v0.68)
+
+All scenes were revamped in v0.68 with a unified "black glass" design language. The system is implemented in `content/shared/static/` and included in every scene's base template.
+
+### Design Tokens (`design_tokens.css`)
+
+Extended token set defining the black glass palette:
+
+| Token | Value | Usage |
+|-------|-------|-------|
+| `--glass-bg` | `rgba(0,0,0,0.65)` | Panel backgrounds |
+| `--glass-border` | `rgba(255,255,255,0.08)` | Panel borders |
+| `--glass-blur` | `blur(18px)` | `backdrop-filter` |
+| `--accent` | Per-scene hex | Primary highlight colour |
+| `--accent-glow` | `0 0 24px var(--accent)` | Neon glow shadow |
+
+Each scene declares its own accent colour via a CSS variable override in its root template.
+
+| Scene | Accent |
+|-------|--------|
+| THE PENTHOUSE | `#ec4899` |
+| NEON CITY | `#06b6d4` |
+| SIGNAL | `#10b981` |
+| THE VELVET PIT | `#f59e0b` |
+| THE RUSTY ANCHOR | `#92400e` |
+| CLUB NOIR | `#f97316` |
+| THE OBSCURA | `#7c3aed` |
+| THE SCORE | `#e11d48` |
+| THE SHATTERED THRONE | `#059669` |
+| THE LAB | `#4ade80` |
+| THE ARCADE | `#8b5cf6` |
+| THE TERMINAL | `#3b82f6` |
+| THE BRIEFING ROOM | `#06b6d4` |
+| THE COLOSSEUM | `#f59e0b` |
+
+### Component Library (`cosysim-components.css`)
+
+Shared component classes: `.glass-panel`, `.glass-card`, `.neon-btn`, `.stat-bar`, `.heat-ring`, `.bench-hud`, `.voice-indicator`.
+
+### Animation Library (`cosysim-animations.css`)
+
+Keyframe library: `glowPulse`, `fadeInUp`, `scanLine`, `particleDrift`. Used by components and scene-specific effects.
+
+### 3D Particle System (`cosysim-particles3d.js`)
+
+Three.js-based particle field rendered to a `<canvas>` behind the scene UI.
+
+- **10,000 particles** at 60fps via `requestAnimationFrame`
+- **12 presets:** `nebula`, `matrix`, `embers`, `snowfall`, `stardust`, `smoke`, `sparks`, `data_stream`, `void`, `aurora`, `ocean`, `inferno`
+- Each scene selects its preset in the template: `CosyParticles.init({ preset: 'embers', accent: '#ec4899' })`
+- Responds to mouse/touch parallax
+
+### Universal Chrome
+
+| Component | Files | Purpose |
+|-----------|-------|---------|
+| **Navbar v2** | `navbar_v2.{html,css,js}` | Top navigation: scene switcher, bench metrics, voice toggle, Aria button |
+| **Admin Overlay** | `admin_overlay.{html,css,js}` | Slide-in 8-tab hacker panel (State, Characters, Engine, Economy, Events, Content, Director, Debug) |
+| **Aria Widget** | `aria_widget.{html,css,js}` | Floating assistant button — expands to inline chat, routes to Phone/Nexus |
+| **Voice Settings** | `voice_settings.html` | TTS/STT config modal embedded in Navbar v2 |
+
+### BenchHUD (`cosysim-bench.js`)
+
+Live metrics overlay injected by `BaseScene.register_bench_route()`:
+
+```
+┌─────────────────────────────┐
+│ MODEL   qwen3-14b            │
+│ LATENCY 342ms  TOKENS 847   │
+│ NEXUS   L2-cached            │
+└─────────────────────────────┘
+```
+
+Polls `/api/bench` every 2s. Visible in top-right corner of every scene.
+
+### VoiceManager (`cosysim-voice.js`)
+
+Client-side voice orchestration:
+- **TTS backends:** Piper · Orpheus · Qwen3 (selected per character)
+- **STT:** Web Speech API with push-to-talk
+- **Persistence:** Voice prefs stored in `localStorage` per character
+- **API:** `VoiceManager.speak(text, charId)`, `VoiceManager.listen(callback)`
+
+---
+
 ## Scene Reference
 
 ---
 
-### Phone (port 5555)
+### Phone — SIGNAL (port 5555)
 
-**CosyPhone OS** — An iOS-style phone interface with messaging, calls, and character social media. Characters send autonomous texts and maintain relationships.
+**SIGNAL** — An iOS-style phone interface with messaging, calls, and character social media. Characters send autonomous texts and maintain relationships.
 
 **Genre:** Social simulation · **Max characters:** 5
 
@@ -162,9 +248,9 @@ In `__init__.py`, export the scene class. The Hub and launcher discover scenes a
 
 ---
 
-### Bedroom (port 5556)
+### Bedroom — THE PENTHOUSE (port 5556)
 
-**The Bedroom** — Adult roleplay scene with detailed 3D avatars, a clothing system, bed-game mechanics, and heat-gated explicit content progression.
+**THE PENTHOUSE** — Adult roleplay scene with detailed 3D avatars, a clothing system, bed-game mechanics, and heat-gated explicit content progression.
 
 **Genre:** Adult roleplay · **Max characters:** 3
 
@@ -213,9 +299,9 @@ In `__init__.py`, export the scene class. The Hub and launcher discover scenes a
 
 ---
 
-### Lounge (port 5557)
+### Lounge — THE VELVET PIT (port 5557)
 
-**The Velvet Lounge** — A 1920s underground jazz speakeasy. Two resident characters powered entirely by the MCP framework with consequence chains, timers, and trust gates.
+**THE VELVET PIT** — A 1920s underground jazz speakeasy. Two resident characters powered entirely by the MCP framework with consequence chains, timers, and trust gates.
 
 **Genre:** Social · **Max characters:** 5
 
@@ -263,9 +349,9 @@ In `__init__.py`, export the scene class. The Hub and launcher discover scenes a
 
 ---
 
-### Tavern (port 5558)
+### Tavern — THE RUSTY ANCHOR (port 5558)
 
-**Dragon's Flagon Tavern** — A fantasy RPG tavern showcasing every MCP framework feature. Gold economy, reputation system, quest board, dice gambling, rumor mill, and time-of-day cycle.
+**THE RUSTY ANCHOR** — A fantasy RPG tavern showcasing every MCP framework feature. Gold economy, reputation system, quest board, dice gambling, rumor mill, and time-of-day cycle.
 
 **Genre:** Fantasy RPG · **Max characters:** 4
 
@@ -314,9 +400,9 @@ In `__init__.py`, export the scene class. The Hub and launcher discover scenes a
 
 ---
 
-### Casino (port 5559)
+### Casino — CLUB NOIR (port 5559)
 
-**The Casino Floor** — A noir underground poker den with blackjack, poker, roulette, and slots. AI dealers and characters with personality-driven gambling styles.
+**CLUB NOIR** — A noir underground poker den with blackjack, poker, roulette, and slots. AI dealers and characters with personality-driven gambling styles.
 
 **Genre:** Gambling simulation · **Max characters:** 5
 
@@ -365,9 +451,9 @@ In `__init__.py`, export the scene class. The Hub and launcher discover scenes a
 
 ---
 
-### Gallery (port 5560)
+### Gallery — THE OBSCURA (port 5560)
 
-**Art Gallery** — An AI art gallery where characters evaluate, create, and debate generated artwork. Showcases image generation integration.
+**THE OBSCURA** — An AI art gallery where characters evaluate, create, and debate generated artwork. Showcases image generation integration.
 
 **Genre:** Creative · **Max characters:** 5
 
@@ -413,59 +499,43 @@ Characters are dynamically assigned roles from the database on startup:
 
 ---
 
-### Warzone (port 5561)
+### Arena — THE COLOSSEUM (port 5561)
 
-**Warzone** — Real-time strategy scene with AI commanders managing squads, buildings, and combat. Features event-driven warfare mechanics rendered in Three.js.
+**THE COLOSSEUM** — Tactical card game where two AI agents compete head-to-head in a Rock-Paper-Scissors mechanic with counters and combos. Live betting, NLM match commentary, and a BenchHUD showing both model latencies side by side.
 
-**Genre:** Strategy · **Max characters:** 4
-
-#### MCP Skills (7)
-| Skill | Description |
-|-------|-------------|
-| `warzone_status` | Full battlefield status: turn, weather, resources, HP, buildings, spy intel |
-| `warzone_attack` | Attack base or building via GameState.process_action() (5s cooldown) |
-| `warzone_build` | Build factory/power_plant/radar/fortress (5s cooldown) |
-| `warzone_upgrade` | Upgrade weapon or defense level (8s cooldown) |
-| `warzone_special_op` | Execute spy/emp/sabotage/shield/taunt (15s cooldown) |
-| `warzone_recon` | Deploy recon (spy satellite alias, 15s cooldown) |
-| `warzone_end_turn` | End turn: AI acts, income collected, weather rolls (3s cooldown) |
+**Genre:** Tactical card game · **Max characters:** 2 (agent vs agent)
 
 #### Game Mechanics
-- **Resource tycoon loop** — Collect credits/power/intel from buildings → upgrade weapons/defenses → attack.
-- **Escalation** — Income multiplier increases 5% per turn for late-game acceleration.
-- **Weather system** — Clear, Cloudy, Storm, Fog, Favorable; affects attack accuracy (storm −15%, fog −20%).
-- **Combat** — Accuracy rolls, crit chance (15% = 1.5× damage), interception, shield bypass, counterstrike (25% chance when base HP < 30%).
-- **7 weapon tiers** — Artillery (30 dmg) → Cruise Missile → ICBM → Bunker Buster → Laser Cannon → Drone Swarm (3 hits) → Orbital Strike (250 dmg).
-- **5 special abilities** — Spy Satellite, EMP Burst, Sabotage, Shield Overcharge, Commander Taunt.
-- **Buildings** — Factory (+75 credits/turn), Power Plant (+2 power/turn), Intel Center (+1 intel/turn).
+- **Card system** — RPS-based card types with counter chains and combo multipliers. Each agent holds a hand drawn from a faction deck.
+- **Live betting** — Players wager credits on each round outcome. Odds update in real time based on agent win streaks.
+- **NLM commentary** — InvestigationBoard pipes match events to NLM for live play-by-play narration.
+- **BenchHUD** — Dual latency display: left agent model latency vs right agent model latency, Nexus tier, token count per turn.
+- **Economy integration** — EconomyManager tracks credits across sessions; winnings persist cross-scene.
+- **Event bus** — Match events (card_played, round_won, combo_triggered) broadcast via EventBus to Hub overlay.
 
-#### Scene Rules
-- Weapon/defense unlock gates (Cruise Missile at 300 credits, Orbital Strike at 2500 credits + 8 power + 3 intel)
-- AI Commander rules: aggressive when weapon advantage, defensive when base HP < 50%, taunt on successful hits
-- Counterstrike at < 30% HP (desperation mode)
-
-#### Characters
-| Character | Role | Behavior |
-|-----------|------|----------|
-| **General Ironside** | AI Commander | Adaptive strategy — aggressive/defensive based on game state. Taunts after hits. |
+#### Engine Modules Used
+`ArenaEngine` · `EconomyManager` · `EventBus` · `InvestigationBoard` (NLM commentary) · `WorldStateInterceptor`
 
 #### Key API Endpoints
 | Method | Path | Purpose |
 |--------|------|---------|
-| GET | `/api/game` | Current game state |
-| POST | `/api/game/action` | Execute action (attack, build, upgrade, deploy) |
-| SocketIO | — | Real-time game state broadcasts, combat results |
+| GET | `/api/state` | Current match state (hands, scores, credits) |
+| POST | `/api/match/new` | Start new match (select agent configs) |
+| POST | `/api/match/play` | Play a card for the current turn |
+| GET | `/api/bench` | BenchHUD payload (latencies, tokens, tier) |
+| GET | `/api/commentary` | Latest NLM match commentary |
 
 #### State Management
-- Player and AI state: credits, power, intel, base HP, weapon/defense levels, buildings.
-- Weather, turn/phase, status effects (Spy, EMP, Shield Overcharge), escalation multiplier.
-- Three.js 3D battlefield with SocketIO sync.
+- `ArenaEngine` — match state, hands, scores, round history, combo tracker.
+- `EconomyManager` — credit balances, bet escrow, payout ledger.
+- EventBus broadcasts all round events to subscribed scenes.
+- SocketIO: `round_result`, `combo_triggered`, `commentary_update`, `bench_update`.
 
 ---
 
-### Realm (port 5562)
+### Realm — THE SHATTERED THRONE (port 5562)
 
-**The Realm** — A director-guided LitRPG visual novel with quests, exploration, and character skills. Features a dual-agent system with a fourth-wall-breaking companion.
+**THE SHATTERED THRONE** — A director-guided LitRPG visual novel with quests, exploration, and character skills. Features a dual-agent system with a fourth-wall-breaking companion.
 
 **Genre:** Fantasy RPG · **Max characters:** 4
 
@@ -522,9 +592,9 @@ Characters are dynamically assigned roles from the database on startup:
 
 ---
 
-### Neon City (port 5563)
+### Neon City — NEON CITY (port 5563)
 
-**Neon City** — A cyberpunk battle-royale board game on a shrinking grid with hacking, factions, and street events.
+**NEON CITY** — A cyberpunk battle-royale board game on a shrinking grid with hacking, factions, and street events.
 
 **Genre:** Cyberpunk · **Max characters:** 5
 
@@ -569,9 +639,9 @@ Characters are dynamically assigned roles from the database on startup:
 
 ---
 
-### Coders Room (port 5564)
+### Coders Room — THE LAB (port 5564)
 
-**Coders Room** — An AI coding room where agents collaboratively write, review, and test Python code in an idle-simulation loop.
+**THE LAB** — An AI coding room where agents collaboratively write, review, and test Python code in an idle-simulation loop.
 
 **Genre:** Coding simulation · **Max characters:** 3
 
@@ -620,9 +690,9 @@ Three AI agents with mood, status, and task tracking:
 
 ---
 
-### Heist (port 5565)
+### Heist — THE SCORE (port 5565)
 
-**The Heist** — Cooperative heist planning and execution with specialized crew roles. The player directs a crew through phase-gated operations.
+**THE SCORE** — Cooperative heist planning and execution with specialized crew roles. The player directs a crew through phase-gated operations.
 
 **Genre:** Crime co-op · **Max characters:** 4
 
@@ -722,9 +792,9 @@ Each has health, morale, and status (ok/injured/arrested).
 
 ---
 
-### Hub (port 8500)
+### Hub — THE TERMINAL (port 8500)
 
-**Scene Hub** — Central launcher and navigation for the entire CosySim system. Runs as a Streamlit application.
+**THE TERMINAL** — Central launcher and navigation for the entire CosySim system. Runs as a Streamlit application.
 
 #### Features
 - **Scene launcher** with live status indicators (🟢 Running / ⚫ Stopped) for 14 services across 3 categories:
@@ -780,9 +850,9 @@ Mood, energy, relationship level, arousal, memory count per character.
 
 ---
 
-### Games Arcade (port 5567)
+### Games Arcade — THE ARCADE (port 5567)
 
-**Games Arcade** — Mini-game collection wrapped as a proper BaseScene with MCP skills. Hosts Mystery Investigation and Truth or Dare as sub-modules.
+**THE ARCADE** — Mini-game collection wrapped as a proper BaseScene with MCP skills. Hosts Mystery Investigation and Truth or Dare as sub-modules.
 
 **Genre:** Mini-games · **Max characters:** 0
 
