@@ -340,8 +340,11 @@ class TestBuiltinTasks:
         from engine.nexus.scheduler_daemon import _doc_sync_callback
 
         fake_diff = "engine/skills/builtin/notebooklm_skills.py\ndocs/SKILLS.md"
+        mock_proc = MagicMock()
+        mock_proc.stdout = fake_diff
+        mock_proc.returncode = 0
         mock_client = MagicMock()
-        with patch("subprocess.check_output", return_value=fake_diff), \
+        with patch("subprocess.run", return_value=mock_proc), \
              patch("engine.nexus.client.get_nexus_client", return_value=mock_client):
             _doc_sync_callback()
         # Nexus add_entry should have been called with the changed files
