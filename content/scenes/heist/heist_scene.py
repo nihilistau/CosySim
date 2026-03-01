@@ -92,12 +92,20 @@ class HeistScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_I
     """Cooperative heist planning & execution scene."""
 
     SCENE_METADATA = {
-        "title": "The Heist",
-        "description": "Cooperative heist planning and execution with specialized crew roles.",
+        "name": "heist",
+        "display_name": "THE SCORE",
+        "port": 5565,
+        "type": "thriller",
+        "accent_color": "#e11d48",
+        "accent_rgb": "225 29 72",
+        "description": "Everyone gets a cut. Nobody gets out clean. The clock is ticking.",
         "genre": "crime_coop",
         "max_characters": 4,
-        "features": ["heist_planning", "crew_roles", "phase_system",
-                     "multi_agent_cooperation", "branched_conversations"],
+        "features": [
+            "heist_planning", "crew_roles", "phase_system",
+            "multi_agent_cooperation", "branched_conversations",
+            "investigation_board", "consequence_system", "economy",
+        ],
     }
 
     def __init__(
@@ -113,6 +121,13 @@ class HeistScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_I
             static_folder=str(scene_dir / "static"),
         )
         register_shared_assets(self.app)
+        # Extend template loader to include shared templates (navbar_v2.html etc.)
+        import jinja2 as _jinja2
+        _shared_tpl = scene_dir.parent.parent / "shared" / "templates"
+        self.app.jinja_loader = _jinja2.ChoiceLoader([
+            _jinja2.FileSystemLoader(str(scene_dir / "templates")),
+            _jinja2.FileSystemLoader(str(_shared_tpl)),
+        ])
         self.register_health_route(self.app)
         CORS(self.app)
         self.socketio = SocketIO(self.app, cors_allowed_origins="*", async_mode="threading")
@@ -126,7 +141,22 @@ class HeistScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_I
         self._ticker_thread: Optional[threading.Thread] = None
         self._ticker_stop = threading.Event()
 
+        # Heist state — v0.68
+        self._active_job_id: Optional[str] = None
+        self._assigned_roles: Dict[str, str] = {}
+
+        # Engine subsystem refs (wired in start())
+        self._content_engine = None
+        self._economy = None
+        self._reputation = None
+        self._investigation = None
+        self._consequences = None
+        self._director = None
+        self._event_bus = None
+
         register_heist_rules()
+        self.register_bench_route(self.app, self.socketio)
+        self.register_tts_route(self.app)
         self._register_routes()
         self._register_socketio()
 
@@ -147,7 +177,7 @@ class HeistScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_I
 
         @app.route("/")
         def index():
-            return render_template("heist.html")
+            return render_template("heist.html", **self.inject_navbar_context())
 
         @app.route("/api/venues")
         def list_venues():
@@ -281,6 +311,146 @@ class HeistScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_I
                     args=(char_id, message),
                     daemon=True,
                 ).start()
+
+        # ── v0.68 handlers ───────────────────────────────────────────────
+
+        @self.socketio.on("get_heist_state")
+        def on_get_heist_state():
+            state: Dict[str, Any] = {
+                "active": self.game is not None,
+                "phase": self.game.phase.value if self.game else "planning",
+                "heat": self.game.suspicion if self.game else 0,
+                "job_id": self._active_job_id,
+                "assigned_roles": self._assigned_roles,
+            }
+            if self.game:
+                state.update(self.game.to_dict())
+            emit("heist_state", state)
+
+        @self.socketio.on("get_available_jobs")
+        def on_get_available_jobs():
+            jobs: List[Dict] = []
+            try:
+                from engine.content.content_engine import get_content_engine
+                ce = get_content_engine()
+                if hasattr(ce, "get_heist_jobs"):
+                    jobs = ce.get_heist_jobs() or []
+            except Exception:
+                pass
+            if not jobs:
+                jobs = [
+                    {
+                        "id": k,
+                        "name": v.get("name", k),
+                        "difficulty": v.get("difficulty", 1),
+                        "payout": v.get("loot_value", 500_000),
+                        "risk": "high" if v.get("difficulty", 1) > 2 else
+                                "medium" if v.get("difficulty", 1) > 1 else "low",
+                        "guards": v.get("guards", 0),
+                        "obstacles": v.get("obstacles", []),
+                    }
+                    for k, v in VENUES.items()
+                ]
+            emit("available_jobs", {"jobs": jobs})
+
+        @self.socketio.on("select_job")
+        def on_select_job(data):
+            job_id = data.get("job_id", "")
+            if not job_id:
+                emit("error", {"msg": "job_id required"})
+                return
+            self._active_job_id = job_id
+            venue = VENUES.get(job_id, VENUES.get("diamond_exchange", {}))
+            emit("job_selected", {"job_id": job_id, "venue": venue})
+            self._sync_to_mcp("job_selected", {"job_id": job_id})
+            logger.info("Heist job selected: %s", job_id)
+
+        @self.socketio.on("assign_crew")
+        def on_assign_crew(data):
+            crew_member = data.get("crew_member", "")
+            role = data.get("role", "")
+            if not crew_member or not role:
+                emit("error", {"msg": "crew_member and role required"})
+                return
+            self._assigned_roles[crew_member] = role
+            emit("crew_assigned", {
+                "crew_member": crew_member,
+                "role": role,
+                "roles": self._assigned_roles,
+            })
+            self._sync_to_mcp("crew_assigned", {"crew_member": crew_member, "role": role})
+
+        @self.socketio.on("execute_phase")
+        def on_execute_phase(data):
+            if not self.game:
+                emit("error", {"msg": "No active heist"})
+                return
+            new_phase = self.game.advance_phase()
+            result: Dict[str, Any] = {
+                "phase": new_phase.value,
+                "state": self.game.to_dict(),
+            }
+            if self.game.check_bust():
+                result["blown"] = True
+            elif self.game.check_victory():
+                result["complete"] = True
+                self._on_heist_complete()
+            emit("phase_executed", result)
+            self._broadcast_state()
+
+        @self.socketio.on("abort_heist")
+        def on_abort_heist():
+            if not self.game:
+                emit("error", {"msg": "No active heist"})
+                return
+            heat = self.game.suspicion
+            self.game.phase = Phase.FAILED
+            # Heat lingers — schedule decay +48 h via ConsequenceStore
+            try:
+                from engine.mechanics.consequences import get_consequence_store
+                cs = get_consequence_store()
+                cs.schedule(
+                    scene="heist",
+                    type="heat_decay",
+                    delay_hours=48,
+                    payload={"heat": heat, "reason": "abort"},
+                )
+            except Exception:
+                pass
+            emit("heist_aborted", {
+                "heat": heat,
+                "message": "Heist blown. Lay low for 48 hours.",
+            })
+            self._broadcast_state()
+            logger.warning("Heist aborted — heat=%d", heat)
+
+        @self.socketio.on("get_investigation")
+        def on_get_investigation():
+            board_state: Dict[str, Any] = {}
+            try:
+                from engine.mechanics.investigation import get_investigation_board
+                board = get_investigation_board()
+                if hasattr(board, "get_state"):
+                    board_state = board.get_state("heist") or {}
+                elif hasattr(board, "get_board"):
+                    board_state = board.get_board("heist") or {}
+            except Exception:
+                pass
+            # Fallback: synthesise from live game state
+            if not board_state and self.game:
+                board_state = {
+                    "nodes": [
+                        {
+                            "id": ob,
+                            "label": ob.replace("_", " ").title(),
+                            "type": "obstacle",
+                            "cleared": False,
+                        }
+                        for ob in self.game.obstacles_remaining
+                    ],
+                    "events": self.game.events[-5:] if self.game.events else [],
+                }
+            emit("investigation_state", {"board": board_state})
 
     # ── Agent management ─────────────────────────────────────────────────
 
@@ -501,13 +671,72 @@ class HeistScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_I
     def _broadcast_event(self, event: dict):
         self.socketio.emit("game_event", event)
 
+    def _on_heist_complete(self) -> None:
+        """Handle heist completion — schedule payout, fire EventBus, update reputation."""
+        if not self.game:
+            return
+        payout = self.game.loot_collected
+        job_id = self._active_job_id
+        venue_name = self.game.venue.get("name", "unknown") if self.game.venue else "unknown"
+
+        # Payout arrives +24 h via ConsequenceStore
+        try:
+            from engine.mechanics.consequences import get_consequence_store
+            cs = get_consequence_store()
+            cs.schedule(
+                scene="heist",
+                type="payout",
+                delay_hours=24,
+                payload={"amount": payout, "source": "heist_job", "job_id": job_id},
+            )
+        except Exception:
+            pass
+
+        # Publish to EventBus — heist.job_complete
+        try:
+            from engine.events.event_bus import get_event_bus
+            bus = get_event_bus()
+            bus.publish("heist.job_complete", {
+                "payout": payout,
+                "job_id": job_id,
+                "venue": venue_name,
+                "crew": list(self.game.crew.keys()),
+                "suspicion": self.game.suspicion,
+            })
+        except Exception:
+            pass
+
+        # Update crew reputation
+        try:
+            from engine.characters.reputation import get_reputation_manager
+            rep_mgr = get_reputation_manager()
+            for char_id in self.game.crew:
+                rep_mgr.update(char_id, delta=10, source="heist_complete")
+        except Exception:
+            pass
+
+        # Leaderboard
+        try:
+            from engine.mcp.shared_boards import get_shared_boards
+            get_shared_boards().submit_score(
+                "heist_legends", "Mastermind",
+                payout,
+                metadata={"venue": venue_name, "suspicion": self.game.suspicion},
+            )
+        except Exception:
+            pass
+
+        logger.info(
+            "THE SCORE — heist complete | payout=$%d | venue=%s", payout, venue_name
+        )
+
     # ── BaseScene interface ──────────────────────────────────────────────
 
     def get_plugin_info(self) -> dict:
         return {
-            "name": "The Heist",
-            "description": "Cooperative multi-agent heist planning & execution",
-            "version": "0.50b",
+            "name": "THE SCORE",
+            "description": "Grimy planning room for criminal jobs. Everyone gets a cut.",
+            "version": "0.68",
             "author": "CosySim",
             "port": self.port,
             "tags": ["heist", "multi-agent", "cooperative", "game", "pipeline", "mcp"],
@@ -515,11 +744,47 @@ class HeistScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_I
         }
 
     def start(self) -> None:
-        print(f"The Heist — Cooperative Heist Scene starting on port {self.port}...")
+        print(f"THE SCORE — Dark Renaissance heist scene starting on port {self.port}...")
+        # Wire engine subsystems (all optional — graceful fallback if unavailable)
+        try:
+            from engine.content.content_engine import get_content_engine
+            self._content_engine = get_content_engine()
+        except Exception:
+            self._content_engine = None
+        try:
+            from engine.economy.economy import get_economy_manager
+            self._economy = get_economy_manager()
+        except Exception:
+            self._economy = None
+        try:
+            from engine.characters.reputation import get_reputation_manager
+            self._reputation = get_reputation_manager()
+        except Exception:
+            self._reputation = None
+        try:
+            from engine.mechanics.investigation import get_investigation_board
+            self._investigation = get_investigation_board()
+        except Exception:
+            self._investigation = None
+        try:
+            from engine.mechanics.consequences import get_consequence_store
+            self._consequences = get_consequence_store()
+        except Exception:
+            self._consequences = None
+        try:
+            from engine.director.scene_director import get_scene_director
+            self._director = get_scene_director()
+        except Exception:
+            self._director = None
+        try:
+            from engine.events.event_bus import get_event_bus
+            self._event_bus = get_event_bus()
+        except Exception:
+            self._event_bus = None
         try:
             from engine.mcp.framework import get_framework
             fw = get_framework()
-            fw.on("environment_change", lambda evt: None)  # placeholder
+            fw.on("environment_change", lambda evt: None)
         except Exception:
             pass
         self.socketio.run(

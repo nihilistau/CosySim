@@ -1,15 +1,16 @@
 """
-Gallery Scene — v2.7 Framework Showcase
-========================================
-An interactive art gallery where AI characters act as curators, critics, and
-artists. Demonstrates the full v2.7 streaming framework:
+THE OBSCURA — Gallery Scene v0.68 "Dark Renaissance"
+=====================================================
+Dark art gallery with disturbing and adult exhibits.  Characters inhabit the
+roles of curator, critic, and private collector in a space where art confronts
+the viewer across every comfort boundary.
 
-• **Streaming inference** with real-time mood/action extraction via StreamProcessor
-• **Image generation** — characters "create" art via [IMAGE:prompt] tags
-• **Conversation branching** — debate art interpretations with try_alternatives()
-• **Structured output** — art evaluations as typed JSON via run_structured()
-• **Multi-character interaction** — curator and critic with different perspectives
-• **Store control** — stateful gallery tours vs stateless quick evaluations
+• **Dark Renaissance aesthetic** — violet accent (#7c3aed), spotlight framing
+• **ContentGate-gated exhibits** — adult pieces blur until private viewing unlocked
+• **Economy integration** — private viewings cost 250 credits via EconomyManager
+• **SceneArtManager** — commission new works via ComfyUI generation
+• **SceneDirector** — narrative beats drive the exhibit's evolving mood
+• **EventBus** — cross-scene events (gallery.commission, gallery.private_viewing)
 • **MCP framework** — rules, state management, consequence chains
 
 Port: 5560 (configurable)
@@ -127,6 +128,99 @@ PREMADE_EXHIBITIONS = {
     },
 }
 
+# ── THE OBSCURA Permanent Collection ──────────────────────────────────────────
+
+OBSCURA_PIECES: List[Dict] = [
+    {
+        "id": "ob_001",
+        "title": "Anatomia Proibita",
+        "artist": "Unknown, 1887",
+        "medium": "oil on canvas",
+        "description": "A medical illustration turned fever dream. Bodies dissected into component desires.",
+        "intensity": 2,
+        "tags": ["disturbing", "adult:violent"],
+        "adult": True,
+        "placeholder_gradient": "linear-gradient(135deg, #1a0a2e 0%, #3d1a4a 100%)",
+    },
+    {
+        "id": "ob_002",
+        "title": "The Collector's Appetite",
+        "artist": "M. Veyne",
+        "medium": "mixed media",
+        "description": "Objects of obsession mounted and labeled. The viewer becomes the specimen.",
+        "intensity": 1,
+        "tags": ["disturbing"],
+        "adult": False,
+        "placeholder_gradient": "linear-gradient(135deg, #0a1628 0%, #1e2d4a 100%)",
+    },
+    {
+        "id": "ob_003",
+        "title": "Rapture Studies I\u2013IV",
+        "artist": "Anonymous",
+        "medium": "charcoal",
+        "description": "Four panels documenting states of extreme sensation. Clinical yet intimate.",
+        "intensity": 3,
+        "tags": ["explicit", "adult:sexual"],
+        "adult": True,
+        "placeholder_gradient": "linear-gradient(135deg, #2a0a0a 0%, #4a1a1a 100%)",
+    },
+    {
+        "id": "ob_004",
+        "title": "Last Rites (After Goya)",
+        "artist": "D. Mercer",
+        "medium": "oil on canvas",
+        "description": "Figures in extremis. The line between ecstasy and suffering, indistinguishable.",
+        "intensity": 2,
+        "tags": ["violent", "disturbing"],
+        "adult": False,
+        "placeholder_gradient": "linear-gradient(135deg, #0d0d1a 0%, #2a1a3a 100%)",
+    },
+    {
+        "id": "ob_005",
+        "title": "Taxonomy of Hunger",
+        "artist": "K. Voss",
+        "medium": "ink and gold leaf",
+        "description": "A bestiary of human appetites illustrated in the style of medieval manuscripts.",
+        "intensity": 2,
+        "tags": ["disturbing", "adult:violent"],
+        "adult": True,
+        "placeholder_gradient": "linear-gradient(135deg, #1a1400 0%, #3d3200 100%)",
+    },
+    {
+        "id": "ob_006",
+        "title": "Portrait of the Warden",
+        "artist": "Unknown",
+        "medium": "daguerreotype, altered",
+        "description": "A face composed of faces. All of them consenting. None of them present.",
+        "intensity": 1,
+        "tags": ["unsettling"],
+        "adult": False,
+        "placeholder_gradient": "linear-gradient(135deg, #0a0a0a 0%, #2a2a2a 100%)",
+    },
+    {
+        "id": "ob_007",
+        "title": "The Architecture of Transgression",
+        "artist": "R. Sade (attr.)",
+        "medium": "architectural drawing",
+        "description": "Blueprint for a structure designed for a single, unstated purpose.",
+        "intensity": 3,
+        "tags": ["explicit", "adult:sexual"],
+        "adult": True,
+        "placeholder_gradient": "linear-gradient(135deg, #0a1a0a 0%, #1a3a2a 100%)",
+    },
+    {
+        "id": "ob_008",
+        "title": "Piet\u00e0 (Secular)",
+        "artist": "A. Blackwood",
+        "medium": "sculpture, resin",
+        "description": "A reversal of comfort. The mourner and the mourned exchange positions endlessly.",
+        "intensity": 1,
+        "tags": ["disturbing", "grief"],
+        "adult": False,
+        "placeholder_gradient": "linear-gradient(135deg, #1a1a2e 0%, #0a0a1a 100%)",
+    },
+]
+
 
 @dataclass
 class Artwork:
@@ -168,13 +262,17 @@ class GalleryScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE
     """Interactive art gallery — v2.7 framework showcase."""
 
     SCENE_METADATA = {
-        "title": "Art Gallery",
-        "description": "AI art gallery where characters evaluate and discuss generated artwork. "
-                       "Showcases image generation integration.",
-        "genre": "creative",
-        "max_characters": 5,
-        "features": ["image_generation", "art_evaluation", "gallery_curation",
-                     "character_opinions"],
+        "name": "gallery",
+        "display_name": "THE OBSCURA",
+        "port": 5560,
+        "type": "narrative",
+        "accent_color": "#7c3aed",
+        "accent_rgb": "124 58 237",
+        "description": "Art is violence. The exhibit changes you. You cannot unsee it.",
+        "features": [
+            "image_generation", "content_gate", "economy",
+            "scene_director", "event_bus", "character_memory",
+        ],
     }
 
     def __init__(self, host: str = "0.0.0.0", port: int = 5560):
@@ -220,6 +318,16 @@ class GalleryScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE
         self._governors: Dict[str, Any] = {}  # char_id → governor
 
         self.nexus_init("gallery")
+
+        # Bench & TTS helpers (BaseScene-provided)
+        try:
+            self.register_bench_route(self.app, self.socketio)
+            self.register_tts_route(self.app)
+        except Exception:
+            pass
+
+        # THE OBSCURA state
+        self._curator_mood: str = "contemplative"
 
     def _get_governor_context(self, char_id: str) -> str:
         """
@@ -335,13 +443,15 @@ class GalleryScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE
 
     def get_plugin_info(self) -> Dict[str, Any]:
         return {
-            "name": "Gallery",
+            "name": "THE OBSCURA",
             "scene_id": SCENE_ID,
-            "description": "Interactive art gallery — v2.7 streaming framework showcase.",
-            "version": "0.50b",
+            "display_name": "THE OBSCURA",
+            "description": "Dark art gallery with disturbing and adult exhibits. v0.68 Dark Renaissance.",
+            "version": "0.68",
             "port": self.port,
-            "skill_packs": ["narrative", "memory", "character"],
-            "features": ["streaming", "structured_output", "branching", "image_gen"],
+            "skill_packs": ["gallery"],
+            "features": ["content_gate", "economy", "scene_director", "event_bus", "image_gen"],
+            "accent_color": "#7c3aed",
         }
 
     def _on_art_event(self, evt) -> None:
@@ -714,6 +824,68 @@ class GalleryScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE
             self.gallery_log = self.gallery_log[-100:]
         self.socketio.emit("gallery_log", entry)
 
+    # ── THE OBSCURA Helpers ────────────────────────────────────────────────
+
+    def _get_pieces(self) -> List[Dict]:
+        """Return OBSCURA permanent collection, merged with any commissioned artworks."""
+        pieces = [dict(p) for p in OBSCURA_PIECES]
+        for art in self.artworks.values():
+            pieces.append({
+                "id": art.id,
+                "title": art.title,
+                "artist": "Commissioned",
+                "medium": art.style,
+                "description": art.description,
+                "intensity": 1,
+                "tags": [],
+                "adult": False,
+                "placeholder_gradient": "linear-gradient(135deg, #1a1a2e 0%, #2a0a3a 100%)",
+                "image_url": art.image_path,
+            })
+        return pieces
+
+    def _get_piece_detail(self, piece_id: str) -> Optional[Dict]:
+        """Return enriched piece dict with curator commentary."""
+        piece = next((p for p in OBSCURA_PIECES if p["id"] == piece_id), None)
+        if not piece:
+            art = self.artworks.get(piece_id)
+            if art:
+                piece = {
+                    "id": art.id, "title": art.title, "artist": "Commissioned",
+                    "medium": art.style, "description": art.description,
+                    "tags": [], "adult": False, "intensity": 1,
+                    "image_url": art.image_path,
+                }
+        if not piece:
+            return None
+        commentary = self._default_commentary(piece)
+        try:
+            from engine.content.content_engine import get_content_engine
+            item = get_content_engine().get_scenario(
+                "gallery", intensity=piece.get("intensity", 1)
+            )
+            if item and item.content:
+                commentary = item.content[:300]
+        except Exception:
+            pass
+        return {**piece, "commentary": commentary}
+
+    def _default_commentary(self, piece: Dict) -> str:
+        """Static curator commentary based on piece tags."""
+        tag_comments = {
+            "adult:sexual": "The body rendered as text. Read it carefully.",
+            "adult:violent": "Violence made beautiful. This is the gallery's mandate.",
+            "explicit": "Explicit in every sense the word allows. Proceed deliberately.",
+            "violent": "Suffering as subject matter. The artist does not flinch.",
+            "disturbing": "The work unsettles without apology. Sit with that discomfort.",
+            "unsettling": "Something here will stay with you. We cannot say what.",
+            "grief": "Loss made visible. The absence is the subject.",
+        }
+        for tag in piece.get("tags", []):
+            if tag in tag_comments:
+                return tag_comments[tag]
+        return "The curator offers no comment. Let the work speak."
+
     # ── Socket.IO ──────────────────────────────────────────────────────────
 
     def _register_socketio(self) -> None:
@@ -725,6 +897,125 @@ class GalleryScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE
         def on_request():
             emit("gallery_state", self._get_state())
 
+        @self.socketio.on("get_gallery_state")
+        def on_get_gallery_state():
+            """Emit full gallery state: current_exhibit, pieces, curator_mood."""
+            emit("gallery_state", self._get_state())
+
+        @self.socketio.on("view_piece")
+        def on_view_piece(data):
+            """Detailed piece view with curator commentary."""
+            piece_id = (data or {}).get("piece_id", "")
+            detail = self._get_piece_detail(piece_id)
+            if detail:
+                intensity = detail.get("intensity", 1)
+                moods = ["contemplative", "unsettled", "disturbed", "transgressed"]
+                self._curator_mood = moods[min(intensity, len(moods) - 1)]
+                emit("piece_detail", detail)
+                self._log("view_piece", f"Piece viewed: '{detail.get('title', piece_id)}'")
+            else:
+                emit("piece_not_found", {"piece_id": piece_id})
+
+        @self.socketio.on("get_private_viewing")
+        def on_private_viewing(data):
+            """Adult-gated exhibit access. Requires ContentGate clearance + 250 credits."""
+            piece_id = (data or {}).get("piece_id", "")
+            piece = next((p for p in OBSCURA_PIECES if p["id"] == piece_id), None)
+            if not piece:
+                emit("private_viewing_denied", {
+                    "reason": "Exhibit not found in the permanent collection."
+                })
+                return
+
+            # Content gate check
+            adult_tags = [t for t in piece.get("tags", []) if t.startswith("adult:")]
+            if adult_tags:
+                try:
+                    from engine.content.content_gate import get_content_gate
+                    if not get_content_gate().can_show(adult_tags):
+                        emit("private_viewing_denied", {
+                            "reason": "Content profile does not permit access to this exhibit."
+                        })
+                        return
+                except Exception:
+                    pass  # Gate unavailable — proceed
+
+            # Economy spend
+            try:
+                from engine.economy.economy import get_economy_manager, TransactionType
+                em = get_economy_manager()
+                balance = em.get_balance()
+                if balance < 250:
+                    emit("private_viewing_denied", {
+                        "reason": (
+                            f"Insufficient funds — 250 credits required. "
+                            f"Balance: {balance}."
+                        )
+                    })
+                    return
+                em.transact(
+                    -250, TransactionType.SPEND, "gallery",
+                    f"Private viewing: {piece['title']}"
+                )
+            except Exception:
+                pass  # Economy unavailable — proceed
+
+            detail = self._get_piece_detail(piece_id) or dict(piece)
+            emit("private_viewing_granted", {
+                "piece": detail,
+                "commentary": detail.get("commentary", ""),
+            })
+            self._log("private_viewing", f"Private viewing granted: '{piece['title']}'")
+
+            try:
+                from engine.events.event_bus import get_event_bus
+                get_event_bus().publish(
+                    "gallery.private_viewing",
+                    {"piece_id": piece_id, "piece_title": piece["title"]},
+                    scene="gallery",
+                )
+            except Exception:
+                pass
+
+        @self.socketio.on("commission_work")
+        def on_commission_work(data):
+            """Commission a new work via SceneArtManager (ComfyUI)."""
+            description = (data or {}).get("description", "")
+            intensity = max(1, min(3, int((data or {}).get("intensity", 1))))
+            if not description:
+                emit("commission_error", {
+                    "reason": "A description is required to commission work."
+                })
+                return
+
+            result: Dict = {
+                "description": description,
+                "intensity": intensity,
+                "url": None,
+                "cached": False,
+            }
+            try:
+                from engine.art.scene_art import get_scene_art_manager
+                art_result = get_scene_art_manager().get_action_card(
+                    description, scene="gallery", intensity=intensity
+                )
+                result.update({"url": art_result.url, "cached": art_result.cached})
+            except Exception as exc:
+                logger.debug("SceneArtManager commission skipped: %s", exc)
+
+            emit("commission_complete", result)
+            self._log("commission", f"Commission: '{description[:60]}' (intensity {intensity})")
+
+            try:
+                from engine.events.event_bus import get_event_bus
+                get_event_bus().publish(
+                    "gallery.commission",
+                    {"description": description, "intensity": intensity, "url": result.get("url")},
+                    scene="gallery",
+                )
+            except Exception:
+                pass
+
     def _get_state(self) -> Dict:
         return {
             "characters": {k: v.to_dict() for k, v in self.characters.items()},
@@ -734,6 +1025,9 @@ class GalleryScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE
             "exhibition_info": PREMADE_EXHIBITIONS.get(self.active_exhibition, {}),
             "log": self.gallery_log[-50:],
             "streaming_enabled": self.streaming_enabled,
+            # THE OBSCURA state
+            "pieces": self._get_pieces(),
+            "curator_mood": self._curator_mood,
         }
 
     # ── HTTP Routes ────────────────────────────────────────────────────────
@@ -743,7 +1037,7 @@ class GalleryScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE
 
         @app.route("/")
         def index():
-            return render_template("gallery_ui.html")
+            return render_template("gallery.html", **self.inject_navbar_context())
 
         @app.route("/api/state")
         def get_state():
@@ -904,6 +1198,24 @@ class GalleryScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE
                 return jsonify({"ok": True, "status": fw.get_status()})
             except Exception as exc:
                 return jsonify({"ok": False, "error": str(exc)}), 500
+
+        # ── Gallery Pieces (THE OBSCURA) ──────────────────────────────────
+        @app.route("/api/gallery/pieces")
+        def gallery_pieces():
+            """List all artwork pieces: permanent OBSCURA collection + commissioned works."""
+            return jsonify({
+                "ok": True,
+                "pieces": self._get_pieces(),
+                "curator_mood": self._curator_mood,
+            })
+
+        @app.route("/api/gallery/piece/<piece_id>")
+        def gallery_piece_detail(piece_id: str):
+            """Detail view for a single piece with curator commentary."""
+            detail = self._get_piece_detail(piece_id)
+            if not detail:
+                return jsonify({"ok": False, "error": "Piece not found"}), 404
+            return jsonify({"ok": True, "piece": detail})
 
         @app.route("/api/health")
         def health():

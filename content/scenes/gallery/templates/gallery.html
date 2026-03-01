@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en" data-scene="gallery">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>THE OBSCURA — Dark Renaissance</title>
+
+  <!-- Scene accent CSS variables (violet) -->
+  <style>
+    :root {
+      --accent:       #7c3aed;
+      --accent-rgb:   124 58 237;
+      --accent-dim:   rgba(124, 58, 237, 0.18);
+      --accent-glow:  0 0 18px rgba(124, 58, 237, 0.55);
+      --cs-scene-accent: #7c3aed;
+      --cs-scene-glow:   0 0 18px rgba(124, 58, 237, 0.55);
+    }
+  </style>
+
+  <link rel="stylesheet" href="/shared/css/design_tokens.css">
+  <link rel="stylesheet" href="/shared/css/cosysim-components.css">
+  <link rel="stylesheet" href="{{ url_for('static', filename='gallery.css') }}">
+</head>
+
+<body data-scene="gallery" class="obscura-body">
+
+  {% include 'navbar_v2.html' ignore missing %}
+
+  <div class="obscura-wrapper">
+
+    <!-- ── Gallery Header ─────────────────────────────────────── -->
+    <header class="gallery-header">
+      <div class="header-left">
+        <h1 class="exhibit-title">THE OBSCURA</h1>
+        <p class="exhibit-subtitle">Dark Renaissance Collection &mdash; v0.68</p>
+      </div>
+      <div class="header-right">
+        <div class="curator-status">
+          <span class="curator-label">Curator</span>
+          <span class="curator-mood-badge" id="curator-mood">contemplative</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- ── Featured Exhibit Strip (hologram_static particles) ─── -->
+    <div class="featured-container">
+      <div id="featured-particles" class="featured-particles"></div>
+      <span class="featured-label">FEATURED EXHIBIT</span>
+    </div>
+
+    <!-- ── Gallery Floor ──────────────────────────────────────── -->
+    <main class="gallery-floor" id="gallery-floor" role="main" aria-label="Gallery collection">
+      <div class="gallery-loading" id="gallery-loading">
+        <div class="loading-pulse">Loading collection&hellip;</div>
+      </div>
+    </main>
+
+  </div><!-- /.obscura-wrapper -->
+
+
+  <!-- ── Detail Panel (right slide-in) ─────────────────────────── -->
+  <aside class="detail-panel" id="detail-panel" aria-label="Artwork detail">
+    <button class="detail-close" id="detail-close" aria-label="Close detail panel">&#x2715;</button>
+
+    <div class="detail-artwork-display" id="detail-art-display">
+      <div class="detail-artwork-bg" id="detail-art-bg"></div>
+    </div>
+
+    <div class="detail-content">
+      <div class="detail-tags" id="detail-tags"></div>
+      <h2 class="detail-title"  id="detail-title"></h2>
+      <p  class="detail-artist" id="detail-artist"></p>
+      <p  class="detail-medium" id="detail-medium"></p>
+      <p  class="detail-description" id="detail-description"></p>
+      <blockquote class="detail-commentary" id="detail-commentary"></blockquote>
+      <button class="private-viewing-btn" id="private-viewing-btn">
+        &#x1F512; Private Viewing &mdash; 250 credits
+      </button>
+    </div>
+  </aside>
+
+
+  <!-- ── Commission Panel ────────────────────────────────────────── -->
+  <section class="commission-panel" id="commission-panel" aria-label="Commission artwork">
+    <button class="commission-toggle" id="commission-toggle">
+      &#x2726; Commission a Work
+    </button>
+    <div class="commission-form" id="commission-form">
+      <textarea
+        id="commission-description"
+        placeholder="Describe the work you wish to commission…"
+        rows="3"
+        aria-label="Commission description"
+      ></textarea>
+      <div class="commission-controls">
+        <select id="commission-intensity" class="intensity-select" aria-label="Content intensity">
+          <option value="1">Intensity I &mdash; Unsettling</option>
+          <option value="2">Intensity II &mdash; Disturbing</option>
+          <option value="3">Intensity III &mdash; Explicit</option>
+        </select>
+        <button class="commission-submit" id="commission-submit">Commission</button>
+      </div>
+      <div class="commission-status" id="commission-status" aria-live="polite"></div>
+    </div>
+  </section>
+
+
+  <!-- Overlay backdrop (closes detail panel) -->
+  <div class="overlay-backdrop" id="overlay-backdrop" aria-hidden="true"></div>
+
+  {% include 'aria_widget.html' ignore missing %}
+
+  <!-- ── Scripts ─────────────────────────────────────────────────── -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="/shared/js/cosysim-particles3d.js"></script>
+  <script src="/shared/js/cosysim-bench.js"></script>
+  <script src="/shared/js/navbar_v2.js" defer></script>
+  <script src="{{ url_for('static', filename='gallery.js') }}" defer></script>
+
+</body>
+</html>

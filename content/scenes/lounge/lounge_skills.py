@@ -416,3 +416,203 @@ def lounge_mirror_soul(target: str = "lola") -> str:
         f"🪞 You reflect {target}'s inner state: {mood}\n"
         f"Trust: {trust} → {new_trust} (+8)"
     )
+
+
+# ── Velvet Pit v0.68 Skills ────────────────────────────────────────────
+
+
+@skill(
+    pack="lounge",
+    tags=["game", "lounge", "social", "atmosphere"],
+    category=SkillCategory.SOCIAL,
+    description="Get the current atmosphere and available activities in The Velvet Pit.",
+)
+def lounge_atmosphere() -> str:
+    """Return a rich description of current atmosphere and available activities.
+
+    Returns:
+        A formatted string describing heat, time of day, stage activity, and tables.
+    """
+    scene = _get_lounge_scene()
+    if not scene:
+        return "The Velvet Pit is dark. No one is home."
+    heat = getattr(scene, "heat_level", 0)
+    trust = getattr(scene, "guest_trust", 0)
+    song = getattr(scene, "current_song", None)
+    world_time = getattr(scene, "world_time_slot", "EVENING")
+    seating = getattr(scene, "seating_map", [])
+    occupied = sum(1 for t in seating if t.get("occupied"))
+
+    if heat >= 70:
+        atm = "💀 Suffocating. The air is electric. Everyone is watching everyone."
+    elif heat >= 40:
+        atm = "⚡ Charged. Conversations drop half a register. Eyes move too quickly."
+    else:
+        atm = "🌑 Low and slow. Amber light pools on the bar. Jazz seeps through the walls."
+
+    song_line = f"On stage: '{song['title']}'" if isinstance(song, dict) else "Stage: ambient jazz drifts from somewhere."
+    lines = [
+        f"▣ THE VELVET PIT — {world_time}",
+        f"Heat: {heat}/100 | Trust: {trust}/100",
+        atm,
+        song_line,
+        f"Tables occupied: {occupied}/{len(seating)}",
+        "Activities: approach a table, order a drink, speak to Lola or Viktor.",
+    ]
+    return "\n".join(lines)
+
+
+@skill(
+    pack="lounge",
+    tags=["game", "lounge", "social", "drinks"],
+    category=SkillCategory.SOCIAL,
+    description="Buy a drink at the lounge bar. Trust gates premium pours.",
+    cooldown=10,
+)
+def buy_drink(drink_name: str = "gin_fizz") -> str:
+    """Purchase a drink from the Velvet Pit bar.
+
+    Args:
+        drink_name: The cocktail ID to order (e.g. 'gin_fizz', 'negroni', 'bourbon').
+
+    Returns:
+        A string confirming the order, Viktor's reaction, and any stat effects.
+    """
+    from content.scenes.lounge.lounge_mcp import COCKTAILS
+    drink = COCKTAILS.get(drink_name.lower())
+    if not drink:
+        available = ", ".join(sorted(COCKTAILS.keys()))
+        return f"Unknown drink. The menu: {available}"
+
+    scene = _get_lounge_scene()
+    trust = getattr(scene, "guest_trust", 0) if scene else 0
+    req = drink.get("trust_req", 0)
+    if trust < req:
+        return f"Viktor shakes his head. {drink['name']} requires trust ≥{req}. Yours: {trust}."
+
+    # Process via scene if available
+    if scene:
+        result = scene._serve_drink(drink_name.lower())
+        if not result.get("ok"):
+            return result.get("error", "Order refused.")
+        try:
+            from engine.economy.economy import get_economy_manager, TransactionType
+            price = drink.get("price", 0)
+            if price > 0:
+                get_economy_manager().transact(
+                    amount=-price,
+                    txn_type=TransactionType.SPEND,
+                    scene="lounge",
+                    description=f"Drink: {drink_name}",
+                )
+        except Exception:
+            pass
+        return (
+            f"🥃 {drink['name']} — ${drink.get('price', 0)}\n"
+            f"Viktor: \"{drink.get('viktor_line', 'Served.')}\"\n"
+            f"Effects: {', '.join(f'{k}:{v:+d}' for k, v in drink.get('stat_effects', {}).items())}"
+        )
+    return f"🥃 {drink['name']} — bar unavailable right now."
+
+
+@skill(
+    pack="lounge",
+    tags=["game", "lounge", "social", "npc"],
+    category=SkillCategory.SOCIAL,
+    description="Approach an NPC at their table in The Velvet Pit.",
+    cooldown=15,
+)
+def approach_npc(character_name: str = "lola") -> str:
+    """Walk up to an NPC at their table or post in the lounge.
+
+    Args:
+        character_name: The NPC to approach — 'lola', 'viktor', or a patron name.
+
+    Returns:
+        A narrative string describing the approach and NPC's reaction.
+    """
+    scene = _get_lounge_scene()
+    if not scene:
+        return "The Velvet Pit is empty."
+    cname = character_name.lower().strip()
+    if cname in ("lola", "lola voss"):
+        trust = getattr(scene, "guest_trust", 0)
+        return (
+            f"You cross the floor toward the stage. Lola's eyes find you mid-phrase.\n"
+            f"Trust: {trust}/100 — {'She smiles, just slightly.' if trust >= 40 else 'She keeps singing. Watching.'}"
+        )
+    elif cname in ("viktor", "viktor marlowe"):
+        return (
+            "Viktor is behind the bar. He doesn't look up, but he knows you're there.\n"
+            "He'll serve when he's ready. He's always ready."
+        )
+    else:
+        seating = getattr(scene, "seating_map", [])
+        for table in seating:
+            if table.get("npc", "").lower() == cname:
+                table["occupied"] = True
+                return f"You approach {table['label']}. {character_name} looks up from their drink."
+        return f"{character_name} doesn't seem to be here tonight."
+
+
+@skill(
+    pack="lounge",
+    tags=["game", "lounge", "social", "events"],
+    category=SkillCategory.SOCIAL,
+    description="Check what events and entertainment are running tonight in The Velvet Pit.",
+)
+def lounge_events() -> str:
+    """List tonight's events and current entertainment.
+
+    Returns:
+        A formatted string of active and upcoming events.
+    """
+    scene = _get_lounge_scene()
+    if not scene:
+        return "The Velvet Pit event board is dark."
+    events = scene._get_events_tonight()
+    song = getattr(scene, "current_song", None)
+    lines = ["🎷 TONIGHT AT THE VELVET PIT"]
+    if isinstance(song, dict):
+        lines.append(f"  🎵 On stage now: '{song['title']}'")
+    for evt in events:
+        title = evt.get("title", evt.get("id", "Unknown"))
+        desc = evt.get("desc", evt.get("description", ""))
+        lines.append(f"  ◈ {title}" + (f" — {desc}" if desc else ""))
+    if not events:
+        lines.append("  Nothing on the board. That changes by midnight.")
+    return "\n".join(lines)
+
+
+@skill(
+    pack="lounge",
+    tags=["game", "lounge", "social", "heat"],
+    category=SkillCategory.SOCIAL,
+    description="Get or set the current lounge heat level (0-100). Omit set_to to just read.",
+    cooldown=5,
+)
+def heat_level(set_to: int = -1) -> str:
+    """Get or forcefully set the Velvet Pit heat level.
+
+    Args:
+        set_to: Target heat level 0-100. If -1 (default), just reads current heat.
+
+    Returns:
+        A string describing current heat level and its meaning.
+    """
+    scene = _get_lounge_scene()
+    if not scene:
+        return "Scene not active."
+    current = getattr(scene, "heat_level", 0)
+    if set_to >= 0:
+        clamped = max(0, min(100, set_to))
+        scene.heat_level = clamped
+        scene.socketio.emit("heat_update", {"heat": clamped}, namespace="/")
+        return f"🌡 Heat set to {clamped}/100."
+    if current >= 70:
+        desc = "🚨 CRITICAL — the room has a pulse. Danger is visible."
+    elif current >= 40:
+        desc = "⚡ TENSE — conversations are shorter. Eyes move fast."
+    else:
+        desc = "😌 COOL — amber haze, low jazz. The Pit breathes easy."
+    return f"🌡 Heat: {current}/100 — {desc}"

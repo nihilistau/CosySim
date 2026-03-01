@@ -1,7 +1,7 @@
-"""Intelligence Hub — Unified system monitoring and control center.
+"""THE BRIEFING ROOM — Mission control above the hacker loft.
 
-The Intelligence Hub is the master control interface for CosySim,
-exposing every subsystem in a single, beautiful, real-time dashboard:
+CosySim v0.68 "Dark Renaissance" — unified intelligence command center
+exposing every subsystem through a cyan/blue mission-control dashboard:
 
   - System overview (health, metrics, live activity)
   - Nexus full knowledge explorer (browse, search, add, edit, Q&A)
@@ -13,8 +13,11 @@ exposing every subsystem in a single, beautiful, real-time dashboard:
   - Conversation Analyzer + User Profile
   - Backup Manager (status, list, restore)
   - Cache Pipeline (QA generation, coverage, review sheet)
+  - World Events feed from WorldSim (classified intel briefs)
+  - Scene Health Grid (all active scenes status)
 
 Port: 5580
+Accent: #06b6d4 (cyan/blue hybrid)
 """
 from __future__ import annotations
 
@@ -50,15 +53,19 @@ SCENE_ID = "intel_hub"
 DEFAULT_PORT = 5580
 
 SCENE_METADATA = {
-    "title": "Intelligence Hub",
-    "description": "Unified system control: Nexus, Copilot, NLM, fine-tuning, scheduler, backups",
-    "genre": "management",
-    "type": "admin",
-    "max_characters": 1,
+    "name": "intel_hub",
+    "display_name": "THE BRIEFING ROOM",
+    "port": DEFAULT_PORT,
+    "type": "system",
+    "accent_color": "#06b6d4",
+    "accent_rgb": "6 182 212",
+    "description": "All intelligence flows through here. Nothing is coincidence.",
+    "version": "0.68",
     "features": [
         "system overview", "nexus explorer", "librarian", "copilot rules",
         "nlm lab", "fine-tune lab", "scheduler control", "conversation analyzer",
         "user profile", "backup manager", "cache pipeline", "model registry",
+        "world events", "scene health grid",
     ],
 }
 
@@ -88,17 +95,22 @@ class IntelHubScene(BaseScene):
         self._push_thread: Optional[threading.Thread] = None
         self._register_routes()
         self._register_socketio()
+        # Register bench and TTS routes for the HUD + voice support
+        self.register_bench_route(self._app, None)
+        self.register_tts_route(self._app)
 
     # ── BaseScene interface ────────────────────────────────────────────────────
 
     def start(self) -> None:
-        """Start the Intelligence Hub Flask server."""
+        """Start THE BRIEFING ROOM Flask server."""
         self._stop_event.clear()
         self._push_thread = threading.Thread(
-            target=self._push_loop, daemon=True, name="intel-hub-push"
+            target=self._push_loop, daemon=True, name="briefing-room-push"
         )
         self._push_thread.start()
-        logger.info("Intelligence Hub starting on %s:%d", self._host, self._port)
+        # Re-register bench with socketio now available for real-time HUD
+        self.register_bench_route(self._app, self._socketio)
+        logger.info("THE BRIEFING ROOM starting on %s:%d", self._host, self._port)
         if self._socketio:
             self._socketio.run(
                 self._app, host=self._host, port=self._port,
@@ -113,11 +125,11 @@ class IntelHubScene(BaseScene):
     def get_plugin_info(self) -> Dict[str, Any]:
         return {
             "id": SCENE_ID,
-            "title": SCENE_METADATA["title"],
+            "title": SCENE_METADATA["display_name"],
             "description": SCENE_METADATA["description"],
             "port": self._port,
             "url": f"http://localhost:{self._port}",
-            "type": "admin",
+            "type": SCENE_METADATA["type"],
             "icon": "◆",
         }
 
@@ -135,12 +147,17 @@ class IntelHubScene(BaseScene):
 
         @app.route("/")
         def index():
-            return render_template("intel_hub.html", port=self._port)
+            return render_template(
+                "intel_hub.html",
+                port=self._port,
+                **self.inject_navbar_context(),
+            )
 
         @app.route("/health")
         @app.route("/api/health")
         def health():
-            return jsonify({"status": "ok", "scene": SCENE_ID, "port": self._port})
+            return jsonify({"status": "ok", "scene": SCENE_ID, "port": self._port,
+                            "display_name": SCENE_METADATA["display_name"]})
 
         # ── TTS control ───────────────────────────────────────────────────────
 
@@ -465,6 +482,23 @@ class IntelHubScene(BaseScene):
         @app.route("/api/news/sources")
         def api_news_sources():
             return jsonify(_get_news_sources())
+
+        # ── World Events (WorldSim) ────────────────────────────────────────────
+
+        @app.route("/api/world/events")
+        def api_world_events():
+            limit = int(request.args.get("limit", 20))
+            return jsonify(_get_world_events(limit=limit))
+
+        @app.route("/api/world/state")
+        def api_world_state():
+            return jsonify(_get_world_state_summary())
+
+        # ── Scene Health Grid ──────────────────────────────────────────────────
+
+        @app.route("/api/scenes/health")
+        def api_scenes_health():
+            return jsonify(_get_scene_health())
 
     # ── Socket.IO ──────────────────────────────────────────────────────────────
 
@@ -1060,6 +1094,64 @@ def _get_system_resources() -> Dict[str, Any]:
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _get_world_events(limit: int = 20) -> Dict[str, Any]:
+    """Fetch recent world simulation events (classified intel briefs)."""
+    try:
+        from engine.world.world_sim import get_world_sim
+        sim = get_world_sim()
+        events = sim.get_all_events(limit=limit)
+        return {"events": events or [], "count": len(events or [])}
+    except Exception as exc:
+        logger.debug("WorldSim events unavailable: %s", exc)
+        return {"events": [], "count": 0, "error": str(exc)}
+
+
+def _get_world_state_summary() -> Dict[str, Any]:
+    """Fetch current world state snapshot (game time, weather, scene states)."""
+    try:
+        from engine.world.world_state import get_world_state
+        ws = get_world_state()
+        summary = ws.tick() if hasattr(ws, "tick") else {}
+        return {"state": summary or {}}
+    except Exception as exc:
+        logger.debug("WorldState unavailable: %s", exc)
+        return {"state": {}, "error": str(exc)}
+
+
+def _get_scene_health() -> Dict[str, Any]:
+    """Return health status for all registered scenes."""
+    import requests as _req
+    _KNOWN_SCENES = [
+        {"name": "bedroom",     "display": "THE PENTHOUSE",      "port": 5556},
+        {"name": "casino",      "display": "THE CASINO",         "port": 5557},
+        {"name": "arena",       "display": "THE ARENA",          "port": 5558},
+        {"name": "lounge",      "display": "THE LOUNGE",         "port": 5560},
+        {"name": "phone",       "display": "THE PHONE",          "port": 5570},
+        {"name": "intel_hub",   "display": "THE BRIEFING ROOM",  "port": 5580},
+    ]
+    results = []
+    for scene in _KNOWN_SCENES:
+        status = "unknown"
+        latency_ms = None
+        try:
+            import time as _time
+            t0 = _time.monotonic()
+            r = _req.get(f"http://localhost:{scene['port']}/api/health", timeout=1.5)
+            latency_ms = round((_time.monotonic() - t0) * 1000)
+            status = "online" if r.ok else "error"
+        except Exception:
+            status = "offline"
+        results.append({
+            "name": scene["name"],
+            "display": scene["display"],
+            "port": scene["port"],
+            "status": status,
+            "latency_ms": latency_ms,
+        })
+    online = sum(1 for r in results if r["status"] == "online")
+    return {"scenes": results, "online": online, "total": len(results)}
 
 
 # ──── TTS / VTT Helpers ───────────────────────────────────────────────────────

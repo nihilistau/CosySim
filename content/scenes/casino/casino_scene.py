@@ -1,7 +1,8 @@
 """
-The Midnight Casino — Scene
-=============================
-A noir-themed underground poker den showcasing the full MCP framework.
+CLUB NOIR — Scene  (v0.68 Dark Renaissance)
+=============================================
+A high-stakes underground casino revamped from The Midnight Casino.
+Accent: neon orange #f97316.  Port: 5559.
 
 Port: 5559
 
@@ -77,13 +78,13 @@ class CasinoScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
     """
 
     SCENE_METADATA = {
-        "title": "Casino Floor",
-        "description": "Casino with blackjack, poker, roulette, and slots. "
-                       "AI dealers and characters with personality-driven gambling styles.",
-        "genre": "gambling_simulation",
-        "max_characters": 5,
-        "features": ["blackjack", "poker", "roulette", "slots", "chips_economy",
-                     "dealer_ai", "game_rules"],
+        "name": "casino",
+        "display_name": "CLUB NOIR",
+        "port": 5559,
+        "type": "gambling",
+        "accent_color": "#f97316",
+        "accent_rgb": "249 115 22",
+        "description": "Everyone owes someone. The cards don't lie. The dealers do.",
     }
 
     def __init__(self, host: str = "0.0.0.0", port: int = CASINO_PORT) -> None:
@@ -127,6 +128,21 @@ class CasinoScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
         self.hand_history:     List[Dict]       = []
         self._turn_lock        = threading.Lock()
 
+        # ── Blackjack state ──────────────────────────────────────────
+        self._bj_state: Dict[str, Any] = {
+            "active": False,
+            "game": "blackjack",
+            "buy_in": 0,
+            "bet": 0,
+            "target": "player_win",
+            "player_hand": [],
+            "dealer_hand": [],
+            "phase": "idle",   # idle | betting | playing | result
+            "result": None,
+            "winnings": 0,
+        }
+        self._transactions: List[Dict] = []
+
         # ── Agents (lazy) ────────────────────────────────────────────
         self._dealer_agent = None
         self._mira_agent   = None
@@ -144,6 +160,18 @@ class CasinoScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
         self._tag_registry = TagRegistry.get()
 
         self.nexus_init("casino")
+
+        # ── New engine integrations ───────────────────────────────────
+        self._economy       = None
+        self._reputation    = None
+        self._consequence   = None
+        self._event_bus_new = None
+        self._wire_economy()
+        self._wire_reputation()
+        self._wire_consequence_store()
+        self._wire_new_event_bus()
+        self.register_bench_route(self.app, self.socketio)
+        self.register_tts_route(self.app)
 
     # ══════════════════════════════════════════════════════════════════
     #  FRAMEWORK INTEGRATION
@@ -198,6 +226,216 @@ class CasinoScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
         if timer and timer.completed:
             self._fw.cancel_timer("casino_round")
             self._fw.emit_event("casino_round_timeout", {"round": self.round_number}, source=SCENE_ID)
+
+    # ══════════════════════════════════════════════════════════════════
+    #  ENGINE MODULE WIRING (v0.68)
+    # ══════════════════════════════════════════════════════════════════
+
+    def _wire_economy(self) -> None:
+        """Wire EconomyManager for buy-in deduction and cash-out."""
+        try:
+            from engine.economy.economy import get_economy_manager
+            self._economy = get_economy_manager()
+            logger.info("CLUB NOIR: EconomyManager wired")
+        except Exception as exc:
+            logger.warning("CLUB NOIR: EconomyManager unavailable: %s", exc)
+
+    def _wire_reputation(self) -> None:
+        """Wire ReputationManager for win/loss tracking."""
+        try:
+            from engine.characters.reputation import get_reputation_manager
+            self._reputation = get_reputation_manager()
+            logger.info("CLUB NOIR: ReputationManager wired")
+        except Exception as exc:
+            logger.warning("CLUB NOIR: ReputationManager unavailable: %s", exc)
+
+    def _wire_consequence_store(self) -> None:
+        """Wire ConsequenceStore for delayed narrative consequences."""
+        try:
+            from engine.mechanics.consequences import get_consequence_store
+            self._consequence = get_consequence_store()
+            logger.info("CLUB NOIR: ConsequenceStore wired")
+        except Exception as exc:
+            logger.warning("CLUB NOIR: ConsequenceStore unavailable: %s", exc)
+
+    def _wire_new_event_bus(self) -> None:
+        """Wire EventBus for casino.major_win publishing."""
+        try:
+            from engine.events.event_bus import get_event_bus, EventTypes
+            self._event_bus_new = get_event_bus()
+            logger.info("CLUB NOIR: EventBus wired")
+        except Exception as exc:
+            logger.warning("CLUB NOIR: EventBus unavailable: %s", exc)
+
+    # ── Economy helpers ───────────────────────────────────────────────
+
+    def _economy_balance(self) -> int:
+        """Return player credit balance from EconomyManager (fallback: chips)."""
+        try:
+            if self._economy:
+                return int(self._economy.get_balance("player"))
+        except Exception:
+            pass
+        return self.player_chips
+
+    def _economy_spend(self, amount: int, reason: str = "casino_buy_in") -> bool:
+        """Deduct credits via EconomyManager; fall back to chip deduction."""
+        try:
+            if self._economy:
+                ok = self._economy.spend("player", amount, reason=reason)
+                if ok:
+                    self._log_transaction("debit", amount, reason)
+                return ok
+        except Exception as exc:
+            logger.debug("economy_spend error: %s", exc)
+        # fallback
+        if self.player_chips >= amount:
+            self.player_chips -= amount
+            self._log_transaction("debit", amount, reason)
+            return True
+        return False
+
+    def _economy_credit(self, amount: int, reason: str = "casino_cashout") -> None:
+        """Add credits via EconomyManager; fall back to chip addition."""
+        try:
+            if self._economy:
+                self._economy.earn("player", amount, reason=reason)
+                self._log_transaction("credit", amount, reason)
+                return
+        except Exception as exc:
+            logger.debug("economy_credit error: %s", exc)
+        self.player_chips += amount
+        self._log_transaction("credit", amount, reason)
+
+    def _log_transaction(self, tx_type: str, amount: int, reason: str) -> None:
+        self._transactions.append({
+            "type": tx_type,
+            "amount": amount,
+            "reason": reason,
+            "ts": int(time.time()),
+        })
+        if len(self._transactions) > 20:
+            self._transactions = self._transactions[-20:]
+
+    # ── Reputation helpers ────────────────────────────────────────────
+
+    def _reputation_update(self, outcome: str, amount: int) -> None:
+        """Update player reputation on win/loss."""
+        try:
+            if not self._reputation:
+                return
+            if outcome == "win" and amount >= 200:
+                self._reputation.add_trait("player", "high_roller", weight=0.3)
+            elif outcome == "loss" and amount >= 200:
+                self._reputation.add_trait("player", "degenerate_gambler", weight=0.4)
+            elif outcome == "loss" and amount >= 100:
+                self._reputation.add_trait("player", "unlucky", weight=0.2)
+        except Exception as exc:
+            logger.debug("reputation_update error: %s", exc)
+
+    # ── Consequence helpers ───────────────────────────────────────────
+
+    def _schedule_mira_call(self, loss_amount: int) -> None:
+        """Schedule 'Mira calls 24h later' consequence on major loss."""
+        try:
+            if not self._consequence:
+                return
+            self._consequence.schedule(
+                scene_id=SCENE_ID,
+                character_id=HUSTLER_ID,
+                consequence_type="character_contact",
+                params={
+                    "method": "phone_call",
+                    "message": (
+                        f"You lost ${loss_amount} last night. "
+                        "I know people who can help. Or people who can hurt. "
+                        "Your call."
+                    ),
+                    "tone": "ominous",
+                },
+                delay_hours=24,
+                description="Mira calls — she always knows.",
+            )
+            logger.info("CLUB NOIR: Mira call consequence scheduled (loss=$%d)", loss_amount)
+        except Exception as exc:
+            logger.debug("schedule_mira_call error: %s", exc)
+
+    # ── EventBus helpers ──────────────────────────────────────────────
+
+    def _publish_major_win(self, amount: int) -> None:
+        """Publish casino.major_win event on large wins."""
+        try:
+            if self._event_bus_new:
+                self._event_bus_new.publish(
+                    "casino.major_win",
+                    {
+                        "scene": SCENE_ID,
+                        "player": "player",
+                        "amount": amount,
+                        "round": self.round_number,
+                        "ts": int(time.time()),
+                    },
+                )
+        except Exception as exc:
+            logger.debug("publish_major_win error: %s", exc)
+
+    # ── Blackjack helpers ─────────────────────────────────────────────
+
+    def _bj_card_value(self, card: str) -> int:
+        """Return blackjack value of a single card string (e.g. 'K♠' → 10)."""
+        rank = card[:-1]
+        if rank in ("J", "Q", "K"):
+            return 10
+        if rank == "A":
+            return 11
+        try:
+            return int(rank)
+        except ValueError:
+            return 0
+
+    def _bj_hand_value(self, hand: List[str]) -> int:
+        """Return blackjack total for a hand, with ace softening."""
+        total = sum(self._bj_card_value(c) for c in hand)
+        aces = sum(1 for c in hand if c[:-1] == "A")
+        while total > 21 and aces:
+            total -= 10
+            aces -= 1
+        return total
+
+    def _get_blackjack_state(self) -> Dict:
+        """Return current blackjack state for frontend emission."""
+        bj = self._bj_state
+        bal = self._economy_balance()
+        dealer_visible = (
+            bj["dealer_hand"][:1] + ["🂠"]
+            if bj["phase"] == "playing" and len(bj["dealer_hand"]) > 1
+            else bj["dealer_hand"]
+        )
+        return {
+            "phase": bj["phase"],
+            "game": bj["game"],
+            "active": bj["active"],
+            "buy_in": bj["buy_in"],
+            "bet": bj["bet"],
+            "target": bj["target"],
+            "player_hand": bj["player_hand"],
+            "player_value": self._bj_hand_value(bj["player_hand"]),
+            "dealer_hand": dealer_visible,
+            "dealer_value": self._bj_hand_value(dealer_visible),
+            "result": bj["result"],
+            "winnings": bj["winnings"],
+            "balance": bal,
+            "transactions": self._transactions[-5:],
+            "consequences_pending": self._pending_consequence_count(),
+        }
+
+    def _pending_consequence_count(self) -> int:
+        try:
+            if self._consequence:
+                return len(self._consequence.poll(scene=SCENE_ID, peek=True))
+        except Exception:
+            pass
+        return 0
 
     # ══════════════════════════════════════════════════════════════════
     #  REGISTRY SEEDING
@@ -697,7 +935,7 @@ class CasinoScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
 
         @app.route("/")
         def index():
-            return render_template("casino.html")
+            return render_template("casino.html", **self.inject_navbar_context())
 
         @app.route("/api/health")
         def health():
@@ -781,6 +1019,7 @@ class CasinoScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
         @sio.on("connect")
         def on_connect():
             emit("game_update", self._get_game_state())
+            emit("blackjack_update", self._get_blackjack_state())
 
         @sio.on("chat_message")
         def on_chat(data):
@@ -796,22 +1035,312 @@ class CasinoScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
                 "mood": reply_data.get("mood"),
             })
 
+        # ── CLUB NOIR v0.68 handlers ─────────────────────────────────
+
+        @sio.on("get_casino_state")
+        def on_get_casino_state(_data=None):
+            """Return current state, balance, and available tables."""
+            balance = self._economy_balance()
+            emit("casino_state", {
+                "display_name": self.SCENE_METADATA["display_name"],
+                "description": self.SCENE_METADATA["description"],
+                "accent_color": self.SCENE_METADATA["accent_color"],
+                "balance": balance,
+                "tables": [
+                    {"id": "blackjack", "name": "Blackjack", "min_buy_in": 50,
+                     "max_buy_in": 2000, "status": "open"},
+                    {"id": "poker", "name": "Poker", "min_buy_in": 100,
+                     "max_buy_in": 5000, "status": "open"},
+                ],
+                "active_game": self._bj_state["game"] if self._bj_state["active"] else None,
+                "blackjack": self._get_blackjack_state(),
+                "poker": self._get_game_state(),
+                "transactions": self._transactions[-5:],
+                "consequences_pending": self._pending_consequence_count(),
+            })
+
+        @sio.on("join_table")
+        def on_join_table(data):
+            """Join a table with a buy-in; deducts credits via EconomyManager."""
+            game   = str(data.get("game", "blackjack")).lower()
+            buy_in = int(data.get("buy_in", 100))
+
+            if buy_in < 50:
+                emit("error", {"message": "Minimum buy-in is $50."})
+                return
+
+            success = self._economy_spend(buy_in, reason=f"casino_buy_in:{game}")
+            if not success:
+                emit("error", {"message": "Insufficient credits to join the table."})
+                return
+
+            self._bj_state.update({
+                "active": True,
+                "game": game,
+                "buy_in": buy_in,
+                "phase": "betting",
+                "player_hand": [],
+                "dealer_hand": [],
+                "bet": 0,
+                "result": None,
+                "winnings": 0,
+            })
+
+            dealer_quip = self._agent_text(
+                DEALER_ID,
+                f"A player just sat down with ${buy_in} to play {game}. Welcome them briefly.",
+                role="small",
+            ) or f"Welcome to the table. ${buy_in} on the line."
+
+            emit("join_table_ok", {
+                "game": game,
+                "buy_in": buy_in,
+                "balance": self._economy_balance(),
+                "dealer_says": dealer_quip,
+                "state": self._get_blackjack_state(),
+            })
+            self.socketio.emit("blackjack_update", self._get_blackjack_state())
+
+        @sio.on("place_bet")
+        def on_place_bet(data):
+            """Record a bet for the current game."""
+            amount = int(data.get("amount", 0))
+            target = str(data.get("target", "player_win"))
+
+            bj = self._bj_state
+            if not bj["active"]:
+                emit("error", {"message": "Join a table first."})
+                return
+            if bj["phase"] != "betting":
+                emit("error", {"message": "Not in betting phase."})
+                return
+            if amount <= 0 or amount > bj["buy_in"]:
+                emit("error", {"message": f"Bet must be 1–{bj['buy_in']}."})
+                return
+
+            bj["bet"] = amount
+            bj["target"] = target
+
+            emit("bet_placed", {
+                "bet": amount,
+                "target": target,
+                "state": self._get_blackjack_state(),
+            })
+
+        @sio.on("deal_cards")
+        def on_deal_cards(_data=None):
+            """Deal initial blackjack cards after bet is placed."""
+            bj = self._bj_state
+            if not bj["active"]:
+                emit("error", {"message": "Join a table first."})
+                return
+            if bj["bet"] <= 0:
+                emit("error", {"message": "Place a bet before dealing."})
+                return
+
+            bj["player_hand"] = deal_hand(2)
+            bj["dealer_hand"] = deal_hand(2)
+            bj["phase"] = "playing"
+            bj["result"] = None
+
+            # Dealer comment
+            pval = self._bj_hand_value(bj["player_hand"])
+            dealer_says = self._agent_text(
+                DEALER_ID,
+                f"Cards dealt. Player shows {bj['player_hand']} (value {pval}). Narrate briefly.",
+                role="small",
+            ) or "Cards are out."
+
+            # Check natural blackjack
+            if pval == 21:
+                bj["phase"] = "result"
+                bj["result"] = "blackjack"
+                bj["winnings"] = int(bj["bet"] * 1.5)
+                self._economy_credit(bj["buy_in"] + bj["winnings"], reason="casino_blackjack_win")
+                self._reputation_update("win", bj["winnings"])
+                if bj["winnings"] >= 200:
+                    self._publish_major_win(bj["winnings"])
+                bj["active"] = False
+                dealer_says = "Blackjack! The house pays 3:2."
+
+            emit("cards_dealt", {
+                "state": self._get_blackjack_state(),
+                "dealer_says": dealer_says,
+            })
+            self.socketio.emit("blackjack_update", self._get_blackjack_state())
+
+        @sio.on("make_decision")
+        def on_make_decision(data):
+            """Handle blackjack player decision: hit | stand | double | fold."""
+            action = str(data.get("action", "")).lower()
+            bj = self._bj_state
+
+            if not bj["active"] or bj["phase"] != "playing":
+                emit("error", {"message": "No active hand."})
+                return
+            if action not in ("hit", "stand", "double", "fold"):
+                emit("error", {"message": "Invalid action."})
+                return
+
+            result_payload: Dict[str, Any] = {}
+
+            if action == "hit":
+                new_card = deal_hand(1)
+                bj["player_hand"].extend(new_card)
+                pval = self._bj_hand_value(bj["player_hand"])
+                if pval > 21:
+                    bj["phase"] = "result"
+                    bj["result"] = "bust"
+                    bj["winnings"] = -bj["bet"]
+                    self._reputation_update("loss", bj["bet"])
+                    if bj["bet"] >= 100:
+                        self._schedule_mira_call(bj["bet"])
+                    bj["active"] = False
+                    result_payload["message"] = f"Bust! {pval}. House wins."
+                else:
+                    result_payload["message"] = f"Hit — {pval}."
+
+            elif action == "stand":
+                # Dealer plays
+                while self._bj_hand_value(bj["dealer_hand"]) < 17:
+                    bj["dealer_hand"].extend(deal_hand(1))
+                pval  = self._bj_hand_value(bj["player_hand"])
+                dval  = self._bj_hand_value(bj["dealer_hand"])
+                bj["phase"] = "result"
+                if dval > 21 or pval > dval:
+                    bj["result"] = "win"
+                    bj["winnings"] = bj["bet"]
+                    self._economy_credit(bj["buy_in"] + bj["winnings"], reason="casino_win")
+                    self._reputation_update("win", bj["winnings"])
+                    if bj["winnings"] >= 200:
+                        self._publish_major_win(bj["winnings"])
+                    result_payload["message"] = f"You win! {pval} vs {dval}."
+                elif pval == dval:
+                    bj["result"] = "push"
+                    bj["winnings"] = 0
+                    self._economy_credit(bj["buy_in"], reason="casino_push")
+                    result_payload["message"] = f"Push. {pval} vs {dval}."
+                else:
+                    bj["result"] = "loss"
+                    bj["winnings"] = -bj["bet"]
+                    self._reputation_update("loss", bj["bet"])
+                    if bj["bet"] >= 100:
+                        self._schedule_mira_call(bj["bet"])
+                    result_payload["message"] = f"Dealer wins. {dval} vs {pval}."
+                bj["active"] = False
+
+            elif action == "double":
+                extra = min(bj["bet"], self._economy_balance())
+                if not self._economy_spend(extra, reason="casino_double_down"):
+                    emit("error", {"message": "Can't afford to double."})
+                    return
+                bj["bet"] += extra
+                bj["player_hand"].extend(deal_hand(1))
+                pval = self._bj_hand_value(bj["player_hand"])
+                if pval > 21:
+                    bj["phase"] = "result"
+                    bj["result"] = "bust"
+                    bj["winnings"] = -bj["bet"]
+                    self._reputation_update("loss", bj["bet"])
+                    if bj["bet"] >= 100:
+                        self._schedule_mira_call(bj["bet"])
+                    bj["active"] = False
+                    result_payload["message"] = f"Double down — bust at {pval}."
+                else:
+                    # Force stand after double
+                    while self._bj_hand_value(bj["dealer_hand"]) < 17:
+                        bj["dealer_hand"].extend(deal_hand(1))
+                    dval = self._bj_hand_value(bj["dealer_hand"])
+                    bj["phase"] = "result"
+                    if dval > 21 or pval > dval:
+                        bj["result"] = "win"
+                        bj["winnings"] = bj["bet"]
+                        self._economy_credit(bj["buy_in"] + bj["winnings"], reason="casino_double_win")
+                        self._reputation_update("win", bj["winnings"])
+                        if bj["winnings"] >= 200:
+                            self._publish_major_win(bj["winnings"])
+                        result_payload["message"] = f"Double win! {pval} vs {dval}."
+                    elif pval == dval:
+                        bj["result"] = "push"
+                        bj["winnings"] = 0
+                        self._economy_credit(bj["buy_in"], reason="casino_push")
+                        result_payload["message"] = f"Push on double. {pval}."
+                    else:
+                        bj["result"] = "loss"
+                        bj["winnings"] = -bj["bet"]
+                        self._reputation_update("loss", bj["bet"])
+                        if bj["bet"] >= 100:
+                            self._schedule_mira_call(bj["bet"])
+                        result_payload["message"] = f"Double down loss. {dval} vs {pval}."
+                    bj["active"] = False
+
+            elif action == "fold":
+                # Surrender — get half the bet back
+                refund = bj["bet"] // 2
+                self._economy_credit(bj["buy_in"] - bj["bet"] + refund, reason="casino_surrender")
+                bj["result"] = "surrender"
+                bj["winnings"] = -(bj["bet"] - refund)
+                bj["phase"] = "result"
+                bj["active"] = False
+                result_payload["message"] = f"Surrender. Half bet (${refund}) returned."
+
+            # Get dealer reaction
+            dealer_says = self._agent_text(
+                DEALER_ID,
+                f"Player chose {action}. Result: {bj.get('result', 'ongoing')}. Comment briefly.",
+                role="small",
+            ) or result_payload.get("message", "...")
+
+            result_payload.update({
+                "action": action,
+                "state": self._get_blackjack_state(),
+                "dealer_says": dealer_says,
+            })
+            emit("decision_result", result_payload)
+            self.socketio.emit("blackjack_update", self._get_blackjack_state())
+
+        @sio.on("cash_out")
+        def on_cash_out(_data=None):
+            """Cash out chips back to credits."""
+            bj = self._bj_state
+            if bj["active"]:
+                emit("error", {"message": "Finish your hand before cashing out."})
+                return
+
+            # Any remaining buy-in that was already credited back; just report balance
+            balance = self._economy_balance()
+            mira_says = self._agent_text(
+                HUSTLER_ID,
+                f"The player is cashing out with ${balance} in credits. React.",
+                role="small",
+            ) or "Smart move. Or is it?"
+
+            emit("cash_out_ok", {
+                "balance": balance,
+                "mira_says": mira_says,
+                "transactions": self._transactions[-10:],
+            })
+
     # ══════════════════════════════════════════════════════════════════
     #  BASESCENE INTERFACE
     # ══════════════════════════════════════════════════════════════════
 
     def get_plugin_info(self) -> Dict:
         return {
-            "name":        "The Midnight Casino",
-            "description": "Noir poker den — Dealer Jack & Hustler Mira. Full MCP showcase.",
-            "version":     "0.50b",
+            "name":        "CLUB NOIR",
+            "display_name": "CLUB NOIR",
+            "description": "v0.68 Dark Renaissance — high-stakes underground casino. "
+                           "Blackjack, poker, AI dealer Jack & Hustler Mira. "
+                           "Full MCP + economy + reputation + consequences.",
+            "version":     "0.68",
             "port":        CASINO_PORT,
-            "tags":        ["casino", "poker", "mcp", "multi-agent", "game"],
-            "skill_packs": ["social", "environment", "narrative", "memory", "character"],
+            "accent_color": "#f97316",
+            "tags":        ["casino", "blackjack", "poker", "mcp", "multi-agent", "game", "noir"],
+            "skill_packs": ["casino", "social", "environment", "narrative", "memory", "character"],
         }
 
     def start(self) -> None:
-        logger.info("The Midnight Casino opening on port %d", self.port)
+        logger.info("CLUB NOIR opening on port %d", self.port)
         self._fw.emit_event("scene_started", {"scene_id": SCENE_ID, "port": CASINO_PORT}, source=SCENE_ID)
         self.socketio.run(self.app, host=self.host, port=self.port, debug=False)
 

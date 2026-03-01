@@ -136,11 +136,20 @@ class RealmScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="realm"
     """The Realm — AI-Directed LitRPG / Visual Novel."""
 
     SCENE_METADATA = {
-        "title": "The Realm",
-        "description": "Fantasy RPG realm with quests, exploration, and character skills.",
-        "genre": "fantasy_rpg",
+        "name": "realm",
+        "display_name": "THE SHATTERED THRONE",
+        "port": 5562,
+        "type": "rpg",
+        "accent_color": "#059669",
+        "accent_rgb": "5 150 105",
+        "description": "The throne is broken. The king is dead. Power is yours to take — or lose.",
+        # Legacy fields retained for compatibility
+        "genre": "dark_fantasy_rpg",
         "max_characters": 4,
-        "features": ["quests", "exploration", "skills", "fantasy_world", "npc_interaction"],
+        "features": [
+            "dark_story_arcs", "magic_system", "sanity_mechanic",
+            "combat", "quests", "murder_mystery", "dual_agent",
+        ],
     }
 
     def __init__(self, host: str = "0.0.0.0", port: int = DEFAULT_PORT):
@@ -148,20 +157,29 @@ class RealmScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="realm"
         self._mcp_init()
 
         # Flask + SocketIO
+        _scene_dir = Path(__file__).parent
         self.app = Flask(
             __name__,
-            template_folder=str(Path(__file__).parent / "templates"),
-            static_folder=str(Path(__file__).parent / "static"),
+            template_folder=str(_scene_dir / "templates"),
+            static_folder=str(_scene_dir / "static"),
         )
+        import jinja2 as _jinja2
+        _shared_tpl = _scene_dir.parent.parent / "shared" / "templates"
+        self.app.jinja_loader = _jinja2.ChoiceLoader([
+            _jinja2.FileSystemLoader(str(_scene_dir / "templates")),
+            _jinja2.FileSystemLoader(str(_shared_tpl)),
+        ])
         register_shared_assets(self.app)
-        self.app.config["SECRET_KEY"] = "realm_v3_showcase"
+        self.app.config["SECRET_KEY"] = "realm_shattered_throne_v068"
         CORS(self.app)
         self.socketio = SocketIO(self.app, cors_allowed_origins="*")
 
-        # Mount overlay + skills + health
+        # Mount overlay + skills + health + bench + TTS
         self.mount_overlay(self.app, self.socketio)
         self.mount_skills_server(self.app)
         self.register_health_route(self.app)
+        self.register_bench_route(self.app, self.socketio)
+        self.register_tts_route(self.app)
 
         # Game state (one active session at a time)
         self.state: Optional[RealmGameState] = None
@@ -398,11 +416,14 @@ class RealmScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="realm"
 
         @self.app.route("/")
         def index():
-            return render_template("realm_ui.html",
-                                   personalities=DIRECTOR_PERSONALITIES,
-                                   skills=list(SKILL_TREE.keys()),
-                                   weapons=MURDER_WEAPONS,
-                                   rooms=MURDER_ROOMS)
+            return render_template(
+                "realm.html",
+                personalities=DIRECTOR_PERSONALITIES,
+                skills=list(SKILL_TREE.keys()),
+                weapons=MURDER_WEAPONS,
+                rooms=MURDER_ROOMS,
+                **self.inject_navbar_context(),
+            )
 
         @self.app.route("/api/scene/info")
         def scene_info():
@@ -949,10 +970,214 @@ class RealmScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="realm"
             if self.state:
                 self.socketio.emit("game_state", self.state.to_dict())
 
-    # ── BaseScene contract ──
+        @self.socketio.on("get_realm_state")
+        def on_get_realm_state():
+            """Emit full state: arc, player_stats, active_quest, world_events."""
+            if not self.state:
+                self.socketio.emit("realm_state", {"active": False})
+                return
+            self.socketio.emit("realm_state", {
+                "active": True,
+                "arc": getattr(self.state, "active_arc", None),
+                "player_stats": self.state.player_stats,
+                "active_quest": self.state.active_quests[0] if self.state.active_quests else None,
+                "world_events": list(self.state.history[-5:]) if hasattr(self.state, "history") else [],
+                "sanity": getattr(self.state, "sanity", 100),
+                **self.state.to_dict(),
+            })
+
+        @self.socketio.on("get_story_arcs")
+        def on_get_story_arcs():
+            """Emit available dark story arcs from ContentEngine."""
+            self.socketio.emit("story_arcs", {"arcs": self._get_story_arcs()})
+
+        @self.socketio.on("start_arc")
+        def on_start_arc(data: Dict):
+            """Begin a dark story arc by arc_id."""
+            if not self.state:
+                self.socketio.emit("arc_error", {"error": "No active game."})
+                return
+            arc_id = (data or {}).get("arc_id", "")
+            arc = self._STORY_ARCS.get(arc_id)
+            if not arc:
+                self.socketio.emit("arc_error", {"error": f"Unknown arc '{arc_id}'."})
+                return
+            self.state.active_arc = arc_id  # type: ignore[attr-defined]
+            prompt = (
+                f"The player starts the dark arc: '{arc['title']}'. "
+                f"Arc description: {arc['description']}. "
+                "Open this arc dramatically in 2-3 paragraphs. Dark tone, high stakes."
+            )
+            result = self._director_infer(prompt)
+            self._apply_director_result(result)
+            self._sync_to_mcp()
+            self.socketio.emit("arc_started", {
+                "arc": arc,
+                "narration": result.get("narration", ""),
+                "choices": result.get("choices", []),
+                "state": self.state.to_dict(),
+            })
+
+        @self.socketio.on("player_choice")
+        def on_player_choice(data: Dict):
+            """Narrative branching point via Socket.IO."""
+            if not self.state or self.state.ended:
+                self.socketio.emit("choice_error", {"error": "No active game."})
+                return
+            choice_id = (data or {}).get("choice_id", "")
+            self.state.decay_patience()
+            choice_match = next(
+                (c for c in self.state.current_choices if c.get("id") == choice_id), None
+            )
+            action_text = (
+                f"The player chose: {choice_match['text']}" if choice_match
+                else f"Player chose option {choice_id}"
+            )
+            result = self._director_infer(action_text)
+            self._apply_director_result(result)
+            self._sync_to_mcp()
+            self.socketio.emit("choice_result", {
+                "narration": result.get("narration", ""),
+                "choices": result.get("choices", []),
+                "state": self.state.to_dict(),
+            })
+
+        @self.socketio.on("cast_spell")
+        def on_cast_spell(data: Dict):
+            """Magic system — costs MP, narrated by Director."""
+            if not self.state or self.state.ended:
+                self.socketio.emit("spell_error", {"error": "No active game."})
+                return
+            spell = (data or {}).get("spell", "").strip()
+            if not spell:
+                self.socketio.emit("spell_error", {"error": "No spell specified."})
+                return
+            mp_cost = max(5, len(spell) // 3)
+            current_mp = self.state.player_stats.get("mp", 0)
+            if current_mp < mp_cost:
+                self.socketio.emit("spell_error", {
+                    "error": f"Not enough MP. Need {mp_cost}, have {current_mp}.",
+                })
+                return
+            self.state.adjust_stat("mp", -mp_cost)
+            forbidden_keywords = {"void", "soul", "death", "blood", "forbidden", "ancient", "eldritch"}
+            if any(kw in spell.lower() for kw in forbidden_keywords):
+                sanity = getattr(self.state, "sanity", 100)
+                self.state.sanity = max(0, sanity - 10)  # type: ignore[attr-defined]
+            result = self._director_infer(
+                f"The player casts the spell: '{spell}' (cost {mp_cost} MP). "
+                "Describe the dramatic magical effect with dark fantasy flair."
+            )
+            self._apply_director_result(result)
+            self._sync_to_mcp()
+            self.socketio.emit("spell_cast", {
+                "spell": spell,
+                "mp_cost": mp_cost,
+                "mp_remaining": self.state.player_stats.get("mp", 0),
+                "sanity": getattr(self.state, "sanity", 100),
+                "narration": result.get("narration", ""),
+                "choices": result.get("choices", []),
+                "state": self.state.to_dict(),
+            })
+
+        @self.socketio.on("inventory_action")
+        def on_inventory_action(data: Dict):
+            """Inventory management via Socket.IO."""
+            if not self.state:
+                self.socketio.emit("inventory_error", {"error": "No active game."})
+                return
+            action = (data or {}).get("action", "")
+            item_id = (data or {}).get("item_id", "")
+            if action == "use":
+                result = self.state.combat_use_item(item_id) if self.state.combat else {"error": "Not in combat"}
+                self.socketio.emit("inventory_result", {"action": "use", "result": result})
+            elif action == "drop":
+                removed = self.state.remove_item(item_id)
+                self.socketio.emit("inventory_result", {
+                    "action": "drop",
+                    "item": removed,
+                    "inventory": list(self.state.inventory),
+                })
+            elif action == "inspect":
+                item = next((i for i in self.state.inventory if i.get("id") == item_id), None)
+                self.socketio.emit("inventory_result", {"action": "inspect", "item": item})
+            else:
+                self.socketio.emit("inventory_error", {
+                    "error": f"Unknown action '{action}'. Valid: use, drop, inspect.",
+                })
+
+    # ── Dark Story Arcs ──────────────────────────────────────────
+
+    _STORY_ARCS = {
+        "corruption": {
+            "id": "corruption",
+            "title": "The Corruptor's Bargain",
+            "icon": "☠️",
+            "description": "A dark entity offers you impossible power — at the cost of your soul.",
+            "intensity": 2,
+            "tags": ["dark", "moral_choice", "power"],
+        },
+        "forbidden_magic": {
+            "id": "forbidden_magic",
+            "title": "Forbidden Tome",
+            "icon": "📖",
+            "description": "A cursed grimoire promises omniscience. Every spell costs sanity.",
+            "intensity": 2,
+            "tags": ["magic", "sanity", "horror"],
+        },
+        "betrayal": {
+            "id": "betrayal",
+            "title": "The Knife in the Dark",
+            "icon": "🗡️",
+            "description": "Your closest ally is the realm's most dangerous traitor.",
+            "intensity": 2,
+            "tags": ["political", "trust", "revenge"],
+        },
+        "lovecraftian": {
+            "id": "lovecraftian",
+            "title": "What Stirs Beneath",
+            "icon": "🦑",
+            "description": "Something ancient and unspeakable stirs beneath the shattered throne.",
+            "intensity": 3,
+            "tags": ["cosmic_horror", "sanity", "eldritch"],
+        },
+        "political_intrigue": {
+            "id": "political_intrigue",
+            "title": "Game of Shards",
+            "icon": "👑",
+            "description": "Four factions war for the throne's fragments. Every alliance is a lie.",
+            "intensity": 1,
+            "tags": ["political", "strategy", "intrigue"],
+        },
+    }
+
+    def _get_story_arcs(self) -> List[Dict[str, Any]]:
+        """Return dark story arcs, enriched from ContentEngine if available."""
+        arcs = list(self._STORY_ARCS.values())
+        try:
+            from engine.content.content_engine import get_content_engine
+            engine = get_content_engine()
+            ce_arcs = engine.get_content("realm", "arc", count=5, intensity_max=3)
+            for arc in ce_arcs:
+                if arc.id not in self._STORY_ARCS:
+                    arcs.append({
+                        "id": arc.id,
+                        "title": arc.title,
+                        "icon": "🌑",
+                        "description": arc.content[:120],
+                        "intensity": arc.intensity,
+                        "tags": arc.tags,
+                    })
+        except Exception:
+            pass
+        return arcs
+
+    # ── SocketIO ──
 
     def start(self) -> None:
-        logger.info("The Realm v0.50a — LitRPG Visual Novel starting on port %d", self.port)
+        logger.info(
+            "THE SHATTERED THRONE v0.68 'Dark Renaissance' — starting on port %d", self.port
+        )
         self.socketio.run(self.app, host=self.host, port=self.port, debug=False, allow_unsafe_werkzeug=True)
 
     def stop(self) -> None:
@@ -961,35 +1186,40 @@ class RealmScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="realm"
 
     def get_plugin_info(self) -> Dict[str, Any]:
         return {
-            "name": "The Realm",
+            "name": "THE SHATTERED THRONE",
             "scene_id": SCENE_ID,
-            "description": "AI-Directed LitRPG Visual Novel with combat, quests, murder mystery, and dual-agent pipeline.",
-            "version": "0.50b",
+            "description": "Dark Renaissance RPG — dark story arcs, magic system, sanity mechanics, dual-agent pipeline.",
+            "version": "0.68",
             "port": self.port,
             "author": "CosySim",
-            "tags": ["litrpg", "visual_novel", "dual_agent", "combat", "quests", "murder_mystery"],
-            "skill_packs": ["memory", "narrative", "character"],
+            "accent_color": "#059669",
+            "tags": [
+                "dark_fantasy", "litrpg", "visual_novel", "dual_agent",
+                "combat", "quests", "murder_mystery", "magic", "sanity",
+            ],
+            "skill_packs": ["realm", "memory", "narrative", "character"],
+            "story_arcs": list(self._STORY_ARCS.keys()),
             "routes": [
-                {"path": "/api/game/new",       "methods": ["POST"], "description": "Start new game"},
-                {"path": "/api/game/choice",     "methods": ["POST"], "description": "Make player choice"},
-                {"path": "/api/game/state",      "methods": ["GET"],  "description": "Get game state"},
-                {"path": "/api/combat/start",    "methods": ["POST"], "description": "Start combat encounter"},
-                {"path": "/api/combat/attack",   "methods": ["POST"], "description": "Attack in combat"},
-                {"path": "/api/combat/defend",   "methods": ["POST"], "description": "Defend in combat"},
-                {"path": "/api/combat/flee",     "methods": ["POST"], "description": "Flee from combat"},
-                {"path": "/api/combat/use_item", "methods": ["POST"], "description": "Use item in combat"},
-                {"path": "/api/location/current","methods": ["GET"],  "description": "Get current location"},
-                {"path": "/api/location/move",   "methods": ["POST"], "description": "Move to connected location"},
-                {"path": "/api/quests",          "methods": ["GET"],  "description": "List quests"},
-                {"path": "/api/quests/accept",   "methods": ["POST"], "description": "Accept a quest"},
-                {"path": "/api/murder/start",    "methods": ["POST"], "description": "Start murder mystery"},
-                {"path": "/api/murder/accuse",   "methods": ["POST"], "description": "Accuse in murder mystery"},
-                {"path": "/api/equipment",       "methods": ["GET"],  "description": "Get equipment"},
+                {"path": "/api/game/new",        "methods": ["POST"], "description": "Start new game"},
+                {"path": "/api/game/choice",      "methods": ["POST"], "description": "Make player choice"},
+                {"path": "/api/game/state",       "methods": ["GET"],  "description": "Get game state"},
+                {"path": "/api/combat/start",     "methods": ["POST"], "description": "Start combat encounter"},
+                {"path": "/api/combat/attack",    "methods": ["POST"], "description": "Attack in combat"},
+                {"path": "/api/combat/defend",    "methods": ["POST"], "description": "Defend in combat"},
+                {"path": "/api/combat/flee",      "methods": ["POST"], "description": "Flee from combat"},
+                {"path": "/api/combat/use_item",  "methods": ["POST"], "description": "Use item in combat"},
+                {"path": "/api/location/current", "methods": ["GET"],  "description": "Get current location"},
+                {"path": "/api/location/move",    "methods": ["POST"], "description": "Move to connected location"},
+                {"path": "/api/quests",           "methods": ["GET"],  "description": "List quests"},
+                {"path": "/api/quests/accept",    "methods": ["POST"], "description": "Accept a quest"},
+                {"path": "/api/murder/start",     "methods": ["POST"], "description": "Start murder mystery"},
+                {"path": "/api/murder/accuse",    "methods": ["POST"], "description": "Accuse in murder mystery"},
+                {"path": "/api/equipment",        "methods": ["GET"],  "description": "Get equipment"},
                 {"path": "/api/equipment/equip",  "methods": ["POST"], "description": "Equip an item"},
                 {"path": "/api/equipment/unequip","methods": ["POST"], "description": "Unequip a slot"},
-                {"path": "/api/inventory",       "methods": ["GET"],  "description": "Get inventory"},
-                {"path": "/api/shop/catalog",    "methods": ["GET"],  "description": "Shop catalog"},
-                {"path": "/api/shop/buy",        "methods": ["POST"], "description": "Buy item"},
-                {"path": "/api/shop/sell",       "methods": ["POST"], "description": "Sell item"},
+                {"path": "/api/inventory",        "methods": ["GET"],  "description": "Get inventory"},
+                {"path": "/api/shop/catalog",     "methods": ["GET"],  "description": "Shop catalog"},
+                {"path": "/api/shop/buy",         "methods": ["POST"], "description": "Buy item"},
+                {"path": "/api/shop/sell",        "methods": ["POST"], "description": "Sell item"},
             ],
         }

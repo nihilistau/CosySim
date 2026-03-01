@@ -137,13 +137,14 @@ class TestSceneInit:
         assert gallery.port == 15560
 
     def test_scene_metadata_title(self, gallery):
-        assert gallery.SCENE_METADATA["title"] == "Art Gallery"
-        assert gallery.SCENE_METADATA["genre"] == "creative"
+        # v0.68 revamp: "title" replaced by "display_name" = "THE OBSCURA"
+        assert gallery.SCENE_METADATA["display_name"] == "THE OBSCURA"
+        assert gallery.SCENE_METADATA["type"] == "narrative"
 
     def test_scene_metadata_features(self, gallery):
         feats = gallery.SCENE_METADATA["features"]
         assert "image_generation" in feats
-        assert "art_evaluation" in feats
+        assert "content_gate" in feats  # v0.68: art_evaluation → content_gate
 
     def test_initial_state_empty(self, gallery):
         assert gallery.artworks == {}
@@ -176,7 +177,8 @@ class TestGetPluginInfo:
 
     def test_features_list(self, gallery):
         feats = gallery.get_plugin_info()["features"]
-        assert "streaming" in feats
+        # v0.68: "streaming" replaced by "content_gate"; "image_gen" remains
+        assert "content_gate" in feats
         assert "image_gen" in feats
 
 

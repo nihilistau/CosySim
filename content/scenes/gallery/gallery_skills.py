@@ -452,3 +452,158 @@ def gallery_milestones() -> str:
     elif gs["prestige"] >= 75:
         lines.append(f"\n🎯 {100 - gs['prestige']} prestige to legendary status!")
     return "\n".join(lines)
+
+
+# ── THE OBSCURA Skills (v0.68 Dark Renaissance) ────────────────────────────────
+
+@skill(
+    pack="gallery",
+    tags=["game", "gallery", "obscura"],
+    category=SkillCategory.GAME,
+    description="Browse the current Obscura gallery exhibit. Lists all pieces with intensity ratings.",
+)
+def browse_gallery() -> str:
+    """Browse THE OBSCURA permanent collection."""
+    try:
+        from content.scenes.gallery.gallery_scene import OBSCURA_PIECES
+    except Exception:
+        return "THE OBSCURA collection is currently inaccessible."
+    if not OBSCURA_PIECES:
+        return "The gallery is dark. No exhibits are currently on display."
+    lines = ["🖤 THE OBSCURA — Permanent Collection", "=" * 40]
+    for piece in OBSCURA_PIECES:
+        tags_str = ", ".join(piece.get("tags", [])) or "unclassified"
+        adult_marker = " ⛔" if piece.get("adult") else ""
+        lines.append(
+            f"  [{piece['id']}]{adult_marker} \"{piece['title']}\" — {piece.get('artist', 'Unknown')}\n"
+            f"    {piece.get('medium', '')} | Intensity: {piece.get('intensity', 1)}/3 | {tags_str}"
+        )
+    lines.append(f"\n{len(OBSCURA_PIECES)} pieces in permanent collection.")
+    return "\n".join(lines)
+
+
+@skill(
+    pack="gallery",
+    tags=["game", "gallery", "obscura", "view"],
+    category=SkillCategory.GAME,
+    description="Get curator commentary on a specific Obscura artwork by piece ID (e.g. ob_001).",
+)
+def view_artwork(piece_id: str) -> str:
+    """View an artwork and receive curator commentary."""
+    try:
+        from content.scenes.gallery.gallery_scene import OBSCURA_PIECES
+    except Exception:
+        return "Gallery system unavailable."
+    piece = next((p for p in OBSCURA_PIECES if p["id"] == piece_id), None)
+    if not piece:
+        available = ", ".join(p["id"] for p in OBSCURA_PIECES)
+        return f"Piece '{piece_id}' not found. Available: {available}"
+    tag_comments = {
+        "adult:sexual": "The body rendered as text. Read it carefully.",
+        "adult:violent": "Violence made beautiful. This is the gallery's mandate.",
+        "explicit": "Explicit in every sense the word allows.",
+        "violent": "Suffering as subject matter. The artist does not flinch.",
+        "disturbing": "The work unsettles without apology.",
+        "unsettling": "Something here will stay with you.",
+        "grief": "Loss made visible. The absence is the subject.",
+    }
+    tags = piece.get("tags", [])
+    commentary = next(
+        (tag_comments[t] for t in tags if t in tag_comments),
+        "The curator offers no comment. Let the work speak.",
+    )
+    adult_note = " [ADULT — private viewing required]" if piece.get("adult") else ""
+    return (
+        f"🖤 \"{piece['title']}\"{adult_note}\n"
+        f"   Artist: {piece.get('artist', 'Unknown')}\n"
+        f"   Medium: {piece.get('medium', 'Unknown')}\n"
+        f"   {piece.get('description', '')}\n\n"
+        f"   Curator: \"{commentary}\""
+    )
+
+
+@skill(
+    pack="gallery",
+    tags=["game", "gallery", "obscura", "commission"],
+    category=SkillCategory.GAME,
+    description="Commission a custom artwork from THE OBSCURA. Provide a description and intensity (1=unsettling, 2=disturbing, 3=explicit).",
+    cooldown=30,
+)
+def commission_artwork(description: str, intensity: int = 1) -> str:
+    """Commission a custom work. Notifies the running scene for ComfyUI generation."""
+    if not description:
+        return "Provide a description for your commission."
+    intensity = max(1, min(3, intensity))
+    intensity_labels = {1: "unsettling", 2: "disturbing", 3: "explicit"}
+    label = intensity_labels[intensity]
+    # Attempt to notify the running scene instance
+    try:
+        from engine.scenes.base_scene import get_active_scene
+        scene = get_active_scene("gallery")
+        if scene and hasattr(scene, "socketio"):
+            scene.socketio.emit("commission_complete", {
+                "description": description,
+                "intensity": intensity,
+                "url": None,
+                "cached": False,
+            })
+    except Exception:
+        pass
+    return (
+        f"🎨 Commission submitted to THE OBSCURA:\n"
+        f"   Description: \"{description}\"\n"
+        f"   Intensity: {intensity}/3 ({label})\n"
+        f"   The curator will review your request."
+    )
+
+
+@skill(
+    pack="gallery",
+    tags=["game", "gallery", "obscura", "private"],
+    category=SkillCategory.SOCIAL,
+    description="Request a private viewing of a restricted Obscura work. Costs 250 credits. Requires adult content clearance.",
+    cooldown=20,
+)
+def request_private_viewing(piece_id: str) -> str:
+    """Request private viewing. Checks ContentGate then deducts 250 credits."""
+    try:
+        from content.scenes.gallery.gallery_scene import OBSCURA_PIECES
+    except Exception:
+        return "Gallery system unavailable."
+    piece = next((p for p in OBSCURA_PIECES if p["id"] == piece_id), None)
+    if not piece:
+        return f"Piece '{piece_id}' not found in the permanent collection."
+    if not piece.get("adult"):
+        return f"'{piece['title']}' does not require a private viewing."
+
+    # Content gate
+    adult_tags = [t for t in piece.get("tags", []) if t.startswith("adult:")]
+    if adult_tags:
+        try:
+            from engine.content.content_gate import get_content_gate
+            if not get_content_gate().can_show(adult_tags):
+                return "Your content profile does not permit access to this exhibit."
+        except Exception:
+            pass
+
+    # Economy deduction
+    try:
+        from engine.economy.economy import get_economy_manager, TransactionType
+        em = get_economy_manager()
+        balance = em.get_balance()
+        if balance < 250:
+            return (
+                f"Insufficient funds — 250 credits required for a private viewing. "
+                f"Balance: {balance}."
+            )
+        em.transact(-250, TransactionType.SPEND, "gallery", f"Private viewing: {piece['title']}")
+        return (
+            f"🔓 Private viewing granted: \"{piece['title']}\"\n"
+            f"   {piece.get('description', '')}\n"
+            f"   250 credits deducted. Balance: {balance - 250}."
+        )
+    except Exception:
+        return (
+            f"🔓 Private viewing access: \"{piece['title']}\"\n"
+            f"   {piece.get('description', '')}"
+        )

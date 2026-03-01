@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>THE LAB — CosySim</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.4/socket.io.min.js"></script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='coders.css') }}">
+</head>
+<body data-scene="coders">
+
+  <!-- Matrix rain canvas — full background -->
+  <canvas id="matrix-canvas"></canvas>
+
+  {% include 'navbar_v2.html' ignore missing %}
+
+  <div class="coders-layout" id="app">
+
+    <!-- ── HEADER ──────────────────────────────────────────── -->
+    <header class="lab-header">
+      <div class="lab-title-block">
+        <span class="lab-bracket">[</span>
+        <h1 class="lab-title">THE LAB</h1>
+        <span class="lab-bracket">]</span>
+        <span class="lab-version">v0.68 <span class="lab-tag">DARK RENAISSANCE</span></span>
+      </div>
+      <div class="lab-header-stats">
+        <div class="hstat">
+          <span class="hstat-label">TICKS</span>
+          <span class="hstat-value mono" id="stat-ticks">0</span>
+        </div>
+        <div class="hstat">
+          <span class="hstat-label">LINES</span>
+          <span class="hstat-value mono" id="stat-lines">0</span>
+        </div>
+        <div class="hstat">
+          <span class="hstat-label">TESTS</span>
+          <span class="hstat-value mono" id="stat-tests">0</span>
+        </div>
+        <div class="hstat">
+          <span class="hstat-label">SHIPPED</span>
+          <span class="hstat-value mono" id="stat-shipped">0</span>
+        </div>
+        <div class="hstat">
+          <span class="hstat-label">AGENTS</span>
+          <span class="hstat-value mono" id="stat-agents">4</span>
+        </div>
+        <div class="lab-pipeline-pill" id="pipeline-pill">
+          <span class="pill-dot" id="sim-dot"></span>
+          <span id="sim-label">OFFLINE</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- ── PIPELINE STEPPER ─────────────────────────────────── -->
+    <nav class="pipeline-stepper" id="pipeline-stepper">
+      <div class="step" data-phase="feature">
+        <div class="step-dot"></div>
+        <span class="step-label">DESIGN</span>
+      </div>
+      <div class="step-connector"></div>
+      <div class="step" data-phase="coding">
+        <div class="step-dot"></div>
+        <span class="step-label">CODE</span>
+      </div>
+      <div class="step-connector"></div>
+      <div class="step" data-phase="review">
+        <div class="step-dot"></div>
+        <span class="step-label">REVIEW</span>
+      </div>
+      <div class="step-connector"></div>
+      <div class="step" data-phase="testing">
+        <div class="step-dot"></div>
+        <span class="step-label">TEST</span>
+      </div>
+      <div class="step-connector"></div>
+      <div class="step" data-phase="complete">
+        <div class="step-dot"></div>
+        <span class="step-label">DEPLOY</span>
+      </div>
+    </nav>
+
+    <!-- ── MAIN 3-COLUMN AREA ─────────────────────────────── -->
+    <main class="lab-main">
+
+      <!-- LEFT: Task queue -->
+      <aside class="task-queue-panel">
+        <div class="panel-header">
+          <span class="panel-icon">⬡</span>
+          <span class="panel-title">TASK QUEUE</span>
+          <span class="panel-badge" id="queue-count">0</span>
+        </div>
+        <div class="panel-body" id="task-queue-list">
+          <!-- Task cards injected here -->
+        </div>
+        <div class="panel-footer">
+          <button class="lab-btn lab-btn--sm" id="btn-add-task">＋ NEW TASK</button>
+          <button class="lab-btn lab-btn--sm lab-btn--ghost" id="btn-manual-tick">⏭ TICK</button>
+        </div>
+      </aside>
+
+      <!-- CENTER: Live agent feed -->
+      <section class="agent-feed-panel">
+        <div class="panel-header">
+          <span class="panel-icon">⬡</span>
+          <span class="panel-title">AGENT FEED</span>
+          <div class="agent-legend" id="agent-legend">
+            <!-- Agent tag badges rendered by JS -->
+          </div>
+        </div>
+        <div class="panel-body agent-feed" id="agent-feed">
+          <div class="feed-placeholder">
+            <span class="feed-cursor">█</span>
+            <span class="feed-idle-msg">Awaiting initialization…</span>
+          </div>
+        </div>
+        <!-- Terminal code output strip -->
+        <div class="terminal-strip">
+          <div class="terminal-strip-header mono">
+            <span class="ts-label">// TERMINAL OUTPUT</span>
+            <button class="ts-clear" onclick="TheLab.clearTerminal()">CLR</button>
+          </div>
+          <div class="terminal-output mono" id="terminal-output"></div>
+        </div>
+      </section>
+
+      <!-- RIGHT: Metrics panel -->
+      <aside class="metrics-panel">
+        <div class="panel-header">
+          <span class="panel-icon">⬡</span>
+          <span class="panel-title">METRICS HUD</span>
+        </div>
+
+        <!-- Velocity chart -->
+        <div class="metric-block">
+          <div class="metric-title">VELOCITY</div>
+          <canvas class="mini-chart" id="velocity-chart" width="220" height="60"></canvas>
+          <div class="metric-row">
+            <span class="metric-label">Lines/tick</span>
+            <span class="metric-val mono" id="m-lpt">—</span>
+          </div>
+          <div class="metric-row">
+            <span class="metric-label">Tests/tick</span>
+            <span class="metric-val mono" id="m-tpt">—</span>
+          </div>
+        </div>
+
+        <!-- Agent roster -->
+        <div class="metric-block">
+          <div class="metric-title">AGENT ROSTER</div>
+          <div id="agent-roster">
+            <!-- Injected by JS -->
+          </div>
+        </div>
+
+        <!-- Bench HUD -->
+        <div class="metric-block" id="bench-hud">
+          <div class="metric-title">BENCH HUD</div>
+          <div class="metric-row">
+            <span class="metric-label">Response</span>
+            <span class="metric-val mono" id="bench-response">—</span>
+          </div>
+          <div class="metric-row">
+            <span class="metric-label">Tokens/s</span>
+            <span class="metric-val mono" id="bench-tps">—</span>
+          </div>
+          <div class="metric-row">
+            <span class="metric-label">Model</span>
+            <span class="metric-val mono" id="bench-model">—</span>
+          </div>
+        </div>
+
+        <!-- Controls -->
+        <div class="metric-block">
+          <div class="metric-title">CONTROLS</div>
+          <button class="lab-btn lab-btn--full lab-btn--primary" id="btn-start">▶ BOOT LAB</button>
+          <button class="lab-btn lab-btn--full lab-btn--danger" id="btn-stop" style="display:none">■ SHUTDOWN</button>
+        </div>
+      </aside>
+
+    </main>
+
+    <!-- ── BOTTOM: Terminal input + status ──────────────────── -->
+    <footer class="lab-footer">
+      <div class="footer-prompt mono">
+        <span class="prompt-host">lab@cosysim</span><span class="prompt-sep">:</span><span class="prompt-path">~/pipeline</span><span class="prompt-gt">$</span>
+        <input class="terminal-input mono" id="terminal-input" type="text"
+               placeholder="enter command or task description…" autocomplete="off">
+      </div>
+      <div class="footer-status">
+        <span class="status-dot" id="footer-dot"></span>
+        <span class="mono footer-status-text" id="footer-status">IDLE</span>
+      </div>
+    </footer>
+
+  </div><!-- /.coders-layout -->
+
+  <!-- Start overlay -->
+  <div class="start-overlay" id="start-overlay">
+    <div class="start-card">
+      <div class="start-glitch" data-text="THE LAB">THE LAB</div>
+      <p class="start-sub">v0.68 &mdash; DARK RENAISSANCE</p>
+      <p class="start-desc">Green means go. The code writes itself.<br>You just watch.</p>
+      <button class="lab-btn lab-btn--primary lab-btn--lg" id="start-btn-overlay">▶ INITIALIZE</button>
+    </div>
+  </div>
+
+  <script src="{{ url_for('static', filename='coders.js') }}"></script>
+</body>
+</html>

@@ -1070,13 +1070,22 @@ class BedroomScene(BedroomCombatMixin, BedroomDialogMixin, BedroomInventoryMixin
     """Adult multi-agent roleplay bedroom — v4."""
 
     SCENE_METADATA = {
-        "title": "The Bedroom",
-        "description": "Adult roleplay scene with detailed 3D avatars, clothing system, "
-                       "bed game mechanics, and heat-gated explicit content progression.",
+        "name": "bedroom",
+        "display_name": "THE PENTHOUSE",
+        "port": 5556,
+        "type": "game",
+        "accent_color": "#ec4899",
+        "accent_rgb": "236 72 153",
+        "description": "The Penthouse. Where desire and danger meet above the neon city.",
+        # Legacy fields kept for compatibility
+        "title": "THE PENTHOUSE",
         "genre": "adult_roleplay",
         "max_characters": 3,
-        "features": ["3d_avatars", "clothing_system", "bed_game", "heat_gating",
-                      "director_mode", "mountable_furniture", "mood_expressions"],
+        "features": [
+            "3d_avatars", "clothing_system", "bed_game", "heat_gating",
+            "director_mode", "mountable_furniture", "mood_expressions",
+            "character_memory", "scene_director", "economy", "content_gate",
+        ],
     }
 
     def __init__(self, host: str = "0.0.0.0", port: int = 5556):
@@ -1133,8 +1142,16 @@ class BedroomScene(BedroomCombatMixin, BedroomDialogMixin, BedroomInventoryMixin
             template_folder=str(Path(__file__).parent / "templates"),
             static_folder=str(Path(__file__).parent / "static"),
         )
+        # Multi-folder Jinja loader: scene templates + shared templates
+        import jinja2
+        _shared_tmpl = str(Path(__file__).parent.parent.parent / "shared" / "templates")
+        self.app.jinja_loader = jinja2.ChoiceLoader([
+            self.app.jinja_loader,
+            jinja2.FileSystemLoader(_shared_tmpl),
+        ])
         register_shared_assets(self.app)
         self.register_health_route(self.app)
+        self.register_bench_route(self.app, None)  # socketio not yet created
         self.app.config["SECRET_KEY"] = "bedroom_v4_roleplay_secret"
         CORS(self.app)
         self.socketio = SocketIO(self.app, cors_allowed_origins="*", manage_session=False)
@@ -1234,13 +1251,26 @@ class BedroomScene(BedroomCombatMixin, BedroomDialogMixin, BedroomInventoryMixin
 
         @self.app.route("/")
         def index():
-            return render_template("bedroom_ui.html",
-                                   scenarios=PREMADE_SCENARIOS,
-                                   positions=POSITIONS,
-                                   outfits=OUTFITS,
-                                   props=PROPS,
-                                   personalities=PERSONALITY_PROFILES,
-                                   lighting_presets=LIGHTING_PRESETS)
+            """THE PENTHOUSE — main UI (v0.68 revamp)."""
+            return render_template(
+                "bedroom.html",
+                scenarios=PREMADE_SCENARIOS,
+                scene_name="THE PENTHOUSE",
+                accent_color="#ec4899",
+            )
+
+        @self.app.route("/classic")
+        def index_classic():
+            """Legacy 3D Director Control Room UI."""
+            return render_template(
+                "bedroom_ui.html",
+                scenarios=PREMADE_SCENARIOS,
+                positions=POSITIONS,
+                outfits=OUTFITS,
+                props=PROPS,
+                personalities=PERSONALITY_PROFILES,
+                lighting_presets=LIGHTING_PRESETS,
+            )
 
         @self.app.route("/api/scene/state")
         def get_scene_state():
@@ -1359,20 +1389,170 @@ class BedroomScene(BedroomCombatMixin, BedroomDialogMixin, BedroomInventoryMixin
                     pass
                 self._broadcast_state()
 
+        # ── Penthouse v0.68 — new socket handlers ──────────────────────
+
+        @self.socketio.on("get_scenarios")
+        def handle_get_scenarios(data):
+            """Return ContentEngine scenarios or fall back to PREMADE_SCENARIOS."""
+            intensity = (data or {}).get("intensity", 2)
+            tags = (data or {}).get("tags", "")
+            engine = getattr(self, "_content_engine", None)
+            if engine:
+                try:
+                    scenarios = engine.get_scenarios(
+                        scene="bedroom", intensity=intensity, tags=tags
+                    )
+                    emit("scenarios", {"scenarios": scenarios, "source": "content_engine"})
+                    return
+                except Exception:
+                    pass
+            # Fallback to built-in premade scenarios
+            gate = getattr(self, "_content_gate", None)
+            result = []
+            for sid, sc in PREMADE_SCENARIOS.items():
+                if gate:
+                    try:
+                        allowed = gate.check(scene="bedroom", content_id=sid, intensity=intensity)
+                        if not allowed:
+                            continue
+                    except Exception:
+                        pass
+                result.append({
+                    "id": sid,
+                    "label": sc.get("label", sid),
+                    "emoji": sc.get("emoji", "🎭"),
+                    "opening": sc.get("opening", ""),
+                    "beats": sc.get("beats", []),
+                    "intensity": intensity,
+                    "premium": False,
+                })
+            emit("scenarios", {"scenarios": result, "source": "premade"})
+
+        @self.socketio.on("load_scenario")
+        def handle_load_scenario(data):
+            """Load a scenario into the scene director."""
+            scenario_id = (data or {}).get("scenario_id", "")
+            if not scenario_id:
+                emit("error", {"message": "scenario_id required"})
+                return
+            director = getattr(self, "_scene_director", None)
+            if director:
+                try:
+                    beat = director.load_scenario(scenario_id)
+                    emit("director_beat", {"beat": beat, "scenario_id": scenario_id})
+                    return
+                except Exception:
+                    pass
+            # Fallback: use built-in scenario
+            sc = PREMADE_SCENARIOS.get(scenario_id)
+            if sc:
+                self.active_scenario = scenario_id
+                self.story_beats = list(sc.get("beats", []))
+                self._broadcast_state()
+                emit("director_beat", {
+                    "beat": {"type": "opening", "instruction": sc.get("opening", "")},
+                    "scenario_id": scenario_id,
+                })
+            else:
+                emit("error", {"message": f"Unknown scenario: {scenario_id}"})
+
+        @self.socketio.on("director_nudge")
+        def handle_director_nudge(data):
+            """Nudge the scene director in a direction."""
+            direction = (data or {}).get("direction", "escalation")
+            director = getattr(self, "_scene_director", None)
+            if director:
+                try:
+                    beat = director.nudge("bedroom", direction)
+                    self.socketio.emit("director_beat", {"beat": beat, "direction": direction})
+                    return
+                except Exception:
+                    pass
+            # Fallback: inject nudge as story beat
+            beat_map = {
+                "escalation": "The tension rises. Push the scene forward — more intense, more intimate.",
+                "cool_down": "Take a breath. Let the scene settle into something softer and more romantic.",
+                "revelation": "A secret surfaces. A truth is revealed. The dynamic shifts completely.",
+            }
+            instruction = beat_map.get(direction, f"Scene nudge: {direction}")
+            self._inject_to_loop("(Director)", f"[DIRECTOR NUDGE: {direction}] {instruction}", "director")
+            self.socketio.emit("director_beat", {
+                "beat": {"type": direction, "instruction": instruction},
+                "direction": direction,
+            })
+
+        @self.socketio.on("get_economy")
+        def handle_get_economy(data):
+            """Return current player credit balance."""
+            economy = getattr(self, "_economy", None)
+            balance = 0
+            if economy:
+                try:
+                    balance = economy.get_balance("player")
+                except Exception:
+                    pass
+            emit("economy_update", {"balance": balance, "currency": "₵"})
+
+        @self.socketio.on("spend_credits")
+        def handle_spend_credits(data):
+            """Unlock premium scenario or content with credits."""
+            content_id = (data or {}).get("content_id", "")
+            cost = int((data or {}).get("cost", 100))
+            economy = getattr(self, "_economy", None)
+            if economy:
+                try:
+                    success = economy.spend("player", cost, reason=f"unlock:{content_id}")
+                    if success:
+                        emit("economy_update", {
+                            "balance": economy.get_balance("player"),
+                            "currency": "₵",
+                            "event": "unlock",
+                            "content_id": content_id,
+                        })
+                        emit("premium_unlocked", {"content_id": content_id})
+                    else:
+                        emit("error", {"message": "Insufficient credits", "code": "low_credits"})
+                except Exception as exc:
+                    emit("error", {"message": str(exc)})
+            else:
+                # Economy not available — grant free access
+                emit("premium_unlocked", {"content_id": content_id})
+
+        @self.socketio.on("world_tick")
+        def handle_world_tick(data):
+            """Push a world state update to the client."""
+            world = getattr(self, "_world_state", None)
+            if world:
+                try:
+                    state = world.snapshot()
+                    self.socketio.emit("world_tick", state)
+                    return
+                except Exception:
+                    pass
+            self.socketio.emit("world_tick", {
+                "time": self.scene_state.get("time_of_day", "night"),
+                "scene": "bedroom",
+                "tick": True,
+            })
+
     # ── BaseScene interface──────────────────────────────────────────────
     def get_plugin_info(self) -> dict:
         return {
-            "name": "Bedroom Scene",
-            "description": "Adult multi-agent roleplay bedroom with stats, props, scenarios, and Director controls",
-            "version": "0.50b",
+            "name": "THE PENTHOUSE",
+            "description": "v0.68 Dark Renaissance — adult multi-agent roleplay with memory, director, economy & content gating",
+            "version": "0.68",
             "author": "CosySim",
             "port": self.port,
-            "tags": ["bedroom", "roleplay", "adult", "multi-agent", "spatial", "intimate", "mcp"],
+            "tags": ["bedroom", "penthouse", "roleplay", "adult", "multi-agent", "spatial", "intimate", "mcp"],
         }
 
     def start(self) -> None:
-        print("Bedroom Scene v4 — Adult Roleplay Engine starting...")
+        print("THE PENTHOUSE — v0.68 Dark Renaissance — igniting...")
         print(f"   Access at: http://{self.host}:{self.port}")
+
+        # Re-register bench with socketio now available
+        self.register_bench_route(self.app, self.socketio)
+
         # Wire up framework event bus
         try:
             from engine.mcp.framework import get_framework
@@ -1382,8 +1562,80 @@ class BedroomScene(BedroomCombatMixin, BedroomDialogMixin, BedroomInventoryMixin
             fw.on("story_beat", lambda evt: self._on_story_beat(evt))
         except Exception:
             pass
+
+        # Wire CharacterMemoryInterceptor into all loaded agents
+        try:
+            from engine.characters.memory import get_character_memory, CharacterMemoryInterceptor
+            _mem = get_character_memory()
+            for cid, loop in getattr(self, "agent_loop_map", {}).items():
+                loop.add_interceptor(CharacterMemoryInterceptor(_mem, cid))
+            self._char_memory = _mem
+        except Exception:
+            self._char_memory = None
+
+        # Wire SceneDirector — ticked on each conversation turn
+        try:
+            from engine.director.scene_director import get_scene_director
+            self._scene_director = get_scene_director("bedroom")
+        except Exception:
+            self._scene_director = None
+
+        # Wire ContentGate
+        try:
+            from engine.content.content_gate import get_content_gate
+            self._content_gate = get_content_gate()
+        except Exception:
+            self._content_gate = None
+
+        # Wire ContentEngine
+        try:
+            from engine.content.content_engine import get_content_engine
+            self._content_engine = get_content_engine()
+        except Exception:
+            self._content_engine = None
+
+        # Wire EconomyManager
+        try:
+            from engine.economy.economy import get_economy_manager
+            self._economy = get_economy_manager()
+        except Exception:
+            self._economy = None
+
+        # Wire WorldState
+        try:
+            from engine.world.world_state import get_world_state
+            self._world_state = get_world_state()
+        except Exception:
+            self._world_state = None
+
+        # Wire EventBus
+        try:
+            from engine.events.event_bus import get_event_bus, EventTypes
+            _bus = get_event_bus()
+            _bus.subscribe(EventTypes.EMOTION_CHANGED, self._on_emotion_changed)
+            _bus.subscribe(EventTypes.WORLD_TICK, self._on_world_tick_event)
+            self._event_bus = _bus
+        except Exception:
+            self._event_bus = None
+
         self.socketio.run(self.app, host=self.host, port=self.port,
                           debug=False, allow_unsafe_werkzeug=True)
+
+    # ── New engine event handlers ─────────────────────────────────────
+
+    def _on_emotion_changed(self, payload: dict) -> None:
+        """Broadcast emotion update to Penthouse UI."""
+        try:
+            self.socketio.emit("emotion_update", payload)
+        except Exception:
+            pass
+
+    def _on_world_tick_event(self, payload: dict) -> None:
+        """Broadcast world tick to Penthouse UI."""
+        try:
+            self.socketio.emit("world_tick", payload)
+        except Exception:
+            pass
 
     def stop(self) -> None:
         if self.agent_loop:

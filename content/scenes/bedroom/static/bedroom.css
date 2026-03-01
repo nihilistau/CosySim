@@ -1,0 +1,861 @@
+/*
+ * THE PENTHOUSE — Scene CSS  v0.68 "Dark Renaissance"
+ * ====================================================
+ * Scene-specific styles on top of the CosySim design system.
+ * Requires: design_tokens.css · cosysim-components.css · cosysim-animations.css
+ *
+ * This file handles ONLY layout & bedroom-specific overrides.
+ * All glass panels, stat bars, buttons, and chips come from the shared system.
+ */
+
+/* ══════════════════════════════════════════════════════════════
+   SCENE BODY — full viewport, deep black glass foundation
+   ══════════════════════════════════════════════════════════════ */
+
+.penthouse-body {
+  background: var(--cs-bg-deepest);
+  color: var(--cs-text-primary);
+  font-family: var(--cs-font-display, 'Inter', system-ui, sans-serif);
+  height: 100dvh;
+  overflow: hidden;
+  /* Penthouse grain texture overlay */
+  background-image:
+    radial-gradient(ellipse 120% 60% at 50% 0%, rgba(236, 72, 153, 0.06) 0%, transparent 70%),
+    radial-gradient(ellipse 80% 40% at 100% 100%, rgba(139, 92, 246, 0.04) 0%, transparent 60%);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   ADULT CONTENT GATE
+   ══════════════════════════════════════════════════════════════ */
+
+.penthouse-gate {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(4, 6, 8, 0.98);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--cs-space-xl, 2rem);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.penthouse-gate[hidden] {
+  display: none;
+}
+
+.penthouse-gate__card {
+  max-width: 480px;
+  width: 100%;
+  padding: 2.5rem;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  border-color: rgba(236, 72, 153, 0.2);
+  box-shadow: 0 0 60px rgba(236, 72, 153, 0.12), var(--cs-glass-shadow);
+}
+
+.penthouse-gate__icon {
+  font-size: 3rem;
+  line-height: 1;
+}
+
+.penthouse-gate__title {
+  font-size: 1.75rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--cs-scene-accent);
+  text-transform: uppercase;
+}
+
+.penthouse-gate__subtitle {
+  font-size: 0.9rem;
+  color: var(--cs-text-secondary);
+  font-weight: 500;
+}
+
+.penthouse-gate__body {
+  font-size: 0.85rem;
+  line-height: 1.65;
+  color: var(--cs-text-muted);
+}
+
+.penthouse-gate__actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   3-COLUMN SCENE LAYOUT
+   ══════════════════════════════════════════════════════════════ */
+
+.bedroom-layout {
+  display: grid;
+  grid-template-columns: 280px 1fr 300px;
+  grid-template-rows: 1fr;
+  gap: 0;
+  height: calc(100dvh - var(--cs-navbar-height, 52px));
+  overflow: hidden;
+  position: relative;
+  z-index: 1;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   LEFT PANEL — Character portrait + emotion bars
+   ══════════════════════════════════════════════════════════════ */
+
+.bedroom-character-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.25rem;
+  overflow-y: auto;
+  overflow-x: hidden;
+  border-right: 1px solid var(--cs-glass-border);
+  border-radius: 0;
+  background: var(--cs-glass-bg-strong);
+  backdrop-filter: blur(var(--cs-blur-lg));
+  -webkit-backdrop-filter: blur(var(--cs-blur-lg));
+  scrollbar-width: thin;
+  scrollbar-color: rgba(236, 72, 153, 0.3) transparent;
+}
+
+/* Portrait wrapper */
+.bedroom-portrait-wrap {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--cs-glass-border);
+}
+
+.bedroom-portrait-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center top;
+  display: block;
+  border-radius: var(--cs-radius-xl, 16px);
+  background: var(--cs-bg-card);
+}
+
+.bedroom-portrait-overlay {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    to bottom,
+    transparent 60%,
+    rgba(4, 6, 8, 0.7) 100%
+  );
+  pointer-events: none;
+}
+
+.bedroom-char-name {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--cs-text-primary);
+  letter-spacing: 0.04em;
+  text-align: center;
+}
+
+/* Speaking ring around portrait */
+.bedroom-speaking-ring {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 240px;
+  height: 240px;
+  border-radius: var(--cs-radius-xl, 16px);
+  border: 2px solid var(--cs-scene-accent);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
+.bedroom-speaking-ring.active {
+  opacity: 1;
+  animation: cs-speaking-ring 0.8s ease-in-out infinite;
+  box-shadow: 0 0 20px var(--cs-scene-glow);
+}
+
+/* Emotion bars */
+.bedroom-emotion-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  flex: 1;
+}
+
+/* Mood descriptor */
+.bedroom-mood-text {
+  font-size: 0.75rem;
+  color: var(--cs-scene-accent);
+  text-align: center;
+  font-style: italic;
+  padding: 0.5rem;
+  background: rgba(236, 72, 153, 0.06);
+  border-radius: var(--cs-radius-md, 8px);
+  border: 1px solid rgba(236, 72, 153, 0.15);
+  min-height: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   CENTER PANEL — Neon city window + chat
+   ══════════════════════════════════════════════════════════════ */
+
+.bedroom-main-panel {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+  background: var(--cs-bg-dark);
+}
+
+/* Neon city background window */
+.bedroom-window {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.bedroom-window-particles {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+
+/* Neon city silhouette — CSS-painted building skyline */
+.bedroom-city-silhouette {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 280px;
+  z-index: 2;
+  background:
+    /* Buildings layer 1 — foreground */
+    linear-gradient(to top,
+      var(--cs-bg-deepest) 0%,
+      var(--cs-bg-deepest) 15%,
+      transparent 16%
+    ),
+    /* Neon glow on horizon */
+    radial-gradient(ellipse 100% 20% at 50% 100%,
+      rgba(236, 72, 153, 0.12) 0%,
+      rgba(139, 92, 246, 0.06) 50%,
+      transparent 100%
+    );
+}
+
+/* Individual building shapes via clip-path pseudo-element */
+.bedroom-city-silhouette::before {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 220px;
+  background: var(--cs-bg-deepest);
+  clip-path: polygon(
+    0% 100%,
+    0% 70%,    3% 70%,    3% 45%,   6% 45%,   6% 60%,   9% 60%,   9% 30%,
+    12% 30%,  12% 55%,  15% 55%,  15% 25%,  17% 25%,  17% 50%,
+    20% 50%,  20% 40%,  23% 40%,  23% 20%,  25% 20%,  25% 15%,
+    27% 15%,  27% 35%,  30% 35%,  30% 50%,  33% 50%,  33% 30%,
+    35% 30%,  35% 45%,  38% 45%,  38% 10%,  40% 10%,  40% 5%,
+    42% 5%,   42% 35%,  45% 35%,  45% 50%,  47% 50%,  47% 28%,
+    50% 28%,  50% 18%,  52% 18%,  52% 40%,  55% 40%,  55% 55%,
+    57% 55%,  57% 22%,  60% 22%,  60% 38%,  63% 38%,  63% 48%,
+    66% 48%,  66% 15%,  68% 15%,  68% 32%,  70% 32%,  70% 45%,
+    73% 45%,  73% 28%,  76% 28%,  76% 42%,  78% 42%,  78% 58%,
+    81% 58%,  81% 32%,  84% 32%,  84% 48%,  86% 48%,  86% 25%,
+    88% 25%,  88% 38%,  91% 38%,  91% 52%,  94% 52%,  94% 35%,
+    96% 35%,  96% 55%,  99% 55%,  99% 65%,
+    100% 65%, 100% 100%
+  );
+}
+
+/* Neon window glow accents on buildings */
+.bedroom-city-silhouette::after {
+  content: '';
+  position: absolute;
+  bottom: 20%;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(
+    to right,
+    transparent 0%,
+    rgba(236, 72, 153, 0.4) 20%,
+    rgba(139, 92, 246, 0.3) 40%,
+    rgba(0, 229, 255, 0.3) 60%,
+    rgba(236, 72, 153, 0.4) 80%,
+    transparent 100%
+  );
+  filter: blur(2px);
+}
+
+/* Glass reflection on window */
+.bedroom-window-reflection {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.015) 0%,
+    transparent 50%,
+    rgba(236, 72, 153, 0.02) 100%
+  );
+  z-index: 3;
+}
+
+/* Scene header floating above window */
+.bedroom-header {
+  position: relative;
+  z-index: 10;
+  padding: 1.25rem 1.5rem 0.75rem;
+  background: linear-gradient(
+    to bottom,
+    rgba(4, 6, 8, 0.85) 0%,
+    transparent 100%
+  );
+}
+
+/* Chat log */
+.bedroom-chat {
+  position: relative;
+  z-index: 10;
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0.75rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(236, 72, 153, 0.25) transparent;
+  /* fade at top */
+  mask-image: linear-gradient(to bottom, transparent 0%, black 6%, black 100%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 6%, black 100%);
+}
+
+/* Individual chat messages */
+.bedroom-message {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  max-width: 88%;
+  animation: cs-fade-in-up 0.25s var(--cs-ease) both;
+}
+
+.bedroom-message--player {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+
+.bedroom-message--char {
+  align-self: flex-start;
+  align-items: flex-start;
+}
+
+.bedroom-message--system {
+  align-self: center;
+  align-items: center;
+  max-width: 100%;
+}
+
+.bedroom-message__name {
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--cs-text-muted);
+}
+
+.bedroom-message--player .bedroom-message__name {
+  color: var(--cs-scene-accent);
+}
+
+.bedroom-message__bubble {
+  padding: 0.65rem 1rem;
+  border-radius: var(--cs-radius-lg, 12px);
+  font-size: 0.875rem;
+  line-height: 1.6;
+  border: 1px solid var(--cs-glass-border);
+}
+
+.bedroom-message--player .bedroom-message__bubble {
+  background: rgba(236, 72, 153, 0.12);
+  border-color: rgba(236, 72, 153, 0.25);
+  color: var(--cs-text-primary);
+  border-bottom-right-radius: 4px;
+}
+
+.bedroom-message--char .bedroom-message__bubble {
+  background: var(--cs-glass-bg);
+  backdrop-filter: blur(var(--cs-blur-sm));
+  -webkit-backdrop-filter: blur(var(--cs-blur-sm));
+  color: var(--cs-text-primary);
+  border-bottom-left-radius: 4px;
+}
+
+.bedroom-message--system .bedroom-message__bubble {
+  background: transparent;
+  border-color: transparent;
+  color: var(--cs-text-dim);
+  font-size: 0.75rem;
+  font-style: italic;
+}
+
+.bedroom-message__ts {
+  font-size: 0.65rem;
+  color: var(--cs-text-dim);
+}
+
+/* Typing indicator */
+.bedroom-typing {
+  position: relative;
+  z-index: 10;
+  display: none;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0 1.25rem 0.25rem;
+  color: var(--cs-text-muted);
+  font-size: 0.75rem;
+}
+
+.bedroom-typing.visible {
+  display: flex;
+}
+
+.bedroom-typing__dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--cs-scene-accent);
+  animation: cs-bounce 1.2s ease-in-out infinite;
+}
+
+.bedroom-typing__dot:nth-child(2) { animation-delay: 0.2s; }
+.bedroom-typing__dot:nth-child(3) { animation-delay: 0.4s; }
+
+.bedroom-typing__label {
+  color: var(--cs-scene-accent);
+}
+
+/* Input row */
+.bedroom-input-row {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  align-items: flex-end;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem 0.875rem;
+  background: linear-gradient(
+    to top,
+    rgba(4, 6, 8, 0.92) 0%,
+    rgba(4, 6, 8, 0.7) 100%
+  );
+  border-top: 1px solid var(--cs-glass-border);
+}
+
+.bedroom-input {
+  flex: 1;
+  padding: 0.65rem 0.875rem;
+  background: var(--cs-glass-bg);
+  backdrop-filter: blur(var(--cs-blur-sm));
+  -webkit-backdrop-filter: blur(var(--cs-blur-sm));
+  border: 1px solid var(--cs-glass-border);
+  border-radius: var(--cs-radius-lg, 12px);
+  color: var(--cs-text-primary);
+  font-family: inherit;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  resize: none;
+  outline: none;
+  transition: border-color 0.2s ease;
+  min-height: 44px;
+  max-height: 120px;
+}
+
+.bedroom-input:focus {
+  border-color: rgba(236, 72, 153, 0.4);
+  box-shadow: 0 0 0 3px rgba(236, 72, 153, 0.08);
+}
+
+.bedroom-input::placeholder {
+  color: var(--cs-text-dim);
+  font-style: italic;
+}
+
+.bedroom-input-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   RIGHT PANEL — Scenarios, Director, Economy, Memories
+   ══════════════════════════════════════════════════════════════ */
+
+.bedroom-right-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  border-left: 1px solid var(--cs-glass-border);
+  background: var(--cs-glass-bg-strong);
+  backdrop-filter: blur(var(--cs-blur-lg));
+  -webkit-backdrop-filter: blur(var(--cs-blur-lg));
+  scrollbar-width: thin;
+  scrollbar-color: rgba(236, 72, 153, 0.3) transparent;
+}
+
+.bedroom-panel-section {
+  border-radius: 0 !important;
+  border-left: none;
+  border-right: none;
+  border-top: none;
+  padding: 0.875rem 1rem;
+  border-bottom: 1px solid var(--cs-glass-border);
+}
+
+.bedroom-panel-section:last-child {
+  border-bottom: none;
+  flex: 1;
+}
+
+.bedroom-panel-title {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--cs-text-muted);
+  margin-bottom: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* Scenario cards */
+.bedroom-scenarios {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  max-height: 200px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(236, 72, 153, 0.2) transparent;
+  margin-bottom: 0.6rem;
+}
+
+.bedroom-scenarios__empty {
+  font-size: 0.75rem;
+  color: var(--cs-text-dim);
+  font-style: italic;
+  text-align: center;
+  padding: 0.75rem 0;
+}
+
+.bedroom-scenario-card {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.625rem;
+  background: var(--cs-glass-bg);
+  border: 1px solid var(--cs-glass-border);
+  border-radius: var(--cs-radius-md, 8px);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-size: 0.8rem;
+  color: var(--cs-text-secondary);
+  text-align: left;
+  width: 100%;
+}
+
+.bedroom-scenario-card:hover {
+  border-color: rgba(236, 72, 153, 0.3);
+  background: rgba(236, 72, 153, 0.07);
+  color: var(--cs-text-primary);
+  transform: translateX(2px);
+}
+
+.bedroom-scenario-card.active {
+  border-color: var(--cs-scene-accent);
+  background: rgba(236, 72, 153, 0.12);
+  color: var(--cs-scene-accent);
+}
+
+.bedroom-scenario-card.premium {
+  border-color: rgba(234, 179, 8, 0.3);
+}
+
+.bedroom-scenario-emoji {
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+.bedroom-scenario-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bedroom-scenario-lock {
+  font-size: 0.65rem;
+  color: var(--cs-yellow);
+  flex-shrink: 0;
+}
+
+.bedroom-scenarios-controls {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.bedroom-intensity-select {
+  flex: 1;
+  padding: 0.35rem 0.5rem;
+  background: var(--cs-glass-bg);
+  border: 1px solid var(--cs-glass-border);
+  border-radius: var(--cs-radius-md, 8px);
+  color: var(--cs-text-secondary);
+  font-size: 0.75rem;
+  cursor: pointer;
+  outline: none;
+}
+
+.bedroom-intensity-select option {
+  background: var(--cs-bg-card);
+  color: var(--cs-text-primary);
+}
+
+/* Director panel */
+.bedroom-director-beat-type {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.bedroom-director-beat-label {
+  font-size: 0.7rem;
+  color: var(--cs-text-dim);
+}
+
+.bedroom-director-instruction {
+  font-size: 0.78rem;
+  line-height: 1.55;
+  color: var(--cs-text-secondary);
+  font-style: italic;
+  margin-bottom: 0.75rem;
+  padding: 0.5rem 0.625rem;
+  background: rgba(236, 72, 153, 0.04);
+  border-left: 2px solid rgba(236, 72, 153, 0.3);
+  border-radius: 0 var(--cs-radius-sm, 4px) var(--cs-radius-sm, 4px) 0;
+}
+
+.bedroom-director-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.bedroom-director-actions .cs-glass-btn {
+  flex: 1;
+  min-width: 72px;
+  font-size: 0.7rem;
+  padding: 0.35rem 0.5rem;
+}
+
+/* Economy row */
+.bedroom-economy-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* Memory items */
+.bedroom-memories {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  flex: 1;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(236, 72, 153, 0.2) transparent;
+}
+
+.bedroom-memories__empty {
+  font-size: 0.75rem;
+  color: var(--cs-text-dim);
+  font-style: italic;
+  text-align: center;
+  padding: 0.5rem 0;
+}
+
+.bedroom-memory-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.4rem 0.5rem;
+  background: rgba(236, 72, 153, 0.04);
+  border: 1px solid rgba(236, 72, 153, 0.1);
+  border-radius: var(--cs-radius-sm, 4px);
+  font-size: 0.72rem;
+  color: var(--cs-text-secondary);
+  line-height: 1.5;
+  animation: cs-fade-in-up 0.2s ease both;
+}
+
+.bedroom-memory-weight {
+  flex-shrink: 0;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--cs-scene-accent);
+  align-self: stretch;
+  opacity: var(--weight-opacity, 0.5);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   RESPONSIVE — tablet (single-column chat + overlay panels)
+   ══════════════════════════════════════════════════════════════ */
+
+@media (max-width: 1024px) {
+  .bedroom-layout {
+    grid-template-columns: 240px 1fr 260px;
+  }
+}
+
+@media (max-width: 768px) {
+  .bedroom-layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr auto;
+  }
+
+  .bedroom-character-panel {
+    border-right: none;
+    border-bottom: 1px solid var(--cs-glass-border);
+    border-radius: 0;
+    flex-direction: row;
+    flex-wrap: wrap;
+    padding: 0.75rem;
+    gap: 0.75rem;
+    max-height: 160px;
+  }
+
+  .bedroom-portrait-wrap {
+    width: 80px;
+    border-bottom: none;
+    padding-bottom: 0;
+  }
+
+  .bedroom-emotion-bars {
+    flex: 1;
+    min-width: 200px;
+    gap: 0.35rem;
+  }
+
+  .bedroom-mood-text {
+    width: 100%;
+  }
+
+  .bedroom-right-panel {
+    border-left: none;
+    border-top: 1px solid var(--cs-glass-border);
+    max-height: 260px;
+    flex-direction: row;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .bedroom-panel-section {
+    min-width: 240px;
+    border-bottom: none;
+    border-right: 1px solid var(--cs-glass-border);
+  }
+
+  .bedroom-panel-section:last-child {
+    border-right: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .bedroom-layout {
+    grid-template-rows: 100px 1fr 180px;
+  }
+
+  .bedroom-character-panel {
+    max-height: 100px;
+  }
+
+  .bedroom-portrait-wrap {
+    width: 60px;
+  }
+
+  .cs-portrait-frame--2xl {
+    width: 60px;
+    height: 60px;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   UTILITY / ANIMATIONS (scene-local)
+   ══════════════════════════════════════════════════════════════ */
+
+/* Stat bar pulse on big change */
+@keyframes bedroom-stat-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(236, 72, 153, 0.5); }
+  50%  { box-shadow: 0 0 0 6px rgba(236, 72, 153, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(236, 72, 153, 0); }
+}
+
+.cs-stat-bar__fill--pulse {
+  animation: bedroom-stat-pulse 0.6s ease-out;
+}
+
+/* Economy gain flash */
+@keyframes bedroom-credits-gain {
+  0%   { color: var(--cs-green); transform: scale(1.08); }
+  100% { color: inherit; transform: scale(1); }
+}
+
+.bedroom-credits-gain {
+  animation: bedroom-credits-gain 0.5s ease-out;
+}
+
+/* Scenario card active flash */
+@keyframes bedroom-card-activate {
+  0%   { box-shadow: 0 0 0 0 rgba(236, 72, 153, 0.6); }
+  100% { box-shadow: 0 0 0 12px rgba(236, 72, 153, 0); }
+}
+
+.bedroom-scenario-card.activated {
+  animation: bedroom-card-activate 0.5s ease-out;
+}
+
+/* Celebration burst on milestone */
+@keyframes bedroom-celebrate {
+  0%   { transform: scale(1); }
+  20%  { transform: scale(1.04); }
+  100% { transform: scale(1); }
+}
+
+.bedroom-main-panel.celebrating {
+  animation: bedroom-celebrate 0.4s ease-out;
+}

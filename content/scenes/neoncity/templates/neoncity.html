@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en" data-scene="neoncity">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NEON CITY — CosySim v0.68</title>
+
+<link rel="stylesheet" href="/shared/css/design_tokens.css">
+<link rel="stylesheet" href="/static/neoncity.css">
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.4/socket.io.min.js"></script>
+</head>
+<body data-scene="neoncity">
+
+<!-- ════════════════════════════════════════════════════════════════
+     NAVBAR
+══════════════════════════════════════════════════════════════════ -->
+<div id="navbar-mount"></div>
+
+<!-- ════════════════════════════════════════════════════════════════
+     PARTICLE CANVAS (background)
+══════════════════════════════════════════════════════════════════ -->
+<canvas id="particle-canvas" class="particle-canvas"></canvas>
+
+<!-- ════════════════════════════════════════════════════════════════
+     MAIN LAYOUT
+══════════════════════════════════════════════════════════════════ -->
+<div class="neoncity-layout">
+
+  <!-- ── CITY HEADER ─────────────────────────────────────────── -->
+  <header class="neoncity-header">
+    <div class="header-left">
+      <h1 class="city-title">
+        <span class="title-neon">NEON</span>
+        <span class="title-city">CITY</span>
+      </h1>
+      <div class="city-version">v0.68 <span class="accent">Dark Renaissance</span></div>
+    </div>
+
+    <div class="header-center">
+      <div class="world-clock" id="world-clock">
+        <span class="clock-icon">◉</span>
+        <span id="clock-display">LOADING…</span>
+      </div>
+      <div class="tension-summary" id="tension-summary">
+        <span class="tension-label">CITY TENSION</span>
+        <span class="tension-value" id="tension-val">—</span>
+      </div>
+    </div>
+
+    <div class="header-right">
+      <div class="credit-display">
+        <span class="credit-icon">₢</span>
+        <span id="credit-balance">—</span>
+      </div>
+      <button class="btn-board-game" onclick="window.location.href='/board'" title="Board Game Mode">
+        ◉ GRID MODE
+      </button>
+    </div>
+  </header>
+
+  <!-- ── TICKER ──────────────────────────────────────────────── -->
+  <div class="neoncity-ticker">
+    <span class="ticker-label">CITY FEED</span>
+    <div class="ticker-track">
+      <div class="ticker-inner" id="ticker-inner">
+        <span class="ticker-item">[SYSTEM] Connecting to city network…</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── MAIN CONTENT ─────────────────────────────────────────── -->
+  <div class="neoncity-content">
+
+    <!-- ── DISTRICT GRID ─────────────────────────────────────── -->
+    <section class="neoncity-districts" id="district-grid">
+      <h2 class="section-title">◈ DISTRICTS</h2>
+      <div class="district-cards">
+
+        <!-- BLACK MARKET -->
+        <div class="district-card" data-district="black_market" style="--district-color: #f97316"
+             onclick="NeonCityApp.visitDistrict('black_market')">
+          <div class="card-glow"></div>
+          <div class="card-icon">🔫</div>
+          <div class="card-body">
+            <div class="card-name">BLACK MARKET</div>
+            <div class="card-faction" id="faction-black_market">BlackMarket</div>
+            <div class="card-desc">Buy/sell contraband, hire fixers, trade in the shadows.</div>
+            <div class="card-activity" id="activity-black_market">
+              <span class="activity-dot busy"></span> BUSY
+            </div>
+          </div>
+          <div class="card-npcs" id="npcs-black_market">
+            <span class="npc-tag">FIXER</span>
+            <span class="npc-tag">ARMORER</span>
+            <span class="npc-tag">INFO_BROKER</span>
+          </div>
+          <div class="card-action">▶ ENTER DISTRICT</div>
+        </div>
+
+        <!-- CORPORATE TOWER -->
+        <div class="district-card" data-district="corporate_tower" style="--district-color: #3b82f6"
+             onclick="NeonCityApp.visitDistrict('corporate_tower')">
+          <div class="card-glow"></div>
+          <div class="card-icon">🏢</div>
+          <div class="card-body">
+            <div class="card-name">CORPORATE TOWER</div>
+            <div class="card-faction" id="faction-corporate_tower">OmniCorp</div>
+            <div class="card-desc">Faction HQ, corporate espionage, and reputation quests.</div>
+            <div class="card-activity" id="activity-corporate_tower">
+              <span class="activity-dot quiet"></span> QUIET
+            </div>
+          </div>
+          <div class="card-npcs" id="npcs-corporate_tower">
+            <span class="npc-tag">EXEC</span>
+            <span class="npc-tag">SEC_AGENT</span>
+            <span class="npc-tag">CORP_LIAISON</span>
+          </div>
+          <div class="card-action">▶ ENTER DISTRICT</div>
+        </div>
+
+        <!-- UNDERGROUND CLUB -->
+        <div class="district-card" data-district="underground_club" style="--district-color: #ec4899"
+             onclick="NeonCityApp.visitDistrict('underground_club')">
+          <div class="card-glow"></div>
+          <div class="card-icon">🎵</div>
+          <div class="card-body">
+            <div class="card-name">UNDERGROUND CLUB</div>
+            <div class="card-faction" id="faction-underground_club">SynthSec</div>
+            <div class="card-desc">Connects to Lounge. Live performances, dark deals.</div>
+            <div class="card-activity" id="activity-underground_club">
+              <span class="activity-dot busy"></span> BUSY
+            </div>
+          </div>
+          <div class="card-npcs" id="npcs-underground_club">
+            <span class="npc-tag">BARTENDER</span>
+            <span class="npc-tag">DANCER</span>
+            <span class="npc-tag">CONTACT</span>
+          </div>
+          <div class="card-action">▶ ENTER DISTRICT</div>
+        </div>
+
+        <!-- HACKER DEN -->
+        <div class="district-card" data-district="hacker_den" style="--district-color: #22c55e"
+             onclick="NeonCityApp.visitDistrict('hacker_den')">
+          <div class="card-glow"></div>
+          <div class="card-icon">💻</div>
+          <div class="card-body">
+            <div class="card-name">HACKER DEN</div>
+            <div class="card-faction" id="faction-hacker_den">Ghost_Net</div>
+            <div class="card-desc">0xGH0ST base. Connects to Admin/phone.</div>
+            <div class="card-activity" id="activity-hacker_den">
+              <span class="activity-dot dangerous"></span> DANGEROUS
+            </div>
+          </div>
+          <div class="card-npcs" id="npcs-hacker_den">
+            <span class="npc-tag">0xGH0ST</span>
+            <span class="npc-tag">NETRUNNER</span>
+            <span class="npc-tag">SYSOP</span>
+          </div>
+          <div class="card-action">▶ ENTER DISTRICT</div>
+        </div>
+
+        <!-- STREET LEVEL -->
+        <div class="district-card" data-district="street_level" style="--district-color: #facc15"
+             onclick="NeonCityApp.visitDistrict('street_level')">
+          <div class="card-glow"></div>
+          <div class="card-icon">🌆</div>
+          <div class="card-body">
+            <div class="card-name">STREET LEVEL</div>
+            <div class="card-faction" id="faction-street_level">DeepState</div>
+            <div class="card-desc">NPCs, rumors, and world events unfold here.</div>
+            <div class="card-activity" id="activity-street_level">
+              <span class="activity-dot dangerous"></span> DANGEROUS
+            </div>
+          </div>
+          <div class="card-npcs" id="npcs-street_level">
+            <span class="npc-tag">STREET_KID</span>
+            <span class="npc-tag">GANGER</span>
+            <span class="npc-tag">INFORMANT</span>
+          </div>
+          <div class="card-action">▶ ENTER DISTRICT</div>
+        </div>
+
+      </div><!-- .district-cards -->
+    </section>
+
+    <!-- ── FACTION BARS ─────────────────────────────────────── -->
+    <section class="faction-bars" id="faction-panel">
+      <h2 class="section-title">◈ FACTION TENSIONS</h2>
+      <div class="faction-list" id="faction-list">
+
+        <div class="faction-row" data-faction="OmniCorp">
+          <span class="faction-name" style="color:#3b82f6">OmniCorp</span>
+          <div class="faction-bar-track">
+            <div class="faction-bar-fill" style="width:78%; background:#3b82f6;" id="bar-OmniCorp"></div>
+          </div>
+          <span class="faction-power" id="power-OmniCorp">78</span>
+          <span class="faction-standing" id="standing-OmniCorp">Neutral</span>
+        </div>
+
+        <div class="faction-row" data-faction="NeoTech">
+          <span class="faction-name" style="color:#8b5cf6">NeoTech</span>
+          <div class="faction-bar-track">
+            <div class="faction-bar-fill" style="width:52%; background:#8b5cf6;" id="bar-NeoTech"></div>
+          </div>
+          <span class="faction-power" id="power-NeoTech">52</span>
+          <span class="faction-standing" id="standing-NeoTech">Neutral</span>
+        </div>
+
+        <div class="faction-row" data-faction="BlackMarket">
+          <span class="faction-name" style="color:#f97316">BlackMarket</span>
+          <div class="faction-bar-track">
+            <div class="faction-bar-fill" style="width:22%; background:#f97316;" id="bar-BlackMarket"></div>
+          </div>
+          <span class="faction-power" id="power-BlackMarket">22</span>
+          <span class="faction-standing" id="standing-BlackMarket">Neutral</span>
+        </div>
+
+        <div class="faction-row" data-faction="Ghost_Net">
+          <span class="faction-name" style="color:#22c55e">Ghost_Net</span>
+          <div class="faction-bar-track">
+            <div class="faction-bar-fill" style="width:81%; background:#22c55e;" id="bar-Ghost_Net"></div>
+          </div>
+          <span class="faction-power" id="power-Ghost_Net">81</span>
+          <span class="faction-standing" id="standing-Ghost_Net">Neutral</span>
+        </div>
+
+        <div class="faction-row" data-faction="SynthSec">
+          <span class="faction-name" style="color:#ec4899">SynthSec</span>
+          <div class="faction-bar-track">
+            <div class="faction-bar-fill" style="width:43%; background:#ec4899;" id="bar-SynthSec"></div>
+          </div>
+          <span class="faction-power" id="power-SynthSec">43</span>
+          <span class="faction-standing" id="standing-SynthSec">Neutral</span>
+        </div>
+
+        <div class="faction-row" data-faction="DeepState">
+          <span class="faction-name" style="color:#06b6d4">DeepState</span>
+          <div class="faction-bar-track">
+            <div class="faction-bar-fill" style="width:70%; background:#06b6d4;" id="bar-DeepState"></div>
+          </div>
+          <span class="faction-power" id="power-DeepState">70</span>
+          <span class="faction-standing" id="standing-DeepState">Neutral</span>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ── BOTTOM ROW ────────────────────────────────────────── -->
+    <div class="neoncity-bottom">
+
+      <!-- Chat Panel -->
+      <section class="neoncity-chat">
+        <h2 class="section-title">◈ DISTRICT COMMS
+          <span class="chat-district-label" id="chat-district-label">— No district selected</span>
+        </h2>
+        <div class="chat-log" id="chat-log">
+          <div class="chat-entry system">
+            <span class="entry-src">[SYSTEM]</span> City network online. Select a district to connect.
+          </div>
+        </div>
+        <div class="chat-input-row">
+          <input type="text" id="chat-input" class="chat-input"
+                 placeholder="Speak to district NPCs…"
+                 onkeydown="if(event.key==='Enter') NeonCityApp.sendMessage()">
+          <button class="btn-send" onclick="NeonCityApp.sendMessage()">SEND</button>
+        </div>
+      </section>
+
+      <!-- Economy Panel -->
+      <section class="economy-panel">
+        <h2 class="section-title">◈ ECONOMY</h2>
+        <div class="econ-balance">
+          <span class="econ-label">BALANCE</span>
+          <span class="econ-value" id="econ-balance">₢ —</span>
+        </div>
+        <div class="intel-buy">
+          <div class="intel-row">
+            <input type="text" id="intel-topic" class="intel-input" placeholder="Topic (e.g. OmniCorp)">
+            <input type="number" id="intel-cost" class="intel-cost-input" value="50" min="10" max="200">
+            <button class="btn-intel" onclick="NeonCityApp.buyIntel()">BUY INTEL</button>
+          </div>
+          <div class="intel-result" id="intel-result"></div>
+        </div>
+        <div class="exchange-row">
+          <input type="number" id="exchange-amount" class="exchange-input" value="100" min="1">
+          <select id="exchange-dir" class="exchange-dir">
+            <option value="in">Deposit</option>
+            <option value="out">Withdraw</option>
+          </select>
+          <button class="btn-exchange" onclick="NeonCityApp.doExchange()">EXCHANGE</button>
+        </div>
+      </section>
+
+      <!-- Active Events Panel -->
+      <section class="events-panel">
+        <h2 class="section-title">◈ ACTIVE EVENTS</h2>
+        <div class="events-list" id="events-list">
+          <div class="event-item system">No active events detected.</div>
+        </div>
+        <button class="btn-refresh-events" onclick="NeonCityApp.loadWorldEvents()">
+          ↺ REFRESH FEED
+        </button>
+      </section>
+
+    </div><!-- .neoncity-bottom -->
+
+  </div><!-- .neoncity-content -->
+
+</div><!-- .neoncity-layout -->
+
+<!-- ════════════════════════════════════════════════════════════════
+     DISTRICT DETAIL MODAL
+══════════════════════════════════════════════════════════════════ -->
+<div class="district-modal" id="district-modal" style="display:none">
+  <div class="modal-overlay" onclick="NeonCityApp.closeModal()"></div>
+  <div class="modal-content">
+    <div class="modal-header">
+      <span class="modal-icon" id="modal-icon">?</span>
+      <h3 class="modal-title" id="modal-title">DISTRICT</h3>
+      <button class="modal-close" onclick="NeonCityApp.closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <p class="modal-desc" id="modal-desc"></p>
+      <div class="modal-faction">
+        <span class="modal-faction-label">CONTROLLED BY</span>
+        <span class="modal-faction-name" id="modal-faction-name">—</span>
+        <div class="modal-faction-bar">
+          <div class="modal-faction-fill" id="modal-faction-fill" style="width:0%"></div>
+        </div>
+      </div>
+      <div class="modal-npcs">
+        <span class="modal-npcs-label">NPCS PRESENT</span>
+        <div class="modal-npc-list" id="modal-npc-list"></div>
+      </div>
+      <div class="modal-ticker" id="modal-ticker"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-enter-district" id="btn-enter-district">◉ INTERACT WITH DISTRICT</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════
+     SCRIPTS
+══════════════════════════════════════════════════════════════════ -->
+<script src="/shared/js/navbar_v2.js" defer></script>
+<script src="/shared/js/cosysim-particles3d.js"></script>
+<script src="/shared/js/cosysim-bench.js" defer></script>
+<script src="/static/neoncity.js" defer></script>
+</body>
+</html>

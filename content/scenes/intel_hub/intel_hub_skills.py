@@ -134,3 +134,78 @@ def intel_hub_cache_status() -> str:
         return json.dumps(_get_cache_status())
     except Exception as exc:
         return json.dumps({"error": str(exc)})
+
+
+@skill(
+    pack="intel_hub",
+    description="Get system-wide benchmark metrics including latency, model, and resource usage.",
+    category="SYSTEM",
+    tags=["benchmark", "metrics", "performance"],
+)
+def get_benchmark_report() -> str:
+    """Return a benchmark metrics report as JSON.
+
+    Returns:
+        JSON string with system resources and available benchmark data.
+    """
+    import json
+    try:
+        from content.scenes.intel_hub.intel_hub_scene import _get_system_resources, _get_benchmarks
+        resources = _get_system_resources()
+        benchmarks = _get_benchmarks()
+        return json.dumps({
+            "system": resources,
+            "benchmarks": benchmarks.get("benchmarks", []),
+            "source": "intel_hub",
+        })
+    except Exception as exc:
+        import json as _j
+        return _j.dumps({"error": str(exc)})
+
+
+@skill(
+    pack="intel_hub",
+    description="Get the current AI news feed from world events and recent activity.",
+    category="SYSTEM",
+    tags=["news", "feed", "world", "events"],
+)
+def get_news_feed() -> str:
+    """Return recent news and world events as JSON.
+
+    Returns:
+        JSON string with a list of news items and world sim events.
+    """
+    import json
+    try:
+        from content.scenes.intel_hub.intel_hub_scene import _get_news_latest, _get_world_events
+        news = _get_news_latest(limit=10)
+        world = _get_world_events(limit=10)
+        return json.dumps({"news": news, "world_events": world})
+    except Exception as exc:
+        return json.dumps({"error": str(exc)})
+
+
+@skill(
+    pack="intel_hub",
+    description="Ask Aria a question about the system and receive an intelligent response.",
+    category="SYSTEM",
+    tags=["aria", "assistant", "question", "briefing"],
+)
+def ask_aria(question: str) -> str:
+    """Ask the Aria system assistant a question.
+
+    Args:
+        question: The question to ask Aria.
+
+    Returns:
+        Aria's response as a string.
+    """
+    try:
+        from engine.assistant.system_assistant import get_system_assistant
+        assistant = get_system_assistant()
+        result = assistant.chat(question)
+        if isinstance(result, dict):
+            return result.get("response", str(result))
+        return str(result)
+    except Exception as exc:
+        return f"Aria unavailable: {exc}"

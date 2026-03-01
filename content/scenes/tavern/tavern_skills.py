@@ -410,3 +410,211 @@ def tavern_advance_time() -> str:
     if events:
         result += "\n" + "\n".join(events)
     return result
+
+
+# ── v0.68 Dark Renaissance Skills ───────────────────────────────────
+
+@skill(
+    pack="tavern",
+    tags=["tavern", "atmosphere", "status", "time"],
+    category=SkillCategory.SOCIAL,
+    description="Get the current tavern atmosphere and time of day at The Rusty Anchor.",
+)
+def tavern_atmosphere() -> str:
+    """Return current atmosphere, time-of-day, and heat level."""
+    state = _get_state()
+    if not state:
+        return "The Rusty Anchor is dark and shuttered."
+    snap = state.to_snapshot()
+    time_label = snap.get("time_of_day", "unknown").upper()
+    atm = snap.get("atmosphere", "quiet")
+    heat = snap.get("heat", 0)
+    turn = snap.get("turn", 0)
+
+    heat_desc = (
+        "Dead quiet — even the rats are bored." if heat < 20 else
+        "Low murmur of drinking men and old debts." if heat < 40 else
+        "Lively crowd, coin on every table." if heat < 60 else
+        "Rowdy as a storm — something's about to snap." if heat < 80 else
+        "On the edge of a brawl. Bottles are being gripped."
+    )
+    return (
+        f"⚓ THE RUSTY ANCHOR — {time_label} (Turn {turn})\n"
+        f"Atmosphere: {atm.upper()} | Heat: {heat}/100\n"
+        f"{heat_desc}"
+    )
+
+
+@skill(
+    pack="tavern",
+    tags=["tavern", "quest", "board", "adventure"],
+    category=SkillCategory.GAME,
+    description="Get available quests from the quest board at The Rusty Anchor.",
+)
+def get_quest_board() -> str:
+    """Fetch quests from ContentEngine, fall back to scene state."""
+    state = _get_state()
+    quests_from_engine: list = []
+
+    try:
+        from engine.content.content_engine import get_content_engine
+        ce = get_content_engine()
+        items = ce.get_by_scene("tavern", content_type="quest", limit=6)
+        quests_from_engine = [
+            f"  • [{it.id}] {it.title} — {', '.join(it.tags)}"
+            for it in items
+        ]
+    except Exception:
+        pass
+
+    lines = ["📋 QUEST BOARD — The Rusty Anchor:"]
+    if quests_from_engine:
+        lines.extend(quests_from_engine)
+    elif state:
+        available = state.get_available_quests()
+        if available:
+            for q in available:
+                lines.append(f"  • [{q.id}] {q.title} — {q.reward_gold}g reward ({q.giver})")
+        else:
+            lines.append("  No quests posted. Check back at nightfall.")
+    else:
+        lines.append("  Board is empty. The port has gone quiet.")
+
+    return "\n".join(lines)
+
+
+@skill(
+    pack="tavern",
+    tags=["tavern", "quest", "accept", "adventure"],
+    category=SkillCategory.GAME,
+    description="Accept a quest by ID and begin the adventure.",
+)
+def accept_quest(quest_id: str) -> str:
+    """Accept a quest from the board and publish quest_accepted event."""
+    state = _get_state()
+    if not state:
+        return "The Rusty Anchor is closed. No quests today."
+    if not quest_id:
+        return "Specify a quest ID to accept."
+    q = state.accept_quest(quest_id)
+    if not q:
+        return f"Quest '{quest_id}' is not available on the board."
+
+    state.log_event(f"Quest accepted: {q.title}", "quest")
+
+    try:
+        from engine.events.event_bus import get_event_bus
+        get_event_bus().publish(
+            "tavern.quest_accepted",
+            {"quest_id": quest_id, "title": q.title, "reward_gold": q.reward_gold},
+        )
+    except Exception:
+        pass
+
+    return (
+        f"📜 Quest accepted: {q.title}\n"
+        f"Objective: {q.objective}\n"
+        f"Reward: {q.reward_gold}g\n"
+        f"Given by: {q.giver}"
+    )
+
+
+@skill(
+    pack="tavern",
+    tags=["tavern", "dice", "roll", "skill_check"],
+    category=SkillCategory.GAME,
+    description="Roll dice for skill checks and random events at The Rusty Anchor.",
+    cooldown=2,
+)
+def roll_dice(sides: int = 20, reason: str = "skill check") -> str:
+    """3D dice roll — roll three dice and sum them."""
+    import random
+    sides = max(2, min(int(sides), 100))
+    rolls = [random.randint(1, sides) for _ in range(3)]
+    total = sum(rolls)
+    critical = total == sides * 3
+    fumble = total == 3
+
+    state = _get_state()
+    if state:
+        state.log_event(f"Dice roll ({reason}): {rolls} = {total}", "game")
+
+    suffix = " 💀 FUMBLE!" if fumble else " ✨ CRITICAL!" if critical else ""
+    return (
+        f"🎲 {reason} — 3d{sides}\n"
+        f"Rolls: [{', '.join(str(r) for r in rolls)}]\n"
+        f"Total: {total}/{sides * 3}{suffix}"
+    )
+
+
+@skill(
+    pack="tavern",
+    tags=["tavern", "drink", "rumor", "bar"],
+    category=SkillCategory.SOCIAL,
+    description="Buy a drink and hear a rumor from the barkeep at The Rusty Anchor.",
+    cooldown=8,
+)
+def buy_drink_and_rumor(drink_name: str = "ale") -> str:
+    """Purchase a drink and get a rumor from the barkeep."""
+    state = _get_state()
+    if not state:
+        return "The bar is shuttered. No drinks tonight."
+
+    # Find drink
+    from .tavern_state import DRINKS_MENU
+    drink = next((d for d in DRINKS_MENU if d.id == drink_name), None)
+    if not drink:
+        menu = ", ".join(f"{d.id} ({d.price}g)" for d in DRINKS_MENU)
+        return f"Never heard of '{drink_name}'. Menu: {menu}"
+
+    if not state.spend_gold(drink.price):
+        return (
+            f"Can't afford {drink.name} ({drink.price}g). "
+            f"You have {state.gold}g."
+        )
+
+    changes = state.adjust_stats(**drink.effects)
+    state.drinks_consumed.append(drink.id)
+    state.adjust_heat(3)
+    state.log_event(f"Ordered {drink.name} at The Rusty Anchor.", "drink")
+
+    # Try to get an economy transaction logged
+    try:
+        from engine.economy.economy import get_economy_manager, TransactionType
+        get_economy_manager().transact(
+            entity_id="player",
+            amount=-drink.price,
+            transaction_type=TransactionType.SPEND,
+            description=f"Drink: {drink.name} at The Rusty Anchor",
+        )
+    except Exception:
+        pass
+
+    # Schedule warmth fade consequence
+    scene = _get_tavern()
+    if scene and hasattr(scene, "_fw") and scene._fw:
+        try:
+            scene._fw.schedule_consequence(
+                scene_id="tavern", character_id="player",
+                consequence_type="stat_adjust",
+                params={"warmth": -5},
+                trigger_after_turns=3,
+                description=f"The warmth from {drink.name} fades.",
+            )
+        except Exception:
+            pass
+
+    # Hear a rumor while drinking
+    rumor = state.hear_rumor()
+    fx = ", ".join(
+        f"{k}{'+' if v > 0 else ''}{v}" for k, v in changes.items() if v
+    )
+    result = (
+        f"🍺 {drink.name} — {drink.description}\n"
+        f"Cost: {drink.price}g | Effects: {fx}"
+    )
+    if rumor:
+        from .tavern_state import NPC_PROFILES
+        speaker = NPC_PROFILES.get(rumor.source, {}).get("name", "someone")
+        result += f'\n\n🗣️ {speaker} leans in: "{rumor.text}"'
+    return result

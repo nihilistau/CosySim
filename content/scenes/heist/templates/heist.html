@@ -1,78 +1,165 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-scene="heist">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>The Heist — CosySim</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/heist.css') }}">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
-    <link rel="stylesheet" href="/shared/css/design_tokens.css">
-    <script src="/shared/js/cosysim-core.js"></script>
-    <script src="/shared/js/cosysim-stream.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>THE SCORE — CosySim</title>
+
+  <!-- CosySim design system -->
+  <link rel="stylesheet" href="/shared/css/design_tokens.css">
+  <link rel="stylesheet" href="/shared/css/cosysim-components.css">
+  <link rel="stylesheet" href="/shared/css/cosysim-animations.css">
+  <link rel="stylesheet" href="/shared/css/navbar_v2.css">
+
+  <!-- Scene stylesheet -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/heist.css') }}">
 </head>
-<body>
-    <div id="app">
-        <!-- Top bar -->
-        <header class="top-bar">
-            <h1>🎯 THE HEIST</h1>
-            <div class="meters">
-                <div class="meter" id="suspicion-meter">
-                    <label>Suspicion</label>
-                    <div class="bar"><div class="fill" id="suspicion-fill"></div></div>
-                    <span id="suspicion-val">0</span>
-                </div>
-                <div class="meter" id="loot-meter">
-                    <label>Loot</label>
-                    <div class="bar"><div class="fill loot" id="loot-fill"></div></div>
-                    <span id="loot-val">$0</span>
-                </div>
-                <div class="phase-badge" id="phase-badge">PLANNING</div>
-            </div>
-        </header>
+<body class="cs-scene-body heist-body">
 
-        <!-- Main layout -->
-        <div class="main-layout">
-            <!-- Left: Crew panel -->
-            <div class="crew-panel">
-                <h2>Crew</h2>
-                <div id="crew-list"></div>
-                <button class="btn" id="btn-tick">🎲 Crew Tick</button>
-            </div>
+  {% include 'navbar_v2.html' %}
 
-            <!-- Center: Chat / Events -->
-            <div class="center-panel">
-                <div class="chat-area" id="chat-area"></div>
-                <div class="input-area">
-                    <select id="target-crew">
-                        <option value="">Select crew member...</option>
-                    </select>
-                    <input type="text" id="chat-input" placeholder="Message your crew..." />
-                    <button class="btn send" id="btn-send">Send</button>
-                </div>
-            </div>
+  <!-- Blueprint grid overlay (decorative) -->
+  <div class="blueprint-bg" aria-hidden="true"></div>
 
-            <!-- Right: Game state -->
-            <div class="state-panel">
-                <h2>Obstacles</h2>
-                <div id="obstacles-list"></div>
-                <h2>Events</h2>
-                <div id="events-list"></div>
-                <div class="actions">
-                    <button class="btn phase" id="btn-advance">⏭ Advance Phase</button>
-                    <button class="btn loot" id="btn-loot">💰 Grab Loot</button>
-                </div>
-            </div>
-        </div>
-
-        <!-- Setup modal -->
-        <div class="modal" id="setup-modal">
-            <div class="modal-content">
-                <h2>🎯 Plan Your Heist</h2>
-                <div class="venue-grid" id="venue-grid"></div>
-                <button class="btn start" id="btn-start">Start Heist</button>
-            </div>
-        </div>
+  <!-- ── Heist Header ─────────────────────────────────────────── -->
+  <header class="heist-header">
+    <div class="job-title-area">
+      <span class="job-label">TARGET</span>
+      <h1 class="job-name" id="job-name">— SELECT JOB —</h1>
     </div>
-    <script src="{{ url_for('static', filename='js/heist.js') }}"></script>
+
+    <div class="heat-area">
+      <span class="heat-label">HEAT</span>
+      <div class="heat-bar-wrap" title="Current suspicion level">
+        <div class="heat-bar" id="heat-bar" style="width:15%;--heat-pct:15"></div>
+      </div>
+      <span class="heat-value" id="heat-value">15</span>
+    </div>
+
+    <div class="timer-area">
+      <span class="timer-label">CLOCK</span>
+      <span class="timer-value" id="timer-value">—</span>
+    </div>
+
+    <div class="phase-badge" id="phase-badge">PLANNING</div>
+  </header>
+
+  <!-- ── Main 3-column Layout ────────────────────────────────── -->
+  <main class="heist-layout" id="heist-main">
+
+    <!-- LEFT: Job briefing -->
+    <section class="job-panel panel" aria-label="Job Briefing">
+      <div class="panel-header">
+        <span class="panel-icon">📋</span>
+        <h2 class="panel-title">BRIEFING</h2>
+      </div>
+
+      <div class="job-card" id="job-briefing">
+        <div class="job-select-hint">No job selected.<br>Choose a target to begin.</div>
+      </div>
+
+      <div class="jobs-list" id="jobs-list" role="list" aria-label="Available jobs">
+        <!-- Populated by JS -->
+      </div>
+    </section>
+
+    <!-- CENTER: Investigation board / blueprint canvas -->
+    <section class="board-panel panel" aria-label="Investigation Board">
+      <div class="panel-header">
+        <span class="panel-icon">🗺️</span>
+        <h2 class="panel-title">BOARD</h2>
+        <span class="board-subtitle">Connect the dots.</span>
+      </div>
+
+      <div class="investigation-board" id="investigation-board" role="region" aria-label="Pinboard">
+        <div class="board-empty-hint" id="board-hint">Select a job to populate the board.</div>
+      </div>
+
+      <!-- Tension meter -->
+      <div class="tension-area">
+        <span class="tension-label">TENSION</span>
+        <svg class="tension-meter" id="tension-meter"
+             viewBox="0 0 300 60" preserveAspectRatio="none"
+             aria-label="Tension level" role="img">
+          <polyline class="tension-glow" id="tension-glow"
+                    points="0,30 50,30 100,30 150,30 200,30 250,30 300,30"/>
+          <polyline class="tension-line" id="tension-line"
+                    points="0,30 50,30 100,30 150,30 200,30 250,30 300,30"/>
+        </svg>
+      </div>
+    </section>
+
+    <!-- RIGHT: Crew roster -->
+    <section class="crew-panel panel" aria-label="Crew Roster">
+      <div class="panel-header">
+        <span class="panel-icon">👤</span>
+        <h2 class="panel-title">CREW</h2>
+      </div>
+
+      <div class="crew-list" id="crew-list" role="list" aria-label="Crew members">
+        <div class="crew-empty-hint">No active crew.<br>Start a job to deploy.</div>
+      </div>
+
+      <div class="crew-chat-area">
+        <div class="chat-log" id="chat-log" aria-live="polite" aria-label="Crew communications"></div>
+        <div class="chat-input-row">
+          <select class="crew-select" id="crew-target" aria-label="Target crew member">
+            <option value="">— crew —</option>
+          </select>
+          <input class="chat-input" id="chat-input" type="text"
+                 placeholder="Mastermind…" aria-label="Send message to crew"
+                 autocomplete="off" maxlength="300">
+          <button class="btn-send" id="btn-send" aria-label="Send">▶</button>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ── Footer: Phase stepper + controls ───────────────────── -->
+  <footer class="heist-footer">
+
+    <div class="phase-stepper" id="phase-stepper" role="list" aria-label="Heist phases">
+      <div class="phase-step" data-phase="planning" role="listitem">
+        <div class="step-dot"></div>
+        <span class="step-label">PLAN</span>
+      </div>
+      <div class="step-connector" aria-hidden="true"></div>
+      <div class="phase-step" data-phase="approach" role="listitem">
+        <div class="step-dot"></div>
+        <span class="step-label">INFILTRATE</span>
+      </div>
+      <div class="step-connector" aria-hidden="true"></div>
+      <div class="phase-step" data-phase="execution" role="listitem">
+        <div class="step-dot"></div>
+        <span class="step-label">ACQUIRE</span>
+      </div>
+      <div class="step-connector" aria-hidden="true"></div>
+      <div class="phase-step" data-phase="escape" role="listitem">
+        <div class="step-dot"></div>
+        <span class="step-label">EXTRACT</span>
+      </div>
+    </div>
+
+    <div class="phase-actions" id="phase-actions">
+      <button class="btn-phase" id="btn-advance">⏭ ADVANCE PHASE</button>
+      <button class="btn-abort"  id="btn-abort">⚠ ABORT</button>
+      <button class="btn-tick"   id="btn-tick">🎲 CREW TICK</button>
+    </div>
+
+    <div class="bench-hud" id="cs-bench-hud" style="display:none;"></div>
+
+  </footer>
+
+  <!-- Particles (embers — near heat-critical elements) -->
+  <div id="heist-particles" class="heist-particles" aria-hidden="true"></div>
+
+  <!-- ── Scripts ─────────────────────────────────────────────── -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="/shared/js/navbar_v2.js" defer></script>
+  <script src="/shared/js/cosysim-particles3d.js"></script>
+  <script src="/shared/js/cosysim-bench.js"></script>
+  <script src="{{ url_for('static', filename='js/heist.js') }}"></script>
+
 </body>
 </html>

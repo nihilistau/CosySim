@@ -274,3 +274,274 @@ def bedroom_fire_event(event_type: str = "", details: str = "") -> str:
     scene._inject_to_loop("(Event)", f"[EVENT: {event_type}] {msg}", "event")
     scene.socketio.emit("scene_event", {"type": event_type, "message": msg})
     return f"Event fired: {event_type}. {details}"
+
+
+# ── Penthouse v0.68 — New Skills ──────────────────────────────────────
+
+
+@skill(
+    pack="bedroom",
+    tags=["game", "bedroom", "scenarios"],
+    category=SkillCategory.GAME,
+    description="Get current scenario options from the content pool.",
+)
+def get_scenario_options(intensity: int = 2, tags: str = "") -> str:
+    """Return available scenarios filtered by intensity level and optional tags.
+
+    Args:
+        intensity: Desired intensity level 1-5 (default 2).
+        tags: Comma-separated tag filter (e.g. "romantic,slow").
+
+    Returns:
+        JSON-serialisable string of scenario objects, or error message.
+    """
+    import json
+
+    scene = _get_bedroom_scene()
+
+    # Try ContentEngine first
+    try:
+        from engine.content.content_engine import get_content_engine
+        engine = get_content_engine()
+        result = engine.get_scenarios(scene="bedroom", intensity=intensity, tags=tags)
+        return json.dumps(result, ensure_ascii=False)
+    except Exception:
+        pass
+
+    # Fallback: built-in PREMADE_SCENARIOS
+    try:
+        from content.scenes.bedroom.bedroom_scene import PREMADE_SCENARIOS
+        tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
+        options = []
+        for sid, sc in PREMADE_SCENARIOS.items():
+            options.append({
+                "id": sid,
+                "label": sc.get("label", sid),
+                "emoji": sc.get("emoji", "🎭"),
+                "intensity": intensity,
+            })
+        return json.dumps(options[:20], ensure_ascii=False)
+    except Exception as exc:
+        return f"Error loading scenarios: {exc}"
+
+
+@skill(
+    pack="bedroom",
+    tags=["game", "bedroom", "director"],
+    category=SkillCategory.GAME,
+    description="Load a scenario into the scene director.",
+)
+def load_scenario(scenario_id: str = "") -> str:
+    """Activate a scenario and return the opening director beat.
+
+    Args:
+        scenario_id: Scenario identifier key (e.g. "romantic_evening").
+
+    Returns:
+        Opening beat instruction string, or error message.
+    """
+    if not scenario_id:
+        return "Specify scenario_id."
+    scene = _get_bedroom_scene()
+    if not scene:
+        return "Bedroom not active."
+
+    # Try SceneDirector
+    try:
+        from engine.director.scene_director import get_scene_director
+        director = get_scene_director("bedroom")
+        beat = director.load_scenario(scenario_id)
+        return f"Scenario loaded. Beat: {beat}"
+    except Exception:
+        pass
+
+    # Fallback: built-in scenario
+    from content.scenes.bedroom.bedroom_scene import PREMADE_SCENARIOS
+    sc = PREMADE_SCENARIOS.get(scenario_id)
+    if not sc:
+        return f"Unknown scenario: {scenario_id}. Available: {', '.join(PREMADE_SCENARIOS.keys())}"
+
+    scene.active_scenario = scenario_id
+    scene.story_beats = list(sc.get("beats", []))
+    scene._broadcast_state()
+    opening = sc.get("opening", f"Scenario '{sc.get('label', scenario_id)}' begins.")
+    scene.socketio.emit("director_beat", {
+        "beat": {"type": "opening", "instruction": opening},
+        "scenario_id": scenario_id,
+    })
+    return f"Loaded '{sc.get('label', scenario_id)}'. Opening: {opening[:120]}..."
+
+
+@skill(
+    pack="bedroom",
+    tags=["game", "bedroom", "memory"],
+    category=SkillCategory.GAME,
+    description="Check what the character remembers about the player.",
+)
+def recall_memories(character_id: str = "") -> str:
+    """Retrieve recent memories the character has about the player.
+
+    Args:
+        character_id: The character whose memory to query.
+
+    Returns:
+        Formatted string of memories, or a fallback message.
+    """
+    if not character_id:
+        return "Specify character_id."
+    scene = _get_bedroom_scene()
+    if not scene:
+        return "Bedroom not active."
+    if character_id not in scene.characters:
+        return f"Character {character_id} not loaded."
+
+    # Try CharacterMemory engine
+    try:
+        from engine.characters.memory import get_character_memory
+        mem = get_character_memory()
+        memories = mem.recall(character_id, subject="player", limit=10)
+        if not memories:
+            return f"{scene.characters[character_id].name} has no memories of the player yet."
+        lines = [f"- [{m.get('weight', 0):.1f}] {m.get('description', '')}" for m in memories]
+        return f"Memories of {scene.characters[character_id].name}:\n" + "\n".join(lines)
+    except Exception:
+        pass
+
+    return f"{scene.characters[character_id].name} has a fresh perspective — no memories stored yet."
+
+
+@skill(
+    pack="bedroom",
+    tags=["game", "bedroom", "memory"],
+    category=SkillCategory.GAME,
+    description="Record a memorable moment in character memory.",
+    cooldown=5,
+)
+def remember_moment(
+    character_id: str = "",
+    description: str = "",
+    weight: float = 0.7,
+) -> str:
+    """Store a memorable moment for a character to recall later.
+
+    Args:
+        character_id: The character forming the memory.
+        description: Human-readable description of the moment.
+        weight: Emotional weight 0.0–1.0 (default 0.7).
+
+    Returns:
+        Confirmation string or error message.
+    """
+    if not character_id or not description:
+        return "Specify character_id and description."
+    scene = _get_bedroom_scene()
+    if not scene:
+        return "Bedroom not active."
+    if character_id not in scene.characters:
+        return f"Character {character_id} not loaded."
+
+    char_name = scene.characters[character_id].name
+    weight = max(0.0, min(1.0, float(weight)))
+
+    try:
+        from engine.characters.memory import get_character_memory
+        mem = get_character_memory()
+        mem.store(
+            character_id=character_id,
+            subject="player",
+            description=description,
+            weight=weight,
+        )
+        scene.socketio.emit("memory_update", {
+            "character_id": character_id,
+            "description": description,
+            "weight": weight,
+        })
+        return f"Memory stored for {char_name} (weight={weight:.2f}): {description}"
+    except Exception as exc:
+        return f"Memory engine unavailable ({exc}). Moment noted locally."
+
+
+@skill(
+    pack="bedroom",
+    tags=["game", "bedroom", "character"],
+    category=SkillCategory.GAME,
+    description="Get current emotion levels for a character.",
+)
+def get_emotion_levels(character_id: str = "") -> str:
+    """Return the full emotion stat vector for a character.
+
+    Args:
+        character_id: Character to query.
+
+    Returns:
+        Formatted stats string with all 10 emotion dimensions.
+    """
+    if not character_id:
+        return "Specify character_id."
+    scene = _get_bedroom_scene()
+    if not scene:
+        return "Bedroom not active."
+    profile = scene.profiles.get(character_id)
+    if not profile:
+        return f"Character {character_id} not loaded."
+
+    stats = profile.stats.to_dict()
+    char_name = scene.characters[character_id].name if character_id in scene.characters else character_id
+    lines = [f"Emotion levels for {char_name}:"]
+    for stat, value in sorted(stats.items()):
+        bar = "█" * max(0, int(float(value) / 10)) + "░" * max(0, 10 - int(float(value) / 10))
+        lines.append(f"  {stat:14s} [{bar}] {float(value):5.1f}")
+    lines.append(f"\n  Mood: {profile.stats.describe()}")
+    lines.append(f"  Compliance: {round(profile.stats.compliance_score(0), 1)}%")
+    return "\n".join(lines)
+
+
+@skill(
+    pack="bedroom",
+    tags=["game", "bedroom", "economy"],
+    category=SkillCategory.GAME,
+    description="Unlock premium content with player credits.",
+    cooldown=10,
+)
+def unlock_premium(content_id: str = "", cost: int = 100) -> str:
+    """Spend credits to unlock a premium scenario or content item.
+
+    Args:
+        content_id: Identifier of the content to unlock.
+        cost: Credit cost (default 100).
+
+    Returns:
+        Success confirmation or insufficient-credits message.
+    """
+    if not content_id:
+        return "Specify content_id."
+    scene = _get_bedroom_scene()
+    if not scene:
+        return "Bedroom not active."
+
+    try:
+        from engine.economy.economy import get_economy_manager
+        economy = get_economy_manager()
+        balance = economy.get_balance("player")
+        if balance < cost:
+            return (
+                f"Insufficient credits. Need {cost} ₵, have {balance} ₵. "
+                f"Earn more by completing scenarios."
+            )
+        success = economy.spend("player", cost, reason=f"unlock:{content_id}")
+        if success:
+            new_balance = economy.get_balance("player")
+            scene.socketio.emit("economy_update", {
+                "balance": new_balance,
+                "currency": "₵",
+                "event": "unlock",
+                "content_id": content_id,
+            })
+            scene.socketio.emit("premium_unlocked", {"content_id": content_id})
+            return f"Unlocked '{content_id}' for {cost} ₵. New balance: {new_balance} ₵."
+        return f"Transaction failed for '{content_id}'."
+    except Exception:
+        # Economy engine not wired — grant free access in dev
+        scene.socketio.emit("premium_unlocked", {"content_id": content_id})
+        return f"Unlocked '{content_id}' (economy offline — dev mode)."

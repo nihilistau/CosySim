@@ -129,3 +129,184 @@ def heist_obstacles() -> str:
     if not game.obstacles_remaining:
         return "All obstacles cleared! Time to grab the loot and escape."
     return "Remaining obstacles: " + ", ".join(game.obstacles_remaining)
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  v0.68 "Dark Renaissance" — THE SCORE skills
+# ══════════════════════════════════════════════════════════════════════
+
+
+def _get_heist_scene():
+    """Get the active HeistScene instance (not just the game state)."""
+    from engine.scenes.base_scene import BaseScene
+    return BaseScene.get_active_scene("heist")
+
+
+@skill(
+    name="get_heist_jobs",
+    description="Get available heist jobs from the planning board",
+    pack="heist",
+    cooldown=3,
+)
+def get_heist_jobs() -> str:
+    """Return a list of available heist jobs with payout and risk information."""
+    import json
+    scene = _get_heist_scene()
+    jobs = []
+    # Try ContentEngine first
+    try:
+        from engine.content.content_engine import get_content_engine
+        ce = get_content_engine()
+        if hasattr(ce, "get_heist_jobs"):
+            jobs = ce.get_heist_jobs() or []
+    except Exception:
+        pass
+    # Fallback to VENUES
+    if not jobs:
+        try:
+            from content.scenes.heist.heist_game import VENUES
+            jobs = [
+                {
+                    "id": k,
+                    "name": v.get("name", k),
+                    "payout": v.get("loot_value", 500_000),
+                    "difficulty": v.get("difficulty", 1),
+                    "guards": v.get("guards", 0),
+                }
+                for k, v in VENUES.items()
+            ]
+        except Exception:
+            return "Unable to retrieve available jobs."
+    return json.dumps(jobs)
+
+
+@skill(
+    name="select_heist",
+    description="Select a heist job as the active target",
+    pack="heist",
+    cooldown=5,
+)
+def select_heist(job_id: str) -> str:
+    """Set the active heist target by job ID.
+
+    Args:
+        job_id: The identifier of the heist venue/job to select.
+
+    Returns:
+        Confirmation string with job details or an error message.
+    """
+    if not job_id:
+        return "Specify a job_id to select."
+    try:
+        from content.scenes.heist.heist_game import VENUES
+        venue = VENUES.get(job_id)
+        if not venue:
+            return f"Unknown job: '{job_id}'. Available: {', '.join(VENUES.keys())}"
+        scene = _get_heist_scene()
+        if scene and hasattr(scene, "_active_job_id"):
+            scene._active_job_id = job_id
+        name = venue.get("name", job_id)
+        payout = venue.get("loot_value", 0)
+        diff = venue.get("difficulty", 1)
+        return f"Job selected: {name} | Payout: ${payout:,} | Difficulty: {diff}/3"
+    except Exception as exc:
+        return f"Failed to select job: {exc}"
+
+
+@skill(
+    name="assign_crew_member",
+    description="Assign a crew member to a role in the active heist",
+    pack="heist",
+    cooldown=2,
+)
+def assign_crew_member(crew_member: str, role: str) -> str:
+    """Assign a crew member to a specific operational role.
+
+    Args:
+        crew_member: The crew member's ID (e.g. 'ghost', 'tank', 'silk', 'wheels').
+        role: The operational role (e.g. 'mastermind', 'hacker', 'lookout', 'muscle', 'driver').
+
+    Returns:
+        Confirmation string or error message.
+    """
+    if not crew_member or not role:
+        return "Specify both crew_member and role."
+    game = _get_heist()
+    if game and crew_member not in game.crew:
+        available = ", ".join(game.crew.keys()) if game.crew else "none"
+        return f"Crew member '{crew_member}' not found. Active crew: {available}"
+    scene = _get_heist_scene()
+    if scene and hasattr(scene, "_assigned_roles"):
+        scene._assigned_roles[crew_member] = role
+    return f"{crew_member.capitalize()} assigned as {role.upper()}."
+
+
+@skill(
+    name="execute_heist_phase",
+    description="Execute the current heist phase",
+    pack="heist",
+    cooldown=5,
+)
+def execute_heist_phase(phase: str) -> str:
+    """Advance the heist to execute the specified phase.
+
+    Args:
+        phase: Target phase to execute (planning/approach/execution/escape).
+
+    Returns:
+        Result string including new phase and any complications.
+    """
+    game = _get_heist()
+    if not game:
+        return "No active heist to execute."
+    current = game.phase.value
+    new_phase = game.advance_phase()
+    comp = game.maybe_complication()
+    result = f"Phase advanced: {current} → {new_phase.value}"
+    if comp:
+        result += f" | COMPLICATION: {comp}"
+    if game.check_bust():
+        result += " | ⚠ BLOWN — too much heat!"
+    elif game.check_victory():
+        result += " | ✓ THE SCORE — clean exit."
+    return result
+
+
+@skill(
+    name="crew_status",
+    description="Get current crew status and heist heat level",
+    pack="heist",
+    cooldown=2,
+)
+def crew_status() -> str:
+    """Return a full status report: heat level, phase, and each crew member's state.
+
+    Returns:
+        Human-readable status string suitable for LLM consumption.
+    """
+    game = _get_heist()
+    if not game:
+        return "No active heist."
+    lines = [
+        f"Phase: {game.phase.value.upper()}",
+        f"Heat: {game.suspicion}/100",
+        f"Loot: ${game.loot_collected:,} / ${game.loot_target:,}",
+        "",
+        "CREW:",
+    ]
+    for cid, member in game.crew.items():
+        status_str = "ARRESTED" if member.arrested else ("INJURED" if member.injured else "OK")
+        lines.append(
+            f"  {member.name} ({member.specialty.value}) — "
+            f"HP:{member.health} MOR:{member.morale} [{status_str}]"
+        )
+    scene = _get_heist_scene()
+    if scene and hasattr(scene, "_assigned_roles") and scene._assigned_roles:
+        lines.append("")
+        lines.append("ROLES:")
+        for m, r in scene._assigned_roles.items():
+            lines.append(f"  {m} → {r}")
+    if game.obstacles_remaining:
+        lines.append("")
+        lines.append("REMAINING: " + ", ".join(game.obstacles_remaining))
+    return "\n".join(lines)

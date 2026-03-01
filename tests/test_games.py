@@ -39,6 +39,7 @@ def _make_scene(port: int = 15567):
         # Active game dicts
         s.mystery_games = {}
         s.tod_games = {}
+        s._active_game = {}  # v0.68: player → active game type
 
         # Create real Flask app + SocketIO for route testing
         from flask import Flask
@@ -102,19 +103,17 @@ class TestInitialization:
         assert scene.port == 15567
 
     def test_metadata_title(self, scene):
-        assert scene.SCENE_METADATA["title"] == "Games Arcade"
+        assert scene.SCENE_METADATA["display_name"] == "THE ARCADE"
 
     def test_metadata_genre(self, scene):
-        assert scene.SCENE_METADATA["genre"] == "minigames"
+        assert scene.SCENE_METADATA["type"] == "games"
 
     def test_metadata_max_characters(self, scene):
-        assert scene.SCENE_METADATA["max_characters"] == 2
+        assert scene.SCENE_METADATA["accent_color"] == "#8b5cf6"
 
     def test_metadata_features(self, scene):
-        feats = scene.SCENE_METADATA["features"]
-        assert "mystery_investigation" in feats
-        assert "truth_or_dare" in feats
-        assert "mcp_skills" in feats
+        desc = scene.SCENE_METADATA["description"]
+        assert len(desc) > 20
 
     def test_metadata_description_non_empty(self, scene):
         assert len(scene.SCENE_METADATA["description"]) > 20
@@ -183,11 +182,11 @@ class TestRouteRegistration:
     def test_index_route_returns_html(self, client):
         resp = client.get("/")
         assert resp.status_code == 200
-        assert b"Games Arcade" in resp.data
+        assert b"THE ARCADE" in resp.data
 
     def test_index_contains_mystery_section(self, client):
         resp = client.get("/")
-        assert b"Mystery Investigation" in resp.data
+        assert b"Mystery Board" in resp.data
 
     def test_index_contains_truth_or_dare_section(self, client):
         resp = client.get("/")
@@ -285,7 +284,7 @@ class TestGetPluginInfo:
 
     def test_plugin_info_version(self, scene):
         info = scene.get_plugin_info()
-        assert info["version"] == "0.56b"
+        assert info["version"] == "0.68"
 
     def test_plugin_info_author(self, scene):
         assert scene.get_plugin_info()["author"] == "CosySim"

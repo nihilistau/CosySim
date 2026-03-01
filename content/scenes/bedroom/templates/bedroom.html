@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en" data-scene="bedroom">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>THE PENTHOUSE — CosySim</title>
+
+  <!-- CosySim Design System -->
+  <link rel="stylesheet" href="/shared/css/design_tokens.css">
+  <link rel="stylesheet" href="/shared/css/cosysim-components.css">
+  <link rel="stylesheet" href="/shared/css/cosysim-animations.css">
+  <link rel="stylesheet" href="/shared/css/navbar_v2.css">
+
+  <!-- Scene CSS -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='bedroom.css') }}">
+</head>
+
+<body class="cs-scene-body penthouse-body">
+
+  {% include 'navbar_v2.html' %}
+
+  <!-- Adult Content Gate (session-cached) -->
+  <div id="penthouse-gate" class="penthouse-gate" role="alertdialog" aria-modal="true" aria-labelledby="gate-title">
+    <div class="penthouse-gate__card cs-glass-panel cs-glass-panel--strong">
+      <div class="penthouse-gate__icon">🔞</div>
+      <h1 id="gate-title" class="penthouse-gate__title">THE PENTHOUSE</h1>
+      <p class="penthouse-gate__subtitle">Explicit adult content. 18+ only.</p>
+      <p class="penthouse-gate__body">
+        This space contains graphic sexual language, explicit adult roleplay, and mature themes.
+        Characters are designed to be fully uninhibited. By entering you confirm you are of legal age
+        in your jurisdiction and consent to viewing this content.
+      </p>
+      <div class="penthouse-gate__actions">
+        <button class="cs-glass-btn cs-glass-btn--accent" id="gate-enter">
+          Enter — I'm an adult
+        </button>
+        <button class="cs-glass-btn cs-glass-btn--danger" id="gate-leave" onclick="window.location.href='/'">
+          Leave
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scene: THE PENTHOUSE -->
+  <main class="bedroom-layout" id="bedroom-main" aria-label="The Penthouse scene">
+
+    <!-- ── LEFT: Character portrait + emotion bars ───────────────── -->
+    <aside class="bedroom-character-panel cs-glass-panel" aria-label="Character panel">
+
+      <!-- Portrait -->
+      <div class="bedroom-portrait-wrap" id="char-portrait-frame">
+        <div class="cs-portrait-frame cs-portrait-frame--2xl cs-portrait-frame--no-dot" id="portrait-inner">
+          <img id="char-portrait-img" src="" alt="Character portrait" class="bedroom-portrait-img">
+          <div class="bedroom-portrait-overlay"></div>
+        </div>
+        <div class="bedroom-char-name" id="char-name">—</div>
+        <div class="bedroom-speaking-ring" id="speaking-ring" aria-hidden="true"></div>
+      </div>
+
+      <!-- 10 Emotion Bars -->
+      <div class="bedroom-emotion-bars" role="group" aria-label="Emotion levels">
+
+        <div class="cs-stat-bar cs-stat-bar--arousal">
+          <div class="cs-stat-bar__label">
+            <span>Arousal</span>
+            <span class="cs-stat-bar__value" id="stat-arousal-val">0</span>
+          </div>
+          <div class="cs-stat-bar__track">
+            <div class="cs-stat-bar__fill" id="stat-arousal" style="width:0%"></div>
+          </div>
+        </div>
+
+        <div class="cs-stat-bar cs-stat-bar--pleasure">
+          <div class="cs-stat-bar__label">
+            <span>Pleasure</span>
+            <span class="cs-stat-bar__value" id="stat-pleasure-val">0</span>
+          </div>
+          <div class="cs-stat-bar__track">
+            <div class="cs-stat-bar__fill" id="stat-pleasure" style="width:0%"></div>
+          </div>
+        </div>
+
+        <div class="cs-stat-bar cs-stat-bar--happiness">
+          <div class="cs-stat-bar__label">
+            <span>Happiness</span>
+            <span class="cs-stat-bar__value" id="stat-happiness-val">0</span>
+          </div>
+          <div class="cs-stat-bar__track">
+            <div class="cs-stat-bar__fill" id="stat-happiness" style="width:0%"></div>
+          </div>
+        </div>
+
+        <div class="cs-stat-bar cs-stat-bar--horniness">
+          <div class="cs-stat-bar__label">
+            <span>Desire</span>
+            <span class="cs-stat-bar__value" id="stat-horniness-val">0</span>
+          </div>
+          <div class="cs-stat-bar__track">
+            <div class="cs-stat-bar__fill" id="stat-horniness" style="width:0%"></div>
+          </div>
+        </div>
+
+        <div class="cs-stat-bar cs-stat-bar--drunkenness">
+          <div class="cs-stat-bar__label">
+            <span>Intoxicated</span>
+            <span class="cs-stat-bar__value" id="stat-drunkenness-val">0</span>
+          </div>
+          <div class="cs-stat-bar__track">
+            <div class="cs-stat-bar__fill" id="stat-drunkenness" style="width:0%"></div>
+          </div>
+        </div>
+
+        <div class="cs-stat-bar cs-stat-bar--dominance">
+          <div class="cs-stat-bar__label">
+            <span>Dominance</span>
+            <span class="cs-stat-bar__value" id="stat-dominance-val">0</span>
+          </div>
+          <div class="cs-stat-bar__track">
+            <div class="cs-stat-bar__fill" id="stat-dominance" style="width:0%"></div>
+          </div>
+        </div>
+
+        <div class="cs-stat-bar cs-stat-bar--fear">
+          <div class="cs-stat-bar__label">
+            <span>Fear</span>
+            <span class="cs-stat-bar__value" id="stat-fear-val">0</span>
+          </div>
+          <div class="cs-stat-bar__track">
+            <div class="cs-stat-bar__fill" id="stat-fear" style="width:0%"></div>
+          </div>
+        </div>
+
+        <div class="cs-stat-bar cs-stat-bar--anger">
+          <div class="cs-stat-bar__label">
+            <span>Anger</span>
+            <span class="cs-stat-bar__value" id="stat-anger-val">0</span>
+          </div>
+          <div class="cs-stat-bar__track">
+            <div class="cs-stat-bar__fill" id="stat-anger" style="width:0%"></div>
+          </div>
+        </div>
+
+        <div class="cs-stat-bar cs-stat-bar--openness">
+          <div class="cs-stat-bar__label">
+            <span>Openness</span>
+            <span class="cs-stat-bar__value" id="stat-openness-val">0</span>
+          </div>
+          <div class="cs-stat-bar__track">
+            <div class="cs-stat-bar__fill" id="stat-openness" style="width:0%"></div>
+          </div>
+        </div>
+
+        <div class="cs-stat-bar cs-stat-bar--tiredness">
+          <div class="cs-stat-bar__label">
+            <span>Tired</span>
+            <span class="cs-stat-bar__value" id="stat-tiredness-val">0</span>
+          </div>
+          <div class="cs-stat-bar__track">
+            <div class="cs-stat-bar__fill" id="stat-tiredness" style="width:0%"></div>
+          </div>
+        </div>
+
+      </div><!-- /emotion-bars -->
+
+      <!-- Mood descriptor -->
+      <div class="bedroom-mood-text" id="mood-descriptor" aria-live="polite">Waiting...</div>
+
+    </aside><!-- /character-panel -->
+
+    <!-- ── CENTER: City window + chat ────────────────────────────── -->
+    <section class="bedroom-main-panel" aria-label="Main scene panel">
+
+      <!-- Neon city window background -->
+      <div class="bedroom-window" id="bedroom-window" aria-hidden="true">
+        <div class="bedroom-window-particles" id="bedroom-particles"></div>
+        <div class="bedroom-city-silhouette"></div>
+        <div class="bedroom-window-reflection"></div>
+      </div>
+
+      <!-- Scene header -->
+      <div class="cs-scene-header bedroom-header">
+        <h1 class="cs-scene-header__title">THE PENTHOUSE</h1>
+        <div class="cs-scene-header__accent-line"></div>
+        <p class="cs-scene-header__subtitle" id="director-beat-text">
+          Above the neon city, nothing is forbidden.
+        </p>
+      </div>
+
+      <!-- Chat log -->
+      <div class="bedroom-chat"
+           id="bedroom-chat"
+           role="log"
+           aria-live="polite"
+           aria-label="Conversation">
+        <!-- Messages injected by JS -->
+      </div>
+
+      <!-- Typing indicator -->
+      <div class="bedroom-typing" id="bedroom-typing" aria-hidden="true">
+        <span class="bedroom-typing__dot"></span>
+        <span class="bedroom-typing__dot"></span>
+        <span class="bedroom-typing__dot"></span>
+        <span class="bedroom-typing__label" id="typing-char-name">…</span>
+      </div>
+
+      <!-- Input row -->
+      <div class="bedroom-input-row">
+        <textarea
+          class="bedroom-input"
+          id="bedroom-input"
+          rows="2"
+          placeholder="Speak your desires..."
+          aria-label="Message input"
+          maxlength="2000"
+        ></textarea>
+        <div class="bedroom-input-actions">
+          <button class="cs-glass-btn cs-glass-btn--accent" id="bedroom-send" aria-label="Send message">
+            Send
+          </button>
+          <button class="cs-icon-btn" id="bedroom-voice-btn" title="Voice input" aria-label="Voice input">
+            🎤
+          </button>
+          <button class="cs-icon-btn" id="bedroom-clear-btn" title="Clear chat" aria-label="Clear chat">
+            🗑
+          </button>
+        </div>
+      </div>
+
+    </section><!-- /main-panel -->
+
+    <!-- ── RIGHT: Scenarios + Director + Economy + Memories ──────── -->
+    <aside class="bedroom-right-panel" aria-label="Control panels">
+
+      <!-- Scenario selector -->
+      <div class="cs-glass-panel bedroom-panel-section">
+        <h3 class="bedroom-panel-title">
+          <span>SCENARIOS</span>
+          <span class="cs-chip" id="scenario-count-chip">—</span>
+        </h3>
+        <div class="bedroom-scenarios" id="bedroom-scenarios" role="list">
+          <!-- Scenario cards populated by JS -->
+          <div class="bedroom-scenarios__empty">Click "Load" to fetch scenarios</div>
+        </div>
+        <div class="bedroom-scenarios-controls">
+          <select class="bedroom-intensity-select" id="scenario-intensity" aria-label="Intensity level">
+            <option value="1">🌸 Mild</option>
+            <option value="2" selected>🌹 Moderate</option>
+            <option value="3">🔥 Intense</option>
+            <option value="4">⚡ Extreme</option>
+            <option value="5">🖤 Unlimited</option>
+          </select>
+          <button class="cs-glass-btn" id="load-scenarios-btn">Load</button>
+        </div>
+      </div>
+
+      <!-- Scene Director -->
+      <div class="cs-glass-panel bedroom-panel-section bedroom-director-panel">
+        <h3 class="bedroom-panel-title">DIRECTOR</h3>
+        <div id="director-panel">
+          <div class="bedroom-director-beat-type">
+            <div class="cs-chip" id="beat-type-chip">—</div>
+            <span class="bedroom-director-beat-label">Current Beat</span>
+          </div>
+          <p class="bedroom-director-instruction" id="beat-instruction">
+            The story is unfolding.
+          </p>
+          <div class="bedroom-director-actions">
+            <button class="cs-glass-btn" data-nudge="escalation" title="Push the scene forward">
+              ↑ Escalate
+            </button>
+            <button class="cs-glass-btn" data-nudge="cool_down" title="Let the scene breathe">
+              ↓ Cool Down
+            </button>
+            <button class="cs-glass-btn" data-nudge="revelation" title="Surface a secret">
+              ✦ Reveal
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Economy / Credits -->
+      <div class="cs-glass-panel bedroom-panel-section">
+        <h3 class="bedroom-panel-title">CREDITS</h3>
+        <div class="bedroom-economy-row">
+          <div class="cs-economy-ticker" id="bedroom-credits" aria-live="polite">₵ —</div>
+          <button class="cs-icon-btn" id="refresh-credits-btn" title="Refresh balance" aria-label="Refresh credits">
+            ↺
+          </button>
+        </div>
+      </div>
+
+      <!-- Character Memory -->
+      <div class="cs-glass-panel bedroom-panel-section">
+        <h3 class="bedroom-panel-title">MEMORIES</h3>
+        <div class="bedroom-memories" id="bedroom-memories" aria-live="polite">
+          <div class="bedroom-memories__empty">No memories yet.</div>
+        </div>
+      </div>
+
+    </aside><!-- /right-panel -->
+
+  </main><!-- /bedroom-layout -->
+
+  <!-- ARIA assistant widget -->
+  {% include 'aria_widget.html' %}
+
+  <!-- Socket.IO -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.4/socket.io.min.js"
+          integrity="sha512-uB6tpIBGFFHPfHY8waMCVwCl0+h4IOqnllzfVh8P40e4bBX11I1uC8MGYoAzfomIHJxUYugjgOZe+1KoxXa8w=="
+          crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+
+  <!-- Shared utilities -->
+  <script src="/shared/js/navbar_v2.js" defer></script>
+  <script src="/shared/js/cosysim-particles3d.js"></script>
+  <script src="/shared/js/cosysim-bench.js"></script>
+  <script src="/shared/js/cosysim-voice.js"></script>
+  <script src="/shared/js/aria_widget.js" defer></script>
+
+  <!-- Scene script -->
+  <script src="{{ url_for('static', filename='bedroom.js') }}"></script>
+
+</body>
+</html>

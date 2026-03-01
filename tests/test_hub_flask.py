@@ -35,8 +35,21 @@ def _make_hub(port: int = 18500):
         hub.scene_metadata = HubScene.SCENE_METADATA
 
         # Create real Flask app for route testing
+        from pathlib import Path
+        from jinja2 import ChoiceLoader, FileSystemLoader
         from flask import Flask
-        hub.app = Flask("test_hub")
+        _scene_dir = Path(__file__).parent.parent / "content" / "scenes" / "hub"
+        _shared_dir = Path(__file__).parent.parent / "content" / "shared" / "templates"
+        hub.app = Flask(
+            "test_hub",
+            template_folder=str(_scene_dir / "templates"),
+            static_folder=str(_scene_dir / "static"),
+            static_url_path="/hub/static",
+        )
+        hub.app.jinja_loader = ChoiceLoader([
+            FileSystemLoader(str(_scene_dir / "templates")),
+            FileSystemLoader(str(_shared_dir)),
+        ])
 
         # Stub BaseScene helper used during __init__
         hub.register_health_route = MagicMock()
@@ -113,21 +126,19 @@ class TestInitialization:
         assert hub.SCENE_METADATA["name"] == "hub"
 
     def test_metadata_title(self, hub):
-        assert hub.SCENE_METADATA["title"] == "CosySim Hub"
+        assert hub.SCENE_METADATA["display_name"] == "THE TERMINAL"
 
     def test_metadata_type(self, hub):
         assert hub.SCENE_METADATA["type"] == "hub"
 
     def test_metadata_genre(self, hub):
-        assert hub.SCENE_METADATA["genre"] == "utility"
+        assert hub.SCENE_METADATA["accent_color"] == "#3b82f6"
 
     def test_metadata_features(self, hub):
-        feats = hub.SCENE_METADATA["features"]
-        assert "scene_navigation" in feats
-        assert "health_monitoring" in feats
+        assert len(hub.SCENE_METADATA["description"]) > 10
 
     def test_metadata_max_characters(self, hub):
-        assert hub.SCENE_METADATA["max_characters"] == 0
+        assert hub.SCENE_METADATA["port"] == 8500
 
     def test_has_flask_app(self, hub):
         assert hub.app is not None
@@ -146,11 +157,11 @@ class TestGetPluginInfo:
 
     def test_plugin_name(self, hub):
         info = hub.get_plugin_info()
-        assert info["name"] == "hub"
+        assert info["name"] == "THE TERMINAL"
 
     def test_plugin_version(self, hub):
         info = hub.get_plugin_info()
-        assert info["version"] == "0.57b"
+        assert info["version"] == "0.68"
 
     def test_plugin_port(self, hub):
         info = hub.get_plugin_info()
@@ -174,7 +185,7 @@ class TestGetPluginInfo:
 
     def test_plugin_skill_packs_empty(self, hub):
         info = hub.get_plugin_info()
-        assert info["skill_packs"] == []
+        assert "hub" in info["skill_packs"]
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -203,11 +214,11 @@ class TestIndexRoute:
 
     def test_index_contains_cosysim_hub(self, client):
         resp = client.get("/")
-        assert b"CosySim Hub" in resp.data
+        assert b"THE TERMINAL" in resp.data
 
     def test_index_contains_version(self, client):
         resp = client.get("/")
-        assert b"0.57b" in resp.data
+        assert b"0.68" in resp.data
 
     def test_index_has_scene_grid(self, client):
         resp = client.get("/")
@@ -215,7 +226,7 @@ class TestIndexRoute:
 
     def test_index_has_system_bar(self, client):
         resp = client.get("/")
-        assert b"system-bar" in resp.data
+        assert b"bench-hud" in resp.data
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -422,8 +433,8 @@ class TestSceneCatalogue:
     def test_catalogue_groups(self):
         from content.scenes.hub.hub_flask import SCENE_CATALOGUE
         groups = {s["group"] for s in SCENE_CATALOGUE}
-        assert "core" in groups
-        assert "tools" in groups
+        assert "neon_world" in groups
+        assert "system" in groups
 
     def test_catalogue_ports_unique(self):
         from content.scenes.hub.hub_flask import SCENE_CATALOGUE

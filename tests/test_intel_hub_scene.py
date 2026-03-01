@@ -56,8 +56,8 @@ class TestIntelHubScene:
     def test_scene_metadata(self):
         from content.scenes.intel_hub.intel_hub_scene import IntelHubScene
         assert hasattr(IntelHubScene, "SCENE_METADATA")
-        assert IntelHubScene.SCENE_METADATA.get("type") == "admin"
-        assert "Intelligence Hub" in IntelHubScene.SCENE_METADATA.get("title", "")
+        assert IntelHubScene.SCENE_METADATA.get("type") == "system"
+        assert "BRIEFING ROOM" in IntelHubScene.SCENE_METADATA.get("display_name", "")
 
     def test_scene_package_has_init(self):
         """Package is importable."""

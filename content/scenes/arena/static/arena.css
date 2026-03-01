@@ -1,0 +1,619 @@
+/* ═══════════════════════════════════════════════════════════════════
+   THE COLOSSEUM — Arena Scene CSS
+   CosySim v0.68 "Dark Renaissance"
+   Accent: #dc2626 (blood red)
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── Layout ─────────────────────────────────────────────────────── */
+
+.arena-layout {
+  display: grid;
+  grid-template-columns: 320px 1fr 320px;
+  gap: 1.25rem;
+  height: calc(100vh - var(--navbar-height, 56px));
+  padding: 1rem 1.25rem;
+  overflow: hidden;
+  background: radial-gradient(
+    ellipse at 50% 80%,
+    rgba(var(--scene-accent-rgb, 220 38 38), 0.12) 0%,
+    transparent 70%
+  ), var(--cs-bg-base, #0a0a0f);
+}
+
+/* ── Fighter Columns ─────────────────────────────────────────────── */
+
+.arena-fighter {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scene-accent, #dc2626) transparent;
+}
+
+/* Left column — align items start */
+.arena-fighter--a {
+  align-items: flex-start;
+}
+
+/* Right column — mirror: align items end */
+.arena-fighter--b {
+  align-items: flex-end;
+  text-align: right;
+}
+
+.arena-fighter__portrait {
+  position: relative;
+  width: 100%;
+  max-width: 280px;
+  aspect-ratio: 3 / 4;
+  overflow: hidden;
+  border-radius: var(--cs-radius-lg, 12px);
+  border: 2px solid rgba(var(--scene-accent-rgb, 220 38 38), 0.4);
+  box-shadow: var(--scene-accent-glow,
+    0 0 24px rgba(220, 38, 38, 0.45));
+}
+
+.arena-fighter__portrait img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top;
+}
+
+.arena-fighter__name {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 0.5rem 0.75rem;
+  background: linear-gradient(transparent, rgba(0,0,0,.85));
+  font-family: var(--cs-font-display, 'Cinzel', serif);
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #fff;
+}
+
+/* Right fighter name alignment */
+.arena-fighter--b .arena-fighter__name {
+  text-align: right;
+}
+
+.arena-fighter__stats {
+  font-size: 0.75rem;
+  color: var(--cs-text-muted, #888);
+  letter-spacing: 0.05em;
+}
+
+/* ── HP Bars ─────────────────────────────────────────────────────── */
+
+.cs-stat-bar {
+  width: 100%;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.08);
+  overflow: hidden;
+}
+
+.cs-stat-bar--thick {
+  height: 14px;
+}
+
+.cs-stat-bar__fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    var(--scene-accent, #dc2626) 0%,
+    #ef4444 60%,
+    #fca5a5 100%
+  );
+  transition: width 0.55s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  box-shadow: 0 0 8px rgba(220, 38, 38, 0.6);
+}
+
+/* Turns gold when HP < 25% */
+.cs-stat-bar__fill--critical {
+  background: linear-gradient(90deg, #d97706 0%, #fbbf24 100%);
+  box-shadow: 0 0 8px rgba(251, 191, 36, 0.6);
+  animation: pulse-bar 0.8s ease-in-out infinite alternate;
+}
+
+@keyframes pulse-bar {
+  from { opacity: 0.75; }
+  to   { opacity: 1.0; }
+}
+
+/* ── Arena Center ────────────────────────────────────────────────── */
+
+.arena-center {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-height: 0;
+}
+
+/* ── Arena Floor ─────────────────────────────────────────────────── */
+
+.arena-floor {
+  position: relative;
+  flex: 0 0 auto;
+  height: 220px;
+  border-radius: var(--cs-radius-xl, 16px);
+  overflow: hidden;
+  background: #0d0608;
+  border: 1px solid rgba(var(--scene-accent-rgb, 220 38 38), 0.3);
+  box-shadow:
+    0 0 40px rgba(var(--scene-accent-rgb, 220 38 38), 0.2),
+    inset 0 0 60px rgba(0,0,0,0.8);
+}
+
+/* Perspective grid lines */
+.arena-floor__grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    /* Vertical lines */
+    repeating-linear-gradient(
+      90deg,
+      transparent,
+      transparent 59px,
+      rgba(var(--scene-accent-rgb, 220 38 38), 0.07) 60px
+    ),
+    /* Horizontal lines — perspective-skewed via transform */
+    repeating-linear-gradient(
+      180deg,
+      transparent,
+      transparent 29px,
+      rgba(var(--scene-accent-rgb, 220 38 38), 0.07) 30px
+    );
+  transform: perspective(300px) rotateX(25deg) scaleY(1.3);
+  transform-origin: bottom center;
+}
+
+/* Particle layer */
+.arena-floor__particles {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* VS badge */
+.arena-vs-badge {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-family: var(--cs-font-display, 'Cinzel', serif);
+  font-size: 2.5rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  color: var(--scene-accent, #dc2626);
+  text-shadow:
+    0 0 20px rgba(220, 38, 38, 0.8),
+    0 0 60px rgba(220, 38, 38, 0.4);
+  user-select: none;
+  transition: opacity 0.3s;
+}
+
+/* Clash flash overlay */
+.arena-clash-flash {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(var(--scene-accent-rgb, 220 38 38), 0.9) 0%,
+    transparent 70%
+  );
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s;
+}
+
+.arena-clash-flash--active {
+  animation: clash-burst 0.55s ease-out forwards;
+}
+
+@keyframes clash-burst {
+  0%   { opacity: 0.85; }
+  100% { opacity: 0; }
+}
+
+/* ── Status Bar ──────────────────────────────────────────────────── */
+
+.arena-status-bar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.5rem 1rem;
+  background: rgba(255,255,255,0.03);
+  border-radius: var(--cs-radius-md, 8px);
+  border: 1px solid rgba(255,255,255,0.06);
+}
+
+.arena-round-counter {
+  font-family: var(--cs-font-mono, 'JetBrains Mono', monospace);
+  font-size: 0.85rem;
+  color: var(--cs-text-secondary, #aaa);
+  letter-spacing: 0.05em;
+}
+
+.arena-match-status {
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  background: rgba(var(--scene-accent-rgb, 220 38 38), 0.15);
+  color: var(--scene-accent, #dc2626);
+  border: 1px solid rgba(var(--scene-accent-rgb, 220 38 38), 0.35);
+}
+
+.arena-match-status--complete {
+  background: rgba(34, 197, 94, 0.12);
+  color: #22c55e;
+  border-color: rgba(34, 197, 94, 0.35);
+}
+
+.arena-timer {
+  margin-left: auto;
+  font-family: var(--cs-font-mono, 'JetBrains Mono', monospace);
+  font-size: 0.8rem;
+  color: var(--cs-text-muted, #666);
+}
+
+/* ── Commentary Feed ─────────────────────────────────────────────── */
+
+.arena-commentary {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.arena-commentary__feed {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.5rem 0.25rem;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(var(--scene-accent-rgb, 220 38 38), 0.4) transparent;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.arena-commentary__line {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--cs-text-secondary, #ccc);
+  animation: fade-up 0.4s ease-out both;
+}
+
+.arena-commentary__line--intro {
+  color: var(--cs-text-muted, #888);
+  font-style: italic;
+}
+
+.arena-commentary__line--round {
+  color: #fff;
+  font-weight: 600;
+}
+
+.arena-commentary__line--special {
+  color: #c084fc;
+}
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Controls ────────────────────────────────────────────────────── */
+
+.arena-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.arena-fighter-select {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.arena-fighter-select select {
+  flex: 1;
+}
+
+.arena-vs-mini {
+  font-weight: 700;
+  font-size: 0.7rem;
+  color: var(--scene-accent, #dc2626);
+  letter-spacing: 0.1em;
+}
+
+.arena-controls__row {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+/* ── Arena Card ──────────────────────────────────────────────────── */
+
+.cs-arena-card {
+  position: relative;
+  padding: 0.65rem 0.75rem;
+  border-radius: var(--cs-radius-md, 8px);
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.04);
+  min-width: 120px;
+  transition:
+    border-color 0.3s,
+    box-shadow 0.3s,
+    transform 0.2s;
+}
+
+.cs-arena-card[data-type="attack"] {
+  border-color: rgba(220, 38, 38, 0.55);
+  box-shadow: 0 0 12px rgba(220, 38, 38, 0.2);
+  --card-color: #dc2626;
+}
+
+.cs-arena-card[data-type="defense"] {
+  border-color: rgba(59, 130, 246, 0.55);
+  box-shadow: 0 0 12px rgba(59, 130, 246, 0.2);
+  --card-color: #3b82f6;
+}
+
+.cs-arena-card[data-type="special"] {
+  border-color: rgba(168, 85, 247, 0.55);
+  box-shadow: 0 0 12px rgba(168, 85, 247, 0.2);
+  --card-color: #a855f7;
+}
+
+.cs-arena-card[data-type="wild"] {
+  border-color: rgba(234, 179, 8, 0.55);
+  box-shadow: 0 0 12px rgba(234, 179, 8, 0.2);
+  --card-color: #eab308;
+}
+
+.cs-arena-card[data-type="trap"] {
+  border-color: rgba(249, 115, 22, 0.55);
+  box-shadow: 0 0 12px rgba(249, 115, 22, 0.2);
+  --card-color: #f97316;
+}
+
+.cs-arena-card[data-type="counter"] {
+  border-color: rgba(6, 182, 212, 0.55);
+  box-shadow: 0 0 12px rgba(6, 182, 212, 0.2);
+  --card-color: #06b6d4;
+}
+
+.cs-arena-card__type-badge {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.5rem;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--card-color, #888);
+  box-shadow: 0 0 6px var(--card-color, #888);
+}
+
+.cs-arena-card__name {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 0.15rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 160px;
+}
+
+.cs-arena-card__power {
+  font-family: var(--cs-font-mono, 'JetBrains Mono', monospace);
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--card-color, #888);
+}
+
+.cs-arena-card__flavor {
+  font-size: 0.68rem;
+  color: var(--cs-text-muted, #666);
+  font-style: italic;
+  margin-top: 0.25rem;
+  line-height: 1.3;
+}
+
+/* Card flip-in animation when a new card is played */
+.cs-arena-card--played {
+  animation: card-play 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@keyframes card-play {
+  from { transform: scale(0.7) rotateY(90deg); opacity: 0; }
+  to   { transform: scale(1) rotateY(0deg);   opacity: 1; }
+}
+
+/* ── Reasoning Panel ─────────────────────────────────────────────── */
+
+.arena-reasoning {
+  width: 100%;
+  padding: 0.75rem;
+}
+
+.arena-reasoning__text {
+  font-size: 0.78rem;
+  line-height: 1.55;
+  color: var(--cs-text-secondary, #b0b0b0);
+  min-height: 2.5rem;
+  font-style: italic;
+}
+
+.arena-last-card {
+  margin-top: 0.6rem;
+}
+
+/* ── Betting Panel ───────────────────────────────────────────────── */
+
+.arena-bet-panel {
+  position: fixed;
+  top: calc(var(--navbar-height, 56px) + 1rem);
+  right: 1rem;
+  width: 300px;
+  padding: 1rem 1.125rem;
+  z-index: 100;
+  border: 1px solid rgba(var(--scene-accent-rgb, 220 38 38), 0.35);
+  box-shadow:
+    0 0 30px rgba(var(--scene-accent-rgb, 220 38 38), 0.15),
+    0 8px 32px rgba(0,0,0,0.6);
+  transform: translateX(calc(100% + 2rem));
+  transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.arena-bet-panel:not([hidden]) {
+  transform: translateX(0);
+}
+
+/* Remove the [hidden] display:none default so our CSS transition fires */
+.arena-bet-panel[hidden] {
+  display: flex !important;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.arena-bet-panel:not([hidden]) {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.arena-bet-panel__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.arena-bet-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--cs-text-muted, #888);
+  margin-bottom: 0.3rem;
+  display: block;
+}
+
+.arena-bet-section {
+  display: flex;
+  flex-direction: column;
+}
+
+.arena-bet-types,
+.arena-bet-targets {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.arena-bet-type--active,
+.arena-bet-target--active {
+  border-color: var(--scene-accent, #dc2626) !important;
+  color: var(--scene-accent, #dc2626) !important;
+  background: rgba(var(--scene-accent-rgb, 220 38 38), 0.12) !important;
+}
+
+.arena-bet-target--a:hover,
+.arena-bet-target--a.arena-bet-target--active {
+  border-color: #dc2626;
+  color: #dc2626;
+}
+
+.arena-bet-target--b:hover,
+.arena-bet-target--b.arena-bet-target--active {
+  border-color: #3b82f6;
+  color: #3b82f6;
+}
+
+.arena-bet-submit {
+  width: 100%;
+}
+
+.cs-economy-ticker {
+  font-family: var(--cs-font-mono, 'JetBrains Mono', monospace);
+  font-size: 0.9rem;
+  color: #22c55e;
+  text-align: center;
+  padding: 0.25rem 0;
+}
+
+.arena-active-bets {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  max-height: 160px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.arena-active-bet-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.72rem;
+  padding: 0.25rem 0.4rem;
+  border-radius: 4px;
+  background: rgba(255,255,255,0.04);
+  color: var(--cs-text-secondary, #aaa);
+}
+
+.arena-active-bet-row span {
+  font-weight: 600;
+  color: #22c55e;
+}
+
+/* ── Responsive ──────────────────────────────────────────────────── */
+
+@media (max-width: 1100px) {
+  .arena-layout {
+    grid-template-columns: 260px 1fr 260px;
+  }
+}
+
+@media (max-width: 900px) {
+  .arena-layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto auto;
+    height: auto;
+    overflow-y: auto;
+  }
+
+  .arena-fighter--a,
+  .arena-fighter--b {
+    flex-direction: row;
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .arena-fighter__portrait {
+    max-width: 120px;
+  }
+
+  .arena-bet-panel {
+    width: 100%;
+    right: 0;
+    top: auto;
+    bottom: 0;
+    transform: translateY(calc(100% + 1rem));
+  }
+
+  .arena-bet-panel:not([hidden]) {
+    transform: translateY(0);
+  }
+}

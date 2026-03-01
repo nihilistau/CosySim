@@ -1,4 +1,4 @@
-"""The Dragon's Flagon — Fantasy tavern scene.
+"""THE RUSTY ANCHOR — v0.68 'Dark Renaissance' gritty dockside tavern scene.
 
 Port 5558.  Flask + SocketIO.
 
@@ -62,14 +62,15 @@ class TavernScene(BaseScene, NexusSceneMixin):
     """
 
     SCENE_METADATA = {
-        "title": "The Dragon's Flagon",
-        "description": (
-            "A fantasy tavern with 4 NPCs, quest board, dice gambling, "
-            "reputation system, and dynamic atmosphere.  MCP framework "
-            "showcase scene."
-        ),
-        "genre": "fantasy_social",
-        "max_characters": 4,
+        "name": "tavern",
+        "display_name": "THE RUSTY ANCHOR",
+        "port": 5558,
+        "type": "adventure",
+        "accent_color": "#92400e",
+        "accent_rgb": "146 64 14",
+        "description": "Cheap ale. Cheaper lies. The best quests start here.",
+        "genre": "dark_adventure",
+        "max_characters": 6,
         "features": [
             "multi_npc",
             "reputation_system",
@@ -77,8 +78,8 @@ class TavernScene(BaseScene, NexusSceneMixin):
             "dice_gambling",
             "atmosphere_heat",
             "rumor_system",
-            "bard_music",
-            "merchant_trade",
+            "investigation_board",
+            "economy_integration",
             "time_cycle",
             "consequence_chains",
             "mcp_showcase",
@@ -212,7 +213,10 @@ class TavernScene(BaseScene, NexusSceneMixin):
 
         @app.route("/")
         def index():
-            return render_template("tavern_ui.html")
+            return render_template(
+                "tavern.html",
+                **self.inject_navbar_context(),
+            )
 
         @app.route("/api/health")
         def health():
@@ -318,6 +322,16 @@ class TavernScene(BaseScene, NexusSceneMixin):
         # Health route for service discovery
         self.register_health_route(app)
 
+        # Bench metrics + TTS endpoints
+        try:
+            self.register_bench_route(app, self.socketio)
+        except Exception as exc:
+            log.debug("Bench route: %s", exc)
+        try:
+            self.register_tts_route(app)
+        except Exception as exc:
+            log.debug("TTS route: %s", exc)
+
         # Overlay + skills server
         try:
             self.mount_overlay(app)
@@ -336,11 +350,138 @@ class TavernScene(BaseScene, NexusSceneMixin):
         def on_connect():
             sio.emit("state_update", self.tavern_state.to_snapshot())
 
+        @sio.on("get_tavern_state")
+        def on_get_tavern_state(_data=None):
+            snap = self.tavern_state.to_snapshot()
+            sio.emit("tavern_state", {
+                "time_of_day": snap.get("time_of_day", "evening"),
+                "atmosphere": snap.get("atmosphere", "quiet"),
+                "heat": snap.get("heat", 0),
+                "available_quests": [
+                    q for q in snap.get("quests", {}).values()
+                    if q.get("status") == "available"
+                ],
+                "gold": snap.get("gold", 0),
+                "turn": snap.get("turn", 0),
+            })
+
+        @sio.on("get_quest_board")
+        def on_get_quest_board(_data=None):
+            try:
+                from engine.content.content_engine import get_content_engine
+                ce = get_content_engine()
+                items = ce.get_by_scene("tavern", content_type="quest", limit=8)
+                quests = [
+                    {"id": it.id, "title": it.title, "content": it.content,
+                     "tags": it.tags, "intensity": it.intensity}
+                    for it in items
+                ]
+            except Exception:
+                quests = []
+            if not quests:
+                snap = self.tavern_state.to_snapshot()
+                quests = [
+                    {"id": qid, "title": q.get("title", qid),
+                     "reward": q.get("reward_gold", 0), "status": q.get("status")}
+                    for qid, q in snap.get("quests", {}).items()
+                    if q.get("status") == "available"
+                ]
+            sio.emit("quest_board", {"quests": quests})
+
+        @sio.on("accept_quest")
+        def on_accept_quest(data):
+            quest_id = (data or {}).get("quest_id", "")
+            if not quest_id:
+                sio.emit("error", {"message": "quest_id required"})
+                return
+            q = self.tavern_state.accept_quest(quest_id)
+            self._sync_mcp_state()
+            if q:
+                try:
+                    from engine.events.event_bus import get_event_bus
+                    get_event_bus().publish(
+                        "tavern.quest_accepted",
+                        {"quest_id": quest_id, "title": q.title},
+                    )
+                except Exception:
+                    pass
+                sio.emit("quest_started", {
+                    "quest_id": quest_id,
+                    "title": q.title,
+                    "objective": q.objective,
+                    "reward_gold": q.reward_gold,
+                })
+            else:
+                sio.emit("error", {"message": f"Quest '{quest_id}' not available."})
+
+        @sio.on("roll_dice")
+        def on_roll_dice(data):
+            import random
+            d = data or {}
+            sides = max(2, min(int(d.get("sides", 20)), 100))
+            reason = d.get("reason", "skill check")
+            rolls = [random.randint(1, sides) for _ in range(3)]
+            total = sum(rolls)
+            sio.emit("dice_result", {
+                "sides": sides,
+                "rolls": rolls,
+                "total": total,
+                "reason": reason,
+                "critical": total == sides * 3,
+                "fumble": total == 3,
+            })
+            self._emit("event", {
+                "type": "dice_roll",
+                "text": f"Dice roll ({reason}): [{chr(44).join(str(r) for r in rolls)}] = {total}",
+            })
+
+        @sio.on("order_drink")
+        def on_order_drink(data):
+            drink = (data or {}).get("drink", "ale")
+            try:
+                from engine.economy.economy import get_economy_manager, TransactionType
+                from .tavern_state import DRINKS_MENU
+                item = next((d for d in DRINKS_MENU if d.id == drink), None)
+                if item:
+                    get_economy_manager().transact(
+                        entity_id="player",
+                        amount=-item.price,
+                        transaction_type=TransactionType.SPEND,
+                        description=f"Ordered {item.name} at The Rusty Anchor",
+                    )
+            except Exception:
+                pass
+            from .tavern_skills import buy_drink_and_rumor
+            result = buy_drink_and_rumor(drink_name=drink)
+            self._sync_mcp_state()
+            sio.emit("drink_result", {"drink": drink, "result": result})
+
+        @sio.on("investigate_rumor")
+        def on_investigate_rumor(data):
+            rumor_id = (data or {}).get("rumor_id", "")
+            try:
+                from engine.mechanics.investigation import get_investigation_board
+                board = get_investigation_board("tavern_rumors", scene="tavern")
+                board.add_clue(
+                    clue_id=rumor_id or f"rumor_{len(board.get_clues())}",
+                    title="Tavern Rumor",
+                    description=f"Rumor heard at The Rusty Anchor: {rumor_id}",
+                    source="barkeep",
+                    tags=["rumor", "tavern"],
+                )
+                sio.emit("rumor_investigated", {
+                    "rumor_id": rumor_id,
+                    "clues": len(board.get_clues()),
+                })
+            except Exception as exc:
+                log.debug("Investigate rumor error: %s", exc)
+                sio.emit("rumor_investigated", {"rumor_id": rumor_id, "clues": 0})
+
         @sio.on("action")
         def on_action(data):
             action_type = data.get("type", "")
             log.debug("SocketIO action: %s", action_type)
-            # Actions handled via REST API; SocketIO is for push updates
+            # Legacy handler — new actions use dedicated events above
 
     def _emit(self, event: str, data: dict) -> None:
         """Push event to all connected WebSocket clients."""
@@ -377,11 +518,12 @@ class TavernScene(BaseScene, NexusSceneMixin):
     def get_plugin_info(self) -> Dict[str, Any]:
         return {
             "name": "tavern",
+            "display_name": "THE RUSTY ANCHOR",
             "description": self.SCENE_METADATA["description"],
-            "version": "0.50b",
+            "version": "0.68",
             "author": "CosySim",
             "port": self.port,
-            "tags": ["fantasy", "social", "tavern", "mcp_showcase"],
+            "tags": ["adventure", "dockside", "tavern", "dark_renaissance", "mcp_showcase"],
             "skill_packs": ["tavern"],
             "routes": [
                 "/", "/api/health", "/api/status", "/api/drink",

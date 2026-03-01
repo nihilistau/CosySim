@@ -59,21 +59,30 @@ LOUNGE_PORT = 5557
 # ──────────────────────────────────────────────────────────────────────────────
 
 class LoungeScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_ID):
-    """
-    The Velvet Lounge — MCP-first scene showcasing the full framework.
+    """THE VELVET PIT — v0.68 'Dark Renaissance'.
 
+    Underground lounge beneath the streets. Amber-lit. Heat never drops to zero.
     State is almost entirely owned by MCPFramework / SceneStateManager.
     This class provides the Flask/SocketIO scaffolding and thin Python
-    state that cannot live in the framework (active_song timer object, etc.).
+    state that cannot live in the framework (active_song timer, seating map, etc.).
     """
 
     SCENE_METADATA = {
-        "title": "The Lounge",
-        "description": "Social lounge with music, conversations, and group dynamics.",
-        "genre": "social",
-        "max_characters": 5,
-        "features": ["music_system", "group_conversations", "social_dynamics",
-                     "conversation_heat", "activity_scheduling"],
+        "name":         "lounge",
+        "display_name": "THE VELVET PIT",
+        "port":         5557,
+        "type":         "social",
+        "accent_color": "#f59e0b",
+        "accent_rgb":   "245 158 11",
+        "description":  "Below the streets. Above the law. The heat never leaves.",
+        "version":      "0.68",
+        "codename":     "Dark Renaissance",
+        "genre":        "social",
+        "max_characters": 8,
+        "features": [
+            "heat_system", "trust_economy", "seating_map", "world_time",
+            "smoke_particles", "mcp_framework", "multi_agent",
+        ],
     }
 
     def __init__(self, host: str = "0.0.0.0", port: int = LOUNGE_PORT) -> None:
@@ -87,6 +96,8 @@ class LoungeScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
         )
         register_shared_assets(self.app)
         self.register_health_route(self.app)
+        self.register_bench_route(self.app, self.socketio)
+        self.register_tts_route(self.app)
         self.app.config["SECRET_KEY"] = "velvet_lounge_secret_1920s"
         CORS(self.app)
         self.socketio = SocketIO(self.app, cors_allowed_origins="*", manage_session=False)
@@ -104,6 +115,8 @@ class LoungeScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
         self.current_song      : Optional[Dict]  = None
         self.song_start_time   : Optional[float] = None
         self.events_log        : List[Dict]      = []
+        self.seating_map       : List[Dict]      = self._init_seating_map()
+        self.world_time_slot   : str             = "EVENING"
         self.heat_timer_id     : Optional[str]   = None
         self._heat_lock        = threading.Lock()
 
@@ -129,6 +142,13 @@ class LoungeScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
         self._start_next_song()
 
         self.nexus_init("lounge")
+
+        # ── EventBus subscription ────────────────────────────────────────────
+        try:
+            from engine.events.event_bus import get_event_bus
+            get_event_bus().subscribe("world_sim.lounge_event", self._on_world_lounge_event)
+        except Exception as exc:
+            logger.debug("EventBus subscribe failed: %s", exc)
 
     # ══════════════════════════════════════════════════════════════════════════
     #  FRAMEWORK SHORTCUTS
@@ -897,6 +917,58 @@ class LoungeScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
             self.events_log = self.events_log[-80:]
         self.socketio.emit("lounge_event", entry, namespace="/")
 
+    def _init_seating_map(self) -> List[Dict]:
+        """Initialise 8 tables with default occupancy."""
+        tables = []
+        for i in range(1, 9):
+            tables.append({
+                "id":       f"table_{i}",
+                "label":    f"T{i}",
+                "occupied": False,
+                "npc":      None,
+                "faction":  None,
+            })
+        return tables
+
+    def _get_tables_state(self) -> List[Dict]:
+        """Return current seating map state."""
+        return self.seating_map
+
+    def _get_world_time_slot(self) -> str:
+        """Return world time label based on hour."""
+        hour = datetime.now().hour
+        if 5 <= hour < 12:
+            return "MORNING"
+        elif 12 <= hour < 17:
+            return "LATE AFTERNOON"
+        elif 17 <= hour < 21:
+            return "EVENING"
+        elif 21 <= hour < 24:
+            return "MIDNIGHT RUSH"
+        else:
+            return "LAST CALL"
+
+    def _get_events_tonight(self) -> List[Dict]:
+        """Return tonight's events from ContentEngine or fallback list."""
+        try:
+            from engine.content.content_engine import get_content_engine
+            eng = get_content_engine()
+            return eng.get_events(scene="lounge", limit=5)
+        except Exception:
+            pass
+        return [
+            {"id": "jazz_set",    "title": "Jazz Quartet",  "desc": "Live jazz on the main stage."},
+            {"id": "card_game",   "title": "Card Table",    "desc": "High-stakes poker in the back."},
+            {"id": "poetry",      "title": "Poetry Night",  "desc": "Spoken word between sets."},
+        ]
+
+    def _on_world_lounge_event(self, event_data: dict) -> None:
+        """Handle world_sim.lounge_event from EventBus; forward to clients."""
+        try:
+            self.socketio.emit("lounge_event", event_data, namespace="/")
+        except Exception as exc:
+            logger.debug("_on_world_lounge_event forward failed: %s", exc)
+
     # ══════════════════════════════════════════════════════════════════════════
     #  FRAMEWORK TICK  — called each turn; fires consequences + checks timers
     # ══════════════════════════════════════════════════════════════════════════
@@ -959,7 +1031,19 @@ class LoungeScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
 
         @self.app.route("/")
         def index():
-            return render_template("lounge.html")
+            return render_template(
+                "lounge.html",
+                **self.inject_navbar_context(),
+                world_time=self._get_world_time_slot(),
+            )
+
+        @self.app.route("/api/tables")
+        def api_tables():
+            return jsonify({"tables": self._get_tables_state()})
+
+        @self.app.route("/api/events_tonight")
+        def api_events_tonight():
+            return jsonify({"events": self._get_events_tonight()})
 
         @self.app.route("/api/state")
         def api_state():
@@ -1117,8 +1201,9 @@ class LoungeScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
         def on_connect():
             emit("welcome", {
                 "message": (
-                    "The door opens. The warmth and smoke and low piano hit you at once. "
-                    "Viktor glances up. Lola is mid-song. You take a seat at the bar."
+                    "The iron stairs lead down. The Velvet Pit exhales heat and amber light. "
+                    "Something is playing. Something always is. Viktor doesn't look up. "
+                    "He doesn't need to."
                 ),
                 "state": self._get_state_snapshot(),
             })
@@ -1134,6 +1219,60 @@ class LoungeScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
                 self._cool_heat(20)
             elif action == "heat":
                 self._tick_heat(10)
+
+        @self.socketio.on("get_lounge_state")
+        def on_get_lounge_state():
+            emit("lounge_state", {
+                **self._get_state_snapshot(),
+                "heat_level": self.heat_level,
+                "seating":    self._get_tables_state(),
+                "current_event": (self._get_events_tonight() or [{}])[0],
+                "staff": [
+                    {"id": LOLA_ID,   "name": "Lola Voss",    "role": "Singer · Owner"},
+                    {"id": VIKTOR_ID, "name": "Viktor Marlowe","role": "Bartender"},
+                ],
+                "world_time": self._get_world_time_slot(),
+            })
+
+        @self.socketio.on("approach_table")
+        def on_approach_table(data):
+            table_id = data.get("table_id", "") if isinstance(data, dict) else ""
+            table = next((t for t in self.seating_map if t["id"] == table_id), None)
+            if not table:
+                emit("table_response", {"ok": False, "error": "No such table."})
+                return
+            table["occupied"] = True
+            npc_name = table.get("npc") or "a patron"
+            emit("table_response", {
+                "ok":      True,
+                "table":   table,
+                "message": f"You approach {table_id}. {npc_name} looks up.",
+            })
+            self.socketio.emit("seating_update", {"tables": self.seating_map}, namespace="/")
+
+        @self.socketio.on("order_drink")
+        def on_order_drink(data):
+            drink = data.get("drink", "gin_fizz") if isinstance(data, dict) else "gin_fizz"
+            result = self._serve_drink(drink)
+            # Economy transaction (best-effort)
+            if result.get("ok"):
+                try:
+                    from engine.economy.economy import get_economy_manager, TransactionType
+                    price = COCKTAILS.get(drink, {}).get("price", 0)
+                    if price > 0:
+                        get_economy_manager().transact(
+                            amount=-price,
+                            txn_type=TransactionType.SPEND,
+                            scene=SCENE_ID,
+                            description=f"Drink: {drink}",
+                        )
+                except Exception:
+                    pass
+            emit("drink_response", result)
+
+        @self.socketio.on("get_events_tonight")
+        def on_get_events_tonight():
+            emit("events_tonight", {"events": self._get_events_tonight()})
 
     # ══════════════════════════════════════════════════════════════════════════
     #  HELPERS
@@ -1219,18 +1358,24 @@ class LoungeScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
     def get_plugin_info(self) -> dict:
         """Return metadata consumed by the admin panel and launcher."""
         return {
-            "name":        "The Velvet Lounge",
-            "description": "1920s underground jazz speakeasy — Lola Voss & Viktor Marlowe",
-            "version":     "0.50b",
+            "name":        "THE VELVET PIT",
+            "description": "Below the streets. Above the law. The heat never leaves.",
+            "version":     "0.68",
+            "codename":    "Dark Renaissance",
             "author":      "CosySim",
             "port":        LOUNGE_PORT,
-            "tags":        ["lounge", "jazz", "mcp", "multi-agent"],
-            "skill_packs": ["memory", "character", "voice"],
+            "tags":        ["lounge", "velvet_pit", "mcp", "multi-agent", "dark_renaissance"],
+            "skill_packs": ["lounge", "memory", "character", "voice"],
             "routes": [
-                {"path": "/",               "methods": ["GET"],  "description": "Main lounge UI"},
-                {"path": "/api/chat",        "methods": ["POST"], "description": "Send message to character"},
-                {"path": "/api/state",       "methods": ["GET"],  "description": "Scene state"},
-                {"path": "/api/health",      "methods": ["GET"],  "description": "Health check"},
+                {"path": "/",                    "methods": ["GET"],  "description": "Main lounge UI"},
+                {"path": "/api/state",           "methods": ["GET"],  "description": "Scene state"},
+                {"path": "/api/tables",          "methods": ["GET"],  "description": "Seating map"},
+                {"path": "/api/events_tonight",  "methods": ["GET"],  "description": "Tonight's events"},
+                {"path": "/api/message",         "methods": ["POST"], "description": "Send message to character"},
+                {"path": "/api/order",           "methods": ["POST"], "description": "Order a drink"},
+                {"path": "/api/health",          "methods": ["GET"],  "description": "Health check"},
+                {"path": "/api/bench/metrics",   "methods": ["GET"],  "description": "Benchmark HUD metrics"},
+                {"path": "/api/tts/speak",       "methods": ["POST"], "description": "TTS synthesis"},
             ],
         }
 
@@ -1239,7 +1384,7 @@ class LoungeScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
     # ══════════════════════════════════════════════════════════════════════════
 
     def start(self) -> None:
-        logger.info("The Velvet Lounge opening on port %d", self.port)
+        logger.info("THE VELVET PIT opening on port %d — Dark Renaissance v0.68", self.port)
         # Wire up framework event bus for cross-scene events
         try:
             self._fw.on("environment_change", lambda evt: self._on_env_event(evt))

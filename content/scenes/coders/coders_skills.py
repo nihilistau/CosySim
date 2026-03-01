@@ -237,7 +237,7 @@ def coders_inspire(agent_id: str = "", action: str = "pep_talk") -> str:
 
 @skill(
     pack="coders",
-    tags=["game", "coding", "debug"],
+    tags=["coding", "simulation", "debug"],
     category=SkillCategory.GAME,
     description="Debug failing code — retry the current feature's tests with fixes.",
     cooldown=10,
@@ -271,3 +271,120 @@ def coders_debug() -> str:
         f"🐛 Debug attempt failed ({roll} vs {success_chance}% threshold).\n"
         f"Try pair_programming or more test runs to improve odds."
     )
+
+
+# ── THE LAB v0.68 Skills ─────────────────────────────────────────────
+
+@skill(
+    pack="coders",
+    tags=["coding", "pipeline", "system"],
+    category=SkillCategory.SYSTEM,
+    description="Get current pipeline status and agent feed.",
+)
+def pipeline_status() -> str:
+    """Return live pipeline status: active feature, phase, agent states, velocity."""
+    scene = _get_coders_scene()
+    if not scene or not scene.state:
+        return json.dumps({"status": "offline", "message": "THE LAB not active."})
+    st = scene.state
+    feature = st.get_current_feature()
+    agents_data = [
+        {
+            "name": a.name,
+            "role": a.role.value,
+            "status": a.status,
+            "lines": a.lines_written,
+            "reviews": a.reviews_done,
+            "tests": a.tests_run,
+        }
+        for a in st.agents
+    ]
+    result = {
+        "status": "running" if st.active else "idle",
+        "tick": st.tick_count,
+        "pipeline": {
+            "queued": len(st.features),
+            "completed": len(st.completed_features),
+            "current": {
+                "title": feature.title,
+                "phase": feature.phase.value,
+            } if feature else None,
+        },
+        "velocity": {
+            "total_lines": st.total_lines,
+            "total_tests": st.total_tests,
+            "lines_per_tick": round(st.total_lines / max(1, st.tick_count), 1),
+        },
+        "agents": agents_data,
+    }
+    return json.dumps(result, indent=2)
+
+
+@skill(
+    pack="coders",
+    tags=["coding", "pipeline", "task"],
+    category=SkillCategory.SYSTEM,
+    description="Start a new coding task through the pipeline.",
+)
+def start_coding_task(task_description: str) -> str:
+    """Queue a new task in the pipeline with a given description. Returns task ID."""
+    if not task_description or not task_description.strip():
+        return "Error: task_description cannot be empty."
+    scene = _get_coders_scene()
+    if not scene or not scene.state:
+        return "THE LAB not active — cannot queue task."
+    feature = scene.state.add_feature(
+        title=task_description[:80],
+        description=task_description,
+    )
+    logger.info("THE LAB: task queued via skill — %s (id=%s)", feature.title, feature.id)
+    return (
+        f"✅ Task queued: '{feature.title}'\n"
+        f"ID: {feature.id} | Phase: {feature.phase.value}\n"
+        f"Queue depth: {len(scene.state.features)}"
+    )
+
+
+@skill(
+    pack="coders",
+    tags=["coding", "metrics", "benchmark"],
+    category=SkillCategory.SYSTEM,
+    description="Get velocity metrics and benchmark data.",
+)
+def get_velocity_metrics() -> str:
+    """Return velocity stats: lines/tick, test pass rate, agent XP, uptime."""
+    scene = _get_coders_scene()
+    if not scene or not scene.state:
+        return json.dumps({"error": "THE LAB not active."})
+    st = scene.state
+    ticks = max(1, st.tick_count)
+    total_completed = len(st.completed_features)
+    agent_stats = []
+    for a in st.agents:
+        xp = a.lines_written + a.reviews_done * 5 + a.tests_run * 3
+        level = 1 + xp // 50
+        agent_stats.append({
+            "name": a.name,
+            "role": a.role.value,
+            "level": level,
+            "xp": xp,
+            "lines": a.lines_written,
+            "reviews": a.reviews_done,
+            "tests": a.tests_run,
+        })
+    metrics = {
+        "velocity": {
+            "lines_per_tick": round(st.total_lines / ticks, 2),
+            "tests_per_tick": round(st.total_tests / ticks, 2),
+            "features_per_tick": round(total_completed / ticks, 3),
+        },
+        "totals": {
+            "lines": st.total_lines,
+            "tests": st.total_tests,
+            "features_completed": total_completed,
+            "ticks": ticks,
+        },
+        "agents": agent_stats,
+        "pipeline_health": "green" if st.active and len(st.features) < 5 else "yellow",
+    }
+    return json.dumps(metrics, indent=2)

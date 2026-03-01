@@ -643,3 +643,144 @@ def realm_time_check() -> str:
         lines.append("⚡ MUTINY ACTIVE — The Director has gone rogue!")
 
     return "\n".join(lines)
+
+
+# ── Dark Renaissance v0.68 — Shattered Throne Skills ──────────────────────────
+
+@skill(
+    pack="realm",
+    tags=["game", "state", "narrative"],
+    category=SkillCategory.GAME,
+    description="Get current story arc progress, player stats, active quest, and world events.",
+)
+def realm_state() -> str:
+    """Return full game state for THE SHATTERED THRONE."""
+    scene = _get_realm_scene()
+    if not scene or not scene.state:
+        return "THE SHATTERED THRONE — no active game."
+    st = scene.state
+    s = st.player_stats
+    arc_id = getattr(st, "active_arc", None)
+    arc_label = arc_id.replace("_", " ").title() if arc_id else "None"
+    sanity = getattr(st, "sanity", 100)
+    active_quest_title = st.active_quests[0]["title"] if st.active_quests else "None"
+    return (
+        f"⚔️ THE SHATTERED THRONE — Turn {st.turn_number}\n"
+        f"Arc: {arc_label} | Director: {st.director_personality} "
+        f"(patience {st.director_patience:.0f}/100)\n"
+        f"HP: {s['hp']}/{s['max_hp']} | MP: {s['mp']}/{s['max_mp']} | "
+        f"Sanity: {sanity}/100 | XP: {s['xp']}/{s['xp_next']}\n"
+        f"Level {s['level']} | Gold: {s.get('gold', 0)} | "
+        f"Location: {st.current_location}\n"
+        f"Active Quest: {active_quest_title}\n"
+        f"Inventory: {len(st.inventory)} item(s)"
+    )
+
+
+@skill(
+    pack="realm",
+    tags=["game", "narrative", "arc"],
+    category=SkillCategory.NARRATIVE,
+    description="Get available dark story arcs to begin in THE SHATTERED THRONE.",
+)
+def get_story_arcs() -> str:
+    """Return the five dark story arcs available in the Shattered Throne."""
+    arcs = [
+        ("corruption",         "☠️", "The Corruptor's Bargain",
+         "A dark entity offers impossible power — at the cost of your soul."),
+        ("forbidden_magic",    "📖", "Forbidden Tome",
+         "A cursed grimoire promises omniscience. Every spell costs sanity."),
+        ("betrayal",           "🗡️", "The Knife in the Dark",
+         "Your closest ally is the realm's most dangerous traitor."),
+        ("lovecraftian",       "🦑", "What Stirs Beneath",
+         "Something ancient and unspeakable stirs beneath the shattered throne."),
+        ("political_intrigue", "👑", "Game of Shards",
+         "Four factions war for the throne's fragments. Every alliance is a lie."),
+    ]
+    lines = ["🌑 DARK STORY ARCS — THE SHATTERED THRONE:"]
+    for arc_id, icon, title, desc in arcs:
+        lines.append(f"  {icon} [{arc_id}] {title}: {desc}")
+    lines.append("\nUse start_story_arc(arc_id) to begin an arc.")
+    return "\n".join(lines)
+
+
+@skill(
+    pack="realm",
+    tags=["game", "narrative", "arc"],
+    category=SkillCategory.NARRATIVE,
+    description=(
+        "Start a dark story arc in THE SHATTERED THRONE "
+        "(arc_id: corruption, forbidden_magic, betrayal, lovecraftian, political_intrigue)."
+    ),
+    cooldown=10.0,
+)
+def start_story_arc(arc_id: str) -> str:
+    """Begin a dark story arc. The Director narrates the arc opening."""
+    scene = _get_realm_scene()
+    if not scene or not scene.state:
+        return "No active Shattered Throne game."
+    valid = {"corruption", "forbidden_magic", "betrayal", "lovecraftian", "political_intrigue"}
+    if arc_id not in valid:
+        return f"Unknown arc '{arc_id}'. Valid arcs: {', '.join(sorted(valid))}"
+    scene.state.active_arc = arc_id  # type: ignore[attr-defined]
+    return f"🌑 Arc '{arc_id}' activated. The Director will narrate the opening on next turn."
+
+
+@skill(
+    pack="realm",
+    tags=["game", "narrative", "choice"],
+    category=SkillCategory.NARRATIVE,
+    description="Make a narrative choice at a branching point in THE SHATTERED THRONE.",
+)
+def make_choice(choice_id: str, reason: str = "") -> str:
+    """Select a story choice by ID. Optionally provide a reason for the choice."""
+    scene = _get_realm_scene()
+    if not scene or not scene.state:
+        return "No active Shattered Throne game."
+    st = scene.state
+    if st.ended:
+        return "The game has ended. Start a new game to make choices."
+    choice_match = next(
+        (c for c in st.current_choices if c.get("id") == choice_id), None
+    )
+    if not choice_match:
+        available = [f"{c['id']}: {c['text']}" for c in st.current_choices]
+        return (
+            f"Choice '{choice_id}' not found.\n"
+            f"Available: {'; '.join(available) if available else 'No choices available'}"
+        )
+    reason_suffix = f" (Reason: {reason})" if reason else ""
+    return f"✅ Choice '{choice_id}' selected: {choice_match['text']}{reason_suffix}"
+
+
+@skill(
+    pack="realm",
+    tags=["game", "stats"],
+    category=SkillCategory.GAME,
+    description="Check player stats: HP, MP, XP, Sanity, Level, Gold.",
+)
+def player_stats() -> str:
+    """Return player stats for THE SHATTERED THRONE including sanity."""
+    scene = _get_realm_scene()
+    if not scene or not scene.state:
+        return "No active Shattered Throne game."
+    s = scene.state.player_stats
+    sanity = getattr(scene.state, "sanity", 100)
+    sanity_bar = "█" * (sanity // 10) + "░" * (10 - sanity // 10)
+    sanity_status = (
+        "SHATTERED 💔" if sanity < 20 else
+        "Fraying 😰" if sanity < 40 else
+        "Strained 😟" if sanity < 60 else
+        "Stable 🧠" if sanity < 80 else
+        "Clear ✨"
+    )
+    return (
+        f"⚔️ PLAYER STATS — THE SHATTERED THRONE\n"
+        f"HP:     {s['hp']:>3}/{s['max_hp']:<3}\n"
+        f"MP:     {s['mp']:>3}/{s['max_mp']:<3}\n"
+        f"Sanity: {sanity:>3}/100  [{sanity_bar}] {sanity_status}\n"
+        f"Level:  {s['level']} ({s['xp']}/{s['xp_next']} XP)\n"
+        f"Gold:   {s.get('gold', 0)}\n"
+        f"STR: {s['strength']}  AGI: {s['agility']}  "
+        f"INT: {s['intellect']}  CHA: {s['charisma']}  LCK: {s['luck']}"
+    )

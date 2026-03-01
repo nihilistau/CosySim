@@ -1,154 +1,267 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-scene="casino">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>The Midnight Casino</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/casino.css') }}">
-    <link rel="stylesheet" href="/shared/css/design_tokens.css">
-    <script src="/shared/js/cosysim-core.js"></script>
-    <script src="/shared/js/cosysim-stream.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CLUB NOIR — {{ scene_name or 'CLUB NOIR' }}</title>
+
+  <!-- Shared assets -->
+  <link rel="stylesheet" href="/shared/css/design_tokens.css">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/casino.css') }}">
+
+  <!-- Socket.IO -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+  <!-- CosySim core -->
+  <script src="/shared/js/cosysim-core.js" defer></script>
+  <script src="/shared/js/cosysim-stream.js" defer></script>
+
+  <style>
+    :root {
+      --accent:     #f97316;
+      --accent-rgb: 249 115 22;
+      --accent-dim: rgba(249,115,22,0.18);
+      --accent-glow: 0 0 18px rgba(249,115,22,0.55);
+    }
+  </style>
 </head>
-<body>
-    <div id="casino-app">
-        <!-- Header -->
-        <header class="casino-header">
-            <h1>🎰 The Midnight Casino</h1>
-            <div class="chip-display">
-                <span class="chip-icon">🪙</span>
-                <span id="player-chips">500</span> chips
-            </div>
-        </header>
 
-        <!-- Main table area -->
-        <div class="table-area">
-            <!-- Dealer -->
-            <div class="dealer-area">
-                <div class="character-card dealer">
-                    <div class="character-avatar">🃏</div>
-                    <div class="character-name">Dealer Jack</div>
-                    <div class="character-comment" id="dealer-comment">Waiting for the game to begin...</div>
-                </div>
-            </div>
+<body data-scene="casino">
 
-            <!-- Cards -->
-            <div class="cards-area">
-                <div class="community-cards" id="community-cards">
-                    <div class="card-placeholder">Community Cards</div>
-                </div>
-                <div class="pot-display">
-                    Pot: <span id="pot-amount">0</span> 🪙
-                </div>
-            </div>
+<!-- ══════════════════════════════════════════════════════════════
+     NAVBAR
+═══════════════════════════════════════════════════════════════ -->
+{% include 'navbar_v2.html' ignore missing %}
 
-            <!-- Player hand -->
-            <div class="player-area">
-                <div class="player-hand" id="player-hand">
-                    <div class="card-placeholder">Your Hand</div>
-                </div>
-            </div>
+<!-- ══════════════════════════════════════════════════════════════
+     CASINO SHELL
+═══════════════════════════════════════════════════════════════ -->
+<div id="casino-shell">
 
-            <!-- Mira -->
-            <div class="mira-area">
-                <div class="character-card mira">
-                    <div class="character-avatar">🎭</div>
-                    <div class="character-name">Mira Chen</div>
-                    <div class="character-chips">
-                        <span id="mira-chips">500</span> 🪙
-                    </div>
-                    <div class="character-comment" id="mira-comment">Care for a game?</div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Tell indicator -->
-        <div class="tell-area" id="tell-area" style="display:none;">
-            <span class="tell-label">🔍 Tell:</span>
-            <span id="current-tell"></span>
-        </div>
-
-        <!-- Actions -->
-        <div class="actions-area">
-            <div class="action-row" id="lobby-actions">
-                <button class="btn btn-primary" onclick="newHand()">🂡 Deal New Hand</button>
-            </div>
-            <div class="action-row" id="bet-actions" style="display:none;">
-                <button class="btn btn-bet" onclick="placeBet(10)">Bet 10</button>
-                <button class="btn btn-bet" onclick="placeBet(25)">Bet 25</button>
-                <button class="btn btn-bet" onclick="placeBet(50)">Bet 50</button>
-                <button class="btn btn-danger" onclick="goAllIn()">ALL IN</button>
-                <button class="btn btn-bluff" onclick="attemptBluff()">🃏 Bluff</button>
-                <button class="btn btn-fold" onclick="fold()">Fold</button>
-            </div>
-            <div class="action-row" id="showdown-actions" style="display:none;">
-                <button class="btn btn-primary" onclick="showdown()">👁 Showdown</button>
-            </div>
-            <div class="action-row" id="result-actions" style="display:none;">
-                <button class="btn btn-primary" onclick="newHand()">Next Hand →</button>
-            </div>
-        </div>
-
-        <!-- Stats panel -->
-        <div class="stats-panel">
-            <h3>Player Stats</h3>
-            <div class="stat-bar">
-                <label>Confidence</label>
-                <div class="bar"><div class="bar-fill" id="stat-confidence" style="width:50%"></div></div>
-            </div>
-            <div class="stat-bar">
-                <label>Focus</label>
-                <div class="bar"><div class="bar-fill focus" id="stat-focus" style="width:50%"></div></div>
-            </div>
-            <div class="stat-bar">
-                <label>Luck</label>
-                <div class="bar"><div class="bar-fill luck" id="stat-luck" style="width:50%"></div></div>
-            </div>
-            <div class="stat-bar">
-                <label>Charm</label>
-                <div class="bar"><div class="bar-fill charm" id="stat-charm" style="width:50%"></div></div>
-            </div>
-            <div class="stat-bar">
-                <label>Recklessness</label>
-                <div class="bar"><div class="bar-fill reckless" id="stat-recklessness" style="width:20%"></div></div>
-            </div>
-        </div>
-
-        <!-- Drink menu -->
-        <div class="drink-menu">
-            <h3>🍸 Casino Bar</h3>
-            <div class="drink-grid" id="drink-grid"></div>
-        </div>
-
-        <!-- Event log -->
-        <div class="event-log">
-            <h3>📜 Events</h3>
-            <div id="event-list"></div>
-            <button class="btn btn-small" onclick="triggerEvent()">🎲 Random Event</button>
-        </div>
-
-        <!-- Chat -->
-        <div class="chat-panel">
-            <h3>💬 Talk</h3>
-            <div id="chat-log"></div>
-            <div class="chat-input">
-                <select id="chat-target">
-                    <option value="dealer_jack">Dealer Jack</option>
-                    <option value="hustler_mira">Mira Chen</option>
-                </select>
-                <input type="text" id="chat-message" placeholder="Say something..." onkeypress="if(event.key==='Enter')sendChat()">
-                <button onclick="sendChat()">Send</button>
-            </div>
-        </div>
-
-        <!-- Framework status (debug) -->
-        <details class="framework-debug">
-            <summary>🔧 Framework Status</summary>
-            <pre id="framework-status">Loading...</pre>
-            <button class="btn btn-small" onclick="refreshFramework()">Refresh</button>
-        </details>
+  <!-- ── HEADER ─────────────────────────────────────────────── -->
+  <header class="cn-header">
+    <div class="cn-header__brand">
+      <span class="cn-header__neon">CLUB</span>
+      <span class="cn-header__neon cn-header__neon--bold">NOIR</span>
+      <span class="cn-header__tagline">Everyone owes someone.</span>
     </div>
+    <div class="cn-header__info">
+      <div class="cn-balance" id="hdr-balance">
+        <span class="cn-balance__label">CREDITS</span>
+        <span class="cn-balance__value" id="balance-display">—</span>
+      </div>
+      <div class="cn-table-badge" id="hdr-table">
+        <span id="table-name-display">NO TABLE</span>
+      </div>
+    </div>
+  </header>
 
-    <script src="{{ url_for('static', filename='js/casino.js') }}"></script>
+  <!-- ── THREE-COLUMN LAYOUT ───────────────────────────────── -->
+  <div class="cn-layout">
+
+    <!-- LEFT SIDEBAR -->
+    <aside class="cn-sidebar cn-sidebar--left">
+
+      <!-- Credit balance (animated) -->
+      <div class="cn-panel cn-panel--credits">
+        <div class="cn-panel__title">BALANCE</div>
+        <div class="cn-credits-display">
+          <span class="cn-credits-icon">₵</span>
+          <span class="cn-credits-amount" id="credits-main">—</span>
+        </div>
+        <div class="cn-credits-delta" id="credits-delta"></div>
+      </div>
+
+      <!-- Recent transactions -->
+      <div class="cn-panel cn-panel--transactions">
+        <div class="cn-panel__title">LEDGER</div>
+        <ul class="cn-transaction-list" id="tx-list">
+          <li class="cn-tx cn-tx--empty">No transactions yet</li>
+        </ul>
+      </div>
+
+      <!-- Consequences pending -->
+      <div class="cn-panel cn-panel--consequences">
+        <div class="cn-panel__title">DEBTS</div>
+        <div id="consequence-area">
+          <span class="cn-no-debts">All clear… for now.</span>
+        </div>
+      </div>
+
+    </aside>
+
+    <!-- MAIN TABLE -->
+    <main class="cn-main">
+
+      <!-- Dealer portrait + speech ring -->
+      <div class="cn-dealer-row">
+        <div class="cn-character cn-character--dealer" id="dealer-portrait">
+          <div class="cn-character__ring" id="dealer-ring"></div>
+          <div class="cn-character__avatar">🃏</div>
+          <div class="cn-character__name">DEALER JACK</div>
+          <div class="cn-character__speech" id="dealer-speech">The house is open.</div>
+        </div>
+
+        <!-- Phase indicator -->
+        <div class="cn-phase-badge" id="phase-badge">LOBBY</div>
+
+        <div class="cn-character cn-character--mira" id="mira-portrait">
+          <div class="cn-character__ring" id="mira-ring"></div>
+          <div class="cn-character__avatar">🎭</div>
+          <div class="cn-character__name">MIRA CHEN</div>
+          <div class="cn-character__speech" id="mira-speech">Care for a game?</div>
+        </div>
+      </div>
+
+      <!-- FELT TABLE -->
+      <div class="cn-table">
+        <div class="cn-table__felt">
+
+          <!-- Dealer hand -->
+          <div class="cn-hand-zone cn-hand-zone--dealer">
+            <div class="cn-hand-label">DEALER</div>
+            <div class="cn-cards" id="dealer-hand"></div>
+            <div class="cn-hand-value" id="dealer-value"></div>
+          </div>
+
+          <!-- Pot display + chip stack -->
+          <div class="cn-pot-area">
+            <div class="cn-pot-label">POT</div>
+            <div class="cn-chip-counter" id="chip-counter">
+              <div class="cn-chip cn-chip--spin" id="chip-spin">🪙</div>
+              <span class="cn-pot-amount" id="pot-display">—</span>
+            </div>
+          </div>
+
+          <!-- Player hand -->
+          <div class="cn-hand-zone cn-hand-zone--player">
+            <div class="cn-hand-label">YOUR HAND</div>
+            <div class="cn-cards" id="player-hand"></div>
+            <div class="cn-hand-value" id="player-value"></div>
+          </div>
+
+        </div><!-- /.cn-table__felt -->
+      </div><!-- /.cn-table -->
+
+      <!-- Dealer comments / result banner -->
+      <div class="cn-result-banner" id="result-banner" style="display:none;"></div>
+
+      <!-- Agent reasoning panel -->
+      <details class="cn-reasoning-panel" id="reasoning-panel">
+        <summary>◈ AGENT REASONING</summary>
+        <div class="cn-reasoning-body" id="reasoning-body">Awaiting next inference…</div>
+      </details>
+
+      <!-- Bench HUD -->
+      <div class="cn-bench-hud" id="bench-hud">
+        <span class="cn-bench-item" id="bench-ms">—ms</span>
+        <span class="cn-bench-item" id="bench-model">—</span>
+        <span class="cn-bench-item" id="bench-tokens">— tok</span>
+        <span class="cn-bench-item" id="bench-nexus">—</span>
+      </div>
+
+    </main>
+
+    <!-- RIGHT SIDEBAR -->
+    <aside class="cn-sidebar cn-sidebar--right">
+
+      <!-- NPC area — Mira + spectators -->
+      <div class="cn-panel cn-panel--npcs">
+        <div class="cn-panel__title">AT THE TABLE</div>
+        <div class="cn-npc-list">
+          <div class="cn-npc" id="npc-mira">
+            <span class="cn-npc__avatar">🎭</span>
+            <div class="cn-npc__info">
+              <div class="cn-npc__name">Mira Chen</div>
+              <div class="cn-npc__chips" id="mira-chips">— ₵</div>
+            </div>
+          </div>
+          <div class="cn-npc" id="npc-spec1">
+            <span class="cn-npc__avatar">🕵️</span>
+            <div class="cn-npc__info">
+              <div class="cn-npc__name">Unknown</div>
+              <div class="cn-npc__chips">watching</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Join table / bet controls -->
+      <div class="cn-panel cn-panel--bet" id="bet-panel">
+        <div class="cn-panel__title">BET</div>
+
+        <!-- Game select + buy-in (shown in lobby) -->
+        <div class="cn-join-controls" id="join-controls">
+          <select class="cn-select" id="game-select">
+            <option value="blackjack">Blackjack</option>
+            <option value="poker">Poker</option>
+          </select>
+          <input class="cn-input" id="buy-in-input" type="number" value="200" min="50" max="5000" placeholder="Buy-in">
+          <button class="cn-btn cn-btn--accent" id="join-btn" onclick="window._casino.joinTable()">SIT DOWN</button>
+        </div>
+
+        <!-- Bet amount + quick buttons (shown when at table) -->
+        <div class="cn-bet-controls" id="bet-controls" style="display:none;">
+          <input class="cn-input" id="bet-input" type="number" value="50" min="1" placeholder="Bet">
+          <div class="cn-quick-bets">
+            <button class="cn-btn cn-btn--sm" onclick="window._casino.quickBet(25)">$25</button>
+            <button class="cn-btn cn-btn--sm" onclick="window._casino.quickBet(50)">$50</button>
+            <button class="cn-btn cn-btn--sm" onclick="window._casino.quickBet(100)">$100</button>
+            <button class="cn-btn cn-btn--sm cn-btn--ghost" onclick="window._casino.quickBet(0, true)">MAX</button>
+          </div>
+          <button class="cn-btn cn-btn--accent" onclick="window._casino.placeBet()">PLACE BET</button>
+          <button class="cn-btn cn-btn--deal" id="deal-btn" onclick="window._casino.dealCards()" style="display:none;">DEAL</button>
+        </div>
+      </div>
+
+      <!-- Action buttons -->
+      <div class="cn-panel cn-panel--actions">
+        <div class="cn-panel__title">ACTIONS</div>
+        <div class="cn-action-bar" id="action-bar">
+          <button class="cn-btn cn-btn--action cn-btn--hit"    onclick="window._casino.makeDecision('hit')"    id="btn-hit"    disabled>HIT</button>
+          <button class="cn-btn cn-btn--action cn-btn--stand"  onclick="window._casino.makeDecision('stand')"  id="btn-stand"  disabled>STAND</button>
+          <button class="cn-btn cn-btn--action cn-btn--double" onclick="window._casino.makeDecision('double')" id="btn-double" disabled>DOUBLE</button>
+          <button class="cn-btn cn-btn--action cn-btn--fold"   onclick="window._casino.makeDecision('fold')"   id="btn-fold"   disabled>FOLD</button>
+        </div>
+        <button class="cn-btn cn-btn--cashout" onclick="window._casino.cashOut()" id="btn-cashout" style="display:none;">CASH OUT</button>
+      </div>
+
+      <!-- Chat -->
+      <div class="cn-panel cn-panel--chat">
+        <div class="cn-panel__title">TALK</div>
+        <div class="cn-chat-log" id="chat-log"></div>
+        <div class="cn-chat-input-row">
+          <select class="cn-select cn-select--sm" id="chat-target">
+            <option value="dealer_jack">Jack</option>
+            <option value="hustler_mira">Mira</option>
+          </select>
+          <input class="cn-input cn-input--chat" id="chat-msg" type="text" placeholder="Say something…"
+                 onkeydown="if(event.key==='Enter') window._casino.sendMessage()">
+          <button class="cn-btn cn-btn--sm" onclick="window._casino.sendMessage()">→</button>
+        </div>
+      </div>
+
+    </aside>
+  </div><!-- /.cn-layout -->
+
+</div><!-- /#casino-shell -->
+
+<!-- WIN / LOSS FLASH OVERLAYS -->
+<div class="cn-flash cn-flash--win"  id="flash-win"  style="display:none;">
+  <div class="cn-flash__text">WIN</div>
+  <div class="cn-flash__amount" id="flash-win-amount"></div>
+  <canvas class="cn-sparks" id="sparks-canvas"></canvas>
+</div>
+<div class="cn-flash cn-flash--loss" id="flash-loss" style="display:none;">
+  <div class="cn-flash__text">BUST</div>
+  <div class="cn-flash__amount" id="flash-loss-amount"></div>
+</div>
+
+<!-- Consequence toast -->
+<div class="cn-consequence-toast" id="consequence-toast" style="display:none;">
+  <span class="consequence-badge">⚠ MIRA WILL CALL</span>
+  <span id="consequence-msg"></span>
+</div>
+
+<script src="{{ url_for('static', filename='js/casino.js') }}"></script>
 </body>
 </html>

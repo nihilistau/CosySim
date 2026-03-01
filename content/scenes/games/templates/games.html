@@ -3,90 +3,268 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Games Arcade</title>
+  <title>THE ARCADE — CosySim</title>
+  <link rel="stylesheet" href="/static/shared/css/cosysim.css">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/games.css') }}">
 </head>
-<body>
-  <header>
-    <h1>🎮 Games Arcade</h1>
-    <div id="status-bar">
-      <span id="connection-status">⚪ Connecting...</span>
-      <span id="score-display"></span>
+<body data-scene="games" class="arcade-body">
+
+  <!-- Sparks canvas (win particle effect) -->
+  <canvas id="sparks-canvas" aria-hidden="true"></canvas>
+
+  {% include 'navbar_v2.html' ignore missing %}
+
+  <!-- ═══════════════════════════════════════════════════════
+       ARCADE HEADER — neon sign title
+  ═══════════════════════════════════════════════════════ -->
+  <header class="arcade-header">
+    <div class="arcade-neon-title">
+      <span class="neon-char">T</span><span class="neon-char">H</span><span class="neon-char">E</span>
+      <span class="neon-space"> </span>
+      <span class="neon-char accent">A</span><span class="neon-char accent">R</span><span class="neon-char accent">C</span><span class="neon-char accent">A</span><span class="neon-char accent">D</span><span class="neon-char accent">E</span>
+    </div>
+    <p class="arcade-tagline">Insert coin. Lose yourself. The high score is never enough.</p>
+    <div class="arcade-status-bar">
+      <span id="connection-status" class="status-dot disconnected">⚪ Connecting…</span>
+      <span id="score-ticker" class="score-ticker"></span>
+      <span class="arcade-version">v0.68 Dark Renaissance</span>
     </div>
   </header>
 
-  <!-- Game Selector -->
-  <div id="game-select" class="panel">
-    <div class="game-card" onclick="startMystery()">
-      <h3>🔍 Mystery Investigation</h3>
-      <p>Work through 5 clues to identify the culprit. The GameMaster narrates your journey.</p>
-      <button class="btn">Play</button>
+  <!-- ═══════════════════════════════════════════════════════
+       GAME SELECTOR — horizontal scrolling cards
+  ═══════════════════════════════════════════════════════ -->
+  <section class="game-selector" id="game-selector" aria-label="Game selection">
+    <div class="game-card" data-game="mystery" onclick="window._arcade.startGame('mystery')" tabindex="0" role="button" aria-label="Mystery Board">
+      <div class="game-card__icon">🔍</div>
+      <div class="game-card__name">Mystery Board</div>
+      <div class="game-card__desc">Pin the clues. Name the killer.</div>
+      <div class="game-card__badge">5 clues</div>
     </div>
-    <div class="game-card" onclick="startTOD()">
-      <h3>🎲 Truth or Dare</h3>
-      <p>Roll dice, answer truths or complete dares. Score 5+ to win.</p>
-      <button class="btn">Play</button>
+    <div class="game-card" data-game="dice_challenge" onclick="window._arcade.startGame('dice_challenge')" tabindex="0" role="button" aria-label="Dice Challenge">
+      <div class="game-card__icon">🎲</div>
+      <div class="game-card__name">Dice Challenge</div>
+      <div class="game-card__desc">Roll the bones. Chase the max.</div>
+      <div class="game-card__badge">d6 → d100</div>
     </div>
-  </div>
+    <div class="game-card" data-game="truth_or_dare" onclick="window._arcade.startGame('truth_or_dare')" tabindex="0" role="button" aria-label="Truth or Dare">
+      <div class="game-card__icon">🔥</div>
+      <div class="game-card__name">Truth or Dare</div>
+      <div class="game-card__desc">Dare to be honest. Or dare to be bold.</div>
+      <div class="game-card__badge">18+ intensity</div>
+    </div>
+    <div class="game-card" data-game="trivia" onclick="window._arcade.startGame('trivia')" tabindex="0" role="button" aria-label="Trivia">
+      <div class="game-card__icon">🧠</div>
+      <div class="game-card__name">Trivia</div>
+      <div class="game-card__desc">How much do you really know?</div>
+      <div class="game-card__badge">10 rounds</div>
+    </div>
+    <div class="game-card" data-game="word_game" onclick="window._arcade.startGame('word_game')" tabindex="0" role="button" aria-label="Word Game">
+      <div class="game-card__icon">💬</div>
+      <div class="game-card__name">Word Game</div>
+      <div class="game-card__desc">Letters, patterns, forbidden words.</div>
+      <div class="game-card__badge">quick-fire</div>
+    </div>
+  </section>
 
-  <!-- Mystery Game UI -->
-  <div id="mystery-panel" class="panel" style="display:none">
-    <div class="game-header">
-      <h2 id="mystery-title">🔍 Mystery</h2>
-      <button class="btn btn-small btn-secondary" onclick="exitGame()">✕ Exit</button>
-    </div>
-    <div id="mystery-setting" class="setting"></div>
-    <div id="mystery-narration" class="narration"></div>
-    <div id="clue-progress">
-      <div id="clue-bar"><div id="clue-fill"></div></div>
-      <span id="clue-count">0 / 5 clues</span>
-    </div>
-    <div id="clues-list"></div>
-    <div id="mystery-actions">
-      <button class="btn" id="btn-clue" onclick="getClue()">🔎 Search for Clue</button>
-      <button class="btn btn-accent" id="btn-accuse" onclick="showAccuseForm()" style="display:none">⚖️ Make Accusation</button>
-    </div>
-    <div id="accuse-form" style="display:none">
-      <input type="text" id="suspect-input" placeholder="Name the culprit...">
-      <button class="btn btn-accent" onclick="makeAccusation()">Accuse!</button>
-    </div>
-    <div id="mystery-result" class="result" style="display:none"></div>
-  </div>
+  <!-- ═══════════════════════════════════════════════════════
+       MAIN CONTENT — 3-column layout
+  ═══════════════════════════════════════════════════════ -->
+  <main class="games-layout" id="games-main">
 
-  <!-- Truth or Dare UI -->
-  <div id="tod-panel" class="panel" style="display:none">
-    <div class="game-header">
-      <h2>🎲 Truth or Dare</h2>
-      <button class="btn btn-small btn-secondary" onclick="exitGame()">✕ Exit</button>
-    </div>
-    <div id="tod-narration" class="narration"></div>
-    <div id="tod-score-display">Score: <span id="tod-score">0</span> / 5</div>
-    <div id="tod-prompt-area" style="display:none">
-      <div id="tod-type" class="tod-badge"></div>
-      <div id="tod-prompt-text"></div>
-      <textarea id="tod-response" placeholder="Your response..."></textarea>
-      <button class="btn" onclick="submitAnswer(true)">✅ Done</button>
-      <button class="btn btn-secondary" onclick="submitAnswer(false)">⏭️ Skip</button>
-    </div>
-    <div id="tod-actions">
-      <button class="btn" id="btn-roll" onclick="rollDice()">🎲 Roll Dice</button>
-    </div>
-    <div id="tod-result" class="result" style="display:none"></div>
-  </div>
+    <!-- ── LEFT: Active game area ────────────────────────── -->
+    <section class="games-layout__active" id="active-game-area">
 
-  <!-- GameMaster Chat -->
-  <div id="chat-panel">
-    <div id="chat-header" onclick="toggleChat()">
-      💬 <span>GameMaster</span>
-      <span id="chat-toggle">▲</span>
-    </div>
-    <div id="chat-messages"></div>
-    <div id="chat-input-area">
-      <input type="text" id="chat-input" placeholder="Talk to the GameMaster..."
-             onkeydown="if(event.key==='Enter')sendChat()">
-      <button class="btn btn-small" onclick="sendChat()">Send</button>
-    </div>
-  </div>
+      <!-- Idle state -->
+      <div id="game-idle" class="game-idle">
+        <div class="idle-icon">🕹️</div>
+        <p>Select a game above to begin.</p>
+      </div>
+
+      <!-- ── Mystery Board ────────────────────────────────── -->
+      <div id="mystery-panel" class="active-game-panel" style="display:none">
+        <div class="panel-header">
+          <h2 id="mystery-title">🔍 Mystery Board</h2>
+          <button class="btn btn-sm btn-ghost" onclick="window._arcade.exitGame()">✕ Exit</button>
+        </div>
+        <div id="mystery-setting" class="setting-label"></div>
+        <div id="mystery-narration" class="narration-box"></div>
+
+        <!-- Investigation board: glass pinboard with clue cards -->
+        <div class="investigation-board" id="investigation-board" aria-label="Clue board">
+          <div class="board-grid" id="clue-cards-grid">
+            <!-- Clue cards injected by JS -->
+          </div>
+          <!-- SVG overlay for string connections -->
+          <svg class="board-strings" id="board-strings" aria-hidden="true"></svg>
+        </div>
+
+        <div class="clue-progress">
+          <div class="clue-bar"><div class="clue-fill" id="clue-fill"></div></div>
+          <span id="clue-count" class="clue-count-label">0 / 5 clues</span>
+        </div>
+
+        <div class="mystery-actions" id="mystery-actions">
+          <button class="btn btn-violet" id="btn-clue" onclick="window._arcade._mysteryClue()">
+            🔎 Search for Clue
+          </button>
+          <button class="btn btn-accent" id="btn-accuse" style="display:none"
+                  onclick="document.getElementById('accuse-form').style.display='flex'">
+            ⚖️ Make Accusation
+          </button>
+        </div>
+        <div class="accuse-form" id="accuse-form" style="display:none">
+          <input type="text" id="suspect-input" class="arcade-input" placeholder="Name the culprit…">
+          <button class="btn btn-accent" onclick="window._arcade._mysteryAccuse()">Accuse!</button>
+        </div>
+        <div id="mystery-result" class="result-box" style="display:none"></div>
+      </div>
+
+      <!-- ── Dice Challenge ───────────────────────────────── -->
+      <div id="dice-panel" class="active-game-panel" style="display:none">
+        <div class="panel-header">
+          <h2>🎲 Dice Challenge</h2>
+          <button class="btn btn-sm btn-ghost" onclick="window._arcade.exitGame()">✕ Exit</button>
+        </div>
+        <div id="dice-narration" class="narration-box"></div>
+        <div class="dice-controls">
+          <label class="dice-label">Sides:</label>
+          <div class="dice-selector" id="dice-selector">
+            <button class="dice-btn active" data-sides="6">d6</button>
+            <button class="dice-btn" data-sides="8">d8</button>
+            <button class="dice-btn" data-sides="10">d10</button>
+            <button class="dice-btn" data-sides="12">d12</button>
+            <button class="dice-btn" data-sides="20">d20</button>
+            <button class="dice-btn" data-sides="100">d100</button>
+          </div>
+        </div>
+        <!-- CSS 3D cube dice -->
+        <div class="dice-3d-wrap" id="dice-3d-wrap">
+          <div class="dice-3d" id="dice-3d">
+            <div class="face face-front">⚀</div>
+            <div class="face face-back">⚅</div>
+            <div class="face face-left">⚃</div>
+            <div class="face face-right">⚂</div>
+            <div class="face face-top">⚄</div>
+            <div class="face face-bottom">⚁</div>
+          </div>
+        </div>
+        <div id="dice-result-display" class="dice-result-display" style="display:none">
+          <span class="dice-number" id="dice-number">—</span>
+          <span class="dice-label-result" id="dice-label-result"></span>
+        </div>
+        <button class="btn btn-violet btn-wide" id="btn-roll-dice"
+                onclick="window._arcade.rollDice()">
+          🎲 Roll
+        </button>
+      </div>
+
+      <!-- ── Truth or Dare ────────────────────────────────── -->
+      <div id="tod-panel" class="active-game-panel" style="display:none">
+        <div class="panel-header">
+          <h2>🔥 Truth or Dare</h2>
+          <button class="btn btn-sm btn-ghost" onclick="window._arcade.exitGame()">✕ Exit</button>
+        </div>
+        <div id="tod-narration" class="narration-box"></div>
+        <div class="tod-score-row">Score: <span id="tod-score" class="tod-score-val">0</span> / 5</div>
+        <div id="tod-prompt-area" class="tod-prompt-area" style="display:none">
+          <div class="tod-badge" id="tod-type"></div>
+          <div id="tod-prompt-text" class="tod-prompt-text"></div>
+          <textarea id="tod-response" class="arcade-textarea"
+                    placeholder="Your answer or dare response…"></textarea>
+          <div class="tod-buttons">
+            <button class="btn btn-violet" onclick="window._arcade.submitAnswer(document.getElementById('tod-response').value)">
+              ✅ Done
+            </button>
+            <button class="btn btn-ghost" onclick="window._arcade.submitAnswer('')">
+              ⏭ Skip
+            </button>
+          </div>
+        </div>
+        <button class="btn btn-violet btn-wide" id="btn-tod-roll"
+                onclick="window._arcade._todRoll()">
+          🎲 Roll Dice
+        </button>
+        <div id="tod-result" class="result-box" style="display:none"></div>
+      </div>
+
+      <!-- ── Trivia ───────────────────────────────────────── -->
+      <div id="trivia-panel" class="active-game-panel" style="display:none">
+        <div class="panel-header">
+          <h2>🧠 Trivia</h2>
+          <button class="btn btn-sm btn-ghost" onclick="window._arcade.exitGame()">✕ Exit</button>
+        </div>
+        <div id="trivia-narration" class="narration-box"></div>
+        <div id="trivia-question-area" class="trivia-area">
+          <div id="trivia-question" class="trivia-question">Waiting for question…</div>
+          <div id="trivia-options" class="trivia-options"></div>
+        </div>
+        <div id="trivia-result" class="result-box" style="display:none"></div>
+      </div>
+
+      <!-- ── Word Game ────────────────────────────────────── -->
+      <div id="word-panel" class="active-game-panel" style="display:none">
+        <div class="panel-header">
+          <h2>💬 Word Game</h2>
+          <button class="btn btn-sm btn-ghost" onclick="window._arcade.exitGame()">✕ Exit</button>
+        </div>
+        <div id="word-narration" class="narration-box"></div>
+        <div class="word-game-area">
+          <div id="word-prompt" class="word-prompt">Waiting for word…</div>
+          <div class="word-input-row">
+            <input type="text" id="word-input" class="arcade-input"
+                   placeholder="Your word…"
+                   onkeydown="if(event.key==='Enter') window._arcade.submitAnswer(this.value)">
+            <button class="btn btn-violet"
+                    onclick="window._arcade.submitAnswer(document.getElementById('word-input').value)">
+              Submit
+            </button>
+          </div>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ── RIGHT: Leaderboard + GameMaster chat ──────────── -->
+    <aside class="games-layout__sidebar" id="sidebar">
+
+      <!-- Economy tracker -->
+      <div class="sidebar-card economy-card" id="economy-card">
+        <h3 class="sidebar-card__title">🪙 Economy</h3>
+        <div id="economy-balance" class="economy-balance">— pts</div>
+      </div>
+
+      <!-- Leaderboard -->
+      <div class="sidebar-card leaderboard-card">
+        <h3 class="sidebar-card__title">🏆 High Scores</h3>
+        <ol class="leaderboard" id="leaderboard-list">
+          <li class="lb-empty">No scores yet</li>
+        </ol>
+      </div>
+
+      <!-- GameMaster chat -->
+      <div class="sidebar-card chat-card" id="chat-card">
+        <div class="chat-card__header" onclick="window._arcade._toggleChat()">
+          <span>💬 GameMaster</span>
+          <span id="chat-toggle-icon">▲</span>
+        </div>
+        <div id="chat-messages" class="chat-messages"></div>
+        <div id="chat-input-row" class="chat-input-row">
+          <input type="text" id="chat-input" class="arcade-input"
+                 placeholder="Talk to the GameMaster…"
+                 onkeydown="if(event.key==='Enter') window._arcade.sendMessage(this.value)">
+          <button class="btn btn-sm btn-violet"
+                  onclick="window._arcade.sendMessage(document.getElementById('chat-input').value)">
+            Send
+          </button>
+        </div>
+      </div>
+
+    </aside>
+  </main>
+
+  <!-- ── Bench HUD ──────────────────────────────────────── -->
+  <div id="bench-hud" class="bench-hud" aria-label="Bench metrics"></div>
 
   <script src="https://cdn.socket.io/4.6.0/socket.io.min.js"></script>
   <script src="{{ url_for('static', filename='js/games.js') }}"></script>

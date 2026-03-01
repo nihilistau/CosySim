@@ -1,18 +1,21 @@
-"""Games Arcade — AI-powered mini-game scene with GameMaster narration.
+"""THE ARCADE — v0.68 Dark Renaissance. Violet-themed arcade with investigation
+board, 3D dice, adult Truth-or-Dare, and AI GameMaster narration.
 
 Port 5567.  Flask + SocketIO.
 
 Features an AI GameMaster who narrates mysteries, reacts to player choices,
 and hosts Truth-or-Dare with personality. Wraps MysteryGame and TruthOrDareGame
-in a full BaseScene with Socket.IO events, MCP state, and score persistence.
+in a full BaseScene with Socket.IO events, MCP state, score persistence,
+investigation board integration, and a Nexus-backed leaderboard.
 """
 
 from __future__ import annotations
 
 import logging
 import os
+import random
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from flask import Flask, jsonify, render_template, request
 from flask_socketio import SocketIO, emit
@@ -27,29 +30,22 @@ SCENE_ID = "games"
 DEFAULT_PORT = 5567
 GAMEMASTER_ID = "gamemaster"
 
+# Games available in THE ARCADE
+ARCADE_GAMES = ["mystery", "dice_challenge", "truth_or_dare", "trivia", "word_game"]
+
 
 class GamesScene(BaseScene, NexusSceneMixin):
-    """Games Arcade with AI GameMaster, Socket.IO events, and score tracking."""
+    """THE ARCADE — violet-themed game hub with AI GameMaster, Socket.IO events,
+    investigation board, 3D dice, adult Truth-or-Dare, and Nexus leaderboard."""
 
     SCENE_METADATA = {
         "name": "games",
-        "title": "Games Arcade",
+        "display_name": "THE ARCADE",
         "port": 5567,
-        "type": "game",
-        "description": (
-            "AI-powered mini-game collection: Mystery Investigation with "
-            "GameMaster narration and Truth-or-Dare with dice rolls and scoring."
-        ),
-        "genre": "minigames",
-        "max_characters": 2,
-        "features": [
-            "mystery_investigation",
-            "truth_or_dare",
-            "ai_gamemaster",
-            "score_persistence",
-            "socket_io",
-            "mcp_skills",
-        ],
+        "type": "games",
+        "accent_color": "#8b5cf6",
+        "accent_rgb": "139 92 246",
+        "description": "Insert coin. Lose yourself. The high score is never enough.",
     }
 
     def __init__(self, host: str = "0.0.0.0", port: int = DEFAULT_PORT):
@@ -68,6 +64,8 @@ class GamesScene(BaseScene, NexusSceneMixin):
         self.mystery_games: Dict[str, Any] = {}
         self.tod_games: Dict[str, Any] = {}
         self._fw: Optional[Any] = None
+        self._active_game: Dict[str, str] = {}   # player → active game type
+        self._trivia_state: Dict[str, Any] = {}  # player → trivia state
 
         self._register_routes()
         self._setup_socketio()
@@ -76,7 +74,11 @@ class GamesScene(BaseScene, NexusSceneMixin):
 
         self.nexus_init("games")
 
-        log.info("GamesScene created on port %d", port)
+        # Wire bench + TTS routes
+        self.register_bench_route(self.app, self.socketio)
+        self.register_tts_route(self.app)
+
+        log.info("GamesScene (THE ARCADE) created on port %d", port)
 
     # ── MCP Integration ──────────────────────────────────────────────
 
@@ -88,11 +90,13 @@ class GamesScene(BaseScene, NexusSceneMixin):
             self._scene_node = self._fw.get_scene(SCENE_ID)
             self._scene_node.update_state({
                 "scores": {},
+                "leaderboard": [],
                 "games_played": 0,
                 "mysteries_solved": 0,
                 "tod_rounds": 0,
+                "active_game": None,
             })
-            log.info("GamesScene MCP wired with state tracking")
+            log.info("GamesScene (THE ARCADE) MCP wired")
         except Exception as exc:
             log.warning("MCP wiring skipped: %s", exc)
             self._scene_node = None
@@ -188,7 +192,7 @@ class GamesScene(BaseScene, NexusSceneMixin):
     # ── Score Tracking ───────────────────────────────────────────────
 
     def _update_score(self, player: str, game: str, won: bool, points: int = 0) -> Dict[str, Any]:
-        """Update persistent score for a player."""
+        """Update persistent score for a player and refresh leaderboard."""
         scores = {}
         if self._scene_node:
             scores = self._scene_node.get_state().get("scores", {})
@@ -197,18 +201,25 @@ class GamesScene(BaseScene, NexusSceneMixin):
             scores[player] = {
                 "mystery_wins": 0, "mystery_losses": 0,
                 "tod_score": 0, "tod_rounds": 0,
-                "total_games": 0,
+                "dice_wins": 0, "total_games": 0,
+                "total_points": 0,
             }
 
         scores[player]["total_games"] += 1
         if game == "mystery":
             if won:
                 scores[player]["mystery_wins"] += 1
+                scores[player]["total_points"] += 10
             else:
                 scores[player]["mystery_losses"] += 1
         elif game == "tod":
             scores[player]["tod_score"] += points
             scores[player]["tod_rounds"] += 1
+            scores[player]["total_points"] += points
+        elif game == "dice":
+            if won:
+                scores[player]["dice_wins"] += 1
+                scores[player]["total_points"] += points
 
         if self._scene_node:
             state = self._scene_node.get_state()
@@ -216,9 +227,23 @@ class GamesScene(BaseScene, NexusSceneMixin):
             state["games_played"] = state.get("games_played", 0) + 1
             if game == "mystery" and won:
                 state["mysteries_solved"] = state.get("mysteries_solved", 0) + 1
+            # Rebuild leaderboard (top-10 by total_points)
+            lb: List[Dict[str, Any]] = [
+                {"player": p, "points": v.get("total_points", 0),
+                 "games": v.get("total_games", 0)}
+                for p, v in scores.items()
+            ]
+            lb.sort(key=lambda x: x["points"], reverse=True)
+            state["leaderboard"] = lb[:10]
             self._scene_node.update_state(state)
 
         return scores[player]
+
+    def _get_leaderboard(self) -> List[Dict[str, Any]]:
+        """Return current top-10 leaderboard from MCP state."""
+        if self._scene_node:
+            return self._scene_node.get_state().get("leaderboard", [])
+        return []
 
     # ── Routes ───────────────────────────────────────────────────────
 
@@ -232,7 +257,7 @@ class GamesScene(BaseScene, NexusSceneMixin):
 
         @app.route("/")
         def index():
-            return render_template("games.html")
+            return render_template("games.html", **self.inject_navbar_context())
 
         @app.route("/api/health")
         def health():
@@ -241,18 +266,19 @@ class GamesScene(BaseScene, NexusSceneMixin):
         @app.route("/api/status")
         def status():
             scores = {}
+            state = {}
             if self._scene_node:
                 state = self._scene_node.get_state()
                 scores = state.get("scores", {})
             return jsonify({
                 "scene": SCENE_ID,
+                "display_name": self.SCENE_METADATA["display_name"],
+                "active_game": state.get("active_game"),
                 "mystery_active": len(self.mystery_games),
                 "tod_active": len(self.tod_games),
                 "scores": scores,
-                "games_played": (
-                    self._scene_node.get_state().get("games_played", 0)
-                    if self._scene_node else 0
-                ),
+                "games_played": state.get("games_played", 0),
+                "games_available": ARCADE_GAMES,
             })
 
         @app.route("/api/scores")
@@ -262,6 +288,14 @@ class GamesScene(BaseScene, NexusSceneMixin):
             if self._scene_node:
                 scores = self._scene_node.get_state().get("scores", {})
             return jsonify(scores)
+
+        @app.route("/api/leaderboard")
+        def get_leaderboard():
+            """Get THE ARCADE leaderboard (top-10 by points)."""
+            return jsonify({
+                "leaderboard": self._get_leaderboard(),
+                "scene": SCENE_ID,
+            })
 
         @app.route("/api/chat", methods=["POST"])
         def chat_with_gamemaster():
@@ -325,24 +359,149 @@ class GamesScene(BaseScene, NexusSceneMixin):
     # ── Socket.IO Events ─────────────────────────────────────────────
 
     def _setup_socketio(self) -> None:
-        """Wire Socket.IO event handlers for real-time gameplay."""
+        """Wire Socket.IO event handlers for THE ARCADE real-time gameplay."""
         sio = self.socketio
 
         @sio.on("connect")
         def on_connect():
-            log.debug("Games Arcade client connected")
+            log.debug("THE ARCADE client connected")
             scores = {}
+            state = {}
             if self._scene_node:
-                scores = self._scene_node.get_state().get("scores", {})
+                state = self._scene_node.get_state()
+                scores = state.get("scores", {})
             emit("game_update", {
                 "type": "connected",
+                "display_name": self.SCENE_METADATA["display_name"],
+                "accent": self.SCENE_METADATA["accent_color"],
                 "scores": scores,
-                "games_available": ["mystery", "truth_or_dare"],
+                "games_available": ARCADE_GAMES,
+                "leaderboard": self._get_leaderboard(),
             })
 
         @sio.on("disconnect")
         def on_disconnect():
-            log.debug("Games Arcade client disconnected")
+            log.debug("THE ARCADE client disconnected")
+
+        # ── New v0.68 handlers ────────────────────────────────────────
+
+        @sio.on("get_games_state")
+        def on_get_games_state(data: Dict[str, Any] = None) -> None:
+            """Emit current arcade state: active game, scores, leaderboard."""
+            data = data or {}
+            player = data.get("player", "player")
+            state = {}
+            if self._scene_node:
+                state = self._scene_node.get_state()
+            emit("games_state", {
+                "active_game": self._active_game.get(player),
+                "games_available": ARCADE_GAMES,
+                "scores": state.get("scores", {}).get(player, {}),
+                "leaderboard": self._get_leaderboard(),
+                "games_played": state.get("games_played", 0),
+            })
+
+        @sio.on("start_game")
+        def on_start_game(data: Dict[str, Any]) -> None:
+            """Begin a specific mini-game for a player."""
+            player = data.get("player", "player")
+            game = (data.get("game") or "").lower().strip()
+            if game not in ARCADE_GAMES:
+                emit("error", {"message": f"Unknown game '{game}'. Available: {ARCADE_GAMES}"})
+                return
+            self._active_game[player] = game
+            if self._scene_node:
+                s = self._scene_node.get_state()
+                s["active_game"] = game
+                self._scene_node.update_state(s)
+
+            intro = self._get_gamemaster_reply(
+                f"Welcome to THE ARCADE! A new game of {game.replace('_', ' ').title()} begins. "
+                f"Introduce it with dark, violet-noir flair."
+            )
+            emit("game_started", {
+                "game": game,
+                "message": intro or f"Welcome to {game.replace('_', ' ').title()}!",
+                "player": player,
+            })
+
+        @sio.on("submit_answer")
+        def on_submit_answer(data: Dict[str, Any]) -> None:
+            """Generic answer submission — routes to active game logic."""
+            player = data.get("player", "player")
+            answer = (data.get("answer") or "").strip()
+            active = self._active_game.get(player)
+            if active == "mystery":
+                # Treat answer as accusation
+                game = self.mystery_games.get(player)
+                if not game:
+                    emit("error", {"message": "No active mystery game."})
+                    return
+                result = game.accuse(answer)
+                correct = result.get("correct", False)
+                self._update_score(player, "mystery", correct)
+                reaction = self._get_gamemaster_reply(
+                    f"{'Correct!' if correct else 'Wrong!'} They said '{answer}', "
+                    f"real culprit was {result.get('real_culprit')}."
+                )
+                emit("accusation_result", {
+                    "correct": correct,
+                    "suspect": answer,
+                    "real_culprit": result.get("real_culprit"),
+                    "reaction": reaction or ("Case solved!" if correct else "Not quite..."),
+                    "player": player,
+                })
+            elif active == "truth_or_dare":
+                # Route to ToD answer handler
+                game = self.tod_games.get(player)
+                if not game:
+                    emit("error", {"message": "No active Truth-or-Dare game."})
+                    return
+                result = game.answer(completed=True, response=answer)
+                score = result.get("score", 0)
+                self._update_score(player, "tod", False, points=score)
+                if score >= 5:
+                    reaction = self._get_gamemaster_reply(
+                        f"The player scored {score} and WINS Truth or Dare! Celebrate!"
+                    )
+                    emit("tod_complete", {
+                        "score": score,
+                        "reaction": reaction or f"You win with {score} points!",
+                    })
+                else:
+                    emit("tod_scored", {"score": score, "completed": True})
+            else:
+                emit("error", {"message": f"No active game handling answers (active: {active})."})
+
+        @sio.on("roll_dice")
+        def on_roll_dice(data: Dict[str, Any]) -> None:
+            """Roll an N-sided die (defaults to d6). Returns roll result with animation cue."""
+            sides = int(data.get("sides", 6))
+            player = data.get("player", "player")
+            sides = max(2, min(sides, 100))  # clamp to sane range
+            roll = random.randint(1, sides)
+            narrative = self._get_gamemaster_reply(
+                f"The dice tumble across the violet-lit table and show {roll} on a d{sides}. "
+                f"React dramatically — build tension!"
+            )
+            self._update_score(player, "dice", roll == sides, points=roll)
+            emit("dice_result", {
+                "roll": roll,
+                "sides": sides,
+                "is_max": roll == sides,
+                "narration": narrative or f"Rolled {roll}!",
+                "player": player,
+            })
+
+        @sio.on("get_leaderboard")
+        def on_get_leaderboard(data: Dict[str, Any] = None) -> None:
+            """Emit current Nexus-backed leaderboard."""
+            emit("leaderboard_update", {
+                "leaderboard": self._get_leaderboard(),
+                "scene": SCENE_ID,
+            })
+
+        # ── Legacy handlers (Mystery + ToD) ──────────────────────────
 
         @sio.on("chat_message")
         def on_chat(data: Dict[str, Any]) -> None:
@@ -365,12 +524,13 @@ class GamesScene(BaseScene, NexusSceneMixin):
             case_index = data.get("case_index")
             game = MysteryGame(character_id=player)
             self.mystery_games[player] = game
+            self._active_game[player] = "mystery"
             result = game.start(case_index)
 
             intro_prompt = (
-                f"A new mystery begins: '{result['case_title']}'. "
+                f"A new mystery begins in THE ARCADE: '{result['case_title']}'. "
                 f"Setting: {result['setting']}. "
-                f"Set the scene dramatically. Welcome the detective."
+                f"Set the scene with dark, violet-neon atmosphere. Welcome the detective."
             )
             narration = self._get_gamemaster_reply(intro_prompt)
 
@@ -396,8 +556,8 @@ class GamesScene(BaseScene, NexusSceneMixin):
             narration = ""
             if clue:
                 prompt = (
-                    f"The detective found clue #{clue_num}: \"{clue}\". "
-                    f"Describe the discovery moment with suspense."
+                    f"Clue #{clue_num} in THE ARCADE mystery: \"{clue}\". "
+                    f"Describe it with noir suspense under violet neon."
                 )
                 narration = self._get_gamemaster_reply(prompt)
 
@@ -424,11 +584,11 @@ class GamesScene(BaseScene, NexusSceneMixin):
             self._update_score(player, "mystery", correct)
 
             if correct:
-                prompt = f"CORRECT! The culprit was {result.get('real_culprit')}! Celebrate!"
+                prompt = f"CORRECT in THE ARCADE! The culprit was {result.get('real_culprit')}! Celebrate with violet flair!"
             else:
                 prompt = (
-                    f"Wrong! They said '{suspect}' but it was "
-                    f"{result.get('real_culprit')}. React with dramatic sympathy."
+                    f"Wrong in THE ARCADE! They said '{suspect}' but it was "
+                    f"{result.get('real_culprit')}. React with theatrical sympathy."
                 )
             reaction = self._get_gamemaster_reply(prompt)
 
@@ -451,10 +611,12 @@ class GamesScene(BaseScene, NexusSceneMixin):
             player = data.get("player", "player")
             game = TruthOrDareGame(character_id=player)
             self.tod_games[player] = game
+            self._active_game[player] = "truth_or_dare"
             game.start()
 
             intro = self._get_gamemaster_reply(
-                "A new game of Truth or Dare begins! Welcome the player with excitement."
+                "A new game of Truth or Dare begins in THE ARCADE. "
+                "Welcome the player with violet-tinged excitement and a hint of danger."
             )
             emit("tod_started", {
                 "message": intro or "Truth or Dare begins! Roll the dice!",
@@ -476,14 +638,16 @@ class GamesScene(BaseScene, NexusSceneMixin):
 
             kind = result.get("type", "truth")
             prompt_text = result.get("prompt", "")
+            intensity = result.get("intensity", 1)
             narration = self._get_gamemaster_reply(
-                f"The dice show {result.get('roll')}! It's a {kind.upper()}: "
-                f'"{prompt_text}". Present this dramatically.'
+                f"The dice show {result.get('roll')}! It's a {kind.upper()} "
+                f"(intensity {intensity}): \"{prompt_text}\". Present with dark arcade energy."
             )
             emit("tod_prompt", {
                 "roll": result.get("roll"),
                 "type": kind,
                 "prompt": prompt_text,
+                "intensity": intensity,
                 "narration": narration or prompt_text,
             })
 
@@ -503,7 +667,7 @@ class GamesScene(BaseScene, NexusSceneMixin):
 
             if score >= 5:
                 reaction = self._get_gamemaster_reply(
-                    f"The player scored {score} points and WINS! Celebrate!"
+                    f"The player scored {score} points and WINS in THE ARCADE! Celebrate!"
                 )
                 emit("tod_complete", {
                     "score": score,
@@ -537,15 +701,18 @@ class GamesScene(BaseScene, NexusSceneMixin):
     def get_plugin_info(self) -> Dict[str, Any]:
         return {
             "name": "games",
+            "display_name": self.SCENE_METADATA["display_name"],
             "description": self.SCENE_METADATA["description"],
-            "version": "0.56b",
+            "version": "0.68",
             "author": "CosySim",
             "port": self.port,
-            "tags": ["games", "mystery", "truth_or_dare", "ai_gamemaster"],
+            "accent_color": self.SCENE_METADATA["accent_color"],
+            "tags": ["games", "arcade", "mystery", "truth_or_dare", "dice", "ai_gamemaster"],
             "skill_packs": ["games"],
             "routes": [
                 "/", "/api/health", "/api/status", "/api/scores",
-                "/api/chat", "/api/mystery/narrate", "/api/mystery/react",
+                "/api/leaderboard", "/api/chat",
+                "/api/mystery/narrate", "/api/mystery/react",
                 "/games/mystery/*", "/games/truth-or-dare/*",
             ],
         }

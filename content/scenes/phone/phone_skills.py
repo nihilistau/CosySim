@@ -1,17 +1,225 @@
 """
-Phone Skills — MCP skill functions for the CosyPhone scene.
+Phone Skills — MCP skill functions for the SIGNAL scene (v0.68 Dark Renaissance).
 
-Exposes messaging, media, games, and social interactions as @skill-decorated
-functions callable by LMS agents via tool use.
+Exposes contact management, ghost-story progression, and investigation-board
+clue tracking as ``@skill``-decorated callables for LMS agent tool use.
 """
 from __future__ import annotations
 
+import json
 import logging
-import threading
 
 from engine.skills.skill import skill, SkillCategory
 
 logger = logging.getLogger(__name__)
+
+
+# ── Scene accessor ────────────────────────────────────────────────────────────
+
+def _get_phone_scene():
+    """Return the active NeonPhone scene instance, or None."""
+    from engine.scenes.base_scene import get_active_scene
+    return get_active_scene("phone")
+
+
+# ── Skills ────────────────────────────────────────────────────────────────────
+
+@skill(
+    pack="phone",
+    tags=["game", "phone", "contacts"],
+    category=SkillCategory.GAME,
+    description="Get all phone contacts and their status",
+)
+def get_phone_contacts() -> str:
+    """Return a formatted list of all SIGNAL contacts with status and unread counts.
+
+    Returns:
+        JSON string with contact list, or error message.
+    """
+    scene = _get_phone_scene()
+    if not scene:
+        return "SIGNAL scene not active."
+    try:
+        contacts = []
+        for cid, data in scene._threads.items():
+            from content.scenes.phone.neon_phone import _CONTACTS
+            contact_meta = _CONTACTS.get(cid, {})
+            unread = sum(
+                1 for m in data
+                if m.get("from") == cid and not m.get("read")
+            )
+            contacts.append({
+                "id": cid,
+                "name": contact_meta.get("name", cid.upper()),
+                "status": contact_meta.get("status", "unknown"),
+                "unread": unread,
+                "message_count": len(data),
+            })
+        return json.dumps({"contacts": contacts, "total": len(contacts)}, indent=2)
+    except Exception as exc:
+        logger.error("get_phone_contacts failed: %s", exc)
+        return f"Failed to retrieve contacts: {exc}"
+
+
+@skill(
+    pack="phone",
+    tags=["game", "phone", "messaging"],
+    category=SkillCategory.GAME,
+    description="Send a message to a phone contact",
+)
+def send_phone_message(contact_id: str = "", message: str = "") -> str:
+    """Send a text message to a named SIGNAL contact.
+
+    Args:
+        contact_id: Target contact ID (e.g. ``"lola"``, ``"0xgh0st"``).
+        message: Message text to send.
+
+    Returns:
+        Confirmation string or error message.
+    """
+    if not contact_id or not message:
+        return "Provide both contact_id and message."
+    scene = _get_phone_scene()
+    if not scene:
+        return "SIGNAL scene not active."
+    try:
+        from content.scenes.phone.neon_phone import _CONTACTS
+        if contact_id not in _CONTACTS:
+            available = ", ".join(_CONTACTS.keys())
+            return f"Unknown contact '{contact_id}'. Available: {available}"
+        import uuid
+        from datetime import datetime, timezone
+
+        msg = {
+            "id": str(uuid.uuid4())[:8],
+            "from": "user",
+            "text": message,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "read": True,
+        }
+        with scene._lock:
+            scene._threads[contact_id].append(msg)
+
+        # Trigger async AI reply
+        import threading
+        threading.Thread(
+            target=scene._generate_ai_reply,
+            args=(contact_id, message),
+            daemon=True,
+        ).start()
+
+        preview = message[:50] + "…" if len(message) > 50 else message
+        return f"Message sent to {contact_id.upper()}: \"{preview}\""
+    except Exception as exc:
+        logger.error("send_phone_message failed: %s", exc)
+        return f"Failed to send message: {exc}"
+
+
+@skill(
+    pack="phone",
+    tags=["game", "phone", "mystery", "ghost"],
+    category=SkillCategory.GAME,
+    description="Get the current 0xGH0ST story progress",
+)
+def get_ghost_story_progress() -> str:
+    """Return the current stage and clue summary for the 0xGH0ST mystery arc.
+
+    Returns:
+        JSON string with stage number, title, clue, and message count.
+    """
+    scene = _get_phone_scene()
+    if not scene:
+        return "SIGNAL scene not active."
+    try:
+        from content.scenes.phone.neon_phone import _GHOST_STAGES
+        stage = scene._current_ghost_stage()
+        stage_data = _GHOST_STAGES[min(stage, len(_GHOST_STAGES) - 1)]
+        return json.dumps({
+            "stage": stage,
+            "title": stage_data["title"],
+            "clue": stage_data["clue"],
+            "messages_exchanged": scene._ghost_message_count,
+            "next_stage_at": (
+                _GHOST_STAGES[stage + 1]["trigger_count"]
+                if stage + 1 < len(_GHOST_STAGES) else None
+            ),
+        }, indent=2)
+    except Exception as exc:
+        logger.error("get_ghost_story_progress failed: %s", exc)
+        return f"Failed to retrieve ghost progress: {exc}"
+
+
+@skill(
+    pack="phone",
+    tags=["game", "phone", "investigation", "ghost"],
+    category=SkillCategory.GAME,
+    description="Add a clue to the investigation board from a message",
+)
+def add_message_clue(message_id: str = "", description: str = "") -> str:
+    """Pin a message as evidence on the 0xGH0ST investigation board.
+
+    Args:
+        message_id: Short ID of the message to reference as evidence.
+        description: Human-readable clue description to add to the board.
+
+    Returns:
+        Confirmation string with the new clue ID, or error message.
+    """
+    if not description:
+        return "Provide a clue description."
+    try:
+        from engine.mechanics.investigation import (
+            get_investigation_board,
+            BOARD_HACKER,
+            ClueType,
+        )
+        board = get_investigation_board(BOARD_HACKER, scene="phone")
+        clue = board.add_clue(
+            title=f"MSG_{message_id.upper()}" if message_id else "MESSAGE_CLUE",
+            content=description,
+            clue_type=ClueType.MESSAGE,
+            importance=0.6,
+            tags=["phone", "signal", "message"],
+            revealed=True,
+        )
+        return f"Clue added to investigation board: {clue.id} — \"{description[:60]}\""
+    except Exception as exc:
+        logger.error("add_message_clue failed: %s", exc)
+        return f"Failed to add clue: {exc}"
+
+
+@skill(
+    pack="phone",
+    tags=["game", "phone", "ghost", "mystery"],
+    category=SkillCategory.GAME,
+    description="Check if 0xGH0ST has new encoded messages",
+)
+def check_ghost_messages() -> str:
+    """Check the 0xGH0ST thread for unread messages and return a summary.
+
+    Returns:
+        Formatted string showing unread count and message previews.
+    """
+    scene = _get_phone_scene()
+    if not scene:
+        return "SIGNAL scene not active."
+    try:
+        with scene._lock:
+            thread = list(scene._threads.get("0xgh0st", []))
+
+        unread = [m for m in thread if m.get("from") == "0xgh0st" and not m.get("read")]
+        if not unread:
+            return "No new messages from 0xGH0ST."
+
+        lines = [f"0xGH0ST — {len(unread)} unread message(s):"]
+        for msg in unread[-5:]:
+            ts = msg.get("timestamp", "")[:19].replace("T", " ")
+            preview = msg["text"][:70] + "…" if len(msg["text"]) > 70 else msg["text"]
+            lines.append(f"  [{ts}] {preview}")
+        return "\n".join(lines)
+    except Exception as exc:
+        logger.error("check_ghost_messages failed: %s", exc)
+        return f"Failed to check ghost messages: {exc}"
 
 
 def _get_phone_scene():

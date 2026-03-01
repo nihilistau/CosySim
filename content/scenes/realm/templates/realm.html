@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en" data-scene="realm">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>THE SHATTERED THRONE — CosySim</title>
+
+  <!-- Socket.IO -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+
+  <!-- CosySim shared design system -->
+  <link rel="stylesheet" href="/shared/css/design_tokens.css">
+  <link rel="stylesheet" href="/shared/css/cosysim-components.css">
+  <link rel="stylesheet" href="/shared/css/cosysim-animations.css">
+  <link rel="stylesheet" href="/shared/css/navbar_v2.css">
+
+  <!-- Scene CSS -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='realm.css') }}">
+</head>
+
+<body class="realm-body" data-scene="realm">
+
+  {% include 'navbar_v2.html' %}
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!--  REALM HEADER                                              -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <header class="realm-header">
+    <div class="realm-header__left">
+      <span class="realm-header__crest">♚</span>
+      <div>
+        <h1 class="realm-header__title">THE SHATTERED THRONE</h1>
+        <p class="realm-header__subtitle" id="world-subtitle">v0.68 — Dark Renaissance</p>
+      </div>
+    </div>
+
+    <div class="realm-header__arc-progress">
+      <span class="realm-header__arc-label">Active Arc</span>
+      <span class="realm-header__arc-name" id="active-arc-name">— None —</span>
+      <div class="realm-arc-bar">
+        <div class="realm-arc-bar__fill" id="arc-progress-fill" style="width:0%"></div>
+      </div>
+    </div>
+
+    <div class="realm-header__right">
+      <span class="realm-header__player-title" id="player-title">The Wanderer</span>
+      <span class="realm-header__turn" id="turn-counter">Turn 0</span>
+      <div class="realm-patience-pip" id="patience-pip" title="Director Patience"></div>
+    </div>
+  </header>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!--  MAIN LAYOUT — 3 columns                                   -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <main class="realm-layout" id="realm-main">
+
+    <!-- ─── LEFT: Player Panel ─────────────────────────── -->
+    <aside class="realm-panel realm-panel--left">
+
+      <!-- Portrait with speaking ring -->
+      <div class="realm-portrait-wrap" id="portrait-frame">
+        <div class="realm-portrait-ring" id="portrait-ring">
+          <div class="realm-portrait-img" id="portrait-img" aria-label="Player portrait">
+            <span class="realm-portrait-placeholder">⚔</span>
+          </div>
+        </div>
+        <div class="realm-portrait-name" id="portrait-name">The Wanderer</div>
+        <div class="realm-portrait-location" id="portrait-location">Unknown Lands</div>
+      </div>
+
+      <!-- Stat Bars -->
+      <div class="realm-stats">
+        <div class="realm-stat">
+          <div class="realm-stat__header">
+            <span class="realm-stat__label">HP</span>
+            <span class="realm-stat__value" id="stat-hp-val">100 / 100</span>
+          </div>
+          <div class="realm-stat__track">
+            <div class="realm-stat__fill stat-bar hp" id="stat-hp" style="width:100%"></div>
+          </div>
+        </div>
+
+        <div class="realm-stat">
+          <div class="realm-stat__header">
+            <span class="realm-stat__label">MP</span>
+            <span class="realm-stat__value" id="stat-mp-val">50 / 50</span>
+          </div>
+          <div class="realm-stat__track">
+            <div class="realm-stat__fill stat-bar mp" id="stat-mp" style="width:100%"></div>
+          </div>
+        </div>
+
+        <div class="realm-stat">
+          <div class="realm-stat__header">
+            <span class="realm-stat__label">XP</span>
+            <span class="realm-stat__value" id="stat-xp-val">0 / 100</span>
+          </div>
+          <div class="realm-stat__track">
+            <div class="realm-stat__fill stat-bar xp" id="stat-xp" style="width:0%"></div>
+          </div>
+        </div>
+
+        <div class="realm-stat" id="sanity-stat-wrap">
+          <div class="realm-stat__header">
+            <span class="realm-stat__label">Sanity</span>
+            <span class="realm-stat__value" id="stat-sanity-val">100 / 100</span>
+          </div>
+          <div class="realm-stat__track">
+            <div class="realm-stat__fill stat-bar sanity" id="stat-sanity" style="width:100%"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Attribute pillboxes -->
+      <div class="realm-attrs" id="realm-attrs">
+        <span class="realm-attr" id="attr-str" title="Strength">STR <b>10</b></span>
+        <span class="realm-attr" id="attr-agi" title="Agility">AGI <b>10</b></span>
+        <span class="realm-attr" id="attr-int" title="Intellect">INT <b>10</b></span>
+        <span class="realm-attr" id="attr-cha" title="Charisma">CHA <b>10</b></span>
+        <span class="realm-attr" id="attr-lck" title="Luck">LCK <b>10</b></span>
+      </div>
+
+      <!-- Inventory grid -->
+      <div class="realm-inventory">
+        <h3 class="realm-inventory__title">⚔ Inventory</h3>
+        <div class="inventory-grid" id="inventory-grid">
+          <!-- Slots filled by JS -->
+          {% for i in range(16) %}
+          <div class="inventory-slot" data-slot="{{ i }}" onclick="ShatteredThrone.onSlotClick(this)">
+            <span class="inventory-slot__icon">·</span>
+          </div>
+          {% endfor %}
+        </div>
+        <div class="realm-gold">
+          <span class="realm-gold__icon">🪙</span>
+          <span id="gold-val">0</span> gold
+        </div>
+      </div>
+
+    </aside>
+
+    <!-- ─── CENTER: Story Theater ──────────────────────── -->
+    <section class="realm-panel realm-panel--center">
+
+      <!-- Scene art area -->
+      <div class="realm-scene-art" id="scene-art">
+        <div class="realm-scene-art__placeholder" id="scene-art-placeholder">
+          <div class="realm-art-rune">♛</div>
+          <p class="realm-art-caption">THE SHATTERED THRONE</p>
+        </div>
+        <img class="realm-scene-art__img" id="scene-art-img" src="" alt="Scene art" style="display:none">
+      </div>
+
+      <!-- Narrative text panel -->
+      <div class="narrative-panel" id="narrative-panel">
+        <div class="narrative-panel__text" id="narrative-text">
+          <span class="narrative-cursor" id="narrative-cursor">▌</span>
+        </div>
+      </div>
+
+      <!-- Choice buttons -->
+      <div class="realm-choices" id="realm-choices">
+        <!-- Populated by JS -->
+      </div>
+
+      <!-- Free-text input -->
+      <div class="realm-input-row">
+        <input
+          type="text"
+          class="realm-input"
+          id="custom-input"
+          placeholder="Speak freely or enter a command…"
+          autocomplete="off"
+        >
+        <button class="realm-send-btn" id="send-btn" onclick="ShatteredThrone.sendMessage()">
+          ▶ Send
+        </button>
+      </div>
+
+    </section>
+
+    <!-- ─── RIGHT: World State ─────────────────────────── -->
+    <aside class="realm-panel realm-panel--right">
+
+      <!-- Active quest tracker -->
+      <div class="realm-quest-tracker" id="quest-tracker">
+        <h3 class="realm-section-title">📜 Active Quest</h3>
+        <div class="quest-card" id="quest-card">
+          <p class="quest-card__title" id="quest-title">No active quest</p>
+          <p class="quest-card__objective" id="quest-objective">—</p>
+          <div class="quest-progress-wrap">
+            <div class="quest-progress-bar" id="quest-progress-bar" style="width:0%"></div>
+          </div>
+          <span class="quest-progress-label" id="quest-progress-label">0 / 0</span>
+        </div>
+      </div>
+
+      <!-- Faction standings -->
+      <div class="realm-factions" id="realm-factions">
+        <h3 class="realm-section-title">⚖ Faction Standings</h3>
+        <div class="faction-list" id="faction-list">
+          <div class="faction-entry" data-faction="crown">
+            <span class="faction-icon">👑</span>
+            <span class="faction-name">The Crown</span>
+            <div class="faction-bar-wrap">
+              <div class="faction-bar" style="width:50%"></div>
+            </div>
+          </div>
+          <div class="faction-entry" data-faction="shadow">
+            <span class="faction-icon">🌑</span>
+            <span class="faction-name">Shadow Guild</span>
+            <div class="faction-bar-wrap">
+              <div class="faction-bar" style="width:35%"></div>
+            </div>
+          </div>
+          <div class="faction-entry" data-faction="arcane">
+            <span class="faction-icon">📖</span>
+            <span class="faction-name">Arcane Circle</span>
+            <div class="faction-bar-wrap">
+              <div class="faction-bar" style="width:45%"></div>
+            </div>
+          </div>
+          <div class="faction-entry" data-faction="void">
+            <span class="faction-icon">🦑</span>
+            <span class="faction-name">Void Cult</span>
+            <div class="faction-bar-wrap">
+              <div class="faction-bar" style="width:10%"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Dark events timeline -->
+      <div class="realm-timeline" id="realm-timeline">
+        <h3 class="realm-section-title">🕯 Dark Events</h3>
+        <ul class="timeline-list" id="timeline-list">
+          <li class="timeline-item timeline-item--system">Awaiting the throne's reckoning…</li>
+        </ul>
+      </div>
+
+    </aside>
+
+  </main>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!--  BOTTOM BAR — Spell Bar + Bench HUD                       -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <footer class="realm-footer">
+
+    <!-- Spell bar -->
+    <div class="spell-bar" id="spell-bar">
+      <span class="spell-bar__label">✦ Spells</span>
+      <button class="spell-btn" data-spell="Fireball"         onclick="ShatteredThrone.castSpell('Fireball')">🔥 Fireball</button>
+      <button class="spell-btn" data-spell="Shadow Step"      onclick="ShatteredThrone.castSpell('Shadow Step')">🌑 Shadow Step</button>
+      <button class="spell-btn" data-spell="Arcane Shield"    onclick="ShatteredThrone.castSpell('Arcane Shield')">🔵 Shield</button>
+      <button class="spell-btn" data-spell="Void Rift"        onclick="ShatteredThrone.castSpell('Void Rift')">🦑 Void Rift</button>
+      <button class="spell-btn" data-spell="Blood Pact"       onclick="ShatteredThrone.castSpell('Blood Pact')">🩸 Blood Pact</button>
+      <input
+        type="text"
+        class="spell-custom-input"
+        id="spell-custom-input"
+        placeholder="Custom spell…"
+        onkeydown="if(event.key==='Enter') ShatteredThrone.castSpell(this.value)"
+      >
+      <button class="spell-cast-btn" onclick="ShatteredThrone.castSpell(document.getElementById('spell-custom-input').value)">Cast</button>
+    </div>
+
+    <!-- Bench HUD — auto-injected by register_bench_route -->
+    <div id="realm-bench-hud" class="realm-bench-hud"></div>
+
+  </footer>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!--  CANVAS — Particles (sparks / smoke)                       -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <canvas id="realm-fx-canvas" class="realm-fx-canvas" aria-hidden="true"></canvas>
+
+  <!-- Level-up flash overlay -->
+  <div id="level-up-overlay" class="level-up-overlay" aria-hidden="true">
+    <div class="level-up-overlay__inner">
+      <span class="level-up-overlay__icon">⚔</span>
+      <h2 class="level-up-overlay__text">LEVEL UP!</h2>
+      <p class="level-up-overlay__sub" id="level-up-level">Level 2</p>
+    </div>
+  </div>
+
+  <!-- Shared scripts -->
+  <script src="/shared/js/cosysim-core.js"></script>
+  <script src="/shared/js/cosysim-stream.js"></script>
+
+  <!-- Scene script -->
+  <script src="{{ url_for('static', filename='realm.js') }}"></script>
+
+  <script>
+    // Auto-init on DOMContentLoaded
+    document.addEventListener('DOMContentLoaded', () => {
+      window.ShatteredThrone = new ShatteredThroneScene();
+      ShatteredThrone.init();
+    });
+
+    // Enter key in custom input
+    document.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('custom-input').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') ShatteredThrone.sendMessage();
+      });
+    });
+  </script>
+
+</body>
+</html>

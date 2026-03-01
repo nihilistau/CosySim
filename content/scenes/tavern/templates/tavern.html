@@ -1,0 +1,184 @@
+{% extends "navbar_v2.html" %}
+{% block title %}THE RUSTY ANCHOR{% endblock %}
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='tavern.css') }}">
+{% endblock %}
+
+{% block content %}
+<body data-scene="tavern" class="tavern-layout">
+
+  <!-- ══════════════════════════════════════════════════════════
+       TAVERN HEADER
+  ══════════════════════════════════════════════════════════════ -->
+  <header class="tavern-header">
+    <div class="tavern-identity">
+      <h1 class="tavern-name">⚓ THE RUSTY ANCHOR</h1>
+      <p class="tavern-tagline">Cheap ale. Cheaper lies. The best quests start here.</p>
+    </div>
+    <div class="tavern-hud">
+      <span class="time-badge" id="time-badge" data-time="evening">🌆 DUSK</span>
+      <span class="atm-pill" id="atm-pill">QUIET</span>
+      <span class="heat-meter">
+        🔥 <span id="heat-val">0</span><span class="heat-max">/100</span>
+      </span>
+      <span class="gold-counter">💰 <span id="gold-val">50</span>g</span>
+      <span class="turn-counter">Turn <span id="turn-val">0</span></span>
+    </div>
+  </header>
+
+  <!-- ══════════════════════════════════════════════════════════
+       MAIN 3-COLUMN LAYOUT
+  ══════════════════════════════════════════════════════════════ -->
+  <main class="tavern-main">
+
+    <!-- ─── LEFT: Quest Board ───────────────────────────────── -->
+    <aside class="quest-board-col">
+      <h2 class="col-heading">📋 Quest Board</h2>
+      <div class="quest-board" id="quest-board">
+        <!-- Quest cards injected by JS -->
+        <div class="quest-board-empty">Loading quests…</div>
+      </div>
+      <button class="btn-amber" id="refresh-quests">⟳ Refresh</button>
+    </aside>
+
+    <!-- ─── CENTER: Tavern Scene + Chat + Dice ───────────────── -->
+    <section class="tavern-center">
+
+      <!-- Scene art / atmosphere panel -->
+      <div class="scene-panel" id="scene-panel">
+        <canvas id="embers-canvas"></canvas>
+        <div class="scene-overlay">
+          <div class="atmosphere-ring" id="atm-ring"></div>
+        </div>
+      </div>
+
+      <!-- Chat / event feed -->
+      <div class="chat-panel">
+        <div class="chat-feed" id="chat-feed">
+          <div class="chat-line system">⚓ Welcome to The Rusty Anchor. Mind the rats.</div>
+        </div>
+        <form class="chat-form" id="chat-form">
+          <input class="chat-input" id="chat-input" type="text"
+                 placeholder="Say something…" autocomplete="off" />
+          <button class="btn-amber" type="submit">Send</button>
+        </form>
+      </div>
+
+      <!-- Dice Area -->
+      <div class="dice-area" id="dice-area">
+        <div class="dice-3d" id="dice-3d">
+          <div class="dice-face">🎲</div>
+        </div>
+        <div class="dice-result hidden" id="dice-result">
+          <span class="dice-total" id="dice-total">—</span>
+          <span class="dice-label" id="dice-label">skill check</span>
+        </div>
+        <div class="dice-controls">
+          <select class="dice-sides-select" id="dice-sides">
+            <option value="4">d4</option>
+            <option value="6">d6</option>
+            <option value="8">d8</option>
+            <option value="10">d10</option>
+            <option value="12">d12</option>
+            <option value="20" selected>d20</option>
+            <option value="100">d100</option>
+          </select>
+          <input class="dice-reason-input" id="dice-reason" type="text"
+                 value="skill check" placeholder="Reason…" />
+          <button class="btn-amber btn-roll" id="btn-roll">🎲 ROLL</button>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ─── RIGHT: Rumors + Investigation ───────────────────── -->
+    <aside class="rumors-col">
+      <h2 class="col-heading">🗣️ Rumors</h2>
+      <div class="rumor-stack" id="rumor-stack">
+        <div class="rumor-card">
+          <p class="rumor-text"><em>The old lighthouse blinks three times at midnight. No keeper lives there.</em></p>
+          <span class="rumor-source">— A fisherman</span>
+        </div>
+        <div class="rumor-card">
+          <p class="rumor-text"><em>Captain Marlowe's crew doesn't cast shadows. Been that way since the fog.</em></p>
+          <span class="rumor-source">— The barkeep</span>
+        </div>
+        <div class="rumor-card">
+          <p class="rumor-text"><em>Something's been eating the cargo. Not rats. Too big. Too quiet.</em></p>
+          <span class="rumor-source">— Dock worker</span>
+        </div>
+      </div>
+      <button class="btn-amber btn-sm" id="btn-investigate">🔍 Investigate</button>
+      <div class="investigation-count hidden" id="investigation-count">
+        Clues on board: <span id="clue-count">0</span>
+      </div>
+    </aside>
+
+  </main>
+
+  <!-- ══════════════════════════════════════════════════════════
+       BOTTOM BAR: Drinks + Active Quest + Bench HUD
+  ══════════════════════════════════════════════════════════════ -->
+  <footer class="tavern-footer">
+
+    <!-- Drink menu -->
+    <div class="drink-menu">
+      <h3 class="footer-heading">🍺 Order a Drink</h3>
+      <div class="drink-row" id="drink-row">
+        <button class="drink-btn" data-drink="ale">🍺 Ale <span class="drink-price">3g</span></button>
+        <button class="drink-btn" data-drink="wine">🍷 Wine <span class="drink-price">8g</span></button>
+        <button class="drink-btn" data-drink="mead">🍯 Mead <span class="drink-price">5g</span></button>
+        <button class="drink-btn" data-drink="spirits">🔥 Spirits <span class="drink-price">12g</span></button>
+        <button class="drink-btn" data-drink="tea">🍵 Tea <span class="drink-price">2g</span></button>
+        <button class="drink-btn featured" data-drink="mystery">🌀 Stranger's Draught <span class="drink-price">15g</span></button>
+      </div>
+    </div>
+
+    <!-- Active quest status -->
+    <div class="active-quest-panel" id="active-quest-panel">
+      <h3 class="footer-heading">⚔️ Active Quest</h3>
+      <div class="active-quest-content" id="active-quest-content">
+        <span class="no-quest-text">No active quest — check the board.</span>
+      </div>
+    </div>
+
+    <!-- Bench HUD (populated by register_bench_route) -->
+    <div class="bench-hud" id="bench-hud">
+      <h3 class="footer-heading">📊 Scene Stats</h3>
+      <div class="bench-metrics" id="bench-metrics">
+        <span class="bench-item">NPCs: <b id="npc-count">0</b></span>
+        <span class="bench-item">Drinks: <b id="drinks-count">0</b></span>
+        <span class="bench-item">Atm: <b id="atm-label">quiet</b></span>
+      </div>
+    </div>
+
+  </footer>
+
+  <!-- Quest card detail modal -->
+  <div class="quest-modal hidden" id="quest-modal">
+    <div class="quest-modal-inner">
+      <button class="modal-close" id="modal-close">✕</button>
+      <div class="quest-type-tag" id="modal-type-tag">QUEST</div>
+      <h2 class="modal-title" id="modal-title">Quest Title</h2>
+      <p class="modal-description" id="modal-description">Quest description…</p>
+      <div class="modal-reward" id="modal-reward">Reward: —</div>
+      <button class="btn-amber btn-accept" id="btn-accept-quest">⚔️ Accept Quest</button>
+    </div>
+  </div>
+
+  <!-- Toast notification -->
+  <div class="toast hidden" id="toast"></div>
+
+</body>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+<script src="{{ url_for('static', filename='tavern.js') }}"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    window.scene = new RustyAnchorScene();
+    window.scene.init();
+  });
+</script>
+{% endblock %}

@@ -46,8 +46,14 @@ class CodersRoomScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="c
     """The Coders Room — AI Agent Idle Code Simulation."""
 
     SCENE_METADATA = {
-        "title": "Coders Room",
-        "description": "AI coding room where agents collaboratively write, review, and test Python code.",
+        "name": "coders",
+        "display_name": "THE LAB",
+        "port": 5564,
+        "type": "system",
+        "accent_color": "#4ade80",
+        "accent_rgb": "74 222 128",
+        "description": "Green means go. The code writes itself. You just watch.",
+        # Legacy compat fields
         "genre": "coding_simulation",
         "max_characters": 3,
         "features": ["code_generation", "code_review", "testing", "pipeline_phases",
@@ -71,6 +77,8 @@ class CodersRoomScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="c
         self.mount_overlay(self.app, self.socketio)
         self.mount_skills_server(self.app)
         self.register_health_route(self.app)
+        self.register_bench_route(self.app, self.socketio)
+        self.register_tts_route(self.app)
 
         self.state: Optional[CodersRoomState] = None
         self._state_mgr = get_scene_state_manager()
@@ -317,7 +325,8 @@ class CodersRoomScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="c
 
         @self.app.route("/")
         def index():
-            return render_template("coders_ui.html", feature_seeds=FEATURE_SEEDS)
+            return render_template("coders.html", feature_seeds=FEATURE_SEEDS,
+                                   **self.inject_navbar_context())
 
         @self.app.route("/api/scene/info")
         def scene_info():
@@ -395,7 +404,7 @@ class CodersRoomScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="c
     # ── BaseScene contract ──
 
     def start(self) -> None:
-        logger.info("The Coders Room v0.56b starting on port %d", self.port)
+        logger.info("THE LAB v0.68 Dark Renaissance starting on port %d", self.port)
         self.socketio.run(self.app, host=self.host, port=self.port, debug=False, allow_unsafe_werkzeug=True)
 
     def stop(self) -> None:
@@ -407,14 +416,14 @@ class CodersRoomScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="c
 
     def get_plugin_info(self) -> Dict[str, Any]:
         return {
-            "name": "The Coders Room",
+            "name": "THE LAB",
             "scene_id": SCENE_ID,
-            "description": "AI agent idle simulation where agents write, review, and test real Python code.",
-            "version": "0.56b",
+            "description": "Matrix-green AI agent coding pipeline — write, review, test, deploy.",
+            "version": "0.68",
             "port": self.port,
             "author": "CosySim",
-            "tags": ["coding", "agents", "idle_sim", "sandbox", "showcase"],
-            "skill_packs": ["memory"],
+            "tags": ["coding", "agents", "idle_sim", "sandbox", "matrix", "dark_renaissance"],
+            "skill_packs": ["coders"],
             "routes": [
                 {"path": "/api/start",       "methods": ["POST"], "description": "Start simulation"},
                 {"path": "/api/stop",        "methods": ["POST"], "description": "Stop simulation"},

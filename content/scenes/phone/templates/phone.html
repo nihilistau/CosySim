@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SIGNAL — CosySim</title>
+
+  {# Navbar injects its own CSS + JS #}
+  {% include 'navbar_v2.html' %}
+
+  <link rel="stylesheet" href="/static/phone.css">
+
+  <style>
+    :root {
+      --accent:        #10b981;
+      --accent-rgb:    16 185 129;
+      --accent-dim:    rgba(16,185,129,.15);
+      --accent-glow:   rgba(16,185,129,.35);
+      --bg:            #0a0e0c;
+      --bg2:           #0d1410;
+      --bg3:           #111a15;
+      --glass:         rgba(16,185,129,.06);
+      --glass-border:  rgba(16,185,129,.18);
+      --text:          #e2faf0;
+      --text-dim:      #6b9e85;
+      --pink:          #ec4899;
+      --cyan:          #06b6d4;
+      --amber:         #f59e0b;
+      --green:         #22c55e;
+      --gray:          #6b7280;
+      --red:           #ef4444;
+    }
+    html, body { height: 100%; margin: 0; background: var(--bg); color: var(--text); font-family: 'JetBrains Mono', 'Fira Code', monospace; }
+  </style>
+</head>
+
+<body data-scene="phone">
+
+<!-- ── Investigation panel (right slide-in) ───────────────────────────────── -->
+<div class="investigation-panel" id="investigationPanel">
+  <div class="inv-header">
+    <span class="inv-title">▸ HACKER_TRAIL</span>
+    <button class="inv-close" onclick="window.signal._toggleInvestigation()">✕</button>
+  </div>
+  <div class="inv-clues" id="invClues">
+    <p class="inv-empty">No clues yet. Interact with 0xGH0ST to uncover the signal.</p>
+  </div>
+  <div class="inv-footer">
+    <button class="inv-btn" onclick="window.signal._requestInvestigation()">↻ SYNC BOARD</button>
+  </div>
+</div>
+
+<!-- ── Main layout ────────────────────────────────────────────────────────── -->
+<div class="signal-layout" id="signalLayout">
+
+  <!-- PHONE FRAME -->
+  <div class="phone-frame" id="phoneFrame">
+
+    <!-- ── CONTACTS SIDEBAR ── -->
+    <div class="contacts-sidebar" id="contactsSidebar">
+      <div class="sidebar-header">
+        <span class="sidebar-title">SIGNAL</span>
+        <span class="sidebar-sub">v0.68</span>
+      </div>
+      <ul class="contacts-list" id="contactsList">
+        <!-- Populated by JS -->
+      </ul>
+      <div class="sidebar-footer">
+        <button class="inv-toggle-btn" onclick="window.signal._toggleInvestigation()" title="Investigation Board">
+          🕵 BOARD
+        </button>
+      </div>
+    </div>
+
+    <!-- ── MESSAGE THREAD ── -->
+    <div class="thread-panel" id="threadPanel">
+
+      <!-- Thread header -->
+      <div class="thread-header" id="threadHeader">
+        <div class="thread-header-info">
+          <span class="thread-avatar" id="threadAvatar">📱</span>
+          <div>
+            <div class="thread-name" id="threadName">SELECT A CONTACT</div>
+            <div class="thread-status" id="threadStatus">—</div>
+          </div>
+        </div>
+        <div class="thread-actions">
+          <button class="ghost-btn" id="ghostTriggerBtn" style="display:none"
+                  onclick="window.signal._triggerGhostMessage()" title="Ping 0xGH0ST">
+            ⚡ PING
+          </button>
+        </div>
+      </div>
+
+      <!-- Message area -->
+      <div class="thread-container" id="threadContainer">
+        <div class="thread-empty" id="threadEmpty">
+          <div class="empty-icon">📡</div>
+          <div class="empty-text">SELECT A CONTACT TO BEGIN</div>
+          <div class="empty-sub">6 contacts. 1 mystery.</div>
+        </div>
+      </div>
+
+      <!-- Typing indicator -->
+      <div class="typing-row" id="typingRow" style="display:none">
+        <div class="typing-indicator">
+          <span></span><span></span><span></span>
+        </div>
+        <span class="typing-label" id="typingLabel">...</span>
+      </div>
+
+      <!-- Input bar -->
+      <div class="input-bar" id="inputBar">
+        <textarea class="message-input" id="messageInput"
+                  placeholder="Type a message…"
+                  rows="1"
+                  onkeydown="window.signal._onInputKey(event)"></textarea>
+        <button class="send-btn" onclick="window.signal.sendMessage()">▶</button>
+      </div>
+
+    </div><!-- /thread-panel -->
+
+  </div><!-- /phone-frame -->
+
+</div><!-- /signal-layout -->
+
+<!-- ── Ghost status bar (bottom overlay) ─────────────────────────────────── -->
+<div class="ghost-status-bar" id="ghostStatusBar" style="display:none">
+  <span class="gst-label">0xGH0ST ARC</span>
+  <div class="gst-stages" id="gstStages"></div>
+  <span class="gst-msg" id="gstMsg"></span>
+</div>
+
+<!-- ── Bench HUD ──────────────────────────────────────────────────────────── -->
+<div id="bench-hud" data-scene="phone"></div>
+
+<!-- ── Scripts ────────────────────────────────────────────────────────────── -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.4/socket.io.min.js"></script>
+<script src="/shared/js/cosysim-bench.js"></script>
+<script src="/shared/js/cosysim-voice.js"></script>
+<script src="/static/phone.js"></script>
+
+</body>
+</html>
