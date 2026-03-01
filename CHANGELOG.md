@@ -2,7 +2,42 @@
 
 All notable changes to CosySim are documented here.
 
-## v0.60.8 — NLM Advanced Extraction: Quota-Free Distillation + Multi-Ask
+## v0.60.9 — NLM Lab Panel: Full Sub-Nav UI
+
+### Nexus Panel (`content/scenes/nexus_panel/`)
+
+#### New: NLM Lab Sub-Navigation (6 tabs)
+Replaced the flat NLM Lab panel with a fully organised sub-navigation layout:
+
+- **Query** — NLM-first query, multi-ask (3–10 questions in one session), tier badge + source metadata
+- **Studio** — All quota-free Studio tile operations:
+  - Extract Flashcards → parse `{front, back}[]`, optionally store in Nexus
+  - Extract Quiz → parse `{question, answer, options[]}[]`, optionally store in Nexus
+  - Report with Custom Prompt → inject any prompt into Reports tile, get custom Gemini output
+  - Distill to Nexus (one-shot) → flashcards + quiz → parse all → store all Q&A atomically
+- **Batch** — Batch Q&A Workshop with auto question generation
+- **Analysis** — Plan Decomposer, Code Analyzer, Topic Builder
+- **Metrics** — NLM Savings Dashboard (cache/FTS/NLM/LLM hits, tokens saved), Quota Usage display
+- **Admin** — Auth Status + Setup, Quota Tier Override (all 5 tiers), Export Nexus → NLM Notebook
+
+#### New: Backend Routes (10 new endpoints)
+- `POST /api/nlm/studio/extract-flashcards` — quota-free flashcard extraction
+- `POST /api/nlm/studio/extract-quiz` — quota-free quiz extraction
+- `POST /api/nlm/studio/generate-report` — custom-prompted report generation
+- `POST /api/nlm/studio/ask-multi` — multi-question single-session ask
+- `POST /api/nlm/studio/distill` — one-shot distil pipeline
+- `GET /api/nlm/quota` — quota status
+- `POST /api/nlm/quota/set-tier` — override quota tier
+- `GET /api/nlm/auth/status` — Node server health + auth state
+- `POST /api/nlm/auth/setup` — trigger interactive browser auth
+- `POST /api/nlm/export-nexus` — assemble Nexus entries → upload as NLM text source
+
+#### NLM Node Bridge (`engine/mcp/nlm_node_bridge.py`)
+- Added `is_initialized` public property
+- Added convenience bridge methods: `extract_flashcards`, `extract_quiz`, `generate_report_with_prompt`, `ask_multi`, `distill_to_nexus`, `set_quota_tier` (with appropriate long timeouts for browser ops)
+
+---
+
 
 ### NLM Structured Extraction (`C:\Files\MCP\notebooklm-mcp`)
 
