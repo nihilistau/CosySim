@@ -1069,6 +1069,63 @@ def _register_builtin_tasks(daemon: "SchedulerDaemon") -> None:
         "weekly",
         _dataset_augment_callback,
     )
+    daemon.register(
+        "world-sim-tick",
+        "World Simulation Tick (5-minute sim-time advance)",
+        "every_5m",
+        _world_sim_tick_callback,
+    )
+    daemon.register(
+        "director-tick",
+        "Scene Director Beat (15-minute narrative advance)",
+        "every_15m",
+        _director_tick_callback,
+    )
+    daemon.register(
+        "content-refresh",
+        "Content Pool Refresh (6-hour NLM refill for depleted pools)",
+        "every_6h",
+        _content_refresh_callback,
+    )
+
+
+def _world_sim_tick_callback() -> Dict[str, Any]:
+    """Every 5 min: advance world simulation time by one sim-hour."""
+    try:
+        from engine.world.world_sim import get_world_sim
+        sim = get_world_sim()
+        if not sim.is_running:
+            sim.start()
+        return {"status": "ok", "running": sim.is_running}
+    except Exception as exc:
+        logger.debug("world_sim_tick skipped: %s", exc)
+        return {"status": "skipped", "reason": str(exc)}
+
+
+def _director_tick_callback() -> Dict[str, Any]:
+    """Every 15 min: advance scene director narrative beats."""
+    try:
+        from engine.scenes.scene_director import get_scene_director
+        director = get_scene_director()
+        director.tick()
+        return {"status": "ok"}
+    except Exception as exc:
+        logger.debug("director_tick skipped: %s", exc)
+        return {"status": "skipped", "reason": str(exc)}
+
+
+def _content_refresh_callback() -> Dict[str, Any]:
+    """Every 6 hours: trigger NLM refills for depleted content pools."""
+    try:
+        from engine.content.content_engine import get_content_engine
+        engine = get_content_engine()
+        results = engine.refresh_pools()
+        total = sum(results.values())
+        logger.info("content_refresh: added %d items across %d pools", total, len(results))
+        return {"status": "ok", "pools_refilled": len(results), "items_added": total}
+    except Exception as exc:
+        logger.debug("content_refresh skipped: %s", exc)
+        return {"status": "skipped", "reason": str(exc)}
 
 
 def _qa_history_mine_callback() -> Dict[str, Any]:

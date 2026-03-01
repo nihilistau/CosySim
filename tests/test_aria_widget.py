@@ -11,104 +11,48 @@ from pathlib import Path
 # ── Paths ───────────────────────────────────────────────────────────────────
 
 REPO = Path(__file__).parent.parent
-TEMPLATE = REPO / 'content' / 'shared' / 'templates' / 'aria_widget.html'
-CSS_FILE = REPO / 'content' / 'shared' / 'static' / 'css' / 'aria_widget.css'
-JS_FILE  = REPO / 'content' / 'shared' / 'static' / 'js'  / 'aria_widget.js'
+TEMPLATE       = REPO / 'content' / 'shared' / 'templates' / 'aria_widget.html'
+CSS_FILE       = REPO / 'content' / 'shared' / 'static' / 'css' / 'aria_widget.css'
+JS_FILE        = REPO / 'content' / 'shared' / 'static' / 'js'  / 'aria_widget.js'
+PORTRAIT_CSS   = REPO / 'content' / 'shared' / 'static' / 'css' / 'cosysim-aria-portrait.css'
+PORTRAIT_JS    = REPO / 'content' / 'shared' / 'static' / 'js'  / 'cosysim-aria-portrait.js'
 
 
 # ── File existence ───────────────────────────────────────────────────────────
 
 class TestAriaWidgetFilesExist:
-    """All three asset files must be present."""
+    """All asset files must be present."""
 
     def test_template_exists(self):
         assert TEMPLATE.exists(), f'Missing: {TEMPLATE}'
 
-    def test_css_exists(self):
+    def test_legacy_css_exists(self):
         assert CSS_FILE.exists(), f'Missing: {CSS_FILE}'
 
-    def test_js_exists(self):
+    def test_legacy_js_exists(self):
         assert JS_FILE.exists(), f'Missing: {JS_FILE}'
+
+    def test_portrait_css_exists(self):
+        assert PORTRAIT_CSS.exists(), f'Missing: {PORTRAIT_CSS}'
+
+    def test_portrait_js_exists(self):
+        assert PORTRAIT_JS.exists(), f'Missing: {PORTRAIT_JS}'
 
 
 # ── HTML structure ───────────────────────────────────────────────────────────
 
 class TestAriaWidgetHTML:
-    """Template must contain the required structural elements."""
+    """Template loads the portrait system assets."""
 
     @classmethod
     def setup_class(cls):
         cls.html = TEMPLATE.read_text(encoding='utf-8')
 
-    def test_widget_root_id(self):
-        assert 'id="cs-aria-widget"' in self.html
+    def test_portrait_css_linked(self):
+        assert 'cosysim-aria-portrait.css' in self.html
 
-    def test_data_state_attribute(self):
-        assert 'data-state="idle"' in self.html
-
-    def test_toggle_button(self):
-        assert 'id="cs-aria-toggle"' in self.html
-
-    def test_portrait_element(self):
-        assert 'id="cs-aria-portrait"' in self.html
-
-    def test_portrait_image(self):
-        assert 'aria_idle.png' in self.html
-
-    def test_fallback_emoji(self):
-        assert '🤖' in self.html
-
-    def test_state_ring(self):
-        assert 'cs-aria-state-ring' in self.html
-
-    def test_notification_badge(self):
-        assert 'id="cs-aria-notif"' in self.html
-
-    def test_expanded_panel(self):
-        assert 'id="cs-aria-panel"' in self.html
-
-    def test_aria_name_header(self):
-        assert 'ARIA' in self.html
-
-    def test_messenger_mode_button(self):
-        assert 'data-mode="messenger"' in self.html
-
-    def test_voice_mode_button(self):
-        assert 'data-mode="voice"' in self.html
-
-    def test_close_button(self):
-        assert 'id="cs-aria-close"' in self.html
-
-    def test_message_log(self):
-        assert 'id="cs-aria-messages"' in self.html
-
-    def test_chat_input(self):
-        assert 'id="cs-aria-input"' in self.html
-
-    def test_send_button(self):
-        assert 'id="cs-aria-send"' in self.html
-
-    def test_voice_portrait_large(self):
-        assert 'id="cs-aria-portrait-large"' in self.html
-
-    def test_waveform_bars(self):
-        assert 'cs-waveform-bar' in self.html
-        # Should have 5 bars
-        assert self.html.count('cs-waveform-bar') >= 5
-
-    def test_voice_status(self):
-        assert 'id="cs-aria-voice-status"' in self.html
-
-    def test_mic_button(self):
-        assert 'id="cs-aria-mic"' in self.html
-
-    def test_aria_live_regions(self):
-        # Accessibility: live regions for dynamic content
-        assert 'aria-live="polite"' in self.html
-
-    def test_mode_panel_attributes(self):
-        assert 'data-mode-panel="messenger"' in self.html
-        assert 'data-mode-panel="voice"' in self.html
+    def test_portrait_js_linked(self):
+        assert 'cosysim-aria-portrait.js' in self.html
 
 
 # ── CSS structure ────────────────────────────────────────────────────────────

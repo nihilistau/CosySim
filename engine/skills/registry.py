@@ -196,6 +196,12 @@ class SkillRegistry:
         COOLDOWN_TRACKER.mark_used(meta.name)
         return result
 
+    def reset(self) -> None:
+        """Clear all registered skills. Used in tests to prevent state leakage."""
+        with self._lock:
+            self._by_name.clear()
+            self._skills.clear()
+
     def __len__(self) -> int:
         with self._lock:
             return sum(len(v) for v in self._skills.values())

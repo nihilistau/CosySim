@@ -549,6 +549,78 @@ class ContentEngine:
         )
         return added
 
+    def add_to_pool(
+        self,
+        scene: str,
+        pool: str,
+        content: str,
+        intensity: int = 2,
+        tags: Optional[List[str]] = None,
+    ) -> str:
+        """Add a single text item directly to a content pool.
+
+        Persists the item to Nexus (so it survives restarts) and inserts it
+        into the in-memory pool immediately.
+
+        Args:
+            scene: Scene identifier.
+            pool: Pool / content-type name (e.g. ``"dialogue"``).
+            content: The text content to add.
+            intensity: Intensity level 0–3 (default 2).
+            tags: Optional extra tags to attach.
+
+        Returns:
+            The assigned item ID.
+        """
+        item_id = str(uuid.uuid4())
+        nexus_tags: List[str] = list(
+            {f"scene:{scene}", f"type:{pool}", f"intensity:{intensity}"}
+            | set(tags or [])
+        )
+        item = ContentItem(
+            id=item_id,
+            title=content[:80],
+            content=content,
+            scene=scene,
+            content_type=pool,
+            intensity=intensity,
+            adult_categories=[],
+            tags=nexus_tags,
+        )
+        try:
+            entry_id = self._nexus.add_entry(
+                title=item.title,
+                content=item.content,
+                content_type="note",
+                category=f"content_pool:{scene}",
+                tags=nexus_tags,
+            )
+            if entry_id:
+                item.id = entry_id
+        except Exception as exc:
+            logger.debug("Failed to persist seeded item to Nexus: %s", exc)
+
+        pool_obj = self._ensure_pool(scene, pool)
+        with self._lock:
+            pool_obj.add(item)
+        return item.id
+
+    def refresh_pools(self) -> Dict[str, int]:
+        """Trigger NLM refills for all depleted in-memory pools.
+
+        Returns:
+            Mapping of ``"scene/content_type"`` → number of items added.
+        """
+        with self._lock:
+            keys = list(self._pools.keys())
+        results: Dict[str, int] = {}
+        for scene, content_type in keys:
+            pool = self._pools.get((scene, content_type))
+            if pool and pool.is_depleted():
+                added = self.refill_pool(scene, content_type)
+                results[f"{scene}/{content_type}"] = added
+        return results
+
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
