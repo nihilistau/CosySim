@@ -1,6 +1,6 @@
 # CosySim Roadmap
 
-> Current: **v0.61** | Last updated: 2026-03-01
+> Current: **v0.64** | Last updated: 2026-03-15
 
 ## Philosophy
 
@@ -130,7 +130,7 @@ CosySim is a **meta-system** — a playground for designing, testing, benchmarki
 - [x] Fixed nexus bridge `seed` command (function-based API, no class)
 - [x] 4,827 tests across 176 files
 
-### v0.61 — Copilot-Nexus Deep Integration ✅ ← CURRENT
+### v0.61 — Copilot-Nexus Deep Integration ✅
 - [x] Session→Nexus sync (`sync_sessions_to_nexus.py`) — 8 historical sessions seeded
 - [x] NLM session distillation pipeline (`session_distillation.py`) — daily scheduler task
 - [x] Copilot governance gate (`consensus_gate`) — architecture change enforcement
@@ -142,14 +142,45 @@ CosySim is a **meta-system** — a playground for designing, testing, benchmarki
 - [x] Scheduler: 17 builtin tasks (was 16)
 - [x] 5,133 tests across 178 files
 
+### v0.62 — NLM QA Cache Pipeline ✅
+- [x] NLM-driven Q&A cache pipeline — 10-stage orchestrator (history_miner, source_pyramid, consumer_briefing, review_sheet)
+- [x] HistoryMiner — 10 themed session history dumps for NLM source loading
+- [x] SourcePyramid — 6-layer meta-document system shaping all generation tiles
+- [x] ConsumerBriefing — living query taxonomy for 5 consumer classes
+- [x] ReviewSheet — openpyxl Excel output with formulas, dropdowns, conditional formatting
+- [x] CachePipeline — Stages A–J with CSV/code-exec/data-table Gemini output modes
+- [x] 23 scheduler tasks (+ qa-history-mine, qa-cache-prune)
+- [x] 4 MCP cache tools + 2 autonomy skills
+- [x] 5,437 tests across 183 files
+
+### v0.63 — NLM QA Cache Enhancements ✅
+- [x] QA pair expander with deduplication and batch processing
+- [x] Cache pipeline bug fixes and rate-limit handling
+- [x] Master notebook builder for cross-session knowledge synthesis
+- [x] 5,437 tests
+
+### v0.64 — Training Pipeline + Intelligence Hub ✅ ← CURRENT
+- [x] **NLM Teacher Pipeline** (`engine/nexus/teacher_pipeline.py`) — Gemini 3.0 generates per-type JSONL datasets for 5 micro-model types
+- [x] **MicroDatasetManager** (`training/micro_datasets.py`) — augmentation, dedup, Alpaca formatting, 80/10/10 splits
+- [x] **FinetuneOrchestrator** (`training/finetune_orchestrator.py`) — Unsloth QLoRA subprocess runner with live progress tracking, LoRA merge
+- [x] **ModelRegistry** (`training/model_registry.py`) — tracks all fine-tuned models, benchmark scores, auto-promotion
+- [x] **BenchmarkRunner** (`training/benchmark_runner.py`) — accuracy/F1/exact-match, rule-based baseline, auto-promote on improvement
+- [x] **FinetunedRouter** (`engine/lmstudio/finetuned_router.py`) — routes task requests to local fine-tuned models; Stage F integration
+- [x] **Intel Hub Scene** (`:5580`) — glassmorphism admin panel, 12 sections: Nexus Explorer, NLM Lab, Fine-tune Lab, Scheduler, Copilot Rules, Cache Pipeline, Model Registry, Backups, Conversation Analyzer, User Profile, TTS/VTT config, assistant chat
+- [x] **Scheduler distillation loop** — 4 new tasks: teacher-dataset-gen, finetune-if-ready, model-benchmark, backup-databases (27 total)
+- [x] **Cache pipeline Stage F** — tries fine-tuned evaluator first, falls back to NLM Gemini batch evaluation
+- [x] **18 new MCP tools** in devtools_server.py for training pipeline control
+- [x] 5,505 tests across 183 files
+
 ---
 
 ## Next Up
 
+- [ ] Nexus Panel UI upgrade — add NLM Lab sections and training pipeline views
+- [ ] DevTools UI upgrade — training pipeline sections in command center
+- [ ] Router model fine-tuning with captured training data (270M Qwen) — first real finetune cycle
 - [ ] News ingestion pipeline — NotebookLM-based source discovery, distillation, Nexus storage
-- [ ] Curated news feeds with agent-driven filtering and relevance scoring
 - [ ] Local agent task runner — pick tickets, implement, test, commit loop
-- [ ] Router model fine-tuning with captured training data (270M)
 - [ ] Agent performance metrics (engagement, coherence, creativity scores)
 - [ ] Cross-scene event propagation
 

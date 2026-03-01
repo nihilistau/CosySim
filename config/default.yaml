@@ -111,6 +111,11 @@ scenes:
     port: 5575
     debug: false
 
+  intel_hub:
+    host: "localhost"
+    port: 5580
+    debug: false
+
   hub:
     host: "localhost"
     port: 8500

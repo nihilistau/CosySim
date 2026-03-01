@@ -1,10 +1,10 @@
 # CosySim
 
-> v0.61 — Multi-scene AI simulation framework
+> v0.64 — Multi-scene AI simulation framework
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Tests: 5133](https://img.shields.io/badge/tests-5%2C133%20passing-brightgreen.svg)]()
+[![Tests: 5505](https://img.shields.io/badge/tests-5%2C505%20passing-brightgreen.svg)]()
 
 ## Overview
 
@@ -80,10 +80,25 @@ User / Browser
 - System Assistant Aria with cosysim-navbar floating navigation
 
 **DevOps**
-- 5,133 tests, 0 failures across 178 files
+- 5,505 tests, 0 failures across 183 files
 - 18 Copilot custom agents, 9 instruction files
 - Config hardening — all 18 scenes in production.yaml
 - Central CORS and health routes on all scenes
+
+**Training Pipeline** (v0.64)
+- NLM teacher pipeline: Gemini 3.0 → per-model-type JSONL datasets
+- Unsloth QLoRA fine-tuning orchestrator (subprocess-based, progress tracking)
+- Model registry with auto-promote on benchmark improvement
+- Benchmark runner: accuracy/F1/exact-match with rule-based baseline
+- Fine-tuned router integrates into cache pipeline Stage F (local model first, NLM fallback)
+- 4 new scheduler tasks: teacher-dataset-gen, finetune-if-ready, model-benchmark, backup-databases (27 total)
+- 18 new MCP tools for training pipeline control
+
+**Intelligence Hub** (v0.64)
+- Unified glassmorphism admin panel at :5580
+- Sections: Nexus Explorer, NLM Lab, Fine-tune Lab, Scheduler, Conversation Analyzer, User Profile, Backup Manager
+- TTS config + voice selection, VTT config, assistant chat panel
+- Glassmorphism CSS with neon accent design
 
 ## Quick Start
 

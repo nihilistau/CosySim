@@ -529,8 +529,8 @@ class CachePipeline:
     ) -> EvalResult:
         """NLM self-evaluation: rate each candidate ESSENTIAL / USEFUL / SKIP.
 
-        Batches candidates in groups of _EVAL_BATCH_SIZE to keep prompt size
-        manageable.  Candidates rated ESSENTIAL or USEFUL are approved.
+        Tries the fine-tuned qa_evaluator model first (fast, free), then falls
+        back to NLM/Gemini batch evaluation if unavailable.
 
         Args:
             notebook_id: NLM evaluator notebook ID.
@@ -540,6 +540,18 @@ class CachePipeline:
             EvalResult with essential, useful, skipped lists.
         """
         logger.info("Stage F: evaluating %d candidates", len(candidates))
+
+        # ── Try fine-tuned QA evaluator first ────────────────────────────────
+        try:
+            from engine.lmstudio.finetuned_router import get_finetuned_router
+            ft_router = get_finetuned_router()
+            if ft_router.is_available("qa_evaluator"):
+                logger.info("Stage F: using fine-tuned qa_evaluator model")
+                return self._run_stage_f_finetuned(ft_router, candidates)
+        except Exception as exc:
+            logger.debug("Fine-tuned evaluator unavailable, falling back to NLM: %s", exc)
+
+        # ── Fall back to NLM/Gemini evaluation ───────────────────────────────
         from engine.nexus.consumer_briefing import get_consumer_briefing
         briefing = get_consumer_briefing()
         result = EvalResult()
@@ -576,6 +588,35 @@ class CachePipeline:
         logger.info("Stage F: E=%d U=%d S=%d errors=%d",
                     len(result.essential), len(result.useful),
                     len(result.skipped), result.parse_errors)
+        return result
+
+    def _run_stage_f_finetuned(
+        self,
+        router: Any,
+        candidates: List[CandidatePair],
+    ) -> "EvalResult":
+        """Stage F variant using a local fine-tuned qa_evaluator model."""
+        result = EvalResult()
+        for candidate in candidates:
+            try:
+                label = router.route_qa_evaluation(candidate.question, candidate.answer)
+                if label is None:
+                    result.useful.append(candidate)
+                    continue
+                label = label.strip().upper().split()[0] if label.strip() else "USEFUL"
+                candidate.rating = label
+                if label == "ESSENTIAL":
+                    result.essential.append(candidate)
+                elif label == "SKIP":
+                    result.skipped.append(candidate)
+                else:
+                    result.useful.append(candidate)
+            except Exception:
+                result.useful.append(candidate)
+        logger.info(
+            "Stage F (fine-tuned): E=%d U=%d S=%d",
+            len(result.essential), len(result.useful), len(result.skipped),
+        )
         return result
 
     # ── Stage G: Store ────────────────────────────────────────────────────────

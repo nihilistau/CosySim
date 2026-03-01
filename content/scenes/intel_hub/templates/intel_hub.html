@@ -1,0 +1,914 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Aria Intel Hub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/intel_hub/static/css/intel_hub.css">
+</head>
+<body>
+
+  <!-- ══════════════════════ SIDEBAR ══════════════════════ -->
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <span class="brand-dot"></span>
+      <span class="brand-name">ARIA INTEL HUB</span>
+    </div>
+
+    <nav class="sidebar-nav">
+      <button class="nav-item active" data-section="assistant">
+        <span class="nav-icon">🤖</span>
+        <span class="nav-label">Assistant</span>
+      </button>
+      <button class="nav-item" data-section="nexus">
+        <span class="nav-icon">🧠</span>
+        <span class="nav-label">Nexus KMS</span>
+      </button>
+      <button class="nav-item" data-section="nlm">
+        <span class="nav-icon">📓</span>
+        <span class="nav-label">NLM Lab</span>
+      </button>
+      <button class="nav-item" data-section="cache">
+        <span class="nav-icon">⚡</span>
+        <span class="nav-label">QA Cache</span>
+      </button>
+      <button class="nav-item" data-section="scheduler">
+        <span class="nav-icon">⏱</span>
+        <span class="nav-label">Scheduler</span>
+      </button>
+      <button class="nav-item" data-section="finetuning">
+        <span class="nav-icon">🔬</span>
+        <span class="nav-label">Fine-Tuning</span>
+      </button>
+      <button class="nav-item" data-section="benchmarks">
+        <span class="nav-icon">📊</span>
+        <span class="nav-label">Benchmarks</span>
+      </button>
+      <button class="nav-item" data-section="backups">
+        <span class="nav-icon">💾</span>
+        <span class="nav-label">Backups</span>
+      </button>
+      <button class="nav-item" data-section="copilot">
+        <span class="nav-icon">🛸</span>
+        <span class="nav-label">Copilot Rules</span>
+      </button>
+      <button class="nav-item" data-section="system">
+        <span class="nav-icon">⚙️</span>
+        <span class="nav-label">System</span>
+      </button>
+    </nav>
+
+    <div class="sidebar-footer">
+      <span class="version-badge">v0.64</span>
+    </div>
+  </aside>
+
+  <!-- ══════════════════════ MAIN ══════════════════════ -->
+  <main class="main-content">
+
+    <!-- ─── ASSISTANT ─── -->
+    <section id="sec-assistant" class="section active">
+      <div class="assistant-layout">
+
+        <!-- LEFT: Avatar Panel -->
+        <div class="avatar-panel">
+
+          <!-- Media Frame -->
+          <div class="media-frame" id="media-frame">
+            <div class="media-tabs">
+              <button class="btn-media-tab active" data-mode="image">Image</button>
+              <button class="btn-media-tab" data-mode="anim">Animated</button>
+              <button class="btn-media-tab" data-mode="video">Video</button>
+            </div>
+            <img id="media-img" src="" alt="Aria" style="display:block;">
+            <img id="media-anim" src="" alt="Aria animated" style="display:none;">
+            <video id="media-video" loop muted autoplay style="display:none;"></video>
+            <div class="media-overlay">
+              <span class="status-dot" id="status-dot"></span>
+              <span id="aria-status">Ready</span>
+            </div>
+            <input type="file" id="media-upload" accept="image/*,video/*" hidden>
+            <label class="btn-upload" for="media-upload">📎 upload media</label>
+          </div>
+
+          <!-- TTS Section -->
+          <div class="panel tts-section">
+            <div class="panel-header">
+              <span>🔊 Text-to-Speech</span>
+              <button class="collapse-btn" title="Toggle">▾</button>
+            </div>
+            <div class="panel-body tts-panel">
+              <div class="backend-tabs">
+                <button class="btn-backend active" data-backend="piper">⚡ Piper</button>
+                <button class="btn-backend" data-backend="orpheus">✦ Orpheus</button>
+                <button class="btn-backend" data-backend="orpheus_native">⊕ Native</button>
+                <button class="btn-backend" data-backend="qwen3">◉ Qwen3</button>
+              </div>
+
+              <div class="tts-config-panels">
+                <!-- Piper -->
+                <div class="tts-config active" data-for="piper">
+                  <div class="form-group">
+                    <label class="form-label">Voice</label>
+                    <select id="piper-voice" class="form-select">
+                      <option value="en_US-amy-medium">Amy (Medium)</option>
+                      <option value="en_US-kristin-medium">Kristin (Medium)</option>
+                      <option value="en_US-lessac-medium" selected>Lessac (Medium)</option>
+                      <option value="en_US-ryan-high">Ryan (High)</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Speed: <span id="piper-speed-val">1.0</span>×</label>
+                    <input type="range" id="piper-speed" min="0.5" max="2.0" step="0.1" value="1.0">
+                  </div>
+                </div>
+
+                <!-- Orpheus -->
+                <div class="tts-config" data-for="orpheus">
+                  <div class="form-group">
+                    <label class="form-label">Voice</label>
+                    <select id="orpheus-voice" class="form-select">
+                      <option value="tara">Tara</option>
+                      <option value="leah">Leah</option>
+                      <option value="jess">Jess</option>
+                      <option value="leo">Leo</option>
+                      <option value="dan">Dan</option>
+                      <option value="mia">Mia</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Emotion Tags</label>
+                    <div class="emotion-chips">
+                      <span class="emotion-chip" data-tag="&lt;laugh&gt;">&lt;laugh&gt;</span>
+                      <span class="emotion-chip" data-tag="&lt;sigh&gt;">&lt;sigh&gt;</span>
+                      <span class="emotion-chip" data-tag="&lt;gasp&gt;">&lt;gasp&gt;</span>
+                      <span class="emotion-chip" data-tag="&lt;yawn&gt;">&lt;yawn&gt;</span>
+                      <span class="emotion-chip" data-tag="&lt;groan&gt;">&lt;groan&gt;</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Orpheus Native -->
+                <div class="tts-config" data-for="orpheus_native">
+                  <div class="form-group">
+                    <label class="form-label">Voice</label>
+                    <select id="native-voice" class="form-select">
+                      <option value="default">Default</option>
+                      <option value="expressive">Expressive</option>
+                      <option value="calm">Calm</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Layers: <span id="native-layers-val">16</span></label>
+                    <input type="range" id="native-layers" min="1" max="32" step="1" value="16">
+                  </div>
+                </div>
+
+                <!-- Qwen3 -->
+                <div class="tts-config" data-for="qwen3">
+                  <div class="form-group">
+                    <label class="form-label">Voice Design</label>
+                    <textarea id="qwen3-design" class="form-textarea" rows="3" placeholder="Natural language voice description...">A calm, professional female voice with a slight warmth.</textarea>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Model</label>
+                    <select id="qwen3-model" class="form-select">
+                      <option value="0.6b-fast">0.6b-fast</option>
+                      <option value="1.7b-quality" selected>1.7b-quality</option>
+                    </select>
+                  </div>
+                </div>
+              </div><!-- /tts-config-panels -->
+
+              <div class="tts-test-row">
+                <input id="tts-test-text" type="text" placeholder="Type test phrase..." value="Hello, I am Aria.">
+                <button id="btn-tts-test">▶ Speak</button>
+                <span class="rtf-badge" id="tts-rtf"></span>
+              </div>
+              <div class="waveform-row">
+                <canvas id="tts-waveform" width="280" height="40"></canvas>
+              </div>
+            </div>
+          </div><!-- /tts-section -->
+
+          <!-- VTT Section -->
+          <div class="panel vtt-section">
+            <div class="panel-header">
+              <span>🎙 Voice to Text</span>
+              <button class="collapse-btn" title="Toggle">▾</button>
+            </div>
+            <div class="panel-body vtt-panel">
+              <div class="backend-tabs">
+                <button class="btn-vtt-backend active" data-backend="web_speech">🌐 Web Speech</button>
+                <button class="btn-vtt-backend" data-backend="whisper">🔬 Whisper</button>
+                <button class="btn-vtt-backend" data-backend="upload">📁 Upload</button>
+              </div>
+
+              <div class="vtt-config-panels">
+                <!-- Web Speech -->
+                <div class="vtt-config active" data-for="web_speech">
+                  <div class="form-group">
+                    <label class="form-label">Language</label>
+                    <select id="ws-lang" class="form-select">
+                      <option value="en-US" selected>English (US)</option>
+                      <option value="en-GB">English (GB)</option>
+                      <option value="en-AU">English (AU)</option>
+                      <option value="fr-FR">French</option>
+                      <option value="de-DE">German</option>
+                      <option value="es-ES">Spanish</option>
+                      <option value="ja-JP">Japanese</option>
+                    </select>
+                  </div>
+                  <div class="form-group" style="flex-direction:row;align-items:center;gap:10px;">
+                    <label class="form-label" style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+                      <input type="checkbox" id="ws-continuous" checked> Continuous
+                    </label>
+                    <label class="form-label" style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+                      <input type="checkbox" id="ws-interim" checked> Interim
+                    </label>
+                  </div>
+                </div>
+
+                <!-- Whisper -->
+                <div class="vtt-config" data-for="whisper">
+                  <div class="form-group">
+                    <label class="form-label">Server URL</label>
+                    <input type="text" id="whisper-url" class="form-input" value="http://localhost:5051">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Model</label>
+                    <select id="whisper-model" class="form-select">
+                      <option value="tiny">tiny</option>
+                      <option value="base" selected>base</option>
+                      <option value="small">small</option>
+                      <option value="medium">medium</option>
+                      <option value="large">large</option>
+                    </select>
+                  </div>
+                </div>
+
+                <!-- Upload -->
+                <div class="vtt-config" data-for="upload">
+                  <p class="text-dim" style="font-size:13px;">Upload a .wav/.mp3/.ogg file to transcribe.</p>
+                  <input type="file" id="vtt-file-upload" accept=".wav,.mp3,.ogg" class="form-input" style="padding:4px;">
+                </div>
+              </div><!-- /vtt-config-panels -->
+
+              <div class="vtt-live-row">
+                <button id="btn-vtt-mic" class="btn-mic">🎤 Hold to Record</button>
+                <div id="vtt-transcript" class="transcript-box">Transcript appears here...</div>
+              </div>
+            </div>
+          </div><!-- /vtt-section -->
+
+        </div><!-- /avatar-panel -->
+
+        <!-- RIGHT: Chat Panel -->
+        <div class="chat-panel panel">
+          <div class="chat-header">
+            <div class="chat-title">
+              <span class="status-dot pulse" style="display:inline-block;"></span>
+              Aria
+            </div>
+            <div class="chat-controls">
+              <button id="btn-autospeak" class="chat-ctrl active" title="Auto-speak responses">🔊</button>
+              <button id="btn-clear-chat" class="chat-ctrl" title="Clear chat">🗑</button>
+            </div>
+          </div>
+
+          <div class="chat-messages" id="chat-messages">
+            <div class="msg msg-aria">
+              <div class="msg-avatar">A</div>
+              <div class="msg-bubble">Hello! I&rsquo;m Aria, your intelligence hub assistant. How can I help you today?</div>
+            </div>
+          </div>
+
+          <div class="chat-status" id="chat-status" style="display:none;">Aria is thinking...</div>
+          <div class="chat-attachments" id="chat-attachments"></div>
+
+          <div class="chat-toolbar">
+            <button id="btn-attach-file" class="chat-tool" title="Attach file">📎</button>
+            <button id="btn-mic-quick" class="chat-tool" title="Voice input">🎤</button>
+            <button id="btn-replay-last" class="chat-tool" title="Replay last response">🔁</button>
+            <input type="file" id="file-attach-input" multiple hidden>
+          </div>
+
+          <div class="audio-strip" id="audio-strip">
+            <canvas id="audio-waveform" width="220" height="32"></canvas>
+            <div class="audio-controls">
+              <button id="btn-audio-play">▶</button>
+              <div class="audio-progress-bar">
+                <div class="audio-progress-fill" id="audio-progress-fill"></div>
+              </div>
+              <span id="audio-time">0:00</span>
+              <button id="btn-audio-close">✕</button>
+            </div>
+            <audio id="audio-player" hidden></audio>
+          </div>
+
+          <div class="chat-input-row">
+            <textarea id="chat-input" placeholder="Message Aria..." rows="1"></textarea>
+            <button id="btn-send">Send ▶</button>
+          </div>
+        </div><!-- /chat-panel -->
+
+      </div><!-- /assistant-layout -->
+    </section>
+
+    <!-- ─── NEXUS KMS ─── -->
+    <section id="sec-nexus" class="section">
+      <div class="section-title"><span class="title-icon">🧠</span> Nexus KMS</div>
+
+      <div class="stats-grid">
+        <div class="stat-card stat-violet">
+          <div class="stat-value" id="nexus-entries">—</div>
+          <div class="stat-label">Knowledge Entries</div>
+        </div>
+        <div class="stat-card stat-cyan">
+          <div class="stat-value" id="nexus-qa">—</div>
+          <div class="stat-label">QA Pairs</div>
+        </div>
+        <div class="stat-card stat-emerald">
+          <div class="stat-value" id="nexus-rules">—</div>
+          <div class="stat-label">Rules</div>
+        </div>
+        <div class="stat-card stat-amber">
+          <div class="stat-value" id="nexus-hitrate">—</div>
+          <div class="stat-label">Cache Hit Rate</div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <span>Search &amp; Browse</span>
+          <button class="collapse-btn">▾</button>
+        </div>
+        <div class="panel-body">
+          <div class="search-row">
+            <input type="text" id="nexus-search-input" class="form-input" placeholder="Search knowledge base...">
+            <button id="btn-nexus-search" class="btn btn-primary">Search</button>
+            <button id="btn-nexus-refresh" class="btn btn-secondary">↻ Refresh</button>
+          </div>
+          <div style="overflow-x:auto;">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Title</th>
+                  <th>Type</th>
+                  <th>Category</th>
+                  <th>Updated</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="nexus-entries-body">
+                <tr><td colspan="5" style="color:var(--text-mute);text-align:center;padding:24px;">Loading entries...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <span>Add Knowledge Entry</span>
+          <button class="collapse-btn">▾</button>
+        </div>
+        <div class="panel-body">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+            <div class="form-group">
+              <label class="form-label">Title</label>
+              <input type="text" id="nexus-add-title" class="form-input" placeholder="Entry title...">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Category</label>
+              <select id="nexus-add-category" class="form-select">
+                <option value="architecture">Architecture</option>
+                <option value="api">API</option>
+                <option value="debugging">Debugging</option>
+                <option value="testing">Testing</option>
+                <option value="performance">Performance</option>
+                <option value="system">System</option>
+                <option value="training">Training</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group" style="margin-bottom:12px;">
+            <label class="form-label">Content</label>
+            <textarea id="nexus-add-content" class="form-textarea" rows="4" placeholder="Knowledge content..."></textarea>
+          </div>
+          <button id="btn-nexus-add" class="btn btn-primary">＋ Add Entry</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── NLM LAB ─── -->
+    <section id="sec-nlm" class="section">
+      <div class="section-title"><span class="title-icon">📓</span> NLM Lab</div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <span>Notebooks</span>
+          <button id="btn-create-notebook-toggle" class="btn btn-primary" style="font-size:12px;padding:5px 12px;">＋ New Notebook</button>
+        </div>
+        <div class="panel-body">
+          <div id="create-notebook-form" style="display:none;margin-bottom:20px;padding:16px;background:rgba(0,0,0,0.2);border-radius:8px;border:1px solid var(--border);">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+              <div class="form-group">
+                <label class="form-label">Notebook Name</label>
+                <input type="text" id="nlm-nb-name" class="form-input" placeholder="My Research Notebook">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Topic Tag</label>
+                <input type="text" id="nlm-nb-topic" class="form-input" placeholder="mcp-framework">
+              </div>
+            </div>
+            <div class="form-group" style="margin-bottom:12px;">
+              <label class="form-label">Source URLs (one per line)</label>
+              <textarea id="nlm-nb-sources" class="form-textarea" rows="3" placeholder="https://docs.example.com/..."></textarea>
+            </div>
+            <div style="display:flex;gap:8px;">
+              <button id="btn-nlm-create" class="btn btn-primary">Create Notebook</button>
+              <button id="btn-nlm-cancel" class="btn btn-secondary">Cancel</button>
+            </div>
+          </div>
+
+          <div style="overflow-x:auto;">
+            <table class="data-table">
+              <thead>
+                <tr><th>Name</th><th>ID</th><th>Sources</th><th>Status</th><th>Actions</th></tr>
+              </thead>
+              <tbody id="nlm-notebooks-body">
+                <tr><td colspan="5" style="color:var(--text-mute);text-align:center;padding:24px;">Loading notebooks...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel" id="nlm-ask-panel" style="display:none;">
+        <div class="panel-header">
+          <span>Ask Notebook: <span id="nlm-active-nb-name">—</span></span>
+          <button class="collapse-btn">▾</button>
+        </div>
+        <div class="panel-body">
+          <div class="form-group" style="margin-bottom:12px;">
+            <label class="form-label">Question</label>
+            <input type="text" id="nlm-ask-input" class="form-input" placeholder="What does this codebase do?">
+          </div>
+          <button id="btn-nlm-ask" class="btn btn-primary">Ask NLM</button>
+          <div id="nlm-ask-result" style="margin-top:12px;padding:12px;background:rgba(0,0,0,0.2);border-radius:8px;font-size:13px;color:var(--text-dim);display:none;"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── QA CACHE ─── -->
+    <section id="sec-cache" class="section">
+      <div class="section-title"><span class="title-icon">⚡</span> QA Cache</div>
+
+      <div class="stats-grid">
+        <div class="stat-card stat-violet">
+          <div class="stat-value" id="cache-pairs">—</div>
+          <div class="stat-label">Total QA Pairs</div>
+        </div>
+        <div class="stat-card stat-cyan">
+          <div class="stat-value" id="cache-essential">—</div>
+          <div class="stat-label">Essential</div>
+        </div>
+        <div class="stat-card stat-emerald">
+          <div class="stat-value" id="cache-useful">—</div>
+          <div class="stat-label">Useful</div>
+        </div>
+        <div class="stat-card stat-amber">
+          <div class="stat-value" id="cache-next-run">—</div>
+          <div class="stat-label">Next Cycle</div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <span>Pipeline Controls</span>
+          <div style="display:flex;gap:8px;">
+            <button id="btn-run-pipeline" class="btn btn-primary" style="font-size:12px;padding:5px 12px;">▶ Run Pipeline</button>
+            <button class="collapse-btn">▾</button>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+            <div>
+              <div class="form-label" style="margin-bottom:8px;">Last Cycle</div>
+              <div id="cache-last-cycle" style="font-size:13px;color:var(--text-dim);">—</div>
+            </div>
+            <div>
+              <div class="form-label" style="margin-bottom:8px;">Pipeline Status</div>
+              <div id="cache-pipeline-status"><span class="badge badge-success">Idle</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <span>Coverage Gaps</span>
+          <button class="collapse-btn">▾</button>
+        </div>
+        <div class="panel-body">
+          <div id="cache-gaps-list" style="display:flex;flex-direction:column;gap:8px;">
+            <div style="color:var(--text-mute);font-size:13px;text-align:center;padding:16px;">Loading gap analysis...</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <span>Recent Review Sheets</span>
+          <button class="collapse-btn">▾</button>
+        </div>
+        <div class="panel-body">
+          <div style="overflow-x:auto;">
+            <table class="data-table">
+              <thead>
+                <tr><th>Date</th><th>Topic</th><th>Pairs Added</th><th>Coverage</th><th>Actions</th></tr>
+              </thead>
+              <tbody id="cache-reviews-body">
+                <tr><td colspan="5" style="color:var(--text-mute);text-align:center;padding:24px;">No review sheets yet.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── SCHEDULER ─── -->
+    <section id="sec-scheduler" class="section">
+      <div class="section-title"><span class="title-icon">⏱</span> Scheduler</div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <span>Scheduled Tasks</span>
+          <button id="btn-refresh-scheduler" class="btn btn-secondary" style="font-size:12px;padding:5px 12px;">↻ Refresh</button>
+        </div>
+        <div class="panel-body">
+          <div style="overflow-x:auto;">
+            <table class="data-table">
+              <thead>
+                <tr><th>Task</th><th>Schedule</th><th>Last Run</th><th>Next Run</th><th>Status</th><th>Actions</th></tr>
+              </thead>
+              <tbody id="scheduler-tasks-body">
+                <tr><td colspan="6" style="color:var(--text-mute);text-align:center;padding:24px;">Loading tasks...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <span>Task Log</span>
+          <button class="collapse-btn">▾</button>
+        </div>
+        <div class="panel-body">
+          <div id="scheduler-log" style="font-family:monospace;font-size:12px;color:var(--text-dim);max-height:200px;overflow-y:auto;background:rgba(0,0,0,0.3);border-radius:8px;padding:10px;">
+            Scheduler log output will appear here...
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── FINE-TUNING ─── -->
+    <section id="sec-finetuning" class="section">
+      <div class="section-title"><span class="title-icon">🔬</span> Fine-Tuning</div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <span>Available Models</span>
+          <button class="collapse-btn">▾</button>
+        </div>
+        <div class="panel-body">
+          <div id="finetune-models-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;">
+            <div style="color:var(--text-mute);font-size:13px;text-align:center;padding:24px;">Loading models...</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <span>Training Job Queue</span>
+          <button class="collapse-btn">▾</button>
+        </div>
+        <div class="panel-body">
+          <div style="overflow-x:auto;">
+            <table class="data-table">
+              <thead>
+                <tr><th>Job</th><th>Base Model</th><th>Dataset</th><th>Progress</th><th>Status</th><th>Actions</th></tr>
+              </thead>
+              <tbody id="finetune-jobs-body">
+                <tr><td colspan="6" style="color:var(--text-mute);text-align:center;padding:24px;">No training jobs.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <span>Launch Fine-Tuning Job</span>
+          <button class="collapse-btn">▾</button>
+        </div>
+        <div class="panel-body">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+            <div class="form-group">
+              <label class="form-label">Base Model</label>
+              <select id="ft-base-model" class="form-select">
+                <option value="qwen2.5-0.5b">Qwen2.5 0.5B</option>
+                <option value="qwen2.5-1.5b">Qwen2.5 1.5B</option>
+                <option value="qwen2.5-3b">Qwen2.5 3B</option>
+                <option value="llama3.2-1b">Llama 3.2 1B</option>
+                <option value="llama3.2-3b">Llama 3.2 3B</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Dataset Path</label>
+              <input type="text" id="ft-dataset" class="form-input" placeholder="data/training/...">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Epochs</label>
+              <input type="number" id="ft-epochs" class="form-input" value="3" min="1" max="50">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Batch Size</label>
+              <input type="number" id="ft-batch" class="form-input" value="4" min="1" max="64">
+            </div>
+          </div>
+          <button id="btn-launch-ft" class="btn btn-primary">🔬 Launch Training</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── BENCHMARKS ─── -->
+    <section id="sec-benchmarks" class="section">
+      <div class="section-title"><span class="title-icon">📊</span> Benchmarks</div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <span>Results</span>
+          <div style="display:flex;gap:8px;">
+            <button id="btn-run-benchmark" class="btn btn-primary" style="font-size:12px;padding:5px 12px;">▶ Run Benchmark</button>
+            <button class="collapse-btn">▾</button>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div style="overflow-x:auto;">
+            <table class="data-table">
+              <thead>
+                <tr><th>Model</th><th>Tokens/sec</th><th>RTF</th><th>Latency (ms)</th><th>VRAM (MB)</th><th>Date</th><th>Trend</th></tr>
+              </thead>
+              <tbody id="benchmarks-body">
+                <tr><td colspan="7" style="color:var(--text-mute);text-align:center;padding:24px;">Loading benchmark results...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <span>Run Configuration</span>
+          <button class="collapse-btn">▾</button>
+        </div>
+        <div class="panel-body">
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px;">
+            <div class="form-group">
+              <label class="form-label">Model</label>
+              <select id="bench-model" class="form-select">
+                <option value="all">All Models</option>
+                <option value="primary">Primary</option>
+                <option value="small">Small</option>
+                <option value="router">Router</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Iterations</label>
+              <input type="number" id="bench-iters" class="form-input" value="10" min="1" max="100">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Prompt Length</label>
+              <select id="bench-prompt-len" class="form-select">
+                <option value="short">Short (50 tokens)</option>
+                <option value="medium" selected>Medium (200 tokens)</option>
+                <option value="long">Long (1000 tokens)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── BACKUPS ─── -->
+    <section id="sec-backups" class="section">
+      <div class="section-title"><span class="title-icon">💾</span> Backups</div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <span>Backup Archives</span>
+          <div style="display:flex;gap:8px;">
+            <button id="btn-run-backup" class="btn btn-primary" style="font-size:12px;padding:5px 12px;">💾 Run Backup</button>
+            <button class="collapse-btn">▾</button>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div style="overflow-x:auto;">
+            <table class="data-table">
+              <thead>
+                <tr><th>Date</th><th>Label</th><th>Size</th><th>Targets</th><th>Status</th><th>Actions</th></tr>
+              </thead>
+              <tbody id="backups-body">
+                <tr><td colspan="6" style="color:var(--text-mute);text-align:center;padding:24px;">Loading backups...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <span>Restore</span>
+          <button class="collapse-btn">▾</button>
+        </div>
+        <div class="panel-body">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+            <div class="form-group">
+              <label class="form-label">Select Backup</label>
+              <select id="restore-select" class="form-select">
+                <option value="">— select a backup —</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Restore Target</label>
+              <select id="restore-target" class="form-select">
+                <option value="nexus">Nexus KMS</option>
+                <option value="config">Config</option>
+                <option value="scenes">Scenes</option>
+                <option value="all">All</option>
+              </select>
+            </div>
+          </div>
+          <button id="btn-restore" class="btn btn-danger">↩ Restore Selected</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── COPILOT RULES ─── -->
+    <section id="sec-copilot" class="section">
+      <div class="section-title"><span class="title-icon">🛸</span> Copilot Rules</div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <span>Governance Rules</span>
+          <button id="btn-save-rules" class="btn btn-primary" style="font-size:12px;padding:5px 12px;">💾 Save</button>
+        </div>
+        <div class="panel-body">
+          <div id="copilot-rules-list" style="display:flex;flex-direction:column;gap:8px;">
+            <div style="color:var(--text-mute);font-size:13px;text-align:center;padding:24px;">Loading rules...</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <span>Custom Agents</span>
+          <button class="collapse-btn">▾</button>
+        </div>
+        <div class="panel-body">
+          <div id="copilot-agents-list" style="display:flex;flex-direction:column;gap:8px;">
+            <div style="color:var(--text-mute);font-size:13px;text-align:center;padding:24px;">Loading agents...</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <span>Hooks</span>
+          <button class="collapse-btn">▾</button>
+        </div>
+        <div class="panel-body">
+          <div id="copilot-hooks-list" style="display:flex;flex-direction:column;gap:8px;">
+            <div style="color:var(--text-mute);font-size:13px;text-align:center;padding:24px;">Loading hooks...</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── SYSTEM ─── -->
+    <section id="sec-system" class="section">
+      <div class="section-title"><span class="title-icon">⚙️</span> System</div>
+
+      <div class="gauge-grid" id="system-gauges" style="margin-bottom:20px;">
+        <div class="gauge-card">
+          <div class="gauge-label">CPU Usage</div>
+          <div class="gauge-value" id="gauge-cpu-val">—%</div>
+          <div class="gauge-bar"><div class="gauge-fill gauge-fill-violet" id="gauge-cpu-fill" style="width:0%"></div></div>
+        </div>
+        <div class="gauge-card">
+          <div class="gauge-label">RAM Used</div>
+          <div class="gauge-value" id="gauge-ram-val">— GB</div>
+          <div class="gauge-bar"><div class="gauge-fill gauge-fill-cyan" id="gauge-ram-fill" style="width:0%"></div></div>
+        </div>
+        <div class="gauge-card">
+          <div class="gauge-label">GPU VRAM</div>
+          <div class="gauge-value" id="gauge-vram-val">— MB</div>
+          <div class="gauge-bar"><div class="gauge-fill gauge-fill-emerald" id="gauge-vram-fill" style="width:0%"></div></div>
+        </div>
+        <div class="gauge-card">
+          <div class="gauge-label">GPU Temp</div>
+          <div class="gauge-value" id="gauge-temp-val">—°C</div>
+          <div class="gauge-bar"><div class="gauge-fill gauge-fill-amber" id="gauge-temp-fill" style="width:0%"></div></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <span>LMStudio Status</span>
+          <button id="btn-refresh-lms" class="btn btn-secondary" style="font-size:12px;padding:5px 12px;">↻ Check</button>
+        </div>
+        <div class="panel-body">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+            <div>
+              <div class="form-label" style="margin-bottom:6px;">Server</div>
+              <div id="lms-server-status"><span class="badge badge-pending">Checking...</span></div>
+            </div>
+            <div>
+              <div class="form-label" style="margin-bottom:6px;">Loaded Model</div>
+              <div id="lms-model-name" style="font-size:13px;color:var(--text-dim);">—</div>
+            </div>
+            <div>
+              <div class="form-label" style="margin-bottom:6px;">Context Used</div>
+              <div id="lms-context" style="font-size:13px;color:var(--text-dim);">—</div>
+            </div>
+            <div>
+              <div class="form-label" style="margin-bottom:6px;">Active Slots</div>
+              <div id="lms-slots" style="font-size:13px;color:var(--text-dim);">—</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <span>Service Health</span>
+          <button class="collapse-btn">▾</button>
+        </div>
+        <div class="panel-body">
+          <div id="service-health-list" style="display:flex;flex-direction:column;gap:8px;">
+            <div class="service-row" data-service="lmstudio" data-url="http://localhost:1234/api/v1/models">
+              <span class="service-dot"><span class="badge badge-pending">●</span></span>
+              <span class="service-name" style="font-size:13px;font-weight:500;">LMStudio</span>
+              <span class="service-url" style="font-size:12px;color:var(--text-mute);">localhost:1234</span>
+              <span class="service-latency" style="font-size:11px;color:var(--text-mute);margin-left:auto;"></span>
+            </div>
+            <div class="service-row" data-service="nexus" data-url="http://localhost:8700/api/health">
+              <span class="service-dot"><span class="badge badge-pending">●</span></span>
+              <span class="service-name" style="font-size:13px;font-weight:500;">Nexus KMS</span>
+              <span class="service-url" style="font-size:12px;color:var(--text-mute);">localhost:8700</span>
+              <span class="service-latency" style="font-size:11px;color:var(--text-mute);margin-left:auto;"></span>
+            </div>
+            <div class="service-row" data-service="tts" data-url="http://localhost:8600/health">
+              <span class="service-dot"><span class="badge badge-pending">●</span></span>
+              <span class="service-name" style="font-size:13px;font-weight:500;">TTS Server</span>
+              <span class="service-url" style="font-size:12px;color:var(--text-mute);">localhost:8600</span>
+              <span class="service-latency" style="font-size:11px;color:var(--text-mute);margin-left:auto;"></span>
+            </div>
+            <div class="service-row" data-service="comfyui" data-url="http://localhost:8188/system_stats">
+              <span class="service-dot"><span class="badge badge-pending">●</span></span>
+              <span class="service-name" style="font-size:13px;font-weight:500;">ComfyUI</span>
+              <span class="service-url" style="font-size:12px;color:var(--text-mute);">localhost:8188</span>
+              <span class="service-latency" style="font-size:11px;color:var(--text-mute);margin-left:auto;"></span>
+            </div>
+            <div class="service-row" data-service="hub" data-url="http://localhost:8500/health">
+              <span class="service-dot"><span class="badge badge-pending">●</span></span>
+              <span class="service-name" style="font-size:13px;font-weight:500;">Hub</span>
+              <span class="service-url" style="font-size:12px;color:var(--text-mute);">localhost:8500</span>
+              <span class="service-latency" style="font-size:11px;color:var(--text-mute);margin-left:auto;"></span>
+            </div>
+            <div class="service-row" data-service="intel_hub" data-url="http://localhost:5580/health">
+              <span class="service-dot"><span class="badge badge-pending">●</span></span>
+              <span class="service-name" style="font-size:13px;font-weight:500;">Intel Hub (self)</span>
+              <span class="service-url" style="font-size:12px;color:var(--text-mute);">localhost:5580</span>
+              <span class="service-latency" style="font-size:11px;color:var(--text-mute);margin-left:auto;"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main><!-- /main-content -->
+
+  <!-- ══════════════════════ TOAST CONTAINER ══════════════════════ -->
+  <div id="toast-container"></div>
+
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <script src="/intel_hub/static/js/intel_hub.js"></script>
+</body>
+</html>

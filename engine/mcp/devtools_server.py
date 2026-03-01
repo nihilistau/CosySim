@@ -2212,6 +2212,258 @@ async def qa_expander_reset() -> str:
     return "QA expander state reset. Next run will process all entries from scratch."
 
 
+@mcp.tool()
+async def qa_expander_reset() -> str:
+    """Reset QA expansion state — next run will start from the beginning.    WARNING: This clears all progress tracking. The Q&A pairs already stored
+    in Nexus are preserved, but expansion will re-process all entries.
+    """
+    from engine.nexus.qa_expander import QAExpander
+    QAExpander().reset()
+    return "QA expander state reset. Next run will process all entries from scratch."
+
+
+# ──── Fine-tune & Training MCP Tools ─────────────────────────────────────────
+
+@mcp.tool()
+async def finetune_submit(model_type: str, base_model: str = "") -> str:
+    """Submit a new fine-tuning job for a micro-model type.
+
+    Args:
+        model_type: qa_evaluator | conversation_analyzer | syntax_fixer | router_v2 | knowledge_synthesizer
+        base_model: HuggingFace model ID or alias (qwen-270m, qwen-1.7b, llama-3b). Default: auto.
+    """
+    from training.finetune_orchestrator import get_finetune_orchestrator
+    orch = get_finetune_orchestrator()
+    kwargs: dict = {"model_type": model_type}
+    if base_model:
+        kwargs["base_model"] = base_model
+    try:
+        job = orch.submit(**kwargs)
+        return json.dumps(job.to_dict(), indent=2)
+    except FileNotFoundError as exc:
+        return f"ERROR: {exc}\nRun finetune_build_dataset first."
+
+
+@mcp.tool()
+async def finetune_run_next() -> str:
+    """Run the next pending fine-tuning job. Blocks until complete."""
+    from training.finetune_orchestrator import get_finetune_orchestrator
+    orch = get_finetune_orchestrator()
+    job = orch.run_next()
+    if job is None:
+        return "No pending fine-tuning jobs."
+    return json.dumps(job.to_dict(), indent=2)
+
+
+@mcp.tool()
+async def finetune_list_jobs(status: str = "") -> str:
+    """List all fine-tuning jobs.
+
+    Args:
+        status: Filter by status (pending|running|done|failed). Empty = all.
+    """
+    from training.finetune_orchestrator import get_finetune_orchestrator
+    orch = get_finetune_orchestrator()
+    jobs = orch.list_jobs(status=status or None)
+    lines = ["=== Fine-tune Jobs ===", f"Queue: {orch.queue_status()}", ""]
+    for j in jobs[:20]:
+        lines.append(
+            f"[{j['status']}] {j['job_id']} {j['model_type']} ({j['base_model']}) "
+            f"progress={j['progress']:.0%}"
+        )
+    return "\n".join(lines)
+
+
+@mcp.tool()
+async def finetune_build_dataset(model_type: str, count: int = 500) -> str:
+    """Build training dataset for a micro-model type using NLM teacher.
+
+    Args:
+        model_type: Target model type.
+        count: Number of examples to generate.
+    """
+    from training.micro_datasets import MicroDatasetManager
+    mgr = MicroDatasetManager()
+    stats = mgr.build(model_type, count=count)
+    return json.dumps(stats.to_dict(), indent=2)
+
+
+@mcp.tool()
+async def finetune_dataset_status() -> str:
+    """Show dataset sizes for all micro-model types."""
+    from training.micro_datasets import MicroDatasetManager
+    mgr = MicroDatasetManager()
+    status = mgr.status()
+    lines = ["=== Dataset Status ==="]
+    for model_type, info in status.items():
+        ready = "✓" if info["ready"] else "✗"
+        lines.append(f"  {ready} {model_type}: train={info['train']} val={info['val']} test={info['test']}")
+    return "\n".join(lines)
+
+
+@mcp.tool()
+async def model_registry_list(model_type: str = "") -> str:
+    """List registered fine-tuned models.
+
+    Args:
+        model_type: Filter by type. Empty = all.
+    """
+    from training.model_registry import get_model_registry
+    registry = get_model_registry()
+    models = registry.list_models(model_type=model_type or None)
+    lines = ["=== Model Registry ==="]
+    for m in models:
+        active = "★ ACTIVE" if m["active"] else "  "
+        score = f"score={m['benchmark_score']:.3f}" if m["benchmark_score"] else "score=?"
+        lines.append(f"  {active} [{m['model_id']}] {m['model_type']} {score} base={m['base_model']}")
+    lines.append(f"\nSummary: {json.dumps(registry.summary(), indent=2)}")
+    return "\n".join(lines)
+
+
+@mcp.tool()
+async def model_benchmark_run(model_type: str = "") -> str:
+    """Run benchmarks on fine-tuned models.
+
+    Args:
+        model_type: Type to benchmark. Empty = run all.
+    """
+    from training.benchmark_runner import get_benchmark_runner
+    runner = get_benchmark_runner()
+    if model_type:
+        result = runner.run(model_type)
+        return result.summary()
+    else:
+        results = runner.run_all()
+        return "\n".join(r.summary() for r in results)
+
+
+@mcp.tool()
+async def model_benchmark_leaderboard() -> str:
+    """Show the best benchmark score per micro-model type."""
+    from training.benchmark_runner import get_benchmark_runner
+    board = get_benchmark_runner().get_leaderboard()
+    lines = ["=== Model Leaderboard ==="]
+    for model_type, info in board.items():
+        score = f"{info['best_score']:.3f}" if info["best_score"] is not None else "no data"
+        lines.append(f"  {model_type}: {score} (id={info['model_id']})")
+    return "\n".join(lines)
+
+
+@mcp.tool()
+async def model_promote(model_id: str, model_type: str) -> str:
+    """Manually promote a fine-tuned model as the active one for its type.
+
+    Args:
+        model_id: Registry model ID (8-char).
+        model_type: Model type (qa_evaluator, router_v2, etc.).
+    """
+    from training.model_registry import get_model_registry
+    registry = get_model_registry()
+    registry.promote(model_type, model_id)
+    return f"Promoted model {model_id} as active {model_type}."
+
+
+@mcp.tool()
+async def teacher_generate_dataset(model_type: str, count: int = 300) -> str:
+    """Generate a training dataset via NLM teacher pipeline (Gemini 3.0).
+
+    Args:
+        model_type: Target micro-model type.
+        count: Number of examples to generate.
+    """
+    from engine.nexus.teacher_pipeline import get_teacher_pipeline
+    pipeline = get_teacher_pipeline()
+    result = pipeline.generate_dataset(model_type, count=count)
+    return json.dumps(result.to_dict(), indent=2)
+
+
+@mcp.tool()
+async def finetuned_router_status() -> str:
+    """Show which fine-tuned models are currently active in the router."""
+    from engine.lmstudio.finetuned_router import get_finetuned_router
+    router = get_finetuned_router()
+    active = router.get_active_models()
+    lines = ["=== Fine-tuned Router ==="]
+    if not active:
+        lines.append("  No fine-tuned models loaded.")
+        lines.append("  Run: finetuned_router_load_registry")
+    else:
+        for task_type, path in active.items():
+            lines.append(f"  {task_type}: {path}")
+    return "\n".join(lines)
+
+
+@mcp.tool()
+async def finetuned_router_load_registry() -> str:
+    """Load all active fine-tuned models from the model registry into the router."""
+    from engine.lmstudio.finetuned_router import get_finetuned_router
+    router = get_finetuned_router()
+    count = router.load_from_registry()
+    return f"Loaded {count} fine-tuned models from registry."
+
+
+@mcp.tool()
+async def backup_run() -> str:
+    """Trigger an immediate database backup."""
+    from engine.nexus.backup_manager import get_backup_manager
+    mgr = get_backup_manager()
+    result = mgr.run_backup()
+    return json.dumps(result.to_dict() if hasattr(result, "to_dict") else {"result": str(result)}, indent=2)
+
+
+@mcp.tool()
+async def backup_list() -> str:
+    """List all available database backups."""
+    from engine.nexus.backup_manager import get_backup_manager
+    mgr = get_backup_manager()
+    backups = mgr.list_backups()
+    if not backups:
+        return "No backups found."
+    lines = ["=== Database Backups ==="]
+    for b in backups[:20]:
+        lines.append(f"  {b.get('timestamp', '?')} | {b.get('size_mb', 0):.1f}MB | {b.get('targets', [])}")
+    return "\n".join(lines)
+
+
+@mcp.tool()
+async def backup_restore(backup_path: str, target: str = "nexus") -> str:
+    """Restore a specific database backup.
+
+    Args:
+        backup_path: Path to the backup file.
+        target: Which database to restore (nexus | session | all).
+    """
+    from engine.nexus.backup_manager import get_backup_manager
+    result = get_backup_manager().restore_backup(backup_path, target)
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool()
+async def user_profile_get() -> str:
+    """Retrieve the current user profile (extracted from conversations)."""
+    from engine.nexus.user_profile import get_user_profile_store
+    store = get_user_profile_store()
+    profile = store.get()
+    return json.dumps(profile, indent=2)
+
+
+@mcp.tool()
+async def user_profile_update(updates: str) -> str:
+    """Merge updates into the user profile.
+
+    Args:
+        updates: JSON string with profile fields to update.
+    """
+    from engine.nexus.user_profile import get_user_profile_store
+    store = get_user_profile_store()
+    try:
+        data = json.loads(updates)
+    except json.JSONDecodeError as exc:
+        return f"ERROR: Invalid JSON: {exc}"
+    result = store.merge(data)
+    return json.dumps(result, indent=2)
+
+
 def main(mode: str = "stdio") -> None:
     if mode == "http":
         logger.info("Starting CosySim DevTools MCP server in HTTP mode...")

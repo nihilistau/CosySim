@@ -1,0 +1,5 @@
+{"input": "How do I start the CosySim bedroom scene?", "output": "ESSENTIAL", "model_type": "qa_evaluator", "source": "synthetic_fallback", "quality": "bronze", "metadata": {}}
+{"input": "What is the meaning of life?", "output": "SKIP", "model_type": "qa_evaluator", "source": "synthetic_fallback", "quality": "bronze", "metadata": {}}
+{"input": "How does the interceptor pipeline work?", "output": "ESSENTIAL", "model_type": "qa_evaluator", "source": "synthetic_fallback", "quality": "bronze", "metadata": {}}
+{"input": "What port does the Nexus KMS run on?", "output": "ESSENTIAL", "model_type": "qa_evaluator", "source": "synthetic_fallback", "quality": "bronze", "metadata": {}}
+{"input": "Can you help me?", "output": "SKIP", "model_type": "qa_evaluator", "source": "synthetic_fallback", "quality": "bronze", "metadata": {}}

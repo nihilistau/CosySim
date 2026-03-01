@@ -2,7 +2,112 @@
 
 All notable changes to CosySim are documented here.
 
-## v0.63 — NLM-Driven QA Cache Pipeline
+## v0.64 — Training Pipeline + Intelligence Hub
+
+### New: TeacherPipeline (`engine/nexus/teacher_pipeline.py`)
+- NLM teacher that drives Gemini 3.0 via NotebookLM to generate per-type JSONL datasets
+- 5 micro-model types: `qa_evaluator`, `router_v2`, `syntax_fixer`, `knowledge_synthesizer`, `conversation_analyzer`
+- Per-type NLM notebooks with source pyramid loading
+- Generates datasets via `generate_report_with_prompt` with per-type CSV/JSONL prompts
+- Synthetic fallback when NLM unavailable
+- `TrainingExample` dataclass, saves as JSONL, stores metadata in Nexus
+- `get_teacher_pipeline()` singleton
+
+### New: MicroDatasetManager (`training/micro_datasets.py`)
+- Loads existing examples, generates via teacher pipeline, augments, deduplicates
+- Model-specific augmenters (rephrase, synonym, filler words, question reformulation)
+- Converts to Alpaca instruction format (`{instruction, input, output}`)
+- 80/10/10 train/val/test splits saved as separate JSONL files
+- `MODELS` list exported for scheduler and benchmark runner
+
+### New: FinetuneOrchestrator (`training/finetune_orchestrator.py`)
+- Job queue with `pending`, `running`, `done`, `failed`, `cancelled` states
+- Generates standalone `train.py` using Unsloth QLoRA (subprocess — avoids import conflicts)
+- Live log parsing: step progress + loss tracking
+- Auto-merges LoRA adapters on completion (`save_pretrained_merged`)
+- Persists job state to `training/jobs.jsonl`
+- Notifies ModelRegistry on completion
+- `BASE_MODEL_ALIASES`: `qwen-270m`, `qwen-1.7b`, `llama-3b`, `qwen-7b`
+- `FinetuneConfig` auto-selects hyperparams by model size (r, batch_size)
+- `get_finetune_orchestrator()` singleton
+
+### New: ModelRegistry (`training/model_registry.py`)
+- Tracks all fine-tuned models with benchmark scores and active flags
+- `promote(model_type, model_id)` / `auto_promote(model_type)` → swap active model
+- `update_benchmark(model_id, score, metrics)` for score tracking
+- Persists to `training/model_registry.json` (full rewrite on save)
+- Notifies `finetuned_router` on promotion
+- `get_model_registry()` singleton
+
+### New: BenchmarkRunner (`training/benchmark_runner.py`)
+- Runs held-out test sets against active fine-tuned models
+- Per-type rule-based baseline predictor as fallback (no LMStudio needed)
+- Computes accuracy, F1 (token overlap), exact-match, aggregate score
+- `auto_promote()` on score improvement
+- Appends results to `training/benchmarks.jsonl` + stores in Nexus
+- `get_leaderboard()` returns best score per model type
+- `get_benchmark_runner()` singleton
+
+### New: FinetunedRouter (`engine/lmstudio/finetuned_router.py`)
+- Routes task-specific requests to fine-tuned models when available
+- `is_available(task_type)` check before routing — returns `None` gracefully when unavailable
+- `load_from_registry()` auto-loads all active models on startup
+- Formats as Alpaca prompt, calls LMStudio `/v1/completions`
+- Convenience methods: `route_qa_evaluation()`, `route_request_classification()`
+- `get_finetuned_router()` singleton
+
+### New: Intelligence Hub Scene (`:5580`)
+- Unified glassmorphism admin panel with 12 sections
+- **Nexus Explorer** — search, browse, add entries; live stats
+- **NLM Lab** — create notebooks, upload sources, run generation tiles, batch-ask
+- **Fine-tune Lab** — submit jobs, track progress, view leaderboard, promote models
+- **Scheduler** — view tasks, trigger runs, view history
+- **Copilot Rules** — view/edit governance rules
+- **Cache Pipeline** — run stages, view cycle results, download review sheet
+- **Model Registry** — browse all fine-tuned models, promote, delete
+- **Backup Manager** — create/restore backups, view history
+- **Conversation Analyzer** — analyze session history, extract insights
+- **User Profile** — preferences, system config
+- **TTS Config** — select backend, voice, test TTS; VTT config
+- **Assistant Panel** — chat interface, mic input, avatar display area
+- `intel_hub_skills.py` — 6 @skill functions for agent access
+- Glassmorphism CSS with neon accent design system
+
+### Modified: Scheduler Daemon (`engine/nexus/scheduler_daemon.py`)
+- 4 new builtin tasks (27 total, was 23):
+  - `teacher-dataset-gen` (weekly) — NLM teacher generates JSONL datasets
+  - `finetune-if-ready` (weekly) — submits finetune job if dataset ≥500 examples
+  - `model-benchmark` (daily) — runs benchmark on all active fine-tuned models
+  - `backup-databases` (daily) — creates Nexus + SQLite backups
+- 4 new callback functions: `_teacher_dataset_gen_callback`, `_finetune_if_ready_callback`, `_model_benchmark_callback`, `_backup_databases_callback`
+
+### Modified: Cache Pipeline Stage F (`engine/nexus/cache_pipeline.py`)
+- Stage F now tries `finetuned_router.route_qa_evaluation()` first (local, free)
+- Falls back to NLM Gemini batch evaluation if fine-tuned model unavailable
+- `_run_stage_f_finetuned()` added as dual-path method
+- This is the core self-improvement loop: fine-tuned model replaces Gemini calls over time
+
+### Modified: DevTools Server (`engine/mcp/devtools_server.py`)
+- 18 new MCP tools:
+  - `finetune_submit`, `finetune_run_next`, `finetune_list_jobs`, `finetune_build_dataset`, `finetune_dataset_status`
+  - `model_registry_list`, `model_benchmark_run`, `model_benchmark_leaderboard`, `model_promote`
+  - `teacher_generate_dataset`
+  - `finetuned_router_status`, `finetuned_router_load_registry`
+  - `backup_run`, `backup_list`, `backup_restore`
+  - `user_profile_get`, `user_profile_update`
+
+### Tests
+- `tests/test_teacher_pipeline.py` — full coverage for TeacherPipeline
+- `tests/test_micro_datasets.py` — MicroDatasetManager, augmentation, formatting, dedup
+- `tests/test_finetune_orchestrator.py` — FinetuneOrchestrator job lifecycle, script gen, persist
+- `tests/test_model_registry_and_benchmark.py` — ModelRegistry CRUD + BenchmarkRunner F1/accuracy
+- `tests/test_finetuned_router.py` — FinetunedRouter routing, registry loading, graceful fallback
+- `tests/test_intel_hub_scene.py` — Intel Hub scene, skills, config
+- **5,505 tests, 0 failures** (was 5,437)
+
+---
+
+
 
 ### New: CachePipeline (`engine/nexus/cache_pipeline.py`)
 - 10-stage orchestrator (A–J) for NLM-driven Q&A cache generation

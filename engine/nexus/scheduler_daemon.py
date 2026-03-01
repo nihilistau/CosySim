@@ -1027,6 +1027,30 @@ def _register_builtin_tasks(daemon: "SchedulerDaemon") -> None:
         "weekly",
         _qa_cache_prune_callback,
     )
+    daemon.register(
+        "teacher-dataset-gen",
+        "NLM Teacher Dataset Generation (micro-model training data)",
+        "weekly",
+        _teacher_dataset_gen_callback,
+    )
+    daemon.register(
+        "finetune-if-ready",
+        "Auto Fine-tune When Dataset Grows 500+ Examples",
+        "weekly",
+        _finetune_if_ready_callback,
+    )
+    daemon.register(
+        "model-benchmark",
+        "Daily Micro-Model Benchmarks",
+        "daily",
+        _model_benchmark_callback,
+    )
+    daemon.register(
+        "backup-databases",
+        "Scheduled Database Backups (Nexus + session store)",
+        "daily",
+        _backup_databases_callback,
+    )
 
 
 def _qa_history_mine_callback() -> Dict[str, Any]:
@@ -1173,8 +1197,90 @@ def _cli_start() -> None:
         daemon.stop()
 
 
+def _teacher_dataset_gen_callback() -> Dict[str, Any]:
+    """Weekly: generate NLM teacher datasets for all micro-model types."""
+    results: Dict[str, Any] = {}
+    try:
+        from engine.nexus.teacher_pipeline import get_teacher_pipeline
+        pipeline = get_teacher_pipeline()
+        for model_type in ["qa_evaluator", "router_v2", "syntax_fixer", "conversation_analyzer", "knowledge_synthesizer"]:
+            try:
+                result = pipeline.generate_dataset(model_type, count=300)
+                results[model_type] = {
+                    "generated": result.count_generated,
+                    "path": result.dataset_path,
+                    "errors": result.errors,
+                }
+            except Exception as exc:
+                results[model_type] = {"error": str(exc)}
+    except Exception as exc:
+        return {"error": str(exc)}
+    return {"datasets": results, "timestamp": datetime.now(timezone.utc).isoformat()}
+
+
+def _finetune_if_ready_callback() -> Dict[str, Any]:
+    """Weekly: submit fine-tune jobs if any dataset has grown 500+ examples."""
+    submitted: List[str] = []
+    skipped: List[str] = []
+    try:
+        from training.micro_datasets import MicroDatasetManager, MODELS
+        from training.finetune_orchestrator import get_finetune_orchestrator
+        mgr = MicroDatasetManager()
+        orch = get_finetune_orchestrator()
+        status = mgr.status()
+        for model_type in MODELS:
+            train_count = status.get(model_type, {}).get("train", 0)
+            if train_count >= 500:
+                # Check if there's already a pending/running job
+                existing = [
+                    j for j in orch.list_jobs()
+                    if j["model_type"] == model_type and j["status"] in ("pending", "running")
+                ]
+                if not existing:
+                    try:
+                        job = orch.submit(model_type)
+                        submitted.append(f"{model_type} ({job.job_id})")
+                    except Exception as exc:
+                        skipped.append(f"{model_type}: {exc}")
+                else:
+                    skipped.append(f"{model_type}: already queued")
+            else:
+                skipped.append(f"{model_type}: only {train_count} examples")
+    except Exception as exc:
+        return {"error": str(exc)}
+    return {"submitted": submitted, "skipped": skipped}
+
+
+def _model_benchmark_callback() -> Dict[str, Any]:
+    """Daily: benchmark all active fine-tuned micro-models."""
+    try:
+        from training.benchmark_runner import get_benchmark_runner
+        runner = get_benchmark_runner()
+        results = runner.run_all(auto_promote=True)
+        return {
+            "benchmarked": len(results),
+            "results": [
+                {"model_type": r.model_type, "score": r.aggregate_score, "promoted": r.promoted}
+                for r in results
+            ],
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+    except Exception as exc:
+        return {"error": str(exc), "benchmarked": 0}
+
+
+def _backup_databases_callback() -> Dict[str, Any]:
+    """Daily: run automated database backups."""
+    try:
+        from engine.nexus.backup_manager import get_backup_manager
+        mgr = get_backup_manager()
+        result = mgr.run_backup()
+        return result.to_dict() if hasattr(result, "to_dict") else {"result": str(result)}
+    except Exception as exc:
+        return {"error": str(exc)}
+
+
 def main() -> None:
-    """CLI entry point."""
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
