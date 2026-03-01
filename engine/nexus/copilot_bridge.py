@@ -152,10 +152,18 @@ class CopilotBridge:
         except Exception as e:
             logger.debug("Rules lookup failed: %s", e)
 
+        # Include full onboarding context (rules, recent decisions, architecture)
+        try:
+            onboarding = self.get_onboarding_context()
+            context["onboarding"] = onboarding
+        except Exception as exc:
+            logger.debug("Onboarding context failed: %s", exc)
+
         logger.info(
-            "Session started: %d knowledge entries, %s cached Q&A",
+            "Session started: %d knowledge entries, %s cached Q&A, %d rules loaded",
             len(context.get("knowledge", [])),
             "yes" if "cached_answer" in context else "no",
+            len(context.get("onboarding", {}).get("rules", [])),
         )
         return context
 

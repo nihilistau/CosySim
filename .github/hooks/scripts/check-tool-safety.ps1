@@ -40,6 +40,38 @@ try {
                     if ($session.nexus_consulted) { $nexusUsed = $true }
                 }
 
+                # Consensus gate — architecture/config-changing operations
+                $archPatterns = @("engine/nexus", "engine/mcp", "engine/agents", "config/default", ".github/hooks", "engine/skills/builtin")
+                $isArchChange = $false
+                if ($parsed.input -and $parsed.input.path) {
+                    foreach ($p in $archPatterns) {
+                        if ($parsed.input.path -replace "\\", "/" -match $p) {
+                            $isArchChange = $true; break
+                        }
+                    }
+                }
+                if ($isArchChange) {
+                    try {
+                        $escapedPath = if ($parsed.input.path) { $parsed.input.path -replace "'", "" } else { "" }
+                        $gateOut = python -c "
+import json
+try:
+    from engine.nexus.copilot_bridge import get_copilot_bridge
+    allowed = get_copilot_bridge().consensus_gate('edit:$escapedPath', 'Modifying core architecture file')
+    print(json.dumps({'allowed': bool(allowed)}))
+except Exception:
+    print(json.dumps({'allowed': True}))
+" 2>$null
+                        if ($gateOut) {
+                            $gate = $gateOut | ConvertFrom-Json -ErrorAction SilentlyContinue
+                            if ($gate -and -not $gate.allowed) {
+                                Write-Output '{"decision": "deny", "reason": "Consensus gate: architecture change blocked by governance rule"}'
+                                exit 0
+                            }
+                        }
+                    } catch { }
+                }
+
                 # Run governance validation on file edits
                 $governanceMsg = ""
                 if ($parsed.input -and $parsed.input.path) {

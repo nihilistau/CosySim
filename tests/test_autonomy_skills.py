@@ -622,6 +622,7 @@ class TestIntegrationFlow:
             "metrics-collect", "training-sync",
             "system-reflection", "experiment-scan",
             "governance-audit", "ha-news-push",
+            "session-distillation",
         ]
         for tid in expected:
             assert tid in task_ids, f"Missing task: {tid}"

@@ -1,7 +1,7 @@
 """sync_sessions_to_nexus.py — Bulk-sync Copilot CLI session history to Nexus KMS.
 
 Reads sessions from the Copilot session store SQLite database
-(~/.copilot/session-store/store.sqlite) and syncs them to Nexus as
+(~/.copilot/session-store.db) and syncs them to Nexus as
 copilot-history entries with full checkpoint, file-change, and summary data.
 
 Uses hash-based change detection — already-synced unchanged sessions are
@@ -31,8 +31,8 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
 NEXUS_URL = os.environ.get("NEXUS_URL", "http://localhost:8700")
-# Correct path: ~/.copilot/session-store/store.sqlite
-SESSION_STORE_DB = Path.home() / ".copilot" / "session-store" / "store.sqlite"
+# Actual path: ~/.copilot/session-store.db (flat file, no subdirectory)
+SESSION_STORE_DB = Path.home() / ".copilot" / "session-store.db"
 STATE_FILE = (
     Path(__file__).resolve().parent.parent.parent
     / ".github"

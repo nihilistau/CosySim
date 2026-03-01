@@ -360,3 +360,114 @@ def nlm_build_topic(topic: str, sources: str = "", question_count: int = 30) -> 
         }, ensure_ascii=False)
     except Exception as exc:
         return json.dumps({"error": str(exc)})
+
+
+def _get_hybrid():
+    """Lazy-load NLMHybrid router."""
+    from engine.mcp.nlm_hybrid import get_nlm_hybrid
+    return get_nlm_hybrid()
+
+
+@skill(
+    pack="nlm_forge",
+    description=(
+        "Generate a NotebookLM audio overview for a notebook. "
+        "Returns a link or status of the generated audio (style: standard or deep_dive)."
+    ),
+    category="SYSTEM",
+    tags=["nlm", "audio", "overview", "generate"],
+)
+def nlm_audio(notebook_id: str, style: str = "standard") -> str:
+    """Generate an audio overview for a notebook via the NLM hybrid router.
+
+    Args:
+        notebook_id: NLM notebook ID.
+        style: Audio style — "standard" or "deep_dive".
+
+    Returns:
+        JSON with audio_url or status.
+    """
+    try:
+        result = _get_hybrid().generate_audio(notebook_id, style=style)
+        return json.dumps(result, ensure_ascii=False)
+    except Exception as exc:
+        return json.dumps({"error": str(exc)})
+
+
+@skill(
+    pack="nlm_forge",
+    description=(
+        "Generate a NotebookLM video overview for a notebook. "
+        "Styles: cinematic, educational, documentary, tutorial, short_reel, interview, "
+        "news_report, product_demo, animated_explainer, corporate."
+    ),
+    category="SYSTEM",
+    tags=["nlm", "video", "overview", "generate"],
+)
+def nlm_video(notebook_id: str, style: str = "cinematic") -> str:
+    """Generate a video overview for a notebook via the NLM hybrid router.
+
+    Args:
+        notebook_id: NLM notebook ID.
+        style: Video generation style.
+
+    Returns:
+        JSON with video_url or status.
+    """
+    try:
+        result = _get_hybrid().generate_video(notebook_id, style=style)
+        return json.dumps(result, ensure_ascii=False)
+    except Exception as exc:
+        return json.dumps({"error": str(exc)})
+
+
+@skill(
+    pack="nlm_forge",
+    description=(
+        "Extract structured data tables from a notebook. "
+        "Useful for getting structured facts, comparisons, or metrics stored in sources."
+    ),
+    category="SYSTEM",
+    tags=["nlm", "data", "tables", "extract"],
+)
+def nlm_data_tables(notebook_id: str, query: str = "") -> str:
+    """Extract data tables from notebook sources via the NLM hybrid router.
+
+    Args:
+        notebook_id: NLM notebook ID.
+        query: Optional filtering query for specific table topics.
+
+    Returns:
+        JSON array of extracted tables.
+    """
+    try:
+        result = _get_hybrid().extract_tables(notebook_id, query=query)
+        return json.dumps(result, ensure_ascii=False)
+    except Exception as exc:
+        return json.dumps({"error": str(exc)})
+
+
+@skill(
+    pack="nlm_forge",
+    description=(
+        "Retrieve the full chat history for a notebook. "
+        "Returns all previous questions and answers for review or re-distillation."
+    ),
+    category="SYSTEM",
+    tags=["nlm", "chat", "history", "retrieve"],
+)
+def nlm_chat_history(notebook_id: str) -> str:
+    """Get the chat history for a NLM notebook.
+
+    Args:
+        notebook_id: NLM notebook ID.
+
+    Returns:
+        JSON array of {question, answer} entries.
+    """
+    try:
+        from engine.mcp.nlm_node_bridge import get_nlm_node_bridge
+        result = get_nlm_node_bridge().get_chat_history(notebook_id)
+        return json.dumps(result, ensure_ascii=False)
+    except Exception as exc:
+        return json.dumps({"error": str(exc)})

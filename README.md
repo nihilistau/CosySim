@@ -1,10 +1,10 @@
 # CosySim
 
-> v0.60.1 — Multi-scene AI simulation framework
+> v0.61 — Multi-scene AI simulation framework
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Tests: 4827](https://img.shields.io/badge/tests-4%2C827%20passing-brightgreen.svg)]()
+[![Tests: 5133](https://img.shields.io/badge/tests-5%2C133%20passing-brightgreen.svg)]()
 
 ## Overview
 
@@ -80,7 +80,7 @@ User / Browser
 - System Assistant Aria with cosysim-navbar floating navigation
 
 **DevOps**
-- 4,827 tests, 0 failures across 176 files
+- 5,133 tests, 0 failures across 178 files
 - 18 Copilot custom agents, 9 instruction files
 - Config hardening — all 18 scenes in production.yaml
 - Central CORS and health routes on all scenes
@@ -124,7 +124,7 @@ CosySim/
 │   ├── scenes/          # 18 scene implementations
 │   └── simulation/      # Database, character system, services
 ├── config/              # YAML/JSON config (default, dev, prod, voices, skills)
-├── tests/               # pytest suite (176 files, 4,827 tests)
+├── tests/               # pytest suite (178 files, 5,133 tests)
 ├── docs/                # Documentation (INDEX.md entry point)
 ├── training/            # Fine-tuning pipelines and data
 ├── main.py              # Application entry point
@@ -162,7 +162,7 @@ CosySim/
 ## Testing
 
 ```bash
-# Full suite — 4,827 tests
+# Full suite — 5,133 tests
 python -m pytest tests/ -v --tb=short --ignore=tests/test_agent_loop.py --ignore=tests/live_wire_test.py
 
 # Single file

@@ -1044,3 +1044,152 @@ class TestLazyLoading:
 
         nlm_distill("nb-123")
         mock_get_forge.assert_called_once()
+
+
+# ═══════════════════════════════════════════════════════════════════
+# NLM MEDIA SKILLS — audio, video, data_tables, chat_history
+# ═══════════════════════════════════════════════════════════════════
+
+_HYBRID_PATH = "engine.mcp.nlm_hybrid.get_nlm_hybrid"
+_NODE_BRIDGE_PATH = "engine.mcp.nlm_node_bridge.get_nlm_node_bridge"
+
+
+class TestNlmAudio:
+    @patch(_HYBRID_PATH)
+    def test_nlm_audio_returns_result(self, mock_get_hybrid):
+        from engine.skills.builtin.nlm_forge_skills import nlm_audio
+        mock_hybrid = MagicMock()
+        mock_hybrid.generate_audio.return_value = {"status": "generated", "audio_url": "https://nlm.example/audio.mp3"}
+        mock_get_hybrid.return_value = mock_hybrid
+
+        raw = nlm_audio("nb-abc")
+        result = json.loads(raw)
+        assert result["status"] == "generated"
+        mock_hybrid.generate_audio.assert_called_once_with("nb-abc", style="standard")
+
+    @patch(_HYBRID_PATH)
+    def test_nlm_audio_custom_style(self, mock_get_hybrid):
+        from engine.skills.builtin.nlm_forge_skills import nlm_audio
+        mock_hybrid = MagicMock()
+        mock_hybrid.generate_audio.return_value = {"status": "ok"}
+        mock_get_hybrid.return_value = mock_hybrid
+
+        nlm_audio("nb-abc", style="deep_dive")
+        mock_hybrid.generate_audio.assert_called_once_with("nb-abc", style="deep_dive")
+
+    @patch(_HYBRID_PATH)
+    def test_nlm_audio_handles_exception(self, mock_get_hybrid):
+        from engine.skills.builtin.nlm_forge_skills import nlm_audio
+        mock_get_hybrid.side_effect = RuntimeError("hybrid offline")
+
+        raw = nlm_audio("nb-abc")
+        result = json.loads(raw)
+        assert "error" in result
+        assert "hybrid offline" in result["error"]
+
+
+class TestNlmVideo:
+    @patch(_HYBRID_PATH)
+    def test_nlm_video_returns_result(self, mock_get_hybrid):
+        from engine.skills.builtin.nlm_forge_skills import nlm_video
+        mock_hybrid = MagicMock()
+        mock_hybrid.generate_video.return_value = {"status": "queued", "video_id": "vid-123"}
+        mock_get_hybrid.return_value = mock_hybrid
+
+        raw = nlm_video("nb-abc")
+        result = json.loads(raw)
+        assert result["video_id"] == "vid-123"
+        mock_hybrid.generate_video.assert_called_once_with("nb-abc", style="cinematic")
+
+    @patch(_HYBRID_PATH)
+    def test_nlm_video_custom_style(self, mock_get_hybrid):
+        from engine.skills.builtin.nlm_forge_skills import nlm_video
+        mock_hybrid = MagicMock()
+        mock_hybrid.generate_video.return_value = {"status": "ok"}
+        mock_get_hybrid.return_value = mock_hybrid
+
+        nlm_video("nb-abc", style="tutorial")
+        mock_hybrid.generate_video.assert_called_once_with("nb-abc", style="tutorial")
+
+    @patch(_HYBRID_PATH)
+    def test_nlm_video_error_propagated(self, mock_get_hybrid):
+        from engine.skills.builtin.nlm_forge_skills import nlm_video
+        mock_get_hybrid.side_effect = ConnectionError("node bridge down")
+
+        raw = nlm_video("nb-abc")
+        result = json.loads(raw)
+        assert "error" in result
+
+
+class TestNlmDataTables:
+    @patch(_HYBRID_PATH)
+    def test_nlm_data_tables_returns_tables(self, mock_get_hybrid):
+        from engine.skills.builtin.nlm_forge_skills import nlm_data_tables
+        mock_hybrid = MagicMock()
+        mock_hybrid.extract_tables.return_value = {"tables": [{"headers": ["A", "B"], "rows": [["1", "2"]]}]}
+        mock_get_hybrid.return_value = mock_hybrid
+
+        raw = nlm_data_tables("nb-abc")
+        result = json.loads(raw)
+        assert "tables" in result
+        assert len(result["tables"]) == 1
+        mock_hybrid.extract_tables.assert_called_once_with("nb-abc", query="")
+
+    @patch(_HYBRID_PATH)
+    def test_nlm_data_tables_passes_query(self, mock_get_hybrid):
+        from engine.skills.builtin.nlm_forge_skills import nlm_data_tables
+        mock_hybrid = MagicMock()
+        mock_hybrid.extract_tables.return_value = {"tables": []}
+        mock_get_hybrid.return_value = mock_hybrid
+
+        nlm_data_tables("nb-abc", query="performance benchmarks")
+        mock_hybrid.extract_tables.assert_called_once_with("nb-abc", query="performance benchmarks")
+
+    @patch(_HYBRID_PATH)
+    def test_nlm_data_tables_error_json(self, mock_get_hybrid):
+        from engine.skills.builtin.nlm_forge_skills import nlm_data_tables
+        mock_get_hybrid.side_effect = Exception("tables unavailable")
+
+        raw = nlm_data_tables("nb-abc")
+        result = json.loads(raw)
+        assert "error" in result
+
+
+class TestNlmChatHistory:
+    @patch(_NODE_BRIDGE_PATH)
+    def test_nlm_chat_history_returns_list(self, mock_get_bridge):
+        from engine.skills.builtin.nlm_forge_skills import nlm_chat_history
+        mock_bridge = MagicMock()
+        mock_bridge.get_chat_history.return_value = [
+            {"question": "Q1?", "answer": "A1"},
+            {"question": "Q2?", "answer": "A2"},
+        ]
+        mock_get_bridge.return_value = mock_bridge
+
+        raw = nlm_chat_history("nb-abc")
+        result = json.loads(raw)
+        assert isinstance(result, list)
+        assert len(result) == 2
+        assert result[0]["question"] == "Q1?"
+        mock_bridge.get_chat_history.assert_called_once_with("nb-abc")
+
+    @patch(_NODE_BRIDGE_PATH)
+    def test_nlm_chat_history_empty(self, mock_get_bridge):
+        from engine.skills.builtin.nlm_forge_skills import nlm_chat_history
+        mock_bridge = MagicMock()
+        mock_bridge.get_chat_history.return_value = []
+        mock_get_bridge.return_value = mock_bridge
+
+        raw = nlm_chat_history("nb-abc")
+        result = json.loads(raw)
+        assert result == []
+
+    @patch(_NODE_BRIDGE_PATH)
+    def test_nlm_chat_history_error_propagated(self, mock_get_bridge):
+        from engine.skills.builtin.nlm_forge_skills import nlm_chat_history
+        mock_get_bridge.side_effect = RuntimeError("node bridge error")
+
+        raw = nlm_chat_history("nb-abc")
+        result = json.loads(raw)
+        assert "error" in result
+        assert "node bridge error" in result["error"]

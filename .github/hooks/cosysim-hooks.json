@@ -27,6 +27,20 @@
         "powershell": "python -c \"from engine.nexus.copilot_bridge import get_copilot_bridge; import json,sys; data=json.load(sys.stdin) if not sys.stdin.isatty() else {}; get_copilot_bridge().session_end(data.get('summary',''))\"",
         "bash": "python3 -c \"from engine.nexus.copilot_bridge import get_copilot_bridge; import json,sys; data=json.load(sys.stdin) if not sys.stdin.isatty() else {}; get_copilot_bridge().session_end(data.get('summary',''))\"",
         "timeoutSec": 10
+      },
+      {
+        "type": "command",
+        "powershell": "python engine/nexus/nexus_session_logger.py end 2>$null; exit 0",
+        "bash": "python3 engine/nexus/nexus_session_logger.py end 2>/dev/null; true",
+        "timeoutSec": 15
+      }
+    ],
+    "preCompaction": [
+      {
+        "type": "command",
+        "powershell": "python engine/nexus/nexus_session_logger.py compact 2>$null; exit 0",
+        "bash": "python3 engine/nexus/nexus_session_logger.py compact 2>/dev/null; true",
+        "timeoutSec": 30
       }
     ],
     "postToolUse": [

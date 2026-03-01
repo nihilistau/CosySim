@@ -1,6 +1,6 @@
 # CosySim Roadmap
 
-> Current: **v0.60** | Last updated: 2026-02-28
+> Current: **v0.61** | Last updated: 2026-03-01
 
 ## Philosophy
 
@@ -120,7 +120,7 @@ CosySim is a **meta-system** — a playground for designing, testing, benchmarki
 - [x] Comprehensive NLM SDK documentation (`docs/NOTEBOOKLM_SDK.md`)
 - [x] 195 skills across 21 packs, 4,800 tests
 
-### v0.60.1 — Bug Fixes, NLM v2.1, HAR Ingestion ✅ ← CURRENT
+### v0.60.1 — Bug Fixes, NLM v2.1, HAR Ingestion ✅
 - [x] NLM v2.1: 18 fully catalogued RPCs with response schemas
 - [x] Configure Chat API — set conversation goals, roles, response length per notebook
 - [x] Source management RPCs: list, rename, delete, get content
@@ -130,11 +130,21 @@ CosySim is a **meta-system** — a playground for designing, testing, benchmarki
 - [x] Fixed nexus bridge `seed` command (function-based API, no class)
 - [x] 4,827 tests across 176 files
 
+### v0.61 — Copilot-Nexus Deep Integration ✅ ← CURRENT
+- [x] Session→Nexus sync (`sync_sessions_to_nexus.py`) — 8 historical sessions seeded
+- [x] NLM session distillation pipeline (`session_distillation.py`) — daily scheduler task
+- [x] Copilot governance gate (`consensus_gate`) — architecture change enforcement
+- [x] Copilot memory structure — `get_onboarding_context()`, `get_decision_history()`
+- [x] NLM hybrid media skills — `nlm_audio`, `nlm_video`, `nlm_data_tables`, `nlm_chat_history`
+- [x] NLM user plan API — `/user/plan` and `/user/queries` endpoints
+- [x] Hooks upgrade — onboarding context on sessionStart, compact on preCompaction
+- [x] Nexus copilot namespace extended — history, decisions, plans, micro-versions, rules
+- [x] Scheduler: 17 builtin tasks (was 16)
+- [x] 5,133 tests across 178 files
+
 ---
 
 ## Next Up
-
-### v0.61 — News Intelligence & Agent Autonomy
 
 - [ ] News ingestion pipeline — NotebookLM-based source discovery, distillation, Nexus storage
 - [ ] Curated news feeds with agent-driven filtering and relevance scoring

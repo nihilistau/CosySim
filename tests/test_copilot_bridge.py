@@ -262,11 +262,12 @@ class TestSessionStart:
         assert ctx["knowledge"] == []
 
     def test_searches_nexus_for_knowledge(self, bridge, mock_nexus):
-        """Nexus search is called for non-empty task."""
+        """Nexus search is called for non-empty task (at least once for task knowledge)."""
         ctx = bridge.session_start("Implement MCP skills")
-        mock_nexus.search.assert_called_once_with("Implement MCP skills", limit=5)
+        # search is called multiple times: once for task knowledge, once for decisions, once for arch overview
+        mock_nexus.search.assert_any_call("Implement MCP skills", limit=5)
         assert len(ctx["knowledge"]) == 2
-        assert bridge._metrics.nexus_searches == 1
+        assert bridge._metrics.nexus_searches >= 1
 
     def test_knowledge_entries_truncated(self, bridge, mock_nexus):
         """Knowledge content is truncated to 300 chars."""
@@ -300,9 +301,10 @@ class TestSessionStart:
         assert "cached_answer" not in ctx
 
     def test_rules_loaded(self, bridge, mock_nexus):
-        """Coding rules are loaded into context."""
+        """Coding rules are loaded into context (session_start loads rules both directly and via onboarding)."""
         ctx = bridge.session_start("write tests")
-        mock_nexus.get_rules.assert_called_once_with(scope="coding")
+        # get_rules called multiple times: once for coding in session_start, then for coding/global/copilot in onboarding
+        mock_nexus.get_rules.assert_any_call(scope="coding")
         assert ctx["rules"] == ["Use Nexus-first", "Mock at boundaries"]
 
     def test_resets_metrics(self, bridge):
