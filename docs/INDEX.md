@@ -1,6 +1,6 @@
 # CosySim Documentation Index
 
-> All project documentation in one place. v0.60.6 — 5054 tests, 225+ MCP tools, 18 scenes.
+> All project documentation in one place. v0.65 — 5,582 tests, 214 MCP tools, 22 skill packs (206 skills), 18 scenes.
 
 ## Getting Started
 

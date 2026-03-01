@@ -1,10 +1,10 @@
 # CosySim
 
-> v0.64 — Multi-scene AI simulation framework
+> v0.65 — Multi-scene AI simulation framework
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Tests: 5505](https://img.shields.io/badge/tests-5%2C505%20passing-brightgreen.svg)]()
+[![Tests: 5582](https://img.shields.io/badge/tests-5%2C582%20passing-brightgreen.svg)]()
 
 ## Overview
 
@@ -49,7 +49,7 @@ User / Browser
 - Character system with traits, emotions (0–100), relationships, speech patterns
 
 **MCP Framework**
-- 195 skills across 21 packs via `@skill` decorator
+- 195 skills across 21 packs via `@skill` decorator (206 with profile pack)
 - 214 tools exposed via CosySim MCP server (106 main + 108 devtools)
 - 22-interceptor governance pipeline (10 active, pre/post inference)
 - `AgentGovernor` + `InterceptorPipeline` for personality enforcement
@@ -80,19 +80,26 @@ User / Browser
 - System Assistant Aria with cosysim-navbar floating navigation
 
 **DevOps**
-- 5,505 tests, 0 failures across 183 files
+- 5,582 tests, 0 failures across 186 files
 - 18 Copilot custom agents, 9 instruction files
 - Config hardening — all 18 scenes in production.yaml
 - Central CORS and health routes on all scenes
 
-**Training Pipeline** (v0.64)
+**Training Pipeline** (v0.64–v0.65)
 - NLM teacher pipeline: Gemini 3.0 → per-model-type JSONL datasets
 - Unsloth QLoRA fine-tuning orchestrator (subprocess-based, progress tracking)
 - Model registry with auto-promote on benchmark improvement
 - Benchmark runner: accuracy/F1/exact-match with rule-based baseline
 - Fine-tuned router integrates into cache pipeline Stage F (local model first, NLM fallback)
-- 4 new scheduler tasks: teacher-dataset-gen, finetune-if-ready, model-benchmark, backup-databases (27 total)
-- 18 new MCP tools for training pipeline control
+- 28 scheduler builtin tasks (teacher-dataset-gen, finetune-if-ready, model-benchmark, backup-databases, conversation-analyze)
+- 18 new MCP tools for training pipeline control; smoke test (training/smoke_test.py)
+
+**Profile System** (v0.65)
+- ConversationAnalyzer — 3-tier extraction (NLM → LM → heuristic), extracts facts/preferences/tech bg/action items
+- UserProfileStore — persists to data/user_profile.json + syncs to Nexus (category: copilot)
+- BackupManager — gzip-compressed SQLite backups, full/incremental, retention pruning, manifest
+- 11 profile MCP skills: analyze_conversation, user_profile_get/set/update, backup_run/list/restore
+- conversation-analyze scheduler task (#28) — daily analysis of recent Copilot session turns
 
 **Intelligence Hub** (v0.64)
 - Unified glassmorphism admin panel at :5580
@@ -139,7 +146,7 @@ CosySim/
 │   ├── scenes/          # 18 scene implementations
 │   └── simulation/      # Database, character system, services
 ├── config/              # YAML/JSON config (default, dev, prod, voices, skills)
-├── tests/               # pytest suite (178 files, 5,133 tests)
+├── tests/               # pytest suite (186 files, 5,582 tests)
 ├── docs/                # Documentation (INDEX.md entry point)
 ├── training/            # Fine-tuning pipelines and data
 ├── main.py              # Application entry point
@@ -164,6 +171,7 @@ CosySim/
 | Heist | 5565 | Cooperative multi-agent heist |
 | Command Center | 5566 | System monitoring dashboard |
 | Games | 5567 | Multi-game arcade |
+| Intelligence Hub | 5580 | Training, NLM lab, fine-tune, scheduler, profile, backups |
 | Nexus Panel | 5570 | Nexus control interface |
 | Hub | 8500 | Landing page and scene launcher |
 | Dashboard | 8501 | System metrics |
@@ -177,7 +185,7 @@ CosySim/
 ## Testing
 
 ```bash
-# Full suite — 5,133 tests
+# Full suite — 5,582 tests
 python -m pytest tests/ -v --tb=short --ignore=tests/test_agent_loop.py --ignore=tests/live_wire_test.py
 
 # Single file

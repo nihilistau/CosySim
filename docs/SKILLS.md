@@ -1,9 +1,9 @@
-# CosySim Skills System — v0.60.1
+# CosySim Skills System — v0.65
 
 Skills are Python callables that an LLM agent invokes as **tools** during inference.
 The `@skill` decorator registers them into the global `SKILL_REGISTRY`. LMStudio
 calls skills via MCP tool use during `/api/v1/chat` responses. The system now
-includes **195 skills across 21 packs** (13 core + 8 scene packs).
+includes **206 skills across 22 packs** (14 core + 8 scene packs).
 
 ---
 

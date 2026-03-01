@@ -138,6 +138,7 @@ class IntelHubScene(BaseScene):
             return render_template("intel_hub.html", port=self._port)
 
         @app.route("/health")
+        @app.route("/api/health")
         def health():
             return jsonify({"status": "ok", "scene": SCENE_ID, "port": self._port})
 

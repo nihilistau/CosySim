@@ -1,6 +1,6 @@
 # CosySim Roadmap
 
-> Current: **v0.64** | Last updated: 2026-03-15
+> Current: **v0.65** | Last updated: 2026-03-01
 
 ## Philosophy
 
@@ -159,7 +159,7 @@ CosySim is a **meta-system** — a playground for designing, testing, benchmarki
 - [x] Master notebook builder for cross-session knowledge synthesis
 - [x] 5,437 tests
 
-### v0.64 — Training Pipeline + Intelligence Hub ✅ ← CURRENT
+### v0.64 — Training Pipeline + Intelligence Hub ✅
 - [x] **NLM Teacher Pipeline** (`engine/nexus/teacher_pipeline.py`) — Gemini 3.0 generates per-type JSONL datasets for 5 micro-model types
 - [x] **MicroDatasetManager** (`training/micro_datasets.py`) — augmentation, dedup, Alpaca formatting, 80/10/10 splits
 - [x] **FinetuneOrchestrator** (`training/finetune_orchestrator.py`) — Unsloth QLoRA subprocess runner with live progress tracking, LoRA merge
@@ -172,19 +172,26 @@ CosySim is a **meta-system** — a playground for designing, testing, benchmarki
 - [x] **18 new MCP tools** in devtools_server.py for training pipeline control
 - [x] 5,505 tests across 183 files
 
+### v0.65 — Profile Skills, Conversation Analyzer, Backup Manager ✅ ← CURRENT
+- [x] **Profile Skills Pack** (`engine/skills/builtin/profile_skills.py`) — 11 new MCP skills across 3 groups: conversation analysis, user profile, backups
+- [x] **Scheduler Task #28** — `conversation-analyze` daily task: analyzes recent Copilot session turns, stores facts/preferences/tech background to UserProfileStore + Nexus
+- [x] **Training Smoke Test** (`training/smoke_test.py`) — 8-check end-to-end pipeline validation without GPU
+- [x] 57 new tests: `test_conversation_analyzer.py`, `test_backup_manager.py`, `test_profile_skills.py`
+- [x] 28 scheduler builtin tasks, 206 skills across 22 packs
+- [x] 5,582 tests across 186 files
+
 ---
 
-## Next Up
+## v0.66 — The Living Loop (Next)
 
-- [ ] Nexus Panel UI upgrade — add NLM Lab sections and training pipeline views
-- [ ] DevTools UI upgrade — training pipeline sections in command center
-- [ ] Router model fine-tuning with captured training data (270M Qwen) — first real finetune cycle
-- [ ] News ingestion pipeline — NotebookLM-based source discovery, distillation, Nexus storage
-- [ ] Local agent task runner — pick tickets, implement, test, commit loop
-- [ ] Agent performance metrics (engagement, coherence, creativity scores)
-- [ ] Cross-scene event propagation
+- [ ] **First Finetuning Cycle** — generate router_v2 training data via TeacherPipeline, finetune Qwen3-0.6B as router, benchmark, auto-promote
+- [ ] **router-finetune-cycle scheduler task** (28 → 30 tasks) — weekly end-to-end finetuning loop
+- [ ] **Conversation Profile Activation** — run ConversationAnalyzer against real session history (lookback_sessions param), bootstrap UserProfileStore with name/prefs/tech stack
+- [ ] **Profile API routes** — GET/POST /api/user-profile in Command Center, profile context injection into PhoneAssistant
+- [ ] **Master Control Panel redesign** — sidebar navigation, glassmorphism design system, dedicated pages: Assistant (TTS/STT/avatar/mic), Training dashboard (jobs/registry/benchmarks), Knowledge panel (nexus stats/search/notebooks), Profile page, System page
+- [ ] **Assistant Panel** — full chat canvas, TTS backend selection (Piper/Orpheus/Qwen3), STT selection (3 backends), file upload, avatar frame (static/animated/video)
 
-### v0.61+ — Advanced Features
+### v0.67+ — Advanced Features
 
 **Multi-agent orchestration:**
 - [ ] Agent teams with role specialization
@@ -209,3 +216,4 @@ CosySim is a **meta-system** — a playground for designing, testing, benchmarki
 5. **Scene independence** — Scenes are self-contained. Adding a scene shouldn't break others
 6. **Agent freedom within rails** — Governance pipeline enforces consistency without killing creativity
 7. **Nexus-first workflow** — Search Nexus before coding, store decisions after. Audit results always go to Nexus
+8. **Profile-aware agents** — Conversation analyzer builds a persistent user profile; agents use it for personalised, context-aware interactions

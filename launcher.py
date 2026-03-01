@@ -46,7 +46,7 @@ for _stream in (sys.stdout, sys.stderr):
 PROJECT_ROOT = Path(__file__).parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-VERSION = "0.60b"
+VERSION = "0.65b"
 
 # ── Catalogues ────────────────────────────────────────────────────────────
 # type: "flask" | "streamlit" | "fastapi"
@@ -143,6 +143,9 @@ SCENES: Dict[str, Dict[str, Any]] = {
                        "port": 5566, "label": "Command Center",         "auto_start": False},
     "games":          {"type": "flask", "cls": "content.scenes.games.games_scene.GamesScene",
                        "port": 5567, "label": "Games Arcade",           "auto_start": False},
+    "intel_hub":      {"type": "flask",
+                       "cls": "content.scenes.intel_hub.intel_hub_scene.IntelHubScene",
+                       "port": 5580, "label": "Intelligence Hub",       "auto_start": False},
 }
 
 ALL_TARGETS: Dict[str, Dict[str, Any]] = {**SERVICES, **SCENES}
@@ -458,7 +461,7 @@ def interactive_menu() -> None:
 
   Single Scene  (type name):
     phone  bedroom  lounge  casino  gallery  warzone
-    realm  neoncity  coders  heist  command_center  games
+    realm  neoncity  coders  heist  command_center  games  intel_hub
 
   Single Service  (type name):
     hub  nexus_panel  dashboard  admin  tts  bridge

@@ -40,6 +40,7 @@ SCENE_CATALOGUE: List[Dict[str, Any]] = [
     {"id": "games",     "port": 5567, "label": "Games Arcade",     "icon": "🎮", "group": "core",  "desc": "Mystery investigation and truth-or-dare with AI GameMaster"},
     {"id": "command_center", "port": 5566, "label": "Command Center", "icon": "📡", "group": "tools", "desc": "Real-time system monitoring and control"},
     {"id": "nexus_panel",    "port": 5570, "label": "Nexus Control",   "icon": "🧠", "group": "tools", "desc": "Knowledge management, Librarian AI, workflows"},
+    {"id": "intel_hub",      "port": 5580, "label": "Intelligence Hub", "icon": "◆",  "group": "tools", "desc": "Unified control: Nexus, Copilot, NLM, fine-tuning, scheduler"},
     {"id": "dashboard", "port": 8501, "label": "Dashboard",        "icon": "📊", "group": "tools", "desc": "Admin dashboard and analytics"},
 ]
 
