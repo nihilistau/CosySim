@@ -803,6 +803,16 @@ def _doc_sync_callback() -> Dict[str, Any]:
     return {"files_changed": len(changed), "doc_relevant": len(relevant), "queued": True}
 
 
+def _coverage_eval_callback() -> Dict[str, Any]:
+    """Daily knowledge coverage evaluation and auto-gap-filling."""
+    try:
+        from engine.nexus.knowledge_evaluator import run_coverage_evaluation
+        return run_coverage_evaluation()
+    except Exception as exc:
+        logger.error("Coverage evaluation failed: %s", exc)
+        return {"error": str(exc)}
+
+
 def _register_builtin_tasks(daemon: TaskSchedulerDaemon) -> None:
     """Register all built-in autonomous tasks."""
     daemon.register(
@@ -882,6 +892,12 @@ def _register_builtin_tasks(daemon: TaskSchedulerDaemon) -> None:
         "Auto Documentation Sync",
         "daily",
         _doc_sync_callback,
+    )
+    daemon.register(
+        "coverage-eval",
+        "Knowledge Coverage Evaluation",
+        "daily",
+        _coverage_eval_callback,
     )
 
 
