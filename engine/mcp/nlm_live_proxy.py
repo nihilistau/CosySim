@@ -2522,6 +2522,54 @@ def get_user_quota(cookies: Dict[str, str]) -> Dict[str, Any]:
     return {"quota_data": data, "extracted": texts[:10]}
 
 
+def get_user_plan(cookies: Dict[str, str]) -> Dict[str, Any]:
+    """Fetch user plan/tier and quota limits (ZwVcOc RPC).
+
+    Returns current plan name, daily query allowance, and remaining queries.
+
+    Args:
+        cookies: Google auth cookies.
+
+    Returns:
+        Dict with: plan_name, daily_limit, queries_remaining, raw_data.
+    """
+    args = json.dumps([None, [2]])
+    _, data = _batchexecute(RPC_USER_PLAN, args, cookies)
+    if data is None or (isinstance(data, dict) and "error" in data):
+        return data or {"error": "no_data"}
+
+    result: Dict[str, Any] = {"raw_data": data}
+    try:
+        texts = _extract_strings(data, min_len=3)
+        ints = [x for x in _walk_ints(data)]
+
+        # Heuristic: plan name is the first string of length > 3
+        if texts:
+            result["plan_name"] = texts[0]
+
+        # daily_limit and queries_remaining are typically integers in the payload
+        if len(ints) >= 2:
+            result["daily_limit"] = ints[0]
+            result["queries_remaining"] = ints[1]
+        elif len(ints) == 1:
+            result["queries_remaining"] = ints[0]
+    except Exception:
+        pass
+
+    return result
+
+
+def _walk_ints(obj: Any) -> List[int]:
+    """Recursively extract all integers from a nested structure."""
+    results: List[int] = []
+    if isinstance(obj, int) and not isinstance(obj, bool):
+        results.append(obj)
+    elif isinstance(obj, list):
+        for item in obj:
+            results.extend(_walk_ints(item))
+    return results
+
+
 def generate_document(
     notebook_id: str,
     source_ids: List[str],
@@ -3053,6 +3101,14 @@ class NLMClient:
             Dict with quota_data and extracted text.
         """
         return get_user_quota(_load_cookies())
+
+    def get_user_plan(self) -> Dict[str, Any]:
+        """Fetch user plan/tier and daily query allowance (ZwVcOc RPC).
+
+        Returns:
+            Dict with plan_name, daily_limit, queries_remaining.
+        """
+        return get_user_plan(_load_cookies())
 
     # ── Status ────────────────────────────────────────────────────────────
 
@@ -4211,6 +4267,40 @@ def create_nlm_proxy_app() -> Flask:
         except (IndexError, TypeError):
             pass
         return jsonify(profile)
+
+    @app.route("/user/plan", methods=["GET"])
+    def get_user_plan_route():
+        """Get user plan/tier and daily query allowance (ZwVcOc RPC).
+
+        Returns: {plan_name, daily_limit, queries_remaining}
+        """
+        cookies = _cookies()
+        if not cookies:
+            return _no_cookies()
+        result = get_user_plan(cookies)
+        if isinstance(result, dict) and "error" in result:
+            return jsonify(result), 502
+        return jsonify(result)
+
+    @app.route("/user/queries", methods=["GET"])
+    def get_user_queries():
+        """Get remaining queries as a simple integer (fast path from JFMDGd RPC).
+
+        Returns: {queries_remaining: int}
+        """
+        cookies = _cookies()
+        if not cookies:
+            return _no_cookies()
+        notebook_id = request.args.get("notebook_id", "")
+        args = json.dumps([notebook_id, [2]])
+        _, data = _batchexecute(RPC_USER_PROFILE, args, cookies, notebook_id)
+        remaining: Optional[int] = None
+        try:
+            if isinstance(data, list) and len(data) > 2 and isinstance(data[2], (int, float)):
+                remaining = int(data[2])
+        except (IndexError, TypeError):
+            pass
+        return jsonify({"queries_remaining": remaining})
 
     # ── Read/Write: rate limiter control ────────────────────────────────
 

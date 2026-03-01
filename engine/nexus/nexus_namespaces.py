@@ -91,6 +91,9 @@ NAMESPACES: Dict[str, NexusNamespace] = {
         allowed_categories={
             "sessions", "development", "decisions",
             "debugging", "architecture",
+            # Extended: Copilot-specific subcategories
+            "copilot-rules", "copilot-history", "copilot-decisions",
+            "copilot-plans", "copilot-micro-versions",
         },
         can_read_from={"system", "copilot", "research"},
         can_write_to={"copilot"},

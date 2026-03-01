@@ -997,3 +997,153 @@ class TestFullSessionLifecycle:
         bridge.track_tool_use("edit", {"path": "file_0.py"})
 
         assert len(bridge._metrics.files_edited) == 5
+
+
+# ──── consensus_gate Tests ────
+
+
+class TestConsensusGate:
+    """Tests for consensus_gate() — governance enforcement before operations."""
+
+    def test_allowed_by_default_when_nexus_down(self):
+        """Returns True (allow) when Nexus is unavailable."""
+        b = CopilotBridge()
+        with patch.object(b, "_get_nexus", return_value=None):
+            result = b.consensus_gate("arch-change", "Restructure MCP")
+        assert result is True
+
+    def test_allowed_when_no_blocking_rules(self, bridge, mock_nexus):
+        """Returns True when no blocking rules are found."""
+        mock_nexus.get_rules.return_value = [{"title": "Use types", "content": "Add hints"}]
+        result = bridge.consensus_gate("minor-edit", "Add a docstring")
+        assert result is True
+
+    def test_blocked_when_deny_rule_present(self, bridge, mock_nexus):
+        """Returns False when a 'deny' rule is found for the operation."""
+        mock_nexus.get_rules.return_value = [
+            {"title": "No direct schema changes", "content": "block: schema modifications"}
+        ]
+        result = bridge.consensus_gate("arch-change", "Remove MCP tree")
+        assert result is False
+
+    def test_stores_gate_check_in_nexus(self, bridge, mock_nexus):
+        """Gate check result is stored as a copilot-decisions entry."""
+        mock_nexus.get_rules.return_value = []
+        bridge.consensus_gate("rule-change", "Add new rule")
+        # add_entry should be called for the gate check
+        assert mock_nexus.add_entry.called
+        call_kwargs = mock_nexus.add_entry.call_args[1]
+        assert call_kwargs["category"] == "copilot-decisions"
+        assert "gate" in call_kwargs["tags"]
+
+    def test_rules_exception_allows(self, bridge, mock_nexus):
+        """Exception during rule check allows the operation (fail-open)."""
+        mock_nexus.get_rules.side_effect = RuntimeError("Nexus down")
+        result = bridge.consensus_gate("config-change", "Update config")
+        assert result is True
+
+
+# ──── get_onboarding_context Tests ────
+
+
+class TestGetOnboardingContext:
+    """Tests for get_onboarding_context() — loads full context at session start."""
+
+    def test_returns_dict_with_all_keys(self, bridge, mock_nexus):
+        """Returns dict with rules, decisions, architecture_overview, active_todos."""
+        with patch.object(bridge, "get_decision_history", return_value=[]):
+            with patch("engine.nexus.task_scheduler.get_task_scheduler", side_effect=ImportError):
+                result = bridge.get_onboarding_context()
+        assert "rules" in result
+        assert "recent_decisions" in result
+        assert "architecture_overview" in result
+        assert "active_todos" in result
+
+    def test_loads_coding_rules(self, bridge, mock_nexus):
+        """Coding rules are loaded from Nexus."""
+        mock_nexus.get_rules.return_value = ["Use absolute imports", "No print()"]
+        with patch.object(bridge, "get_decision_history", return_value=[]):
+            with patch("engine.nexus.task_scheduler.get_task_scheduler", side_effect=ImportError):
+                result = bridge.get_onboarding_context()
+        assert len(result["rules"]) > 0
+
+    def test_nexus_unavailable_returns_error(self):
+        """Returns error key when Nexus is down."""
+        b = CopilotBridge()
+        with patch.object(b, "_get_nexus", return_value=None):
+            result = b.get_onboarding_context()
+        assert "error" in result
+
+    def test_architecture_search_performed(self, bridge, mock_nexus):
+        """Nexus is searched for architecture overview."""
+        mock_nexus.search.return_value = [
+            {"title": "Architecture", "content": "MCP tree manages state"}
+        ]
+        with patch.object(bridge, "get_decision_history", return_value=[]):
+            with patch("engine.nexus.task_scheduler.get_task_scheduler", side_effect=ImportError):
+                result = bridge.get_onboarding_context()
+        assert "MCP tree" in result["architecture_overview"]
+
+
+# ──── get_decision_history Tests ────
+
+
+class TestGetDecisionHistory:
+    """Tests for get_decision_history() — retrieves past architectural decisions."""
+
+    def test_returns_list(self, bridge, mock_nexus):
+        """Returns a list of decision dicts."""
+        mock_nexus.search.return_value = [
+            {"title": "Decision: Use FTS5", "content": "FTS5 for search.", "category": "architecture"}
+        ]
+        mock_nexus.find_qa.return_value = None
+        result = bridge.get_decision_history("search")
+        assert isinstance(result, list)
+
+    def test_filters_to_decision_categories(self, bridge, mock_nexus):
+        """Only entries with decision/architecture/copilot categories are included."""
+        mock_nexus.search.return_value = [
+            {"title": "Decision: Use Redis", "content": "Redis for cache.", "category": "architecture"},
+            {"title": "Random entry", "content": "Some note.", "category": "general"},
+        ]
+        mock_nexus.find_qa.return_value = None
+        result = bridge.get_decision_history("cache")
+        titles = [d["title"] for d in result]
+        assert "Decision: Use Redis" in titles
+        assert "Random entry" not in titles
+
+    def test_increments_nexus_searches(self, bridge, mock_nexus):
+        """Nexus searches counter is incremented."""
+        mock_nexus.search.return_value = []
+        mock_nexus.find_qa.return_value = None
+        initial = bridge._metrics.nexus_searches
+        bridge.get_decision_history("topic")
+        assert bridge._metrics.nexus_searches == initial + 1
+
+    def test_nexus_unavailable_returns_empty(self):
+        """Returns empty list when Nexus is unavailable."""
+        b = CopilotBridge()
+        with patch.object(b, "_get_nexus", return_value=None):
+            result = b.get_decision_history("anything")
+        assert result == []
+
+    def test_respects_n_limit(self, bridge, mock_nexus):
+        """Returned list is capped at n entries."""
+        mock_nexus.search.return_value = [
+            {"title": f"D{i}", "content": "c", "category": "architecture"}
+            for i in range(10)
+        ]
+        mock_nexus.find_qa.return_value = None
+        result = bridge.get_decision_history("arch", n=3)
+        assert len(result) <= 3
+
+    def test_includes_qa_cache_results(self, bridge, mock_nexus):
+        """Q&A cache hits are appended as decisions."""
+        mock_nexus.search.return_value = []
+        mock_nexus.find_qa.return_value = {
+            "question": "How does NLM routing work?",
+            "answer": "4-tier pipeline: cache → FTS → NLM → LLM",
+        }
+        result = bridge.get_decision_history("nlm routing")
+        sources = [d.get("source") for d in result]
+        assert "qa_cache" in sources

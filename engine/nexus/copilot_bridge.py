@@ -433,6 +433,208 @@ class CopilotBridge:
         from engine.nexus.knowledge_forge import generate_questions
         return generate_questions(topic, category=category, count=count, subject=topic[:50])
 
+    # ──── Governance & Memory ────
+
+    def consensus_gate(
+        self,
+        operation: str,
+        description: str,
+        allow_categories: Optional[List[str]] = None,
+    ) -> bool:
+        """Check governance rules before a high-impact operation.
+
+        Queries Nexus governance rules and prior decisions to determine
+        if the proposed operation is permitted and consistent with
+        established patterns.
+
+        Args:
+            operation: Operation type — e.g. "arch-change", "rule-change",
+                "major-refactor", "new-dependency", "config-change".
+            description: What is being changed and why.
+            allow_categories: Rule categories to check. Defaults to all.
+
+        Returns:
+            True if permitted. Logs the gate check regardless.
+        """
+        nexus = self._get_nexus()
+        if not nexus:
+            logger.debug("consensus_gate: Nexus unavailable — allowing by default")
+            return True
+
+        # Check governance rules
+        blocked_by: Optional[str] = None
+        try:
+            scope = f"operation:{operation}"
+            rules = nexus.get_rules(scope=scope)
+            for rule in (rules or []):
+                rule_str = json.dumps(rule) if isinstance(rule, dict) else str(rule)
+                if "block" in rule_str.lower() or "deny" in rule_str.lower():
+                    blocked_by = rule.get("title") if isinstance(rule, dict) else rule_str[:80]
+                    break
+        except Exception as exc:
+            logger.debug("Gate rule check failed: %s", exc)
+
+        # Check decision history for conflicting prior decisions
+        conflicts = []
+        try:
+            prior = self.get_decision_history(operation, n=3)
+            for d in prior:
+                content = d.get("content", "") + d.get("answer", "")
+                if "must not" in content.lower() or "do not" in content.lower():
+                    conflicts.append(d.get("title", d.get("question", "unknown"))[:60])
+        except Exception as exc:
+            logger.debug("Gate history check failed: %s", exc)
+
+        permitted = blocked_by is None
+
+        logger.info(
+            "consensus_gate: op=%s permitted=%s blocked_by=%s conflicts=%d",
+            operation, permitted, blocked_by, len(conflicts),
+        )
+
+        # Store gate check as a micro-version event
+        try:
+            nexus.add_entry(
+                title=f"Gate: {operation}",
+                content=(
+                    f"Operation: {operation}\n"
+                    f"Description: {description}\n"
+                    f"Permitted: {permitted}\n"
+                    f"Blocked by: {blocked_by or 'none'}\n"
+                    f"Conflicts: {conflicts}"
+                ),
+                content_type="note",
+                category="copilot-decisions",
+                tags=["copilot", "governance", "gate", operation],
+            )
+        except Exception:
+            pass
+
+        return permitted
+
+    def get_onboarding_context(self) -> Dict[str, Any]:
+        """Load full onboarding context for a new Copilot CLI session.
+
+        Pulls together:
+          - Copilot-specific governance rules
+          - Recent architectural decisions (last 10)
+          - System architecture overview
+          - Active todos or pending tasks
+
+        Returns:
+            Dict with rules, decisions, architecture, and quick-start guidance.
+        """
+        context: Dict[str, Any] = {
+            "rules": [],
+            "recent_decisions": [],
+            "architecture_overview": "",
+            "active_todos": [],
+        }
+
+        nexus = self._get_nexus()
+        if not nexus:
+            context["error"] = "Nexus unavailable"
+            return context
+
+        # Load coding/project rules
+        for scope in ("coding", "global", "copilot"):
+            try:
+                rules = nexus.get_rules(scope=scope)
+                if rules:
+                    context["rules"].extend(rules[:5])
+            except Exception:
+                pass
+
+        # Load recent architectural decisions
+        try:
+            decisions = self.get_decision_history("architecture", n=10)
+            context["recent_decisions"] = decisions
+        except Exception as exc:
+            logger.debug("Decision history failed: %s", exc)
+
+        # Load architecture overview from Nexus
+        try:
+            results = nexus.search("CosySim architecture overview", limit=1)
+            if results:
+                context["architecture_overview"] = results[0].get("content", "")[:1000]
+        except Exception:
+            pass
+
+        # Load active todos from session DB (best-effort)
+        try:
+            from engine.nexus.task_scheduler import get_task_scheduler
+            scheduler = get_task_scheduler()
+            pending = scheduler.get_pending_tasks(limit=5)
+            context["active_todos"] = [
+                {"title": t.get("title", ""), "priority": t.get("priority", 0)}
+                for t in (pending or [])
+            ]
+        except Exception:
+            pass
+
+        logger.info(
+            "Onboarding context: %d rules, %d decisions",
+            len(context["rules"]), len(context["recent_decisions"]),
+        )
+        return context
+
+    def get_decision_history(
+        self,
+        topic: str,
+        n: int = 5,
+    ) -> List[Dict[str, Any]]:
+        """Retrieve past architectural/design decisions from Nexus.
+
+        Searches both knowledge entries (category=copilot-decisions) and
+        Q&A pairs that match the given topic.
+
+        Args:
+            topic: Topic to search for (e.g. "caching", "testing", "NLM routing").
+            n: Maximum number of decisions to return.
+
+        Returns:
+            List of decision dicts with title, content/answer, and created_at.
+        """
+        nexus = self._get_nexus()
+        if not nexus:
+            return []
+
+        decisions: List[Dict[str, Any]] = []
+
+        # Search knowledge entries in copilot-decisions category
+        try:
+            results = nexus.search(
+                f"decision {topic}",
+                limit=n,
+            )
+            for r in results or []:
+                category = r.get("category", "")
+                if "decision" in category or "architecture" in category or "copilot" in category:
+                    decisions.append({
+                        "title": r.get("title", ""),
+                        "content": r.get("content", "")[:400],
+                        "created_at": r.get("created_at", ""),
+                        "source": "knowledge",
+                    })
+        except Exception as exc:
+            logger.debug("Decision search failed: %s", exc)
+
+        # Also check Q&A cache
+        try:
+            qa_result = nexus.find_qa(f"decision {topic}")
+            if qa_result and qa_result.get("answer"):
+                decisions.append({
+                    "title": f"Q&A: {topic}",
+                    "answer": qa_result["answer"][:400],
+                    "question": qa_result.get("question", ""),
+                    "source": "qa_cache",
+                })
+        except Exception:
+            pass
+
+        self._metrics.nexus_searches += 1
+        return decisions[:n]
+
     # ──── Metrics ────
 
     def get_savings_report(self) -> Dict[str, Any]:

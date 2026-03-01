@@ -833,6 +833,16 @@ def _notebook_bootstrap_callback() -> Dict[str, Any]:
         return {"error": str(exc)}
 
 
+def _session_distillation_callback() -> Dict[str, Any]:
+    """Daily distillation of Copilot session history into NLM Q&A pairs."""
+    try:
+        from engine.nexus.session_distillation import run_session_distillation
+        return run_session_distillation()
+    except Exception as exc:
+        logger.error("Session distillation failed: %s", exc)
+        return {"error": str(exc)}
+
+
 def _register_builtin_tasks(daemon: TaskSchedulerDaemon) -> None:
     """Register all built-in autonomous tasks."""
     daemon.register(
@@ -930,6 +940,12 @@ def _register_builtin_tasks(daemon: TaskSchedulerDaemon) -> None:
         "NLM Notebook Bootstrap",
         "weekly",
         _notebook_bootstrap_callback,
+    )
+    daemon.register(
+        "session-distillation",
+        "Copilot Session Distillation",
+        "daily",
+        _session_distillation_callback,
     )
 
 

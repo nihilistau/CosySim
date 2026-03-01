@@ -2,6 +2,64 @@
 
 All notable changes to CosySim are documented here.
 
+## v0.61 — Copilot Session Memory, Knowledge Distillation, NLM Quota API
+
+### New: Session → Nexus → NLM Knowledge Pipeline
+
+**`engine/nexus/sync_sessions_to_nexus.py`** (new)
+- Bulk-syncs Copilot CLI session history from `~/.copilot/session-store/store.sqlite` to Nexus
+- Hash-based change detection — only syncs changed sessions
+- Stores checkpoints, file changes, turn count, and refs as `copilot-history` entries
+- CLI: `python engine/nexus/sync_sessions_to_nexus.py --days 7 --force`
+- Scheduler callback: `run_session_sync()` (syncs last 7 days)
+
+**`engine/nexus/session_distillation.py`** (new)
+- Distills recent session history into NLM notebook Q&A pairs
+- Pipeline: Nexus history entries → digest text → NLM notebook source → batch-ask → store Q&A
+- 12 targeted distillation questions covering decisions, patterns, bugs, conventions, NLM learnings
+- Scheduler callback: `run_session_distillation()` (daily)
+- CLI: `python engine/nexus/session_distillation.py --days 7 --upload-only`
+- Support for `--upload-only` (update NLM only) and `--distill-only` (skip upload, just ask)
+
+### Updated: Copilot Bridge — Governance & Memory
+
+**`engine/nexus/copilot_bridge.py`**
+- `consensus_gate(operation, description)` — checks Nexus governance rules before high-impact ops
+  - Returns `True` (allow) or `False` (block) based on matching `block`/`deny` rules
+  - Always stores gate check as a `copilot-decisions` entry for audit trail
+  - Operations: `arch-change`, `rule-change`, `major-refactor`, `new-dependency`, `config-change`
+- `get_onboarding_context()` — loads complete context at session start: rules (coding/global/copilot), last 10 architectural decisions, architecture overview, active scheduler todos
+- `get_decision_history(topic, n=5)` — retrieves past decisions from Nexus matching a topic; checks both knowledge entries and Q&A cache
+
+### Updated: Nexus Namespace — Copilot Subcategories
+
+**`engine/nexus/nexus_namespaces.py`**
+- Extended `copilot` namespace `allowed_categories` to include:
+  `copilot-rules`, `copilot-history`, `copilot-decisions`, `copilot-plans`, `copilot-micro-versions`
+
+### Updated: NLM Proxy — User Plan API
+
+**`engine/mcp/nlm_live_proxy.py`**
+- `get_user_plan(cookies)` standalone function (ZwVcOc RPC) — returns `plan_name`, `daily_limit`, `queries_remaining`
+- `NLMClient.get_user_plan()` method
+- `GET /user/plan` Flask endpoint
+- `GET /user/queries` Flask endpoint — fast path for queries remaining (clean integer from JFMDGd)
+- Helper `_walk_ints(obj)` — recursively extracts integers from nested structures
+
+### Updated: Scheduler — Session Distillation Task
+
+**`engine/nexus/scheduler_daemon.py`**
+- Added `session-distillation` daily task (17th builtin task)
+- Callback: `_session_distillation_callback()` → `run_session_distillation()`
+
+### Tests
+- `tests/test_sync_sessions_to_nexus.py` — 35 tests for session sync utility
+- `tests/test_session_distillation.py` — 42 tests for distillation pipeline
+- `tests/test_copilot_bridge.py` — 22 new tests for `consensus_gate`, `get_onboarding_context`, `get_decision_history`
+- `tests/test_scheduler_daemon.py` — updated builtin task count: 16 → 17
+
+---
+
 ## v0.60.9 — NLM Lab Panel: Full Sub-Nav UI
 
 ### Nexus Panel (`content/scenes/nexus_panel/`)
