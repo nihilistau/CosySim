@@ -2,18 +2,123 @@
 news:
   enabled: true
   fetch_interval_hours: 8
-  max_articles_per_fetch: 30
+  max_articles_per_fetch: 50
   max_article_age_hours: 48
 
   categories:
     - ai_ml
-    - llm
-    - python
     - local_inference
-    - mcp_agents
     - open_source
+    - python
+    - security
+    - science
+    - dev_tools
+
+  # Per-category keyword filters (override global for domain-specific sources).
+  # If a source's category has an entry here, only those filters apply.
+  # Categories without an entry use no include filter (just global excludes).
+  category_filters:
+    ai_ml:
+      include:
+        - llm
+        - language model
+        - inference
+        - fine-tuning
+        - finetuning
+        - quantization
+        - gguf
+        - lmstudio
+        - ollama
+        - mcp
+        - agent
+        - rag
+        - embedding
+        - transformers
+        - pytorch
+        - notebooklm
+        - gemini
+        - gpt
+        - claude
+        - mistral
+        - neural
+        - diffusion
+        - stable diffusion
+        - openai
+        - anthropic
+        - deepmind
+        - hugging face
+        - benchmark
+        - model
+    local_inference:
+      include:
+        - local
+        - inference
+        - llm
+        - gguf
+        - ollama
+        - lmstudio
+        - quantiz
+        - onnx
+        - llama
+        - mistral
+        - phi
+        - qwen
+        - gemma
+        - vllm
+        - tgi
+        - self-host
+    python:
+      include:
+        - python
+        - pip
+        - pypi
+        - pep
+        - fastapi
+        - django
+        - flask
+        - pytest
+        - uv
+        - ruff
+        - asyncio
+    security:
+      include:
+        - vulnerab
+        - cve
+        - exploit
+        - malware
+        - ransomware
+        - phishing
+        - zero-day
+        - breach
+        - hack
+        - patch
+        - security
+        - threat
+    science:
+      include:
+        - research
+        - study
+        - paper
+        - arxiv
+        - model
+        - algorithm
+        - neural
+        - compute
+        - dataset
+        - benchmark
+
+  # Global exclude list — applied to ALL categories regardless
+  keyword_filters:
+    exclude:
+      - crypto
+      - blockchain
+      - nft
+      - bitcoin
+      - ethereum
+      - gambling
 
   sources:
+    # ── Hacker News ───────────────────────────────────────────────────────
     - id: hn_top
       name: "Hacker News - Top"
       type: api
@@ -32,17 +137,9 @@ news:
       quality_score: 0.85
       max_items: 10
 
-    - id: reddit_localllama
-      name: "Reddit - LocalLLaMA"
-      type: rss
-      url: "https://www.reddit.com/r/LocalLLaMA/.rss"
-      category: local_inference
-      enabled: true
-      quality_score: 0.8
-      max_items: 10
-
+    # ── AI / ML ───────────────────────────────────────────────────────────
     - id: reddit_machinelearning
-      name: "Reddit - Machine Learning"
+      name: "Reddit - r/MachineLearning"
       type: rss
       url: "https://www.reddit.com/r/MachineLearning/.rss"
       category: ai_ml
@@ -50,33 +147,215 @@ news:
       quality_score: 0.8
       max_items: 10
 
+    - id: reddit_artificial
+      name: "Reddit - r/artificial"
+      type: rss
+      url: "https://www.reddit.com/r/artificial/.rss"
+      category: ai_ml
+      enabled: true
+      quality_score: 0.75
+      max_items: 8
+
+    - id: reddit_singularity
+      name: "Reddit - r/singularity"
+      type: rss
+      url: "https://www.reddit.com/r/singularity/.rss"
+      category: ai_ml
+      enabled: true
+      quality_score: 0.7
+      max_items: 8
+
+    - id: arxiv_cs_ai
+      name: "ArXiv - cs.AI"
+      type: rss
+      url: "https://rss.arxiv.org/rss/cs.AI"
+      category: ai_ml
+      enabled: true
+      quality_score: 0.95
+      max_items: 15
+
+    - id: arxiv_cs_lg
+      name: "ArXiv - cs.LG (Machine Learning)"
+      type: rss
+      url: "https://rss.arxiv.org/rss/cs.LG"
+      category: ai_ml
+      enabled: true
+      quality_score: 0.95
+      max_items: 10
+
+    - id: arxiv_cs_cl
+      name: "ArXiv - cs.CL (NLP)"
+      type: rss
+      url: "https://rss.arxiv.org/rss/cs.CL"
+      category: ai_ml
+      enabled: true
+      quality_score: 0.95
+      max_items: 10
+
+    - id: venturebeat_ai
+      name: "VentureBeat - AI"
+      type: rss
+      url: "https://venturebeat.com/category/ai/feed/"
+      category: ai_ml
+      enabled: true
+      quality_score: 0.75
+      max_items: 10
+
+    # ── Local Inference ───────────────────────────────────────────────────
+    - id: reddit_localllama
+      name: "Reddit - r/LocalLLaMA"
+      type: rss
+      url: "https://www.reddit.com/r/LocalLLaMA/.rss"
+      category: local_inference
+      enabled: true
+      quality_score: 0.85
+      max_items: 12
+
+    - id: reddit_ollama
+      name: "Reddit - r/ollama"
+      type: rss
+      url: "https://www.reddit.com/r/ollama/.rss"
+      category: local_inference
+      enabled: true
+      quality_score: 0.75
+      max_items: 8
+
+    - id: reddit_oobabooga
+      name: "Reddit - r/Oobabooga"
+      type: rss
+      url: "https://www.reddit.com/r/Oobabooga/.rss"
+      category: local_inference
+      enabled: true
+      quality_score: 0.7
+      max_items: 6
+
+    # ── Open Source ───────────────────────────────────────────────────────
     - id: github_trending
-      name: "GitHub Trending"
+      name: "GitHub Trending - All"
       type: web_scrape
       url: "https://github.com/trending?since=daily"
       category: open_source
       enabled: true
-      quality_score: 0.7
+      quality_score: 0.8
+      max_items: 15
+
+    - id: github_trending_python
+      name: "GitHub Trending - Python"
+      type: web_scrape
+      url: "https://github.com/trending/python?since=daily"
+      category: open_source
+      enabled: true
+      quality_score: 0.8
       max_items: 10
 
-  keyword_filters:
-    include:
-      - llm
-      - language model
-      - inference
-      - fine-tuning
-      - quantization
-      - gguf
-      - lmstudio
-      - ollama
-      - mcp
-      - agent
-      - rag
-      - embedding
-      - transformers
-      - pytorch
-      - notebooklm
-    exclude:
-      - crypto
-      - blockchain
-      - nft
+    - id: lobsters
+      name: "Lobste.rs"
+      type: rss
+      url: "https://lobste.rs/rss"
+      category: open_source
+      enabled: true
+      quality_score: 0.8
+      max_items: 10
+
+    - id: changelog_news
+      name: "Changelog - News"
+      type: rss
+      url: "https://changelog.com/news.rss"
+      category: open_source
+      enabled: true
+      quality_score: 0.8
+      max_items: 8
+
+    # ── Python ────────────────────────────────────────────────────────────
+    - id: reddit_python
+      name: "Reddit - r/Python"
+      type: rss
+      url: "https://www.reddit.com/r/Python/.rss"
+      category: python
+      enabled: true
+      quality_score: 0.8
+      max_items: 10
+
+    - id: real_python
+      name: "Real Python - Tutorials"
+      type: rss
+      url: "https://realpython.com/atom.xml"
+      category: python
+      enabled: true
+      quality_score: 0.85
+      max_items: 6
+
+    - id: python_insider
+      name: "Python Insider (Official Blog)"
+      type: rss
+      url: "https://feeds.feedburner.com/PythonInsider"
+      category: python
+      enabled: true
+      quality_score: 0.95
+      max_items: 5
+
+    - id: pypi_updates
+      name: "PyPI - New Packages"
+      type: rss
+      url: "https://pypi.org/rss/updates.xml"
+      category: python
+      enabled: true
+      quality_score: 0.6
+      max_items: 8
+
+    # ── Security ──────────────────────────────────────────────────────────
+    - id: reddit_netsec
+      name: "Reddit - r/netsec"
+      type: rss
+      url: "https://www.reddit.com/r/netsec/.rss"
+      category: security
+      enabled: true
+      quality_score: 0.85
+      max_items: 8
+
+    - id: krebs_security
+      name: "Krebs on Security"
+      type: rss
+      url: "https://krebsonsecurity.com/feed/"
+      category: security
+      enabled: true
+      quality_score: 0.9
+      max_items: 5
+
+    - id: schneier_security
+      name: "Schneier on Security"
+      type: rss
+      url: "https://www.schneier.com/feed/"
+      category: security
+      enabled: true
+      quality_score: 0.9
+      max_items: 5
+
+    # ── Science ───────────────────────────────────────────────────────────
+    - id: science_alert
+      name: "ScienceAlert"
+      type: rss
+      url: "https://www.sciencealert.com/feed"
+      category: science
+      enabled: true
+      quality_score: 0.75
+      max_items: 8
+
+    - id: mit_tech_review
+      name: "MIT Technology Review"
+      type: rss
+      url: "https://www.technologyreview.com/feed/"
+      category: science
+      enabled: true
+      quality_score: 0.9
+      max_items: 8
+
+    # ── Dev Tools ─────────────────────────────────────────────────────────
+    - id: devto_top
+      name: "Dev.to - Top Posts"
+      type: rss
+      url: "https://dev.to/feed"
+      category: dev_tools
+      enabled: true
+      quality_score: 0.65
+      max_items: 8

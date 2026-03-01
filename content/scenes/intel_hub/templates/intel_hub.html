@@ -27,6 +27,10 @@
         <span class="nav-icon">🤖</span>
         <span class="nav-label">Assistant</span>
       </button>
+      <button class="nav-item" data-section="news">
+        <span class="nav-icon">📰</span>
+        <span class="nav-label">News</span>
+      </button>
       <button class="nav-item" data-section="profile">
         <span class="nav-icon">👤</span>
         <span class="nav-label">Profile</span>
@@ -70,7 +74,7 @@
     </nav>
 
     <div class="sidebar-footer">
-      <span class="version-badge">v0.66</span>
+      <span class="version-badge">v0.67</span>
     </div>
   </aside>
 
@@ -135,6 +139,54 @@
             <button class="quick-action" data-goto="system">⚙️ System</button>
             <button class="quick-action" data-goto="profile">👤 My Profile</button>
             <button class="quick-action" data-goto="nlm">📓 NLM Lab</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── NEWS ─── -->
+    <section id="sec-news" class="section">
+      <div class="section-title"><span class="title-icon">📰</span> News Feed</div>
+
+      <!-- Top controls bar -->
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap;">
+        <div class="cat-tabs" style="display:flex;gap:6px;flex-wrap:wrap;">
+          <button class="cat-tab active" data-cat="all">All</button>
+          <button class="cat-tab" data-cat="ai_ml">AI / ML</button>
+          <button class="cat-tab" data-cat="local_inference">Inference</button>
+          <button class="cat-tab" data-cat="python">Python</button>
+          <button class="cat-tab" data-cat="security">Security</button>
+          <button class="cat-tab" data-cat="science">Science</button>
+          <button class="cat-tab" data-cat="open_source">Open Source</button>
+          <button class="cat-tab" data-cat="dev_tools">Dev Tools</button>
+        </div>
+        <input id="news-search" type="text" placeholder="Filter articles…"
+          style="margin-left:auto;padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg-panel);color:var(--text-primary);font-size:13px;width:200px;">
+        <button id="news-fetch-btn" class="btn btn-primary" style="white-space:nowrap;">
+          🔄 Fetch Now
+        </button>
+      </div>
+
+      <div style="display:grid;grid-template-columns:260px 1fr;gap:16px;height:calc(100vh - 220px);">
+
+        <!-- LEFT: Sources panel -->
+        <div class="panel" style="overflow-y:auto;">
+          <div style="font-size:12px;font-weight:600;color:var(--text-mute);letter-spacing:.05em;margin-bottom:10px;">
+            SOURCES <span id="news-source-count" style="color:var(--text-primary);">…</span>
+          </div>
+          <div id="news-status-bar" style="font-size:11px;color:var(--text-mute);margin-bottom:10px;padding:8px;background:var(--bg-dark);border-radius:6px;">
+            Last fetch: <span id="news-last-fetch">–</span>
+          </div>
+          <div id="news-sources-list" style="display:flex;flex-direction:column;gap:6px;">
+            <div class="empty-state" style="font-size:12px;color:var(--text-mute);">Loading sources…</div>
+          </div>
+        </div>
+
+        <!-- RIGHT: Articles feed -->
+        <div style="overflow-y:auto;display:flex;flex-direction:column;gap:10px;" id="news-articles-container">
+          <div class="empty-state" style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:200px;gap:12px;">
+            <div style="font-size:32px;">📭</div>
+            <div style="font-size:14px;color:var(--text-mute);">No articles yet — click Fetch Now to start</div>
           </div>
         </div>
       </div>

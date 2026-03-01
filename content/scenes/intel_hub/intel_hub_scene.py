@@ -450,6 +450,22 @@ class IntelHubScene(BaseScene):
             data = request.json or {}
             return jsonify(_generate_review_sheet(data.get("path", "data/qa_review.xlsx")))
 
+        # ── News Routes ───────────────────────────────────────────────────────
+
+        @app.route("/api/news/latest")
+        def api_news_latest():
+            limit = int(request.args.get("limit", 30))
+            category = request.args.get("category", None)
+            return jsonify(_get_news_latest(limit=limit, category=category))
+
+        @app.route("/api/news/fetch-now", methods=["POST"])
+        def api_news_fetch():
+            return jsonify(_run_news_fetch())
+
+        @app.route("/api/news/sources")
+        def api_news_sources():
+            return jsonify(_get_news_sources())
+
     # ── Socket.IO ──────────────────────────────────────────────────────────────
 
     def _register_socketio(self) -> None:
@@ -1150,6 +1166,101 @@ def _update_vtt_config(data: Dict[str, Any]) -> Dict[str, Any]:
         return {"success": True}
     except Exception as exc:
         return {"error": str(exc)}
+
+
+# ──── News Helpers ────────────────────────────────────────────────────────────
+
+def _get_news_latest(limit: int = 30, category: Optional[str] = None) -> Dict[str, Any]:
+    """Fetch recent news articles from Nexus (content_type='news').
+
+    Args:
+        limit: Maximum number of articles to return.
+        category: Optional category filter.
+
+    Returns:
+        Dict with articles list and metadata.
+    """
+    try:
+        from engine.nexus.client import get_nexus_client
+        client = get_nexus_client()
+        entries = client.list_by_type(
+            content_type="news",
+            category=category or "",
+            limit=limit,
+        )
+        articles = []
+        for e in (entries or []):
+            articles.append({
+                "id": e.get("id", ""),
+                "title": e.get("title", ""),
+                "content": e.get("content", "")[:500],
+                "category": e.get("category", ""),
+                "tags": e.get("tags", []),
+                "created_at": e.get("created_at", ""),
+            })
+        return {"success": True, "articles": articles, "total": len(articles)}
+    except Exception as exc:
+        return {"success": False, "error": str(exc), "articles": []}
+
+
+def _run_news_fetch() -> Dict[str, Any]:
+    """Trigger a news fetch cycle inline.
+
+    Returns:
+        Dict with articles_found, stored, and digest_preview.
+    """
+    try:
+        from engine.nexus.news_sources import get_news_registry
+        registry = get_news_registry()
+        articles = registry.fetch_all()
+        filtered = registry.filter_articles(articles)
+        for art in filtered:
+            art.score = registry.score_relevance(art)
+        filtered.sort(key=lambda a: a.score, reverse=True)
+        stored = registry.store_to_nexus(filtered)
+        digest = registry.generate_digest(filtered, max_articles=10)
+        return {
+            "success": True,
+            "articles_found": len(articles),
+            "articles_filtered": len(filtered),
+            "stored": stored,
+            "digest_preview": digest[:800],
+        }
+    except Exception as exc:
+        return {"success": False, "error": str(exc), "articles_found": 0, "stored": 0}
+
+
+def _get_news_sources() -> Dict[str, Any]:
+    """Return all configured news sources with status.
+
+    Returns:
+        Dict with sources list and total counts.
+    """
+    try:
+        from engine.nexus.news_sources import get_news_registry
+        registry = get_news_registry()
+        stats = registry.stats()
+        sources = []
+        for sid, sdata in stats.get("sources", {}).items():
+            sources.append({
+                "id": sid,
+                "name": sdata.get("name", sid),
+                "category": sdata.get("category", ""),
+                "enabled": sdata.get("enabled", True),
+                "quality_score": sdata.get("quality_score", 0.5),
+                "fetch_count": sdata.get("fetch_count", 0),
+                "error_count": sdata.get("error_count", 0),
+                "last_fetched": sdata.get("last_fetched"),
+                "last_fetch_status": sdata.get("last_fetch_status", "pending"),
+            })
+        return {
+            "success": True,
+            "sources": sources,
+            "total": stats.get("total_sources", 0),
+            "enabled": stats.get("enabled_sources", 0),
+        }
+    except Exception as exc:
+        return {"success": False, "error": str(exc), "sources": []}
 
 
 # ──── Module Entry Point ──────────────────────────────────────────────────────

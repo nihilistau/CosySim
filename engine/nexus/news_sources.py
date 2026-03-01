@@ -49,6 +49,7 @@ class NewsSource:
     quality_score: float = 0.5
     max_items: int = 10
     last_fetched: Optional[float] = None
+    last_fetch_status: str = "pending"  # pending | ok | error
     fetch_count: int = 0
     error_count: int = 0
 
@@ -110,6 +111,7 @@ class NewsSourceRegistry:
                     enabled=src_data.get("enabled", True),
                     quality_score=src_data.get("quality_score", 0.5),
                     max_items=src_data.get("max_items", 10),
+                    last_fetch_status="pending",
                 )
                 self._sources[source.id] = source
             count = len(self._sources)
@@ -249,11 +251,13 @@ class NewsSourceRegistry:
             articles = fetcher(source)
             with self._lock:
                 source.last_fetched = time.time()
+                source.last_fetch_status = "ok"
                 source.fetch_count += 1
             return articles
         except Exception as exc:
             logger.error("Error fetching %s: %s", source.id, exc)
             with self._lock:
+                source.last_fetch_status = "error"
                 source.error_count += 1
             return []
 
@@ -374,29 +378,48 @@ class NewsSourceRegistry:
     ) -> List[NewsArticle]:
         """Filter articles by keyword inclusion/exclusion.
 
+        Category-aware: each category can have its own include keywords from
+        ``config.category_filters``. Categories without a dedicated filter
+        only have the global excludes applied (no include requirement).
+
         Args:
             articles: Articles to filter.
-            keywords: Override include keywords (None uses config).
+            keywords: Override include keywords for all categories (None uses config).
 
         Returns:
             Filtered list of articles.
         """
-        filters = self._config.get("keyword_filters", {})
-        include_kw = keywords or filters.get("include", [])
-        exclude_kw = filters.get("exclude", [])
+        category_filters: Dict[str, Any] = self._config.get("category_filters", {})
+        global_excludes: List[str] = self._config.get(
+            "keyword_filters", {}
+        ).get("exclude", [])
 
         result: List[NewsArticle] = []
         for article in articles:
             text = f"{article.title} {article.summary}".lower()
-            if exclude_kw and any(kw.lower() in text for kw in exclude_kw):
+
+            # Always apply global excludes
+            if global_excludes and any(kw.lower() in text for kw in global_excludes):
                 continue
+
+            # Determine include keywords to apply
+            if keywords:
+                include_kw = keywords
+            else:
+                cat_cfg = category_filters.get(article.category, {})
+                include_kw = cat_cfg.get("include", [])  # empty → no include filter
+
+            # Only enforce include filter if keywords exist for this category
             if include_kw and not any(kw.lower() in text for kw in include_kw):
                 continue
+
             result.append(article)
         return result
 
     def score_relevance(self, article: NewsArticle) -> float:
         """Score an article's relevance based on keyword matches.
+
+        Uses category-specific keywords if available, otherwise global include list.
 
         Args:
             article: The article to score.
@@ -404,10 +427,18 @@ class NewsSourceRegistry:
         Returns:
             Relevance score between 0.0 and 1.0.
         """
-        filters = self._config.get("keyword_filters", {})
-        include_kw = filters.get("include", [])
+        category_filters: Dict[str, Any] = self._config.get("category_filters", {})
+        cat_cfg = category_filters.get(article.category, {})
+        include_kw: List[str] = cat_cfg.get(
+            "include",
+            self._config.get("keyword_filters", {}).get("include", []),
+        )
+
         if not include_kw:
-            return 0.5
+            # No keywords for this category — assign moderate base score
+            source = self.get_source(article.source_id)
+            quality = source.quality_score if source else 0.5
+            return quality
 
         text = f"{article.title} {article.summary}".lower()
         matches = sum(1 for kw in include_kw if kw.lower() in text)
@@ -439,10 +470,13 @@ class NewsSourceRegistry:
             for sid, src in self._sources.items():
                 source_stats[sid] = {
                     "name": src.name,
+                    "category": src.category,
                     "fetch_count": src.fetch_count,
                     "error_count": src.error_count,
                     "last_fetched": src.last_fetched,
+                    "last_fetch_status": src.last_fetch_status,
                     "enabled": src.enabled,
+                    "quality_score": src.quality_score,
                 }
             return {
                 "total_sources": len(self._sources),
@@ -498,7 +532,7 @@ class NewsSourceRegistry:
                 client.add_entry(
                     title=f"News: {article.title[:80]}",
                     content=content,
-                    content_type="note",
+                    content_type="news",
                     category=article.category or "news",
                     tags=["news", article.source_id] + article.keywords,
                 )

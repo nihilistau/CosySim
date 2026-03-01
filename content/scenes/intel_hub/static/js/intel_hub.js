@@ -1,5 +1,5 @@
 // Intel Hub — Main JavaScript
-// CosySim v0.66
+// CosySim v0.67
 
 'use strict';
 
@@ -104,6 +104,7 @@ function toast(msg, type = 'info') {
 const sectionLoaders = {
   overview: loadOverview,
   assistant: () => {},
+  news: initNewsSection,
   profile: loadProfile,
   nexus: loadNexus,
   nlm: loadNlm,
@@ -1879,4 +1880,144 @@ function initProfileSection() {
       btn.textContent = '↻ Re-analyze';
     }
   });
+}
+
+
+// --- News Section ---
+
+let _newsActiveCat = 'all';
+let _newsAllArticles = [];
+
+function initNewsSection() {
+  document.querySelectorAll('.cat-tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.cat-tab').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      _newsActiveCat = btn.dataset.cat;
+      renderNewsArticles();
+    });
+  });
+  document.getElementById('news-search')?.addEventListener('input', renderNewsArticles);
+  document.getElementById('news-fetch-btn')?.addEventListener('click', async () => {
+    const btn = document.getElementById('news-fetch-btn');
+    btn.disabled = true;
+    btn.textContent = '⏳ Fetching...';
+    try {
+      const res = await api('/api/news/fetch-now', { method: 'POST' });
+      if (res.success) {
+        toast('Fetched ' + res.articles_found + ' articles, stored ' + res.stored, 'success');
+        await loadNewsArticles();
+        await loadNewsSources();
+      } else {
+        toast('Fetch failed: ' + (res.error || 'unknown'), 'error');
+      }
+    } catch (e) {
+      toast('Fetch error: ' + e.message, 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '🔄 Fetch Now';
+    }
+  });
+  loadNewsSources();
+  loadNewsArticles();
+}
+
+async function loadNewsSources() {
+  try {
+    const res = await api('/api/news/sources');
+    if (!res.success) return;
+    const el = document.getElementById('news-sources-list');
+    const countEl = document.getElementById('news-source-count');
+    if (countEl) countEl.textContent = res.enabled + '/' + res.total;
+    if (!el) return;
+    if (!res.sources || !res.sources.length) {
+      el.innerHTML = '<div style="font-size:12px;color:var(--text-mute);">No sources configured</div>';
+      return;
+    }
+    el.innerHTML = res.sources.map(function(s) {
+      const dotClass = s.last_fetch_status === 'ok' ? 'source-dot-ok' :
+                       s.last_fetch_status === 'error' ? 'source-dot-error' : 'source-dot-pending';
+      const dotSymbol = s.last_fetch_status === 'ok' ? '\u25cf' :
+                        s.last_fetch_status === 'error' ? '\u25cf' : '\u25cb';
+      return '<div class="source-row">' +
+        '<span class="' + dotClass + '">' + dotSymbol + '</span>' +
+        '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + s.name + '</span>' +
+        '<span style="color:var(--text-mute);font-size:10px;">' + (s.category || '') + '</span>' +
+        '</div>';
+    }).join('');
+    const fetched = res.sources.find(function(s) { return s.last_fetched; });
+    const lastFetchEl = document.getElementById('news-last-fetch');
+    if (lastFetchEl && fetched && fetched.last_fetched) {
+      lastFetchEl.textContent = new Date(fetched.last_fetched * 1000).toLocaleString();
+    }
+  } catch (e) {
+    console.warn('News sources load failed:', e);
+  }
+}
+
+async function loadNewsArticles() {
+  try {
+    const cat = _newsActiveCat === 'all' ? '' : _newsActiveCat;
+    const url = '/api/news/latest?limit=50' + (cat ? '&category=' + cat : '');
+    const res = await api(url);
+    _newsAllArticles = res.articles || [];
+    renderNewsArticles();
+  } catch (e) {
+    console.warn('News load failed:', e);
+  }
+}
+
+function renderNewsArticles() {
+  const container = document.getElementById('news-articles-container');
+  if (!container) return;
+  const search = (document.getElementById('news-search')?.value || '').toLowerCase();
+  const catFilter = _newsActiveCat;
+  const filtered = _newsAllArticles.filter(function(a) {
+    if (catFilter !== 'all' && a.category !== catFilter) return false;
+    if (search && !a.title.toLowerCase().includes(search) &&
+        !(a.content || '').toLowerCase().includes(search)) return false;
+    return true;
+  });
+  if (!filtered.length) {
+    const msg = _newsAllArticles.length ? 'No articles match filter' : 'No articles yet \u2014 click Fetch Now';
+    container.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:200px;gap:12px;">'
+      + '<div style="font-size:32px;">\uD83D\uDCED</div>'
+      + '<div style="font-size:14px;color:var(--text-mute);">' + msg + '</div>'
+      + '</div>';
+    return;
+  }
+  const catColors = {
+    ai_ml: '#6366f1', local_inference: '#8b5cf6', open_source: '#10b981',
+    python: '#3b82f6', security: '#f43f5e', science: '#f59e0b', dev_tools: '#06b6d4'
+  };
+  container.innerHTML = filtered.map(function(a) {
+    const catColor = catColors[a.category] || '#6366f1';
+    const titleText = a.title.replace(/^News:\s*/i, '');
+    const urlMatch = (a.content || '').match(/URL:\s*(https?:\/\/[^\n]+)/);
+    const articleUrl = urlMatch ? urlMatch[1].trim() : '';
+    const summaryMatch = (a.content || '').match(/\n\n([\s\S]+)$/);
+    const summary = summaryMatch ? summaryMatch[1].replace(/\*\*/g, '').trim() : '';
+    const scoreMatch = (a.content || '').match(/Relevance:\s*([\d.]+)/);
+    const score = scoreMatch ? parseFloat(scoreMatch[1]) : 0;
+    const scoreW = Math.round(Math.min(1, score) * 100);
+    const timeStr = a.created_at ? new Date(a.created_at).toLocaleString() : '';
+    const tagBadges = (a.tags || [])
+      .filter(function(t) { return t !== 'news'; })
+      .slice(0, 2)
+      .map(function(t) {
+        return '<span style="font-size:10px;color:var(--text-mute);background:var(--bg-dark);padding:1px 6px;border-radius:8px;">' + t + '</span>';
+      }).join('');
+    return '<div class="news-article-card">'
+      + '<div class="news-article-title">'
+      + (articleUrl ? '<a href="' + articleUrl + '" target="_blank" rel="noopener">' + titleText + '</a>' : titleText)
+      + '</div>'
+      + '<div class="news-article-meta">'
+      + '<span class="news-cat-chip" style="background:' + catColor + '22;color:' + catColor + ';">' + (a.category || '').replace(/_/g, ' ') + '</span>'
+      + (timeStr ? '<span style="font-size:11px;color:var(--text-mute);">' + timeStr + '</span>' : '')
+      + tagBadges
+      + '</div>'
+      + (summary ? '<div class="news-article-summary">' + summary.slice(0, 300) + '</div>' : '')
+      + '<div class="news-score-bar"><div class="news-score-fill" style="width:' + scoreW + '%;"></div></div>'
+      + '</div>';
+  }).join('');
 }

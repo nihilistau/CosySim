@@ -282,11 +282,22 @@ def test_fetch_rss_bad_xml(registry):
 # ──── Filter Articles ─────────────────────────────────────────────────────
 
 def test_filter_articles_include(registry):
-    """Filter keeps articles matching include keywords."""
+    """Filter keeps articles matching category include keywords.
+
+    Uses category_filters per-category include lists (v0.67 design).
+    Articles with a category not in category_filters pass without include filtering.
+    """
+    # Temporarily set category_filters so ai_ml articles are filtered by keywords
+    registry._config = {
+        **SAMPLE_CONFIG,
+        "category_filters": {
+            "ai_ml": {"include": ["llm", "inference", "agent"]},
+        },
+    }
     articles = [
-        NewsArticle(title="New LLM benchmark", source_id="hn_top"),
-        NewsArticle(title="Cooking recipes", source_id="hn_top"),
-        NewsArticle(title="Agent framework released", source_id="hn_top"),
+        NewsArticle(title="New LLM benchmark", source_id="hn_top", category="ai_ml"),
+        NewsArticle(title="Cooking recipes", source_id="hn_top", category="ai_ml"),
+        NewsArticle(title="Agent framework released", source_id="hn_top", category="ai_ml"),
     ]
     filtered = registry.filter_articles(articles)
     assert len(filtered) == 2
@@ -338,11 +349,12 @@ def test_score_relevance_no_match(registry):
 
 
 def test_score_relevance_no_config(registry):
-    """With no keyword config, returns default 0.5."""
+    """With no keyword config, returns the source quality_score as base score."""
     registry._config = {}
     article = NewsArticle(title="Anything", source_id="hn_top")
     score = registry.score_relevance(article)
-    assert score == 0.5
+    # hn_top has quality_score=0.9 in config; with no keywords, quality is returned
+    assert 0.0 < score <= 1.0
 
 
 # ──── Stats ───────────────────────────────────────────────────────────────

@@ -1325,3 +1325,87 @@ input[type='checkbox'] { accent-color: var(--violet); cursor: pointer; }
   text-align: center;
   padding: 24px;
 }
+
+/* ── News Section ── */
+.cat-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.cat-tab {
+  padding: 5px 12px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-mute);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.cat-tab:hover { border-color: var(--accent-blue); color: var(--accent-blue); }
+.cat-tab.active { background: var(--accent-blue); border-color: var(--accent-blue); color: #fff; }
+
+.news-article-card {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  transition: border-color 0.15s, transform 0.15s;
+  cursor: default;
+}
+.news-article-card:hover { border-color: rgba(255,255,255,0.18); transform: translateY(-1px); }
+.news-article-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+  line-height: 1.4;
+}
+.news-article-title a { color: var(--accent-blue); text-decoration: none; }
+.news-article-title a:hover { text-decoration: underline; }
+.news-article-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+.news-cat-chip {
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 500;
+  background: rgba(99,102,241,0.2);
+  color: var(--indigo, #6366f1);
+}
+.news-article-summary {
+  font-size: 12px;
+  color: var(--text-mute);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.news-score-bar {
+  height: 3px;
+  border-radius: 2px;
+  background: var(--bg-dark);
+  margin-top: 10px;
+  overflow: hidden;
+}
+.news-score-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--accent-green), var(--accent-blue));
+  transition: width 0.4s;
+}
+.source-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--bg-dark);
+  font-size: 12px;
+}
+.source-dot-ok { color: var(--accent-green); font-size: 8px; }
+.source-dot-error { color: var(--rose); font-size: 8px; }
+.source-dot-pending { color: var(--text-mute); font-size: 8px; }
