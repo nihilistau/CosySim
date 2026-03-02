@@ -69,8 +69,8 @@ def test_draw_particle_method_defined(js_content):
 # ──── All 9 effects ────
 
 @pytest.mark.parametrize("effect", [
-    "float", "smoke", "embers", "glint", "ink",
-    "blood", "energy", "rain", "static",
+    "float", "signal", "smoke", "ember", "glint",
+    "ink", "blood", "energy", "neon_rain",
 ])
 def test_effect_defined(js_content, effect):
     assert f"'{effect}'" in js_content or f'"{effect}"' in js_content, \
@@ -110,6 +110,17 @@ def test_cs_particles_canvas_id(js_content):
 
 def test_window_particle_engine_exposed(js_content):
     assert "window.particleEngine" in js_content
+
+
+def test_window_particle_engine_class_exposed(js_content):
+    """window.ParticleEngine (the class) must be assigned for external use."""
+    assert "window.ParticleEngine = ParticleEngine" in js_content or \
+           "window.ParticleEngine=ParticleEngine" in js_content
+
+
+def test_init_method_defined(js_content):
+    """init(canvas, config) method must be defined on ParticleEngine."""
+    assert "init(" in js_content
 
 
 def test_scene_particle_config_override(js_content):
@@ -165,7 +176,7 @@ def test_nine_presets_total(js_content):
 
 def test_all_effect_types_used_in_presets(js_content):
     """Every effect type must appear at least once as a preset value."""
-    for effect in ("float", "smoke", "embers", "glint", "ink", "blood", "energy", "rain", "static"):
+    for effect in ("float", "signal", "smoke", "ember", "glint", "ink", "blood", "energy", "neon_rain"):
         assert effect in js_content, f"Effect '{effect}' missing from presets"
 
 

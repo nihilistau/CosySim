@@ -7,11 +7,22 @@
  *   <canvas id="cs-particles"></canvas>
  *   <script src="/static/js/cosysim-particles.js"></script>
  *
- *   Optional override before script loads:
- *     window.SCENE_PARTICLE_CONFIG = { count: 60, color: '#ff0000', effect: 'embers', ... }
+ *   Optional — set before script loads:
+ *     window.SCENE_PARTICLE_CONFIG = { effect: 'float', color: '#8b5cf6', count: 40, speed: 0.3 }
  *
  *   Or set scene via body data attribute:
  *     <body data-scene="tavern">
+ *
+ * Scene configs:
+ *   bedroom:  { effect: 'float',     color: '#8b5cf6', count: 40,  speed: 0.3  }
+ *   phone:    { effect: 'signal',    color: '#22d3ee', count: 30,  speed: 1.5  }
+ *   lounge:   { effect: 'smoke',     color: '#a3a3a3', count: 60,  speed: 0.2  }
+ *   tavern:   { effect: 'ember',     color: '#f97316', count: 50,  speed: 0.8  }
+ *   casino:   { effect: 'glint',     color: '#f59e0b', count: 35,  speed: 0.5  }
+ *   gallery:  { effect: 'ink',       color: '#6366f1', count: 25,  speed: 0.15 }
+ *   arena:    { effect: 'blood',     color: '#dc2626', count: 80,  speed: 0.6  }
+ *   realm:    { effect: 'energy',    color: '#7c3aed', count: 45,  speed: 0.4  }
+ *   neoncity: { effect: 'neon_rain', color: '#06b6d4', count: 100, speed: 2.0  }
  */
 
 'use strict';
@@ -19,15 +30,15 @@
 // ──── Scene Presets ────
 
 const PARTICLE_PRESETS = {
-  bedroom:  { count: 40,  color: '#8b5cf6', effect: 'float',  size: 2,    speed: 0.3,  opacity: 0.5  },
-  phone:    { count: 30,  color: '#22d3ee', effect: 'static', size: 1,    speed: 0.8,  opacity: 0.4  },
-  lounge:   { count: 60,  color: '#a3a3a3', effect: 'smoke',  size: 5,    speed: 0.2,  opacity: 0.3  },
-  tavern:   { count: 50,  color: '#f97316', effect: 'embers', size: 2,    speed: 0.6,  opacity: 0.8  },
-  casino:   { count: 35,  color: '#f59e0b', effect: 'glint',  size: 1,    speed: 0.4,  opacity: 0.9  },
-  gallery:  { count: 25,  color: '#6366f1', effect: 'ink',    size: 4,    speed: 0.15, opacity: 0.25 },
-  arena:    { count: 80,  color: '#dc2626', effect: 'blood',  size: 2,    speed: 0.7,  opacity: 0.7  },
-  realm:    { count: 45,  color: '#7c3aed', effect: 'energy', size: 2,    speed: 0.5,  opacity: 0.6  },
-  neoncity: { count: 100, color: '#06b6d4', effect: 'rain',   size: 1,    speed: 1.2,  opacity: 0.5  },
+  bedroom:  { count: 40,  color: '#8b5cf6', effect: 'float',     size: 2, speed: 0.3,  opacity: 0.5  },
+  phone:    { count: 30,  color: '#22d3ee', effect: 'signal',    size: 1, speed: 1.5,  opacity: 0.4  },
+  lounge:   { count: 60,  color: '#a3a3a3', effect: 'smoke',     size: 5, speed: 0.2,  opacity: 0.3  },
+  tavern:   { count: 50,  color: '#f97316', effect: 'ember',     size: 2, speed: 0.8,  opacity: 0.8  },
+  casino:   { count: 35,  color: '#f59e0b', effect: 'glint',     size: 1, speed: 0.5,  opacity: 0.9  },
+  gallery:  { count: 25,  color: '#6366f1', effect: 'ink',       size: 4, speed: 0.15, opacity: 0.25 },
+  arena:    { count: 80,  color: '#dc2626', effect: 'blood',     size: 2, speed: 0.6,  opacity: 0.7  },
+  realm:    { count: 45,  color: '#7c3aed', effect: 'energy',    size: 2, speed: 0.4,  opacity: 0.6  },
+  neoncity: { count: 100, color: '#06b6d4', effect: 'neon_rain', size: 1, speed: 2.0,  opacity: 0.5  },
 };
 
 // ──── Helpers ────
@@ -52,19 +63,43 @@ function randInt(min, max) {
 
 class ParticleEngine {
   /**
-   * @param {HTMLCanvasElement} canvas
-   * @param {Object} config  - { count, color, effect, size, speed, opacity }
+   * @param {HTMLCanvasElement} [canvas]
+   * @param {Object} [config]  - { count, color, effect, size, speed, opacity }
    */
   constructor(canvas, config) {
+    this._canvas = null;
+    this._ctx = null;
+    this._config = {};
+    this._particles = [];
+    this._raf = null;
+    this._running = false;
+    this._rgb = { r: 139, g: 92, b: 246 };
+    this._w = 0;
+    this._h = 0;
+    this._resizeObserver = null;
+
+    if (canvas) {
+      this.init(canvas, config || {});
+    }
+  }
+
+  /**
+   * Initialise (or re-initialise) the engine with a canvas and config.
+   * @param {HTMLCanvasElement} canvas
+   * @param {Object} config  - { count, color, effect, size, speed, opacity }
+   * @returns {ParticleEngine} this
+   */
+  init(canvas, config) {
+    if (this._resizeObserver) {
+      this._resizeObserver.disconnect();
+    }
+
     this._canvas = canvas;
     this._ctx = canvas.getContext('2d');
     this._config = Object.assign(
       { count: 40, color: '#8b5cf6', effect: 'float', size: 2, speed: 0.3, opacity: 0.6 },
       config
     );
-    this._particles = [];
-    this._raf = null;
-    this._running = false;
     this._rgb = hexToRgb(this._config.color);
 
     this._applyCanvasStyle();
@@ -72,6 +107,8 @@ class ParticleEngine {
 
     this._resizeObserver = new ResizeObserver(() => this.resize());
     this._resizeObserver.observe(document.documentElement);
+
+    return this;
   }
 
   _applyCanvasStyle() {
@@ -177,7 +214,7 @@ class ParticleEngine {
         p.extra.growRate = rand(0.008, 0.02);
         break;
 
-      case 'embers':
+      case 'ember':
         p.x = spread ? rand(0, w) : rand(0, w);
         p.y = spread ? rand(0, h) : h + p.radius;
         p.vy = -speed * rand(0.6, 1.8);
@@ -237,7 +274,7 @@ class ParticleEngine {
           break;
         }
 
-      case 'rain':
+      case 'neon_rain':
         p.x = spread ? rand(0, w) : rand(0, w);
         p.y = spread ? rand(0, h) : -rand(10, h * 0.5);
         p.vy = speed * rand(8, 16);
@@ -248,7 +285,7 @@ class ParticleEngine {
         p.extra.len = rand(6, 20);
         break;
 
-      case 'static':
+      case 'signal':
         p.x = rand(0, w);
         p.y = rand(0, h);
         p.maxAge = randInt(4, 18);
@@ -309,7 +346,7 @@ class ParticleEngine {
         break;
       }
 
-      case 'embers': {
+      case 'ember': {
         // Arc trajectory
         p.vx += p.extra.arc;
         p.vy += 0.012 * speed;  // slight gravity pull
@@ -373,15 +410,15 @@ class ParticleEngine {
         break;
       }
 
-      case 'rain': {
+      case 'neon_rain': {
         p.x += p.vx;
         p.y += p.vy;
         if (p.age >= p.maxAge || p.y > h + p.extra.len) p.dead = true;
         break;
       }
 
-      case 'static': {
-        // Stationary noise — just counts age
+      case 'signal': {
+        // Stationary static noise — just counts age
         if (p.age >= p.maxAge) p.dead = true;
         break;
       }
@@ -426,7 +463,7 @@ class ParticleEngine {
         break;
       }
 
-      case 'embers': {
+      case 'ember': {
         // Bright core with glow
         ctx.shadowColor = `rgb(${r},${g},${b})`;
         ctx.shadowBlur = p.radius * 3;
@@ -496,8 +533,10 @@ class ParticleEngine {
         break;
       }
 
-      case 'rain': {
-        // Thin vertical streak
+      case 'neon_rain': {
+        // Thin vertical streak with neon glow
+        ctx.shadowColor = `rgba(${r},${g},${b},${alpha})`;
+        ctx.shadowBlur = 4;
         ctx.strokeStyle = `rgba(${r},${g},${b},${alpha})`;
         ctx.lineWidth = p.radius * 0.6;
         ctx.lineCap = 'round';
@@ -505,11 +544,12 @@ class ParticleEngine {
         ctx.moveTo(p.x, p.y);
         ctx.lineTo(p.x + p.vx * 2, p.y - p.extra.len);
         ctx.stroke();
+        ctx.shadowBlur = 0;
         break;
       }
 
-      case 'static': {
-        // Single pixel / tiny rectangle noise
+      case 'signal': {
+        // Single pixel / tiny rectangle noise — rapid static
         ctx.fillStyle = `rgba(${r},${g},${b},${alpha})`;
         ctx.fillRect(
           p.x - p.radius * 0.5,
@@ -532,15 +572,19 @@ class ParticleEngine {
   }
 }
 
+// ──── Expose globally ────
+
+window.ParticleEngine = ParticleEngine;
+
 // ──── Auto-init on DOMContentLoaded ────
 
 document.addEventListener('DOMContentLoaded', () => {
   const canvas = document.getElementById('cs-particles');
   if (!canvas) return;
 
-  const scene = document.body.dataset.scene;
+  const scene = document.body ? document.body.dataset.scene : null;
   const config = window.SCENE_PARTICLE_CONFIG
-    || PARTICLE_PRESETS[scene]
+    || (scene && PARTICLE_PRESETS[scene])
     || PARTICLE_PRESETS.bedroom;
 
   window.particleEngine = new ParticleEngine(canvas, config);
