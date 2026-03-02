@@ -185,3 +185,122 @@ class TestPortraitInjectedBySharedInit:
 
     def test_portrait_js_injected(self):
         assert "portrait.js" in self.init
+
+
+# ── Mood colour CSS selectors ─────────────────────────────────────────────────
+
+class TestPortraitCSSMoodColors:
+    """portrait.css must define data-mood attribute selectors for every canonical mood."""
+
+    MOODS = ["happy", "angry", "sad", "aroused", "neutral", "afraid", "excited"]
+
+    @classmethod
+    def setup_class(cls):
+        cls.css = CSS_FILE.read_text(encoding="utf-8")
+
+    def test_has_happy_selector(self):
+        assert '[data-mood="happy"]' in self.css
+
+    def test_has_angry_selector(self):
+        assert '[data-mood="angry"]' in self.css
+
+    def test_has_sad_selector(self):
+        assert '[data-mood="sad"]' in self.css
+
+    def test_has_aroused_selector(self):
+        assert '[data-mood="aroused"]' in self.css
+
+    def test_has_neutral_selector(self):
+        assert '[data-mood="neutral"]' in self.css
+
+    def test_has_afraid_selector(self):
+        assert '[data-mood="afraid"]' in self.css
+
+    def test_has_excited_selector(self):
+        assert '[data-mood="excited"]' in self.css
+
+    def test_all_moods_present(self):
+        for mood in self.MOODS:
+            assert f'[data-mood="{mood}"]' in self.css, f"Missing CSS selector for mood: {mood}"
+
+
+# ── Admin portrait routes ─────────────────────────────────────────────────────
+
+class TestAdminPortraitsRoutes:
+    """/api/admin/portraits and /api/admin/portrait/generate must be wired."""
+
+    @classmethod
+    def setup_class(cls):
+        cls.init = (REPO / "content" / "shared" / "__init__.py").read_text(encoding="utf-8")
+
+    def test_admin_portraits_route_in_shared_init(self):
+        assert "/api/admin/portraits" in self.init
+
+    def test_admin_portrait_generate_route_in_shared_init(self):
+        assert "/api/admin/portrait/generate" in self.init
+
+    def test_admin_portraits_returns_portraits_key(self):
+        """GET /api/admin/portraits returns JSON with a portraits list."""
+        import sys
+        from unittest.mock import MagicMock
+        from flask import Flask
+
+        # Ensure flask_cors won't cause an ImportError inside register_shared_assets
+        if "flask_cors" not in sys.modules:
+            sys.modules["flask_cors"] = MagicMock()
+
+        app = Flask(__name__)
+        app.config["TESTING"] = True
+
+        from content.shared import register_shared_assets
+        register_shared_assets(app)
+
+        with app.test_client() as client:
+            rv = client.get("/api/admin/portraits")
+            assert rv.status_code == 200
+            data = rv.get_json()
+            assert data is not None, "Expected JSON response"
+            assert "portraits" in data, f"Expected 'portraits' key, got: {list(data.keys())}"
+            assert isinstance(data["portraits"], list)
+
+
+# ── Injection into scene responses ────────────────────────────────────────────
+
+class TestPortraitOverlayInjection:
+    """portrait_overlay.html must be injected into scene HTML responses."""
+
+    @classmethod
+    def setup_class(cls):
+        cls.init = (REPO / "content" / "shared" / "__init__.py").read_text(encoding="utf-8")
+
+    def test_shared_init_references_portrait_overlay_html(self):
+        assert "portrait_overlay.html" in self.init
+
+    def test_portrait_overlay_div_injected_into_response(self):
+        """The after_request hook must embed cs-portrait-overlay into HTML responses."""
+        import sys
+        from unittest.mock import MagicMock
+        from flask import Flask, Response
+
+        if "flask_cors" not in sys.modules:
+            sys.modules["flask_cors"] = MagicMock()
+
+        app = Flask(__name__)
+        app.config["TESTING"] = True
+
+        from content.shared import register_shared_assets
+        register_shared_assets(app)
+
+        @app.route("/test-portrait-inject")
+        def _test_view() -> Response:
+            return Response(
+                "<html><body><p>hello</p></body></html>",
+                content_type="text/html",
+            )
+
+        with app.test_client() as client:
+            rv = client.get("/test-portrait-inject")
+            html = rv.data.decode("utf-8")
+            assert "cs-portrait-overlay" in html, (
+                "Expected cs-portrait-overlay to be injected into HTML response"
+            )

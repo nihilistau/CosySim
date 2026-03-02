@@ -1,8 +1,13 @@
 """CosySim shared assets — design tokens, JS utilities, Streamlit theme."""
 
+import logging as _logging
 from pathlib import Path as _Path
 
+logger = _logging.getLogger(__name__)
+
 SHARED_STATIC_DIR = str(_Path(__file__).parent / "static")
+_PORTRAIT_TEMPLATE_PATH = _Path(__file__).parent / "templates" / "portrait_overlay.html"
+_PORTRAITS_DIR = _Path(__file__).parent / "static" / "img" / "portraits"
 
 # Script/CSS tags auto-injected into every HTML response
 _INJECT_TAGS = (
@@ -110,6 +115,22 @@ def register_shared_assets(app):
         except Exception as exc:
             return jsonify({"ok": False, "error": str(exc)})
 
+    # ── Metrics API routes (v0.72) ───────────────────────────────────
+
+    @shared_bp.route("/api/metrics")
+    def api_metrics() -> "Response":
+        """Return in-process metrics summary. Query param: window (seconds)."""
+        from engine.monitoring.metrics_collector import get_metrics_collector
+        window = request.args.get("window", 3600, type=int)
+        return jsonify(get_metrics_collector().get_summary(window_seconds=window))
+
+    @shared_bp.route("/api/metrics/reset", methods=["POST"])
+    def api_metrics_reset() -> "Response":
+        """Clear all recorded metrics samples."""
+        from engine.monitoring.metrics_collector import get_metrics_collector
+        get_metrics_collector().reset()
+        return jsonify({"reset": True})
+
     # ── Art / Portrait API routes (v0.72) ──────────────────────────
 
     @shared_bp.route("/api/art/portrait")
@@ -180,6 +201,36 @@ def register_shared_assets(app):
         except Exception as exc:
             return jsonify({"ok": False, "error": str(exc)})
 
+    # ── Admin Portrait API routes (v0.72) ──────────────────────────
+
+    @shared_bp.route("/api/admin/portraits")
+    def admin_portraits_api() -> "Response":
+        """Return list of portrait image files from the portraits directory."""
+        _PORTRAITS_DIR.mkdir(parents=True, exist_ok=True)
+        files = sorted(
+            f.name for f in _PORTRAITS_DIR.iterdir()
+            if f.is_file() and not f.name.startswith(".")
+        )
+        return jsonify({"portraits": files})
+
+    @shared_bp.route("/api/admin/portrait/generate", methods=["POST"])
+    def admin_portrait_generate_api() -> "Response":
+        """Generate a portrait via the art_skills generate_portrait function.
+
+        Body: {char_id: str, emotion: str}
+        """
+        try:
+            from engine.skills.builtin.art_skills import generate_portrait
+            data = request.get_json(force=True) or {}
+            char_id = data.get("char_id", "")
+            if not char_id:
+                return jsonify({"ok": False, "error": "char_id required"}), 400
+            emotion = data.get("emotion", data.get("mood", "neutral"))
+            result = generate_portrait(char_id=char_id, emotion=emotion)
+            return jsonify({"ok": True, "result": str(result)})
+        except Exception as exc:
+            return jsonify({"ok": False, "error": str(exc)})
+
     app.register_blueprint(shared_bp)
 
     # Auto-mount assistant API on this app
@@ -210,12 +261,23 @@ def register_shared_assets(app):
         ):
             try:
                 data = response.get_data(as_text=True)
+                # Read portrait overlay HTML (lazy, once per request — cheap file read)
+                try:
+                    _portrait_html = _PORTRAIT_TEMPLATE_PATH.read_text(encoding="utf-8")
+                except OSError:
+                    _portrait_html = ""
                 # Inject before </body> if present, otherwise before </html>
                 if "</body>" in data:
-                    data = data.replace("</body>", _INJECT_TAGS + "\n</body>")
+                    inject = _INJECT_TAGS
+                    if _portrait_html:
+                        inject = _portrait_html + inject
+                    data = data.replace("</body>", inject + "\n</body>", 1)
                     response.set_data(data)
                 elif "</html>" in data:
-                    data = data.replace("</html>", _INJECT_TAGS + "\n</html>")
+                    inject = _INJECT_TAGS
+                    if _portrait_html:
+                        inject = _portrait_html + inject
+                    data = data.replace("</html>", inject + "\n</html>", 1)
                     response.set_data(data)
             except Exception:
                 pass  # Don't break responses on injection failure

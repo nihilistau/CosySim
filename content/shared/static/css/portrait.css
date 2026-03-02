@@ -104,4 +104,11 @@
   color: var(--cs-text-primary, #fff);
 }
 
-/* Mood color mapping (set via JS on --portrait-mood-color) */
+/* Mood colour map — data-mood attribute selectors set --portrait-mood-color */
+#cs-portrait-overlay[data-mood="happy"]   { --portrait-mood-color: #22c55e; }
+#cs-portrait-overlay[data-mood="angry"]   { --portrait-mood-color: #ef4444; }
+#cs-portrait-overlay[data-mood="sad"]     { --portrait-mood-color: #3b82f6; }
+#cs-portrait-overlay[data-mood="aroused"] { --portrait-mood-color: #ec4899; }
+#cs-portrait-overlay[data-mood="neutral"] { --portrait-mood-color: #6b7280; }
+#cs-portrait-overlay[data-mood="afraid"]  { --portrait-mood-color: #f59e0b; }
+#cs-portrait-overlay[data-mood="excited"] { --portrait-mood-color: #a855f7; }
