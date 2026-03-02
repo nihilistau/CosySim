@@ -293,9 +293,9 @@ def search_memories(query: str, character_id: str = "", top_k: int = 5) -> str:
 | `training_skills.py` | training data capture |
 | `notebooklm_skills.py` | NotebookLM integration |
 
-#### 11 Scene-Specific Packs (`content/scenes/`)
+#### 10 Scene-Specific Packs (`content/scenes/`)
 
-`phone_skills.py` · `bedroom_skills.py` · `lounge_skills.py` · `casino_skills.py` · `gallery_skills.py` · `warzone_skills.py` · `realm_skills.py` · `neoncity_skills.py` · `coders_skills.py` · `heist_skills.py` · `command_center_skills.py`
+`phone_skills.py` · `bedroom_skills.py` · `lounge_skills.py` · `casino_skills.py` · `gallery_skills.py` · `realm_skills.py` · `neoncity_skills.py` · `coders_skills.py` · `heist_skills.py` · `command_center_skills.py`
 
 #### Skill Triggers
 

@@ -56,7 +56,6 @@ VirtualAgentManager.infer()     engine/agents/virtual_agent_manager.py
 | `lounge` | lounge_skills.py | jukebox, drinks, secrets, back room, atmosphere, social, trust | 10 |
 | `coders` | coders_skills.py | room status, agent info, add feature, feature list, run code, tick | 6 |
 | `command_center` | command_center_skills.py | system monitoring, model control, scene status, diagnostics, training | 6 |
-| `warzone` | warzone_skills.py | status, attack, build, upgrade, special ops, recon, end turn | 7 |
 | `gallery` | gallery_skills.py | exhibit management, art generation, critique, curation, tours, gallery walk | 8 |
 | `tavern` | tavern_skills.py | order food/drink, patron info, tales, dice, brawl, cook, menu, atmosphere, secret menu, bard song | 10 |
 | `games` | games_skills.py | word games, trivia, creative challenges, scores, status, hint, skip | 7 |

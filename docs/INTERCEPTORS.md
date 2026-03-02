@@ -103,7 +103,7 @@ These modify `ctx["system_prompt"]` before the LLM sees it.
 | 60 | `PolicyEnforcerInterceptor` | `policy_enforcer` | all | Inject token-budget instruction (min/max reply tokens from `InteractionPolicy`) |
 | 70 | `MemoryEnhancerInterceptor` | `memory_enhancer` | all | Extra RAG search on user message. Append top-3 relevant memories. **Disabled by default** |
 
-¹ `NaturalMoodDriftInterceptor` has `applicable_scenes` set to bedroom, phone, lounge, gallery, warzone, casino, heist, realm, neoncity, coders.
+¹ `NaturalMoodDriftInterceptor` has `applicable_scenes` set to bedroom, phone, lounge, gallery, arena, casino, heist, realm, neoncity, coders.
 ² `UniversalSceneInterceptor` skips bedroom, phone, lounge, gallery (which have dedicated interceptors).
 
 ### Post-Call Interceptors
@@ -212,7 +212,7 @@ class WeatherInterceptor(InterceptorBase):
     """Inject current weather into the scene context."""
     name     = "weather"
     priority = 18                          # after scene interceptors (15-16)
-    applicable_scenes = {"realm", "warzone"}  # or None for all scenes
+    applicable_scenes = {"realm", "arena"}  # or None for all scenes
 
     def pre_call(self, ctx):
         weather = self._get_weather(ctx.get("scene", ""))

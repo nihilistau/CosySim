@@ -31,7 +31,7 @@ python launcher.py --status
 engine/          Reusable framework (DO NOT put scene-specific logic here)
   mcp/tools/     MCP tool modules (8 domain files, 67 functions)
 content/         Example scenes + simulation services
-  scenes/        Phone, bedroom, hub, casino, realm, neoncity, coders, heist, warzone, gallery, lounge
+  scenes/        Phone, bedroom, hub, casino, realm, neoncity, coders, heist, arena, gallery, lounge
   simulation/    Database, RAG, character system, services
   shared/        Shared CSS/themes used by all scenes
 config/          YAML settings (ports, URLs, thresholds)

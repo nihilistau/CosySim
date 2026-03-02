@@ -19,7 +19,7 @@ Test configuration is defined in `pyproject.toml` under `[tool.pytest.ini_option
 
 **176 test files** · **4,827 test functions**
 
-### Scenes (11 files, ~370 tests)
+### Scenes (10 files, ~345 tests)
 
 | File | Tests | Description |
 |------|-------|-------------|
@@ -31,7 +31,6 @@ Test configuration is defined in `pyproject.toml` under `[tool.pytest.ini_option
 | test_heist.py | 43 | Heist scene |
 | test_command_center.py | 32 | Command center scene |
 | test_neoncity.py | 26 | Neon City scene |
-| test_warzone.py | 25 | Warzone scene |
 | test_coders.py | 22 | Coders scene |
 | test_vam_pipeline_integration.py | 9 | VaM pipeline integration |
 

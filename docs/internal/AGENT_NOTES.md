@@ -2509,7 +2509,7 @@ scene's `__init__.py` importing the skills module.
 | Velvet Lounge | 5557 | `content.scenes.lounge.lounge_scene.LoungeScene` |
 | Midnight Casino | 5559 | `content.scenes.casino.casino_scene.CasinoScene` |
 | The Gallery | 5560 | `content.scenes.gallery.gallery_scene.GalleryScene` |
-| Global Strike | 5561 | `content.scenes.warzone.warzone_scene.WarzoneScene` |
+| THE COLOSSEUM | 5561 | `content.scenes.arena.arena_scene.ArenaScene` |
 | **The Realm** | **5562** | `content.scenes.realm.realm_scene.RealmScene` |
 | **NeonCity** | **5563** | `content.scenes.neoncity.neoncity_scene.NeonCityScene` |
 | **The Coders Room** | **5564** | `content.scenes.coders.coders_scene.CodersRoomScene` |
@@ -2738,7 +2738,7 @@ shadows, transitions, z-index, and utility classes.
 | Casino | 5558 | Flask+SocketIO | Card games, chips, NPC dealer |
 | Gallery | 5560 | Flask+SocketIO | Image generation showcase |
 | Lounge | 5559 | Flask+SocketIO | Multi-character social space |
-| Warzone | 5561 | Flask+SocketIO | Turn-based strategy, squads |
+| Arena | 5561 | Flask+SocketIO | Turn-based combat, colosseum |
 | Heist | 5562 | Flask+SocketIO | Cooperative crew, phases |
 | Command Center | 5563 | Flask+SocketIO | Metrics dashboard, training |
 | Realm | -- | Flask+SocketIO | Fantasy RPG exploration |
@@ -2771,7 +2771,6 @@ replacing hardcoded regex patterns scattered across StreamProcessor, StreamWatch
 
 Scenes can register custom tags at startup:
 - **Heist:** `[PLAN:x]` — heist planning directives
-- **Warzone:** `[ORDER:x]` — military orders
 
 ### Consumer Integration
 
@@ -2811,7 +2810,7 @@ All 9 scenes now share a consistent framework integration pattern:
 | Casino | — | — | — | Chips, hands |
 | Lounge | — | — | — | Heat, trust |
 | Gallery | — | — | — | Gallery state |
-| Warzone | — | — | [ORDER:] | Military state |
+| Arena | — | — | — | Combat state |
 | Heist | — | VirtualPipeline | [PLAN:] | Phase tracking |
 | Realm | — | — | — | Quest state |
 | Command Center | — | — | — | System metrics |
@@ -2854,7 +2853,6 @@ Key test files added in v4.0:
 | Coders | B- | 65 | ✅ | 9 | ❌ | 5564 |
 | Gallery | B- | 65 ↑ | ✅ | 8 ↑ | ❌ | 5560 |
 | Command Ctr | C+ | 58 | ✅ | 6 | ❌ | 5566 |
-| Warzone | C+ | 58 ↑ | ✅ | 7 ↑ | ❌ | 5561 |
 | Games | C+ | 55 ↑ | ✅ ↑ | 7 ↑ | ❌ | 5567 |
 | Admin | C- | 41 | ❌ Streamlit | 0 | ❌ | 8502 |
 | Dashboard | D | 32 | ❌ Streamlit | 0 | ❌ | 8501 |
@@ -2876,7 +2874,6 @@ Key test files added in v4.0:
 | gallery | 8 | Prestige/Artwork |
 | heist | 7 | HeistGame |
 | games | 7 | Mystery/ToD |
-| warzone | 7 | GameState |
 | command_center | 6 | System Monitor |
 | phone | 6 | Conversations |
 

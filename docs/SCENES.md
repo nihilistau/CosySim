@@ -798,7 +798,7 @@ Each has health, morale, and status (ok/injured/arrested).
 
 #### Features
 - **Scene launcher** with live status indicators (🟢 Running / ⚫ Stopped) for 14 services across 3 categories:
-  - **Core Scenes (6):** Phone, Bedroom, Lounge, Casino, Gallery, Warzone
+  - **Core Scenes (6):** Phone, Bedroom, Lounge, Casino, Gallery, Arena
   - **v0.50b Showcase (3):** Realm, Neon City, Coders Room
   - **Tools & Services (5):** Dashboard, Admin, Asset Generator, TTS Server, MCP Bridge
 - **System health monitoring** — HTTP health checks against all scene ports.

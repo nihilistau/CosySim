@@ -148,7 +148,6 @@ python launcher.py --mode lounge
 python launcher.py --mode tavern
 python launcher.py --mode casino
 python launcher.py --mode gallery
-python launcher.py --mode warzone
 python launcher.py --mode realm
 python launcher.py --mode neoncity
 python launcher.py --mode coders
@@ -290,7 +289,7 @@ All ports used by CosySim, grouped by category. Ports are configured in `config/
 | 5558 | `tavern` | Dragon's Flagon Tavern |
 | 5559 | `casino` | Midnight Casino |
 | 5560 | `gallery` | The Gallery |
-| 5561 | `warzone` | Global Strike |
+| 5561 | `arena` | The Colosseum |
 | 5562 | `realm` | The Realm |
 | 5563 | `neoncity` | NeonCity |
 | 5564 | `coders` | The Coders Room |

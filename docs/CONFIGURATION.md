@@ -140,7 +140,7 @@ Each scene has `host`, `port`, and `debug` settings. Default host is `localhost`
 | `lounge` | 5557 |
 | `casino` | 5559 |
 | `gallery` | 5560 |
-| `warzone` | 5561 |
+| `arena` | 5561 |
 | `realm` | 5562 |
 | `neoncity` | 5563 |
 | `coders` | 5564 |
