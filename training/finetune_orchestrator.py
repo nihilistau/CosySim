@@ -53,6 +53,7 @@ RECOMMENDED_MODELS: Dict[str, str] = {
     "conversation_analyzer": "qwen-270m",
     "syntax_fixer": "qwen-1.7b",
     "router_v2": "qwen-270m",
+    "router_v3": "qwen-270m",
     "knowledge_synthesizer": "qwen-1.7b",
 }
 

@@ -129,12 +129,14 @@ class RouterFinetuneCycle:
             from training.finetune_orchestrator import FinetuneOrchestrator
 
             orchestrator = FinetuneOrchestrator()
-            job = orchestrator.start_job(
+            job = orchestrator.submit(
                 model_type=ROUTER_V3_MODEL_KEY,
                 dataset_path=str(_TRAIN_OUT),
             )
-            logger.info("Fine-tuning job started: %s", job)
-            return {"status": "training_started", "job": job, **split_counts}
+            logger.info("Fine-tuning job queued: %s", job)
+            completed_job = orchestrator.run_next()
+            logger.info("Fine-tuning job completed: %s", completed_job)
+            return {"status": "training_started", "job": str(job), **split_counts}
         except Exception as exc:
             logger.error("Failed to launch fine-tuning: %s", exc)
             return {"status": "error", "error": str(exc), **split_counts}
