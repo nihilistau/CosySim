@@ -248,6 +248,85 @@ class TestSeedAllScenes:
 
 
 # ---------------------------------------------------------------------------
+# generate_scene_lore
+# ---------------------------------------------------------------------------
+
+class TestGenerateSceneLore:
+    def test_stores_lore_entries(self):
+        lore_items = ["Faction A rules the docks.", "The old mine is haunted.", "Silver coins are counterfeit here."]
+        nexus = _make_mock_nexus(answer=json.dumps(lore_items))
+        gen = _make_fresh_generator(nexus)
+        stored = gen.generate_scene_lore("tavern", count=3)
+        assert stored == 3
+        assert nexus.add_entry.call_count == 3
+
+    def test_stores_with_correct_tags(self):
+        nexus = _make_mock_nexus(answer='["The city never sleeps."]')
+        gen = _make_fresh_generator(nexus)
+        gen.generate_scene_lore("neoncity", count=1)
+        _, kwargs = nexus.add_entry.call_args
+        assert "scene:neoncity" in kwargs["tags"]
+        assert "type:lore" in kwargs["tags"]
+        assert "world_lore" in kwargs["tags"]
+
+    def test_empty_response_returns_zero(self):
+        nexus = _make_mock_nexus(answer="")
+        gen = _make_fresh_generator(nexus)
+        stored = gen.generate_scene_lore("arena", count=5)
+        assert stored == 0
+        nexus.add_entry.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# generate_npc_backstory
+# ---------------------------------------------------------------------------
+
+class TestGenerateNpcBackstory:
+    def test_stores_backstory_with_character_tag(self):
+        backstory = "Viktor grew up in the slums and became a fixer for the syndicate."
+        nexus = _make_mock_nexus(answer=backstory)
+        gen = _make_fresh_generator(nexus)
+        result = gen.generate_npc_backstory("casino", "Viktor")
+        assert result == backstory
+        _, kwargs = nexus.add_entry.call_args
+        assert "character:Viktor" in kwargs["tags"]
+        assert "backstory" in kwargs["tags"]
+        assert "npc_lore" in kwargs["tags"]
+        assert "scene:casino" in kwargs["tags"]
+
+    def test_empty_response_returns_none(self):
+        nexus = _make_mock_nexus(answer="")
+        gen = _make_fresh_generator(nexus)
+        result = gen.generate_npc_backstory("lounge", "Lola")
+        assert result is None
+        nexus.add_entry.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# seed_lore_all_scenes
+# ---------------------------------------------------------------------------
+
+class TestSeedLoreAllScenes:
+    def test_returns_per_scene_counts(self):
+        from engine.content.nlm_generator import GENERATOR_SCENES
+        lore = ["Lore entry one.", "Lore entry two."]
+        nexus = _make_mock_nexus(answer=json.dumps(lore))
+        gen = _make_fresh_generator(nexus)
+        results = gen.seed_lore_all_scenes(lore_count=2)
+        for scene in GENERATOR_SCENES:
+            assert scene in results
+            assert results[scene] == 2
+
+    def test_exception_per_scene_returns_zero(self):
+        nexus = MagicMock()
+        nexus.ask.side_effect = RuntimeError("nlm down")
+        gen = _make_fresh_generator(nexus)
+        results = gen.seed_lore_all_scenes(lore_count=5)
+        for v in results.values():
+            assert v == 0
+
+
+# ---------------------------------------------------------------------------
 # Singleton accessor
 # ---------------------------------------------------------------------------
 

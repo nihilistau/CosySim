@@ -57,6 +57,22 @@ _CONTENT_TYPES_PER_SCENE: Dict[str, List[str]] = {
     "realm":    ["quest", "arc", "lore"],
 }
 
+#: Lore generation prompt sent to Nexus/NLM.
+_LORE_PROMPT = (
+    "Generate {count} world lore entries for the '{scene}' scene in an adult-themed "
+    "dark-gritty simulation.  Include a mix of faction descriptions, location details, "
+    "historical events, and atmosphere notes specific to this scene's theme.  "
+    "Return a JSON array of strings only, no extra text."
+)
+
+#: NPC backstory prompt sent to Nexus/NLM.
+_NPC_BACKSTORY_PROMPT = (
+    "Write a single backstory paragraph for an NPC named '{character_name}' who lives "
+    "and works in the '{scene}' scene of a dark-gritty adult simulation.  "
+    "Include their history, motivations, and a secret or flaw.  "
+    "Return plain text only, no JSON."
+)
+
 #: Instruction generation prompt sent to Nexus/NLM.
 _BEAT_INSTR_PROMPT = (
     "Write {count} unique director beat instructions for the '{scene}' scene, "
@@ -313,6 +329,90 @@ class NLMContentGenerator:
                 except Exception as exc:
                     logger.warning("Beat gen failed %s/%s: %s", scene, bt.value, exc)
         return total
+
+    def generate_scene_lore(self, scene: str, count: int = 10) -> int:
+        """Generate world lore entries for a scene and store in Nexus.
+
+        Args:
+            scene: Scene identifier (e.g. ``"tavern"``).
+            count: Number of lore entries to generate and store.
+
+        Returns:
+            Number of lore entries successfully stored.
+        """
+        prompt = _LORE_PROMPT.format(count=count, scene=scene)
+        logger.info("Generating %d lore entries for scene '%s' via NLM", count, scene)
+        raw = self._ask_nlm(prompt)
+        entries = self._parse_json_array(raw)
+        if not entries:
+            logger.warning("NLM returned no lore entries for '%s'", scene)
+            return 0
+
+        stored = 0
+        for idx, entry in enumerate(entries[:count]):
+            title = f"{scene} world lore {idx + 1}"
+            tags = [f"scene:{scene}", "type:lore", "world_lore", "nlm_generated"]
+            entry_id = self._store_nexus(title, entry, "lore", tags)
+            if entry_id:
+                stored += 1
+
+        logger.info("Stored %d/%d lore entries for '%s'", stored, count, scene)
+        return stored
+
+    def generate_npc_backstory(self, scene: str, character_name: str) -> Optional[str]:
+        """Generate a backstory for an NPC and store in Nexus.
+
+        Args:
+            scene: Scene identifier.
+            character_name: The NPC's name.
+
+        Returns:
+            The generated backstory text, or ``None`` if generation failed.
+        """
+        prompt = _NPC_BACKSTORY_PROMPT.format(scene=scene, character_name=character_name)
+        logger.info("Generating backstory for '%s' in scene '%s' via NLM", character_name, scene)
+        backstory = self._ask_nlm(prompt).strip()
+        if not backstory:
+            logger.warning("NLM returned no backstory for '%s'/%s", scene, character_name)
+            return None
+
+        title = f"{character_name} backstory ({scene})"
+        tags = [
+            f"scene:{scene}",
+            f"character:{character_name}",
+            "backstory",
+            "npc_lore",
+            "nlm_generated",
+        ]
+        entry_id = self._store_nexus(title, backstory, "lore", tags)
+        if entry_id:
+            logger.info("Stored backstory for '%s' (id=%s)", character_name, entry_id)
+            return backstory
+        return None
+
+    def seed_lore_all_scenes(self, lore_count: int = 10) -> Dict[str, int]:
+        """Seed world lore entries for all configured scenes.
+
+        Args:
+            lore_count: Lore entries to generate per scene.
+
+        Returns:
+            Dict mapping scene name → count of lore entries stored.
+        """
+        results: Dict[str, int] = {}
+        for scene in GENERATOR_SCENES:
+            logger.info("NLMGenerator: seeding lore for scene '%s'…", scene)
+            try:
+                results[scene] = self.generate_scene_lore(scene, count=lore_count)
+            except Exception as exc:
+                logger.warning("Lore generation failed for '%s': %s", scene, exc)
+                results[scene] = 0
+        total = sum(results.values())
+        logger.info(
+            "NLMGenerator: seeded lore for %d scenes — %d entries total",
+            len(results), total,
+        )
+        return results
 
     def seed_all_scenes(
         self,

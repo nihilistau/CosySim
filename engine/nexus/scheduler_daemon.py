@@ -1093,6 +1093,12 @@ def _register_builtin_tasks(daemon: "SchedulerDaemon") -> None:
         "weekly",
         _nlm_content_seed_callback,
     )
+    daemon.register(
+        "scene-lore-seed",
+        "Scene Lore Seed — weekly NLM lore generation for all scenes",
+        "weekly",
+        _scene_lore_seed_callback,
+    )
 
 
 def _world_sim_tick_callback() -> Dict[str, Any]:
@@ -1148,6 +1154,19 @@ def _nlm_content_seed_callback() -> Dict[str, Any]:
         return {"status": "ok", **totals, "scenes": len(results) - 1}
     except Exception as exc:
         logger.debug("nlm_content_seed skipped: %s", exc)
+        return {"status": "skipped", "reason": str(exc)}
+
+
+def _scene_lore_seed_callback() -> Dict[str, Any]:
+    """Weekly: generate world lore entries for all scenes via NLM."""
+    try:
+        from engine.content.nlm_generator import get_nlm_generator
+        gen = get_nlm_generator()
+        results = gen.seed_lore_all_scenes(lore_count=10)
+        total = sum(v for k, v in results.items() if k != "_totals")
+        return {"status": "ok", "scenes": len(results), "lore_entries": total}
+    except Exception as exc:
+        logger.debug("scene_lore_seed skipped: %s", exc)
         return {"status": "skipped", "reason": str(exc)}
 
 
