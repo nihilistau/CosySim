@@ -2,7 +2,49 @@
 
 All notable changes to CosySim are documented here.
 
-## v0.68 "Dark Renaissance" — March 2, 2026
+## v0.69 "The Living System" — March 2026
+
+### New
+- **Cross-scene relay** (`engine/events/cross_scene_relay.py`): EventBus events ripple across scenes —
+  Arena results → NeonCity faction shifts + Lounge rumors; Casino wins → Intel Hub alerts;
+  Heist completions → faction events; World shifts → Tavern rumors
+- **Universal phone panel** (`cosysim-phone-panel.css/js`): slide-in SIGNAL panel available on every scene
+  via navbar; live contacts, chat, notifications, auto-injected via shared after_request hook
+- **Aria animated portrait** (`cosysim-aria-portrait.css/js`): 4 display modes (floating/messenger/
+  voice-call/full-portrait), 4 CSS states (idle/talking/thinking/listening), inline SVG face,
+  backward-compat `window.ariaWidget` shim
+- **Router v3 dataset** (`training/datasets/router_v3.jsonl`): 2,080 examples, 16-class taxonomy
+  (expanded from v2's 8 classes): small_talk, game_action, story_narrative, character_emotion,
+  world_query, skill_call, memory_recall, scene_transition, system_command, creative_generation,
+  information_lookup, emotional_support, adult_content, combat_narrative, economic_action, investigation
+- **Router finetune cycle** (`engine/nexus/router_finetune_cycle.py`): orchestrates train/val split →
+  Alpaca conversion → FinetuneOrchestrator.start_job()
+- **Content seeder** (`engine/content/seed_all.py`): 40 content items across 8 scenes + 5 Nexus QA pairs
+- **World state wiring**: casino, lounge, tavern, heist, gallery all connected to WorldState + EventBus
+  with per-scene time handlers (happy hour, quest refresh, exhibit rotation)
+- **Scene beat configs**: per-scene `SCENE_BEAT_CONFIGS` in SceneDirector (7 scenes: bedroom, arena,
+  casino, lounge, neoncity, heist, tavern) with preferred_beats, avoid_beats, escalation_threshold
+- New docs: WORLD_SYSTEM.md, ECONOMY_GUIDE.md, ARENA_GUIDE.md, CONTENT_GUIDE.md
+
+### Changed
+- `launcher.py`: WorldSim daemon started after scenes; CrossSceneRelay.start() called after WorldSim
+- `engine/nexus/scheduler_daemon.py`: 3 new tasks (world-sim-tick 5m, director-tick 15m, content-refresh 6h)
+- `content/shared/templates/aria_widget.html`: replaced 157-line inline HTML with 2 asset tags
+- `config/default.yaml`: version corrected to 0.68b
+- `ROADMAP.md`: v0.68 marked complete, v0.69 tracks added
+- `docs/INDEX.md`, `docs/SYSTEM_AUDIT.md`: updated to v0.68 (A+ grade)
+
+### Fixed
+- **Test isolation** (Track E): 74 failures + 38 errors → **6,882 passed, 0 failures, 0 errors**
+  - `tests/conftest.py`: module-scoped autouse fixture resets 7 singletons between test modules
+  - `pyproject.toml`: `norecursedirs` excludes tests/tmp from pytest collection
+
+### Tests
+- **6,882 tests passing** (up from 6,679 at v0.68)
+- 203 new tests across: cross_scene_relay, router_v3_dataset, content seeder, world wiring, Aria portrait
+
+---
+
 
 ### New
 - 13 engine modules: EventBus, EconomyManager, ContentGate, ContentEngine, CharacterMemory,
