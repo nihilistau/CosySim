@@ -449,6 +449,23 @@ class VirtualAgentManager:
         self._total_tokens_out += response.output_tokens
         self._total_latency_ms += response.latency_ms
 
+        # Publish to MetricsCollector
+        try:
+            from engine.monitoring.metrics_collector import get_metrics_collector
+            _mc = get_metrics_collector()
+            if response.ok:
+                _mc.record_llm_call(
+                    model_profile=request.model or "unknown",
+                    latency_ms=response.latency_ms,
+                    tokens_prompt=response.input_tokens,
+                    tokens_completion=response.output_tokens,
+                    success=True,
+                )
+            else:
+                _mc.record_error("lmstudio", "InferenceError")
+        except Exception:
+            logger.debug("MetricsCollector record failed", exc_info=True)
+
         # Auto-persist agent state after successful inference
         if response.ok:
             agent = self._agents.get(request.agent_id)
