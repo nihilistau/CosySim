@@ -253,6 +253,40 @@ html, body {
     100% { transform: translateX(-100%); }
 }
 
+/* ── District Alerts ticker ───────────────────────────────── */
+.district-alerts-ticker {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    background: rgba(239, 68, 68, 0.06);
+    border-bottom: 1px solid rgba(239, 68, 68, 0.4);
+    height: 30px;
+    overflow: hidden;
+    flex-shrink: 0;
+}
+
+.ticker-label.alert {
+    color: #ef4444;
+    background: rgba(239, 68, 68, 0.12);
+    border-right-color: #ef4444;
+}
+
+.district-alerts-ticker .ticker-item {
+    color: #fca5a5;
+}
+
+/* ── Faction territory indicator ─────────────────────────── */
+.faction-territory {
+    flex-shrink: 0;
+    font-size: 0.75rem;
+    font-weight: 700;
+    min-width: 18px;
+    text-align: center;
+    color: #4a5568;
+    cursor: default;
+    transition: color 0.3s ease;
+}
+
 /* ══════════════════════════════════════════════════════════
    MAIN CONTENT
 ══════════════════════════════════════════════════════════ */

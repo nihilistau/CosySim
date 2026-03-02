@@ -228,6 +228,7 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE
             self._mcp_init()
         except Exception as exc:
             logger.warning("MCP rule registration skipped: %s", exc)
+        self._subscribe_world_events()
         logger.info("PhoneSceneV2 started on %s:%s", self.host, self.port)
         self.socketio.run(self.app, host=self.host, port=self.port, debug=False, use_reloader=False)
 
@@ -266,6 +267,98 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE
             "port":        self.port,
             "skill_packs": ["memory", "character", "social", "narrative"],
         }
+
+    # ── living world integration ─────────────────────────────────────────────
+
+    def _subscribe_world_events(self) -> None:
+        """Subscribe to world event bus channels for living-world integration."""
+        try:
+            from engine.events.event_bus import get_event_bus, EventTypes
+            bus = get_event_bus()
+            bus.subscribe(
+                EventTypes.PHONE_HACKER_MESSAGE,
+                self._on_world_hacker_event,
+                "phone_scene",
+            )
+            bus.subscribe(
+                "world.major_event",
+                self._on_world_major_event,
+                "phone_scene",
+            )
+            logger.info("PhoneSceneV2 subscribed to world event channels")
+        except Exception as exc:
+            logger.warning("World event subscription failed: %s", exc)
+
+    def _on_world_hacker_event(self, payload: Dict[str, Any]) -> None:
+        """Handle incoming 0xGH0ST hacker event — emit to phone clients."""
+        try:
+            msg_text = payload.get("message", "")
+            if msg_text:
+                self._emit("incoming_message", {
+                    "from": "0xGH0ST",
+                    "text": msg_text,
+                    "type": "ghost",
+                    "time": "",
+                })
+        except Exception as exc:
+            logger.debug("_on_world_hacker_event failed: %s", exc)
+
+    def _on_world_major_event(self, payload: Dict[str, Any]) -> None:
+        """Handle major world event — emit world_alert if intensity is high."""
+        try:
+            # Fetch the event from the sim log to get intensity
+            from engine.world.world_sim import get_world_sim
+            sim = get_world_sim()
+            sim_event_id = payload.get("sim_event_id", "")
+            with sim._lock:
+                matching = [
+                    e for e in sim._event_log
+                    if e.id == sim_event_id
+                ]
+            event = matching[0] if matching else None
+            intensity = (event.intensity if event else 0.0)
+            if intensity >= 2.5:
+                self._emit("world_alert", {
+                    "title": payload.get("title", ""),
+                    "scene": payload.get("scene", ""),
+                    "event_type": payload.get("event_type", ""),
+                    "intensity": intensity,
+                })
+        except Exception as exc:
+            logger.debug("_on_world_major_event failed: %s", exc)
+
+    def _get_incoming_world_messages(self) -> List[Dict[str, Any]]:
+        """Return last 5 world events relevant to the phone scene.
+
+        Filters the WorldSim event log for events where scene=="phone"
+        or intensity >= 2.5 and returns them as formatted incoming-message
+        dicts ready for JSON serialisation.
+
+        Returns:
+            List of message dicts with from, text, time, type, heat_impact keys.
+        """
+        try:
+            from engine.world.world_sim import get_world_sim
+            sim = get_world_sim()
+            all_events = sim.get_all_events(limit=100)
+            relevant = [
+                e for e in all_events
+                if e.scene == "phone" or e.intensity >= 2.5
+            ][:5]
+            messages = []
+            for event in relevant:
+                is_ghost = event.actor == "0xGH0ST"
+                messages.append({
+                    "from": "0xGH0ST" if is_ghost else (event.actor or "SYSTEM"),
+                    "text": event.description,
+                    "time": event.created_at,
+                    "type": "ghost" if is_ghost else "world",
+                    "heat_impact": int(event.payload.get("heat_impact", 0)),
+                })
+            return messages
+        except Exception as exc:
+            logger.warning("_get_incoming_world_messages failed: %s", exc)
+            return []
 
     # ── character seeding ────────────────────────────────────────────────────
 
@@ -1195,6 +1288,43 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE
                 feedback = self.phone_db.get_feedback_summary()
                 return jsonify({"ok": True, "stats": stats, "feedback": feedback})
             except Exception as exc:
+                return jsonify({"ok": False, "error": str(exc)}), 500
+
+        # ── World / Ghost integration ──────────────────────────────────
+
+        @app.route("/api/world/incoming")
+        def world_incoming():
+            """Return world-triggered incoming messages for the phone scene."""
+            return jsonify(self._get_incoming_world_messages())
+
+        @app.route("/api/world/send_ghost", methods=["POST"])
+        def world_send_ghost():
+            """Send a tip to 0xGH0ST; store in Nexus and earn credits."""
+            body = request.get_json(force=True, silent=True) or {}
+            message = str(body.get("message", "")).strip()
+            if not message:
+                return jsonify({"ok": False, "error": "message required"}), 400
+            try:
+                from engine.nexus.client import get_nexus_client
+                from engine.world.player_state import get_player_state
+                client = get_nexus_client()
+                client.add_entry(
+                    title="ghost_outgoing",
+                    content=message,
+                    content_type="history",
+                    category="phone_messages",
+                    tags=["ghost", "phone", "outgoing"],
+                )
+                ps = get_player_state()
+                new_balance = ps.earn_credits(50, "ghost_tip")
+                state = ps.to_dict()
+                return jsonify({
+                    "ok": True,
+                    "credits_earned": 50,
+                    "balance": state["credits"],
+                })
+            except Exception as exc:
+                logger.error("world_send_ghost failed: %s", exc)
                 return jsonify({"ok": False, "error": str(exc)}), 500
 
         # ── MCP Framework API ─────────────────────────────────────────

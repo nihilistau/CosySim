@@ -1238,6 +1238,70 @@ class BedroomScene(BedroomCombatMixin, BedroomDialogMixin, BedroomInventoryMixin
         except Exception:
             pass
 
+    # ── Living World Integration ─────────────────────────────────────────
+
+    def _get_world_context_for_character(self) -> dict:
+        """Build world context relevant to the bedroom for LLM system prompt injection.
+
+        Returns:
+            Dict with world_context (list[str]), credits, reputation, heat, mood_modifier.
+        """
+        from engine.world.world_sim import get_event_log
+        from engine.world.player_state import get_player_state
+
+        # Gather up to 3 relevant events (bedroom scene or high intensity)
+        try:
+            all_events = get_event_log(limit=20)
+            relevant = [
+                ev for ev in all_events
+                if ev.scene == "bedroom" or ev.intensity >= 2.0
+            ][:3]
+            world_context = [
+                f"{ev.title}: {ev.description}"
+                for ev in relevant
+            ]
+        except Exception:
+            world_context = []
+
+        # Read player state
+        try:
+            ps = get_player_state()
+            state = ps.to_dict()
+            credits: int = state.get("credits", 0)
+            reputation: int = state.get("reputation", 50)
+            heat: int = state.get("heat", 0)
+        except Exception:
+            credits, reputation, heat = 0, 50, 0
+
+        # Derive mood modifier
+        if heat >= 70:
+            mood_modifier = "tense"
+        elif reputation >= 70:
+            mood_modifier = "impressed"
+        elif reputation <= 30:
+            mood_modifier = "cold"
+        else:
+            mood_modifier = "neutral"
+
+        return {
+            "world_context": world_context,
+            "credits": credits,
+            "reputation": reputation,
+            "heat": heat,
+            "mood_modifier": mood_modifier,
+        }
+
+    def _on_world_npc_action(self, payload: dict) -> None:
+        """Handle a world.npc_action event and push context to bedroom clients."""
+        try:
+            scene = payload.get("scene", "")
+            if scene != "bedroom":
+                return
+            ctx = self._get_world_context_for_character()
+            self.socketio.emit("world_context_update", ctx)
+        except Exception:
+            pass
+
     def _inject_to_loop(self, name: str, text: str, msg_type: str = "director") -> None:
         if self.agent_loop:
             self.agent_loop.shared_log.append({
@@ -1345,6 +1409,11 @@ class BedroomScene(BedroomCombatMixin, BedroomDialogMixin, BedroomInventoryMixin
             except Exception as exc:
                 logger.error("Economy API error: %s", exc)
                 return jsonify({"error": str(exc)}), 500
+
+        @self.app.route("/api/world/context")
+        def api_world_context():
+            """Return living world context for the bedroom scene."""
+            return jsonify(self._get_world_context_for_character())
 
         # Delegate route groups to mixins
         self._setup_character_routes()
@@ -1632,6 +1701,11 @@ class BedroomScene(BedroomCombatMixin, BedroomDialogMixin, BedroomInventoryMixin
             _bus = get_event_bus()
             _bus.subscribe(EventTypes.EMOTION_CHANGED, self._on_emotion_changed)
             _bus.subscribe(EventTypes.WORLD_TICK, self._on_world_tick_event)
+            # Subscribe to NPC action events from the living world
+            try:
+                _bus.subscribe("world.npc_action", self._on_world_npc_action)
+            except Exception:
+                pass
             self._event_bus = _bus
         except Exception:
             self._event_bus = None

@@ -376,6 +376,36 @@
     @keyframes scaleIn{from{opacity:0;transform:scale(.92)}to{opacity:1;transform:scale(1)}}
     .anim-fadeIn{animation:fadeIn .3s ease}
     .anim-scaleIn{animation:scaleIn .25s ease}
+
+    /* ══════════════════════════════════════════════════════════
+       GHOST / WORLD INTEGRATION
+    ══════════════════════════════════════════════════════════ */
+    #world-incoming-panel{margin:0 16px 12px;background:rgba(0,255,160,.06);border:1px solid rgba(0,255,160,.2);border-radius:var(--radius);overflow:hidden}
+    #world-incoming-panel .panel-header{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid rgba(0,255,160,.15)}
+    #world-incoming-panel .panel-title{font-size:12px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#00ffa0}
+    #world-incoming-panel .panel-count{background:rgba(0,255,160,.2);color:#00ffa0;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px}
+    .ghost-msg-item{padding:10px 14px;border-bottom:.5px solid rgba(0,255,160,.08);animation:fadeIn .3s ease}
+    .ghost-msg-item:last-child{border-bottom:none}
+    .ghost-msg-sender{font-size:11px;font-weight:700;color:#00ffa0;letter-spacing:.8px;text-transform:uppercase;display:flex;align-items:center;gap:6px}
+    .ghost-msg-sender .heat-tag{background:rgba(255,69,58,.2);color:#ff453a;padding:1px 6px;border-radius:8px;font-size:10px}
+    .ghost-msg-text{font-size:13px;color:rgba(235,235,245,.75);margin-top:3px;line-height:1.45}
+    .ghost-msg-time{font-size:10px;color:rgba(235,235,245,.35);margin-top:3px}
+    .ghost-msg-new{position:relative}
+    .ghost-msg-new::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:#00ffa0;border-radius:0 2px 2px 0}
+    @keyframes pulseGlow{0%,100%{box-shadow:0 0 0 0 rgba(0,255,160,.4)}50%{box-shadow:0 0 8px 2px rgba(0,255,160,.25)}}
+    .ghost-pulse{animation:pulseGlow 2s ease-in-out 3}
+    .ghost-terminal-btn{display:flex;align-items:center;gap:8px;width:calc(100% - 32px);margin:0 16px 16px;padding:12px 16px;background:rgba(0,255,160,.08);border:1px solid rgba(0,255,160,.25);border-radius:var(--radius);font-size:14px;font-weight:600;color:#00ffa0;cursor:pointer;transition:background .15s,border-color .15s;text-align:left}
+    .ghost-terminal-btn:active{background:rgba(0,255,160,.15)}
+    .ghost-terminal-modal{position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.8);backdrop-filter:blur(12px);display:flex;align-items:flex-end;justify-content:center;padding-bottom:env(safe-area-inset-bottom,20px)}
+    .ghost-terminal-sheet{background:var(--bg2);border-radius:24px 24px 0 0;padding:24px 20px;width:100%;max-width:430px}
+    .ghost-terminal-sheet h3{font-size:18px;font-weight:700;color:#00ffa0;margin-bottom:6px}
+    .ghost-terminal-sheet p{font-size:13px;color:var(--label2);margin-bottom:16px}
+    .ghost-input{width:100%;background:var(--bg3);border:1px solid var(--sep);border-radius:12px;padding:12px 14px;font-size:14px;color:var(--label);resize:none;min-height:90px;outline:none}
+    .ghost-input:focus{border-color:rgba(0,255,160,.5)}
+    .ghost-send-btn{width:100%;margin-top:12px;padding:14px;background:#00ffa0;color:#000;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;letter-spacing:.5px}
+    .ghost-send-btn:active{opacity:.85}
+    .world-alert-banner{position:fixed;top:0;left:50%;transform:translateX(-50%) translateY(-100%);z-index:8999;background:rgba(255,69,58,.92);color:#fff;padding:10px 20px;border-radius:0 0 14px 14px;font-size:13px;font-weight:600;max-width:430px;width:100%;text-align:center;transition:transform .35s cubic-bezier(.4,0,.2,1)}
+    .world-alert-banner.show{transform:translateX(-50%) translateY(0)}
   </style>
     <link rel="stylesheet" href="/shared/css/design_tokens.css">
     <script src="/shared/js/cosysim-core.js"></script>
@@ -424,5 +454,173 @@
 <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
 <script src="/static/js/phone_v2.js?v=3.2.1"></script>
 <script src="/shared/js/cosysim-voice.js"></script>
+<script>
+/* ── World / Ghost Integration ─────────────────────────────────── */
+(function () {
+  const _worldIncomingMessages = [];
+
+  /* DOM helpers */
+  function _renderIncomingPanel(container) {
+    const existing = container.querySelector('#world-incoming-panel');
+    if (existing) existing.remove();
+
+    const panel = document.createElement('div');
+    panel.id = 'world-incoming-panel';
+    if (_worldIncomingMessages.length === 0) return;
+
+    panel.innerHTML = `
+      <div class="panel-header">
+        <span class="panel-title">📡 INCOMING</span>
+        <span class="panel-count" id="world-msg-count">${_worldIncomingMessages.length}</span>
+      </div>
+      <div id="world-msg-list"></div>
+    `;
+    const list = panel.querySelector('#world-msg-list');
+    _worldIncomingMessages.slice(0, 5).forEach(m => {
+      list.appendChild(_buildMsgItem(m, false));
+    });
+    container.insertBefore(panel, container.firstChild);
+  }
+
+  function _buildMsgItem(m, isNew) {
+    const item = document.createElement('div');
+    item.className = 'ghost-msg-item' + (isNew ? ' ghost-msg-new ghost-pulse' : '');
+    const heat = m.heat_impact > 0 ? `<span class="heat-tag">+${m.heat_impact}🔥</span>` : '';
+    const icon = m.type === 'ghost' ? '👾' : '🌐';
+    item.innerHTML = `
+      <div class="ghost-msg-sender">${icon} ${m.from || 'SYSTEM'}${heat}</div>
+      <div class="ghost-msg-text">${m.text || ''}</div>
+      <div class="ghost-msg-time">${m.time || ''}</div>
+    `;
+    return item;
+  }
+
+  function _prependNewMessage(m) {
+    _worldIncomingMessages.unshift(m);
+    if (_worldIncomingMessages.length > 10) _worldIncomingMessages.pop();
+    const list = document.querySelector('#world-msg-list');
+    if (list) {
+      const item = _buildMsgItem(m, true);
+      list.insertBefore(item, list.firstChild);
+      const countEl = document.querySelector('#world-msg-count');
+      if (countEl) countEl.textContent = _worldIncomingMessages.length;
+    } else {
+      /* panel not rendered yet — re-render next time messages app opens */
+    }
+  }
+
+  /* World alert banner */
+  function _showWorldAlert(data) {
+    let banner = document.querySelector('#world-alert-banner');
+    if (!banner) {
+      banner = document.createElement('div');
+      banner.id = 'world-alert-banner';
+      banner.className = 'world-alert-banner';
+      document.body.appendChild(banner);
+    }
+    banner.textContent = `⚠️ WORLD EVENT: ${data.title || 'Major event detected'}`;
+    banner.classList.add('show');
+    setTimeout(() => banner.classList.remove('show'), 5000);
+  }
+
+  /* Ghost Terminal modal */
+  function openGhostTerminal() {
+    const modal = document.createElement('div');
+    modal.className = 'ghost-terminal-modal';
+    modal.id = 'ghost-terminal-modal';
+    modal.innerHTML = `
+      <div class="ghost-terminal-sheet">
+        <h3>👾 GHOST TERMINAL</h3>
+        <p>Send an encrypted tip to 0xGH0ST. Intel pays 50₵.</p>
+        <textarea class="ghost-input" id="ghost-input-text" placeholder="Enter intel for 0xGH0ST..."></textarea>
+        <button class="ghost-send-btn" onclick="window._sendGhostTip()">TRANSMIT ⬆</button>
+        <button class="pill-btn pill-secondary" style="width:100%;margin-top:8px;justify-content:center" onclick="document.querySelector('#ghost-terminal-modal').remove()">Cancel</button>
+      </div>`;
+    document.body.appendChild(modal);
+    modal.onclick = e => { if (e.target === modal) modal.remove(); };
+    setTimeout(() => document.querySelector('#ghost-input-text')?.focus(), 100);
+  }
+
+  window._sendGhostTip = async function () {
+    const input = document.querySelector('#ghost-input-text');
+    const msg = (input ? input.value : '').trim();
+    if (!msg) return;
+    try {
+      const r = await fetch('/api/world/send_ghost', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: msg }),
+      });
+      const d = await r.json();
+      document.querySelector('#ghost-terminal-modal')?.remove();
+      if (typeof toast === 'function') {
+        toast(d.ok ? `👾 Transmitted. +50₵ (Balance: ${d.balance}₵)` : `❌ ${d.error}`);
+      }
+    } catch (e) {
+      if (typeof toast === 'function') toast('❌ Transmission failed');
+    }
+  };
+
+  window.openGhostTerminal = openGhostTerminal;
+
+  /* Fetch incoming messages from server */
+  async function _fetchIncoming() {
+    try {
+      const r = await fetch('/api/world/incoming');
+      const data = await r.json();
+      if (Array.isArray(data) && data.length > 0) {
+        _worldIncomingMessages.length = 0;
+        data.forEach(m => _worldIncomingMessages.push(m));
+      }
+    } catch (e) { /* best-effort */ }
+  }
+
+  /* Patch Messages app render to inject INCOMING panel + GHOST button */
+  function _patchMessagesApp() {
+    const msgsApp = window.CosyPhone && window.CosyPhone.apps && window.CosyPhone.apps.messages;
+    if (!msgsApp) return false;
+
+    const origRender = msgsApp.render.bind(msgsApp);
+    msgsApp.render = function (body) {
+      origRender(body);
+      /* Insert INCOMING panel before thread list */
+      const threadList = body.querySelector('#msg-thread-list');
+      if (threadList) {
+        _renderIncomingPanel(body);
+        /* Insert GHOST TERMINAL button after INCOMING panel */
+        const btn = document.createElement('button');
+        btn.className = 'ghost-terminal-btn';
+        btn.innerHTML = '👾 GHOST TERMINAL <span style="margin-left:auto;font-size:11px;opacity:.6">+50₵</span>';
+        btn.onclick = openGhostTerminal;
+        body.insertBefore(btn, threadList);
+      }
+      _fetchIncoming().then(() => _renderIncomingPanel(body));
+    };
+    return true;
+  }
+
+  /* Wire socket events once socket is available */
+  function _wireSocket() {
+    const socket = window.CosyPhone && window.CosyPhone.socket;
+    if (!socket) return false;
+    socket.on('incoming_message', d => {
+      _prependNewMessage(d);
+    });
+    socket.on('world_alert', d => {
+      _showWorldAlert(d);
+    });
+    return true;
+  }
+
+  /* Poll until CosyPhone is ready */
+  let _attempts = 0;
+  const _poll = setInterval(() => {
+    _attempts++;
+    const patched = _patchMessagesApp();
+    const wired = _wireSocket();
+    if ((patched && wired) || _attempts > 50) clearInterval(_poll);
+  }, 100);
+})();
+</script>
 </body>
 </html>

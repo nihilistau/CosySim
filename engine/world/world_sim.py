@@ -1060,6 +1060,20 @@ def get_world_sim() -> WorldSim:
     return _WORLD_SIM
 
 
+def get_event_log(limit: int = 50) -> List[SimEvent]:
+    """Return recent world events from the singleton WorldSim.
+
+    Convenience wrapper around :meth:`WorldSim.get_all_events`.
+
+    Args:
+        limit: Maximum number of events to return (default 50).
+
+    Returns:
+        List of :class:`SimEvent` objects, newest first.
+    """
+    return get_world_sim().get_all_events(limit=limit)
+
+
 def start_world_sim() -> WorldSim:
     """Return the singleton :class:`WorldSim` and start it if not running.
 

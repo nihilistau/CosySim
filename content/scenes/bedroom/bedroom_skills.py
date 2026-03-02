@@ -545,3 +545,86 @@ def unlock_premium(content_id: str = "", cost: int = 100) -> str:
         # Economy engine not wired — grant free access in dev
         scene.socketio.emit("premium_unlocked", {"content_id": content_id})
         return f"Unlocked '{content_id}' (economy offline — dev mode)."
+
+
+# ── Living World Skills ────────────────────────────────────────────────
+
+
+@skill(
+    pack="bedroom",
+    tags=["game", "bedroom", "world"],
+    category=SkillCategory.ENVIRONMENT,
+    description="Get world context affecting the bedroom — recent events, Lola's mood modifier based on player status",
+)
+def get_bedroom_world_context() -> str:
+    """Return a formatted summary of living world context for the bedroom.
+
+    Returns:
+        Multi-line string with world events, credits, rep, heat, and mood.
+    """
+    scene = _get_bedroom_scene()
+    if not scene:
+        # Fall back to calling the logic directly
+        from engine.world.world_sim import get_event_log
+        from engine.world.player_state import get_player_state
+        try:
+            events = get_event_log(limit=20)
+            relevant = [e for e in events if e.scene == "bedroom" or e.intensity >= 2.0][:3]
+            ctx_lines = [f"• {e.title}: {e.description}" for e in relevant]
+            ps = get_player_state()
+            state = ps.to_dict()
+            credits = state.get("credits", 0)
+            rep = state.get("reputation", 50)
+            heat = state.get("heat", 0)
+        except Exception as exc:
+            return f"World context unavailable: {exc}"
+        if heat >= 70:
+            mood = "tense"
+        elif rep >= 70:
+            mood = "impressed"
+        elif rep <= 30:
+            mood = "cold"
+        else:
+            mood = "neutral"
+        lines = [f"Credits: {credits} ₵  Rep: {rep}  Heat: {heat}  Mood: {mood}"]
+        lines += ctx_lines or ["No notable events."]
+        return "\n".join(lines)
+
+    ctx = scene._get_world_context_for_character()
+    lines = [
+        f"Credits: {ctx['credits']} ₵  Rep: {ctx['reputation']}  "
+        f"Heat: {ctx['heat']}  Mood: {ctx['mood_modifier']}"
+    ]
+    for item in ctx["world_context"]:
+        lines.append(f"• {item}")
+    if not ctx["world_context"]:
+        lines.append("No notable world events.")
+    return "\n".join(lines)
+
+
+@skill(
+    pack="bedroom",
+    tags=["game", "bedroom", "reputation"],
+    category=SkillCategory.SOCIAL,
+    description="Update player reputation based on bedroom interactions",
+)
+def update_bedroom_reputation(delta: int = 0, reason: str = "bedroom_interaction") -> str:
+    """Adjust player reputation from a bedroom interaction outcome.
+
+    Args:
+        delta: Amount to change reputation (positive or negative).
+        reason: Context label stored in the player state log.
+
+    Returns:
+        Confirmation string with new reputation value.
+    """
+    if delta == 0:
+        return "No reputation change (delta=0)."
+    try:
+        from engine.world.player_state import get_player_state
+        ps = get_player_state()
+        new_rep = ps.update_reputation(delta, reason)
+        direction = "increased" if delta > 0 else "decreased"
+        return f"Reputation {direction} by {abs(delta):+d} ({reason}). New reputation: {new_rep}."
+    except Exception as exc:
+        return f"Reputation update failed: {exc}"

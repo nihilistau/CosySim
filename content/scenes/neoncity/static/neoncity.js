@@ -92,6 +92,7 @@ class NeonCityScene {
         this.socket.on('world_major_event', (data) => this._onWorldMajorEvent(data));
         this.socket.on('city_event', (data) => this._onCityEvent(data));
         this.socket.on('intel_result', (data) => this._onIntelResult(data));
+        this.socket.on('district_alert', (data) => this._onDistrictAlert(data));
         this.socket.on('error', (data) => {
             console.warn('[NeonCity] Server error:', data.message || data);
         });
@@ -102,6 +103,57 @@ class NeonCityScene {
     /** Request full city state from server. */
     loadCityState() {
         if (this.socket) this.socket.emit('get_city_state');
+    }
+
+    /** Fetch living-world district status from REST and update alerts ticker. */
+    fetchDistrictStatus() {
+        fetch('/api/world/district_status')
+            .then(r => r.json())
+            .then(data => {
+                this._districtStatus = data;
+                this._updateDistrictAlerts(data.district_alerts || []);
+                // Re-render faction bars to apply territory indicators
+                if (this.cityState) {
+                    this._renderFactionBars(this.cityState.factions || []);
+                }
+            })
+            .catch(e => console.warn('[NeonCity] district_status fetch failed:', e));
+    }
+
+    /**
+     * Update the DISTRICT ALERTS ticker with living-world event titles.
+     * @param {string[]} titles - Alert titles from /api/world/district_status.
+     */
+    _updateDistrictAlerts(titles) {
+        const bar = document.getElementById('district-alerts-bar');
+        const inner = document.getElementById('district-alerts-inner');
+        if (!inner || !bar) return;
+        if (!titles || titles.length === 0) {
+            bar.style.display = 'none';
+            return;
+        }
+        bar.style.display = '';
+        const all = [...titles, ...titles];
+        inner.innerHTML = all
+            .map(t => `<span class="ticker-item">${this._esc(t)}</span>`)
+            .join('');
+        const totalChars = all.reduce((n, t) => n + t.length, 0);
+        const duration = Math.max(20, totalChars * 0.08);
+        inner.style.animationDuration = `${duration}s`;
+    }
+
+    /**
+     * Handle a district_alert Socket.IO event (e.g. Corp Raid).
+     * @param {Object} data - Alert payload with type, title, payload.
+     */
+    _onDistrictAlert(data) {
+        const title = data.title || 'District Alert';
+        const payload = data.payload || {};
+        const desc = payload.description || payload.label || title;
+        this._showToast('⚠ DISTRICT ALERT', desc, 8000);
+        this._appendChatEntry('event', '[DISTRICT ALERT]', desc);
+        // Refresh district status so alerts ticker stays current
+        this.fetchDistrictStatus();
     }
 
     /** Request world events for the news feed. */
@@ -297,6 +349,7 @@ class NeonCityScene {
      * @param {Array<Object>} factions - Array of faction data objects.
      */
     _renderFactionBars(factions) {
+        const standings = (this._districtStatus || {}).faction_standings || {};
         factions.forEach(f => {
             const bar = document.getElementById(`bar-${f.name}`);
             if (bar) {
@@ -311,6 +364,25 @@ class NeonCityScene {
                 const label = f.label || 'Neutral';
                 const sign = (f.standing >= 0) ? '+' : '';
                 standingEl.textContent = `${label} (${sign}${f.standing || 0})`;
+            }
+
+            // Territory indicator based on PlayerState faction_standings
+            const terrEl = document.getElementById(`territory-${f.name}`);
+            if (terrEl) {
+                const ps = standings[f.name] || 0;
+                if (ps > 10) {
+                    terrEl.style.color = '#22c55e';
+                    terrEl.textContent = '▲';
+                    terrEl.title = `Territory: +${ps}`;
+                } else if (ps < -10) {
+                    terrEl.style.color = '#ef4444';
+                    terrEl.textContent = '▼';
+                    terrEl.title = `Territory: ${ps}`;
+                } else {
+                    terrEl.style.color = '#4a5568';
+                    terrEl.textContent = '—';
+                    terrEl.title = `Territory: ${ps >= 0 ? '+' : ''}${ps}`;
+                }
             }
         });
 
@@ -485,6 +557,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // Kick off periodic world-event fetch every 60 s
     NeonCityApp.loadWorldEvents();
     setInterval(() => NeonCityApp.loadWorldEvents(), 60_000);
+
+    // Fetch living-world district status on load and every 60 s
+    NeonCityApp.fetchDistrictStatus();
+    setInterval(() => NeonCityApp.fetchDistrictStatus(), 60_000);
 
     // Refresh faction status every 30 s
     setInterval(() => {

@@ -273,10 +273,11 @@ class CasinoScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
             logger.warning("CLUB NOIR: ConsequenceStore unavailable: %s", exc)
 
     def _wire_new_event_bus(self) -> None:
-        """Wire EventBus for casino.major_win publishing."""
+        """Wire EventBus for casino.major_win publishing and world sim events."""
         try:
             from engine.events.event_bus import get_event_bus, EventTypes
             self._event_bus_new = get_event_bus()
+            self._event_bus_new.subscribe("world.economy_tick", self._on_economy_tick_world)
             logger.info("CLUB NOIR: EventBus wired")
         except Exception as exc:
             logger.warning("CLUB NOIR: EventBus unavailable: %s", exc)
@@ -941,6 +942,80 @@ class CasinoScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
         return state
 
     # ══════════════════════════════════════════════════════════════════
+    #  LIVING WORLD INTEGRATION
+    # ══════════════════════════════════════════════════════════════════
+
+    def _get_world_status(self) -> Dict[str, Any]:
+        """Build the living-world status dict for CLUB NOIR.
+
+        Reads :class:`~engine.world.player_state.PlayerState` and recent
+        :class:`~engine.world.world_sim.SimEvent` objects for the ``casino``
+        scene, then computes derived flags (VIP access, heat lock).
+
+        Returns:
+            Dict with keys: credits, reputation, heat, faction_standings,
+            active_location, recent_events, vip_access, heat_locked.
+        """
+        from engine.world.player_state import get_player_state
+        ps = get_player_state()
+        state = ps.to_dict()
+        faction_standings: Dict[str, int] = state.get("faction_standings", {})
+
+        recent_events: List[Dict] = []
+        try:
+            from engine.world.world_sim import get_world_sim
+            ws = get_world_sim()
+            events = ws.get_digest("casino")
+            recent_events = [
+                {
+                    "title": e.title,
+                    "description": e.description,
+                    "intensity": e.intensity,
+                    "event_type": str(e.event_type),
+                    "actor": e.actor,
+                    "created_at": e.created_at,
+                }
+                for e in events[:10]
+            ]
+        except Exception as exc:
+            logger.debug("CLUB NOIR: WorldSim unavailable for status: %s", exc)
+
+        return {
+            "credits": state["credits"],
+            "reputation": state["reputation"],
+            "heat": state["heat"],
+            "faction_standings": faction_standings,
+            "active_location": state.get("active_location", "CLUB NOIR"),
+            "recent_events": recent_events,
+            "vip_access": faction_standings.get("OmniCorp", 0) >= 30,
+            "heat_locked": state["heat"] >= 80,
+        }
+
+    def _on_economy_tick_world(self, payload: dict) -> None:
+        """React to a ``world.economy_tick`` EventBus event.
+
+        Emits a ``world_event`` Socket.IO event so the frontend HUD can
+        display an odds-adjustment notice.
+
+        Args:
+            payload: EventBus payload dict from :class:`~engine.world.world_sim.WorldSim`.
+        """
+        try:
+            from engine.world.player_state import get_player_state
+            ps = get_player_state()
+            state = ps.to_dict()
+            impact = payload.get("economy_impact", 0)
+            self.socketio.emit("world_event", {
+                "title": payload.get("title", "Economy Shift"),
+                "economy_impact": impact,
+                "event_type": payload.get("event_type", "economy"),
+                "player_credits": state["credits"],
+                "odds_note": "Market shift — odds adjusted" if impact != 0 else "",
+            })
+        except Exception as exc:
+            logger.debug("CLUB NOIR: world_event emit failed: %s", exc)
+
+    # ══════════════════════════════════════════════════════════════════
     #  FLASK ROUTES
     # ══════════════════════════════════════════════════════════════════
 
@@ -1039,6 +1114,21 @@ class CasinoScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
             except Exception as exc:
                 logger.error("Economy API error: %s", exc)
                 return jsonify({"error": str(exc)}), 500
+
+        @app.route("/api/world/status")
+        def world_status():
+            return jsonify(self._get_world_status())
+
+        @app.route("/api/world/earn", methods=["POST"])
+        def world_earn():
+            from engine.world.player_state import get_player_state
+            data = request.get_json(force=True, silent=True) or {}
+            amount = data.get("amount")
+            reason = str(data.get("reason", "earn"))
+            if not isinstance(amount, int) or amount <= 0:
+                return jsonify({"error": "amount must be a positive integer"}), 400
+            balance = get_player_state().earn_credits(int(amount), reason)
+            return jsonify({"balance": balance, "reason": reason, "amount": amount})
 
     # ══════════════════════════════════════════════════════════════════
     #  SOCKETIO
@@ -1191,6 +1281,11 @@ class CasinoScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
                 self._reputation_update("win", bj["winnings"])
                 if bj["winnings"] >= 200:
                     self._publish_major_win(bj["winnings"])
+                try:
+                    from engine.world.player_state import get_player_state as _gps
+                    _gps().earn_credits(abs(bj["winnings"]), "casino_win")
+                except Exception:
+                    pass
                 bj["active"] = False
                 dealer_says = "Blackjack! The house pays 3:2."
 
@@ -1314,6 +1409,18 @@ class CasinoScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
                 bj["phase"] = "result"
                 bj["active"] = False
                 result_payload["message"] = f"Surrender. Half bet (${refund}) returned."
+
+            # Sync win/loss to PlayerState (living world integration)
+            try:
+                from engine.world.player_state import get_player_state as _gps
+                _ps = _gps()
+                _bj_result = bj.get("result")
+                if _bj_result == "win":
+                    _ps.earn_credits(abs(bj.get("winnings", 0)), "casino_win")
+                elif _bj_result in ("loss", "bust"):
+                    _ps.spend_credits(abs(bj.get("bet", 0)), "casino_loss")
+            except Exception:
+                pass
 
             # Get dealer reaction
             dealer_says = self._agent_text(

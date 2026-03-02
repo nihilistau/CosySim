@@ -55,6 +55,7 @@
       <div class="cn-table-badge" id="hdr-table">
         <span id="table-name-display">NO TABLE</span>
       </div>
+      <div class="cn-vip-badge" id="vip-badge" style="display:none;">⬡ VIP</div>
     </div>
   </header>
 
@@ -87,6 +88,25 @@
         <div class="cn-panel__title">DEBTS</div>
         <div id="consequence-area">
           <span class="cn-no-debts">All clear… for now.</span>
+        </div>
+      </div>
+
+      <!-- Living world status -->
+      <div class="cn-panel cn-panel--world" id="world-status-panel">
+        <div class="cn-panel__title">WORLD STATUS</div>
+        <div class="cn-world-rows" id="world-rows">
+          <div class="cn-world-row">
+            <span class="cn-world-label">CREDITS</span>
+            <span class="cn-world-value" id="ws-credits">—</span>
+          </div>
+          <div class="cn-world-row">
+            <span class="cn-world-label">REP</span>
+            <span class="cn-world-value" id="ws-rep">—</span>
+          </div>
+          <div class="cn-world-row">
+            <span class="cn-world-label">HEAT</span>
+            <span class="cn-world-value cn-world-heat" id="ws-heat">—</span>
+          </div>
         </div>
       </div>
 
@@ -259,6 +279,13 @@
   <div class="cn-flash__amount" id="flash-loss-amount"></div>
 </div>
 
+<!-- HEAT LOCK OVERLAY -->
+<div id="heat-lock-overlay" style="display:none;position:fixed;inset:0;background:rgba(180,0,0,0.82);z-index:9999;display:none;align-items:center;justify-content:center;flex-direction:column;">
+  <div style="color:#fff;font-size:2.4rem;font-weight:900;letter-spacing:.2em;text-shadow:0 0 24px #f00;">ACCESS DENIED</div>
+  <div style="color:#ffaaaa;font-size:1.1rem;margin-top:.6rem;letter-spacing:.15em;">TOO HOT — COOL DOWN BEFORE RETURNING</div>
+  <div style="color:#fff;margin-top:1.2rem;font-size:1.6rem;" id="heat-lock-value"></div>
+</div>
+
 <!-- Consequence toast -->
 <div class="cn-consequence-toast" id="consequence-toast" style="display:none;">
   <span class="consequence-badge">⚠ MIRA WILL CALL</span>
@@ -269,5 +296,63 @@
 <script src="/shared/js/cosysim-voice.js"></script>
 <script>window.SCENE_PARTICLE_CONFIG = { scene: 'casino' };</script>
 <script src="/shared/js/cosysim-particles.js"></script>
-</body>
+
+<script>
+/* ── WORLD STATUS HUD ─────────────────────────────────────────── */
+(function () {
+  'use strict';
+
+  function applyWorldStatus(data) {
+    const safe = (v) => (v !== undefined && v !== null) ? v : '—';
+
+    const wsCredits = document.getElementById('ws-credits');
+    const wsRep     = document.getElementById('ws-rep');
+    const wsHeat    = document.getElementById('ws-heat');
+    const vipBadge  = document.getElementById('vip-badge');
+    const heatOverlay = document.getElementById('heat-lock-overlay');
+
+    if (wsCredits) wsCredits.textContent = '₵' + safe(data.credits);
+    if (wsRep)     wsRep.textContent     = safe(data.reputation) + '/100';
+    if (wsHeat) {
+      wsHeat.textContent = safe(data.heat) + '/100';
+      wsHeat.style.color = data.heat >= 60 ? '#f00' : data.heat >= 40 ? '#f97316' : '#0f0';
+    }
+
+    if (vipBadge) {
+      vipBadge.style.display = data.vip_access ? 'inline-flex' : 'none';
+    }
+
+    if (heatOverlay) {
+      if (data.heat_locked) {
+        heatOverlay.style.display = 'flex';
+        const heatVal = document.getElementById('heat-lock-value');
+        if (heatVal) heatVal.textContent = 'HEAT: ' + data.heat + ' / 100';
+      } else {
+        heatOverlay.style.display = 'none';
+      }
+    }
+  }
+
+  function fetchWorldStatus() {
+    fetch('/api/world/status')
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (data) { if (data) applyWorldStatus(data); })
+      .catch(function (e) { console.debug('world status fetch failed', e); });
+  }
+
+  // Load on page ready and then every 60 s
+  document.addEventListener('DOMContentLoaded', fetchWorldStatus);
+  setInterval(fetchWorldStatus, 60000);
+
+  // Also refresh on Socket.IO world_event
+  if (typeof window._casino !== 'undefined' && window._casino.socket) {
+    window._casino.socket.on('world_event', function () { fetchWorldStatus(); });
+  } else {
+    document.addEventListener('DOMContentLoaded', function () {
+      const s = window.io && window.io();
+      if (s) s.on('world_event', function () { fetchWorldStatus(); });
+    });
+  }
+}());
+</script>
 </html>

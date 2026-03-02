@@ -300,6 +300,31 @@
         </div>
       </div>
 
+      <!-- World Status -->
+      <div class="cs-glass-panel bedroom-panel-section" id="world-status-panel">
+        <h3 class="bedroom-panel-title">
+          <span>WORLD STATUS</span>
+          <span class="cs-chip world-mood-chip" id="world-mood-chip">neutral</span>
+        </h3>
+        <div class="bedroom-world-stats">
+          <div class="bedroom-world-stat">
+            <span class="bedroom-world-stat__label">₵ Credits</span>
+            <span class="bedroom-world-stat__value" id="world-credits">—</span>
+          </div>
+          <div class="bedroom-world-stat">
+            <span class="bedroom-world-stat__label">Rep</span>
+            <span class="bedroom-world-stat__value" id="world-rep">—</span>
+          </div>
+          <div class="bedroom-world-stat">
+            <span class="bedroom-world-stat__label">Heat</span>
+            <span class="bedroom-world-stat__value world-heat-val" id="world-heat">—</span>
+          </div>
+        </div>
+        <ul class="bedroom-world-events" id="world-events-list" aria-live="polite">
+          <li class="bedroom-world-events__empty">Loading world context…</li>
+        </ul>
+      </div>
+
     </aside><!-- /right-panel -->
 
   </main><!-- /bedroom-layout -->
@@ -323,6 +348,69 @@
   <script src="{{ url_for('static', filename='bedroom.js') }}"></script>
   <script>window.SCENE_PARTICLE_CONFIG = { scene: 'bedroom' };</script>
   <script src="/shared/js/cosysim-particles.js"></script>
+
+  <!-- Living World integration -->
+  <script>
+  (function () {
+    'use strict';
+
+    const MOOD_CHIP_CLASSES = {
+      tense:     'cs-chip--intensity-3',
+      impressed: 'cs-chip--green',
+      cold:      'cs-chip--blue',
+      neutral:   '',
+    };
+
+    function applyWorldContext(ctx) {
+      const credits = ctx.credits ?? '—';
+      const rep     = ctx.reputation ?? '—';
+      const heat    = ctx.heat ?? '—';
+      const mood    = ctx.mood_modifier ?? 'neutral';
+
+      const credEl = document.getElementById('world-credits');
+      const repEl  = document.getElementById('world-rep');
+      const heatEl = document.getElementById('world-heat');
+      const chipEl = document.getElementById('world-mood-chip');
+      const listEl = document.getElementById('world-events-list');
+
+      if (credEl) credEl.textContent = credits;
+      if (repEl)  repEl.textContent  = rep;
+      if (heatEl) {
+        heatEl.textContent = heat;
+        heatEl.className = 'bedroom-world-stat__value world-heat-val' +
+          (heat >= 70 ? ' world-heat-val--danger' : heat >= 40 ? ' world-heat-val--warn' : '');
+      }
+      if (chipEl) {
+        chipEl.textContent = mood;
+        chipEl.className = 'cs-chip world-mood-chip ' + (MOOD_CHIP_CLASSES[mood] || '');
+      }
+      if (listEl) {
+        const events = ctx.world_context || [];
+        if (events.length === 0) {
+          listEl.innerHTML = '<li class="bedroom-world-events__empty">No notable world events.</li>';
+        } else {
+          listEl.innerHTML = events
+            .map(e => `<li class="bedroom-world-events__item">${e}</li>`)
+            .join('');
+        }
+      }
+    }
+
+    // Fetch on load
+    fetch('/api/world/context')
+      .then(r => r.json())
+      .then(applyWorldContext)
+      .catch(() => {});
+
+    // Listen for real-time updates via Socket.IO (socket defined by bedroom.js)
+    document.addEventListener('bedroom-socket-ready', function (ev) {
+      const socket = ev.detail;
+      if (socket) {
+        socket.on('world_context_update', applyWorldContext);
+      }
+    });
+  }());
+  </script>
 
 </body>
 </html>

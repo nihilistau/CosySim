@@ -227,4 +227,30 @@ def cash_out() -> str:
     return f"Cashed out. Balance: ${balance}. The house thanks you."
 
 
+@skill(
+    pack="casino",
+    description="Get casino world status including player credits, VIP access, and heat level",
+    category=SkillCategory.ENVIRONMENT,
+    tags=["casino", "world", "status", "hud"],
+)
+def get_casino_world_status() -> str:
+    """Return a formatted Neon City world-status string for CLUB NOIR."""
+    scene = _get_casino_scene()
+    if not scene:
+        return "Casino not active."
+    try:
+        status = scene._get_world_status()
+        vip_tag = " [VIP ACCESS]" if status["vip_access"] else ""
+        locked_tag = " ⚠ HEAT LOCKED" if status["heat_locked"] else ""
+        return (
+            f"CLUB NOIR — WORLD STATUS{vip_tag}{locked_tag}\n"
+            f"Credits: ₵{status['credits']} | "
+            f"Rep: {status['reputation']}/100 | "
+            f"Heat: {status['heat']}/100\n"
+            f"OmniCorp standing: {status['faction_standings'].get('OmniCorp', 0)}"
+        )
+    except Exception as exc:
+        return f"World status unavailable: {exc}"
+
+
 # ── End of CLUB NOIR Casino Skills ─────────────────────────────────────

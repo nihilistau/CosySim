@@ -350,6 +350,41 @@ class NeonCityScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="neo
             ))
         return items
 
+    def _get_district_status(self) -> Dict[str, Any]:
+        """Assemble living-world district status from PlayerState and WorldSim.
+
+        Returns:
+            Dict with faction_standings, district_alerts, corp_raid_active,
+            heat, and credits sourced from the PlayerState singleton.
+        """
+        from engine.world.player_state import get_player_state
+        from engine.world.world_sim import get_world_sim
+
+        ps_dict = get_player_state().to_dict()
+
+        district_alerts: List[str] = []
+        corp_raid_active: bool = False
+        try:
+            for ev in get_world_sim().get_all_events(limit=20):
+                scene = getattr(ev, "scene", "")
+                title = getattr(ev, "title", "")
+                if scene == SCENE_ID or not scene:
+                    if title:
+                        district_alerts.append(title)
+                    lower = title.lower()
+                    if "corp raid" in lower or "corp_raid" in lower:
+                        corp_raid_active = True
+        except Exception as exc:
+            logger.debug("WorldSim unavailable for district_status: %s", exc)
+
+        return {
+            "faction_standings": ps_dict.get("faction_standings", {}),
+            "district_alerts": district_alerts,
+            "corp_raid_active": corp_raid_active,
+            "heat": ps_dict.get("heat", 0),
+            "credits": ps_dict.get("credits", 0),
+        }
+
     def _sync_to_mcp(self) -> None:
         """Push current city state snapshot to MCPFramework."""
         try:
@@ -430,6 +465,21 @@ class NeonCityScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="neo
                 name: {**data, "power": self._get_faction_power(name)}
                 for name, data in _FACTIONS.items()
             })
+
+        # ── Living world routes ─────────────────────────────────────────
+
+        @self.app.route("/api/world/district_status")
+        def world_district_status():
+            return jsonify(self._get_district_status())
+
+        @self.app.route("/api/world/faction_rep", methods=["POST"])
+        def world_faction_rep():
+            from engine.world.player_state import get_player_state
+            data = request.json or {}
+            faction = data.get("faction", "")
+            delta = int(data.get("delta", 0))
+            new_val = get_player_state().update_faction_standing(faction, delta)
+            return jsonify({"faction": faction, "delta": delta, "new_standing": new_val})
 
         # ── Board game routes (legacy) ──────────────────────────────────
 
@@ -769,12 +819,29 @@ class NeonCityScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="neo
             except Exception as exc:
                 logger.debug("city_event emit failed: %s", exc)
 
+        def _on_corp_raid_check(event: Dict[str, Any]) -> None:
+            """Detect Corp Raid events and emit district_alert to all clients."""
+            payload = event.get("payload", {})
+            title = payload.get("title") or event.get("title", "")
+            event_type_str = payload.get("event_type", "") or event.get("event_type", "")
+            lower = title.lower()
+            if "corp raid" in lower or "corp_raid" in lower or "corp_raid" in event_type_str:
+                try:
+                    self.socketio.emit("district_alert", {
+                        "type": "corp_raid",
+                        "title": title,
+                        "payload": payload,
+                    })
+                except Exception as exc:
+                    logger.debug("district_alert emit failed: %s", exc)
+
         try:
             bus = self._event_bus
             self._bus_subs.extend([
                 bus.subscribe(EventTypes.WORLD_EVENT, _on_world_event, "neoncity_scene"),
                 bus.subscribe(EventTypes.NEONCITY_FACTION_SHIFT, _on_faction_shift, "neoncity_scene"),
                 bus.subscribe(EventTypes.NEONCITY_WORLD_EVENT, _on_npc_action, "neoncity_scene"),
+                bus.subscribe("world.world_event", _on_corp_raid_check, "neoncity_world_watch"),
             ])
             logger.info("NeonCity EventBus: %d subscriptions active.", len(self._bus_subs))
         except Exception as exc:

@@ -455,3 +455,84 @@ def phone_toggle_autotxt(mute: bool = True) -> str:
     except Exception as e:
         logger.error("phone_toggle_autotxt failed: %s", e)
         return f"Auto-texts {'muted' if mute else 'unmuted'}."
+
+
+# ── Living World / 0xGH0ST integration ────────────────────────
+
+
+@skill(
+    pack="phone",
+    description="Get recent 0xGH0ST messages and world event alerts",
+    category=SkillCategory.COMMUNICATION,
+    tags=["ghost", "world", "phone", "hacker"],
+)
+def get_ghost_messages() -> str:
+    """Return a formatted string of recent 0xGH0ST messages and world alerts.
+
+    Calls the scene's world-integration endpoint to fetch the latest
+    hacker transmissions and high-intensity world events.
+
+    Returns:
+        Formatted string listing incoming messages, or status message.
+    """
+    scene = _get_phone_scene()
+    if not scene:
+        return "SIGNAL scene not active."
+    try:
+        messages = scene._get_incoming_world_messages()
+        if not messages:
+            return "No incoming transmissions from 0xGH0ST."
+        lines = [f"[INCOMING — {len(messages)} transmission(s)]"]
+        for m in messages:
+            tag = "👾 0xGH0ST" if m.get("type") == "ghost" else f"🌐 {m.get('from', 'SYSTEM')}"
+            heat = m.get("heat_impact", 0)
+            heat_str = f" [+{heat}🔥]" if heat else ""
+            lines.append(f"  {tag}{heat_str}: {m.get('text', '')}")
+        return "\n".join(lines)
+    except Exception as exc:
+        logger.error("get_ghost_messages failed: %s", exc)
+        return f"Failed to retrieve transmissions: {exc}"
+
+
+@skill(
+    pack="phone",
+    description="Send intel to 0xGH0ST for credits reward",
+    category=SkillCategory.COMMUNICATION,
+    tags=["ghost", "phone", "credits", "hacker"],
+    cooldown=30.0,
+)
+def send_ghost_tip(message: str = "") -> str:
+    """Send an intel tip to 0xGH0ST and earn 50 credits.
+
+    Stores the message in Nexus under the phone_messages category and
+    credits the player's account.
+
+    Args:
+        message: The intel message to send to 0xGH0ST.
+
+    Returns:
+        Confirmation string with new credit balance, or error message.
+    """
+    if not message:
+        return "Provide intel message to send to 0xGH0ST."
+    try:
+        from engine.nexus.client import get_nexus_client
+        from engine.world.player_state import get_player_state
+        client = get_nexus_client()
+        client.add_entry(
+            title="ghost_outgoing",
+            content=message,
+            content_type="history",
+            category="phone_messages",
+            tags=["ghost", "phone", "outgoing"],
+        )
+        ps = get_player_state()
+        ps.earn_credits(50, "ghost_tip")
+        state = ps.to_dict()
+        return (
+            f"Intel transmitted to 0xGH0ST. "
+            f"+50₵ earned. Balance: {state['credits']}₵"
+        )
+    except Exception as exc:
+        logger.error("send_ghost_tip failed: %s", exc)
+        return f"Transmission failed: {exc}"

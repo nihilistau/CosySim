@@ -249,8 +249,114 @@ def credit_exchange(amount: int, direction: str = "in") -> str:
         logger.error("credit_exchange failed: %s", exc)
         return f"[EXCHANGE] ❌ Exchange terminal offline: {exc}"
 
+
 
-# ── Reputation Check ──────────────────────────────────────────────────────────
+# ── NeonCity World Status ─────────────────────────────────────────────────────
+
+@skill(
+    pack="neoncity",
+    tags=["game", "world", "district", "environment"],
+    category=SkillCategory.ENVIRONMENT,
+    description=(
+        "Get Neon City district alerts, faction territory status, "
+        "and player heat level."
+    ),
+)
+def get_neoncity_world_status() -> str:
+    """Return a formatted district status report for NeonCity.
+
+    Reads PlayerState (faction standings, heat, credits) and WorldSim
+    (active district alerts, corp_raid_active flag) to produce a
+    situational summary.
+
+    Returns:
+        Multi-line status string with heat, credits, alerts, and faction control.
+    """
+    try:
+        from engine.world.player_state import get_player_state
+        from engine.world.world_sim import get_world_sim
+
+        ps_dict = get_player_state().to_dict()
+        standings = ps_dict.get("faction_standings", {})
+        heat = ps_dict.get("heat", 0)
+        credits = ps_dict.get("credits", 0)
+
+        district_alerts: list = []
+        corp_raid_active = False
+        try:
+            for ev in get_world_sim().get_all_events(limit=20):
+                scene = getattr(ev, "scene", "")
+                title = getattr(ev, "title", "")
+                if scene == "neoncity" or not scene:
+                    if title:
+                        district_alerts.append(title)
+                    if "corp raid" in title.lower() or "corp_raid" in title.lower():
+                        corp_raid_active = True
+        except Exception as exc:
+            logger.debug("WorldSim unavailable: %s", exc)
+
+        heat_bar = "█" * (heat // 10) + "░" * (10 - heat // 10)
+        lines = [
+            "🏙️  NEON CITY — DISTRICT STATUS",
+            "─" * 44,
+            f"  🌡️  Heat:    [{heat_bar}] {heat}/100",
+            f"  ₢   Credits: {credits:,}",
+            f"  🚨  Corp Raid Active: {'YES ⚠' if corp_raid_active else 'No'}",
+            "─" * 44,
+        ]
+        if district_alerts:
+            lines.append("  ACTIVE ALERTS:")
+            for alert in district_alerts[:5]:
+                lines.append(f"    ⚠ {alert}")
+        else:
+            lines.append("  [ALL QUIET] No district alerts detected.")
+        lines.append("─" * 44)
+        lines.append("  FACTION TERRITORY CONTROL:")
+        for faction, standing in standings.items():
+            sign = "+" if standing >= 0 else ""
+            icon = "💚" if standing > 10 else ("🔴" if standing < -10 else "🟡")
+            lines.append(f"    {icon} {faction:<14} Standing: {sign}{standing}")
+        return "\n".join(lines)
+    except Exception as exc:
+        logger.error("get_neoncity_world_status failed: %s", exc)
+        return f"[DISTRICT STATUS] Terminal offline: {exc}"
+
+
+# ── Trigger District Event ────────────────────────────────────────────────────
+
+@skill(
+    pack="neoncity",
+    tags=["game", "district", "heat", "incident"],
+    category=SkillCategory.GAME,
+    description=(
+        "Trigger a district incident (increases heat, fires world event). "
+        "Use sparingly — each incident raises your heat level by 15."
+    ),
+    cooldown=30.0,
+)
+def trigger_district_event() -> str:
+    """Trigger a district incident that raises the player's heat level.
+
+    Adjusts heat by +15 via PlayerState and returns a narrative message.
+
+    Returns:
+        Incident report string with new heat level.
+    """
+    try:
+        from engine.world.player_state import get_player_state
+        ps = get_player_state()
+        new_heat = ps.adjust_heat(15, reason="district_incident")
+        heat_bar = "█" * (new_heat // 10) + "░" * (10 - new_heat // 10)
+        status = "CRITICAL" if new_heat >= 80 else ("HIGH" if new_heat >= 50 else "ELEVATED")
+        return (
+            f"[DISTRICT INCIDENT] Chaos erupts in the sector.\n"
+            f"  Heat Level: [{heat_bar}] {new_heat}/100 — {status}\n"
+            f"  Enforcers are mobilising. Watch your back, runner."
+        )
+    except Exception as exc:
+        logger.error("trigger_district_event failed: %s", exc)
+        return f"[INCIDENT] Event trigger failed: {exc}"
+
 
 @skill(
     pack="neoncity",
