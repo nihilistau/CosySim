@@ -46,7 +46,7 @@ for _stream in (sys.stdout, sys.stderr):
 PROJECT_ROOT = Path(__file__).parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-VERSION = "0.69b"
+VERSION = "0.74b"
 
 # ── Catalogues ────────────────────────────────────────────────────────────
 # type: "flask" | "streamlit" | "fastapi"
@@ -329,6 +329,13 @@ def launch_multi(service_names: List[str], scene_names: List[str]) -> None:
         print("  🔗 Cross-scene relay active")
     except Exception as exc:
         print(f"  ⚠️  Cross-scene relay: {exc}")
+
+    try:
+        from engine.world.event_cascade import get_event_cascade
+        get_event_cascade().start()
+        print("  🌊 EventCascade active")
+    except Exception as exc:
+        print(f"  ⚠️  EventCascade start failed: {exc}")
 
     time.sleep(5)
     print("\n  Health check:")

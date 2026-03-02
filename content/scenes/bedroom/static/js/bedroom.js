@@ -1098,6 +1098,32 @@ function connectSocket() {
         console.log('[BedGame] Ended');
         CharModels.stopPose(false); // smooth return to standing
     });
+    socket.on('world_event', (evt) => {
+        _onWorldEvent(evt);
+    });
+}
+
+// ── World Event Cascade ─────────────────────────────────────────────────
+function _onWorldEvent(evt) {
+    const type = evt.event_type || '';
+    const summary = (evt.data && (evt.data.summary || evt.data.description)) || type;
+    // Show subtle ambient notification — doesn't interrupt gameplay
+    const ticker = document.getElementById('world-event-ticker');
+    if (ticker) {
+        ticker.textContent = summary;
+        ticker.classList.add('world-event-ticker--active');
+        setTimeout(() => ticker.classList.remove('world-event-ticker--active'), 6000);
+    }
+    // Emit to the scene event log if it exists
+    const log = document.getElementById('scene-event-log');
+    if (log) {
+        const row = document.createElement('div');
+        row.className = 'scene-event-row';
+        row.textContent = `[${type.toUpperCase()}] ${summary}`;
+        log.insertBefore(row, log.firstChild);
+        while (log.children.length > 10) log.removeChild(log.lastChild);
+    }
+    console.debug('[WorldCascade]', evt.event_type, summary);
 }
 
 // ═══════════════════════════════════════════════════════════════════════

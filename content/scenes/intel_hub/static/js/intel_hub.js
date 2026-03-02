@@ -139,6 +139,10 @@ class BriefingRoomScene {
           items.slice(0, 8).reverse().forEach(i => this._appendActivity(i));
         }
       });
+
+      this.socket.on('world_event', (evt) => {
+        this._onWorldEvent(evt);
+      });
     } catch (e) {
       console.warn('[BriefingRoom] Socket.IO unavailable:', e.message);
     }
@@ -373,6 +377,27 @@ class BriefingRoomScene {
     el.insertBefore(entry, el.firstChild);
     // Keep max 20 entries
     while (el.children.length > 20) el.removeChild(el.lastChild);
+  }
+
+  _onWorldEvent(evt) {
+    // Surface world events in the Intel Hub activity log
+    const typeLabels = {
+      economy: '💹 ECONOMY', faction: '⚔️ FACTION', npc: '🧍 NPC',
+      crime: '🚨 CRIME', weather: '🌩️ WEATHER', political: '🏛️ POLITICAL',
+      social: '👥 SOCIAL', disaster: '💥 DISASTER', rumour: '📢 RUMOUR', combat: '⚔️ COMBAT',
+    };
+    const label = typeLabels[evt.event_type] || evt.event_type.toUpperCase();
+    const summary = evt.data?.summary || evt.data?.description || evt.event_type;
+    this._appendActivity({ cat: label, msg: `[${evt.source}] ${summary}` });
+    // Also update world events panel if visible
+    const panel = document.getElementById('world-events-feed');
+    if (panel) {
+      const row = document.createElement('div');
+      row.className = 'world-event-row';
+      row.innerHTML = `<span class="we-type">${_esc(label)}</span> <span>${_esc(summary)}</span>`;
+      panel.insertBefore(row, panel.firstChild);
+      while (panel.children.length > 30) panel.removeChild(panel.lastChild);
+    }
   }
 
   // ── Aria ───────────────────────────────────────────────

@@ -668,6 +668,29 @@ class BaseScene(ABC):
             _bslogger.debug("BaseScene: MCPFramework registered scene '%s'", self.scene_name)
         except Exception as _exc:
             _bslogger.debug("BaseScene._mcp_register_scene failed: %s", _exc)
+        self._wire_event_cascade()
+
+    def _wire_event_cascade(self) -> None:
+        """Subscribe this scene to EventCascade using its default event types.
+
+        Reads DEFAULT_SCENE_SUBSCRIPTIONS for the scene's registered event
+        interests and calls get_event_cascade().subscribe().  Best-effort —
+        silently skips if EventCascade is not available or scene has no defaults.
+        """
+        try:
+            from engine.world.event_cascade import (
+                get_event_cascade,
+                DEFAULT_SCENE_SUBSCRIPTIONS,
+            )
+            event_types = DEFAULT_SCENE_SUBSCRIPTIONS.get(self.scene_name)
+            if event_types:
+                get_event_cascade().subscribe(self.scene_name, event_types)
+                _bslogger.debug(
+                    "BaseScene: %s subscribed to EventCascade types: %s",
+                    self.scene_name, event_types,
+                )
+        except Exception as _exc:
+            _bslogger.debug("BaseScene._wire_event_cascade failed: %s", _exc)
 
     def _mcp_deregister_scene(self) -> None:
         """Broadcast scene stop to ActivityBus.  Call from subclass stop()."""

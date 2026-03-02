@@ -466,6 +466,32 @@ body {
 /* ─── Animations ───────────────────────────────────────────────────── */
 @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.35} }
 @keyframes fadeSlideIn { from{opacity:0;transform:translateY(5px)} to{opacity:1;transform:translateY(0)} }
+@keyframes worldEventFade { 0%{opacity:0;transform:translateX(-50%) translateY(-8px)} 10%{opacity:1;transform:translateX(-50%) translateY(0)} 85%{opacity:1} 100%{opacity:0;transform:translateX(-50%) translateY(-4px)} }
+
+/* ─── World Event Ticker ────────────────────────────────────────────── */
+.world-event-ticker {
+  position: fixed;
+  top: 52px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0,0,0,0.75);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 6px;
+  padding: 5px 16px;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  color: rgba(255,255,255,0.55);
+  pointer-events: none;
+  opacity: 0;
+  z-index: 800;
+  white-space: nowrap;
+  max-width: 60vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.world-event-ticker--active {
+  animation: worldEventFade 6s ease-in-out forwards;
+}
 
 /* ─── Scrollbar ────────────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 4px; }
