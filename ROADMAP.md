@@ -83,62 +83,75 @@ The system's ultimate goal: **inhabit itself** — AI agents that maintain, impr
 
 ---
 
-## Active: v0.72 — "The Living World"
+## Active: v0.72 — "The Asset Studio" ✅ COMPLETE
 
-> v0.71 polished the surface. v0.72 makes the world breathe on its own.
-> ComfyUI-generated character portraits, NPCs with autonomous schedules,
-> persistent player identity across scenes, the router_v3 model serving
-> live traffic and growing its own dataset, and Intel Hub as mission control.
+> v0.72 brought the Asset Studio: ComfyUI-powered portrait and video generation,
+> NPC autonomous schedules, persistent player identity, router v3 in production,
+> real-time metrics, and the full Wan 2.2 GGUF dual-model video pipeline.
 
-### Track A: ComfyUI Character Portraits
-- [ ] `engine/art/portrait_generator.py` — `PortraitGenerator` wrapping ComfyUI `/prompt` API
-- [ ] Per-character prompt templates stored in Nexus (face, style, background per character)
-- [ ] `generate_portrait(character_id, emotion)` skill → ComfyUI → saves to `content/shared/static/img/portraits/{id}_{emotion}.png`
-- [ ] Portrait overlay wired to load from file path; CSS gradient fallback if not generated
-- [ ] Batch generation skill `generate_all_portraits` — generates all named NPCs at scene start
-- [ ] Admin overlay [PORTRAITS] tab — grid of generated portraits, regenerate button
-- [ ] `tests/test_portrait_generator.py` — mock ComfyUI API, test prompt building, caching
+- [x] Track A: PortraitGenerator engine — ComfyUI API wrapper, per-character prompt templates, generate/batch/admin skills
+- [x] Track B: NPCScheduler + npc_state + NPC activity badge in admin overlay; npc-world-tick scheduler task
+- [x] Track C: PlayerProfile singleton (Nexus-backed), PROFILE admin tab, RelationshipContextInterceptor
+- [x] Track D: Router v3 production client; training flywheel (router-data-export, router-v3-retrain scheduler tasks)
+- [x] Track E: MetricsCollector + /api/metrics; Intel Hub mission control (scene health grid, metrics ticker, training panel)
+- [x] Track F: Docs — WORLD_SYSTEM, TRAINING_FLYWHEEL, PLAYER_IDENTITY, SYSTEM_AUDIT v0.72b
+- [x] Wan 2.2 GGUF Video System: 15 workflow variants, dual-model architecture, all params exposed
+- [x] A++ Tuning System: proven profiles, benchmark runner, Qwen3-VL visual scoring, auto-tuner
+- [x] Smart Test Runner: 24-domain git-diff-based selector (scripts/smart_test.py)
+- [x] Tests: **7,500+ passing**, 39 scheduler tasks, 15 workflow variants
 
-### Track B: Autonomous NPC Behavior
-- [ ] `engine/agents/npc_scheduler.py` — `NPCScheduler` with async tick loop per character
-- [ ] NPC tick actions: drift reputation, send ambient message, change scene price, log activity
-- [ ] `engine/world/npc_state.py` — per-NPC: location, activity, last_action, schedule
-- [ ] WorldSim → NPC state bridge: world events affect NPC mood/activity
-- [ ] Scheduler task `npc-world-tick` (every 15 min) → total 37 tasks
-- [ ] NPC activity badge in scene UI: pulsing dot when NPC is "doing something"
-- [ ] `tests/test_npc_scheduler.py` — tick logic, state transitions, WorldSim bridge
+---
 
-### Track C: Persistent Player Identity
-- [ ] `engine/characters/player_profile.py` — `PlayerProfile` singleton, Nexus-backed
-- [ ] Tracks: session count, scenes visited, NPCs met, relationship scores, key decisions, reputation summary
-- [ ] `player_profile_skills.py` — `get_player_profile`, `update_player_reputation`, `get_relationship_summary`, `record_decision`
-- [ ] Admin overlay **[PROFILE]** tab — identity card, relationship web, timeline
-- [ ] `RelationshipContextInterceptor` extended to inject player profile summary into every LLM call
-- [ ] `tests/test_player_profile.py` — profile CRUD, Nexus persistence, interceptor injection
+## Active: v0.73 — "The Living Nexus"
 
-### Track D: Training Flywheel
-- [ ] `engine/lmstudio/router_v3_client.py` — thin wrapper loading trained adapter via ModelRegistry
-- [ ] `InferenceRouter` updated to use router_v3 model for routing decisions (fallback to rule_predictor)
-- [ ] `RouterDataCollector` weekly export: auto-merge incremental JSONL, trigger `RouterFinetuneCycle`
-- [ ] Scheduler tasks `router-data-export` + `router-retrain-cycle` → total **38 tasks** (6 test files updated)
-- [ ] Retrain report generated post-cycle: val_loss, sample_count, model_id — stored in Nexus
-- [ ] Intel Hub training dashboard: val_loss history chart, dataset size trend, last retrain time
-- [ ] `tests/test_training_flywheel.py` — export trigger, retrain cycle, report generation
+> v0.73 makes the Nexus truly live: a curated news and intelligence feed that agents
+> consume, scene-integrated asset generation (use ComfyUI assets directly in scene UIs),
+> and a self-improving world that benchmarks, measures, and tunes itself continuously.
 
-### Track E: Intel Hub Mission Control
-- [ ] `engine/monitoring/metrics_collector.py` — in-process metrics: LLM call latency, error rate, token usage
-- [ ] `/api/metrics` on shared blueprint → returns JSON snapshot
-- [ ] Intel Hub scene enhanced: live scene health grid (ping all 13 scenes), metrics ticker, training panel
-- [ ] World events feed: WorldSim events displayed as news ticker in Intel Hub
-- [ ] Scene health badge in navbar_v2.html — green/amber/red dot per scene based on last ping
-- [ ] `tests/test_metrics_collector.py` — metric recording, snapshot serialisation
+### Track A: Scene-Integrated Asset Generation
+- [ ] Asset Studio assets served in scene UIs — portraits appear in character panels at runtime
+- [ ] `generate_scene_image(scene, prompt)` skill → ComfyUI → auto-serves via static route
+- [ ] Asset Studio "inject to scene" button — push generated asset directly to a running scene
+- [ ] Scene background auto-generation: scheduler task generates scene backgrounds nightly
+- [ ] `tests/test_scene_asset_injection.py`
+
+### Track B: Nexus News & Intelligence System
+- [ ] `engine/nexus/news/news_pipeline.py` — full pipeline: fetch → parse → deduplicate → distill → store
+- [ ] RSS/scrape sources for: AI news, tech, world events (configurable source list in Nexus)
+- [ ] NLM notebook per news category (AI, tech, world, science) — auto-created + kept updated
+- [ ] NotebookLM distillation: ask 10 curated questions per notebook, store Q&A in Nexus
+- [ ] Scene news feeds: `/api/news` route on Intel Hub + phone scene ticker
+- [ ] Scheduler tasks: `news-fetch` (3x/day), `news-distill` (1x/day) — total: **41 tasks**
+- [ ] `tests/test_news_pipeline.py`
+
+### Track C: Continuous Benchmarking Dashboard
+- [ ] `engine/benchmarks/benchmark_runner.py` — systematic pipeline: generate image → VL score → store metrics
+- [ ] Per-workflow benchmark profiles: 3 seeds × 3 prompts = 9 samples per workflow variant
+- [ ] Metrics history stored in Nexus: quality score, generation time, VRAM, timestamp
+- [ ] Intel Hub benchmark tab — quality trend charts, A/B comparison, auto-tune trigger
+- [ ] Auto-tuner: if quality drops below threshold, try adjacent settings, benchmark, keep best
+- [ ] `tests/test_continuous_benchmark.py`
+
+### Track D: Nexus Knowledge Expansion
+- [ ] Nexus seeder run: ingest all docs, CHANGELOG, ROADMAP, architecture decisions
+- [ ] NLM notebook: "CosySim Architecture" — all docs as sources, distill 50+ Q&A pairs
+- [ ] NLM notebook: "ComfyUI Workflows" — workflow docs, distill optimal settings Q&A
+- [ ] NLM notebook: "Agent Governance" — interceptor docs, rules, best practices
+- [ ] Knowledge quality audit: deduplicate, reindex, verify cross-references
+- [ ] `nexus_maintain("dedup")` + `nexus_maintain("reindex")`
+
+### Track E: World Event Propagation
+- [ ] WorldSim events cascade to scene UI in real-time via Socket.IO broadcast
+- [ ] Intel Hub world-events ticker: live feed of WorldSim events with scene badges
+- [ ] `engine/world/event_cascade.py` — subscribes WorldSim, fans out to relevant scenes
+- [ ] Per-scene event filter: each scene declares which event types affect it
+- [ ] `tests/test_event_cascade.py`
 
 ### Track F: Docs + System Audit
-- [ ] `docs/WORLD_SYSTEM.md` — WorldSim, WorldEvents, FactionManager, NPC schedules, cross-scene continuity
-- [ ] `docs/TRAINING_FLYWHEEL.md` — router_v3 lifecycle: dataset → train → benchmark → promote → serve → collect
-- [ ] `docs/PLAYER_IDENTITY.md` — PlayerProfile, relationship web, session persistence
-- [ ] `ROADMAP.md` — mark v0.71 complete, update v0.72 as active
-- [ ] `docs/SYSTEM_AUDIT.md` — update to v0.72b, reassess grade, update test count + module list
+- [ ] `docs/ASSET_STUDIO.md` — ComfyUI integration, workflow types, tuning guide
+- [ ] `docs/NEWS_SYSTEM.md` — news pipeline, sources, NLM distillation flow
+- [ ] `ROADMAP.md` — mark v0.72 complete, update v0.73 as active
+- [ ] `docs/SYSTEM_AUDIT.md` — update to v0.73b, new grade, test count, module list
 
 ---
 

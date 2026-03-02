@@ -14,6 +14,10 @@ All notable changes to CosySim are documented here.
 - **Portrait Overlay Component**: Shared portrait overlay injected into all scenes. Mood-colored CSS, /api/admin/portraits route, generate endpoint.
 - **Intel Hub Mission Control**: /api/intel/metrics combining MetricsCollector + RouterV3 status. Scene health grid, NPC counter, auto-refresh.
 - **RelationshipContextInterceptor**: Auto-injects player relationship context into agent system prompts.
+- **Wan 2.2 GGUF Video Workflow System**: Full dual-model architecture (UnetLoaderGGUF high/low + KSamplerAdvanced two-stage). 5 T2V/I2V variants: portrait (272×352 105f), landscape (480×272 49f), portrait_fast (272×352 49f 4-step), character_hq (272×352 81f 8-step). White.png T2V trick. All settings exposed as parameters: cfg, steps, seed, fps, width, height, length, batch_size, checkpoint, loras. Total: 15 workflow variants (up from 12).
+- **A++ Tuning System** (`engine/asset_studio/tuning_engine.py`): Proven workflow profiles, benchmark runner with timing/VRAM metrics, Qwen3-VL visual quality scoring, auto-tuning state machine. 3 tuning stages: verify → profile → optimize. Live metrics endpoint.
+- **Smart Test Runner** (`scripts/smart_test.py`): Git-diff-based test selector. Maps source files to 24 test domains. `--smoke` (15 files), `--domain X`, `--fast` (skip slow), `--full`, `--list`. conftest changes auto-upgrade to smoke coverage.
+- **Torch Auto-Skip**: `tests/conftest.py` `pytest_collection_modifyitems` hook skips `test_orpheus_native.py` when torch is absent (Python 3.13 test venv compatibility).
 
 ### Scheduler Tasks
 - Total: 39 builtin tasks (up from 35 in v0.70b)
@@ -21,6 +25,7 @@ All notable changes to CosySim are documented here.
 
 ### Tests
 - 7,500+ tests passing across ~195 test files
+- 145 workflow builder tests (test_asset_studio_workflows.py)
 
 ## v0.71b "Full Immersion" — 2026
 
