@@ -3,7 +3,7 @@
 
 system:
   name: "CosySim AI Playground"
-  version: "0.76b"
+  version: "0.77b"
   environment: "default"
 
 # Paths configuration
@@ -627,3 +627,4 @@ npc_scheduler:
     - "browsing nearby goods"
     - "chatting with someone"
     - "lost in thought"
+

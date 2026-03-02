@@ -3,6 +3,34 @@
 All notable changes to CosySim are documented here.
 
 ---
+## [0.77b] — 2026 — "THE FIRST MIND" — 🔄 IN PROGRESS
+
+### New Features
+
+#### Intel Hub — Finetune Status Panel
+- Full-width **FINETUNE STATUS** panel in THE BRIEFING ROOM (`panel-finetune`)
+- `/api/finetune/status` endpoint returning jobs, dataset inventory, and infra health
+- `_get_finetune_status()` helper: polls `FinetuneOrchestrator.list_jobs()`, scans
+  `training/datasets/*.jsonl` for example counts, checks Unsloth + CUDA availability
+- Frontend JS: `_loadFinetuneStatus()` with 30s auto-refresh; job cards show model type,
+  status badge (colour-coded), loss, epoch count; infra row shows GPU/VRAM/Unsloth state
+
+#### News Skills — Category Digest
+- `summarize_news_category(category)` skill — 300-word structured digest from Nexus Q&A
+- `_NEWS_CATEGORIES` constant: `ai_research`, `tech`, `world`, `science`
+- Falls back to wide Nexus search if category-filtered search returns nothing
+- Returns graceful "no intelligence" message when Nexus is empty
+
+### Bug Fixes
+- `test_player_state.py` fixture now redirects `PlayerState._SAVE_PATH` to `tmp_path`
+  so auto-load on `__init__` doesn't pollute tests with real game save data
+- `launcher.py` VERSION corrected from `"0.74b"` → `"0.76b"`
+
+### Tests
+- 5 new tests for `summarize_news_category` (valid, invalid, empty, exception, word budget)
+- Total test count: ~8,450+
+
+---
 ## [0.76b] — 2026 — "THE DEEP MIND" — ✅ COMPLETE
 
 ### New Features
