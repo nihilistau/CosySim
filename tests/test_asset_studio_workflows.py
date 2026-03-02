@@ -1,6 +1,6 @@
 """Tests for Asset Studio ComfyUI workflow builder and manager.
 
-Covers all 10 workflow builders, WorkflowManager methods, and scene routes.
+Covers all 15 workflow builders, WorkflowManager methods, and scene routes.
 All HTTP calls and ComfyUI interactions are mocked.
 """
 from __future__ import annotations
@@ -29,6 +29,9 @@ from engine.asset_studio.workflow_builder import (
     build_message_image,
     build_video_wan_t2v,
     build_video_wan_i2v,
+    build_video_wan_landscape,
+    build_video_wan_portrait_fast,
+    build_video_wan_character_hq,
     build_upscale_enhance,
     _seed,
 )
@@ -384,6 +387,169 @@ class TestBuildVideoWanI2V:
         assert "WanVideoImageToVideoEncode" not in class_types
 
 
+class TestBuildVideoWanLandscape:
+    def test_returns_valid_dict(self) -> None:
+        _assert_valid_workflow(build_video_wan_landscape())
+
+    def test_default_resolution_is_landscape(self) -> None:
+        wf = build_video_wan_landscape()
+        wan = next(n for n in wf.values() if n["class_type"] == "WanImageToVideo")
+        assert wan["inputs"]["width"] == 480
+        assert wan["inputs"]["height"] == 272
+
+    def test_default_length_is_49_frames(self) -> None:
+        wf = build_video_wan_landscape()
+        wan = next(n for n in wf.values() if n["class_type"] == "WanImageToVideo")
+        assert wan["inputs"]["length"] == 49
+
+    def test_uses_white_start_image(self) -> None:
+        wf = build_video_wan_landscape()
+        loader = next(n for n in wf.values() if n["class_type"] == "LoadImage")
+        assert loader["inputs"]["image"] == "white.png"
+
+    def test_has_correct_wan_nodes(self) -> None:
+        wf = build_video_wan_landscape()
+        class_types = [n["class_type"] for n in wf.values()]
+        assert "UnetLoaderGGUF" in class_types
+        assert "CLIPLoaderGGUF" in class_types
+        assert "WanImageToVideo" in class_types
+        assert "KSamplerAdvanced" in class_types
+        assert "CreateVideo" in class_types
+        assert "SaveVideo" in class_types
+
+    def test_dual_stage_samplers(self) -> None:
+        wf = build_video_wan_landscape(steps=6)
+        samplers = [n for n in wf.values() if n["class_type"] == "KSamplerAdvanced"]
+        assert len(samplers) == 2
+        assert samplers[0]["inputs"]["add_noise"] == "enable"
+        assert samplers[1]["inputs"]["add_noise"] == "disable"
+
+    def test_filename_prefix(self) -> None:
+        wf = build_video_wan_landscape()
+        save = next(n for n in wf.values() if n["class_type"] == "SaveVideo")
+        assert "wan_landscape" in save["inputs"]["filename_prefix"]
+
+    def test_custom_params_respected(self) -> None:
+        wf = build_video_wan_landscape(width=848, height=480, length=81, steps=8, fps=24)
+        wan = next(n for n in wf.values() if n["class_type"] == "WanImageToVideo")
+        assert wan["inputs"]["width"] == 848
+        assert wan["inputs"]["height"] == 480
+        assert wan["inputs"]["length"] == 81
+        video = next(n for n in wf.values() if n["class_type"] == "CreateVideo")
+        assert video["inputs"]["fps"] == 24
+
+
+class TestBuildVideoWanPortraitFast:
+    def test_returns_valid_dict(self) -> None:
+        _assert_valid_workflow(build_video_wan_portrait_fast())
+
+    def test_default_steps_is_4(self) -> None:
+        wf = build_video_wan_portrait_fast()
+        samplers = [n for n in wf.values() if n["class_type"] == "KSamplerAdvanced"]
+        # stage 1 ends at steps//2 = 2
+        assert samplers[0]["inputs"]["end_at_step"] == 2
+
+    def test_default_length_is_49_frames(self) -> None:
+        wf = build_video_wan_portrait_fast()
+        wan = next(n for n in wf.values() if n["class_type"] == "WanImageToVideo")
+        assert wan["inputs"]["length"] == 49
+
+    def test_portrait_orientation(self) -> None:
+        wf = build_video_wan_portrait_fast()
+        wan = next(n for n in wf.values() if n["class_type"] == "WanImageToVideo")
+        assert wan["inputs"]["width"] == 272
+        assert wan["inputs"]["height"] == 352
+
+    def test_uses_white_start_image(self) -> None:
+        wf = build_video_wan_portrait_fast()
+        loader = next(n for n in wf.values() if n["class_type"] == "LoadImage")
+        assert loader["inputs"]["image"] == "white.png"
+
+    def test_has_correct_wan_nodes(self) -> None:
+        wf = build_video_wan_portrait_fast()
+        class_types = [n["class_type"] for n in wf.values()]
+        assert "UnetLoaderGGUF" in class_types
+        assert "WanImageToVideo" in class_types
+        assert "KSamplerAdvanced" in class_types
+        assert "CreateVideo" in class_types
+        assert "SaveVideo" in class_types
+
+    def test_no_old_wan_nodes(self) -> None:
+        wf = build_video_wan_portrait_fast()
+        class_types = [n["class_type"] for n in wf.values()]
+        assert "WanVideoModelLoader" not in class_types
+
+    def test_filename_prefix(self) -> None:
+        wf = build_video_wan_portrait_fast()
+        save = next(n for n in wf.values() if n["class_type"] == "SaveVideo")
+        assert "wan_fast" in save["inputs"]["filename_prefix"]
+
+
+class TestBuildVideoWanCharacterHQ:
+    def test_returns_valid_dict(self) -> None:
+        _assert_valid_workflow(build_video_wan_character_hq())
+
+    def test_default_steps_is_8(self) -> None:
+        wf = build_video_wan_character_hq()
+        samplers = [n for n in wf.values() if n["class_type"] == "KSamplerAdvanced"]
+        # 8 steps → stage 1 ends at 4
+        assert samplers[0]["inputs"]["end_at_step"] == 4
+
+    def test_default_fps_is_24(self) -> None:
+        wf = build_video_wan_character_hq()
+        video = next(n for n in wf.values() if n["class_type"] == "CreateVideo")
+        assert video["inputs"]["fps"] == 24
+
+    def test_default_length_is_81_frames(self) -> None:
+        wf = build_video_wan_character_hq()
+        wan = next(n for n in wf.values() if n["class_type"] == "WanImageToVideo")
+        assert wan["inputs"]["length"] == 81
+
+    def test_portrait_orientation(self) -> None:
+        wf = build_video_wan_character_hq()
+        wan = next(n for n in wf.values() if n["class_type"] == "WanImageToVideo")
+        assert wan["inputs"]["width"] == 272
+        assert wan["inputs"]["height"] == 352
+
+    def test_default_start_image_is_white_png(self) -> None:
+        wf = build_video_wan_character_hq()
+        loader = next(n for n in wf.values() if n["class_type"] == "LoadImage")
+        assert loader["inputs"]["image"] == "white.png"
+
+    def test_supports_i2v_via_start_image(self) -> None:
+        wf = build_video_wan_character_hq(start_image="character_frame.png")
+        loader = next(n for n in wf.values() if n["class_type"] == "LoadImage")
+        assert loader["inputs"]["image"] == "character_frame.png"
+
+    def test_has_correct_wan_nodes(self) -> None:
+        wf = build_video_wan_character_hq()
+        class_types = [n["class_type"] for n in wf.values()]
+        assert "UnetLoaderGGUF" in class_types
+        assert "CLIPLoaderGGUF" in class_types
+        assert "WanImageToVideo" in class_types
+        assert "KSamplerAdvanced" in class_types
+        assert "ModelSamplingSD3" in class_types
+        assert "CreateVideo" in class_types
+        assert "SaveVideo" in class_types
+
+    def test_dual_stage_samplers(self) -> None:
+        wf = build_video_wan_character_hq()
+        samplers = [n for n in wf.values() if n["class_type"] == "KSamplerAdvanced"]
+        assert len(samplers) == 2
+        assert samplers[0]["inputs"]["add_noise"] == "enable"
+        assert samplers[1]["inputs"]["add_noise"] == "disable"
+
+    def test_filename_prefix(self) -> None:
+        wf = build_video_wan_character_hq()
+        save = next(n for n in wf.values() if n["class_type"] == "SaveVideo")
+        assert "wan_char_hq" in save["inputs"]["filename_prefix"]
+
+    def test_seed_injection(self) -> None:
+        wf = build_video_wan_character_hq(seed=99)
+        sampler = next(n for n in wf.values() if n["class_type"] == "KSamplerAdvanced")
+        assert sampler["inputs"]["noise_seed"] == 99
+
+
 class TestBuildUpscaleEnhance:
     def test_returns_valid_workflow(self) -> None:
         _assert_valid_workflow(build_upscale_enhance())
@@ -414,11 +580,12 @@ class TestBuildUpscaleEnhance:
 # ──── WORKFLOW_REGISTRY tests ──────────────────────────────────────────────────
 
 class TestWorkflowRegistry:
-    def test_has_all_twelve_workflows(self) -> None:
+    def test_has_all_fifteen_workflows(self) -> None:
         expected = {
             "portrait_hires", "portrait_refiner", "portrait_fast", "character_card",
             "game_item_icon", "scene_background", "action_card", "ui_icon", "message_image",
-            "video_wan_t2v", "video_wan_i2v", "upscale_enhance",
+            "video_wan_t2v", "video_wan_i2v", "video_wan_landscape",
+            "video_wan_portrait_fast", "video_wan_character_hq", "upscale_enhance",
         }
         assert set(WORKFLOW_REGISTRY.keys()) == expected
 
@@ -603,10 +770,10 @@ class TestWorkflowManagerSelectModel:
 
 
 class TestWorkflowManagerListWorkflows:
-    def test_returns_all_twelve(self) -> None:
+    def test_returns_all_fifteen(self) -> None:
         wm = WorkflowManager(base_url="http://localhost:9999")
         workflows = wm.list_workflows()
-        assert len(workflows) == 12
+        assert len(workflows) == 15
 
     def test_each_has_required_keys(self) -> None:
         wm = WorkflowManager(base_url="http://localhost:9999")
@@ -884,7 +1051,7 @@ class TestSceneRoutes:
         data = resp.get_json()
         assert "workflows" in data
         assert isinstance(data["workflows"], list)
-        assert len(data["workflows"]) == 12
+        assert len(data["workflows"]) == 15
 
     def test_models_route_structure(self, asset_studio_app: Any) -> None:
         client = asset_studio_app.test_client()

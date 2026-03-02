@@ -1,9 +1,16 @@
 """ComfyUI Workflow Builder — dynamic workflow construction for Asset Studio.
 
-Builds ComfyUI API-format prompt dicts for 11 professional workflow types.
+Builds ComfyUI API-format prompt dicts for 15 professional workflow types.
 All builders expose every configurable parameter and use helper chains for
 LoRA stacking. Video builders use the correct Wan 2.2 dual-model architecture
 (UnetLoaderGGUF + KSamplerAdvanced two-stage pipeline).
+
+Video variants:
+  video_wan_t2v          — portrait 272x352, 105 frames, 16fps (6.5s)
+  video_wan_i2v          — same as t2v but animate a start image
+  video_wan_landscape    — widescreen 480x272, 49 frames, 16fps (3s)
+  video_wan_portrait_fast — portrait 272x352, 49 frames, 16fps (3s, ultra-fast 4 steps)
+  video_wan_character_hq  — portrait 272x352, 81 frames, 24fps (3.4s, quality 8 steps)
 """
 from __future__ import annotations
 
@@ -1219,6 +1226,239 @@ def build_video_wan_i2v(
     )
 
 
+def build_video_wan_landscape(
+    positive: str = "cinematic widescreen video, smooth motion, high quality, detailed",
+    negative: str = "blurry, low quality, worst quality, watermark",
+    seed: int = -1,
+    width: int = 480,
+    height: int = 272,
+    length: int = 49,
+    batch_size: int = 1,
+    fps: int = 16,
+    steps: int = 6,
+    cfg: float = 1.0,
+    shift: float = 5.0,
+    sampler_name: str = "euler",
+    scheduler: str = "simple",
+    unet_high: str = _DEFAULT_UNET_HIGH,
+    unet_low: str = _DEFAULT_UNET_LOW,
+    clip_model: str = _DEFAULT_CLIP_MODEL,
+    vae: str = _DEFAULT_VAE_WAN,
+    loras_high: Optional[List[Dict[str, Any]]] = None,
+    loras_low: Optional[List[Dict[str, Any]]] = None,
+    filename_prefix: str = "wan_landscape",
+) -> Dict[str, Any]:
+    """Wan 2.2 T2V — 16:9 landscape 480x272, 49 frames (~3s).
+
+    Ideal for scene backgrounds, establishing shots, and environment loops.
+
+    Args:
+        positive: Positive prompt text.
+        negative: Negative prompt text.
+        seed: RNG seed (-1 for random).
+        width: Output width (default 480 for 16:9 landscape).
+        height: Output height (default 272).
+        length: Number of frames (default 49 ≈ 3s at 16fps).
+        batch_size: Batch size.
+        fps: Output video framerate.
+        steps: Total sampling steps.
+        cfg: Guidance scale.
+        shift: ModelSamplingSD3 shift.
+        sampler_name: KSamplerAdvanced sampler.
+        scheduler: KSamplerAdvanced scheduler.
+        unet_high: High-noise GGUF model filename.
+        unet_low: Low-noise GGUF model filename.
+        clip_model: CLIP GGUF filename.
+        vae: VAE filename.
+        loras_high: LoRAs for high-noise model; defaults to LightX2V.
+        loras_low: LoRAs for low-noise model; defaults to SVI_LOW.
+        filename_prefix: Prefix for SaveVideo.
+
+    Returns:
+        ComfyUI API-format workflow dict.
+    """
+    return _build_wan_video(
+        positive=positive,
+        negative=negative,
+        seed=seed,
+        start_image="white.png",
+        width=width,
+        height=height,
+        length=length,
+        batch_size=batch_size,
+        fps=fps,
+        steps=steps,
+        cfg=cfg,
+        shift=shift,
+        sampler_name=sampler_name,
+        scheduler=scheduler,
+        unet_high=unet_high,
+        unet_low=unet_low,
+        clip_model=clip_model,
+        vae=vae,
+        loras_high=loras_high if loras_high is not None else list(_DEFAULT_LORAS_HIGH),
+        loras_low=loras_low if loras_low is not None else list(_DEFAULT_LORAS_LOW),
+        filename_prefix=filename_prefix,
+    )
+
+
+def build_video_wan_portrait_fast(
+    positive: str = "cinematic video, smooth motion, high quality",
+    negative: str = "blurry, low quality, worst quality, watermark",
+    seed: int = -1,
+    width: int = 272,
+    height: int = 352,
+    length: int = 49,
+    batch_size: int = 1,
+    fps: int = 16,
+    steps: int = 4,
+    cfg: float = 1.0,
+    shift: float = 5.0,
+    sampler_name: str = "euler",
+    scheduler: str = "simple",
+    unet_high: str = _DEFAULT_UNET_HIGH,
+    unet_low: str = _DEFAULT_UNET_LOW,
+    clip_model: str = _DEFAULT_CLIP_MODEL,
+    vae: str = _DEFAULT_VAE_WAN,
+    loras_high: Optional[List[Dict[str, Any]]] = None,
+    loras_low: Optional[List[Dict[str, Any]]] = None,
+    filename_prefix: str = "wan_fast",
+) -> Dict[str, Any]:
+    """Wan 2.2 T2V — ultra-fast portrait 272x352, 49 frames, 4 steps (~3s).
+
+    Fastest possible video generation — ideal for quick previews, reactions,
+    story panel drafts, or real-time creative iteration.
+
+    Args:
+        positive: Positive prompt text.
+        negative: Negative prompt text.
+        seed: RNG seed (-1 for random).
+        width: Output width (default 272 portrait).
+        height: Output height (default 352 portrait).
+        length: Number of frames (default 49 ≈ 3s at 16fps).
+        batch_size: Batch size.
+        fps: Output video framerate.
+        steps: Total sampling steps (default 4 — minimum viable quality).
+        cfg: Guidance scale.
+        shift: ModelSamplingSD3 shift.
+        sampler_name: KSamplerAdvanced sampler.
+        scheduler: KSamplerAdvanced scheduler.
+        unet_high: High-noise GGUF model filename.
+        unet_low: Low-noise GGUF model filename.
+        clip_model: CLIP GGUF filename.
+        vae: VAE filename.
+        loras_high: LoRAs for high-noise model; defaults to LightX2V.
+        loras_low: LoRAs for low-noise model; defaults to SVI_LOW.
+        filename_prefix: Prefix for SaveVideo.
+
+    Returns:
+        ComfyUI API-format workflow dict.
+    """
+    return _build_wan_video(
+        positive=positive,
+        negative=negative,
+        seed=seed,
+        start_image="white.png",
+        width=width,
+        height=height,
+        length=length,
+        batch_size=batch_size,
+        fps=fps,
+        steps=steps,
+        cfg=cfg,
+        shift=shift,
+        sampler_name=sampler_name,
+        scheduler=scheduler,
+        unet_high=unet_high,
+        unet_low=unet_low,
+        clip_model=clip_model,
+        vae=vae,
+        loras_high=loras_high if loras_high is not None else list(_DEFAULT_LORAS_HIGH),
+        loras_low=loras_low if loras_low is not None else list(_DEFAULT_LORAS_LOW),
+        filename_prefix=filename_prefix,
+    )
+
+
+def build_video_wan_character_hq(
+    positive: str = "cinematic close-up character video, smooth motion, high quality, highly detailed, realistic",
+    negative: str = "blurry, low quality, worst quality, watermark, static, frozen",
+    seed: int = -1,
+    start_image: str = "white.png",
+    width: int = 272,
+    height: int = 352,
+    length: int = 81,
+    batch_size: int = 1,
+    fps: int = 24,
+    steps: int = 8,
+    cfg: float = 1.0,
+    shift: float = 5.0,
+    sampler_name: str = "euler",
+    scheduler: str = "simple",
+    unet_high: str = _DEFAULT_UNET_HIGH,
+    unet_low: str = _DEFAULT_UNET_LOW,
+    clip_model: str = _DEFAULT_CLIP_MODEL,
+    vae: str = _DEFAULT_VAE_WAN,
+    loras_high: Optional[List[Dict[str, Any]]] = None,
+    loras_low: Optional[List[Dict[str, Any]]] = None,
+    filename_prefix: str = "wan_char_hq",
+) -> Dict[str, Any]:
+    """Wan 2.2 character video — portrait 272x352, 81 frames, 24fps, 8 steps (~3.4s).
+
+    High-quality character close-ups and reaction shots. Supports both T2V (white.png)
+    and I2V (provide start_image path) modes. 8 steps gives significantly better detail
+    than the default 6 — optimised for faces, hair, and fine character features.
+
+    Args:
+        positive: Positive prompt text.
+        negative: Negative prompt text.
+        seed: RNG seed (-1 for random).
+        start_image: Start image (white.png for T2V, or a real image for I2V).
+        width: Output width.
+        height: Output height.
+        length: Number of frames (default 81 ≈ 3.4s at 24fps).
+        batch_size: Batch size.
+        fps: Output video framerate (default 24 for cinematic character motion).
+        steps: Total sampling steps (default 8 for higher quality).
+        cfg: Guidance scale.
+        shift: ModelSamplingSD3 shift.
+        sampler_name: KSamplerAdvanced sampler.
+        scheduler: KSamplerAdvanced scheduler.
+        unet_high: High-noise GGUF model filename.
+        unet_low: Low-noise GGUF model filename.
+        clip_model: CLIP GGUF filename.
+        vae: VAE filename.
+        loras_high: LoRAs for high-noise model; defaults to LightX2V.
+        loras_low: LoRAs for low-noise model; defaults to SVI_LOW.
+        filename_prefix: Prefix for SaveVideo.
+
+    Returns:
+        ComfyUI API-format workflow dict.
+    """
+    return _build_wan_video(
+        positive=positive,
+        negative=negative,
+        seed=seed,
+        start_image=start_image,
+        width=width,
+        height=height,
+        length=length,
+        batch_size=batch_size,
+        fps=fps,
+        steps=steps,
+        cfg=cfg,
+        shift=shift,
+        sampler_name=sampler_name,
+        scheduler=scheduler,
+        unet_high=unet_high,
+        unet_low=unet_low,
+        clip_model=clip_model,
+        vae=vae,
+        loras_high=loras_high if loras_high is not None else list(_DEFAULT_LORAS_HIGH),
+        loras_low=loras_low if loras_low is not None else list(_DEFAULT_LORAS_LOW),
+        filename_prefix=filename_prefix,
+    )
+
+
 def build_portrait_refiner(
     positive: str = "masterpiece, best quality, highly detailed portrait photograph, sharp focus",
     negative: str = _DEFAULT_NEGATIVE,
@@ -1715,6 +1955,136 @@ WORKFLOW_REGISTRY: Dict[str, Dict[str, Any]] = {
             "loras_high": {"type": "list", "default": None},
             "loras_low": {"type": "list", "default": None},
             "filename_prefix": {"type": "str", "default": "wan_i2v"},
+        },
+    },
+    "video_wan_landscape": {
+        "builder": build_video_wan_landscape,
+        "label": "Video — Wan 2.2 Landscape T2V (16:9)",
+        "description": (
+            "Wan 2.2 widescreen 16:9 T2V. 480x272, 49 frames (3s at 16fps). "
+            "Ideal for scene backgrounds, environments, and establishing shots."
+        ),
+        "category": "video",
+        "resolution": "480x272",
+        "frames": 49,
+        "fps": 16,
+        "speed": "medium",
+        "requires_nodes": [
+            "UnetLoaderGGUF",
+            "CLIPLoaderGGUF",
+            "WanImageToVideo",
+            "KSamplerAdvanced",
+            "CreateVideo",
+            "SaveVideo",
+        ],
+        "params": {
+            "positive": {"type": "str", "default": "cinematic widescreen video, smooth motion, high quality, detailed"},
+            "negative": {"type": "str", "default": "blurry, low quality, worst quality, watermark"},
+            "seed": {"type": "int", "default": -1},
+            "width": {"type": "int", "default": 480},
+            "height": {"type": "int", "default": 272},
+            "length": {"type": "int", "default": 49},
+            "batch_size": {"type": "int", "default": 1},
+            "fps": {"type": "int", "default": 16},
+            "steps": {"type": "int", "default": 6},
+            "cfg": {"type": "float", "default": 1.0},
+            "shift": {"type": "float", "default": 5.0},
+            "sampler_name": {"type": "str", "default": "euler"},
+            "scheduler": {"type": "str", "default": "simple"},
+            "unet_high": {"type": "str", "default": _DEFAULT_UNET_HIGH},
+            "unet_low": {"type": "str", "default": _DEFAULT_UNET_LOW},
+            "clip_model": {"type": "str", "default": _DEFAULT_CLIP_MODEL},
+            "vae": {"type": "str", "default": _DEFAULT_VAE_WAN},
+            "loras_high": {"type": "list", "default": None},
+            "loras_low": {"type": "list", "default": None},
+            "filename_prefix": {"type": "str", "default": "wan_landscape"},
+        },
+    },
+    "video_wan_portrait_fast": {
+        "builder": build_video_wan_portrait_fast,
+        "label": "Video — Wan 2.2 Portrait Fast (4-step)",
+        "description": (
+            "Wan 2.2 ultra-fast T2V portrait. 272x352, 49 frames (3s at 16fps), 4 steps. "
+            "Best for previews, reactions, story panels, real-time iteration."
+        ),
+        "category": "video",
+        "resolution": "272x352",
+        "frames": 49,
+        "fps": 16,
+        "speed": "fast",
+        "requires_nodes": [
+            "UnetLoaderGGUF",
+            "CLIPLoaderGGUF",
+            "WanImageToVideo",
+            "KSamplerAdvanced",
+            "CreateVideo",
+            "SaveVideo",
+        ],
+        "params": {
+            "positive": {"type": "str", "default": "cinematic video, smooth motion, high quality"},
+            "negative": {"type": "str", "default": "blurry, low quality, worst quality, watermark"},
+            "seed": {"type": "int", "default": -1},
+            "width": {"type": "int", "default": 272},
+            "height": {"type": "int", "default": 352},
+            "length": {"type": "int", "default": 49},
+            "batch_size": {"type": "int", "default": 1},
+            "fps": {"type": "int", "default": 16},
+            "steps": {"type": "int", "default": 4},
+            "cfg": {"type": "float", "default": 1.0},
+            "shift": {"type": "float", "default": 5.0},
+            "sampler_name": {"type": "str", "default": "euler"},
+            "scheduler": {"type": "str", "default": "simple"},
+            "unet_high": {"type": "str", "default": _DEFAULT_UNET_HIGH},
+            "unet_low": {"type": "str", "default": _DEFAULT_UNET_LOW},
+            "clip_model": {"type": "str", "default": _DEFAULT_CLIP_MODEL},
+            "vae": {"type": "str", "default": _DEFAULT_VAE_WAN},
+            "loras_high": {"type": "list", "default": None},
+            "loras_low": {"type": "list", "default": None},
+            "filename_prefix": {"type": "str", "default": "wan_fast"},
+        },
+    },
+    "video_wan_character_hq": {
+        "builder": build_video_wan_character_hq,
+        "label": "Video — Wan 2.2 Character HQ (T2V + I2V)",
+        "description": (
+            "High-quality character video. 272x352, 81 frames (3.4s at 24fps), 8 steps. "
+            "Cinematic quality for close-ups, reactions, expressions. Supports T2V and I2V via start_image."
+        ),
+        "category": "video",
+        "resolution": "272x352",
+        "frames": 81,
+        "fps": 24,
+        "speed": "slow",
+        "requires_nodes": [
+            "UnetLoaderGGUF",
+            "CLIPLoaderGGUF",
+            "WanImageToVideo",
+            "KSamplerAdvanced",
+            "CreateVideo",
+            "SaveVideo",
+        ],
+        "params": {
+            "positive": {"type": "str", "default": "cinematic close-up character video, smooth motion, high quality, highly detailed, realistic"},
+            "negative": {"type": "str", "default": "blurry, low quality, worst quality, watermark, static, frozen"},
+            "seed": {"type": "int", "default": -1},
+            "start_image": {"type": "str", "default": "white.png"},
+            "width": {"type": "int", "default": 272},
+            "height": {"type": "int", "default": 352},
+            "length": {"type": "int", "default": 81},
+            "batch_size": {"type": "int", "default": 1},
+            "fps": {"type": "int", "default": 24},
+            "steps": {"type": "int", "default": 8},
+            "cfg": {"type": "float", "default": 1.0},
+            "shift": {"type": "float", "default": 5.0},
+            "sampler_name": {"type": "str", "default": "euler"},
+            "scheduler": {"type": "str", "default": "simple"},
+            "unet_high": {"type": "str", "default": _DEFAULT_UNET_HIGH},
+            "unet_low": {"type": "str", "default": _DEFAULT_UNET_LOW},
+            "clip_model": {"type": "str", "default": _DEFAULT_CLIP_MODEL},
+            "vae": {"type": "str", "default": _DEFAULT_VAE_WAN},
+            "loras_high": {"type": "list", "default": None},
+            "loras_low": {"type": "list", "default": None},
+            "filename_prefix": {"type": "str", "default": "wan_char_hq"},
         },
     },
     "upscale_enhance": {
