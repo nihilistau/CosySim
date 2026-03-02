@@ -1087,6 +1087,12 @@ def _register_builtin_tasks(daemon: "SchedulerDaemon") -> None:
         "every_6h",
         _content_refresh_callback,
     )
+    daemon.register(
+        "nlm-content-seed",
+        "NLM Content Seed — weekly deep-seed all scene pools + director beats via NLM",
+        "weekly",
+        _nlm_content_seed_callback,
+    )
 
 
 def _world_sim_tick_callback() -> Dict[str, Any]:
@@ -1125,6 +1131,23 @@ def _content_refresh_callback() -> Dict[str, Any]:
         return {"status": "ok", "pools_refilled": len(results), "items_added": total}
     except Exception as exc:
         logger.debug("content_refresh skipped: %s", exc)
+        return {"status": "skipped", "reason": str(exc)}
+
+
+def _nlm_content_seed_callback() -> Dict[str, Any]:
+    """Weekly: deep-seed all scene pools + director beat instructions via NLM."""
+    try:
+        from engine.content.nlm_generator import get_nlm_generator
+        gen = get_nlm_generator()
+        results = gen.seed_all_scenes(intensity=2, beat_count=3, content_count=5)
+        totals = results.get("_totals", {"beats": 0, "content": 0})
+        logger.info(
+            "nlm_content_seed: %d beats + %d content items across %d scenes",
+            totals["beats"], totals["content"], len(results) - 1,
+        )
+        return {"status": "ok", **totals, "scenes": len(results) - 1}
+    except Exception as exc:
+        logger.debug("nlm_content_seed skipped: %s", exc)
         return {"status": "skipped", "reason": str(exc)}
 
 

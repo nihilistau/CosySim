@@ -330,7 +330,7 @@ class TestAutoPromoteWiring:
         from engine.nexus.scheduler_daemon import _register_builtin_tasks
         daemon = MagicMock()
         _register_builtin_tasks(daemon)
-        assert daemon.register.call_count == 33
+        assert daemon.register.call_count == 34
 
     def test_new_tasks_registered(self):
         """Both new v0.66 tasks must appear in the scheduler task list."""
