@@ -87,6 +87,10 @@ class NPCStateRegistry:
         with self._lock:
             return list(self._states.values())
 
+    def list_all(self) -> List[NPCState]:
+        """Alias for :meth:`get_all` — returns all registered NPC states."""
+        return self.get_all()
+
     def list_busy(self) -> List[NPCState]:
         """Return only NPCs currently marked as busy.
 
@@ -170,3 +174,12 @@ def get_npc_state_registry() -> NPCStateRegistry:
             if _registry is None:
                 _registry = NPCStateRegistry()
     return _registry
+
+
+def get_npc_state() -> NPCStateRegistry:
+    """Alias for :func:`get_npc_state_registry`.
+
+    Returns:
+        The global registry instance.
+    """
+    return get_npc_state_registry()

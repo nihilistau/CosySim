@@ -3,7 +3,7 @@
 
 system:
   name: "CosySim AI Playground"
-  version: "0.71b"
+  version: "0.72b"
   environment: "default"
 
 # Paths configuration
@@ -587,6 +587,7 @@ comms:
     memory_enhancer:          false   # extra RAG lookup — heavier, opt-in
     response_shaper:          true
     activity_logger:          true
+    relationship_context:     true    # inject player-NPC relationship into system prompt
   stats_poll_interval_ms: 2000  # how often the browser overlay polls /api/stats/live
 
 # Framework settings

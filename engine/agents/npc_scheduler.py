@@ -132,6 +132,7 @@ class NPCScheduler:
                 logger.error("NPCScheduler: error processing NPC %r: %s", npc.get("id", "?"), exc)
         self._npcs_active = active
         logger.debug("NPCScheduler tick: processed %d NPC(s)", active)
+        self._emit_activity_update()
 
     def _get_idle_npcs(self) -> List[Dict[str, Any]]:
         """Return a list of NPC info dicts for currently idle NPCs.
@@ -252,6 +253,29 @@ class NPCScheduler:
             fw.emit("npc_activity", payload)
         except Exception as exc:
             logger.debug("NPCScheduler: could not emit socket event: %s", exc)
+
+    def _emit_activity_update(self) -> None:
+        """Broadcast npc_activity_update with all NPC states (best-effort)."""
+        try:
+            from engine.world.npc_state import get_npc_state_registry
+            registry = get_npc_state_registry()
+            npcs = [
+                {
+                    "id": s.character_id,
+                    "activity": s.activity,
+                    "scene": s.location,
+                }
+                for s in registry.get_all()
+            ]
+            payload: Dict[str, Any] = {"npcs": npcs}
+            try:
+                from engine.mcp import get_framework
+                fw = get_framework()
+                fw.emit("npc_activity_update", payload)
+            except Exception as exc:
+                logger.debug("NPCScheduler: could not emit npc_activity_update: %s", exc)
+        except Exception as exc:
+            logger.debug("NPCScheduler: _emit_activity_update error: %s", exc)
 
     # ──── Status ────
 
