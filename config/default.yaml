@@ -116,6 +116,21 @@ scenes:
     port: 5580
     debug: false
 
+  asset_studio:
+    host: "localhost"
+    port: 5568
+    debug: false
+    library_db: "data/asset_library.db"
+    voice_output_dir: "data/asset_studio/voice"
+    svg_output_dir: "data/asset_studio/svg"
+    audio_output_dir: "data/asset_studio/audio"
+    comfyui_enabled: true
+    tts_enabled: true
+    lms_enabled: true
+    video_enabled: true
+    nexus_cache_enabled: true
+    adult_enabled: false
+
   hub:
     host: "localhost"
     port: 8500

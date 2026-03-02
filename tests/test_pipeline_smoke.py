@@ -909,6 +909,7 @@ class TestGalleryGovernorContext:
 class TestWarzoneCoordinatorSync:
     """Warzone should sync mood through Coordinator."""
 
+    @pytest.mark.skip(reason="warzone archived in v0.71b")
     def test_warzone_ai_decide_references_coordinator(self):
         import inspect, importlib
         mod = importlib.import_module("content.scenes.warzone.warzone_scene")

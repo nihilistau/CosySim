@@ -110,6 +110,76 @@ def register_shared_assets(app):
         except Exception as exc:
             return jsonify({"ok": False, "error": str(exc)})
 
+    # ── Art / Portrait API routes (v0.72) ──────────────────────────
+
+    @shared_bp.route("/api/art/portrait")
+    def art_portrait_api() -> "Response":
+        """Generate or retrieve a character portrait.
+
+        Query params:
+            char_id (str): Character identifier (required).
+            mood    (str): Mood key (default: neutral).
+            scene   (str): Scene slug for context (optional).
+        """
+        try:
+            from engine.art.scene_art import get_scene_art_manager
+            from engine.art.portrait_cache import get_portrait_cache
+            char_id = request.args.get("char_id", "")
+            if not char_id:
+                return jsonify({"error": "char_id required"}), 400
+            mood  = request.args.get("mood", "neutral")
+            scene = request.args.get("scene", "")
+            result = get_scene_art_manager().get_character_portrait(
+                char_id, mood=mood, scene=scene
+            )
+            get_portrait_cache().set_url(char_id, mood, result.url)
+            return jsonify({
+                "ok": True,
+                "char_id": char_id,
+                "mood": mood,
+                "url": result.url,
+                "cached": result.cached,
+                "generation_ms": result.generation_ms,
+            })
+        except Exception as exc:
+            return jsonify({"ok": False, "error": str(exc)})
+
+    @shared_bp.route("/api/art/portraits")
+    def art_portraits_api() -> "Response":
+        """Return all cached portrait URLs as {char_id:mood → url}."""
+        from engine.art.portrait_cache import get_portrait_cache
+        return jsonify({"portraits": get_portrait_cache().get_all()})
+
+    @shared_bp.route("/api/art/background")
+    def art_background_api() -> "Response":
+        """Generate or retrieve a scene background.
+
+        Query params:
+            scene       (str): Scene slug (required).
+            time_of_day (str): dawn/morning/afternoon/dusk/night/midnight.
+            mood        (str): Dramatic mood (default: neutral).
+        """
+        try:
+            from engine.art.scene_art import get_scene_art_manager
+            scene = request.args.get("scene", "")
+            if not scene:
+                return jsonify({"error": "scene required"}), 400
+            time_of_day = request.args.get("time_of_day", "night")
+            mood        = request.args.get("mood", "neutral")
+            result = get_scene_art_manager().get_scene_bg(
+                scene, time_of_day=time_of_day, mood=mood
+            )
+            return jsonify({
+                "ok": True,
+                "scene": scene,
+                "time_of_day": time_of_day,
+                "url": result.url,
+                "cached": result.cached,
+                "generation_ms": result.generation_ms,
+            })
+        except Exception as exc:
+            return jsonify({"ok": False, "error": str(exc)})
+
     app.register_blueprint(shared_bp)
 
     # Auto-mount assistant API on this app

@@ -1,0 +1,34 @@
+{
+  "models": [
+    {
+      "model_id": "817cdafd",
+      "model_type": "router_v3",
+      "base_model": "Qwen/Qwen2.5-0.5B-Instruct",
+      "adapter_path": "training\\models\\router_v3_6dade8aa\\adapter",
+      "merged_path": "training\\models\\router_v3_6dade8aa\\merged",
+      "job_id": "6dade8aa",
+      "benchmark_score": null,
+      "benchmark_details": {},
+      "active": false,
+      "promoted_at": null,
+      "registered_at": "2026-03-02T07:39:01.001314+00:00",
+      "tags": [],
+      "notes": ""
+    },
+    {
+      "model_id": "6115d0f2",
+      "model_type": "router_v3",
+      "base_model": "Qwen/Qwen2.5-0.5B-Instruct",
+      "adapter_path": "C:\\Files\\Models\\CosySim\\training\\models\\router_v3_6dade8aa\\adapter",
+      "merged_path": null,
+      "job_id": null,
+      "benchmark_score": null,
+      "benchmark_details": {},
+      "active": true,
+      "promoted_at": "2026-03-02T07:39:45.693342+00:00",
+      "registered_at": "2026-03-02T07:39:41.032059+00:00",
+      "tags": [],
+      "notes": "Colab-trained. val_accuracy=?%"
+    }
+  ]
+}

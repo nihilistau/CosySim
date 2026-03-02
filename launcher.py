@@ -146,6 +146,9 @@ SCENES: Dict[str, Dict[str, Any]] = {
     "intel_hub":      {"type": "flask",
                        "cls": "content.scenes.intel_hub.intel_hub_scene.IntelHubScene",
                        "port": 5580, "label": "THE BRIEFING ROOM",      "auto_start": False},
+    "asset_studio":   {"type": "flask",
+                       "cls": "content.scenes.asset_studio.asset_studio_scene.AssetStudioScene",
+                       "port": 5568, "label": "ASSET STUDIO",           "auto_start": False},
 }
 
 ALL_TARGETS: Dict[str, Dict[str, Any]] = {**SERVICES, **SCENES}

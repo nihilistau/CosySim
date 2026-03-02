@@ -11,6 +11,7 @@ from . import nlm_forge_skills, prompts_chat_skills
 from . import profile_skills
 from . import relationship_skills
 from . import reputation_skills
+from . import art_skills
 
 __all__ = [
     "comfyui_skills", "memory_skills", "character_skills", "voice_skills",
@@ -24,4 +25,5 @@ __all__ = [
     "profile_skills",
     "relationship_skills",
     "reputation_skills",
+    "art_skills",
 ]

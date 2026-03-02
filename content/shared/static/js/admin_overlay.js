@@ -168,6 +168,7 @@
         case 'economy':   this._loadEconomy();  break;
         case 'system':    this._loadSystem();   break;
         case 'knowledge': this._loadKnowledge(); break;
+        case 'portraits': this._loadPortraits(); break;
       }
     }
 
@@ -566,6 +567,88 @@
         });
     }
 
+    /* ── Portraits ──────────────────────────────────────────────── */
+
+    _loadPortraits() {
+      const grid = document.getElementById('cs-portrait-grid');
+      if (!grid) return;
+      grid.innerHTML = '<span style="color:var(--cs-text-dim)">Loading…</span>';
+      fetch('/api/art/portraits')
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+          if (!data || !data.portraits || Object.keys(data.portraits).length === 0) {
+            grid.innerHTML = '<span style="color:var(--cs-text-dim)">No portraits cached yet. Generate one above.</span>';
+            return;
+          }
+          grid.innerHTML = Object.entries(data.portraits).map(([key, url]) => {
+            const [charId, mood] = key.split(':');
+            return `
+              <div style="text-align:center">
+                <img
+                  src="${_esc(url)}"
+                  alt="${_esc(charId)} — ${_esc(mood)}"
+                  loading="lazy"
+                  style="width:100%;aspect-ratio:3/4;object-fit:cover;border:1px solid var(--cs-glass-border);border-radius:4px"
+                  onerror="this.style.display='none'"
+                >
+                <div style="font-size:0.7em;color:var(--cs-text-dim);margin-top:0.25rem">
+                  <strong>${_esc(charId)}</strong> / ${_esc(mood)}
+                </div>
+                <button
+                  class="cs-glass-btn"
+                  style="font-size:0.7em;padding:0.2rem 0.5rem;margin-top:0.2rem"
+                  onclick="window._adminOverlay && window._adminOverlay._generatePortraitFor('${_esc(charId)}','${_esc(mood)}')"
+                >↻ Regen</button>
+              </div>`;
+          }).join('');
+        })
+        .catch(() => {
+          if (grid) grid.innerHTML = '<span style="color:var(--cs-text-dim)">ComfyUI unavailable.</span>';
+        });
+    }
+
+    _generatePortrait() {
+      const charEl   = document.getElementById('cs-portrait-char');
+      const moodEl   = document.getElementById('cs-portrait-mood');
+      const sceneEl  = document.getElementById('cs-portrait-scene');
+      const statusEl = document.getElementById('cs-portrait-status');
+      const charId = charEl ? charEl.value.trim() : '';
+      if (!charId) {
+        if (statusEl) { statusEl.textContent = '✗ char_id required'; statusEl.style.color = 'var(--cs-hack-red)'; }
+        return;
+      }
+      const mood  = moodEl ? moodEl.value : 'neutral';
+      const scene = sceneEl ? sceneEl.value.trim() : '';
+      if (statusEl) { statusEl.textContent = '⟳ Generating…'; statusEl.style.color = ''; }
+      const params = new URLSearchParams({ char_id: charId, mood });
+      if (scene) params.set('scene', scene);
+      fetch(`/api/art/portrait?${params}`)
+        .then(r => r.json())
+        .then(data => {
+          if (!statusEl) return;
+          if (data.ok) {
+            const tag = data.cached ? '(cached)' : `(${data.generation_ms}ms)`;
+            statusEl.textContent = `✓ ${data.url} ${tag}`;
+            statusEl.style.color = '';
+            setTimeout(() => this._loadPortraits(), 200);
+          } else {
+            statusEl.textContent = `✗ ${data.error || 'Failed'}`;
+            statusEl.style.color = 'var(--cs-hack-red)';
+          }
+        })
+        .catch(() => {
+          if (statusEl) { statusEl.textContent = '✗ Network error'; statusEl.style.color = 'var(--cs-hack-red)'; }
+        });
+    }
+
+    _generatePortraitFor(charId, mood) {
+      const charEl  = document.getElementById('cs-portrait-char');
+      const moodEl  = document.getElementById('cs-portrait-mood');
+      if (charEl)  charEl.value = charId;
+      if (moodEl)  moodEl.value = mood;
+      this._generatePortrait();
+    }
+
     /* ── Keyboard ───────────────────────────────────────────────── */
 
     _setupKeyboard() {
@@ -680,6 +763,13 @@
     if (knowledgeStoreBtn) knowledgeStoreBtn.addEventListener('click', () => overlay._storeKnowledge());
     const knowledgeReload = document.getElementById('cs-know-reload');
     if (knowledgeReload) knowledgeReload.addEventListener('click', () => overlay._loadKnowledge());
+
+    // Portraits tab (v0.72)
+    const portraitGenBtn = document.getElementById('cs-portrait-gen-btn');
+    if (portraitGenBtn) portraitGenBtn.addEventListener('click', () => overlay._generatePortrait());
+    const portraitReload = document.getElementById('cs-portrait-reload');
+    if (portraitReload) portraitReload.addEventListener('click', () => overlay._loadPortraits());
+    window._adminOverlay = overlay;
 
     // Training controls
     const seedBtn = document.getElementById('cs-trigger-seed');

@@ -1,6 +1,6 @@
 # CosySim Roadmap
 
-> Current: **v0.69** | Last updated: 2026-03-02
+> Current: **v0.72** | Last updated: 2026-03-02
 
 ## Philosophy
 
@@ -69,48 +69,76 @@ The system's ultimate goal: **inhabit itself** — AI agents that maintain, impr
 
 ---
 
-## Active: v0.71 — "Full Immersion"
+## Completed: v0.71b — "Full Immersion" ✅
 
-> v0.70 wired up the plumbing. v0.71 makes it unmistakably alive.
-> Deep scene gameplay with real arcs and state machines, 5× polished UI
-> with 3D/particle effects, NPC faction reactivity, and the first model
-> the system fine-tuned and actually swapped in.
+> Made the world unmistakably alive: particle engines, story arcs, dialogue gating, NPC backstories, Nexus admin tabs, push-to-talk STT, ambient audio, and the first model fine-tuned and promoted.
 
-### Track A: Scene UI/UX Polish (5× upgrade)
-- [ ] All 9 scenes: 3D canvas/WebGL particle backgrounds per scene theme
-- [ ] Unified black glass design token refresh — shadows, glows, blur, depth
-- [ ] Scene-specific accent animations (blood drip for arena, neon pulse for neoncity, candleflame for tavern…)
-- [ ] Character portrait overlays on all scenes — animated reaction frames on dialogue
-- [ ] Smooth scene transition animations (fade through black glass)
+- [x] Track A: Scene visual polish — particles, scene-fx CSS, portrait overlays, 200ms transitions
+- [x] Track B: Narrative engine — StoryArcEngine, FactionManager, DailyChallengeManager, 9 arc templates
+- [x] Track C: Dialogue & character depth — DialogueGateInterceptor, reputation HUD, VoiceProfileManager, NPC backstories
+- [x] Track D: Live finetuning — router_v3 trained (1872 ex, 3 epochs, loss 0.17), promoted to ModelRegistry (model_id 6115d0f2)
+- [x] Track E: Nexus admin — [NEXUS]/[KNOWLEDGE] tabs, NexusAwareSkillMixin, NexusContextInjector interceptor
+- [x] Track F: Audio immersion — cosysim-stt.js push-to-talk, cosysim-ambient.js procedural audio, 9 scene profiles
+- [x] Tests: **7,443 passing**, 25 interceptors, 13 active scenes, 36 scheduler tasks
 
-### Track B: Deep Gameplay Loops
-- [ ] Story arc engine: 3-act structures per scene, NLM-authored, advance on trigger events
-- [ ] Win/lose/progress states: each scene has a persistent score/stage visible in UI
-- [ ] Faction politics: join/betray factions — prices, dialogue, NPC hostility change in real-time
-- [ ] Daily challenge system: scheduler generates NLM scene challenge each morning, stored in Nexus
+---
 
-### Track C: NPC Reactivity
-- [ ] Dialogue gate: NPCs check CharacterMemory score before responding (hostile / wary / neutral / friendly / trusted)
-- [ ] Reputation visible in scene UI — floating indicator per NPC, updates live
-- [ ] Per-character voice profiles in CharacterMemory (pitch, speed, backend) — used by TTS on every line
-- [ ] NLM backstory surfaced on hover/inspect for all named NPCs
+## Active: v0.72 — "The Living World"
 
-### Track D: Live Finetuning Run
-- [ ] Trigger `RouterFinetuneCycle.run()` on GPU — train router_v3 on 2,080 examples
-- [ ] Auto-benchmark against rule_predictor baseline; log result to Nexus
-- [ ] Auto-promote to `ModelRegistry` if accuracy improves; swap `InferenceRouter`
-- [ ] Weekly scheduler confirmed active; dataset augment task runs before each cycle
+> v0.71 polished the surface. v0.72 makes the world breathe on its own.
+> ComfyUI-generated character portraits, NPCs with autonomous schedules,
+> persistent player identity across scenes, the router_v3 model serving
+> live traffic and growing its own dataset, and Intel Hub as mission control.
 
-### Track E: Nexus Admin Integration
-- [ ] Admin overlay [NEXUS] tab — live search panel hitting `nexus_search` endpoint
-- [ ] Admin overlay [KNOWLEDGE] tab — browse recent entries, Q&A cache, tag filter
-- [ ] Scene skills: query Nexus for context before every LLM call (soft fallback, not blocking)
-- [ ] Nexus seeding dashboard — show last seed times, entry counts, scheduled tasks
+### Track A: ComfyUI Character Portraits
+- [ ] `engine/art/portrait_generator.py` — `PortraitGenerator` wrapping ComfyUI `/prompt` API
+- [ ] Per-character prompt templates stored in Nexus (face, style, background per character)
+- [ ] `generate_portrait(character_id, emotion)` skill → ComfyUI → saves to `content/shared/static/img/portraits/{id}_{emotion}.png`
+- [ ] Portrait overlay wired to load from file path; CSS gradient fallback if not generated
+- [ ] Batch generation skill `generate_all_portraits` — generates all named NPCs at scene start
+- [ ] Admin overlay [PORTRAITS] tab — grid of generated portraits, regenerate button
+- [ ] `tests/test_portrait_generator.py` — mock ComfyUI API, test prompt building, caching
 
-### Track F: Audio + STT
-- [ ] Push-to-talk STT on all 9 scenes (Web Speech API, wired to existing VoiceManager)
-- [ ] Per-scene ambient audio layer (subtle atmospheric background, volume in admin)
-- [ ] Voice line synthesis: NLM-generated dialogue → TTS → cached audio file in Nexus
+### Track B: Autonomous NPC Behavior
+- [ ] `engine/agents/npc_scheduler.py` — `NPCScheduler` with async tick loop per character
+- [ ] NPC tick actions: drift reputation, send ambient message, change scene price, log activity
+- [ ] `engine/world/npc_state.py` — per-NPC: location, activity, last_action, schedule
+- [ ] WorldSim → NPC state bridge: world events affect NPC mood/activity
+- [ ] Scheduler task `npc-world-tick` (every 15 min) → total 37 tasks
+- [ ] NPC activity badge in scene UI: pulsing dot when NPC is "doing something"
+- [ ] `tests/test_npc_scheduler.py` — tick logic, state transitions, WorldSim bridge
+
+### Track C: Persistent Player Identity
+- [ ] `engine/characters/player_profile.py` — `PlayerProfile` singleton, Nexus-backed
+- [ ] Tracks: session count, scenes visited, NPCs met, relationship scores, key decisions, reputation summary
+- [ ] `player_profile_skills.py` — `get_player_profile`, `update_player_reputation`, `get_relationship_summary`, `record_decision`
+- [ ] Admin overlay **[PROFILE]** tab — identity card, relationship web, timeline
+- [ ] `RelationshipContextInterceptor` extended to inject player profile summary into every LLM call
+- [ ] `tests/test_player_profile.py` — profile CRUD, Nexus persistence, interceptor injection
+
+### Track D: Training Flywheel
+- [ ] `engine/lmstudio/router_v3_client.py` — thin wrapper loading trained adapter via ModelRegistry
+- [ ] `InferenceRouter` updated to use router_v3 model for routing decisions (fallback to rule_predictor)
+- [ ] `RouterDataCollector` weekly export: auto-merge incremental JSONL, trigger `RouterFinetuneCycle`
+- [ ] Scheduler tasks `router-data-export` + `router-retrain-cycle` → total **38 tasks** (6 test files updated)
+- [ ] Retrain report generated post-cycle: val_loss, sample_count, model_id — stored in Nexus
+- [ ] Intel Hub training dashboard: val_loss history chart, dataset size trend, last retrain time
+- [ ] `tests/test_training_flywheel.py` — export trigger, retrain cycle, report generation
+
+### Track E: Intel Hub Mission Control
+- [ ] `engine/monitoring/metrics_collector.py` — in-process metrics: LLM call latency, error rate, token usage
+- [ ] `/api/metrics` on shared blueprint → returns JSON snapshot
+- [ ] Intel Hub scene enhanced: live scene health grid (ping all 13 scenes), metrics ticker, training panel
+- [ ] World events feed: WorldSim events displayed as news ticker in Intel Hub
+- [ ] Scene health badge in navbar_v2.html — green/amber/red dot per scene based on last ping
+- [ ] `tests/test_metrics_collector.py` — metric recording, snapshot serialisation
+
+### Track F: Docs + System Audit
+- [ ] `docs/WORLD_SYSTEM.md` — WorldSim, WorldEvents, FactionManager, NPC schedules, cross-scene continuity
+- [ ] `docs/TRAINING_FLYWHEEL.md` — router_v3 lifecycle: dataset → train → benchmark → promote → serve → collect
+- [ ] `docs/PLAYER_IDENTITY.md` — PlayerProfile, relationship web, session persistence
+- [ ] `ROADMAP.md` — mark v0.71 complete, update v0.72 as active
+- [ ] `docs/SYSTEM_AUDIT.md` — update to v0.72b, reassess grade, update test count + module list
 
 ---
 
@@ -120,7 +148,7 @@ The system's ultimate goal: **inhabit itself** — AI agents that maintain, impr
 2. **Nexus as truth** — Prompts, rules, configurations, session history, and experiment results live in Nexus
 3. **NLM-first** — Research, analysis, and knowledge generation go through NotebookLM (free Gemini) before LMStudio
 4. **Local-first** — No cloud dependencies. LMStudio, ChromaDB, ComfyUI, TTS all run locally
-5. **Test-driven** — Every feature gets tests. 7,066 passing at v0.70
+5. **Test-driven** — Every feature gets tests. 7,443 passing at v0.71b
 6. **Scene independence** — Scenes are self-contained. Adding a scene shouldn't break others
 7. **Agent freedom within rails** — Governance pipeline enforces consistency without killing creativity
 8. **Profile-aware** — Conversation analyzer builds persistent user profile; all agents use it

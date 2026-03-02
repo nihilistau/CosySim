@@ -112,6 +112,21 @@ class BedroomCombatMixin:
                     "timestamp": action.get("timestamp", ""),
                     "character_id": character_id,
                 })
+                # Emit character_speaking for portrait overlay
+                try:
+                    from engine.art.portrait_cache import get_portrait_cache
+                    from engine.agents.stream_processor import _RE_MOOD
+                    moods = _RE_MOOD.findall(action["message"])
+                    mood = moods[0].strip() if moods else "neutral"
+                    portrait_url = get_portrait_cache().get_url(character_id, mood)
+                    self.socketio.emit("character_speaking", {
+                        "name": char_name,
+                        "character_id": character_id,
+                        "mood": mood,
+                        "portrait_url": portrait_url or "",
+                    })
+                except Exception:
+                    pass
             # Log physical interactions as InteractionRecords
             _INTERACTION_TYPES = {
                 "flirt", "kiss", "make_out", "intimate", "cuddle", "touch", "caress",

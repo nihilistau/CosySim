@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="en" data-scene="asset_studio">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ASSET STUDIO — CosySim</title>
+  <link rel="stylesheet" href="/shared/css/design_tokens.css">
+  <link rel="stylesheet" href="/shared/css/cosysim-animations.css">
+  <link rel="stylesheet" href="/static/css/asset_studio.css">
+</head>
+<body data-scene="asset_studio">
+
+<!-- Shared navbar -->
+{% include 'navbar_v2.html' ignore missing %}
+
+<div class="cs-studio-layout">
+
+  <!-- ── Sidebar tabs ─────────────────────────────────────────────────── -->
+  <nav class="cs-studio-sidebar" id="studio-sidebar">
+    <div class="cs-studio-logo">
+      <span class="cs-logo-icon">◈</span>
+      <span class="cs-logo-text">ASSET<br>STUDIO</span>
+    </div>
+
+    <div class="cs-tab-list" role="tablist">
+      <button class="cs-tab-btn active" data-tab="library"   role="tab" aria-selected="true">
+        <span class="cs-tab-icon">⊞</span><span class="cs-tab-label">LIBRARY</span>
+      </button>
+      <button class="cs-tab-btn" data-tab="images"    role="tab">
+        <span class="cs-tab-icon">🖼</span><span class="cs-tab-label">IMAGES</span>
+      </button>
+      <button class="cs-tab-btn" data-tab="portraits" role="tab">
+        <span class="cs-tab-icon">👤</span><span class="cs-tab-label">PORTRAITS</span>
+      </button>
+      <button class="cs-tab-btn" data-tab="voice"     role="tab">
+        <span class="cs-tab-icon">🎙</span><span class="cs-tab-label">VOICE</span>
+      </button>
+      <button class="cs-tab-btn" data-tab="video"     role="tab">
+        <span class="cs-tab-icon">▶</span><span class="cs-tab-label">VIDEO</span>
+      </button>
+      <button class="cs-tab-btn" data-tab="items"     role="tab">
+        <span class="cs-tab-icon">⚔</span><span class="cs-tab-label">ITEMS</span>
+      </button>
+      <button class="cs-tab-btn" data-tab="svg"       role="tab">
+        <span class="cs-tab-icon">◇</span><span class="cs-tab-label">SVG</span>
+      </button>
+      <button class="cs-tab-btn" data-tab="audio"     role="tab">
+        <span class="cs-tab-icon">♪</span><span class="cs-tab-label">AUDIO</span>
+      </button>
+      <button class="cs-tab-btn cs-tab-btn--bottom" data-tab="settings" role="tab">
+        <span class="cs-tab-icon">⚙</span><span class="cs-tab-label">SETTINGS</span>
+      </button>
+    </div>
+
+    <!-- Status bar -->
+    <div class="cs-studio-status">
+      <div class="cs-status-dot" id="studio-status-dot" title="Studio health"></div>
+      <span id="studio-status-text">Checking…</span>
+    </div>
+  </nav>
+
+  <!-- ── Main content ──────────────────────────────────────────────────── -->
+  <main class="cs-studio-main" id="studio-main">
+
+    <!-- LIBRARY tab -->
+    <div class="cs-tab-panel active" id="tab-library">
+      <div class="cs-panel-header">
+        <h2>Asset Library</h2>
+        <div class="cs-library-controls">
+          <input type="text" id="lib-search" placeholder="Search assets…" class="cs-input">
+          <select id="lib-filter-type" class="cs-select">
+            <option value="">All Types</option>
+            <option value="image">Images</option>
+            <option value="portrait">Portraits</option>
+            <option value="voice">Voice</option>
+            <option value="video">Video</option>
+            <option value="item">Items</option>
+            <option value="svg">SVG</option>
+            <option value="audio">Audio</option>
+          </select>
+          <select id="lib-filter-scene" class="cs-select">
+            <option value="">All Scenes</option>
+            <option value="bedroom">Bedroom</option>
+            <option value="lounge">Lounge</option>
+            <option value="tavern">Tavern</option>
+            <option value="casino">Casino</option>
+            <option value="gallery">Gallery</option>
+            <option value="arena">Arena</option>
+            <option value="realm">Realm</option>
+            <option value="neoncity">NeonCity</option>
+            <option value="phone">Phone</option>
+          </select>
+          <label class="cs-toggle-label">
+            <input type="checkbox" id="lib-favorites-only"> ★ Favorites
+          </label>
+          <button class="cs-btn cs-btn--ghost" id="lib-refresh-btn">↺ Refresh</button>
+        </div>
+        <div class="cs-library-stats" id="lib-stats"></div>
+      </div>
+      <div class="cs-asset-grid" id="lib-grid">
+        <div class="cs-grid-loading">Loading library…</div>
+      </div>
+      <div class="cs-pagination">
+        <button class="cs-btn cs-btn--ghost" id="lib-prev-btn" disabled>← Prev</button>
+        <span id="lib-page-info">Page 1</span>
+        <button class="cs-btn cs-btn--ghost" id="lib-next-btn">Next →</button>
+      </div>
+    </div>
+
+    <!-- IMAGES tab -->
+    <div class="cs-tab-panel" id="tab-images">
+      <div class="cs-panel-header"><h2>Image Generator</h2></div>
+      <div class="cs-gen-layout">
+        <div class="cs-gen-form" id="image-form">
+          <div class="cs-form-group">
+            <label>Subject / Description</label>
+            <textarea id="img-subject" class="cs-textarea" rows="3"
+              placeholder="A dark rooftop at midnight, city lights below…"></textarea>
+          </div>
+          <div class="cs-form-row">
+            <div class="cs-form-group">
+              <label>Scene Context</label>
+              <select id="img-scene" class="cs-select">
+                <option value="">None</option>
+                <option value="bedroom">Bedroom</option>
+                <option value="lounge">Lounge</option>
+                <option value="tavern">Tavern</option>
+                <option value="casino">Casino</option>
+                <option value="gallery">Gallery</option>
+                <option value="arena">Arena</option>
+                <option value="realm">Realm</option>
+                <option value="neoncity">NeonCity</option>
+                <option value="heist">Heist</option>
+                <option value="phone">Phone</option>
+              </select>
+            </div>
+            <div class="cs-form-group">
+              <label>Mood</label>
+              <select id="img-mood" class="cs-select">
+                <option value="neutral">Neutral</option>
+                <option value="tense">Tense</option>
+                <option value="romantic">Romantic</option>
+                <option value="dangerous">Dangerous</option>
+                <option value="mysterious">Mysterious</option>
+                <option value="joyful">Joyful</option>
+                <option value="melancholy">Melancholy</option>
+                <option value="seductive">Seductive</option>
+              </select>
+            </div>
+          </div>
+          <div class="cs-form-row">
+            <div class="cs-form-group">
+              <label>Style Preset</label>
+              <select id="img-preset" class="cs-select cs-preset-select"></select>
+            </div>
+          </div>
+          <div class="cs-form-row">
+            <div class="cs-form-group">
+              <label>Width</label>
+              <input type="number" id="img-width" class="cs-input" value="512" min="256" max="2048" step="64">
+            </div>
+            <div class="cs-form-group">
+              <label>Height</label>
+              <input type="number" id="img-height" class="cs-input" value="512" min="256" max="2048" step="64">
+            </div>
+            <div class="cs-form-group">
+              <label>Steps</label>
+              <input type="number" id="img-steps" class="cs-input" value="20" min="10" max="50">
+            </div>
+            <div class="cs-form-group">
+              <label>CFG Scale</label>
+              <input type="number" id="img-cfg" class="cs-input" value="7.0" min="1" max="20" step="0.5">
+            </div>
+          </div>
+          <div class="cs-form-group">
+            <label>Extra Positive Keywords</label>
+            <input type="text" id="img-extra-pos" class="cs-input" placeholder="masterpiece, trending on artstation…">
+          </div>
+          <div class="cs-form-group">
+            <label>Extra Negative Keywords</label>
+            <input type="text" id="img-extra-neg" class="cs-input" placeholder="cartoon, anime…">
+          </div>
+          <button class="cs-btn cs-btn--primary cs-generate-btn" id="img-generate-btn">
+            <span class="cs-btn-icon">⚡</span> Generate Image
+          </button>
+        </div>
+        <div class="cs-gen-preview" id="image-preview">
+          <div class="cs-preview-placeholder">Preview will appear here</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PORTRAITS tab -->
+    <div class="cs-tab-panel" id="tab-portraits">
+      <div class="cs-panel-header"><h2>Portrait Generator</h2></div>
+      <div class="cs-gen-layout">
+        <div class="cs-gen-form" id="portrait-form">
+          <div class="cs-form-group">
+            <label>Character ID</label>
+            <input type="text" id="por-char" class="cs-input" placeholder="aria, lola, viktor…">
+          </div>
+          <div class="cs-form-row">
+            <div class="cs-form-group">
+              <label>Mood</label>
+              <select id="por-mood" class="cs-select">
+                <option value="neutral">Neutral</option>
+                <option value="happy">Happy</option>
+                <option value="angry">Angry</option>
+                <option value="sad">Sad</option>
+                <option value="seductive">Seductive</option>
+                <option value="fearful">Fearful</option>
+                <option value="disgusted">Disgusted</option>
+                <option value="excited">Excited</option>
+                <option value="romantic">Romantic</option>
+              </select>
+            </div>
+            <div class="cs-form-group">
+              <label>Scene Context</label>
+              <select id="por-scene" class="cs-select">
+                <option value="">None</option>
+                <option value="bedroom">Bedroom</option>
+                <option value="lounge">Lounge</option>
+                <option value="tavern">Tavern</option>
+                <option value="casino">Casino</option>
+                <option value="gallery">Gallery</option>
+                <option value="arena">Arena</option>
+                <option value="realm">Realm</option>
+                <option value="neoncity">NeonCity</option>
+              </select>
+            </div>
+          </div>
+          <div class="cs-form-group">
+            <label>Style Preset</label>
+            <select id="por-preset" class="cs-select cs-preset-select"></select>
+          </div>
+          <div class="cs-form-row">
+            <div class="cs-form-group">
+              <label>Width</label>
+              <input type="number" id="por-width" class="cs-input" value="512" min="256" max="1024" step="64">
+            </div>
+            <div class="cs-form-group">
+              <label>Height</label>
+              <input type="number" id="por-height" class="cs-input" value="768" min="256" max="1536" step="64">
+            </div>
+          </div>
+          <label class="cs-toggle-label">
+            <input type="checkbox" id="por-adult"> Allow adult content
+          </label>
+          <button class="cs-btn cs-btn--primary cs-generate-btn" id="por-generate-btn">
+            <span class="cs-btn-icon">⚡</span> Generate Portrait
+          </button>
+        </div>
+        <div class="cs-gen-preview" id="portrait-preview">
+          <div class="cs-preview-placeholder">Portrait will appear here</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- VOICE tab -->
+    <div class="cs-tab-panel" id="tab-voice">
+      <div class="cs-panel-header"><h2>Voice Generator</h2></div>
+      <div class="cs-gen-layout cs-gen-layout--voice">
+        <div class="cs-gen-form">
+          <div class="cs-form-group">
+            <label>Text to Synthesise</label>
+            <textarea id="voice-text" class="cs-textarea" rows="4"
+              placeholder="Enter dialogue or narration…"></textarea>
+          </div>
+          <div class="cs-form-row">
+            <div class="cs-form-group">
+              <label>Character ID (optional)</label>
+              <input type="text" id="voice-char" class="cs-input" placeholder="aria">
+            </div>
+            <div class="cs-form-group">
+              <label>Backend</label>
+              <select id="voice-backend" class="cs-select">
+                <option value="auto">Auto</option>
+                <option value="piper">Piper (fast)</option>
+                <option value="orpheus">Orpheus (quality)</option>
+                <option value="qwen3">Qwen3 (expressive)</option>
+              </select>
+            </div>
+          </div>
+          <div class="cs-form-group">
+            <label>Voice Description (Qwen3 style)</label>
+            <textarea id="voice-desc" class="cs-textarea" rows="2"
+              placeholder="A warm, husky female voice with a slight rasp…"></textarea>
+          </div>
+          <button class="cs-btn cs-btn--primary cs-generate-btn" id="voice-generate-btn">
+            <span class="cs-btn-icon">⚡</span> Synthesise
+          </button>
+        </div>
+        <div class="cs-voice-panel">
+          <div class="cs-voice-player" id="voice-player" style="display:none">
+            <audio id="voice-audio" controls style="width:100%"></audio>
+            <div class="cs-voice-meta" id="voice-meta"></div>
+          </div>
+          <div class="cs-voice-design-editor">
+            <h3>Voice Design Editor</h3>
+            <p class="cs-hint">Save a reusable voice design for a character.</p>
+            <div class="cs-form-group">
+              <label>Character ID</label>
+              <input type="text" id="vd-char" class="cs-input" placeholder="aria">
+            </div>
+            <div class="cs-form-group">
+              <label>Voice Description</label>
+              <textarea id="vd-desc" class="cs-textarea" rows="3"
+                placeholder="A seductive, breathy female voice with Eastern European flair…"></textarea>
+            </div>
+            <div class="cs-form-group">
+              <label>Model Size</label>
+              <select id="vd-size" class="cs-select">
+                <option value="1.7b">1.7B (complex/emotional)</option>
+                <option value="0.6b">0.6B (fast/simple)</option>
+              </select>
+            </div>
+            <button class="cs-btn cs-btn--secondary" id="vd-save-btn">Save Voice Design</button>
+          </div>
+          <div class="cs-voice-library" id="voice-library">
+            <h3>Available Voices</h3>
+            <div id="voice-list-content">Loading…</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- VIDEO tab -->
+    <div class="cs-tab-panel" id="tab-video">
+      <div class="cs-panel-header">
+        <h2>Video Generator</h2>
+        <span class="cs-badge cs-badge--warn">Requires AnimateDiff</span>
+      </div>
+      <div class="cs-gen-layout">
+        <div class="cs-gen-form">
+          <div class="cs-form-group">
+            <label>Scene Description</label>
+            <textarea id="vid-subject" class="cs-textarea" rows="3"
+              placeholder="A figure walking through neon rain…"></textarea>
+          </div>
+          <div class="cs-form-row">
+            <div class="cs-form-group">
+              <label>Scene</label>
+              <select id="vid-scene" class="cs-select">
+                <option value="">None</option>
+                <option value="neoncity">NeonCity</option>
+                <option value="bedroom">Bedroom</option>
+                <option value="tavern">Tavern</option>
+                <option value="arena">Arena</option>
+                <option value="realm">Realm</option>
+              </select>
+            </div>
+            <div class="cs-form-group">
+              <label>Mood</label>
+              <select id="vid-mood" class="cs-select">
+                <option value="neutral">Neutral</option>
+                <option value="tense">Tense</option>
+                <option value="mysterious">Mysterious</option>
+                <option value="dangerous">Dangerous</option>
+              </select>
+            </div>
+            <div class="cs-form-group">
+              <label>Motion</label>
+              <select id="vid-motion" class="cs-select">
+                <option value="subtle">Subtle</option>
+                <option value="moderate">Moderate</option>
+                <option value="dynamic">Dynamic</option>
+              </select>
+            </div>
+          </div>
+          <div class="cs-form-row">
+            <div class="cs-form-group">
+              <label>Frames</label>
+              <input type="number" id="vid-frames" class="cs-input" value="16" min="8" max="32" step="4">
+            </div>
+            <div class="cs-form-group">
+              <label>FPS</label>
+              <input type="number" id="vid-fps" class="cs-input" value="8" min="4" max="24">
+            </div>
+            <div class="cs-form-group">
+              <label>Style Preset</label>
+              <select id="vid-preset" class="cs-select cs-preset-select"></select>
+            </div>
+          </div>
+          <button class="cs-btn cs-btn--primary cs-generate-btn" id="vid-generate-btn">
+            <span class="cs-btn-icon">⚡</span> Generate Video
+          </button>
+        </div>
+        <div class="cs-gen-preview" id="video-preview">
+          <div class="cs-preview-placeholder">Video clip will appear here</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ITEMS tab -->
+    <div class="cs-tab-panel" id="tab-items">
+      <div class="cs-panel-header"><h2>Game Item Creator</h2></div>
+      <div class="cs-gen-layout">
+        <div class="cs-gen-form">
+          <div class="cs-form-group">
+            <label>Item Name</label>
+            <input type="text" id="item-name" class="cs-input" placeholder="Dagger of Shadows">
+          </div>
+          <div class="cs-form-row">
+            <div class="cs-form-group">
+              <label>Archetype</label>
+              <select id="item-arch" class="cs-select">
+                <option value="weapon">Weapon</option>
+                <option value="armor">Armor</option>
+                <option value="potion">Potion</option>
+                <option value="key">Key</option>
+                <option value="scroll">Scroll</option>
+                <option value="ring">Ring</option>
+                <option value="amulet">Amulet</option>
+                <option value="book">Book</option>
+                <option value="coin">Coin</option>
+                <option value="card">Card</option>
+                <option value="food">Food</option>
+                <option value="plant">Plant</option>
+                <option value="tool">Tool</option>
+                <option value="tech">Tech</option>
+                <option value="clothing">Clothing</option>
+              </select>
+            </div>
+            <div class="cs-form-group">
+              <label>Rarity</label>
+              <select id="item-rarity" class="cs-select">
+                <option value="common">Common</option>
+                <option value="uncommon">Uncommon</option>
+                <option value="rare">Rare</option>
+                <option value="epic">Epic</option>
+                <option value="legendary">Legendary</option>
+              </select>
+            </div>
+            <div class="cs-form-group">
+              <label>Scene Context</label>
+              <select id="item-scene" class="cs-select">
+                <option value="">None</option>
+                <option value="tavern">Tavern</option>
+                <option value="realm">Realm</option>
+                <option value="casino">Casino</option>
+                <option value="arena">Arena</option>
+              </select>
+            </div>
+          </div>
+          <label class="cs-toggle-label">
+            <input type="checkbox" id="item-icon" checked> Generate Icon
+          </label>
+          <div class="cs-form-group">
+            <label>Style Preset (icon)</label>
+            <select id="item-preset" class="cs-select cs-preset-select"></select>
+          </div>
+          <button class="cs-btn cs-btn--primary cs-generate-btn" id="item-generate-btn">
+            <span class="cs-btn-icon">⚡</span> Create Item
+          </button>
+        </div>
+        <div class="cs-item-result" id="item-result">
+          <div class="cs-preview-placeholder">Item data will appear here</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SVG tab -->
+    <div class="cs-tab-panel" id="tab-svg">
+      <div class="cs-panel-header"><h2>SVG Generator</h2></div>
+      <div class="cs-gen-layout">
+        <div class="cs-gen-form">
+          <div class="cs-form-group">
+            <label>Subject / Description</label>
+            <textarea id="svg-subject" class="cs-textarea" rows="3"
+              placeholder="A crescent moon with stars and a dagger…"></textarea>
+          </div>
+          <div class="cs-form-row">
+            <div class="cs-form-group">
+              <label>Style</label>
+              <select id="svg-style" class="cs-select">
+                <option value="minimal">Minimal</option>
+                <option value="detailed">Detailed</option>
+                <option value="logo">Logo</option>
+                <option value="icon">Icon</option>
+                <option value="ornate">Ornate</option>
+              </select>
+            </div>
+            <div class="cs-form-group">
+              <label>Scene (colour palette)</label>
+              <select id="svg-scene" class="cs-select">
+                <option value="">Default</option>
+                <option value="bedroom">Bedroom (purple)</option>
+                <option value="casino">Casino (amber)</option>
+                <option value="neoncity">NeonCity (cyan)</option>
+                <option value="realm">Realm (violet)</option>
+                <option value="arena">Arena (red)</option>
+              </select>
+            </div>
+          </div>
+          <div class="cs-form-group">
+            <label>Custom Colours (comma-separated hex)</label>
+            <input type="text" id="svg-colors" class="cs-input" placeholder="#8b5cf6, #1e1b4b">
+          </div>
+          <button class="cs-btn cs-btn--primary cs-generate-btn" id="svg-generate-btn">
+            <span class="cs-btn-icon">⚡</span> Generate SVG
+          </button>
+        </div>
+        <div class="cs-svg-result" id="svg-result">
+          <div class="cs-preview-placeholder">SVG preview will appear here</div>
+          <div id="svg-code-block" style="display:none">
+            <textarea id="svg-output-code" class="cs-textarea cs-code-area" rows="12" readonly></textarea>
+            <button class="cs-btn cs-btn--ghost" id="svg-copy-btn">⎘ Copy SVG</button>
+            <a class="cs-btn cs-btn--ghost" id="svg-download-btn" download="asset.svg">⬇ Download</a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- AUDIO tab -->
+    <div class="cs-tab-panel" id="tab-audio">
+      <div class="cs-panel-header">
+        <h2>Audio Generator</h2>
+        <span class="cs-badge cs-badge--info">Synthesised tones — AudioCraft planned</span>
+      </div>
+      <div class="cs-gen-layout cs-gen-layout--voice">
+        <div class="cs-gen-form">
+          <div class="cs-form-row">
+            <div class="cs-form-group">
+              <label>Audio Type</label>
+              <select id="aud-type" class="cs-select">
+                <option value="ambient">Ambient</option>
+                <option value="sfx">SFX</option>
+                <option value="loop">Loop</option>
+                <option value="music">Music</option>
+              </select>
+            </div>
+            <div class="cs-form-group">
+              <label>Scene (tone)</label>
+              <select id="aud-scene" class="cs-select">
+                <option value="">Default</option>
+                <option value="bedroom">Bedroom</option>
+                <option value="tavern">Tavern</option>
+                <option value="casino">Casino</option>
+                <option value="arena">Arena</option>
+                <option value="realm">Realm</option>
+                <option value="neoncity">NeonCity</option>
+              </select>
+            </div>
+            <div class="cs-form-group">
+              <label>Duration (sec)</label>
+              <input type="number" id="aud-duration" class="cs-input" value="5" min="1" max="60" step="1">
+            </div>
+          </div>
+          <div class="cs-form-group">
+            <label>Description</label>
+            <textarea id="aud-desc" class="cs-textarea" rows="2"
+              placeholder="Tavern ambience with distant laughter and crackling fire…"></textarea>
+          </div>
+          <button class="cs-btn cs-btn--primary cs-generate-btn" id="aud-generate-btn">
+            <span class="cs-btn-icon">⚡</span> Generate Audio
+          </button>
+        </div>
+        <div class="cs-voice-panel">
+          <div class="cs-voice-player" id="audio-player" style="display:none">
+            <audio id="audio-element" controls style="width:100%"></audio>
+            <div class="cs-voice-meta" id="audio-meta"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SETTINGS tab -->
+    <div class="cs-tab-panel" id="tab-settings">
+      <div class="cs-panel-header"><h2>Studio Settings</h2></div>
+      <div class="cs-settings-layout">
+
+        <!-- Feature Flags -->
+        <section class="cs-settings-section">
+          <h3>Feature Flags</h3>
+          <p class="cs-hint">Toggle integrations. Changes apply immediately (session only).</p>
+          <div class="cs-flag-list" id="flags-list">Loading…</div>
+        </section>
+
+        <!-- Preset Manager -->
+        <section class="cs-settings-section">
+          <h3>Style Presets</h3>
+          <div class="cs-preset-list" id="preset-list">Loading…</div>
+          <div class="cs-preset-editor">
+            <h4>Create / Edit Preset</h4>
+            <div class="cs-form-row">
+              <div class="cs-form-group">
+                <label>Preset ID</label>
+                <input type="text" id="preset-id-input" class="cs-input" placeholder="my_preset">
+              </div>
+              <div class="cs-form-group">
+                <label>Name</label>
+                <input type="text" id="preset-name-input" class="cs-input" placeholder="My Preset">
+              </div>
+            </div>
+            <div class="cs-form-group">
+              <label>Description</label>
+              <input type="text" id="preset-desc-input" class="cs-input" placeholder="What this preset looks like">
+            </div>
+            <div class="cs-form-group">
+              <label>Style Tags (comma-separated)</label>
+              <input type="text" id="preset-tags-input" class="cs-input"
+                placeholder="digital painting, cinematic, dark">
+            </div>
+            <div class="cs-form-group">
+              <label>Negative Tags (comma-separated)</label>
+              <input type="text" id="preset-neg-input" class="cs-input"
+                placeholder="blurry, watermark, bad quality">
+            </div>
+            <div class="cs-form-row">
+              <div class="cs-form-group">
+                <label>Width</label>
+                <input type="number" id="preset-w" class="cs-input" value="512">
+              </div>
+              <div class="cs-form-group">
+                <label>Height</label>
+                <input type="number" id="preset-h" class="cs-input" value="768">
+              </div>
+              <div class="cs-form-group">
+                <label>Steps</label>
+                <input type="number" id="preset-steps" class="cs-input" value="20">
+              </div>
+              <div class="cs-form-group">
+                <label>CFG</label>
+                <input type="number" id="preset-cfg" class="cs-input" value="7.0" step="0.5">
+              </div>
+            </div>
+            <button class="cs-btn cs-btn--secondary" id="preset-save-btn">Save Preset</button>
+          </div>
+        </section>
+
+        <!-- Backend Status -->
+        <section class="cs-settings-section">
+          <h3>Backend Status</h3>
+          <div id="backend-status-list">Loading…</div>
+          <button class="cs-btn cs-btn--ghost" id="settings-refresh-btn">↺ Refresh Status</button>
+        </section>
+
+      </div>
+    </div>
+
+  </main>
+
+  <!-- ── Generation spinner overlay ──────────────────────────────────── -->
+  <div class="cs-gen-spinner" id="gen-spinner" style="display:none">
+    <div class="cs-spinner-inner">
+      <div class="cs-spinner-ring"></div>
+      <span id="gen-spinner-label">Generating…</span>
+    </div>
+  </div>
+
+</div><!-- /.cs-studio-layout -->
+
+<!-- Toast notifications -->
+<div class="cs-toast-container" id="toast-container"></div>
+
+<script src="/shared/js/socket.io.min.js"></script>
+<script src="/static/js/asset_studio.js"></script>
+</body>
+</html>

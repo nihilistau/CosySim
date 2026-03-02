@@ -27,6 +27,7 @@ _DEFAULT_PORTS: Dict[str, int] = {
     "heist": 5565,
     "command_center": 5566,
     "games": 5567,
+    "asset_studio": 5568,
     "nexus_panel": 5570,
     # Streamlit apps (8500–8504)
     "hub": 8500,
@@ -52,7 +53,7 @@ SERVICE_GROUPS: Dict[str, List[str]] = {
     "scenes": [
         "phone", "bedroom", "lounge", "tavern", "casino", "gallery",
         "arena", "realm", "neoncity", "coders", "heist",
-        "command_center", "games", "nexus_panel",
+        "command_center", "games", "asset_studio", "nexus_panel",
     ],
     "streamlit": ["hub", "dashboard", "admin", "assets", "creator"],
     "tts": ["qwen3_tts", "orpheus_tts", "cosyvoice_tts", "whisper_stt"],
