@@ -28,9 +28,11 @@ Usage::
 """
 from __future__ import annotations
 
+import json
 import logging
 import threading
 import time
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -79,11 +81,14 @@ WEATHER_ICONS: Dict[str, str] = {
 class PlayerState:
     """Persistent player state across all CosySim scenes.
 
-    Thread-safe singleton. State persists in memory for the session and is
-    serialisable via :meth:`to_dict` for REST responses.
+    Thread-safe singleton. State persists to ``data/player_state.json`` across
+    server restarts and is serialisable via :meth:`to_dict` for REST responses.
 
     Not intended for direct instantiation — use :func:`get_player_state`.
     """
+
+    _SAVE_PATH: Path = Path("data") / "player_state.json"
+    _AUTO_SAVE_DELAY: float = 5.0  # seconds debounce
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
@@ -95,6 +100,41 @@ class PlayerState:
         self._inventory: List[str] = []
         self._event_history: List[Dict[str, Any]] = []  # last 50 HUD events
         self._last_updated: float = time.time()
+        self._save_timer: Optional[threading.Timer] = None
+        # Auto-load persisted state if it exists
+        if self._SAVE_PATH.exists():
+            try:
+                self.load_from_file()
+            except Exception as exc:
+                logger.warning("PlayerState: failed to load saved state: %s", exc)
+
+    # ------------------------------------------------------------------
+    # Properties
+    # ------------------------------------------------------------------
+
+    @property
+    def credits(self) -> int:
+        """Current credit balance."""
+        with self._lock:
+            return self._credits
+
+    @property
+    def reputation(self) -> int:
+        """Current reputation score (0–100)."""
+        with self._lock:
+            return self._rep
+
+    @property
+    def heat(self) -> int:
+        """Current heat level (0–100)."""
+        with self._lock:
+            return self._heat
+
+    @property
+    def faction_standings(self) -> Dict[str, int]:
+        """Faction standings dict (copy)."""
+        with self._lock:
+            return dict(self._faction_standings)
 
     # ------------------------------------------------------------------
     # Credits
@@ -115,6 +155,7 @@ class PlayerState:
             self._last_updated = time.time()
             balance = self._credits
         self._emit_hud_update({"credits_delta": abs(amount), "reason": reason})
+        self._schedule_auto_save()
         logger.debug("earn_credits +%d (%s) → %d", amount, reason, balance)
         return balance
 
@@ -135,6 +176,7 @@ class PlayerState:
             self._last_updated = time.time()
             balance = self._credits
         self._emit_hud_update({"credits_delta": -abs(amount), "reason": reason})
+        self._schedule_auto_save()
         logger.debug("spend_credits -%d (%s) → %d", amount, reason, balance)
         return balance
 
@@ -157,6 +199,7 @@ class PlayerState:
             self._last_updated = time.time()
             rep = self._rep
         self._emit_hud_update({"rep_delta": delta, "reason": reason})
+        self._schedule_auto_save()
         return rep
 
     # ------------------------------------------------------------------
@@ -177,6 +220,7 @@ class PlayerState:
             self._last_updated = time.time()
             heat = self._heat
         self._emit_hud_update({"heat": heat})
+        self._schedule_auto_save()
         return heat
 
     def adjust_heat(self, delta: int, reason: str = "") -> int:
@@ -195,6 +239,7 @@ class PlayerState:
             heat = self._heat
         if delta != 0:
             self._emit_hud_update({"heat_delta": delta, "reason": reason})
+            self._schedule_auto_save()
         return heat
 
     # ------------------------------------------------------------------
@@ -220,6 +265,7 @@ class PlayerState:
             self._faction_standings[faction] = new_val
             self._last_updated = time.time()
         self._emit_hud_update({"faction": faction, "standing_delta": delta})
+        self._schedule_auto_save()
         return new_val
 
     # ------------------------------------------------------------------
@@ -236,6 +282,7 @@ class PlayerState:
             self._active_location = location
             self._last_updated = time.time()
         self._emit_hud_update({"location": location})
+        self._schedule_auto_save()
 
     # ------------------------------------------------------------------
     # Inventory
@@ -340,6 +387,82 @@ class PlayerState:
             }
 
     # ------------------------------------------------------------------
+    # Persistence
+    # ------------------------------------------------------------------
+
+    def save_to_file(self, path: Optional[Path] = None) -> None:
+        """Save player state to JSON file.
+
+        Args:
+            path: Override save path (defaults to ``data/player_state.json``).
+        """
+        target = path or self._SAVE_PATH
+        try:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            data = self.to_dict()
+            data["_saved_at"] = time.time()
+            target.write_text(json.dumps(data, indent=2), encoding="utf-8")
+            logger.debug("PlayerState saved → %s", target)
+        except Exception as exc:
+            logger.warning("PlayerState.save_to_file failed: %s", exc)
+
+    def load_from_file(self, path: Optional[Path] = None) -> bool:
+        """Load player state from JSON file.
+
+        Args:
+            path: Override load path (defaults to ``data/player_state.json``).
+
+        Returns:
+            True if loaded successfully, False otherwise.
+        """
+        target = path or self._SAVE_PATH
+        if not target.exists():
+            return False
+        try:
+            data = json.loads(target.read_text(encoding="utf-8"))
+            with self._lock:
+                self._credits = int(data.get("credits", _DEFAULT_CREDITS))
+                self._rep = max(0, min(100, int(data.get("reputation", _DEFAULT_REP))))
+                self._heat = max(0, min(100, int(data.get("heat", _DEFAULT_HEAT))))
+                stored_factions = data.get("faction_standings", {})
+                for f in _FACTION_NAMES:
+                    self._faction_standings[f] = int(stored_factions.get(f, 0))
+                self._active_location = str(data.get("active_location", "NEON CITY"))
+                self._inventory = list(data.get("inventory", []))
+                self._last_updated = float(data.get("last_updated", time.time()))
+            logger.info("PlayerState restored from %s (₵%d, REP %d)", target, self._credits, self._rep)
+            return True
+        except Exception as exc:
+            logger.warning("PlayerState.load_from_file failed: %s", exc)
+            return False
+
+    def reset_to_defaults(self) -> None:
+        """Reset state to defaults and delete save file."""
+        with self._lock:
+            self._credits = _DEFAULT_CREDITS
+            self._rep = _DEFAULT_REP
+            self._heat = _DEFAULT_HEAT
+            self._faction_standings = {f: 0 for f in _FACTION_NAMES}
+            self._active_location = "NEON CITY"
+            self._inventory = []
+            self._event_history = []
+            self._last_updated = time.time()
+        try:
+            if self._SAVE_PATH.exists():
+                self._SAVE_PATH.unlink()
+        except Exception:
+            pass
+        logger.info("PlayerState reset to defaults")
+
+    def _schedule_auto_save(self) -> None:
+        """Debounced auto-save — fires 5 s after the last mutation."""
+        if self._save_timer is not None:
+            self._save_timer.cancel()
+        self._save_timer = threading.Timer(self._AUTO_SAVE_DELAY, self.save_to_file)
+        self._save_timer.daemon = True
+        self._save_timer.start()
+
+    # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
 
@@ -396,4 +519,6 @@ def reset_player_state() -> None:
     """Reset the singleton (test helper only)."""
     global _PLAYER_STATE
     with _PS_LOCK:
+        if _PLAYER_STATE is not None and _PLAYER_STATE._save_timer is not None:
+            _PLAYER_STATE._save_timer.cancel()
         _PLAYER_STATE = None

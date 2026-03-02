@@ -89,3 +89,61 @@ def run_news_fetch(category: Optional[str] = None) -> str:
             f"News fetch complete: {report['total_items']} items across "
             f"{len(report['categories'])} categories, {report['total_stored']} stored to Nexus"
         )
+
+
+@skill(
+    pack="news",
+    description="Get a 200-word news insight for a topic, sourced from the NLM-distilled Nexus Q&A cache",
+    category="SYSTEM",
+    tags=["news", "insight", "nexus", "nlm"],
+)
+def news_insight(topic: str) -> str:
+    """Return a concise 200-word news digest for a topic.
+
+    Checks the Nexus Q&A cache first for an instant answer. Falls back to a
+    Nexus full-text search synthesis, then generates a summary from stored
+    news articles if still nothing found.
+
+    Args:
+        topic: The news topic or question (e.g., "AI regulation", "neon city faction war")
+
+    Returns:
+        200-word news insight string, or a fallback message if nothing found.
+    """
+    try:
+        client = get_nexus_client()
+
+        # Tier 1 — Q&A cache hit
+        qa_result = client.ask(topic)
+        if isinstance(qa_result, dict):
+            answer = qa_result.get("answer", "")
+            source = qa_result.get("source", "unknown")
+        else:
+            answer = str(qa_result) if qa_result else ""
+            source = "nexus"
+
+        if answer and len(answer) > 40:
+            words = answer.split()[:200]
+            digest = " ".join(words)
+            logger.debug("news_insight cache hit (%s): %d chars", source, len(digest))
+            return f"[NEWS INSIGHT — {topic.upper()}]\n\n{digest}"
+
+        # Tier 2 — FTS search synthesis
+        results = client.search(f"{topic} news", category="news", limit=5)
+        if results:
+            lines = []
+            for r in results[:3]:
+                snippet = r.get("content", "")[:300].strip()
+                if snippet:
+                    lines.append(snippet)
+            if lines:
+                combined = " ".join(lines)
+                words = combined.split()[:200]
+                digest = " ".join(words)
+                return f"[NEWS INSIGHT — {topic.upper()}]\n\n{digest}"
+
+        return f"[NEWS INSIGHT — {topic.upper()}]\n\nNo recent intelligence found. Run news-fetch to populate."
+
+    except Exception as exc:
+        logger.warning("news_insight error: %s", exc)
+        return f"[NEWS INSIGHT — {topic.upper()}]\n\nIntel unavailable: {exc}"

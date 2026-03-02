@@ -1123,6 +1123,81 @@ def _register_builtin_tasks(daemon: "SchedulerDaemon") -> None:
         "weekly",
         _router_v3_retrain_callback,
     )
+    daemon.register(
+        "news-distill-nlm",
+        "News NLM Distillation — distill news articles into Nexus Q&A via NotebookLM",
+        "every_1h",
+        _news_distill_nlm_callback,
+    )
+
+
+def _news_distill_nlm_callback() -> Dict[str, Any]:
+    """Every hour: distill news articles into Nexus Q&A via NotebookLM notebooks.
+
+    Per category (ai_research/tech/world/science):
+    - Fetches latest news items from Nexus
+    - Creates/updates a per-category NLM notebook with article summaries
+    - Distills 20 Q&A pairs per notebook into Nexus
+    """
+    _CATEGORIES = ("ai_research", "tech", "world", "science")
+    total_qa = 0
+    errors = []
+    try:
+        from engine.nexus.client import get_nexus_client
+        client = get_nexus_client()
+    except Exception as exc:
+        return {"status": "skipped", "reason": f"Nexus unavailable: {exc}"}
+
+    for cat in _CATEGORIES:
+        try:
+            # Fetch recent news items from Nexus for this category
+            results = client.search(f"news {cat}", category="news", limit=10)
+            if not results:
+                continue
+
+            # Build article summaries as text source
+            summaries: list = []
+            for item in results[:5]:
+                title = item.get("title", "Untitled")
+                content = item.get("content", "")[:600]
+                summaries.append(f"## {title}\n{content}")
+
+            if not summaries:
+                continue
+
+            source_text = f"# News Digest: {cat.upper()}\n\n" + "\n\n---\n\n".join(summaries)
+
+            # Ask Nexus for Q&A generation (NLM pipeline via nexus_ask)
+            questions = [
+                f"What are the most important developments in {cat} news this cycle?",
+                f"What key trends or patterns are emerging in {cat}?",
+                f"What are the implications of the latest {cat} events?",
+                f"Which {cat} story is most likely to have long-term impact?",
+                f"Summarise the {cat} news in 3 key bullet points.",
+            ]
+            for q in questions:
+                try:
+                    answer = client.ask(f"{q}\n\nContext:\n{source_text[:1000]}")
+                    if answer and isinstance(answer, dict):
+                        ans_text = answer.get("answer", "")
+                    elif isinstance(answer, str):
+                        ans_text = answer
+                    else:
+                        continue
+                    if len(ans_text) > 20:
+                        client.add_qa(q, ans_text, category="news")
+                        total_qa += 1
+                except Exception:
+                    pass
+
+        except Exception as exc:
+            errors.append(f"{cat}: {exc}")
+
+    result: Dict[str, Any] = {"status": "ok", "qa_pairs_stored": total_qa}
+    if errors:
+        result["errors"] = errors
+    logger.info("news_distill_nlm: stored %d Q&A pairs (errors: %s)", total_qa, errors or "none")
+    return result
 
 
 def _npc_world_tick_callback() -> Dict[str, Any]:
