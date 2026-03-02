@@ -86,7 +86,8 @@ class TestPreCallWithRelationship:
             return_value=profile,
         ):
             interceptor.pre_call(ctx)
-        assert "close" in ctx["system_prompt"]
+        # New format uses tier block — score 60.0 maps to CLOSE tier
+        assert "CLOSE" in ctx["system_prompt"]
 
     def test_appends_score_to_system_prompt(self) -> None:
         profile = self._setup_profile_with("viktor", -70.0, "hostile")
@@ -119,7 +120,8 @@ class TestPreCallWithRelationship:
             return_value=profile,
         ):
             interceptor.pre_call(ctx)
-        assert "[Player relationship:" in ctx["system_prompt"]
+        # New format: block header with character name
+        assert "[RELATIONSHIP CONTEXT" in ctx["system_prompt"]
 
     def test_uses_agent_id_key(self) -> None:
         profile = self._setup_profile_with("mira", 20.0, "neutral")
@@ -130,7 +132,8 @@ class TestPreCallWithRelationship:
             return_value=profile,
         ):
             interceptor.pre_call(ctx)
-        assert "neutral" in ctx["system_prompt"]
+        # Score 20.0 → ACQUAINTANCE tier
+        assert "ACQUAINTANCE" in ctx["system_prompt"]
 
     def test_uses_character_id_fallback_key(self) -> None:
         """Falls back to ctx['character_id'] when agent_id is absent."""
@@ -144,7 +147,8 @@ class TestPreCallWithRelationship:
             return_value=profile,
         ):
             interceptor.pre_call(ctx)
-        assert "close" in ctx["system_prompt"]
+        # Score 55.0 → FRIEND tier
+        assert "FRIEND" in ctx["system_prompt"]
 
 
 # ══════════════════════════════════════════════════════════════════════

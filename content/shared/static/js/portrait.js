@@ -22,6 +22,7 @@ window.portraitManager = {
   _imgArea: null,
   _nameEl: null,
   _moodEl: null,
+  _relBadge: null,
   _placeholder: null,
   _backstoryPanel: null,
   _backstoryText: null,
@@ -37,6 +38,7 @@ window.portraitManager = {
     this._imgEl         = document.getElementById('cs-portrait-img');
     this._nameEl        = document.getElementById('cs-portrait-name');
     this._moodEl        = document.getElementById('cs-portrait-mood');
+    this._relBadge      = document.getElementById('cs-portrait-rel-badge');
     this._backstoryPanel = document.getElementById('cs-backstory-panel');
     this._backstoryText  = document.getElementById('cs-backstory-text');
     this._backstoryClose = document.getElementById('cs-backstory-close');
@@ -67,6 +69,9 @@ window.portraitManager = {
     // Update mood badge
     this.updateMood(mood);
 
+    // Fetch relationship tier badge
+    if (charName) this._fetchRelationship(charName);
+
     // Update image vs placeholder
     if (this._imgEl && this._placeholder) {
       if (imgUrl) {
@@ -92,6 +97,10 @@ window.portraitManager = {
   hide() {
     if (!this._overlay) return;
     this._overlay.dataset.state = 'hidden';
+    if (this._relBadge) {
+      this._relBadge.textContent = '';
+      this._relBadge.dataset.tier = '';
+    }
   },
 
   /**
@@ -122,6 +131,25 @@ window.portraitManager = {
     if (!messageText || typeof messageText !== 'string') return null;
     const match = messageText.match(/\[MOOD:(\w+)\]/i);
     return match ? match[1].toLowerCase() : null;
+  },
+
+  /**
+   * Fetch relationship tier for the named character from the server.
+   * @param {string} charName
+   */
+  _fetchRelationship(charName) {
+    if (!charName || !this._relBadge) return;
+    fetch(`/api/character/relationship/${encodeURIComponent(charName)}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!data) return;
+        const tier = data.tier || '';
+        if (tier && this._relBadge) {
+          this._relBadge.textContent = tier;
+          this._relBadge.dataset.tier = tier;
+        }
+      })
+      .catch(() => {});
   },
 
   /**

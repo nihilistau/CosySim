@@ -342,6 +342,11 @@ class BaseScene(ABC):
     def register_health_route(self, app) -> None:
         """Register ``/api/health`` on a Flask app.
 
+        Also automatically registers character info routes
+        (``/api/character/relationship/<name>`` and
+        ``/api/character/backstory/<name>``) so the portrait overlay works
+        without additional scene-level wiring.
+
         Call this in ``start()`` after creating the Flask app::
 
             self.register_health_route(self.app)
@@ -355,6 +360,52 @@ class BaseScene(ABC):
                 _json.dumps(self.get_health()),
                 mimetype="application/json",
             )
+
+        # Auto-wire portrait overlay character routes
+        self.register_character_routes(app)
+
+    def register_character_routes(self, app) -> None:
+        """Register character info API routes used by the portrait overlay.
+
+        Routes registered:
+        * ``GET /api/character/relationship/<name>`` — returns tier + score for
+          the named character from PlayerProfile.
+        * ``GET /api/character/backstory/<name>`` — returns backstory text (if any).
+
+        Call this in ``start()`` alongside ``register_health_route``::
+
+            self.register_character_routes(self.app)
+        """
+        import json as _json
+        from flask import Response
+
+        @app.route("/api/character/relationship/<path:char_name>")
+        def _char_relationship(char_name: str):
+            data: dict = {"name": char_name, "tier": "STRANGER", "score": 0.0}
+            try:
+                from engine.characters.player_profile import get_player_profile
+                from engine.agents.relationship_interceptor import _relationship_tier
+                profile = get_player_profile()
+                rel = profile.relationships.get(char_name.lower())
+                if rel is not None:
+                    tier = _relationship_tier(rel.score)
+                    data["tier"] = tier
+                    data["score"] = rel.score
+            except Exception as _exc:
+                _bslogger.debug("character/relationship unavailable: %s", _exc)
+            return Response(_json.dumps(data), mimetype="application/json")
+
+        @app.route("/api/character/backstory/<path:char_name>")
+        def _char_backstory(char_name: str):
+            data: dict = {"name": char_name, "backstory": ""}
+            try:
+                from engine.mcp.character_registry import get_character_registry
+                char = get_character_registry().get_character(char_name.lower())
+                if char and hasattr(char, "backstory"):
+                    data["backstory"] = char.backstory or ""
+            except Exception as _exc:
+                _bslogger.debug("character/backstory unavailable: %s", _exc)
+            return Response(_json.dumps(data), mimetype="application/json")
 
     def register_hud_route(self, app) -> None:
         """Register ``/api/hud/state`` on a Flask app.
