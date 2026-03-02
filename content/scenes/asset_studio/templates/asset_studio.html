@@ -189,6 +189,27 @@
         </div>
         <div class="cs-gen-preview" id="image-preview">
           <div class="cs-preview-placeholder">Preview will appear here</div>
+          <div class="cs-inject-panel" id="img-inject-panel" style="display:none">
+            <div class="cs-inject-header">
+              <span class="cs-inject-icon">🎯</span>
+              <span>Inject to Scene</span>
+            </div>
+            <div class="cs-inject-row">
+              <select id="img-inject-scene" class="cs-select cs-inject-scene-select">
+                <option value="">Select scene…</option>
+              </select>
+              <select id="img-inject-type" class="cs-select">
+                <option value="background">Background</option>
+                <option value="banner">Banner</option>
+                <option value="overlay">Overlay</option>
+                <option value="item">Item</option>
+              </select>
+            </div>
+            <button class="cs-btn cs-btn--accent cs-inject-btn" id="img-inject-btn">
+              <span>📤</span> Inject
+            </button>
+            <div id="img-inject-status" class="cs-inject-status"></div>
+          </div>
         </div>
       </div>
     </div>
@@ -255,6 +276,26 @@
         </div>
         <div class="cs-gen-preview" id="portrait-preview">
           <div class="cs-preview-placeholder">Portrait will appear here</div>
+          <div class="cs-inject-panel" id="por-inject-panel" style="display:none">
+            <div class="cs-inject-header">
+              <span class="cs-inject-icon">🎯</span>
+              <span>Inject to Scene</span>
+            </div>
+            <div class="cs-inject-row">
+              <select id="por-inject-scene" class="cs-select cs-inject-scene-select">
+                <option value="">Select scene…</option>
+              </select>
+              <select id="por-inject-type" class="cs-select">
+                <option value="portrait">Portrait</option>
+                <option value="character">Character</option>
+                <option value="npc">NPC</option>
+              </select>
+            </div>
+            <button class="cs-btn cs-btn--accent cs-inject-btn" id="por-inject-btn">
+              <span>📤</span> Inject
+            </button>
+            <div id="por-inject-status" class="cs-inject-status"></div>
+          </div>
         </div>
       </div>
     </div>

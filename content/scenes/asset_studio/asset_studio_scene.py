@@ -335,7 +335,77 @@ class AssetStudioScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="
             top_n = int(request.args.get("top_n", 5))
             return jsonify({"results": get_tuning_engine().get_best_settings(workflow_id, top_n)})
 
-        # ── Static asset serving (voice/svg/audio output) ─────────────────
+        @app.route("/api/inject_to_scene", methods=["POST"])
+        def api_inject_to_scene():
+            """Inject a generated asset into a scene's static folder.
+
+            Expects JSON: {scene, asset_url, image_type, filename (optional)}
+            Copies the asset to content/scenes/{scene}/static/img/{filename}
+            and emits scene_asset_updated via SocketIO.
+            """
+            data = request.get_json() or {}
+            scene = data.get("scene", "")
+            asset_url = data.get("asset_url", "")
+            image_type = data.get("image_type", "background")
+            filename = data.get("filename", f"{image_type}_injected.png")
+
+            if not scene or not asset_url:
+                return jsonify({"status": "error", "message": "scene and asset_url are required"}), 400
+
+            # Resolve source file from URL
+            # asset_url could be /asset_studio/output/image.png or a relative path
+            output_dir = Path("data/asset_studio/images")
+            source_filename = Path(asset_url).name
+            source_path = output_dir / source_filename
+
+            if not source_path.exists():
+                return jsonify({"status": "error", "message": f"Asset not found: {source_filename}"}), 404
+
+            # Ensure target dir exists
+            target_dir = Path(f"content/scenes/{scene}/static/img")
+            target_dir.mkdir(parents=True, exist_ok=True)
+            target_path = target_dir / filename
+
+            import shutil
+            shutil.copy2(str(source_path), str(target_path))
+
+            flask_url = f"/scenes/{scene}/static/img/{filename}"
+
+            # Emit scene_asset_updated for live reload
+            try:
+                self.socketio.emit("scene_asset_updated", {
+                    "scene": scene,
+                    "image_type": image_type,
+                    "url": flask_url,
+                    "filename": filename,
+                })
+            except Exception:
+                pass
+
+            logger.info("Injected %s → %s", source_filename, target_path)
+            return jsonify({
+                "status": "ok",
+                "scene": scene,
+                "url": flask_url,
+                "filename": filename,
+            })
+
+        @app.route("/api/scenes/list")
+        def api_scenes_list():
+            """List available scenes for inject-to-scene dropdown."""
+            scenes = [
+                {"id": "bedroom", "name": "THE PENTHOUSE", "port": 5555},
+                {"id": "phone", "name": "SIGNAL", "port": 5556},
+                {"id": "lounge", "name": "THE VELVET PIT", "port": 5557},
+                {"id": "tavern", "name": "THE RUSTY ANCHOR", "port": 5558},
+                {"id": "casino", "name": "CLUB NOIR", "port": 5559},
+                {"id": "gallery", "name": "THE OBSCURA", "port": 5560},
+                {"id": "arena", "name": "THE COLOSSEUM", "port": 5561},
+                {"id": "realm", "name": "THE SHATTERED THRONE", "port": 5562},
+                {"id": "neoncity", "name": "NEON CITY", "port": 5563},
+            ]
+            return jsonify({"status": "ok", "scenes": scenes})
+
 
         @app.route("/asset_studio/voice/<path:filename>")
         def serve_voice(filename: str):

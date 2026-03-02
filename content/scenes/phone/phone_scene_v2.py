@@ -1597,6 +1597,27 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE
                 return jsonify({"error": str(exc)}), 500
 
 
+        @app.route("/api/news/feed")
+        def api_phone_news_feed():
+            category = request.args.get("category", "ai_research")
+            limit = min(int(request.args.get("limit", 10)), 20)
+            try:
+                from engine.nexus.client import get_nexus_client
+                client = get_nexus_client()
+                results = client.search(f"{category} news", category="news", limit=limit)
+                formatted = []
+                for r in results:
+                    formatted.append({
+                        "sender": "NEXUS FEED",
+                        "message": f"**{r.get('title', 'News')}**\n{r.get('content', '')[:250]}",
+                        "category": category,
+                        "timestamp": r.get("created_at", ""),
+                    })
+                return jsonify({"status": "ok", "messages": formatted})
+            except Exception as e:
+                return jsonify({"status": "error", "messages": [], "error": str(e)})
+
+
 # ── Module entry point ────────────────────────────────────────────────────────
 
 def create_app(host: str = "0.0.0.0", port: int = 5555) -> PhoneSceneV2:

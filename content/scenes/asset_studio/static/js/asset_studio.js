@@ -426,18 +426,40 @@ function onAssetGenerated(data) {
 
 // ── Preview helpers ────────────────────────────────────────────────────────────
 
+// Track last generated asset URL per container for inject
+const _lastAssetUrl = {};
+
 function showImagePreview(containerId, result) {
   const c = document.getElementById(containerId);
   if (!c) return;
   const url = result.url || '/static/img/placeholder.png';
-  c.innerHTML = `
-    <img src="${url}" alt="Generated" style="max-width:100%;max-height:560px;border-radius:8px"
-      onerror="this.src='/static/img/placeholder.png'">
-    <div class="cs-preview-meta">
-      ${url !== '/static/img/placeholder.png' ? `<a href="${url}" target="_blank" class="cs-btn cs-btn--ghost" style="font-size:0.68rem;padding:4px 10px">⬇ Open</a>` : ''}
-      ${result.duration_ms ? ` · ${result.duration_ms}ms` : ''}
-      ${result.cached ? ' · (cached)' : ''}
-    </div>`;
+  _lastAssetUrl[containerId] = url;
+
+  // Re-insert placeholder + inject panel (preserve them, update img)
+  const imgEl = c.querySelector('img') || document.createElement('img');
+  imgEl.src = url;
+  imgEl.alt = 'Generated';
+  imgEl.style.cssText = 'max-width:100%;max-height:460px;border-radius:8px';
+  imgEl.onerror = () => { imgEl.src = '/static/img/placeholder.png'; };
+
+  const meta = document.createElement('div');
+  meta.className = 'cs-preview-meta';
+  meta.innerHTML = `${url !== '/static/img/placeholder.png' ? `<a href="${url}" target="_blank" class="cs-btn cs-btn--ghost" style="font-size:0.68rem;padding:4px 10px">⬇ Open</a>` : ''}${result.duration_ms ? ` · ${result.duration_ms}ms` : ''}${result.cached ? ' · (cached)' : ''}`;
+
+  // Clear content before placeholder + inject panel
+  const injectPanel = c.querySelector('.cs-inject-panel');
+  c.innerHTML = '';
+  c.appendChild(imgEl);
+  c.appendChild(meta);
+  if (injectPanel) {
+    injectPanel.style.display = 'block';
+    c.appendChild(injectPanel);
+  } else {
+    // Fallback: find by id
+    const panelId = containerId === 'image-preview' ? 'img-inject-panel' : 'por-inject-panel';
+    const p = document.getElementById(panelId);
+    if (p) { p.style.display = 'block'; c.appendChild(p); }
+  }
 }
 
 function showVoicePlayer(playerId, audioId, metaId, result) {
@@ -1333,3 +1355,74 @@ function resetRunButtons() {
   if (runBtn) runBtn.style.display = '';
   if (cancelBtn) cancelBtn.style.display = 'none';
 }
+
+// ── Inject to Scene ────────────────────────────────────────────────────────────
+
+async function loadScenesList() {
+  try {
+    const res = await fetch('/api/scenes/list');
+    const data = await res.json();
+    const scenes = data.scenes || [];
+    document.querySelectorAll('.cs-inject-scene-select').forEach(sel => {
+      // Keep placeholder
+      const placeholder = sel.options[0];
+      sel.innerHTML = '';
+      sel.appendChild(placeholder);
+      scenes.forEach(s => {
+        const opt = document.createElement('option');
+        opt.value = s.id;
+        opt.textContent = s.name;
+        sel.appendChild(opt);
+      });
+    });
+  } catch (e) {
+    console.warn('Could not load scenes list:', e);
+  }
+}
+
+async function injectAsset(previewContainerId, sceneSelectId, typeSelectId, statusId) {
+  const scene = document.getElementById(sceneSelectId)?.value;
+  const imageType = document.getElementById(typeSelectId)?.value || 'background';
+  const statusEl = document.getElementById(statusId);
+  const assetUrl = _lastAssetUrl[previewContainerId];
+
+  if (!scene) {
+    if (statusEl) statusEl.textContent = '⚠ Select a scene first';
+    return;
+  }
+  if (!assetUrl) {
+    if (statusEl) statusEl.textContent = '⚠ Generate an asset first';
+    return;
+  }
+
+  if (statusEl) statusEl.textContent = '⏳ Injecting…';
+
+  try {
+    const res = await fetch('/api/inject_to_scene', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scene, asset_url: assetUrl, image_type: imageType }),
+    });
+    const data = await res.json();
+    if (data.status === 'ok') {
+      if (statusEl) statusEl.innerHTML = `✅ Injected → <code>${data.filename}</code>`;
+    } else {
+      if (statusEl) statusEl.textContent = `❌ ${data.message || 'Inject failed'}`;
+    }
+  } catch (e) {
+    if (statusEl) statusEl.textContent = `❌ ${e.message}`;
+  }
+}
+
+// Wire up inject buttons once DOM is ready
+document.addEventListener('DOMContentLoaded', () => {
+  loadScenesList();
+
+  document.getElementById('img-inject-btn')?.addEventListener('click', () => {
+    injectAsset('image-preview', 'img-inject-scene', 'img-inject-type', 'img-inject-status');
+  });
+
+  document.getElementById('por-inject-btn')?.addEventListener('click', () => {
+    injectAsset('portrait-preview', 'por-inject-scene', 'por-inject-type', 'por-inject-status');
+  });
+});

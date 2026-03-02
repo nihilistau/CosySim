@@ -333,7 +333,77 @@ body[data-scene="asset_studio"] {
   word-break: break-all;
 }
 
-/* ── Library grid ────────────────────────────────────────────────────────── */
+/* ── Inject to Scene panel ────────────────────────────────────────────────── */
+
+.cs-inject-panel {
+  width: 100%;
+  padding: 14px 16px;
+  background: rgba(245, 158, 11, 0.08);
+  border-top: 1px solid rgba(245, 158, 11, 0.2);
+  border-radius: 0 0 10px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-sizing: border-box;
+}
+
+.cs-inject-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: rgba(245, 158, 11, 0.9);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.cs-inject-icon {
+  font-size: 1rem;
+}
+
+.cs-inject-row {
+  display: flex;
+  gap: 8px;
+}
+
+.cs-inject-row .cs-select {
+  flex: 1;
+  font-size: 0.75rem;
+  padding: 6px 8px;
+}
+
+.cs-inject-btn {
+  width: 100%;
+  font-size: 0.78rem;
+  padding: 8px;
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  color: rgba(245, 158, 11, 0.95);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.cs-inject-btn:hover {
+  background: rgba(245, 158, 11, 0.28);
+}
+
+.cs-inject-status {
+  font-size: 0.7rem;
+  min-height: 1.4em;
+  color: rgba(248, 250, 252, 0.6);
+  text-align: center;
+}
+
+.cs-inject-status code {
+  font-size: 0.66rem;
+  background: rgba(245, 158, 11, 0.12);
+  padding: 2px 5px;
+  border-radius: 3px;
+}
+
+
 
 .cs-library-controls {
   display: flex;
