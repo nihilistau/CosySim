@@ -25,12 +25,17 @@ class PortraitManager {
     this._overlay = null;
     this._hideTimer = null;
     this._current = null;
+    this._backstoryPanel = null;
+    this._backstoryText = null;
   }
 
   init() {
     this._overlay = document.getElementById('cs-portrait-overlay');
     if (!this._overlay) return;
+    this._backstoryPanel = document.getElementById('cs-backstory-panel');
+    this._backstoryText = document.getElementById('cs-backstory-text');
     this._bindEvents();
+    this._bindBackstoryEvents();
   }
 
   /**
@@ -142,6 +147,40 @@ class PortraitManager {
     if (prefixMatch) return prefixMatch[1].trim();
 
     return null;
+  }
+
+  /**
+   * Fetch and display backstory for the current character.
+   * @param {string} charId - lowercase character identifier
+   */
+  _fetchBackstory(charId) {
+    if (!this._backstoryPanel || !this._backstoryText || !charId) return;
+    fetch(`/api/character/backstory/${encodeURIComponent(charId)}`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        if (!data || !data.backstory) return;
+        this._backstoryText.textContent = data.backstory;
+        this._backstoryPanel.classList.add('is-visible');
+      })
+      .catch(() => {});
+  }
+
+  /** Bind click-to-reveal backstory on the portrait frame and close button. */
+  _bindBackstoryEvents() {
+    const frame = this._overlay && this._overlay.querySelector('.cs-portrait__frame');
+    if (frame) {
+      frame.style.cursor = 'pointer';
+      frame.addEventListener('click', () => {
+        if (this._current) this._fetchBackstory(this._current.toLowerCase());
+      });
+    }
+    const closeBtn = document.getElementById('cs-backstory-close');
+    if (closeBtn) {
+      closeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (this._backstoryPanel) this._backstoryPanel.classList.remove('is-visible');
+      });
+    }
   }
 
   /** Attach Socket.IO event listeners if a socket is available. */

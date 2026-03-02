@@ -63,4 +63,45 @@
   font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em;
 }
 
+/* Backstory panel — slides up from below the portrait info */
+.cs-backstory-panel {
+  display: none;
+  margin-top: 8px;
+  padding: 8px;
+  background: var(--cs-glass-bg-strong, rgba(0,0,0,0.85));
+  border: 1px solid var(--cs-glass-border, rgba(255,255,255,0.12));
+  border-radius: 8px;
+  position: relative;
+}
+
+.cs-backstory-panel.is-visible {
+  display: block;
+}
+
+.cs-backstory-text {
+  font-size: 0.6rem;
+  line-height: 1.4;
+  color: var(--cs-text-secondary, rgba(255,255,255,0.75));
+  margin: 0;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+.cs-backstory-close {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  background: none;
+  border: none;
+  color: var(--cs-text-secondary, rgba(255,255,255,0.5));
+  cursor: pointer;
+  font-size: 0.65rem;
+  line-height: 1;
+  padding: 2px 4px;
+}
+
+.cs-backstory-close:hover {
+  color: var(--cs-text-primary, #fff);
+}
+
 /* Mood color mapping (set via JS on --portrait-mood-color) */
