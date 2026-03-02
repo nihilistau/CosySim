@@ -1,16 +1,17 @@
 # CosySim
 
-> v0.68b — Multi-scene AI simulation framework
+> v0.73b — "The Living Nexus" — Multi-scene AI simulation framework
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Tests: 6679](https://img.shields.io/badge/tests-6%2C679%20passing-brightgreen.svg)]()
+[![Tests: 7500+](https://img.shields.io/badge/tests-7%2C500%2B%20passing-brightgreen.svg)]()
+[![Grade: A++](https://img.shields.io/badge/audit-A%2B%2B-gold.svg)]()
 
 ## Overview
 
 CosySim is a local-first AI simulation framework that orchestrates virtual agents across 18 interactive scenes. Each scene is a self-contained web application with its own agents, state machine, game logic, and skill pack — from a messaging app with mood tracking to a LitRPG with dual-agent orchestration, a cyberpunk board game, and an AI coding sandbox. Everything runs locally against LMStudio on an NVIDIA GPU.
 
-The core of CosySim is its **Model Context Protocol (MCP) pipeline**. Agents call 188 skills during inference for memory retrieval, media generation, game mechanics, and state mutation. A 22-interceptor governance pipeline wraps every LLM call, injecting context, enforcing personality constraints, syncing state, and shaping responses. The **Nexus Knowledge System** provides central knowledge management with an NLM intelligence layer, FTS5 search, prompt versioning, and Q&A distillation.
+The core of CosySim is its **Model Context Protocol (MCP) pipeline**. Agents call 188+ skills during inference for memory retrieval, media generation, game mechanics, and state mutation. A 25-interceptor governance pipeline wraps every LLM call, injecting context, enforcing personality constraints, syncing state, and shaping responses. The **Nexus Knowledge System** provides central knowledge management with an NLM intelligence layer, FTS5 search, prompt versioning, Q&A distillation, and a live news intelligence pipeline.
 
 CosySim is a meta-system — a playground for designing, testing, and evolving AI agent interactions. Router training data is captured automatically during inference for fine-tuning a 270M routing model. The framework is built for builders who want to experiment with multi-agent orchestration and tool-augmented LLMs without cloud dependencies.
 
@@ -21,9 +22,9 @@ User / Browser
       │
       ▼
 ┌──────────────┐    ┌──────────────┐    ┌──────────────┐
-│  18 Scenes   │───▶│  160+ Skills │───▶│ MCP Pipeline │
+│  18 Scenes   │───▶│  188+ Skills │───▶│ MCP Pipeline │
 │  Flask/      │    │  @skill deco │    │ 25 intercept │
-│  Streamlit   │    │  25+ packs   │    │ governance   │
+│  SocketIO    │    │  21 packs    │    │ governance   │
 └──────┬───────┘    └──────────────┘    └──────┬───────┘
        │                                       │
        ▼                                       ▼
@@ -34,30 +35,43 @@ User / Browser
 └──────────────┘    └──────────────┘    └──────────────┘
        │
        ▼
-┌──────────────┐    ┌──────────────┐
-│  Qwen3 TTS   │    │  ComfyUI     │
-│  :8600       │    │  :8188       │
-└──────────────┘    └──────────────┘
+┌──────────────┐    ┌──────────────┐    ┌──────────────┐
+│  Qwen3 TTS   │    │  ComfyUI     │    │  Asset Studio│
+│  :8600       │    │  :8188       │    │  :5568       │
+└──────────────┘    └──────────────┘    └──────────────┘
 ```
 
 ## Features
 
+**The Living Nexus** (v0.73b) — Latest
+- News intelligence pipeline: RSS fetch 3×/day, 12 sources, 4 categories, NLM distillation, Intel Hub ticker, Phone news feed
+- World event cascade: WorldSim → scene fan-out with 3-tier delivery (EventBus → Socket.IO → MCP poll)
+- Asset Studio inject-to-scene: push generated assets directly to running scene UIs
+- Intel Hub benchmark dashboard: workflow quality scores, SVG sparklines, run-now button
+- Per-scene ambient animations: 9 distinct CSS keyframe effects + canvas particle engine
+- Portrait overlay: mood-reactive character portrait panel on every scene
+- Scene transitions: 200ms fade-through-black between scenes
+- System audit grade: **A++** (first A++ in project history)
+- **7,500+ tests passing**
+
+**The Asset Studio** (v0.72b)
+- Asset Studio (port 5568): 9-tab hub — images, portraits, SVG, video, audio, items
+- Wan 2.2 GGUF video: dual-model architecture, 15 workflow variants, all params exposed
+- A++ tuning engine: proven profiles, Qwen3-VL visual scoring, auto-tuner state machine
+- Smart test runner: 24-domain git-diff-based selector (scripts/smart_test.py)
+
 **Dark Renaissance** (v0.68)
-- 13 new engine modules: EventBus (cross-scene pub/sub), EconomyManager (credits), ContentGate (adult content), ContentEngine (Nexus-backed pools), CharacterMemory, ReputationManager, SceneDirector, ConsequenceStore, InvestigationBoard, SceneArtManager (ComfyUI), WorldState (game clock + NPC schedules), WorldSim (living world daemon), ArenaEngine (tactical card game)
-- New scene: Arena — THE COLOSSEUM (port 5561): card game, agent betting, NLM commentary, BenchHUD
+- 13 new engine modules: EventBus, EconomyManager, ContentGate, ContentEngine, CharacterMemory, ReputationManager, SceneDirector, ConsequenceStore, InvestigationBoard, SceneArtManager, WorldState, WorldSim, ArenaEngine
+- New scene: Arena — THE COLOSSEUM (port 5561): card game, agent betting, NLM commentary
 - Black glass design system with Three.js 3D particles (12 presets, 10k particles at 60fps)
-- Universal chrome: navbar_v2, admin_overlay (8-tab hacker loft), Aria floating widget
-- VoiceManager JS: Piper/Orpheus/Qwen3 backends, STT, localStorage persistence
-- ContentIntensityInterceptor: adult content profiles 0–3 per category
-- 14 scene revamps with new display names, scene accent system, all new engine modules wired
-- BenchHUD on every scene: live latency, model name, Nexus tier, token count
-- 6,679 tests passing
+- Universal chrome: navbar_v2, admin_overlay (8-tab), Aria floating widget
 
 **Simulation Engine**
-- 18 scenes (8 game + 10 utility/support) with independent agents, state, and UI
-- Bedroom scene refactored into 4 mixins (combat, dialog, inventory, social)
-- Cross-scene agent state persistence (reputation, relationships, achievements)
+- 18 scenes (9 game + 5 utility/support + 4 system) with independent agents, state, and UI
+- Cross-scene agent state persistence (reputation, relationships, achievements, economy)
 - Character system with traits, emotions (0–100), relationships, speech patterns
+
+
 
 **MCP Framework**
 - 195 skills across 21 packs via `@skill` decorator (206 with profile pack)

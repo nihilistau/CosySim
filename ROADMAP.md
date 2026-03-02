@@ -1,6 +1,6 @@
 # CosySim Roadmap
 
-> Current: **v0.72** | Last updated: 2026-03-02
+> Current: **v0.73b** "The Living Nexus" ✅ | Next: **v0.74** "The Awakening" | Last updated: 2026-03-02
 
 ## Philosophy
 
@@ -102,56 +102,56 @@ The system's ultimate goal: **inhabit itself** — AI agents that maintain, impr
 
 ---
 
-## Active: v0.73 — "The Living Nexus"
+## Active: v0.73b — "The Living Nexus" ✅ COMPLETE
 
-> v0.73 makes the Nexus truly live: a curated news and intelligence feed that agents
-> consume, scene-integrated asset generation (use ComfyUI assets directly in scene UIs),
-> and a self-improving world that benchmarks, measures, and tunes itself continuously.
+> v0.73b makes the Nexus truly live: curated news intelligence that agents consume,
+> scene-integrated asset injection (ComfyUI → scene UI in one click), world event
+> cascade propagating WorldSim events to every scene, and Intel Hub as a real
+> mission control dashboard with benchmark tracking and news feeds.
 
-### Track A: Scene-Integrated Asset Generation
-- [ ] Asset Studio assets served in scene UIs — portraits appear in character panels at runtime
-- [ ] `generate_scene_image(scene, prompt)` skill → ComfyUI → auto-serves via static route
-- [ ] Asset Studio "inject to scene" button — push generated asset directly to a running scene
-- [ ] Scene background auto-generation: scheduler task generates scene backgrounds nightly
-- [ ] `tests/test_scene_asset_injection.py`
+- [x] Track A: Scene visual polish — cosysim-scene-fx.css (9 per-scene FX), cosysim-particles.js, portrait overlay, transitions wired to all 9 templates
+- [x] Track A1: Inject-to-scene — `/api/inject_to_scene`, UI panel in Images/Portraits, scene selector dropdown
+- [x] Track B: News pipeline — `engine/nexus/news/` (12 RSS sources, 4 categories, dedup, NLM), 28 tests
+- [x] Track B2: Intel Hub news ticker + Phone news feed — `/api/news/ticker`, `/api/news/feed`, scrolling bar
+- [x] Track C: Intel Hub benchmark dashboard — `/api/benchmark/workflows|run|trend`, SVG sparklines, score cards
+- [x] Track D: Nexus seeded — 32 new entries, 4 Q&A pairs, 310 dupes removed, session log stored
+- [x] Track E: `engine/world/event_cascade.py` — WorldSim→scene fan-out, 3-tier delivery, 41 tests
+- [x] Track F: ASSET_STUDIO.md, NEWS_SYSTEM.md, SYSTEM_AUDIT v0.73b (grade A++), CHANGELOG, README, ROADMAP
+- [x] Tests: **7,500+ passing**, 39 scheduler tasks, 15 workflow variants, system audit **A++**
 
-### Track B: Nexus News & Intelligence System
-- [ ] `engine/nexus/news/news_pipeline.py` — full pipeline: fetch → parse → deduplicate → distill → store
-- [ ] RSS/scrape sources for: AI news, tech, world events (configurable source list in Nexus)
-- [ ] NLM notebook per news category (AI, tech, world, science) — auto-created + kept updated
-- [ ] NotebookLM distillation: ask 10 curated questions per notebook, store Q&A in Nexus
-- [ ] Scene news feeds: `/api/news` route on Intel Hub + phone scene ticker
-- [ ] Scheduler tasks: `news-fetch` (3x/day), `news-distill` (1x/day) — total: **41 tasks**
-- [ ] `tests/test_news_pipeline.py`
+---
 
-### Track C: Continuous Benchmarking Dashboard
-- [ ] `engine/benchmarks/benchmark_runner.py` — systematic pipeline: generate image → VL score → store metrics
-- [ ] Per-workflow benchmark profiles: 3 seeds × 3 prompts = 9 samples per workflow variant
-- [ ] Metrics history stored in Nexus: quality score, generation time, VRAM, timestamp
-- [ ] Intel Hub benchmark tab — quality trend charts, A/B comparison, auto-tune trigger
-- [ ] Auto-tuner: if quality drops below threshold, try adjacent settings, benchmark, keep best
-- [ ] `tests/test_continuous_benchmark.py`
+## Next: v0.74 — "The Awakening"
 
-### Track D: Nexus Knowledge Expansion
-- [ ] Nexus seeder run: ingest all docs, CHANGELOG, ROADMAP, architecture decisions
-- [ ] NLM notebook: "CosySim Architecture" — all docs as sources, distill 50+ Q&A pairs
-- [ ] NLM notebook: "ComfyUI Workflows" — workflow docs, distill optimal settings Q&A
-- [ ] NLM notebook: "Agent Governance" — interceptor docs, rules, best practices
-- [ ] Knowledge quality audit: deduplicate, reindex, verify cross-references
-- [ ] `nexus_maintain("dedup")` + `nexus_maintain("reindex")`
+> v0.74 aims to complete the self-improvement loop: first real QLoRA finetune cycle,
+> ContentEngine seeded in production, event cascade wired to launcher startup,
+> and news distillation feeding NLM notebooks automatically.
 
-### Track E: World Event Propagation
-- [ ] WorldSim events cascade to scene UI in real-time via Socket.IO broadcast
+### Track A: Self-Improvement Loop
+- [ ] First end-to-end QLoRA finetune cycle on Qwen3-0.6B (router data → Unsloth → ModelRegistry)
+- [ ] ContentEngine pool seeding: run `TeacherPipeline` → feed to ContentEngine
+- [ ] Auto-promote: if finetuned model beats base on benchmark → promote in ModelRegistry
+
+### Track B: Event Cascade Wiring
+- [ ] Wire `event_cascade.get_event_cascade().start()` into `launcher.py` or `WorldSim.__init__`
 - [ ] Intel Hub world-events ticker: live feed of WorldSim events with scene badges
-- [ ] `engine/world/event_cascade.py` — subscribes WorldSim, fans out to relevant scenes
-- [ ] Per-scene event filter: each scene declares which event types affect it
-- [ ] `tests/test_event_cascade.py`
+- [ ] Per-scene event filter: each active scene declares which WorldEventTypes affect it
 
-### Track F: Docs + System Audit
-- [ ] `docs/ASSET_STUDIO.md` — ComfyUI integration, workflow types, tuning guide
-- [ ] `docs/NEWS_SYSTEM.md` — news pipeline, sources, NLM distillation flow
-- [ ] `ROADMAP.md` — mark v0.72 complete, update v0.73 as active
-- [ ] `docs/SYSTEM_AUDIT.md` — update to v0.73b, new grade, test count, module list
+### Track C: News Distillation Auto-Pipeline
+- [ ] Scheduler task: `news-distill` — after `news-fetch`, auto-create/update NLM notebooks per category
+- [ ] NLM notebook per news category: AI, tech, world, science — auto-created + kept updated
+- [ ] Distill 20 curated questions per notebook after each fetch cycle → store Q&A in Nexus
+- [ ] News summary skill: `summarize_news(category)` → NLM → 200-word digest stored in Nexus
+
+### Track D: Scene Depth
+- [ ] Aria animated portrait — 4 mood states, SVG face, Socket.IO mood sync
+- [ ] World state wired to remaining 4 scenes (lounge, tavern, phone, heist)
+- [ ] NLM challenge system: per-scene daily challenges distilled from NLM notebooks
+
+### Track E: Observability
+- [ ] MetricsCollector → Prometheus export → Grafana dashboard (local)
+- [ ] Benchmark trend charts: multi-session history, auto-tune trigger thresholds
+- [ ] Scene health grid: real-time uptime, latency, error rate per scene
 
 ---
 

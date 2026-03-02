@@ -46,6 +46,10 @@
 `ReputationManager` · `SceneDirector` · `ConsequenceStore` · `InvestigationBoard` ·
 `SceneArtManager` · `WorldState` · `WorldSim` · `ArenaEngine`
 
+### v0.73 New Modules
+
+`EventCascade` · `NewsPipeline` · `RSSFetcher` · `DedupFilter` · `TuningEngine`
+
 ---
 
 ## Getting Started
