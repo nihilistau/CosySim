@@ -1,0 +1,98 @@
+/* ═══════════════════════════════════════════════════════════
+   reputation.css  —  NPC Reputation HUD
+   z-index 800 (below portrait overlay at 900)
+   ═══════════════════════════════════════════════════════════ */
+
+.cs-rep-hud {
+  position: fixed;
+  bottom: 1.2rem;
+  left: 1.2rem;
+  z-index: 800;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.35rem 0.7rem;
+  background: rgba(10, 10, 20, 0.72);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 0.6rem;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45);
+  font-family: var(--font-ui, 'Inter', sans-serif);
+  font-size: 0.75rem;
+  color: #e0e0e0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
+/* Character name */
+.cs-rep-name {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+
+/* Bar track */
+.cs-rep-bar-wrap {
+  width: 5rem;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+/* Bar fill */
+.cs-rep-bar {
+  display: block;
+  height: 100%;
+  width: 50%;
+  border-radius: 2px;
+  background: var(--rep-color, #7ec8e3);
+  transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1),
+              background-color 0.4s ease;
+}
+
+/* Score number */
+.cs-rep-score {
+  font-variant-numeric: tabular-nums;
+  min-width: 2.8em;
+  text-align: right;
+  font-weight: 600;
+}
+
+/* Disposition label */
+.cs-rep-label {
+  font-size: 0.68rem;
+  opacity: 0.75;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* ── Per-disposition colour tokens ────────────────────────── */
+.cs-rep-bar--devoted   { background: #f0c060; --rep-color: #f0c060; }
+.cs-rep-bar--trusted   { background: #60c060; --rep-color: #60c060; }
+.cs-rep-bar--friendly  { background: #60b8e0; --rep-color: #60b8e0; }
+.cs-rep-bar--neutral   { background: #8888aa; --rep-color: #8888aa; }
+.cs-rep-bar--wary      { background: #e09060; --rep-color: #e09060; }
+.cs-rep-bar--hostile   { background: #e06060; --rep-color: #e06060; }
+.cs-rep-bar--enemy     { background: #c02020; --rep-color: #c02020; }
+
+/* ── Score colour tints ───────────────────────────────────── */
+.cs-rep-hud[data-label="devoted"]  .cs-rep-score { color: #f0c060; }
+.cs-rep-hud[data-label="trusted"]  .cs-rep-score { color: #60c060; }
+.cs-rep-hud[data-label="friendly"] .cs-rep-score { color: #60b8e0; }
+.cs-rep-hud[data-label="wary"]     .cs-rep-score { color: #e09060; }
+.cs-rep-hud[data-label="hostile"]  .cs-rep-score { color: #e06060; }
+.cs-rep-hud[data-label="enemy"]    .cs-rep-score { color: #c02020; }
+
+/* ── Score-change pop animation ──────────────────────────── */
+@keyframes cs-rep-pop {
+  0%   { transform: scale(1);    }
+  40%  { transform: scale(1.35); }
+  100% { transform: scale(1);    }
+}
+
+.cs-rep-score.cs-rep-pop {
+  animation: cs-rep-pop 0.35s ease;
+}

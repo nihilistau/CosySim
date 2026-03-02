@@ -1,4 +1,4 @@
-"""
+﻿"""
 CosySim Agent Interceptors
 ===========================
 
@@ -21,6 +21,7 @@ Execution order (by priority):
   30  SkillAwarenessInterceptor    — build the "available skills" list for the LLM
   35  GameSessionInterceptor       — inject MCPGameSession history + actions when a game is active
   40  GameRulesInterceptor         — inject game-specific rules and required tools
+   45  DialogueGateInterceptor      — gate/tone NPC dialogue by player reputation
   50  PersonalityGuardInterceptor  — add in-character reminders and tone guidance
   55  ConversationVarietyInterceptor — anti-repetition and variety enforcement
   60  PolicyEnforcerInterceptor    — enforce reply length, forbidden topics
