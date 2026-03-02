@@ -834,3 +834,360 @@ body[data-scene="asset_studio"] {
   .cs-tab-label { display: none; }
   .cs-logo-text { display: none; }
 }
+
+/* ── Tuning tab ───────────────────────────────────────────────────────────── */
+
+.cs-tuning-layout {
+  display: grid;
+  grid-template-columns: 380px 1fr;
+  gap: 20px;
+  padding: 20px;
+  height: 100%;
+  overflow-y: auto;
+}
+
+.cs-tuning-left {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.cs-tuning-right {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.cs-tuning-section {
+  background: rgba(5, 5, 15, 0.6);
+  border: 1px solid rgba(245, 158, 11, 0.15);
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.cs-tuning-section h3 {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #f59e0b;
+  margin: 0 0 12px;
+}
+
+.cs-tuning-section h4 {
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.5);
+  margin: 12px 0 8px;
+}
+
+/* Profiles */
+.cs-profile-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.cs-profile-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(245, 158, 11, 0.1);
+  background: rgba(245, 158, 11, 0.04);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.cs-profile-item:hover {
+  border-color: rgba(245, 158, 11, 0.4);
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.cs-profile-item.cs-profile-item--selected {
+  border-color: #f59e0b;
+  background: rgba(245, 158, 11, 0.12);
+}
+
+.cs-profile-item--builtin .cs-profile-icon {
+  color: #f59e0b;
+}
+
+.cs-profile-icon { font-size: 1rem; flex-shrink: 0; }
+
+.cs-profile-info { flex: 1; min-width: 0; }
+.cs-profile-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: rgba(255,255,255,0.9);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cs-profile-desc {
+  font-size: 0.6rem;
+  color: rgba(255,255,255,0.4);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cs-profile-badge {
+  font-size: 0.55rem;
+  padding: 2px 5px;
+  border-radius: 3px;
+  background: rgba(245, 158, 11, 0.2);
+  color: #f59e0b;
+  flex-shrink: 0;
+}
+
+/* Sweep rows */
+.cs-tuning-sweep-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 8px 0 4px;
+}
+
+.cs-sweep-rows { display: flex; flex-direction: column; gap: 6px; }
+
+.cs-sweep-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 6px;
+  align-items: center;
+}
+
+.cs-sweep-row input { font-size: 0.65rem; }
+
+/* Input size variants */
+.cs-input--sm, .cs-select--sm { font-size: 0.65rem; padding: 4px 8px; }
+
+/* Tuning actions */
+.cs-tuning-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 12px;
+}
+
+/* Live metrics */
+.cs-progress-bar-wrap {
+  height: 6px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+
+.cs-progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #f59e0b, #fbbf24);
+  border-radius: 3px;
+  transition: width 0.4s ease;
+}
+
+.cs-live-metrics-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.cs-live-metric {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 72px;
+}
+
+.cs-live-metric-label {
+  font-size: 0.55rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(255,255,255,0.35);
+}
+
+.cs-live-metric-value {
+  font-size: 0.8rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255,255,255,0.9);
+  font-family: 'Courier New', monospace;
+}
+
+.cs-live-metric--time { color: #fbbf24; }
+.cs-live-metric--status { color: #34d399; }
+
+.cs-running-detail {
+  margin-top: 10px;
+  font-size: 0.62rem;
+  color: rgba(255,255,255,0.45);
+  min-height: 18px;
+}
+
+/* Results table */
+.cs-results-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.cs-results-header h3 {
+  margin: 0;
+  flex: 1;
+}
+
+.cs-results-table-wrap, .cs-metrics-table-wrap {
+  overflow-x: auto;
+  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.06);
+}
+
+.cs-results-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.65rem;
+}
+
+.cs-results-table th {
+  padding: 7px 10px;
+  text-align: left;
+  background: rgba(245, 158, 11, 0.08);
+  color: rgba(255,255,255,0.5);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  white-space: nowrap;
+}
+
+.cs-results-table td {
+  padding: 6px 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  vertical-align: middle;
+  color: rgba(255,255,255,0.8);
+}
+
+.cs-results-table tbody tr:hover { background: rgba(245, 158, 11, 0.04); }
+
+.cs-results-table tbody tr.cs-row--best {
+  background: rgba(245, 158, 11, 0.1);
+  border-left: 2px solid #f59e0b;
+}
+
+.cs-score-badge {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-weight: 700;
+  font-size: 0.7rem;
+}
+.cs-score-badge--high { background: rgba(52, 211, 153, 0.2); color: #34d399; }
+.cs-score-badge--mid  { background: rgba(251, 191, 36, 0.2);  color: #fbbf24; }
+.cs-score-badge--low  { background: rgba(239, 68,  68, 0.2);  color: #f87171; }
+.cs-score-badge--none { background: rgba(255,255,255,0.06);    color: rgba(255,255,255,0.3); }
+
+.cs-result-thumb {
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: 4px;
+  border: 1px solid rgba(255,255,255,0.1);
+  cursor: pointer;
+}
+
+.cs-result-thumb--placeholder {
+  width: 48px;
+  height: 48px;
+  border-radius: 4px;
+  background: rgba(255,255,255,0.05);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.6rem;
+  color: rgba(255,255,255,0.2);
+}
+
+/* VL feedback detail */
+.cs-vl-detail {
+  margin-top: 12px;
+  padding: 12px;
+  background: rgba(52, 211, 153, 0.04);
+  border: 1px solid rgba(52, 211, 153, 0.15);
+  border-radius: 6px;
+  font-size: 0.65rem;
+}
+
+.cs-vl-detail h4 { color: #34d399; font-size: 0.65rem; margin: 0 0 8px; }
+.cs-vl-strengths { color: #34d399; }
+.cs-vl-issues { color: #f87171; }
+.cs-vl-suggestion { color: rgba(255,255,255,0.6); margin-top: 6px; font-style: italic; }
+
+/* Metrics summary */
+.cs-metrics-summary {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.cs-metric-card {
+  background: rgba(245, 158, 11, 0.06);
+  border: 1px solid rgba(245, 158, 11, 0.12);
+  border-radius: 6px;
+  padding: 8px 14px;
+  min-width: 90px;
+}
+
+.cs-metric-card-label {
+  font-size: 0.55rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(255,255,255,0.35);
+}
+
+.cs-metric-card-value {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #f59e0b;
+  font-variant-numeric: tabular-nums;
+  font-family: 'Courier New', monospace;
+}
+
+/* Sparkline */
+.cs-sparkline-wrap {
+  margin-bottom: 12px;
+}
+
+.cs-sparkline-label {
+  font-size: 0.55rem;
+  color: rgba(255,255,255,0.3);
+  margin-top: 4px;
+}
+
+.cs-metrics-table { margin-top: 0; }
+
+/* Danger button */
+.cs-btn--danger {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.cs-btn--danger:hover {
+  background: rgba(239, 68, 68, 0.25);
+  border-color: #f87171;
+}
+
+/* Small button */
+.cs-btn--sm { font-size: 0.62rem; padding: 4px 10px; }
+
+@media (max-width: 900px) {
+  .cs-tuning-layout { grid-template-columns: 1fr; }
+}

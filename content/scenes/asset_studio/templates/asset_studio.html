@@ -47,6 +47,9 @@
       <button class="cs-tab-btn" data-tab="audio"     role="tab">
         <span class="cs-tab-icon">♪</span><span class="cs-tab-label">AUDIO</span>
       </button>
+      <button class="cs-tab-btn" data-tab="tuning" role="tab">
+        <span class="cs-tab-icon">⚗</span><span class="cs-tab-label">TUNING</span>
+      </button>
       <button class="cs-tab-btn cs-tab-btn--bottom" data-tab="settings" role="tab">
         <span class="cs-tab-icon">⚙</span><span class="cs-tab-label">SETTINGS</span>
       </button>
@@ -561,6 +564,212 @@
             <div class="cs-voice-meta" id="audio-meta"></div>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- TUNING tab -->
+    <div class="cs-tab-panel" id="tab-tuning">
+      <div class="cs-panel-header">
+        <h2>Tuning &amp; Benchmarking</h2>
+        <span class="cs-badge cs-badge--info">Qwen VL Scoring</span>
+      </div>
+
+      <div class="cs-tuning-layout">
+
+        <!-- ── LEFT COLUMN: Profiles + Run Config ── -->
+        <div class="cs-tuning-left">
+
+          <!-- Proven Profiles -->
+          <section class="cs-tuning-section">
+            <h3>⚡ Proven Profiles</h3>
+            <p class="cs-hint">Best-known settings from working workflows. Click to load into the benchmark.</p>
+            <div id="tuning-profiles-list" class="cs-profile-list">Loading…</div>
+            <div class="cs-form-row" style="margin-top:8px">
+              <button class="cs-btn cs-btn--ghost cs-btn--sm" id="tuning-save-profile-btn" disabled>
+                💾 Save Current as Profile
+              </button>
+              <button class="cs-btn cs-btn--ghost cs-btn--sm" id="tuning-delete-profile-btn" disabled>
+                🗑 Delete Selected
+              </button>
+            </div>
+          </section>
+
+          <!-- Benchmark config -->
+          <section class="cs-tuning-section">
+            <h3>🔬 Benchmark Setup</h3>
+
+            <div class="cs-form-group">
+              <label>Workflow</label>
+              <select id="tuning-workflow" class="cs-select"></select>
+            </div>
+            <div class="cs-form-group">
+              <label>Test Prompt</label>
+              <textarea id="tuning-prompt" class="cs-textarea" rows="2"
+                placeholder="masterpiece, best quality, portrait photograph, sharp focus"></textarea>
+            </div>
+
+            <!-- Base params (proven profile auto-loads here) -->
+            <div class="cs-form-row">
+              <div class="cs-form-group">
+                <label>Steps</label>
+                <input type="number" id="tuning-steps" class="cs-input cs-input--sm" value="20" min="1" max="50">
+              </div>
+              <div class="cs-form-group">
+                <label>CFG</label>
+                <input type="number" id="tuning-cfg" class="cs-input cs-input--sm" value="1.5" min="1" max="20" step="0.5">
+              </div>
+              <div class="cs-form-group">
+                <label>Sampler</label>
+                <select id="tuning-sampler" class="cs-select cs-select--sm">
+                  <option value="lcm">lcm</option>
+                  <option value="euler">euler</option>
+                  <option value="dpmpp_2m">dpmpp_2m</option>
+                  <option value="dpmpp_sde">dpmpp_sde</option>
+                  <option value="dpmpp_2m_sde">dpmpp_2m_sde</option>
+                  <option value="ddim">ddim</option>
+                </select>
+              </div>
+              <div class="cs-form-group">
+                <label>Scheduler</label>
+                <select id="tuning-scheduler" class="cs-select cs-select--sm">
+                  <option value="exponential">exponential</option>
+                  <option value="simple">simple</option>
+                  <option value="karras">karras</option>
+                  <option value="normal">normal</option>
+                  <option value="ddim_uniform">ddim_uniform</option>
+                </select>
+              </div>
+            </div>
+            <div class="cs-form-row">
+              <div class="cs-form-group">
+                <label>Width</label>
+                <input type="number" id="tuning-width" class="cs-input cs-input--sm" value="512" min="256" max="2048" step="64">
+              </div>
+              <div class="cs-form-group">
+                <label>Height</label>
+                <input type="number" id="tuning-height" class="cs-input cs-input--sm" value="512" min="256" max="2048" step="64">
+              </div>
+              <div class="cs-form-group">
+                <label>Batch Size</label>
+                <input type="number" id="tuning-batch" class="cs-input cs-input--sm" value="1" min="1" max="4">
+              </div>
+            </div>
+
+            <!-- Sweep config -->
+            <div class="cs-tuning-sweep-header">
+              <h4>Parameter Sweep</h4>
+              <button class="cs-btn cs-btn--ghost cs-btn--sm" id="tuning-add-sweep-btn">&#65291; Add Param</button>
+            </div>
+            <div id="tuning-sweep-rows" class="cs-sweep-rows"></div>
+            <p class="cs-hint" id="tuning-variant-count">Variants: 1 (no sweep)</p>
+
+            <!-- Options -->
+            <div class="cs-form-row" style="margin-top:8px;align-items:center">
+              <label class="cs-toggle-label">
+                <input type="checkbox" id="tuning-use-vl" checked>
+                Score with Qwen VL
+              </label>
+            </div>
+
+            <div class="cs-tuning-actions">
+              <button class="cs-btn cs-btn--primary" id="tuning-run-btn">
+                <span class="cs-btn-icon">&#9654;</span> Run Benchmark
+              </button>
+              <button class="cs-btn cs-btn--danger cs-btn--sm" id="tuning-cancel-btn" style="display:none">
+                &#9632; Cancel
+              </button>
+            </div>
+          </section>
+        </div>
+
+        <!-- ── RIGHT COLUMN: Live progress + Results ── -->
+        <div class="cs-tuning-right">
+
+          <!-- Live progress -->
+          <section class="cs-tuning-section" id="tuning-progress-section" style="display:none">
+            <h3>&#9201; Live Progress</h3>
+            <div class="cs-progress-bar-wrap">
+              <div class="cs-progress-bar" id="tuning-progress-bar" style="width:0%"></div>
+            </div>
+            <div class="cs-live-metrics-row">
+              <div class="cs-live-metric">
+                <span class="cs-live-metric-label">Variant</span>
+                <span class="cs-live-metric-value" id="lm-variant">0 / 0</span>
+              </div>
+              <div class="cs-live-metric">
+                <span class="cs-live-metric-label">Elapsed</span>
+                <span class="cs-live-metric-value cs-live-metric--time" id="lm-elapsed">00:00</span>
+              </div>
+              <div class="cs-live-metric">
+                <span class="cs-live-metric-label">ETA</span>
+                <span class="cs-live-metric-value cs-live-metric--time" id="lm-eta">&#8212;</span>
+              </div>
+              <div class="cs-live-metric">
+                <span class="cs-live-metric-label">Avg Time</span>
+                <span class="cs-live-metric-value" id="lm-avg-time">&#8212;</span>
+              </div>
+              <div class="cs-live-metric">
+                <span class="cs-live-metric-label">Status</span>
+                <span class="cs-live-metric-value cs-live-metric--status" id="lm-status">idle</span>
+              </div>
+            </div>
+            <!-- Running variant detail -->
+            <div class="cs-running-detail" id="tuning-running-detail"></div>
+          </section>
+
+          <!-- Results table -->
+          <section class="cs-tuning-section" id="tuning-results-section" style="display:none">
+            <div class="cs-results-header">
+              <h3>&#128202; Results</h3>
+              <button class="cs-btn cs-btn--ghost cs-btn--sm" id="tuning-export-btn">&#11015; Export CSV</button>
+              <button class="cs-btn cs-btn--secondary cs-btn--sm" id="tuning-apply-best-btn" disabled>
+                &#9733; Apply Best to Forms
+              </button>
+            </div>
+            <div class="cs-results-table-wrap">
+              <table class="cs-results-table" id="tuning-results-table">
+                <thead>
+                  <tr>
+                    <th>#</th><th>Preview</th><th>Steps</th><th>CFG</th>
+                    <th>Sampler</th><th>Scheduler</th><th>Time</th>
+                    <th>VL Score</th><th>Status</th><th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="tuning-results-body"></tbody>
+              </table>
+            </div>
+            <!-- VL feedback detail panel -->
+            <div class="cs-vl-detail" id="tuning-vl-detail" style="display:none"></div>
+          </section>
+
+          <!-- Metrics History -->
+          <section class="cs-tuning-section" id="tuning-metrics-section">
+            <div class="cs-results-header">
+              <h3>&#128200; Metrics History</h3>
+              <select id="tuning-metrics-workflow" class="cs-select cs-select--sm" style="width:160px">
+                <option value="">All Workflows</option>
+              </select>
+              <button class="cs-btn cs-btn--ghost cs-btn--sm" id="tuning-metrics-refresh">&#8634;</button>
+            </div>
+            <div class="cs-metrics-summary" id="tuning-metrics-summary"></div>
+            <div class="cs-sparkline-wrap">
+              <canvas id="tuning-sparkline" width="400" height="60"></canvas>
+              <div class="cs-sparkline-label">VL Score history (last 20 runs)</div>
+            </div>
+            <div class="cs-metrics-table-wrap">
+              <table class="cs-results-table cs-metrics-table" id="tuning-metrics-table">
+                <thead>
+                  <tr>
+                    <th>Workflow</th><th>Steps</th><th>CFG</th><th>Sampler</th>
+                    <th>Time</th><th>VL Score</th><th>Date</th>
+                  </tr>
+                </thead>
+                <tbody id="tuning-metrics-body"></tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+
       </div>
     </div>
 
