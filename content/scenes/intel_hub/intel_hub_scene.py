@@ -1124,11 +1124,18 @@ def _get_scene_health() -> Dict[str, Any]:
     """Return health status for all registered scenes."""
     import requests as _req
     _KNOWN_SCENES = [
+        {"name": "phone",       "display": "SIGNAL",             "port": 5555},
         {"name": "bedroom",     "display": "THE PENTHOUSE",      "port": 5556},
-        {"name": "casino",      "display": "THE CASINO",         "port": 5557},
-        {"name": "arena",       "display": "THE ARENA",          "port": 5558},
-        {"name": "lounge",      "display": "THE LOUNGE",         "port": 5560},
-        {"name": "phone",       "display": "THE PHONE",          "port": 5570},
+        {"name": "lounge",      "display": "THE PIT",            "port": 5557},
+        {"name": "tavern",      "display": "RUSTY ANCHOR",       "port": 5558},
+        {"name": "casino",      "display": "CLUB NOIR",          "port": 5559},
+        {"name": "gallery",     "display": "THE OBSCURA",        "port": 5560},
+        {"name": "arena",       "display": "THE COLOSSEUM",      "port": 5561},
+        {"name": "realm",       "display": "SHATTERED THRONE",   "port": 5562},
+        {"name": "neoncity",    "display": "NEON CITY",          "port": 5563},
+        {"name": "coders",      "display": "THE LAB",            "port": 5564},
+        {"name": "heist",       "display": "THE SCORE",          "port": 5565},
+        {"name": "games",       "display": "THE ARCADE",         "port": 5567},
         {"name": "intel_hub",   "display": "THE BRIEFING ROOM",  "port": 5580},
     ]
     results = []

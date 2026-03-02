@@ -61,12 +61,6 @@ scenes:
     port: 5560
     debug: false
 
-  warzone:
-    host: "localhost"
-    port: 5561
-    debug: false
-    enabled: false  # archived — replaced by Arena
-
   arena:
     host: "localhost"
     port: 5561

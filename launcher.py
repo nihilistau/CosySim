@@ -476,8 +476,8 @@ def interactive_menu() -> None:
     all       -- every known target
 
   Single Scene  (type name):
-    phone  bedroom  lounge  casino  gallery  warzone
-    realm  neoncity  coders  heist  command_center  games  intel_hub
+    phone  bedroom  lounge  casino  gallery  arena
+    realm  neoncity  coders  heist  games  intel_hub
 
   Single Service  (type name):
     hub  nexus_panel  dashboard  admin  tts  bridge

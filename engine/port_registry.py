@@ -21,7 +21,6 @@ _DEFAULT_PORTS: Dict[str, int] = {
     "tavern": 5558,
     "casino": 5559,
     "gallery": 5560,
-    "warzone": 5561,
     "realm": 5562,
     "neoncity": 5563,
     "coders": 5564,
@@ -52,7 +51,7 @@ _DEFAULT_PORTS: Dict[str, int] = {
 SERVICE_GROUPS: Dict[str, List[str]] = {
     "scenes": [
         "phone", "bedroom", "lounge", "tavern", "casino", "gallery",
-        "warzone", "realm", "neoncity", "coders", "heist",
+        "arena", "realm", "neoncity", "coders", "heist",
         "command_center", "games", "nexus_panel",
     ],
     "streamlit": ["hub", "dashboard", "admin", "assets", "creator"],

@@ -36,7 +36,7 @@ SCENE_CATALOGUE: List[Dict[str, Any]] = [
     {"id": "casino",    "port": 5559, "label": "CLUB NOIR",         "subtitle": "High-Stakes Shadows",   "icon": "🎴", "group": "neon_world", "accent": "#f97316", "desc": "Blackjack, poker, and a dealer who never blinks"},
     {"id": "phone",     "port": 5555, "label": "SIGNAL",            "subtitle": "Dark Net Comms",        "icon": "📡", "group": "neon_world", "accent": "#22c55e", "desc": "Encrypted messaging, calls, photo/video sharing"},
     # ⚔️ ACTION
-    {"id": "arena",     "port": 5568, "label": "THE COLOSSEUM",     "subtitle": "Blood Sport Circuit",   "icon": "⚔️", "group": "action",     "accent": "#ef4444", "desc": "Tactical arena combat with betting and AI fighters"},
+    {"id": "arena",     "port": 5561, "label": "THE COLOSSEUM",     "subtitle": "Blood Sport Circuit",   "icon": "⚔️", "group": "action",     "accent": "#ef4444", "desc": "Tactical arena combat with betting and AI fighters"},
     {"id": "heist",     "port": 5565, "label": "THE SCORE",         "subtitle": "One Last Job",          "icon": "🔓", "group": "action",     "accent": "#f59e0b", "desc": "Plan and execute elaborate heists with your AI crew"},
     {"id": "realm",     "port": 5562, "label": "SHATTERED THRONE",  "subtitle": "Kingdoms in Ruin",      "icon": "🏰", "group": "action",     "accent": "#8b5cf6", "desc": "Open-world RPG with quest chains and exploration"},
     {"id": "gallery",   "port": 5560, "label": "THE OBSCURA",       "subtitle": "Forbidden Visions",     "icon": "🎨", "group": "action",     "accent": "#e879f9", "desc": "AI-generated art exhibition and dark curation"},

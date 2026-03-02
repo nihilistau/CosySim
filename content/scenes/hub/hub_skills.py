@@ -40,7 +40,7 @@ _SCENE_PORTS: List[Dict[str, Any]] = [
     {"id": "heist",          "port": 5565, "label": "THE SCORE"},
     {"id": "command_center", "port": 5566, "label": "ADMIN"},
     {"id": "games",          "port": 5567, "label": "THE ARCADE"},
-    {"id": "arena",          "port": 5568, "label": "THE COLOSSEUM"},
+    {"id": "arena",          "port": 5561, "label": "THE COLOSSEUM"},
     {"id": "nexus_panel",    "port": 5570, "label": "NEXUS PANEL"},
     {"id": "intel_hub",      "port": 5580, "label": "INTEL HUB"},
 ]
