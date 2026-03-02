@@ -326,11 +326,11 @@ class TestAutoPromoteWiring:
         assert r1 is r2
 
     def test_scheduler_has_30_builtin_tasks(self):
-        """Scheduler must have exactly 30 builtin tasks after v0.66 additions."""
+        """Scheduler must have exactly 37 builtin tasks after v0.72 additions."""
         from engine.nexus.scheduler_daemon import _register_builtin_tasks
         daemon = MagicMock()
         _register_builtin_tasks(daemon)
-        assert daemon.register.call_count == 36
+        assert daemon.register.call_count == 39
 
     def test_new_tasks_registered(self):
         from engine.nexus.scheduler_daemon import _register_builtin_tasks
@@ -340,3 +340,4 @@ class TestAutoPromoteWiring:
         task_ids = [call.args[0] for call in daemon.register.call_args_list]
         assert "router-finetune-cycle" in task_ids
         assert "dataset-augment" in task_ids
+

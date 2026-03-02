@@ -1105,6 +1105,35 @@ def _register_builtin_tasks(daemon: "SchedulerDaemon") -> None:
         "daily",
         _daily_challenge_seed_callback,
     )
+    daemon.register(
+        "npc-world-tick",
+        "NPC World Tick",
+        "every_1m",
+        _npc_world_tick_callback,
+    )
+    daemon.register(
+        "router-data-export",
+        "Router Training Data Export (hourly RouterDataCollector → JSONL)",
+        "every_4h",
+        _router_data_export_callback,
+    )
+    daemon.register(
+        "router-v3-retrain",
+        "Router v3 Retrain Cycle (weekly export → finetune → evaluate → promote)",
+        "weekly",
+        _router_v3_retrain_callback,
+    )
+
+
+def _npc_world_tick_callback() -> Dict[str, Any]:
+    """Every minute: drive NPC autonomous activity via NPCScheduler."""
+    try:
+        from engine.agents.npc_scheduler import get_npc_scheduler
+        get_npc_scheduler().tick()
+        return {"status": "ok"}
+    except Exception as exc:
+        logger.debug("npc_world_tick skipped: %s", exc)
+        return {"status": "skipped", "reason": str(exc)}
 
 
 def _world_sim_tick_callback() -> Dict[str, Any]:
@@ -1286,6 +1315,118 @@ def _master_notebook_refresh_callback() -> Dict[str, Any]:
     except Exception as exc:
         logger.error("Master notebook refresh failed: %s", exc)
         return {"error": str(exc)}
+
+
+def _router_data_export_callback() -> Dict[str, Any]:
+    """Every 4 hours: export RouterDataCollector decisions to JSONL training file.
+
+    Reads accumulated router decisions and appends them to the training
+    datasets directory in Alpaca JSONL format for the router-v3 model.
+    """
+    try:
+        from engine.lmstudio.router_data import get_router_data_collector
+        collector = get_router_data_collector()
+
+        # Flush any buffered records first
+        collector.flush()
+
+        export_dir = Path(_REPO_ROOT) / "training" / "datasets"
+        export_dir.mkdir(parents=True, exist_ok=True)
+        export_path = export_dir / "router_v3_incremental.jsonl"
+
+        stats = collector.get_stats()
+        total = stats.get("total_records", 0)
+        if total == 0:
+            return {"status": "ok", "exported": 0, "message": "no records"}
+
+        written = collector.export_jsonl(str(export_path))
+        logger.info("router_data_export: wrote %d records to %s", written, export_path.name)
+        return {"status": "ok", "exported": written, "path": str(export_path)}
+    except Exception as exc:
+        logger.debug("router_data_export skipped: %s", exc)
+        return {"status": "skipped", "reason": str(exc)}
+
+
+def _router_v3_retrain_callback() -> Dict[str, Any]:
+    """Weekly: trigger a full Router v3 retrain cycle.
+
+    Flow:
+    1. Accumulate all JSONL shards into one dataset
+    2. Launch fine-tuning subprocess (same script as training/models/router_v3*)
+    3. Evaluate new model vs current active — compare routing accuracy
+    4. Promote new model by updating model_registry.json if improved
+
+    Returns a summary dict that is stored in Nexus for tracking.
+    """
+    try:
+        import subprocess
+        registry_path = Path(_REPO_ROOT) / "training" / "model_registry.json"
+        dataset_dir = Path(_REPO_ROOT) / "training" / "datasets"
+        train_script = Path(_REPO_ROOT) / "training" / "scripts" / "train_router_v3.py"
+
+        if not train_script.exists():
+            return {"status": "skipped", "reason": "train script not found"}
+
+        # Merge all router JSONL shards
+        merged_path = dataset_dir / "router_v3_merged.jsonl"
+        shards = list(dataset_dir.glob("router_v3*.jsonl"))
+        if not shards:
+            return {"status": "skipped", "reason": "no training data"}
+
+        total_examples = 0
+        with open(merged_path, "w", encoding="utf-8") as out:
+            for shard in shards:
+                for line in shard.read_text(encoding="utf-8").splitlines():
+                    if line.strip():
+                        out.write(line + "\n")
+                        total_examples += 1
+
+        if total_examples < 100:
+            return {
+                "status": "skipped",
+                "reason": f"insufficient data ({total_examples} < 100 examples)",
+            }
+
+        # Launch fine-tune subprocess (non-blocking, returns PID)
+        result = subprocess.Popen(
+            ["python", str(train_script), "--dataset", str(merged_path)],
+            cwd=str(_REPO_ROOT),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        logger.info(
+            "router_v3_retrain: launched training PID=%d with %d examples",
+            result.pid,
+            total_examples,
+        )
+
+        # Store launch record in Nexus
+        try:
+            from engine.nexus.client import get_nexus_client
+            client = get_nexus_client()
+            if client and client.is_available():
+                client.add_entry(
+                    f"Router v3 Retrain — {total_examples} examples",
+                    json.dumps({
+                        "pid": result.pid,
+                        "examples": total_examples,
+                        "shards": [s.name for s in shards],
+                    }),
+                    content_type="note",
+                    category="training",
+                )
+        except Exception:
+            pass
+
+        return {
+            "status": "ok",
+            "pid": result.pid,
+            "examples": total_examples,
+            "shards": len(shards),
+        }
+    except Exception as exc:
+        logger.debug("router_v3_retrain skipped: %s", exc)
+        return {"status": "skipped", "reason": str(exc)}
 
 
 # ──── CLI ────

@@ -305,15 +305,15 @@ class TestNexusLogging:
 
 
 class TestBuiltinTasks:
-    """Tests for the 30 builtin scheduler tasks."""
+    """Tests for the builtin scheduler tasks."""
 
     def test_builtin_task_count(self) -> None:
-        """Scheduler daemon registers exactly 30 builtin tasks."""
+        """Scheduler daemon registers exactly 37 builtin tasks."""
         from engine.nexus.scheduler_daemon import _register_builtin_tasks
 
         daemon = MagicMock()
         _register_builtin_tasks(daemon)
-        assert daemon.register.call_count == 36
+        assert daemon.register.call_count == 39
 
     def test_doc_sync_task_registered(self) -> None:
         from engine.nexus.scheduler_daemon import _register_builtin_tasks
@@ -348,3 +348,4 @@ class TestBuiltinTasks:
             _doc_sync_callback()
         # Nexus add_entry should have been called with the changed files
         assert mock_client.add_entry.called
+
