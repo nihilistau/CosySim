@@ -1,0 +1,27 @@
+#cs-ambient-status {
+  position: fixed;
+  bottom: 20px;
+  left: 20px;
+  z-index: 840;
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--cs-text-dim, rgba(255,255,255,0.3));
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+}
+#cs-ambient-status::before {
+  content: '';
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--cs-scene-accent, #a855f7);
+  opacity: 0;
+  transition: opacity 500ms;
+}
+#cs-ambient-status.is-active::before { opacity: 1; animation: ambient-blink 3s ease infinite; }
+@keyframes ambient-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.2; }
+}

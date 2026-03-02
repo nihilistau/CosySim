@@ -15,6 +15,12 @@ _INJECT_TAGS = (
     '\n<script src="/shared/js/cosysim-phone-panel.js" defer></script>'
     '\n<link rel="stylesheet" href="/shared/css/portrait.css">'
     '\n<script src="/shared/js/portrait.js" defer></script>'
+    '\n<link rel="stylesheet" href="/shared/css/cosysim-stt.css">'
+    '\n<script src="/shared/js/cosysim-stt.js" defer></script>'
+    '\n<link rel="stylesheet" href="/shared/css/cosysim-ambient.css">'
+    '\n<script src="/shared/js/cosysim-ambient.js" defer></script>'
+    '\n<link rel="stylesheet" href="/shared/css/reputation.css">'
+    '\n<script src="/shared/js/reputation.js" defer></script>'
 )
 
 
@@ -59,6 +65,17 @@ def register_shared_assets(app):
         mount_assistant(app)
     except Exception:
         pass  # Assistant not available (e.g., during tests)
+
+    # Backstory API — used by portrait hover panel
+    try:
+        from flask import jsonify
+
+        @app.route("/api/character/backstory/<character_id>")
+        def character_backstory(character_id: str):
+            from engine.skills.builtin.npc_backstory_skills import get_npc_backstory
+            return jsonify({"character_id": character_id, "backstory": get_npc_backstory(character_id)})
+    except Exception:
+        pass  # Flask not available (e.g., during tests)
 
     # Auto-inject navbar + assistant into HTML responses
     @app.after_request

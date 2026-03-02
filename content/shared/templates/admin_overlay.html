@@ -89,6 +89,13 @@
         aria-controls="cs-admin-panel-system"
         data-tab="system"
       >[SYSTEM]</button>
+      <button
+        class="cs-admin-tab"
+        role="tab"
+        aria-selected="false"
+        aria-controls="cs-admin-panel-knowledge"
+        data-tab="knowledge"
+      >[KNOWLEDGE]</button>
     </nav>
 
     <button
@@ -259,29 +266,62 @@
       aria-label="Nexus knowledge base"
       style="display:none"
     >
-      <div class="cs-nexus-stats" id="cs-nexus-stats" aria-live="polite">
-        <div class="cs-admin-loading">Loading stats…</div>
-      </div>
+      <div class="cs-admin-tab-content" id="cs-tab-nexus">
 
-      <div id="cs-nexus-search-form" class="cs-nexus-search-form">
-        <input
-          type="text"
-          class="cs-hack-input"
-          id="cs-nexus-query"
-          placeholder="Search knowledge…"
-          aria-label="Nexus search query"
-        >
-        <button class="cs-glass-btn cs-glass-btn--hack" id="cs-nexus-search-btn">
-          Search
-        </button>
-      </div>
+        <!-- Status section (v0.71) -->
+        <div class="cs-admin-section">
+          <h3 class="cs-hack-text">Nexus Status</h3>
+          <div class="cs-nexus-stats" id="cs-nexus-stats" aria-live="polite">
+            <div id="cs-nexus-status-grid" class="cs-nexus-grid">
+              <div class="cs-nexus-stat">
+                <span class="cs-nexus-label">Status</span>
+                <span id="cs-nexus-conn" class="cs-nexus-value">—</span>
+              </div>
+              <div class="cs-nexus-stat">
+                <span class="cs-nexus-label">Entries</span>
+                <span id="cs-nexus-entries" class="cs-nexus-value">—</span>
+              </div>
+              <div class="cs-nexus-stat">
+                <span class="cs-nexus-label">Q&amp;A Cached</span>
+                <span id="cs-nexus-qa" class="cs-nexus-value">—</span>
+              </div>
+              <div class="cs-nexus-stat">
+                <span class="cs-nexus-label">Router Hits</span>
+                <span id="cs-nexus-hits" class="cs-nexus-value">—</span>
+              </div>
+            </div>
+          </div>
+          <button class="cs-glass-btn cs-glass-btn--hack" id="cs-nexus-refresh">Refresh</button>
+        </div>
 
-      <div
-        id="cs-nexus-results"
-        class="cs-nexus-results"
-        aria-live="polite"
-        aria-label="Nexus search results"
-      ></div>
+        <!-- Quick Search -->
+        <div class="cs-admin-section">
+          <h3 class="cs-hack-text">Quick Search</h3>
+          <div id="cs-nexus-search-form" class="cs-nexus-search-form">
+            <input
+              type="text"
+              class="cs-hack-input"
+              id="cs-nexus-search-input"
+              placeholder="Search knowledge…"
+              aria-label="Nexus search query"
+            >
+            <!-- Legacy ID alias kept for backward compat -->
+            <span id="cs-nexus-query" hidden aria-hidden="true"></span>
+            <button class="cs-glass-btn cs-glass-btn--hack" id="cs-nexus-search-btn">
+              Search
+            </button>
+          </div>
+          <div
+            id="cs-nexus-search-results"
+            class="cs-nexus-results"
+            aria-live="polite"
+            aria-label="Nexus search results"
+          ></div>
+          <!-- Legacy results alias -->
+          <div id="cs-nexus-results" hidden></div>
+        </div>
+
+      </div>
     </div><!-- /NEXUS -->
 
     <!-- TRAINING ─────────────────────────────────────────────── -->
@@ -424,8 +464,65 @@
           <input type="checkbox" id="cs-stt-toggle" aria-label="Enable STT">
           <span class="cs-intensity-val" id="cs-stt-status">off</span>
         </div>
+
+        <h3 class="cs-hack-text">Ambient Audio</h3>
+
+        <div class="cs-admin-row">
+          <label for="cs-ambient-toggle">Ambient Audio</label>
+          <input type="checkbox" id="cs-ambient-toggle" checked>
+        </div>
+        <div class="cs-admin-row">
+          <label for="cs-ambient-volume">Volume</label>
+          <input type="range" id="cs-ambient-volume" min="0" max="1" step="0.05" value="0.5">
+        </div>
       </div>
     </div><!-- /SYSTEM -->
+
+    <!-- KNOWLEDGE ────────────────────────────────────────────── -->
+    <div
+      class="cs-admin-panel"
+      id="cs-admin-panel-knowledge"
+      data-tab="knowledge"
+      role="tabpanel"
+      aria-label="Knowledge base management"
+      style="display:none"
+    >
+      <div class="cs-admin-tab-content" id="cs-tab-knowledge">
+
+        <div class="cs-admin-section">
+          <h3 class="cs-hack-text">Store Knowledge</h3>
+          <input
+            type="text"
+            id="cs-know-title"
+            class="cs-hack-input"
+            placeholder="Title"
+            aria-label="Knowledge entry title"
+          >
+          <textarea
+            id="cs-know-content"
+            class="cs-textarea"
+            rows="3"
+            placeholder="Content…"
+            aria-label="Knowledge entry content"
+          ></textarea>
+          <select id="cs-know-type" class="cs-select" aria-label="Content type">
+            <option value="note">Note</option>
+            <option value="decision">Decision</option>
+            <option value="code">Code</option>
+            <option value="document">Document</option>
+          </select>
+          <button class="cs-glass-btn cs-glass-btn--hack" id="cs-know-store-btn">Store in Nexus</button>
+          <span id="cs-know-result" class="cs-nexus-value" aria-live="polite"></span>
+        </div>
+
+        <div class="cs-admin-section">
+          <h3 class="cs-hack-text">Recent Entries</h3>
+          <div id="cs-know-recent" class="cs-nexus-results" aria-live="polite">Loading…</div>
+          <button class="cs-glass-btn" id="cs-know-reload">Reload</button>
+        </div>
+
+      </div>
+    </div><!-- /KNOWLEDGE -->
 
   </div><!-- /.cs-admin-panels -->
 </div><!-- /#cs-admin-overlay -->
