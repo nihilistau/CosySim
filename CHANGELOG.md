@@ -3,6 +3,59 @@
 All notable changes to CosySim are documented here.
 
 ---
+## [0.76b] — 2026 — "THE DEEP MIND" — ✅ COMPLETE
+
+### New Features
+
+#### Track A — Test Suite Fixes
+- Resolved 60+ test failures from v0.75b suite — root causes: singleton isolation,
+  FastMCP API change, and path normalisation in finetune orchestrator.
+
+#### Track B — PlayerState Persistence
+- **Disk persistence** (`engine/world/player_state.py`): `save_to_file()` + `load_from_file()`
+  write / read `data/player_state.json`. Auto-saves 5 s after any mutation (debounced timer);
+  auto-loads on singleton init if the file exists.
+- **Public properties**: `credits`, `reputation`, `heat`, `faction_standings` — previously
+  inaccessible without `to_dict()`.
+- **`reset_to_defaults()`**: wipes file + in-memory state; safely cancels pending auto-save timer.
+- **`session_restored` Socket.IO event** fired on load — HUD shows a toast with restored values.
+
+#### Track C — NLM Auto-Distillation Pipeline
+- **Scheduler task `news-distill-nlm`** (task #40): runs 1 h after `news-fetch`; per-category
+  (ai_research / tech / world / science) searches Nexus, asks 5 targeted questions, stores
+  Q&A pairs via `nexus_add_qa()`.
+- **`news_insight(topic)`** skill (`engine/skills/builtin/news_skills.py`): 3-tier lookup
+  (Q&A cache → FTS search → "not found") — returns a 200-word `[NEWS INSIGHT — TOPIC]` block.
+- 6 test files updated: `== 39` → `== 40`.
+
+#### Track D — Economy Depth (already wired)
+- Confirmed `grid_scene._wire_event_cascade()` already subscribes `world.economy_tick` →
+  `economy_shock()` → `price_update` Socket.IO.  No code changes required.
+
+#### Track F — Character Memory Depth
+- **`RelationshipContextInterceptor`** fully rewritten (`engine/agents/relationship_interceptor.py`):
+  `_relationship_tier()` maps score (–100 → +100) to STRANGER / ACQUAINTANCE / FRIEND /
+  CLOSE / INTIMATE.  `_build_memory_block()` injects a rich context block into the system
+  prompt: tier label, numeric score, interaction count, up to 3 recent memory notes.
+- **Portrait relationship badge** — `#cs-portrait-rel-badge` div in `portrait_overlay.html`,
+  per-tier CSS in `portrait.css` (data-tier colour selectors), `_fetchRelationship()` +
+  `_updateRelBadge()` in `portrait.js` — called on `show()` and cleared on `hide()`.
+- **`/api/character/relationship/<name>`** and **`/api/character/backstory/<name>`** routes
+  auto-registered via `BaseScene.register_health_route()` on every scene — no scene-level
+  wiring needed.
+
+### Tests
+- `tests/test_player_state.py` — 11 new persistence + property tests
+- `tests/test_news_skills.py` — 5 new `news_insight` tests
+- `tests/test_relationship_interceptor.py` — 4 assertions updated to new block format
+
+### Stats
+- **40 scheduler tasks** (up from 39)
+- **15 scenes** (unchanged)
+- **New skills**: `news_insight`
+- **Player state**: now persistent across restarts
+
+---
 ## [0.75] — 2026 — "NEON CITY" — ✅ COMPLETE
 
 ### New Features

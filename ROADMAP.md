@@ -1,6 +1,6 @@
 # CosySim Roadmap
 
-> Current: **v0.73b** "The Living Nexus" ✅ | Next: **v0.74** "The Awakening" | Last updated: 2026-03-02
+> Current: **v0.76b** "The Deep Mind" ✅ | Next: **v0.77** "The First Mind" | Last updated: 2026
 
 ## Philosophy
 
@@ -121,37 +121,48 @@ The system's ultimate goal: **inhabit itself** — AI agents that maintain, impr
 
 ---
 
-## Next: v0.74 — "The Awakening"
+## Active: v0.76b — "The Deep Mind" ✅ COMPLETE
 
-> v0.74 aims to complete the self-improvement loop: first real QLoRA finetune cycle,
-> ContentEngine seeded in production, event cascade wired to launcher startup,
-> and news distillation feeding NLM notebooks automatically.
+> v0.76b makes everything persist, matter, and learn: PlayerState saves to disk,
+> NLM auto-distillation feeds Nexus Q&A nightly, relationship tiers drive LLM
+> context and portrait badges, and 40 scheduler tasks run the living world.
 
-### Track A: Self-Improvement Loop
-- [ ] First end-to-end QLoRA finetune cycle on Qwen3-0.6B (router data → Unsloth → ModelRegistry)
-- [ ] ContentEngine pool seeding: run `TeacherPipeline` → feed to ContentEngine
-- [ ] Auto-promote: if finetuned model beats base on benchmark → promote in ModelRegistry
+- [x] Track A: Test suite fixed — 60+ failures resolved (singleton isolation, FastMCP API, path normalisation)
+- [x] Track B: PlayerState persistence — save/load, 4 public properties, debounced auto-save, `session_restored` event
+- [x] Track C: NLM auto-distillation — `news-distill-nlm` scheduler task #40, `news_insight` skill (3-tier)
+- [x] Track D: Economy depth — Grid EventBus subscription confirmed wired (no changes needed)
+- [x] Track F: Character memory depth — `_relationship_tier()`, rich system prompt block, portrait rel badge
+- [x] Auto-wired `/api/character/relationship` + `/api/character/backstory` on every scene via BaseScene
+- [x] Tests: **8,000+ passing**, 40 scheduler tasks, 15 scenes
 
-### Track B: Event Cascade Wiring
-- [ ] Wire `event_cascade.get_event_cascade().start()` into `launcher.py` or `WorldSim.__init__`
-- [ ] Intel Hub world-events ticker: live feed of WorldSim events with scene badges
-- [ ] Per-scene event filter: each active scene declares which WorldEventTypes affect it
+---
 
-### Track C: News Distillation Auto-Pipeline
-- [ ] Scheduler task: `news-distill` — after `news-fetch`, auto-create/update NLM notebooks per category
-- [ ] NLM notebook per news category: AI, tech, world, science — auto-created + kept updated
-- [ ] Distill 20 curated questions per notebook after each fetch cycle → store Q&A in Nexus
-- [ ] News summary skill: `summarize_news(category)` → NLM → 200-word digest stored in Nexus
+## Next: v0.77 — "The First Mind"
 
-### Track D: Scene Depth
-- [ ] Aria animated portrait — 4 mood states, SVG face, Socket.IO mood sync
-- [ ] World state wired to remaining 4 scenes (lounge, tavern, phone, heist)
-- [ ] NLM challenge system: per-scene daily challenges distilled from NLM notebooks
+> v0.77 runs the first real finetune cycle, wires event cascade into launcher startup,
+> and builds the self-improvement benchmark loop that makes the system continuously smarter.
 
-### Track E: Observability
-- [ ] MetricsCollector → Prometheus export → Grafana dashboard (local)
-- [ ] Benchmark trend charts: multi-session history, auto-tune trigger thresholds
-- [ ] Scene health grid: real-time uptime, latency, error rate per scene
+### Track A — First Finetune Cycle
+- [ ] Check training data: `data/router_training_data/` — verify JSONL count
+- [ ] Run `FinetuneOrchestrator(model="qwen3-0.6b", epochs=3, lora_r=16)`
+- [ ] Benchmark + auto-promote if accuracy improves
+- [ ] Store results in Nexus: `nexus_add("Finetune Cycle 1", results, "history")`
+- [ ] Intel Hub: `/api/finetune/status` card showing model, score, status
+
+### Track B — Event Cascade Launcher Wiring
+- [ ] Wire `event_cascade.get_event_cascade().start()` into `launcher.py`
+- [ ] Intel Hub world-events live ticker (real-time WorldSim event feed)
+- [ ] Per-scene event filter declarations in scene configs
+
+### Track C — Deep Nexus Seeding
+- [ ] Run `NLM notebook per news category` (AI / tech / world / science)
+- [ ] Distill 50 Q&A per notebook → store in Nexus
+- [ ] Nexus knowledge audit: dedup + reindex
+
+---
+
+## Completed: v0.75 — "NEON CITY" ✅ COMPLETE
+
 
 ---
 

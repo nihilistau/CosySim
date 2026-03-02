@@ -3,7 +3,7 @@
 
 system:
   name: "CosySim AI Playground"
-  version: "0.75b"
+  version: "0.76b"
   environment: "default"
 
 # Paths configuration
