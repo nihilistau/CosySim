@@ -322,7 +322,7 @@ def test_api_metrics_route_returns_200():
     register_shared_assets(app)
 
     with app.test_client() as client:
-        resp = client.get("/api/metrics")
+        resp = client.get("/api/perf/metrics")
         assert resp.status_code == 200
         data = resp.get_json()
         assert "llm" in data
@@ -341,7 +341,7 @@ def test_api_metrics_window_param():
     register_shared_assets(app)
 
     with app.test_client() as client:
-        resp = client.get("/api/metrics?window=600")
+        resp = client.get("/api/perf/metrics?window=600")
         assert resp.status_code == 200
         data = resp.get_json()
         assert data["window_seconds"] == 600
@@ -356,7 +356,7 @@ def test_api_metrics_reset_route():
     register_shared_assets(app)
 
     with app.test_client() as client:
-        resp = client.post("/api/metrics/reset")
+        resp = client.post("/api/perf/metrics/reset")
         assert resp.status_code == 200
         data = resp.get_json()
         assert data["reset"] is True
