@@ -2,6 +2,57 @@
 
 All notable changes to CosySim are documented here.
 
+## v0.70b "The Character Web" — March 2026
+
+### Track A — Scene Gameplay Deepening
+- **EconomyManager** wired to all 9 active scenes — `/api/economy` route on every scene
+- **ConsequenceStore** UI panel surfaced in Tavern, Realm, NeonCity — collapsible side panel
+  showing last 5 decisions + pending consequences
+- `tests/test_economy_wiring.py` — 57 tests covering all 9 economy routes and 3 consequence panels
+
+### Track B — Character Relationship Web
+- `engine/agents/character_memory.py` — `CharacterMemory` class with relationship scoring (0–100),
+  5-tier labels (hostile → trusted), Nexus-backed persistence, clamped deltas
+- `engine/skills/builtin/relationship_skills.py` — `get_relationship_score`, `update_relationship_score`,
+  `get_character_relationships` skills + `RelationshipContextInterceptor`
+- `tests/test_relationship_system.py` — 33 tests
+
+### Track C — Finetuning Pipeline Fixed
+- Fixed `router_finetune_cycle.py` method call: `start_job()` → `submit()` + `run_next()`
+- Added `router_v3` to `RECOMMENDED_MODELS` in `finetune_orchestrator.py`
+- Pipeline is now end-to-end runnable: dataset (2,080 ex) → Unsloth QLoRA → auto-promote
+
+### Track D — Voice / TTS Hardening
+- `register_tts_route` added to bedroom, phone, arena scenes (was missing)
+- `cosysim-voice.js` script tag injected into all 9 scene templates
+- Global TTS/STT toggles added to admin overlay `[SYSTEM]` tab
+- localStorage keys standardised to `cosysim_tts_enabled` / `cosysim_stt_enabled`
+- `tests/test_voice_hardening.py` — 42 tests
+
+### Track E — Documentation Overhaul
+- `docs/SCENE_GUIDE.md` — new: all 9 scenes, mechanics, NPCs, props
+- `docs/CHARACTER_SYSTEM.md` — new: CharacterMemory API, 9-tier standing table, ripple map
+- `docs/FINETUNING_GUIDE.md` — new: full pipeline guide, router_v3 facts
+- `docs/INDEX.md` updated to v0.69b facts (6,921 tests, 214 MCP tools)
+- `docs/SYSTEM_AUDIT.md` rewritten — Grade A+
+
+### Track F — Nexus Deepening
+- `NLMContentGenerator.generate_scene_lore()` — prompts NLM for lore arrays, stores tagged entries
+- `NLMContentGenerator.generate_npc_backstory()` — NPC backstory per character, stored in Nexus
+- `NLMContentGenerator.seed_lore_all_scenes()` — bulk seed all 9 GENERATOR_SCENES
+- `scheduler_daemon.py` — `scene-lore-seed` weekly task added (total: **35 builtin tasks**)
+- 8 new tests in `test_nlm_generator.py`
+
+### Stats
+- **Tests:** 7,066 passing, 0 failures (was 6,921)
+- **Scheduler tasks:** 35 builtin
+- **New files:** `engine/agents/character_memory.py`, `engine/skills/builtin/relationship_skills.py`,
+  `engine/content/nlm_generator.py` (extended), `tests/test_relationship_system.py`,
+  `tests/test_voice_hardening.py`, `tests/test_economy_wiring.py`,
+  `docs/SCENE_GUIDE.md`, `docs/CHARACTER_SYSTEM.md`, `docs/FINETUNING_GUIDE.md`
+
+---
+
 ## v0.69b Documentation Overhaul — March 2026
 
 ### New Documentation
