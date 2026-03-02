@@ -201,6 +201,18 @@ def register_shared_assets(app):
         except Exception as exc:
             return jsonify({"ok": False, "error": str(exc)})
 
+    # ── Admin Profile API route (v0.72) ───────────────────────────
+
+    @shared_bp.route("/api/admin/profile")
+    def admin_profile_api() -> "Response":
+        """Return player profile data as JSON."""
+        try:
+            from engine.characters.player_profile import get_player_profile
+            profile = get_player_profile()
+            return jsonify(profile.to_dict())
+        except Exception as exc:
+            return jsonify({"error": str(exc)})
+
     # ── Admin Portrait API routes (v0.72) ──────────────────────────
 
     @shared_bp.route("/api/admin/portraits")
@@ -230,6 +242,17 @@ def register_shared_assets(app):
             return jsonify({"ok": True, "result": str(result)})
         except Exception as exc:
             return jsonify({"ok": False, "error": str(exc)})
+
+    @shared_bp.route("/api/admin/npcs")
+    def admin_npcs() -> "Response":
+        """Return all active NPC states as a JSON list."""
+        try:
+            from engine.world.npc_state import get_npc_state
+            state = get_npc_state()
+            return jsonify({"npcs": [n.to_dict() for n in state.list_all()]})
+        except Exception as exc:
+            logger.error("admin_npcs error: %s", exc)
+            return jsonify({"npcs": [], "error": str(exc)})
 
     app.register_blueprint(shared_bp)
 

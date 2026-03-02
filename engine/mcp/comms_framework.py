@@ -771,6 +771,7 @@ def _build_default_pipeline() -> InterceptorPipeline:
         RelationshipEventInterceptor,
     )
     from engine.agents.dialogue_gate import DialogueGateInterceptor
+    from engine.agents.relationship_interceptor import RelationshipContextInterceptor
     pipeline = InterceptorPipeline()
     pipeline.add(NaturalMoodDriftInterceptor())  #  5
     pipeline.add(ConversationRecapInterceptor()) #  6
@@ -788,6 +789,7 @@ def _build_default_pipeline() -> InterceptorPipeline:
     pipeline.add(GameSessionInterceptor())       # 35
     pipeline.add(GameRulesInterceptor())         # 40
     pipeline.add(DialogueGateInterceptor())      # 45
+    pipeline.add(RelationshipContextInterceptor())  # 46
     pipeline.add(PersonalityGuardInterceptor())  # 50
     pipeline.add(ConversationVarietyInterceptor()) # 55
     pipeline.add(PolicyEnforcerInterceptor())    # 60

@@ -1,0 +1,127 @@
+/*
+ * CosySim Scene Styles — cosysim-scene.css
+ * =========================================
+ * Shared scene-level CSS including NPC Activity Badges (v72-b2).
+ *
+ * Depends on: design_tokens.css
+ */
+
+/* ── NPC Activity Panel ─────────────────────────────────────────── */
+
+.cs-npc-activity-panel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  padding: 0.5rem;
+}
+
+/* ── NPC Badge ──────────────────────────────────────────────────── */
+
+.cs-npc-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  background: rgba(20, 20, 30, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  font-size: 0.75rem;
+  line-height: 1.4;
+  animation: cs-badge-fadein 0.3s ease forwards;
+  white-space: nowrap;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@keyframes cs-badge-fadein {
+  from { opacity: 0; transform: scale(0.85); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+.cs-npc-badge .badge-name {
+  font-weight: 600;
+  color: #c8cdd6;
+}
+
+.cs-npc-badge .badge-activity {
+  color: #8890a0;
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: inline-block;
+}
+
+/* ── Activity accent colours ────────────────────────────────────── */
+
+/* idle — grey (default) */
+.cs-npc-badge[data-activity="idle"] {
+  border-color: rgba(140, 140, 160, 0.35);
+}
+.cs-npc-badge[data-activity="idle"] .badge-activity {
+  color: #7a7e8a;
+}
+
+/* talking — blue */
+.cs-npc-badge[data-activity="talking"] {
+  border-color: rgba(64, 156, 255, 0.5);
+  background: rgba(12, 30, 60, 0.85);
+}
+.cs-npc-badge[data-activity="talking"] .badge-activity {
+  color: #5bb3ff;
+}
+
+/* working — green */
+.cs-npc-badge[data-activity="working"] {
+  border-color: rgba(52, 199, 89, 0.5);
+  background: rgba(10, 30, 15, 0.85);
+}
+.cs-npc-badge[data-activity="working"] .badge-activity {
+  color: #4cd964;
+}
+
+/* resting — purple */
+.cs-npc-badge[data-activity="resting"] {
+  border-color: rgba(175, 82, 222, 0.5);
+  background: rgba(25, 10, 40, 0.85);
+}
+.cs-npc-badge[data-activity="resting"] .badge-activity {
+  color: #bf5af2;
+}
+
+/* fighting — red */
+.cs-npc-badge[data-activity="fighting"] {
+  border-color: rgba(255, 59, 48, 0.55);
+  background: rgba(40, 8, 8, 0.85);
+}
+.cs-npc-badge[data-activity="fighting"] .badge-activity {
+  color: #ff453a;
+}
+
+/* ── Admin NPC table ────────────────────────────────────────────── */
+
+.cs-npc-table {
+  font-size: 0.82rem;
+  color: var(--cs-text, #c8cdd6);
+}
+
+.cs-npc-th {
+  text-align: left;
+  padding: 0.4rem 0.6rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--cs-text-dim, #7a7e8a);
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+}
+
+.cs-npc-td {
+  padding: 0.35rem 0.6rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  vertical-align: middle;
+}
+
+.cs-npc-row:hover {
+  background: rgba(255, 255, 255, 0.03);
+}

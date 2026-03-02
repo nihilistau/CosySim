@@ -500,6 +500,24 @@ class IntelHubScene(BaseScene):
         def api_scenes_health():
             return jsonify(_get_scene_health())
 
+        # ── Mission Control Metrics ────────────────────────────────────────────
+
+        @app.route("/api/intel/metrics")
+        def api_intel_metrics():
+            from engine.monitoring.metrics_collector import get_metrics_collector
+            from engine.lmstudio.router_v3_client import get_router_v3_client
+            try:
+                metrics = get_metrics_collector().get_summary(window_seconds=3600)
+            except Exception as exc:
+                logger.warning("MetricsCollector unavailable: %s", exc)
+                metrics = {"llm": {}, "scenes": {}, "errors": {}}
+            try:
+                router_status = get_router_v3_client().get_status()
+            except Exception as exc:
+                logger.warning("RouterV3Client unavailable: %s", exc)
+                router_status = {"available": False, "predict_count": 0}
+            return jsonify({"metrics": metrics, "router": router_status})
+
     # ── Socket.IO ──────────────────────────────────────────────────────────────
 
     def _register_socketio(self) -> None:
@@ -1098,14 +1116,29 @@ def _now() -> str:
 
 def _get_world_events(limit: int = 20) -> Dict[str, Any]:
     """Fetch recent world simulation events (classified intel briefs)."""
+    result: Dict[str, Any] = {"events": [], "count": 0, "npc_count": 0}
     try:
         from engine.world.world_sim import get_world_sim
         sim = get_world_sim()
         events = sim.get_all_events(limit=limit)
-        return {"events": events or [], "count": len(events or [])}
+        result["events"] = events or []
+        result["count"] = len(events or [])
     except Exception as exc:
         logger.debug("WorldSim events unavailable: %s", exc)
-        return {"events": [], "count": 0, "error": str(exc)}
+        result["error"] = str(exc)
+    try:
+        from engine.world.npc_state import get_npc_state
+        result["npc_count"] = len(get_npc_state().list_all())
+    except Exception as exc:
+        logger.debug("NPCState unavailable: %s", exc)
+    try:
+        from engine.world.world_state import get_world_state
+        ws = get_world_state()
+        if hasattr(ws, "get_world_time"):
+            result["world_time"] = ws.get_world_time()
+    except Exception:
+        pass
+    return result
 
 
 def _get_world_state_summary() -> Dict[str, Any]:

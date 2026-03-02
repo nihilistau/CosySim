@@ -103,6 +103,20 @@
         aria-controls="cs-admin-panel-portraits"
         data-tab="portraits"
       >[PORTRAITS]</button>
+      <button
+        class="cs-admin-tab"
+        role="tab"
+        aria-selected="false"
+        aria-controls="cs-admin-panel-npc"
+        data-tab="npc"
+      >[NPC]</button>
+      <button
+        class="cs-admin-tab"
+        role="tab"
+        aria-selected="false"
+        aria-controls="cs-admin-panel-profile"
+        data-tab="profile"
+      >[PROFILE]</button>
     </nav>
 
     <button
@@ -596,4 +610,186 @@
       </div>
     </div><!-- /PORTRAITS -->
 
+    <!-- NPC ──────────────────────────────────────────────────── -->
+    <div
+      class="cs-admin-panel"
+      id="cs-admin-panel-npc"
+      data-tab="npc"
+      role="tabpanel"
+      aria-label="NPC Activity"
+      style="display:none"
+    >
+      <div class="cs-admin-tab-content" id="cs-tab-npc">
+        <div class="cs-admin-section">
+          <h3 class="cs-hack-text">NPC Activity</h3>
+          <button class="cs-glass-btn cs-glass-btn--hack" id="cs-npc-refresh">↻ Refresh</button>
+          <span class="cs-admin-status" id="cs-npc-status" aria-live="polite"></span>
+          <div style="overflow-x:auto;margin-top:0.75rem">
+            <table class="cs-npc-table" id="cs-npc-table" style="width:100%;border-collapse:collapse">
+              <thead>
+                <tr>
+                  <th class="cs-npc-th">ID</th>
+                  <th class="cs-npc-th">Activity</th>
+                  <th class="cs-npc-th">Scene</th>
+                  <th class="cs-npc-th">Last Update</th>
+                </tr>
+              </thead>
+              <tbody id="cs-npc-tbody" aria-live="polite">
+                <tr><td colspan="4" style="color:var(--cs-text-dim);padding:0.5rem">Loading…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div><!-- /NPC -->
+
+    <!-- PROFILE ──────────────────────────────────────────────── -->
+    <div
+      class="cs-admin-panel"
+      id="cs-admin-panel-profile"
+      data-tab="profile"
+      role="tabpanel"
+      aria-label="Player profile"
+      style="display:none"
+    >
+      <div class="cs-admin-tab-content" id="cs-tab-profile">
+
+        <!-- Player Stats -->
+        <div class="cs-admin-section">
+          <h3 class="cs-hack-text">Player Stats</h3>
+          <div id="cs-profile-stats" class="cs-nexus-grid" aria-live="polite">
+            <div class="cs-nexus-stat">
+              <span class="cs-nexus-label">Sessions</span>
+              <span id="cs-profile-sessions" class="cs-nexus-value">—</span>
+            </div>
+            <div class="cs-nexus-stat">
+              <span class="cs-nexus-label">Decisions</span>
+              <span id="cs-profile-decisions" class="cs-nexus-value">—</span>
+            </div>
+            <div class="cs-nexus-stat">
+              <span class="cs-nexus-label">Scenes Visited</span>
+              <span id="cs-profile-scenes" class="cs-nexus-value">—</span>
+            </div>
+          </div>
+          <button class="cs-glass-btn cs-glass-btn--hack" id="cs-profile-refresh" style="margin-top:0.5rem">↻ Refresh</button>
+        </div>
+
+        <!-- Relationships -->
+        <div class="cs-admin-section">
+          <h3 class="cs-hack-text">NPC Relationships</h3>
+          <div id="cs-profile-relationships" aria-live="polite">
+            <div class="cs-admin-loading">Loading relationships…</div>
+          </div>
+        </div>
+
+        <!-- Recent Decisions -->
+        <div class="cs-admin-section">
+          <h3 class="cs-hack-text">Recent Decisions</h3>
+          <ol id="cs-profile-decision-list" class="cs-event-timeline" aria-live="polite">
+            <li class="cs-event-item cs-event-item--empty">No decisions recorded</li>
+          </ol>
+        </div>
+
+      </div>
+    </div><!-- /PROFILE -->
+
 </div><!-- /#cs-admin-overlay -->
+
+<script>
+(function () {
+  'use strict';
+
+  let _profileTimer = null;
+
+  function _sentimentClass(sentiment) {
+    if (sentiment === 'close') return 'cs-glass-btn--hack';
+    if (sentiment === 'hostile') return 'cs-glass-btn--danger';
+    return '';
+  }
+
+  function _renderProfile(data) {
+    // Stats
+    const sessions = (data.sessions || []).length;
+    const decisions = (data.decisions || []).length;
+    const scenes = Object.keys(data.scene_visits || {}).length;
+    const el = function (id) { return document.getElementById(id); };
+    if (el('cs-profile-sessions')) el('cs-profile-sessions').textContent = sessions;
+    if (el('cs-profile-decisions')) el('cs-profile-decisions').textContent = decisions;
+    if (el('cs-profile-scenes')) el('cs-profile-scenes').textContent = scenes;
+
+    // Relationships
+    const relContainer = el('cs-profile-relationships');
+    if (relContainer) {
+      const rels = data.relationships || {};
+      const keys = Object.keys(rels);
+      if (keys.length === 0) {
+        relContainer.innerHTML = '<span style="color:var(--cs-text-dim)">No relationships yet.</span>';
+      } else {
+        relContainer.innerHTML = keys.map(function (k) {
+          const r = rels[k];
+          const pct = Math.round(((r.score + 100) / 200) * 100);
+          const sClass = _sentimentClass(r.sentiment);
+          return '<div class="cs-monitor-bar-row" style="margin-bottom:0.4rem">' +
+            '<span class="cs-monitor-bar-label" style="min-width:80px">' + k + '</span>' +
+            '<div class="cs-monitor-bar-track" style="flex:1">' +
+              '<div class="cs-monitor-bar-fill" style="width:' + pct + '%;background:var(--cs-accent)"></div>' +
+            '</div>' +
+            '<span class="cs-nexus-value" style="margin-left:0.5rem;min-width:40px">' + (r.score >= 0 ? '+' : '') + r.score.toFixed(1) + '</span>' +
+            '<span class="cs-glass-btn ' + sClass + '" style="margin-left:0.4rem;padding:0.1rem 0.4rem;font-size:0.7em;cursor:default">' + r.sentiment + '</span>' +
+          '</div>';
+        }).join('');
+      }
+    }
+
+    // Recent decisions (last 10)
+    const decList = el('cs-profile-decision-list');
+    if (decList) {
+      const decs = (data.decisions || []).slice(-10).reverse();
+      if (decs.length === 0) {
+        decList.innerHTML = '<li class="cs-event-item cs-event-item--empty">No decisions recorded</li>';
+      } else {
+        decList.innerHTML = decs.map(function (d) {
+          return '<li class="cs-event-item">' +
+            '<span style="color:var(--cs-text-dim);font-size:0.8em">[' + d.scene + ']</span> ' +
+            d.description +
+          '</li>';
+        }).join('');
+      }
+    }
+  }
+
+  function _fetchProfile() {
+    fetch('/api/admin/profile')
+      .then(function (r) { return r.json(); })
+      .then(function (data) { _renderProfile(data); })
+      .catch(function (e) { console.warn('PROFILE fetch error', e); });
+  }
+
+  function _onProfileTabOpen() {
+    _fetchProfile();
+    if (_profileTimer) clearInterval(_profileTimer);
+    _profileTimer = setInterval(_fetchProfile, 30000);
+  }
+
+  function _onProfileTabClose() {
+    if (_profileTimer) { clearInterval(_profileTimer); _profileTimer = null; }
+  }
+
+  // Hook into the admin overlay tab system
+  document.addEventListener('DOMContentLoaded', function () {
+    const refreshBtn = document.getElementById('cs-profile-refresh');
+    if (refreshBtn) refreshBtn.addEventListener('click', _fetchProfile);
+
+    // Watch for tab switches (admin_overlay.js fires data-tab clicks on buttons)
+    document.addEventListener('click', function (e) {
+      const btn = e.target.closest('[data-tab]');
+      if (!btn) return;
+      if (btn.getAttribute('data-tab') === 'profile') {
+        _onProfileTabOpen();
+      } else {
+        _onProfileTabClose();
+      }
+    });
+  });
+})();
+</script>

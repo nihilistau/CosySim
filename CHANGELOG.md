@@ -2,6 +2,26 @@
 
 All notable changes to CosySim are documented here.
 
+## [0.72b] — 2026-03-02 — "The Asset Studio"
+
+### New Features
+- **Asset Studio** (port 5568): 9-tab asset generation hub — images, portraits, SVG, backgrounds, audio, video, animations, items. Integrates ComfyUI + TTS + LMStudio. Full preset system, asset library, prompt builder.
+- **Router v3 Production Client**: ML-based routing using fine-tuned Qwen2.5-0.5B. Lazy-loads model, falls back to rule-based routing.
+- **Training Flywheel**: Automated scheduler tasks (router-data-export every 4h, router-v3-retrain weekly) — self-improving routing.
+- **PlayerProfile**: Persistent player identity — tracks session history, NPC relationships (-100 to +100), decisions. Skills + admin PROFILE tab.
+- **NPCScheduler**: Autonomous NPC world-tick (every 1min) via SchedulerDaemon. NPCState registry. NPC activity badges in admin overlay.
+- **MetricsCollector**: Real-time LLM call metrics, error rates, latency percentiles (p50/p90). /api/metrics endpoint + Prometheus export.
+- **Portrait Overlay Component**: Shared portrait overlay injected into all scenes. Mood-colored CSS, /api/admin/portraits route, generate endpoint.
+- **Intel Hub Mission Control**: /api/intel/metrics combining MetricsCollector + RouterV3 status. Scene health grid, NPC counter, auto-refresh.
+- **RelationshipContextInterceptor**: Auto-injects player relationship context into agent system prompts.
+
+### Scheduler Tasks
+- Total: 39 builtin tasks (up from 35 in v0.70b)
+- New: npc-world-tick, router-data-export, router-v3-retrain, daily-challenge-seed
+
+### Tests
+- 7,500+ tests passing across ~195 test files
+
 ## v0.71b "Full Immersion" — 2026
 
 ### Track A — Scene Visual Polish (Phase 0–3)

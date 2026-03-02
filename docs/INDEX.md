@@ -78,7 +78,9 @@
 | [Skills](SKILLS.md) | @skill decorator, 21 built-in packs (188+ skills) |
 | [Admin Guide](ADMIN_GUIDE.md) | Admin panel pages and operations |
 | [System Control Panel](SYSTEM_CONTROL.md) | Config editor, service health, launcher, NLM proxy, Git — port 5575 |
-| [World System](WORLD_SYSTEM.md) | WorldSim, WorldState, EventBus, cross-scene events |
+| [World System](WORLD_SYSTEM.md) | WorldSim, WorldState, NPCScheduler, NPCState, SceneDirector, autonomous NPC ticks |
+| [Training Flywheel](TRAINING_FLYWHEEL.md) | RouterDataCollector, RouterV3Client, Alpaca export, automated weekly retrain |
+| [Player Identity](PLAYER_IDENTITY.md) | PlayerProfile, NPC relationships (−100..+100), RelationshipContextInterceptor, admin PROFILE tab |
 | [Economy Guide](ECONOMY_GUIDE.md) | EconomyManager, cross-scene credits, betting, consequences |
 | [Arena Guide](ARENA_GUIDE.md) | THE COLOSSEUM — card game mechanics, betting, NLM commentary |
 | [Content Guide](CONTENT_GUIDE.md) | ContentEngine, ContentGate, adult profiles, NLM seeding |

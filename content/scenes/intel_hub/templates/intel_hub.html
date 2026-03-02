@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en" data-scene="intel_hub">
 <head>
   <meta charset="UTF-8">
@@ -313,7 +313,102 @@
       </div>
     </section>
 
+    <!-- ── MISSION CONTROL ──────────────────────────────── -->
+    <section class="intel-panel intel-panel--mission-control" id="panel-mission-control" aria-label="Mission Control" style="grid-column: 1 / -1;">
+      <header class="panel-header">
+        <span class="panel-icon">⬡</span>
+        <span class="panel-title">MISSION CONTROL</span>
+        <span class="panel-badge" id="mc-refresh-badge">AUTO-REFRESH 30s</span>
+        <button class="panel-refresh-btn" onclick="window.briefingRoom && window.briefingRoom._refreshMissionControl()" title="Refresh" aria-label="Refresh mission control">↻</button>
+      </header>
+      <div class="panel-body">
+        <div class="mc-grid" id="mc-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem;">
+
+          <!-- System Metrics -->
+          <div class="mc-card" id="mc-metrics" style="background:rgba(6,182,212,0.06);border:1px solid rgba(6,182,212,0.25);border-radius:6px;padding:0.75rem;">
+            <div style="font-size:0.65rem;letter-spacing:0.12em;color:#06b6d4;margin-bottom:0.5rem;">SYSTEM METRICS</div>
+            <div class="stat-row"><span class="stat-key">LLM Calls</span><span class="stat-val" id="mc-llm-calls">—</span></div>
+            <div class="stat-row"><span class="stat-key">Error Rate</span><span class="stat-val" id="mc-error-rate">—</span></div>
+            <div class="stat-row"><span class="stat-key">Avg Latency</span><span class="stat-val" id="mc-avg-latency">—</span></div>
+            <div class="stat-row"><span class="stat-key">Total Tokens</span><span class="stat-val" id="mc-total-tokens">—</span></div>
+          </div>
+
+          <!-- Router Stats -->
+          <div class="mc-card" id="mc-router" style="background:rgba(6,182,212,0.06);border:1px solid rgba(6,182,212,0.25);border-radius:6px;padding:0.75rem;">
+            <div style="font-size:0.65rem;letter-spacing:0.12em;color:#06b6d4;margin-bottom:0.5rem;">ROUTER STATS</div>
+            <div class="stat-row"><span class="stat-key">Router Available</span><span class="stat-val" id="mc-router-available">—</span></div>
+            <div class="stat-row"><span class="stat-key">Predictions</span><span class="stat-val" id="mc-router-predictions">—</span></div>
+            <div class="stat-row"><span class="stat-key">GPU Primary</span><span class="stat-val" id="mc-gpu-primary">—</span></div>
+            <div class="stat-row"><span class="stat-key">CPU Utility</span><span class="stat-val" id="mc-cpu-utility">—</span></div>
+            <div class="stat-row"><span class="stat-key">CPU Router</span><span class="stat-val" id="mc-cpu-router">—</span></div>
+          </div>
+
+          <!-- Active NPC Counter -->
+          <div class="mc-card" id="mc-npcs" style="background:rgba(6,182,212,0.06);border:1px solid rgba(6,182,212,0.25);border-radius:6px;padding:0.75rem;">
+            <div style="font-size:0.65rem;letter-spacing:0.12em;color:#06b6d4;margin-bottom:0.5rem;">ACTIVE NPCS</div>
+            <div style="font-size:2rem;font-weight:700;color:#06b6d4;text-align:center;padding:0.5rem 0;" id="mc-npc-count">—</div>
+            <div style="font-size:0.7rem;color:#94a3b8;text-align:center;">NPC entities registered</div>
+          </div>
+
+          <!-- Scene Health Grid -->
+          <div class="mc-card" id="mc-scenes" style="background:rgba(6,182,212,0.06);border:1px solid rgba(6,182,212,0.25);border-radius:6px;padding:0.75rem;grid-column: span 2;">
+            <div style="font-size:0.65rem;letter-spacing:0.12em;color:#06b6d4;margin-bottom:0.5rem;">SCENE HEALTH GRID</div>
+            <div id="mc-scene-cards" style="display:flex;flex-wrap:wrap;gap:0.4rem;">
+              <span style="color:#64748b;font-size:0.75rem;">Loading...</span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </section>
   </main><!-- /intel-layout -->
+  <!-- Mission Control auto-refresh -->
+  <script>
+    (function() {
+      function _refreshMissionControl() {
+        // Fetch /api/intel/metrics
+        fetch('/api/intel/metrics').then(r => r.json()).then(function(data) {
+          var m = (data.metrics && data.metrics.llm) || {};
+          var setEl = function(id, val) { var el = document.getElementById(id); if (el) el.textContent = val; };
+          setEl('mc-llm-calls', m.total_calls !== undefined ? m.total_calls : '—');
+          setEl('mc-error-rate', m.error_rate !== undefined ? (m.error_rate * 100).toFixed(1) + '%' : '—');
+          setEl('mc-avg-latency', m.avg_latency_ms !== undefined ? m.avg_latency_ms.toFixed(0) + 'ms' : '—');
+          setEl('mc-total-tokens', m.total_tokens !== undefined ? m.total_tokens : '—');
+          var r = data.router || {};
+          setEl('mc-router-available', r.available !== undefined ? (r.available ? 'YES' : 'NO') : '—');
+          setEl('mc-router-predictions', r.predict_count !== undefined ? r.predict_count : '—');
+          var routing = (data.metrics && data.metrics.routing) || {};
+          setEl('mc-gpu-primary', routing.gpu_primary !== undefined ? routing.gpu_primary : '—');
+          setEl('mc-cpu-utility', routing.cpu_utility !== undefined ? routing.cpu_utility : '—');
+          setEl('mc-cpu-router', routing.cpu_router !== undefined ? routing.cpu_router : '—');
+        }).catch(function() {});
+        // Fetch /api/world/events for NPC count
+        fetch('/api/world/events?limit=1').then(r => r.json()).then(function(data) {
+          var el = document.getElementById('mc-npc-count');
+          if (el) el.textContent = data.npc_count !== undefined ? data.npc_count : '—';
+        }).catch(function() {});
+        // Fetch /api/scenes/health for scene health grid
+        fetch('/api/scenes/health').then(r => r.json()).then(function(data) {
+          var container = document.getElementById('mc-scene-cards');
+          if (!container) return;
+          var scenes = data.scenes || [];
+          if (!scenes.length) { container.innerHTML = '<span style="color:#64748b;font-size:0.75rem;">No scenes found</span>'; return; }
+          container.innerHTML = scenes.map(function(s) {
+            var color = s.status === 'online' ? '#22c55e' : (s.status === 'offline' ? '#ef4444' : '#94a3b8');
+            return '<span style="display:inline-flex;align-items:center;gap:0.3rem;padding:0.2rem 0.5rem;border-radius:4px;border:1px solid ' + color + '33;font-size:0.68rem;">' +
+              '<span style="width:7px;height:7px;border-radius:50%;background:' + color + ';display:inline-block;"></span>' +
+              s.display + '</span>';
+          }).join('');
+        }).catch(function() {});
+      }
+      // Expose for manual refresh button
+      window.briefingRoom = window.briefingRoom || {};
+      window.briefingRoom._refreshMissionControl = _refreshMissionControl;
+      // Initial load + auto-refresh every 30 seconds
+      _refreshMissionControl();
+      setInterval(_refreshMissionControl, 30000);
+    })();
+  </script>
 
   <!-- ══════════════════════════════════════════════
        BENCH HUD

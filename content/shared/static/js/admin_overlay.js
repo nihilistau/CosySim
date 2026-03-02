@@ -169,6 +169,7 @@
         case 'system':    this._loadSystem();   break;
         case 'knowledge': this._loadKnowledge(); break;
         case 'portraits': this._loadPortraits(); break;
+        case 'npc':       this._loadNPCs();      break;
       }
     }
 
@@ -649,6 +650,36 @@
       this._generatePortrait();
     }
 
+    /* ── NPC Activity (v72-b2) ──────────────────────────────────── */
+
+    _loadNPCs() {
+      const tbody   = document.getElementById('cs-npc-tbody');
+      const statusEl = document.getElementById('cs-npc-status');
+      if (!tbody) return;
+      tbody.innerHTML = '<tr><td colspan="4" style="color:var(--cs-text-dim);padding:0.5rem">Loading…</td></tr>';
+      fetch('/api/admin/npcs')
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+          if (!data || !data.npcs || data.npcs.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4" style="color:var(--cs-text-dim);padding:0.5rem">No active NPCs.</td></tr>';
+            return;
+          }
+          tbody.innerHTML = data.npcs.map(n => {
+            const ts = n.last_action_time ? new Date(n.last_action_time * 1000).toLocaleTimeString() : '—';
+            return `<tr class="cs-npc-row">
+              <td class="cs-npc-td">${_esc(n.character_id || n.id || '—')}</td>
+              <td class="cs-npc-td">${_esc(n.activity || '—')}</td>
+              <td class="cs-npc-td">${_esc(n.location || n.scene || '—')}</td>
+              <td class="cs-npc-td">${_esc(ts)}</td>
+            </tr>`;
+          }).join('');
+          if (statusEl) { statusEl.textContent = `${data.npcs.length} NPC(s)`; }
+        })
+        .catch(() => {
+          tbody.innerHTML = '<tr><td colspan="4" style="color:var(--cs-text-dim);padding:0.5rem">Unavailable.</td></tr>';
+        });
+    }
+
     /* ── Keyboard ───────────────────────────────────────────────── */
 
     _setupKeyboard() {
@@ -710,6 +741,8 @@
         this._pollTimer = setInterval(() => this._loadMonitors(), 5000);
       } else if (this._activeTab === 'logs') {
         this._pollTimer = setInterval(() => this._loadLogs(), 3000);
+      } else if (this._activeTab === 'npc') {
+        this._pollTimer = setInterval(() => this._loadNPCs(), 10000);
       }
     }
 
@@ -770,6 +803,10 @@
     const portraitReload = document.getElementById('cs-portrait-reload');
     if (portraitReload) portraitReload.addEventListener('click', () => overlay._loadPortraits());
     window._adminOverlay = overlay;
+
+    // NPC Activity tab (v72-b2)
+    const npcRefresh = document.getElementById('cs-npc-refresh');
+    if (npcRefresh) npcRefresh.addEventListener('click', () => overlay._loadNPCs());
 
     // Training controls
     const seedBtn = document.getElementById('cs-trigger-seed');
