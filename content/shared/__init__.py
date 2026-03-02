@@ -86,7 +86,7 @@ def register_shared_assets(app):
             from engine.nexus.client import get_nexus_client
             q = request.args.get("q", "")
             if not q:
-                return jsonify({"results": []})
+                return jsonify({"error": "Missing required query parameter: q"}), 400
             client = get_nexus_client()
             results = client.search(q, limit=10)
             return jsonify({"results": results})

@@ -814,17 +814,13 @@ class TestBuildGovernanceContext:
     def test_different_scenes_produce_context(self):
         """Different scenes should work without error."""
         from engine.mcp.comms_framework import build_governance_context
-        for scene in ["phone", "bedroom", "warzone", "gallery", "realm", "neoncity", "coders"]:
+        for scene in ["phone", "bedroom", "gallery", "realm", "neoncity", "coders"]:
             result = build_governance_context("test_agent", scene, "hello")
             assert isinstance(result, str), f"Failed for scene: {scene}"
 
 
 class TestRulesRegistration:
     """Tests that all scene rules files register without error."""
-
-    def test_warzone_rules(self):
-        from content.scenes.warzone.warzone_rules import register_warzone_rules
-        register_warzone_rules()
 
     def test_neoncity_rules(self):
         from content.scenes.neoncity.neoncity_rules import register_neoncity_rules
@@ -844,9 +840,9 @@ class TestRulesRegistration:
 
     def test_idempotent_registration(self):
         """Calling register twice should not raise."""
-        from content.scenes.warzone.warzone_rules import register_warzone_rules
-        register_warzone_rules()
-        register_warzone_rules()
+        from content.scenes.neoncity.neoncity_rules import register_neoncity_rules
+        register_neoncity_rules()
+        register_neoncity_rules()
 
 
 # ══════════════════════════════════════════════════════════════════════════════

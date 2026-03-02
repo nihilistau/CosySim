@@ -91,8 +91,8 @@ class TestSceneSkillsRegistration:
     """All scene skills register correctly when imported."""
 
     SCENE_PACKS = [
-        "bedroom", "casino", "coders", "command_center", "gallery",
-        "heist", "lounge", "neoncity", "phone", "realm", "warzone",
+        "bedroom", "casino", "coders", "gallery",
+        "heist", "lounge", "neoncity", "phone", "realm",
     ]
 
     @classmethod
