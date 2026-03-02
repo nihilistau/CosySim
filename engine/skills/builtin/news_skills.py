@@ -147,3 +147,72 @@ def news_insight(topic: str) -> str:
     except Exception as exc:
         logger.warning("news_insight error: %s", exc)
         return f"[NEWS INSIGHT — {topic.upper()}]\n\nIntel unavailable: {exc}"
+
+
+_NEWS_CATEGORIES = ("ai_research", "tech", "world", "science")
+
+
+@skill(
+    pack="news",
+    description="Generate a 300-word structured digest for a news category from Nexus Q&A cache",
+    category="SYSTEM",
+    tags=["news", "summary", "nexus", "category"],
+)
+def summarize_news_category(category: str = "ai_research") -> str:
+    """Return a structured 300-word news digest for a whole category.
+
+    Pulls all Q&A pairs tagged to *category* from the Nexus cache, synthesises
+    them into a ranked digest, and returns a formatted brief. Categories:
+    ``ai_research``, ``tech``, ``world``, ``science``.
+
+    Args:
+        category: News category to summarise.
+
+    Returns:
+        Formatted category digest, or "no intelligence" message.
+    """
+    cat = category.lower().strip()
+    if cat not in _NEWS_CATEGORIES:
+        return (
+            f"[NEWS DIGEST — UNKNOWN CATEGORY '{category}']\n\n"
+            f"Valid categories: {', '.join(_NEWS_CATEGORIES)}"
+        )
+    try:
+        client = get_nexus_client()
+
+        # Pull up to 10 Q&A entries tagged to this news category
+        results = client.search(f"news {cat}", category="news", limit=10)
+        if not results:
+            # Wider search without category filter
+            results = client.search(cat, limit=8) or []
+
+        if not results:
+            return (
+                f"[NEWS DIGEST — {cat.upper()}]\n\n"
+                f"No intelligence on file for this category. "
+                f"Run the news-fetch scheduler task to populate."
+            )
+
+        lines: list[str] = [f"[NEWS DIGEST — {cat.upper()}]\n"]
+        word_budget = 300
+        for r in results:
+            title = r.get("title", "").strip()
+            body = r.get("content", "").strip()
+            if not body:
+                continue
+            # Take a snippet per entry proportional to word budget
+            snippet_words = body.split()[:max(30, word_budget // max(len(results), 1))]
+            snippet = " ".join(snippet_words)
+            if title:
+                lines.append(f"▸ {title}\n  {snippet}")
+            else:
+                lines.append(f"▸ {snippet}")
+            word_budget -= len(snippet_words)
+            if word_budget <= 0:
+                break
+
+        return "\n\n".join(lines)
+
+    except Exception as exc:
+        logger.warning("summarize_news_category error: %s", exc)
+        return f"[NEWS DIGEST — {cat.upper()}]\n\nIntel unavailable: {exc}"

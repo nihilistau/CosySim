@@ -336,6 +336,11 @@ class IntelHubScene(BaseScene):
         def api_finetune_benchmarks():
             return jsonify(_get_benchmarks())
 
+        @app.route("/api/finetune/status")
+        def api_finetune_status():
+            """Summarise all finetune jobs — latest job per model type + dataset stats."""
+            return jsonify(_get_finetune_status())
+
         @app.route("/api/finetune/generate_dataset", methods=["POST"])
         def api_finetune_generate_dataset():
             data = request.json or {}
@@ -1037,6 +1042,89 @@ def _get_benchmarks() -> Dict[str, Any]:
             except Exception:
                 pass
     return {"benchmarks": benchmarks}
+
+
+def _get_finetune_status() -> Dict[str, Any]:
+    """Return a consolidated finetune status summary.
+
+    Combines:
+    * All jobs from FinetuneOrchestrator (with latest-per-model rollup)
+    * Dataset inventory (name, path, example count)
+    * Model registry (promoted models, benchmark scores)
+    * Training infrastructure health (Unsloth available, CUDA, VRAM)
+    """
+    status: Dict[str, Any] = {
+        "jobs": [],
+        "latest_by_model": {},
+        "datasets": [],
+        "promoted_models": [],
+        "infra": {},
+    }
+
+    # ── Jobs ──────────────────────────────────────────────────────────────────
+    try:
+        from training.finetune_orchestrator import get_finetune_orchestrator
+        orch = get_finetune_orchestrator()
+        jobs = orch.list_jobs()
+        status["jobs"] = jobs
+
+        # Latest job per model type
+        latest: Dict[str, Dict] = {}
+        for j in jobs:
+            mt = j.get("model_type", "unknown")
+            if mt not in latest or j["created_at"] > latest[mt]["created_at"]:
+                latest[mt] = j
+        status["latest_by_model"] = latest
+    except Exception as exc:
+        status["jobs_error"] = str(exc)
+
+    # ── Datasets ──────────────────────────────────────────────────────────────
+    try:
+        datasets_dir = Path("training/datasets")
+        for f in sorted(datasets_dir.glob("*.jsonl")):
+            try:
+                with open(f, encoding="utf-8", errors="ignore") as fh:
+                    count = sum(1 for _ in fh)
+                status["datasets"].append({
+                    "name": f.stem,
+                    "path": str(f),
+                    "examples": count,
+                })
+            except Exception:
+                pass
+    except Exception as exc:
+        status["datasets_error"] = str(exc)
+
+    # ── Promoted models ────────────────────────────────────────────────────────
+    try:
+        from engine.lmstudio.model_manager import get_model_manager
+        mgr = get_model_manager()
+        registry = mgr.list_models() if hasattr(mgr, "list_models") else []
+        status["promoted_models"] = [
+            m for m in (registry or [])
+            if isinstance(m, dict) and m.get("finetuned")
+        ]
+    except Exception as exc:
+        status["promoted_error"] = str(exc)
+
+    # ── Infrastructure ────────────────────────────────────────────────────────
+    try:
+        import torch
+        status["infra"]["cuda"] = torch.cuda.is_available()
+        if torch.cuda.is_available():
+            props = torch.cuda.get_device_properties(0)
+            status["infra"]["gpu"] = props.name
+            status["infra"]["vram_gb"] = round(props.total_memory / 1024 ** 3, 1)
+    except Exception:
+        status["infra"]["cuda"] = False
+
+    try:
+        import unsloth  # noqa: F401
+        status["infra"]["unsloth"] = True
+    except ImportError:
+        status["infra"]["unsloth"] = False
+
+    return status
 
 
 def _get_scheduler_tasks() -> Dict[str, Any]:

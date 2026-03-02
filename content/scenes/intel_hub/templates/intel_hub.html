@@ -363,6 +363,46 @@
     </section>
 
     <!-- ══════════════════════════════════════════════
+         FINETUNE STATUS PANEL
+    ══════════════════════════════════════════════ -->
+    <section class="intel-panel intel-panel--finetune" id="panel-finetune" aria-label="Finetune Status" style="grid-column: 1 / -1;">
+      <header class="panel-header">
+        <span class="panel-icon">🧬</span>
+        <span class="panel-title">FINETUNE STATUS</span>
+        <span class="panel-badge" id="finetune-infra-badge">—</span>
+        <button class="panel-refresh-btn" onclick="window._loadFinetuneStatus && window._loadFinetuneStatus()" title="Refresh" aria-label="Refresh finetune status">↻</button>
+      </header>
+      <div class="panel-body" id="finetune-panel-body" style="display:flex;flex-direction:column;gap:0.75rem;">
+
+        <!-- Infrastructure row -->
+        <div id="finetune-infra-row" style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:center;padding:0.4rem 0;border-bottom:1px solid #1e293b;">
+          <span style="font-size:0.68rem;color:#64748b;text-transform:uppercase;letter-spacing:.08em;">INFRA</span>
+          <span id="ft-infra-cuda" style="font-size:0.75rem;">CUDA —</span>
+          <span id="ft-infra-gpu" style="font-size:0.75rem;">GPU —</span>
+          <span id="ft-infra-vram" style="font-size:0.75rem;">VRAM —</span>
+          <span id="ft-infra-unsloth" style="font-size:0.75rem;">UNSLOTH —</span>
+        </div>
+
+        <!-- Datasets row -->
+        <div>
+          <div style="font-size:0.68rem;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:0.35rem;">DATASETS</div>
+          <div id="finetune-datasets" style="display:flex;flex-wrap:wrap;gap:0.5rem;">
+            <span style="font-size:0.75rem;color:#475569;">Loading...</span>
+          </div>
+        </div>
+
+        <!-- Jobs grid -->
+        <div>
+          <div style="font-size:0.68rem;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:0.35rem;">JOBS</div>
+          <div id="finetune-jobs" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:0.5rem;">
+            <span style="font-size:0.75rem;color:#475569;">No jobs found.</span>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ══════════════════════════════════════════════
          BENCHMARK DASHBOARD PANEL
     ══════════════════════════════════════════════ -->
     <section class="intel-panel intel-panel--benchmark" id="panel-benchmarks" aria-label="Asset Quality Benchmarks">
@@ -436,8 +476,84 @@
   </script>
 
   <!-- ══════════════════════════════════════════════
-       BENCH HUD
+       FINETUNE STATUS SCRIPT
   ══════════════════════════════════════════════ -->
+  <script>
+    (function() {
+      var STATUS_COLORS = {
+        pending:   '#94a3b8',
+        queued:    '#f59e0b',
+        running:   '#06b6d4',
+        completed: '#22c55e',
+        failed:    '#ef4444',
+        cancelled: '#64748b',
+      };
+
+      function _renderInfra(infra) {
+        var cuda = infra.cuda;
+        document.getElementById('ft-infra-cuda').textContent    = 'CUDA: ' + (cuda ? '✓' : '✗');
+        document.getElementById('ft-infra-cuda').style.color    = cuda ? '#22c55e' : '#ef4444';
+        document.getElementById('ft-infra-gpu').textContent     = 'GPU: ' + (infra.gpu || '—');
+        document.getElementById('ft-infra-vram').textContent    = 'VRAM: ' + (infra.vram_gb ? infra.vram_gb + 'GB' : '—');
+        var unsloth = infra.unsloth;
+        document.getElementById('ft-infra-unsloth').textContent = 'UNSLOTH: ' + (unsloth ? '✓' : '✗');
+        document.getElementById('ft-infra-unsloth').style.color = unsloth ? '#22c55e' : '#ef4444';
+        document.getElementById('finetune-infra-badge').textContent = cuda && unsloth ? 'READY' : 'DEGRADED';
+        document.getElementById('finetune-infra-badge').style.background = cuda && unsloth ? '#166534' : '#7f1d1d';
+      }
+
+      function _renderDatasets(datasets) {
+        var el = document.getElementById('finetune-datasets');
+        if (!datasets || !datasets.length) {
+          el.innerHTML = '<span style="font-size:0.75rem;color:#475569;">No datasets found.</span>';
+          return;
+        }
+        el.innerHTML = datasets.map(function(d) {
+          return '<span style="display:inline-flex;align-items:center;gap:0.35rem;padding:0.2rem 0.6rem;border-radius:4px;border:1px solid #1e293b;font-size:0.72rem;">' +
+            '<span style="color:#94a3b8;">' + d.name + '</span>' +
+            '<span style="color:#22c55e;font-family:monospace;">' + d.examples + '</span>' +
+            '</span>';
+        }).join('');
+      }
+
+      function _renderJobs(jobs) {
+        var el = document.getElementById('finetune-jobs');
+        if (!jobs || !jobs.length) {
+          el.innerHTML = '<span style="font-size:0.75rem;color:#475569;">No jobs found. Submit a finetune job to begin.</span>';
+          return;
+        }
+        el.innerHTML = jobs.slice(0, 12).map(function(j) {
+          var col = STATUS_COLORS[j.status] || '#94a3b8';
+          var lossStr = j.final_loss != null ? ' · loss ' + parseFloat(j.final_loss).toFixed(4) : '';
+          var epochStr = j.epochs ? ' · ' + j.epochs + ' ep' : '';
+          return '<div style="padding:0.5rem 0.65rem;border-radius:6px;border:1px solid ' + col + '33;background:#0f172a;">' +
+            '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.2rem;">' +
+              '<span style="font-size:0.72rem;color:#e2e8f0;font-family:monospace;">' + (j.model_type || j.model || '—') + '</span>' +
+              '<span style="font-size:0.65rem;padding:0.1rem 0.4rem;border-radius:3px;background:' + col + '22;color:' + col + ';border:1px solid ' + col + '55;">' + (j.status || '—').toUpperCase() + '</span>' +
+            '</div>' +
+            '<div style="font-size:0.68rem;color:#64748b;">' + (j.job_id || '').slice(0,8) + epochStr + lossStr + '</div>' +
+          '</div>';
+        }).join('');
+      }
+
+      function _loadFinetuneStatus() {
+        fetch('/api/finetune/status')
+          .then(function(r) { return r.ok ? r.json() : Promise.reject(r.status); })
+          .then(function(data) {
+            _renderInfra(data.infra || {});
+            _renderDatasets(data.datasets || []);
+            _renderJobs(data.jobs || []);
+          })
+          .catch(function(err) {
+            document.getElementById('finetune-infra-badge').textContent = 'ERR';
+          });
+      }
+
+      window._loadFinetuneStatus = _loadFinetuneStatus;
+      _loadFinetuneStatus();
+      setInterval(_loadFinetuneStatus, 30000);
+    })();
+  
   <div id="bench-hud" class="bench-hud" role="complementary" aria-label="Benchmark HUD"></div>
 
   <!-- ══════════════════════════════════════════════

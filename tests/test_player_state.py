@@ -7,12 +7,16 @@ import pytest
 
 
 @pytest.fixture(autouse=True)
-def fresh_player_state():
-    """Reset PlayerState singleton before each test."""
+def fresh_player_state(tmp_path):
+    """Reset PlayerState singleton before each test, without loading a real save file."""
     import engine.world.player_state as ps_mod
     ps_mod.reset_player_state()
+    # Point save path at a non-existent tmp file so __init__ doesn't auto-load
+    original_save = ps_mod.PlayerState._SAVE_PATH
+    ps_mod.PlayerState._SAVE_PATH = tmp_path / "player_state_test.json"
     yield
     ps_mod.reset_player_state()
+    ps_mod.PlayerState._SAVE_PATH = original_save
 
 
 # ──────────────────────────────────────────────────────────────────────────────

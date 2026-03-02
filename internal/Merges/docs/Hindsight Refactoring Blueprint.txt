@@ -1,0 +1,198 @@
+🏗️ CosySim Hindsight Refactoring Blueprint
+To the AI Agent (Claude 3.7 Sonnet): You are tasked with refactoring the CosySim engine. This codebase has grown iteratively ("layer on layer") into a complex, tightly coupled multi-agent simulation framework. Your goal is to apply "hindsight architecture"—re-structuring the code as if we knew the current outcome and scale before we wrote the first line of code.
+
+1. Architectural Diagnostics & Hindsight Vision
+🔴 The Current State ("Layer on Layer")
+Primitive Obsession: Heavy reliance on Dict[str, Any] and raw json.dumps() across the MCP tools (engine/mcp/tools/*.py).
+Defensive Anti-Patterns: Pervasive use of try ... except Exception as e: return json.dumps({"error": str(e)}) in every tool, hiding tracebacks and domain errors.
+God Objects & Circular Dependencies: cosysim_server.py, comms_framework.py, and the NLM proxies have become massive dumping grounds. Circular imports were recently mitigated but the coupling remains.
+Hardcoded Pipelines: comms_framework.py hardcodes 24+ interceptors into _build_default_pipeline(), making it rigid and hard to test.
+🟢 The Hindsight Architecture ("How it should have been built")
+Domain-Driven Design (DDD) & Pydantic: Use strong typing at the boundaries. Every MCP tool should return a Pydantic model. We serialize to JSON only at the very edge (the network layer), not inside the business logic.
+Centralized Error Handling: Replace the repeated except Exception blocks with a unified @mcp_tool decorator that catches typed domain exceptions (e.g., SceneNotFoundError, CharacterStateError) and formats the JSON error response automatically, while publishing to an ErrorEvent bus.
+Dependency Injection & Registry Pattern: Interceptors and Tools should self-register (e.g., via decorators) rather than being manually appended to a master list.
+Service Abstraction: The massive nlm_live_proxy.py (which is thousands of lines long) should be isolated behind a clean LLMProviderProtocol.
+2. Execution Plan for Claude
+Please execute the following phases using your Copilot/VSCode integration.
+
+Phase 1: Core Domain Models & Error Middleware (Foundations)
+Create engine/core/models.py (or use Pydantic in engine/mcp/comms_types.py).
+Create engine/core/exceptions.py to define specific error types (CosySimError, ToolError, StateError).
+Create engine/mcp/decorators.py to house the new @mcp_tool wrapper.
+Phase 2: Refactoring MCP Tools
+Iterate through engine/mcp/tools/ (dialog_tools.py, scene_tools.py, character_tools.py, etc.):
+
+Remove all manual try/except Exception blocks.
+Remove manual json.dumps().
+Apply the @mcp_tool decorator.
+Define and return Pydantic models for responses.
+Phase 3: Decoupling the Interceptor Pipeline
+Refactor engine/mcp/comms_framework.py.
+Convert _build_default_pipeline() into a dynamic registry where interceptors load based on scene tags or auto-discovery, eliminating the massive hardcoded .add() list.
+3. Code Blueprints (Provide these to Claude)
+Here are the target state templates to guide your refactoring.
+
+Blueprint A: Centralized Error & Decorator Logic
+File: engine/mcp/decorators.py (New File)
+
+import logging
+import json
+from functools import wraps
+from typing import Any, Callable
+from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
+
+class ToolExecutionError(Exception):
+    """Base exception for predictable tool failures."""
+    pass
+
+def mcp_tool(func: Callable) -> Callable:
+    """
+    Hindsight Refactor: 
+    A unified decorator for all MCP tools. 
+    1. Catches exceptions and logs them properly.
+    2. Automatically converts Pydantic models or dicts to JSON strings.
+    3. Standardizes the error schema.
+    """
+    @wraps(func)
+    def wrapper(*args, **kwargs) -> str:
+        try:
+            result = func(*args, **kwargs)
+            
+            # Auto-serialize Pydantic models
+            if isinstance(result, BaseModel):
+                return result.model_dump_json(indent=2)
+            
+            # Auto-serialize standard dicts/lists
+            if isinstance(result, (dict, list)):
+                return json.dumps(result, indent=2)
+                
+            return str(result)
+            
+        except ToolExecutionError as e:
+            logger.warning(f"Tool {func.__name__} execution failed: {e}")
+            return json.dumps({"ok": False, "error": str(e)})
+        except Exception as e:
+            # Catch-all for unexpected errors (so the prompt doesn't crash)
+            logger.exception(f"Unexpected crash in tool {func.__name__}")
+            return json.dumps({"ok": False, "error": "Internal system error occurred."})
+            
+    return wrapper
+Blueprint B: Refactoring Tools (Before vs. After)
+File: engine/mcp/tools/dialog_tools.py (Refactored Target State)
+
+"""
+Pure business-logic helpers for dialog / speech MCP tools.
+Refactored to use Pydantic models and centralized error handling.
+"""
+from __future__ import annotations
+from typing import Any, List, Optional
+from pydantic import BaseModel, Field
+
+from engine.mcp.decorators import mcp_tool, ToolExecutionError
+
+# --- Domain Models ---
+
+class DialogOptionsResponse(BaseModel):
+    options: List[str]
+    conversation_heat: int
+    scene: str
+
+class DirectiveResponse(BaseModel):
+    ok: bool = True
+    character_id: str
+    scene: str
+    directive_type: Optional[str] = None
+    turns: Optional[int] = None
+
+# --- Refactored Tools ---
+
+@mcp_tool
+def get_dialog_options(
+    dialog_system: Any,
+    character_id: str,
+    scene_id: str,
+    context_tags: Optional[List[str]] = None,
+    stats: Optional[dict] = None,
+    max_options: int = 4,
+) -> DialogOptionsResponse:
+    """Return situationally appropriate dialog/action options."""
+    
+    # Notice: No try/except block or json.dumps() needed anymore!
+    opts = dialog_system.get_options(
+        character_id, 
+        scene_id,
+        context_tags=context_tags or [], 
+        stats=stats or {}, 
+        max_options=max_options,
+    )
+    heat = dialog_system.get_conversation_heat(character_id, scene_id)
+    
+    return DialogOptionsResponse(
+        options=opts, 
+        conversation_heat=heat, 
+        scene=scene_id
+    )
+
+@mcp_tool
+def set_response_directive(
+    dialog_system: Any,
+    character_id: str,
+    scene_id: str,
+    directive_type: str,
+    value: str,
+    turns: int = 1,
+    issued_by: str = "director",
+) -> DirectiveResponse:
+    """Issue a directive controlling the character's next *turns* responses."""
+    
+    dialog_system.set_directive(
+        character_id, scene_id,
+        directive_type=directive_type,
+        value=value,
+        turns=turns,
+        issued_by=issued_by,
+    )
+    
+    return DirectiveResponse(
+        character_id=character_id,
+        scene=scene_id,
+        directive_type=directive_type,
+        turns=turns
+    )
+Blueprint C: Decoupling Interceptors
+File: engine/agents/interceptors/__init__.py (New Concept) Instead of importing 24 interceptors and appending them one by one in comms_framework.py, implement an auto-registry:
+
+# engine/agents/interceptors/registry.py
+from typing import List, Type
+from engine.mcp.comms_types import InterceptorBase
+
+_INTERCEPTOR_REGISTRY: List[Type[InterceptorBase]] = []
+
+def register_interceptor(cls: Type[InterceptorBase]):
+    """Decorator to register an interceptor."""
+    _INTERCEPTOR_REGISTRY.append(cls)
+    return cls
+
+def get_all_interceptors() -> List[InterceptorBase]:
+    # Sort by priority dynamically
+    instances = [cls() for cls in _INTERCEPTOR_REGISTRY]
+    return sorted(instances, key=lambda x: x.priority)
+Note for Claude: You will need to go to files like engine/agents/interceptors/natural_mood_drift.py and add @register_interceptor above the class definition. Then, in comms_framework.py, _build_default_pipeline() simply becomes:
+
+def _build_default_pipeline() -> InterceptorPipeline:
+    pipeline = InterceptorPipeline()
+    for interceptor in get_all_interceptors():
+        pipeline.add(interceptor)
+    return pipeline
+
+
+Summary for the Agent
+Claude, your mission is to rip out the boilerplate.
+
+The codebase currently acts like a script that grew too big.
+Make it act like an enterprise application by standardizing the boundaries (Pydantic), centralizing error handling (Decorators), and enabling inversion of control (Registries).
+Run pytest tests/test_pipeline_smoke.py after every phase to ensure the simulation logic remains intact.
+
+

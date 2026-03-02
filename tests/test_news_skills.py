@@ -125,3 +125,64 @@ def test_news_insight_truncates_to_200_words():
     # Should be truncated to roughly 200 words plus header
     word_count = len(result.split())
     assert word_count <= 215, f"Too many words: {word_count}"
+
+
+# ── summarize_news_category tests ──────────────────────────────────────────
+
+
+def test_summarize_news_category_valid():
+    """Returns a digest for a valid category."""
+    from engine.skills.builtin.news_skills import summarize_news_category
+    mock_client = MagicMock()
+    mock_client.search.return_value = [
+        {"content": "AI chip exports face new restrictions from US regulators."},
+        {"content": "OpenAI announces GPT-5 with extended reasoning capabilities."},
+    ]
+    with patch("engine.skills.builtin.news_skills.get_nexus_client", return_value=mock_client):
+        result = summarize_news_category("ai_research")
+    assert "NEWS DIGEST" in result
+    assert "AI_RESEARCH" in result.upper()
+    assert isinstance(result, str)
+
+
+def test_summarize_news_category_invalid():
+    """Returns an error message for an unrecognised category."""
+    from engine.skills.builtin.news_skills import summarize_news_category
+    result = summarize_news_category("fake_category")
+    assert "UNKNOWN CATEGORY" in result
+    assert "ai_research" in result
+
+
+def test_summarize_news_category_empty_nexus():
+    """Returns a helpful no-data message when Nexus is empty."""
+    from engine.skills.builtin.news_skills import summarize_news_category
+    mock_client = MagicMock()
+    mock_client.search.return_value = []
+    with patch("engine.skills.builtin.news_skills.get_nexus_client", return_value=mock_client):
+        result = summarize_news_category("tech")
+    assert "No intelligence" in result or "unavailable" in result.lower()
+
+
+def test_summarize_news_category_exception_handled():
+    """Handles Nexus errors gracefully."""
+    from engine.skills.builtin.news_skills import summarize_news_category
+    mock_client = MagicMock()
+    mock_client.search.side_effect = RuntimeError("Nexus offline")
+    with patch("engine.skills.builtin.news_skills.get_nexus_client", return_value=mock_client):
+        result = summarize_news_category("world")
+    assert "NEWS DIGEST" in result
+    assert isinstance(result, str)
+
+
+def test_summarize_news_category_word_budget():
+    """Digest is at most ~300 words."""
+    from engine.skills.builtin.news_skills import summarize_news_category
+    mock_client = MagicMock()
+    # 10 entries × 40 words each = 400 words of input → should be capped
+    mock_client.search.return_value = [
+        {"content": "word " * 40} for _ in range(10)
+    ]
+    with patch("engine.skills.builtin.news_skills.get_nexus_client", return_value=mock_client):
+        result = summarize_news_category("science")
+    word_count = len(result.split())
+    assert word_count <= 320, f"Too many words: {word_count}"
