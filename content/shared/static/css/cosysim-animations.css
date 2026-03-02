@@ -426,3 +426,7 @@
 .cs-stagger > *:nth-child(7) { animation-delay: 300ms; }
 .cs-stagger > *:nth-child(8) { animation-delay: 350ms; }
 .cs-stagger > *:nth-child(n+9) { animation-delay: 400ms; }
+
+/* ── Scene transition helpers ──────────────────────────────── */
+.cs-page-enter { animation: cs-fade-in  200ms ease forwards; }
+.cs-page-exit  { animation: cs-fade-out 200ms ease forwards; }

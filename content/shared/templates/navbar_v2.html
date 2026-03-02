@@ -56,7 +56,7 @@
   {# ── Left cluster: logo + scene identity ──────────────────── #}
   <div class="cs-navbar__left">
 
-    <a class="cs-navbar__logo" href="/" aria-label="CosySim home">
+    <a class="cs-navbar__logo" href="/" data-scene-nav aria-label="CosySim home">
       <span class="cs-navbar__logo-mark" aria-hidden="true">CS</span>
     </a>
 
@@ -81,6 +81,7 @@
     <a
       class="cs-navbar__nav-item{% if scene.key == current_scene %} cs-navbar__nav-item--active{% endif %}"
       href="http://localhost:{{ scene.port }}/"
+      data-scene-nav
       data-scene-key="{{ scene.key }}"
       data-scene-port="{{ scene.port }}"
       data-scene-accent="{{ scene.accent }}"
@@ -103,6 +104,7 @@
           <a
             class="cs-navbar__more-item{% if scene.key == current_scene %} cs-navbar__nav-item--active{% endif %}"
             href="http://localhost:{{ scene.port }}/"
+            data-scene-nav
             data-scene-key="{{ scene.key }}"
             data-scene-port="{{ scene.port }}"
             data-scene-accent="{{ scene.accent }}"
@@ -205,6 +207,7 @@
 <div class="cs-navbar__spacer" aria-hidden="true"></div>
 
 <script src="{{ _js_url }}" defer></script>
+<script src="/shared/static/js/cosysim-transitions.js" defer></script>
 <script>
   document.addEventListener('DOMContentLoaded', function () {
     window.cosyNavbar = new CosyNavbar({
