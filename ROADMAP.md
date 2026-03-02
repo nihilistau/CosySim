@@ -1,6 +1,6 @@
 # CosySim Roadmap
 
-> Current: **v0.68** | Last updated: 2026-03-01
+> Current: **v0.69** | Last updated: 2026-03-02
 
 ## Philosophy
 
@@ -43,47 +43,62 @@ The system's ultimate goal: **inhabit itself** — AI agents that maintain, impr
 
 ---
 
-## Active: v0.69 — "The Living System"
+### v0.69 — "The Living System" ✅ COMPLETE
 
-> All the machinery built in v0.68 starts actually running.
-> The world ticks. Content generates. The system benchmarks and improves itself.
+- [x] Track A: World state wired to casino, lounge, tavern, heist, gallery; WorldSim daemon in launcher
+- [x] Track B: Universal phone panel (slide-in SIGNAL drawer on every scene via navbar)
+- [x] Track C: Aria animated portrait — 4 modes, 4 CSS states, SVG face, voice event wiring
+- [x] Track D: ContentEngine seeded, NLM distillation cycle, 34-task scheduler verified
+- [x] Track E: Test isolation — 74 failures → **0 failures, 0 errors** (module-scoped singleton reset)
+- [x] Track F: Router v3 dataset (2,080 examples, 16 classes), finetune cycle, benchmark runner
+- [x] Track G: Docs refreshed — SYSTEM_AUDIT v0.69, INDEX.md, ROADMAP, 4 new guide docs
+- [x] Track H: Scene director beats (per-scene BEAT_CONFIGS), cross-scene relay (4 ripple routes), NLM content generator
+- [x] Tests: **6,921 passing** (up from 6,679)
 
-### Track A: Complete the Living World
-- [ ] Wire `world_state` to casino, lounge, tavern, heist, gallery (only neoncity complete)
-- [ ] Activate WorldSim daemon in launcher
-- [ ] Cross-scene EventBus (arena result → faction shift → lounge gossip)
+---
 
-### Track B: Universal Phone Panel
-- [ ] `cosysim-phone-panel.js` — slide-in drawer from any scene via navbar phone button
-- [ ] Phone panel CSS + HTML template, included in all 14 scene templates
+## Active: v0.70 — "The Character Web"
 
-### Track C: Aria Animated Portrait
-- [ ] CSS `@keyframes` states: idle-breathe, talk-pulse, think-blink, listen-glow
-- [ ] Mode toggle: floating-widget → messenger → voice-call → full-portrait
-- [ ] Wire to VoiceManager events (speaking/done/listening → CSS state classes)
+> The scenes are alive and ticking. Now make them worth living in.
+> Deep character interactions, real story arcs, faction politics, economy loops,
+> and a first-class finetuning cycle that produces models the system actually uses.
 
-### Track D: Self-Improvement Activation
-- [ ] NLM TeacherPipeline → seed ContentEngine pools for all 10 content scenes
-- [ ] 10-stage QA distillation cycle → 2,000+ Q&A pairs in Nexus
-- [ ] Verify all 27+ scheduler tasks firing; add `world_sim_tick` + `director_tick`
+### Track A: Scene Gameplay Deepening
+- [ ] All 9 active scenes get deeper game loops — real win/lose states, progression, rewards
+- [ ] Economy fully wired: EconomyManager drives prices, faction bonuses, scene-specific events
+- [ ] ConsequenceStore surfaced in UI — past decisions shown, future consequences telegraphed
+- [ ] Story arc system: 3-act arcs per scene, NLM-generated, tracked in CharacterMemory
 
-### Track E: Test Isolation Fix
-- [ ] `SKILL_REGISTRY.reset()` + conftest autouse fixture
-- [ ] Target: 0 failures, 0 errors in full suite (6,679+ clean)
+### Track B: Character Relationship Web
+- [ ] Character relationship graph: CharacterMemory stores per-character opinion scores
+- [ ] NPC reaction system: characters respond differently based on relationship/reputation
+- [ ] Faction alignment visible in scene UI — player standing with each faction
+- [ ] Character backstory generation via NLM, stored in Nexus, surfaced on hover/inspect
 
-### Track F: Router V3 Finetuning
-- [ ] 16-class dataset (2,000+ examples) via TeacherPipeline
-- [ ] Finetune Qwen3-0.6B, benchmark, auto-promote if improved
+### Track C: First Live Finetuning Cycle
+- [ ] Run router_v3 finetune job on Qwen3-0.6B (FinetuneOrchestrator.start_job)
+- [ ] Auto-benchmark vs rule_predictor baseline
+- [ ] Auto-promote to ModelRegistry if improved; swap into InferenceRouter
+- [ ] Log result in Nexus; scheduler runs weekly thereafter
 
-### Track G: Documentation Refresh
-- [ ] New docs: WORLD_SYSTEM.md, ECONOMY_GUIDE.md, ARENA_GUIDE.md, CONTENT_GUIDE.md
-- [ ] SYSTEM_AUDIT.md v0.68 — honest A++ assessment
-- [ ] INDEX.md and ROADMAP.md up to date
+### Track D: Voice + TTS Hardening
+- [ ] Verify TTS works in all 9 scenes (Piper / Orpheus / Qwen3 backends)
+- [ ] Global TTS/STT on/off toggle in admin overlay + persisted to localStorage
+- [ ] Voice profile per character (pitch, speed, backend stored in CharacterMemory)
+- [ ] STT input on all scenes with push-to-talk mode
 
-### Track H: Scene Intelligence
-- [ ] Director scheduler task — SceneDirector.tick() every 5 min per active scene
-- [ ] NLM-generated content pools (dialogue, quests, arcs)
-- [ ] Cross-scene character travel skeleton
+### Track E: Document Overhaul
+- [ ] Full documentation pass: update all 26 docs to v0.69 reality
+- [ ] New: SCENE_GUIDE.md (per-scene game mechanics reference)
+- [ ] New: CHARACTER_SYSTEM.md (memory, relationships, arcs)
+- [ ] New: FINETUNING_GUIDE.md (end-to-end from dataset to live router)
+- [ ] SYSTEM_AUDIT.md → v0.70 honest grade
+
+### Track F: Nexus Deepening
+- [ ] Seed Nexus with per-scene character lore, faction descriptions, world lore
+- [ ] NLM weekly scene-lore seeder (scheduler task) — 50+ entries per cycle
+- [ ] Nexus search exposed in admin overlay (live scene-side search panel)
+- [ ] All scene skills query Nexus for context before responding
 
 ---
 
@@ -93,7 +108,7 @@ The system's ultimate goal: **inhabit itself** — AI agents that maintain, impr
 2. **Nexus as truth** — Prompts, rules, configurations, session history, and experiment results live in Nexus
 3. **NLM-first** — Research, analysis, and knowledge generation go through NotebookLM (free Gemini) before LMStudio
 4. **Local-first** — No cloud dependencies. LMStudio, ChromaDB, ComfyUI, TTS all run locally
-5. **Test-driven** — Every feature gets tests. Target: 6,000+ tests post-v0.68
+5. **Test-driven** — Every feature gets tests. 6,921 passing at v0.69
 6. **Scene independence** — Scenes are self-contained. Adding a scene shouldn't break others
 7. **Agent freedom within rails** — Governance pipeline enforces consistency without killing creativity
 8. **Profile-aware** — Conversation analyzer builds persistent user profile; all agents use it
@@ -271,40 +286,6 @@ The system's ultimate goal: **inhabit itself** — AI agents that maintain, impr
 - [x] 28 scheduler builtin tasks, 206 skills across 22 packs
 - [x] 5,582 tests across 186 files
 
----
-
-## v0.66 — The Living Loop (Next)
-
-- [ ] **First Finetuning Cycle** — generate router_v2 training data via TeacherPipeline, finetune Qwen3-0.6B as router, benchmark, auto-promote
-- [ ] **router-finetune-cycle scheduler task** (28 → 30 tasks) — weekly end-to-end finetuning loop
-- [ ] **Conversation Profile Activation** — run ConversationAnalyzer against real session history (lookback_sessions param), bootstrap UserProfileStore with name/prefs/tech stack
-- [ ] **Profile API routes** — GET/POST /api/user-profile in Command Center, profile context injection into PhoneAssistant
-- [ ] **Master Control Panel redesign** — sidebar navigation, glassmorphism design system, dedicated pages: Assistant (TTS/STT/avatar/mic), Training dashboard (jobs/registry/benchmarks), Knowledge panel (nexus stats/search/notebooks), Profile page, System page
-- [ ] **Assistant Panel** — full chat canvas, TTS backend selection (Piper/Orpheus/Qwen3), STT selection (3 backends), file upload, avatar frame (static/animated/video)
-
-### v0.67+ — Advanced Features
-
-**Multi-agent orchestration:**
-- [ ] Agent teams with role specialization
-- [ ] Debate/consensus protocols
-- [ ] Agent-to-agent teaching (knowledge transfer)
-- [ ] Emergent behavior detection and logging
-
-**Production readiness:**
-- [ ] Scene packaging (export/import scenes as packages)
-- [ ] Remote agent support (agents running on different machines)
-- [ ] Performance profiling and bottleneck detection
-- [ ] Plugin marketplace (share skills, interceptors, scenes)
+*(v0.66–v0.68 details above in Completed section)*
 
 ---
-
-## Architecture Principles
-
-1. **Everything through MCP** — Skills, state, events, and cross-system communication all go through the MCP pipeline
-2. **Nexus as truth** — Prompts, rules, configurations, session history, and experiment results live in Nexus
-3. **Local-first** — No cloud dependencies. LMStudio, ChromaDB, ComfyUI, TTS all run locally
-4. **Test-driven** — Every feature gets tests. Current: 4,827 CosySim tests
-5. **Scene independence** — Scenes are self-contained. Adding a scene shouldn't break others
-6. **Agent freedom within rails** — Governance pipeline enforces consistency without killing creativity
-7. **Nexus-first workflow** — Search Nexus before coding, store decisions after. Audit results always go to Nexus
-8. **Profile-aware agents** — Conversation analyzer builds a persistent user profile; agents use it for personalised, context-aware interactions
