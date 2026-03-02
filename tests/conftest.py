@@ -128,3 +128,21 @@ def _reset_singletons_per_module():
     _wipe_singletons()
     yield
     _wipe_singletons()
+
+
+# ──── Optional-dependency skip markers ───────────────────────────────────────
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list) -> None:  # type: ignore[type-arg]
+    """Auto-skip tests that require optional heavy deps (torch, etc.) when unavailable."""
+    try:
+        import torch  # noqa: F401
+        _torch_ok = True
+    except ImportError:
+        _torch_ok = False
+
+    if not _torch_ok:
+        skip_torch = pytest.mark.skip(reason="torch not installed — skipping GPU/native-TTS tests")
+        _torch_test_files = {"test_orpheus_native.py"}
+        for item in items:
+            if Path(item.fspath).name in _torch_test_files:
+                item.add_marker(skip_torch)
