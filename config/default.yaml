@@ -609,3 +609,20 @@ codespace:
   default_repo: "nihilistau/CosySim"
   default_machine: "standardLinux32gb"
   idle_timeout: "30m"
+
+
+# NPC Scheduler — autonomous NPC world activity
+npc_scheduler:
+  enabled: true
+  tick_interval: 60
+  max_npcs_per_tick: 3
+  fallback_npcs:
+    - lola
+    - viktor
+    - aria
+  activity_pool:
+    - "tending to business in the area"
+    - "having a quiet moment to themselves"
+    - "browsing nearby goods"
+    - "chatting with someone"
+    - "lost in thought"
