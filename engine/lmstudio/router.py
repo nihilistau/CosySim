@@ -320,10 +320,9 @@ class InferenceRouter:
         Rules:
         1. Explicit tier in request → use it
         2. Agent affinity (warm KV cache) → prefer same tier
-        3. task_type == "classify" or "route" → T3 router
-        4. task_type == "act" → T1 GPU (needs reasoning)
-        5. priority == BACKGROUND and no tools → T2 CPU
-        6. Everything else → T1 GPU
+        3. RouterV3 ML prediction → use if available (with rule fallback)
+        4. Rule-based fallback: task_type classify/route → T3, act/tools → T1,
+           BACKGROUND without tools → T2, else T1
         """
         if request.tier is not None:
             return request.tier
@@ -333,6 +332,25 @@ class InferenceRouter:
             affinity_tier = self._agent_affinity[request.agent_id]
             if self.has_available_slot(affinity_tier):
                 return affinity_tier
+
+        # RouterV3 ML-based prediction
+        try:
+            from engine.lmstudio.router_v3_client import get_router_v3_client
+            v3 = get_router_v3_client()
+            has_tools = bool(request.tools)
+            has_sys = bool(request.system_prompt)
+            tier_name = v3.predict_tier(
+                request.task_type,
+                request.priority.name.lower(),
+                has_tools=has_tools,
+                has_system_prompt=has_sys,
+            )
+            tier = Tier(tier_name)
+            # Validate selected tier is enabled and has slots
+            if self._tiers.get(tier, TierConfig(tier)).enabled:
+                return tier
+        except Exception:
+            pass  # fall through to rule-based
 
         task = request.task_type
 
