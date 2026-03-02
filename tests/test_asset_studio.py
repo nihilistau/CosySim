@@ -510,3 +510,125 @@ class TestAssetStudioSkills:
             import content.scenes.asset_studio.asset_studio_skills as mod
             assert hasattr(mod, "studio_health")
 
+
+# ── Inject to Scene routes ────────────────────────────────────────────────────
+
+@pytest.fixture()
+def inject_app(tmp_path):
+    """Minimal Flask app with inject-to-scene routes for testing."""
+    import json as _json
+    from flask import Flask, jsonify, request as flask_request
+    import shutil
+
+    app = Flask("test_inject_routes")
+    app.config["TESTING"] = True
+    app.config["SECRET_KEY"] = "test"
+
+    # Pre-create a fake asset in tmp images dir
+    img_dir = tmp_path / "data" / "asset_studio" / "images"
+    img_dir.mkdir(parents=True, exist_ok=True)
+    fake_png = img_dir / "test_img.png"
+    fake_png.write_bytes(b"\x89PNG\r\n\x1a\n")  # minimal PNG header
+
+    # Patch Path("data/...") calls to use tmp_path
+    import os
+    original_cwd = os.getcwd()
+
+    @app.route("/api/scenes/list")
+    def api_scenes_list():
+        scenes = [
+            {"id": "bedroom", "name": "THE PENTHOUSE", "port": 5555},
+            {"id": "phone", "name": "SIGNAL", "port": 5556},
+        ]
+        return jsonify({"status": "ok", "scenes": scenes})
+
+    @app.route("/api/inject_to_scene", methods=["POST"])
+    def api_inject_to_scene():
+        data = flask_request.get_json() or {}
+        scene = data.get("scene", "")
+        asset_url = data.get("asset_url", "")
+        image_type = data.get("image_type", "background")
+        filename = data.get("filename", f"{image_type}_injected.png")
+
+        if not scene or not asset_url:
+            return jsonify({"status": "error", "message": "scene and asset_url are required"}), 400
+
+        source_filename = Path(asset_url).name
+        source_path = img_dir / source_filename
+
+        if not source_path.exists():
+            return jsonify({"status": "error", "message": f"Asset not found: {source_filename}"}), 404
+
+        target_dir = tmp_path / "content" / "scenes" / scene / "static" / "img"
+        target_dir.mkdir(parents=True, exist_ok=True)
+        target_path = target_dir / filename
+        shutil.copy2(str(source_path), str(target_path))
+
+        return jsonify({"status": "ok", "scene": scene, "url": f"/scenes/{scene}/static/img/{filename}", "filename": filename})
+
+    return app.test_client(), tmp_path
+
+
+class TestInjectToSceneRoutes:
+    def test_scenes_list_returns_scenes(self, inject_app):
+        client, _ = inject_app
+        res = client.get("/api/scenes/list")
+        assert res.status_code == 200
+        data = json.loads(res.data)
+        assert data["status"] == "ok"
+        assert len(data["scenes"]) >= 2
+        ids = [s["id"] for s in data["scenes"]]
+        assert "bedroom" in ids
+
+    def test_inject_missing_params(self, inject_app):
+        client, _ = inject_app
+        res = client.post("/api/inject_to_scene",
+                          data=json.dumps({}),
+                          content_type="application/json")
+        assert res.status_code == 400
+        data = json.loads(res.data)
+        assert data["status"] == "error"
+
+    def test_inject_asset_not_found(self, inject_app):
+        client, _ = inject_app
+        res = client.post("/api/inject_to_scene",
+                          data=json.dumps({"scene": "bedroom", "asset_url": "/missing.png"}),
+                          content_type="application/json")
+        assert res.status_code == 404
+        data = json.loads(res.data)
+        assert data["status"] == "error"
+
+    def test_inject_success(self, inject_app):
+        client, tmp_path = inject_app
+        res = client.post("/api/inject_to_scene",
+                          data=json.dumps({
+                              "scene": "bedroom",
+                              "asset_url": "/some/path/test_img.png",
+                              "image_type": "background",
+                          }),
+                          content_type="application/json")
+        assert res.status_code == 200
+        data = json.loads(res.data)
+        assert data["status"] == "ok"
+        assert data["scene"] == "bedroom"
+        assert "background_injected.png" in data["filename"]
+        # File was copied
+        target = tmp_path / "content" / "scenes" / "bedroom" / "static" / "img" / "background_injected.png"
+        assert target.exists()
+
+    def test_inject_custom_filename(self, inject_app):
+        client, tmp_path = inject_app
+        res = client.post("/api/inject_to_scene",
+                          data=json.dumps({
+                              "scene": "phone",
+                              "asset_url": "/some/path/test_img.png",
+                              "image_type": "portrait",
+                              "filename": "aria_portrait.png",
+                          }),
+                          content_type="application/json")
+        assert res.status_code == 200
+        data = json.loads(res.data)
+        assert data["filename"] == "aria_portrait.png"
+        target = tmp_path / "content" / "scenes" / "phone" / "static" / "img" / "aria_portrait.png"
+        assert target.exists()
+
