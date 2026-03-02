@@ -23,24 +23,31 @@ window.portraitManager = {
   _nameEl: null,
   _moodEl: null,
   _placeholder: null,
+  _backstoryPanel: null,
+  _backstoryText: null,
+  _backstoryClose: null,
 
   /**
    * Initialize the portrait manager.
    * Locates DOM nodes and wires Socket.IO listeners if available.
    */
   init() {
-    this._overlay     = document.getElementById('cs-portrait-overlay');
-    this._imgArea     = document.getElementById('cs-portrait-img-area');
-    this._imgEl       = document.getElementById('cs-portrait-img');
-    this._nameEl      = document.getElementById('cs-portrait-name');
-    this._moodEl      = document.getElementById('cs-portrait-mood');
-    this._placeholder = this._overlay
+    this._overlay       = document.getElementById('cs-portrait-overlay');
+    this._imgArea       = document.getElementById('cs-portrait-img-area');
+    this._imgEl         = document.getElementById('cs-portrait-img');
+    this._nameEl        = document.getElementById('cs-portrait-name');
+    this._moodEl        = document.getElementById('cs-portrait-mood');
+    this._backstoryPanel = document.getElementById('cs-backstory-panel');
+    this._backstoryText  = document.getElementById('cs-backstory-text');
+    this._backstoryClose = document.getElementById('cs-backstory-close');
+    this._placeholder   = this._overlay
       ? this._overlay.querySelector('.cs-portrait__placeholder')
       : null;
 
     if (!this._overlay) return;
 
     this._bindSocketEvents();
+    this._bindBackstoryEvents();
   },
 
   /**
@@ -115,6 +122,45 @@ window.portraitManager = {
     if (!messageText || typeof messageText !== 'string') return null;
     const match = messageText.match(/\[MOOD:(\w+)\]/i);
     return match ? match[1].toLowerCase() : null;
+  },
+
+  /**
+   * Fetch backstory for the named character from the server.
+   * @param {string} charName
+   */
+  _fetchBackstory(charName) {
+    if (!charName || !this._backstoryPanel || !this._backstoryText) return;
+    fetch(`/api/character/backstory/${encodeURIComponent(charName)}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!data) return;
+        const text = data.backstory || data.content || data.text || '';
+        if (!text) return;
+        this._backstoryText.textContent = text;
+        this._backstoryPanel.classList.add('is-visible');
+      })
+      .catch(() => {});
+  },
+
+  /**
+   * Bind backstory close button and show-backstory events.
+   */
+  _bindBackstoryEvents() {
+    if (this._backstoryClose) {
+      this._backstoryClose.addEventListener('click', () => {
+        if (this._backstoryPanel) {
+          this._backstoryPanel.classList.remove('is-visible');
+        }
+      });
+    }
+
+    // Double-click portrait image area to show backstory
+    if (this._imgArea) {
+      this._imgArea.addEventListener('dblclick', () => {
+        const name = this._nameEl ? this._nameEl.textContent : '';
+        if (name) this._fetchBackstory(name);
+      });
+    }
   },
 
   /**

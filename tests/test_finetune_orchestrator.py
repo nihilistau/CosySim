@@ -102,7 +102,7 @@ class TestFinetuneOrchestrator:
         assert "unsloth" in script
         assert "SFTTrainer" in script
         assert "qa_evaluator" in script
-        assert str(dataset_file) in script
+        assert str(dataset_file).replace('\\', '/') in script.replace('\\', '/')
 
     def test_default_config_small_model(self, orch):
         cfg = orch._default_config("Qwen/Qwen2.5-0.5B-Instruct")

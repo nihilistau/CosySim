@@ -154,3 +154,48 @@
 .cs-portrait[data-mood="neutral"] { --portrait-current-mood: var(--mood-neutral); }
 .cs-portrait[data-mood="anxious"] { --portrait-current-mood: var(--mood-anxious); }
 .cs-portrait[data-mood="excited"] { --portrait-current-mood: var(--mood-excited); }
+
+/* ── Backstory panel ── */
+.cs-backstory-panel {
+  display: none;
+  margin-top: 6px;
+  background: var(--cs-glass-bg, rgba(10, 10, 20, 0.85));
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--cs-glass-border, rgba(255, 255, 255, 0.12));
+  border-radius: 10px;
+  padding: 10px;
+  position: relative;
+  pointer-events: auto;
+  width: 148px;
+  box-sizing: border-box;
+}
+
+.cs-backstory-panel.is-visible {
+  display: block;
+}
+
+.cs-backstory-text {
+  font-size: 0.65rem;
+  line-height: 1.5;
+  color: var(--cs-text-secondary, #94a3b8);
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.cs-backstory-close {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  background: none;
+  border: none;
+  color: var(--cs-text-secondary, #94a3b8);
+  font-size: 0.65rem;
+  cursor: pointer;
+  padding: 2px 4px;
+  line-height: 1;
+}
+
+.cs-backstory-close:hover {
+  color: var(--cs-text-primary, #ffffff);
+}

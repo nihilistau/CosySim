@@ -115,6 +115,11 @@ def _wipe_singletons() -> None:
         _m._WORLD_SIM = None
     except Exception:
         pass
+    try:
+        import engine.world.player_state as _m
+        _m._PLAYER_STATE = None
+    except Exception:
+        pass
 
 
 @pytest.fixture(autouse=True, scope="module")
