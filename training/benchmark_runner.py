@@ -298,6 +298,7 @@ class BenchmarkRunner:
         instructions: Dict[str, str] = {
             "qa_evaluator": "Classify as ESSENTIAL, USEFUL, or SKIP:",
             "router_v2": "Route this request to the correct handler (one word):",
+            "router_v3": "Classify this request into exactly one category. Respond with one word only:",
             "syntax_fixer": "Fix the syntax error. Return only the corrected code:",
             "conversation_analyzer": "Extract user facts as JSON:",
             "knowledge_synthesizer": "Synthesize a concise answer from the context:",
@@ -344,12 +345,49 @@ class BenchmarkRunner:
                 fixed += "}" * opens
             return fixed
 
+        def predict_router_v3(inp: str) -> str:
+            inp_lower = inp.lower()
+            if any(w in inp_lower for w in ["hi", "hello", "hey", "chat", "talk"]):
+                return "small_talk"
+            if any(w in inp_lower for w in ["attack", "move", "fight", "shoot", "dodge", "defend", "craft", "build"]):
+                return "game_action"
+            if any(w in inp_lower for w in ["story", "scene", "narrative", "describe", "tell", "wrote", "happened"]):
+                return "story_narrative"
+            if any(w in inp_lower for w in ["feel", "emotion", "mood", "happy", "sad", "angry", "scared", "love"]):
+                return "character_emotion"
+            if any(w in inp_lower for w in ["world", "lore", "faction", "history", "who rules", "government"]):
+                return "world_query"
+            if any(w in inp_lower for w in ["use skill", "activate", "cast", "execute", "run skill"]):
+                return "skill_call"
+            if any(w in inp_lower for w in ["remember", "recall", "last time", "before", "previous"]):
+                return "memory_recall"
+            if any(w in inp_lower for w in ["go to", "travel", "move to", "enter", "leave", "exit", "next scene"]):
+                return "scene_transition"
+            if any(w in inp_lower for w in ["save", "load", "backup", "config", "setting", "system", "admin"]):
+                return "system_command"
+            if any(w in inp_lower for w in ["write", "create", "generate", "compose", "design", "invent"]):
+                return "creative_generation"
+            if any(w in inp_lower for w in ["what is", "how do", "explain", "define", "look up", "search"]):
+                return "information_lookup"
+            if any(w in inp_lower for w in ["help me", "feeling down", "support", "advice", "comfort"]):
+                return "emotional_support"
+            if any(w in inp_lower for w in ["sex", "explicit", "nude", "mature", "xxx", "adult"]):
+                return "adult_content"
+            if any(w in inp_lower for w in ["battle", "war", "fight report", "combat", "troops"]):
+                return "combat_narrative"
+            if any(w in inp_lower for w in ["buy", "sell", "trade", "market", "price", "pay", "coins", "credits"]):
+                return "economic_action"
+            if any(w in inp_lower for w in ["investigate", "clue", "evidence", "mystery", "suspect", "case"]):
+                return "investigation"
+            return "information_lookup"
+
         def predict_generic(inp: str) -> str:
             return inp
 
         predictors = {
             "qa_evaluator": predict_qa,
             "router_v2": predict_router,
+            "router_v3": predict_router_v3,
             "syntax_fixer": predict_syntax,
         }
         return predictors.get(model_type, predict_generic)

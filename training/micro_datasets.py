@@ -23,7 +23,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
-MODELS = ["qa_evaluator", "conversation_analyzer", "syntax_fixer", "router_v2", "knowledge_synthesizer"]
+MODELS = ["qa_evaluator", "conversation_analyzer", "syntax_fixer", "router_v2", "router_v3", "knowledge_synthesizer"]
 _DATASET_DIR = Path("training/datasets")
 _DATASET_DIR.mkdir(parents=True, exist_ok=True)
 
