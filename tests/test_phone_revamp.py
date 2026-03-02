@@ -62,12 +62,12 @@ def _stub_heavy_deps(monkeypatch):
             pass
 
     base_mod.BaseScene = _FakeBase
-    sys.modules["engine.scenes.base_scene"] = base_mod
+    monkeypatch.setitem(sys.modules, "engine.scenes.base_scene", base_mod)
 
     # Stub content.shared
     shared_mod = types.ModuleType("content.shared")
     shared_mod.register_shared_assets = MagicMock()
-    sys.modules["content.shared"] = shared_mod
+    monkeypatch.setitem(sys.modules, "content.shared", shared_mod)
 
     # Stub Flask + SocketIO
     flask_mod = types.ModuleType("flask")
@@ -76,13 +76,13 @@ def _stub_heavy_deps(monkeypatch):
     flask_mod.request = MagicMock()
     flask_mod.render_template = MagicMock(return_value="<html/>")
     flask_mod.Response = MagicMock()
-    sys.modules["flask"] = flask_mod
+    monkeypatch.setitem(sys.modules, "flask", flask_mod)
 
     socketio_mod = types.ModuleType("flask_socketio")
     socketio_mod.SocketIO = MagicMock(return_value=MagicMock())
     socketio_mod.emit = MagicMock()
     socketio_mod.join_room = MagicMock()
-    sys.modules["flask_socketio"] = socketio_mod
+    monkeypatch.setitem(sys.modules, "flask_socketio", socketio_mod)
 
     # Stub engine.skills.skill
     skill_mod = types.ModuleType("engine.skills.skill")
@@ -100,7 +100,7 @@ def _stub_heavy_deps(monkeypatch):
 
     skill_mod.skill = _skill_decorator
     skill_mod.SkillCategory = _FakeCategory
-    sys.modules["engine.skills.skill"] = skill_mod
+    monkeypatch.setitem(sys.modules, "engine.skills.skill", skill_mod)
 
     # Stub investigation board
     inv_mod = types.ModuleType("engine.mechanics.investigation")
@@ -123,19 +123,19 @@ def _stub_heavy_deps(monkeypatch):
         EVIDENCE = "evidence"
 
     inv_mod.ClueType = _FakeClueType
-    sys.modules["engine.mechanics.investigation"] = inv_mod
+    monkeypatch.setitem(sys.modules, "engine.mechanics.investigation", inv_mod)
 
     # Stub event bus
     bus_mod = types.ModuleType("engine.events.event_bus")
     bus_mod.get_event_bus = MagicMock(return_value=MagicMock())
-    sys.modules["engine.events.event_bus"] = bus_mod
+    monkeypatch.setitem(sys.modules, "engine.events.event_bus", bus_mod)
 
     # Stub LMStudio client
     lms_mod = types.ModuleType("engine.lmstudio.lms_client")
     lms_mod.get_lms_client = MagicMock(return_value=MagicMock(
         chat=MagicMock(return_value="Mocked LLM reply")
     ))
-    sys.modules["engine.lmstudio.lms_client"] = lms_mod
+    monkeypatch.setitem(sys.modules, "engine.lmstudio.lms_client", lms_mod)
 
     yield
 

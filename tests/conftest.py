@@ -38,6 +38,27 @@ def event_chain(temp_db):
     return EventChain(db=temp_db)
 
 
+# Modules that tests may replace with fakes; restore originals after each test.
+_PROTECTED_MODULES = [
+    "flask",
+    "flask_socketio",
+    "engine.world.world_state",
+    "engine.world.world_sim",
+]
+
+
+@pytest.fixture(autouse=True)
+def _restore_protected_modules():
+    """Restore sys.modules entries that test isolation bugs may have replaced."""
+    saved = {k: sys.modules.get(k) for k in _PROTECTED_MODULES}
+    yield
+    for k, v in saved.items():
+        if v is None:
+            sys.modules.pop(k, None)
+        else:
+            sys.modules[k] = v
+
+
 @pytest.fixture
 def mock_config():
     """Return a dict-based mock config that mimics get_config()."""
@@ -51,3 +72,59 @@ def mock_config():
     mock = MagicMock()
     mock.get = lambda key, default=None: defaults.get(key, default)
     return mock
+
+
+def _wipe_singletons() -> None:
+    """Set all stateful module-level singletons back to None.
+
+    SKILL_REGISTRY is intentionally excluded — @skill decorators fire only
+    once at import time and the registry is safe to share across modules.
+    """
+    try:
+        import engine.mcp.framework as _m
+        _m._FW_INSTANCE = None
+    except Exception:
+        pass
+    try:
+        import engine.mcp.character_registry as _m
+        _m._REGISTRY_INSTANCE = None
+    except Exception:
+        pass
+    try:
+        import engine.mcp.dialog_system as _m
+        _m._DIALOG_INSTANCE = None
+    except Exception:
+        pass
+    try:
+        import engine.mcp.scene_rules_engine as _m
+        _m._ENGINE_INSTANCE = None
+    except Exception:
+        pass
+    try:
+        import engine.mcp.scene_state as _m
+        _m._SSM_INSTANCE = None
+    except Exception:
+        pass
+    try:
+        import engine.world.world_state as _m
+        _m._WORLD_STATE = None
+    except Exception:
+        pass
+    try:
+        import engine.world.world_sim as _m
+        _m._WORLD_SIM = None
+    except Exception:
+        pass
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _reset_singletons_per_module():
+    """Wipe stateful singletons before and after each test module.
+
+    This prevents cross-module contamination where module A creates real
+    singleton objects that module B's mocked tests inadvertently pick up.
+    Within a single test module, singletons persist normally.
+    """
+    _wipe_singletons()
+    yield
+    _wipe_singletons()

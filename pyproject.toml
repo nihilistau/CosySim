@@ -391,6 +391,7 @@ python_files = "test_*.py"
 python_classes = "Test*"
 python_functions = "test_*"
 addopts = "-v --strict-markers --basetemp=tests/tmp"
+norecursedirs = ["tests/tmp", ".git", "__pycache__", "*.egg-info", "node_modules", "unsloth_compiled_cache", "backups"]
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: marks tests as integration tests",
