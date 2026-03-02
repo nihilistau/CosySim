@@ -2,6 +2,33 @@
 
 All notable changes to CosySim are documented here.
 
+## v0.69b Documentation Overhaul — March 2026
+
+### New Documentation
+- **docs/SCENE_GUIDE.md**: Per-scene game mechanics reference for all 9 active scenes —
+  THE PENTHOUSE, SIGNAL, THE VELVET PIT, THE RUSTY ANCHOR, CLUB NOIR, THE OBSCURA,
+  THE COLOSSEUM, THE SHATTERED THRONE, NEON CITY. Covers emotion stats, gate systems,
+  NPCs, props, economy integration, and cross-scene systems.
+- **docs/CHARACTER_SYSTEM.md**: CharacterMemory, ReputationManager, relationship lifecycle,
+  emotion model (10 stats 0–100), speech patterns, `PersonalityTemplate` reference,
+  interceptor priorities, Nexus storage layout.
+- **docs/FINETUNING_GUIDE.md**: End-to-end training pipeline guide: dataset generation →
+  `MicroDatasetManager` → `FinetuneOrchestrator` (Unsloth QLoRA) → `ModelRegistry` →
+  `BenchmarkRunner` → auto-promote → `InferenceRouter`. Includes router_v3 facts
+  (2,080 examples, 16 classes, 90/10 train/val split), scheduler automation table,
+  base model aliases, and full troubleshooting section.
+
+### Updated Documentation
+- **docs/INDEX.md**: v0.69b header — 6,921 tests, 214 MCP tools, 21 skill packs (188+ skills),
+  9 active scenes + 5 system scenes. Added Quick Facts table, scene port table, engine module list,
+  new doc entries (CHARACTER_SYSTEM, SCENE_GUIDE, FINETUNING_GUIDE).
+- **docs/SYSTEM_AUDIT.md**: Full v0.69b audit replacing v0.68 content. Grade: A+.
+  7-subsystem breakdown with honest gap analysis. Key upgrades: test suite now 6,921/0
+  (zero failures), scheduler at 34 builtin tasks, router v3 dataset complete (2,080 examples),
+  training pipeline upgraded to A from B+.
+
+---
+
 ## v0.69 "The Living System" — March 2026
 
 ### New
