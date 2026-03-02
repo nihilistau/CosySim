@@ -1,6 +1,6 @@
 # CosySim
 
-> v0.73b — "The Living Nexus" — Multi-scene AI simulation framework
+> v0.75 — "NEON CITY" — Multi-scene AI simulation framework
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -9,9 +9,9 @@
 
 ## Overview
 
-CosySim is a local-first AI simulation framework that orchestrates virtual agents across 18 interactive scenes. Each scene is a self-contained web application with its own agents, state machine, game logic, and skill pack — from a messaging app with mood tracking to a LitRPG with dual-agent orchestration, a cyberpunk board game, and an AI coding sandbox. Everything runs locally against LMStudio on an NVIDIA GPU.
+CosySim is a local-first AI simulation framework that orchestrates virtual agents across **15 interactive scenes**. Each scene is a self-contained web application with its own agents, state machine, game logic, and skill pack — from a messaging app with mood tracking to a LitRPG with dual-agent orchestration, a cyberpunk board game, an AI coding sandbox, and **THE GRID** — a four-zone underground marketplace powered by a Universal Neon HUD and living economy engine. Everything runs locally against LMStudio on an NVIDIA GPU.
 
-The core of CosySim is its **Model Context Protocol (MCP) pipeline**. Agents call 188+ skills during inference for memory retrieval, media generation, game mechanics, and state mutation. A 25-interceptor governance pipeline wraps every LLM call, injecting context, enforcing personality constraints, syncing state, and shaping responses. The **Nexus Knowledge System** provides central knowledge management with an NLM intelligence layer, FTS5 search, prompt versioning, Q&A distillation, and a live news intelligence pipeline.
+The core of CosySim is its **Model Context Protocol (MCP) pipeline**. Agents call 198+ skills during inference for memory retrieval, media generation, game mechanics, and state mutation. A 25-interceptor governance pipeline wraps every LLM call, injecting context, enforcing personality constraints, syncing state, and shaping responses. The **Universal Neon HUD** surfaces player credits, reputation, heat, and faction standings as a live 32px strip on all 15 scenes, driven by the `PlayerState` singleton and Socket.IO. The **Nexus Knowledge System** provides central knowledge management with an NLM intelligence layer, FTS5 search, prompt versioning, Q&A distillation, and a live news intelligence pipeline.
 
 CosySim is a meta-system — a playground for designing, testing, and evolving AI agent interactions. Router training data is captured automatically during inference for fine-tuning a 270M routing model. The framework is built for builders who want to experiment with multi-agent orchestration and tool-augmented LLMs without cloud dependencies.
 
@@ -22,9 +22,9 @@ User / Browser
       │
       ▼
 ┌──────────────┐    ┌──────────────┐    ┌──────────────┐
-│  18 Scenes   │───▶│  188+ Skills │───▶│ MCP Pipeline │
+│  15 Scenes   │───▶│  198+ Skills │───▶│ MCP Pipeline │
 │  Flask/      │    │  @skill deco │    │ 25 intercept │
-│  SocketIO    │    │  21 packs    │    │ governance   │
+│  SocketIO    │    │  22 packs    │    │ governance   │
 └──────┬───────┘    └──────────────┘    └──────┬───────┘
        │                                       │
        ▼                                       ▼
@@ -43,7 +43,16 @@ User / Browser
 
 ## Features
 
-**The Living Nexus** (v0.73b) — Latest
+**NEON CITY** (v0.75) — Latest
+- **Universal Neon HUD**: `PlayerState` singleton (credits, reputation, heat, 6 faction standings) injected as a 32px strip into all 15 scenes via Socket.IO + 30s polling
+- **THE GRID** (scene #15, port 5569): four-zone underground hub — MARKET (Mira/Viktor/Frankie), STATION (SVG city map, 15 travel nodes), DEN (factions, quests), BROKER (intel feed, ghost terminal)
+- **70+ Rich world events** (`neon_city_events.py`): `NPC_ACTIONS_RICH`, `WORLD_EVENTS_RICH`, `FACTION_EVENTS_RICH`, `ECONOMY_EVENTS`, `GHOST_MESSAGES_RICH`
+- **Economy tick** (90s): WorldSim fires `ECONOMY_EVENTS` → `PlayerState` → Socket.IO `hud_update` + `economy_tick`
+- **World skills pack** (10 skills): `get_player_state_info`, `earn_credits`, `spend_credits`, `adjust_heat`, `get_faction_standings`, and more
+- **Scene polish**: Casino VIP gate, NeonCity district ticker, Phone ghost terminal, Bedroom world widget
+- **22 skill packs · 198+ skills · 15 scenes**
+
+**The Living Nexus** (v0.73b)
 - News intelligence pipeline: RSS fetch 3×/day, 12 sources, 4 categories, NLM distillation, Intel Hub ticker, Phone news feed
 - World event cascade: WorldSim → scene fan-out with 3-tier delivery (EventBus → Socket.IO → MCP poll)
 - Asset Studio inject-to-scene: push generated assets directly to running scene UIs
@@ -51,7 +60,7 @@ User / Browser
 - Per-scene ambient animations: 9 distinct CSS keyframe effects + canvas particle engine
 - Portrait overlay: mood-reactive character portrait panel on every scene
 - Scene transitions: 200ms fade-through-black between scenes
-- System audit grade: **A++** (first A++ in project history)
+- System audit grade: **A++**
 - **7,500+ tests passing**
 
 **The Asset Studio** (v0.72b)
@@ -67,14 +76,16 @@ User / Browser
 - Universal chrome: navbar_v2, admin_overlay (8-tab), Aria floating widget
 
 **Simulation Engine**
-- 18 scenes (9 game + 5 utility/support + 4 system) with independent agents, state, and UI
+- 15 scenes (9 game + 5 utility/support + 1 grid hub) with independent agents, state, and UI
+- **Universal Neon HUD**: `PlayerState` singleton — credits, reputation, heat, 6 faction standings live on all scenes
+- **Living world engine**: `WorldSim` economy ticks every 90s, 70+ rich event templates, `EventCascade` 3-tier fan-out
 - Cross-scene agent state persistence (reputation, relationships, achievements, economy)
 - Character system with traits, emotions (0–100), relationships, speech patterns
 
 
 
 **MCP Framework**
-- 195 skills across 21 packs via `@skill` decorator (206 with profile pack)
+- 198+ skills across 22 packs via `@skill` decorator (209 with profile pack)
 - 214 tools exposed via CosySim MCP server (106 main + 108 devtools)
 - 22-interceptor governance pipeline (10 active, pre/post inference)
 - `AgentGovernor` + `InterceptorPipeline` for personality enforcement
@@ -196,6 +207,7 @@ CosySim/
 | Heist — THE SCORE | 5565 | Cooperative multi-agent heist |
 | Command Center | 5566 | System monitoring dashboard |
 | Games — THE ARCADE | 5567 | Multi-game arcade |
+| Grid — THE GRID | 5569 | Underground marketplace, 4 zones, faction hub |
 | Intel Hub — THE BRIEFING ROOM | 5580 | Training, NLM lab, fine-tune, scheduler, profile, backups |
 | Nexus Panel | 5570 | Nexus control interface |
 | Hub — THE TERMINAL | 8500 | Landing page and scene launcher |

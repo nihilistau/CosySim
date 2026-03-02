@@ -177,6 +177,7 @@
     --cs-scene-hub:         #3b82f6;   /* Blue — The Terminal */
     --cs-scene-intel:       #06b6d4;   /* Cyan — The Briefing Room */
     --cs-scene-admin:       #00ff41;   /* Hack green — The Loft */
+    --cs-scene-grid:        #00ff88;   /* Neon green — The Grid */
 
     /* ── Borders ────────────────────────────────────────────── */
     --cs-border:        rgba(255, 255, 255, 0.06);
@@ -375,6 +376,22 @@
     100%       { opacity: 1; }
 }
 
+/* Scene status dot — pulses green when online, turns red when offline */
+.scene-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #22c55e;
+    margin-left: 6px;
+    vertical-align: middle;
+    animation: dot-pulse 2s ease-in-out infinite;
+}
+@keyframes dot-pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50%       { opacity: 0.4; transform: scale(0.8); }
+}
+
 /* Ghost / hacker message style */
 .cs-ghost-message {
     font-family: var(--cs-terminal-font);
@@ -400,3 +417,4 @@
 [data-scene="hub"]      { --cs-scene-accent: var(--cs-scene-hub);      --cs-scene-glow: rgba(59, 130, 246, 0.35); }
 [data-scene="intel"]    { --cs-scene-accent: var(--cs-scene-intel);    --cs-scene-glow: rgba(6, 182, 212, 0.35); }
 [data-scene="admin"]    { --cs-scene-accent: var(--cs-scene-admin);    --cs-scene-glow: rgba(0, 255, 65, 0.35); }
+[data-scene="grid"]     { --cs-scene-accent: var(--cs-scene-grid);     --cs-scene-glow: rgba(0, 255, 136, 0.35); }

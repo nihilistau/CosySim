@@ -1,16 +1,16 @@
 # CosySim Documentation Index
 
-> All project documentation in one place. v0.73b — 7,500+ tests, 214 MCP tools, 21 skill packs (188+ skills), 9 active scenes + 5 system scenes.
+> All project documentation in one place. v0.75 — 7,500+ tests, 214 MCP tools, 22 skill packs (198+ skills), 15 scenes.
 
-## Quick Facts — v0.73b
+## Quick Facts — v0.75
 
 | Metric | Value |
 |--------|-------|
-| Version | **0.73b** (2026) — "The Living Nexus" |
-| Tests passing | **7,500+** across ~195 files |
+| Version | **0.75** (2026) — "NEON CITY" |
+| Tests passing | **7,500+** across ~210 files |
 | MCP tools | **214** |
-| Skill packs | **21 packs · 188+ skills** |
-| Active scenes | **9** (bedroom, phone, lounge, tavern, casino, gallery, arena, realm, neoncity) |
+| Skill packs | **22 packs · 198+ skills** |
+| Active scenes | **10** (bedroom, phone, lounge, tavern, casino, gallery, arena, realm, neoncity, grid) |
 | System scenes | **5** (coders, heist, games, hub, intel_hub) |
 | Scheduler tasks | **39** builtin autonomous tasks |
 | Engine modules (v0.68+) | **13** new living-world modules |
@@ -29,6 +29,7 @@
 | arena | THE COLOSSEUM | 5561 |
 | realm | THE SHATTERED THRONE | 5562 |
 | neoncity | NEON CITY | 5563 |
+| grid | THE GRID | 5569 |
 
 ### System Scene Ports
 
@@ -49,6 +50,10 @@
 ### v0.73 New Modules
 
 `EventCascade` · `NewsPipeline` · `RSSFetcher` · `DedupFilter` · `TuningEngine`
+
+### v0.75 New Modules
+
+`PlayerState` · `NeonCityEvents` · `WorldSkills` · `GridScene` · `GridSkills`
 
 ---
 
@@ -80,12 +85,15 @@
 |-----|-------------|
 | [Asset Studio](ASSET_STUDIO.md) | ComfyUI integration — 15 workflow variants, tuning engine, scene injection, benchmarking |
 | [News System](NEWS_SYSTEM.md) | Automated news ingestion, NLM distillation, Nexus Q&A feeds, Intel Hub ticker |
-| [Scene Guide](SCENE_GUIDE.md) | Per-scene game mechanics — all 9 active scenes |
+| [Scene Guide](SCENE_GUIDE.md) | Per-scene game mechanics — all 10 active scenes |
 | [Scenes Reference](SCENES.md) | All scenes — mechanics, APIs, rules (legacy reference) |
-| [Skills](SKILLS.md) | @skill decorator, 21 built-in packs (188+ skills) |
+| [Skills](SKILLS.md) | @skill decorator, 22 built-in packs (198+ skills) |
 | [Admin Guide](ADMIN_GUIDE.md) | Admin panel pages and operations |
 | [System Control Panel](SYSTEM_CONTROL.md) | Config editor, service health, launcher, NLM proxy, Git — port 5575 |
 | [World System](WORLD_SYSTEM.md) | WorldSim, WorldState, NPCScheduler, NPCState, SceneDirector, autonomous NPC ticks |
+| [Living World](LIVING_WORLD.md) | WorldSim + PlayerState + EventCascade + neon_city_events — economy ticks, faction system |
+| [Neon HUD](NEON_HUD.md) | Universal Neon HUD — PlayerState API, Socket.IO, faction standings, integration guide |
+| [The Grid](THE_GRID.md) | THE GRID scene (port 5569) — 4 zones, market vendors, travel map, GridSkills |
 | [Training Flywheel](TRAINING_FLYWHEEL.md) | RouterDataCollector, RouterV3Client, Alpaca export, automated weekly retrain |
 | [Player Identity](PLAYER_IDENTITY.md) | PlayerProfile, NPC relationships (−100..+100), RelationshipContextInterceptor, admin PROFILE tab |
 | [Economy Guide](ECONOMY_GUIDE.md) | EconomyManager, cross-scene credits, betting, consequences |
@@ -118,7 +126,7 @@
 |-----|-------------|
 | [Logging](LOGGING.md) | CosyLogger ring buffer, SystemMonitor, structured logging patterns |
 | [KPI](KPI.md) | `@timed` decorator, LLM KPIs, benchmarking dashboard |
-| [System Audit](SYSTEM_AUDIT.md) | v0.73b system audit — grade A++, event cascade, ComfyUI asset injection, 7,500+ tests |
+| [System Audit](SYSTEM_AUDIT.md) | v0.75 system audit — grade A++, Universal Neon HUD, THE GRID, 15 scenes, 7,500+ tests |
 
 ## Training & Testing
 

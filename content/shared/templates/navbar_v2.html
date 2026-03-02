@@ -91,6 +91,7 @@
     >
       <span class="cs-navbar__nav-dot" data-status-dot="{{ scene.key }}" aria-hidden="true"></span>
       <span class="cs-navbar__nav-label">{{ scene.label }}</span>
+      <span class="scene-dot" aria-hidden="true"></span>
     </a>
     {% endfor %}
     {# Explicit scene shortcuts ensure data-scene-nav is present for all primary scenes #}
@@ -124,7 +125,7 @@
             aria-current="{% if scene.key == current_scene %}page{% else %}false{% endif %}"
           >
             <span class="cs-navbar__nav-dot" data-status-dot="{{ scene.key }}" aria-hidden="true"></span>
-            {{ scene.label }}
+            {{ scene.label }}<span class="scene-dot" aria-hidden="true"></span>
           </a>
         </li>
         {% endfor %}

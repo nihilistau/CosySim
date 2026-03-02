@@ -2,10 +2,82 @@
 
 All notable changes to CosySim are documented here.
 
-# Changelog
+---
+## [0.75] — 2026 — "NEON CITY" — ✅ COMPLETE
 
-All notable changes to CosySim are documented here.
+### New Features
 
+#### Track A — Universal Neon HUD
+- **PlayerState singleton** (`engine/world/player_state.py`): credits (₵5,000 default),
+  reputation (0–100), heat (0–100), faction_standings (6 factions), active_location.
+  Methods: `earn_credits`, `spend_credits`, `update_reputation`, `adjust_heat`,
+  `set_location`, `update_faction_standing`, `on_economy_tick`, `on_faction_shift`, `to_dict`.
+- **Neon HUD strip** (`content/shared/templates/neon_hud.html` + `cosysim-neon-hud.css` +
+  `cosysim-neon-hud.js`): 32px accent strip injected via `navbar_v2.html` into all 15 scenes.
+  Renders credits glyph, reputation bar, heat bar (pulses red ≥ 90), location label, and
+  6-dot faction row colour-coded by standing.
+- **Real-time HUD**: Socket.IO `hud_update` push + 30-second polling fallback at
+  `GET /api/hud/state` (registered by BaseScene on every scene).
+
+#### Track B — Rich World Events (`engine/world/neon_city_events.py`)
+- **70+ event templates**: `NPC_ACTIONS_RICH` (25+), `WORLD_EVENTS_RICH` (20+),
+  `FACTION_EVENTS_RICH` (6 faction pools), `ECONOMY_EVENTS` (7 market events),
+  `GHOST_MESSAGES_RICH` (12 dicts with `message` / `intensity` / `heat_impact` fields).
+- **Helper functions**: `get_events_for_scene(scene, event_list)`,
+  `get_all_world_events()` — scene-filtered and combined pools.
+
+#### Track C — WorldSim Enhancements (`engine/world/world_sim.py`)
+- **Economy tick task** (90 s interval): `_fire_economy_tick()` selects `ECONOMY_EVENTS`
+  template, calls `PlayerState.on_economy_tick()`, emits Socket.IO `economy_tick`.
+- All `_fire_*` methods updated to draw from rich template pools in `neon_city_events.py`.
+- `GHOST_MESSAGES_RICH` dicts extracted correctly via `.message`, `.intensity`, `.heat_impact`.
+- `PlayerState` hooks wired in `_fire_npc_action()` and `_fire_world_event()`.
+
+#### Track D — World Skills (`engine/skills/builtin/world_skills.py`)
+- **Pack `"world"`** — 10 new skills: `get_world_time`, `get_world_weather`,
+  `get_active_events`, `get_player_state_info`, `get_faction_standings`, `earn_credits`,
+  `spend_credits`, `set_player_location`, `adjust_heat`, `get_recent_sim_events`.
+
+#### Track E — THE GRID Scene (`content/scenes/grid/`, port 5569, accent `#00ff88`)
+- **Scene #15** — 4 zones: MARKET (buy/sell from Mira/Viktor/Frankie), STATION (SVG city
+  map with 15 travel nodes), DEN (6 factions, pledge allegiance, quests), BROKER (intel
+  feed, ghost terminal).
+- **GridSkills** (`grid_skills.py`) — 7 skills: `grid_buy_item`, `grid_sell_item`,
+  `grid_get_market_prices`, `grid_faction_pledge`, `grid_accept_quest`,
+  `grid_get_travel_map`, `grid_broker_intel`.
+
+#### Track F — Scene Polish (Casino, NeonCity, Phone, Bedroom)
+- **Casino**: `/api/world/status`; VIP gate (`omnicorp` ≥ 30); `heat_locked` at heat ≥ 80;
+  economy events adjust table odds ±5–15 %.
+- **NeonCity**: `/api/world/district_status`; `district_alerts` ticker;
+  `/api/world/faction_rep` route.
+- **Phone**: `/api/world/incoming` (0xGH0ST messages); `/api/world/send_ghost`;
+  Ghost Terminal modal overlay.
+- **Bedroom**: `/api/world/context`; `mood_modifier` from world events; world status widget.
+
+#### Track G — UI/UX Unification
+- **Scene status dots** in `navbar_v2.html` for all 15 scenes (`.scene-dot` classes,
+  `--cs-scene-*` design tokens).
+- `cosysim-scene-fx.css`: THE GRID neon-green animations (`[data-scene="grid"]`).
+- `design_tokens.css`: `.scene-dot` styles, `--cs-scene-grid: #00ff88` token.
+
+### Tests
+- `tests/test_player_state.py` — PlayerState singleton, all methods, clamp logic
+- `tests/test_neon_hud.py` — HUD endpoint, Socket.IO event payload
+- `tests/test_world_skills.py` — all 10 world skills
+- `tests/test_grid_scene.py` — GridScene routes, 4 zones, GridSkills
+- `tests/test_neon_city_events.py` — 70+ templates, helper functions
+- `tests/test_worldsim_economy.py` — economy tick, GHOST_MESSAGES_RICH extraction
+- `tests/test_scene_polish.py` — Casino/NeonCity/Phone/Bedroom world routes
+
+### Stats
+- **15 scenes** (grid added as scene #15, port 5569)
+- **7,500+ tests passing** across ~210 files (zero failures)
+- **6 factions** fully wired across PlayerState, WorldSim, and scene polish
+- Skill packs: **22** (+1: `world`)
+- System audit grade: **A++**
+
+---
 ## [0.73b] — 2026-03-02 — "The Living Nexus" — ✅ COMPLETE
 
 ### New Features

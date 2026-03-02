@@ -30,6 +30,7 @@
 [data-scene="arena"]    { --cs-scene-accent: #dc2626; --cs-scene-glow: rgba(220, 38, 38, 0.22); }
 [data-scene="realm"]    { --cs-scene-accent: #7c3aed; --cs-scene-glow: rgba(124, 58, 237, 0.18); }
 [data-scene="neoncity"] { --cs-scene-accent: #06b6d4; --cs-scene-glow: rgba(6, 182, 212, 0.20); }
+[data-scene="grid"]     { --cs-scene-accent: #00ff88; --cs-scene-glow: rgba(0, 255, 136, 0.22); }
 
 /* ── 2. Per-scene animation bindings on <body> ────────────────────────── */
 
@@ -83,6 +84,11 @@
 [data-scene="neoncity"] {
   animation: neoncity-scan 5s linear infinite;
   will-change: transform, opacity;
+}
+
+[data-scene="grid"] {
+  animation: grid-neon 4s ease-in-out infinite;
+  will-change: box-shadow;
 }
 
 /* ── 3. Neoncity scanline overlay canvas ──────────────────────────────── */
@@ -259,6 +265,15 @@
   100% { background-position: 0  100vh; }
 }
 
+/* Grid — neon green pulse: electric grid energy radiates from edges */
+@keyframes grid-neon {
+  0%   { box-shadow: inset 0 0 100px rgba(0, 255, 136, 0.00); }
+  25%  { box-shadow: inset 0 0 100px rgba(0, 255, 136, 0.08); }
+  50%  { box-shadow: inset 0 0 100px rgba(0, 255, 136, 0.14); }
+  75%  { box-shadow: inset 0 0 100px rgba(0, 255, 136, 0.07); }
+  100% { box-shadow: inset 0 0 100px rgba(0, 255, 136, 0.00); }
+}
+
 /* ── 5. Interactive element accent per scene ──────────────────────────── */
 
 [data-scene="bedroom"]  .btn-primary,
@@ -288,6 +303,9 @@
 [data-scene="neoncity"] .btn-primary,
 [data-scene="neoncity"] .cs-accent { color: var(--cs-scene-accent); }
 
+[data-scene="grid"]     .btn-primary,
+[data-scene="grid"]     .cs-accent { color: var(--cs-scene-accent); }
+
 /* Focus ring — match scene accent */
 [data-scene="bedroom"]  :focus-visible { outline-color: var(--cs-scene-accent); }
 [data-scene="phone"]    :focus-visible { outline-color: var(--cs-scene-accent); }
@@ -298,6 +316,7 @@
 [data-scene="arena"]    :focus-visible { outline-color: var(--cs-scene-accent); }
 [data-scene="realm"]    :focus-visible { outline-color: var(--cs-scene-accent); }
 [data-scene="neoncity"] :focus-visible { outline-color: var(--cs-scene-accent); }
+[data-scene="grid"]     :focus-visible { outline-color: var(--cs-scene-accent); }
 
 /* ── 6. Scrollbar accent per scene ────────────────────────────────────── */
 
@@ -310,6 +329,7 @@
 [data-scene="arena"]    ::-webkit-scrollbar-thumb { background: var(--cs-scene-accent); }
 [data-scene="realm"]    ::-webkit-scrollbar-thumb { background: var(--cs-scene-accent); }
 [data-scene="neoncity"] ::-webkit-scrollbar-thumb { background: var(--cs-scene-accent); }
+[data-scene="grid"]     ::-webkit-scrollbar-thumb { background: var(--cs-scene-accent); }
 
 /* ── 7. prefers-reduced-motion — disable all ambient animations ─────────── */
 /*
