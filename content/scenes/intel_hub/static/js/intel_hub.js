@@ -506,6 +506,104 @@ function _relTime(ts) {
   } catch (_) { return ts; }
 }
 
+// ──── Benchmark Dashboard ────
+(function initBenchmarks() {
+  const grid = document.getElementById('benchmark-grid');
+  if (!grid) return;
+
+  const refreshBtn = document.getElementById('benchmark-refresh-btn');
+  const detailPanel = document.getElementById('benchmark-detail');
+  const detailName = document.getElementById('benchmark-detail-name');
+  const runBtn = document.getElementById('benchmark-run-btn');
+  let selectedWorkflow = null;
+
+  function scoreClass(score) {
+    if (score === null || score === undefined) return 'benchmark-score--none';
+    if (score >= 0.8) return 'benchmark-score--high';
+    if (score >= 0.6) return 'benchmark-score--mid';
+    return 'benchmark-score--low';
+  }
+
+  function sparklineSVG(trend) {
+    if (!trend || trend.length < 2) return '';
+    const scores = trend.map(t => t.mean_score || 0);
+    const min = Math.min(...scores);
+    const max = Math.max(...scores) || 1;
+    const w = 80, h = 24;
+    const points = scores.map((s, i) => {
+      const x = (i / (scores.length - 1)) * w;
+      const y = h - ((s - min) / (max - min || 1)) * h;
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    }).join(' ');
+    return `<svg class="benchmark-sparkline" viewBox="0 0 ${w} ${h}">
+      <polyline fill="none" stroke="var(--cs-scene-accent,#06b6d4)" stroke-width="1.5" points="${points}"/>
+    </svg>`;
+  }
+
+  function renderCard(wf) {
+    const score = wf.latest_score;
+    const cls = scoreClass(score);
+    const displayScore = score !== null && score !== undefined ? (score * 100).toFixed(0) : '—';
+    return `<div class="benchmark-card" data-workflow="${wf.name}" onclick="selectWorkflow('${wf.name}')">
+      <div class="benchmark-card-name">${wf.name.replace(/_/g, ' ')}</div>
+      <div class="benchmark-score ${cls}">${displayScore}${score !== null ? '%' : ''}</div>
+      ${sparklineSVG(wf.trend)}
+    </div>`;
+  }
+
+  window.selectWorkflow = function(name) {
+    selectedWorkflow = name;
+    if (detailName) detailName.textContent = name.replace(/_/g, ' ').toUpperCase();
+    if (detailPanel) detailPanel.style.display = 'block';
+  };
+
+  function loadBenchmarks() {
+    grid.innerHTML = '<div class="benchmark-loading">Loading...</div>';
+    fetch('/api/benchmark/workflows')
+      .then(r => r.json())
+      .then(data => {
+        if (!data.workflows || data.workflows.length === 0) {
+          grid.innerHTML = '<div class="benchmark-loading">No benchmark data. Run a benchmark to see results.</div>';
+          return;
+        }
+        grid.innerHTML = data.workflows.map(renderCard).join('');
+      })
+      .catch(() => {
+        grid.innerHTML = '<div class="benchmark-loading">Benchmark service unavailable.</div>';
+      });
+  }
+
+  if (refreshBtn) refreshBtn.addEventListener('click', loadBenchmarks);
+
+  if (runBtn) {
+    runBtn.addEventListener('click', () => {
+      if (!selectedWorkflow) return;
+      runBtn.textContent = '⏳ Running...';
+      runBtn.disabled = true;
+      fetch('/api/benchmark/run', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({workflow: selectedWorkflow}),
+      })
+        .then(r => r.json())
+        .then(() => {
+          setTimeout(() => {
+            runBtn.textContent = '▶ RUN NOW';
+            runBtn.disabled = false;
+            loadBenchmarks();
+          }, 2000);
+        })
+        .catch(() => {
+          runBtn.textContent = '▶ RUN NOW';
+          runBtn.disabled = false;
+        });
+    });
+  }
+
+  loadBenchmarks();
+  setInterval(loadBenchmarks, 10 * 60 * 1000); // auto-refresh every 10 min
+})();
+
 // ──────────────────────────────────────────────────────────
 // BOOT
 // ──────────────────────────────────────────────────────────

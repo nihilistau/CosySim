@@ -361,6 +361,31 @@
         </div>
       </div>
     </section>
+
+    <!-- ══════════════════════════════════════════════
+         BENCHMARK DASHBOARD PANEL
+    ══════════════════════════════════════════════ -->
+    <section class="intel-panel intel-panel--benchmark" id="panel-benchmarks" aria-label="Asset Quality Benchmarks">
+      <header class="panel-header">
+        <span class="panel-icon">◈</span>
+        <span class="panel-title">ASSET BENCHMARKS</span>
+        <button class="panel-action-btn" id="benchmark-refresh-btn" title="Refresh">↺</button>
+      </header>
+      <div class="panel-body benchmark-body">
+        <div class="benchmark-grid" id="benchmark-grid">
+          <div class="benchmark-loading">Loading benchmark data...</div>
+        </div>
+        <div class="benchmark-detail" id="benchmark-detail" style="display:none">
+          <div class="benchmark-detail-header">
+            <span class="benchmark-detail-name" id="benchmark-detail-name">—</span>
+            <button class="benchmark-run-btn" id="benchmark-run-btn">▶ RUN NOW</button>
+          </div>
+          <div class="benchmark-trend-chart" id="benchmark-trend-chart">
+            <!-- SVG sparkline injected by JS -->
+          </div>
+        </div>
+      </div>
+    </section>
   </main><!-- /intel-layout -->
   <!-- Mission Control auto-refresh -->
   <script>
@@ -428,5 +453,64 @@
     window.SCENE_ACCENT = "{{ scene_accent|default('#06b6d4') }}";
   </script>
   <script src="/intel_hub/static/js/intel_hub.js"></script>
+
+  <!-- ══════════════════════════════════════════════
+       NEWS TICKER
+  ══════════════════════════════════════════════ -->
+  <div class="news-ticker-container" id="news-ticker-container">
+    <div class="news-ticker-label">INTEL FEED</div>
+    <div class="news-ticker-track" id="news-ticker-track">
+      <div class="news-ticker-items" id="news-ticker-items">
+        <span class="news-ticker-item news-ticker-item--loading">Loading intelligence feed...</span>
+      </div>
+    </div>
+    <div class="news-ticker-filter" id="news-ticker-filter">
+      <button class="ticker-filter-btn ticker-filter-btn--active" data-cat="">ALL</button>
+      <button class="ticker-filter-btn" data-cat="ai_research">AI</button>
+      <button class="ticker-filter-btn" data-cat="tech">TECH</button>
+      <button class="ticker-filter-btn" data-cat="world">WORLD</button>
+    </div>
+  </div>
+
+  <script>
+    // ──── News Ticker ────
+    (function initNewsTicker() {
+      const tickerItems = document.getElementById('news-ticker-items');
+      const filterBtns = document.querySelectorAll('.ticker-filter-btn');
+      let currentCategory = '';
+
+      function loadTicker(category) {
+        currentCategory = category;
+        const url = `/api/news/ticker${category ? '?category=' + category : ''}`;
+        fetch(url)
+          .then(r => r.json())
+          .then(data => {
+            if (!data.items || data.items.length === 0) {
+              tickerItems.innerHTML = '<span class="news-ticker-item news-ticker-item--loading">No intelligence available — run news fetch to populate feed.</span>';
+              return;
+            }
+            // Duplicate items for seamless loop
+            const html = data.items.concat(data.items).map(item =>
+              `<span class="news-ticker-item" title="${item.content || ''}">${item.title}</span>`
+            ).join('');
+            tickerItems.innerHTML = html;
+          })
+          .catch(() => {
+            tickerItems.innerHTML = '<span class="news-ticker-item news-ticker-item--loading">Intelligence feed offline.</span>';
+          });
+      }
+
+      filterBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+          filterBtns.forEach(b => b.classList.remove('ticker-filter-btn--active'));
+          btn.classList.add('ticker-filter-btn--active');
+          loadTicker(btn.dataset.cat);
+        });
+      });
+
+      loadTicker('');
+      setInterval(() => loadTicker(currentCategory), 5 * 60 * 1000); // refresh every 5 min
+    })();
+  </script>
 </body>
 </html>

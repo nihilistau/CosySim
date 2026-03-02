@@ -518,6 +518,109 @@ class IntelHubScene(BaseScene):
                 router_status = {"available": False, "predict_count": 0}
             return jsonify({"metrics": metrics, "router": router_status})
 
+        # ── News Ticker / Feed ─────────────────────────────────────────────────
+
+        @app.route("/api/news/ticker")
+        def api_news_ticker():
+            """Return latest curated news Q&A for the ticker."""
+            try:
+                from engine.nexus.client import get_nexus_client
+                client = get_nexus_client()
+                results = client.search("news", category="news", limit=20)
+                items = []
+                for r in results[:20]:
+                    items.append({
+                        "id": r.get("id", ""),
+                        "title": r.get("title", "")[:100],
+                        "content": r.get("content", "")[:300],
+                        "category": r.get("category", "news"),
+                        "tags": r.get("tags", []),
+                    })
+                return jsonify({"status": "ok", "items": items, "count": len(items)})
+            except Exception as e:
+                logger.warning("News ticker error: %s", e)
+                return jsonify({"status": "ok", "items": [], "count": 0, "error": str(e)})
+
+        @app.route("/api/news/feed")
+        def api_news_feed():
+            """Return news feed for a category."""
+            category = request.args.get("category", "")
+            limit = min(int(request.args.get("limit", 10)), 50)
+            try:
+                from engine.nexus.client import get_nexus_client
+                client = get_nexus_client()
+                query = f"{category} news" if category else "news"
+                results = client.search(query, category="news", limit=limit)
+                return jsonify({"status": "ok", "items": results, "count": len(results)})
+            except Exception as e:
+                return jsonify({"status": "error", "message": str(e), "items": []})
+
+        @app.route("/api/benchmark/workflows")
+        def api_benchmark_workflows():
+            """List all workflows with their latest benchmark scores."""
+            try:
+                from engine.asset_studio.workflow_manager import get_workflow_manager
+                from engine.asset_studio.tuning_engine import get_tuning_engine
+
+                wm = get_workflow_manager()
+                engine = get_tuning_engine()
+
+                workflows = []
+                for name in wm.list_workflows():
+                    try:
+                        trend = engine.get_quality_trend(name, last_n=5)
+                        latest_score = trend[-1]["mean_score"] if trend else None
+                        avg_score = sum(t["mean_score"] for t in trend) / len(trend) if trend else None
+                    except Exception:
+                        latest_score = None
+                        avg_score = None
+
+                    workflows.append({
+                        "name": name,
+                        "latest_score": latest_score,
+                        "avg_score": avg_score,
+                        "trend": trend or [],
+                    })
+
+                return jsonify({"status": "ok", "workflows": workflows})
+            except Exception as e:
+                logger.warning("Benchmark workflows error: %s", e)
+                return jsonify({"status": "error", "workflows": [], "error": str(e)})
+
+        @app.route("/api/benchmark/run", methods=["POST"])
+        def api_benchmark_run():
+            """Trigger a benchmark run for a specific workflow."""
+            try:
+                data = request.get_json() or {}
+                workflow_name = data.get("workflow", "portrait_hires")
+
+                from engine.asset_studio.tuning_engine import get_tuning_engine
+                engine = get_tuning_engine()
+
+                import threading
+
+                def run_benchmark():
+                    try:
+                        engine.benchmark_workflow(workflow_name)
+                    except Exception as e:
+                        logger.warning("Background benchmark error: %s", e)
+
+                threading.Thread(target=run_benchmark, daemon=True).start()
+                return jsonify({"status": "ok", "message": f"Benchmark started for {workflow_name}"})
+            except Exception as e:
+                return jsonify({"status": "error", "message": str(e)})
+
+        @app.route("/api/benchmark/trend/<workflow_name>")
+        def api_benchmark_trend(workflow_name: str):
+            """Get quality trend for a specific workflow."""
+            try:
+                from engine.asset_studio.tuning_engine import get_tuning_engine
+                engine = get_tuning_engine()
+                trend = engine.get_quality_trend(workflow_name, last_n=20)
+                return jsonify({"status": "ok", "workflow": workflow_name, "trend": trend})
+            except Exception as e:
+                return jsonify({"status": "error", "workflow": workflow_name, "trend": [], "error": str(e)})
+
     # ── Socket.IO ──────────────────────────────────────────────────────────────
 
     def _register_socketio(self) -> None:
