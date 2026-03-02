@@ -33,14 +33,15 @@
   { "key": "tavern",    "label": "RUSTY ANCHOR",      "port": 5558, "accent": "#f97316" },
   { "key": "casino",    "label": "CLUB NOIR",         "port": 5559, "accent": "#eab308" },
   { "key": "gallery",   "label": "THE OBSCURA",       "port": 5560, "accent": "#a78bfa" },
-  { "key": "arena",     "label": "THE SCORE",         "port": 5561, "accent": "#22c55e" },
+  { "key": "arena",     "label": "THE COLOSSEUM",     "port": 5561, "accent": "#22c55e" },
   { "key": "realm",     "label": "SHATTERED THRONE",  "port": 5562, "accent": "#e879f9" },
   { "key": "coders",    "label": "CODERS LAB",        "port": 5564, "accent": "#34d399" },
+  { "key": "heist",     "label": "THE SCORE",         "port": 5565, "accent": "#e11d48" },
   { "key": "games",     "label": "THE ARCADE",        "port": 5567, "accent": "#fb7185" },
+  { "key": "grid",      "label": "THE GRID",          "port": 5569, "accent": "#00ff88" },
   { "key": "intel",     "label": "THE BRIEFING",      "port": 5580, "accent": "#38bdf8" },
-  { "key": "hub",       "label": "THE LOFT",          "port": 8500, "accent": "#94a3b8" },
   { "key": "neoncity",  "label": "NEON CITY",         "port": 5563, "accent": "#00e5ff" },
-  { "key": "warzone",   "label": "THE COLOSSEUM",     "port": 5565, "accent": "#ef4444" },
+  { "key": "hub",       "label": "THE LOFT",          "port": 8500, "accent": "#94a3b8" },
 ] %}
 
 {# ─────────────────────────────────────────────────────────────── #}
@@ -216,6 +217,9 @@
 
 {# Spacer so page content isn't hidden under the fixed bar #}
 <div class="cs-navbar__spacer" aria-hidden="true"></div>
+
+{# ── Neon HUD — inject after navbar spacer ─────────────────────────── #}
+{% include 'neon_hud.html' %}
 
 <script src="{{ _js_url }}" defer></script>
 <script src="/shared/static/js/cosysim-transitions.js" defer></script>

@@ -37,6 +37,14 @@ from typing import Dict, List, Optional
 
 from engine.events.event_bus import EventTypes, get_event_bus
 from engine.nexus.client import get_nexus_client
+from engine.world.neon_city_events import (
+    ECONOMY_EVENTS,
+    FACTION_EVENTS_RICH,
+    GHOST_MESSAGES_RICH,
+    NPC_ACTIONS_RICH,
+    WORLD_EVENTS_RICH,
+    get_events_for_scene,
+)
 from engine.world.world_state import WorldEvent, WorldTime, get_world_state
 
 logger = logging.getLogger(__name__)
@@ -360,6 +368,7 @@ _TASK_INTERVALS: Dict[str, float] = {
     "hacker_event": 600.0,
     "arena_queue": 1200.0,
     "world_event": 2400.0,
+    "economy_tick": 90.0,
 }
 
 _RING_BUFFER_MAX: int = 200
@@ -518,6 +527,7 @@ class WorldSim:
             "hacker_event": self._fire_hacker_event,
             "arena_queue": self._fire_arena_queue,
             "world_event": self._fire_world_event,
+            "economy_tick": self._fire_economy_tick,
         }
         handler = handler_map.get(task_key)
         if handler:
@@ -547,18 +557,43 @@ class WorldSim:
         Returns:
             The generated :class:`SimEvent`.
         """
-        template = random.choice(NPC_ACTIONS)
+        template = random.choice(NPC_ACTIONS_RICH)
         event = SimEvent(
             id=str(uuid.uuid4()),
             event_type=SimEventType.NPC_ACTION,
             title=template["title"],
             description=template["desc"],
             scene=template["scene"],
-            actor=template["actor"],
-            intensity=round(random.uniform(0.5, 1.5), 2),
+            actor=template.get("actor", "unknown"),
+            intensity=round(template.get("intensity", random.uniform(0.5, 1.5)), 2),
+            payload={
+                "economy_impact": template.get("economy_impact", 0),
+                "rep_impact": template.get("rep_impact", 0),
+                "heat_impact": template.get("heat_impact", 0),
+                "affected_scenes": template.get("affected_scenes", [template["scene"]]),
+                "narrative": template.get("narrative", ""),
+                "faction": template.get("faction", ""),
+            },
             created_at=self._current_game_time_str(),
         )
         self._log_event(event)
+        # Apply player state impacts (best-effort)
+        try:
+            from engine.world.player_state import get_player_state
+            ps = get_player_state()
+            eco = template.get("economy_impact", 0)
+            if eco > 0:
+                ps.earn_credits(eco, f"npc_{template['title']}")
+            elif eco < 0:
+                ps.spend_credits(-eco, f"npc_{template['title']}")
+            heat = template.get("heat_impact", 0)
+            if heat:
+                ps.adjust_heat(heat)
+            rep = template.get("rep_impact", 0)
+            if rep:
+                ps.update_reputation(rep, f"npc_{template['title']}")
+        except Exception as exc:
+            logger.debug("PlayerState update skipped for npc_action: %s", exc)
         try:
             self._get_bus().publish(
                 EventTypes.NEONCITY_FACTION_SHIFT
@@ -569,6 +604,8 @@ class WorldSim:
                     "title": event.title,
                     "scene": event.scene,
                     "sim_event_id": event.id,
+                    "economy_impact": template.get("economy_impact", 0),
+                    "heat_impact": template.get("heat_impact", 0),
                 },
                 scene=event.scene,
             )
@@ -651,7 +688,7 @@ class WorldSim:
         Returns:
             The generated :class:`SimEvent`.
         """
-        all_scenes = list({t["scene"] for t in NPC_ACTIONS})
+        all_scenes = list({t["scene"] for t in NPC_ACTIONS_RICH})
         scene = random.choice(all_scenes)
         mood = random.choice(_AMBIENT_MOODS)
 
@@ -688,7 +725,10 @@ class WorldSim:
         if random.random() > 0.30:
             return None
 
-        message = random.choice(GHOST_MESSAGES)
+        ghost_entry = random.choice(GHOST_MESSAGES_RICH)
+        message = ghost_entry["message"]
+        intensity = ghost_entry.get("intensity", 2.0)
+        heat_impact = ghost_entry.get("heat_impact", 0)
         timestamp = self._current_game_time_str()
         nexus_title = f"ghost_msg:{timestamp.replace(' ', '_')}"
 
@@ -705,6 +745,14 @@ class WorldSim:
         except Exception as exc:
             logger.warning("Nexus store failed for hacker_event: %s", exc)
 
+        # Apply heat impact to player state
+        if heat_impact:
+            try:
+                from engine.world.player_state import get_player_state
+                get_player_state().adjust_heat(heat_impact, reason="ghost_message")
+            except Exception:
+                pass
+
         event = SimEvent(
             id=str(uuid.uuid4()),
             event_type=SimEventType.HACKER_MESSAGE,
@@ -712,8 +760,8 @@ class WorldSim:
             description=message,
             scene="phone",
             actor="0xGH0ST",
-            intensity=2.0,
-            payload={"message": message},
+            intensity=intensity,
+            payload={"message": message, "heat_impact": heat_impact},
             created_at=timestamp,
         )
         self._log_event(event)
@@ -787,7 +835,7 @@ class WorldSim:
         Returns:
             The generated :class:`SimEvent`.
         """
-        template = random.choice(WORLD_EVENTS)
+        template = random.choice(WORLD_EVENTS_RICH)
         event_id = str(uuid.uuid4())
 
         # Register in WorldState so scenes can query it.
@@ -815,11 +863,36 @@ class WorldSim:
             title=template["title"],
             description=template["desc"],
             scene=template["scene"],
-            intensity=3.0,
-            payload={"world_event_type": template["event_type"]},
+            intensity=template.get("intensity", 3.0),
+            payload={
+                "world_event_type": template["event_type"],
+                "economy_impact": template.get("economy_impact", 0),
+                "rep_impact": template.get("rep_impact", 0),
+                "heat_impact": template.get("heat_impact", 0),
+                "affected_scenes": template.get("affected_scenes", [template["scene"]]),
+                "faction": template.get("faction", ""),
+                "narrative": template.get("narrative", ""),
+            },
             created_at=self._current_game_time_str(),
         )
         self._log_event(event)
+        # Apply player state impacts (best-effort)
+        try:
+            from engine.world.player_state import get_player_state
+            ps = get_player_state()
+            eco = template.get("economy_impact", 0)
+            if eco > 0:
+                ps.earn_credits(eco, f"world_{template['title']}")
+            elif eco < 0:
+                ps.spend_credits(-eco, f"world_{template['title']}")
+            heat = template.get("heat_impact", 0)
+            if heat:
+                ps.adjust_heat(heat)
+            rep = template.get("rep_impact", 0)
+            if rep:
+                ps.update_reputation(rep, f"world_{template['title']}")
+        except Exception as exc:
+            logger.debug("PlayerState update skipped for world_event: %s", exc)
         try:
             self._get_bus().publish(
                 "world.major_event",
@@ -833,6 +906,58 @@ class WorldSim:
             )
         except Exception as exc:
             logger.warning("EventBus publish failed for world_event: %s", exc)
+        return event
+
+    def _fire_economy_tick(self) -> Optional[SimEvent]:
+        """Apply a passive economy tick: market shifts affect player credits and heat.
+
+        Picks a random :data:`ECONOMY_EVENTS` template, applies player state
+        impacts, and publishes ``world.economy_tick`` on the event bus.
+
+        Returns:
+            A :class:`SimEvent` describing the tick, or ``None`` if skipped
+            (40 % chance per tick to keep it varied).
+        """
+        if random.random() < 0.40:
+            return None
+
+        template = random.choice(ECONOMY_EVENTS)
+        event_id = str(uuid.uuid4())
+        event = SimEvent(
+            id=event_id,
+            event_type=SimEventType.ECONOMY_TICK,
+            title=template["title"],
+            description=template["desc"],
+            scene=template.get("scene", "global"),
+            intensity=template.get("intensity", 1.0),
+            payload={
+                "economy_impact": template.get("economy_impact", 0),
+                "heat_impact": template.get("heat_impact", 0),
+                "event_type": template.get("event_type", "economy"),
+            },
+            created_at=self._current_game_time_str(),
+        )
+        self._log_event(event)
+        # Apply player state (best-effort)
+        try:
+            from engine.world.player_state import get_player_state
+            ps = get_player_state()
+            ps.on_economy_tick(template.get("event_type", "market_shift"))
+        except Exception as exc:
+            logger.debug("PlayerState economy_tick skipped: %s", exc)
+        # Publish on event bus so scenes can react
+        try:
+            self._get_bus().publish(
+                "world.economy_tick",
+                {
+                    "title": template["title"],
+                    "economy_impact": template.get("economy_impact", 0),
+                    "event_type": template.get("event_type", "economy"),
+                    "sim_event_id": event_id,
+                },
+            )
+        except Exception as exc:
+            logger.warning("EventBus publish failed for economy_tick: %s", exc)
         return event
 
     # ------------------------------------------------------------------

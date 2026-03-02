@@ -356,6 +356,71 @@ class BaseScene(ABC):
                 mimetype="application/json",
             )
 
+    def register_hud_route(self, app) -> None:
+        """Register ``/api/hud/state`` on a Flask app.
+
+        Returns player state, world time, active events, and weather —
+        everything the Neon HUD needs in a single round-trip.
+
+        Call this in ``start()`` after creating the Flask app::
+
+            self.register_hud_route(self.app)
+        """
+        import json as _json
+        import time as _time
+        from flask import Response
+
+        scene_ref = self
+
+        @app.route("/api/hud/state")
+        def _hud_state():
+            data: dict = {}
+
+            # Player state
+            try:
+                from engine.world.player_state import get_player_state
+                ps = get_player_state()
+                data.update(ps.to_dict())
+            except Exception as _exc:
+                _bslogger.debug("HUD: player_state unavailable: %s", _exc)
+                data.setdefault("credits", 5000)
+                data.setdefault("reputation", 50)
+                data.setdefault("heat", 0)
+                data.setdefault("faction_standings", {})
+                data.setdefault("active_location", "NEON CITY")
+
+            # World time
+            try:
+                from engine.world.world_state import get_world_state
+                ws = get_world_state()
+                wt = ws.get_time()
+                data["world_time"] = f"Day {wt.game_day}  {wt.game_hour:02d}:00"
+                data["time_of_day"] = wt.time_of_day
+                # Weather for current scene
+                weather = ws.get_weather(scene_ref.scene_name)
+                if weather and hasattr(weather, "value"):
+                    data["weather"] = weather.value
+            except Exception as _exc:
+                _bslogger.debug("HUD: world_state unavailable: %s", _exc)
+                data.setdefault("world_time", "Day 1  00:00")
+
+            # Active world events (up to 3)
+            try:
+                from engine.world.world_state import get_world_state
+                ws = get_world_state()
+                active = [
+                    {"id": e.id, "title": e.name, "type": e.event_type, "scene": e.scene}
+                    for e in ws.get_active_events()[:3]
+                ]
+                data["active_events"] = active
+            except Exception as _exc:
+                _bslogger.debug("HUD: active_events unavailable: %s", _exc)
+                data.setdefault("active_events", [])
+
+            data["scene"] = scene_ref.scene_name
+            data["updated_at"] = int(_time.time() * 1000)
+            return Response(_json.dumps(data), mimetype="application/json")
+
     def register_bench_route(self, app, socketio=None) -> None:
         """Register ``/api/bench/metrics`` on a Flask app.
 

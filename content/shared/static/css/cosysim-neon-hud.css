@@ -1,0 +1,494 @@
+/*
+ * cosysim-neon-hud.css — Universal Neon City HUD
+ * =================================================
+ * 32px fixed strip below the navbar, plus an expandable event-history panel.
+ * Uses design token CSS custom properties for seamless scene accent integration.
+ *
+ * Z-index: 490 (below navbar 500, above game content)
+ */
+
+/* ── HUD strip ─────────────────────────────────────────────────────────── */
+
+.cs-hud {
+  position: fixed;
+  top: var(--cs-navbar-height, 48px);
+  left: 0;
+  right: 0;
+  height: 32px;
+  z-index: 490;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  gap: 8px;
+
+  background: rgba(0, 0, 0, 0.82);
+  border-bottom: 1px solid rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.25);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+
+  font-family: var(--cs-font-mono, "JetBrains Mono", "Courier New", monospace);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: rgba(255, 255, 255, 0.75);
+
+  cursor: pointer;
+  user-select: none;
+
+  transition: border-color 0.3s ease;
+}
+
+.cs-hud:hover {
+  border-bottom-color: rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.6);
+}
+
+/* Scene spacer adjustment — pushes content below HUD */
+.cs-navbar__spacer {
+  margin-bottom: 32px !important;
+}
+
+/* ── HUD: Left cluster ─────────────────────────────────────────────────── */
+
+.cs-hud__left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+.cs-hud__weather {
+  font-size: 13px;
+  line-height: 1;
+}
+
+.cs-hud__location {
+  color: var(--cs-scene-accent, #00e5ff);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 180px;
+}
+
+.cs-hud__time {
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.cs-hud__sep {
+  color: rgba(255, 255, 255, 0.25);
+  flex-shrink: 0;
+}
+
+/* ── HUD: Center ticker ────────────────────────────────────────────────── */
+
+.cs-hud__center {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cs-hud__ticker-wrap {
+  overflow: hidden;
+  width: 100%;
+  position: relative;
+}
+
+.cs-hud__ticker {
+  display: inline-block;
+  white-space: nowrap;
+  color: rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.9);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  animation: hud-ticker-scroll 20s linear infinite;
+  padding-left: 100%;
+}
+
+/* Static version when only one event */
+.cs-hud__ticker--static {
+  animation: none;
+  padding-left: 0;
+  text-align: center;
+  width: 100%;
+}
+
+@keyframes hud-ticker-scroll {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-100%); }
+}
+
+/* Flash animation when new event fires */
+@keyframes hud-ticker-flash {
+  0%, 100% { opacity: 1; }
+  25%, 75%  { opacity: 0.3; }
+  50%       { opacity: 1; color: #fff; }
+}
+
+.cs-hud__ticker--flash {
+  animation: hud-ticker-flash 0.6s ease;
+}
+
+/* ── HUD: Right cluster ────────────────────────────────────────────────── */
+
+.cs-hud__right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.cs-hud__credits-icon {
+  color: #f59e0b;
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.cs-hud__credits {
+  color: #f59e0b;
+  font-weight: 700;
+  font-size: 11px;
+  min-width: 48px;
+  text-align: right;
+  transition: color 0.3s ease;
+}
+
+.cs-hud__credits--gain  { animation: hud-credits-gain  0.6s ease; }
+.cs-hud__credits--spend { animation: hud-credits-spend 0.6s ease; }
+
+@keyframes hud-credits-gain {
+  0%, 100% { color: #f59e0b; }
+  50%       { color: #4ade80; text-shadow: 0 0 8px #4ade80; }
+}
+@keyframes hud-credits-spend {
+  0%, 100% { color: #f59e0b; }
+  50%       { color: #f87171; text-shadow: 0 0 8px #f87171; }
+}
+
+/* Reputation bar */
+.cs-hud__rep-label {
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.4);
+  letter-spacing: 0.08em;
+}
+
+.cs-hud__rep-bar {
+  width: 48px;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.cs-hud__rep-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #a78bfa 0%, var(--cs-scene-accent, #00e5ff) 100%);
+  border-radius: 3px;
+  transition: width 0.6s ease;
+}
+
+.cs-hud__rep-value {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.6);
+  min-width: 20px;
+}
+
+/* Heat */
+.cs-hud__heat-icon {
+  font-size: 12px;
+  line-height: 1;
+  transition: filter 0.3s ease;
+}
+
+.cs-hud__heat-icon--critical {
+  animation: heat-pulse 1s ease-in-out infinite;
+  filter: drop-shadow(0 0 4px #f87171);
+}
+
+@keyframes heat-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.5; }
+}
+
+.cs-hud__heat {
+  font-size: 10px;
+  min-width: 28px;
+  text-align: right;
+  transition: color 0.3s ease;
+}
+
+.cs-hud__heat--low      { color: rgba(255, 255, 255, 0.55); }
+.cs-hud__heat--medium   { color: #fbbf24; }
+.cs-hud__heat--high     { color: #f97316; }
+.cs-hud__heat--critical { color: #f87171; font-weight: 700; }
+
+/* ── Event history panel ───────────────────────────────────────────────── */
+
+.cs-hud__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 488;
+  background: rgba(0, 0, 0, 0.4);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+}
+
+.cs-hud__backdrop--visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.cs-hud__panel {
+  position: fixed;
+  top: calc(var(--cs-navbar-height, 48px) + 32px);
+  left: 50%;
+  transform: translateX(-50%) translateY(-8px);
+  z-index: 489;
+  width: min(680px, calc(100vw - 32px));
+  max-height: 72vh;
+  overflow: hidden;
+
+  background: rgba(5, 5, 10, 0.96);
+  border: 1px solid rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.35);
+  border-radius: 8px;
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.7),
+    0 0 0 1px rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.08) inset,
+    0 0 40px rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.06) inset;
+
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+  font-family: var(--cs-font-mono, "JetBrains Mono", monospace);
+  font-size: 12px;
+}
+
+.cs-hud__panel--visible {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(-50%) translateY(0);
+}
+
+.cs-hud__panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.15);
+  background: rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.06);
+}
+
+.cs-hud__panel-title {
+  color: var(--cs-scene-accent, #00e5ff);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-size: 11px;
+}
+
+.cs-hud__panel-close {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  line-height: 1;
+  transition: color 0.2s, background 0.2s;
+}
+.cs-hud__panel-close:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.cs-hud__panel-body {
+  overflow-y: auto;
+  max-height: calc(72vh - 44px);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Stat grid */
+.cs-hud__panel-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.cs-hud__stat {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cs-hud__stat-label {
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.4);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.cs-hud__stat-value {
+  font-size: 13px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.cs-hud__stat--credits { color: #f59e0b; }
+.cs-hud__stat--rep     { color: var(--cs-scene-accent, #00e5ff); }
+.cs-hud__stat--heat    { color: #f97316; }
+
+/* Faction standings grid */
+.cs-hud__faction-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cs-hud__faction-title {
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.4);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 2px;
+}
+
+.cs-hud__faction-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 4px;
+  border-left: 2px solid transparent;
+}
+
+.cs-hud__faction-row--positive { border-left-color: #4ade80; }
+.cs-hud__faction-row--negative { border-left-color: #f87171; }
+.cs-hud__faction-row--neutral  { border-left-color: rgba(255, 255, 255, 0.2); }
+
+.cs-hud__faction-name {
+  min-width: 90px;
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.cs-hud__faction-bar-wrap {
+  flex: 1;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 2px;
+  overflow: visible;
+  position: relative;
+}
+
+.cs-hud__faction-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  position: absolute;
+  transition: width 0.6s ease, left 0.6s ease, background 0.3s ease;
+}
+
+.cs-hud__faction-bar-fill--positive { background: #4ade80; left: 50%; }
+.cs-hud__faction-bar-fill--negative { background: #f87171; right: 50%; }
+.cs-hud__faction-bar-fill--neutral  { background: rgba(255, 255, 255, 0.3); left: 50%; width: 0; }
+
+.cs-hud__faction-value {
+  min-width: 36px;
+  text-align: right;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+/* Event list */
+.cs-hud__event-list-header {
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.4);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.cs-hud__event-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cs-hud__event-item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 4px;
+  border-left: 2px solid rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.3);
+  animation: hud-event-fade-in 0.3s ease;
+}
+
+.cs-hud__event-item--placeholder {
+  color: rgba(255, 255, 255, 0.25);
+  font-style: italic;
+  border-left-color: transparent;
+}
+
+@keyframes hud-event-fade-in {
+  from { opacity: 0; transform: translateX(-8px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+.cs-hud__event-ts {
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.3);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.cs-hud__event-title {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.8);
+  flex: 1;
+}
+
+.cs-hud__event-scene {
+  font-size: 9px;
+  color: var(--cs-scene-accent, #00e5ff);
+  white-space: nowrap;
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+
+/* ── Responsive ─────────────────────────────────────────────────────────── */
+
+@media (max-width: 640px) {
+  .cs-hud__time,
+  .cs-hud__rep-label,
+  .cs-hud__rep-bar,
+  .cs-hud__rep-value { display: none; }
+
+  .cs-hud__location { max-width: 100px; }
+
+  .cs-hud__panel-stats { grid-template-columns: repeat(2, 1fr); }
+}

@@ -415,13 +415,14 @@ class TestFireWorldEvent:
         assert mock_bus.publish.call_args[0][0] == "world.major_event"
 
     def test_fire_world_event_intensity_is_max(self, sim: WorldSim):
-        """World events are high-intensity (3.0)."""
+        """World events are higher-intensity (>=1.5) than NPC actions."""
         ev = sim._fire_world_event()
-        assert ev.intensity == 3.0
+        assert ev.intensity >= 1.5
 
     def test_fire_world_event_title_from_templates(self, sim: WorldSim):
-        """Generated title matches one of the WORLD_EVENTS templates."""
-        known_titles = {t["title"] for t in WORLD_EVENTS}
+        """Generated title matches one of the WORLD_EVENTS_RICH templates."""
+        from engine.world.neon_city_events import WORLD_EVENTS_RICH
+        known_titles = {t["title"] for t in WORLD_EVENTS_RICH}
         ev = sim._fire_world_event()
         assert ev.title in known_titles
 

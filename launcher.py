@@ -143,6 +143,8 @@ SCENES: Dict[str, Dict[str, Any]] = {
                        "port": 5566, "label": "Command Center",         "auto_start": False},
     "games":          {"type": "flask", "cls": "content.scenes.games.games_scene.GamesScene",
                        "port": 5567, "label": "THE ARCADE",             "auto_start": False},
+    "grid":           {"type": "flask", "cls": "content.scenes.grid.grid_scene.GridScene",
+                       "port": 5569, "label": "THE GRID",               "auto_start": False},
     "intel_hub":      {"type": "flask",
                        "cls": "content.scenes.intel_hub.intel_hub_scene.IntelHubScene",
                        "port": 5580, "label": "THE BRIEFING ROOM",      "auto_start": False},
