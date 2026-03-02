@@ -1,44 +1,36 @@
-// cosysim-transitions.js
-// Intercepts data-scene-nav links for smooth scene-to-scene transitions
+/**
+ * CosySim Page Transitions — 200ms fade-through-black on scene navigation.
+ * Only intercepts links with [data-scene-nav] attribute.
+ */
 (function () {
-  const DURATION = 200; // ms — matches --cs-transition-page in design_tokens
+  'use strict';
 
-  function addOverlay() {
-    if (document.getElementById('cs-transition-overlay')) return document.getElementById('cs-transition-overlay');
-    const el = document.createElement('div');
-    el.id = 'cs-transition-overlay';
-    el.style.cssText = 'position:fixed;inset:0;background:#000;z-index:9999;pointer-events:none;opacity:0;transition:opacity 200ms ease';
-    document.body.appendChild(el);
-    return el;
-  }
+  const TRANSITION_DURATION = 200;
 
-  function fadeOut(cb) {
-    const overlay = addOverlay();
-    requestAnimationFrame(() => {
-      overlay.style.opacity = '1';
-      setTimeout(cb, DURATION);
+  function init() {
+    // Apply fade-in on page load
+    document.body.classList.add('cs-page-enter');
+    // Remove class after animation completes
+    setTimeout(() => document.body.classList.remove('cs-page-enter'), TRANSITION_DURATION + 50);
+
+    // Intercept scene nav links
+    document.addEventListener('click', (e) => {
+      const link = e.target.closest('[data-scene-nav]');
+      if (!link) return;
+      const href = link.getAttribute('href');
+      if (!href || href.startsWith('#') || href.startsWith('javascript:')) return;
+
+      e.preventDefault();
+      document.body.classList.add('cs-page-exit');
+      setTimeout(() => {
+        window.location.href = href;
+      }, TRANSITION_DURATION);
     });
   }
 
-  function fadeIn() {
-    const overlay = addOverlay();
-    overlay.style.opacity = '1';
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        overlay.style.opacity = '0';
-      });
-    });
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
   }
-
-  // Intercept scene nav links
-  document.addEventListener('click', function (e) {
-    const link = e.target.closest('[data-scene-nav]');
-    if (!link || !link.href) return;
-    e.preventDefault();
-    const href = link.href;
-    fadeOut(() => { window.location.href = href; });
-  });
-
-  // Fade in on page load
-  window.addEventListener('DOMContentLoaded', fadeIn);
 })();

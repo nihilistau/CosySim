@@ -12,5 +12,19 @@ Quick start::
 """
 
 from engine.asset_studio.studio_core import AssetStudioCore, get_studio_core
+from engine.asset_studio.workflow_builder import (
+    build_video_wan_t2v,
+    build_video_wan_i2v,
+    WORKFLOW_REGISTRY,
+)
+from engine.asset_studio.workflow_manager import WorkflowManager, get_workflow_manager
 
-__all__ = ["AssetStudioCore", "get_studio_core"]
+__all__ = [
+    "AssetStudioCore",
+    "get_studio_core",
+    "WorkflowManager",
+    "get_workflow_manager",
+    "build_video_wan_t2v",
+    "build_video_wan_i2v",
+    "WORKFLOW_REGISTRY",
+]

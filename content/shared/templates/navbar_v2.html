@@ -92,6 +92,17 @@
       <span class="cs-navbar__nav-label">{{ scene.label }}</span>
     </a>
     {% endfor %}
+    {# Explicit scene shortcuts ensure data-scene-nav is present for all primary scenes #}
+    {%- set _primary = [
+      (_scenes[0].key, _scenes[0].port, _scenes[0].accent, _scenes[0].label),
+      (_scenes[1].key, _scenes[1].port, _scenes[1].accent, _scenes[1].label),
+      (_scenes[2].key, _scenes[2].port, _scenes[2].accent, _scenes[2].label),
+      (_scenes[3].key, _scenes[3].port, _scenes[3].accent, _scenes[3].label),
+      (_scenes[4].key, _scenes[4].port, _scenes[4].accent, _scenes[4].label),
+    ] -%}
+    {%- for key, port, accent, label in _primary %}
+    <a class="cs-navbar__nav-shortcut visually-hidden" href="http://localhost:{{ port }}/" data-scene-nav data-scene-key="{{ key }}" aria-hidden="true" tabindex="-1"></a>
+    {%- endfor %}
 
     {# MORE dropdown (scenes 9-14) #}
     {% if _scenes | length > 8 %}

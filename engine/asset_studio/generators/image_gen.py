@@ -80,6 +80,52 @@ class ImageGenerator:
         cfg = cfg_scale or preset.cfg_scale
 
         t_start = time.monotonic()
+
+        # ── Try WorkflowManager first ──────────────────────────────────────
+        try:
+            from engine.asset_studio.workflow_manager import get_workflow_manager  # noqa: PLC0415
+            wm = get_workflow_manager()
+            if wm.is_available():
+                from pathlib import Path as _Path  # noqa: PLC0415
+                from engine.config import get_config as _get_config  # noqa: PLC0415
+                _cfg = _get_config()
+                save_dir = _Path(_cfg.get("art.output_dir", "data/art/output"))
+                save_dir.mkdir(parents=True, exist_ok=True)
+                _model = wm.select_model([model]) if "model" in locals() else None
+                wf_params: Dict[str, Any] = {
+                    "positive": positive,
+                    "negative": negative,
+                    "seed": seed,
+                    "width": w,
+                    "height": h,
+                    "steps": st,
+                    "cfg": cfg,
+                }
+                if _model:
+                    wf_params["model"] = _model
+                result_wm = wm.generate(
+                    "scene_background",
+                    wf_params,
+                    save_dir=save_dir,
+                    filename_prefix="scene_bg",
+                )
+                if not result_wm.get("error"):
+                    duration_ms = int((time.monotonic() - t_start) * 1000)
+                    return {
+                        "url": result_wm["url"],
+                        "prompt": positive,
+                        "negative": negative,
+                        "cached": False,
+                        "duration_ms": duration_ms,
+                        "request_id": result_wm.get("prompt_id", uuid.uuid4().hex),
+                        "preset_id": preset_id,
+                        "width": w,
+                        "height": h,
+                    }
+        except Exception as _wm_exc:
+            logger.debug("WorkflowManager not available, falling back: %s", _wm_exc)
+
+        # ── Fallback: SceneArtManager ──────────────────────────────────────
         try:
             mgr = get_scene_art_manager()
             # Override config dimensions by patching a minimal ArtRequest through _generate.

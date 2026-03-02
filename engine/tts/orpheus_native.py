@@ -27,10 +27,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-import numpy as np
-import torch
-
-logger = logging.getLogger(__name__)
+try:
+    import numpy as np
+    import torch
+    _TORCH_AVAILABLE = True
+except ImportError:  # pragma: no cover — absent in lean CI / Python 3.13 venvs
+    np = None  # type: ignore[assignment]
+    torch = None  # type: ignore[assignment]
+    _TORCH_AVAILABLE = False
 
 # SNAC codec constants
 SNAC_SAMPLE_RATE = 24000
@@ -96,6 +100,11 @@ class OrpheusNative:
         gpu_layers: int = -1,
         context_size: int = 8192,
     ) -> None:
+        if not _TORCH_AVAILABLE:
+            raise RuntimeError(
+                "OrpheusNative requires torch and numpy. "
+                "Install them with: pip install torch numpy"
+            )
         self._model_dir = Path(model_dir)
         self._default_quant = default_quant.lower()
         self._gpu_layers = gpu_layers

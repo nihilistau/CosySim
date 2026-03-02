@@ -71,6 +71,54 @@ class VideoGenerator:
         )
 
         t_start = time.monotonic()
+
+        # ── Try WorkflowManager (Wan 2.2) first ───────────────────────────
+        try:
+            from engine.asset_studio.workflow_manager import get_workflow_manager  # noqa: PLC0415
+            wm = get_workflow_manager()
+            image_path = _kwargs.get("image_path") or _kwargs.get("image")
+            workflow_name = "video_wan_i2v" if image_path else "video_wan_t2v"
+            if wm.is_available() and wm.has_node("WanVideoModelLoader") and wm.has_node("WanVideoSampler"):
+                from pathlib import Path as _Path  # noqa: PLC0415
+                from engine.config import get_config as _get_config  # noqa: PLC0415
+                _cfg2 = _get_config()
+                save_dir = _Path(_cfg2.get("art.output_dir", "data/art/output"))
+                save_dir.mkdir(parents=True, exist_ok=True)
+                wan_params: Dict[str, Any] = {
+                    "positive": positive,
+                    "negative": negative,
+                    "seed": seed,
+                    "width": width,
+                    "height": height,
+                    "frames": frames,
+                    "fps": fps,
+                    "steps": steps,
+                }
+                if image_path:
+                    wan_params["image_path"] = image_path
+                result_wm = wm.generate(
+                    workflow_name,
+                    wan_params,
+                    save_dir=save_dir,
+                    filename_prefix="video",
+                    timeout=600.0,
+                )
+                if not result_wm.get("error"):
+                    duration_ms = int((time.monotonic() - t_start) * 1000)
+                    return {
+                        "url": result_wm["url"],
+                        "prompt": positive,
+                        "negative": negative,
+                        "cached": False,
+                        "duration_ms": duration_ms,
+                        "frames": frames,
+                        "fps": fps,
+                        "preset_id": preset_id,
+                    }
+        except Exception as _wm_exc:
+            logger.debug("WorkflowManager not available for video, falling back: %s", _wm_exc)
+
+        # ── Fallback: AnimateDiff ──────────────────────────────────────────
         try:
             result = self._submit_animatediff(
                 positive=positive,

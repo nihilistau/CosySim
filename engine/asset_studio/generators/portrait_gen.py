@@ -90,6 +90,59 @@ class PortraitGenerator:
             negative = f"{negative}, {extra_negative}"
 
         t_start = time.monotonic()
+
+        # ── Try WorkflowManager first ──────────────────────────────────────
+        try:
+            from engine.asset_studio.workflow_manager import get_workflow_manager  # noqa: PLC0415
+            wm = get_workflow_manager()
+            if wm.is_available():
+                from pathlib import Path as _Path  # noqa: PLC0415
+                from engine.config import get_config as _get_config  # noqa: PLC0415
+                _cfg2 = _get_config()
+                save_dir = _Path(_cfg2.get("art.output_dir", "data/art/output"))
+                save_dir.mkdir(parents=True, exist_ok=True)
+                # Use hi-res workflow if FaceDetailer is available, else fast.
+                if wm.has_node("FaceDetailer") and wm.has_node("UltralyticsDetectorProvider"):
+                    wf_id = "portrait_hires"
+                else:
+                    wf_id = "portrait_fast"
+                result_wm = wm.generate(
+                    wf_id,
+                    {
+                        "positive": positive,
+                        "negative": negative,
+                        "seed": seed,
+                        "width": width,
+                        "height": height,
+                    },
+                    save_dir=save_dir,
+                    filename_prefix="portrait",
+                )
+                if not result_wm.get("error"):
+                    url = result_wm["url"]
+                    if url and "/placeholder" not in url:
+                        try:
+                            from engine.art.portrait_cache import get_portrait_cache  # noqa: PLC0415
+                            get_portrait_cache().set_url(character_id, mood, url)
+                        except Exception:
+                            pass
+                    duration_ms = int((time.monotonic() - t_start) * 1000)
+                    return {
+                        "url": url,
+                        "prompt": positive,
+                        "negative": negative,
+                        "cached": False,
+                        "duration_ms": duration_ms,
+                        "request_id": result_wm.get("prompt_id", uuid.uuid4().hex),
+                        "character_id": character_id,
+                        "mood": mood,
+                        "scene": scene,
+                        "preset_id": preset_id,
+                    }
+        except Exception as _wm_exc:
+            logger.debug("WorkflowManager not available for portrait, falling back: %s", _wm_exc)
+
+        # ── Fallback: SceneArtManager ──────────────────────────────────────
         try:
             mgr = get_scene_art_manager()
             import uuid as _uuid  # noqa: PLC0415

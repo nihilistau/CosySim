@@ -220,7 +220,7 @@ SCENE_CATEGORIES = {
             {"name": "Admin Panel",     "icon": "🎛️", "port": 8502, "mode": "admin",
              "desc": "Character editor, asset manager, conversation explorer, model config",
              "color": "#f5576c"},
-            {"name": "Asset Generator", "icon": "🎨", "port": 8503, "mode": "assets",
+            {"name": "Asset Studio", "icon": "🎨", "port": 5568, "mode": "assets",
              "desc": "Generate images, videos, voices and stories via ComfyUI / TTS",
              "color": "#0ea5e9"},
             {"name": "TTS Server",      "icon": "🎙️", "port": 8600, "mode": "tts",
