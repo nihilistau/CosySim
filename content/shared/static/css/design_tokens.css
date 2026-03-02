@@ -15,8 +15,8 @@
     /* ── Color Palette ──────────────────────────────────────── */
 
     /* Backgrounds — deep black glass foundation */
-    --cs-bg-deepest:    #040608;
-    --cs-bg-dark:       #070a10;
+    --cs-bg-deepest:    #000000;
+    --cs-bg-dark:       #060606;
     --cs-bg-panel:      #0d1117;
     --cs-bg-card:       #111520;
     --cs-bg-elevated:   #161c2a;
@@ -76,14 +76,14 @@
     --cs-glass-bg-light:    rgba(22, 28, 42, 0.55);
     --cs-glass-border:      rgba(255, 255, 255, 0.06);
     --cs-glass-border-glow: rgba(var(--cs-scene-accent-rgb, 59 130 246), 0.25);
-    --cs-glass-blur:        12px;
+    --cs-glass-blur:        24px;
     --cs-glass-shadow:      0 8px 32px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.04);
     --cs-glass-shadow-glow: 0 0 24px var(--cs-scene-glow), 0 8px 32px rgba(0, 0, 0, 0.6);
 
     /* Backdrop blur levels */
     --cs-blur-sm:   4px;
     --cs-blur-md:   12px;
-    --cs-blur-lg:   24px;
+    --cs-blur-lg:   32px;
     --cs-blur-xl:   40px;
 
     /* ── Hacker / Admin Loft Theme ──────────────────────────── */
@@ -217,14 +217,22 @@
     --cs-shadow-md:     0 4px 16px rgba(0, 0, 0, 0.6);
     --cs-shadow-lg:     0 8px 32px rgba(0, 0, 0, 0.7);
     --cs-shadow-xl:     0 16px 48px rgba(0, 0, 0, 0.8);
-    --cs-shadow-glow:   0 0 16px var(--cs-scene-glow);
-    --cs-shadow-neon:   0 0 8px var(--cs-scene-accent), 0 0 24px var(--cs-scene-glow);
+    --cs-shadow-glow:   0 0 19px var(--cs-scene-glow);
+    --cs-shadow-neon:   0 0 10px var(--cs-scene-accent), 0 0 29px var(--cs-scene-glow);
+
+    /* Depth shadow stack */
+    --cs-depth-1: 0 1px 3px rgba(0, 0, 0, .4);
+    --cs-depth-2: 0 4px 12px rgba(0, 0, 0, .5);
+    --cs-depth-3: 0 8px 24px rgba(0, 0, 0, .6);
+    --cs-depth-4: 0 16px 48px rgba(0, 0, 0, .7);
+    --cs-depth-5: 0 32px 96px rgba(0, 0, 0, .8);
 
     /* ── Transitions ────────────────────────────────────────── */
     --cs-duration-fast: 150ms;
     --cs-duration-base: 250ms;
     --cs-duration-slow: 500ms;
     --cs-duration-xslow:800ms;
+    --cs-transition-page: 200ms;
     --cs-ease:          cubic-bezier(0.4, 0, 0.2, 1);
     --cs-ease-bounce:   cubic-bezier(0.34, 1.56, 0.64, 1);
     --cs-ease-sharp:    cubic-bezier(0.0, 0, 0.2, 1);
@@ -318,10 +326,10 @@
 
 /* Neon glow text */
 .cs-glow-scene {
-    text-shadow: 0 0 8px var(--cs-scene-accent), 0 0 20px var(--cs-scene-glow);
+    text-shadow: 0 0 10px var(--cs-scene-accent), 0 0 24px var(--cs-scene-glow);
 }
 .cs-glow-hack {
-    text-shadow: 0 0 8px var(--cs-hack-green), 0 0 20px var(--cs-hack-green-glow);
+    text-shadow: 0 0 10px var(--cs-hack-green), 0 0 24px var(--cs-hack-green-glow);
 }
 
 /* CRT overlay — apply to container for scanlines */

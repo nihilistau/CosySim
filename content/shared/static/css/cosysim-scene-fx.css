@@ -1,0 +1,219 @@
+/*
+ * CosySim Scene FX — v1.0
+ * ========================
+ * Per-scene ambient animations applied when <body data-scene="X"> is set.
+ * Designed to enhance atmosphere without distracting from gameplay.
+ *
+ * Usage: <link rel="stylesheet" href="/shared/static/css/cosysim-scene-fx.css">
+ * Requires: design_tokens.css loaded first (inherits base token cascade).
+ *
+ * Sections:
+ *   1. Scene variable overrides (--cs-scene-accent, --cs-scene-glow)
+ *   2. body::before overlay scaffold
+ *   3. Per-scene animation bindings
+ *   4. @keyframes (9 animations)
+ *   5. Interactive element accent per scene
+ *   6. Scrollbar accent per scene
+ */
+
+/* ── 1. Scene variable overrides ──────────────────────────────────────── */
+
+[data-scene="bedroom"]  { --cs-scene-accent: #8b5cf6; --cs-scene-glow: rgba(139, 92, 246, .15); }
+[data-scene="phone"]    { --cs-scene-accent: #22d3ee; --cs-scene-glow: rgba(34, 211, 238, .15); }
+[data-scene="lounge"]   { --cs-scene-accent: #6b7280; --cs-scene-glow: rgba(107, 114, 128, .10); }
+[data-scene="tavern"]   { --cs-scene-accent: #f97316; --cs-scene-glow: rgba(249, 115, 22, .15); }
+[data-scene="casino"]   { --cs-scene-accent: #f59e0b; --cs-scene-glow: rgba(245, 158, 11, .15); }
+[data-scene="gallery"]  { --cs-scene-accent: #6366f1; --cs-scene-glow: rgba(99, 102, 241, .12); }
+[data-scene="arena"]    { --cs-scene-accent: #dc2626; --cs-scene-glow: rgba(220, 38, 38, .18); }
+[data-scene="realm"]    { --cs-scene-accent: #7c3aed; --cs-scene-glow: rgba(124, 58, 237, .15); }
+[data-scene="neoncity"] { --cs-scene-accent: #06b6d4; --cs-scene-glow: rgba(6, 182, 212, .18); }
+
+/* ── 2. body::before overlay scaffold ────────────────────────────────── */
+/*
+ * Full-screen pseudo-element acts as the ambient FX canvas.
+ * pointer-events:none keeps it fully non-interactive.
+ * z-index:-1 ensures it sits behind all content.
+ */
+
+[data-scene]::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: -1;
+    opacity: 0;          /* base state — animation drives opacity */
+    background: transparent;
+    will-change: opacity, background-color;
+}
+
+/* ── 3. Per-scene animation bindings ─────────────────────────────────── */
+
+[data-scene="bedroom"]::before  { animation: bedroom-glow  15s ease-in-out infinite; }
+[data-scene="casino"]::before   { animation: casino-pulse   8s ease-in-out infinite; }
+[data-scene="arena"]::before    { animation: arena-rumble   4s ease-in-out infinite; }
+[data-scene="tavern"]::before   { animation: tavern-flicker 6s ease-in-out infinite; }
+[data-scene="realm"]::before    { animation: realm-breathe 10s ease-in-out infinite; }
+[data-scene="neoncity"]::before { animation: neoncity-scan  5s linear      infinite; }
+[data-scene="lounge"]::before   { animation: lounge-drift  12s ease-in-out infinite; }
+[data-scene="gallery"]::before  { animation: gallery-float 20s ease-in-out infinite; }
+[data-scene="phone"]::before    { animation: phone-glitch   3s steps(2)    infinite; }
+
+/* ── 4. @keyframes ───────────────────────────────────────────────────── */
+
+/* bedroom — soft violet breathing pulse */
+@keyframes bedroom-glow {
+    0%   { opacity: 0.00; background-color: rgba(139, 92, 246, 0.00); }
+    25%  { opacity: 0.05; background-color: rgba(139, 92, 246, 0.04); }
+    50%  { opacity: 0.07; background-color: rgba(139, 92, 246, 0.06); }
+    75%  { opacity: 0.04; background-color: rgba(139, 92, 246, 0.03); }
+    100% { opacity: 0.00; background-color: rgba(139, 92, 246, 0.00); }
+}
+
+/* casino — golden shimmer pulse (faster rhythm, a little brighter) */
+@keyframes casino-pulse {
+    0%   { opacity: 0.00; background-color: rgba(245, 158, 11, 0.00); }
+    20%  { opacity: 0.06; background-color: rgba(245, 158, 11, 0.05); }
+    40%  { opacity: 0.08; background-color: rgba(245, 158, 11, 0.07); }
+    60%  { opacity: 0.05; background-color: rgba(245, 158, 11, 0.04); }
+    80%  { opacity: 0.07; background-color: rgba(245, 158, 11, 0.06); }
+    100% { opacity: 0.00; background-color: rgba(245, 158, 11, 0.00); }
+}
+
+/* arena — aggressive blood-red throb */
+@keyframes arena-rumble {
+    0%   { opacity: 0.00; background-color: rgba(220, 38, 38, 0.00); }
+    15%  { opacity: 0.08; background-color: rgba(220, 38, 38, 0.07); }
+    30%  { opacity: 0.04; background-color: rgba(220, 38, 38, 0.03); }
+    50%  { opacity: 0.08; background-color: rgba(220, 38, 38, 0.07); }
+    70%  { opacity: 0.03; background-color: rgba(220, 38, 38, 0.02); }
+    85%  { opacity: 0.06; background-color: rgba(220, 38, 38, 0.05); }
+    100% { opacity: 0.00; background-color: rgba(220, 38, 38, 0.00); }
+}
+
+/* tavern — warm orange candle flicker */
+@keyframes tavern-flicker {
+    0%   { opacity: 0.02; background-color: rgba(249, 115, 22, 0.02); }
+    10%  { opacity: 0.05; background-color: rgba(249, 115, 22, 0.04); }
+    20%  { opacity: 0.03; background-color: rgba(249, 115, 22, 0.02); }
+    35%  { opacity: 0.07; background-color: rgba(249, 115, 22, 0.06); }
+    45%  { opacity: 0.02; background-color: rgba(249, 115, 22, 0.01); }
+    60%  { opacity: 0.06; background-color: rgba(249, 115, 22, 0.05); }
+    75%  { opacity: 0.03; background-color: rgba(249, 115, 22, 0.02); }
+    90%  { opacity: 0.05; background-color: rgba(249, 115, 22, 0.04); }
+    100% { opacity: 0.02; background-color: rgba(249, 115, 22, 0.02); }
+}
+
+/* realm — deep violet mystical breathe */
+@keyframes realm-breathe {
+    0%   { opacity: 0.00; background-color: rgba(124, 58, 237, 0.00); }
+    30%  { opacity: 0.06; background-color: rgba(124, 58, 237, 0.05); }
+    50%  { opacity: 0.08; background-color: rgba(124, 58, 237, 0.07); }
+    70%  { opacity: 0.05; background-color: rgba(124, 58, 237, 0.04); }
+    100% { opacity: 0.00; background-color: rgba(124, 58, 237, 0.00); }
+}
+
+/* neoncity — cyan horizontal scan line sweep */
+@keyframes neoncity-scan {
+    0%   {
+        opacity: 0.04;
+        background: linear-gradient(
+            180deg,
+            transparent 0%,
+            rgba(6, 182, 212, 0.06) 48%,
+            rgba(6, 182, 212, 0.08) 50%,
+            rgba(6, 182, 212, 0.06) 52%,
+            transparent 100%
+        );
+        background-position: 0 -100vh;
+        background-size: 100% 200vh;
+    }
+    100% {
+        opacity: 0.04;
+        background: linear-gradient(
+            180deg,
+            transparent 0%,
+            rgba(6, 182, 212, 0.06) 48%,
+            rgba(6, 182, 212, 0.08) 50%,
+            rgba(6, 182, 212, 0.06) 52%,
+            transparent 100%
+        );
+        background-position: 0 100vh;
+        background-size: 100% 200vh;
+    }
+}
+
+/* lounge — cool grey ultra-slow atmospheric drift */
+@keyframes lounge-drift {
+    0%   { opacity: 0.00; background-color: rgba(107, 114, 128, 0.00); }
+    40%  { opacity: 0.04; background-color: rgba(107, 114, 128, 0.03); }
+    60%  { opacity: 0.05; background-color: rgba(107, 114, 128, 0.04); }
+    100% { opacity: 0.00; background-color: rgba(107, 114, 128, 0.00); }
+}
+
+/* gallery — indigo slow radial float */
+@keyframes gallery-float {
+    0%   { opacity: 0.00; background-color: rgba(99, 102, 241, 0.00); }
+    20%  { opacity: 0.04; background-color: rgba(99, 102, 241, 0.03); }
+    50%  { opacity: 0.06; background-color: rgba(99, 102, 241, 0.05); }
+    80%  { opacity: 0.03; background-color: rgba(99, 102, 241, 0.02); }
+    100% { opacity: 0.00; background-color: rgba(99, 102, 241, 0.00); }
+}
+
+/* phone — cyan digital glitch step flash */
+@keyframes phone-glitch {
+    0%   { opacity: 0.00; background-color: rgba(34, 211, 238, 0.00); }
+    50%  { opacity: 0.05; background-color: rgba(34, 211, 238, 0.04); }
+    100% { opacity: 0.00; background-color: rgba(34, 211, 238, 0.00); }
+}
+
+/* ── 5. Interactive element accent per scene ──────────────────────────── */
+
+[data-scene="bedroom"]  .btn-primary,
+[data-scene="bedroom"]  .cs-accent { color: var(--cs-scene-accent); }
+
+[data-scene="phone"]    .btn-primary,
+[data-scene="phone"]    .cs-accent { color: var(--cs-scene-accent); }
+
+[data-scene="lounge"]   .btn-primary,
+[data-scene="lounge"]   .cs-accent { color: var(--cs-scene-accent); }
+
+[data-scene="tavern"]   .btn-primary,
+[data-scene="tavern"]   .cs-accent { color: var(--cs-scene-accent); }
+
+[data-scene="casino"]   .btn-primary,
+[data-scene="casino"]   .cs-accent { color: var(--cs-scene-accent); }
+
+[data-scene="gallery"]  .btn-primary,
+[data-scene="gallery"]  .cs-accent { color: var(--cs-scene-accent); }
+
+[data-scene="arena"]    .btn-primary,
+[data-scene="arena"]    .cs-accent { color: var(--cs-scene-accent); }
+
+[data-scene="realm"]    .btn-primary,
+[data-scene="realm"]    .cs-accent { color: var(--cs-scene-accent); }
+
+[data-scene="neoncity"] .btn-primary,
+[data-scene="neoncity"] .cs-accent { color: var(--cs-scene-accent); }
+
+/* Focus ring — match scene accent */
+[data-scene="bedroom"]  :focus-visible { outline-color: var(--cs-scene-accent); }
+[data-scene="phone"]    :focus-visible { outline-color: var(--cs-scene-accent); }
+[data-scene="lounge"]   :focus-visible { outline-color: var(--cs-scene-accent); }
+[data-scene="tavern"]   :focus-visible { outline-color: var(--cs-scene-accent); }
+[data-scene="casino"]   :focus-visible { outline-color: var(--cs-scene-accent); }
+[data-scene="gallery"]  :focus-visible { outline-color: var(--cs-scene-accent); }
+[data-scene="arena"]    :focus-visible { outline-color: var(--cs-scene-accent); }
+[data-scene="realm"]    :focus-visible { outline-color: var(--cs-scene-accent); }
+[data-scene="neoncity"] :focus-visible { outline-color: var(--cs-scene-accent); }
+
+/* ── 6. Scrollbar accent per scene ───────────────────────────────────── */
+
+[data-scene="bedroom"]  ::-webkit-scrollbar-thumb { background: var(--cs-scene-accent); }
+[data-scene="phone"]    ::-webkit-scrollbar-thumb { background: var(--cs-scene-accent); }
+[data-scene="lounge"]   ::-webkit-scrollbar-thumb { background: var(--cs-scene-accent); }
+[data-scene="tavern"]   ::-webkit-scrollbar-thumb { background: var(--cs-scene-accent); }
+[data-scene="casino"]   ::-webkit-scrollbar-thumb { background: var(--cs-scene-accent); }
+[data-scene="gallery"]  ::-webkit-scrollbar-thumb { background: var(--cs-scene-accent); }
+[data-scene="arena"]    ::-webkit-scrollbar-thumb { background: var(--cs-scene-accent); }
+[data-scene="realm"]    ::-webkit-scrollbar-thumb { background: var(--cs-scene-accent); }
+[data-scene="neoncity"] ::-webkit-scrollbar-thumb { background: var(--cs-scene-accent); }
