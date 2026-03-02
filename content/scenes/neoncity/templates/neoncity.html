@@ -350,5 +350,46 @@
 <script src="/shared/js/cosysim-bench.js" defer></script>
 <script src="/static/neoncity.js" defer></script>
 <script src="/shared/js/cosysim-voice.js"></script>
+
+<!-- ── Consequences Panel ──────────────────────────────────────── -->
+<div id="consequences-panel" class="consequences-panel">
+  <button class="consequences-toggle" onclick="toggleConsequences()" title="Consequences">
+    ⚡ <span class="csq-label">Consequences</span> <span id="consequences-count"></span>
+  </button>
+  <div class="consequences-body" id="consequences-body">
+    <div class="consequences-section">
+      <h4>Recent</h4>
+      <ul id="consequences-recent" class="consequences-list"></ul>
+    </div>
+    <div class="consequences-section">
+      <h4>Pending</h4>
+      <ul id="consequences-pending" class="consequences-list"></ul>
+    </div>
+  </div>
+</div>
+<style>
+  .consequences-panel{position:fixed;right:0;top:50%;transform:translateY(-50%);width:36px;background:rgba(0,0,0,.85);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,.08);border-right:none;border-radius:8px 0 0 8px;z-index:900;overflow:hidden;transition:width .25s ease;}
+  .consequences-panel.open{width:290px;}
+  .consequences-toggle{display:flex;align-items:center;gap:6px;width:100%;background:none;border:none;color:var(--accent,#06b6d4);font-size:.7rem;letter-spacing:.08em;padding:10px 8px;cursor:pointer;white-space:nowrap;}
+  .csq-label,.consequences-body{display:none;}
+  .consequences-panel.open .csq-label,.consequences-panel.open .consequences-body{display:block;}
+  .consequences-body{padding:0 12px 12px;}
+  .consequences-section h4{color:rgba(255,255,255,.45);font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;margin:8px 0 4px;}
+  .consequences-list{list-style:none;margin:0;padding:0;}
+  .consequences-list li{font-size:.68rem;color:rgba(255,255,255,.7);padding:3px 0;border-bottom:1px solid rgba(255,255,255,.05);}
+  .consequences-list li.empty{color:rgba(255,255,255,.3);font-style:italic;}
+</style>
+<script>
+  function toggleConsequences(){document.getElementById('consequences-panel').classList.toggle('open');}
+  (function csqPoll(){
+    fetch('/api/consequences').then(function(r){return r.ok?r.json():{recent:[],pending:[]};}).then(function(d){
+      var r=d.recent||[],p=d.pending||[],ct=r.length+p.length;
+      document.getElementById('consequences-count').textContent=ct?'('+ct+')':'';
+      var render=function(id,items){var el=document.getElementById(id);if(!el)return;el.innerHTML=items.slice(0,5).map(function(c){return'<li>'+(c.description||'')+'</li>';}).join('')||'<li class="empty">None</li>';};
+      render('consequences-recent',r);render('consequences-pending',p);
+    }).catch(function(){});
+    setTimeout(csqPoll,30000);
+  })();
+</script>
 </body>
 </html>

@@ -302,5 +302,6 @@ socket.on('game_state', d => { if(d) { Neon.state=d; Neon.updateUI(); } });
 socket.on('turn_update', d => { if(d) { Neon.state=d; Neon.updateUI(); } });
 socket.on('game_won', d => { Neon.log(`🏆 ${d.winner} wins NeonCity!`, 'loot'); });
 </script>
+<script src="/shared/js/cosysim-voice.js"></script>
 </body>
 </html>
