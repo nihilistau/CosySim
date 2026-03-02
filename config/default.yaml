@@ -503,6 +503,10 @@ observability:
 training:
   auto_capture: true               # Capture training data from pipeline
   min_quality: 0.7                 # Minimum quality score for capture
+  # Python executable for training subprocesses (needs unsloth installed).
+  # Set to conda base python path if running CosySim in a venv.
+  # Override at runtime via COSYSIM_TRAIN_PYTHON env var.
+  python_executable: ""            # empty = auto-detect from COSYSIM_TRAIN_PYTHON or sys.executable
   auto_train:
     enabled: false                 # Opt-in automated retraining
     min_examples: 100              # Examples needed before auto-train

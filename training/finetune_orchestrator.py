@@ -30,6 +30,11 @@ _JOBS_PATH = Path("training/jobs.jsonl")
 _MODELS_DIR = Path("training/models")
 _DATASETS_DIR = Path("training/datasets")
 
+# Python executable used for training subprocesses.
+# Set COSYSIM_TRAIN_PYTHON env var to override (e.g. conda base python with unsloth).
+# Example: $env:COSYSIM_TRAIN_PYTHON = "C:\Users\Knack\anaconda3\python.exe"
+_DEFAULT_TRAIN_PYTHON: str = os.environ.get("COSYSIM_TRAIN_PYTHON") or sys.executable
+
 
 # ──── Enums / Models ──────────────────────────────────────────────────────────
 
@@ -246,6 +251,9 @@ class FinetuneOrchestrator:
             Python script as a string.
         """
         cfg = FinetuneConfig(**job.config) if job.config else FinetuneConfig()
+        # Normalise paths to forward slashes so the generated script is cross-platform
+        dataset_path = str(Path(job.dataset_path).resolve()).replace("\\", "/")
+        output_dir   = str(Path(job.output_dir).resolve()).replace("\\", "/")
         return f'''"""Auto-generated fine-tuning script for job {job.job_id}: {job.model_type}."""
 import json
 from pathlib import Path
@@ -284,7 +292,7 @@ def format_alpaca(example):
     text = f"### Instruction:\\n{{example.get(\'instruction\', \'\')}}\\n\\n### Input:\\n{{example.get(\'input\', \'\')}}\\n\\n### Response:\\n{{example.get(\'output\', '')}}"
     return {{"text": text}}
 
-raw_dataset = load_dataset_from_jsonl("{job.dataset_path}")
+raw_dataset = load_dataset_from_jsonl("{dataset_path}")
 dataset = raw_dataset.map(format_alpaca)
 
 # ── Training ──────────────────────────────────────────────────────────────────
@@ -298,7 +306,7 @@ trainer = SFTTrainer(
     dataset_text_field="text",
     max_seq_length={cfg.max_seq_length},
     args=TrainingArguments(
-        output_dir="{job.output_dir}",
+        output_dir="{output_dir}",
         num_train_epochs={cfg.num_epochs},
         per_device_train_batch_size={cfg.batch_size},
         gradient_accumulation_steps={cfg.gradient_accumulation},
@@ -315,13 +323,13 @@ trainer = SFTTrainer(
 trainer.train()
 
 # ── Save adapter ──────────────────────────────────────────────────────────────
-adapter_path = "{job.output_dir}/adapter"
+adapter_path = "{output_dir}/adapter"
 model.save_pretrained(adapter_path)
 tokenizer.save_pretrained(adapter_path)
 print(f"Adapter saved to: {{adapter_path}}")
 
 # ── Merge ──────────────────────────────────────────────────────────────────────
-merged_path = "{job.output_dir}/merged"
+merged_path = "{output_dir}/merged"
 model.save_pretrained_merged(merged_path, tokenizer, save_method="merged_16bit")
 print(f"Merged model saved to: {{merged_path}}")
 '''
@@ -342,8 +350,17 @@ print(f"Merged model saved to: {{merged_path}}")
         script_file.write_text(script, encoding="utf-8")
 
         try:
+            train_python = _DEFAULT_TRAIN_PYTHON
+            try:
+                from engine.config import get_config
+                cfg_py = get_config().get("training.python_executable", "")
+                if cfg_py:
+                    train_python = cfg_py
+            except Exception:
+                pass
+
             process = subprocess.Popen(
-                [sys.executable, str(script_file)],
+                [train_python, str(script_file)],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
