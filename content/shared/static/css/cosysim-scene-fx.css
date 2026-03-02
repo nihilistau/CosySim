@@ -1,169 +1,262 @@
 /*
- * CosySim Scene FX — v1.0
- * ========================
- * Per-scene ambient animations applied when <body data-scene="X"> is set.
- * Designed to enhance atmosphere without distracting from gameplay.
+ * CosySim Scene FX — v2.0 "Ambient Atmosphere"
+ * =============================================
+ * Per-scene ambient keyframe animations applied when <body data-scene="X"> is set.
+ * Each animation targets [data-scene="X"] directly (body element) using box-shadow
+ * inset vignettes, transform tremors, and background-color tints for GPU-composited
+ * atmosphere without disrupting layout.
  *
- * Usage: <link rel="stylesheet" href="/shared/static/css/cosysim-scene-fx.css">
- * Requires: design_tokens.css loaded first (inherits base token cascade).
+ * Usage:  <link rel="stylesheet" href="/shared/static/css/cosysim-scene-fx.css">
+ * Requires: design_tokens.css loaded first (inherits --cs-scene-accent cascade).
  *
  * Sections:
- *   1. Scene variable overrides (--cs-scene-accent, --cs-scene-glow)
- *   2. body::before overlay scaffold
- *   3. Per-scene animation bindings
- *   4. @keyframes (9 animations)
+ *   1. Per-scene CSS custom property overrides
+ *   2. Per-scene animation bindings on <body>
+ *   3. Neoncity scanline overlay canvas (::before)
+ *   4. @keyframes — 9 distinct animations
  *   5. Interactive element accent per scene
  *   6. Scrollbar accent per scene
+ *   7. prefers-reduced-motion (clean disable)
  */
 
-/* ── 1. Scene variable overrides ──────────────────────────────────────── */
+/* ── 1. Per-scene CSS custom property overrides ───────────────────────── */
 
-[data-scene="bedroom"]  { --cs-scene-accent: #8b5cf6; --cs-scene-glow: rgba(139, 92, 246, .15); }
-[data-scene="phone"]    { --cs-scene-accent: #22d3ee; --cs-scene-glow: rgba(34, 211, 238, .15); }
-[data-scene="lounge"]   { --cs-scene-accent: #6b7280; --cs-scene-glow: rgba(107, 114, 128, .10); }
-[data-scene="tavern"]   { --cs-scene-accent: #f97316; --cs-scene-glow: rgba(249, 115, 22, .15); }
-[data-scene="casino"]   { --cs-scene-accent: #f59e0b; --cs-scene-glow: rgba(245, 158, 11, .15); }
-[data-scene="gallery"]  { --cs-scene-accent: #6366f1; --cs-scene-glow: rgba(99, 102, 241, .12); }
-[data-scene="arena"]    { --cs-scene-accent: #dc2626; --cs-scene-glow: rgba(220, 38, 38, .18); }
-[data-scene="realm"]    { --cs-scene-accent: #7c3aed; --cs-scene-glow: rgba(124, 58, 237, .15); }
-[data-scene="neoncity"] { --cs-scene-accent: #06b6d4; --cs-scene-glow: rgba(6, 182, 212, .18); }
+[data-scene="bedroom"]  { --cs-scene-accent: #8b5cf6; --cs-scene-glow: rgba(139, 92, 246, 0.20); }
+[data-scene="phone"]    { --cs-scene-accent: #22d3ee; --cs-scene-glow: rgba(34, 211, 238, 0.18); }
+[data-scene="lounge"]   { --cs-scene-accent: #9ca3af; --cs-scene-glow: rgba(156, 163, 175, 0.12); }
+[data-scene="tavern"]   { --cs-scene-accent: #f97316; --cs-scene-glow: rgba(249, 115, 22, 0.20); }
+[data-scene="casino"]   { --cs-scene-accent: #f59e0b; --cs-scene-glow: rgba(245, 158, 11, 0.20); }
+[data-scene="gallery"]  { --cs-scene-accent: #6366f1; --cs-scene-glow: rgba(99, 102, 241, 0.15); }
+[data-scene="arena"]    { --cs-scene-accent: #dc2626; --cs-scene-glow: rgba(220, 38, 38, 0.22); }
+[data-scene="realm"]    { --cs-scene-accent: #7c3aed; --cs-scene-glow: rgba(124, 58, 237, 0.18); }
+[data-scene="neoncity"] { --cs-scene-accent: #06b6d4; --cs-scene-glow: rgba(6, 182, 212, 0.20); }
 
-/* ── 2. body::before overlay scaffold ────────────────────────────────── */
+/* ── 2. Per-scene animation bindings on <body> ────────────────────────── */
+
 /*
- * Full-screen pseudo-element acts as the ambient FX canvas.
- * pointer-events:none keeps it fully non-interactive.
- * z-index:-1 ensures it sits behind all content.
+ * All animations target the body element directly.
+ * box-shadow: inset creates a viewport-edge ambient vignette.
+ * transform: translate produces micro-tremors without layout shifts.
+ * will-change hints the GPU to composite the element before animation starts.
  */
 
-[data-scene]::before {
-    content: '';
-    position: fixed;
-    inset: 0;
-    pointer-events: none;
-    z-index: -1;
-    opacity: 0;          /* base state — animation drives opacity */
-    background: transparent;
-    will-change: opacity, background-color;
+[data-scene="bedroom"] {
+  animation: bedroom-glow 15s ease-in-out infinite;
+  will-change: box-shadow;
 }
 
-/* ── 3. Per-scene animation bindings ─────────────────────────────────── */
+[data-scene="phone"] {
+  animation: phone-glitch 3s steps(2) infinite;
+  will-change: transform, opacity;
+}
 
-[data-scene="bedroom"]::before  { animation: bedroom-glow  15s ease-in-out infinite; }
-[data-scene="casino"]::before   { animation: casino-pulse   8s ease-in-out infinite; }
-[data-scene="arena"]::before    { animation: arena-rumble   4s ease-in-out infinite; }
-[data-scene="tavern"]::before   { animation: tavern-flicker 6s ease-in-out infinite; }
-[data-scene="realm"]::before    { animation: realm-breathe 10s ease-in-out infinite; }
-[data-scene="neoncity"]::before { animation: neoncity-scan  5s linear      infinite; }
-[data-scene="lounge"]::before   { animation: lounge-drift  12s ease-in-out infinite; }
-[data-scene="gallery"]::before  { animation: gallery-float 20s ease-in-out infinite; }
-[data-scene="phone"]::before    { animation: phone-glitch   3s steps(2)    infinite; }
+[data-scene="lounge"] {
+  animation: lounge-drift 12s ease-in-out infinite;
+  will-change: box-shadow;
+}
 
-/* ── 4. @keyframes ───────────────────────────────────────────────────── */
+[data-scene="tavern"] {
+  animation: tavern-flicker 6s ease-in-out infinite;
+  will-change: box-shadow;
+}
 
-/* bedroom — soft violet breathing pulse */
+[data-scene="casino"] {
+  animation: casino-pulse 8s ease-in-out infinite;
+  will-change: box-shadow;
+}
+
+[data-scene="gallery"] {
+  animation: gallery-float 20s ease-in-out infinite;
+  will-change: box-shadow;
+}
+
+[data-scene="arena"] {
+  animation: arena-rumble 4s ease-in-out infinite;
+  will-change: transform, box-shadow;
+}
+
+[data-scene="realm"] {
+  animation: realm-breathe 10s ease-in-out infinite;
+  will-change: box-shadow;
+}
+
+[data-scene="neoncity"] {
+  animation: neoncity-scan 5s linear infinite;
+  will-change: transform, opacity;
+}
+
+/* ── 3. Neoncity scanline overlay canvas ──────────────────────────────── */
+/*
+ * A fixed full-screen pseudo-element provides the gradient canvas for
+ * the neoncity-scan background-position sweep. The body animation above
+ * creates a GPU compositing layer; this ::before overlay renders the line.
+ */
+
+[data-scene="neoncity"]::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: -1;
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    transparent 47%,
+    rgba(6, 182, 212, 0.12) 50%,
+    transparent 53%,
+    transparent 100%
+  );
+  background-size: 100% 200%;
+  background-repeat: no-repeat;
+  animation: neoncity-scan 5s linear infinite;
+  will-change: background-position;
+}
+
+/* ── 4. @keyframes — 9 distinct animations ────────────────────────────── */
+
+/* Bedroom — deep purple haze pulse: dual-radius inset vignette breathes in/out */
 @keyframes bedroom-glow {
-    0%   { opacity: 0.00; background-color: rgba(139, 92, 246, 0.00); }
-    25%  { opacity: 0.05; background-color: rgba(139, 92, 246, 0.04); }
-    50%  { opacity: 0.07; background-color: rgba(139, 92, 246, 0.06); }
-    75%  { opacity: 0.04; background-color: rgba(139, 92, 246, 0.03); }
-    100% { opacity: 0.00; background-color: rgba(139, 92, 246, 0.00); }
+  0%   {
+    box-shadow:
+      inset 0 0  80px rgba(139, 92, 246, 0.00),
+      inset 0 0 220px rgba(139, 92, 246, 0.00);
+  }
+  25%  {
+    box-shadow:
+      inset 0 0  80px rgba(139, 92, 246, 0.07),
+      inset 0 0 220px rgba(139, 92, 246, 0.03);
+  }
+  50%  {
+    box-shadow:
+      inset 0 0  80px rgba(139, 92, 246, 0.12),
+      inset 0 0 220px rgba(139, 92, 246, 0.05);
+  }
+  75%  {
+    box-shadow:
+      inset 0 0  80px rgba(139, 92, 246, 0.08),
+      inset 0 0 220px rgba(139, 92, 246, 0.03);
+  }
+  100% {
+    box-shadow:
+      inset 0 0  80px rgba(139, 92, 246, 0.00),
+      inset 0 0 220px rgba(139, 92, 246, 0.00);
+  }
 }
 
-/* casino — golden shimmer pulse (faster rhythm, a little brighter) */
-@keyframes casino-pulse {
-    0%   { opacity: 0.00; background-color: rgba(245, 158, 11, 0.00); }
-    20%  { opacity: 0.06; background-color: rgba(245, 158, 11, 0.05); }
-    40%  { opacity: 0.08; background-color: rgba(245, 158, 11, 0.07); }
-    60%  { opacity: 0.05; background-color: rgba(245, 158, 11, 0.04); }
-    80%  { opacity: 0.07; background-color: rgba(245, 158, 11, 0.06); }
-    100% { opacity: 0.00; background-color: rgba(245, 158, 11, 0.00); }
-}
-
-/* arena — aggressive blood-red throb */
-@keyframes arena-rumble {
-    0%   { opacity: 0.00; background-color: rgba(220, 38, 38, 0.00); }
-    15%  { opacity: 0.08; background-color: rgba(220, 38, 38, 0.07); }
-    30%  { opacity: 0.04; background-color: rgba(220, 38, 38, 0.03); }
-    50%  { opacity: 0.08; background-color: rgba(220, 38, 38, 0.07); }
-    70%  { opacity: 0.03; background-color: rgba(220, 38, 38, 0.02); }
-    85%  { opacity: 0.06; background-color: rgba(220, 38, 38, 0.05); }
-    100% { opacity: 0.00; background-color: rgba(220, 38, 38, 0.00); }
-}
-
-/* tavern — warm orange candle flicker */
-@keyframes tavern-flicker {
-    0%   { opacity: 0.02; background-color: rgba(249, 115, 22, 0.02); }
-    10%  { opacity: 0.05; background-color: rgba(249, 115, 22, 0.04); }
-    20%  { opacity: 0.03; background-color: rgba(249, 115, 22, 0.02); }
-    35%  { opacity: 0.07; background-color: rgba(249, 115, 22, 0.06); }
-    45%  { opacity: 0.02; background-color: rgba(249, 115, 22, 0.01); }
-    60%  { opacity: 0.06; background-color: rgba(249, 115, 22, 0.05); }
-    75%  { opacity: 0.03; background-color: rgba(249, 115, 22, 0.02); }
-    90%  { opacity: 0.05; background-color: rgba(249, 115, 22, 0.04); }
-    100% { opacity: 0.02; background-color: rgba(249, 115, 22, 0.02); }
-}
-
-/* realm — deep violet mystical breathe */
-@keyframes realm-breathe {
-    0%   { opacity: 0.00; background-color: rgba(124, 58, 237, 0.00); }
-    30%  { opacity: 0.06; background-color: rgba(124, 58, 237, 0.05); }
-    50%  { opacity: 0.08; background-color: rgba(124, 58, 237, 0.07); }
-    70%  { opacity: 0.05; background-color: rgba(124, 58, 237, 0.04); }
-    100% { opacity: 0.00; background-color: rgba(124, 58, 237, 0.00); }
-}
-
-/* neoncity — cyan horizontal scan line sweep */
-@keyframes neoncity-scan {
-    0%   {
-        opacity: 0.04;
-        background: linear-gradient(
-            180deg,
-            transparent 0%,
-            rgba(6, 182, 212, 0.06) 48%,
-            rgba(6, 182, 212, 0.08) 50%,
-            rgba(6, 182, 212, 0.06) 52%,
-            transparent 100%
-        );
-        background-position: 0 -100vh;
-        background-size: 100% 200vh;
-    }
-    100% {
-        opacity: 0.04;
-        background: linear-gradient(
-            180deg,
-            transparent 0%,
-            rgba(6, 182, 212, 0.06) 48%,
-            rgba(6, 182, 212, 0.08) 50%,
-            rgba(6, 182, 212, 0.06) 52%,
-            transparent 100%
-        );
-        background-position: 0 100vh;
-        background-size: 100% 200vh;
-    }
-}
-
-/* lounge — cool grey ultra-slow atmospheric drift */
-@keyframes lounge-drift {
-    0%   { opacity: 0.00; background-color: rgba(107, 114, 128, 0.00); }
-    40%  { opacity: 0.04; background-color: rgba(107, 114, 128, 0.03); }
-    60%  { opacity: 0.05; background-color: rgba(107, 114, 128, 0.04); }
-    100% { opacity: 0.00; background-color: rgba(107, 114, 128, 0.00); }
-}
-
-/* gallery — indigo slow radial float */
-@keyframes gallery-float {
-    0%   { opacity: 0.00; background-color: rgba(99, 102, 241, 0.00); }
-    20%  { opacity: 0.04; background-color: rgba(99, 102, 241, 0.03); }
-    50%  { opacity: 0.06; background-color: rgba(99, 102, 241, 0.05); }
-    80%  { opacity: 0.03; background-color: rgba(99, 102, 241, 0.02); }
-    100% { opacity: 0.00; background-color: rgba(99, 102, 241, 0.00); }
-}
-
-/* phone — cyan digital glitch step flash */
+/* Phone — digital signal static: cyan flash + lateral glitch shake */
 @keyframes phone-glitch {
-    0%   { opacity: 0.00; background-color: rgba(34, 211, 238, 0.00); }
-    50%  { opacity: 0.05; background-color: rgba(34, 211, 238, 0.04); }
-    100% { opacity: 0.00; background-color: rgba(34, 211, 238, 0.00); }
+  0%   { transform: translateX(0);    background-color: transparent; }
+  25%  { transform: translateX(-3px); background-color: rgba(34, 211, 238, 0.05); }
+  50%  { transform: translateX( 3px); background-color: rgba(34, 211, 238, 0.08); }
+  75%  { transform: translateX(-2px); background-color: rgba(34, 211, 238, 0.04); }
+  100% { transform: translateX(0);    background-color: transparent; }
+}
+
+/* Lounge — cool grey smoke atmosphere: single wide inset drifts in then out */
+@keyframes lounge-drift {
+  0%   { box-shadow: inset 0 0 160px rgba(156, 163, 175, 0.00); }
+  40%  { box-shadow: inset 0 0 160px rgba(156, 163, 175, 0.05); }
+  60%  { box-shadow: inset 0 0 160px rgba(156, 163, 175, 0.08); }
+  80%  { box-shadow: inset 0 0 160px rgba(156, 163, 175, 0.04); }
+  100% { box-shadow: inset 0 0 160px rgba(156, 163, 175, 0.00); }
+}
+
+/* Tavern — warm ember glow: asymmetric flicker rhythm mimics candle flame */
+@keyframes tavern-flicker {
+  0%   { box-shadow: inset 0 0 100px rgba(249, 115, 22, 0.03); }
+  10%  { box-shadow: inset 0 0 100px rgba(249, 115, 22, 0.08); }
+  20%  { box-shadow: inset 0 0 100px rgba(249, 115, 22, 0.04); }
+  35%  { box-shadow: inset 0 0 100px rgba(249, 115, 22, 0.11); }
+  45%  { box-shadow: inset 0 0 100px rgba(249, 115, 22, 0.02); }
+  60%  { box-shadow: inset 0 0 100px rgba(249, 115, 22, 0.09); }
+  75%  { box-shadow: inset 0 0 100px rgba(249, 115, 22, 0.04); }
+  90%  { box-shadow: inset 0 0 100px rgba(249, 115, 22, 0.07); }
+  100% { box-shadow: inset 0 0 100px rgba(249, 115, 22, 0.03); }
+}
+
+/* Casino — gold shimmer: multi-step golden haze that brightens then dims */
+@keyframes casino-pulse {
+  0%   { box-shadow: inset 0 0 120px rgba(245, 158, 11, 0.00); }
+  20%  { box-shadow: inset 0 0 120px rgba(245, 158, 11, 0.08); }
+  40%  { box-shadow: inset 0 0 120px rgba(245, 158, 11, 0.12); }
+  60%  { box-shadow: inset 0 0 120px rgba(245, 158, 11, 0.07); }
+  80%  { box-shadow: inset 0 0 120px rgba(245, 158, 11, 0.10); }
+  100% { box-shadow: inset 0 0 120px rgba(245, 158, 11, 0.00); }
+}
+
+/* Gallery — ink wash drift: very slow indigo radial ink diffusion */
+@keyframes gallery-float {
+  0%   {
+    box-shadow:
+      inset 0 0 180px rgba(99, 102, 241, 0.00),
+      inset 0 0 360px rgba(99, 102, 241, 0.00);
+  }
+  20%  {
+    box-shadow:
+      inset 0 0 180px rgba(99, 102, 241, 0.05),
+      inset 0 0 360px rgba(99, 102, 241, 0.02);
+  }
+  50%  {
+    box-shadow:
+      inset 0 0 180px rgba(99, 102, 241, 0.09),
+      inset 0 0 360px rgba(99, 102, 241, 0.04);
+  }
+  80%  {
+    box-shadow:
+      inset 0 0 180px rgba(99, 102, 241, 0.04),
+      inset 0 0 360px rgba(99, 102, 241, 0.02);
+  }
+  100% {
+    box-shadow:
+      inset 0 0 180px rgba(99, 102, 241, 0.00),
+      inset 0 0 360px rgba(99, 102, 241, 0.00);
+  }
+}
+
+/* Arena — red tremor: blood-glow vignette + 1px micro-translate quakes */
+@keyframes arena-rumble {
+  0%   { box-shadow: inset 0 0  90px rgba(220, 38, 38, 0.00); transform: translate(0, 0); }
+  15%  { box-shadow: inset 0 0  90px rgba(220, 38, 38, 0.12); transform: translate(-1px,  0px); }
+  30%  { box-shadow: inset 0 0  90px rgba(220, 38, 38, 0.05); transform: translate( 1px,  0px); }
+  50%  { box-shadow: inset 0 0  90px rgba(220, 38, 38, 0.14); transform: translate( 0px, -1px); }
+  70%  { box-shadow: inset 0 0  90px rgba(220, 38, 38, 0.04); transform: translate( 1px,  1px); }
+  85%  { box-shadow: inset 0 0  90px rgba(220, 38, 38, 0.10); transform: translate(-1px,  0px); }
+  100% { box-shadow: inset 0 0  90px rgba(220, 38, 38, 0.00); transform: translate(0, 0); }
+}
+
+/* Realm — violet breathe: layered deep-violet energy pulse expands slowly */
+@keyframes realm-breathe {
+  0%   {
+    box-shadow:
+      inset 0 0 120px rgba(124, 58, 237, 0.00),
+      inset 0 0 320px rgba(124, 58, 237, 0.00);
+  }
+  30%  {
+    box-shadow:
+      inset 0 0 120px rgba(124, 58, 237, 0.08),
+      inset 0 0 320px rgba(124, 58, 237, 0.03);
+  }
+  50%  {
+    box-shadow:
+      inset 0 0 120px rgba(124, 58, 237, 0.12),
+      inset 0 0 320px rgba(124, 58, 237, 0.05);
+  }
+  70%  {
+    box-shadow:
+      inset 0 0 120px rgba(124, 58, 237, 0.07),
+      inset 0 0 320px rgba(124, 58, 237, 0.03);
+  }
+  100% {
+    box-shadow:
+      inset 0 0 120px rgba(124, 58, 237, 0.00),
+      inset 0 0 320px rgba(124, 58, 237, 0.00);
+  }
+}
+
+/* Neoncity — cyan horizontal scan: background-position sweeps gradient top→bottom */
+@keyframes neoncity-scan {
+  0%   { background-position: 0 -100vh; }
+  100% { background-position: 0  100vh; }
 }
 
 /* ── 5. Interactive element accent per scene ──────────────────────────── */
@@ -206,7 +299,7 @@
 [data-scene="realm"]    :focus-visible { outline-color: var(--cs-scene-accent); }
 [data-scene="neoncity"] :focus-visible { outline-color: var(--cs-scene-accent); }
 
-/* ── 6. Scrollbar accent per scene ───────────────────────────────────── */
+/* ── 6. Scrollbar accent per scene ────────────────────────────────────── */
 
 [data-scene="bedroom"]  ::-webkit-scrollbar-thumb { background: var(--cs-scene-accent); }
 [data-scene="phone"]    ::-webkit-scrollbar-thumb { background: var(--cs-scene-accent); }
@@ -217,3 +310,18 @@
 [data-scene="arena"]    ::-webkit-scrollbar-thumb { background: var(--cs-scene-accent); }
 [data-scene="realm"]    ::-webkit-scrollbar-thumb { background: var(--cs-scene-accent); }
 [data-scene="neoncity"] ::-webkit-scrollbar-thumb { background: var(--cs-scene-accent); }
+
+/* ── 7. prefers-reduced-motion — disable all ambient animations ─────────── */
+/*
+ * Users who prefer reduced motion get a fully static experience.
+ * !important overrides any inline animation that scenes might set.
+ */
+
+@media (prefers-reduced-motion: reduce) {
+  [data-scene],
+  [data-scene]::before,
+  [data-scene]::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

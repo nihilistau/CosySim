@@ -86,6 +86,14 @@
     --cs-blur-lg:   32px;
     --cs-blur-xl:   40px;
 
+    /* Glass blur named sizes */
+    --cs-glass-blur-md: 24px;
+
+    /* Glow spread sizes */
+    --cs-glow-spread-sm: 12px;
+    --cs-glow-spread-md: 20px;
+    --cs-glow-spread-lg: 32px;
+
     /* ── Hacker / Admin Loft Theme ──────────────────────────── */
     --cs-hack-green:        #00ff41;
     --cs-hack-green-dim:    #00cc33;
@@ -221,11 +229,11 @@
     --cs-shadow-neon:   0 0 10px var(--cs-scene-accent), 0 0 29px var(--cs-scene-glow);
 
     /* Depth shadow stack */
-    --cs-depth-1: 0 1px 3px rgba(0, 0, 0, .4);
+    --cs-depth-1: 0 2px 4px rgba(0,0,0,0.4);
     --cs-depth-2: 0 4px 12px rgba(0, 0, 0, .5);
     --cs-depth-3: 0 8px 24px rgba(0, 0, 0, .6);
     --cs-depth-4: 0 16px 48px rgba(0, 0, 0, .7);
-    --cs-depth-5: 0 32px 96px rgba(0, 0, 0, .8);
+    --cs-depth-5: 0 32px 80px rgba(0,0,0,0.8);
 
     /* ── Transitions ────────────────────────────────────────── */
     --cs-duration-fast: 150ms;
