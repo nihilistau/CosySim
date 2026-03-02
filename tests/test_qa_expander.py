@@ -401,7 +401,7 @@ class TestSchedulerIntegration:
         from engine.nexus.scheduler_daemon import _register_builtin_tasks
         daemon = MagicMock()
         _register_builtin_tasks(daemon)
-        assert daemon.register.call_count == 35
+        assert daemon.register.call_count == 36
 
     def test_qa_expansion_callback_calls_run(self) -> None:
         from engine.nexus.scheduler_daemon import _qa_expansion_callback

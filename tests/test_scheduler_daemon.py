@@ -313,10 +313,9 @@ class TestBuiltinTasks:
 
         daemon = MagicMock()
         _register_builtin_tasks(daemon)
-        assert daemon.register.call_count == 35
+        assert daemon.register.call_count == 36
 
     def test_doc_sync_task_registered(self) -> None:
-        """doc-sync task is registered in builtin tasks."""
         from engine.nexus.scheduler_daemon import _register_builtin_tasks
 
         daemon = MagicMock()

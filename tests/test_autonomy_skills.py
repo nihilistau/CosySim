@@ -531,8 +531,7 @@ class TestIntegrationFlow:
         daemon = MagicMock()
         _register_builtin_tasks(daemon)
         task_ids = [c.args[0] for c in daemon.register.call_args_list]
-        assert daemon.register.call_count == 35
-        assert "nexus-maintenance" in task_ids
+        assert daemon.register.call_count == 36
         assert "nexus-dedup" in task_ids
         assert "knowledge-quality" in task_ids
         assert "notebook-rotation" in task_ids
@@ -610,7 +609,7 @@ class TestIntegrationFlow:
         from engine.nexus.scheduler_daemon import get_scheduler_daemon
         daemon = get_scheduler_daemon()
         status = daemon.status()
-        assert status["task_count"] == 35
+        assert status["task_count"] == 36
 
     def test_scheduler_daemon_task_ids(self):
         """SchedulerDaemon has the expected task IDs."""

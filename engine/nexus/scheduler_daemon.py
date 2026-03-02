@@ -1099,6 +1099,12 @@ def _register_builtin_tasks(daemon: "SchedulerDaemon") -> None:
         "weekly",
         _scene_lore_seed_callback,
     )
+    daemon.register(
+        "daily-challenge-seed",
+        "Daily Challenge Seed — pre-generate scene challenges for all 9 scenes",
+        "daily",
+        _daily_challenge_seed_callback,
+    )
 
 
 def _world_sim_tick_callback() -> Dict[str, Any]:
@@ -1168,6 +1174,18 @@ def _scene_lore_seed_callback() -> Dict[str, Any]:
     except Exception as exc:
         logger.debug("scene_lore_seed skipped: %s", exc)
         return {"status": "skipped", "reason": str(exc)}
+
+
+def _daily_challenge_seed_callback() -> Dict[str, Any]:
+    """Daily: pre-generate challenges for all 9 scenes and store in Nexus."""
+    try:
+        from engine.nexus.daily_challenge import get_daily_challenge_manager
+        mgr = get_daily_challenge_manager()
+        results = mgr.seed_all()
+        return {"status": "ok", "scenes": len(results), "challenges": results}
+    except Exception as exc:
+        logger.error("daily_challenge_seed failed: %s", exc)
+        return {"error": str(exc)}
 
 
 def _qa_history_mine_callback() -> Dict[str, Any]:
