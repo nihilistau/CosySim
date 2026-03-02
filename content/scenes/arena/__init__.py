@@ -85,6 +85,7 @@ class ArenaScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
         # Register BaseScene standard routes
         self.register_health_route(self.app)
         self.register_bench_route(self.app, self.socketio)
+        self.register_tts_route(self.app)
 
         # Mount control overlay
         try:
@@ -195,6 +196,23 @@ class ArenaScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
                     "scene": SCENE_ID,
                 })
             except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @app.route("/api/economy")
+        def api_economy():
+            """Return current economy state for this scene."""
+            try:
+                from engine.economy.economy import get_economy_manager
+                em = get_economy_manager()
+                player_id = request.args.get("player_id", "player")
+                return jsonify({
+                    "scene": SCENE_ID,
+                    "balance": em.get_balance(player_id),
+                    "debt": em.check_debt(player_id),
+                    "recent_transactions": [t.to_dict() for t in em.get_history(player_id, limit=10)],
+                })
+            except Exception as exc:
+                logger.warning("Economy API error: %s", exc)
                 return jsonify({"error": str(exc)}), 500
 
     # ══════════════════════════════════════════════════════════════════

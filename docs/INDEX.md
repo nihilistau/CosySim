@@ -1,6 +1,51 @@
 # CosySim Documentation Index
 
-> All project documentation in one place. v0.68 — 6,679 tests, 214 MCP tools, 22 skill packs (206 skills), 15 active scenes + Arena.
+> All project documentation in one place. v0.69b — 6,921 tests, 214 MCP tools, 21 skill packs (188+ skills), 9 active scenes + 5 system scenes.
+
+## Quick Facts — v0.69b
+
+| Metric | Value |
+|--------|-------|
+| Version | **0.69b** (March 2026) |
+| Tests passing | **6,921** across ~190 files |
+| MCP tools | **214** |
+| Skill packs | **21 packs · 188+ skills** |
+| Active scenes | **9** (bedroom, phone, lounge, tavern, casino, gallery, arena, realm, neoncity) |
+| System scenes | **5** (coders, heist, games, hub, intel_hub) |
+| Scheduler tasks | **34** builtin autonomous tasks |
+| Engine modules (v0.68+) | **13** new living-world modules |
+
+### Active Scene Ports
+
+| Scene | Display Name | Port |
+|-------|-------------|------|
+| bedroom | THE PENTHOUSE | 5555 |
+| phone | SIGNAL | 5556 |
+| lounge | THE VELVET PIT | 5557 |
+| tavern | THE RUSTY ANCHOR | 5558 |
+| casino | CLUB NOIR | 5559 |
+| gallery | THE OBSCURA | 5560 |
+| arena | THE COLOSSEUM | 5561 |
+| realm | THE SHATTERED THRONE | 5562 |
+| neoncity | NEON CITY | 5563 |
+
+### System Scene Ports
+
+| Scene | Display Name | Port |
+|-------|-------------|------|
+| coders | THE LAB | 5564 |
+| heist | THE SCORE | 5565 |
+| games | THE ARCADE | 5566 |
+| hub | THE TERMINAL | 8500 |
+| intel_hub | THE BRIEFING ROOM | 5580 |
+
+### v0.68 Engine Modules
+
+`EventBus` · `EconomyManager` · `ContentGate` · `ContentEngine` · `CharacterMemory` ·
+`ReputationManager` · `SceneDirector` · `ConsequenceStore` · `InvestigationBoard` ·
+`SceneArtManager` · `WorldState` · `WorldSim` · `ArenaEngine`
+
+---
 
 ## Getting Started
 
@@ -19,6 +64,7 @@
 | [Interceptors](INTERCEPTORS.md) | Interceptor pipeline — all 25 hooks, priorities, custom interceptors |
 | [MCP Framework](MCP_FRAMEWORK.md) | Tools, governance, state, dialog, rules, skills |
 | [Characters](CHARACTERS.md) | Personality, stats, buffs, tags, relationships |
+| [Character System](CHARACTER_SYSTEM.md) | CharacterMemory, ReputationManager, emotion model, speech patterns |
 | [LMStudio](LMSTUDIO.md) | InferenceOrchestrator, model management, routing, streaming, branching |
 | [Spatial System](SPATIAL.md) | SceneMap, Location, character positioning, proximity gating |
 | [Architecture Decisions](DECISIONS.md) | Key design decisions and rationale (ADRs) |
@@ -27,8 +73,9 @@
 
 | Doc | Description |
 |-----|-------------|
-| [Scenes Guide](SCENES.md) | All 18 game scenes — mechanics, APIs, rules |
-| [Skills](SKILLS.md) | @skill decorator, 21 built-in packs (195 skills) |
+| [Scene Guide](SCENE_GUIDE.md) | Per-scene game mechanics — all 9 active scenes |
+| [Scenes Reference](SCENES.md) | All scenes — mechanics, APIs, rules (legacy reference) |
+| [Skills](SKILLS.md) | @skill decorator, 21 built-in packs (188+ skills) |
 | [Admin Guide](ADMIN_GUIDE.md) | Admin panel pages and operations |
 | [System Control Panel](SYSTEM_CONTROL.md) | Config editor, service health, launcher, NLM proxy, Git — port 5575 |
 | [World System](WORLD_SYSTEM.md) | WorldSim, WorldState, EventBus, cross-scene events |
@@ -62,15 +109,15 @@
 |-----|-------------|
 | [Logging](LOGGING.md) | CosyLogger ring buffer, SystemMonitor, structured logging patterns |
 | [KPI](KPI.md) | `@timed` decorator, LLM KPIs, benchmarking dashboard |
-| [System Audit](SYSTEM_AUDIT.md) | v0.59b system audit — grade A, all 18 scenes rated |
+| [System Audit](SYSTEM_AUDIT.md) | v0.69b system audit — grade A+, all 9 active scenes rated |
 
 ## Training & Testing
 
 | Doc | Description |
 |-----|-------------|
+| [Fine-Tuning Guide](FINETUNING_GUIDE.md) | End-to-end: datasets → MicroDatasetManager → FinetuneOrchestrator → ModelRegistry → promote |
 | [Training](TRAINING.md) | Gemma 270M fine-tuning pipeline, datasets, Colab |
-| [Router Training Data](ROUTER_TRAINING.md) | RouterDataCollector, inference capture, tier label export |
-| [Testing](TESTING.md) | Test commands, fixtures, writing tests (5054 tests, 177 files) |
+| [Testing](TESTING.md) | Test commands, fixtures, writing tests (6,921 tests, ~190 files) |
 
 ## Development
 

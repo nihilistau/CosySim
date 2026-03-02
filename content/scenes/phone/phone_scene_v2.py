@@ -198,6 +198,7 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE
         )
         register_shared_assets(self.app)
         self.register_health_route(self.app)
+        self.register_tts_route(self.app)
         self.app.secret_key = os.urandom(24)
         self.socketio = SocketIO(self.app, cors_allowed_origins="*", async_mode="threading")
 
@@ -1577,6 +1578,23 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE
                 return jsonify({"ok": True, "notebooks": notebooks})
             except Exception as exc:
                 return jsonify({"ok": False, "error": str(exc)}), 500
+
+        @app.route("/api/economy")
+        def api_economy():
+            """Return current economy state for this scene."""
+            try:
+                from engine.economy.economy import get_economy_manager
+                em = get_economy_manager()
+                player_id = request.args.get("player_id", "player")
+                return jsonify({
+                    "scene": "phone",
+                    "balance": em.get_balance(player_id),
+                    "debt": em.check_debt(player_id),
+                    "recent_transactions": [t.to_dict() for t in em.get_history(player_id, limit=10)],
+                })
+            except Exception as exc:
+                logger.error("Economy API error: %s", exc)
+                return jsonify({"error": str(exc)}), 500
 
 
 # ── Module entry point ────────────────────────────────────────────────────────

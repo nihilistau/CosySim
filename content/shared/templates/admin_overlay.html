@@ -82,6 +82,13 @@
         aria-controls="cs-admin-panel-economy"
         data-tab="economy"
       >[ECONOMY]</button>
+      <button
+        class="cs-admin-tab"
+        role="tab"
+        aria-selected="false"
+        aria-controls="cs-admin-panel-system"
+        data-tab="system"
+      >[SYSTEM]</button>
     </nav>
 
     <button
@@ -393,6 +400,32 @@
         </div>
       </div>
     </div><!-- /ECONOMY -->
+
+    <!-- SYSTEM ───────────────────────────────────────────────── -->
+    <div
+      class="cs-admin-panel"
+      id="cs-admin-panel-system"
+      data-tab="system"
+      role="tabpanel"
+      aria-label="System settings"
+      style="display:none"
+    >
+      <div class="cs-content-controls">
+        <h3 class="cs-hack-text">Voice Settings</h3>
+
+        <div class="cs-intensity-row">
+          <label for="cs-tts-toggle">Master TTS</label>
+          <input type="checkbox" id="cs-tts-toggle" aria-label="Enable TTS">
+          <span class="cs-intensity-val" id="cs-tts-status">on</span>
+        </div>
+
+        <div class="cs-intensity-row">
+          <label for="cs-stt-toggle">Master STT</label>
+          <input type="checkbox" id="cs-stt-toggle" aria-label="Enable STT">
+          <span class="cs-intensity-val" id="cs-stt-status">off</span>
+        </div>
+      </div>
+    </div><!-- /SYSTEM -->
 
   </div><!-- /.cs-admin-panels -->
 </div><!-- /#cs-admin-overlay -->

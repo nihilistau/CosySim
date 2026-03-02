@@ -1152,6 +1152,7 @@ class BedroomScene(BedroomCombatMixin, BedroomDialogMixin, BedroomInventoryMixin
         register_shared_assets(self.app)
         self.register_health_route(self.app)
         self.register_bench_route(self.app, None)  # socketio not yet created
+        self.register_tts_route(self.app)
         self.app.config["SECRET_KEY"] = "bedroom_v4_roleplay_secret"
         CORS(self.app)
         self.socketio = SocketIO(self.app, cors_allowed_origins="*", manage_session=False)
@@ -1327,6 +1328,23 @@ class BedroomScene(BedroomCombatMixin, BedroomDialogMixin, BedroomInventoryMixin
                     "pos": loc.properties.get("pos", {"x": 0, "y": 0, "z": 0}),
                 }
             return jsonify(locs)
+
+        @self.app.route("/api/economy")
+        def api_economy():
+            """Return current economy state for this scene."""
+            try:
+                from engine.economy.economy import get_economy_manager
+                em = get_economy_manager()
+                player_id = request.args.get("player_id", "player")
+                return jsonify({
+                    "scene": "bedroom",
+                    "balance": em.get_balance(player_id),
+                    "debt": em.check_debt(player_id),
+                    "recent_transactions": [t.to_dict() for t in em.get_history(player_id, limit=10)],
+                })
+            except Exception as exc:
+                logger.error("Economy API error: %s", exc)
+                return jsonify({"error": str(exc)}), 500
 
         # Delegate route groups to mixins
         self._setup_character_routes()

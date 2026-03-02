@@ -335,6 +335,38 @@ class TavernScene(BaseScene, NexusSceneMixin):
             entries = self.tavern_state.narrative[-limit:]
             return jsonify({"narrative": entries})
 
+        @app.route("/api/economy")
+        def api_economy():
+            """Return current economy state for this scene."""
+            try:
+                from engine.economy.economy import get_economy_manager
+                em = get_economy_manager()
+                player_id = request.args.get("player_id", "player")
+                return jsonify({
+                    "scene": SCENE_ID,
+                    "balance": em.get_balance(player_id),
+                    "debt": em.check_debt(player_id),
+                    "recent_transactions": [t.to_dict() for t in em.get_history(player_id, limit=10)],
+                })
+            except Exception as exc:
+                log.error("Economy API error: %s", exc)
+                return jsonify({"error": str(exc)}), 500
+
+        @app.route("/api/consequences")
+        def api_consequences():
+            """Return recent and pending consequences for this scene."""
+            try:
+                from engine.mechanics.consequences import get_consequence_store
+                store = get_consequence_store()
+                player_id = request.args.get("player_id", "player")
+                return jsonify({
+                    "recent": [c.to_dict() for c in store.get_history(player_id, limit=5)],
+                    "pending": [c.to_dict() for c in store.get_pending(SCENE_ID, player_id)],
+                })
+            except Exception as exc:
+                log.error("Consequences API error: %s", exc)
+                return jsonify({"error": str(exc)}), 500
+
         # Health route for service discovery
         self.register_health_route(app)
 

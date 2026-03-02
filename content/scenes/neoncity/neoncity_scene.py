@@ -568,6 +568,37 @@ class NeonCityScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="neo
                 logger.error("end_turn failed: %s", exc, exc_info=True)
                 return jsonify({"error": str(exc)}), 500
 
+        @self.app.route("/api/economy")
+        def api_economy():
+            """Return current economy state for this scene."""
+            try:
+                player_id = request.args.get("player_id", "player")
+                return jsonify({
+                    "scene": SCENE_ID,
+                    "balance": get_economy_manager().get_balance(player_id),
+                    "debt": get_economy_manager().check_debt(player_id),
+                    "recent_transactions": [
+                        t.to_dict() for t in get_economy_manager().get_history(player_id, limit=10)
+                    ],
+                })
+            except Exception as exc:
+                logger.error("Economy API error: %s", exc)
+                return jsonify({"error": str(exc)}), 500
+
+        @self.app.route("/api/consequences")
+        def api_consequences():
+            """Return recent and pending consequences for this scene."""
+            try:
+                player_id = request.args.get("player_id", "player")
+                store = get_consequence_store()
+                return jsonify({
+                    "recent": [c.to_dict() for c in store.get_history(player_id, limit=5)],
+                    "pending": [c.to_dict() for c in store.get_pending(SCENE_ID, player_id)],
+                })
+            except Exception as exc:
+                logger.error("Consequences API error: %s", exc)
+                return jsonify({"error": str(exc)}), 500
+
     # ------------------------------------------------------------------
     # Private — Socket.IO handlers
     # ------------------------------------------------------------------

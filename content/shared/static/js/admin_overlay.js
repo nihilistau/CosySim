@@ -166,6 +166,7 @@
         case 'logs':      this._loadLogs();     break;
         case 'content':   /* sliders are static */  break;
         case 'economy':   this._loadEconomy();  break;
+        case 'system':    this._loadSystem();   break;
       }
     }
 
@@ -506,6 +507,44 @@
           this.toggle();
         }
       });
+    }
+
+    /* ── System (Voice Settings) ────────────────────────────────── */
+
+    _loadSystem() {
+      const ttsToggle  = document.getElementById('cs-tts-toggle');
+      const sttToggle  = document.getElementById('cs-stt-toggle');
+      const ttsStatus  = document.getElementById('cs-tts-status');
+      const sttStatus  = document.getElementById('cs-stt-status');
+
+      const ttsEnabled = localStorage.getItem('cosysim_tts_enabled') !== 'false';
+      const sttEnabled = localStorage.getItem('cosysim_stt_enabled') === 'true';
+
+      if (ttsToggle) {
+        ttsToggle.checked = ttsEnabled;
+        if (ttsStatus) ttsStatus.textContent = ttsEnabled ? 'on' : 'off';
+        ttsToggle.onchange = () => {
+          if (window.voiceManager) {
+            ttsToggle.checked ? window.voiceManager.enable() : window.voiceManager.disable();
+          } else {
+            localStorage.setItem('cosysim_tts_enabled', ttsToggle.checked ? 'true' : 'false');
+          }
+          if (ttsStatus) ttsStatus.textContent = ttsToggle.checked ? 'on' : 'off';
+        };
+      }
+
+      if (sttToggle) {
+        sttToggle.checked = sttEnabled;
+        if (sttStatus) sttStatus.textContent = sttEnabled ? 'on' : 'off';
+        sttToggle.onchange = () => {
+          if (window.voiceManager) {
+            sttToggle.checked ? window.voiceManager.enableSTT() : window.voiceManager.disableSTT();
+          } else {
+            localStorage.setItem('cosysim_stt_enabled', sttToggle.checked ? 'true' : 'false');
+          }
+          if (sttStatus) sttStatus.textContent = sttToggle.checked ? 'on' : 'off';
+        };
+      }
     }
 
     /* ── Poll ───────────────────────────────────────────────────── */

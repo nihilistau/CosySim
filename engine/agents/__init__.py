@@ -8,6 +8,7 @@ Public API::
     from engine.agents.protocols import IAgent, AgentCapability
 """
 from .character_agent import CharacterAgent
+from .character_memory import CharacterMemory, get_character_memory
 from .scene_agent      import SceneAgent, get_scene_agent
 from .agent_loop       import AgentLoop
 from .protocols        import IAgent, IInterceptor, AgentCapability
@@ -19,6 +20,8 @@ from engine.mcp.comms_framework import AgentGovernor, get_governor
 
 __all__ = [
     "CharacterAgent",
+    "CharacterMemory",
+    "get_character_memory",
     "SceneAgent",
     "get_scene_agent",
     "AgentLoop",

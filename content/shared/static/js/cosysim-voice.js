@@ -18,7 +18,8 @@
  */
 class VoiceManager {
   constructor() {
-    this._enabled  = localStorage.getItem('cs_voice_enabled') !== 'false';
+    this._enabled  = localStorage.getItem('cosysim_tts_enabled') !== 'false';
+    this._sttEnabled = localStorage.getItem('cosysim_stt_enabled') === 'true';
     this._backend  = localStorage.getItem('cs_voice_backend') || 'piper';
     this._speed    = parseFloat(localStorage.getItem('cs_voice_speed')  || '1.0');
     this._pitch    = parseFloat(localStorage.getItem('cs_voice_pitch')  || '1.0');
@@ -37,13 +38,13 @@ class VoiceManager {
 
   enable() {
     this._enabled = true;
-    localStorage.setItem('cs_voice_enabled', 'true');
+    localStorage.setItem('cosysim_tts_enabled', 'true');
     this._emit('voice:enabled', {});
   }
 
   disable() {
     this._enabled = false;
-    localStorage.setItem('cs_voice_enabled', 'false');
+    localStorage.setItem('cosysim_tts_enabled', 'false');
     this.stop();
     this._emit('voice:disabled', {});
   }
@@ -59,6 +60,26 @@ class VoiceManager {
   /** @returns {boolean} */
   isEnabled() {
     return this._enabled;
+  }
+
+  // ── STT master toggle ─────────────────────────────────────────────────
+
+  enableSTT() {
+    this._sttEnabled = true;
+    localStorage.setItem('cosysim_stt_enabled', 'true');
+    this._emit('voice:stt_enabled', {});
+  }
+
+  disableSTT() {
+    this._sttEnabled = false;
+    localStorage.setItem('cosysim_stt_enabled', 'false');
+    this.stopListening();
+    this._emit('voice:stt_disabled', {});
+  }
+
+  /** @returns {boolean} */
+  isSTTEnabled() {
+    return this._sttEnabled;
   }
 
   // ── Speak ─────────────────────────────────────────────────────────────
@@ -198,6 +219,9 @@ class VoiceManager {
    * @returns {Promise<string>}
    */
   listen() {
+    if (!this._sttEnabled) {
+      return Promise.reject(new Error('STT is disabled.'));
+    }
     return new Promise((resolve, reject) => {
       const SpeechRecognition =
         window.SpeechRecognition || window.webkitSpeechRecognition;
