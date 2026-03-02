@@ -7,6 +7,8 @@
 
   <!-- Shared assets -->
   <link rel="stylesheet" href="/shared/css/design_tokens.css">
+  <link rel="stylesheet" href="/shared/css/cosysim-animations.css">
+  <link rel="stylesheet" href="/shared/css/cosysim-scene-fx.css">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/casino.css') }}">
 
   <!-- Socket.IO -->
@@ -26,6 +28,7 @@
 </head>
 
 <body data-scene="casino">
+<canvas id="cs-particles"></canvas>
 
 <!-- ══════════════════════════════════════════════════════════════
      NAVBAR
@@ -264,5 +267,7 @@
 
 <script src="{{ url_for('static', filename='js/casino.js') }}"></script>
 <script src="/shared/js/cosysim-voice.js"></script>
+<script>window.SCENE_PARTICLE_CONFIG = { scene: 'casino' };</script>
+<script src="/shared/js/cosysim-particles.js"></script>
 </body>
 </html>

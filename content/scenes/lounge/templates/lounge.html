@@ -6,12 +6,15 @@
   <title>THE VELVET PIT</title>
   <link rel="stylesheet" href="/shared/static/css/design_tokens.css"/>
   <link rel="stylesheet" href="{{ url_for('static', filename='lounge.css') }}"/>
+  <link rel="stylesheet" href="/shared/css/cosysim-animations.css">
+  <link rel="stylesheet" href="/shared/css/cosysim-scene-fx.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.6.1/socket.io.min.js"></script>
   <script src="/shared/static/js/cosysim-core.js"></script>
   <script src="/shared/static/js/cosysim-stream.js"></script>
   <script src="/shared/static/js/cosysim-particles3d.js"></script>
 </head>
 <body data-scene="lounge">
+<canvas id="cs-particles"></canvas>
 
 {% include 'navbar_v2.html' %}
 
@@ -208,5 +211,7 @@
 
 <script src="{{ url_for('static', filename='lounge.js') }}"></script>
 <script src="/shared/js/cosysim-voice.js"></script>
+<script>window.SCENE_PARTICLE_CONFIG = { scene: 'lounge' };</script>
+<script src="/shared/js/cosysim-particles.js"></script>
 </body>
 </html>

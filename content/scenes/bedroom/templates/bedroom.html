@@ -9,13 +9,15 @@
   <link rel="stylesheet" href="/shared/css/design_tokens.css">
   <link rel="stylesheet" href="/shared/css/cosysim-components.css">
   <link rel="stylesheet" href="/shared/css/cosysim-animations.css">
+  <link rel="stylesheet" href="/shared/css/cosysim-scene-fx.css">
   <link rel="stylesheet" href="/shared/css/navbar_v2.css">
 
   <!-- Scene CSS -->
   <link rel="stylesheet" href="{{ url_for('static', filename='bedroom.css') }}">
 </head>
 
-<body class="cs-scene-body penthouse-body">
+<body class="cs-scene-body penthouse-body" data-scene="bedroom">
+<canvas id="cs-particles"></canvas>
 
   {% include 'navbar_v2.html' %}
 
@@ -318,6 +320,8 @@
 
   <!-- Scene script -->
   <script src="{{ url_for('static', filename='bedroom.js') }}"></script>
+  <script>window.SCENE_PARTICLE_CONFIG = { scene: 'bedroom' };</script>
+  <script src="/shared/js/cosysim-particles.js"></script>
 
 </body>
 </html>

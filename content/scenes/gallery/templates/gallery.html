@@ -18,11 +18,14 @@
   </style>
 
   <link rel="stylesheet" href="/shared/css/design_tokens.css">
+  <link rel="stylesheet" href="/shared/css/cosysim-animations.css">
+  <link rel="stylesheet" href="/shared/css/cosysim-scene-fx.css">
   <link rel="stylesheet" href="/shared/css/cosysim-components.css">
   <link rel="stylesheet" href="{{ url_for('static', filename='gallery.css') }}">
 </head>
 
 <body data-scene="gallery" class="obscura-body">
+<canvas id="cs-particles"></canvas>
 
   {% include 'navbar_v2.html' ignore missing %}
 
@@ -117,6 +120,8 @@
   <script src="/shared/js/navbar_v2.js" defer></script>
   <script src="{{ url_for('static', filename='gallery.js') }}" defer></script>
   <script src="/shared/js/cosysim-voice.js"></script>
+  <script>window.SCENE_PARTICLE_CONFIG = { scene: 'gallery' };</script>
+  <script src="/shared/js/cosysim-particles.js"></script>
 
 </body>
 </html>

@@ -12,6 +12,7 @@
   <link rel="stylesheet" href="/shared/css/design_tokens.css">
   <link rel="stylesheet" href="/shared/css/cosysim-components.css">
   <link rel="stylesheet" href="/shared/css/cosysim-animations.css">
+  <link rel="stylesheet" href="/shared/css/cosysim-scene-fx.css">
   <link rel="stylesheet" href="/shared/css/navbar_v2.css">
 
   <!-- Scene CSS -->
@@ -19,6 +20,7 @@
 </head>
 
 <body class="realm-body" data-scene="realm">
+<canvas id="cs-particles"></canvas>
 
   {% include 'navbar_v2.html' %}
 
@@ -347,6 +349,8 @@
       setTimeout(csqPoll,30000);
     })();
   </script>
+  <script>window.SCENE_PARTICLE_CONFIG = { scene: 'realm' };</script>
+  <script src="/shared/js/cosysim-particles.js"></script>
 
 </body>
 </html>

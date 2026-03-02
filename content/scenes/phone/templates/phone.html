@@ -9,6 +9,9 @@
   {% include 'navbar_v2.html' %}
 
   <link rel="stylesheet" href="/static/phone.css">
+  <link rel="stylesheet" href="/shared/css/design_tokens.css">
+  <link rel="stylesheet" href="/shared/css/cosysim-animations.css">
+  <link rel="stylesheet" href="/shared/css/cosysim-scene-fx.css">
 
   <style>
     :root {
@@ -35,8 +38,9 @@
 </head>
 
 <body data-scene="phone">
+<canvas id="cs-particles"></canvas>
 
-<!-- ── Investigation panel (right slide-in) ───────────────────────────────── -->
+<!-- ── Investigation panel(right slide-in) ───────────────────────────────── -->
 <div class="investigation-panel" id="investigationPanel">
   <div class="inv-header">
     <span class="inv-title">▸ HACKER_TRAIL</span>
@@ -139,6 +143,8 @@
 <script src="/shared/js/cosysim-bench.js"></script>
 <script src="/shared/js/cosysim-voice.js"></script>
 <script src="/static/phone.js"></script>
+<script>window.SCENE_PARTICLE_CONFIG = { scene: 'phone' };</script>
+<script src="/shared/js/cosysim-particles.js"></script>
 
 </body>
 </html>

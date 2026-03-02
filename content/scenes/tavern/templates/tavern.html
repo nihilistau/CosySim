@@ -2,10 +2,14 @@
 {% block title %}THE RUSTY ANCHOR{% endblock %}
 {% block extra_head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='tavern.css') }}">
+<link rel="stylesheet" href="/shared/css/design_tokens.css">
+<link rel="stylesheet" href="/shared/css/cosysim-animations.css">
+<link rel="stylesheet" href="/shared/css/cosysim-scene-fx.css">
 {% endblock %}
 
 {% block content %}
 <body data-scene="tavern" class="tavern-layout">
+<canvas id="cs-particles"></canvas>
 
   <!-- ══════════════════════════════════════════════════════════
        TAVERN HEADER
@@ -223,4 +227,6 @@
     window.scene.init();
   });
 </script>
+<script>window.SCENE_PARTICLE_CONFIG = { scene: 'tavern' };</script>
+<script src="/shared/js/cosysim-particles.js"></script>
 {% endblock %}

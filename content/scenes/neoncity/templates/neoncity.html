@@ -6,11 +6,14 @@
 <title>NEON CITY — CosySim v0.68</title>
 
 <link rel="stylesheet" href="/shared/css/design_tokens.css">
+<link rel="stylesheet" href="/shared/css/cosysim-animations.css">
+<link rel="stylesheet" href="/shared/css/cosysim-scene-fx.css">
 <link rel="stylesheet" href="/static/neoncity.css">
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.4/socket.io.min.js"></script>
 </head>
 <body data-scene="neoncity">
+<canvas id="cs-particles"></canvas>
 
 <!-- ════════════════════════════════════════════════════════════════
      NAVBAR
@@ -391,5 +394,7 @@
     setTimeout(csqPoll,30000);
   })();
 </script>
+<script>window.SCENE_PARTICLE_CONFIG = { scene: 'neoncity' };</script>
+<script src="/shared/js/cosysim-particles.js"></script>
 </body>
 </html>
