@@ -117,14 +117,14 @@ def register_shared_assets(app):
 
     # ── Metrics API routes (v0.72) ───────────────────────────────────
 
-    @shared_bp.route("/api/metrics")
+    @shared_bp.route("/api/perf/metrics")
     def api_metrics() -> "Response":
         """Return in-process metrics summary. Query param: window (seconds)."""
         from engine.monitoring.metrics_collector import get_metrics_collector
         window = request.args.get("window", 3600, type=int)
         return jsonify(get_metrics_collector().get_summary(window_seconds=window))
 
-    @shared_bp.route("/api/metrics/reset", methods=["POST"])
+    @shared_bp.route("/api/perf/metrics/reset", methods=["POST"])
     def api_metrics_reset() -> "Response":
         """Clear all recorded metrics samples."""
         from engine.monitoring.metrics_collector import get_metrics_collector
