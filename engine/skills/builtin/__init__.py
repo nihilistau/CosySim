@@ -12,6 +12,8 @@ from . import profile_skills
 from . import relationship_skills
 from . import reputation_skills
 from . import art_skills
+from . import player_profile_skills
+from . import npc_skills
 
 __all__ = [
     "comfyui_skills", "memory_skills", "character_skills", "voice_skills",
@@ -26,4 +28,6 @@ __all__ = [
     "relationship_skills",
     "reputation_skills",
     "art_skills",
+    "player_profile_skills",
+    "npc_skills",
 ]
