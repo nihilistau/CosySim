@@ -11,6 +11,8 @@ handle the failure in its next turn.
 """
 from __future__ import annotations
 
+from typing import List, Optional
+
 from engine.skills.skill import skill
 import logging
 
@@ -174,3 +176,157 @@ def list_comfyui_workflows() -> str:
         return json.dumps(workflows)
     except Exception as exc:
         return f"Could not list workflows: {exc}"
+
+
+@skill(
+    pack="comfyui",
+    description=(
+        "Generate an image for a specific scene (background, atmosphere, or item) using "
+        "ComfyUI and inject it into the scene's static assets.  Returns the static URL "
+        "path the scene can use immediately, or an error message."
+    ),
+    tags=["image", "scene", "background", "generation"],
+)
+def generate_scene_image(
+    scene: str,
+    image_type: str = "background",
+    prompt: str = "",
+    width: int = 1920,
+    height: int = 1080,
+    steps: int = 6,
+    cfg: float = 1.0,
+    filename: str = "",
+) -> str:
+    """Generate and inject an image directly into a scene's static asset folder.
+
+    Args:
+        scene:       Target scene name (e.g. 'bedroom', 'casino', 'arena').
+        image_type:  Asset category: 'background', 'item', 'atmosphere', 'portrait'.
+        prompt:      Image prompt.  If empty, a default is built from scene + type.
+        width:       Output width in pixels (default 1920 for backgrounds).
+        height:      Output height in pixels (default 1080 for backgrounds).
+        steps:       Diffusion steps (default 6 — proven fast-quality balance).
+        cfg:         Guidance scale (default 1.0 — proven profile).
+        filename:    Output filename stem (default: scene_imagetype_timestamp.png).
+
+    Returns:
+        Static URL string (e.g. '/scenes/bedroom/static/img/bg_generated.png')
+        on success, or an error message.
+    """
+    import time
+    from pathlib import Path
+
+    try:
+        from engine.config import get_config
+        from engine.asset_studio.workflow_manager import get_workflow_manager
+
+        config = get_config()
+
+        # Build prompt from scene context if not supplied
+        if not prompt:
+            scene_prompts = {
+                "bedroom":  "luxury penthouse bedroom at night, purple neon ambient lighting, moody atmosphere",
+                "casino":   "high-end casino floor, golden chandeliers, roulette tables, noir atmosphere",
+                "lounge":   "velvet underground lounge bar, deep red lighting, jazz atmosphere",
+                "tavern":   "rustic fantasy tavern interior, warm firelight, wooden beams",
+                "gallery":  "modern art gallery, white walls, dramatic spotlights, abstract art",
+                "arena":    "gladiatorial arena, stone walls, torches, crowd shadows",
+                "realm":    "shattered fantasy throne room, magical energy, fractured stone",
+                "neoncity": "cyberpunk neon city street at night, rain, holographic signs",
+                "heist":    "corporate vault corridor, red laser grid, security panels",
+                "phone":    "signal tower at night, digital interference patterns, cyan glow",
+            }
+            base = scene_prompts.get(scene, f"{scene} environment, cinematic")
+            prompt = f"{base}, {image_type}, high quality, 8k, photorealistic"
+
+        # Resolve output path inside scene's static/img folder
+        stem = filename or f"{scene}_{image_type}_{int(time.time())}"
+        static_img_dir = Path("content/scenes") / scene / "static" / "img"
+        static_img_dir.mkdir(parents=True, exist_ok=True)
+        out_path = static_img_dir / f"{stem}.png"
+
+        # Use workflow manager to generate via ComfyUI (portrait_fast profile for speed)
+        wm = get_workflow_manager()
+        result = wm.generate(
+            workflow_name="portrait_hires",
+            params={
+                "prompt": prompt,
+                "negative_prompt": "blurry, watermark, text, deformed, low quality",
+                "width": width,
+                "height": height,
+                "steps": steps,
+                "cfg": cfg,
+                "output_prefix": stem,
+            },
+        )
+
+        if isinstance(result, dict) and result.get("status") == "ok":
+            src = result.get("output_path", "")
+            if src:
+                # Copy/move to scene static folder
+                import shutil
+                shutil.copy2(src, out_path)
+                # Return the Flask static URL
+                static_url = f"/scenes/{scene}/static/img/{stem}.png"
+                logger.info("generate_scene_image: %s → %s", scene, static_url)
+                return static_url
+
+        return f"Image generation queued. Check {out_path} when ComfyUI finishes."
+
+    except Exception as exc:
+        logger.debug("generate_scene_image failed: %s", exc)
+        return f"Failed to generate scene image: {exc}"
+
+
+@skill(
+    pack="comfyui",
+    description=(
+        "Batch-generate scene background images for all active scenes and store them "
+        "in each scene's static/img folder.  Intended for nightly scheduler use."
+    ),
+    tags=["image", "scene", "background", "batch"],
+    cooldown=3600.0,
+)
+def generate_all_scene_backgrounds(
+    scenes: Optional[List[str]] = None,
+    force: bool = False,
+) -> str:
+    """Generate background images for all active scenes.
+
+    Args:
+        scenes:  List of scene names to generate for.  Defaults to all 9 game scenes.
+        force:   If True, regenerate even if a background already exists.
+
+    Returns:
+        Summary string with counts of generated/skipped scenes.
+    """
+    from pathlib import Path
+
+    default_scenes = [
+        "bedroom", "phone", "lounge", "tavern", "casino",
+        "gallery", "arena", "realm", "neoncity",
+    ]
+    target_scenes: List[str] = scenes or default_scenes
+
+    generated, skipped, errors = 0, 0, 0
+    for scene_name in target_scenes:
+        bg_path = Path("content/scenes") / scene_name / "static" / "img" / f"{scene_name}_background_latest.png"
+        if bg_path.exists() and not force:
+            skipped += 1
+            continue
+        result = generate_scene_image(
+            scene=scene_name,
+            image_type="background",
+            filename=f"{scene_name}_background_latest",
+            width=1920,
+            height=1080,
+        )
+        if result.startswith("/") or "static" in result:
+            generated += 1
+        else:
+            errors += 1
+
+    return (
+        f"Background generation complete: "
+        f"{generated} generated, {skipped} skipped (existing), {errors} errors."
+    )

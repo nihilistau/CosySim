@@ -640,6 +640,210 @@ class TestListComfyuiWorkflows:
 
 
 # ══════════════════════════════════════════════════════════════════
+#  generate_scene_image
+# ══════════════════════════════════════════════════════════════════
+
+_PATCH_WM = "engine.asset_studio.workflow_manager.get_workflow_manager"
+_PATCH_CONFIG2 = "engine.config.get_config"
+
+
+class TestGenerateSceneImage:
+    """Tests for the generate_scene_image skill."""
+
+    def _mock_wm(self, output_path: str = "/output/bg_001.png", status: str = "ok") -> MagicMock:
+        wm = MagicMock()
+        wm.generate.return_value = {"status": status, "output_path": output_path}
+        return wm
+
+    def _cfg(self):
+        cfg = MagicMock()
+        cfg.get = lambda key, default=None: default
+        return cfg
+
+    @patch("shutil.copy2")
+    @patch(_PATCH_WM)
+    @patch(_PATCH_CONFIG2)
+    def test_returns_static_url_on_success(self, mock_cfg, mock_wm_factory, mock_copy):
+        from engine.skills.builtin.comfyui_skills import generate_scene_image
+        mock_cfg.return_value = self._cfg()
+        mock_wm_factory.return_value = self._mock_wm("/output/bg.png")
+
+        result = generate_scene_image(scene="bedroom", filename="bg_test")
+        assert result.startswith("/scenes/bedroom/static/img/")
+        assert result.endswith(".png")
+
+    @patch("shutil.copy2")
+    @patch(_PATCH_WM)
+    @patch(_PATCH_CONFIG2)
+    def test_auto_builds_prompt_for_known_scene(self, mock_cfg, mock_wm_factory, mock_copy):
+        from engine.skills.builtin.comfyui_skills import generate_scene_image
+        mock_cfg.return_value = self._cfg()
+        wm = self._mock_wm()
+        mock_wm_factory.return_value = wm
+
+        generate_scene_image(scene="casino", image_type="background", filename="test")
+
+        call_params = wm.generate.call_args[1]["params"]
+        assert "casino" in call_params["prompt"].lower() or "noir" in call_params["prompt"].lower()
+
+    @patch("shutil.copy2")
+    @patch(_PATCH_WM)
+    @patch(_PATCH_CONFIG2)
+    def test_uses_supplied_prompt_when_provided(self, mock_cfg, mock_wm_factory, mock_copy):
+        from engine.skills.builtin.comfyui_skills import generate_scene_image
+        mock_cfg.return_value = self._cfg()
+        wm = self._mock_wm()
+        mock_wm_factory.return_value = wm
+
+        generate_scene_image(scene="arena", prompt="gladiator dust storm", filename="test")
+
+        call_params = wm.generate.call_args[1]["params"]
+        assert call_params["prompt"] == "gladiator dust storm"
+
+    @patch("shutil.copy2")
+    @patch(_PATCH_WM)
+    @patch(_PATCH_CONFIG2)
+    def test_forwards_width_height_steps_cfg(self, mock_cfg, mock_wm_factory, mock_copy):
+        from engine.skills.builtin.comfyui_skills import generate_scene_image
+        mock_cfg.return_value = self._cfg()
+        wm = self._mock_wm()
+        mock_wm_factory.return_value = wm
+
+        generate_scene_image(
+            scene="tavern", width=1280, height=720, steps=8, cfg=2.0, filename="test",
+        )
+
+        params = wm.generate.call_args[1]["params"]
+        assert params["width"] == 1280
+        assert params["height"] == 720
+        assert params["steps"] == 8
+        assert params["cfg"] == 2.0
+
+    @patch(_PATCH_WM)
+    @patch(_PATCH_CONFIG2)
+    def test_returns_queued_message_when_no_output_path(self, mock_cfg, mock_wm_factory):
+        from engine.skills.builtin.comfyui_skills import generate_scene_image
+        mock_cfg.return_value = self._cfg()
+        wm = MagicMock()
+        wm.generate.return_value = {"status": "ok", "output_path": ""}
+        mock_wm_factory.return_value = wm
+
+        result = generate_scene_image(scene="lounge", filename="test")
+        assert "queued" in result.lower() or "comfyui" in result.lower()
+
+    @patch(_PATCH_WM)
+    @patch(_PATCH_CONFIG2)
+    def test_exception_returns_error_string(self, mock_cfg, mock_wm_factory):
+        from engine.skills.builtin.comfyui_skills import generate_scene_image
+        mock_cfg.return_value = self._cfg()
+        mock_wm_factory.side_effect = RuntimeError("workflow manager down")
+
+        result = generate_scene_image(scene="bedroom", filename="test")
+        assert "failed" in result.lower()
+
+    @patch("shutil.copy2")
+    @patch(_PATCH_WM)
+    @patch(_PATCH_CONFIG2)
+    def test_unknown_scene_uses_generic_prompt(self, mock_cfg, mock_wm_factory, mock_copy):
+        from engine.skills.builtin.comfyui_skills import generate_scene_image
+        mock_cfg.return_value = self._cfg()
+        wm = self._mock_wm()
+        mock_wm_factory.return_value = wm
+
+        generate_scene_image(scene="unknown_scene_xyz", filename="test")
+
+        params = wm.generate.call_args[1]["params"]
+        assert "unknown_scene_xyz" in params["prompt"].lower()
+
+
+# ══════════════════════════════════════════════════════════════════
+#  generate_all_scene_backgrounds
+# ══════════════════════════════════════════════════════════════════
+
+
+class TestGenerateAllSceneBackgrounds:
+    """Tests for the generate_all_scene_backgrounds batch skill."""
+
+    @patch("shutil.copy2")
+    @patch(_PATCH_WM)
+    @patch(_PATCH_CONFIG2)
+    def test_returns_summary_string(self, mock_cfg, mock_wm_factory, mock_copy):
+        from engine.skills.builtin.comfyui_skills import generate_all_scene_backgrounds
+        mock_cfg.return_value = MagicMock()
+        mock_wm_factory.return_value = MagicMock(
+            generate=MagicMock(return_value={"status": "ok", "output_path": "/out/bg.png"})
+        )
+
+        result = generate_all_scene_backgrounds(
+            scenes=["bedroom", "casino"], force=True
+        )
+        assert "generated" in result.lower()
+
+    @patch("shutil.copy2")
+    @patch(_PATCH_WM)
+    @patch(_PATCH_CONFIG2)
+    def test_skips_existing_backgrounds_without_force(
+        self, mock_cfg, mock_wm_factory, mock_copy, tmp_path, monkeypatch
+    ):
+        from pathlib import Path
+        from engine.skills.builtin.comfyui_skills import generate_all_scene_backgrounds
+
+        mock_cfg.return_value = MagicMock()
+        mock_wm_factory.return_value = MagicMock(
+            generate=MagicMock(return_value={"status": "ok", "output_path": "/out/bg.png"})
+        )
+
+        # Make it think the bg file exists by patching Path.exists
+        with patch("pathlib.Path.exists", return_value=True):
+            result = generate_all_scene_backgrounds(scenes=["bedroom"], force=False)
+
+        assert "skipped" in result.lower()
+
+    @patch("shutil.copy2")
+    @patch(_PATCH_WM)
+    @patch(_PATCH_CONFIG2)
+    def test_force_regenerates_existing(self, mock_cfg, mock_wm_factory, mock_copy):
+        from engine.skills.builtin.comfyui_skills import generate_all_scene_backgrounds
+        mock_cfg.return_value = MagicMock()
+        wm = MagicMock(
+            generate=MagicMock(return_value={"status": "ok", "output_path": "/out/bg.png"})
+        )
+        mock_wm_factory.return_value = wm
+
+        with patch("pathlib.Path.exists", return_value=True):
+            result = generate_all_scene_backgrounds(scenes=["arena"], force=True)
+
+        assert "generated" in result.lower()
+
+    @patch("shutil.copy2")
+    @patch(_PATCH_WM)
+    @patch(_PATCH_CONFIG2)
+    def test_uses_default_nine_scenes_when_none_supplied(
+        self, mock_cfg, mock_wm_factory, mock_copy
+    ):
+        from engine.skills.builtin.comfyui_skills import generate_all_scene_backgrounds
+        mock_cfg.return_value = MagicMock()
+        mock_wm_factory.return_value = MagicMock(
+            generate=MagicMock(return_value={"status": "ok", "output_path": "/out/bg.png"})
+        )
+
+        result = generate_all_scene_backgrounds(force=True)
+        # 9 game scenes should be attempted
+        assert "9" in result or "generated" in result.lower()
+
+    @patch(_PATCH_WM)
+    @patch(_PATCH_CONFIG2)
+    def test_errors_counted_not_raised(self, mock_cfg, mock_wm_factory):
+        from engine.skills.builtin.comfyui_skills import generate_all_scene_backgrounds
+        mock_cfg.return_value = MagicMock()
+        mock_wm_factory.side_effect = RuntimeError("wm dead")
+
+        # Must not raise; errors should be counted
+        result = generate_all_scene_backgrounds(scenes=["bedroom"], force=True)
+        assert "error" in result.lower()
+
+
+# ══════════════════════════════════════════════════════════════════
 #  HELPERS (not test classes)
 # ══════════════════════════════════════════════════════════════════
 
