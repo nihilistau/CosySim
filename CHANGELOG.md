@@ -2,6 +2,51 @@
 
 All notable changes to CosySim are documented here.
 
+## v0.71b "Full Immersion" — 2026
+
+### Track A — Scene Visual Polish (Phase 0–3)
+- **Warzone archived** → `content/scenes/_archive/warzone/`; arena is the active combat scene
+- **Intel Hub port map fixed** — all 14 scene ports now canonical and correct
+- `cosysim-particles.js` — canvas particle engine, 9 effect types, per-scene presets (no CDN deps)
+- `cosysim-scene-fx.css` — per-scene ambient keyframe animations via `[data-scene]` attribute
+- `design_tokens.css` refreshed — true black bg, deeper glass blur, glow spread +20%, 5-layer depth stack
+- `portrait_overlay.html` + `portrait.css` + `portrait.js` — fixed character portrait panel, mood-reactive
+- All 9 scene templates wired: `data-scene`, particle canvas, scene-fx CSS, particle config
+- `cosysim-transitions.js` — 200ms fade-through-black page transitions on `[data-scene-nav]` links
+- `navbar_v2.html` — `data-scene-nav` on all scene links
+
+### Track B — Narrative Engine
+- `engine/story/story_arc.py` — `StoryArcEngine` singleton with multi-step arcs, win/lose states
+- `engine/story/arc_templates.py` — 4-step default arcs for all 9 active scenes
+- `engine/story/faction_politics.py` — `FactionManager` with cascade standing and scene-specific factions
+- `engine/nexus/daily_challenge.py` — `DailyChallengeManager` with Nexus cache + per-scene fallbacks
+- 9 story/faction skills added; scheduler +1 task (now 36): `daily-challenge-seed`
+
+### Track C — Dialogue & Character Depth
+- `engine/agents/dialogue_gate.py` — `DialogueGateInterceptor` (priority 45): reputation-gated dialogue
+- `content/shared/templates/reputation_hud.html` + `reputation.css` + `reputation.js` — live HUD
+- `engine/tts/voice_profiles.py` — `VoiceProfileManager`, 5 built-in profiles, emotion modulation
+- `engine/skills/builtin/npc_backstory_skills.py` — 3 character depth skills, 5 built-in backstories
+- Portrait overlay extended with backstory panel
+
+### Track E — Nexus Integration Depth
+- Admin overlay **[NEXUS]** tab — stat grid, live search; **[KNOWLEDGE]** tab — store/retrieve entries
+- `/api/nexus/status`, `/api/nexus/search`, `/api/nexus/store` routes on shared blueprint
+- `engine/skills/nexus_aware.py` — `NexusAwareSkillMixin` + `@nexus_aware` decorator
+- `engine/agents/nexus_context_injector.py` — pre-call interceptor injects Nexus search into every LLM call
+- `engine/skills/skill.py` — `nexus_first=True` param; `nexus_ask` + `nexus_search` use it
+
+### Track F — Audio Immersion
+- `cosysim-stt.js` + `cosysim-stt.css` — push-to-talk STT, Space hotkey, glass PTT button
+- `cosysim-ambient.js` + `cosysim-ambient.css` — procedural ambient audio, 9 scene profiles, 5 generators
+- Admin overlay `[SYSTEM]` tab — ambient toggle + volume slider
+
+### Stats
+- **7,444 tests passing** (17 pre-existing sdk_client failures, torch tests excluded)
+- Pipeline: 25 interceptors (DialogueGate + NexusContextInjector added)
+- Scenes: 13 active (warzone archived)
+- Scheduler: 36 builtin tasks
+
 ## v0.70b "The Character Web" — March 2026
 
 ### Track A — Scene Gameplay Deepening
