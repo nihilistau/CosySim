@@ -41,11 +41,6 @@ scenes:
     port: 5560
     debug: false
 
-  warzone:
-    host: "0.0.0.0"
-    port: 5561
-    debug: false
-
   realm:
     host: "0.0.0.0"
     port: 5562

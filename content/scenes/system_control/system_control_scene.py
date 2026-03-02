@@ -69,7 +69,7 @@ _SERVICE_ENDPOINTS: List[Dict[str, Any]] = [
     {"id": "lounge", "name": "Lounge", "url": "http://localhost:5557/api/health", "port": 5557},
     {"id": "tavern", "name": "Tavern", "url": "http://localhost:5558/api/health", "port": 5558},
     {"id": "casino", "name": "Casino", "url": "http://localhost:5559/api/health", "port": 5559},
-    {"id": "warzone", "name": "Warzone", "url": "http://localhost:5561/api/health", "port": 5561},
+    {"id": "arena", "name": "Arena", "url": "http://localhost:5561/api/health", "port": 5561},
     {"id": "games", "name": "Games", "url": "http://localhost:5567/api/health", "port": 5567},
     {"id": "lmstudio", "name": "LMStudio", "url": "http://localhost:1234/api/v1/models", "port": 1234},
     {"id": "comfyui", "name": "ComfyUI", "url": "http://localhost:8188/system_stats", "port": 8188},

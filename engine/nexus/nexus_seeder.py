@@ -247,7 +247,7 @@ def _get_doc_entries() -> list[tuple[str, str, str, str, list[str]]]:
             "Decorator: @skill(pack='scene_name', description='LLM-facing desc', category='game', cooldown=5.0, cost=1.0, tags=[...])\n\n"
             "Categories: COMMUNICATION, MEMORY, MEDIA, GAME, SOCIAL, ENVIRONMENT, SYSTEM, NARRATIVE\n\n"
             "Core Packs (14): memory, character, comfyui, voice, tts, social, boards, training, notebooklm, nexus, coding, environment, narrative, system\n"
-            "Scene Packs (12): realm, bedroom, neoncity, phone, casino, heist, lounge, coders, command_center, warzone, gallery, tavern\n\n"
+            "Scene Packs (12): realm, bedroom, neoncity, phone, casino, heist, lounge, coders, command_center, arena, gallery, tavern\n\n"
             "Registry: SKILL_REGISTRY singleton. Methods: all_tools(), get_pack_tools(pack), all_packs(), describe()\n\n"
             "Skills vs MCP Tools: @skill is for local LMStudio agents. @mcp.tool() is for Copilot/external. list_all_skills() MCP tool bridges both.",
             "document", "architecture", ["skills", "decorator", "registry", "packs"],

@@ -256,7 +256,7 @@ def generate_priority_classify(count: int = 300) -> List[Dict]:
     scenes = [
         "bedroom_scene", "phone_scene", "lounge_scene", "casino_scene",
         "gallery_scene", "realm_scene", "tavern_scene", "coders_scene",
-        "games_scene", "hub_scene", "warzone_scene", "shop_scene",
+        "games_scene", "hub_scene", "arena_scene", "shop_scene",
     ]
     chars = ["lola", "aria", "viktor", "frankie", "mira"]
     actions_realtime = [

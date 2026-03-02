@@ -23,8 +23,6 @@ scenes:
     auto_start: false
   tavern:
     auto_start: false
-  warzone:
-    auto_start: false
 services:
   admin:
     auto_start: false
