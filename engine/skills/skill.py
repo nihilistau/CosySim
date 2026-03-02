@@ -175,6 +175,7 @@ def skill(
     cooldown:      float          = 0.0,
     prerequisites: List[str]      = None,
     cost:          float          = 1.0,
+    nexus_first:   bool           = False,
 ) -> Any:
     """
     Decorator that registers a function as a CosySim skill.
@@ -210,12 +211,23 @@ def skill(
         Skill names that must be called first.
     cost : float
         Abstract cost for budget tracking.
+    nexus_first : bool
+        When True, wrap the skill with Nexus-first lookup via the
+        ``@nexus_aware`` decorator.  Cache hits bypass the function body
+        entirely; misses are stored back to Nexus automatically.
     """
     def _register(fn: Callable) -> Callable:
         _name = name or fn.__name__
         _desc = description or (fn.__doc__ or "").split("\n")[0].strip()
+
+        # Wrap with Nexus-first lookup when requested
+        registered_fn = fn
+        if nexus_first:
+            from engine.skills.nexus_aware import nexus_aware
+            registered_fn = nexus_aware(fn)
+
         meta  = SkillMeta(
-            func=fn,
+            func=registered_fn,
             name=_name,
             pack=pack,
             description=_desc,
@@ -227,7 +239,7 @@ def skill(
         )
         from engine.skills.registry import SKILL_REGISTRY
         SKILL_REGISTRY.register(meta)
-        return fn
+        return fn  # always return the original unwrapped function
 
     if func is not None:
         return _register(func)

@@ -555,7 +555,9 @@ comms:
   governance_enabled: true      # route CharacterAgent.reply() through interceptors
   skill_manifest_path: "config/skill_manifests.yaml"
   interceptors:
+    dialogue_gate:             true    # gate NPC dialogue by player reputation
     nexus_prompt:              true    # inject Nexus knowledge/rules into agent context
+    nexus_context_injector:    true    # inject Nexus search results before each LLM call
     content_intensity:         true    # adult content gate (ContentIntensityInterceptor)
     router_message_injector:  true
     auto_result_injector:     true

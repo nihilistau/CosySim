@@ -17,7 +17,8 @@ def _client():
 # ── Knowledge Search & Store ──────────────────────────────────
 
 @skill(pack="nexus", description="Search the Nexus knowledge base",
-       tags=["nexus", "search", "knowledge"], category=SkillCategory.SYSTEM)
+       tags=["nexus", "search", "knowledge"], category=SkillCategory.SYSTEM,
+       nexus_first=True)
 def nexus_search(query: str, limit: int = 10) -> str:
     """Full-text search across all Nexus knowledge entries."""
     results = _client().search(query, limit)
@@ -131,7 +132,8 @@ def nexus_changelog(version: str = "", limit: int = 10) -> str:
 # ── Smart Q&A (v0.50b) ───────────────────────────────────────
 
 @skill(pack="nexus", description="Smart Q&A — cache → knowledge → NLM research",
-       tags=["nexus", "qa", "research", "ask"], category=SkillCategory.SYSTEM)
+       tags=["nexus", "qa", "research", "ask"], category=SkillCategory.SYSTEM,
+       nexus_first=True)
 def nexus_ask(question: str, depth: str = "auto",
               category: str = "") -> str:
     """Ask a question. Searches Q&A cache, knowledge base, then NLM if needed.
