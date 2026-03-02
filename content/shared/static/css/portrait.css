@@ -1,0 +1,66 @@
+/* NPC Portrait Overlay */
+#cs-portrait-overlay {
+  position: fixed;
+  bottom: 80px;           /* above phone panel */
+  right: 20px;
+  width: 120px;
+  z-index: 900;           /* below admin overlay (1000) */
+
+  /* Glass panel */
+  background: var(--cs-glass-bg, rgba(0,0,0,0.7));
+  backdrop-filter: blur(var(--cs-glass-blur-md, 16px));
+  border: 1px solid var(--cs-glass-border, rgba(255,255,255,0.1));
+  border-radius: 12px;
+  padding: 8px;
+
+  /* Hidden by default — animated in/out */
+  transform: translateX(140px);
+  opacity: 0;
+  transition: transform 300ms cubic-bezier(.34,1.56,.64,1), opacity 200ms ease;
+  pointer-events: none;
+}
+
+#cs-portrait-overlay.is-visible {
+  transform: translateX(0);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.cs-portrait__frame { position: relative; width: 100%; aspect-ratio: 1; border-radius: 8px; overflow: hidden; }
+.cs-portrait__image { width: 100%; height: 100%; object-fit: cover; }
+.cs-portrait__placeholder {
+  width: 100%; height: 100%;
+  background: var(--cs-glass-bg-strong, rgba(255,255,255,0.05));
+  display: flex; align-items: center; justify-content: center;
+}
+.cs-portrait__initial { font-size: 2.5rem; font-weight: 700; color: var(--cs-scene-accent, #8b5cf6); }
+
+/* Mood ring — animated border */
+.cs-portrait__mood-ring {
+  position: absolute; inset: 0; border-radius: 8px;
+  border: 2px solid var(--portrait-mood-color, var(--cs-scene-accent, #8b5cf6));
+  box-shadow: 0 0 12px var(--portrait-mood-color, var(--cs-scene-accent, #8b5cf6));
+  animation: portrait-pulse 2s ease-in-out infinite;
+}
+
+@keyframes portrait-pulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+.cs-portrait__info {
+  margin-top: 6px;
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+}
+.cs-portrait__name {
+  font-size: 0.65rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--cs-text-primary, #fff); text-align: center;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
+}
+.cs-portrait__mood-badge {
+  font-size: 0.55rem; padding: 1px 6px; border-radius: 10px;
+  background: var(--portrait-mood-color, var(--cs-scene-accent)); color: #000;
+  font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em;
+}
+
+/* Mood color mapping (set via JS on --portrait-mood-color) */
