@@ -1,19 +1,20 @@
 # CosySim Documentation Index
 
-> All project documentation in one place. v0.69b — 6,921 tests, 214 MCP tools, 21 skill packs (188+ skills), 9 active scenes + 5 system scenes.
+> All project documentation in one place. v0.73b — 7,500+ tests, 214 MCP tools, 21 skill packs (188+ skills), 9 active scenes + 5 system scenes.
 
-## Quick Facts — v0.69b
+## Quick Facts — v0.73b
 
 | Metric | Value |
 |--------|-------|
-| Version | **0.69b** (March 2026) |
-| Tests passing | **6,921** across ~190 files |
+| Version | **0.73b** (2026) — "The Living Nexus" |
+| Tests passing | **7,500+** across ~195 files |
 | MCP tools | **214** |
 | Skill packs | **21 packs · 188+ skills** |
 | Active scenes | **9** (bedroom, phone, lounge, tavern, casino, gallery, arena, realm, neoncity) |
 | System scenes | **5** (coders, heist, games, hub, intel_hub) |
-| Scheduler tasks | **34** builtin autonomous tasks |
+| Scheduler tasks | **39** builtin autonomous tasks |
 | Engine modules (v0.68+) | **13** new living-world modules |
+| Workflow variants | **15** (image + Wan 2.2 video) |
 
 ### Active Scene Ports
 
@@ -73,6 +74,8 @@
 
 | Doc | Description |
 |-----|-------------|
+| [Asset Studio](ASSET_STUDIO.md) | ComfyUI integration — 15 workflow variants, tuning engine, scene injection, benchmarking |
+| [News System](NEWS_SYSTEM.md) | Automated news ingestion, NLM distillation, Nexus Q&A feeds, Intel Hub ticker |
 | [Scene Guide](SCENE_GUIDE.md) | Per-scene game mechanics — all 9 active scenes |
 | [Scenes Reference](SCENES.md) | All scenes — mechanics, APIs, rules (legacy reference) |
 | [Skills](SKILLS.md) | @skill decorator, 21 built-in packs (188+ skills) |
@@ -111,7 +114,7 @@
 |-----|-------------|
 | [Logging](LOGGING.md) | CosyLogger ring buffer, SystemMonitor, structured logging patterns |
 | [KPI](KPI.md) | `@timed` decorator, LLM KPIs, benchmarking dashboard |
-| [System Audit](SYSTEM_AUDIT.md) | v0.69b system audit — grade A+, all 9 active scenes rated |
+| [System Audit](SYSTEM_AUDIT.md) | v0.73b system audit — grade A++, event cascade, ComfyUI asset injection, 7,500+ tests |
 
 ## Training & Testing
 

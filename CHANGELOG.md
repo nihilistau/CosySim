@@ -2,6 +2,27 @@
 
 All notable changes to CosySim are documented here.
 
+## [0.73b] — 2026 — "The Living Nexus" — IN PROGRESS
+
+### New Features
+- **World Event Cascade** (`engine/world/event_cascade.py`): WorldSim → scene fan-out with 3-tier delivery (EventBus → Socket.IO → MCP poll queue). `WorldEventType` constants, per-scene subscription map, stats tracking.
+- **generate_scene_image skill**: Scene-aware ComfyUI generation → injects image directly into `content/scenes/{scene}/static/img/`. Auto-prompts for all 9 game scenes. Returns Flask static URL immediately serveable.
+- **generate_all_scene_backgrounds skill**: Batch background generator for all 9 scenes. Skip-existing logic. Nightly scheduler target.
+- **docs/ASSET_STUDIO.md**: Complete Asset Studio documentation — 15 workflow variants, all params, tuning engine, scene injection, scheduler integration.
+- **docs/NEWS_SYSTEM.md**: News system design — RSS ingestion, NLM distillation, Nexus Q&A storage, scene delivery, agent skills.
+
+### Tests
+- `tests/test_event_cascade.py` — 41 tests (WorldEventType, delivery tiers, WorldSim bridge, stats, singleton)
+- `tests/test_comfyui_skills.py` — +12 tests for generate_scene_image and generate_all_scene_backgrounds (38 total)
+
+### In Progress
+- Track A: Scene visual polish (particles, scene-fx CSS, portrait overlay, template wiring, transitions)
+- Track B: News pipeline implementation
+- Track C: Benchmark dashboard
+- Track D: Nexus knowledge expansion
+
+---
+
 ## [0.72b] — 2026-03-02 — "The Asset Studio"
 
 ### New Features
