@@ -1,210 +1,157 @@
 /**
- * PortraitManager — NPC portrait overlay controller
- * Listens to Socket.IO 'message' events for [MOOD:x] tags.
- * Also listens for 'character_speaking' events directly.
+ * Portrait Overlay Manager
+ * Controls the cs-portrait overlay: show/hide, mood updates, Socket.IO wiring.
  */
 
-const MOOD_COLORS = {
-  happy:     '#22c55e',
-  angry:     '#ef4444',
-  sad:       '#3b82f6',
-  aroused:   '#ec4899',
-  fearful:   '#f97316',
-  disgusted: '#84cc16',
-  surprised: '#f59e0b',
-  neutral:   '#6b7280',
-  seductive: '#d946ef',
-  drunk:     '#a16207',
-  tired:     '#64748b',
+'use strict';
+
+/** Mood tag → badge label + CSS variable mapping */
+const MOOD_MAP = {
+  happy:   { label: 'Happy',   var: '--mood-happy' },
+  sad:     { label: 'Sad',     var: '--mood-sad' },
+  angry:   { label: 'Angry',   var: '--mood-angry' },
+  aroused: { label: 'Aroused', var: '--mood-aroused' },
+  neutral: { label: 'Neutral', var: '--mood-neutral' },
+  anxious: { label: 'Anxious', var: '--mood-anxious' },
+  excited: { label: 'Excited', var: '--mood-excited' },
 };
 
-const PORTRAIT_AUTO_HIDE_MS = 8000;
-
-class PortraitManager {
-  constructor() {
-    this._overlay = null;
-    this._hideTimer = null;
-    this._current = null;
-    this._backstoryPanel = null;
-    this._backstoryText = null;
-  }
-
-  init() {
-    this._overlay = document.getElementById('cs-portrait-overlay');
-    if (!this._overlay) return;
-    this._backstoryPanel = document.getElementById('cs-backstory-panel');
-    this._backstoryText = document.getElementById('cs-backstory-text');
-    this._bindEvents();
-    this._bindBackstoryEvents();
-  }
+window.portraitManager = {
+  _overlay: null,
+  _imgEl: null,
+  _imgArea: null,
+  _nameEl: null,
+  _moodEl: null,
+  _placeholder: null,
 
   /**
-   * Show the portrait panel for a character.
-   * @param {string|null} charName - Character name (null keeps current)
-   * @param {string} mood - Mood key from MOOD_COLORS
-   * @param {string|null} imageUrl - Optional portrait image URL
+   * Initialize the portrait manager.
+   * Locates DOM nodes and wires Socket.IO listeners if available.
    */
-  show(charName, mood = 'neutral', imageUrl = null) {
+  init() {
+    this._overlay     = document.getElementById('cs-portrait-overlay');
+    this._imgArea     = document.getElementById('cs-portrait-img-area');
+    this._imgEl       = document.getElementById('cs-portrait-img');
+    this._nameEl      = document.getElementById('cs-portrait-name');
+    this._moodEl      = document.getElementById('cs-portrait-mood');
+    this._placeholder = this._overlay
+      ? this._overlay.querySelector('.cs-portrait__placeholder')
+      : null;
+
     if (!this._overlay) return;
 
-    const name = charName || this._current || '';
-    this._current = name || this._current;
+    this._bindSocketEvents();
+  },
 
-    // Update data attributes
-    this._overlay.dataset.char = name;
-    this._overlay.dataset.mood = mood;
+  /**
+   * Show the portrait panel.
+   * @param {string} charName  - Character display name
+   * @param {string} moodTag   - Mood key (must match MOOD_MAP)
+   * @param {string|null} imgUrl - Portrait image URL or null for placeholder
+   */
+  show(charName, moodTag, imgUrl) {
+    if (!this._overlay) return;
 
-    // Update name display
-    const nameEl = document.getElementById('cs-portrait-name');
-    if (nameEl) nameEl.textContent = name;
+    const mood = MOOD_MAP[moodTag] ? moodTag : 'neutral';
 
-    // Update initial letter
-    const initialEl = document.getElementById('cs-portrait-initial');
-    if (initialEl) initialEl.textContent = name ? name.charAt(0).toUpperCase() : '?';
+    // Update name
+    if (this._nameEl) this._nameEl.textContent = charName || '';
 
     // Update mood badge
-    const badgeEl = document.getElementById('cs-portrait-mood-badge');
-    if (badgeEl) badgeEl.textContent = mood;
+    this.updateMood(mood);
 
-    // Apply mood colour via CSS custom property
-    const color = MOOD_COLORS[mood] || MOOD_COLORS['neutral'];
-    this._overlay.style.setProperty('--portrait-mood-color', color);
-
-    // Handle image — show real image or placeholder
-    const placeholder = document.getElementById('cs-portrait-placeholder');
-    const imgEl = document.getElementById('cs-portrait-img');
-    if (imageUrl) {
-      if (placeholder) placeholder.style.display = 'none';
-      if (imgEl) {
-        imgEl.style.backgroundImage = `url('${imageUrl}')`;
-        imgEl.style.backgroundSize = 'cover';
-        imgEl.style.backgroundPosition = 'center';
-      }
-    } else {
-      if (placeholder) placeholder.style.display = '';
-      if (imgEl) {
-        imgEl.style.backgroundImage = '';
+    // Update image vs placeholder
+    if (this._imgEl && this._placeholder) {
+      if (imgUrl) {
+        this._imgEl.src = imgUrl;
+        this._imgEl.alt = charName || '';
+        this._imgEl.style.display = 'block';
+        this._placeholder.style.display = 'none';
+      } else {
+        this._imgEl.src = '';
+        this._imgEl.style.display = 'none';
+        this._placeholder.style.display = 'flex';
       }
     }
 
-    // Slide in
-    this._overlay.setAttribute('aria-hidden', 'false');
-    this._overlay.classList.add('is-visible');
-
-    // Auto-hide after PORTRAIT_AUTO_HIDE_MS of no new show() call
-    if (this._hideTimer) clearTimeout(this._hideTimer);
-    this._hideTimer = setTimeout(() => this.hide(), PORTRAIT_AUTO_HIDE_MS);
-  }
-
-  /** Slide the overlay out. */
-  hide() {
-    if (!this._overlay) return;
-    this._overlay.classList.remove('is-visible');
-    this._overlay.setAttribute('aria-hidden', 'true');
-    if (this._hideTimer) {
-      clearTimeout(this._hideTimer);
-      this._hideTimer = null;
-    }
-  }
+    // Reveal
+    this._overlay.dataset.state = 'visible';
+    this._overlay.dataset.mood  = mood;
+  },
 
   /**
-   * Update just the mood ring and badge without hiding/re-showing.
-   * @param {string} mood - Mood key
+   * Hide the portrait (slide out).
+   */
+  hide() {
+    if (!this._overlay) return;
+    this._overlay.dataset.state = 'hidden';
+  },
+
+  /**
+   * Update mood badge only — no hide/show transition.
+   * @param {string} mood - Mood key from MOOD_MAP
    */
   updateMood(mood) {
     if (!this._overlay) return;
-    this._overlay.dataset.mood = mood;
 
-    const color = MOOD_COLORS[mood] || MOOD_COLORS['neutral'];
-    this._overlay.style.setProperty('--portrait-mood-color', color);
+    const entry = MOOD_MAP[mood] || MOOD_MAP['neutral'];
+    const resolvedMood = MOOD_MAP[mood] ? mood : 'neutral';
 
-    const badgeEl = document.getElementById('cs-portrait-mood-badge');
-    if (badgeEl) badgeEl.textContent = mood;
-  }
+    // Update data-mood for CSS variable switching
+    this._overlay.dataset.mood = resolvedMood;
+
+    // Update badge text
+    if (this._moodEl) {
+      this._moodEl.textContent = entry.label;
+    }
+  },
 
   /**
-   * Extract [MOOD:x] tag from streamed text.
-   * @param {string} text
-   * @returns {string|null} mood string or null
+   * Parse a [MOOD:X] tag from a message string.
+   * @param {string} messageText
+   * @returns {string|null} mood key in lowercase, or null
    */
-  _parseMoodTag(text) {
-    const match = text.match(/\[MOOD:(\w+)\]/i);
+  parseMood(messageText) {
+    if (!messageText || typeof messageText !== 'string') return null;
+    const match = messageText.match(/\[MOOD:(\w+)\]/i);
     return match ? match[1].toLowerCase() : null;
-  }
+  },
 
   /**
-   * Extract character name from [CHAR:name] tag or "Name: text" prefix.
-   * @param {string} text
-   * @returns {string|null}
+   * Attach Socket.IO listeners for portrait events.
+   * Called internally by init().
    */
-  _parseCharTag(text) {
-    // Try [CHAR:name] tag first
-    const tagMatch = text.match(/\[CHAR:([^\]]+)\]/i);
-    if (tagMatch) return tagMatch[1].trim();
+  _bindSocketEvents() {
+    const socket = window.socket || (window.io ? window.io() : null);
+    if (!socket) return;
 
-    // Fall back to "Name: " prefix at start of message
-    const prefixMatch = text.match(/^([A-Z][a-zA-Z' -]{1,30}):\s/);
-    if (prefixMatch) return prefixMatch[1].trim();
+    // Parse [MOOD:X] from incoming messages and update badge
+    socket.on('message', (data) => {
+      const text = typeof data === 'string'
+        ? data
+        : (data && (data.content || data.text || data.message || ''));
+      if (!text) return;
 
-    return null;
-  }
+      const mood = this.parseMood(text);
+      if (mood) this.updateMood(mood);
+    });
 
-  /**
-   * Fetch and display backstory for the current character.
-   * @param {string} charId - lowercase character identifier
-   */
-  _fetchBackstory(charId) {
-    if (!this._backstoryPanel || !this._backstoryText || !charId) return;
-    fetch(`/api/character/backstory/${encodeURIComponent(charId)}`)
-      .then((r) => r.ok ? r.json() : null)
-      .then((data) => {
-        if (!data || !data.backstory) return;
-        this._backstoryText.textContent = data.backstory;
-        this._backstoryPanel.classList.add('is-visible');
-      })
-      .catch(() => {});
-  }
+    // Character entering the scene → show portrait
+    socket.on('character_entered', (data) => {
+      const name   = (data && (data.name || data.char_name || data.character)) || '';
+      const mood   = (data && data.mood) || 'neutral';
+      const imgUrl = (data && (data.portrait_url || data.image_url || data.img_url)) || null;
+      this.show(name, mood, imgUrl);
+    });
 
-  /** Bind click-to-reveal backstory on the portrait frame and close button. */
-  _bindBackstoryEvents() {
-    const frame = this._overlay && this._overlay.querySelector('.cs-portrait__frame');
-    if (frame) {
-      frame.style.cursor = 'pointer';
-      frame.addEventListener('click', () => {
-        if (this._current) this._fetchBackstory(this._current.toLowerCase());
-      });
-    }
-    const closeBtn = document.getElementById('cs-backstory-close');
-    if (closeBtn) {
-      closeBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        if (this._backstoryPanel) this._backstoryPanel.classList.remove('is-visible');
-      });
-    }
-  }
+    // Character leaving the scene → hide portrait
+    socket.on('character_exited', () => {
+      this.hide();
+    });
+  },
+};
 
-  /** Attach Socket.IO event listeners if a socket is available. */
-  _bindEvents() {
-    if (window.socket || window.io) {
-      const socket = window.socket || (window.io && window.io());
-      if (socket) {
-        socket.on('message', (data) => {
-          const text = typeof data === 'string' ? data : (data.content || data.text || '');
-          const mood = this._parseMoodTag(text);
-          const char = this._parseCharTag(text);
-          if (char || mood) this.show(char || this._current, mood || 'neutral');
-        });
-
-        socket.on('character_speaking', (data) => {
-          this.show(data.name, data.mood || 'neutral', data.portrait_url || null);
-        });
-      }
-    }
-  }
-}
-
-// Auto-init
+// Auto-initialise once the DOM is ready, if Socket.IO is present or absent
 document.addEventListener('DOMContentLoaded', () => {
-  window.portraitManager = new PortraitManager();
   window.portraitManager.init();
 });

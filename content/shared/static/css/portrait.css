@@ -1,114 +1,156 @@
-/* NPC Portrait Overlay */
-#cs-portrait-overlay {
+/* ── Portrait Overlay Component ── */
+
+/* Mood colour variables */
+:root {
+  --mood-happy:   #22c55e;
+  --mood-sad:     #3b82f6;
+  --mood-angry:   #ef4444;
+  --mood-aroused: #ec4899;
+  --mood-neutral: #94a3b8;
+  --mood-anxious: #f59e0b;
+  --mood-excited: #a855f7;
+}
+
+/* Root element */
+.cs-portrait {
   position: fixed;
-  bottom: 80px;           /* above phone panel */
+  bottom: 80px;
   right: 20px;
-  width: 120px;
-  z-index: 900;           /* below admin overlay (1000) */
-
-  /* Glass panel */
-  background: var(--cs-glass-bg, rgba(0,0,0,0.7));
-  backdrop-filter: blur(var(--cs-glass-blur-md, 16px));
-  border: 1px solid var(--cs-glass-border, rgba(255,255,255,0.1));
-  border-radius: 12px;
-  padding: 8px;
-
-  /* Hidden by default — animated in/out */
-  transform: translateX(140px);
-  opacity: 0;
-  transition: transform 300ms cubic-bezier(.34,1.56,.64,1), opacity 200ms ease;
+  z-index: 900;
+  width: 148px;
   pointer-events: none;
 }
 
-#cs-portrait-overlay.is-visible {
-  transform: translateX(0);
+/* Hidden state — off-screen to the right */
+.cs-portrait[data-state="hidden"] {
+  opacity: 0;
+  transform: translateX(120%);
+  pointer-events: none;
+}
+
+/* Visible state — slide in */
+.cs-portrait[data-state="visible"] {
   opacity: 1;
+  transform: translateX(0);
+  transition: opacity 300ms ease, transform 300ms ease;
   pointer-events: auto;
 }
 
-.cs-portrait__frame { position: relative; width: 100%; aspect-ratio: 1; border-radius: 8px; overflow: hidden; }
-.cs-portrait__image { width: 100%; height: 100%; object-fit: cover; }
-.cs-portrait__placeholder {
-  width: 100%; height: 100%;
-  background: var(--cs-glass-bg-strong, rgba(255,255,255,0.05));
-  display: flex; align-items: center; justify-content: center;
+/* Glass panel */
+.cs-portrait__panel {
+  background: var(--cs-glass-bg, rgba(10, 10, 20, 0.75));
+  backdrop-filter: blur(var(--cs-glass-blur-md, 16px));
+  -webkit-backdrop-filter: blur(var(--cs-glass-blur-md, 16px));
+  border: 1px solid var(--cs-glass-border, rgba(255, 255, 255, 0.12));
+  border-radius: 12px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  /* Accent border glow driven by current scene colour */
+  box-shadow:
+    0 0 0 1px var(--cs-scene-accent, #8b5cf6),
+    0 4px 24px rgba(0, 0, 0, 0.5);
+  animation: portrait-pulse 3s ease-in-out infinite;
 }
-.cs-portrait__initial { font-size: 2.5rem; font-weight: 700; color: var(--cs-scene-accent, #8b5cf6); }
 
-/* Mood ring — animated border */
-.cs-portrait__mood-ring {
-  position: absolute; inset: 0; border-radius: 8px;
-  border: 2px solid var(--portrait-mood-color, var(--cs-scene-accent, #8b5cf6));
-  box-shadow: 0 0 12px var(--portrait-mood-color, var(--cs-scene-accent, #8b5cf6));
-  animation: portrait-pulse 2s ease-in-out infinite;
-}
-
+/* Pulse animation for the accent border glow */
 @keyframes portrait-pulse {
-  0%, 100% { opacity: 0.6; }
-  50% { opacity: 1; }
+  0%, 100% {
+    box-shadow:
+      0 0 0 1px var(--cs-scene-accent, #8b5cf6),
+      0 4px 24px rgba(0, 0, 0, 0.5),
+      0 0 8px var(--cs-scene-accent, rgba(139, 92, 246, 0.3));
+  }
+  50% {
+    box-shadow:
+      0 0 0 2px var(--cs-scene-accent, #8b5cf6),
+      0 4px 24px rgba(0, 0, 0, 0.5),
+      0 0 18px var(--cs-scene-accent, rgba(139, 92, 246, 0.6));
+  }
 }
 
-.cs-portrait__info {
-  margin-top: 6px;
-  display: flex; flex-direction: column; align-items: center; gap: 3px;
-}
-.cs-portrait__name {
-  font-size: 0.65rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;
-  color: var(--cs-text-primary, #fff); text-align: center;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
-}
-.cs-portrait__mood-badge {
-  font-size: 0.55rem; padding: 1px 6px; border-radius: 10px;
-  background: var(--portrait-mood-color, var(--cs-scene-accent)); color: #000;
-  font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em;
-}
-
-/* Backstory panel — slides up from below the portrait info */
-.cs-backstory-panel {
-  display: none;
-  margin-top: 8px;
-  padding: 8px;
-  background: var(--cs-glass-bg-strong, rgba(0,0,0,0.85));
-  border: 1px solid var(--cs-glass-border, rgba(255,255,255,0.12));
-  border-radius: 8px;
+/* Image area — 120 × 120 with scene-accent border */
+.cs-portrait__image-area {
   position: relative;
+  width: 120px;
+  height: 120px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 2px solid var(--cs-scene-accent, #8b5cf6);
+  background: var(--cs-glass-bg, rgba(10, 10, 20, 0.75));
+  flex-shrink: 0;
 }
 
-.cs-backstory-panel.is-visible {
+/* Actual portrait image */
+.cs-portrait__img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 6px;
   display: block;
 }
 
-.cs-backstory-text {
-  font-size: 0.6rem;
-  line-height: 1.4;
-  color: var(--cs-text-secondary, rgba(255,255,255,0.75));
-  margin: 0;
-  max-height: 120px;
-  overflow-y: auto;
-}
-
-.cs-backstory-close {
+/* Placeholder shown when no image is loaded */
+.cs-portrait__placeholder {
   position: absolute;
-  top: 4px;
-  right: 4px;
-  background: none;
-  border: none;
-  color: var(--cs-text-secondary, rgba(255,255,255,0.5));
-  cursor: pointer;
-  font-size: 0.65rem;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--cs-glass-bg, rgba(10, 10, 20, 0.75));
+}
+
+.cs-portrait__placeholder-icon {
+  font-size: 2.5rem;
+  color: var(--cs-scene-accent, #8b5cf6);
+  opacity: 0.6;
   line-height: 1;
-  padding: 2px 4px;
 }
 
-.cs-backstory-close:hover {
-  color: var(--cs-text-primary, #fff);
+/* Meta section — name + mood */
+.cs-portrait__meta {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
 }
 
-/* Mood colour map — data-mood attribute selectors set --portrait-mood-color */
-#cs-portrait-overlay[data-mood="happy"]   { --portrait-mood-color: #22c55e; }
-#cs-portrait-overlay[data-mood="angry"]   { --portrait-mood-color: #ef4444; }
-#cs-portrait-overlay[data-mood="sad"]     { --portrait-mood-color: #3b82f6; }
-#cs-portrait-overlay[data-mood="aroused"] { --portrait-mood-color: #ec4899; }
-#cs-portrait-overlay[data-mood="neutral"] { --portrait-mood-color: #6b7280; }
-#cs-portrait-overlay[data-mood="afraid"]  { --portrait-mood-color: #f59e0b; }
-#cs-portrait-overlay[data-mood="excited"] { --portrait-mood-color: #a855f7; }
+/* Character name */
+.cs-portrait__name {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--cs-text-primary, #ffffff);
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+/* Mood badge — pill coloured by current mood */
+.cs-portrait__mood-badge {
+  display: inline-block;
+  font-size: 0.6rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 8px;
+  border-radius: 20px;
+  background-color: var(--portrait-current-mood, var(--mood-neutral));
+  color: #000000;
+  line-height: 1.4;
+}
+
+/* Mood badge colours via data-mood attribute on the root element */
+.cs-portrait[data-mood="happy"]   { --portrait-current-mood: var(--mood-happy); }
+.cs-portrait[data-mood="sad"]     { --portrait-current-mood: var(--mood-sad); }
+.cs-portrait[data-mood="angry"]   { --portrait-current-mood: var(--mood-angry); }
+.cs-portrait[data-mood="aroused"] { --portrait-current-mood: var(--mood-aroused); }
+.cs-portrait[data-mood="neutral"] { --portrait-current-mood: var(--mood-neutral); }
+.cs-portrait[data-mood="anxious"] { --portrait-current-mood: var(--mood-anxious); }
+.cs-portrait[data-mood="excited"] { --portrait-current-mood: var(--mood-excited); }

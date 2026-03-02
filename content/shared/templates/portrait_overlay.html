@@ -1,20 +1,15 @@
-<!-- NPC Portrait Overlay — injected by shared/__init__.py after_request hook -->
-<div id="cs-portrait-overlay" class="cs-portrait" aria-hidden="true" data-char="" data-mood="neutral">
-  <div class="cs-portrait__frame">
-    <div class="cs-portrait__image" id="cs-portrait-img">
-      <!-- Character image or CSS placeholder -->
-      <div class="cs-portrait__placeholder" id="cs-portrait-placeholder">
-        <span class="cs-portrait__initial" id="cs-portrait-initial">?</span>
+<!-- Portrait Overlay Component -->
+<div id="cs-portrait-overlay" class="cs-portrait" data-state="hidden">
+  <div class="cs-portrait__panel">
+    <div class="cs-portrait__image-area" id="cs-portrait-img-area">
+      <img id="cs-portrait-img" src="" alt="" class="cs-portrait__img" />
+      <div class="cs-portrait__placeholder">
+        <span class="cs-portrait__placeholder-icon">◈</span>
       </div>
     </div>
-    <div class="cs-portrait__mood-ring" id="cs-portrait-mood-ring"></div>
-  </div>
-  <div class="cs-portrait__info">
-    <span class="cs-portrait__name" id="cs-portrait-name"></span>
-    <span class="cs-portrait__mood-badge" id="cs-portrait-mood-badge"></span>
-  </div>
-  <div id="cs-backstory-panel" class="cs-backstory-panel" aria-live="polite">
-    <p id="cs-backstory-text" class="cs-backstory-text"></p>
-    <button class="cs-backstory-close" id="cs-backstory-close" aria-label="Close">✕</button>
+    <div class="cs-portrait__meta">
+      <div class="cs-portrait__name" id="cs-portrait-name"></div>
+      <div class="cs-portrait__mood-badge" id="cs-portrait-mood"></div>
+    </div>
   </div>
 </div>

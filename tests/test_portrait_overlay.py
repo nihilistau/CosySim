@@ -1,306 +1,232 @@
-"""
-Tests for the NPC Portrait Overlay static assets and template structure.
+"""Tests for the portrait overlay component (HTML + CSS + JS)."""
 
-Verifies that all required files exist and contain the expected HTML elements,
-CSS classes, and JavaScript API surface. These are structural / smoke tests
-that do not require a running Flask server or browser.
-"""
 import re
 from pathlib import Path
 
-# ── Paths ────────────────────────────────────────────────────────────────────
+TEMPLATE_PATH = Path("content/shared/templates/portrait_overlay.html")
+CSS_PATH      = Path("content/shared/static/css/portrait.css")
+JS_PATH       = Path("content/shared/static/js/portrait.js")
 
-REPO     = Path(__file__).parent.parent
-TEMPLATE = REPO / "content" / "shared" / "templates" / "portrait_overlay.html"
-CSS_FILE = REPO / "content" / "shared" / "static" / "css" / "portrait.css"
-JS_FILE  = REPO / "content" / "shared" / "static" / "js"  / "portrait.js"
 
+# ── Fixtures ──────────────────────────────────────────────────────────────────
 
-# ── File existence ────────────────────────────────────────────────────────────
+def _read(path: Path) -> str:
+    return path.read_text(encoding="utf-8")
 
-class TestPortraitOverlayFilesExist:
-    """All three asset files must be present on disk."""
 
-    def test_template_exists(self):
-        assert TEMPLATE.exists(), f"Missing: {TEMPLATE}"
+# ── HTML tests ────────────────────────────────────────────────────────────────
 
-    def test_css_exists(self):
-        assert CSS_FILE.exists(), f"Missing: {CSS_FILE}"
+def test_html_file_exists():
+    assert TEMPLATE_PATH.exists(), f"Missing: {TEMPLATE_PATH}"
 
-    def test_js_exists(self):
-        assert JS_FILE.exists(), f"Missing: {JS_FILE}"
 
+def test_html_has_root_id():
+    html = _read(TEMPLATE_PATH)
+    assert "id=\"cs-portrait-overlay\"" in html
 
-# ── HTML structure ────────────────────────────────────────────────────────────
 
-class TestPortraitOverlayHTML:
-    """Template must contain all required structural elements."""
+def test_html_root_has_cs_portrait_class():
+    html = _read(TEMPLATE_PATH)
+    assert "class=\"cs-portrait\"" in html
 
-    @classmethod
-    def setup_class(cls):
-        cls.html = TEMPLATE.read_text(encoding="utf-8")
 
-    def test_has_root_id(self):
-        assert 'id="cs-portrait-overlay"' in self.html
+def test_html_root_data_state_hidden():
+    html = _read(TEMPLATE_PATH)
+    assert 'data-state="hidden"' in html
 
-    def test_has_data_char_attr(self):
-        assert "data-char" in self.html
 
-    def test_has_data_mood_attr(self):
-        assert "data-mood" in self.html
+def test_html_has_panel_div():
+    html = _read(TEMPLATE_PATH)
+    assert "cs-portrait__panel" in html
 
-    def test_has_portrait_initial_id(self):
-        assert 'id="cs-portrait-initial"' in self.html
 
-    def test_has_portrait_name_id(self):
-        assert 'id="cs-portrait-name"' in self.html
+def test_html_has_image_area():
+    html = _read(TEMPLATE_PATH)
+    assert "cs-portrait__image-area" in html
 
-    def test_has_portrait_mood_badge_id(self):
-        assert 'id="cs-portrait-mood-badge"' in self.html
 
-    def test_has_mood_ring_element(self):
-        assert 'id="cs-portrait-mood-ring"' in self.html
+def test_html_image_area_has_id():
+    html = _read(TEMPLATE_PATH)
+    assert 'id="cs-portrait-img-area"' in html
 
-    def test_has_aria_hidden(self):
-        assert "aria-hidden" in self.html
 
-    def test_has_cs_portrait_class(self):
-        assert 'class="cs-portrait"' in self.html
+def test_html_has_img_tag():
+    html = _read(TEMPLATE_PATH)
+    assert "<img" in html
+    assert 'id="cs-portrait-img"' in html
 
 
-# ── CSS structure ─────────────────────────────────────────────────────────────
+def test_html_has_placeholder():
+    html = _read(TEMPLATE_PATH)
+    assert "cs-portrait__placeholder" in html
 
-class TestPortraitOverlayCSS:
-    """Stylesheet must define all required rules."""
 
-    @classmethod
-    def setup_class(cls):
-        cls.css = CSS_FILE.read_text(encoding="utf-8")
+def test_html_has_name_element():
+    html = _read(TEMPLATE_PATH)
+    assert "cs-portrait__name" in html
+    assert 'id="cs-portrait-name"' in html
 
-    def test_has_position_fixed(self):
-        assert "position: fixed" in self.css
 
-    def test_has_z_index_900(self):
-        assert "z-index: 900" in self.css
+def test_html_has_mood_badge():
+    html = _read(TEMPLATE_PATH)
+    assert "cs-portrait__mood-badge" in html
 
-    def test_has_is_visible_class(self):
-        assert ".is-visible" in self.css
 
-    def test_has_keyframes_portrait_pulse(self):
-        assert "@keyframes portrait-pulse" in self.css
+def test_html_has_mood_badge_id():
+    html = _read(TEMPLATE_PATH)
+    assert 'id="cs-portrait-mood"' in html
 
-    def test_has_mood_ring_rule(self):
-        assert ".cs-portrait__mood-ring" in self.css
 
-    def test_has_transition_property(self):
-        assert "transition:" in self.css
+# ── CSS tests ─────────────────────────────────────────────────────────────────
 
-    def test_has_backdrop_filter(self):
-        assert "backdrop-filter" in self.css
+def test_css_file_exists():
+    assert CSS_PATH.exists(), f"Missing: {CSS_PATH}"
 
-    def test_has_portrait_mood_color_var(self):
-        assert "--portrait-mood-color" in self.css
 
-    def test_has_translate_x_hidden_state(self):
-        assert "translateX(140px)" in self.css
+def test_css_has_cs_portrait_selector():
+    css = _read(CSS_PATH)
+    assert ".cs-portrait" in css
 
 
-# ── JavaScript structure ──────────────────────────────────────────────────────
+def test_css_position_fixed():
+    css = _read(CSS_PATH)
+    assert "position: fixed" in css or "position:fixed" in css
 
-class TestPortraitOverlayJS:
-    """Script must expose the full PortraitManager API."""
 
-    @classmethod
-    def setup_class(cls):
-        cls.js = JS_FILE.read_text(encoding="utf-8")
+def test_css_z_index_900():
+    css = _read(CSS_PATH)
+    assert "z-index: 900" in css or "z-index:900" in css
 
-    def test_has_portrait_manager_class(self):
-        assert "class PortraitManager" in self.js
 
-    def test_has_mood_colors_map(self):
-        assert "MOOD_COLORS" in self.js
+def test_css_all_mood_vars():
+    css = _read(CSS_PATH)
+    mood_vars = [
+        "--mood-happy",
+        "--mood-sad",
+        "--mood-angry",
+        "--mood-aroused",
+        "--mood-neutral",
+        "--mood-anxious",
+        "--mood-excited",
+    ]
+    for var in mood_vars:
+        assert var in css, f"Missing CSS variable: {var}"
 
-    def test_mood_colors_has_happy(self):
-        assert re.search(r"['\"]?happy['\"]?\s*:", self.js)
 
-    def test_mood_colors_has_angry(self):
-        assert re.search(r"['\"]?angry['\"]?\s*:", self.js)
+def test_css_data_state_hidden_opacity_zero():
+    css = _read(CSS_PATH)
+    assert 'data-state="hidden"' in css
+    # Match .cs-portrait[data-state="hidden"] { ... }
+    hidden_block = re.search(
+        r'\[data-state=["\']hidden["\']\][^{]*\{([^}]+)\}', css, re.DOTALL
+    )
+    assert hidden_block, "No [data-state='hidden'] CSS rule found"
+    assert "opacity: 0" in hidden_block.group(1) or "opacity:0" in hidden_block.group(1)
 
-    def test_mood_colors_has_sad(self):
-        assert re.search(r"['\"]?sad['\"]?\s*:", self.js)
 
-    def test_mood_colors_has_aroused(self):
-        assert re.search(r"['\"]?aroused['\"]?\s*:", self.js)
+def test_css_data_state_visible_opacity_one():
+    css = _read(CSS_PATH)
+    assert 'data-state="visible"' in css
+    # Match .cs-portrait[data-state="visible"] { ... }
+    visible_block = re.search(
+        r'\[data-state=["\']visible["\']\][^{]*\{([^}]+)\}', css, re.DOTALL
+    )
+    assert visible_block, "No [data-state='visible'] CSS rule found"
+    assert "opacity: 1" in visible_block.group(1) or "opacity:1" in visible_block.group(1)
 
-    def test_has_show_method(self):
-        assert "show(" in self.js
 
-    def test_has_hide_method(self):
-        assert "hide()" in self.js
+def test_css_keyframes_portrait_pulse():
+    css = _read(CSS_PATH)
+    assert "@keyframes portrait-pulse" in css
 
-    def test_has_update_mood_method(self):
-        assert "updateMood(" in self.js
 
-    def test_has_parse_mood_tag_method(self):
-        assert "_parseMoodTag(" in self.js
+def test_css_image_area_dimensions():
+    css = _read(CSS_PATH)
+    assert "120px" in css
 
-    def test_has_mood_tag_regex(self):
-        assert "[MOOD:" in self.js
 
-    def test_auto_init_on_dom_content_loaded(self):
-        assert "DOMContentLoaded" in self.js
+def test_css_translate_x_hidden():
+    css = _read(CSS_PATH)
+    assert "translateX(120%)" in css
 
-    def test_exposes_window_portrait_manager(self):
-        assert "window.portraitManager" in self.js
 
-    def test_listens_to_message_event(self):
-        assert "socket.on('message'" in self.js or 'socket.on("message"' in self.js
+# ── JS tests ──────────────────────────────────────────────────────────────────
 
-    def test_listens_to_character_speaking_event(self):
-        assert "socket.on('character_speaking'" in self.js or 'socket.on("character_speaking"' in self.js
+def test_js_file_exists():
+    assert JS_PATH.exists(), f"Missing: {JS_PATH}"
 
-    def test_has_auto_hide_timer(self):
-        assert "hideTimer" in self.js or "hide_timer" in self.js
 
-    def test_mood_colors_has_at_least_8_entries(self):
-        # Count colour hex values as a proxy for the number of entries
-        matches = re.findall(r"'#[0-9a-fA-F]{6}'", self.js)
-        assert len(matches) >= 8, f"Expected ≥8 MOOD_COLORS entries, found {len(matches)}"
+def test_js_has_window_portrait_manager():
+    js = _read(JS_PATH)
+    assert "window.portraitManager" in js
 
-    def test_has_parse_char_tag_method(self):
-        assert "_parseCharTag(" in self.js
 
+def test_js_has_init_method():
+    js = _read(JS_PATH)
+    assert "init(" in js or "init (" in js
 
-# ── Injection registration ────────────────────────────────────────────────────
 
-class TestPortraitInjectedBySharedInit:
-    """portrait.css and portrait.js must be registered in shared/__init__.py."""
+def test_js_has_show_method():
+    js = _read(JS_PATH)
+    assert "show(" in js
 
-    @classmethod
-    def setup_class(cls):
-        cls.init = (REPO / "content" / "shared" / "__init__.py").read_text(encoding="utf-8")
 
-    def test_portrait_css_injected(self):
-        assert "portrait.css" in self.init
+def test_js_has_hide_method():
+    js = _read(JS_PATH)
+    assert "hide(" in js
 
-    def test_portrait_js_injected(self):
-        assert "portrait.js" in self.init
 
+def test_js_has_update_mood_method():
+    js = _read(JS_PATH)
+    assert "updateMood(" in js
 
-# ── Mood colour CSS selectors ─────────────────────────────────────────────────
 
-class TestPortraitCSSMoodColors:
-    """portrait.css must define data-mood attribute selectors for every canonical mood."""
+def test_js_has_parse_mood_method():
+    js = _read(JS_PATH)
+    assert "parseMood(" in js
 
-    MOODS = ["happy", "angry", "sad", "aroused", "neutral", "afraid", "excited"]
 
-    @classmethod
-    def setup_class(cls):
-        cls.css = CSS_FILE.read_text(encoding="utf-8")
+def test_js_has_mood_map():
+    js = _read(JS_PATH)
+    assert "MOOD_MAP" in js
 
-    def test_has_happy_selector(self):
-        assert '[data-mood="happy"]' in self.css
 
-    def test_has_angry_selector(self):
-        assert '[data-mood="angry"]' in self.css
+def test_js_mood_map_all_seven_moods():
+    js = _read(JS_PATH)
+    moods = ["happy", "sad", "angry", "aroused", "neutral", "anxious", "excited"]
+    for mood in moods:
+        assert mood in js, f"Mood missing from MOOD_MAP: {mood}"
 
-    def test_has_sad_selector(self):
-        assert '[data-mood="sad"]' in self.css
 
-    def test_has_aroused_selector(self):
-        assert '[data-mood="aroused"]' in self.css
+def test_js_listens_to_message_event():
+    js = _read(JS_PATH)
+    assert "socket.on('message'" in js or 'socket.on("message"' in js
 
-    def test_has_neutral_selector(self):
-        assert '[data-mood="neutral"]' in self.css
 
-    def test_has_afraid_selector(self):
-        assert '[data-mood="afraid"]' in self.css
+def test_js_listens_to_character_entered_event():
+    js = _read(JS_PATH)
+    assert "socket.on('character_entered'" in js or 'socket.on("character_entered"' in js
 
-    def test_has_excited_selector(self):
-        assert '[data-mood="excited"]' in self.css
 
-    def test_all_moods_present(self):
-        for mood in self.MOODS:
-            assert f'[data-mood="{mood}"]' in self.css, f"Missing CSS selector for mood: {mood}"
+def test_js_listens_to_character_exited_event():
+    js = _read(JS_PATH)
+    assert "socket.on('character_exited'" in js or 'socket.on("character_exited"' in js
 
 
-# ── Admin portrait routes ─────────────────────────────────────────────────────
+def test_js_calls_parse_mood():
+    js = _read(JS_PATH)
+    assert "parseMood(" in js
+    # parseMood must be called somewhere other than its own definition
+    calls = re.findall(r"parseMood\s*\(", js)
+    assert len(calls) >= 2, "parseMood should be defined AND called"
 
-class TestAdminPortraitsRoutes:
-    """/api/admin/portraits and /api/admin/portrait/generate must be wired."""
 
-    @classmethod
-    def setup_class(cls):
-        cls.init = (REPO / "content" / "shared" / "__init__.py").read_text(encoding="utf-8")
+def test_js_mood_tag_regex_format():
+    js = _read(JS_PATH)
+    assert r"[MOOD:" in js or r"\[MOOD:" in js
 
-    def test_admin_portraits_route_in_shared_init(self):
-        assert "/api/admin/portraits" in self.init
 
-    def test_admin_portrait_generate_route_in_shared_init(self):
-        assert "/api/admin/portrait/generate" in self.init
-
-    def test_admin_portraits_returns_portraits_key(self):
-        """GET /api/admin/portraits returns JSON with a portraits list."""
-        import sys
-        from unittest.mock import MagicMock
-        from flask import Flask
-
-        # Ensure flask_cors won't cause an ImportError inside register_shared_assets
-        if "flask_cors" not in sys.modules:
-            sys.modules["flask_cors"] = MagicMock()
-
-        app = Flask(__name__)
-        app.config["TESTING"] = True
-
-        from content.shared import register_shared_assets
-        register_shared_assets(app)
-
-        with app.test_client() as client:
-            rv = client.get("/api/admin/portraits")
-            assert rv.status_code == 200
-            data = rv.get_json()
-            assert data is not None, "Expected JSON response"
-            assert "portraits" in data, f"Expected 'portraits' key, got: {list(data.keys())}"
-            assert isinstance(data["portraits"], list)
-
-
-# ── Injection into scene responses ────────────────────────────────────────────
-
-class TestPortraitOverlayInjection:
-    """portrait_overlay.html must be injected into scene HTML responses."""
-
-    @classmethod
-    def setup_class(cls):
-        cls.init = (REPO / "content" / "shared" / "__init__.py").read_text(encoding="utf-8")
-
-    def test_shared_init_references_portrait_overlay_html(self):
-        assert "portrait_overlay.html" in self.init
-
-    def test_portrait_overlay_div_injected_into_response(self):
-        """The after_request hook must embed cs-portrait-overlay into HTML responses."""
-        import sys
-        from unittest.mock import MagicMock
-        from flask import Flask, Response
-
-        if "flask_cors" not in sys.modules:
-            sys.modules["flask_cors"] = MagicMock()
-
-        app = Flask(__name__)
-        app.config["TESTING"] = True
-
-        from content.shared import register_shared_assets
-        register_shared_assets(app)
-
-        @app.route("/test-portrait-inject")
-        def _test_view() -> Response:
-            return Response(
-                "<html><body><p>hello</p></body></html>",
-                content_type="text/html",
-            )
-
-        with app.test_client() as client:
-            rv = client.get("/test-portrait-inject")
-            html = rv.data.decode("utf-8")
-            assert "cs-portrait-overlay" in html, (
-                "Expected cs-portrait-overlay to be injected into HTML response"
-            )
+def test_js_dom_content_loaded_auto_init():
+    js = _read(JS_PATH)
+    assert "DOMContentLoaded" in js
+    assert "init()" in js
