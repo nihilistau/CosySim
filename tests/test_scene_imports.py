@@ -12,7 +12,6 @@ import pytest
 SCENES = [
     "content.scenes.bedroom",
     "content.scenes.tavern",
-    "content.scenes.warzone",
     "content.scenes.games",
     "content.scenes.realm",
     "content.scenes.neoncity",
@@ -39,5 +38,5 @@ def test_scene_imports_cleanly(module_path: str) -> None:
 
 
 def test_all_scenes_count() -> None:
-    """Exactly 18 scenes are registered — update when a scene is added/removed."""
-    assert len(SCENES) == 18
+    """Exactly 17 scenes are registered — update when a scene is added/removed."""
+    assert len(SCENES) == 17

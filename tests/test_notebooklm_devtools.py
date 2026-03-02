@@ -18,8 +18,8 @@ def _run(coro):
 
 
 def _fn(tool):
-    """Get the underlying async function from an MCP FunctionTool wrapper."""
-    return tool.fn
+    """Get the underlying async function (plain function or MCP FunctionTool wrapper)."""
+    return getattr(tool, "fn", tool)
 
 
 # ──── Helpers ────────────────────────────────────────────────────────────────

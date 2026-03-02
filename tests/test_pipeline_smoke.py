@@ -1049,10 +1049,10 @@ class TestActionBasedHeatBumping:
         assert hasattr(ms, "_bump_heat_from_actions")
 
     def test_pipeline_interceptor_count(self):
-        """Pipeline should have 24 interceptors (added RelationshipEvent in Sprint 11)."""
+        """Pipeline should have 25 interceptors (added DialogueGate + NexusContextInjector in v0.71)."""
         from engine.mcp.comms_framework import _build_default_pipeline
         pipeline = _build_default_pipeline()
-        assert len(pipeline._interceptors) == 24
+        assert len(pipeline._interceptors) == 25
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -1522,10 +1522,10 @@ class TestConversationRecapInterceptor:
         assert "msg_4" in prompt or "reply_4" in prompt
 
     def test_pipeline_count_is_24(self):
-        """Verify pipeline now has 24 interceptors (added RelationshipEvent)."""
+        """Verify pipeline now has 25 interceptors (added DialogueGate + NexusContextInjector in v0.71)."""
         from engine.mcp.comms_framework import _build_default_pipeline
         pipeline = _build_default_pipeline()
-        assert len(pipeline._interceptors) == 24
+        assert len(pipeline._interceptors) == 25
 
 
 # ── RelationshipEventInterceptor Tests ────────────────────────────
