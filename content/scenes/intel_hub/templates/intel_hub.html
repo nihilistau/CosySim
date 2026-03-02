@@ -190,6 +190,7 @@
       <header class="panel-header">
         <span class="panel-icon">📡</span>
         <span class="panel-title">AI NEWS FEED</span>
+        <span class="panel-badge" id="news-rating-stats" style="font-size:0.65rem;letter-spacing:.04em;" title="Training ratings collected">—</span>
         <button class="panel-refresh-btn" onclick="window.briefingRoom.loadDashboard()" title="Refresh" aria-label="Refresh news">↻</button>
       </header>
       <div class="panel-body news-feed" id="news-feed" role="feed">
@@ -585,6 +586,7 @@
       <button class="ticker-filter-btn" data-cat="ai_research">AI</button>
       <button class="ticker-filter-btn" data-cat="tech">TECH</button>
       <button class="ticker-filter-btn" data-cat="world">WORLD</button>
+      <button class="ticker-filter-btn" data-cat="__events__">⚡ LIVE</button>
     </div>
   </div>
 
@@ -594,9 +596,37 @@
       const tickerItems = document.getElementById('news-ticker-items');
       const filterBtns = document.querySelectorAll('.ticker-filter-btn');
       let currentCategory = '';
+      // Buffer for live world events injected via Socket.IO
+      const _liveEvents = [];
+
+      const EVENT_ICONS = {
+        economy: '💹', faction: '⚔️', npc: '🧍', crime: '🚨',
+        weather: '🌩️', political: '🏛️', social: '👥', disaster: '💥',
+        rumour: '📢', combat: '⚔️',
+      };
+
+      function _esc(s) {
+        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+      }
+
+      function _renderLiveEvents() {
+        if (!_liveEvents.length) {
+          tickerItems.innerHTML = '<span class="news-ticker-item news-ticker-item--loading">No live world events yet.</span>';
+          return;
+        }
+        const items = _liveEvents.slice(-40);
+        const html = items.concat(items).map(e =>
+          `<span class="news-ticker-item news-ticker-item--event" title="${_esc(e.full)}">${_esc(e.label)}</span>`
+        ).join('');
+        tickerItems.innerHTML = html;
+      }
 
       function loadTicker(category) {
         currentCategory = category;
+        if (category === '__events__') {
+          _renderLiveEvents();
+          return;
+        }
         const url = `/api/news/ticker${category ? '?category=' + category : ''}`;
         fetch(url)
           .then(r => r.json())
@@ -607,7 +637,10 @@
             }
             // Duplicate items for seamless loop
             const html = data.items.concat(data.items).map(item =>
-              `<span class="news-ticker-item" title="${item.content || ''}">${item.title}</span>`
+              `<span class="news-ticker-item"
+                data-item-id="${item.id || ''}"
+                data-category="${item.category || 'news'}"
+                title="${item.content || ''}">${item.title}</span>`
             ).join('');
             tickerItems.innerHTML = html;
           })
@@ -624,8 +657,33 @@
         });
       });
 
+      // Accept live world events pushed from briefingRoom Socket.IO handler
+      window._tickerInjectWorldEvent = function(evt) {
+        const icon = EVENT_ICONS[evt.event_type] || '◈';
+        const summary = (evt.data && (evt.data.summary || evt.data.description)) || evt.event_type;
+        const label = `${icon} [${evt.source || 'WORLD'}] ${summary}`;
+        _liveEvents.push({ label, full: summary });
+        if (_liveEvents.length > 60) _liveEvents.shift();
+
+        // Inject into ALL view in real-time — prepend a flash item
+        if (currentCategory === '' || currentCategory === '__events__') {
+          const span = document.createElement('span');
+          span.className = 'news-ticker-item news-ticker-item--event news-ticker-item--flash';
+          span.textContent = label;
+          span.title = summary;
+          tickerItems.prepend(span);
+          // Trim to max 60 visible
+          while (tickerItems.children.length > 80) tickerItems.removeChild(tickerItems.lastChild);
+          // Remove flash class after animation
+          setTimeout(() => span.classList.remove('news-ticker-item--flash'), 2000);
+        }
+        // Update LIVE badge count
+        const liveBtn = document.querySelector('[data-cat="__events__"]');
+        if (liveBtn) liveBtn.textContent = `⚡ LIVE (${_liveEvents.length})`;
+      };
+
       loadTicker('');
-      setInterval(() => loadTicker(currentCategory), 5 * 60 * 1000); // refresh every 5 min
+      setInterval(() => { if (currentCategory !== '__events__') loadTicker(currentCategory); }, 5 * 60 * 1000);
     })();
   </script>
 </body>

@@ -167,3 +167,75 @@ class TestUserProfileRoutes:
         )
         assert resp.status_code == 400
         assert "error" in resp.get_json()
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# News Rating API
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class TestNewsRatingRoutes:
+    """Tests for /api/news/rate and /api/news/ratings/stats."""
+
+    def test_rate_thumbs_up_returns_ok(self, hub_app):
+        """POST /api/news/rate with rating=1 returns RELEVANT."""
+        client, _ = hub_app
+        with patch("engine.nexus.client.get_nexus_client", return_value=MagicMock(add_entry=MagicMock())):
+            resp = client.post(
+                "/api/news/rate",
+                json={
+                    "item_id": "abc123",
+                    "title": "OpenAI releases GPT-5",
+                    "content": "Major model release with extended reasoning.",
+                    "category": "ai_research",
+                    "rating": 1,
+                    "source": "feed",
+                },
+                content_type="application/json",
+            )
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["status"] == "ok"
+        assert data["label"] == "RELEVANT"
+
+    def test_rate_thumbs_down_returns_ok(self, hub_app):
+        """POST /api/news/rate with rating=-1 returns NOT_RELEVANT."""
+        client, _ = hub_app
+        with patch("engine.nexus.client.get_nexus_client", return_value=MagicMock(add_entry=MagicMock())):
+            resp = client.post(
+                "/api/news/rate",
+                json={"title": "Some title", "rating": -1, "source": "ticker"},
+                content_type="application/json",
+            )
+        assert resp.status_code == 200
+        assert resp.get_json()["label"] == "NOT_RELEVANT"
+
+    def test_rate_invalid_rating_returns_400(self, hub_app):
+        """POST /api/news/rate with rating=0 returns 400."""
+        client, _ = hub_app
+        resp = client.post(
+            "/api/news/rate",
+            json={"title": "Test", "rating": 0},
+            content_type="application/json",
+        )
+        assert resp.status_code == 400
+
+    def test_rate_missing_title_returns_400(self, hub_app):
+        """POST /api/news/rate with no title returns 400."""
+        client, _ = hub_app
+        resp = client.post(
+            "/api/news/rate",
+            json={"rating": 1},
+            content_type="application/json",
+        )
+        assert resp.status_code == 400
+
+    def test_ratings_stats_returns_structure(self, hub_app):
+        """GET /api/news/ratings/stats returns expected keys."""
+        client, _ = hub_app
+        resp = client.get("/api/news/ratings/stats")
+        data = resp.get_json()
+        assert data["status"] == "ok"
+        assert "total" in data
+        assert "relevant" in data
+        assert "not_relevant" in data

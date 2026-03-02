@@ -525,6 +525,96 @@ class IntelHubScene(BaseScene):
 
         # ── News Ticker / Feed ─────────────────────────────────────────────────
 
+        @app.route("/api/news/rate", methods=["POST"])
+        def api_news_rate():
+            """Store a thumbs-up/down rating as training signal.
+
+            Body: {item_id, title, content, category, rating: 1|-1, source: "feed"|"ticker"}
+            Writes to training/datasets/news_ratings.jsonl and stores in Nexus.
+            """
+            try:
+                body = request.get_json(force=True) or {}
+                item_id  = str(body.get("item_id", "")).strip()
+                title    = str(body.get("title", "")).strip()[:200]
+                content  = str(body.get("content", "")).strip()[:600]
+                category = str(body.get("category", "news")).strip()
+                rating   = int(body.get("rating", 0))
+                source   = str(body.get("source", "feed")).strip()
+
+                if rating not in (1, -1):
+                    return jsonify({"status": "error", "message": "rating must be 1 or -1"}), 400
+                if not title:
+                    return jsonify({"status": "error", "message": "title required"}), 400
+
+                import json as _json
+                import time as _time
+                from pathlib import Path as _Path
+
+                # ── JSONL training record ──────────────────────────────────────
+                label_str = "RELEVANT" if rating == 1 else "NOT_RELEVANT"
+                record = {
+                    "instruction": "Classify this news item as RELEVANT or NOT_RELEVANT based on quality and usefulness.",
+                    "input": f"Title: {title}\nContent: {content}\nCategory: {category}",
+                    "output": label_str,
+                    "metadata": {
+                        "item_id": item_id,
+                        "rating": rating,
+                        "source": source,
+                        "category": category,
+                        "ts": _time.strftime("%Y-%m-%dT%H:%M:%SZ", _time.gmtime()),
+                    },
+                }
+                ratings_path = _Path("training/datasets/news_ratings.jsonl")
+                ratings_path.parent.mkdir(parents=True, exist_ok=True)
+                with open(ratings_path, "a", encoding="utf-8") as fh:
+                    fh.write(_json.dumps(record, ensure_ascii=False) + "\n")
+
+                # ── Nexus signal ───────────────────────────────────────────────
+                try:
+                    from engine.nexus.client import get_nexus_client
+                    nc = get_nexus_client()
+                    nc.add_entry(
+                        f"News Rating [{label_str}]: {title[:80]}",
+                        f"Rating: {label_str}\nSource: {source}\nCategory: {category}\n\n{content}",
+                        content_type="memory",
+                        category="training",
+                        tags=["news_rating", label_str.lower(), category, source],
+                    )
+                except Exception as nexus_exc:
+                    logger.debug("Nexus rating store skipped: %s", nexus_exc)
+
+                logger.info("News rating stored: %s → %s [%s]", title[:50], label_str, source)
+                return jsonify({"status": "ok", "label": label_str})
+            except Exception as exc:
+                logger.error("api_news_rate error: %s", exc)
+                return jsonify({"status": "error", "message": str(exc)}), 500
+
+        @app.route("/api/news/ratings/stats")
+        def api_news_ratings_stats():
+            """Return rating counts from training/datasets/news_ratings.jsonl."""
+            try:
+                import json as _json
+                from pathlib import Path as _Path
+                ratings_path = _Path("training/datasets/news_ratings.jsonl")
+                total = relevant = 0
+                if ratings_path.exists():
+                    for line in ratings_path.read_text(encoding="utf-8").strip().splitlines():
+                        try:
+                            r = _json.loads(line)
+                            total += 1
+                            if r.get("output") == "RELEVANT":
+                                relevant += 1
+                        except Exception:
+                            pass
+                return jsonify({
+                    "status": "ok",
+                    "total": total,
+                    "relevant": relevant,
+                    "not_relevant": total - relevant,
+                })
+            except Exception as exc:
+                return jsonify({"status": "error", "message": str(exc)})
+
         @app.route("/api/news/ticker")
         def api_news_ticker():
             """Return latest curated news Q&A for the ticker."""

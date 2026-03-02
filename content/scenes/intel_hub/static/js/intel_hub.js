@@ -95,9 +95,27 @@ class BriefingRoomScene {
     this._setupParticles();
     this._setupSocket();
     this._setupClock();
+    this._setupTickerRating();
     this.loadDashboard();
     this._pollLoop();
-    console.log('[BriefingRoom] Online — v0.68 Dark Renaissance');
+    this._refreshRatingStats();
+    console.log('[BriefingRoom] Online — v0.77 The First Mind');
+  }
+
+  /** Wire ticker click → rating toast */
+  _setupTickerRating() {
+    const tickerItems = document.getElementById('news-ticker-items');
+    if (!tickerItems) return;
+    tickerItems.addEventListener('click', e => {
+      const item = e.target.closest('.news-ticker-item');
+      if (!item || item.classList.contains('news-ticker-item--loading')) return;
+      this._showRatingToast({
+        item_id: item.dataset.itemId || '',
+        title:   item.textContent.trim(),
+        content: item.title || '',
+        category: item.dataset.category || 'news',
+      });
+    });
   }
 
   // ── Particles ──────────────────────────────────────────
@@ -314,21 +332,139 @@ class BriefingRoomScene {
       el.innerHTML = '<div class="feed-placeholder">No articles.</div>';
       return;
     }
-    el.innerHTML = items.map(item => {
-      const title = item.title || item.headline || 'Untitled';
+    el.innerHTML = items.map((item, idx) => {
+      const title   = item.title || item.headline || 'Untitled';
       const summary = item.summary || item.description || '';
-      const tag = item.category || item.source || defaultTag;
-      const ts = item.published_at || item.created_at || item.ts || '';
+      const tag     = item.category || item.source || defaultTag;
+      const ts      = item.published_at || item.created_at || item.ts || '';
+      const itemId  = item.id || item.item_id || String(idx);
+      const content = item.content || summary;
       return `
         <article class="news-item" role="article">
           <div class="news-item__header">
             <span class="news-item__tag">${_esc(String(tag).toUpperCase().slice(0, 12))}</span>
             <span class="news-item__time">${_relTime(ts)}</span>
+            <span class="news-item__ratings">
+              <button class="news-rating-btn news-rating-btn--up"
+                data-item-id="${_esc(itemId)}"
+                data-title="${_esc(title)}"
+                data-content="${_esc(content.slice(0, 400))}"
+                data-category="${_esc(tag)}"
+                data-source="feed"
+                title="Relevant — use as training signal"
+                aria-label="Thumbs up">👍</button>
+              <button class="news-rating-btn news-rating-btn--down"
+                data-item-id="${_esc(itemId)}"
+                data-title="${_esc(title)}"
+                data-content="${_esc(content.slice(0, 400))}"
+                data-category="${_esc(tag)}"
+                data-source="feed"
+                title="Not relevant — negative training signal"
+                aria-label="Thumbs down">👎</button>
+            </span>
           </div>
           <div class="news-item__title">${_esc(title)}</div>
           ${summary ? `<div class="news-item__summary">${_esc(summary)}</div>` : ''}
         </article>`;
     }).join('');
+
+    // Wire rating buttons
+    el.querySelectorAll('.news-rating-btn').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        const rating = btn.classList.contains('news-rating-btn--up') ? 1 : -1;
+        this._rateNewsItem(
+          btn.dataset.itemId,
+          btn.dataset.title,
+          btn.dataset.content,
+          btn.dataset.category,
+          rating,
+          btn.dataset.source || 'feed',
+          btn,
+        );
+      });
+    });
+  }
+
+  /** POST a rating to /api/news/rate and give visual feedback. */
+  _rateNewsItem(itemId, title, content, category, rating, source, btn) {
+    fetch('/api/news/rate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ item_id: itemId, title, content, category, rating, source }),
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data.status === 'ok') {
+          // Flash the article container
+          const article = btn ? btn.closest('article, .news-item') : null;
+          if (article) {
+            article.classList.add(rating === 1 ? 'news-item--rated-up' : 'news-item--rated-down');
+            setTimeout(() => article.classList.remove('news-item--rated-up', 'news-item--rated-down'), 1200);
+          }
+          // Lock both buttons briefly
+          if (btn) {
+            const parent = btn.closest('.news-item__ratings');
+            if (parent) parent.querySelectorAll('.news-rating-btn').forEach(b => {
+              b.disabled = true;
+              setTimeout(() => { b.disabled = false; }, 3000);
+            });
+          }
+          // Update stats display
+          this._refreshRatingStats();
+        }
+      })
+      .catch(() => {});
+  }
+
+  /** Pull rating stats and update the HUD badge. */
+  _refreshRatingStats() {
+    fetch('/api/news/ratings/stats')
+      .then(r => r.json())
+      .then(data => {
+        const el = document.getElementById('news-rating-stats');
+        if (el && data.status === 'ok') {
+          el.textContent = `👍 ${data.relevant}  👎 ${data.not_relevant}  total ${data.total}`;
+        }
+      })
+      .catch(() => {});
+  }
+
+  /** Show a compact rating toast for ticker items. */
+  _showRatingToast(item) {
+    // Remove any existing toast
+    const existing = document.getElementById('cs-rating-toast');
+    if (existing) existing.remove();
+
+    const toast = document.createElement('div');
+    toast.id = 'cs-rating-toast';
+    toast.className = 'cs-rating-toast';
+    toast.innerHTML = `
+      <div class="cs-rating-toast__title">${_esc(item.title.slice(0, 80))}</div>
+      <div class="cs-rating-toast__actions">
+        <button class="news-rating-btn news-rating-btn--up" title="Relevant">👍 Relevant</button>
+        <button class="news-rating-btn news-rating-btn--down" title="Not relevant">👎 Skip</button>
+        <button class="cs-rating-toast__close" title="Dismiss">✕</button>
+      </div>`;
+    document.body.appendChild(toast);
+
+    const close = () => toast.remove();
+    toast.querySelector('.cs-rating-toast__close').addEventListener('click', close);
+
+    toast.querySelector('.news-rating-btn--up').addEventListener('click', () => {
+      this._rateNewsItem(item.item_id || '', item.title, item.content || '', item.category || 'news', 1, 'ticker', null);
+      toast.classList.add('cs-rating-toast--rated');
+      setTimeout(close, 800);
+    });
+    toast.querySelector('.news-rating-btn--down').addEventListener('click', () => {
+      this._rateNewsItem(item.item_id || '', item.title, item.content || '', item.category || 'news', -1, 'ticker', null);
+      toast.classList.add('cs-rating-toast--rated');
+      setTimeout(close, 800);
+    });
+
+    // Auto-dismiss after 6s
+    const autoClose = setTimeout(close, 6000);
+    toast.addEventListener('mouseenter', () => clearTimeout(autoClose));
   }
 
   // ── Economy & status ───────────────────────────────────
@@ -389,6 +525,10 @@ class BriefingRoomScene {
     const label = typeLabels[evt.event_type] || evt.event_type.toUpperCase();
     const summary = evt.data?.summary || evt.data?.description || evt.event_type;
     this._appendActivity({ cat: label, msg: `[${evt.source}] ${summary}` });
+    // Inject into bottom ticker (live feed)
+    if (typeof window._tickerInjectWorldEvent === 'function') {
+      window._tickerInjectWorldEvent(evt);
+    }
     // Also update world events panel if visible
     const panel = document.getElementById('world-events-feed');
     if (panel) {
