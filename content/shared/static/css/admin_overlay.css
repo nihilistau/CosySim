@@ -837,7 +837,144 @@ body[data-admin-open="true"] .cs-admin-overlay {
   animation: cs-admin-blink 1.2s ease-in-out infinite;
 }
 
+/* ══════════════════════════════════════════════════════════════
+   NEXUS v0.71 ENHANCEMENTS — stat grid + section layout
+   ══════════════════════════════════════════════════════════════ */
+
+.cs-admin-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cs-space-md);
+}
+
+.cs-nexus-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--cs-space-md);
+}
+
+.cs-nexus-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--cs-space-sm) var(--cs-space-md);
+  background: rgba(0, 10, 0, 0.6);
+  border: 1px solid var(--cs-hack-border);
+  border-radius: var(--cs-radius-md);
+}
+
+.cs-nexus-label {
+  font-size: var(--cs-text-xs);
+  color: var(--cs-hack-green-dim);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.cs-nexus-value {
+  font-size: var(--cs-text-xl);
+  font-weight: 700;
+  color: var(--cs-hack-green);
+  text-shadow: 0 0 6px var(--cs-hack-green-glow);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   KNOWLEDGE TAB (v0.71)
+   ══════════════════════════════════════════════════════════════ */
+
+.cs-textarea {
+  width: 100%;
+  padding: 8px 14px;
+  background: rgba(0, 12, 0, 0.8);
+  border: 1px solid var(--cs-hack-border);
+  border-radius: var(--cs-radius-md);
+  color: var(--cs-hack-green);
+  font-family: var(--cs-terminal-font);
+  font-size: var(--cs-text-sm);
+  line-height: 1.5;
+  outline: none;
+  caret-color: var(--cs-hack-green);
+  resize: vertical;
+  box-sizing: border-box;
+  transition: border-color 150ms, box-shadow 150ms;
+  scrollbar-width: thin;
+  scrollbar-color: var(--cs-hack-border) transparent;
+}
+
+.cs-textarea:focus {
+  border-color: var(--cs-hack-green-dim);
+  box-shadow: 0 0 0 2px rgba(0, 255, 65, 0.1);
+}
+
+.cs-textarea::placeholder {
+  color: rgba(0, 204, 51, 0.35);
+}
+
+.cs-select {
+  padding: 7px 14px;
+  background: rgba(0, 12, 0, 0.8);
+  border: 1px solid var(--cs-hack-border);
+  border-radius: var(--cs-radius-md);
+  color: var(--cs-hack-green);
+  font-family: var(--cs-terminal-font);
+  font-size: var(--cs-text-sm);
+  outline: none;
+  cursor: pointer;
+  transition: border-color 150ms;
+}
+
+.cs-select:focus {
+  border-color: var(--cs-hack-green-dim);
+}
+
+.cs-input {
+  padding: 8px 14px;
+  background: rgba(0, 12, 0, 0.8);
+  border: 1px solid var(--cs-hack-border);
+  border-radius: var(--cs-radius-md);
+  color: var(--cs-hack-green);
+  font-family: var(--cs-terminal-font);
+  font-size: var(--cs-text-sm);
+  outline: none;
+  caret-color: var(--cs-hack-green);
+  transition: border-color 150ms, box-shadow 150ms;
+}
+
+.cs-input:focus {
+  border-color: var(--cs-hack-green-dim);
+  box-shadow: 0 0 0 2px rgba(0, 255, 65, 0.1);
+}
+
+.cs-input::placeholder {
+  color: rgba(0, 204, 51, 0.35);
+}
+
+.cs-btn {
+  padding: 6px 16px;
+  background: transparent;
+  border: 1px solid var(--cs-hack-border);
+  border-radius: var(--cs-radius-md);
+  color: var(--cs-hack-green);
+  font-family: var(--cs-terminal-font);
+  font-size: var(--cs-text-sm);
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition: background 150ms, border-color 150ms, box-shadow 150ms;
+}
+
+.cs-btn:hover {
+  background: var(--cs-hack-green-soft);
+  border-color: var(--cs-hack-green-dim);
+  box-shadow: 0 0 6px var(--cs-hack-green-glow);
+}
+
+.cs-btn-sm {
+  padding: 4px 12px;
+  font-size: var(--cs-text-xs);
+}
+
 @keyframes cs-admin-blink {
   0%, 100% { opacity: 1; }
   50%       { opacity: 0.4; }
 }
+

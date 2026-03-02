@@ -167,6 +167,7 @@
         case 'content':   /* sliders are static */  break;
         case 'economy':   this._loadEconomy();  break;
         case 'system':    this._loadSystem();   break;
+        case 'knowledge': this._loadKnowledge(); break;
       }
     }
 
@@ -314,42 +315,60 @@
 
     /* ── Nexus ──────────────────────────────────────────────────── */
 
-    _loadNexus() {
-      const stats = document.getElementById('cs-nexus-stats');
-      if (!stats) return;
-      fetch('/api/admin/nexus/stats')
+    loadNexusTab() {
+      const setVal = (id, val) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = val;
+      };
+      fetch('/api/nexus/status')
         .then(r => r.ok ? r.json() : null)
         .then(data => {
-          if (!data) {
-            stats.innerHTML = '<div class="cs-admin-loading">Nexus unavailable.</div>';
-            return;
-          }
-          const chips = [
-            { label: 'Entries',   val: data.total_entries ?? '—' },
-            { label: 'Q&A Pairs', val: data.qa_pairs       ?? '—' },
-            { label: 'Cache Hits',val: data.cache_hits      ?? '—' },
-            { label: 'FTS Hits',  val: data.fts_hits        ?? '—' },
-          ];
-          stats.innerHTML = chips.map(c => `
-            <div class="cs-nexus-stat-chip">
-              <span class="cs-nexus-stat-chip__label">${_esc(c.label)}</span>
-              <span class="cs-nexus-stat-chip__val">${_esc(String(c.val))}</span>
-            </div>`).join('');
+          if (!data) { setVal('cs-nexus-conn', 'offline'); return; }
+          setVal('cs-nexus-conn',    data.connected ? 'online' : 'offline');
+          setVal('cs-nexus-entries', data.entries    ?? '—');
+          setVal('cs-nexus-qa',      data.qa_pairs   ?? '—');
+          setVal('cs-nexus-hits',    data.router_hits ?? '—');
         })
-        .catch(() => {
-          stats.innerHTML = '<div class="cs-admin-loading">Nexus unavailable.</div>';
-        });
+        .catch(() => setVal('cs-nexus-conn', 'error'));
+    }
+
+    _loadNexus() {
+      const stats = document.getElementById('cs-nexus-stats');
+      // Legacy stat chips (shown when v0.71 grid is absent)
+      if (stats && !document.getElementById('cs-nexus-status-grid')) {
+        fetch('/api/admin/nexus/stats')
+          .then(r => r.ok ? r.json() : null)
+          .then(data => {
+            if (!data) {
+              stats.innerHTML = '<div class="cs-admin-loading">Nexus unavailable.</div>';
+              return;
+            }
+            const chips = [
+              { label: 'Entries',    val: data.total_entries ?? '—' },
+              { label: 'Q&A Pairs',  val: data.qa_pairs      ?? '—' },
+              { label: 'Cache Hits', val: data.cache_hits     ?? '—' },
+              { label: 'FTS Hits',   val: data.fts_hits       ?? '—' },
+            ];
+            stats.innerHTML = chips.map(c => `
+              <div class="cs-nexus-stat-chip">
+                <span class="cs-nexus-stat-chip__label">${_esc(c.label)}</span>
+                <span class="cs-nexus-stat-chip__val">${_esc(String(c.val))}</span>
+              </div>`).join('');
+          })
+          .catch(() => {
+            if (stats) stats.innerHTML = '<div class="cs-admin-loading">Nexus unavailable.</div>';
+          });
+      }
+      // v0.71: populate enhanced stat grid via new endpoint
+      this.loadNexusTab();
     }
 
     _searchNexus(query) {
-      const results = document.getElementById('cs-nexus-results');
+      const results = document.getElementById('cs-nexus-search-results')
+                   || document.getElementById('cs-nexus-results');
       if (!results) return;
       results.innerHTML = '<div class="cs-admin-loading">Searching…</div>';
-      fetch('/api/admin/nexus/search', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ query }),
-      })
+      fetch(`/api/nexus/search?q=${encodeURIComponent(query)}`)
         .then(r => r.ok ? r.json() : null)
         .then(data => {
           if (!data || !data.results || data.results.length === 0) {
@@ -494,6 +513,59 @@
         });
     }
 
+    /* ── Knowledge (v0.71) ──────────────────────────────────────── */
+
+    _loadKnowledge() {
+      const recent = document.getElementById('cs-know-recent');
+      if (!recent) return;
+      recent.innerHTML = '<div class="cs-admin-loading">Loading…</div>';
+      fetch('/api/nexus/search?q=*&limit=10')
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+          if (!data || !data.results || data.results.length === 0) {
+            recent.innerHTML = '<div class="cs-admin-loading">No entries found.</div>';
+            return;
+          }
+          recent.innerHTML = data.results.map(item => `
+            <div class="cs-nexus-result-item">
+              <strong>${_esc(item.title || '—')}</strong>
+              <span class="cs-nexus-label">${_esc(item.content_type || item.type || 'note')}</span>
+            </div>`).join('');
+        })
+        .catch(() => {
+          recent.innerHTML = '<div class="cs-admin-loading">Nexus unavailable.</div>';
+        });
+    }
+
+    _storeKnowledge() {
+      const titleEl   = document.getElementById('cs-know-title');
+      const contentEl = document.getElementById('cs-know-content');
+      const typeEl    = document.getElementById('cs-know-type');
+      const resultEl  = document.getElementById('cs-know-result');
+      if (!titleEl || !contentEl) return;
+      fetch('/api/nexus/store', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+          title:   titleEl.value.trim(),
+          content: contentEl.value.trim(),
+          type:    typeEl ? typeEl.value : 'note',
+        }),
+      })
+        .then(r => r.json())
+        .then(data => {
+          if (resultEl) {
+            resultEl.textContent = data.ok ? '✓ Stored' : `✗ ${data.error || 'Error'}`;
+            resultEl.style.color = data.ok ? '' : 'var(--cs-hack-red)';
+            setTimeout(() => { resultEl.textContent = ''; resultEl.style.color = ''; }, 3000);
+          }
+          if (data.ok) this._loadKnowledge();
+        })
+        .catch(() => {
+          if (resultEl) resultEl.textContent = '✗ Network error';
+        });
+    }
+
     /* ── Keyboard ───────────────────────────────────────────────── */
 
     _setupKeyboard() {
@@ -588,15 +660,26 @@
     const cfgReload = document.getElementById('cs-config-reload');
     if (cfgReload) cfgReload.addEventListener('click', () => overlay._loadConfig());
 
-    // Nexus search
+    // Nexus search (v0.71: prefer cs-nexus-search-input, fall back to cs-nexus-query)
     const nexusBtn = document.getElementById('cs-nexus-search-btn');
-    const nexusInput = document.getElementById('cs-nexus-query');
+    const nexusInput = document.getElementById('cs-nexus-search-input')
+                    || document.getElementById('cs-nexus-query');
     if (nexusBtn && nexusInput) {
       nexusBtn.addEventListener('click', () => overlay._searchNexus(nexusInput.value.trim()));
       nexusInput.addEventListener('keydown', e => {
         if (e.key === 'Enter') overlay._searchNexus(nexusInput.value.trim());
       });
     }
+
+    // Nexus refresh (v0.71)
+    const nexusRefresh = document.getElementById('cs-nexus-refresh');
+    if (nexusRefresh) nexusRefresh.addEventListener('click', () => overlay.loadNexusTab());
+
+    // Knowledge tab (v0.71)
+    const knowledgeStoreBtn = document.getElementById('cs-know-store-btn');
+    if (knowledgeStoreBtn) knowledgeStoreBtn.addEventListener('click', () => overlay._storeKnowledge());
+    const knowledgeReload = document.getElementById('cs-know-reload');
+    if (knowledgeReload) knowledgeReload.addEventListener('click', () => overlay._loadKnowledge());
 
     // Training controls
     const seedBtn = document.getElementById('cs-trigger-seed');

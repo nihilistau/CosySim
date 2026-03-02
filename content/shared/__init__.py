@@ -42,7 +42,7 @@ def register_shared_assets(app):
     """
     if "shared" in app.blueprints:
         return
-    from flask import Blueprint
+    from flask import Blueprint, jsonify, request
 
     # Enable CORS so cross-port navbar health checks work
     try:
@@ -57,6 +57,59 @@ def register_shared_assets(app):
         static_folder=SHARED_STATIC_DIR,
         static_url_path="/shared",
     )
+
+    # ── Nexus API routes (v0.71) ──────────────────────────────────
+
+    @shared_bp.route("/api/nexus/status")
+    def nexus_status_api() -> "Response":
+        """Return live Nexus health and stats."""
+        try:
+            from engine.nexus.client import get_nexus_client
+            client = get_nexus_client()
+            result = client.stats()
+            stats = result.get("data", {}) if result.get("ok") else {}
+            return jsonify({
+                "connected": True,
+                "status": "online",
+                "entries": stats.get("total_entries", stats.get("entries", "unknown")),
+                "qa_pairs": stats.get("qa_pairs", stats.get("qa_count", "unknown")),
+                "cache_hits": stats.get("cache_hits", "unknown"),
+                "router_hits": stats.get("router_hits", "unknown"),
+            })
+        except Exception as exc:
+            return jsonify({"connected": False, "status": str(exc)})
+
+    @shared_bp.route("/api/nexus/search")
+    def nexus_search_api() -> "Response":
+        """Search Nexus knowledge base. Query param: q."""
+        try:
+            from engine.nexus.client import get_nexus_client
+            q = request.args.get("q", "")
+            if not q:
+                return jsonify({"results": []})
+            client = get_nexus_client()
+            results = client.search(q, limit=10)
+            return jsonify({"results": results})
+        except Exception as exc:
+            return jsonify({"results": [], "error": str(exc)})
+
+    @shared_bp.route("/api/nexus/store", methods=["POST"])
+    def nexus_store_api() -> "Response":
+        """Store a knowledge entry. Body: {title, content, type}."""
+        try:
+            from engine.nexus.client import get_nexus_client
+            data = request.get_json(force=True) or {}
+            title = data.get("title", "Untitled")
+            content = data.get("content", "")
+            content_type = data.get("type", "note")
+            client = get_nexus_client()
+            entry_id = client.add_entry(title, content, content_type=content_type)
+            if entry_id:
+                return jsonify({"ok": True, "id": entry_id})
+            return jsonify({"ok": False, "error": "Store failed"})
+        except Exception as exc:
+            return jsonify({"ok": False, "error": str(exc)})
+
     app.register_blueprint(shared_bp)
 
     # Auto-mount assistant API on this app
