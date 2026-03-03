@@ -250,21 +250,21 @@ class CosySimTUI(App[None]):
     CSS = TUI_CSS
 
     BINDINGS = [
-        Binding("space",   "launch_selected",   "Launch",       show=True),
-        Binding("s",       "stop_selected",     "Stop",         show=True),
-        Binding("a",       "launch_autostart",  "Auto-start",   show=True),
-        Binding("o",       "open_browser",      "Open",         show=True),
-        Binding("c",       "open_canvas",       "Canvas",       show=True),
-        Binding("r",       "refresh_status",    "Refresh",      show=True),
-        Binding("i",       "import_har",        "Import HAR",   show=True),
-        Binding("up",      "cursor_up",         "Up",           show=False),
-        Binding("down",    "cursor_down",       "Down",         show=False),
-        Binding("q",       "quit",              "Quit",         show=True),
+        Binding("space",   "launch_selected",   "Launch",       show=True,  priority=True),
+        Binding("s",       "stop_selected",     "Stop",         show=True,  priority=True),
+        Binding("a",       "launch_autostart",  "Auto-start",   show=True,  priority=True),
+        Binding("o",       "open_browser",      "Open",         show=True,  priority=True),
+        Binding("c",       "open_canvas",       "Canvas",       show=True,  priority=True),
+        Binding("r",       "refresh_status",    "Refresh",      show=True,  priority=True),
+        Binding("i",       "import_har",        "Import HAR",   show=True,  priority=True),
+        Binding("up",      "cursor_up",         "Up",           show=False, priority=True),
+        Binding("down",    "cursor_down",       "Down",         show=False, priority=True),
+        Binding("q",       "quit",              "Quit",         show=True,  priority=True),
     ]
 
     selected_index: reactive[int] = reactive(0)
 
-    def __init__(self, autostart: bool = False) -> None:
+    def __init__(self, autostart: bool = True) -> None:
         super().__init__()
         self._autostart = autostart
         self._rows: List[TargetRow] = []
@@ -569,12 +569,65 @@ class CosySimTUI(App[None]):
         row = self._rows[self.selected_index]
         self._launch_target(row.target_name, row.info)
 
+    @work(thread=True)
     def action_launch_autostart(self) -> None:
-        self._log("[bold cyan]Launching all auto-start targets...[/]")
+        self.call_from_thread(self._log, "[bold cyan]Launching all auto-start targets...[/]")
         for name, info in ALL_TARGETS.items():
             if info.get("auto_start"):
-                self._launch_target(name, info)
+                if _port_up(info["port"]):
+                    self.call_from_thread(
+                        self._log,
+                        f"[yellow]{info['label']}[/] already running on :{info['port']}"
+                    )
+                    continue
+                self.call_from_thread(
+                    self._log,
+                    f"[cyan]Starting[/] [bold]{info['label']}[/] → :{info['port']}"
+                )
+                try:
+                    t = info["type"]
+                    if t == "flask":
+                        mod, cls_name = info["cls"].rsplit(".", 1)
+                        scene_cls = getattr(importlib.import_module(mod), cls_name)
+                        thread = threading.Thread(
+                            target=scene_cls().start, daemon=True, name=f"cosysim-{name}"
+                        )
+                        thread.start()
+                        self._launched_threads[name] = thread
+                    elif t == "streamlit":
+                        script = PROJECT_ROOT / info["script"]
+                        proc = subprocess.Popen(
+                            [sys.executable, "-m", "streamlit", "run", str(script),
+                             f"--server.port={info['port']}", "--server.headless=true",
+                             "--server.address=0.0.0.0", "--browser.gatherUsageStats=false",
+                             "--logger.level=warning"],
+                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                        )
+                        self._launched_procs[name] = proc
+                    elif t == "fastapi":
+                        import uvicorn  # type: ignore
+                        mod2, fn = info["factory"].rsplit(".", 1)
+                        factory = getattr(importlib.import_module(mod2), fn)
+                        thread = threading.Thread(
+                            target=uvicorn.run,
+                            args=(factory(),),
+                            kwargs={"host": "0.0.0.0", "port": info["port"], "log_level": "warning"},
+                            daemon=True, name=f"cosysim-{name}",
+                        )
+                        thread.start()
+                        self._launched_threads[name] = thread
+                    elif t == "node":
+                        script_dir = PROJECT_ROOT / info["script"]
+                        proc = subprocess.Popen(
+                            "npm run dev", cwd=str(script_dir), shell=True,
+                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                        )
+                        self._launched_procs[name] = proc
+                except Exception as exc:
+                    self.call_from_thread(self._log, f"[red]✗[/] {info['label']}: {exc}")
                 time.sleep(0.3)
+        time.sleep(3)
+        self.call_from_thread(self._refresh_all_status)
 
     @work(thread=True)
     def _launch_target(self, name: str, info: Dict[str, Any]) -> None:
