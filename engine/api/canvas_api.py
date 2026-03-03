@@ -452,6 +452,94 @@ def rpc_proxy(body: Dict[str, Any]) -> Dict[str, Any]:
     return proxy_request(**body)
 
 
+# ──── Canvas bridge (Python → Node ingest) ───────────────────────────────────
+
+_CANVAS_NODE_URL = os.environ.get("CANVAS_NODE_URL", "http://localhost:5590")
+_CANVAS_API_KEY = os.environ.get("INTERNAL_API_KEY", "cosysim-canvas-internal")
+
+
+def send_to_canvas(
+    content: str,
+    source: str = "python",
+    node_type: str = "note",
+    notebook_id: str = "",
+    timeout: float = 5.0,
+) -> Dict[str, Any]:
+    """Push a node into the Canvas Node server's SQLite store.
+
+    Args:
+        content: Text content to store.
+        source: Origin label (e.g. "nexus", "scheduler", "skill-pack").
+        node_type: Source type tag — "note", "code", "url", etc.
+        notebook_id: Target notebook id; empty = first/default notebook.
+        timeout: Request timeout in seconds.
+
+    Returns:
+        {"status": "ok", "nodeId": "...", "notebook_id": "..."} or {"error": ...}.
+    """
+    try:
+        import httpx
+        payload: Dict[str, Any] = {"content": content, "source": source, "type": node_type}
+        if notebook_id:
+            payload["notebook_id"] = notebook_id
+        r = httpx.post(
+            f"{_CANVAS_NODE_URL}/api/external/ingest",
+            json=payload,
+            headers={"x-api-key": _CANVAS_API_KEY},
+            timeout=timeout,
+        )
+        return r.json()
+    except Exception as exc:
+        logger.warning("send_to_canvas failed: %s", exc)
+        return {"error": str(exc)}
+
+
+class CanvasPushBody(BaseModel):
+    content: str
+    source: str = "canvas-api"
+    type: str = "note"
+    notebook_id: str = ""
+
+
+@app.post("/api/canvas/push")
+def canvas_push(body: CanvasPushBody) -> Dict[str, Any]:
+    """Push content into the Canvas Node server from any Python caller."""
+    return send_to_canvas(
+        content=body.content,
+        source=body.source,
+        node_type=body.type,
+        notebook_id=body.notebook_id,
+    )
+
+
+# ──── LMStudio direct proxy ───────────────────────────────────────────────────
+
+_LMSTUDIO_URL = os.environ.get("LOCAL_LM_STUDIO_URL", "http://localhost:1234")
+
+
+@app.get("/api/lmstudio/health")
+async def lmstudio_health() -> Dict[str, Any]:
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            r = await client.get(f"{_LMSTUDIO_URL}/api/v1/models")
+            models = [m["id"] for m in r.json().get("data", [])]
+        return {"status": "ok", "url": _LMSTUDIO_URL, "models": models}
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"LMStudio offline: {exc}")
+
+
+@app.get("/api/lmstudio/models")
+async def lmstudio_models() -> Dict[str, Any]:
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            r = await client.get(f"{_LMSTUDIO_URL}/api/v1/models")
+            return {"models": r.json().get("data", [])}
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+
+
 # ──── Sidecar compatibility shim ──────────────────────────────────────────────
 
 @app.get("/api/sidecar/health")

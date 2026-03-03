@@ -210,6 +210,124 @@ async function startServer() {
     res.json({ success: true });
   });
 
+  // ── LMStudio direct integration ───────────────────────────────────────────
+  const LM_STUDIO_URL = process.env.LOCAL_LM_STUDIO_URL || "http://localhost:1234";
+  const INTERNAL_API_KEY = process.env.INTERNAL_API_KEY || "cosysim-canvas-internal";
+
+  // GET /api/lmstudio/health — check if LMStudio is reachable
+  app.get("/api/lmstudio/health", async (_req, res) => {
+    try {
+      const r = await fetch(`${LM_STUDIO_URL}/api/v1/models`, {
+        signal: AbortSignal.timeout(3000),
+      });
+      const data = await r.json();
+      const models = (data.data || []).map((m: any) => m.id);
+      res.json({ status: "ok", url: LM_STUDIO_URL, models });
+    } catch (e: any) {
+      res.status(503).json({ status: "offline", error: e.message });
+    }
+  });
+
+  // GET /api/lmstudio/models
+  app.get("/api/lmstudio/models", async (_req, res) => {
+    try {
+      const r = await fetch(`${LM_STUDIO_URL}/api/v1/models`);
+      const data = await r.json();
+      res.json({ models: data.data || [] });
+    } catch (e: any) {
+      res.status(503).json({ error: `LMStudio unreachable: ${e.message}` });
+    }
+  });
+
+  // POST /api/lmstudio/chat — streaming or non-streaming chat completions
+  app.post("/api/lmstudio/chat", async (req, res) => {
+    const {
+      messages = [],
+      model = "",
+      temperature = 0.7,
+      max_tokens = 1024,
+      stream = false,
+      system = "",
+    } = req.body;
+
+    const fullMessages = [
+      ...(system ? [{ role: "system", content: system }] : []),
+      ...messages,
+    ];
+
+    const body = JSON.stringify({
+      model: model || undefined,
+      messages: fullMessages,
+      temperature,
+      max_tokens,
+      stream,
+    });
+
+    try {
+      const r = await fetch(`${LM_STUDIO_URL}/api/v1/chat/completions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
+      });
+
+      if (stream) {
+        res.setHeader("Content-Type", "text/event-stream");
+        res.setHeader("Cache-Control", "no-cache");
+        res.setHeader("Connection", "keep-alive");
+        const reader = r.body?.getReader();
+        const decoder = new TextDecoder();
+        if (reader) {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            res.write(decoder.decode(value, { stream: true }));
+          }
+        }
+        res.end();
+      } else {
+        const data = await r.json();
+        const text = data.choices?.[0]?.message?.content ?? "";
+        res.json({ text, model: data.model, usage: data.usage });
+      }
+    } catch (e: any) {
+      res.status(503).json({ error: `LMStudio unavailable: ${e.message}` });
+    }
+  });
+
+  // POST /api/external/ingest — push a node from any external client (Python, scripts, agents)
+  // Protected by x-api-key header matching INTERNAL_API_KEY.
+  // Stores the node as a source in the default/first notebook, or creates one.
+  app.post("/api/external/ingest", async (req, res) => {
+    const key = req.headers["x-api-key"];
+    if (key !== INTERNAL_API_KEY) {
+      return res.status(401).json({ error: "Unauthorized — x-api-key mismatch" });
+    }
+    const { content, source = "external", type = "note", notebook_id = "" } = req.body;
+    if (!content) return res.status(400).json({ error: "content required" });
+
+    const nodeId = `node_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const ts = new Date().toISOString();
+
+    // Resolve target notebook: use provided id, or first notebook, or create one
+    let nbId = notebook_id as string;
+    if (!nbId) {
+      const nb = db.prepare("SELECT id FROM notebooks ORDER BY created_at LIMIT 1").get() as any;
+      if (nb) {
+        nbId = nb.id;
+      } else {
+        nbId = `nb_${Date.now()}`;
+        db.prepare("INSERT INTO notebooks (id, name) VALUES (?, ?)").run(nbId, "Ingest");
+      }
+    }
+
+    db.prepare(`
+      INSERT INTO sources (id, notebook_id, title, content, type, url)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(nodeId, nbId, `[${source}] ${ts.slice(0, 19)}`, content, type, source);
+
+    res.json({ status: "ok", nodeId, notebook_id: nbId });
+  });
+
   // ── Canvas API proxy (Python backend at 5595) ─────────────────────────────
   const CANVAS_API = process.env.CANVAS_API_URL || "http://localhost:5595";
   const NEXUS_API = "http://localhost:8700";
