@@ -1159,6 +1159,98 @@ def _register_builtin_tasks(daemon: "SchedulerDaemon") -> None:
         "weekly",
         _improvement_review_callback,
     )
+    daemon.register(
+        "colab-pipeline-sync",
+        "Colab Pipeline Sync — daily NLM→Drive→Colab analysis of improvement entries",
+        "daily",
+        _colab_pipeline_sync_callback,
+    )
+
+
+def _colab_pipeline_sync_callback() -> Dict[str, Any]:
+    """Daily at 04:00: NLM→Drive→Colab analysis pipeline for improvement entries.
+
+    For each pending Nexus entry with category="improvement":
+      1. Asks NLM to suggest improvements via nlm_direct_client.
+      2. Uploads suggestions to Drive.
+      3. Builds a Colab analysis notebook via ColabNotebookBuilder.
+      4. Stores the Colab output back in Nexus.
+    """
+    processed = 0
+    errors = 0
+    try:
+        from engine.nexus.client import get_nexus_client
+        client = get_nexus_client()
+
+        results = client.search("category:improvement", limit=20)
+        entries = results if isinstance(results, list) else results.get("results", [])
+
+        if not entries:
+            return {"status": "ok", "processed": 0, "note": "no improvement entries"}
+
+        # Lazy imports — services may not be configured
+        try:
+            from engine.integrations.nlm_direct_client import get_nlm_direct_client
+            nlm = get_nlm_direct_client()
+        except Exception:
+            nlm = None
+
+        try:
+            from engine.integrations.colab_notebook_builder import get_notebook_builder
+            builder = get_notebook_builder()
+        except Exception:
+            builder = None
+
+        for entry in entries[:10]:
+            try:
+                content = entry.get("content", entry.get("text", ""))
+                if not content:
+                    continue
+
+                # Step 1: NLM suggestions
+                suggestion = ""
+                if nlm:
+                    try:
+                        suggestion = nlm.ask_simple(
+                            f"Suggest specific improvements for this AI response:\n{content[:400]}"
+                        )
+                    except Exception as exc:
+                        logger.debug("NLM suggestion failed: %s", exc)
+
+                # Step 2 + 3: Colab analysis
+                if builder:
+                    try:
+                        context = f"Entry:\n{content[:800]}\n\nSuggestions:\n{suggestion[:400]}"
+                        execution = builder.build_and_run(
+                            task_description=(
+                                "Analyze this AI response quality entry and produce a "
+                                "structured improvement report with metrics."
+                            ),
+                            initial_context=context,
+                            save_to_drive=True,
+                            save_to_nexus=False,
+                        )
+                        # Step 4: store Colab output in Nexus
+                        if execution.total_output:
+                            client.add_entry(
+                                title=f"Colab Improvement Analysis: {entry.get('title', 'entry')[:60]}",
+                                content=execution.total_output[:2000],
+                                content_type="note",
+                                category="training",
+                            )
+                    except Exception as exc:
+                        logger.warning("Colab analysis failed for entry: %s", exc)
+
+                processed += 1
+            except Exception as exc:
+                logger.warning("colab-pipeline-sync entry error: %s", exc)
+                errors += 1
+
+    except Exception as exc:
+        logger.error("colab_pipeline_sync_callback failed: %s", exc)
+        return {"status": "error", "error": str(exc), "processed": processed}
+
+    return {"status": "ok", "processed": processed, "errors": errors}
 
 
 def _news_distill_nlm_callback() -> Dict[str, Any]:

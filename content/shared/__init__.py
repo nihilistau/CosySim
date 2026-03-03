@@ -314,6 +314,78 @@ def register_shared_assets(app):
         except Exception as exc:
             return jsonify({"ok": False, "error": str(exc)})
 
+    # ── Compute / Tunnel API routes ───────────────────────────────────
+
+    @shared_bp.route("/api/compute/status")
+    def compute_status() -> "Response":
+        """Return status of all compute backends and usage."""
+        from engine.integrations.compute_router import get_compute_router
+        return jsonify(get_compute_router().get_status())
+
+    @shared_bp.route("/api/compute/tunnel/deploy", methods=["POST"])
+    def deploy_tunnel() -> "Response":
+        """Deploy a Colab tunnel server. Body: {account_name, tunnel_type}."""
+        from engine.integrations.colab_tunnel_server import get_tunnel_server
+        data = request.get_json() or {}
+        account_name = data.get("account_name", "")
+        tunnel_type = data.get("tunnel_type", "cloudflare")
+        try:
+            server = get_tunnel_server()
+            server._tunnel_type = tunnel_type
+            session = server.deploy(account_name=account_name or None)
+            return jsonify({
+                "tunnel_url": session.tunnel_url,
+                "hardware": session.hardware,
+                "kernel_id": session.kernel_id,
+                "status": "ok",
+            })
+        except Exception as exc:
+            return jsonify({"error": str(exc), "status": "error"}), 500
+
+    @shared_bp.route("/api/compute/tunnel/list")
+    def list_tunnels() -> "Response":
+        """List all active tunnel sessions."""
+        from engine.integrations.colab_tunnel_server import get_tunnel_server
+        sessions = get_tunnel_server().get_active_sessions()
+        return jsonify([{
+            "account_name": s.account_name,
+            "tunnel_url": s.tunnel_url,
+            "hardware": s.hardware,
+            "healthy": s.healthy,
+            "started_at": s.started_at,
+            "tunnel_type": s.tunnel_type,
+        } for s in sessions])
+
+    @shared_bp.route("/api/compute/accounts/configure", methods=["POST"])
+    def configure_compute_account() -> "Response":
+        """Configure features or limits for a Google account.
+
+        Body: {account_name, feature?, enabled?, service?, limit?}
+        """
+        from engine.integrations.compute_router import get_compute_router
+        data = request.get_json() or {}
+        router = get_compute_router()
+        account_name = data.get("account_name", "")
+        if not account_name:
+            return jsonify({"error": "account_name required"}), 400
+        if "feature" in data:
+            feature = data["feature"]
+            enabled = data.get("enabled", True)
+            existing = router._feature_config.get(account_name, {}).get(
+                "unlocked_features", []
+            )
+            if enabled and feature not in existing:
+                existing.append(feature)
+            elif not enabled and feature in existing:
+                existing.remove(feature)
+            router.set_feature_config(account_name, existing)
+        if "service" in data and "limit" in data:
+            limit = (
+                float("inf") if data["limit"] == "unlimited" else float(data["limit"])
+            )
+            router.configure_limits(account_name, data["service"], limit)
+        return jsonify({"status": "ok"})
+
     app.register_blueprint(shared_bp)
 
     # Auto-mount assistant API on this app

@@ -1,2 +1,4 @@
 {"model_type": "output_quality", "input": "Hello!", "output": "Hey there!", "quality": 0.8, "metadata": {}, "source": "runtime", "id": "5ef8771f-5f9a-4b4b-b064-50bb511bf600", "collected_at": 1772509618.37804}
 {"model_type": "output_quality", "input": "Help me", "output": "Sure!", "quality": 0.6, "metadata": {}, "source": "runtime", "id": "25d6dfcd-6a38-41f7-829e-42e7479dd0b9", "collected_at": 1772509618.3939166}
+{"model_type": "output_quality", "input": "Hello!", "output": "Hey there!", "quality": 0.8, "metadata": {}, "source": "runtime", "id": "64490c5a-6637-47d7-9297-51917f0c9304", "collected_at": 1772515938.9408484}
+{"model_type": "output_quality", "input": "Help me", "output": "Sure!", "quality": 0.6, "metadata": {}, "source": "runtime", "id": "e603c89f-171c-43bc-a859-79e322786be5", "collected_at": 1772515938.957285}

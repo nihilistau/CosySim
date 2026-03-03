@@ -3,6 +3,79 @@
 All notable changes to CosySim are documented here.
 
 ---
+## [0.79b] — 2026-04 — "THE COMPUTE LAYER" — ✅ COMPLETE
+
+### New Features
+
+#### Google Account Pool + HAR Auth System
+- `engine/integrations/google_account_pool.py` — thread-safe multi-account pool, round-robin rotation, per-service rate-limit tracking, persists to `data/accounts/pool.json` (gitignored)
+- `engine/integrations/har_extractor.py` — extracts 14+ Google cookies + authuser + at-token from HAR captures
+- `GoogleAccount` dataclass with cookie dict, services list, tier (free/pro), rate-limit tracking
+- `get_account_pool()` singleton; `import_from_har()` one-liner for account onboarding
+
+#### Colab AI Agent Client
+- `engine/integrations/colab_client.py` — full Colab AIService RPC client
+- SAPISIDHASH auth: `sha1("{ts} {SAPISID} {origin}")` matches browser exactly
+- `AgentCreateTask`, `AgentUpdateTask`, `AgentQueryTask`, `AgentQuerySuggestions` — 4 RPCs
+- `RuntimeService.ListAssignments` — returns JWT proxy token + runtime URL (dynamic `prod.colab.dev` subdomain)
+- Jupyter kernel WebSocket: `execute_request` → `execute_result`/`stream`/`status` protocol
+- `get_user_info()` — detects hardware tier (T4/free vs H100/G4/A100/L4/pro)
+- `get_colab_client(account_name)` singleton getter
+
+#### NotebookLM Direct HTTP Client
+- `engine/integrations/nlm_direct_client.py` — bypasses official API via direct browser-protocol HTTP
+- Fetches `bl` (build label) + `f.sid` (session fingerprint) from NLM homepage on demand
+- `application/x-www-form-urlencoded` POST with `x-same-domain: 1` header (matches browser exactly)
+- Chunked size-prefixed response parser: strips XSSI `)]}'` prefix, extracts `wrb.fr` text entries
+- Arbitrary instruction execution: any natural language instruction works against all notebook sources
+- `get_nlm_direct_client()` singleton getter
+
+#### Google Drive + Colab Notebook Builder
+- `engine/integrations/google_drive_client.py` — full CRUD, folder management, shareable links, NLM-accessible permissions
+- `engine/integrations/colab_notebook_builder.py` — 10-step pipeline: AI agent creates cells → kernel executes → Drive saves → Nexus stores
+- `training_notebook()` — offloads finetuning jobs to Colab GPU (upload dataset → AI builds cells → execute → save adapter to Drive)
+- `research_to_notebook()` — NLM answer → Drive → Colab analysis pipeline
+
+#### JIT Compute Router + Tunnel Server
+- `engine/integrations/colab_tunnel_server.py` — deploys FastAPI server on Colab kernel with cloudflared/ngrok tunnel
+- Tunnel endpoints: `/infer`, `/chat`, `/embed`, `/execute` — full inference available on free Colab GPUs
+- `engine/integrations/compute_router.py` — multi-backend router: tunnel → colab_agent → lmstudio priority
+- `JITSession` context manager: spin up Colab runtime on demand, do work, guaranteed teardown
+- Human-like delays (0.5–2.5s random) — natural usage pattern, avoids detection
+- `configure_limits()` — unlock any feature or remove rate limits dynamically
+- Max session 25 min, idle timeout 5 min, tier auto-detected via `GetUserInfo`
+- 46 scheduler tasks (+1 `colab-pipeline-sync` — daily NLM→Drive→Colab improvement analysis)
+
+#### RPC Proxy Layer
+- `engine/integrations/rpc_proxy.py` — Python server-side proxy for all Google API calls
+- Handles CORS bypass: React frontend → Express server → Python proxy → Google APIs with stored cookies
+- Functions: `proxy_request`, `import_har_to_pool`, `list_accounts_with_tiers`, `configure_account`, `jit_infer_dict`, `deploy_tunnel_dict`, `list_sessions_dict`, `teardown_by_id`, `get_all_models`
+- Fresh SAPISIDHASH computed per request; cookie set pulled from account pool by domain
+
+#### Colab @skill Pack (13 skills)
+- `engine/skills/builtin/colab_skills.py` — full agent-accessible skill pack
+- Skills: `colab_ask`, `colab_execute`, `colab_status`, `colab_build_notebook`, `drive_upload`, `drive_download`, `drive_list`, `nlm_to_colab_pipeline`, `nlm_direct_ask`, `colab_finetune`, `colab_deploy_server`, `compute_route`, `compute_status`, `compute_configure`, `compute_list_models`
+
+#### Nexus Canvas — Extended Panels
+- `content/apps/notebook_canvas/src/panels/ComputePanel.tsx` — account pool status, active tunnels, JIT inference UI, usage bars
+- `content/apps/notebook_canvas/src/panels/HarExplorerPanel.tsx` — HAR file browser, entry detail, "Try This", "Save as Skill"
+- `content/apps/notebook_canvas/src/panels/RpcExplorerPanel.tsx` — request builder, 6 pre-built RPC templates (Colab + NLM), response viewer, history, saved collections
+- `content/apps/notebook_canvas/src/panels/NexusPanel.tsx` — live Nexus search/add/Q&A
+- `server.ts` — `/api/har/*`, `/api/rpc/proxy` (CORS bypass), `/api/accounts/*`, `/api/compute/*`, `/api/nexus/*` routes
+- `callPython()` bridge: Express → Python module functions via stdin JSON
+- `nexusProxy()` helper: Express → Nexus KMS REST (port 8700)
+
+### Tests
+- 8,753 tests collected
+- New test files: `test_colab_client.py` (31), `test_colab_notebook_builder.py` (24), `test_compute_router.py` (28), `test_colab_tunnel_server.py` (18), `test_jit_compute.py` (16)
+
+### Architecture
+- New integration layer at `engine/integrations/` — Google account pool, Colab, Drive, NLM direct, compute router, tunnel server, RPC proxy
+- JIT design: no persistent long-running Colab sessions; every compute task spun up on demand and torn down
+- Account pool supports N accounts with automatic rotation, rate-limit detection, service-specific tracking
+- Scheduler: 45 → 46 tasks (`colab-pipeline-sync` added)
+
+---
 ## [0.78b] — 2026-04 — "THE DATA FLYWHEEL" — ✅ COMPLETE
 
 ### New Features

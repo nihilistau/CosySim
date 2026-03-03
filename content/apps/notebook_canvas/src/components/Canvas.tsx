@@ -6,11 +6,14 @@ import WorkflowBuilder from './WorkflowBuilder';
 import SourceViewer from './SourceViewer';
 import Browser from './Browser';
 import DataTools from './DataTools';
-import NexusPanel from './NexusPanel';
+import NexusPanel from '../panels/NexusPanel';
 import NLMPanel from './NLMPanel';
 import AiStudioPanel from './AiStudioPanel';
 import AccountsPanel from './AccountsPanel';
 import TrainingPanel from './TrainingPanel';
+import ComputePanel from '../panels/ComputePanel';
+import HarExplorerPanel from '../panels/HarExplorerPanel';
+import RpcExplorerPanel from '../panels/RpcExplorerPanel';
 import { Send, Paperclip, Plus } from 'lucide-react';
 
 interface Props {
@@ -107,7 +110,7 @@ export default function Canvas({
     reader.readAsText(file);
   };
 
-  const isSystemPanel = ['nexus', 'nlm', 'aistudio', 'accounts', 'training'].includes(viewMode);
+  const isSystemPanel = ['nexus', 'nlm', 'aistudio', 'accounts', 'training', 'compute', 'har', 'rpc'].includes(viewMode);
 
   return (
     <div 
@@ -130,6 +133,9 @@ export default function Canvas({
       {viewMode === 'aistudio' && <AiStudioPanel />}
       {viewMode === 'accounts' && <AccountsPanel />}
       {viewMode === 'training' && <TrainingPanel />}
+      {viewMode === 'compute' && <ComputePanel />}
+      {viewMode === 'har' && <HarExplorerPanel />}
+      {viewMode === 'rpc' && <RpcExplorerPanel />}
 
       {/* Standard notebook panels */}
       {!isSystemPanel && (

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ViewMode } from '../types';
-import { Settings, FilePlus, GitBranchPlus, Moon, Sun, Brain, BookOpen, Sparkles, Users, BarChart2 } from 'lucide-react';
+import { Settings, FilePlus, GitBranchPlus, Moon, Sun, Brain, BookOpen, Sparkles, Users, BarChart2, Cpu, FileText, Zap } from 'lucide-react';
 
 const PANEL_BUTTONS: { mode: ViewMode; label: string; icon: React.ReactNode; color: string }[] = [
   { mode: 'nexus',    label: 'Nexus',     icon: <Brain size={14} />,      color: 'text-violet-500 dark:text-violet-400' },
@@ -8,6 +8,9 @@ const PANEL_BUTTONS: { mode: ViewMode; label: string; icon: React.ReactNode; col
   { mode: 'aistudio', label: 'AI Studio', icon: <Sparkles size={14} />,   color: 'text-blue-500 dark:text-blue-400' },
   { mode: 'accounts', label: 'Accounts',  icon: <Users size={14} />,      color: 'text-emerald-500 dark:text-emerald-400' },
   { mode: 'training', label: 'Training',  icon: <BarChart2 size={14} />,  color: 'text-amber-500 dark:text-amber-400' },
+  { mode: 'compute',  label: 'Compute',   icon: <Cpu size={14} />,        color: 'text-orange-500 dark:text-orange-400' },
+  { mode: 'har',      label: 'HAR Explorer', icon: <FileText size={14} />, color: 'text-cyan-500 dark:text-cyan-400' },
+  { mode: 'rpc',      label: 'RPC Explorer', icon: <Zap size={14} />,     color: 'text-yellow-500 dark:text-yellow-400' },
 ];
 
 interface Props {

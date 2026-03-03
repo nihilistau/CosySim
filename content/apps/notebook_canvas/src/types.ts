@@ -35,7 +35,7 @@ export interface Workflow {
   updated_at: string;
 }
 
-export type ViewMode = 'chat' | 'note' | 'workflow' | 'source' | 'data' | 'nexus' | 'nlm' | 'aistudio' | 'accounts' | 'training';
+export type ViewMode = 'chat' | 'note' | 'workflow' | 'source' | 'data' | 'nexus' | 'nlm' | 'aistudio' | 'accounts' | 'training' | 'compute' | 'har' | 'rpc';
 
 export interface NexusEntry {
   id?: string;
@@ -71,3 +71,91 @@ export interface TrainingExample {
   source?: string;
   captured_at?: string;
 }
+
+// ── Compute Panel Types ─────────────────────────────────────────────────────
+
+export interface ComputeAccount {
+  name: string;
+  tier: 'free' | 'pro' | 'unknown';
+  services: string[];
+  hardware: string[];
+  usage: Record<string, number>;
+  limits: Record<string, number>;
+}
+
+export interface TunnelSession {
+  id: string;
+  account_name: string;
+  tunnel_url: string;
+  tunnel_type: string;
+  hardware: string;
+  started_at: number;
+  healthy: boolean;
+}
+
+export interface JITConfig {
+  max_session_minutes: number;
+  idle_timeout_minutes: number;
+  human_delays: boolean;
+  min_delay_s: number;
+  max_delay_s: number;
+}
+
+// ── HAR Explorer Types ──────────────────────────────────────────────────────
+
+export interface HARFile {
+  name: string;
+  size_mb: number;
+  path: string;
+}
+
+export interface HAREntry {
+  url: string;
+  method: string;
+  status: number;
+  mime_type: string;
+  size: number;
+  time_ms: number;
+  send_time_ms: number;
+  wait_time_ms: number;
+  request_headers: Record<string, string>;
+  response_headers: Record<string, string>;
+  request_cookies: Array<{ name: string; value: string }>;
+  response_cookies: Array<{ name: string; value: string }>;
+  request_body: string;
+  response_body: string;
+}
+
+// ── RPC Explorer Types ──────────────────────────────────────────────────────
+
+export interface RpcRequest {
+  id: string;
+  url: string;
+  method: string;
+  account_name: string;
+  headers: Record<string, string>;
+  body: string;
+  content_type: string;
+  label?: string;
+}
+
+export interface RpcHistoryEntry {
+  id: string;
+  request: RpcRequest;
+  response: {
+    status: number;
+    body: string;
+    headers: Record<string, string>;
+    latency_ms: number;
+  };
+  timestamp: number;
+}
+
+export interface RpcTemplate {
+  label: string;
+  url: string;
+  method: string;
+  content_type: string;
+  body: string;
+}
+
