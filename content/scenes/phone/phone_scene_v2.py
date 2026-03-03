@@ -230,7 +230,8 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE
             logger.warning("MCP rule registration skipped: %s", exc)
         self._subscribe_world_events()
         logger.info("PhoneSceneV2 started on %s:%s", self.host, self.port)
-        self.socketio.run(self.app, host=self.host, port=self.port, debug=False, use_reloader=False)
+        self.socketio.run(self.app, host=self.host, port=self.port, debug=False,
+                          use_reloader=False, allow_unsafe_werkzeug=True)
 
     def stop(self) -> None:
         self.nexus_flush()

@@ -1445,7 +1445,8 @@ class LoungeScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
             self._fw.on("story_beat", lambda evt: self._on_story_beat(evt))
         except Exception:
             pass
-        self.socketio.run(self.app, host=self.host, port=self.port, debug=False)
+        self.socketio.run(self.app, host=self.host, port=self.port, debug=False,
+                          allow_unsafe_werkzeug=True)
 
     def _on_env_event(self, evt) -> None:
         """React to environment changes from the event bus."""

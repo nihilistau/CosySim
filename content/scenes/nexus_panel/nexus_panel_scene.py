@@ -2207,7 +2207,8 @@ class NexusPanelScene(BaseScene, NexusSceneMixin):
         self._check_nlm_proxy_health()
         if self.socketio is not None:
             self.socketio.run(self.app, host=self.host, port=self.port,
-                              debug=False, use_reloader=False)
+                              debug=False, use_reloader=False,
+                              allow_unsafe_werkzeug=True)
         else:
             self.app.run(host=self.host, port=self.port, debug=False, use_reloader=False)
 

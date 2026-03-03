@@ -479,7 +479,8 @@ class ArenaScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
             )
         except Exception:
             pass
-        self.socketio.run(self.app, host=self.host, port=self.port, debug=False)
+        self.socketio.run(self.app, host=self.host, port=self.port, debug=False,
+                          allow_unsafe_werkzeug=True)
 
     def stop(self) -> None:
         """Stop the Arena scene and clean up resources."""

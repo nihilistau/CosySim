@@ -1480,7 +1480,8 @@ class CasinoScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
     def start(self) -> None:
         logger.info("CLUB NOIR opening on port %d", self.port)
         self._fw.emit_event("scene_started", {"scene_id": SCENE_ID, "port": CASINO_PORT}, source=SCENE_ID)
-        self.socketio.run(self.app, host=self.host, port=self.port, debug=False)
+        self.socketio.run(self.app, host=self.host, port=self.port, debug=False,
+                          allow_unsafe_werkzeug=True)
 
     def stop(self) -> None:
         self.nexus_flush()

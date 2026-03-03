@@ -115,6 +115,7 @@ class IntelHubScene(BaseScene):
             self._socketio.run(
                 self._app, host=self._host, port=self._port,
                 debug=False, use_reloader=False, log_output=False,
+                allow_unsafe_werkzeug=True,
             )
         else:
             self._app.run(host=self._host, port=self._port, debug=False)

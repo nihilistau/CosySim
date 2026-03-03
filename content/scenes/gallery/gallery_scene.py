@@ -385,7 +385,8 @@ class GalleryScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE
         # Start background ticker for ambient updates
         self._start_ticker()
         logger.info("GalleryScene started on %s:%s", self.host, self.port)
-        self.socketio.run(self.app, host=self.host, port=self.port, debug=False, use_reloader=False)
+        self.socketio.run(self.app, host=self.host, port=self.port, debug=False,
+                          use_reloader=False, allow_unsafe_werkzeug=True)
 
     def stop(self) -> None:
         self.nexus_flush()

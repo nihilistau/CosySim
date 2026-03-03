@@ -486,10 +486,14 @@ class BaseScene(ABC):
 
         scene_ref = self
 
-        @app.route("/api/bench/metrics")
-        def _bench_metrics():
-            data = scene_ref._collect_bench_metrics()
-            return Response(_json.dumps(data), mimetype="application/json")
+        # Guard: only register the route once per Flask app instance
+        if not getattr(app, "_bench_route_registered", False):
+            app._bench_route_registered = True  # type: ignore[attr-defined]
+
+            @app.route("/api/bench/metrics")
+            def _bench_metrics():
+                data = scene_ref._collect_bench_metrics()
+                return Response(_json.dumps(data), mimetype="application/json")
 
         if socketio:
             # Expose a helper so scenes can push updates after agent replies

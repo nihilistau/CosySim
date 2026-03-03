@@ -264,7 +264,7 @@ async function startServer() {
     });
 
     try {
-      const r = await fetch(`${LM_STUDIO_URL}/api/v1/chat/completions`, {
+      const r = await fetch(`${LM_STUDIO_URL}/api/v1/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body,
@@ -291,6 +291,44 @@ async function startServer() {
       }
     } catch (e: any) {
       res.status(503).json({ error: `LMStudio unavailable: ${e.message}` });
+    }
+  });
+
+  // POST /api/lmstudio/load — load a model
+  app.post("/api/lmstudio/load", async (req, res) => {
+    try {
+      const r = await fetch(`${LM_STUDIO_URL}/api/v1/models/load`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(req.body),
+      });
+      res.status(r.status).json(await r.json().catch(() => ({})));
+    } catch (e: any) {
+      res.status(503).json({ error: e.message });
+    }
+  });
+
+  // POST /api/lmstudio/download — download a model
+  app.post("/api/lmstudio/download", async (req, res) => {
+    try {
+      const r = await fetch(`${LM_STUDIO_URL}/api/v1/models/download`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(req.body),
+      });
+      res.status(r.status).json(await r.json().catch(() => ({})));
+    } catch (e: any) {
+      res.status(503).json({ error: e.message });
+    }
+  });
+
+  // GET /api/lmstudio/download/status/:jobId
+  app.get("/api/lmstudio/download/status/:jobId", async (req, res) => {
+    try {
+      const r = await fetch(`${LM_STUDIO_URL}/api/v1/models/download/status/${req.params.jobId}`);
+      res.status(r.status).json(await r.json().catch(() => ({})));
+    } catch (e: any) {
+      res.status(503).json({ error: e.message });
     }
   });
 

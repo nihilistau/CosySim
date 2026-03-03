@@ -482,7 +482,8 @@ class AssetStudioScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="
         except Exception as exc:
             logger.debug("Could not import asset_studio_skills: %s", exc)
         logger.info("Asset Studio starting on port %d", self.port)
-        self.socketio.run(self.app, host=self.host, port=self.port)
+        self.socketio.run(self.app, host=self.host, port=self.port,
+                          allow_unsafe_werkzeug=True)
 
     def stop(self) -> None:
         """Stop the scene."""

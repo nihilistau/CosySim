@@ -306,7 +306,7 @@ class GridScene(BaseScene):
     }
 
     def __init__(self, config: Any = None) -> None:
-        super().__init__(config or {})
+        super().__init__(scene_name="grid", port=self.SCENE_METADATA["port"])
         self.scene_name = "grid"
         self.app: Optional[Flask] = None
         self.socketio: Optional[SocketIO] = None
@@ -347,20 +347,20 @@ class GridScene(BaseScene):
         import content.scenes.grid.grid_skills  # noqa: F401
 
         fw = get_framework()
-        node = fw.get_or_create(f"scenes.{self.scene_name}")
-        node.set("status", "running")
-        node.set("port", self.SCENE_METADATA["port"])
+        node = fw.register_scene(self.scene_name)
+        node.update_state({"status": "running", "port": self.SCENE_METADATA["port"]})
 
         logger.info("THE GRID started on port %d", self.SCENE_METADATA["port"])
-        self.socketio.run(self.app, host="0.0.0.0", port=self.SCENE_METADATA["port"])
+        self.socketio.run(self.app, host="0.0.0.0", port=self.SCENE_METADATA["port"],
+                          allow_unsafe_werkzeug=True)
 
     def stop(self) -> None:
         """Stop and clean up."""
         try:
             from engine.mcp import get_framework
             fw = get_framework()
-            node = fw.get_or_create(f"scenes.{self.scene_name}")
-            node.set("status", "stopped")
+            node = fw.register_scene(self.scene_name)
+            node.update_state({"status": "stopped"})
         except Exception:
             pass
 
@@ -592,8 +592,8 @@ class GridScene(BaseScene):
                     self.socketio.emit("world_event", data)
 
             bus = get_event_bus()
-            bus.subscribe("world.economy_tick", _on_economy_tick, scene="grid")
-            bus.subscribe("world.major_event", _on_world_event, scene="grid")
+            bus.subscribe("world.economy_tick", _on_economy_tick, subscriber_id="grid")
+            bus.subscribe("world.major_event", _on_world_event, subscriber_id="grid")
             logger.debug("THE GRID: EventBus wired")
         except Exception as exc:
             logger.warning("THE GRID: EventBus wiring failed: %s", exc)
