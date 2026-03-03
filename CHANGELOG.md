@@ -3,7 +3,99 @@
 All notable changes to CosySim are documented here.
 
 ---
-## [0.82b] — 2026-03 — "THE OPEN WORLD" — 🚧 IN PROGRESS
+## [0.82b] — "THE OPEN WORLD" — 2026-03
+
+### Added
+- **CityMap** — 16-node city graph, 6 districts, 24 edges, BFS pathfinding (`engine/world/city_map.py`)
+- **MissionManager** — 15 builtin missions, 5 types, full lifecycle + rewards (`engine/world/mission.py`)
+- **WorldAnnouncer** — EventBus-driven city pulse feed, 50-event ring buffer, station muting (`engine/world/world_announcer.py`)
+- **City Skills** — 8 @skill tools in `city` pack (`city_get_map`, `city_travel`, `city_find_path`, …)
+- **Mission Skills** — 9 @skill tools in `mission` pack (`mission_accept`, `mission_complete`, …)
+- **Announcer Skills** — 5 @skill tools in `announcer` pack (`announcer_get_feed`, `world_event_summary`, …)
+- **Cross-scene NPC tracking** — NPCScheduler calls `city_map.set_npc_location()` every tick; emits `npc_location` socket event on location change
+- **`/api/world/events`** — WorldSim ring-buffer REST endpoint (+ `/summary` + `/npc_locations`)
+- **Intel Hub CITY PULSE panel** — full-width panel, category filters (NPC/FACTION/WORLD/HACKER/ECONOMY), live Socket.IO injection
+- **PlayerState extensions** — `spend_energy`, `add_heat`, `adjust_reputation`, `adjust_faction`, `add_xp`, `active_location`
+
+### Changed
+- `BaseScene.register_world_events_route()` added — registers `/api/world/events`, `/api/world/events/summary`, `/api/world/npc_locations`
+- `NPCScheduler._track_npc_in_city_map()` — skips empty/None locations; uses `get_framework().emit()` for socket events
+- Test suite parallelised with pytest-xdist: 30 min → ~6 min (`pytest -n auto`)
+- 7 incompatible fastmcp test files excluded from default run
+
+### Tests
+- 8,327+ tests, 0 failures
+- New: `test_city_map.py` (35), `test_mission.py` (55), `test_announcer.py` (17), `test_npc_scheduler_location.py` (6)
+
+---
+
+## [0.81b] — 2026-03 — "THE LIVING CITY" — ✅ COMPLETE
+
+### New Features
+
+#### City Map Engine (`engine/world/city_map.py`)
+- `CityMap` singleton with 16 city nodes across 6 districts:
+  - **DOWNTOWN**: signal_hq, velvet_pit, rusty_anchor, briefing_room
+  - **COMBAT_ZONE**: colosseum, shattered_throne
+  - **HIGHRISE**: penthouse, obscura
+  - **UNDERWORLD**: the_score, club_noir
+  - **TECH_DISTRICT**: the_lab, the_grid, the_arcade
+  - **OUTSKIRTS**: neon_city_hub, asset_studio, command_center
+- 24 bidirectional edges with `travel_cost` (minutes), `energy_cost`, `heat_add`
+- BFS pathfinding: `get_route(src, dst)` returns hop list
+- `travel(destination)` — validates adjacency, deducts energy, adds heat, updates `PlayerState.active_location`
+- NPC location tracking: `track_npc(name, location)`, `get_npc_location(name)`, `get_npcs_at(location)`
+- Module-level `get_player_state()` wrapper for clean test patching
+- `reset_city_map()` for test isolation; thread-safe with `threading.Lock`
+- 8 @skill tools (city pack): `city_travel`, `city_get_location`, `city_get_neighbors`, `city_get_route`,
+  `city_list_locations`, `city_find_npc`, `city_who_is_at`, `city_all_npc_locations`
+- 7 REST endpoints via `base_scene.register_city_route()`:
+  `GET /api/city/map`, `/api/city/location`, `/api/city/neighbors/<loc>`,
+  `POST /api/city/travel`, `GET /api/city/npcs`, `/api/city/npcs/<location>`,
+  `POST /api/city/route`
+
+#### Mission System (`engine/world/mission.py`)
+- `MissionManager` singleton with 15 builtin missions across 5 types (recon/retrieval/elimination/escort/sabotage)
+- `Mission`, `MissionObjective`, `MissionReward` dataclasses — full lifecycle:
+  `accept()`, `complete_objective()`, `complete()`, `abandon()`, `fail()`, `assign_crew()`, `create()`
+- Optional vs required objectives — game can complete without finishing optional objectives
+- Rewards applied to PlayerState: `earn_credits`, `add_xp`, `adjust_reputation`, `adjust_faction`
+- Rep penalties on abandon (−3) and fail (−difficulty × 3)
+- Builtin missions seed on first load; new missions added in future versions auto-inserted on startup
+- Module-level `get_player_state()` wrapper for clean test patching; `reset_mission_manager()` for isolation
+- Persists to `data/missions.json`
+- 9 @skill tools (mission pack): `mission_list`, `mission_status`, `mission_list_active`, `mission_accept`,
+  `mission_abandon`, `mission_complete_objective`, `mission_complete`, `mission_assign_crew`, `mission_create`, `mission_board`
+- 10 REST endpoints via `base_scene.register_mission_route()`:
+  `GET /api/missions/board`, `/api/missions/available`, `/api/missions/active`, `/api/missions/<id>`,
+  `POST /api/missions/accept`, `/api/missions/abandon`, `/api/missions/complete`,
+  `/api/missions/objective`, `/api/missions/crew`, `/api/missions/create`
+
+#### PlayerState Extensions
+- `spend_energy(amount, reason)` — deduct with floor at 0, log
+- `add_heat(amount, reason)` — accumulate heat score, log
+- `adjust_reputation(delta, reason)` — alias for `update_reputation()`
+- `adjust_faction(faction, delta)` — alias for `update_faction_standing()`
+- `add_xp(amount, reason)` — cumulative XP in `_skills["xp"]`; every 500 XP boundary triggers random skill level-up (max 5)
+- `active_location` property — public accessor for `_active_location`
+
+#### Test Suite Overhaul
+- **pytest-xdist parallel execution**: `pytest -n auto` — 8327 tests in **6 minutes** (was 30 min)
+- **Two-tier system** (`pyproject.toml`):
+  - Default run: `-m "not slow and not integration"` + ignore broken fastmcp files
+  - Full suite: `pytest -m ""` (removes filter)
+- **`slow` marker** applied to: `test_asset_studio_workflows.py` (145 ComfyUI structure tests),
+  `test_nlm_live_proxy.py` (109 tests, needs live auth), `test_pipeline_smoke.py` (148 integration tests)
+- **`integration` marker** applied to: `test_copilot_bridge.py`, `test_colab_client.py` (require live cookies)
+- **`--ignore`** for 7 pre-existing fastmcp `ContentBlock` import failures:
+  `test_nexus_bridge`, `test_nexus_phase2`, `test_nexus_seeder_and_bridge`, `test_nlm_deep_storage`,
+  `test_notebooklm_devtools`, `test_phone_news`, `test_integration`
+- **63 new passing tests**: `tests/test_city_map.py` (35) + `tests/test_mission.py` (55) — minus 27 shared
+- **8327 tests passing, 0 failures** on default run
+
+---
+
+## [0.81b] — 2026-03 — "THE LIVING CITY" — ✅ COMPLETE
 
 ### New Features
 

@@ -779,3 +779,116 @@ window.briefingRoom = briefingRoom;
 document.addEventListener('DOMContentLoaded', () => {
   briefingRoom.init();
 });
+
+// ──────────────────────────────────────────────────────────
+// CITY PULSE PANEL
+// ──────────────────────────────────────────────────────────
+(function initCityPulse() {
+  const feedEl   = document.getElementById('city-pulse-feed');
+  const filters  = document.getElementById('city-pulse-filters');
+  const refreshB = document.getElementById('cp-refresh-btn');
+  if (!feedEl) return;
+
+  let _currentCat = '';
+  const _MAX = 50;
+  const _liveBuffer = [];
+
+  const CAT_ICONS = {
+    npc: '🧍', faction: '⚔️', economy: '💹',
+    hacker: '💻', world: '🌐', system: '⚙️',
+  };
+
+  function _esc(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function _badge(cat) {
+    const cls = ['npc','faction','economy','hacker','world'].includes(cat) ? `cp-event__badge--${cat}` : '';
+    const icon = CAT_ICONS[cat] || '📡';
+    return `<span class="cp-event__badge ${cls}">${icon} ${_esc((cat||'unknown').toUpperCase())}</span>`;
+  }
+
+  function _renderEvent(e) {
+    const cat  = (e.category || e.type || '').toLowerCase();
+    const ts   = e.timestamp || e.created_at || '';
+    const title = e.title || e.event_type || '';
+    const desc  = e.description || e.body || '';
+    const scene = e.scene || '';
+    return `<div class="cp-event" data-cat="${_esc(cat)}">
+      <span class="cp-event__time">${_esc(ts.slice(11,16)||ts.slice(0,5))}</span>
+      ${_badge(cat)}
+      <div class="cp-event__body">
+        <div class="cp-event__title">${_esc(title)}</div>
+        ${desc ? `<div class="cp-event__desc">${_esc(desc)}</div>` : ''}
+        ${scene ? `<div class="cp-event__scene-tag">[ ${_esc(scene.toUpperCase())} ]</div>` : ''}
+      </div>
+    </div>`;
+  }
+
+  function _render(events) {
+    if (!events || !events.length) {
+      feedEl.innerHTML = '<div class="feed-placeholder">No city signals detected.</div>';
+      return;
+    }
+    feedEl.innerHTML = events.slice(0, _MAX).map(_renderEvent).join('');
+  }
+
+  async function _load(cat) {
+    _currentCat = cat;
+    try {
+      const url = `/api/world/events?limit=${_MAX}${cat ? '&category=' + encodeURIComponent(cat) : ''}`;
+      const data = await fetch(url).then(r => r.json());
+      const events = data.events || [];
+      // Merge with live buffer, sort newest first
+      const combined = [..._liveBuffer, ...events];
+      const seen = new Set();
+      const deduped = combined.filter(e => {
+        const key = e.id || (e.title + e.created_at);
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+      deduped.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+      _render(deduped);
+    } catch (_) {
+      feedEl.innerHTML = '<div class="feed-placeholder">Feed unavailable.</div>';
+    }
+  }
+
+  // Filter buttons
+  if (filters) {
+    filters.addEventListener('click', e => {
+      const btn = e.target.closest('.cp-filter-btn');
+      if (!btn) return;
+      filters.querySelectorAll('.cp-filter-btn').forEach(b => b.classList.remove('cp-filter-btn--active'));
+      btn.classList.add('cp-filter-btn--active');
+      _load(btn.dataset.cat || '');
+    });
+  }
+
+  if (refreshB) refreshB.addEventListener('click', () => _load(_currentCat));
+
+  // Socket.IO live injection
+  if (window.io) {
+    const sock = window.io(`http://localhost:${window.SCENE_PORT || 5580}`, { transports: ['websocket', 'polling'] });
+    sock.on('city_pulse', evt => {
+      _liveBuffer.unshift(evt);
+      if (_liveBuffer.length > _MAX) _liveBuffer.pop();
+      const cat = (evt.category || evt.type || '').toLowerCase();
+      if (!_currentCat || _currentCat === cat) {
+        const entry = document.createElement('div');
+        entry.innerHTML = _renderEvent(evt);
+        const child = entry.firstElementChild;
+        if (child) {
+          feedEl.prepend(child);
+          // Keep at most _MAX items in DOM
+          while (feedEl.children.length > _MAX) feedEl.removeChild(feedEl.lastChild);
+        }
+      }
+    });
+  }
+
+  // Initial load + auto-refresh 30s
+  _load('');
+  setInterval(() => _load(_currentCat), 30000);
+})();

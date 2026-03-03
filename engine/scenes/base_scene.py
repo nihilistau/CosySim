@@ -823,6 +823,324 @@ class BaseScene(ABC):
             except Exception as exc:
                 return Response(_json.dumps({"error": str(exc)}), status=500, mimetype="application/json")
 
+    def register_city_route(self, app) -> None:
+        """Register ``/api/city`` REST endpoints on a Flask app.
+
+        Endpoints:
+            GET  /api/city/map              — full city map snapshot
+            GET  /api/city/location         — player's current location
+            GET  /api/city/neighbors        — adjacent nodes from player location
+            GET  /api/city/route            — ?from=X&to=Y shortest path
+            POST /api/city/travel           — move player (json: destination)
+            GET  /api/city/npcs             — all NPC locations
+            GET  /api/city/npcs/<location>  — NPCs at specific location
+        """
+        import json as _json
+        from flask import Response, request as _req
+
+        if getattr(app, "_city_route_registered", False):
+            return
+        app._city_route_registered = True  # type: ignore[attr-defined]
+
+        @app.route("/api/city/map")
+        def _city_map():
+            try:
+                from engine.world.city_map import get_city_map
+                return Response(_json.dumps(get_city_map().to_dict()), mimetype="application/json")
+            except Exception as exc:
+                return Response(_json.dumps({"error": str(exc)}), status=500, mimetype="application/json")
+
+        @app.route("/api/city/location")
+        def _city_location():
+            try:
+                from engine.world.player_state import get_player_state
+                loc = get_player_state().active_location
+                return Response(_json.dumps({"location": loc}), mimetype="application/json")
+            except Exception as exc:
+                return Response(_json.dumps({"error": str(exc)}), status=500, mimetype="application/json")
+
+        @app.route("/api/city/neighbors")
+        def _city_neighbors():
+            try:
+                from engine.world.city_map import get_city_map
+                from engine.world.player_state import get_player_state
+                loc = _req.args.get("location") or get_player_state().active_location or "SIGNAL"
+                neighbors = get_city_map().get_neighbors(loc)
+                return Response(_json.dumps({"location": loc, "neighbors": neighbors}), mimetype="application/json")
+            except Exception as exc:
+                return Response(_json.dumps({"error": str(exc)}), status=500, mimetype="application/json")
+
+        @app.route("/api/city/route")
+        def _city_route():
+            try:
+                origin = _req.args.get("from", "")
+                dest = _req.args.get("to", "")
+                if not origin or not dest:
+                    return Response(_json.dumps({"error": "from and to required"}), status=400, mimetype="application/json")
+                from engine.world.city_map import get_city_map
+                route = get_city_map().get_route(origin, dest)
+                if route is None:
+                    return Response(_json.dumps({"error": f"No route from {origin} to {dest}"}), status=404, mimetype="application/json")
+                return Response(_json.dumps(route), mimetype="application/json")
+            except Exception as exc:
+                return Response(_json.dumps({"error": str(exc)}), status=500, mimetype="application/json")
+
+        @app.route("/api/city/travel", methods=["POST"])
+        def _city_travel():
+            try:
+                body = _req.get_json(force=True) or {}
+                dest = body.get("destination", "")
+                if not dest:
+                    return Response(_json.dumps({"error": "destination required"}), status=400, mimetype="application/json")
+                from engine.world.city_map import get_city_map
+                result = get_city_map().travel(dest)
+                status = 200 if result.success else 400
+                return Response(_json.dumps(result.to_dict()), status=status, mimetype="application/json")
+            except Exception as exc:
+                return Response(_json.dumps({"error": str(exc)}), status=500, mimetype="application/json")
+
+        @app.route("/api/city/npcs")
+        def _city_npcs():
+            try:
+                from engine.world.city_map import get_city_map
+                return Response(_json.dumps(get_city_map().get_all_npc_locations()), mimetype="application/json")
+            except Exception as exc:
+                return Response(_json.dumps({"error": str(exc)}), status=500, mimetype="application/json")
+
+        @app.route("/api/city/npcs/<string:location>")
+        def _city_npcs_at(location: str):
+            try:
+                from engine.world.city_map import get_city_map
+                npcs = get_city_map().get_npcs_at(location)
+                return Response(_json.dumps({"location": location, "npcs": npcs}), mimetype="application/json")
+            except Exception as exc:
+                return Response(_json.dumps({"error": str(exc)}), status=500, mimetype="application/json")
+
+    def register_mission_route(self, app) -> None:
+        """Register ``/api/mission`` REST endpoints on a Flask app.
+
+        Endpoints:
+            GET  /api/mission/board               — full board (available/active/completed)
+            GET  /api/mission/available           — available missions (?location=&type=&max_difficulty=)
+            GET  /api/mission/active              — active missions
+            GET  /api/mission/<id>                — single mission status
+            POST /api/mission/accept              — accept (json: mission_id)
+            POST /api/mission/abandon             — abandon (json: mission_id)
+            POST /api/mission/complete            — complete (json: mission_id, notes)
+            POST /api/mission/objective           — mark objective done (json: mission_id, objective_id)
+            POST /api/mission/assign_crew         — assign crew (json: mission_id, crew_ids list)
+            POST /api/mission/create              — create custom mission
+        """
+        import json as _json
+        from flask import Response, request as _req
+
+        if getattr(app, "_mission_route_registered", False):
+            return
+        app._mission_route_registered = True  # type: ignore[attr-defined]
+
+        @app.route("/api/mission/board")
+        def _mission_board():
+            try:
+                from engine.world.mission import get_mission_manager
+                return Response(_json.dumps(get_mission_manager().to_dict()), mimetype="application/json")
+            except Exception as exc:
+                return Response(_json.dumps({"error": str(exc)}), status=500, mimetype="application/json")
+
+        @app.route("/api/mission/available")
+        def _mission_available():
+            try:
+                from engine.world.mission import get_mission_manager
+                location = _req.args.get("location")
+                mtype = _req.args.get("type")
+                max_diff = _req.args.get("max_difficulty")
+                missions = get_mission_manager().list_available(
+                    location=location,
+                    mission_type=mtype,
+                    max_difficulty=int(max_diff) if max_diff else None,
+                )
+                return Response(_json.dumps({"missions": missions}), mimetype="application/json")
+            except Exception as exc:
+                return Response(_json.dumps({"error": str(exc)}), status=500, mimetype="application/json")
+
+        @app.route("/api/mission/active")
+        def _mission_active():
+            try:
+                from engine.world.mission import get_mission_manager
+                return Response(_json.dumps({"missions": get_mission_manager().list_active()}), mimetype="application/json")
+            except Exception as exc:
+                return Response(_json.dumps({"error": str(exc)}), status=500, mimetype="application/json")
+
+        @app.route("/api/mission/<string:mission_id>")
+        def _mission_get(mission_id: str):
+            try:
+                from engine.world.mission import get_mission_manager
+                result = get_mission_manager().get_status(mission_id)
+                if not result:
+                    return Response(_json.dumps({"error": f"Mission {mission_id} not found"}), status=404, mimetype="application/json")
+                return Response(_json.dumps(result), mimetype="application/json")
+            except Exception as exc:
+                return Response(_json.dumps({"error": str(exc)}), status=500, mimetype="application/json")
+
+        @app.route("/api/mission/accept", methods=["POST"])
+        def _mission_accept():
+            try:
+                body = _req.get_json(force=True) or {}
+                mission_id = body.get("mission_id", "")
+                if not mission_id:
+                    return Response(_json.dumps({"error": "mission_id required"}), status=400, mimetype="application/json")
+                from engine.world.mission import get_mission_manager
+                result = get_mission_manager().accept(mission_id)
+                status = 200 if result.get("success") else 400
+                return Response(_json.dumps(result), status=status, mimetype="application/json")
+            except Exception as exc:
+                return Response(_json.dumps({"error": str(exc)}), status=500, mimetype="application/json")
+
+        @app.route("/api/mission/abandon", methods=["POST"])
+        def _mission_abandon():
+            try:
+                body = _req.get_json(force=True) or {}
+                mission_id = body.get("mission_id", "")
+                from engine.world.mission import get_mission_manager
+                result = get_mission_manager().abandon(mission_id)
+                status = 200 if result.get("success") else 400
+                return Response(_json.dumps(result), status=status, mimetype="application/json")
+            except Exception as exc:
+                return Response(_json.dumps({"error": str(exc)}), status=500, mimetype="application/json")
+
+        @app.route("/api/mission/complete", methods=["POST"])
+        def _mission_complete():
+            try:
+                body = _req.get_json(force=True) or {}
+                mission_id = body.get("mission_id", "")
+                notes = body.get("notes", "")
+                from engine.world.mission import get_mission_manager
+                result = get_mission_manager().complete(mission_id, notes=notes)
+                status = 200 if result.get("success") else 400
+                return Response(_json.dumps(result), status=status, mimetype="application/json")
+            except Exception as exc:
+                return Response(_json.dumps({"error": str(exc)}), status=500, mimetype="application/json")
+
+        @app.route("/api/mission/objective", methods=["POST"])
+        def _mission_objective():
+            try:
+                body = _req.get_json(force=True) or {}
+                mission_id = body.get("mission_id", "")
+                objective_id = body.get("objective_id", "")
+                from engine.world.mission import get_mission_manager
+                result = get_mission_manager().complete_objective(mission_id, objective_id)
+                status = 200 if result.get("success") else 400
+                return Response(_json.dumps(result), status=status, mimetype="application/json")
+            except Exception as exc:
+                return Response(_json.dumps({"error": str(exc)}), status=500, mimetype="application/json")
+
+        @app.route("/api/mission/assign_crew", methods=["POST"])
+        def _mission_assign_crew():
+            try:
+                body = _req.get_json(force=True) or {}
+                mission_id = body.get("mission_id", "")
+                crew_ids = body.get("crew_ids", [])
+                if isinstance(crew_ids, str):
+                    crew_ids = [c.strip() for c in crew_ids.split(",") if c.strip()]
+                from engine.world.mission import get_mission_manager
+                result = get_mission_manager().assign_crew(mission_id, crew_ids)
+                status = 200 if result.get("success") else 400
+                return Response(_json.dumps(result), status=status, mimetype="application/json")
+            except Exception as exc:
+                return Response(_json.dumps({"error": str(exc)}), status=500, mimetype="application/json")
+
+        @app.route("/api/mission/create", methods=["POST"])
+        def _mission_create():
+            try:
+                body = _req.get_json(force=True) or {}
+                from engine.world.mission import get_mission_manager
+                result = get_mission_manager().create(
+                    title=body.get("title", "Unnamed Mission"),
+                    description=body.get("description", ""),
+                    mission_type=body.get("mission_type", "recon"),
+                    giver_npc=body.get("giver_npc", ""),
+                    location=body.get("location", "NEON CITY"),
+                    difficulty=int(body.get("difficulty", 2)),
+                    reward_credits=int(body.get("reward_credits", 1000)),
+                    reward_xp=int(body.get("reward_xp", 50)),
+                    time_limit=body.get("time_limit"),
+                    objectives=body.get("objectives"),
+                )
+                status = 200 if result.get("success") else 400
+                return Response(_json.dumps(result), status=status, mimetype="application/json")
+            except Exception as exc:
+                return Response(_json.dumps({"error": str(exc)}), status=500, mimetype="application/json")
+
+    def register_world_events_route(self, app) -> None:
+        """Register ``/api/world/events`` on a Flask app.
+
+        Returns the WorldSim ring-buffer and WorldAnnouncer city-pulse feed.
+
+        Endpoints:
+            GET /api/world/events          — recent SimEvents (query: limit, scene, category)
+            GET /api/world/events/summary  — narrative summary string
+            GET /api/world/npc_locations   — all NPC city-map locations
+        """
+        import json as _json
+        from flask import Response, request as _req
+
+        if getattr(app, "_world_events_route_registered", False):
+            return
+        app._world_events_route_registered = True  # type: ignore[attr-defined]
+
+        @app.route("/api/world/events")
+        def _world_events():
+            try:
+                from engine.world.world_sim import get_world_sim
+                limit = int(_req.args.get("limit", 50))
+                scene = _req.args.get("scene", "")
+                category = _req.args.get("category", "")
+                sim = get_world_sim()
+                events = sim.get_all_events(limit=max(1, min(200, limit)))
+                if scene:
+                    events = [e for e in events if getattr(e, "scene", "") == scene]
+                result = []
+                for e in events:
+                    d = {
+                        "id": e.id,
+                        "type": e.event_type.value if hasattr(e.event_type, "value") else str(e.event_type),
+                        "title": e.title,
+                        "description": e.description,
+                        "scene": e.scene,
+                        "actor": e.actor,
+                        "intensity": e.intensity,
+                        "created_at": e.created_at,
+                    }
+                    result.append(d)
+                # Also include WorldAnnouncer feed if category filter requested
+                if category:
+                    try:
+                        from engine.world.world_announcer import get_world_announcer
+                        ann_feed = get_world_announcer().get_feed(limit=limit, category=category)
+                        return Response(_json.dumps({"ok": True, "events": ann_feed, "source": "announcer"}), mimetype="application/json")
+                    except Exception:
+                        pass
+                return Response(_json.dumps({"ok": True, "events": result}), mimetype="application/json")
+            except Exception as exc:
+                return Response(_json.dumps({"error": str(exc)}), status=500, mimetype="application/json")
+
+        @app.route("/api/world/events/summary")
+        def _world_events_summary():
+            try:
+                from engine.world.world_announcer import get_world_announcer
+                summary = get_world_announcer().get_summary()
+                return Response(_json.dumps({"ok": True, "summary": summary}), mimetype="application/json")
+            except Exception as exc:
+                return Response(_json.dumps({"error": str(exc)}), status=500, mimetype="application/json")
+
+        @app.route("/api/world/npc_locations")
+        def _world_npc_locations():
+            try:
+                from engine.world.city_map import get_city_map
+                locs = get_city_map().get_all_npc_locations()
+                return Response(_json.dumps({"ok": True, "npc_locations": locs}), mimetype="application/json")
+            except Exception as exc:
+                return Response(_json.dumps({"error": str(exc)}), status=500, mimetype="application/json")
+
     def register_bench_route(self, app, socketio=None) -> None:
         """Register ``/api/bench/metrics`` on a Flask app.
 

@@ -188,6 +188,31 @@ class NPCScheduler:
         )
 
         self._emit_socket_event(char_id, activity, location, mood)
+        self._track_npc_in_city_map(char_id, location)
+
+    def _track_npc_in_city_map(self, char_id: str, location: Optional[str]) -> None:
+        """Update CityMap NPC location and emit npc_location socket event."""
+        if not location:
+            return
+        try:
+            from engine.world.city_map import get_city_map
+            cm = get_city_map()
+            old_location = cm.get_npc_location(char_id)
+            cm.set_npc_location(char_id, location)
+            if old_location != location:
+                payload: Dict[str, str] = {
+                    "character_id": char_id,
+                    "location": location,
+                    "previous_location": old_location or "",
+                }
+                try:
+                    from engine.mcp import get_framework
+                    fw = get_framework()
+                    fw.emit("npc_location", payload)
+                except Exception as exc:
+                    logger.debug("NPCScheduler: could not emit npc_location: %s", exc)
+        except Exception as exc:
+            logger.debug("NPCScheduler: CityMap tracking failed: %s", exc)
 
     def _generate_activity(self, name: str, location: str) -> str:
         """Generate a one-sentence activity string via LMStudio.
