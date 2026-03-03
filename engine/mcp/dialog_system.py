@@ -758,6 +758,19 @@ class DialogSystem:
         """Record a response_id and mood after an LLM call."""
         cstate = self._get_convo(character_id, scene)
         cstate.record_response(response_id, mood)
+        # Capture turn metadata as a lightweight training signal
+        try:
+            from training.data_collector import get_data_collector
+            turn = cstate.turn
+            if mood:
+                get_data_collector().collect_output_rating(
+                    output=mood,
+                    rating=0.7,
+                    context=f"dialog_turn:{turn} char:{character_id} scene:{scene}",
+                    source="dialog_mood",
+                )
+        except Exception:
+            pass
 
     def get_branch_point(
         self,
