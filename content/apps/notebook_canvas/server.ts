@@ -253,29 +253,47 @@ async function startServer() {
 
   // ── Google Accounts ────────────────────────────────────────────────────────
   app.get("/api/accounts", async (req, res) => {
-    const result = await proxyToSidecar("/api/accounts");
-    if (result.error) {
-      res.status(503).json({ error: "Service unavailable", detail: result.error });
-    } else {
-      res.status(result.status).json(result.data);
+    try {
+      const data = await callPython("engine.integrations.rpc_proxy", "list_accounts_from_dirs", {});
+      res.json(data);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message, accounts: [] });
     }
   });
 
   app.post("/api/accounts/import-har", async (req, res) => {
-    const result = await proxyToSidecar("/api/accounts/import-har", req.body);
-    if (result.error) {
-      res.status(503).json({ error: "Service unavailable", detail: result.error });
-    } else {
-      res.status(result.status).json(result.data);
+    try {
+      const { filepath = "", account_name = "", services = [] } = req.body;
+      const data = await callPython("engine.integrations.rpc_proxy", "import_har_to_pool", {
+        filepath, account_name, services,
+      });
+      res.json(data);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
     }
   });
 
   app.post("/api/accounts/import-directory", async (req, res) => {
-    const result = await proxyToSidecar("/api/accounts/import-directory", req.body);
-    if (result.error) {
-      res.status(503).json({ error: "Service unavailable", detail: result.error });
-    } else {
-      res.status(result.status).json(result.data);
+    try {
+      const { directory = "", account_name = "", services = [] } = req.body;
+      // Bulk import all HAR files in a directory
+      const fs2 = await import("fs");
+      const dirFiles = fs2.readdirSync(directory).filter((f: string) => f.endsWith(".har"));
+      const results: any[] = [];
+      for (const f of dirFiles) {
+        const fp = path.join(directory, f);
+        try {
+          const r = await callPython("engine.integrations.rpc_proxy", "import_har_to_pool", {
+            filepath: fp, account_name: account_name || path.basename(directory), services,
+          });
+          results.push({ file: f, ...r });
+        } catch (e: any) {
+          results.push({ file: f, error: e.message });
+        }
+      }
+      res.json({ imported: results.length, results });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
     }
   });
 
@@ -323,26 +341,43 @@ async function startServer() {
 
   // ── NotebookLM ─────────────────────────────────────────────────────────────
   app.get("/api/nlm/notebooks", async (req, res) => {
+    // Try Nexus KMS first; fall back to local metadata if unavailable
     try {
       const r = await fetch(`${NEXUS_API}/api/nlm/notebooks`);
-      const data = await r.json();
+      if (r.ok) {
+        const data = await r.json();
+        return res.json(data);
+      }
+    } catch { /* Nexus KMS down — fall through to Python fallback */ }
+    try {
+      const data = await callPython("engine.integrations.rpc_proxy", "list_nlm_notebooks", {});
       res.json(data);
-    } catch {
-      res.json({ notebooks: [], error: "Nexus KMS not available" });
+    } catch (e: any) {
+      res.json({ notebooks: [], error: e.message });
     }
   });
 
   app.post("/api/nlm/ask", async (req, res) => {
+    // Try Nexus KMS first; fall back to direct NLM engine
     try {
       const r = await fetch(`${NEXUS_API}/api/nlm/ask`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(req.body),
       });
-      const data = await r.json();
-      res.status(r.status).json(data);
+      if (r.ok) {
+        const data = await r.json();
+        return res.status(r.status).json(data);
+      }
+    } catch { /* Fall through */ }
+    try {
+      const { question = "", notebook_id = "" } = req.body;
+      const data = await callPython("engine.integrations.rpc_proxy", "nlm_ask_python", {
+        question, notebook_id,
+      });
+      res.json(data);
     } catch (e: any) {
-      res.status(503).json({ error: "Nexus KMS not available", detail: e.message });
+      res.status(503).json({ error: "NLM not available", detail: e.message });
     }
   });
 
@@ -936,6 +971,94 @@ print(json.dumps(result))
       browserSessions.delete(req.params.sid);
       res.json({ ok: true });
     } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // POST /api/browser/connect-existing — connect to the user's already-running Chrome
+  // Chrome must be started with: --remote-debugging-port=9222
+  // e.g.  chrome.exe --remote-debugging-port=9222 --no-first-run
+  // This does NOT launch a new Chrome — it connects to the authenticated session.
+  app.post("/api/browser/connect-existing", async (req, res) => {
+    const { debug_port = 9222, url = "", account = "user" } = req.body;
+    const sid = sessionId();
+    try {
+      const browser = await puppeteer.connect({
+        browserURL: `http://localhost:${debug_port}`,
+        defaultViewport: null,
+      });
+      const pages = await browser.pages();
+      const page = pages.find(p => p.url() !== "about:blank") || pages[0] || (await browser.newPage());
+      if (url) await page.goto(url, { waitUntil: "domcontentloaded" });
+
+      const harEntries: HarEntry[] = [];
+      const requestTimings = new Map<string, number>();
+
+      const cdp = await page.createCDPSession();
+      await cdp.send("Network.enable");
+
+      cdp.on("Network.requestWillBeSent", (params: any) => {
+        requestTimings.set(params.requestId, params.timestamp * 1000);
+        const r = params.request;
+        const urlObj = new URL(r.url);
+        harEntries.push({
+          startedDateTime: new Date(params.timestamp * 1000).toISOString(),
+          time: 0,
+          request: {
+            method: r.method, url: r.url, httpVersion: "HTTP/1.1",
+            headers: Object.entries(r.headers || {}).map(([name, value]) => ({ name, value: String(value) })),
+            cookies: [],
+            queryString: Array.from(urlObj.searchParams.entries()).map(([name, value]) => ({ name, value })),
+            postData: r.postData ? { mimeType: r.headers["content-type"] || "text/plain", text: r.postData } : undefined,
+            headersSize: -1, bodySize: r.postData ? r.postData.length : 0,
+          },
+          response: {
+            status: 0, statusText: "", httpVersion: "HTTP/1.1",
+            headers: [], cookies: [], content: { size: 0, mimeType: "" },
+            redirectURL: "", headersSize: -1, bodySize: -1,
+          },
+          timings: { send: 0, wait: 0, receive: 0 },
+        } as HarEntry);
+      });
+
+      cdp.on("Network.responseReceived", (params: any) => {
+        const entry = harEntries.slice().reverse().find(e => e.request.url === params.response.url);
+        if (!entry) return;
+        const startMs = requestTimings.get(params.requestId) || 0;
+        entry.response = {
+          status: params.response.status, statusText: params.response.statusText,
+          httpVersion: "HTTP/1.1",
+          headers: Object.entries(params.response.headers || {}).map(([name, value]) => ({ name, value: String(value) })),
+          cookies: [], content: { size: params.response.encodedDataLength || 0, mimeType: params.response.mimeType || "" },
+          redirectURL: params.response.redirectResponseUrl || "",
+          headersSize: -1, bodySize: params.response.encodedDataLength || -1,
+        };
+        entry.time = (params.timestamp * 1000) - startMs;
+        entry.timings = { send: 0, wait: entry.time, receive: 0 };
+      });
+
+      browserSessions.set(sid, { browser: browser as any, page, harEntries, requestTimings, account, started: Date.now() });
+      res.json({
+        sid, ok: true, connected: true, debug_port,
+        url: page.url().slice(0, 120),
+        message: `Connected to existing Chrome on port ${debug_port}`,
+      });
+    } catch (e: any) {
+      res.status(500).json({
+        error: e.message,
+        hint: `Make sure Chrome is running with --remote-debugging-port=${debug_port}`,
+      });
+    }
+  });
+
+  // GET /api/browser/chrome-status — check if Chrome remote debug is available
+  app.get("/api/browser/chrome-status", async (req, res) => {
+    const port = parseInt((req.query.port as string) || "9222", 10);
+    try {
+      const r = await fetch(`http://localhost:${port}/json/version`, { signal: AbortSignal.timeout(2000) });
+      const info = await r.json();
+      res.json({ available: true, port, browser: info.Browser, protocol: info.webSocketDebuggerUrl ? "ws" : "http" });
+    } catch {
+      res.json({ available: false, port, hint: "Start Chrome with: --remote-debugging-port=" + port });
+    }
   });
 
   // ── Python bridge helpers ──────────────────────────────────────────────────

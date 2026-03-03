@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from "react";
 import {
   Globe, RefreshCw, Plus, Copy, FileText, ChevronUp, ChevronDown,
   Monitor, BookOpen, ArrowLeft, ArrowRight,
-  WifiOff, Loader2, AlertCircle, Wifi, Key,
+  WifiOff, Loader2, AlertCircle, Wifi, Key, Link,
 } from "lucide-react";
 import TurndownService from "turndown";
 
@@ -17,6 +17,7 @@ interface LiveSession {
   account: string;
   currentUrl: string;
   harEntries: number;
+  connected?: boolean; // true = connected to existing Chrome, false = launched
 }
 
 export default function Browser({ onAddSource }: Props) {
@@ -39,10 +40,30 @@ export default function Browser({ onAddSource }: Props) {
   const [isSaving, setIsSaving] = useState(false);
   const [saveResult, setSaveResult] = useState<string | null>(null);
 
+  // Chrome remote debug connect
+  const [debugPort, setDebugPort] = useState(9222);
+  const [chromeAvailable, setChromeAvailable] = useState<boolean | null>(null);
+  const [isConnecting, setIsConnecting] = useState(false);
+
   const imgRef = useRef<HTMLImageElement>(null);
   const sseRef = useRef<EventSource | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const turndown = new TurndownService();
+
+  // Check if Chrome remote debug is accessible on mount + when port changes
+  const checkChromeStatus = useCallback(async () => {
+    try {
+      const r = await fetch(`/api/browser/chrome-status?port=${debugPort}`);
+      const data = await r.json();
+      setChromeAvailable(data.available);
+    } catch {
+      setChromeAvailable(false);
+    }
+  }, [debugPort]);
+
+  useEffect(() => {
+    if (mode === "live" && !liveSession) checkChromeStatus();
+  }, [mode, liveSession, checkChromeStatus]);
 
   // ── SSE screenshot stream ──────────────────────────────────────────────────
   const startScreenshotStream = useCallback((sid: string) => {
@@ -59,6 +80,28 @@ export default function Browser({ onAddSource }: Props) {
     sseRef.current = es;
   }, []);
 
+  // ── Connect to existing Chrome ─────────────────────────────────────────────
+  const handleConnectExisting = async () => {
+    setIsConnecting(true);
+    setLiveError(null);
+    try {
+      const url = inputUrl.startsWith("http") ? inputUrl : `https://${inputUrl}`;
+      const r = await fetch("/api/browser/connect-existing", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ debug_port: debugPort, url, account: accountName }),
+      });
+      const data = await r.json();
+      if (data.error) throw new Error(data.error);
+      setLiveSession({ sessionId: data.sid, account: accountName, currentUrl: data.url, harEntries: 0, connected: true });
+      startScreenshotStream(data.sid);
+    } catch (e: any) {
+      setLiveError(e.message);
+    } finally {
+      setIsConnecting(false);
+    }
+  };
+
   // ── Start Puppeteer session ────────────────────────────────────────────────
   const handleStartLive = async () => {
     setIsStartingSession(true);
@@ -72,7 +115,7 @@ export default function Browser({ onAddSource }: Props) {
       });
       const data = await r.json();
       if (data.error) throw new Error(data.error);
-      setLiveSession({ sessionId: data.sessionId, account: accountName, currentUrl: data.url, harEntries: 0 });
+      setLiveSession({ sessionId: data.sessionId, account: accountName, currentUrl: data.url, harEntries: 0, connected: false });
       startScreenshotStream(data.sessionId);
     } catch (e: any) {
       setLiveError(e.message);
@@ -241,8 +284,10 @@ export default function Browser({ onAddSource }: Props) {
                   {isSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Key className="w-3 h-3" />} Capture
                 </button>
                 <span className="text-xs text-zinc-400">{liveSession.harEntries} req</span>
-                <Wifi className="w-3.5 h-3.5 text-emerald-500" />
-                <button onClick={handleCloseLive} title="Close Browser" className="p-1 hover:bg-red-100 dark:hover:bg-red-900 text-red-500 rounded"><WifiOff className="w-3.5 h-3.5" /></button>
+                {liveSession.connected
+                  ? <span title="Connected to your Chrome" className="text-xs text-purple-400 flex items-center gap-0.5"><Link className="w-3 h-3" />Connected</span>
+                  : <Wifi className="w-3.5 h-3.5 text-emerald-500" />}
+                <button onClick={handleCloseLive} title="Disconnect" className="p-1 hover:bg-red-100 dark:hover:bg-red-900 text-red-500 rounded"><WifiOff className="w-3.5 h-3.5" /></button>
               </>
             ) : (
               <button onClick={handleStartLive} disabled={isStartingSession}
@@ -311,9 +356,9 @@ export default function Browser({ onAddSource }: Props) {
           {mode === "live" && (
             <div className="w-full h-full flex flex-col">
               {!liveSession ? (
-                <div className="flex flex-col items-center justify-center h-full gap-3 text-zinc-400">
+                <div className="flex flex-col items-center justify-center h-full gap-4 text-zinc-400">
                   <Monitor className="w-10 h-10 opacity-30" />
-                  <p className="text-sm font-medium">Live Browser — Real Chrome via Puppeteer</p>
+                  <p className="text-sm font-medium">Live Browser — Real Chrome</p>
                   <p className="text-xs text-center max-w-xs text-zinc-500">All network traffic captured as HAR. Press <strong>Capture</strong> to save cookies + HAR for token refresh.</p>
                   <div className="flex items-center gap-3 text-xs">
                     <label className="flex items-center gap-1 cursor-pointer">
@@ -323,10 +368,41 @@ export default function Browser({ onAddSource }: Props) {
                     <span>Account: <input value={accountName} onChange={(e) => setAccountName(e.target.value)} className="w-24 border border-zinc-300 dark:border-zinc-600 rounded px-1.5 py-0.5 bg-white dark:bg-zinc-800 text-xs ml-1" /></span>
                   </div>
                   {liveError && <div className="flex items-center gap-2 text-red-500 text-xs"><AlertCircle className="w-3.5 h-3.5" />{liveError}</div>}
+
+                  {/* Connect to existing Chrome (preferred if already running) */}
+                  <div className="flex flex-col items-center gap-2 p-3 border border-purple-300 dark:border-purple-700 rounded-lg bg-purple-50 dark:bg-purple-900/20 w-72">
+                    <p className="text-xs font-semibold text-purple-700 dark:text-purple-300 flex items-center gap-1.5">
+                      <Link className="w-3.5 h-3.5" /> Connect to your Chrome
+                    </p>
+                    <p className="text-xs text-center text-zinc-500 dark:text-zinc-400">
+                      Use your existing authenticated Chrome session — no login needed.
+                      <br /><span className="text-zinc-400 dark:text-zinc-500 text-[10px]">Start Chrome with <code className="bg-zinc-200 dark:bg-zinc-700 px-0.5 rounded">--remote-debugging-port=9222</code></span>
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-zinc-500">Port:</span>
+                      <input
+                        type="number" value={debugPort} onChange={(e) => setDebugPort(parseInt(e.target.value) || 9222)}
+                        className="w-16 border border-zinc-300 dark:border-zinc-600 rounded px-1.5 py-0.5 bg-white dark:bg-zinc-800 text-xs text-center"
+                      />
+                      <button onClick={checkChromeStatus} className="text-xs text-zinc-400 hover:text-zinc-600 px-1.5 py-0.5 border border-zinc-300 dark:border-zinc-600 rounded">Check</button>
+                      {chromeAvailable === true && <span className="text-xs text-emerald-500 flex items-center gap-0.5"><Wifi className="w-3 h-3" />Found</span>}
+                      {chromeAvailable === false && <span className="text-xs text-zinc-400 flex items-center gap-0.5"><WifiOff className="w-3 h-3" />Not found</span>}
+                    </div>
+                    <button
+                      onClick={handleConnectExisting}
+                      disabled={isConnecting || chromeAvailable === false}
+                      className="flex items-center gap-2 px-4 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-xs rounded disabled:opacity-50 font-medium"
+                    >
+                      {isConnecting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Link className="w-3.5 h-3.5" />}
+                      {isConnecting ? "Connecting…" : "Connect to Chrome"}
+                    </button>
+                  </div>
+
+                  <div className="text-xs text-zinc-400">— or launch a new instance —</div>
                   <button onClick={handleStartLive} disabled={isStartingSession}
                     className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50">
                     {isStartingSession ? <Loader2 className="w-4 h-4 animate-spin" /> : <Monitor className="w-4 h-4" />}
-                    {isStartingSession ? "Launching Chrome…" : "Launch Browser"}
+                    {isStartingSession ? "Launching Chrome…" : "Launch New Browser"}
                   </button>
                 </div>
               ) : (
@@ -342,11 +418,18 @@ export default function Browser({ onAddSource }: Props) {
                       draggable={false}
                     />
                   ) : (
-                    <div className="flex items-center justify-center h-full gap-2 text-zinc-400">
-                      <Loader2 className="w-5 h-5 animate-spin" /><span className="text-sm">Loading screenshot…</span>
+                    <div className="flex flex-col items-center justify-center h-full gap-2 text-zinc-400">
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      <span className="text-sm">{liveSession.connected ? "Connecting to Chrome…" : "Loading screenshot…"}</span>
+                      {liveSession.connected && (
+                        <p className="text-xs text-zinc-500 max-w-xs text-center">
+                          Connected to your Chrome at port {debugPort}. Screenshots appear here — or just use your Chrome window directly.
+                        </p>
+                      )}
                     </div>
                   )}
                   <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-xs px-2 py-1 truncate pointer-events-none">
+                    {liveSession.connected && <span className="text-purple-300 mr-2">⚡ your Chrome</span>}
                     {liveSession.currentUrl}
                   </div>
                 </div>
@@ -359,3 +442,4 @@ export default function Browser({ onAddSource }: Props) {
     </div>
   );
 }
+

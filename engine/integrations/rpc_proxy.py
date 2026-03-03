@@ -8,6 +8,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import time
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import requests
@@ -450,3 +451,163 @@ def import_har_to_pool(
     """Import cookies from a HAR file into the account pool."""
     from engine.integrations.har_parser import import_har_to_pool as _fn
     return _fn(filepath=filepath, account_name=account_name, services=services)
+
+
+# ──── Account discovery (filesystem-level, no sidecar needed) ──────────────────
+
+def list_accounts_from_dirs(**_: Any) -> Dict[str, Any]:
+    """Discover all accounts from HAR dirs and cookie files — no sidecar required.
+
+    Returns fields compatible with the AccountsPanel component:
+    account_id, service, cookie_count, has_api_key, rate_limited_until, last_used,
+    plus extras: har_count, total_mb, has_cookies, cookie_services.
+    """
+    import json as _json
+    import os as _os
+
+    HAR_ROOTS = [
+        r"C:\Files\Models\HAR_Files",
+        r"C:\Files\Models\CosySim\data\har_files",
+    ]
+    COOKIES_DIR = Path(r"C:\Files\Models\CosySim\data\accounts")
+    LEGACY_DIR = Path(r"C:\Files\Models\CosySim\data\google_accounts")
+
+    seen: Dict[str, Dict[str, Any]] = {}
+
+    def _ensure(acct: str) -> Dict[str, Any]:
+        return seen.setdefault(acct, {
+            "account_id": acct,
+            "service": "google",
+            "cookie_count": 0,
+            "has_api_key": False,
+            "rate_limited_until": None,
+            "last_used": None,
+            "request_count": None,
+            # extras
+            "har_count": 0,
+            "total_mb": 0.0,
+            "has_cookies": False,
+            "cookie_services": [],
+            "sources": [],
+        })
+
+    # Scan HAR directories
+    for root in HAR_ROOTS:
+        root_path = Path(root)
+        if not root_path.exists():
+            continue
+        for acct_dir in sorted(root_path.iterdir()):
+            if not acct_dir.is_dir() or acct_dir.name.startswith("."):
+                continue
+            acct = acct_dir.name
+            hars = list(acct_dir.glob("*.har"))
+            total_mb = sum(f.stat().st_size for f in hars) / (1024 * 1024)
+            entry = _ensure(acct)
+            entry["har_count"] += len(hars)
+            entry["total_mb"] = round(entry["total_mb"] + total_mb, 2)
+            entry["sources"].append(str(acct_dir))
+            # Use newest HAR mtime as last_used
+            if hars:
+                newest = max(f.stat().st_mtime for f in hars)
+                if entry["last_used"] is None or newest > (entry["last_used"] or 0):
+                    entry["last_used"] = int(newest)
+
+    # Scan new-format cookies: data/accounts/{acct}_cookies.json
+    if COOKIES_DIR.exists():
+        for f in sorted(COOKIES_DIR.glob("*_cookies.json")):
+            acct = f.stem.removesuffix("_cookies")
+            entry = _ensure(acct)
+            entry["has_cookies"] = True
+            try:
+                data = _json.loads(f.read_text(encoding="utf-8"))
+                svcs: list = []
+                all_cookies: list = []
+                for domain_data in data.values() if isinstance(data, dict) else []:
+                    if isinstance(domain_data, list):
+                        all_cookies.extend(domain_data)
+                    elif isinstance(domain_data, dict):
+                        all_cookies.extend(domain_data.values())
+                entry["cookie_count"] = len(all_cookies)
+                for domain in (data.keys() if isinstance(data, dict) else []):
+                    if "github" in domain:
+                        svcs.append("github")
+                    if "google" in domain or "notebooklm" in domain:
+                        if "google" not in svcs:
+                            svcs.append("google")
+                    if "notebooklm" in domain and "notebooklm" not in svcs:
+                        svcs.append("notebooklm")
+                entry["cookie_services"] = list(set(svcs))
+                if svcs:
+                    entry["service"] = svcs[0]
+            except Exception:
+                pass
+
+    # Legacy: data/google_accounts/{acct}/cookies.json
+    if LEGACY_DIR.exists():
+        for acct_dir in sorted(LEGACY_DIR.iterdir()):
+            if not acct_dir.is_dir():
+                continue
+            cookie_file = acct_dir / "cookies.json"
+            if cookie_file.exists():
+                acct = acct_dir.name
+                entry = _ensure(acct)
+                entry["has_cookies"] = True
+                try:
+                    cookies = _json.loads(cookie_file.read_text(encoding="utf-8"))
+                    if isinstance(cookies, list):
+                        entry["cookie_count"] = max(entry["cookie_count"], len(cookies))
+                except Exception:
+                    pass
+                if "google" not in entry["cookie_services"]:
+                    entry["cookie_services"].append("google")
+                    entry["service"] = "google"
+
+    # Merge with pool accounts (already imported)
+    try:
+        pool = get_account_pool()
+        for pool_acct in pool.list_accounts():
+            acct = pool_acct.get("name", "")
+            if not acct:
+                continue
+            entry = _ensure(acct)
+            # Pool data is more authoritative
+            entry["cookie_count"] = max(entry["cookie_count"], pool_acct.get("cookie_count", 0))
+            entry["service"] = ", ".join(pool_acct.get("services", [])) or entry["service"]
+            rate_limited = pool_acct.get("rate_limited", {})
+            if rate_limited:
+                max_expiry = max(rate_limited.values())
+                entry["rate_limited_until"] = int(max_expiry)
+    except Exception:
+        pass
+
+    return {"accounts": list(seen.values())}
+
+
+def list_nlm_notebooks(**_: Any) -> Dict[str, Any]:
+    """List all managed NLM notebooks from local metadata — no Nexus KMS needed.
+
+    Returns:
+        Dict with ``notebooks`` list from ``data/nlm_notebooks.json``.
+    """
+    from engine.nexus.nlm_notebook_manager import NLMNotebookManager
+    mgr = NLMNotebookManager()
+    notebooks = mgr.list_notebooks()
+    return {"notebooks": notebooks}
+
+
+def nlm_ask_python(question: str, notebook_id: str = "", **_: Any) -> Dict[str, Any]:
+    """Route an NLM question through the NLM engine directly.
+
+    Args:
+        question: The question to ask.
+        notebook_id: Optional notebook slot name to scope the question.
+
+    Returns:
+        Dict with ``answer``, ``source``, ``confidence``.
+    """
+    from engine.nexus.nlm_engine import get_nlm_engine
+    engine = get_nlm_engine()
+    result = engine.ask(question, notebook_id=notebook_id or None)
+    if isinstance(result, dict):
+        return result
+    return {"answer": str(result), "source": "nlm", "confidence": 0.8}
