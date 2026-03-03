@@ -90,7 +90,11 @@ class AudioAsset(BaseAsset):
     @classmethod
     def import_data(cls, data: Dict[str, Any]) -> 'AudioAsset':
         """Import audio asset from dictionary."""
-        metadata = AssetMetadata.from_dict(data["metadata"])
+        from datetime import datetime
+        metadata = AssetMetadata.from_dict(data["metadata"]) if "metadata" in data else AssetMetadata(
+            asset_id=data.get("id", ""), asset_type="audio",
+            created_at=datetime.utcnow().isoformat(), updated_at=datetime.utcnow().isoformat()
+        )
         return cls(
             filepath=data["filepath"],
             duration=data.get("duration"),
@@ -198,7 +202,11 @@ class ImageAsset(BaseAsset):
     @classmethod
     def import_data(cls, data: Dict[str, Any]) -> 'ImageAsset':
         """Import image asset from dictionary."""
-        metadata = AssetMetadata.from_dict(data["metadata"])
+        from datetime import datetime
+        metadata = AssetMetadata.from_dict(data["metadata"]) if "metadata" in data else AssetMetadata(
+            asset_id=data.get("id", ""), asset_type="image",
+            created_at=datetime.utcnow().isoformat(), updated_at=datetime.utcnow().isoformat()
+        )
         return cls(
             filepath=data["filepath"],
             width=data.get("width"),
@@ -315,7 +323,11 @@ class VideoAsset(BaseAsset):
     @classmethod
     def import_data(cls, data: Dict[str, Any]) -> 'VideoAsset':
         """Import video asset from dictionary."""
-        metadata = AssetMetadata.from_dict(data["metadata"])
+        from datetime import datetime
+        metadata = AssetMetadata.from_dict(data["metadata"]) if "metadata" in data else AssetMetadata(
+            asset_id=data.get("id", ""), asset_type="video",
+            created_at=datetime.utcnow().isoformat(), updated_at=datetime.utcnow().isoformat()
+        )
         return cls(
             filepath=data["filepath"],
             duration=data.get("duration"),
