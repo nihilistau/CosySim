@@ -95,7 +95,7 @@ export default function NLMPanel({ activeNotebookId }: Props) {
         ) : nlmNotebooks.length === 0 ? (
           <div className="flex items-center gap-2 text-xs text-zinc-400 dark:text-zinc-500">
             <AlertCircle size={13} className="text-amber-500" />
-            Connect Nexus KMS to access NotebookLM notebooks
+            No notebooks — use the NLM panel to create one
           </div>
         ) : (
           <select

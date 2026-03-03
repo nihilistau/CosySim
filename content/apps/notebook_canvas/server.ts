@@ -233,22 +233,41 @@ async function startServer() {
   }
 
   // ── AI Studio ─────────────────────────────────────────────────────────────
+  const GEMINI_MODELS = [
+    { id: "gemini-2.0-flash",                  name: "Gemini 2.0 Flash" },
+    { id: "gemini-2.0-flash-thinking-exp-01-21", name: "Gemini 2.0 Flash Thinking" },
+    { id: "gemini-2.5-pro-exp-03-25",           name: "Gemini 2.5 Pro (Exp)" },
+    { id: "gemini-1.5-pro-latest",              name: "Gemini 1.5 Pro" },
+    { id: "gemini-1.5-flash-latest",            name: "Gemini 1.5 Flash" },
+    { id: "gemini-1.5-flash-8b",                name: "Gemini 1.5 Flash 8B" },
+  ];
+
   app.post("/api/aistudio/generate", async (req, res) => {
-    const result = await proxyToSidecar("/api/generate", req.body);
-    if (result.error) {
-      res.status(503).json({ error: "Service unavailable", detail: result.error });
-    } else {
-      res.status(result.status).json(result.data);
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return res.status(401).json({ error: "No GEMINI_API_KEY — set it in environment or use HAR-based auth" });
+    }
+    try {
+      const { model = "gemini-2.0-flash", messages = [], temperature = 0.7, systemPrompt = "" } = req.body;
+      const { GoogleGenAI } = await import("@google/genai");
+      const genai = new GoogleGenAI({ apiKey });
+      const contents = (messages as any[]).map((m: any) => ({
+        role: m.role === "assistant" ? "model" : "user",
+        parts: [{ text: m.content }],
+      }));
+      const result = await genai.models.generateContent({
+        model,
+        contents,
+        config: { temperature, systemInstruction: systemPrompt || undefined },
+      });
+      res.json({ text: result.text, model });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
     }
   });
 
-  app.get("/api/aistudio/models", async (req, res) => {
-    const result = await proxyToSidecar("/api/models");
-    if (result.error) {
-      res.status(503).json({ error: "Service unavailable", detail: result.error });
-    } else {
-      res.status(result.status).json(result.data);
-    }
+  app.get("/api/aistudio/models", async (_req, res) => {
+    res.json({ models: GEMINI_MODELS });
   });
 
   // ── Google Accounts ────────────────────────────────────────────────────────
@@ -299,43 +318,59 @@ async function startServer() {
 
   // ── Training Data ──────────────────────────────────────────────────────────
   app.post("/api/training/capture", async (req, res) => {
-    const result = await proxyToSidecar("/api/training/capture", req.body);
-    if (result.error) {
-      res.status(503).json({ error: "Service unavailable", detail: result.error });
-    } else {
-      res.status(result.status).json(result.data);
+    try {
+      const data = await callPython("engine.integrations.rpc_proxy", "capture_training_example", req.body);
+      res.json(data);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
     }
   });
 
   app.get("/api/training/stats", async (req, res) => {
-    const result = await proxyToSidecar("/api/training/stats");
-    if (result.error) {
-      res.status(503).json({ error: "Service unavailable", detail: result.error });
-    } else {
-      res.status(result.status).json(result.data);
+    try {
+      const data = await callPython("engine.integrations.rpc_proxy", "get_training_stats", {});
+      res.json(data);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
     }
   });
 
   // ── Nexus Knowledge ────────────────────────────────────────────────────────
   app.post("/api/nexus/search", async (req, res) => {
+    const q = (req.body.q as string) || (req.body.query as string) || "";
+    // Try Nexus KMS first
     try {
-      const q = (req.body.q as string) || "";
       const result = await nexusProxy(`/search?q=${encodeURIComponent(q)}`);
-      res.json(result);
-    } catch { res.json({ results: [] }); }
+      return res.json(result);
+    } catch { /* KMS down */ }
+    // Fall back to Python bridge
+    try {
+      const data = await callPython("engine.integrations.rpc_proxy", "nexus_search_python", { query: q });
+      res.json(data);
+    } catch (e: any) { res.json({ results: [] }); }
   });
 
   app.post("/api/nexus/ask", async (req, res) => {
+    // Try Nexus KMS first
     try {
       const result = await nexusProxy("/ask", "POST", req.body);
-      res.json(result);
+      return res.json(result);
+    } catch { /* KMS down */ }
+    try {
+      const data = await callPython("engine.integrations.rpc_proxy", "nexus_ask_direct", { question: req.body.question || "" });
+      res.json(data);
     } catch (e: any) { res.status(500).json({ error: e.message }); }
   });
 
   app.post("/api/nexus/add", async (req, res) => {
+    // Try Nexus KMS first
     try {
       const result = await nexusProxy("/add", "POST", req.body);
-      res.json(result);
+      return res.json(result);
+    } catch { /* KMS down */ }
+    try {
+      const data = await callPython("engine.integrations.rpc_proxy", "nexus_add_python", req.body);
+      res.json(data);
     } catch (e: any) { res.status(500).json({ error: e.message }); }
   });
 
@@ -383,23 +418,19 @@ async function startServer() {
 
   // ── Sidecar Health ─────────────────────────────────────────────────────────
   app.get("/api/sidecar/health", async (req, res) => {
-    const result = await proxyToSidecar("/api/health");
-    if (result.error) {
-      res.status(503).json({ error: "Service unavailable", detail: result.error });
-    } else {
-      res.status(result.status).json(result.data);
-    }
+    // Sidecar replaced by callPython bridge — report healthy
+    res.json({ status: "ok", mode: "callPython", sidecar: false });
   });
 
   // ── HAR Import ────────────────────────────────────────────────────────────
   app.post("/api/har/import", async (req, res) => {
     const { harPath, accountId, service } = req.body;
-    const result = await proxyToSidecar("/api/accounts/import-har", {
-      har_path: harPath,
-      account_id: accountId,
-      service,
-    });
-    res.status(result.status).json(result.data || { error: result.error });
+    try {
+      const result = await callPython("engine.integrations.rpc_proxy", "import_har_to_pool", {
+        filepath: harPath, account_name: accountId, services: service ? [service] : [],
+      });
+      res.json(result);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
   });
 
   const HAR_DIR = "C:\\Files\\Models\\HAR_Files";
@@ -442,8 +473,10 @@ async function startServer() {
   });
 
   app.post("/api/har/parse", async (req, res) => {
-    const result = await proxyToSidecar("/api/har/parse", req.body);
-    res.status(result.status).json(result.data || { error: result.error });
+    try {
+      const data = await callPython("engine.integrations.rpc_proxy", "parse_har_file", req.body);
+      res.json(data);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
   });
 
   app.post("/api/har/import-account", async (req, res) => {

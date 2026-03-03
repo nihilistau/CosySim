@@ -587,11 +587,11 @@ def list_nlm_notebooks(**_: Any) -> Dict[str, Any]:
     """List all managed NLM notebooks from local metadata — no Nexus KMS needed.
 
     Returns:
-        Dict with ``notebooks`` list from ``data/nlm_notebooks.json``.
+        Dict with ``notebooks`` list.
     """
     from engine.nexus.nlm_notebook_manager import NLMNotebookManager
     mgr = NLMNotebookManager()
-    notebooks = mgr.list_notebooks()
+    notebooks = mgr.list_managed()
     return {"notebooks": notebooks}
 
 
@@ -611,3 +611,153 @@ def nlm_ask_python(question: str, notebook_id: str = "", **_: Any) -> Dict[str, 
     if isinstance(result, dict):
         return result
     return {"answer": str(result), "source": "nlm", "confidence": 0.8}
+
+
+# ──── Training bridge ─────────────────────────────────────────────────────────
+
+def get_training_stats(**_: Any) -> Dict[str, Any]:
+    """Return training data statistics from the router data collector.
+
+    Returns:
+        Dict with ``total_examples``, ``by_type``, ``router_stats``.
+    """
+    try:
+        from engine.lmstudio.router_data import get_router_data_collector
+        collector = get_router_data_collector()
+        stats = collector.get_stats() if hasattr(collector, "get_stats") else {}
+        total = stats.get("total", 0)
+        return {
+            "total_examples": total,
+            "by_type": stats.get("by_type", {
+                "conversations": 0,
+                "tool_calls": 0,
+                "code": 0,
+                "grammar_errors": 0,
+            }),
+            "router_stats": stats,
+        }
+    except Exception as exc:
+        logger.warning("get_training_stats failed: %s", exc)
+        return {"total_examples": 0, "by_type": {}, "router_stats": {}}
+
+
+def capture_training_example(
+    instruction: str = "",
+    input: str = "",
+    output: str = "",
+    source: str = "canvas",
+    **_: Any,
+) -> Dict[str, Any]:
+    """Store a training example in the router data collector.
+
+    Args:
+        instruction: Task instruction.
+        input: Input text.
+        output: Expected output.
+        source: Origin tag.
+
+    Returns:
+        ``{"ok": True, "id": ...}``
+    """
+    try:
+        from engine.lmstudio.router_data import get_router_data_collector
+        collector = get_router_data_collector()
+        if hasattr(collector, "add_example"):
+            eid = collector.add_example({"instruction": instruction, "input": input, "output": output, "source": source})
+            return {"ok": True, "id": eid}
+        return {"ok": False, "error": "Collector has no add_example method"}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+# ──── Nexus Python bridge ─────────────────────────────────────────────────────
+
+def nexus_search_python(query: str = "", **_: Any) -> Dict[str, Any]:
+    """Search the Nexus knowledge base directly via the Python client.
+
+    Args:
+        query: Search query string.
+
+    Returns:
+        Dict with ``results`` list.
+    """
+    try:
+        from engine.nexus.client import get_nexus_client
+        client = get_nexus_client()
+        results = client.search(query)
+        if isinstance(results, list):
+            return {"results": results}
+        return results if isinstance(results, dict) else {"results": []}
+    except Exception as exc:
+        logger.warning("nexus_search_python failed: %s", exc)
+        return {"results": [], "error": str(exc)}
+
+
+def nexus_ask_direct(question: str = "", **_: Any) -> Dict[str, Any]:
+    """Ask the Nexus knowledge base directly via the Python client.
+
+    Args:
+        question: Question to answer.
+
+    Returns:
+        Dict with ``answer``, ``source``, ``confidence``.
+    """
+    try:
+        from engine.nexus.client import get_nexus_client
+        client = get_nexus_client()
+        result = client.ask(question)
+        if isinstance(result, dict):
+            return result
+        return {"answer": str(result), "source": "nexus", "confidence": 0.7}
+    except Exception as exc:
+        return {"answer": "", "error": str(exc), "source": "error"}
+
+
+def nexus_add_python(
+    title: str = "",
+    content: str = "",
+    content_type: str = "note",
+    category: str = "general",
+    **_: Any,
+) -> Dict[str, Any]:
+    """Add an entry to the Nexus knowledge base via the Python client.
+
+    Args:
+        title: Entry title.
+        content: Entry content.
+        content_type: Type (note, code, document, etc.).
+        category: Category tag.
+
+    Returns:
+        ``{"ok": True, "id": ...}`` or ``{"error": ...}``.
+    """
+    try:
+        from engine.nexus.client import get_nexus_client
+        client = get_nexus_client()
+        result = client.add_entry(title, content, content_type=content_type, category=category)
+        if isinstance(result, dict):
+            return {**result, "ok": True}
+        return {"ok": True, "id": str(result)}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+# ──── HAR parse bridge ────────────────────────────────────────────────────────
+
+def parse_har_file(filepath: str = "", **_: Any) -> Dict[str, Any]:
+    """Parse a HAR file and return summary + entries.
+
+    Args:
+        filepath: Full path or filename to locate and parse.
+
+    Returns:
+        Dict with ``entries``, ``total``, ``summary``.
+    """
+    try:
+        from engine.integrations.har_parser import get_entries_dict, analyze_har_dict
+        filename = Path(filepath).name
+        summary = analyze_har_dict(filename=filename)
+        entries = get_entries_dict(filename=filename, limit=200)
+        return {**summary, **entries}
+    except Exception as exc:
+        return {"error": str(exc), "entries": [], "total": 0}

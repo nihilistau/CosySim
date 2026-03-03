@@ -42,7 +42,9 @@ export default function Canvas({
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
-  if (!activeNotebookId) {
+  const isSystemPanel = ['nexus', 'nlm', 'aistudio', 'accounts', 'training', 'compute', 'har', 'rpc', 'copilot'].includes(viewMode);
+
+  if (!activeNotebookId && !isSystemPanel) {
     return (
       <div className="flex-1 flex items-center justify-center bg-white dark:bg-zinc-900 text-zinc-400 dark:text-zinc-500 transition-colors">
         <p>Select or create a notebook to begin.</p>
@@ -110,8 +112,6 @@ export default function Canvas({
     };
     reader.readAsText(file);
   };
-
-  const isSystemPanel = ['nexus', 'nlm', 'aistudio', 'accounts', 'training', 'compute', 'har', 'rpc', 'copilot'].includes(viewMode);
 
   return (
     <div 
