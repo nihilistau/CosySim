@@ -3,6 +3,78 @@
 All notable changes to CosySim are documented here.
 
 ---
+## [0.80b] — 2026-03 — "THE COPILOT LAYER" — ✅ COMPLETE
+
+### New Features
+
+#### GitHub Copilot Internal API — Full Access to 26 Frontier Models
+- Reverse-engineered `api.individual.githubcopilot.com` from HAR captures
+- `POST github.com/github-copilot/chat/token` → short-lived `GitHub-Bearer` token (1hr)
+- `GET /models` → 26 models: Claude Opus 4.6, Claude Sonnet 4.6, Gemini 3.1 Pro Preview,
+  GPT-5.2 Codex, GPT-5 Mini, GPT-4o, Grok Code Fast, text-embedding-3-small, and more
+- Thread management: `POST /github/chat/threads` → thread UUID
+- SSE streaming: `POST /threads/{id}/messages` with `content-type: text/event-stream`
+- Request body: `{content, model, intent, streaming, mode, parentMessageID, skillOptions, ...}`
+- Response: `data: {"type":"content","body":"chunk"}` ... `data: {"type":"complete",...}`
+- Live verified: **Claude Haiku 4.5 confirmed `CosySim v0.80 is LIVE`**
+
+#### GitHub Copilot Client
+- `engine/integrations/github_copilot_client.py` — full client
+- Auto-refresh token: re-fetches when within 60s of expiry
+- `list_models()` → cached 6 hours
+- `create_thread()` → returns thread_id UUID
+- `send_message(thread_id, content, model, parent_message_id)` → full text response
+- `ask(prompt, model)` → one-shot wrapper (create thread + send message)
+- Model default: `claude-sonnet-4.6`
+- `get_copilot_client(account_name)` → singleton per account
+- Cookie source: `GoogleAccountPool` (service="github") with fallback to `data/accounts/github_{name}_cookies.json`
+
+#### GitHub Account Importer
+- `engine/integrations/github_account_importer.py` — imports GitHub session cookies
+- `import_github_har(har_path, account_name)` — extracts from HAR file
+- `import_github_cookies_json(json_path, account_name)` — imports pre-extracted JSON
+- nihilistcod-netizen imported (18 cookies, services: colab + notebooklm + github)
+
+#### Copilot @skill Pack (9 skills)
+- `engine/skills/builtin/copilot_skills.py`
+- `copilot_ask(prompt, model)` — any model, any question
+- `copilot_code(prompt, language, model)` — code gen defaults to gpt-5.2-codex
+- `copilot_review(code, language)` — code review
+- `copilot_fast(prompt)` — Claude Haiku for quick responses
+- `copilot_smart(prompt)` — Claude Opus for deep reasoning
+- `copilot_models()` — list all available models
+- `copilot_thread(messages, model)` — multi-turn conversation
+- `copilot_summarize(text, style)` — text summarization
+- `copilot_explain(code, language)` — code explanation
+
+#### Compute Router — Copilot Tier
+- New routing tier between tunnel and lmstudio
+- Priority order: tunnel → copilot → lmstudio
+- Model hints: fast→haiku, balanced→sonnet, smart→opus, code→gpt-5.2-codex, embedding→text-embedding-3-small
+- Only activates when github account with valid cookies is in pool
+
+#### Nexus Canvas — Copilot Panel
+- `content/apps/notebook_canvas/src/panels/CopilotPanel.tsx`
+- Model selector with vendor badges (Anthropic=purple, OpenAI=green, Google=blue, xAI=orange)
+- Streaming chat interface with thread history
+- Account indicator
+- `/api/copilot/*` routes in `server.ts`
+
+#### RPC Proxy — Copilot Functions
+- `list_models_dict`, `ask_dict`, `create_thread_dict`, `send_message_dict` added to `rpc_proxy.py`
+- All callable via `/api/rpc/proxy` Express → Python bridge
+
+### Tests
+- 8,811 tests collected
+- `test_github_copilot_client.py` — 43 tests
+- `test_copilot_skills.py` — 15 tests
+
+### Account Integration
+- nihilistcod (GitHub account, Copilot Individual subscription)
+- Services: colab + notebooklm + github (all three under one account entry)
+- HAR from 2026-03-03 — captured today, cookies immediately verified live
+
+---
 ## [0.79b] — 2026-04 — "THE COMPUTE LAYER" — ✅ COMPLETE
 
 ### New Features

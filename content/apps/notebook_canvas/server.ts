@@ -501,7 +501,75 @@ async function startServer() {
     } catch (e: any) { res.status(500).json({ error: e.message }); }
   });
 
-  // ── Nexus rules + QA (GET variants) ───────────────────────────────────────
+  // ── GitHub Copilot ────────────────────────────────────────────────────────
+  app.get("/api/copilot/models", async (req, res) => {
+    try {
+      const result = await callPython(
+        "engine.integrations.rpc_proxy", "list_models_dict",
+        { account_name: (req.query.account_name as string) || "nihilistcod" }
+      );
+      res.json(result);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/copilot/ask", async (req, res) => {
+    try {
+      const { prompt, model, account_name } = req.body;
+      const result = await new Promise<any>((resolve, reject) => {
+        const { spawn } = require("child_process");
+        const script = `
+import json, sys
+sys.path.insert(0, r'C:\\Files\\Models\\CosySim')
+args = json.loads(sys.stdin.read())
+from engine.integrations.rpc_proxy import ask_dict
+result = ask_dict(**args)
+print(json.dumps(result))
+`;
+        const proc = spawn("python", ["-c", script], { cwd: "C:\\Files\\Models\\CosySim" });
+        let out = "", err = "";
+        proc.stdout.on("data", (d: Buffer) => (out += d.toString()));
+        proc.stderr.on("data", (d: Buffer) => (err += d.toString()));
+        proc.stdin.write(JSON.stringify({ prompt, model: model || "claude-sonnet-4.6", account_name: account_name || "nihilistcod" }));
+        proc.stdin.end();
+        const timer = setTimeout(() => { proc.kill(); reject(new Error("Copilot timeout")); }, 60000);
+        proc.on("close", (code: number) => {
+          clearTimeout(timer);
+          if (code !== 0) reject(new Error(err || "Python error"));
+          else try { resolve(JSON.parse(out)); } catch { resolve({ response: out }); }
+        });
+      });
+      res.json(result);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/copilot/thread/create", async (req, res) => {
+    try {
+      const result = await callPython(
+        "engine.integrations.rpc_proxy", "create_thread_dict",
+        { account_name: req.body.account_name || "nihilistcod" }
+      );
+      res.json(result);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/copilot/thread/:id/message", async (req, res) => {
+    try {
+      const { content, model, parent_message_id, account_name } = req.body;
+      const result = await callPython(
+        "engine.integrations.rpc_proxy", "send_message_dict",
+        {
+          thread_id: req.params.id,
+          content,
+          model: model || "claude-sonnet-4.6",
+          parent_message_id: parent_message_id || "root",
+          account_name: account_name || "nihilistcod",
+        }
+      );
+      res.json(result);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+
   app.get("/api/nexus/rules", async (req, res) => {
     try {
       const scope = (req.query.scope as string) || "global";

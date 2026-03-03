@@ -35,7 +35,7 @@ export interface Workflow {
   updated_at: string;
 }
 
-export type ViewMode = 'chat' | 'note' | 'workflow' | 'source' | 'data' | 'nexus' | 'nlm' | 'aistudio' | 'accounts' | 'training' | 'compute' | 'har' | 'rpc';
+export type ViewMode = 'chat' | 'note' | 'workflow' | 'source' | 'data' | 'nexus' | 'nlm' | 'aistudio' | 'accounts' | 'training' | 'compute' | 'har' | 'rpc' | 'copilot';
 
 export interface NexusEntry {
   id?: string;

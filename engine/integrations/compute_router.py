@@ -46,6 +46,20 @@ MODELS_PRO = [
     "text-embedding-004",
 ]
 
+# ──── Copilot routing tier ────────────────────────────────────────────────────
+
+ROUTE_COPILOT = "copilot"
+
+# Maps hint keywords → Copilot model IDs
+_COPILOT_MODEL_MAP: Dict[str, str] = {
+    "fast": "claude-haiku-4.5",
+    "balanced": "claude-sonnet-4.6",
+    "smart": "claude-opus-4.6",
+    "powerful": "claude-opus-4.6",
+    "code": "gpt-5.2-codex",
+    "embedding": "text-embedding-3-small",
+}
+
 LIMITS_FREE: Dict[str, float] = {
     "colab_requests_per_day": 100,
     "colab_gpu_hours_per_day": 6.0,
@@ -529,6 +543,66 @@ class ComputeRouter:
                 k: 0.0 for k in self._usage[account_name]
             }
 
+    # ──── Copilot routing ─────────────────────────────────────────────────────
+
+    def _try_copilot(
+        self,
+        prompt: str,
+        model_hint: str = "auto",
+    ) -> Optional[Dict[str, Any]]:
+        """Attempt to route an inference request through GitHub Copilot.
+
+        Only proceeds if a GitHub account with valid cookies is available in
+        the pool.
+
+        Args:
+            prompt: Text prompt to send.
+            model_hint: Hint keyword or explicit model ID.
+                - "fast" → claude-haiku-4.5
+                - "balanced" / "auto" → claude-sonnet-4.6
+                - "smart" / "powerful" → claude-opus-4.6
+                - "code" → gpt-5.2-codex
+                - "embedding" → text-embedding-3-small
+
+        Returns:
+            Result dict (response, backend, model, account) on success, or
+            ``None`` if Copilot is unavailable.
+        """
+        try:
+            from engine.integrations.google_account_pool import get_account_pool
+
+            pool = get_account_pool()
+            account = pool.get_by_name("nihilistcod") or pool.get_account("github")
+            if account is None or "github" not in account.services:
+                return None
+            # Basic sanity: need at least some cookies
+            if not account.cookies:
+                return None
+
+            from engine.integrations.github_copilot_client import get_copilot_client
+
+            copilot_model = _COPILOT_MODEL_MAP.get(
+                model_hint.lower(), model_hint if model_hint != "auto" else "claude-sonnet-4.6"
+            )
+            # If model_hint is an explicit unknown string, fall back to balanced
+            if "/" in copilot_model or copilot_model not in (
+                list(_COPILOT_MODEL_MAP.values()) + ["auto"]
+            ):
+                # Accept any model ID as-is if it looks like a Copilot model
+                pass
+
+            client = get_copilot_client(account.name)
+            response = client.ask(prompt, model=copilot_model)
+            return {
+                "response": response,
+                "backend": ROUTE_COPILOT,
+                "model": copilot_model,
+                "account": account.name,
+            }
+        except Exception as exc:
+            logger.debug("Copilot routing failed, falling through: %s", exc)
+            return None
+
     # ──── Inference routing ───────────────────────────────────────────────────
 
     def route_inference(
@@ -540,7 +614,7 @@ class ComputeRouter:
     ) -> Dict[str, Any]:
         """Route an inference request to the best available backend.
 
-        Priority: tunnel → colab_agent → lmstudio.
+        Priority: GitHub Copilot → active Colab tunnels → Colab AI agent → LMStudio.
 
         Args:
             prompt: Text prompt.
@@ -556,6 +630,12 @@ class ComputeRouter:
         """
         start = time.time()
         model = model_preference if model_preference != "auto" else "gemini-2.5-flash-exp"
+
+        # 0. Try GitHub Copilot
+        copilot_result = self._try_copilot(prompt, model_preference)
+        if copilot_result is not None:
+            copilot_result["latency_ms"] = int((time.time() - start) * 1000)
+            return copilot_result
 
         # 1. Try active tunnel sessions
         try:

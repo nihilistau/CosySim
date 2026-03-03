@@ -14,6 +14,7 @@ import TrainingPanel from './TrainingPanel';
 import ComputePanel from '../panels/ComputePanel';
 import HarExplorerPanel from '../panels/HarExplorerPanel';
 import RpcExplorerPanel from '../panels/RpcExplorerPanel';
+import CopilotPanel from '../panels/CopilotPanel';
 import { Send, Paperclip, Plus } from 'lucide-react';
 
 interface Props {
@@ -110,7 +111,7 @@ export default function Canvas({
     reader.readAsText(file);
   };
 
-  const isSystemPanel = ['nexus', 'nlm', 'aistudio', 'accounts', 'training', 'compute', 'har', 'rpc'].includes(viewMode);
+  const isSystemPanel = ['nexus', 'nlm', 'aistudio', 'accounts', 'training', 'compute', 'har', 'rpc', 'copilot'].includes(viewMode);
 
   return (
     <div 
@@ -136,6 +137,7 @@ export default function Canvas({
       {viewMode === 'compute' && <ComputePanel />}
       {viewMode === 'har' && <HarExplorerPanel />}
       {viewMode === 'rpc' && <RpcExplorerPanel />}
+      {viewMode === 'copilot' && <CopilotPanel />}
 
       {/* Standard notebook panels */}
       {!isSystemPanel && (

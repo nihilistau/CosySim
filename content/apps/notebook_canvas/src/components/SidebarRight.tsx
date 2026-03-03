@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { ViewMode } from '../types';
-import { Settings, FilePlus, GitBranchPlus, Moon, Sun, Brain, BookOpen, Sparkles, Users, BarChart2, Cpu, FileText, Zap } from 'lucide-react';
+import { Settings, FilePlus, GitBranchPlus, Moon, Sun, Brain, BookOpen, Sparkles, Users, BarChart2, Cpu, FileText, Zap, Github } from 'lucide-react';
 
 const PANEL_BUTTONS: { mode: ViewMode; label: string; icon: React.ReactNode; color: string }[] = [
   { mode: 'nexus',    label: 'Nexus',     icon: <Brain size={14} />,      color: 'text-violet-500 dark:text-violet-400' },
   { mode: 'nlm',      label: 'NLM',       icon: <BookOpen size={14} />,   color: 'text-purple-500 dark:text-purple-400' },
   { mode: 'aistudio', label: 'AI Studio', icon: <Sparkles size={14} />,   color: 'text-blue-500 dark:text-blue-400' },
+  { mode: 'copilot',  label: 'Copilot',   icon: <Github size={14} />,     color: 'text-white dark:text-zinc-200' },
   { mode: 'accounts', label: 'Accounts',  icon: <Users size={14} />,      color: 'text-emerald-500 dark:text-emerald-400' },
   { mode: 'training', label: 'Training',  icon: <BarChart2 size={14} />,  color: 'text-amber-500 dark:text-amber-400' },
   { mode: 'compute',  label: 'Compute',   icon: <Cpu size={14} />,        color: 'text-orange-500 dark:text-orange-400' },

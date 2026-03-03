@@ -211,6 +211,111 @@ def get_all_models(dummy: str = "") -> Dict[str, List[str]]:
     return {"free": MODELS_FREE, "pro": MODELS_PRO}
 
 
+# ──── GitHub Copilot helpers ──────────────────────────────────────────────────
+
+
+def list_models_dict(account_name: str = "nihilistcod") -> List[Dict[str, Any]]:
+    """List all available GitHub Copilot models.
+
+    Args:
+        account_name: Account identifier for cookie lookup.
+
+    Returns:
+        List of model dicts from the Copilot API.
+    """
+    from engine.integrations.github_copilot_client import get_copilot_client
+
+    try:
+        client = get_copilot_client(account_name)
+        return client.list_models()
+    except Exception as exc:
+        logger.error("list_models_dict failed: %s", exc)
+        return []
+
+
+def ask_dict(
+    prompt: str,
+    model: str = "claude-sonnet-4.6",
+    account_name: str = "nihilistcod",
+) -> Dict[str, Any]:
+    """Ask GitHub Copilot a question and return a response dict.
+
+    Args:
+        prompt: Question or instruction.
+        model: Copilot model ID.
+        account_name: Account identifier for cookie lookup.
+
+    Returns:
+        Dict with ``response`` text and ``model``, or ``error`` on failure.
+    """
+    from engine.integrations.github_copilot_client import get_copilot_client
+
+    try:
+        client = get_copilot_client(account_name)
+        response = client.ask(prompt, model=model)
+        return {"response": response, "model": model, "account": account_name}
+    except Exception as exc:
+        logger.error("ask_dict failed: %s", exc)
+        return {"error": str(exc), "response": ""}
+
+
+def create_thread_dict(account_name: str = "nihilistcod") -> Dict[str, Any]:
+    """Create a new Copilot chat thread.
+
+    Args:
+        account_name: Account identifier for cookie lookup.
+
+    Returns:
+        Dict with ``thread_id``, or ``error`` on failure.
+    """
+    from engine.integrations.github_copilot_client import get_copilot_client
+
+    try:
+        client = get_copilot_client(account_name)
+        thread_id = client.create_thread()
+        return {"thread_id": thread_id, "account": account_name}
+    except Exception as exc:
+        logger.error("create_thread_dict failed: %s", exc)
+        return {"error": str(exc), "thread_id": ""}
+
+
+def send_message_dict(
+    thread_id: str,
+    content: str,
+    model: str = "claude-sonnet-4.6",
+    parent_message_id: str = "root",
+    account_name: str = "nihilistcod",
+) -> Dict[str, Any]:
+    """Send a message to a Copilot thread and return the response.
+
+    Args:
+        thread_id: Thread to post to.
+        content: User message text.
+        model: Copilot model ID.
+        parent_message_id: Parent message ID for threading.
+        account_name: Account identifier for cookie lookup.
+
+    Returns:
+        Dict with ``response``, ``message_id``, and ``model``.
+    """
+    from engine.integrations.github_copilot_client import get_copilot_client
+
+    try:
+        client = get_copilot_client(account_name)
+        text, message_id = client.send_message(
+            thread_id, content, model=model, parent_message_id=parent_message_id
+        )
+        return {
+            "response": text,
+            "message_id": message_id,
+            "model": model,
+            "account": account_name,
+        }
+    except Exception as exc:
+        logger.error("send_message_dict failed: %s", exc)
+        return {"error": str(exc), "response": "", "message_id": ""}
+
+
 # ──── Tunnel helpers ──────────────────────────────────────────────────────────
 
 def deploy_tunnel_dict(
