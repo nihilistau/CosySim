@@ -45,6 +45,7 @@ SCENE_CATALOGUE: List[Dict[str, Any]] = [
     {"id": "games",     "port": 5567, "label": "THE ARCADE",        "subtitle": "Play to Win",           "icon": "🎮", "group": "system",     "accent": "#3b82f6", "desc": "Mystery investigation and truth-or-dare with AI GameMaster"},
     {"id": "command_center", "port": 5566, "label": "ADMIN",        "subtitle": "System Override",       "icon": "📡", "group": "system",     "accent": "#64748b", "desc": "Real-time system monitoring and control"},
     {"id": "nexus_panel",    "port": 5570, "label": "NEXUS PANEL",  "subtitle": "Knowledge Engine",      "icon": "🧠", "group": "system",     "accent": "#7c3aed", "desc": "Knowledge management, Librarian AI, workflows"},
+    {"id": "nexus_canvas",   "port": 5590, "label": "NEXUS CANVAS", "subtitle": "The Data Flywheel",     "icon": "🎨", "group": "system",     "accent": "#06b6d4", "desc": "Visual AI workspace: notebooks, NLM, AI Studio, training review"},
     {"id": "intel_hub",      "port": 5580, "label": "INTEL HUB",   "subtitle": "All Seeing Eye",        "icon": "◆",  "group": "system",     "accent": "#0ea5e9", "desc": "Unified control: Nexus, Copilot, NLM, fine-tuning, scheduler"},
 ]
 

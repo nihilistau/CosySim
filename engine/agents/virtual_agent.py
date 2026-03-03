@@ -289,6 +289,10 @@ class VirtualAgent:
             governance_context=governance_context,
         )
 
+        # Store for use in output quality evaluation and DataCollector
+        self._state["last_user_message"] = user_message
+        self._state["last_history"] = list(history or [])
+
         # Route through manager
         response = mgr.infer(request)
 
@@ -345,6 +349,9 @@ class VirtualAgent:
         # Append governance context (interceptor pipeline injections)
         if governance_context:
             system_prompt = system_prompt + "\n\n" + governance_context
+
+        # Cache system prompt for DataCollector
+        self._state["last_system_prompt"] = system_prompt[:500]
 
         # Build messages
         messages: List[Dict[str, str]] = [
@@ -455,6 +462,31 @@ class VirtualAgent:
                 self._on_response(self, response, reply_text)
             except Exception:
                 logger.debug("Suppressed exception", exc_info=True)
+
+        # ── DataCollector — capture conversation for training ────────────
+        if reply_text:
+            try:
+                from training.data_collector import get_data_collector
+                collector = get_data_collector()
+                collector.collect_conversation(
+                    system_prompt=self._state.get("last_system_prompt", ""),
+                    history=self._state.get("last_history", []),
+                    response=reply_text,
+                    character_id=getattr(self.character, "id", self.id),
+                )
+            except Exception:
+                logger.debug("DataCollector collect_conversation skipped", exc_info=True)
+
+        # ── OutputEvaluator — quality score; never block the response ───
+        try:
+            from engine.agents.output_evaluator import get_output_evaluator
+            get_output_evaluator().evaluate_and_store(
+                reply_text,
+                {"user_message": self._state.get("last_user_message", "")},
+                self.name,
+            )
+        except Exception:
+            logger.debug("OutputEvaluator suppressed exception", exc_info=True)
 
         return reply_text
 

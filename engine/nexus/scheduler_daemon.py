@@ -1153,6 +1153,12 @@ def _register_builtin_tasks(daemon: "SchedulerDaemon") -> None:
         "weekly",
         _coder_dataset_refresh_callback,
     )
+    daemon.register(
+        "improvement-review",
+        "Output Improvement Review — batch NLM review of low-quality responses for training signal",
+        "weekly",
+        _improvement_review_callback,
+    )
 
 
 def _news_distill_nlm_callback() -> Dict[str, Any]:
@@ -1630,6 +1636,81 @@ def _coder_dataset_refresh_callback() -> Dict[str, Any]:
         return {"status": "ok", "examples": count}
     except Exception as e:
         return {"status": "error", "error": str(e)}
+
+
+def _improvement_review_callback() -> Dict[str, Any]:
+    """Weekly output improvement review.
+
+    Fetches low-quality responses stored in Nexus (category=improvement),
+    batch-asks NLM notebook for improvement suggestions, and stores the
+    NLM answers as output_evaluator training examples.
+
+    Returns:
+        Dict with status, reviewed count, and stored count.
+    """
+    reviewed = 0
+    stored = 0
+    try:
+        from engine.nexus.client import get_nexus_client
+        from training.data_collector import get_data_collector
+
+        client = get_nexus_client()
+        collector = get_data_collector()
+
+        results = client.search("category:improvement", limit=100)
+        entries = results if isinstance(results, list) else results.get("results", [])
+
+        if not entries:
+            return {"status": "ok", "reviewed": 0, "stored": 0, "note": "no improvement entries found"}
+
+        # Build batch questions for NLM review
+        questions: List[str] = []
+        texts: List[str] = []
+        for entry in entries[:50]:
+            content = entry.get("content", entry.get("text", ""))
+            if not content:
+                continue
+            texts.append(content[:400])
+            questions.append(
+                f"How could this AI response be improved to be more helpful, coherent, and complete?\n\n{content[:400]}"
+            )
+
+        # Try NLM batch-ask for improvement suggestions
+        try:
+            from engine.nexus.nlm_engine import get_nlm_engine
+            nlm = get_nlm_engine()
+            for i, (question, original) in enumerate(zip(questions, texts)):
+                try:
+                    answer = nlm.ask(question, notebook_id=None, timeout=30)
+                    if answer and len(answer) > 20:
+                        collector.collect_output_rating(
+                            output=original,
+                            rating=0.6,
+                            context=f"NLM improvement review #{i}: {answer[:200]}",
+                            source="improvement_review",
+                        )
+                        stored += 1
+                    reviewed += 1
+                except Exception:
+                    reviewed += 1
+        except Exception as nlm_err:
+            logger.debug("NLM unavailable for improvement review: %s", nlm_err)
+            # Fallback: store raw entries as low-quality training signal
+            for text in texts:
+                collector.collect_output_rating(
+                    output=text,
+                    rating=0.3,
+                    context="improvement_review_fallback",
+                    source="improvement_review",
+                )
+                stored += 1
+                reviewed += 1
+
+        return {"status": "ok", "reviewed": reviewed, "stored": stored}
+
+    except Exception as e:
+        logger.error("_improvement_review_callback failed: %s", e)
+        return {"status": "error", "error": str(e), "reviewed": reviewed, "stored": stored}
 
 
 # ──── CLI ────

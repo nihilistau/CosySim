@@ -404,6 +404,76 @@ class DataCollector:
             logger.error(f"DataCollector.get_collected failed for {model_type}: {e}")
         return records
 
+    def get_stats(self) -> Dict[str, Any]:
+        """Get comprehensive training stats for all model types.
+
+        Returns:
+            Dict with live buffer counts, total training examples, and last flush times.
+        """
+        result: Dict[str, Any] = {}
+        try:
+            # Live buffer counts
+            live_counts = self.stats()
+            for model_type, count in live_counts.items():
+                result[f"{model_type}_live"] = count
+
+            # Training dataset sizes
+            train_dir = self._base_dir.parent
+            if train_dir.exists():
+                for path in sorted(train_dir.glob("*_train.jsonl")):
+                    model_type = path.stem.replace("_train", "")
+                    try:
+                        count = sum(1 for line in path.open("r", encoding="utf-8") if line.strip())
+                        result[f"{model_type}_train"] = count
+                    except Exception:
+                        result[f"{model_type}_train"] = 0
+
+            result["total_live"] = sum(live_counts.values())
+            result["model_types"] = len(live_counts)
+        except Exception as e:
+            logger.error(f"DataCollector.get_stats failed: {e}")
+        return result
+
+    def prune_low_quality(self, min_quality: float = 0.3) -> int:
+        """Remove low-quality records from all live buffers.
+
+        Args:
+            min_quality: Minimum quality threshold (records below are removed).
+
+        Returns:
+            Number of records pruned.
+        """
+        pruned = 0
+        try:
+            if not self._base_dir.exists():
+                return 0
+            for live_path in self._base_dir.glob("*_live.jsonl"):
+                kept: List[str] = []
+                removed = 0
+                try:
+                    with live_path.open("r", encoding="utf-8") as f:
+                        for line in f:
+                            line = line.strip()
+                            if not line:
+                                continue
+                            try:
+                                rec = json.loads(line)
+                                if rec.get("quality", 1.0) >= min_quality:
+                                    kept.append(line)
+                                else:
+                                    removed += 1
+                            except json.JSONDecodeError:
+                                kept.append(line)
+                    if removed > 0:
+                        with self._write_lock:
+                            live_path.write_text("\n".join(kept) + ("\n" if kept else ""), encoding="utf-8")
+                        pruned += removed
+                except Exception as exc:
+                    logger.debug("prune_low_quality skip %s: %s", live_path, exc)
+        except Exception as e:
+            logger.error(f"DataCollector.prune_low_quality failed: {e}")
+        return pruned
+
 
 def get_data_collector() -> DataCollector:
     """Get the DataCollector singleton.

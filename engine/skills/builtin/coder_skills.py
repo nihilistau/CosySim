@@ -67,12 +67,18 @@ def coder_complete(signature_and_docstring: str, context: str = "") -> str:
         f"{signature_and_docstring}\n\n"
         f"# Complete the function body:"
     )
-    return _call_lmstudio(prompt, model_hint="coder")
+    result = _call_lmstudio(prompt, model_hint="coder")
+    try:
+        from training.data_collector import get_data_collector
+        get_data_collector().collect_code(signature_and_docstring, result, language="python", source="coder_complete")
+    except Exception:
+        pass
+    return result
 
 
 @skill(
     pack="coder",
-    description="Fix a bug in the given Python code",
+    description="Fix a Python bug given the code and optional error message",
     category="SYSTEM",
 )
 def coder_fix(buggy_code: str, error_message: str = "") -> str:
@@ -92,7 +98,14 @@ def coder_fix(buggy_code: str, error_message: str = "") -> str:
         f"```python\n{buggy_code}\n```\n\n"
         f"Fixed code:"
     )
-    return _call_lmstudio(prompt, model_hint="coder")
+    result = _call_lmstudio(prompt, model_hint="coder")
+    try:
+        from training.data_collector import get_data_collector
+        prompt_key = f"{buggy_code[:200]}\n{error_message[:100] if error_message else ''}"
+        get_data_collector().collect_code(prompt_key, result, language="python", source="coder_fix")
+    except Exception:
+        pass
+    return result
 
 
 @skill(
@@ -116,7 +129,13 @@ def coder_generate(specification: str, module_context: str = "") -> str:
         f"Generate Python code for: {specification}\n\n"
         f"Follow all CosySim conventions. Generated code:"
     )
-    return _call_lmstudio(prompt, model_hint="coder")
+    result = _call_lmstudio(prompt, model_hint="coder")
+    try:
+        from training.data_collector import get_data_collector
+        get_data_collector().collect_code(specification, result, language="python", source="coder_generate")
+    except Exception:
+        pass
+    return result
 
 
 @skill(

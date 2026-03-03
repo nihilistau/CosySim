@@ -1,0 +1,111 @@
+/* admin_training.css — Training Dashboard styles for [TRAINING] admin tab */
+
+.cs-train-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 10px;
+  padding: 10px 0;
+}
+
+.cs-train-card {
+  background: rgba(15, 15, 26, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: background 0.15s;
+}
+
+.cs-train-card:hover {
+  background: rgba(30, 27, 75, 0.9);
+}
+
+.cs-train-card__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cs-train-card__icon {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.cs-train-card__label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #e2e8f0;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cs-train-card__badge {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.cs-train-card__badge--idle     { background: rgba(100, 116, 139, 0.3); color: #94a3b8; }
+.cs-train-card__badge--training { background: rgba(245, 158, 11, 0.3);  color: #fbbf24; }
+.cs-train-card__badge--queued   { background: rgba(99, 102, 241, 0.3);  color: #818cf8; }
+.cs-train-card__badge--error    { background: rgba(239, 68, 68, 0.3);   color: #f87171; }
+.cs-train-card__badge--done     { background: rgba(16, 185, 129, 0.3);  color: #34d399; }
+
+.cs-train-card__stats {
+  display: flex;
+  gap: 8px;
+}
+
+.cs-train-card__stat {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cs-train-card__stat-label {
+  font-size: 9px;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.cs-train-card__stat-val {
+  font-size: 14px;
+  font-weight: 700;
+  color: #a5b4fc;
+  font-variant-numeric: tabular-nums;
+}
+
+.cs-train-card__trigger {
+  margin-top: auto;
+  font-size: 10px;
+  padding: 4px 10px;
+  align-self: flex-end;
+}
+
+.cs-train-card__trigger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.cs-train-summary {
+  display: flex;
+  gap: 20px;
+  padding: 8px 4px;
+  font-size: 11px;
+  color: #64748b;
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+  margin-top: 4px;
+}
+
+.cs-train-summary strong {
+  color: #a5b4fc;
+}

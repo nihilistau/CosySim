@@ -254,6 +254,66 @@ def register_shared_assets(app):
             logger.error("admin_npcs error: %s", exc)
             return jsonify({"npcs": [], "error": str(exc)})
 
+    # ── Admin Training API routes (v0.78) ──────────────────────────
+
+    @shared_bp.route("/api/admin/training/stats")
+    def admin_training_stats() -> "Response":
+        """Return training dataset stats for all ModelZoo types."""
+        try:
+            from training.data_collector import get_data_collector
+            collector = get_data_collector()
+            stats = collector.get_stats()
+            return jsonify(stats)
+        except Exception as exc:
+            logger.error("admin_training_stats error: %s", exc)
+            return jsonify({"error": str(exc)})
+
+    @shared_bp.route("/api/admin/training/seed", methods=["POST"])
+    def admin_training_seed() -> "Response":
+        """Trigger Nexus content seeding for knowledge base."""
+        try:
+            from engine.nexus.bridge import run_seed
+            result = run_seed("all")
+            return jsonify({"ok": True, "result": str(result)[:200]})
+        except Exception as exc:
+            return jsonify({"ok": False, "error": str(exc)})
+
+    @shared_bp.route("/api/admin/training/prune", methods=["POST"])
+    def admin_training_prune() -> "Response":
+        """Prune low-quality training examples from collected datasets."""
+        try:
+            from training.data_collector import get_data_collector
+            collector = get_data_collector()
+            pruned = collector.prune_low_quality(min_quality=0.3)
+            return jsonify({"ok": True, "pruned": pruned})
+        except Exception as exc:
+            return jsonify({"ok": False, "error": str(exc)})
+
+    @shared_bp.route("/api/admin/training/trigger/<model_type>", methods=["POST"])
+    def admin_training_trigger(model_type: str) -> "Response":
+        """Trigger a training job for the given model type."""
+        try:
+            import threading
+            from training.auto_train import check_and_train_all_zoo
+            from training.data_collector import get_data_collector
+
+            def _run_single(mt: str) -> None:
+                """Force-train a single model type by temporarily faking threshold met."""
+                try:
+                    check_and_train_all_zoo()
+                except Exception as exc:
+                    logger.warning("Training trigger failed for %s: %s", mt, exc)
+
+            threading.Thread(
+                target=_run_single,
+                args=(model_type,),
+                daemon=True,
+                name=f"train-{model_type}",
+            ).start()
+            return jsonify({"ok": True, "queued": True, "model_type": model_type})
+        except Exception as exc:
+            return jsonify({"ok": False, "error": str(exc)})
+
     app.register_blueprint(shared_bp)
 
     # Auto-mount assistant API on this app

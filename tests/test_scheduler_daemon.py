@@ -313,7 +313,7 @@ class TestBuiltinTasks:
 
         daemon = MagicMock()
         _register_builtin_tasks(daemon)
-        assert daemon.register.call_count == 44
+        assert daemon.register.call_count == 45
 
     def test_doc_sync_task_registered(self) -> None:
         from engine.nexus.scheduler_daemon import _register_builtin_tasks

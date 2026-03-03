@@ -3,7 +3,63 @@
 All notable changes to CosySim are documented here.
 
 ---
-## [0.77b] — 2026-03 — "THE FIRST MIND" — ✅ COMPLETE
+## [0.78b] — 2026-04 — "THE DATA FLYWHEEL" — ✅ COMPLETE
+
+### New Features
+
+#### DataCollector Live Wiring
+- Every `VirtualAgent` conversation captured: `collect_conversation(system, history, response)`
+  in `process_response()` — all runtime dialogues become training signal automatically
+- `last_history` and `last_system_prompt` cached in agent state for DataCollector access
+- `coder_complete`, `coder_fix`, `coder_generate` skills all call `collect_code()` after
+  each LMStudio response — coder dataset grows with every use
+- `DataCollector.get_stats()` — comprehensive stats across live buffers and training sets
+- `DataCollector.prune_low_quality(min_quality)` — removes low-quality records from live buffers
+
+#### Grammar Scanner Interceptor
+- `GrammarScannerInterceptor` — post-call interceptor (priority 95), 6 grammar checks:
+  truncated sentence, broken symbols, repeated phrases, empty response, no sentence end,
+  excessive whitespace
+- Grammar violations → `collector.collect_grammar_error()` for grammar model training
+- Registered in `config/default.yaml` under `comms.interceptors.grammar_scanner: true`
+
+#### Output Evaluator Auto-Scoring
+- `OutputEvaluator.score()` returns 0.0–1.0 quality score per response
+- Checks: length, sentence completeness, no truncation, relevance, no repetition, coherence
+- Score < 0.4 → automatic Nexus storage under `category=improvement` for review
+- Wired into `VirtualAgent.process_response()` for every LLM reply
+
+#### Training Dashboard (Admin Panel)
+- New **[TRAINING]** tab in admin overlay with 9 model cards
+- `/api/admin/training/stats` — live buffer + training set counts per model type
+- `/api/admin/training/seed` — trigger DataCollector flush
+- `/api/admin/training/prune` — remove low-quality records (threshold configurable)
+- `/api/admin/training/trigger/<model_type>` — submit training job in background thread
+- `content/shared/static/js/admin_training.js` + `admin_training.css` — card UI with
+  status badges (idle/training/queued/error/done), live counts, trigger buttons
+
+#### Improvement Review Scheduler Task (Task #45)
+- `improvement-review` (weekly) — fetches Nexus `category=improvement` entries,
+  batch-asks NLM notebook for improvement suggestions, stores answers as
+  `output_evaluator` training examples
+- Scheduler task count: 44 → **45**
+
+#### TUI Launcher
+- `tui.py` — full Textual 8.0.1 TUI with scene/service list, port health monitoring,
+  HAR import panel, log viewer, external services health
+- Run with `python tui.py` or `python tui.py --autostart`
+- Imports `SERVICES`, `SCENES`, `ALL_TARGETS`, `VERSION`, `_port_up` from `launcher.py`
+
+### Documentation
+- `docs/TRAINING_SYSTEM.md` — full DataCollector → Model Zoo → finetune → promote pipeline
+- `docs/CODER_MODEL.md` — coder model strategy, 10 dataset strategies, deployment
+
+### Version Bumps
+- `config/default.yaml`: `0.77b` → `0.78b`
+- `launcher.py` `VERSION`: `0.76b` → `0.78b`
+
+---
+
 
 ### New Features
 

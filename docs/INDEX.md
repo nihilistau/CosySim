@@ -1,6 +1,6 @@
 # CosySim Documentation Index
 
-> All project documentation in one place. v0.75 — 7,500+ tests, 214 MCP tools, 22 skill packs (198+ skills), 15 scenes.
+> All project documentation in one place. v0.78b — 7,500+ tests, 214 MCP tools, 22 skill packs (198+ skills), 15 scenes.
 
 ## Quick Facts — v0.75
 
@@ -132,8 +132,11 @@
 
 | Doc | Description |
 |-----|-------------|
+| [Training System](TRAINING_SYSTEM.md) | v0.78b Data Flywheel — DataCollector, Model Zoo (9 types), AutoTrain, scheduler tasks, admin dashboard |
+| [Coder Model](CODER_MODEL.md) | Local coder model — Llama 3.2-3B + LoRA, 10 data strategies, 8 coder skills, benchmark promotion |
 | [Fine-Tuning Guide](FINETUNING_GUIDE.md) | End-to-end: datasets → MicroDatasetManager → FinetuneOrchestrator → ModelRegistry → promote |
 | [Training](TRAINING.md) | Gemma 270M fine-tuning pipeline, datasets, Colab |
+| [Training Flywheel](TRAINING_FLYWHEEL.md) | RouterDataCollector, RouterV3Client, Alpaca export, automated weekly retrain |
 | [Testing](TESTING.md) | Test commands, fixtures, writing tests (6,921 tests, ~190 files) |
 
 ## Development

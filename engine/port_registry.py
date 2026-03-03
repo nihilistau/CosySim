@@ -32,6 +32,9 @@ _DEFAULT_PORTS: Dict[str, int] = {
     "nexus_panel": 5570,
     "intel_hub": 5580,
     "system_control": 5575,
+    # NEXUS CANVAS — React/Express UI + Python sidecar
+    "nexus_canvas": 5590,
+    "canvas_sidecar": 5591,
     # Streamlit apps (8500–8504)
     "hub": 8500,
     "dashboard": 8501,

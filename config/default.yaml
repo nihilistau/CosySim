@@ -3,7 +3,7 @@
 
 system:
   name: "CosySim AI Playground"
-  version: "0.77b"
+  version: "0.78b"
   environment: "default"
 
 # Paths configuration
@@ -588,6 +588,7 @@ comms:
     response_shaper:          true
     activity_logger:          true
     relationship_context:     true    # inject player-NPC relationship into system prompt
+    grammar_scanner:          true    # post-call grammar/quality scanner → training signal
   stats_poll_interval_ms: 2000  # how often the browser overlay polls /api/stats/live
 
 # Framework settings
