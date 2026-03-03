@@ -1129,9 +1129,27 @@ def _register_builtin_tasks(daemon: "SchedulerDaemon") -> None:
         "every_1h",
         _news_distill_nlm_callback,
     )
+    daemon.register(
+        "collect-flush",
+        "DataCollector Flush — merge live collected samples into training datasets",
+        "every_4h",
+        _collect_flush_callback,
+    )
+    daemon.register(
+        "model-zoo-train",
+        "Model Zoo Auto-Train — check thresholds and submit finetune jobs",
+        "daily",
+        _model_zoo_train_callback,
+    )
+    daemon.register(
+        "voice-auto-train",
+        "Voice Auto-Train — train Piper/Qwen3/Orpheus from collected voice samples",
+        "weekly",
+        _voice_auto_train_callback,
+    )
 
 
-def _news_distill_nlm_callback() -> Dict[str, Any]:
+def _news_distill_nlm_callback()-> Dict[str, Any]:
     """Every hour: distill news articles into Nexus Q&A via NotebookLM notebooks.
 
     Per category (ai_research/tech/world/science):
@@ -1502,6 +1520,42 @@ def _router_v3_retrain_callback() -> Dict[str, Any]:
     except Exception as exc:
         logger.debug("router_v3_retrain skipped: %s", exc)
         return {"status": "skipped", "reason": str(exc)}
+
+
+def _collect_flush_callback() -> Dict[str, Any]:
+    """Every 4h: flush DataCollector live files into training datasets."""
+    try:
+        from training.data_collector import get_data_collector
+        collector = get_data_collector()
+        total = collector.flush_all()
+        return {"status": "ok", "records_flushed": total}
+    except Exception as exc:
+        logger.error("collect_flush failed: %s", exc)
+        return {"status": "error", "error": str(exc)}
+
+
+def _model_zoo_train_callback() -> Dict[str, Any]:
+    """Daily: check MODEL_ZOO thresholds and submit finetune jobs for ready types."""
+    try:
+        from training.auto_train import check_and_train_all_zoo
+        results = check_and_train_all_zoo()
+        submitted = sum(1 for v in results.values() if v.get("action") == "submitted")
+        return {"status": "ok", "submitted": submitted, "details": results}
+    except Exception as exc:
+        logger.error("model_zoo_train failed: %s", exc)
+        return {"status": "error", "error": str(exc)}
+
+
+def _voice_auto_train_callback() -> Dict[str, Any]:
+    """Weekly: train Piper/Qwen3/Orpheus from collected voice samples."""
+    try:
+        from training.voice_trainer import get_voice_trainer
+        results = get_voice_trainer().auto_train_all()
+        succeeded = sum(1 for r in results if r.success)
+        return {"status": "ok", "trained": succeeded, "total": len(results)}
+    except Exception as exc:
+        logger.error("voice_auto_train failed: %s", exc)
+        return {"status": "error", "error": str(exc)}
 
 
 # ──── CLI ────

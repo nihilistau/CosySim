@@ -302,6 +302,11 @@ class BenchmarkRunner:
             "syntax_fixer": "Fix the syntax error. Return only the corrected code:",
             "conversation_analyzer": "Extract user facts as JSON:",
             "knowledge_synthesizer": "Synthesize a concise answer from the context:",
+            "tool_dispatch": 'Route this instruction to the correct tool. Respond with JSON: {"tool": "skill_name", "args": {...}}',
+            "grammar_scanner": "Scan this text for grammar errors. List issues or respond 'OK':",
+            "output_evaluator": "Score this output 1-5. Respond: SCORE: N\nREASON:",
+            "conversational": "Continue the conversation:",
+            "coder": "Complete the code:",
         }
         instr = instructions.get(model_type, "Complete:")
 
@@ -384,11 +389,47 @@ class BenchmarkRunner:
         def predict_generic(inp: str) -> str:
             return inp
 
+        def predict_tool_dispatch(inp: str) -> str:
+            """Simple tool dispatch predictor."""
+            inp_lower = inp.lower()
+            if any(w in inp_lower for w in ["search", "find", "look up"]):
+                return '{"tool": "nexus_search", "args": {"query": "..."}}'
+            if any(w in inp_lower for w in ["ask", "question", "how"]):
+                return '{"tool": "nexus_ask", "args": {"question": "..."}}'
+            if any(w in inp_lower for w in ["speak", "say", "tts"]):
+                return '{"tool": "tts_speak", "args": {"text": "..."}}'
+            return '{"tool": "system_status", "args": {}}'
+
+        def predict_grammar(inp: str) -> str:
+            """Simple grammar scanner predictor."""
+            import re
+            issues = []
+            if re.search(r"def\s+\w+\([^)]*\)\s*$", inp, re.MULTILINE):
+                issues.append("Missing colon after function definition")
+            if inp.count("{") != inp.count("}"):
+                issues.append("Unmatched braces")
+            if inp.count('"') % 2 != 0:
+                issues.append("Unclosed string")
+            return "\n".join(issues) if issues else "OK"
+
+        def predict_output_eval(inp: str) -> str:
+            """Simple output evaluator predictor."""
+            if len(inp) < 10:
+                return "SCORE: 1\nREASON: Too short"
+            if len(inp) > 50:
+                return "SCORE: 4\nREASON: Detailed response"
+            return "SCORE: 3\nREASON: Average length response"
+
         predictors = {
             "qa_evaluator": predict_qa,
             "router_v2": predict_router,
             "router_v3": predict_router_v3,
             "syntax_fixer": predict_syntax,
+            "tool_dispatch": predict_tool_dispatch,
+            "grammar_scanner": predict_grammar,
+            "output_evaluator": predict_output_eval,
+            "conversational": predict_generic,
+            "coder": predict_generic,
         }
         return predictors.get(model_type, predict_generic)
 

@@ -275,6 +275,80 @@ def get_status() -> dict:
     }
 
 
+
+def check_and_train_all_zoo(min_quality: float = DEFAULT_MIN_QUALITY, dry_run: bool = False) -> Dict[str, dict]:
+    """Check MODEL_ZOO thresholds and trigger training for ready model types.
+
+    Reads the DataCollector live files, checks if collected sample count
+    exceeds the ModelSpec.train_threshold, and submits finetune jobs.
+
+    Args:
+        min_quality: Minimum quality threshold for collected samples.
+        dry_run: If True, log what would happen without actually training.
+
+    Returns:
+        Dict mapping model_type to action result.
+    """
+    results: Dict[str, dict] = {}
+
+    try:
+        from training.model_zoo import MODEL_ZOO, get_nlp_specs
+        from training.data_collector import get_data_collector
+        collector = get_data_collector()
+        stats = collector.stats()
+    except Exception as exc:
+        log.error("check_and_train_all_zoo: failed to load MODEL_ZOO or DataCollector: %s", exc)
+        return results
+
+    nlp_specs = get_nlp_specs(enabled=True)
+
+    for spec in nlp_specs:
+        count = stats.get(spec.id, 0)
+        if count < spec.train_threshold:
+            log.debug(
+                "  %s: %d/%d samples (below threshold)", spec.id, count, spec.train_threshold
+            )
+            continue
+
+        log.info(
+            "  %s: %d samples >= %d threshold — training!",
+            spec.id, count, spec.train_threshold,
+        )
+
+        if dry_run:
+            results[spec.id] = {"action": "would_train", "count": count}
+            continue
+
+        # Flush collected data to training set
+        try:
+            flushed = collector.flush(spec.id)
+            log.info("  Flushed %d samples for %s", flushed, spec.id)
+        except Exception as exc:
+            log.error("  Flush failed for %s: %s", spec.id, exc)
+            results[spec.id] = {"action": "flush_failed", "error": str(exc)}
+            continue
+
+        # Submit finetune job
+        try:
+            from training.finetune_orchestrator import get_finetune_orchestrator
+            orch = get_finetune_orchestrator()
+            job = orch.submit(spec.id)
+            results[spec.id] = {"action": "submitted", "job_id": job.job_id, "count": count}
+            log.info("  Submitted finetune job %s for %s", job.job_id, spec.id)
+        except FileNotFoundError:
+            results[spec.id] = {"action": "no_dataset", "count": count}
+            log.warning("  No training dataset for %s (run build first)", spec.id)
+        except Exception as exc:
+            log.error("  Submit failed for %s: %s", spec.id, exc)
+            results[spec.id] = {"action": "submit_failed", "error": str(exc)}
+
+    # Log results to Nexus
+    if results:
+        _log_training_to_nexus(results)
+
+    return results
+
+
 if __name__ == "__main__":
     import argparse
 

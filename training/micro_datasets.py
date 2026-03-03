@@ -23,7 +23,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
-MODELS = ["qa_evaluator", "conversation_analyzer", "syntax_fixer", "router_v2", "router_v3", "knowledge_synthesizer"]
+MODELS = ["qa_evaluator", "conversation_analyzer", "syntax_fixer", "router_v2", "router_v3", "knowledge_synthesizer", "tool_dispatch", "grammar_scanner", "output_evaluator", "conversational", "coder"]
 _DATASET_DIR = Path("training/datasets")
 _DATASET_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -388,6 +388,39 @@ class MicroDatasetManager:
                 {"input": "How does state sync work? [Context: MCPFramework tree syncs to SQLite]",
                  "output": "State sync works through the MCPFramework tree, which persists to SQLite automatically."},
             ],
+            "tool_dispatch": [
+                {"input": "search nexus for interceptor pipeline",
+                 "output": '{"tool": "nexus_search", "args": {"query": "interceptor pipeline"}}'},
+                {"input": "ask nexus how MCP framework works",
+                 "output": '{"tool": "nexus_ask", "args": {"question": "how does MCP framework work"}}'},
+                {"input": "store a note about architecture",
+                 "output": '{"tool": "nexus_add", "args": {"title": "Architecture Note", "content": "...", "content_type": "note"}}'},
+                {"input": "check system health status",
+                 "output": '{"tool": "system_status", "args": {}}'},
+                {"input": "list all available skills",
+                 "output": '{"tool": "list_all_skills", "args": {}}'},
+            ],
+            "grammar_scanner": [
+                {"input": "def foo()\n    return 1", "output": "Issue: Missing colon after function definition"},
+                {"input": '{"key": "val"', "output": "Issue: Unclosed JSON object, missing closing brace"},
+                {"input": "x = {'a: 1}", "output": "Issue: Unclosed string key 'a"},
+                {"input": "def bar():\n    return 2", "output": "OK"},
+                {"input": '{"key": "value"}', "output": "OK"},
+            ],
+            "output_evaluator": [
+                {"input": "Paris is the capital of France.", "output": "SCORE: 5\nREASON: Factually correct and concise"},
+                {"input": "I dunno maybe something idk", "output": "SCORE: 1\nREASON: Vague and unhelpful response"},
+                {"input": "The interceptor pipeline processes requests by applying pre and post call hooks.", "output": "SCORE: 4\nREASON: Clear and informative"},
+            ],
+            "conversational": [
+                {"input": "System: You are Aria.\n\nUSER: Hello", "output": "Hi there! How can I help you today?"},
+                {"input": "System: You are Lola.\n\nUSER: What do you want?", "output": "That depends entirely on what you're offering..."},
+                {"input": "System: You are Viktor.\n\nUSER: Status report.", "output": "All systems nominal. No threats detected. Standing by."},
+            ],
+            "coder": [
+                {"input": "# Write a Python function to get config\ndef get_config():", "output": "def get_config():\n    from engine.config import get_config as _gc\n    return _gc()"},
+                {"input": "# Module: base_scene\n# Task: Start the scene\ndef start(self):", "output": "def start(self) -> None:\n    \"\"\"Initialize and start the scene.\"\"\"\n    self._setup_routes()\n    self._register_skills()\n    logger.info(f'Scene {self.SCENE_METADATA[\"name\"]} started')"},
+            ],
         }
         base = templates.get(model_type, [{"input": "query", "output": "result"}])
         # Return all unique templates first; only cycle if count exceeds template set
@@ -421,6 +454,11 @@ class MicroDatasetManager:
             "syntax_fixer": self._augment_syntax,
             "conversation_analyzer": self._augment_conversation,
             "knowledge_synthesizer": self._augment_synthesizer,
+            "tool_dispatch": self._augment_tool_dispatch,
+            "grammar_scanner": self._augment_grammar_scanner,
+            "output_evaluator": self._augment_output_evaluator,
+            "conversational": self._augment_conversation,
+            "coder": self._augment_generic,
         }
         fn = augmenters.get(model_type, self._augment_generic)
 
@@ -598,6 +636,30 @@ class MicroDatasetManager:
             return {**ex, "output": f"Based on the available context: {out}", "source": "augmented"}
         return None
 
+    def _augment_tool_dispatch(self, ex: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Augment tool_dispatch examples with phrasing variations."""
+        inp = ex.get("input", "")
+        prefixes = ["please ", "can you ", "I need to ", "help me "]
+        import random
+        prefix = random.choice(prefixes)
+        if not inp.startswith(prefix):
+            return {**ex, "input": prefix + inp[0].lower() + inp[1:], "source": "augmented"}
+        return {**ex, "source": "augmented"}
+
+    def _augment_grammar_scanner(self, ex: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Augment grammar_scanner by minor input rewording."""
+        inp = ex.get("input", "")
+        if inp:
+            return {**ex, "input": inp + " ", "source": "augmented"}
+        return None
+
+    def _augment_output_evaluator(self, ex: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Augment output_evaluator examples with context prefix."""
+        inp = ex.get("input", "")
+        if inp and not inp.startswith("Context:"):
+            return {**ex, "input": f"Evaluate this output:\n{inp}", "source": "augmented"}
+        return None
+
     def _augment_generic(self, ex: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         return {**ex, "source": "augmented"}
 
@@ -623,6 +685,11 @@ class MicroDatasetManager:
             "syntax_fixer": "Fix the syntax errors in this code or text. Return only the corrected version.",
             "router_v2": "Classify this request to the most appropriate CosySim subsystem handler.",
             "knowledge_synthesizer": "Synthesize a concise answer from the provided context fragments.",
+            "tool_dispatch": 'Route this instruction to the correct tool. Respond with JSON: {"tool": "skill_name", "args": {...}}',
+            "grammar_scanner": "Scan this text for grammar errors and missing symbols. List all issues or respond 'OK' if clean.",
+            "output_evaluator": "Score the quality of this LLM output from 1 (bad) to 5 (excellent). Respond: SCORE: N\nREASON: brief explanation",
+            "conversational": "Continue this conversation naturally, in character.",
+            "coder": "Complete or generate the requested code following CosySim conventions.",
         }
         instruction = instructions.get(model_type, "Complete the task.")
         for ex in examples:

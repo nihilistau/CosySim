@@ -60,6 +60,11 @@ RECOMMENDED_MODELS: Dict[str, str] = {
     "router_v2": "qwen-270m",
     "router_v3": "qwen-270m",
     "knowledge_synthesizer": "qwen-1.7b",
+    "tool_dispatch": "qwen-270m",
+    "grammar_scanner": "qwen-270m",
+    "output_evaluator": "qwen-270m",
+    "conversational": "qwen-1.7b",
+    "coder": "llama-3b",
 }
 
 
