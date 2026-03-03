@@ -210,27 +210,47 @@ async function startServer() {
     res.json({ success: true });
   });
 
-  // ── Sidecar helpers ───────────────────────────────────────────────────────
-  const CANVAS_SIDECAR = process.env.CANVAS_SIDECAR_URL || "http://localhost:5591";
+  // ── Canvas API proxy (Python backend at 5595) ─────────────────────────────
+  const CANVAS_API = process.env.CANVAS_API_URL || "http://localhost:5595";
   const NEXUS_API = "http://localhost:8700";
 
-  async function proxyToSidecar(
-    path: string,
-    body?: object
-  ): Promise<{ data?: any; error?: string; status: number }> {
+  // Generic proxy to Canvas API Python backend — forwards request body and query string
+  async function proxyToCanvasApi(req: any, res: any): Promise<void> {
+    const url = new URL(`${CANVAS_API}${req.path}`);
+    Object.entries(req.query as Record<string, string>).forEach(([k, v]) => url.searchParams.set(k, v));
     try {
-      const isGet = !body;
-      const res = await fetch(`${CANVAS_SIDECAR}${path}`, {
-        method: isGet ? "GET" : "POST",
+      const isGet = req.method === "GET" || req.method === "DELETE";
+      const r = await fetch(url.toString(), {
+        method: req.method,
         headers: { "Content-Type": "application/json" },
-        body: isGet ? undefined : JSON.stringify(body),
+        body: isGet ? undefined : JSON.stringify(req.body),
       });
-      const data = await res.json();
-      return { data, status: res.status };
+      const data = await r.json().catch(() => ({}));
+      res.status(r.status).json(data);
     } catch (e: any) {
-      return { error: e.message, status: 503 };
+      res.status(503).json({ error: `Canvas API unavailable: ${e.message}` });
     }
   }
+
+  // Mount all Python-backed route prefixes as pass-throughs to Canvas API
+  const PYTHON_PREFIXES = [
+    "/api/accounts",
+    "/api/har",
+    "/api/training",
+    "/api/nexus",
+    "/api/nlm",
+    "/api/compute",
+    "/api/copilot",
+    "/api/rpc",
+    "/api/sidecar",
+  ];
+  for (const prefix of PYTHON_PREFIXES) {
+    app.all(`${prefix}`, proxyToCanvasApi);
+    app.all(`${prefix}/*`, proxyToCanvasApi);
+  }
+
+  // Legacy sidecar constant kept for reference but unused
+  const CANVAS_SIDECAR = CANVAS_API;
 
   // ── AI Studio ─────────────────────────────────────────────────────────────
   const GEMINI_MODELS = [
@@ -268,446 +288,6 @@ async function startServer() {
 
   app.get("/api/aistudio/models", async (_req, res) => {
     res.json({ models: GEMINI_MODELS });
-  });
-
-  // ── Google Accounts ────────────────────────────────────────────────────────
-  app.get("/api/accounts", async (req, res) => {
-    try {
-      const data = await callPython("engine.integrations.rpc_proxy", "list_accounts_from_dirs", {});
-      res.json(data);
-    } catch (e: any) {
-      res.status(500).json({ error: e.message, accounts: [] });
-    }
-  });
-
-  app.post("/api/accounts/import-har", async (req, res) => {
-    try {
-      const { filepath = "", account_name = "", services = [] } = req.body;
-      const data = await callPython("engine.integrations.rpc_proxy", "import_har_to_pool", {
-        filepath, account_name, services,
-      });
-      res.json(data);
-    } catch (e: any) {
-      res.status(500).json({ error: e.message });
-    }
-  });
-
-  app.post("/api/accounts/import-directory", async (req, res) => {
-    try {
-      const { directory = "", account_name = "", services = [] } = req.body;
-      // Bulk import all HAR files in a directory
-      const fs2 = await import("fs");
-      const dirFiles = fs2.readdirSync(directory).filter((f: string) => f.endsWith(".har"));
-      const results: any[] = [];
-      for (const f of dirFiles) {
-        const fp = path.join(directory, f);
-        try {
-          const r = await callPython("engine.integrations.rpc_proxy", "import_har_to_pool", {
-            filepath: fp, account_name: account_name || path.basename(directory), services,
-          });
-          results.push({ file: f, ...r });
-        } catch (e: any) {
-          results.push({ file: f, error: e.message });
-        }
-      }
-      res.json({ imported: results.length, results });
-    } catch (e: any) {
-      res.status(500).json({ error: e.message });
-    }
-  });
-
-  // ── Training Data ──────────────────────────────────────────────────────────
-  app.post("/api/training/capture", async (req, res) => {
-    try {
-      const data = await callPython("engine.integrations.rpc_proxy", "capture_training_example", req.body);
-      res.json(data);
-    } catch (e: any) {
-      res.status(500).json({ error: e.message });
-    }
-  });
-
-  app.get("/api/training/stats", async (req, res) => {
-    try {
-      const data = await callPython("engine.integrations.rpc_proxy", "get_training_stats", {});
-      res.json(data);
-    } catch (e: any) {
-      res.status(500).json({ error: e.message });
-    }
-  });
-
-  // ── Nexus Knowledge ────────────────────────────────────────────────────────
-  app.post("/api/nexus/search", async (req, res) => {
-    const q = (req.body.q as string) || (req.body.query as string) || "";
-    // Try Nexus KMS first
-    try {
-      const result = await nexusProxy(`/search?q=${encodeURIComponent(q)}`);
-      return res.json(result);
-    } catch { /* KMS down */ }
-    // Fall back to Python bridge
-    try {
-      const data = await callPython("engine.integrations.rpc_proxy", "nexus_search_python", { query: q });
-      res.json(data);
-    } catch (e: any) { res.json({ results: [] }); }
-  });
-
-  app.post("/api/nexus/ask", async (req, res) => {
-    // Try Nexus KMS first
-    try {
-      const result = await nexusProxy("/ask", "POST", req.body);
-      return res.json(result);
-    } catch { /* KMS down */ }
-    try {
-      const data = await callPython("engine.integrations.rpc_proxy", "nexus_ask_direct", { question: req.body.question || "" });
-      res.json(data);
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
-  });
-
-  app.post("/api/nexus/add", async (req, res) => {
-    // Try Nexus KMS first
-    try {
-      const result = await nexusProxy("/add", "POST", req.body);
-      return res.json(result);
-    } catch { /* KMS down */ }
-    try {
-      const data = await callPython("engine.integrations.rpc_proxy", "nexus_add_python", req.body);
-      res.json(data);
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
-  });
-
-  // ── NotebookLM ─────────────────────────────────────────────────────────────
-  app.get("/api/nlm/notebooks", async (req, res) => {
-    // Try Nexus KMS first; fall back to local metadata if unavailable
-    try {
-      const r = await fetch(`${NEXUS_API}/api/nlm/notebooks`);
-      if (r.ok) {
-        const data = await r.json();
-        return res.json(data);
-      }
-    } catch { /* Nexus KMS down — fall through to Python fallback */ }
-    try {
-      const data = await callPython("engine.integrations.rpc_proxy", "list_nlm_notebooks", {});
-      res.json(data);
-    } catch (e: any) {
-      res.json({ notebooks: [], error: e.message });
-    }
-  });
-
-  app.post("/api/nlm/ask", async (req, res) => {
-    // Try Nexus KMS first; fall back to direct NLM engine
-    try {
-      const r = await fetch(`${NEXUS_API}/api/nlm/ask`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(req.body),
-      });
-      if (r.ok) {
-        const data = await r.json();
-        return res.status(r.status).json(data);
-      }
-    } catch { /* Fall through */ }
-    try {
-      const { question = "", notebook_id = "" } = req.body;
-      const data = await callPython("engine.integrations.rpc_proxy", "nlm_ask_python", {
-        question, notebook_id,
-      });
-      res.json(data);
-    } catch (e: any) {
-      res.status(503).json({ error: "NLM not available", detail: e.message });
-    }
-  });
-
-  // ── Sidecar Health ─────────────────────────────────────────────────────────
-  app.get("/api/sidecar/health", async (req, res) => {
-    // Sidecar replaced by callPython bridge — report healthy
-    res.json({ status: "ok", mode: "callPython", sidecar: false });
-  });
-
-  // ── HAR Import ────────────────────────────────────────────────────────────
-  app.post("/api/har/import", async (req, res) => {
-    const { harPath, accountId, service } = req.body;
-    try {
-      const result = await callPython("engine.integrations.rpc_proxy", "import_har_to_pool", {
-        filepath: harPath, account_name: accountId, services: service ? [service] : [],
-      });
-      res.json(result);
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
-  });
-
-  const HAR_DIR = "C:\\Files\\Models\\HAR_Files";
-  const HAR_DIR_ALT = "C:\\Files\\Models\\CosySim\\data\\har_files";
-
-  function findHarFile(filename: string): string | null {
-    function walk(dir: string): string | null {
-      if (!fs.existsSync(dir)) return null;
-      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-        const full = path.join(dir, entry.name);
-        if (entry.isDirectory()) { const r = walk(full); if (r) return r; }
-        else if (entry.name === filename) return full;
-      }
-      return null;
-    }
-    return walk(HAR_DIR) || walk(HAR_DIR_ALT);
-  }
-
-  // ── HAR File Management ───────────────────────────────────────────────────
-  app.get("/api/har/list", async (req, res) => {
-    try {
-      // Use Python parser to list across all HAR directories
-      const result = await callPython(
-        "engine.integrations.rpc_proxy", "list_har_files_dict", {}
-      );
-      res.json(result);
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
-  });
-
-  app.post("/api/har/upload", async (req, res) => {
-    try {
-      const { filename, content, account_folder } = req.body as {
-        filename: string; content: string; account_folder: string;
-      };
-      const dest = path.join(HAR_DIR, account_folder || "");
-      fs.mkdirSync(dest, { recursive: true });
-      fs.writeFileSync(path.join(dest, filename), Buffer.from(content, "base64"));
-      res.json({ ok: true, path: path.join(dest, filename) });
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
-  });
-
-  app.post("/api/har/parse", async (req, res) => {
-    try {
-      const data = await callPython("engine.integrations.rpc_proxy", "parse_har_file", req.body);
-      res.json(data);
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
-  });
-
-  app.post("/api/har/import-account", async (req, res) => {
-    try {
-      const { path: filepath, account_name, services } = req.body;
-      const result = await callPython(
-        "engine.integrations.rpc_proxy", "import_har_to_pool",
-        { filepath: filepath || req.body.filepath, account_name, services }
-      );
-      res.json(result);
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
-  });
-
-  app.get("/api/har/:filename/entries", async (req, res) => {
-    try {
-      const { filename } = req.params;
-      const url_search = (req.query.url_search as string) || (req.query.filter as string) || "";
-      const method_filter = (req.query.method as string) || "";
-      const limit = parseInt(req.query.limit as string) || 100;
-      const offset = parseInt(req.query.offset as string) || 0;
-
-      // Always route through Python — handles large files safely
-      const result = await callPython(
-        "engine.integrations.rpc_proxy", "get_entries_dict",
-        { filename, url_search, method_filter, offset, limit }
-      );
-      res.json(result);
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
-  });
-
-  app.get("/api/har/:filename/entry/:idx", async (req, res) => {
-    try {
-      const result = await callPython(
-        "engine.integrations.rpc_proxy", "get_entry_dict",
-        { filename: req.params.filename, idx: parseInt(req.params.idx) }
-      );
-      res.json(result);
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
-  });
-
-  app.get("/api/har/:filename/analyze", async (req, res) => {
-    try {
-      const result = await callPython(
-        "engine.integrations.rpc_proxy", "analyze_har_dict",
-        { filename: req.params.filename }
-      );
-      res.json(result);
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
-  });
-
-  // ── RPC Proxy ─────────────────────────────────────────────────────────────
-  app.post("/api/rpc/proxy", async (req, res) => {
-    try {
-      const result = await callPython("engine.integrations.rpc_proxy", "proxy_request", req.body);
-      res.json(result);
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
-  });
-
-  // ── Account Management (compute-aware) ────────────────────────────────────
-  app.get("/api/accounts/list", async (req, res) => {
-    try {
-      const result = await callPython(
-        "engine.integrations.rpc_proxy", "list_accounts_with_tiers", {}
-      );
-      res.json(result);
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
-  });
-
-  app.post("/api/accounts/configure", async (req, res) => {
-    try {
-      const result = await callPython("engine.integrations.rpc_proxy", "configure_account", req.body);
-      res.json(result);
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
-  });
-
-  app.delete("/api/accounts/:name", async (req, res) => {
-    try {
-      const r = await fetch(`${CANVAS_SIDECAR}/api/accounts/${req.params.name}`, { method: "DELETE" });
-      const data = await r.json();
-      res.status(r.status).json(data);
-    } catch (e: any) {
-      res.status(503).json({ error: e.message });
-    }
-  });
-
-  // ── Compute (JIT) ─────────────────────────────────────────────────────────
-  app.get("/api/compute/status", async (req, res) => {
-    try {
-      const result = await callPython("engine.integrations.rpc_proxy", "get_status_dict", {});
-      res.json(result);
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
-  });
-
-  app.post("/api/compute/infer", async (req, res) => {
-    try {
-      const result = await callPython("engine.integrations.rpc_proxy", "jit_infer_dict", req.body);
-      res.json(result);
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
-  });
-
-  app.post("/api/compute/tunnel/deploy", async (req, res) => {
-    try {
-      const result = await callPython(
-        "engine.integrations.rpc_proxy", "deploy_tunnel_dict", req.body
-      );
-      res.json(result);
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
-  });
-
-  app.get("/api/compute/tunnel/list", async (req, res) => {
-    try {
-      const result = await callPython("engine.integrations.rpc_proxy", "list_sessions_dict", {});
-      res.json(result);
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
-  });
-
-  app.delete("/api/compute/tunnel/:id", async (req, res) => {
-    try {
-      const result = await callPython(
-        "engine.integrations.rpc_proxy", "teardown_by_id",
-        { session_id: req.params.id }
-      );
-      res.json(result);
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
-  });
-
-  app.get("/api/compute/models", async (req, res) => {
-    try {
-      const result = await callPython("engine.integrations.rpc_proxy", "get_all_models", {});
-      res.json(result);
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
-  });
-
-  // ── GitHub Copilot ────────────────────────────────────────────────────────
-  app.get("/api/copilot/models", async (req, res) => {
-    try {
-      const result = await callPython(
-        "engine.integrations.rpc_proxy", "list_models_dict",
-        { account_name: (req.query.account_name as string) || "nihilistcod" }
-      );
-      res.json(result);
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
-  });
-
-  app.post("/api/copilot/ask", async (req, res) => {
-    try {
-      const { prompt, model, account_name } = req.body;
-      const result = await new Promise<any>((resolve, reject) => {
-        const { spawn } = require("child_process");
-        const script = `
-import json, sys
-sys.path.insert(0, r'C:\\Files\\Models\\CosySim')
-args = json.loads(sys.stdin.read())
-from engine.integrations.rpc_proxy import ask_dict
-result = ask_dict(**args)
-print(json.dumps(result))
-`;
-        const proc = spawn("python", ["-c", script], { cwd: "C:\\Files\\Models\\CosySim" });
-        let out = "", err = "";
-        proc.stdout.on("data", (d: Buffer) => (out += d.toString()));
-        proc.stderr.on("data", (d: Buffer) => (err += d.toString()));
-        proc.stdin.write(JSON.stringify({ prompt, model: model || "claude-sonnet-4.6", account_name: account_name || "nihilistcod" }));
-        proc.stdin.end();
-        const timer = setTimeout(() => { proc.kill(); reject(new Error("Copilot timeout")); }, 60000);
-        proc.on("close", (code: number) => {
-          clearTimeout(timer);
-          if (code !== 0) reject(new Error(err || "Python error"));
-          else try { resolve(JSON.parse(out)); } catch { resolve({ response: out }); }
-        });
-      });
-      res.json(result);
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
-  });
-
-  app.post("/api/copilot/thread/create", async (req, res) => {
-    try {
-      const result = await callPython(
-        "engine.integrations.rpc_proxy", "create_thread_dict",
-        { account_name: req.body.account_name || "nihilistcod" }
-      );
-      res.json(result);
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
-  });
-
-  app.post("/api/copilot/thread/:id/message", async (req, res) => {
-    try {
-      const { content, model, parent_message_id, account_name } = req.body;
-      const result = await callPython(
-        "engine.integrations.rpc_proxy", "send_message_dict",
-        {
-          thread_id: req.params.id,
-          content,
-          model: model || "claude-sonnet-4.6",
-          parent_message_id: parent_message_id || "root",
-          account_name: account_name || "nihilistcod",
-        }
-      );
-      res.json(result);
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
-  });
-
-
-  app.get("/api/nexus/rules", async (req, res) => {
-    try {
-      const scope = (req.query.scope as string) || "global";
-      const result = await nexusProxy(`/rules?scope=${encodeURIComponent(scope)}`);
-      res.json(result);
-    } catch { res.json({ rules: [] }); }
-  });
-
-  app.post("/api/nexus/qa", async (req, res) => {
-    try {
-      const result = await nexusProxy("/qa", "POST", req.body);
-      res.json(result);
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
-  });
-
-  app.get("/api/nexus/search", async (req, res) => {
-    try {
-      const q = (req.query.q as string) || "";
-      const result = await nexusProxy(`/search?q=${encodeURIComponent(q)}`);
-      res.json(result);
-    } catch { res.json({ results: [] }); }
-  });
-
-  app.get("/api/nexus/ask", async (req, res) => {
-    try {
-      const q = req.query.q as string;
-      const result = await nexusProxy(`/ask?q=${encodeURIComponent(q)}`);
-      res.json(result);
-    } catch { res.json({ answer: "" }); }
   });
 
   // ── Reader Mode proxy ─────────────────────────────────────────────────────
@@ -1093,42 +673,6 @@ print(json.dumps(result))
       res.json({ available: false, port, hint: "Start Chrome with: --remote-debugging-port=" + port });
     }
   });
-
-  // ── Python bridge helpers ──────────────────────────────────────────────────
-  async function callPython(module: string, method: string, args: Record<string, any>): Promise<any> {
-    const { spawn } = await import("child_process");
-    const script = `
-import json, sys
-sys.path.insert(0, r'C:\\Files\\Models\\CosySim')
-args = json.loads(sys.stdin.read())
-from ${module} import ${method}
-result = ${method}(**args)
-print(json.dumps(result) if result is not None else json.dumps(None))
-`;
-    return new Promise((resolve, reject) => {
-      const proc = spawn("python", ["-c", script], { cwd: "C:\\Files\\Models\\CosySim" });
-      let out = "", err = "";
-      proc.stdout.on("data", (d: Buffer) => (out += d.toString()));
-      proc.stderr.on("data", (d: Buffer) => (err += d.toString()));
-      proc.stdin.write(JSON.stringify(args));
-      proc.stdin.end();
-      const timer = setTimeout(() => { proc.kill(); reject(new Error("Python timeout")); }, 30000);
-      proc.on("close", (code: number) => {
-        clearTimeout(timer);
-        if (code !== 0) reject(new Error(err || "Python error"));
-        else try { resolve(JSON.parse(out)); } catch { resolve(out); }
-      });
-    });
-  }
-
-  async function nexusProxy(nexusPath: string, method = "GET", body?: any): Promise<any> {
-    const resp = await fetch(`http://localhost:8700/api${nexusPath}`, {
-      method,
-      headers: { "Content-Type": "application/json" },
-      body: body ? JSON.stringify(body) : undefined,
-    });
-    return resp.json();
-  }
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {

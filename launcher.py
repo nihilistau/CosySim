@@ -107,6 +107,12 @@ SERVICES: Dict[str, Dict[str, Any]] = {
         "port": 5590, "label": "Nexus Canvas",
         "auto_start": True,
     },
+    "canvas_api": {
+        "type": "fastapi",
+        "factory": "engine.api.canvas_api.create_app",
+        "port": 5595, "label": "Canvas API",
+        "auto_start": True,
+    },
     "nlm_proxy": {
         "type": "flask",
         "cls":  "engine.mcp.nlm_live_proxy.NLMProxyServer",
