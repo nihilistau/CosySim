@@ -1147,6 +1147,12 @@ def _register_builtin_tasks(daemon: "SchedulerDaemon") -> None:
         "weekly",
         _voice_auto_train_callback,
     )
+    daemon.register(
+        "coder-dataset-refresh",
+        "Coder Dataset Refresh — weekly rescan codebase + Nexus for training data",
+        "weekly",
+        _coder_dataset_refresh_callback,
+    )
 
 
 def _news_distill_nlm_callback()-> Dict[str, Any]:
@@ -1556,6 +1562,17 @@ def _voice_auto_train_callback() -> Dict[str, Any]:
     except Exception as exc:
         logger.error("voice_auto_train failed: %s", exc)
         return {"status": "error", "error": str(exc)}
+
+
+def _coder_dataset_refresh_callback() -> Dict[str, Any]:
+    """Weekly coder dataset refresh — re-scans codebase + Nexus Q&A + flushes collected."""
+    try:
+        from training.coder_pipeline import get_coder_pipeline
+        pipeline = get_coder_pipeline()
+        count = pipeline.refresh_dataset()
+        return {"status": "ok", "examples": count}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
 
 
 # ──── CLI ────

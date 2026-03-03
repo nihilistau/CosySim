@@ -24,9 +24,38 @@
       "job_id": null,
       "benchmark_score": null,
       "benchmark_details": {},
-      "active": true,
+      "active": false,
       "promoted_at": "2026-03-02T07:39:45.693342+00:00",
       "registered_at": "2026-03-02T07:39:41.032059+00:00",
+      "tags": [],
+      "notes": "Colab-trained. val_accuracy=?%"
+    },
+    {
+      "model_id": "030e1c5e",
+      "model_type": "router_v3",
+      "base_model": "Qwen/Qwen2.5-0.5B-Instruct",
+      "adapter_path": "C:\\Files\\Models\\CosySim\\training\\models\\router_v3_6dade8aa\\adapter",
+      "merged_path": "training/models/router_v3_6dade8aa/merged",
+      "job_id": null,
+      "benchmark_score": 0.21,
+      "benchmark_details": {
+        "f1_scores_sample": [
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "latency_p95": 0.013828277587890625
+      },
+      "active": true,
+      "promoted_at": "2026-03-02T23:27:51.317639+00:00",
+      "registered_at": "2026-03-02T23:27:46.698913+00:00",
       "tags": [],
       "notes": "Colab-trained. val_accuracy=?%"
     }
