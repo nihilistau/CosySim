@@ -1,3 +1,6 @@
+import pytest
+pytestmark = pytest.mark.slow
+
 """
 End-to-end pipeline smoke test for CosySim v2.9.
 
@@ -1589,3 +1592,4 @@ class TestRelationshipEventInterceptor:
         """Should have a populated _INTERACTION_BUFFS dict."""
         i = self._make_interceptor()
         assert len(i._INTERACTION_BUFFS) > 20
+
