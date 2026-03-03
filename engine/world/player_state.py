@@ -266,6 +266,38 @@ class PlayerState:
         self._schedule_auto_save()
         return val
 
+    def spend_energy(self, amount: int, reason: str = "") -> int:
+        """Reduce energy by *amount* (clamped to 0).
+
+        Args:
+            amount: Amount to subtract.
+            reason: Optional context label.
+
+        Returns:
+            New energy value.
+        """
+        with self._lock:
+            self._energy = max(0, self._energy - int(amount))
+            self._last_updated = time.time()
+            val = self._energy
+        self._emit_hud_update({"energy": val, "reason": reason})
+        self._schedule_auto_save()
+        return val
+
+    def add_heat(self, amount: int, reason: str = "") -> int:
+        """Increase heat by *amount*.
+
+        Delegates to :meth:`adjust_heat` with a positive delta.
+
+        Args:
+            amount: Amount to add (positive integer).
+            reason: Optional context label.
+
+        Returns:
+            New heat value.
+        """
+        return self.adjust_heat(int(amount), reason=reason)
+
     # ------------------------------------------------------------------
     # Skills
     # ------------------------------------------------------------------
@@ -414,6 +446,63 @@ class PlayerState:
         self._schedule_auto_save()
         return rep
 
+    def adjust_reputation(self, delta: int, reason: str = "") -> int:
+        """Alias for :meth:`update_reputation` — adjust reputation by *delta*.
+
+        Args:
+            delta: Amount to add (can be negative).
+            reason: Optional context label.
+
+        Returns:
+            New reputation score.
+        """
+        return self.update_reputation(delta, reason=reason)
+
+    def adjust_faction(self, faction: str, delta: int) -> int:
+        """Alias for :meth:`update_faction_standing`.
+
+        Args:
+            faction: Faction name.
+            delta: Amount to add (can be negative).
+
+        Returns:
+            New standing value.
+        """
+        return self.update_faction_standing(faction, delta)
+
+    def add_xp(self, amount: int, reason: str = "") -> int:
+        """Award XP to the player (stored as 'xp' skill points).
+
+        XP is tracked in the skills dict under the key ``"xp"`` as a
+        cumulative integer. Every 500 XP bumps a random skill by 1 level
+        (max 5) to simulate passive progression.
+
+        Args:
+            amount: XP amount to award.
+            reason: Optional context label.
+
+        Returns:
+            Total accumulated XP.
+        """
+        import random
+        with self._lock:
+            total = self._skills.get("xp", 0) + int(amount)
+            self._skills["xp"] = total
+            # Passive skill gain every 500 XP
+            gained: Optional[str] = None
+            if total > 0 and total % 500 < int(amount):
+                skills = [k for k, v in self._skills.items() if k != "xp" and v < 5]
+                if skills:
+                    chosen = random.choice(skills)
+                    self._skills[chosen] = min(5, self._skills[chosen] + 1)
+                    gained = chosen
+            self._last_updated = time.time()
+        self._emit_hud_update({"xp": total, "reason": reason})
+        self._schedule_auto_save()
+        if gained:
+            logger.info("PlayerState: skill '%s' levelled up from XP reward", gained)
+        return total
+
     # ------------------------------------------------------------------
     # Heat
     # ------------------------------------------------------------------
@@ -495,6 +584,12 @@ class PlayerState:
             self._last_updated = time.time()
         self._emit_hud_update({"location": location})
         self._schedule_auto_save()
+
+    @property
+    def active_location(self) -> str:
+        """Current player location (display name)."""
+        with self._lock:
+            return self._active_location
 
     # ------------------------------------------------------------------
     # Inventory

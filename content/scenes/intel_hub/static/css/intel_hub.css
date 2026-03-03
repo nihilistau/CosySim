@@ -1378,3 +1378,134 @@ body {
   font-weight: 600;
   color: #fff;
 }
+
+/* ──────────────────────────────────────────
+   CITY PULSE PANEL
+   ────────────────────────────────────────── */
+
+.intel-panel--full {
+  grid-column: 1 / -1;
+  min-height: 220px;
+}
+
+.city-pulse-filters {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-left: 4px;
+}
+
+.cp-filter-btn {
+  background: rgba(6, 182, 212, 0.06);
+  border: 1px solid rgba(6, 182, 212, 0.2);
+  border-radius: 3px;
+  color: rgba(6, 182, 212, 0.7);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  padding: 2px 7px;
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
+}
+
+.cp-filter-btn:hover,
+.cp-filter-btn--active {
+  background: rgba(6, 182, 212, 0.18);
+  border-color: rgba(6, 182, 212, 0.5);
+  color: var(--accent);
+}
+
+#city-pulse-feed {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow-y: auto;
+  max-height: 320px;
+  padding: 8px 10px;
+}
+
+.cp-event {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 8px;
+  background: rgba(6, 182, 212, 0.04);
+  border-radius: 4px;
+  border-left: 2px solid transparent;
+  transition: border-color 0.2s, background 0.2s;
+  animation: cpFadeIn 0.35s ease;
+}
+
+.cp-event:hover {
+  background: rgba(6, 182, 212, 0.08);
+  border-left-color: var(--accent);
+}
+
+@keyframes cpFadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Category-specific accent colours */
+.cp-event[data-cat="faction"] { border-left-color: rgba(239,68,68,0.4); }
+.cp-event[data-cat="economy"] { border-left-color: rgba(251,191,36,0.4); }
+.cp-event[data-cat="hacker"]  { border-left-color: rgba(52,211,153,0.4); }
+.cp-event[data-cat="npc"]     { border-left-color: rgba(99,102,241,0.4); }
+.cp-event[data-cat="world"]   { border-left-color: rgba(6,182,212,0.5); }
+
+.cp-event__time {
+  color: rgba(6, 182, 212, 0.5);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.cp-event__badge {
+  display: inline-block;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  background: rgba(6, 182, 212, 0.14);
+  color: var(--accent);
+  flex-shrink: 0;
+  text-transform: uppercase;
+}
+
+.cp-event__badge--faction { background: rgba(239,68,68,0.12); color: #ef4444; }
+.cp-event__badge--economy { background: rgba(251,191,36,0.12); color: #fbbf24; }
+.cp-event__badge--hacker  { background: rgba(52,211,153,0.12); color: #34d399; }
+.cp-event__badge--npc     { background: rgba(99,102,241,0.12); color: #6366f1; }
+.cp-event__badge--world   { background: rgba(6,182,212,0.14);  color: #06b6d4; }
+
+.cp-event__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.cp-event__title {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--fg);
+  margin-bottom: 2px;
+}
+
+.cp-event__desc {
+  font-size: 10px;
+  color: var(--fg-dim);
+  line-height: 1.4;
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+
+.cp-event__scene-tag {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  color: rgba(6, 182, 212, 0.45);
+  margin-top: 2px;
+}

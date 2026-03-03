@@ -427,6 +427,26 @@
         </div>
       </div>
     </section>
+
+    <!-- ──── CITY PULSE ──── -->
+    <section class="intel-panel intel-panel--full" id="panel-city-pulse" aria-label="City Pulse">
+      <div class="panel-header">
+        <span class="panel-badge">📡</span>
+        <span class="panel-title">CITY PULSE</span>
+        <div class="city-pulse-filters" id="city-pulse-filters">
+          <button class="cp-filter-btn cp-filter-btn--active" data-cat="">ALL</button>
+          <button class="cp-filter-btn" data-cat="npc">NPC</button>
+          <button class="cp-filter-btn" data-cat="faction">FACTION</button>
+          <button class="cp-filter-btn" data-cat="world">WORLD</button>
+          <button class="cp-filter-btn" data-cat="hacker">HACKER</button>
+          <button class="cp-filter-btn" data-cat="economy">ECONOMY</button>
+        </div>
+        <button class="panel-refresh-btn" id="cp-refresh-btn" title="Refresh" aria-label="Refresh city pulse">↻</button>
+      </div>
+      <div class="panel-body" id="city-pulse-feed" role="feed" aria-label="City pulse events">
+        <div class="feed-placeholder">Scanning city frequencies…</div>
+      </div>
+    </section>
   </main><!-- /intel-layout -->
   <!-- Mission Control auto-refresh -->
   <script>

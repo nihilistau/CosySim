@@ -95,9 +95,10 @@ class IntelHubScene(BaseScene):
         self._push_thread: Optional[threading.Thread] = None
         self._register_routes()
         self._register_socketio()
-        # Register bench and TTS routes for the HUD + voice support
+        # Register bench, TTS, and world events routes
         self.register_bench_route(self._app, None)
         self.register_tts_route(self._app)
+        self.register_world_events_route(self._app)
 
     # ── BaseScene interface ────────────────────────────────────────────────────
 
