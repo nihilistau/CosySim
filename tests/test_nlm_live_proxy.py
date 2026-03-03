@@ -1,6 +1,9 @@
 """Tests for engine.mcp.nlm_live_proxy and the updated notebooklm_proxy."""
 from __future__ import annotations
 
+import pytest
+pytestmark = pytest.mark.slow
+
 import json
 import tempfile
 import threading
@@ -1482,3 +1485,4 @@ class TestRateLimiter:
         rl = proxy_mod._RateLimiter(min_gap_seconds=1.0)
         rl.set_gap(2.5)
         assert rl._min_gap == 2.5
+

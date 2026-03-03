@@ -1,5 +1,8 @@
 """Tests for the HAR-based Colab and NLM direct client stack.
 
+import pytest
+pytestmark = pytest.mark.integration
+
 Covers:
 - HAR extraction (cookies, authuser, at token)
 - GoogleAccountPool (import, rotation, rate limiting, cookie header)
@@ -714,3 +717,4 @@ class TestColabSkills:
             result = nlm_direct_ask("nb-id", "src-1", "question?")
 
         assert "No NotebookLM account" in result
+

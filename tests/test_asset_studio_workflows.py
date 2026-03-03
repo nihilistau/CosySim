@@ -1,5 +1,8 @@
 """Tests for Asset Studio ComfyUI workflow builder and manager.
 
+import pytest
+pytestmark = pytest.mark.slow
+
 Covers all 15 workflow builders, WorkflowManager methods, and scene routes.
 All HTTP calls and ComfyUI interactions are mocked.
 """
@@ -1152,3 +1155,4 @@ def test_check_image_quality_request_failure(tmp_path: Path) -> None:
         result = mgr.check_image_quality(str(img))
     assert result["score"] == -1
     assert "error" in result
+

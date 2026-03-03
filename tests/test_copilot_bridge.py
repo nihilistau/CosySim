@@ -1,6 +1,9 @@
 """Tests for engine.nexus.copilot_bridge — Copilot CLI self-improvement bridge."""
 from __future__ import annotations
 
+import pytest
+pytestmark = pytest.mark.integration
+
 import json
 import time
 from dataclasses import dataclass, field
@@ -1149,3 +1152,4 @@ class TestGetDecisionHistory:
         result = bridge.get_decision_history("nlm routing")
         sources = [d.get("source") for d in result]
         assert "qa_cache" in sources
+

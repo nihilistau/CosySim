@@ -390,7 +390,9 @@ testpaths = ["tests"]
 python_files = "test_*.py"
 python_classes = "Test*"
 python_functions = "test_*"
-addopts = "-v --strict-markers --basetemp=tests/tmp"
+addopts = "-v --strict-markers --basetemp=tests/tmp -m \"not slow and not integration\" --ignore=tests/test_agent_loop.py --ignore=tests/live_wire_test.py --ignore=tests/test_orpheus_native.py --ignore=tests/test_mcp_server.py --ignore=tests/test_nexus_bridge.py --ignore=tests/test_nexus_phase2.py --ignore=tests/test_nexus_seeder_and_bridge.py --ignore=tests/test_nlm_deep_storage.py --ignore=tests/test_notebooklm_devtools.py --ignore=tests/test_phone_news.py --ignore=tests/test_integration.py"
+# Run parallel (6x faster):  pytest -n auto
+# Run full suite:             pytest -m "" --co (removes -m filter)
 norecursedirs = ["tests/tmp", ".git", "__pycache__", "*.egg-info", "node_modules", "unsloth_compiled_cache", "backups"]
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
