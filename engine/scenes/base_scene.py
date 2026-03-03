@@ -468,9 +468,285 @@ class BaseScene(ABC):
                 _bslogger.debug("HUD: active_events unavailable: %s", _exc)
                 data.setdefault("active_events", [])
 
+            # Inventory (compact HUD snapshot)
+            try:
+                from engine.world.inventory import get_inventory
+                data["inventory"] = get_inventory().to_hud_dict()
+            except Exception as _exc:
+                _bslogger.debug("HUD: inventory unavailable: %s", _exc)
+                data.setdefault("inventory", [])
+
+            # Crew (compact HUD snapshot)
+            try:
+                from engine.world.crew import get_crew_manager
+                data["crew"] = get_crew_manager().to_hud_dict()
+            except Exception as _exc:
+                _bslogger.debug("HUD: crew unavailable: %s", _exc)
+                data.setdefault("crew", [])
+
             data["scene"] = scene_ref.scene_name
             data["updated_at"] = int(_time.time() * 1000)
             return Response(_json.dumps(data), mimetype="application/json")
+
+    def register_announcer_route(self, app) -> None:
+        """Register ``/api/announcer/feed`` on a Flask app.
+
+        Returns recent world events, faction updates, and NPC broadcasts
+        formatted for the CosyAnnouncer widget. Call in ``start()`` after
+        creating the Flask app::
+
+            self.register_announcer_route(self.app)
+        """
+        import json as _json
+        import time as _time
+        from flask import Response
+
+        scene_ref = self
+
+        if not getattr(app, "_announcer_route_registered", False):
+            app._announcer_route_registered = True  # type: ignore[attr-defined]
+
+            @app.route("/api/announcer/feed")
+            def _announcer_feed():
+                items: list = []
+
+                # Pull recent world events
+                try:
+                    from engine.world.world_state import get_world_state
+                    ws = get_world_state()
+                    for ev in ws.get_active_events()[:8]:
+                        items.append({
+                            "category": getattr(ev, "event_type", "event"),
+                            "text": ev.name if hasattr(ev, "name") else str(ev),
+                            "ts": int(_time.time()),
+                        })
+                except Exception:
+                    pass
+
+                # Pull recent world event log
+                try:
+                    from engine.world.world_state import get_world_state
+                    ws = get_world_state()
+                    log = ws.get_event_log(limit=10) if hasattr(ws, "get_event_log") else []
+                    for entry in log:
+                        items.append({
+                            "category": entry.get("type", "world"),
+                            "text": entry.get("description") or entry.get("title") or "",
+                            "ts": entry.get("ts", int(_time.time())),
+                        })
+                except Exception:
+                    pass
+
+                # Faction standings changes as rumour feed
+                try:
+                    from engine.world.player_state import get_player_state
+                    ps = get_player_state()
+                    standings = ps.faction_standings
+                    for faction, val in standings.items():
+                        if abs(val) >= 20:
+                            rel = "allies with" if val > 0 else "hostile toward"
+                            items.append({
+                                "category": "faction",
+                                "text": f"{faction} ({rel} you, standing: {val:+d})",
+                                "ts": int(_time.time()),
+                            })
+                except Exception:
+                    pass
+
+                # Scene-specific announcements (scenes can override this)
+                try:
+                    scene_items = scene_ref._get_announcer_items()
+                    items.extend(scene_items)
+                except Exception:
+                    pass
+
+                # De-dupe and trim
+                seen: set = set()
+                unique: list = []
+                for item in items:
+                    key = item.get("text", "")[:60]
+                    if key and key not in seen:
+                        seen.add(key)
+                        unique.append(item)
+
+                return Response(
+                    _json.dumps({
+                        "ok": True,
+                        "items": unique[:20],
+                        "station_index": hash(scene_ref.scene_name) % 5,
+                        "scene": scene_ref.scene_name,
+                    }),
+                    mimetype="application/json",
+                )
+
+    def _get_announcer_items(self) -> list:
+        """Override in scene to provide scene-specific announcer content.
+
+        Returns:
+            List of dicts with ``category``, ``text``, and optional ``ts``.
+        """
+        return []
+
+    def register_inventory_route(self, app) -> None:
+        """Register ``/api/inventory`` REST endpoints on a Flask app.
+
+        Endpoints:
+            GET  /api/inventory          — full inventory snapshot
+            POST /api/inventory/add      — add item (json: item_id, quantity)
+            POST /api/inventory/remove   — remove item (json: item_id, quantity)
+            POST /api/inventory/equip    — equip item to slot (json: item_id, slot)
+            POST /api/inventory/unequip  — unequip item (json: item_id)
+        """
+        import json as _json
+        from flask import Response, request as _req
+
+        if getattr(app, "_inventory_route_registered", False):
+            return
+        app._inventory_route_registered = True  # type: ignore[attr-defined]
+
+        @app.route("/api/inventory")
+        def _inv_get():
+            try:
+                from engine.world.inventory import get_inventory
+                return Response(_json.dumps(get_inventory().to_dict()), mimetype="application/json")
+            except Exception as exc:
+                return Response(_json.dumps({"error": str(exc)}), status=500, mimetype="application/json")
+
+        @app.route("/api/inventory/add", methods=["POST"])
+        def _inv_add():
+            try:
+                body = _req.get_json(force=True) or {}
+                from engine.world.inventory import get_inventory
+                item = get_inventory().add_item(
+                    body["item_id"],
+                    quantity=int(body.get("quantity", 1)),
+                    auto_equip=bool(body.get("auto_equip", False)),
+                )
+                if item is None:
+                    return Response(_json.dumps({"ok": False, "error": "Inventory full"}), status=400, mimetype="application/json")
+                return Response(_json.dumps({"ok": True, "item": item.to_dict()}), mimetype="application/json")
+            except Exception as exc:
+                return Response(_json.dumps({"error": str(exc)}), status=500, mimetype="application/json")
+
+        @app.route("/api/inventory/remove", methods=["POST"])
+        def _inv_remove():
+            try:
+                body = _req.get_json(force=True) or {}
+                from engine.world.inventory import get_inventory
+                ok = get_inventory().remove_item(body["item_id"], quantity=int(body.get("quantity", 1)))
+                return Response(_json.dumps({"ok": ok}), mimetype="application/json")
+            except Exception as exc:
+                return Response(_json.dumps({"error": str(exc)}), status=500, mimetype="application/json")
+
+        @app.route("/api/inventory/equip", methods=["POST"])
+        def _inv_equip():
+            try:
+                body = _req.get_json(force=True) or {}
+                from engine.world.inventory import get_inventory
+                ok = get_inventory().equip(body["item_id"], body["slot"])
+                return Response(_json.dumps({"ok": ok}), mimetype="application/json")
+            except Exception as exc:
+                return Response(_json.dumps({"error": str(exc)}), status=500, mimetype="application/json")
+
+        @app.route("/api/inventory/unequip", methods=["POST"])
+        def _inv_unequip():
+            try:
+                body = _req.get_json(force=True) or {}
+                from engine.world.inventory import get_inventory
+                ok = get_inventory().unequip(body["item_id"])
+                return Response(_json.dumps({"ok": ok}), mimetype="application/json")
+            except Exception as exc:
+                return Response(_json.dumps({"error": str(exc)}), status=500, mimetype="application/json")
+
+    def register_crew_route(self, app) -> None:
+        """Register ``/api/crew`` REST endpoints on a Flask app.
+
+        Endpoints:
+            GET  /api/crew                    — full crew state
+            POST /api/crew/recruit            — recruit NPC (json: character_id, role, notes)
+            POST /api/crew/dismiss            — dismiss member (json: character_id, reason)
+            POST /api/crew/loyalty            — adjust loyalty (json: character_id, delta, reason)
+            POST /api/crew/operation/start    — start operation (json: op_type, crew, label, ...)
+            GET  /api/crew/operation/check    — check + complete ready operations
+        """
+        import json as _json
+        from flask import Response, request as _req
+
+        if getattr(app, "_crew_route_registered", False):
+            return
+        app._crew_route_registered = True  # type: ignore[attr-defined]
+
+        @app.route("/api/crew")
+        def _crew_get():
+            try:
+                from engine.world.crew import get_crew_manager
+                return Response(_json.dumps(get_crew_manager().to_dict()), mimetype="application/json")
+            except Exception as exc:
+                return Response(_json.dumps({"error": str(exc)}), status=500, mimetype="application/json")
+
+        @app.route("/api/crew/recruit", methods=["POST"])
+        def _crew_recruit():
+            try:
+                body = _req.get_json(force=True) or {}
+                from engine.world.crew import get_crew_manager
+                ok, msg = get_crew_manager().recruit(
+                    body["character_id"],
+                    role=body.get("role", "unknown"),
+                    notes=body.get("notes", ""),
+                )
+                return Response(_json.dumps({"ok": ok, "message": msg}), mimetype="application/json")
+            except Exception as exc:
+                return Response(_json.dumps({"error": str(exc)}), status=500, mimetype="application/json")
+
+        @app.route("/api/crew/dismiss", methods=["POST"])
+        def _crew_dismiss():
+            try:
+                body = _req.get_json(force=True) or {}
+                from engine.world.crew import get_crew_manager
+                ok = get_crew_manager().dismiss(body["character_id"], reason=body.get("reason", ""))
+                return Response(_json.dumps({"ok": ok}), mimetype="application/json")
+            except Exception as exc:
+                return Response(_json.dumps({"error": str(exc)}), status=500, mimetype="application/json")
+
+        @app.route("/api/crew/loyalty", methods=["POST"])
+        def _crew_loyalty():
+            try:
+                body = _req.get_json(force=True) or {}
+                from engine.world.crew import get_crew_manager
+                val = get_crew_manager().adjust_loyalty(
+                    body["character_id"],
+                    delta=float(body.get("delta", 0)),
+                    reason=body.get("reason", ""),
+                )
+                return Response(_json.dumps({"ok": val is not None, "loyalty": val}), mimetype="application/json")
+            except Exception as exc:
+                return Response(_json.dumps({"error": str(exc)}), status=500, mimetype="application/json")
+
+        @app.route("/api/crew/operation/start", methods=["POST"])
+        def _crew_op_start():
+            try:
+                body = _req.get_json(force=True) or {}
+                from engine.world.crew import get_crew_manager
+                ok, msg = get_crew_manager().start_operation(
+                    op_type=body["op_type"],
+                    assigned_crew=list(body.get("crew", [])),
+                    label=body.get("label", ""),
+                    duration_secs=float(body.get("duration_secs", 3600)),
+                    reward_credits=int(body.get("reward_credits", 0)),
+                    reward_xp=int(body.get("reward_xp", 25)),
+                )
+                return Response(_json.dumps({"ok": ok, "message": msg}), mimetype="application/json")
+            except Exception as exc:
+                return Response(_json.dumps({"error": str(exc)}), status=500, mimetype="application/json")
+
+        @app.route("/api/crew/operation/check")
+        def _crew_op_check():
+            try:
+                from engine.world.crew import get_crew_manager
+                results = get_crew_manager().check_operations()
+                return Response(_json.dumps({"ok": True, "completed": results}), mimetype="application/json")
+            except Exception as exc:
+                return Response(_json.dumps({"error": str(exc)}), status=500, mimetype="application/json")
 
     def register_bench_route(self, app, socketio=None) -> None:
         """Register ``/api/bench/metrics`` on a Flask app.

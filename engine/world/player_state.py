@@ -1,12 +1,17 @@
-"""Player state manager for CosySim v0.75 "NEON CITY".
+"""Player state manager for CosySim v0.81 "THE LIVING CITY".
 
 Tracks the player's persistent state across all scenes:
 - credits (₵) — in-game currency
 - reputation (0–100) — social standing in Neon City
 - heat (0–100) — law/corp attention level
+- health (0–100) — physical condition
+- hunger (0–100) — hunger level (0=starving, 100=full)
+- energy (0–100) — stamina/energy level
+- skills — dict of skill_name → level (0–5)
+- implants — list of active cyberware implants
 - faction_standings — per-faction rep (–100 to +100)
 - active_location — current scene display name
-- inventory — list of item names
+- inventory — list of InventoryItem dicts
 
 The PlayerState singleton integrates with WorldSim:
 - economy_tick events adjust credits ±
@@ -44,6 +49,20 @@ logger = logging.getLogger(__name__)
 _DEFAULT_CREDITS: int = 5000
 _DEFAULT_REP: int = 50
 _DEFAULT_HEAT: int = 0
+_DEFAULT_HEALTH: int = 100
+_DEFAULT_HUNGER: int = 80
+_DEFAULT_ENERGY: int = 100
+
+_DEFAULT_SKILLS: Dict[str, int] = {
+    "hacking": 1,
+    "combat": 1,
+    "stealth": 1,
+    "social": 1,
+    "tech": 1,
+    "driving": 0,
+    "medicine": 0,
+    "trading": 0,
+}
 
 _FACTION_NAMES: List[str] = [
     "OmniCorp",
@@ -95,6 +114,11 @@ class PlayerState:
         self._credits: int = _DEFAULT_CREDITS
         self._rep: int = _DEFAULT_REP
         self._heat: int = _DEFAULT_HEAT
+        self._health: int = _DEFAULT_HEALTH
+        self._hunger: int = _DEFAULT_HUNGER
+        self._energy: int = _DEFAULT_ENERGY
+        self._skills: Dict[str, int] = dict(_DEFAULT_SKILLS)
+        self._implants: List[str] = []
         self._faction_standings: Dict[str, int] = {f: 0 for f in _FACTION_NAMES}
         self._active_location: str = "NEON CITY"
         self._inventory: List[str] = []
@@ -136,9 +160,197 @@ class PlayerState:
         with self._lock:
             return dict(self._faction_standings)
 
+    @property
+    def health(self) -> int:
+        """Current health (0–100)."""
+        with self._lock:
+            return self._health
+
+    @property
+    def hunger(self) -> int:
+        """Current hunger level (0=starving, 100=full)."""
+        with self._lock:
+            return self._hunger
+
+    @property
+    def energy(self) -> int:
+        """Current energy / stamina (0–100)."""
+        with self._lock:
+            return self._energy
+
+    @property
+    def skills(self) -> Dict[str, int]:
+        """Skill levels dict (copy)."""
+        with self._lock:
+            return dict(self._skills)
+
+    @property
+    def implants(self) -> List[str]:
+        """Active cyberware implants (copy)."""
+        with self._lock:
+            return list(self._implants)
+
     # ------------------------------------------------------------------
-    # Credits
+    # Vitals
     # ------------------------------------------------------------------
+
+    def set_health(self, value: int, reason: str = "") -> int:
+        """Set health value (clamped 0–100).
+
+        Args:
+            value: New health value.
+            reason: Optional context label.
+
+        Returns:
+            New health value.
+        """
+        with self._lock:
+            self._health = max(0, min(100, int(value)))
+            self._last_updated = time.time()
+            val = self._health
+        self._emit_hud_update({"health": val, "reason": reason})
+        self._schedule_auto_save()
+        return val
+
+    def adjust_health(self, delta: int, reason: str = "") -> int:
+        """Adjust health by delta (clamped 0–100).
+
+        Args:
+            delta: Positive = heal, negative = damage.
+            reason: Optional context label.
+
+        Returns:
+            New health value.
+        """
+        with self._lock:
+            self._health = max(0, min(100, self._health + delta))
+            self._last_updated = time.time()
+            val = self._health
+        self._emit_hud_update({"health": val, "reason": reason})
+        self._schedule_auto_save()
+        return val
+
+    def set_hunger(self, value: int, reason: str = "") -> int:
+        """Set hunger level (0=starving, 100=full).
+
+        Args:
+            value: New hunger value (0–100).
+            reason: Optional context label.
+
+        Returns:
+            New hunger value.
+        """
+        with self._lock:
+            self._hunger = max(0, min(100, int(value)))
+            self._last_updated = time.time()
+            val = self._hunger
+        self._emit_hud_update({"hunger": val, "reason": reason})
+        self._schedule_auto_save()
+        return val
+
+    def set_energy(self, value: int, reason: str = "") -> int:
+        """Set energy level (0–100).
+
+        Args:
+            value: New energy value.
+            reason: Optional context label.
+
+        Returns:
+            New energy value.
+        """
+        with self._lock:
+            self._energy = max(0, min(100, int(value)))
+            self._last_updated = time.time()
+            val = self._energy
+        self._emit_hud_update({"energy": val, "reason": reason})
+        self._schedule_auto_save()
+        return val
+
+    # ------------------------------------------------------------------
+    # Skills
+    # ------------------------------------------------------------------
+
+    def get_skill(self, skill: str) -> int:
+        """Return level for a skill (0–5). Returns 0 if unknown.
+
+        Args:
+            skill: Skill name.
+
+        Returns:
+            Skill level (0–5).
+        """
+        with self._lock:
+            return self._skills.get(skill, 0)
+
+    def improve_skill(self, skill: str, amount: int = 1) -> int:
+        """Increase a skill level (clamped 0–5).
+
+        Args:
+            skill: Skill name.
+            amount: Points to add (default 1).
+
+        Returns:
+            New skill level.
+        """
+        with self._lock:
+            current = self._skills.get(skill, 0)
+            self._skills[skill] = max(0, min(5, current + amount))
+            self._last_updated = time.time()
+            level = self._skills[skill]
+        self._emit_hud_update({"skill_up": skill, "level": level})
+        self._schedule_auto_save()
+        logger.info("Skill %s improved to %d", skill, level)
+        return level
+
+    def set_skill(self, skill: str, level: int) -> int:
+        """Set a skill to a specific level.
+
+        Args:
+            skill: Skill name.
+            level: Skill level (0–5).
+
+        Returns:
+            New skill level (clamped 0–5).
+        """
+        with self._lock:
+            self._skills[skill] = max(0, min(5, int(level)))
+            self._last_updated = time.time()
+            lvl = self._skills[skill]
+        self._schedule_auto_save()
+        return lvl
+
+    # ------------------------------------------------------------------
+    # Implants
+    # ------------------------------------------------------------------
+
+    def add_implant(self, implant: str) -> None:
+        """Install a cyberware implant.
+
+        Args:
+            implant: Implant name.
+        """
+        with self._lock:
+            if implant not in self._implants:
+                self._implants.append(implant)
+                self._last_updated = time.time()
+        self._emit_hud_update({"implant_added": implant})
+        self._schedule_auto_save()
+
+    def remove_implant(self, implant: str) -> bool:
+        """Remove a cyberware implant.
+
+        Args:
+            implant: Implant name.
+
+        Returns:
+            True if found and removed.
+        """
+        with self._lock:
+            if implant in self._implants:
+                self._implants.remove(implant)
+                self._last_updated = time.time()
+                return True
+            return False
 
     def earn_credits(self, amount: int, reason: str = "") -> int:
         """Add credits to the player's balance.
@@ -379,6 +591,11 @@ class PlayerState:
                 "credits": self._credits,
                 "reputation": self._rep,
                 "heat": self._heat,
+                "health": self._health,
+                "hunger": self._hunger,
+                "energy": self._energy,
+                "skills": dict(self._skills),
+                "implants": list(self._implants),
                 "faction_standings": dict(self._faction_standings),
                 "active_location": self._active_location,
                 "inventory": list(self._inventory),
@@ -424,6 +641,17 @@ class PlayerState:
                 self._credits = int(data.get("credits", _DEFAULT_CREDITS))
                 self._rep = max(0, min(100, int(data.get("reputation", _DEFAULT_REP))))
                 self._heat = max(0, min(100, int(data.get("heat", _DEFAULT_HEAT))))
+                self._health = max(0, min(100, int(data.get("health", _DEFAULT_HEALTH))))
+                self._hunger = max(0, min(100, int(data.get("hunger", _DEFAULT_HUNGER))))
+                self._energy = max(0, min(100, int(data.get("energy", _DEFAULT_ENERGY))))
+                stored_skills = data.get("skills", {})
+                for skill, default in _DEFAULT_SKILLS.items():
+                    self._skills[skill] = max(0, min(5, int(stored_skills.get(skill, default))))
+                # Add any extra skills from save
+                for skill, level in stored_skills.items():
+                    if skill not in self._skills:
+                        self._skills[skill] = max(0, min(5, int(level)))
+                self._implants = list(data.get("implants", []))
                 stored_factions = data.get("faction_standings", {})
                 for f in _FACTION_NAMES:
                     self._faction_standings[f] = int(stored_factions.get(f, 0))
@@ -442,6 +670,11 @@ class PlayerState:
             self._credits = _DEFAULT_CREDITS
             self._rep = _DEFAULT_REP
             self._heat = _DEFAULT_HEAT
+            self._health = _DEFAULT_HEALTH
+            self._hunger = _DEFAULT_HUNGER
+            self._energy = _DEFAULT_ENERGY
+            self._skills = dict(_DEFAULT_SKILLS)
+            self._implants = []
             self._faction_standings = {f: 0 for f in _FACTION_NAMES}
             self._active_location = "NEON CITY"
             self._inventory = []
@@ -516,9 +749,19 @@ def get_player_state() -> PlayerState:
 
 
 def reset_player_state() -> None:
-    """Reset the singleton (test helper only)."""
+    """Reset the singleton to default values (test helper only).
+
+    Creates a fresh PlayerState with no file loaded so tests start
+    from a clean default state regardless of any persisted data.
+    """
     global _PLAYER_STATE
+    # Temporarily point the class save path at a non-existent tmp file so
+    # the new instance's __init__ won't load persisted data.
+    _orig_save_path = PlayerState._SAVE_PATH
+    PlayerState._SAVE_PATH = Path("data") / "_test_player_state_NONEXISTENT.json"
     with _PS_LOCK:
         if _PLAYER_STATE is not None and _PLAYER_STATE._save_timer is not None:
             _PLAYER_STATE._save_timer.cancel()
         _PLAYER_STATE = None
+        _PLAYER_STATE = PlayerState()
+    PlayerState._SAVE_PATH = _orig_save_path

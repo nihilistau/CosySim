@@ -1,0 +1,724 @@
+{
+  "phone": {
+    "name": "phone",
+    "url": "http://localhost:5555/",
+    "errors": [
+      "[error] Failed to load resource: the server responded with a status of 404 (NOT FOUND)",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    ],
+    "warnings": [],
+    "checks": {
+      "thread list visible": {
+        "error": "Page.query_selector: Unexpected token \"=\" while parsing css selector \".thread-list, css=#thread-list, css=.contact-list\". Did you mean to CSS.escape it?"
+      },
+      "message input": {
+        "error": "Page.query_selector: Unexpected token \"=\" while parsing css selector \"input[type=text], css=textarea[placeholder*=message i], css=#msg-input\". Did you mean to CSS.escape it?"
+      },
+      "nav bar present": {
+        "error": "Page.query_selector: Unexpected token \"=\" while parsing css selector \".cs-navbar, css=nav\". Did you mean to CSS.escape it?"
+      }
+    },
+    "network_errors": [
+      "FAILED: http://localhost:5557/api/health \u2014 net::ERR_ABORTED",
+      "FAILED: http://localhost:5558/api/health \u2014 net::ERR_ABORTED",
+      "FAILED: http://localhost:5559/api/health \u2014 net::ERR_ABORTED",
+      "FAILED: http://localhost:5560/api/health \u2014 net::ERR_ABORTED",
+      "FAILED: http://localhost:5561/api/health \u2014 net::ERR_ABORTED",
+      "FAILED: http://localhost:5562/api/health \u2014 net::ERR_ABORTED",
+      "FAILED: http://localhost:5563/api/health \u2014 net::ERR_ABORTED",
+      "FAILED: http://localhost:5564/api/health \u2014 net::ERR_ABORTED",
+      "FAILED: http://localhost:5565/api/health \u2014 net::ERR_ABORTED",
+      "FAILED: http://localhost:5567/api/health \u2014 net::ERR_ABORTED",
+      "FAILED: http://localhost:5570/api/health \u2014 net::ERR_ABORTED",
+      "FAILED: http://localhost:5566/api/health \u2014 net::ERR_ABORTED",
+      "FAILED: http://localhost:8501/api/health \u2014 net::ERR_ABORTED",
+      "FAILED: http://localhost:5560/api/health \u2014 net::ERR_CONNECTION_REFUSED",
+      "FAILED: http://localhost:8501/api/health \u2014 net::ERR_CONNECTION_REFUSED",
+      "FAILED: http://localhost:5566/api/health \u2014 net::ERR_CONNECTION_REFUSED",
+      "FAILED: http://localhost:5567/api/health \u2014 net::ERR_CONNECTION_REFUSED",
+      "FAILED: http://localhost:5559/api/health \u2014 net::ERR_CONNECTION_REFUSED",
+      "FAILED: http://localhost:5562/api/health \u2014 net::ERR_CONNECTION_REFUSED",
+      "FAILED: http://localhost:5563/api/health \u2014 net::ERR_CONNECTION_REFUSED",
+      "FAILED: http://localhost:5570/api/health \u2014 net::ERR_CONNECTION_REFUSED",
+      "FAILED: http://localhost:5564/api/health \u2014 net::ERR_CONNECTION_REFUSED",
+      "FAILED: http://localhost:5558/api/health \u2014 net::ERR_CONNECTION_REFUSED",
+      "FAILED: http://localhost:5561/api/health \u2014 net::ERR_CONNECTION_REFUSED",
+      "FAILED: http://localhost:5565/api/health \u2014 net::ERR_CONNECTION_REFUSED",
+      "FAILED: http://localhost:5557/api/health \u2014 net::ERR_CONNECTION_REFUSED"
+    ],
+    "status": 200,
+    "screenshot": "scripts\\inspection_output\\phone.png",
+    "phone_deep": {
+      "threadListEl": false,
+      "contactListEl": false,
+      "msgContainerEl": false,
+      "hasSocket": true,
+      "allContainers": [
+        {
+          "tag": "DIV",
+          "id": "cs-assistant-messages",
+          "class": "cs-assistant-messages",
+          "children": 1
+        },
+        {
+          "tag": "DIV",
+          "id": "",
+          "class": "cs-contact-list",
+          "children": 5
+        },
+        {
+          "tag": "DIV",
+          "id": "",
+          "class": "cs-contact-item",
+          "children": 3
+        },
+        {
+          "tag": "DIV",
+          "id": "",
+          "class": "cs-contact-avatar",
+          "children": 0
+        },
+        {
+          "tag": "DIV",
+          "id": "",
+          "class": "cs-contact-info",
+          "children": 2
+        },
+        {
+          "tag": "DIV",
+          "id": "",
+          "class": "cs-contact-name",
+          "children": 0
+        },
+        {
+          "tag": "DIV",
+          "id": "",
+          "class": "cs-contact-preview",
+          "children": 0
+        },
+        {
+          "tag": "DIV",
+          "id": "",
+          "class": "cs-contact-meta",
+          "children": 2
+        },
+        {
+          "tag": "DIV",
+          "id": "",
+          "class": "cs-contact-time",
+          "children": 0
+        },
+        {
+          "tag": "DIV",
+          "id": "",
+          "class": "cs-contact-badge",
+          "children": 0
+        },
+        {
+          "tag": "DIV",
+          "id": "",
+          "class": "cs-contact-item",
+          "children": 3
+        },
+        {
+          "tag": "DIV",
+          "id": "",
+          "class": "cs-contact-avatar",
+          "children": 0
+        },
+        {
+          "tag": "DIV",
+          "id": "",
+          "class": "cs-contact-info",
+          "children": 2
+        },
+        {
+          "tag": "DIV",
+          "id": "",
+          "class": "cs-contact-name",
+          "children": 0
+        },
+        {
+          "tag": "DIV",
+          "id": "",
+          "class": "cs-contact-preview",
+          "children": 0
+        },
+        {
+          "tag": "DIV",
+          "id": "",
+          "class": "cs-contact-meta",
+          "children": 2
+        },
+        {
+          "tag": "DIV",
+          "id": "",
+          "class": "cs-contact-time",
+          "children": 0
+        },
+        {
+          "tag": "DIV",
+          "id": "",
+          "class": "cs-contact-badge",
+          "children": 0
+        },
+        {
+          "tag": "DIV",
+          "id": "",
+          "class": "cs-contact-item",
+          "children": 3
+        },
+        {
+          "tag": "DIV",
+          "id": "",
+          "class": "cs-contact-avatar",
+          "children": 0
+        },
+        {
+          "tag": "DIV",
+          "id": "",
+          "class": "cs-contact-info",
+          "children": 2
+        },
+        {
+          "tag": "DIV",
+          "id": "",
+          "class": "cs-contact-name",
+          "children": 0
+        },
+        {
+          "tag": "DIV",
+          "id": "",
+          "class": "cs-contact-preview",
+          "children": 0
+        },
+        {
+          "tag": "DIV",
+          "id": "",
+          "class": "cs-contact-meta",
+          "children": 2
+        },
+        {
+          "tag": "DIV",
+          "id": "",
+          "class": "cs-contact-time",
+          "children": 0
+        },
+        {
+          "tag": "DIV",
+          "id": "",
+          "class": "cs-contact-badge",
+          "children": 0
+        },
+        {
+          "tag": "DIV",
+          "id": "",
+          "class": "cs-contact-item",
+          "children": 3
+        },
+        {
+          "tag": "DIV",
+          "id": "",
+          "class": "cs-contact-avatar",
+          "children": 0
+        },
+        {
+          "tag": "DIV",
+          "id": "",
+          "class": "cs-contact-info",
+          "children": 2
+        },
+        {
+          "tag": "DIV",
+          "id": "",
+          "class": "cs-contact-name",
+          "children": 0
+        },
+        {
+          "tag": "DIV",
+          "id": "",
+          "class": "cs-contact-preview",
+          "children": 0
+        },
+        {
+          "tag": "DIV",
+          "id": "",
+          "class": "cs-contact-meta",
+          "children": 2
+        },
+        {
+          "tag": "DIV",
+          "id": "",
+          "class": "cs-contact-time",
+          "children": 0
+        },
+        {
+          "tag": "DIV",
+          "id": "",
+          "class": "cs-contact-badge",
+          "children": 0
+        },
+        {
+          "tag": "DIV",
+          "id": "",
+          "class": "cs-contact-item",
+          "children": 3
+        },
+        {
+          "tag": "DIV",
+          "id": "",
+          "class": "cs-contact-avatar",
+          "children": 0
+        },
+        {
+          "tag": "DIV",
+          "id": "",
+          "class": "cs-contact-info",
+          "children": 2
+        },
+        {
+          "tag": "DIV",
+          "id": "",
+          "class": "cs-contact-name",
+          "children": 0
+        },
+        {
+          "tag": "DIV",
+          "id": "",
+          "class": "cs-contact-preview",
+          "children": 0
+        },
+        {
+          "tag": "DIV",
+          "id": "",
+          "class": "cs-contact-meta",
+          "children": 2
+        },
+        {
+          "tag": "DIV",
+          "id": "",
+          "class": "cs-contact-time",
+          "children": 0
+        },
+        {
+          "tag": "DIV",
+          "id": "",
+          "class": "cs-contact-badge",
+          "children": 0
+        }
+      ]
+    }
+  },
+  "bedroom": {
+    "name": "bedroom",
+    "url": "http://localhost:5556/",
+    "errors": [
+      "[error] Failed to find a valid digest in the 'integrity' attribute for resource 'https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.4/socket.io.min.js' with computed SHA-512 integrity 'skuhu6jj+sQnhLq1Txsack8VfnIrX8wL+MTFilYlFFT/NuLJm7eya7zOROs39Jy5cjASMEWqxLzijRVmKhsqWQ=='. The resource has been blocked.",
+      "[pageerror] Identifier 'SCENE_PORTS' has already been declared",
+      "[error] Failed to load resource: the server responded with a status of 404 (NOT FOUND)",
+      "[error] Failed to load resource: the server responded with a status of 404 (NOT FOUND)",
+      "[error] Failed to load resource: the server responded with a status of 404 (NOT FOUND)",
+      "[pageerror] io is not defined",
+      "[error] Failed to load resource: the server responded with a status of 404 (NOT FOUND)",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    ],
+    "warnings": [],
+    "checks": {
+      "content warning overlay": {
+        "found": false
+      },
+      "header visible": {
+        "error": "Page.query_selector: Unexpected token \"=\" while parsing css selector \".scene-header, css=header\". Did you mean to CSS.escape it?"
+      },
+      "black overlay on top": {
+        "exists": false
+      },
+      "side panel": {
+        "found": false
+      }
+    },
+    "network_errors": [
+      "FAILED: http://localhost:5556/shared/static/css/aria_widget.css \u2014 net::ERR_ABORTED",
+      "FAILED: http://localhost:5557/api/health \u2014 net::ERR_ABORTED",
+      "FAILED: http://localhost:5558/api/health \u2014 net::ERR_ABORTED",
+      "FAILED: http://localhost:5559/api/health \u2014 net::ERR_ABORTED",
+      "FAILED: http://localhost:5560/api/health \u2014 net::ERR_ABORTED",
+      "FAILED: http://localhost:5561/api/health \u2014 net::ERR_ABORTED",
+      "FAILED: http://localhost:5562/api/health \u2014 net::ERR_ABORTED",
+      "FAILED: http://localhost:5563/api/health \u2014 net::ERR_ABORTED",
+      "FAILED: http://localhost:5564/api/health \u2014 net::ERR_ABORTED",
+      "FAILED: http://localhost:5565/api/health \u2014 net::ERR_ABORTED",
+      "FAILED: http://localhost:5567/api/health \u2014 net::ERR_ABORTED",
+      "FAILED: http://localhost:5570/api/health \u2014 net::ERR_ABORTED",
+      "FAILED: http://localhost:5566/api/health \u2014 net::ERR_ABORTED",
+      "FAILED: http://localhost:8501/api/health \u2014 net::ERR_ABORTED",
+      "FAILED: http://localhost:5562/api/health \u2014 net::ERR_CONNECTION_REFUSED",
+      "FAILED: http://localhost:5559/api/health \u2014 net::ERR_CONNECTION_REFUSED",
+      "FAILED: http://localhost:5563/api/health \u2014 net::ERR_CONNECTION_REFUSED",
+      "FAILED: http://localhost:5565/api/health \u2014 net::ERR_CONNECTION_REFUSED",
+      "FAILED: http://localhost:5570/api/health \u2014 net::ERR_CONNECTION_REFUSED",
+      "FAILED: http://localhost:5561/api/health \u2014 net::ERR_CONNECTION_REFUSED",
+      "FAILED: http://localhost:8501/api/health \u2014 net::ERR_CONNECTION_REFUSED",
+      "FAILED: http://localhost:5558/api/health \u2014 net::ERR_CONNECTION_REFUSED",
+      "FAILED: http://localhost:5557/api/health \u2014 net::ERR_CONNECTION_REFUSED",
+      "FAILED: http://localhost:5560/api/health \u2014 net::ERR_CONNECTION_REFUSED",
+      "FAILED: http://localhost:5567/api/health \u2014 net::ERR_CONNECTION_REFUSED",
+      "FAILED: http://localhost:5566/api/health \u2014 net::ERR_CONNECTION_REFUSED",
+      "FAILED: http://localhost:5564/api/health \u2014 net::ERR_CONNECTION_REFUSED",
+      "FAILED: http://localhost:5565/api/health \u2014 net::ERR_CONNECTION_REFUSED",
+      "FAILED: http://localhost:5563/api/health \u2014 net::ERR_CONNECTION_REFUSED",
+      "FAILED: http://localhost:5567/api/health \u2014 net::ERR_CONNECTION_REFUSED",
+      "FAILED: http://localhost:5564/api/health \u2014 net::ERR_CONNECTION_REFUSED",
+      "FAILED: http://localhost:5558/api/health \u2014 net::ERR_CONNECTION_REFUSED",
+      "FAILED: http://localhost:5559/api/health \u2014 net::ERR_CONNECTION_REFUSED",
+      "FAILED: http://localhost:5562/api/health \u2014 net::ERR_CONNECTION_REFUSED",
+      "FAILED: http://localhost:5557/api/health \u2014 net::ERR_CONNECTION_REFUSED",
+      "FAILED: http://localhost:5560/api/health \u2014 net::ERR_CONNECTION_REFUSED",
+      "FAILED: http://localhost:5561/api/health \u2014 net::ERR_CONNECTION_REFUSED"
+    ],
+    "status": 200,
+    "screenshot": "scripts\\inspection_output\\bedroom.png",
+    "bedroom_deep": {
+      "contentWarning": null,
+      "headerTag": null,
+      "headerZ": null,
+      "headerClick": null,
+      "blockingElements": [
+        {
+          "id": "cs-hud-backdrop",
+          "class": "cs-hud__backdrop",
+          "z": 488,
+          "pos": "fixed",
+          "display": "block",
+          "opacity": "0",
+          "visibility": "visible",
+          "w": 1400,
+          "h": 900
+        },
+        {
+          "id": "penthouse-gate",
+          "class": "penthouse-gate",
+          "z": 9999,
+          "pos": "fixed",
+          "display": "flex",
+          "opacity": "1",
+          "visibility": "visible",
+          "w": 1400,
+          "h": 900
+        },
+        {
+          "id": "cs-phone-panel",
+          "class": "cs-phone-panel",
+          "z": 9000,
+          "pos": "fixed",
+          "display": "flex",
+          "opacity": "1",
+          "visibility": "visible",
+          "w": 421,
+          "h": 900
+        }
+      ],
+      "sessionWarned": null
+    }
+  },
+  "asset_studio": {
+    "name": "asset_studio",
+    "url": "http://localhost:5568/",
+    "errors": [
+      "[error] Failed to load resource: the server responded with a status of 404 (NOT FOUND)",
+      "[pageerror] io is not defined",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "[error] Failed to load resource: the server responded with a status of 404 (NOT FOUND)",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    ],
+    "warnings": [],
+    "checks": {
+      "tab buttons": {
+        "found": true,
+        "visible": true,
+        "box": {
+          "x": 8,
+          "y": 160.60000610351562,
+          "width": 144,
+          "height": 37.19999694824219
+        }
+      },
+      "library tab active": {
+        "found": true,
+        "visible": true,
+        "box": {
+          "x": 184.8000030517578,
+          "y": 114,
+          "width": 1176.0000457763672,
+          "height": 232
+        }
+      },
+      "generate buttons": {
+        "found": true,
+        "visible": false,
+        "box": null
+      },
+      "navbar present": {
+        "found": true,
+        "visible": true,
+        "box": {
+          "x": 0,
+          "y": 0,
+          "width": 1384.800048828125,
+          "height": 38.79999923706055
+        }
+      }
+    },
+    "network_errors": [
+      "FAILED: http://localhost:5568/shared/js/socket.io.min.js \u2014 net::ERR_ABORTED",
+      "FAILED: http://localhost:5563/api/health \u2014 net::ERR_CONNECTION_REFUSED",
+      "FAILED: http://localhost:5567/api/health \u2014 net::ERR_CONNECTION_REFUSED",
+      "FAILED: http://localhost:5565/api/health \u2014 net::ERR_CONNECTION_REFUSED",
+      "FAILED: http://localhost:5562/api/health \u2014 net::ERR_CONNECTION_REFUSED",
+      "FAILED: http://localhost:5559/api/health \u2014 net::ERR_CONNECTION_REFUSED",
+      "FAILED: http://localhost:5564/api/health \u2014 net::ERR_CONNECTION_REFUSED",
+      "FAILED: http://localhost:5560/api/health \u2014 net::ERR_CONNECTION_REFUSED",
+      "FAILED: http://localhost:5557/api/health \u2014 net::ERR_CONNECTION_REFUSED",
+      "FAILED: http://localhost:5558/api/health \u2014 net::ERR_CONNECTION_REFUSED",
+      "FAILED: http://localhost:5561/api/health \u2014 net::ERR_CONNECTION_REFUSED",
+      "FAILED: http://localhost:5570/api/health \u2014 net::ERR_ABORTED",
+      "FAILED: http://localhost:5566/api/health \u2014 net::ERR_ABORTED",
+      "FAILED: http://localhost:8501/api/health \u2014 net::ERR_ABORTED",
+      "FAILED: http://localhost:5570/api/health \u2014 net::ERR_CONNECTION_REFUSED",
+      "FAILED: http://localhost:5562/api/health \u2014 net::ERR_CONNECTION_REFUSED",
+      "FAILED: http://localhost:5567/api/health \u2014 net::ERR_CONNECTION_REFUSED",
+      "FAILED: http://localhost:5560/api/health \u2014 net::ERR_CONNECTION_REFUSED",
+      "FAILED: http://localhost:5566/api/health \u2014 net::ERR_CONNECTION_REFUSED",
+      "FAILED: http://localhost:5557/api/health \u2014 net::ERR_CONNECTION_REFUSED",
+      "FAILED: http://localhost:5565/api/health \u2014 net::ERR_CONNECTION_REFUSED",
+      "FAILED: http://localhost:8501/api/health \u2014 net::ERR_CONNECTION_REFUSED",
+      "FAILED: http://localhost:5564/api/health \u2014 net::ERR_CONNECTION_REFUSED",
+      "FAILED: http://localhost:5559/api/health \u2014 net::ERR_CONNECTION_REFUSED",
+      "FAILED: http://localhost:5561/api/health \u2014 net::ERR_CONNECTION_REFUSED",
+      "FAILED: http://localhost:5558/api/health \u2014 net::ERR_CONNECTION_REFUSED",
+      "FAILED: http://localhost:5563/api/health \u2014 net::ERR_CONNECTION_REFUSED"
+    ],
+    "status": 200,
+    "screenshot": "scripts\\inspection_output\\asset_studio.png",
+    "asset_studio_deep": {
+      "tabCount": 10,
+      "tabInfo": [
+        {
+          "tab": "library",
+          "active": true,
+          "visible": true,
+          "disabled": false,
+          "pointerEvents": "auto"
+        },
+        {
+          "tab": "images",
+          "active": false,
+          "visible": true,
+          "disabled": false,
+          "pointerEvents": "auto"
+        },
+        {
+          "tab": "portraits",
+          "active": false,
+          "visible": true,
+          "disabled": false,
+          "pointerEvents": "auto"
+        },
+        {
+          "tab": "voice",
+          "active": false,
+          "visible": true,
+          "disabled": false,
+          "pointerEvents": "auto"
+        },
+        {
+          "tab": "video",
+          "active": false,
+          "visible": true,
+          "disabled": false,
+          "pointerEvents": "auto"
+        },
+        {
+          "tab": "items",
+          "active": false,
+          "visible": true,
+          "disabled": false,
+          "pointerEvents": "auto"
+        },
+        {
+          "tab": "svg",
+          "active": false,
+          "visible": true,
+          "disabled": false,
+          "pointerEvents": "auto"
+        },
+        {
+          "tab": "audio",
+          "active": false,
+          "visible": true,
+          "disabled": false,
+          "pointerEvents": "auto"
+        },
+        {
+          "tab": "tuning",
+          "active": false,
+          "visible": true,
+          "disabled": false,
+          "pointerEvents": "auto"
+        },
+        {
+          "tab": "settings",
+          "active": false,
+          "visible": true,
+          "disabled": false,
+          "pointerEvents": "auto"
+        }
+      ],
+      "sidebarRect": {
+        "x": 0,
+        "y": 90,
+        "w": 161,
+        "h": 852
+      },
+      "navbarPresent": true,
+      "hudPresent": false,
+      "hudOverTop": false,
+      "hitTestOnTab": {
+        "tag": "SPAN",
+        "id": "",
+        "class": "cs-tab-label"
+      },
+      "scriptErrors": []
+    }
+  },
+  "hub": {
+    "name": "hub",
+    "url": "http://localhost:8500/",
+    "errors": [
+      "[error] Failed to load resource: the server responded with a status of 404 (NOT FOUND)",
+      "[error] Failed to load resource: the server responded with a status of 404 (NOT FOUND)",
+      "[error] Failed to load resource: the server responded with a status of 404 (NOT FOUND)",
+      "[error] Failed to load resource: the server responded with a status of 404 (NOT FOUND)",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    ],
+    "warnings": [],
+    "checks": {},
+    "network_errors": [
+      "FAILED: http://localhost:8500/shared/static/css/navbar_v2.css \u2014 net::ERR_ABORTED",
+      "FAILED: http://localhost:8500/shared/static/js/navbar_v2.js \u2014 net::ERR_ABORTED",
+      "FAILED: http://localhost:5557/api/health \u2014 net::ERR_ABORTED",
+      "FAILED: http://localhost:5558/api/health \u2014 net::ERR_ABORTED",
+      "FAILED: http://localhost:5559/api/health \u2014 net::ERR_ABORTED",
+      "FAILED: http://localhost:5560/api/health \u2014 net::ERR_ABORTED",
+      "FAILED: http://localhost:5561/api/health \u2014 net::ERR_ABORTED",
+      "FAILED: http://localhost:5562/api/health \u2014 net::ERR_ABORTED",
+      "FAILED: http://localhost:5563/api/health \u2014 net::ERR_ABORTED",
+      "FAILED: http://localhost:5564/api/health \u2014 net::ERR_ABORTED",
+      "FAILED: http://localhost:5565/api/health \u2014 net::ERR_ABORTED",
+      "FAILED: http://localhost:5567/api/health \u2014 net::ERR_ABORTED",
+      "FAILED: http://localhost:5570/api/health \u2014 net::ERR_ABORTED",
+      "FAILED: http://localhost:5566/api/health \u2014 net::ERR_ABORTED",
+      "FAILED: http://localhost:8501/api/health \u2014 net::ERR_ABORTED",
+      "FAILED: http://localhost:5565/api/health \u2014 net::ERR_CONNECTION_REFUSED",
+      "FAILED: http://localhost:5561/api/health \u2014 net::ERR_CONNECTION_REFUSED",
+      "FAILED: http://localhost:5562/api/health \u2014 net::ERR_CONNECTION_REFUSED",
+      "FAILED: http://localhost:5558/api/health \u2014 net::ERR_CONNECTION_REFUSED",
+      "FAILED: http://localhost:5559/api/health \u2014 net::ERR_CONNECTION_REFUSED",
+      "FAILED: http://localhost:5560/api/health \u2014 net::ERR_CONNECTION_REFUSED",
+      "FAILED: http://localhost:5567/api/health \u2014 net::ERR_CONNECTION_REFUSED",
+      "FAILED: http://localhost:5557/api/health \u2014 net::ERR_CONNECTION_REFUSED",
+      "FAILED: http://localhost:5563/api/health \u2014 net::ERR_CONNECTION_REFUSED",
+      "FAILED: http://localhost:5564/api/health \u2014 net::ERR_CONNECTION_REFUSED"
+    ],
+    "status": 200,
+    "screenshot": "scripts\\inspection_output\\hub.png"
+  },
+  "system_ctrl": {
+    "name": "system_ctrl",
+    "url": "http://localhost:5575/",
+    "errors": [],
+    "warnings": [],
+    "checks": {},
+    "network_errors": [
+      "FAILED: http://localhost:5575/ \u2014 net::ERR_CONNECTION_REFUSED"
+    ],
+    "status": "ERROR: Page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:5575/\nCall log:\n  - navigating to \"http://localhost:5575/\", waiting until \"domcontentloaded\"\n",
+    "screenshot": null
+  },
+  "canvas": {
+    "name": "canvas",
+    "url": "http://localhost:5590/",
+    "errors": [
+      "[error] Failed to load resource: the server responded with a status of 404 (Not Found)"
+    ],
+    "warnings": [],
+    "checks": {},
+    "network_errors": [],
+    "status": 200,
+    "screenshot": "scripts\\inspection_output\\canvas.png"
+  }
+}

@@ -275,9 +275,12 @@ class TestQwen3TTSEngine:
             assert wf.getnchannels() == 1
 
     def test_load_models_graceful_when_no_models(self, tmp_path):
+        from engine.tts import qwen3_server
         from engine.tts.qwen3_server import Qwen3TTSEngine
-        engine = Qwen3TTSEngine()
-        engine.load_models(model_dir=str(tmp_path))
+        # Patch _PRETRAINED_DIR so the engine can't find real models on disk
+        with patch.object(qwen3_server, "_PRETRAINED_DIR", tmp_path / "nonexistent"):
+            engine = Qwen3TTSEngine()
+            engine.load_models(model_dir=str(tmp_path))
         assert engine.is_loaded is False
 
     def test_chunk_text_short(self):

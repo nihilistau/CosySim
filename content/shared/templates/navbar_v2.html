@@ -17,8 +17,8 @@
 {% set scene_accent  = scene_accent  | default('#00e5ff') %}
 
 {# ── Asset URLs ───────────────────────────────────────────────── #}
-{% set _css_url = '/shared/static/css/navbar_v2.css' %}
-{% set _js_url  = '/shared/static/js/navbar_v2.js'  %}
+{% set _css_url = '/shared/css/navbar_v2.css' %}
+{% set _js_url  = '/shared/js/navbar_v2.js'  %}
 
 <link rel="stylesheet" href="{{ _css_url }}">
 
@@ -224,7 +224,7 @@
 {% include 'neon_hud.html' %}
 
 <script src="{{ _js_url }}" defer></script>
-<script src="/shared/static/js/cosysim-transitions.js" defer></script>
+<script src="/shared/js/cosysim-transitions.js" defer></script>
 <script>
   document.addEventListener('DOMContentLoaded', function () {
     window.cosyNavbar = new CosyNavbar({
@@ -234,3 +234,4 @@
     window.cosyNavbar.init();
   });
 </script>
+

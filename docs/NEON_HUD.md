@@ -348,4 +348,219 @@ NPC dialogue, and economy events.
 - [LIVING\_WORLD.md](./LIVING_WORLD.md) — WorldSim, economy tick, event lifecycle
 - [THE\_GRID.md](./THE_GRID.md) — Scene that most heavily uses PlayerState
 - [WORLD\_SYSTEM.md](./WORLD_SYSTEM.md) — WorldSim daemon, EventBus, NPCScheduler
-- [SKILLS.md](./SKILLS.md) — `world` skill pack (10 skills)
+- [SKILLS.md](./SKILLS.md) — `world` skill pack (10 skills), `inventory` (7), `crew` (8)
+
+---
+
+## HUD v2 — Glass Slide Panels
+
+> v0.81b "THE LIVING CITY" — complete HUD overhaul with slide panels, phone overlay, and world announcer.
+
+### Overview
+
+HUD v2 adds two **glass slide panels** flanking the viewport and a **World Announcer** widget
+in the bottom bar. The existing 32px Neon HUD strip is retained; the panels extend it with full
+player vitals, inventory, crew, phone access, and live world feed.
+
+```
+┌──────────────────┬────────────────────────────────────────────┬──────────────────┐
+│  LEFT PANEL      │            SCENE VIEWPORT                  │  RIGHT PANEL     │
+│  (slide in ◀)   │                                            │  (▶ slide in)    │
+│                  │                                            │                  │
+│  ❤ HEALTH  ████  │                                            │  📱 PHONE        │
+│  🍖 HUNGER ██░░  │      [scene content]                       │  🗺 QUICK TRAVEL  │
+│  ⚡ ENERGY ███░  │                                            │  👥 CREW         │
+│                  │                                            │  🔧 SYSTEM       │
+│  ₵ 4850          │                                            │  🔍 NEXUS SEARCH │
+│  ★ 42  🌡 15     │                                            │                  │
+│                  │                                            │                  │
+│  [IMPLANTS]      │                                            │                  │
+│  [INVENTORY 12]  │                                            │                  │
+│  [SKILL PIPS]    │                                            │                  │
+└──────────────────┴──[ ₵ 4,850  ★42  🌡15  📍THE GRID  ●●●●●● ]┴──────────────────┘
+                                     [ WORLD ANNOUNCER TICKER ]
+```
+
+### Left Slide Panel
+
+Toggled with keyboard shortcut **I** or the inventory button in the Neon HUD strip.
+
+| Widget | Content |
+|--------|---------|
+| Vitals bars | `health`, `hunger`, `energy` — animated progress bars (0–100) |
+| Economy row | credits (₵), reputation (★), heat (🌡) |
+| Cyberdeck status | model name, storage used |
+| Implants list | active cyberware implants from `PlayerState.implants` |
+| Inventory grid | 12-slot visual grid (3×4), item icons, equipped indicator |
+| Skill pips | 8 default skills displayed as named pip rows |
+
+**CSS animation:** panel slides in from the left edge (`transform: translateX(-100%) → 0`) with
+a 240ms ease-out transition. Panel has `backdrop-filter: blur(12px)` glass effect.
+
+### Right Slide Panel
+
+Toggled with keyboard shortcut **C** (command panel).
+
+| Widget | Content |
+|--------|---------|
+| GhostSignal phone launch | Opens phone overlay (keyboard **P**) |
+| Quick travel | Destination buttons wired to scene nav |
+| Crew status | Crew count, current operation if active |
+| System health | Coloured dots: LMStudio, Nexus, TTS, ComfyUI |
+| Nexus search | Input → `GET /api/nexus/quick_search?q=` → inline results |
+
+### Phone Overlay
+
+Keyboard shortcut **P** (or "Launch GhostSignal" button in right panel).
+
+- Lazy-loaded `<iframe>` pointing to `http://localhost:5555` (SIGNAL scene)
+- Slide-in from right with 300ms ease-out
+- Detach button opens SIGNAL in a new browser tab
+- Overlay backdrop blurs the scene behind it
+- Socket.IO passthrough — SIGNAL's own HUD syncs independently
+
+### World Announcer Widget
+
+A persistent bottom ticker below the Neon HUD strip. Keyboard shortcut **A**.
+
+**5 Station Themes:**
+
+| Station | Theme | Colour |
+|---------|-------|--------|
+| `NEON_FM` | Music / culture | `--cs-accent` neon green |
+| `DARKWIRE` | Hacker / underground | `--cs-gold` |
+| `CORP_FEED` | OmniCorp press | `--cs-amber` |
+| `GHOST_NET` | Ghost_Net dispatches | `--cs-info` cyan |
+| `STREET_ECHO` | Street-level events | `--cs-glass-border` neutral |
+
+**7 Badge Categories:**
+
+`BREAKING` · `ALERT` · `FACTION` · `ECONOMY` · `WORLD` · `INTEL` · `GHOST`
+
+**Socket.IO event:** `announcer_update` — server pushes new announcements, client
+appends to the scrolling ticker. Falls back to periodic `GET /api/announcer/feed` polling.
+
+**Fallback messages** are rendered when the announcer has no live feed (e.g., Nexus offline).
+
+---
+
+### PlayerState — v0.81b Expanded Fields
+
+The `PlayerState` singleton gained five new fields in v0.81b:
+
+| Field | Type | Default | Range | Description |
+|-------|------|---------|-------|-------------|
+| `health` | `int` | `100` | `0 – 100` | Physical health |
+| `hunger` | `int` | `80` | `0 – 100` | Satiation level (100 = full) |
+| `energy` | `int` | `100` | `0 – 100` | Stamina / fatigue |
+| `skills` | `dict[str, int]` | 8 defaults | `0 – 100` | Named skill levels |
+| `implants` | `list[str]` | `[]` | — | Active cyberware implant IDs |
+
+**Default skills dict:**
+
+```python
+{
+    "hacking":    10,
+    "stealth":    10,
+    "persuasion": 10,
+    "combat":     10,
+    "tech":       10,
+    "medical":    10,
+    "driving":    10,
+    "athletics":  10,
+}
+```
+
+### Updated `to_dict()` Response
+
+`GET /api/hud/state` now returns a richer payload:
+
+```json
+{
+  "credits": 4850,
+  "reputation": 42,
+  "heat": 15,
+  "health": 87,
+  "hunger": 60,
+  "energy": 95,
+  "active_location": "THE GRID / MARKET",
+  "faction_standings": { "omnicorp": 15, "ghost_net": -10, "..." : 0 },
+  "skills": { "hacking": 55, "stealth": 30, "..." : 10 },
+  "implants": ["reflex_booster", "optic_cam"],
+  "inventory_snapshot": [
+    { "slot": 0, "item_id": "pistol_mk2", "qty": 1, "equipped": true },
+    ...
+  ],
+  "crew_snapshot": [
+    { "name": "Viktor", "role": "muscle", "loyalty": 72, "level": 2 },
+    ...
+  ]
+}
+```
+
+---
+
+### New REST API Endpoints (v0.81b)
+
+#### `/api/announcer/feed`
+
+```
+GET /api/announcer/feed?limit=20
+```
+
+Returns the latest world announcements as a JSON array. Each item:
+
+```json
+{
+  "id": "ann_001",
+  "station": "DARKWIRE",
+  "badge": "INTEL",
+  "text": "Ghost_Net operatives spotted in THE GRID sector 3.",
+  "timestamp": "2026-03-12T14:22:00Z"
+}
+```
+
+#### `/api/inventory` — 5 endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/inventory` | Full inventory + equipped items |
+| `POST` | `/api/inventory/add` | Add item `{item_id, qty}` |
+| `POST` | `/api/inventory/remove` | Remove item `{item_id, qty}` |
+| `POST` | `/api/inventory/equip` | Equip item to slot `{item_id, slot}` |
+| `POST` | `/api/inventory/unequip` | Unequip from slot `{slot}` |
+
+#### `/api/crew` — 6 endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/crew` | All crew members + active operations |
+| `POST` | `/api/crew/recruit` | Recruit NPC `{character_id}` |
+| `POST` | `/api/crew/dismiss` | Dismiss crew member `{member_id}` |
+| `POST` | `/api/crew/loyalty` | Adjust loyalty `{member_id, delta}` |
+| `POST` | `/api/crew/operation/start` | Start operation `{type, member_ids}` |
+| `GET` | `/api/crew/operation/check` | Poll active operations |
+
+---
+
+### Keyboard Shortcuts
+
+| Key | Action |
+|-----|--------|
+| `I` | Toggle left panel (inventory/vitals) |
+| `C` | Toggle right panel (command/crew/phone) |
+| `P` | Toggle phone overlay (SIGNAL iframe) |
+| `A` | Toggle world announcer expanded view |
+
+---
+
+### HUD Micro-Animations
+
+| Effect | Trigger | CSS |
+|--------|---------|-----|
+| Button ripple | Click on any HUD button | `@keyframes ripple` |
+| Stat bar transition | Any vitals change | `transition: width 400ms ease` |
+| Credits bounce | Credit change | `@keyframes credits-bounce` |
+| Inventory hover | Mouse over grid slot | `transform: scale(1.08)` |
+| Panel slide | Open/close | `transform: translateX` 240ms ease-out |
+| Announcer scroll | Continuous | `@keyframes ticker-scroll` |

@@ -135,7 +135,7 @@ class TestNeonCitySkillsRegistered:
         fake_skill_mod = MagicMock()
         fake_skill_mod.skill = dummy_skill
         fake_skill_mod.SkillCategory = dummy_cat
-        sys.modules["engine.skills.skill"] = fake_skill_mod
+        monkeypatch.setitem(sys.modules, "engine.skills.skill", fake_skill_mod)
 
         # Force reimport
         for key in list(sys.modules.keys()):
@@ -169,7 +169,7 @@ class TestGetFactionStatusSkill:
         fake_skill_mod = MagicMock()
         fake_skill_mod.skill = MagicMock(side_effect=lambda **kw: (lambda fn: fn))
         fake_skill_mod.SkillCategory = MagicMock(GAME="game")
-        sys.modules["engine.skills.skill"] = fake_skill_mod
+        monkeypatch.setitem(sys.modules, "engine.skills.skill", fake_skill_mod)
 
         for key in list(sys.modules.keys()):
             if key.startswith(_SKILLS_MOD):
@@ -219,12 +219,12 @@ class TestCityNewsFeedSkill:
     """Unit-test the city_news_feed skill function."""
 
     @pytest.fixture(autouse=True)
-    def _setup(self) -> None:
+    def _setup(self, monkeypatch: pytest.MonkeyPatch) -> None:
         _mock_engine_modules()
         fake_skill_mod = MagicMock()
         fake_skill_mod.skill = MagicMock(side_effect=lambda **kw: (lambda fn: fn))
         fake_skill_mod.SkillCategory = MagicMock(GAME="game")
-        sys.modules["engine.skills.skill"] = fake_skill_mod
+        monkeypatch.setitem(sys.modules, "engine.skills.skill", fake_skill_mod)
 
         for key in list(sys.modules.keys()):
             if key.startswith(_SKILLS_MOD):
@@ -283,12 +283,12 @@ class TestCreditExchangeSkill:
     """Unit-test the credit_exchange skill function."""
 
     @pytest.fixture(autouse=True)
-    def _setup(self) -> None:
+    def _setup(self, monkeypatch: pytest.MonkeyPatch) -> None:
         _mock_engine_modules()
         fake_skill_mod = MagicMock()
         fake_skill_mod.skill = MagicMock(side_effect=lambda **kw: (lambda fn: fn))
         fake_skill_mod.SkillCategory = MagicMock(GAME="game")
-        sys.modules["engine.skills.skill"] = fake_skill_mod
+        monkeypatch.setitem(sys.modules, "engine.skills.skill", fake_skill_mod)
         for key in list(sys.modules.keys()):
             if key.startswith(_SKILLS_MOD):
                 del sys.modules[key]

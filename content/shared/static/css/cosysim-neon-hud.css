@@ -492,3 +492,1649 @@
 
   .cs-hud__panel-stats { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   HUD v2 — Toggle Buttons, Slide Panels, Phone Overlay
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Toggle buttons in the HUD strip ─────────────────────────────────────── */
+
+.cs-hud__toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.25);
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.4);
+  color: rgba(255, 255, 255, 0.55);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: border-color 0.2s, color 0.2s, background 0.2s, transform 0.15s;
+  position: relative;
+  overflow: visible;
+}
+
+.cs-hud__toggle:hover {
+  border-color: rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.7);
+  color: var(--cs-scene-accent, #00e5ff);
+  background: rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.08);
+}
+
+.cs-hud__toggle:active {
+  transform: scale(0.9);
+}
+
+.cs-hud__toggle--left {
+  margin-right: 4px;
+}
+
+.cs-hud__right-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  margin-left: 4px;
+}
+
+.cs-hud__toggle--active {
+  border-color: var(--cs-scene-accent, #00e5ff) !important;
+  color: var(--cs-scene-accent, #00e5ff) !important;
+  background: rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.12) !important;
+  box-shadow: 0 0 6px rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.3);
+}
+
+/* Phone dot indicator */
+.cs-hud__phone-dot {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 5px #10b981;
+  animation: hud-dot-pulse 2s ease-in-out infinite;
+  display: none;
+}
+
+.cs-hud__phone-dot--active { display: block; }
+
+@keyframes hud-dot-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.6; transform: scale(0.8); }
+}
+
+/* ── Slide Panels (shared base) ───────────────────────────────────────────── */
+
+.cs-hud-slide {
+  position: fixed;
+  top: var(--cs-navbar-height, 48px);
+  bottom: 0;
+  width: 320px;
+  z-index: 600;
+
+  background: rgba(4, 6, 12, 0.96);
+  border: 1px solid rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.15);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+
+  transition: transform 0.38s cubic-bezier(0.4, 0, 0.2, 1),
+              opacity  0.28s ease,
+              box-shadow 0.3s ease;
+  will-change: transform;
+  pointer-events: none;
+  opacity: 0;
+}
+
+.cs-hud-slide[aria-hidden="false"] {
+  opacity: 1;
+  pointer-events: all;
+}
+
+/* Left panel */
+.cs-hud-slide--left {
+  left: 0;
+  transform: translateX(-100%);
+  border-right: 1px solid rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.2);
+  border-left: none;
+}
+
+.cs-hud-slide--left[aria-hidden="false"] {
+  transform: translateX(0);
+  box-shadow: 8px 0 40px rgba(0, 0, 0, 0.7);
+}
+
+/* Right panel */
+.cs-hud-slide--right {
+  right: 0;
+  transform: translateX(100%);
+  width: 340px;
+  border-left: 1px solid rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.2);
+  border-right: none;
+}
+
+.cs-hud-slide--right[aria-hidden="false"] {
+  transform: translateX(0);
+  box-shadow: -8px 0 40px rgba(0, 0, 0, 0.7);
+}
+
+/* ── Panel header ─────────────────────────────────────────────────────────── */
+
+.cs-hud-slide__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.12);
+  flex-shrink: 0;
+  background: rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.04);
+}
+
+.cs-hud-slide__title {
+  font-family: var(--cs-font-mono, 'JetBrains Mono', monospace);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  color: var(--cs-scene-accent, #00e5ff);
+  text-transform: uppercase;
+}
+
+.cs-hud-slide__close {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 3px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.4);
+  cursor: pointer;
+  font-size: 11px;
+  transition: all 0.15s ease;
+}
+
+.cs-hud-slide__close:hover {
+  border-color: rgba(255, 255, 255, 0.4);
+  color: #fff;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+/* ── Panel body & sections ────────────────────────────────────────────────── */
+
+.cs-hud-slide__body {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 8px 0;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.2) transparent;
+}
+
+.cs-hud-slide__body::-webkit-scrollbar { width: 4px; }
+.cs-hud-slide__body::-webkit-scrollbar-track { background: transparent; }
+.cs-hud-slide__body::-webkit-scrollbar-thumb {
+  background: rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.2);
+  border-radius: 2px;
+}
+
+.cs-hud-slide__section {
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.cs-hud-slide__section:last-child { border-bottom: none; }
+
+.cs-hud-slide__section-label {
+  font-family: var(--cs-font-mono, monospace);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.3);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ── Left panel: stat rows ────────────────────────────────────────────────── */
+
+.cs-hud-slide__stat-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  font-family: var(--cs-font-mono, monospace);
+  font-size: 10px;
+}
+
+.cs-hud-slide__stat-icon { font-size: 12px; flex-shrink: 0; }
+
+.cs-hud-slide__stat-name {
+  color: rgba(255, 255, 255, 0.55);
+  min-width: 46px;
+  font-size: 10px;
+}
+
+.cs-hud-slide__bar-wrap {
+  flex: 1;
+  height: 5px;
+  background: rgba(255, 255, 255, 0.07);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.cs-hud-slide__bar {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.5s ease;
+}
+
+.cs-hud-slide__bar--health  { background: #22c55e; box-shadow: 0 0 4px rgba(34, 197, 94, 0.4); }
+.cs-hud-slide__bar--hunger  { background: #f97316; box-shadow: 0 0 4px rgba(249, 115, 22, 0.4); }
+.cs-hud-slide__bar--energy  { background: var(--cs-scene-accent, #00e5ff); box-shadow: 0 0 4px rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.4); }
+
+.cs-hud-slide__stat-val {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 10px;
+  min-width: 24px;
+  text-align: right;
+}
+
+/* ── Key-value rows ───────────────────────────────────────────────────────── */
+
+.cs-hud-slide__kv-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 3px 0;
+  font-family: var(--cs-font-mono, monospace);
+  font-size: 11px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.cs-hud-slide__kv-key { color: rgba(255, 255, 255, 0.4); }
+
+.cs-hud-slide__kv-val {
+  color: rgba(255, 255, 255, 0.85);
+  font-weight: 600;
+}
+
+.cs-hud-slide__kv-val.cs-accent { color: var(--cs-scene-accent, #00e5ff); }
+
+.cs-hud-slide__heat-val { color: #f87171 !important; }
+
+/* ── Cyberdeck grid ───────────────────────────────────────────────────────── */
+
+.cs-hud-slide__tech-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cs-hud-slide__tech-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.02);
+  font-family: var(--cs-font-mono, monospace);
+  font-size: 10px;
+  transition: border-color 0.2s;
+}
+
+.cs-hud-slide__tech-item--active {
+  border-color: rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.3);
+  background: rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.04);
+}
+
+.cs-hud-slide__tech-icon { font-size: 12px; }
+
+.cs-hud-slide__tech-name {
+  flex: 1;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.cs-hud-slide__tech-stat {
+  color: rgba(255, 255, 255, 0.35);
+  font-size: 9px;
+}
+
+/* ── Implants list ────────────────────────────────────────────────────────── */
+
+.cs-hud-slide__implant {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-family: var(--cs-font-mono, monospace);
+  font-size: 10px;
+}
+
+.cs-hud-slide__implant-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.cs-hud-slide__implant-dot--active {
+  background: #10b981;
+  box-shadow: 0 0 5px #10b981;
+  animation: hud-dot-pulse 3s ease-in-out infinite;
+}
+
+.cs-hud-slide__implant-name {
+  flex: 1;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.cs-hud-slide__implant-type {
+  font-size: 8px;
+  letter-spacing: 0.12em;
+  color: var(--cs-scene-accent, #00e5ff);
+  opacity: 0.7;
+}
+
+/* ── Inventory grid ───────────────────────────────────────────────────────── */
+
+.cs-hud-slide__inv-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 4px;
+}
+
+.cs-hud-slide__inv-slot {
+  aspect-ratio: 1;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.02);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+  position: relative;
+}
+
+.cs-hud-slide__inv-slot:hover {
+  border-color: rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.4);
+  background: rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.06);
+}
+
+.cs-hud-slide__inv-slot--occupied {
+  border-color: rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.25);
+}
+
+.cs-hud-slide__count {
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.3);
+  font-weight: normal;
+  margin-left: 4px;
+}
+
+/* ── Skills pips ──────────────────────────────────────────────────────────── */
+
+.cs-hud-slide__skill-list { display: flex; flex-direction: column; gap: 5px; }
+
+.cs-hud-slide__skill-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-family: var(--cs-font-mono, monospace);
+  font-size: 10px;
+}
+
+.cs-hud-slide__skill-name { color: rgba(255, 255, 255, 0.6); }
+
+.cs-hud-slide__skill-pips {
+  display: flex;
+  gap: 3px;
+}
+
+.pip {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  transition: background 0.3s, box-shadow 0.3s;
+}
+
+.pip--active {
+  background: var(--cs-scene-accent, #00e5ff);
+  border-color: var(--cs-scene-accent, #00e5ff);
+  box-shadow: 0 0 4px rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.5);
+}
+
+/* ── Right panel: phone launch button ────────────────────────────────────── */
+
+.cs-hud-slide__section--phone { background: rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.03); }
+
+.cs-hud-slide__phone-launch {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.06);
+  border: 1px solid rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.25);
+  border-radius: 6px;
+  color: rgba(255, 255, 255, 0.85);
+  cursor: pointer;
+  font-family: var(--cs-font-mono, monospace);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  transition: all 0.2s ease;
+  margin-bottom: 8px;
+  text-align: left;
+}
+
+.cs-hud-slide__phone-launch:hover {
+  background: rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.12);
+  border-color: var(--cs-scene-accent, #00e5ff);
+  box-shadow: 0 0 12px rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.2);
+  transform: translateY(-1px);
+}
+
+.cs-hud-slide__phone-launch:active { transform: translateY(0) scale(0.98); }
+
+.cs-hud-slide__phone-launch-icon { font-size: 18px; }
+
+.cs-hud-slide__phone-launch-label { flex: 1; }
+
+.cs-hud-slide__phone-launch-status {
+  font-size: 9px;
+  color: #10b981;
+  letter-spacing: 0.1em;
+  animation: hud-dot-pulse 2s ease-in-out infinite;
+}
+
+.cs-hud-slide__phone-notifs {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.cs-hud-slide__notif-pill {
+  padding: 2px 6px;
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  border-radius: 10px;
+  font-family: var(--cs-font-mono, monospace);
+  font-size: 9px;
+  color: #10b981;
+}
+
+/* ── Quick travel nav grid ────────────────────────────────────────────────── */
+
+.cs-hud-slide__nav-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+}
+
+.cs-hud-slide__nav-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 8px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 4px;
+  color: rgba(255, 255, 255, 0.55);
+  font-family: var(--cs-font-mono, monospace);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-decoration: none;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cs-hud-slide__nav-btn:hover {
+  border-color: rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.4);
+  color: var(--cs-scene-accent, #00e5ff);
+  background: rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.05);
+  transform: translateY(-1px);
+}
+
+/* ── Crew list ────────────────────────────────────────────────────────────── */
+
+.cs-hud-slide__crew-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 32px;
+}
+
+.cs-hud-slide__crew-empty {
+  color: rgba(255, 255, 255, 0.25);
+  font-family: var(--cs-font-mono, monospace);
+  font-size: 10px;
+  font-style: italic;
+  padding: 4px 0;
+}
+
+.cs-hud-slide__crew-member {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 4px;
+  font-family: var(--cs-font-mono, monospace);
+  font-size: 10px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.cs-hud-slide__crew-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 4px #10b981;
+  flex-shrink: 0;
+}
+
+.cs-hud-slide__crew-dot--offline { background: rgba(255,255,255,0.2); box-shadow: none; }
+
+.cs-hud-slide__crew-name { flex: 1; color: rgba(255, 255, 255, 0.7); }
+.cs-hud-slide__crew-role { color: rgba(255, 255, 255, 0.3); font-size: 9px; }
+
+/* ── System status dots ───────────────────────────────────────────────────── */
+
+.cs-hud-slide__sys-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.cs-hud-slide__sys-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--cs-font-mono, monospace);
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.cs-hud-slide__sys-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.15);
+  flex-shrink: 0;
+  transition: background 0.3s, box-shadow 0.3s;
+}
+
+.cs-hud-slide__sys-dot--online {
+  background: #10b981;
+  box-shadow: 0 0 5px #10b981;
+  animation: hud-dot-pulse 3s ease-in-out infinite;
+}
+
+.cs-hud-slide__sys-dot--offline { background: #f87171; }
+
+.cs-hud-slide__sys-link {
+  display: block;
+  width: 100%;
+  padding: 6px 10px;
+  text-align: center;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  color: rgba(255, 255, 255, 0.45);
+  font-family: var(--cs-font-mono, monospace);
+  font-size: 10px;
+  text-decoration: none;
+  letter-spacing: 0.05em;
+  transition: all 0.18s;
+}
+
+.cs-hud-slide__sys-link:hover {
+  color: rgba(255, 255, 255, 0.8);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+/* ── Nexus search ─────────────────────────────────────────────────────────── */
+
+.cs-hud-slide__search-wrap {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.cs-hud-slide__search-input {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  padding: 5px 8px;
+  color: rgba(255, 255, 255, 0.85);
+  font-family: var(--cs-font-mono, monospace);
+  font-size: 11px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.cs-hud-slide__search-input:focus {
+  border-color: rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.5);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.cs-hud-slide__search-input::placeholder { color: rgba(255, 255, 255, 0.2); }
+
+.cs-hud-slide__search-btn {
+  width: 30px;
+  height: 30px;
+  background: rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.1);
+  border: 1px solid rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.25);
+  border-radius: 4px;
+  color: var(--cs-scene-accent, #00e5ff);
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.18s;
+}
+
+.cs-hud-slide__search-btn:hover {
+  background: rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.2);
+  box-shadow: 0 0 8px rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.3);
+}
+
+.cs-hud-slide__search-results {
+  max-height: 120px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.cs-hud-slide__search-result {
+  padding: 4px 8px;
+  font-family: var(--cs-font-mono, monospace);
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.65);
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 3px;
+  border-left: 2px solid rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.3);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.cs-hud-slide__search-result:hover { background: rgba(255, 255, 255, 0.05); }
+
+/* ── Phone Overlay ────────────────────────────────────────────────────────── */
+
+.cs-phone-overlay {
+  position: fixed;
+  top: calc(var(--cs-navbar-height, 48px) + 32px + 16px);
+  right: 360px;
+  width: 375px;
+  height: calc(100vh - var(--cs-navbar-height, 48px) - 32px - 32px);
+  max-height: 780px;
+  z-index: 5000;
+
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8),
+              0 0 0 1px rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.2),
+              inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+
+  transform: translateX(100%) scale(0.9);
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+              opacity 0.25s ease,
+              right 0.3s ease;
+  will-change: transform, opacity;
+
+  display: flex;
+  flex-direction: column;
+  background: #020409;
+}
+
+.cs-phone-overlay[aria-hidden="false"] {
+  transform: translateX(0) scale(1);
+  opacity: 1;
+  pointer-events: all;
+}
+
+/* When right panel is closed, phone moves to edge */
+.cs-phone-overlay--edge {
+  right: 24px;
+}
+
+.cs-phone-overlay__topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px;
+  background: rgba(4, 6, 12, 0.98);
+  border-bottom: 1px solid rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.15);
+  flex-shrink: 0;
+  cursor: move;
+  user-select: none;
+}
+
+.cs-phone-overlay__carrier {
+  font-family: var(--cs-font-mono, monospace);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  color: var(--cs-scene-accent, #00e5ff);
+}
+
+.cs-phone-overlay__actions {
+  display: flex;
+  gap: 6px;
+}
+
+.cs-phone-overlay__btn {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.cs-phone-overlay__btn:hover {
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.cs-phone-overlay__btn--close:hover {
+  background: rgba(248, 113, 113, 0.15);
+  border-color: #f87171;
+  color: #f87171;
+}
+
+.cs-phone-overlay__frame {
+  flex: 1;
+  width: 100%;
+  border: none;
+  background: #020409;
+}
+
+/* ── Responsive ───────────────────────────────────────────────────────────── */
+
+@media (max-width: 900px) {
+  .cs-hud-slide { width: 100%; max-width: 320px; }
+  .cs-phone-overlay { right: 16px; width: calc(100vw - 32px); }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   WORLD ANNOUNCER — street radio / faction news widget
+═══════════════════════════════════════════════════════════════════════════ */
+
+.cs-announcer {
+  position: fixed;
+  bottom: 90px;   /* above HUD strip */
+  right: 24px;
+  z-index: 9500;
+  font-family: var(--cs-font, 'Rajdhani', 'Segoe UI', sans-serif);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .3s;
+}
+
+.cs-announcer--visible {
+  pointer-events: auto;
+  opacity: 1;
+}
+
+/* ── LED indicator ── */
+.cs-announcer__led {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #00f5ff;
+  box-shadow: 0 0 6px #00f5ff;
+  animation: announcer-pulse 2s ease-in-out infinite;
+  z-index: 1;
+}
+
+@keyframes announcer-pulse {
+  0%, 100% { opacity: .5; }
+  50%       { opacity: 1;  }
+}
+
+.cs-announcer__led--flash {
+  animation: none;
+  background: #fff;
+  box-shadow: 0 0 12px #fff, 0 0 4px #00f5ff;
+}
+
+/* ── Toggle tab ── */
+.cs-announcer__toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px 6px 10px;
+  background: rgba(0,245,255,.08);
+  border: 1px solid rgba(0,245,255,.3);
+  border-radius: 8px 8px 0 0;
+  color: #00f5ff;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  cursor: pointer;
+  backdrop-filter: blur(12px);
+  transition: background .2s, border-color .2s;
+  text-transform: uppercase;
+}
+
+.cs-announcer__toggle:hover {
+  background: rgba(0,245,255,.16);
+  border-color: rgba(0,245,255,.6);
+}
+
+.cs-announcer__icon { font-size: 14px; }
+
+/* ── Body panel ── */
+.cs-announcer__body {
+  width: 320px;
+  background: rgba(8,10,16,.92);
+  border: 1px solid rgba(0,245,255,.25);
+  border-bottom: none;
+  border-radius: 10px 0 0 0;
+  backdrop-filter: blur(20px);
+  overflow: hidden;
+  transform-origin: bottom right;
+  transition: transform .25s cubic-bezier(.4,0,.2,1), opacity .25s;
+}
+
+.cs-announcer--collapsed .cs-announcer__body {
+  transform: scaleY(0);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.cs-announcer--collapsed .cs-announcer__toggle {
+  border-radius: 8px;
+}
+
+/* peek: show a slim version of the current item */
+.cs-announcer--peek .cs-announcer__body {
+  transform: scaleY(1);
+  opacity: 1;
+  pointer-events: none;
+  height: 44px;
+  overflow: hidden;
+}
+
+.cs-announcer--peek .cs-announcer__scroll-list,
+.cs-announcer--peek .cs-announcer__header {
+  display: none;
+}
+
+/* ── Header ── */
+.cs-announcer__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(0,245,255,.12);
+}
+
+.cs-announcer__station {
+  flex: 1;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  color: #00f5ff;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cs-announcer__freq {
+  font-size: 10px;
+  color: rgba(255,255,255,.4);
+  white-space: nowrap;
+}
+
+.cs-announcer__controls {
+  display: flex;
+  gap: 2px;
+}
+
+.cs-announcer__ctrl {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  color: rgba(255,255,255,.5);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background .15s, color .15s;
+}
+
+.cs-announcer__ctrl:hover {
+  background: rgba(255,255,255,.08);
+  color: #fff;
+}
+
+.cs-announcer__ctrl--close:hover { color: #ff4455; }
+.cs-announcer__ctrl--active      { color: #00f5ff !important; }
+
+/* ── Feed / current item ── */
+.cs-announcer__feed {
+  padding: 10px;
+  min-height: 56px;
+}
+
+.cs-announcer__item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.cs-announcer__item--enter {
+  animation: announcer-enter .3s ease forwards;
+}
+
+@keyframes announcer-enter {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Badges ── */
+.cs-announcer__badge {
+  flex-shrink: 0;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .8px;
+  text-transform: uppercase;
+  margin-top: 2px;
+}
+
+.cs-announcer__badge--world   { background: rgba(0,245,255,.2);  color: #00f5ff; }
+.cs-announcer__badge--faction { background: rgba(191,0,255,.2);  color: #bf00ff; }
+.cs-announcer__badge--event   { background: rgba(255,215,0,.2);  color: #ffd700; }
+.cs-announcer__badge--npc     { background: rgba(0,255,136,.2);  color: #00ff88; }
+.cs-announcer__badge--crime   { background: rgba(255,68,85,.2);  color: #ff4455; }
+.cs-announcer__badge--market  { background: rgba(255,159,10,.2); color: #ff9f0a; }
+.cs-announcer__badge--system  { background: rgba(120,120,130,.2); color: #999; }
+
+/* ── Announcement text ── */
+.cs-announcer__text {
+  font-size: 12px;
+  color: rgba(255,255,255,.85);
+  line-height: 1.5;
+}
+
+/* ── Recent items list ── */
+.cs-announcer__scroll-list {
+  max-height: 180px;
+  overflow-y: auto;
+  border-top: 1px solid rgba(0,245,255,.1);
+  padding: 4px 0;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0,245,255,.2) transparent;
+}
+
+.cs-announcer__list-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
+  transition: background .15s;
+  border-radius: 4px;
+}
+
+.cs-announcer__list-item:hover {
+  background: rgba(255,255,255,.04);
+}
+
+.cs-announcer__list-item--active {
+  background: rgba(0,245,255,.06);
+}
+
+.cs-announcer__list-text {
+  font-size: 11px;
+  color: rgba(255,255,255,.6);
+  line-height: 1.4;
+}
+
+.cs-announcer__list-item--active .cs-announcer__list-text {
+  color: rgba(255,255,255,.9);
+}
+
+/* ── Pinned state ── */
+.cs-announcer--pinned .cs-announcer__ctrl[id="announcer-pin"] {
+  color: #00f5ff;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   HUD MICRO-ANIMATIONS — polish layer
+═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Button press ripple ── */
+.cs-hud-btn,
+.cs-hud-slide button,
+.cs-hud__toggle,
+.cs-phone-overlay__btn {
+  position: relative;
+  overflow: hidden;
+}
+
+.cs-hud-btn::after,
+.cs-hud-slide button::after,
+.cs-hud__toggle::after,
+.cs-phone-overlay__btn::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at var(--rx,50%) var(--ry,50%), rgba(255,255,255,.25) 0%, transparent 70%);
+  opacity: 0;
+  transition: opacity .4s;
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+.cs-hud-btn:active::after,
+.cs-hud-slide button:active::after,
+.cs-hud__toggle:active::after,
+.cs-phone-overlay__btn:active::after {
+  opacity: 1;
+  transition: opacity 0s;
+}
+
+/* ── Stat bars — smooth transition ── */
+.cs-hud-slide__bar-fill {
+  transition: width .6s cubic-bezier(.4,0,.2,1);
+}
+
+/* ── Credits counter bounce when it changes ── */
+.cs-hud-slide__econ-val {
+  transition: color .3s;
+  display: inline-block;
+}
+
+.cs-hud-slide__econ-val--up   { animation: bounce-up .4s ease; color: #00ff88; }
+.cs-hud-slide__econ-val--down { animation: bounce-dn .4s ease; color: #ff4455; }
+
+@keyframes bounce-up {
+  0%   { transform: translateY(0); }
+  40%  { transform: translateY(-5px); }
+  70%  { transform: translateY(2px); }
+  100% { transform: translateY(0); }
+}
+@keyframes bounce-dn {
+  0%   { transform: translateY(0); }
+  40%  { transform: translateY(5px); }
+  70%  { transform: translateY(-2px); }
+  100% { transform: translateY(0); }
+}
+
+/* ── HUD strip — credits update flash ── */
+.cs-hud__credits--updated {
+  animation: credit-flash .5s ease;
+}
+
+@keyframes credit-flash {
+  0%   { text-shadow: 0 0 0 transparent; }
+  30%  { text-shadow: 0 0 8px #00f5ff; color: #00f5ff; }
+  100% { text-shadow: none; }
+}
+
+/* ── Inventory slot — hover lift ── */
+.cs-hud-slide__inv-slot {
+  transition: transform .15s, box-shadow .15s;
+}
+
+.cs-hud-slide__inv-slot:hover:not(:empty) {
+  transform: translateY(-2px) scale(1.06);
+  box-shadow: 0 4px 12px rgba(0,245,255,.3);
+}
+
+/* ── Skill pip ── */
+.pip {
+  transition: background .3s, box-shadow .3s, transform .2s;
+}
+
+.pip--active {
+  box-shadow: 0 0 5px currentColor;
+}
+
+/* Animate new pip fills */
+.pip--fill-anim {
+  animation: pip-pop .3s cubic-bezier(.34,1.56,.64,1);
+}
+
+@keyframes pip-pop {
+  0%   { transform: scale(0); }
+  60%  { transform: scale(1.3); }
+  100% { transform: scale(1); }
+}
+
+/* ── Slide panels — open/close spring ── */
+.cs-hud-slide {
+  transition: transform .35s cubic-bezier(.4,0,.2,1);
+}
+
+/* ── Phone overlay — spring entrance ── */
+.cs-phone-overlay {
+  transition: transform .4s cubic-bezier(.34,1.1,.64,1), opacity .3s;
+}
+
+/* ── Toggle buttons — active glow ── */
+.cs-hud__toggle--active {
+  box-shadow: 0 0 12px rgba(0,245,255,.5);
+  animation: toggle-pulse 2s ease-in-out infinite;
+}
+
+@keyframes toggle-pulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(0,245,255,.3); }
+  50%       { box-shadow: 0 0 16px rgba(0,245,255,.7); }
+}
+
+/* ── Scroll bounce effect (CSS only, for webkit) ── */
+.cs-hud-slide__body,
+.cs-announcer__scroll-list {
+  overscroll-behavior: contain;
+}
+
+/* ── Thread-item hover ── */
+.cs-hud-slide__crew-member,
+.cs-hud-slide__nav-item {
+  transition: background .15s, transform .15s, border-color .15s;
+}
+
+.cs-hud-slide__crew-member:hover,
+.cs-hud-slide__nav-item:hover {
+  transform: translateX(3px);
+}
+
+/* ── HUD strip stat entry animation ── */
+.cs-hud__stat-val {
+  transition: color .3s;
+}
+
+.cs-hud__stat-val--changed {
+  animation: stat-flash .4s ease;
+}
+
+@keyframes stat-flash {
+  0%   { opacity: 1; }
+  25%  { opacity: .3; }
+  100% { opacity: 1; }
+}
+
+/* ── Faction standing bars ── */
+.cs-hud__faction-bar-fill {
+  transition: width .8s cubic-bezier(.4,0,.2,1), background .5s;
+}
+
+/* ── Event ticker scroll ── */
+.cs-hud__ticker {
+  animation: ticker-scroll 30s linear infinite;
+}
+
+.cs-hud__ticker:hover {
+  animation-play-state: paused;
+}
+
+@keyframes ticker-scroll {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+/* ── Notification dot pulse ── */
+.cs-hud-slide__sys-dot--online {
+  animation: dot-pulse 2.5s ease-in-out infinite;
+}
+
+@keyframes dot-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: .5; }
+}
+
+/* ── HUD opening — fade in ── */
+.cs-hud-strip {
+  animation: hud-fadein .6s ease forwards;
+}
+
+@keyframes hud-fadein {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   VISUAL POLISH v0.81 — depth, gradients, glows, micro-detail
+═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── HUD strip: richer gradient background with accent bleed ── */
+.cs-hud {
+  background:
+    linear-gradient(90deg,
+      rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.04) 0%,
+      rgba(0, 0, 0, 0.88) 20%,
+      rgba(0, 0, 0, 0.88) 80%,
+      rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.04) 100%),
+    rgba(0, 2, 8, 0.92);
+  box-shadow: 0 2px 20px rgba(0, 0, 0, 0.5),
+              0 1px 0 rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.08) inset;
+}
+
+/* ── Slide panels: richer glass with diagonal gradient ── */
+.cs-hud-slide {
+  background:
+    linear-gradient(160deg,
+      rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.03) 0%,
+      rgba(4, 6, 14, 0.97) 35%,
+      rgba(2, 4, 10, 0.98) 100%);
+}
+
+.cs-hud-slide--left[aria-hidden="false"] {
+  box-shadow:
+    12px 0 60px rgba(0, 0, 0, 0.9),
+    4px 0 20px rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.06);
+}
+
+.cs-hud-slide--right[aria-hidden="false"] {
+  box-shadow:
+    -12px 0 60px rgba(0, 0, 0, 0.9),
+    -4px 0 20px rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.06);
+}
+
+/* ── Panel header: stronger accent presence ── */
+.cs-hud-slide__header {
+  background:
+    linear-gradient(90deg,
+      rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.08) 0%,
+      rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.02) 100%);
+  border-bottom: 1px solid rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.2);
+}
+
+/* ── Panel body: fade shadow at top/bottom edges ── */
+.cs-hud-slide__body {
+  background:
+    linear-gradient(180deg, rgba(0,0,0,0.3) 0%, transparent 48px) no-repeat top,
+    linear-gradient(0deg, rgba(0,0,0,0.3) 0%, transparent 48px) no-repeat bottom;
+  background-size: 100% 100%;
+}
+
+/* ── Section labels: accent left-border indicator ── */
+.cs-hud-slide__section-label {
+  color: rgba(255, 255, 255, 0.5);
+  padding-left: 8px;
+  position: relative;
+}
+
+.cs-hud-slide__section-label::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 2px;
+  height: 12px;
+  background: var(--cs-scene-accent, #00e5ff);
+  border-radius: 1px;
+  box-shadow: 0 0 6px rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.6);
+}
+
+/* ── Section separator: fade gradient lines ── */
+.cs-hud-slide__section {
+  border-bottom: 1px solid transparent;
+  background-clip: padding-box;
+  border-image: linear-gradient(90deg, rgba(255,255,255,0.06) 0%, transparent 100%) 1;
+}
+
+/* ── Stat bars: thicker, gradient-filled, richer shadows ── */
+.cs-hud-slide__bar-wrap {
+  height: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  overflow: hidden;
+}
+
+.cs-hud-slide__bar--health {
+  background: linear-gradient(90deg, #16a34a 0%, #22c55e 60%, #4ade80 100%);
+  box-shadow: 0 0 8px rgba(34, 197, 94, 0.5), 0 0 2px rgba(34, 197, 94, 0.8) inset;
+  transition: width 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.cs-hud-slide__bar--hunger {
+  background: linear-gradient(90deg, #c2410c 0%, #f97316 60%, #fb923c 100%);
+  box-shadow: 0 0 8px rgba(249, 115, 22, 0.5), 0 0 2px rgba(249, 115, 22, 0.8) inset;
+  transition: width 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.cs-hud-slide__bar--energy {
+  background: linear-gradient(90deg,
+    rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.7) 0%,
+    rgba(var(--cs-scene-accent-rgb, 0 229 255) / 1.0) 100%);
+  box-shadow: 0 0 8px rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.5);
+  transition: width 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Low health warning: bar pulses red */
+.cs-hud-slide__bar--health.cs-bar--critical {
+  background: linear-gradient(90deg, #7f1d1d 0%, #ef4444 100%);
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.7);
+  animation: health-critical-pulse 1s ease-in-out infinite;
+}
+
+@keyframes health-critical-pulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(239, 68, 68, 0.4); }
+  50%       { box-shadow: 0 0 16px rgba(239, 68, 68, 0.9); }
+}
+
+/* ── Tech item cards: enhanced depth ── */
+.cs-hud-slide__tech-item {
+  background: linear-gradient(135deg, rgba(255,255,255,0.03) 0%, rgba(0,0,0,0) 100%);
+  border-color: rgba(255, 255, 255, 0.07);
+  transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
+}
+
+.cs-hud-slide__tech-item--active {
+  background: linear-gradient(135deg,
+    rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.07) 0%,
+    rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.02) 100%);
+  border-color: rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.35);
+  box-shadow: 0 2px 12px rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.08),
+              inset 0 0 0 1px rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.06);
+}
+
+.cs-hud-slide__tech-item:hover {
+  border-color: rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.4);
+  background: linear-gradient(135deg,
+    rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.06) 0%,
+    transparent 100%);
+}
+
+/* ── Inventory slots: richer occupied state with icon glow ── */
+.cs-hud-slide__inv-slot--occupied {
+  border-color: rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.3);
+  background: linear-gradient(135deg,
+    rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.06) 0%,
+    rgba(0,0,0,0) 100%);
+  box-shadow: inset 0 0 0 1px rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.08);
+}
+
+.cs-hud-slide__inv-slot--occupied:hover {
+  transform: translateY(-2px) scale(1.08);
+  box-shadow: 0 4px 14px rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.35),
+              inset 0 0 0 1px rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.2);
+}
+
+/* ── Crew member cards: depth + hover slide ── */
+.cs-hud-slide__crew-member {
+  background: linear-gradient(90deg, rgba(255,255,255,0.025) 0%, rgba(0,0,0,0) 100%);
+  transition: border-color 0.18s, background 0.18s, transform 0.18s, box-shadow 0.18s;
+}
+
+.cs-hud-slide__crew-member:hover {
+  border-color: rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.3);
+  background: linear-gradient(90deg,
+    rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.05) 0%,
+    rgba(0,0,0,0) 100%);
+  transform: translateX(4px);
+  box-shadow: inset 0 0 0 1px rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.06);
+}
+
+/* ── System status items: glow on online ── */
+.cs-hud-slide__sys-dot--online {
+  background: #10b981;
+  box-shadow: 0 0 8px #10b981, 0 0 4px #10b981;
+}
+
+/* ── Navigation buttons: pill style with glow hover ── */
+.cs-hud-slide__nav-btn:hover {
+  box-shadow: 0 2px 12px rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.15);
+  border-color: rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.5);
+  color: var(--cs-scene-accent, #00e5ff);
+}
+
+/* ── Phone launch button: strong glow on hover ── */
+.cs-hud-slide__phone-launch:hover {
+  background: linear-gradient(135deg,
+    rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.14) 0%,
+    rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.06) 100%);
+  border-color: var(--cs-scene-accent, #00e5ff);
+  box-shadow:
+    0 0 20px rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.25),
+    inset 0 0 0 1px rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.1);
+  transform: translateY(-1px);
+}
+
+/* ── Phone overlay: scanline texture + stronger frame glow ── */
+.cs-phone-overlay::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.04) 2px,
+    rgba(0, 0, 0, 0.04) 4px
+  );
+  pointer-events: none;
+  z-index: 9;
+  border-radius: inherit;
+}
+
+.cs-phone-overlay[aria-hidden="false"] {
+  box-shadow:
+    0 24px 80px rgba(0, 0, 0, 0.9),
+    0 0 0 1px rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.3),
+    0 0 40px rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.08),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+/* ── Announcer panel: richer glass ── */
+.cs-announcer__body {
+  background:
+    linear-gradient(160deg, rgba(0,245,255,0.03) 0%, rgba(8,10,16,0.95) 40%),
+    rgba(8, 10, 16, 0.93);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.7),
+    0 0 20px rgba(0, 245, 255, 0.05),
+    inset 0 0 0 1px rgba(0, 245, 255, 0.04);
+}
+
+/* ── Announcer toggle: glowing tab ── */
+.cs-announcer__toggle {
+  background: linear-gradient(90deg,
+    rgba(0,245,255, 0.12) 0%,
+    rgba(0,245,255, 0.06) 100%);
+  box-shadow: 0 -4px 16px rgba(0, 245, 255, 0.08);
+}
+
+.cs-announcer__toggle:hover {
+  background: linear-gradient(90deg,
+    rgba(0,245,255, 0.2) 0%,
+    rgba(0,245,255, 0.1) 100%);
+}
+
+/* ── Event panel: deeper glass ── */
+.cs-hud__panel {
+  background:
+    linear-gradient(160deg,
+      rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.04) 0%,
+      rgba(5, 5, 12, 0.97) 30%,
+      rgba(2, 2, 8, 0.98) 100%);
+  box-shadow:
+    0 12px 48px rgba(0, 0, 0, 0.85),
+    0 0 0 1px rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.12) inset,
+    0 0 60px rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.04) inset,
+    0 0 0 1px rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.35);
+}
+
+/* ── Stat cards in panel: gradient tile ── */
+.cs-hud__stat {
+  background:
+    linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.cs-hud__stat:hover {
+  border-color: rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.3);
+  background: linear-gradient(135deg,
+    rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.06) 0%,
+    rgba(255,255,255,0.02) 100%);
+}
+
+/* ── Active toggle button: sharper glow ── */
+.cs-hud__toggle--active {
+  background: linear-gradient(135deg,
+    rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.16) 0%,
+    rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.08) 100%) !important;
+  border-color: rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.7) !important;
+  box-shadow:
+    0 0 14px rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.45),
+    inset 0 0 0 1px rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.15) !important;
+}
+
+/* ── Location text: subtle text shadow glow ── */
+.cs-hud__location {
+  text-shadow: 0 0 10px rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.4);
+}
+
+/* ── Ticker: subtle glow on text ── */
+.cs-hud__ticker {
+  text-shadow: 0 0 8px rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.4);
+}
+
+/* ── Credits: warm glow ── */
+.cs-hud__credits {
+  text-shadow: 0 0 8px rgba(245, 158, 11, 0.3);
+}
+
+/* ── Search input: focus ring glow ── */
+.cs-hud-slide__search-input:focus {
+  border-color: rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.6);
+  box-shadow: 0 0 0 2px rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.1),
+              0 0 12px rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.08);
+  background: rgba(255, 255, 255, 0.07);
+}
+
+/* ── Skill pips: brighter active + hover ── */
+.pip--active {
+  background: var(--cs-scene-accent, #00e5ff);
+  border-color: transparent;
+  box-shadow: 0 0 6px rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.7),
+              0 0 2px rgba(var(--cs-scene-accent-rgb, 0 229 255) / 1) inset;
+}
+
+/* ── Rep fill bar: gradient glow ── */
+.cs-hud__rep-fill {
+  background: linear-gradient(90deg,
+    rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.6) 0%,
+    var(--cs-scene-accent, #00e5ff) 100%);
+  box-shadow: 0 0 6px rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.4);
+}
+
+/* ── Implant dot: bigger glow ── */
+.cs-hud-slide__implant-dot--active {
+  background: #10b981;
+  box-shadow: 0 0 8px #10b981, 0 0 3px #10b981;
+}
+
+/* ── Notif pills: soft glow ── */
+.cs-hud-slide__notif-pill {
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.2);
+}
+
+/* ── Panel title: sharper accent ── */
+.cs-hud-slide__title {
+  text-shadow: 0 0 12px rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.3);
+  letter-spacing: 0.18em;
+}
+
+/* ── Close button: red hover glow ── */
+.cs-hud-slide__close:hover {
+  border-color: rgba(248, 113, 113, 0.5);
+  color: #f87171;
+  background: rgba(248, 113, 113, 0.08);
+  box-shadow: 0 0 8px rgba(248, 113, 113, 0.2);
+}
+
+/* ── Section: hover reveal effect ── */
+.cs-hud-slide__section:hover {
+  background: rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.01);
+}
+
+/* ── Faction bar fill: enhanced gradient ── */
+.cs-hud__faction-bar-fill {
+  background: linear-gradient(90deg,
+    rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.5) 0%,
+    var(--cs-scene-accent, #00e5ff) 100%);
+  box-shadow: 0 0 4px rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.4);
+}
+
+/* ── KV rows: subtle hover highlight ── */
+.cs-hud-slide__kv-row:hover {
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 3px;
+  margin: 0 -4px;
+  padding: 3px 4px;
+}
+
+/* ── Scrollbar: colored thumb ── */
+.cs-hud-slide__body::-webkit-scrollbar-thumb {
+  background: rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.25);
+  border-radius: 2px;
+}
+
+.cs-hud-slide__body::-webkit-scrollbar-thumb:hover {
+  background: rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.4);
+}
+
+/* ── Event history items: left accent line ── */
+.cs-hud__event-row {
+  border-left: 2px solid rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.2);
+  padding-left: 8px;
+  transition: border-color 0.2s;
+}
+
+.cs-hud__event-row:hover {
+  border-left-color: rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.6);
+  background: rgba(255, 255, 255, 0.02);
+}
+

@@ -43,7 +43,18 @@ def _mock_sdk_response(content="Hello!"):
 
 # ── Tests: Tier selection ────────────────────────────────────────────
 
+
 class TestTierSelection:
+    @pytest.fixture(autouse=True)
+    def disable_v3(self, monkeypatch):
+        """Patch RouterV3 so tier selection falls through to rule-based logic."""
+        def _raise():
+            raise RuntimeError("RouterV3 disabled in tests")
+        monkeypatch.setattr(
+            "engine.lmstudio.router_v3_client.get_router_v3_client",
+            _raise,
+        )
+
     def test_explicit_tier(self):
         router = _make_router()
         req = InferenceRequest(tier=Tier.CPU_UTILITY)
@@ -235,6 +246,16 @@ class TestExecution:
 # ── Tests: Worker loop integration ───────────────────────────────────
 
 class TestWorkerLoop:
+    @pytest.fixture(autouse=True)
+    def disable_v3(self, monkeypatch):
+        """Patch RouterV3 so the worker loop doesn't load ML models."""
+        def _raise():
+            raise RuntimeError("RouterV3 disabled in tests")
+        monkeypatch.setattr(
+            "engine.lmstudio.router_v3_client.get_router_v3_client",
+            _raise,
+        )
+
     def test_worker_processes_queue(self):
         router = _make_router()
         mock_sdk = MagicMock()

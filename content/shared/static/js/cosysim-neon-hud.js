@@ -46,6 +46,9 @@
       this._events   = [];      // rolling event history
       this._pollTid  = null;
       this._expanded = false;
+      this._leftOpen  = false;
+      this._rightOpen = false;
+      this._phoneOpen = false;
 
       // DOM refs — resolved after DOMContentLoaded
       this._els = {};
@@ -91,19 +94,90 @@
     _bindEvents () {
       const { hud, panel, backdrop, closeBtn } = this._els;
 
-      if (hud) {
+      // Center click opens event feed (but not on toggle buttons)
+      const centerEl = document.getElementById('hud-center-click');
+      if (centerEl) {
+        centerEl.addEventListener('click', () => this._togglePanel());
+      } else if (hud) {
+        // Fallback: old behaviour
         hud.addEventListener('click', e => {
-          // Don't open panel on close button
-          if (!e.target.closest('#hud-panel-close')) {
+          if (!e.target.closest('#hud-panel-close') &&
+              !e.target.closest('.cs-hud__toggle') &&
+              !e.target.closest('.cs-hud__right-actions')) {
             this._togglePanel();
           }
         });
       }
       if (closeBtn) closeBtn.addEventListener('click', () => this._closePanel());
-      if (backdrop) backdrop.addEventListener('click', () => this._closePanel());
+      if (backdrop) backdrop.addEventListener('click', () => {
+        this._closePanel();
+        this._closeLeftPanel();
+        this._closeRightPanel();
+      });
+
+      // Left panel toggle
+      const toggleLeft = document.getElementById('hud-toggle-left');
+      if (toggleLeft) toggleLeft.addEventListener('click', () => this._toggleLeftPanel());
+
+      const leftClose = document.getElementById('hud-left-close');
+      if (leftClose) leftClose.addEventListener('click', () => this._closeLeftPanel());
+
+      // Right panel toggle
+      const toggleRight = document.getElementById('hud-toggle-right');
+      if (toggleRight) toggleRight.addEventListener('click', () => this._toggleRightPanel());
+
+      const rightClose = document.getElementById('hud-right-close');
+      if (rightClose) rightClose.addEventListener('click', () => this._closeRightPanel());
+
+      // Phone toggle
+      const togglePhone = document.getElementById('hud-toggle-phone');
+      if (togglePhone) togglePhone.addEventListener('click', () => this._togglePhoneOverlay());
+
+      const phoneLaunch = document.getElementById('hud-phone-launch');
+      if (phoneLaunch) phoneLaunch.addEventListener('click', () => this._openPhoneOverlay());
+
+      const phoneClose = document.getElementById('phone-overlay-close');
+      if (phoneClose) phoneClose.addEventListener('click', () => this._closePhoneOverlay());
+
+      const phoneDetach = document.getElementById('phone-overlay-detach');
+      if (phoneDetach) phoneDetach.addEventListener('click', () => {
+        window.open('http://localhost:5555', '_blank');
+      });
+
+      // Nexus search
+      const searchInput = document.getElementById('hud-nexus-search');
+      const searchBtn   = document.getElementById('hud-nexus-search-btn');
+      if (searchInput) {
+        searchInput.addEventListener('keydown', e => {
+          if (e.key === 'Enter') this._nexusSearch(searchInput.value.trim());
+        });
+      }
+      if (searchBtn) {
+        searchBtn.addEventListener('click', () => {
+          const val = document.getElementById('hud-nexus-search')?.value.trim();
+          if (val) this._nexusSearch(val);
+        });
+      }
 
       document.addEventListener('keydown', e => {
-        if (e.key === 'Escape' && this._expanded) this._closePanel();
+        if (e.key === 'Escape') {
+          if (this._phoneOpen)   this._closePhoneOverlay();
+          else if (this._rightOpen)  this._closeRightPanel();
+          else if (this._leftOpen)   this._closeLeftPanel();
+          else if (this._expanded)   this._closePanel();
+        }
+        if (e.key === 'i' || e.key === 'I') {
+          if (!e.target.matches('input, textarea, [contenteditable]'))
+            this._toggleLeftPanel();
+        }
+        if (e.key === 'c' || e.key === 'C') {
+          if (!e.target.matches('input, textarea, [contenteditable]'))
+            this._toggleRightPanel();
+        }
+        if (e.key === 'p' || e.key === 'P') {
+          if (!e.target.matches('input, textarea, [contenteditable]'))
+            this._togglePhoneOverlay();
+        }
       });
     }
 
@@ -237,6 +311,9 @@
         newEvents.forEach(ev => this._addEventToHistory(ev, false));
         this._renderEventList();
       }
+
+      // Left panel stats
+      this._renderLeftPanel(state);
     }
 
     _setWeather (weather) {
@@ -378,7 +455,192 @@
       this._expanded = false;
       const { panel, backdrop } = this._els;
       if (panel)    { panel.classList.remove('cs-hud__panel--visible');       panel.setAttribute('aria-hidden', 'true'); }
-      if (backdrop) { backdrop.classList.remove('cs-hud__backdrop--visible'); backdrop.setAttribute('aria-hidden', 'true'); }
+      if (backdrop) {
+        backdrop.classList.remove('cs-hud__backdrop--visible');
+        backdrop.setAttribute('aria-hidden', 'true');
+      }
+    }
+
+    // ── Left Panel ───────────────────────────────────────────────────────
+
+    _toggleLeftPanel () {
+      if (this._leftOpen) this._closeLeftPanel();
+      else                this._openLeftPanel();
+    }
+
+    _openLeftPanel () {
+      this._leftOpen = true;
+      const el  = document.getElementById('cs-hud-left-panel');
+      const btn = document.getElementById('hud-toggle-left');
+      const bd  = this._els.backdrop;
+      if (el)  el.setAttribute('aria-hidden', 'false');
+      if (btn) btn.classList.add('cs-hud__toggle--active');
+      if (bd)  { bd.classList.add('cs-hud__backdrop--visible'); bd.setAttribute('aria-hidden', 'false'); }
+      if (this._rightOpen) this._closeRightPanel();
+      this._poll();
+    }
+
+    _closeLeftPanel () {
+      this._leftOpen = false;
+      const el  = document.getElementById('cs-hud-left-panel');
+      const btn = document.getElementById('hud-toggle-left');
+      const bd  = this._els.backdrop;
+      if (el)  el.setAttribute('aria-hidden', 'true');
+      if (btn) btn.classList.remove('cs-hud__toggle--active');
+      if (!this._rightOpen && !this._expanded) {
+        if (bd) { bd.classList.remove('cs-hud__backdrop--visible'); bd.setAttribute('aria-hidden', 'true'); }
+      }
+    }
+
+    // ── Right Panel ──────────────────────────────────────────────────────
+
+    _toggleRightPanel () {
+      if (this._rightOpen) this._closeRightPanel();
+      else                 this._openRightPanel();
+    }
+
+    _openRightPanel () {
+      this._rightOpen = true;
+      const el  = document.getElementById('cs-hud-right-panel');
+      const btn = document.getElementById('hud-toggle-right');
+      const bd  = this._els.backdrop;
+      if (el)  el.setAttribute('aria-hidden', 'false');
+      if (btn) btn.classList.add('cs-hud__toggle--active');
+      if (bd)  { bd.classList.add('cs-hud__backdrop--visible'); bd.setAttribute('aria-hidden', 'false'); }
+      if (this._leftOpen) this._closeLeftPanel();
+      this._pollServiceStatus();
+    }
+
+    _closeRightPanel () {
+      this._rightOpen = false;
+      const el  = document.getElementById('cs-hud-right-panel');
+      const btn = document.getElementById('hud-toggle-right');
+      const bd  = this._els.backdrop;
+      if (el)  el.setAttribute('aria-hidden', 'true');
+      if (btn) btn.classList.remove('cs-hud__toggle--active');
+      if (!this._leftOpen && !this._expanded) {
+        if (bd) { bd.classList.remove('cs-hud__backdrop--visible'); bd.setAttribute('aria-hidden', 'true'); }
+      }
+    }
+
+    // ── Phone Overlay ────────────────────────────────────────────────────
+
+    _togglePhoneOverlay () {
+      if (this._phoneOpen) this._closePhoneOverlay();
+      else                 this._openPhoneOverlay();
+    }
+
+    _openPhoneOverlay () {
+      this._phoneOpen = true;
+      const overlay  = document.getElementById('cs-phone-overlay');
+      const frame    = document.getElementById('cs-phone-frame');
+      const phoneDot = document.querySelector('.cs-hud__phone-dot');
+      const btn      = document.getElementById('hud-toggle-phone');
+      if (frame && !frame.src) frame.src = 'http://localhost:5555';
+      if (overlay) overlay.setAttribute('aria-hidden', 'false');
+      if (overlay) overlay.classList.toggle('cs-phone-overlay--edge', !this._rightOpen);
+      if (phoneDot) phoneDot.classList.add('cs-hud__phone-dot--active');
+      if (btn) btn.classList.add('cs-hud__toggle--active');
+    }
+
+    _closePhoneOverlay () {
+      this._phoneOpen = false;
+      const overlay  = document.getElementById('cs-phone-overlay');
+      const phoneDot = document.querySelector('.cs-hud__phone-dot');
+      const btn      = document.getElementById('hud-toggle-phone');
+      if (overlay) overlay.setAttribute('aria-hidden', 'true');
+      if (phoneDot) phoneDot.classList.remove('cs-hud__phone-dot--active');
+      if (btn) btn.classList.remove('cs-hud__toggle--active');
+    }
+
+    // ── Service status ────────────────────────────────────────────────────
+
+    async _pollServiceStatus () {
+      const checks = [
+        { id: 'sys-lmstudio', url: 'http://localhost:1234/api/v1/models' },
+        { id: 'sys-nexus',    url: 'http://localhost:8700/api/health' },
+        { id: 'sys-tts',      url: 'http://localhost:8600/health' },
+        { id: 'sys-comfy',    url: 'http://localhost:8188/history' },
+      ];
+      for (const { id, url } of checks) {
+        const dot = document.getElementById(id);
+        if (!dot) continue;
+        try {
+          const ctrl = new AbortController();
+          const tid  = setTimeout(() => ctrl.abort(), 2000);
+          const res  = await fetch(url, { method: 'GET', cache: 'no-store', signal: ctrl.signal });
+          clearTimeout(tid);
+          dot.classList.toggle('cs-hud-slide__sys-dot--online',  res.ok);
+          dot.classList.toggle('cs-hud-slide__sys-dot--offline', !res.ok);
+        } catch {
+          dot.classList.remove('cs-hud-slide__sys-dot--online');
+          dot.classList.add('cs-hud-slide__sys-dot--offline');
+        }
+      }
+    }
+
+    // ── Nexus quick search ────────────────────────────────────────────────
+
+    async _nexusSearch (query) {
+      if (!query) return;
+      const el = document.getElementById('hud-nexus-results');
+      if (!el) return;
+      el.innerHTML = '<div class="cs-hud-slide__search-result" style="opacity:0.4">Searching…</div>';
+      try {
+        const res  = await fetch(`/api/nexus/search?q=${encodeURIComponent(query)}`);
+        const data = await res.json();
+        const items = (data.results || []).slice(0, 5);
+        if (!items.length) {
+          el.innerHTML = '<div class="cs-hud-slide__search-result" style="opacity:0.4">No results.</div>';
+          return;
+        }
+        el.innerHTML = items.map(r =>
+          `<div class="cs-hud-slide__search-result" title="${_esc(r.content || '')}"><strong>${_esc(r.title || 'Result')}</strong></div>`
+        ).join('');
+      } catch {
+        el.innerHTML = '<div class="cs-hud-slide__search-result" style="color:#f87171">Search unavailable.</div>';
+      }
+    }
+
+    // ── Left panel rendering ──────────────────────────────────────────────
+
+    _renderLeftPanel (state) {
+      if (!state) return;
+      const cStr = Number(state.credits || 0).toLocaleString();
+      _setText('left-credits', '₵ ' + cStr);
+      _setText('left-rep', (state.reputation ?? 50) + '/100');
+      _setText('left-heat', (state.heat ?? 0) + '%');
+      if (state.health  !== undefined) { _setBar('left-health-bar',  state.health);  _setText('left-health-val',  state.health);  }
+      if (state.hunger  !== undefined) { _setBar('left-hunger-bar',  state.hunger);  _setText('left-hunger-val',  state.hunger);  }
+      if (state.energy  !== undefined) { _setBar('left-energy-bar',  state.energy);  _setText('left-energy-val',  state.energy);  }
+      if (state.inventory) this._renderInventory(state.inventory);
+      if (state.skills)    this._renderSkills(state.skills);
+    }
+
+    _renderInventory (items) {
+      const grid = document.getElementById('left-inventory');
+      const cntEl = document.getElementById('left-inv-count');
+      if (!grid) return;
+      const slots = grid.querySelectorAll('.cs-hud-slide__inv-slot');
+      items.slice(0, slots.length).forEach((item, i) => {
+        slots[i].textContent = item.icon || '';
+        slots[i].title       = item.name || 'Item';
+        slots[i].classList.toggle('cs-hud-slide__inv-slot--occupied', !!item.name);
+      });
+      if (cntEl) cntEl.textContent = `${items.length}/${slots.length}`;
+    }
+
+    _renderSkills (skills) {
+      const list = document.getElementById('left-skills');
+      if (!list) return;
+      list.innerHTML = Object.entries(skills).slice(0, 6).map(([name, level]) => {
+        const pips = Array.from({ length: 5 }, (_, i) =>
+          `<span class="pip ${i < level ? 'pip--active' : ''}"></span>`).join('');
+        return `<div class="cs-hud-slide__skill-row">
+          <span class="cs-hud-slide__skill-name">${_esc(name)}</span>
+          <div class="cs-hud-slide__skill-pips">${pips}</div>
+        </div>`;
+      }).join('');
     }
   }
 
@@ -390,6 +652,16 @@
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;');
+  }
+
+  function _setText (id, val) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = String(val);
+  }
+
+  function _setBar (id, pct) {
+    const el = document.getElementById(id);
+    if (el) el.style.width = Math.max(0, Math.min(100, pct)) + '%';
   }
 
   // ── Boot ─────────────────────────────────────────────────────────────────

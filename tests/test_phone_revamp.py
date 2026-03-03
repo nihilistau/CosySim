@@ -94,9 +94,14 @@ def _stub_heavy_deps(monkeypatch):
         return lambda f: f
 
     class _FakeCategory:
-        GAME   = "game"
-        SOCIAL = "social"
-        SYSTEM = "system"
+        GAME          = "game"
+        SOCIAL        = "social"
+        SYSTEM        = "system"
+        COMMUNICATION = "communication"
+        MEMORY        = "memory"
+        MEDIA         = "media"
+        ENVIRONMENT   = "environment"
+        NARRATIVE     = "narrative"
 
     skill_mod.skill = _skill_decorator
     skill_mod.SkillCategory = _FakeCategory
