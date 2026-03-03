@@ -1,0 +1,374 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   cosysim-hack-minigame.css  —  CosySim v0.81 "THE LIVING CITY"
+   Hacking mini-game overlay: matrix grid puzzle, trace timer, outcome screen.
+───────────────────────────────────────────────────────────────────────────── */
+
+/* ── Overlay wrapper ──────────────────────────────────────────────────────── */
+#cs-hack-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 4, 12, 0.92);
+  backdrop-filter: blur(6px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+}
+
+#cs-hack-overlay.active {
+  opacity: 1;
+  pointer-events: all;
+}
+
+/* ── Main panel ────────────────────────────────────────────────────────────── */
+.cs-hack-panel {
+  width: 520px;
+  max-width: 96vw;
+  background: rgba(0, 10, 22, 0.97);
+  border: 1px solid rgba(0, 229, 255, 0.35);
+  border-radius: 6px;
+  box-shadow:
+    0 0 40px rgba(0, 229, 255, 0.12),
+    0 0 80px rgba(0, 229, 255, 0.04),
+    inset 0 1px 0 rgba(0, 229, 255, 0.15);
+  overflow: hidden;
+  font-family: 'Courier New', Courier, monospace;
+  color: #00e5ff;
+  animation: cs-hack-panel-in 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+}
+
+@keyframes cs-hack-panel-in {
+  from { transform: translateY(-20px) scale(0.96); opacity: 0; }
+  to   { transform: translateY(0)     scale(1);    opacity: 1; }
+}
+
+/* ── Header ────────────────────────────────────────────────────────────────── */
+.cs-hack-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: rgba(0, 229, 255, 0.06);
+  border-bottom: 1px solid rgba(0, 229, 255, 0.18);
+}
+
+.cs-hack-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: #00e5ff;
+  text-shadow: 0 0 8px rgba(0, 229, 255, 0.7);
+}
+
+.cs-hack-target-label {
+  font-size: 10px;
+  color: rgba(0, 229, 255, 0.55);
+  letter-spacing: 0.1em;
+}
+
+.cs-hack-close {
+  cursor: pointer;
+  color: rgba(0, 229, 255, 0.4);
+  font-size: 18px;
+  line-height: 1;
+  padding: 2px 6px;
+  transition: color 0.15s;
+}
+.cs-hack-close:hover { color: #00e5ff; }
+
+/* ── Trace timer bar ────────────────────────────────────────────────────────── */
+.cs-hack-timer-wrap {
+  padding: 8px 16px 0;
+}
+
+.cs-hack-timer-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 9px;
+  letter-spacing: 0.15em;
+  color: rgba(0, 229, 255, 0.5);
+  margin-bottom: 4px;
+  text-transform: uppercase;
+}
+
+.cs-hack-timer-bar {
+  height: 4px;
+  background: rgba(0, 229, 255, 0.12);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.cs-hack-timer-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #00e5ff, #00ff88);
+  border-radius: 2px;
+  transition: width linear;
+  box-shadow: 0 0 6px rgba(0, 229, 255, 0.6);
+}
+
+.cs-hack-timer-fill.danger {
+  background: linear-gradient(90deg, #ff3860, #ff9933);
+  box-shadow: 0 0 8px rgba(255, 56, 96, 0.7);
+  animation: cs-hack-danger-pulse 0.4s ease infinite alternate;
+}
+
+@keyframes cs-hack-danger-pulse {
+  from { opacity: 0.8; }
+  to   { opacity: 1;   }
+}
+
+/* ── Sequence display (target pattern) ──────────────────────────────────────── */
+.cs-hack-sequence {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px 6px;
+  flex-wrap: wrap;
+}
+
+.cs-hack-seq-label {
+  font-size: 9px;
+  letter-spacing: 0.15em;
+  color: rgba(0, 229, 255, 0.45);
+  text-transform: uppercase;
+  min-width: 60px;
+}
+
+.cs-hack-seq-code {
+  font-size: 13px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border: 1px solid rgba(0, 229, 255, 0.3);
+  border-radius: 3px;
+  background: rgba(0, 229, 255, 0.07);
+  letter-spacing: 0.08em;
+  transition: all 0.15s;
+}
+
+.cs-hack-seq-code.matched {
+  background: rgba(0, 255, 136, 0.18);
+  border-color: rgba(0, 255, 136, 0.6);
+  color: #00ff88;
+  box-shadow: 0 0 6px rgba(0, 255, 136, 0.4);
+}
+
+/* ── Matrix grid ────────────────────────────────────────────────────────────── */
+.cs-hack-grid-wrap {
+  padding: 12px 16px;
+}
+
+.cs-hack-grid {
+  display: grid;
+  gap: 6px;
+  width: fit-content;
+  margin: 0 auto;
+}
+
+.cs-hack-cell {
+  width: 56px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  border: 1px solid rgba(0, 229, 255, 0.2);
+  border-radius: 4px;
+  background: rgba(0, 8, 20, 0.8);
+  color: rgba(0, 229, 255, 0.75);
+  transition: all 0.12s ease;
+  user-select: none;
+  position: relative;
+  overflow: hidden;
+}
+
+.cs-hack-cell::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 229, 255, 0);
+  transition: background 0.12s;
+}
+
+.cs-hack-cell:hover {
+  border-color: rgba(0, 229, 255, 0.6);
+  color: #00e5ff;
+  background: rgba(0, 229, 255, 0.1);
+  box-shadow: 0 0 10px rgba(0, 229, 255, 0.2);
+  transform: scale(1.04);
+}
+
+.cs-hack-cell:hover::before {
+  background: rgba(0, 229, 255, 0.06);
+}
+
+.cs-hack-cell.selected {
+  border-color: rgba(0, 255, 136, 0.7);
+  background: rgba(0, 255, 136, 0.12);
+  color: #00ff88;
+  box-shadow: 0 0 12px rgba(0, 255, 136, 0.3);
+}
+
+.cs-hack-cell.correct {
+  border-color: rgba(0, 255, 136, 0.9);
+  background: rgba(0, 255, 136, 0.22);
+  color: #00ff88;
+  animation: cs-hack-cell-correct 0.3s ease;
+}
+
+.cs-hack-cell.wrong {
+  border-color: rgba(255, 56, 96, 0.8);
+  background: rgba(255, 56, 96, 0.15);
+  color: #ff3860;
+  animation: cs-hack-cell-wrong 0.3s ease;
+}
+
+.cs-hack-cell .cs-hack-cell-order {
+  position: absolute;
+  top: 3px;
+  right: 4px;
+  font-size: 8px;
+  color: rgba(0, 255, 136, 0.7);
+  font-weight: 400;
+}
+
+@keyframes cs-hack-cell-correct {
+  0%   { transform: scale(1.1); }
+  100% { transform: scale(1); }
+}
+
+@keyframes cs-hack-cell-wrong {
+  0%, 100% { transform: translateX(0); }
+  25%       { transform: translateX(-4px); }
+  75%       { transform: translateX(4px); }
+}
+
+/* ── Action row ─────────────────────────────────────────────────────────────── */
+.cs-hack-actions {
+  display: flex;
+  gap: 10px;
+  padding: 0 16px 14px;
+  justify-content: flex-end;
+}
+
+.cs-hack-btn {
+  padding: 7px 20px;
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  cursor: pointer;
+  border-radius: 3px;
+  transition: all 0.15s;
+  border: 1px solid;
+}
+
+.cs-hack-btn-primary {
+  background: rgba(0, 229, 255, 0.15);
+  border-color: rgba(0, 229, 255, 0.5);
+  color: #00e5ff;
+}
+.cs-hack-btn-primary:hover {
+  background: rgba(0, 229, 255, 0.28);
+  box-shadow: 0 0 12px rgba(0, 229, 255, 0.25);
+}
+
+.cs-hack-btn-danger {
+  background: rgba(255, 56, 96, 0.1);
+  border-color: rgba(255, 56, 96, 0.4);
+  color: #ff3860;
+}
+.cs-hack-btn-danger:hover {
+  background: rgba(255, 56, 96, 0.2);
+  box-shadow: 0 0 10px rgba(255, 56, 96, 0.2);
+}
+
+/* ── Outcome screen ─────────────────────────────────────────────────────────── */
+.cs-hack-outcome {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 24px;
+  gap: 12px;
+  text-align: center;
+  min-height: 200px;
+}
+
+.cs-hack-outcome.visible {
+  display: flex;
+  animation: cs-hack-panel-in 0.3s ease both;
+}
+
+.cs-hack-outcome-icon {
+  font-size: 40px;
+  line-height: 1;
+}
+
+.cs-hack-outcome-title {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+}
+
+.cs-hack-outcome-title.success { color: #00ff88; text-shadow: 0 0 16px rgba(0, 255, 136, 0.7); }
+.cs-hack-outcome-title.failure { color: #ff3860; text-shadow: 0 0 16px rgba(255, 56, 96, 0.7); }
+
+.cs-hack-outcome-detail {
+  font-size: 11px;
+  color: rgba(0, 229, 255, 0.6);
+  letter-spacing: 0.08em;
+  line-height: 1.6;
+}
+
+/* ── Scanline overlay ───────────────────────────────────────────────────────── */
+.cs-hack-panel::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.04) 2px,
+    rgba(0, 0, 0, 0.04) 4px
+  );
+  z-index: 1;
+}
+
+/* ── HUD trigger button ─────────────────────────────────────────────────────── */
+.cs-hack-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  background: rgba(0, 229, 255, 0.08);
+  border: 1px solid rgba(0, 229, 255, 0.3);
+  border-radius: 3px;
+  color: rgba(0, 229, 255, 0.8);
+  font-family: 'Courier New', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.cs-hack-trigger:hover {
+  background: rgba(0, 229, 255, 0.18);
+  border-color: rgba(0, 229, 255, 0.6);
+  box-shadow: 0 0 10px rgba(0, 229, 255, 0.15);
+}
+.cs-hack-trigger svg {
+  width: 12px;
+  height: 12px;
+  fill: currentColor;
+}
