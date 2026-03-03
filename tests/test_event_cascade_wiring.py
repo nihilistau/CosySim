@@ -58,10 +58,10 @@ class TestLauncherEventCascadeWiring:
         assert "get_event_cascade().start()" in src
 
     def test_launcher_version_updated(self) -> None:
-        """launcher.py VERSION is at least 0.74b."""
+        """launcher.py VERSION is at least 0.81b."""
         import pathlib
         src = pathlib.Path("launcher.py").read_text(encoding="utf-8")
-        assert 'VERSION = "0.74b"' in src
+        assert 'VERSION = "0.81b"' in src
 
 
 # ──── BaseScene._wire_event_cascade ──────────────────────────────────────────

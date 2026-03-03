@@ -74,15 +74,16 @@ class RelationshipContextInterceptor(InterceptorBase):
 
         Args:
             character_id: The NPC's ID.
-            rel: RelationshipEntry with score, interaction_count, notes.
+            rel: RelationshipEntry with score, interaction_count, notes, rel_type.
             tier: The computed tier label.
 
         Returns:
             Multi-line context block to append to the system prompt.
         """
+        rel_type = getattr(rel, "rel_type", "stranger")
         lines = [
             f"\n[RELATIONSHIP CONTEXT — {character_id.upper()}]",
-            f"Tier: {tier} | Score: {rel.score:+.1f} | Interactions: {rel.interaction_count}",
+            f"Tier: {tier} | Type: {rel_type.upper()} | Score: {rel.score:+.1f} | Interactions: {rel.interaction_count}",
         ]
         # Include up to 3 most recent memory notes
         notes = getattr(rel, "notes", [])

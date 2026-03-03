@@ -1,4 +1,4 @@
-<!--
+{#
   CosySim Aria Portrait Widget
   ============================
   Animated Aria portrait — pure CSS, no external images required.
@@ -6,7 +6,7 @@
   that reacts to voice events via CSS state animations.
 
   Include in any scene template:
-    {% include 'shared/templates/aria_widget.html' %}
+    include 'aria_widget.html'
 
   Modes: floating | messenger | voice-call | full-portrait
   States: idle (breathing) | talking (mouth) | thinking (eyes) | listening (glow)
@@ -21,6 +21,6 @@
     voice:speaking · voice:done · voice:listening · aria:thinking
 
   Backward-compat shim: window.ariaWidget.setState / .open / .toggle
--->
-<link rel="stylesheet" href="/shared/static/css/cosysim-aria-portrait.css">
-<script src="/shared/static/js/cosysim-aria-portrait.js" defer></script>
+#}
+<link rel="stylesheet" href="/shared/css/cosysim-aria-portrait.css">
+<script src="/shared/js/cosysim-aria-portrait.js" defer></script>

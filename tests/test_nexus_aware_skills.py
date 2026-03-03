@@ -436,6 +436,31 @@ class TestNexusContextInjectorPostCall:
 class TestSkillNexusFirst:
     """Verify nexus_first=True in @skill wraps the registered function."""
 
+    @pytest.fixture(autouse=True)
+    def restore_skill_module(self):
+        """Ensure the real engine.skills.skill module is active for these tests.
+
+        Some fixtures replace sys.modules['engine.skills.skill'] with a stub;
+        we temporarily restore the real module without popping other cached
+        modules (which would reset the registry singleton).
+        """
+        import sys
+        import importlib
+        real_skill = sys.modules.get("engine.skills.skill")
+        real_registry = sys.modules.get("engine.skills.registry")
+        # Force import real modules if stubs are installed
+        try:
+            if real_skill is None or not hasattr(real_skill, "nexus_first"):
+                # Import from scratch without pop — just override the stub
+                real_skill_mod = importlib.import_module("engine.skills.skill")
+                sys.modules["engine.skills.skill"] = real_skill_mod
+            if real_registry is None:
+                real_reg_mod = importlib.import_module("engine.skills.registry")
+                sys.modules["engine.skills.registry"] = real_reg_mod
+        except Exception:
+            pass
+        yield
+
     def test_nexus_first_true_wraps_function(self):
         from engine.skills.skill import skill, SkillCategory
         from engine.skills.registry import SKILL_REGISTRY

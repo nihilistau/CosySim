@@ -2,3 +2,15 @@
 {"model_type": "output_quality", "input": "Help me", "output": "Sure!", "quality": 0.6, "metadata": {}, "source": "runtime", "id": "25d6dfcd-6a38-41f7-829e-42e7479dd0b9", "collected_at": 1772509618.3939166}
 {"model_type": "output_quality", "input": "Hello!", "output": "Hey there!", "quality": 0.8, "metadata": {}, "source": "runtime", "id": "64490c5a-6637-47d7-9297-51917f0c9304", "collected_at": 1772515938.9408484}
 {"model_type": "output_quality", "input": "Help me", "output": "Sure!", "quality": 0.6, "metadata": {}, "source": "runtime", "id": "e603c89f-171c-43bc-a859-79e322786be5", "collected_at": 1772515938.957285}
+{"model_type": "output_quality", "input": "Hello!", "output": "Hey there!", "quality": 0.8, "metadata": {}, "source": "runtime", "id": "5ac92603-b236-4d1e-9ecf-43d7438749c6", "collected_at": 1772556539.2413702}
+{"model_type": "output_quality", "input": "Help me", "output": "Sure!", "quality": 0.6, "metadata": {}, "source": "runtime", "id": "0a987123-3b0a-42f1-abdb-725b5c3afefa", "collected_at": 1772556539.2582004}
+{"model_type": "output_quality", "input": "Hello!", "output": "Hey there!", "quality": 0.8, "metadata": {}, "source": "runtime", "id": "1b7c973f-5d60-4180-88f6-c6312e6ff3cd", "collected_at": 1772557545.942831}
+{"model_type": "output_quality", "input": "Help me", "output": "Sure!", "quality": 0.6, "metadata": {}, "source": "runtime", "id": "c1234eaa-82a9-45bb-845c-94b217762fac", "collected_at": 1772557545.9593132}
+{"model_type": "output_quality", "input": "Hello!", "output": "Hey there!", "quality": 0.8, "metadata": {}, "source": "runtime", "id": "c9c16d16-676e-424c-8092-63809ca93577", "collected_at": 1772560074.5109003}
+{"model_type": "output_quality", "input": "Help me", "output": "Sure!", "quality": 0.6, "metadata": {}, "source": "runtime", "id": "11dd26f8-e669-499e-91b2-0636a7829823", "collected_at": 1772560074.5264964}
+{"model_type": "output_quality", "input": "Hello!", "output": "Hey there!", "quality": 0.8, "metadata": {}, "source": "runtime", "id": "8b9c0105-96af-4f4e-99fd-d5524e216549", "collected_at": 1772560834.302759}
+{"model_type": "output_quality", "input": "Help me", "output": "Sure!", "quality": 0.6, "metadata": {}, "source": "runtime", "id": "ce097a2b-ce97-4a1a-ab20-c2a16f6c1a2e", "collected_at": 1772560834.3174047}
+{"model_type": "output_quality", "input": "Hello!", "output": "Hey there!", "quality": 0.8, "metadata": {}, "source": "runtime", "id": "6b55ca2d-4004-49af-a711-68f3b847848b", "collected_at": 1772562302.0388753}
+{"model_type": "output_quality", "input": "Help me", "output": "Sure!", "quality": 0.6, "metadata": {}, "source": "runtime", "id": "a0a3d494-376d-40d6-8235-fad7a26762b8", "collected_at": 1772562302.0545864}
+{"model_type": "output_quality", "input": "Hello!", "output": "Hey there!", "quality": 0.8, "metadata": {}, "source": "runtime", "id": "a8c256c4-de1e-48d8-89bb-fa75f9acac67", "collected_at": 1772563810.1650257}
+{"model_type": "output_quality", "input": "Help me", "output": "Sure!", "quality": 0.6, "metadata": {}, "source": "runtime", "id": "1b99bbe0-dfa8-4910-814e-3b27698aae3f", "collected_at": 1772563810.1819992}

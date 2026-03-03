@@ -324,19 +324,17 @@ def test_route_raises_when_all_unavailable() -> None:
     mock_server = MagicMock()
     mock_server._sessions = {}
 
-    lms_fail = MagicMock()
-    lms_fail.side_effect = Exception("connection refused")
-
-    with patch(
-        "engine.integrations.colab_tunnel_server.get_tunnel_server",
-        return_value=mock_server,
-    ):
+    with patch.object(router, "_try_copilot", return_value=None):
         with patch(
-            "engine.integrations.colab_client.get_colab_client", return_value=None
+            "engine.integrations.colab_tunnel_server.get_tunnel_server",
+            return_value=mock_server,
         ):
-            with patch("requests.get", side_effect=Exception("no lmstudio")):
-                with pytest.raises(ComputeUnavailableError):
-                    router.route_inference("hello")
+            with patch(
+                "engine.integrations.colab_client.get_colab_client", return_value=None
+            ):
+                with patch("requests.get", side_effect=Exception("no lmstudio")):
+                    with pytest.raises(ComputeUnavailableError):
+                        router.route_inference("hello")
 
 
 # ──── Tunnel-related tests ────────────────────────────────────────────────────

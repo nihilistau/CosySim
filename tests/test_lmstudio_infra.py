@@ -510,6 +510,17 @@ class TestInferenceRouterPriorityQueue(unittest.TestCase):
 class TestInferenceRouterTierSelection(unittest.TestCase):
     """Tier selection logic in select_tier()."""
 
+    def setUp(self):
+        """Disable RouterV3 so tests exercise rule-based tier selection."""
+        self._v3_patcher = patch(
+            "engine.lmstudio.router_v3_client.get_router_v3_client",
+            side_effect=RuntimeError("RouterV3 disabled in tests"),
+        )
+        self._v3_patcher.start()
+
+    def tearDown(self):
+        self._v3_patcher.stop()
+
     def _make_router(self):
         return InferenceRouter()
 

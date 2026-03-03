@@ -305,12 +305,12 @@ class TestDistrictAlertEmission:
 # ══════════════════════════════════════════════════════════════════════════════
 
 
-def _setup_skill_mocks():
+def _setup_skill_mocks(monkeypatch: pytest.MonkeyPatch):
     """Inject @skill no-op and engine stubs needed to import neoncity_skills."""
     fake_skill_mod = MagicMock()
     fake_skill_mod.skill = MagicMock(side_effect=lambda **kw: (lambda fn: fn))
     fake_skill_mod.SkillCategory = MagicMock(GAME="game", ENVIRONMENT="environment")
-    sys.modules["engine.skills.skill"] = fake_skill_mod
+    monkeypatch.setitem(sys.modules, "engine.skills.skill", fake_skill_mod)
 
     for key in list(sys.modules.keys()):
         if key.startswith(_SKILLS_MOD):
@@ -319,8 +319,8 @@ def _setup_skill_mocks():
 
 class TestGetNeoncityWorldStatusSkill:
     @pytest.fixture(autouse=True)
-    def _setup(self, reset_state):
-        _setup_skill_mocks()
+    def _setup(self, reset_state, monkeypatch):
+        _setup_skill_mocks(monkeypatch)
 
     def test_skill_exists_and_callable(self, reset_state):
         """get_neoncity_world_status must be importable and callable."""
@@ -362,8 +362,8 @@ class TestGetNeoncityWorldStatusSkill:
 
 class TestTriggerDistrictEventSkill:
     @pytest.fixture(autouse=True)
-    def _setup(self, reset_state):
-        _setup_skill_mocks()
+    def _setup(self, reset_state, monkeypatch):
+        _setup_skill_mocks(monkeypatch)
 
     def test_skill_exists_and_callable(self, reset_state):
         """trigger_district_event must be importable and callable."""

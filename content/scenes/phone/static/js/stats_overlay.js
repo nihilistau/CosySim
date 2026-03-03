@@ -12,7 +12,7 @@
  *
  *   <script src="/static/js/stats_overlay.js"></script>
  *   or
- *   <script src="/shared/static/js/stats_overlay.js"></script>
+ *   <script src="/shared/js/stats_overlay.js"></script>
  *
  * The poll URL is detected from the page origin.
  */

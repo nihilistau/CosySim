@@ -3,6 +3,88 @@
 All notable changes to CosySim are documented here.
 
 ---
+## [0.81b] — 2026-03 — "THE LIVING CITY" — ✅ COMPLETE
+
+### New Features
+
+#### Inventory System
+- `engine/world/inventory.py` — InventoryManager singleton with 25 catalog items across 10 categories
+- Item categories: weapon, cyberware, software, cyberdeck, drug, food, clothing, tool, data, credit, key, misc
+- 14 equipment slots (head/torso/legs/weapon_main/cyberdeck/cyberware_1..3/etc.)
+- Full REST API wired via `base_scene.register_inventory_route()`:
+  - `GET /api/inventory` — full inventory state
+  - `POST /api/inventory/add` — add item from catalog
+  - `POST /api/inventory/remove` — remove item by id
+  - `POST /api/inventory/equip` — equip to slot
+  - `POST /api/inventory/unequip` — clear slot
+- 7 @skill tools (inventory pack): inventory_list, inventory_add, inventory_remove, inventory_equip, inventory_equipped, inventory_has, inventory_catalog
+- Thread-safe CRUD, persists to `data/inventory.json`
+
+#### Crew System
+- `engine/world/crew.py` — CrewManager singleton with 9 crew roles
+- Roles: fixer / hacker / muscle / medic / driver / tech / lookout / face / supplier
+- Recruitment gate: relationship score ≥40; capacity: 6 members
+- Loyalty system (0–100), XP + 5-level progression per crew member
+- Operations: 6 types (recon/heist/extraction/deal/hit/hack) — async, timed, auto-reward credits/XP
+- Full REST API wired via `base_scene.register_crew_route()`:
+  - `GET /api/crew` — full roster + pending operations
+  - `POST /api/crew/recruit` — add member (score check)
+  - `POST /api/crew/dismiss` — remove member
+  - `POST /api/crew/loyalty` — adjust loyalty ±
+  - `POST /api/crew/operation/start` — begin async operation
+  - `GET /api/crew/operation/check` — check completed ops, collect rewards
+- 8 @skill tools (crew pack): crew_status, crew_recruit, crew_dismiss, crew_adjust_loyalty, crew_start_operation, crew_check_operations, crew_set_name, crew_can_recruit
+- Persists to `data/crew.json`
+
+#### HUD v2 — Glass Slide Panels
+- Left panel (player status): health/hunger/energy animated bars, economy stats (credits/rep/heat), cyberdeck card, implants list, inventory grid (12 slots), skill pips
+- Right panel (system & GhostSignal): phone launch button (GhostSignal OS), quick travel 2×3 grid, crew status, system health dots, Nexus search
+- Phone overlay: lazy-loaded iframe to `:5555`, draggable, detach button, re-open via `sessionStorage`
+- World Announcer widget: 5 station themes (NEON FM / CITY WIRE / GHOST FREQ / CORP WATCH / FACTION RADIO), 7 badge categories, socket.io live feed, 12s auto-advance, fallback message pools
+- HUD micro-animations: button ripples, stat bar smooth transitions, credits bounce, inventory hover lift, pip-pop, panel spring slide, ticker pause-on-hover, toast slide-up
+- `/api/hud/state` now returns inventory and crew compact snapshots
+
+#### PlayerState Expanded
+- Added vitals: health (0–100), hunger (0–100), energy (0–100)
+- Added skills dict (8 defaults: hacking/combat/social/stealth/tech/medical/driving/negotiation)
+- Added implants list
+- Full CRUD methods: set_health, adjust_health, set_hunger, set_energy, get_skill, improve_skill, add_implant, etc.
+- `to_dict()` and `load_from_file()` updated for new fields
+
+#### Relationship System Expanded
+- `RelationshipEntry` gains `rel_type` and `tags` fields
+- 12 relationship types: brother/close_friend/friend/acquaintance/stranger/rival/enemy/lover/partner/crew/family/co_worker
+- Auto-type from score (90=brother, 75=close_friend, 50=friend, 20=acquaintance) — protected types never auto-override
+- `set_relationship_type()`, `add_crew_member()`, `get_crew()` on PlayerProfile
+- `relationship_interceptor.py` injects `rel_type` into agent system prompt context
+- 4 new skills: set_player_relationship_type, recruit_to_crew, list_crew, get_player_relationship_summary
+
+#### Visual Polish v0.81 (CSS)
+- Slide panels: diagonal gradient backgrounds with scene-accent color bleed
+- Richer panel open shadow with accent glow
+- Section labels: colored left-border indicator with glow
+- Stat bars: gradient-filled, glow shadows, low-health critical pulse animation
+- Tech item cards: gradient backgrounds + active glow
+- Inventory occupied slots: accent border + hover lift with glow
+- Crew member hover: slide + accent glow
+- HUD strip: left/right accent gradient bleed instead of flat black
+- Phone overlay: scanline texture overlay, stronger frame glow
+- Rep fill bar: gradient + glow
+- Active toggle buttons: sharper glow + animated pulse
+- Location/ticker/credits: text-shadow glows
+- All borders: richer, accent-aware
+- Panel body: inner fade shadow at top/bottom edges for scroll depth
+
+#### Critical Bug Fixes
+- socket.io CDN SRI integrity failures fixed across all 24+ scene templates (local copy at `/shared/js/socket.io.min.js`)
+- Asset Studio tabs crash fixed (`io()` at module level → guarded)
+- Hub/lounge/phone static path double-slash bugs fixed (`/shared/static/` → `/shared/`)
+
+### Tests
+- 50 new tests: TestInventoryManager (27), TestCrewManager (15), TestInventorySkills (5), TestCrewSkills (4)
+- All 50 passing, thread-safety verified in inventory and crew managers
+
+---
 ## [0.80b] — 2026-03 — "THE COPILOT LAYER" — ✅ COMPLETE
 
 ### New Features

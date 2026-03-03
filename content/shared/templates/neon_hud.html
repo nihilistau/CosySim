@@ -1,20 +1,18 @@
 {#
-  neon_hud.html — Universal Neon City HUD
-  =========================================
-  Inject via navbar_v2.html immediately after the spacer div.
-  The HUD is a 32px fixed strip that sits below the navbar and displays:
-    Left:   📍 active_location · game day/time · weather icon
-    Center: scrolling world event ticker
-    Right:  ₵ credits · REP bar · 🔥 heat %
+  neon_hud.html — Universal Neon City HUD v2
+  ===========================================
+  32px strip with left/right slide glass panels and phone overlay.
 
-  Expanded panel (click anywhere on the HUD strip): shows last 10 events.
+  Left panel:  Player stats — health, hunger, credits, rep, heat, inventory, implants
+  Right panel: Phone (iframe overlay), admin tools, scene settings, logs
+  Center:      Click to open event history feed (existing behaviour)
 
   Requires:
-    - /shared/static/css/cosysim-neon-hud.css  (loaded here)
-    - /shared/static/js/cosysim-neon-hud.js    (loaded here)
-    - Socket.IO (assumed already loaded by scene templates)
+    - /shared/css/cosysim-neon-hud.css
+    - /shared/js/cosysim-neon-hud.js
+    - Socket.IO (already loaded by scene templates)
 #}
-<link rel="stylesheet" href="/shared/static/css/cosysim-neon-hud.css">
+<link rel="stylesheet" href="/shared/css/cosysim-neon-hud.css">
 
 {# ── Neon HUD Strip ───────────────────────────────────────────────────── #}
 <div
@@ -23,8 +21,20 @@
   role="status"
   aria-live="polite"
   aria-label="Neon City status HUD"
-  title="Click to expand event history"
 >
+
+  {# ── Far Left: Inventory toggle ────────────────────────────────────── #}
+  <button class="cs-hud__toggle cs-hud__toggle--left" id="hud-toggle-left"
+          type="button" aria-label="Open player panel" title="Player Panel [I]">
+    <span class="cs-hud__toggle-icon" aria-hidden="true">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+        <rect x="1" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.2" fill="none"/>
+        <rect x="8" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.2" fill="none"/>
+        <rect x="1" y="9" width="5" height="3" rx="1" stroke="currentColor" stroke-width="1.2" fill="none"/>
+        <rect x="8" y="9" width="5" height="3" rx="1" stroke="currentColor" stroke-width="1.2" fill="none"/>
+      </svg>
+    </span>
+  </button>
 
   {# ── Left: Location + Time + Weather ──────────────────────────────── #}
   <div class="cs-hud__left">
@@ -34,8 +44,8 @@
     <span class="cs-hud__time" id="hud-time" aria-label="Game time">Day 1  00:00</span>
   </div>
 
-  {# ── Center: Event ticker ─────────────────────────────────────────── #}
-  <div class="cs-hud__center" aria-label="World events">
+  {# ── Center: Event ticker (click to open feed) ────────────────────── #}
+  <div class="cs-hud__center" id="hud-center-click" aria-label="World events" title="Click to open event feed">
     <div class="cs-hud__ticker-wrap">
       <span class="cs-hud__ticker" id="hud-ticker">⚡ Neon City Online</span>
     </div>
@@ -60,9 +70,37 @@
     <span class="cs-hud__heat" id="hud-heat" aria-label="Heat level">0%</span>
   </div>
 
+  {# ── Far Right: Command panel + phone toggles ─────────────────────── #}
+  <div class="cs-hud__right-actions">
+    <button class="cs-hud__toggle cs-hud__toggle--phone" id="hud-toggle-phone"
+            type="button" aria-label="Toggle phone overlay" title="Phone [P]">
+      <span class="cs-hud__toggle-icon" aria-hidden="true">
+        <svg width="12" height="14" viewBox="0 0 12 14" fill="none">
+          <rect x="1.5" y="0.5" width="9" height="13" rx="1.5" stroke="currentColor" stroke-width="1.2" fill="none"/>
+          <circle cx="6" cy="11.5" r="0.8" fill="currentColor"/>
+          <rect x="4" y="2" width="4" height="1" rx="0.5" fill="currentColor" opacity="0.5"/>
+        </svg>
+      </span>
+      <span class="cs-hud__phone-dot" id="hud-phone-dot" aria-hidden="true"></span>
+    </button>
+    <button class="cs-hud__toggle cs-hud__toggle--right" id="hud-toggle-right"
+            type="button" aria-label="Open command panel" title="Command Panel [C]">
+      <span class="cs-hud__toggle-icon" aria-hidden="true">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+          <circle cx="7" cy="7" r="5.5" stroke="currentColor" stroke-width="1.2" fill="none"/>
+          <circle cx="7" cy="7" r="2" stroke="currentColor" stroke-width="1.2" fill="none"/>
+          <line x1="7" y1="1.5" x2="7" y2="4.5" stroke="currentColor" stroke-width="1.2"/>
+          <line x1="7" y1="9.5" x2="7" y2="12.5" stroke="currentColor" stroke-width="1.2"/>
+          <line x1="1.5" y1="7" x2="4.5" y2="7" stroke="currentColor" stroke-width="1.2"/>
+          <line x1="9.5" y1="7" x2="12.5" y2="7" stroke="currentColor" stroke-width="1.2"/>
+        </svg>
+      </span>
+    </button>
+  </div>
+
 </div>{# /.cs-hud #}
 
-{# ── Event History Panel (hidden, shown on HUD click) ─────────────────── #}
+{# ── Event History Panel (center-click) ───────────────────────────────── #}
 <div class="cs-hud__panel" id="cs-hud-panel" aria-hidden="true" role="dialog" aria-label="World event history">
   <div class="cs-hud__panel-header">
     <span class="cs-hud__panel-title">⚡ NEON CITY FEED</span>
@@ -99,7 +137,278 @@
   </div>
 </div>
 
-{# ── Overlay backdrop ──────────────────────────────────────────────────── #}
+{# ── LEFT SLIDE PANEL: Player Stats ────────────────────────────────────── #}
+<aside class="cs-hud-slide cs-hud-slide--left" id="cs-hud-left-panel" aria-hidden="true" role="complementary" aria-label="Player panel">
+
+  <div class="cs-hud-slide__header">
+    <span class="cs-hud-slide__title">◈ PLAYER STATUS</span>
+    <button class="cs-hud-slide__close" id="hud-left-close" type="button" aria-label="Close player panel">✕</button>
+  </div>
+
+  <div class="cs-hud-slide__body" id="hud-left-body">
+
+    {# Vital bars #}
+    <div class="cs-hud-slide__section">
+      <div class="cs-hud-slide__section-label">VITALS</div>
+      <div class="cs-hud-slide__stat-row">
+        <span class="cs-hud-slide__stat-icon">❤️</span>
+        <span class="cs-hud-slide__stat-name">Health</span>
+        <div class="cs-hud-slide__bar-wrap">
+          <div class="cs-hud-slide__bar cs-hud-slide__bar--health" id="left-health-bar" style="width:100%"></div>
+        </div>
+        <span class="cs-hud-slide__stat-val" id="left-health-val">100</span>
+      </div>
+      <div class="cs-hud-slide__stat-row">
+        <span class="cs-hud-slide__stat-icon">🍜</span>
+        <span class="cs-hud-slide__stat-name">Hunger</span>
+        <div class="cs-hud-slide__bar-wrap">
+          <div class="cs-hud-slide__bar cs-hud-slide__bar--hunger" id="left-hunger-bar" style="width:80%"></div>
+        </div>
+        <span class="cs-hud-slide__stat-val" id="left-hunger-val">80</span>
+      </div>
+      <div class="cs-hud-slide__stat-row">
+        <span class="cs-hud-slide__stat-icon">⚡</span>
+        <span class="cs-hud-slide__stat-name">Energy</span>
+        <div class="cs-hud-slide__bar-wrap">
+          <div class="cs-hud-slide__bar cs-hud-slide__bar--energy" id="left-energy-bar" style="width:90%"></div>
+        </div>
+        <span class="cs-hud-slide__stat-val" id="left-energy-val">90</span>
+      </div>
+    </div>
+
+    {# Economy #}
+    <div class="cs-hud-slide__section">
+      <div class="cs-hud-slide__section-label">ECONOMY</div>
+      <div class="cs-hud-slide__kv-row">
+        <span class="cs-hud-slide__kv-key">₵ Credits</span>
+        <span class="cs-hud-slide__kv-val cs-accent" id="left-credits">5,000</span>
+      </div>
+      <div class="cs-hud-slide__kv-row">
+        <span class="cs-hud-slide__kv-key">REP</span>
+        <span class="cs-hud-slide__kv-val" id="left-rep">50/100</span>
+      </div>
+      <div class="cs-hud-slide__kv-row">
+        <span class="cs-hud-slide__kv-key">🔥 Heat</span>
+        <span class="cs-hud-slide__kv-val cs-hud-slide__heat-val" id="left-heat">0%</span>
+      </div>
+    </div>
+
+    {# Cyberdeck / Tech #}
+    <div class="cs-hud-slide__section">
+      <div class="cs-hud-slide__section-label">CYBERDECK</div>
+      <div class="cs-hud-slide__tech-grid" id="left-cyberdeck">
+        <div class="cs-hud-slide__tech-item cs-hud-slide__tech-item--active">
+          <span class="cs-hud-slide__tech-icon">💻</span>
+          <span class="cs-hud-slide__tech-name">Phantom v2</span>
+          <span class="cs-hud-slide__tech-stat">ICE: 8</span>
+        </div>
+        <div class="cs-hud-slide__tech-item">
+          <span class="cs-hud-slide__tech-icon">📡</span>
+          <span class="cs-hud-slide__tech-name">SigSpoof</span>
+          <span class="cs-hud-slide__tech-stat">LVL 3</span>
+        </div>
+      </div>
+    </div>
+
+    {# Implants #}
+    <div class="cs-hud-slide__section">
+      <div class="cs-hud-slide__section-label">IMPLANTS</div>
+      <div class="cs-hud-slide__implant-list" id="left-implants">
+        <div class="cs-hud-slide__implant">
+          <span class="cs-hud-slide__implant-dot cs-hud-slide__implant-dot--active"></span>
+          <span class="cs-hud-slide__implant-name">OculEx Mk.II</span>
+          <span class="cs-hud-slide__implant-type">VISION</span>
+        </div>
+        <div class="cs-hud-slide__implant">
+          <span class="cs-hud-slide__implant-dot cs-hud-slide__implant-dot--active"></span>
+          <span class="cs-hud-slide__implant-name">SynapTap</span>
+          <span class="cs-hud-slide__implant-type">REFLEX</span>
+        </div>
+      </div>
+    </div>
+
+    {# Inventory grid #}
+    <div class="cs-hud-slide__section">
+      <div class="cs-hud-slide__section-label">INVENTORY <span id="left-inv-count" class="cs-hud-slide__count">0/12</span></div>
+      <div class="cs-hud-slide__inv-grid" id="left-inventory">
+        {% for i in range(12) %}
+        <div class="cs-hud-slide__inv-slot" data-slot="{{ i }}" title="Empty slot"></div>
+        {% endfor %}
+      </div>
+    </div>
+
+    {# Skills #}
+    <div class="cs-hud-slide__section">
+      <div class="cs-hud-slide__section-label">SKILLS</div>
+      <div class="cs-hud-slide__skill-list" id="left-skills">
+        <div class="cs-hud-slide__skill-row">
+          <span class="cs-hud-slide__skill-name">Hacking</span>
+          <div class="cs-hud-slide__skill-pips" data-level="3">
+            <span class="pip pip--active"></span><span class="pip pip--active"></span><span class="pip pip--active"></span>
+            <span class="pip"></span><span class="pip"></span>
+          </div>
+        </div>
+        <div class="cs-hud-slide__skill-row">
+          <span class="cs-hud-slide__skill-name">Social Eng.</span>
+          <div class="cs-hud-slide__skill-pips" data-level="4">
+            <span class="pip pip--active"></span><span class="pip pip--active"></span><span class="pip pip--active"></span>
+            <span class="pip pip--active"></span><span class="pip"></span>
+          </div>
+        </div>
+        <div class="cs-hud-slide__skill-row">
+          <span class="cs-hud-slide__skill-name">Combat</span>
+          <div class="cs-hud-slide__skill-pips" data-level="2">
+            <span class="pip pip--active"></span><span class="pip pip--active"></span>
+            <span class="pip"></span><span class="pip"></span><span class="pip"></span>
+          </div>
+        </div>
+        <div class="cs-hud-slide__skill-row">
+          <span class="cs-hud-slide__skill-name">Street Cred</span>
+          <div class="cs-hud-slide__skill-pips" data-level="3">
+            <span class="pip pip--active"></span><span class="pip pip--active"></span><span class="pip pip--active"></span>
+            <span class="pip"></span><span class="pip"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>{# /.cs-hud-slide__body #}
+</aside>
+
+{# ── RIGHT SLIDE PANEL: Command Center ────────────────────────────────── #}
+<aside class="cs-hud-slide cs-hud-slide--right" id="cs-hud-right-panel" aria-hidden="true" role="complementary" aria-label="Command panel">
+
+  <div class="cs-hud-slide__header">
+    <span class="cs-hud-slide__title">⊕ COMMAND CENTER</span>
+    <button class="cs-hud-slide__close" id="hud-right-close" type="button" aria-label="Close command panel">✕</button>
+  </div>
+
+  <div class="cs-hud-slide__body">
+
+    {# Phone launch button #}
+    <div class="cs-hud-slide__section cs-hud-slide__section--phone">
+      <div class="cs-hud-slide__section-label">GHOSTSIGNAL OS</div>
+      <button class="cs-hud-slide__phone-launch" id="hud-phone-launch" type="button">
+        <span class="cs-hud-slide__phone-launch-icon">📱</span>
+        <span class="cs-hud-slide__phone-launch-label">Open SIGNAL</span>
+        <span class="cs-hud-slide__phone-launch-status" id="hud-phone-status">● ONLINE</span>
+      </button>
+      <div class="cs-hud-slide__phone-notifs" id="hud-phone-notifs">
+        <span class="cs-hud-slide__notif-pill">2 unread</span>
+      </div>
+    </div>
+
+    {# Scene navigation shortcuts #}
+    <div class="cs-hud-slide__section">
+      <div class="cs-hud-slide__section-label">QUICK TRAVEL</div>
+      <div class="cs-hud-slide__nav-grid" id="hud-nav-grid">
+        <a class="cs-hud-slide__nav-btn" href="http://localhost:5556" target="_blank" title="The Penthouse">🏙️ PENTHOUSE</a>
+        <a class="cs-hud-slide__nav-btn" href="http://localhost:5557" target="_blank" title="The Velvet Pit">🍸 VELVET PIT</a>
+        <a class="cs-hud-slide__nav-btn" href="http://localhost:5559" target="_blank" title="Club Noir">🃏 CLUB NOIR</a>
+        <a class="cs-hud-slide__nav-btn" href="http://localhost:5563" target="_blank" title="Neon City">⚡ NEON CITY</a>
+        <a class="cs-hud-slide__nav-btn" href="http://localhost:5565" target="_blank" title="The Score">💰 THE SCORE</a>
+        <a class="cs-hud-slide__nav-btn" href="http://localhost:5569" target="_blank" title="The Grid">🕸️ THE GRID</a>
+      </div>
+    </div>
+
+    {# Crew status #}
+    <div class="cs-hud-slide__section">
+      <div class="cs-hud-slide__section-label">CREW STATUS</div>
+      <div class="cs-hud-slide__crew-list" id="hud-crew-list">
+        <div class="cs-hud-slide__crew-empty">No crew yet. Build relationships to recruit.</div>
+      </div>
+    </div>
+
+    {# System info #}
+    <div class="cs-hud-slide__section">
+      <div class="cs-hud-slide__section-label">SYSTEM</div>
+      <div class="cs-hud-slide__sys-grid">
+        <div class="cs-hud-slide__sys-item">
+          <span class="cs-hud-slide__sys-label">LMStudio</span>
+          <span class="cs-hud-slide__sys-dot" id="sys-lmstudio" title="LMStudio"></span>
+        </div>
+        <div class="cs-hud-slide__sys-item">
+          <span class="cs-hud-slide__sys-label">Nexus</span>
+          <span class="cs-hud-slide__sys-dot" id="sys-nexus" title="Nexus KMS"></span>
+        </div>
+        <div class="cs-hud-slide__sys-item">
+          <span class="cs-hud-slide__sys-label">TTS</span>
+          <span class="cs-hud-slide__sys-dot" id="sys-tts" title="TTS Server"></span>
+        </div>
+        <div class="cs-hud-slide__sys-item">
+          <span class="cs-hud-slide__sys-label">ComfyUI</span>
+          <span class="cs-hud-slide__sys-dot" id="sys-comfy" title="ComfyUI"></span>
+        </div>
+      </div>
+      <a class="cs-hud-slide__sys-link" href="http://localhost:8500" target="_blank">⊞ Open Hub</a>
+    </div>
+
+    {# Nexus quick search #}
+    <div class="cs-hud-slide__section">
+      <div class="cs-hud-slide__section-label">NEXUS SEARCH</div>
+      <div class="cs-hud-slide__search-wrap">
+        <input type="text" class="cs-hud-slide__search-input" id="hud-nexus-search"
+               placeholder="Search knowledge…" autocomplete="off">
+        <button class="cs-hud-slide__search-btn" id="hud-nexus-search-btn" type="button">⌕</button>
+      </div>
+      <div class="cs-hud-slide__search-results" id="hud-nexus-results"></div>
+    </div>
+
+  </div>{# /.cs-hud-slide__body #}
+</aside>
+
+{# ── PHONE OVERLAY (iframe to :5555) ──────────────────────────────────── #}
+<div class="cs-phone-overlay" id="cs-phone-overlay" aria-hidden="true" role="dialog" aria-label="SIGNAL Phone">
+  <div class="cs-phone-overlay__shell">
+    <div class="cs-phone-overlay__topbar">
+      <span class="cs-phone-overlay__carrier">SIGNAL OS</span>
+      <div class="cs-phone-overlay__actions">
+        <button class="cs-phone-overlay__btn" id="phone-overlay-detach" type="button" title="Open full screen" aria-label="Open phone fullscreen">⤢</button>
+        <button class="cs-phone-overlay__btn cs-phone-overlay__btn--close" id="phone-overlay-close" type="button" title="Close phone" aria-label="Close phone">✕</button>
+      </div>
+    </div>
+    <iframe
+      id="cs-phone-frame"
+      class="cs-phone-overlay__frame"
+      src=""
+      title="SIGNAL OS"
+      allow="microphone; autoplay"
+      loading="lazy"
+    ></iframe>
+  </div>
+</div>
+
+{# ── Global backdrop ───────────────────────────────────────────────────── #}
 <div class="cs-hud__backdrop" id="cs-hud-backdrop" aria-hidden="true"></div>
 
-<script src="/shared/static/js/cosysim-neon-hud.js" defer></script>
+{# ── WORLD ANNOUNCER — street radio / news ticker ─────────────────────── #}
+<div class="cs-announcer" id="cs-announcer" aria-live="polite" aria-label="World Announcer">
+  <div class="cs-announcer__led" aria-hidden="true"></div>
+  <button class="cs-announcer__toggle" id="announcer-toggle" type="button" aria-label="Toggle world announcer">
+    <span class="cs-announcer__icon">📡</span>
+    <span class="cs-announcer__label">RADIO</span>
+  </button>
+  <div class="cs-announcer__body" id="announcer-body">
+    <div class="cs-announcer__header">
+      <span class="cs-announcer__station" id="announcer-station">NEON CITY RADIO</span>
+      <span class="cs-announcer__freq">99.7 FM</span>
+      <div class="cs-announcer__controls">
+        <button class="cs-announcer__ctrl" id="announcer-prev" title="Previous" aria-label="Previous announcement">⏮</button>
+        <button class="cs-announcer__ctrl" id="announcer-next" title="Next" aria-label="Next announcement">⏭</button>
+        <button class="cs-announcer__ctrl" id="announcer-pin" title="Pin open" aria-label="Pin announcer open">📌</button>
+        <button class="cs-announcer__ctrl cs-announcer__ctrl--close" id="announcer-close" title="Close" aria-label="Close announcer">✕</button>
+      </div>
+    </div>
+    <div class="cs-announcer__feed" id="announcer-feed">
+      <div class="cs-announcer__item cs-announcer__item--active" id="announcer-current">
+        <span class="cs-announcer__badge cs-announcer__badge--world">WORLD</span>
+        <span class="cs-announcer__text" id="announcer-text">Loading Neon City broadcast…</span>
+      </div>
+    </div>
+    <div class="cs-announcer__scroll-list" id="announcer-list" aria-label="Recent broadcasts"></div>
+  </div>
+</div>
+
+<script src="/shared/js/cosysim-neon-hud.js" defer></script>
+<script src="/shared/js/cosysim-announcer.js" defer></script>
+

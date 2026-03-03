@@ -22,6 +22,50 @@ logger = logging.getLogger(__name__)
 _NEXUS_CATEGORY = "player_profile"
 _NEXUS_KEY = "player_profile_v1"
 
+# ──── Relationship types ────
+
+RELATIONSHIP_TYPES = [
+    "stranger",
+    "acquaintance",
+    "friend",
+    "close_friend",
+    "lover",
+    "partner",
+    "co_worker",
+    "crew",
+    "brother",     # crew-level bond
+    "rival",
+    "enemy",
+    "family",
+]
+
+# Score → auto-upgraded type thresholds (only upgrade, never auto-downgrade past explicit set)
+_SCORE_TO_TYPE: List[tuple] = [
+    (90,  "brother"),
+    (75,  "close_friend"),
+    (50,  "friend"),
+    (20,  "acquaintance"),
+    (-20, "stranger"),
+    (-50, "rival"),
+    (-80, "enemy"),
+]
+
+
+def _auto_type_from_score(score: float, current_type: str) -> str:
+    """Suggest a relationship type based on score.
+
+    Only suggests upgrades for positive scores; negative scores suggest rival/enemy.
+    Explicit relationship types (lover, partner, crew, family) are never auto-overridden.
+    """
+    protected = {"lover", "partner", "crew", "family", "brother", "co_worker"}
+    if current_type in protected:
+        return current_type
+    for threshold, rel_type in _SCORE_TO_TYPE:
+        if score >= threshold:
+            return rel_type
+    return "enemy"
+
+
 # ──── Sentiment thresholds ────
 
 def _sentiment_from_score(score: float) -> str:
@@ -39,18 +83,22 @@ class RelationshipEntry:
     character_id: str
     score: float = 0.0
     sentiment: str = "neutral"
+    rel_type: str = "stranger"       # see RELATIONSHIP_TYPES
     last_interaction: float = 0.0
     interaction_count: int = 0
     notes: List[str] = field(default_factory=list)
+    tags: List[str] = field(default_factory=list)  # "crew", "crew:hackers", etc.
 
     def to_dict(self) -> dict:
         return {
             "character_id": self.character_id,
             "score": self.score,
             "sentiment": self.sentiment,
+            "rel_type": self.rel_type,
             "last_interaction": self.last_interaction,
             "interaction_count": self.interaction_count,
             "notes": list(self.notes),
+            "tags": list(self.tags),
         }
 
     @classmethod
@@ -59,9 +107,11 @@ class RelationshipEntry:
             character_id=data["character_id"],
             score=float(data.get("score", 0.0)),
             sentiment=data.get("sentiment", "neutral"),
+            rel_type=data.get("rel_type", "stranger"),
             last_interaction=float(data.get("last_interaction", 0.0)),
             interaction_count=int(data.get("interaction_count", 0)),
             notes=list(data.get("notes", [])),
+            tags=list(data.get("tags", [])),
         )
 
 
@@ -192,11 +242,83 @@ class PlayerProfile:
         entry = self.relationships[character_id]
         entry.score = max(-100.0, min(100.0, entry.score + delta))
         entry.sentiment = _sentiment_from_score(entry.score)
+        # Auto-upgrade type unless it's a protected type
+        entry.rel_type = _auto_type_from_score(entry.score, entry.rel_type)
         entry.last_interaction = time.time()
         entry.interaction_count += 1
         if notes:
             entry.notes.append(notes)
         return entry
+
+    def set_relationship_type(
+        self,
+        character_id: str,
+        rel_type: str,
+        notes: str = "",
+    ) -> RelationshipEntry:
+        """Explicitly set the relationship type for *character_id*.
+
+        This overrides the auto-calculated type. Use for story-driven
+        relationship changes (lover, crew, partner, etc.).
+
+        Args:
+            character_id: The NPC's identifier.
+            rel_type: One of RELATIONSHIP_TYPES.
+            notes: Optional note to record.
+
+        Returns:
+            Updated RelationshipEntry.
+        """
+        if character_id not in self.relationships:
+            self.relationships[character_id] = RelationshipEntry(character_id=character_id)
+        entry = self.relationships[character_id]
+        if rel_type not in RELATIONSHIP_TYPES:
+            logger.warning("set_relationship_type: unknown type '%s'", rel_type)
+        entry.rel_type = rel_type
+        entry.last_interaction = time.time()
+        if notes:
+            entry.notes.append(notes)
+        return entry
+
+    def add_crew_member(
+        self,
+        character_id: str,
+        crew_tag: str = "crew",
+        notes: str = "",
+    ) -> RelationshipEntry:
+        """Add *character_id* to the player's crew.
+
+        Sets rel_type to 'crew' and adds a crew tag. Also bumps score to
+        at least 50 if it's currently lower (can't be crew with a stranger).
+
+        Args:
+            character_id: The NPC's identifier.
+            crew_tag: Optional specific crew role tag (e.g. 'crew:hacker').
+            notes: Optional note.
+
+        Returns:
+            Updated RelationshipEntry.
+        """
+        if character_id not in self.relationships:
+            self.relationships[character_id] = RelationshipEntry(character_id=character_id)
+        entry = self.relationships[character_id]
+        entry.rel_type = "crew"
+        entry.score = max(entry.score, 50.0)
+        entry.sentiment = _sentiment_from_score(entry.score)
+        if crew_tag not in entry.tags:
+            entry.tags.append(crew_tag)
+        entry.last_interaction = time.time()
+        if notes:
+            entry.notes.append(notes)
+        logger.info("add_crew_member: %s joined crew as '%s'", character_id, crew_tag)
+        return entry
+
+    def get_crew(self) -> List[RelationshipEntry]:
+        """Return all characters with rel_type='crew' or crew tag."""
+        return [
+            r for r in self.relationships.values()
+            if r.rel_type == "crew" or "crew" in r.tags
+        ]
 
     # ──── Decisions ────
 
@@ -229,7 +351,7 @@ class PlayerProfile:
             reverse=True,
         )[:5]
         lines = [
-            f"{r.character_id}: {r.score:+.1f} ({r.sentiment}, {r.interaction_count} interactions)"
+            f"{r.character_id}: {r.score:+.1f} [{r.rel_type}] ({r.sentiment}, {r.interaction_count} interactions)"
             for r in top
         ]
         return "\n".join(lines)

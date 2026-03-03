@@ -90,9 +90,10 @@ Footer {
 }
 
 #left-panel {
-    width: 38;
+    width: 42;
     background: #0f0f1a;
     border-right: tall #1e293b;
+    overflow-y: auto;
 }
 
 #center-panel {
@@ -251,12 +252,14 @@ class CosySimTUI(App[None]):
 
     BINDINGS = [
         Binding("space",   "launch_selected",   "Launch",       show=True,  priority=True),
+        Binding("enter",   "launch_selected",   "Launch",       show=False, priority=True),
         Binding("s",       "stop_selected",     "Stop",         show=True,  priority=True),
         Binding("a",       "launch_autostart",  "Auto-start",   show=True,  priority=True),
         Binding("o",       "open_browser",      "Open",         show=True,  priority=True),
         Binding("c",       "open_canvas",       "Canvas",       show=True,  priority=True),
+        Binding("l",       "show_log",          "Log",          show=True,  priority=True),
         Binding("r",       "refresh_status",    "Refresh",      show=True,  priority=True),
-        Binding("i",       "import_har",        "Import HAR",   show=True,  priority=True),
+        Binding("i",       "import_har",        "Import HAR",   show=False, priority=True),
         Binding("up",      "cursor_up",         "Up",           show=False, priority=True),
         Binding("down",    "cursor_down",       "Down",         show=False, priority=True),
         Binding("q",       "quit",              "Quit",         show=True,  priority=True),
@@ -296,11 +299,11 @@ class CosySimTUI(App[None]):
             # Center panel — tabbed content
             with Vertical(id="center-panel"):
                 with TabbedContent():
+                    with TabPane("🌐 Services", id="tab-services"):
+                        yield self._build_services_table()
                     with TabPane("📋 Log", id="tab-log"):
                         yield RichLog(id="log-panel", highlight=True, markup=True,
                                       wrap=True, auto_scroll=True)
-                    with TabPane("🌐 Services", id="tab-services"):
-                        yield self._build_services_table()
                     with TabPane("🔑 Accounts", id="tab-accounts"):
                         with ScrollableContainer(id="account-list"):
                             yield from self._accounts_widgets()
@@ -455,7 +458,7 @@ class CosySimTUI(App[None]):
         # Status checks run in background — never block the event loop
         self._do_refresh()
         self._refresh_timer = self.set_interval(10, self._do_refresh)
-        self._log("CosySim TUI started. [dim]Space[/]=launch [dim]A[/]=autostart [dim]C[/]=canvas [dim]Q[/]=quit")
+        self._log("CosySim TUI started. [dim]↑↓[/]=navigate [dim]Space[/]=launch [dim]A[/]=autostart [dim]L[/]=log [dim]O[/]=open [dim]C[/]=canvas [dim]Q[/]=quit")
         if self._autostart:
             self.call_after_refresh(self.action_launch_autostart)
 
@@ -561,6 +564,14 @@ class CosySimTUI(App[None]):
     def action_cursor_down(self) -> None:
         self._select(self.selected_index + 1)
 
+    def action_show_log(self) -> None:
+        """Switch the center panel to the Log tab."""
+        try:
+            tc = self.query_one(TabbedContent)
+            tc.active = "tab-log"
+        except NoMatches:
+            pass
+
     # ── Launch / Stop ─────────────────────────────────────────────────────
 
     def action_launch_selected(self) -> None:
@@ -571,25 +582,47 @@ class CosySimTUI(App[None]):
 
     def action_launch_autostart(self) -> None:
         """Trigger auto-start in a background thread (never blocks the event loop)."""
+        # Switch to log tab so user sees startup progress
+        self.action_show_log()
         threading.Thread(target=self._autostart_worker, daemon=True, name="cosysim-autostart").start()
 
     def _autostart_worker(self) -> None:
         """Worker: start all auto_start targets sequentially with stagger."""
-        self._log_ts("[bold cyan]Auto-starting all ★ targets…[/]")
-        for name, info in ALL_TARGETS.items():
-            if not info.get("auto_start"):
-                continue
-            if _port_up(info["port"]):
-                self._log_ts(f"[yellow]{info['label']}[/] already up :{info['port']}")
-                continue
-            self._log_ts(f"[cyan]→[/] [bold]{info['label']}[/] :{info['port']}")
-            try:
-                self._start_one(name, info)
-            except Exception as exc:
-                import traceback
-                self._log_ts(f"[red]✗[/] {info['label']}: {exc}\n{traceback.format_exc()}")
-            time.sleep(0.5)
-        time.sleep(4)
+        import traceback as _tb
+
+        _dbg = open(PROJECT_ROOT / "tui_autostart.log", "w", buffering=1)
+        def dbg(msg: str) -> None:
+            _dbg.write(msg + "\n")
+            self._log_ts(msg)
+
+        dbg("[autostart] worker started")
+        try:
+            for name, info in ALL_TARGETS.items():
+                if not info.get("auto_start"):
+                    continue
+                port = info["port"]
+                label = info["label"]
+                dbg(f"[autostart] checking {name} ({label}) port={port}")
+                if _port_up(port):
+                    dbg(f"[autostart] {name} already up")
+                    continue
+                dbg(f"[autostart] starting {name} type={info['type']}")
+                try:
+                    self._start_one(name, info)
+                    dbg(f"[autostart] _start_one({name}) returned OK")
+                except Exception as exc:
+                    dbg(f"[autostart] _start_one({name}) FAILED: {exc}\n{_tb.format_exc()}")
+                time.sleep(0.5)
+            dbg("[autostart] loop done, waiting 8s for ports")
+            time.sleep(8)
+            for name, info in ALL_TARGETS.items():
+                if info.get("auto_start"):
+                    up = _port_up(info["port"])
+                    dbg(f"[autostart] final check {name}:{info['port']} up={up}")
+        except Exception as exc:
+            dbg(f"[autostart] WORKER CRASHED: {exc}\n{_tb.format_exc()}")
+        finally:
+            _dbg.close()
         self.call_from_thread(self._refresh_all_status)
 
     def _start_one(self, name: str, info: Dict[str, Any]) -> None:
@@ -598,9 +631,25 @@ class CosySimTUI(App[None]):
         if t == "flask":
             mod, cls_name = info["cls"].rsplit(".", 1)
             scene_cls = getattr(importlib.import_module(mod), cls_name)
-            thread = threading.Thread(
-                target=scene_cls().start, daemon=True, name=f"cosysim-{name}"
-            )
+            instance = scene_cls()
+            _log_path = str(PROJECT_ROOT / "tui_autostart.log")
+
+            def _flask_target() -> None:
+                # Textual owns the real stdout/stderr; redirect this thread's
+                # stdio to a per-service log so Werkzeug startup output doesn't
+                # crash with Bad file descriptor.
+                import sys as _sys, os as _os
+                _svc_log = open(PROJECT_ROOT / "logs" / f"{name}.log", "a", buffering=1)
+                _sys.stdout = _svc_log
+                _sys.stderr = _svc_log
+                try:
+                    instance.start()
+                except Exception as _exc:
+                    import traceback as _tb2
+                    with open(_log_path, "a", buffering=1) as _f:
+                        _f.write(f"[thread] {name} CRASHED: {_exc}\n{_tb2.format_exc()}\n")
+
+            thread = threading.Thread(target=_flask_target, daemon=True, name=f"cosysim-{name}")
             thread.start()
             self._launched_threads[name] = thread
         elif t == "streamlit":
@@ -706,6 +755,9 @@ class CosySimTUI(App[None]):
 
     def key_c(self) -> None:
         self.action_open_canvas()
+
+    def key_l(self) -> None:
+        self.action_show_log()
 
     def key_i(self) -> None:
         self.action_import_har()
@@ -847,8 +899,9 @@ class CosySimTUI(App[None]):
 def main() -> None:
     import argparse
     parser = argparse.ArgumentParser(description="CosySim TUI Launcher")
-    parser.add_argument("--autostart", action="store_true",
-                        help="Auto-launch all auto_start targets on open")
+    parser.add_argument("--no-autostart", dest="autostart", action="store_false",
+                        help="Open TUI without auto-launching targets")
+    parser.set_defaults(autostart=True)
     args = parser.parse_args()
     app = CosySimTUI(autostart=args.autostart)
     app.run()

@@ -6,10 +6,12 @@
 
 // ── SocketIO connection ───────────────────────────────────────────────────────
 
-const socket = io();
-socket.on('studio_health', (data) => updateHealth(data));
-socket.on('asset_generated', (data) => onAssetGenerated(data));
-socket.on('asset_error', (data) => toast(data.error || 'Generation failed', 'error'));
+const socket = (typeof io !== 'undefined') ? io() : null;
+if (socket) {
+  socket.on('studio_health', (data) => updateHealth(data));
+  socket.on('asset_generated', (data) => onAssetGenerated(data));
+  socket.on('asset_error', (data) => toast(data.error || 'Generation failed', 'error'));
+}
 
 // ── State ─────────────────────────────────────────────────────────────────────
 
