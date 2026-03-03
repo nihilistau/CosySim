@@ -318,7 +318,8 @@ async function startServer() {
     res.status(result.status).json(result.data || { error: result.error });
   });
 
-  const HAR_DIR = "C:\\Files\\Models\\CosySim\\data\\har_files";
+  const HAR_DIR = "C:\\Files\\Models\\HAR_Files";
+  const HAR_DIR_ALT = "C:\\Files\\Models\\CosySim\\data\\har_files";
 
   function findHarFile(filename: string): string | null {
     function walk(dir: string): string | null {
@@ -330,27 +331,17 @@ async function startServer() {
       }
       return null;
     }
-    return walk(HAR_DIR);
+    return walk(HAR_DIR) || walk(HAR_DIR_ALT);
   }
 
   // ── HAR File Management ───────────────────────────────────────────────────
   app.get("/api/har/list", async (req, res) => {
     try {
-      const entries: { name: string; path: string; size: number; domain: string }[] = [];
-      function walk(dir: string): void {
-        if (!fs.existsSync(dir)) return;
-        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-          const full = path.join(dir, entry.name);
-          if (entry.isDirectory()) walk(full);
-          else if (entry.name.endsWith(".har")) {
-            const stat = fs.statSync(full);
-            const domain = entry.name.replace(/\.har$/, "").replace(/_\d+$/, "");
-            entries.push({ name: entry.name, path: full, size: stat.size, domain });
-          }
-        }
-      }
-      walk(HAR_DIR);
-      res.json(entries);
+      // Use Python parser to list across all HAR directories
+      const result = await callPython(
+        "engine.integrations.rpc_proxy", "list_har_files_dict", {}
+      );
+      res.json(result);
     } catch (e: any) { res.status(500).json({ error: e.message }); }
   });
 
@@ -373,10 +364,10 @@ async function startServer() {
 
   app.post("/api/har/import-account", async (req, res) => {
     try {
-      const { filepath, account_name, services } = req.body;
+      const { path: filepath, account_name, services } = req.body;
       const result = await callPython(
         "engine.integrations.rpc_proxy", "import_har_to_pool",
-        { filepath, account_name, services }
+        { filepath: filepath || req.body.filepath, account_name, services }
       );
       res.json(result);
     } catch (e: any) { res.status(500).json({ error: e.message }); }
@@ -384,37 +375,38 @@ async function startServer() {
 
   app.get("/api/har/:filename/entries", async (req, res) => {
     try {
-      const harPath = findHarFile(req.params.filename);
-      if (!harPath) return res.status(404).json({ error: "HAR file not found" });
-      const filter = (req.query.filter as string) || "";
-      const methodFilter = (req.query.method as string) || "";
+      const { filename } = req.params;
+      const url_search = (req.query.url_search as string) || (req.query.filter as string) || "";
+      const method_filter = (req.query.method as string) || "";
       const limit = parseInt(req.query.limit as string) || 100;
       const offset = parseInt(req.query.offset as string) || 0;
-      const raw = JSON.parse(fs.readFileSync(harPath, "utf-8"));
-      let entries: any[] = raw.log?.entries || [];
-      if (filter) entries = entries.filter((e: any) => e.request?.url?.includes(filter));
-      if (methodFilter) entries = entries.filter((e: any) => e.request?.method === methodFilter.toUpperCase());
-      const total = entries.length;
-      const page = entries.slice(offset, offset + limit).map((e: any, i: number) => ({
-        idx: offset + i,
-        method: e.request?.method,
-        url: e.request?.url,
-        status: e.response?.status,
-        size: e.response?.content?.size || 0,
-        timing: e.time,
-      }));
-      res.json({ total, entries: page });
+
+      // Always route through Python — handles large files safely
+      const result = await callPython(
+        "engine.integrations.rpc_proxy", "get_entries_dict",
+        { filename, url_search, method_filter, offset, limit }
+      );
+      res.json(result);
     } catch (e: any) { res.status(500).json({ error: e.message }); }
   });
 
   app.get("/api/har/:filename/entry/:idx", async (req, res) => {
     try {
-      const harPath = findHarFile(req.params.filename);
-      if (!harPath) return res.status(404).json({ error: "HAR file not found" });
-      const raw = JSON.parse(fs.readFileSync(harPath, "utf-8"));
-      const entry = (raw.log?.entries || [])[parseInt(req.params.idx)];
-      if (!entry) return res.status(404).json({ error: "Entry not found" });
-      res.json(entry);
+      const result = await callPython(
+        "engine.integrations.rpc_proxy", "get_entry_dict",
+        { filename: req.params.filename, idx: parseInt(req.params.idx) }
+      );
+      res.json(result);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.get("/api/har/:filename/analyze", async (req, res) => {
+    try {
+      const result = await callPython(
+        "engine.integrations.rpc_proxy", "analyze_har_dict",
+        { filename: req.params.filename }
+      );
+      res.json(result);
     } catch (e: any) { res.status(500).json({ error: e.message }); }
   });
 

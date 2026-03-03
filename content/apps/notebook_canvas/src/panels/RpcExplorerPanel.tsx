@@ -15,6 +15,7 @@ import { v4 as uuidv4 } from 'uuid';
 // ── RPC Templates ─────────────────────────────────────────────────────────────
 
 const RPC_TEMPLATES: RpcTemplate[] = [
+  // ── Google Colab Agent ─────────────────────────────────────────────────────
   {
     label: 'Colab: AgentCreateTask',
     url: 'https://colab.clients6.google.com/$rpc/google.colab.v1.AgentService/CreateAgentTask',
@@ -50,12 +51,64 @@ const RPC_TEMPLATES: RpcTemplate[] = [
     content_type: 'application/json+protobuf',
     body: '[null]',
   },
+  // ── NotebookLM ─────────────────────────────────────────────────────────────
   {
     label: 'NLM: GenerateFreeFormStreamed',
     url: 'https://notebooklm.google.com/$rpc/google.internal.apps.maestro.ui.MaestroUiService/GenerateFreeFormStreamed',
     method: 'POST',
     content_type: 'application/json+protobuf',
     body: '[[["NOTEBOOK_ID_HERE","Your question here",null,null,[],null,null,[]]]]',
+  },
+  {
+    label: 'NLM: CreateNotebook',
+    url: 'https://notebooklm.google.com/$rpc/google.internal.apps.maestro.ui.MaestroUiService/CreateProject',
+    method: 'POST',
+    content_type: 'application/json+protobuf',
+    body: '[["New Notebook","Description here"]]',
+  },
+  {
+    label: 'NLM: ListNotebooks',
+    url: 'https://notebooklm.google.com/$rpc/google.internal.apps.maestro.ui.MaestroUiService/ListProjects',
+    method: 'POST',
+    content_type: 'application/json+protobuf',
+    body: '[[]]',
+  },
+  // ── GitHub Copilot ─────────────────────────────────────────────────────────
+  {
+    label: 'Copilot: Get Token',
+    url: 'https://github.com/github-copilot/chat/token',
+    method: 'POST',
+    content_type: 'application/json',
+    body: '{}',
+  },
+  {
+    label: 'Copilot: List Models',
+    url: 'https://api.individual.githubcopilot.com/models',
+    method: 'GET',
+    content_type: 'application/json',
+    body: '',
+  },
+  {
+    label: 'Copilot: Create Thread',
+    url: 'https://api.individual.githubcopilot.com/github/chat/threads',
+    method: 'POST',
+    content_type: 'application/json',
+    body: '{}',
+  },
+  {
+    label: 'Copilot: Send Message',
+    url: 'https://api.individual.githubcopilot.com/github/chat/threads/THREAD_ID_HERE/messages',
+    method: 'POST',
+    content_type: 'application/json',
+    body: JSON.stringify({
+      content: 'Hello, reply with exactly: test ok',
+      intent: 'conversation',
+      model: 'claude-sonnet-4.6',
+      mode: 'immersive',
+      parentMessageID: 'root',
+      streaming: true,
+      skillOptions: { deepCodeSearch: false },
+    }, null, 2),
   },
 ];
 

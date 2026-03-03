@@ -1,13 +1,14 @@
 /**
- * HarExplorerPanel — Browse, filter, and import HAR files.
+ * HarExplorerPanel — Browse, filter, analyze and import HAR files.
  *
- * Layout: sidebar (HAR file list) + main (entry browser + detail).
+ * Layout: sidebar (HAR file list) + main (analyze / entry browser + detail).
  */
 
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  FileText, Upload, RefreshCw, Search, Loader, ChevronRight,
-  ChevronDown, Copy, Key, Filter, AlertCircle, Play, Database,
+  FileText, Upload, RefreshCw, Search, Loader, Copy, Key, Filter,
+  AlertCircle, Play, Database, BarChart2, Shield, Github, Globe,
+  ChevronDown, ChevronRight,
 } from 'lucide-react';
 import { HARFile, HAREntry } from '../types';
 
@@ -435,7 +436,7 @@ function EntryBrowser({
 
         {/* Bottom toolbar */}
         <div className="flex items-center justify-between px-3 py-1.5 border-t border-zinc-200 dark:border-zinc-800 shrink-0 bg-zinc-50 dark:bg-zinc-900/50">
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-1">
             <button
               onClick={() => {
                 setMethod('POST');
@@ -444,16 +445,57 @@ function EntryBrowser({
               }}
               className="flex items-center gap-1 px-2 py-0.5 text-[10px] bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded text-zinc-600 dark:text-zinc-400"
             >
-              <Database size={9} /> Find RPC Endpoints
+              <Database size={9} /> RPC Endpoints
             </button>
             <button
               onClick={() => {
-                setUrlSearch('SAPISID');
+                setMethod('');
+                setUrlSearch('githubcopilot.com');
                 setTimeout(() => loadEntries(true), 50);
               }}
               className="flex items-center gap-1 px-2 py-0.5 text-[10px] bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded text-zinc-600 dark:text-zinc-400"
             >
-              <Key size={9} /> Extract Auth Cookies
+              <Github size={9} /> Copilot API
+            </button>
+            <button
+              onClick={() => {
+                setMethod('POST');
+                setUrlSearch('colab');
+                setTimeout(() => loadEntries(true), 50);
+              }}
+              className="flex items-center gap-1 px-2 py-0.5 text-[10px] bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded text-zinc-600 dark:text-zinc-400"
+            >
+              <Globe size={9} /> Colab
+            </button>
+            <button
+              onClick={() => {
+                setMethod('POST');
+                setUrlSearch('notebooklm');
+                setTimeout(() => loadEntries(true), 50);
+              }}
+              className="flex items-center gap-1 px-2 py-0.5 text-[10px] bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded text-zinc-600 dark:text-zinc-400"
+            >
+              <Globe size={9} /> NLM
+            </button>
+            <button
+              onClick={() => {
+                setMethod('');
+                setUrlSearch('cookie');
+                setTimeout(() => loadEntries(true), 50);
+              }}
+              className="flex items-center gap-1 px-2 py-0.5 text-[10px] bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded text-zinc-600 dark:text-zinc-400"
+            >
+              <Key size={9} /> Auth
+            </button>
+            <button
+              onClick={() => {
+                setMethod('');
+                setUrlSearch('');
+                setTimeout(() => loadEntries(true), 50);
+              }}
+              className="flex items-center gap-1 px-2 py-0.5 text-[10px] bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded text-zinc-600 dark:text-zinc-400"
+            >
+              ✕ Clear
             </button>
           </div>
         </div>
@@ -471,12 +513,157 @@ function EntryBrowser({
   );
 }
 
+// ── Analysis Panel ────────────────────────────────────────────────────────────
+
+function AnalysisPanel({ file }: { file: HARFile }) {
+  const [analysis, setAnalysis] = useState<any | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const run = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const r = await fetch(`/api/har/${encodeURIComponent(file.name)}/analyze`);
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || 'Analysis failed');
+      setAnalysis(data);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { run(); }, [file.name]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center flex-1 text-zinc-400">
+        <Loader size={20} className="animate-spin mr-2" />
+        <span className="text-sm">Analyzing {file.name}…{file.size_mb > 50 ? ' (large file, streaming)' : ''}</span>
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div className="flex items-center gap-2 p-4 text-red-600 dark:text-red-400">
+        <AlertCircle size={16} /> {error}
+      </div>
+    );
+  }
+  if (!analysis) return null;
+
+  const statusColors: Record<number, string> = {
+    2: 'text-emerald-600 dark:text-emerald-400',
+    3: 'text-blue-600 dark:text-blue-400',
+    4: 'text-amber-600 dark:text-amber-400',
+    5: 'text-red-600 dark:text-red-400',
+  };
+
+  return (
+    <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      {/* Summary row */}
+      <div className="grid grid-cols-4 gap-3">
+        {[
+          { label: 'Total Entries', value: analysis.total_entries?.toLocaleString() },
+          { label: 'Unique Domains', value: analysis.unique_domains?.length },
+          { label: 'Cookies', value: analysis.cookies_found?.length },
+          { label: 'Methods', value: Object.keys(analysis.methods || {}).join(', ') },
+        ].map(({ label, value }) => (
+          <div key={label} className="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded p-3">
+            <p className="text-[10px] text-zinc-500 dark:text-zinc-400 uppercase font-semibold">{label}</p>
+            <p className="text-lg font-bold text-zinc-900 dark:text-zinc-100">{value}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Auth detection */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className={`flex items-center gap-2 px-3 py-2 rounded border ${
+          analysis.has_github_auth
+            ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400'
+            : 'bg-zinc-50 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-400'
+        }`}>
+          <Github size={14} />
+          <span className="text-xs font-medium">GitHub Auth {analysis.has_github_auth ? '✓ FOUND' : '— not found'}</span>
+          {analysis.gh_bearer_found && <span className="text-[10px] ml-auto">GitHub-Bearer</span>}
+        </div>
+        <div className={`flex items-center gap-2 px-3 py-2 rounded border ${
+          analysis.has_google_auth
+            ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-400'
+            : 'bg-zinc-50 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-400'
+        }`}>
+          <Shield size={14} />
+          <span className="text-xs font-medium">Google Auth {analysis.has_google_auth ? '✓ FOUND' : '— not found'}</span>
+          {analysis.sapisid_found && <span className="text-[10px] ml-auto">SAPISID</span>}
+        </div>
+      </div>
+
+      {/* Interesting domains */}
+      {analysis.interesting_domains?.length > 0 && (
+        <div className="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded p-3">
+          <h4 className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase mb-2 flex items-center gap-1">
+            <Globe size={10} /> Interesting Domains
+          </h4>
+          <div className="flex flex-wrap gap-1">
+            {analysis.interesting_domains.map((d: string) => (
+              <span key={d} className="px-2 py-0.5 text-[10px] bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded border border-blue-200 dark:border-blue-800 font-mono">
+                {d}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Status distribution */}
+      <div className="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded p-3">
+        <h4 className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase mb-2 flex items-center gap-1">
+          <BarChart2 size={10} /> Status Distribution
+        </h4>
+        <div className="flex flex-wrap gap-2">
+          {Object.entries(analysis.status_distribution || {}).map(([status, count]) => {
+            const prefix = Math.floor(parseInt(status) / 100);
+            return (
+              <div key={status} className={`text-xs font-mono ${statusColors[prefix] ?? 'text-zinc-500'}`}>
+                {status}: <span className="font-bold">{count as number}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* All cookies */}
+      {analysis.cookies_found?.length > 0 && (
+        <div className="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded p-3">
+          <h4 className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase mb-2 flex items-center gap-1">
+            <Key size={10} /> Cookie Names ({analysis.cookies_found.length})
+          </h4>
+          <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto">
+            {analysis.cookies_found.map((c: string) => (
+              <span key={c} className="px-1.5 py-0.5 text-[9px] bg-zinc-100 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-400 rounded font-mono">{c}</span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <button
+        onClick={run}
+        className="flex items-center gap-1 px-3 py-1.5 text-xs bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded text-zinc-600 dark:text-zinc-400"
+      >
+        <RefreshCw size={11} /> Re-analyze
+      </button>
+    </div>
+  );
+}
+
 // ── Main Panel ────────────────────────────────────────────────────────────────
 
 export default function HarExplorerPanel() {
   const [files, setFiles] = useState<HARFile[]>([]);
   const [selectedFile, setSelectedFile] = useState<HARFile | null>(null);
   const [accounts, setAccounts] = useState<string[]>([]);
+  const [mainTab, setMainTab] = useState<'entries' | 'analyze'>('entries');
 
   const loadFiles = async () => {
     try {
@@ -496,22 +683,44 @@ export default function HarExplorerPanel() {
 
   return (
     <div className="flex h-full w-full overflow-hidden">
-      <HarSidebar files={files} selectedFile={selectedFile} onSelect={setSelectedFile} onRefresh={loadFiles} />
+      <HarSidebar files={files} selectedFile={selectedFile} onSelect={(f) => { setSelectedFile(f); setMainTab('entries'); }} onRefresh={loadFiles} />
       <div className="flex flex-col flex-1 overflow-hidden">
         {selectedFile ? (
           <>
-            <div className="flex items-center gap-2 px-4 py-2 border-b border-zinc-200 dark:border-zinc-800 shrink-0 bg-zinc-50 dark:bg-zinc-900/50">
+            {/* Header + tabs */}
+            <div className="flex items-center gap-3 px-4 py-2 border-b border-zinc-200 dark:border-zinc-800 shrink-0 bg-zinc-50 dark:bg-zinc-900/50">
               <FileText size={13} className="text-zinc-400" />
               <span className="text-sm font-medium text-zinc-800 dark:text-zinc-200">{selectedFile.name}</span>
               <span className="text-xs text-zinc-400">{selectedFile.size_mb} MB</span>
+              <div className="ml-auto flex gap-1">
+                {(['entries', 'analyze'] as const).map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => setMainTab(t)}
+                    className={`px-3 py-1 text-xs rounded font-medium transition-colors ${
+                      mainTab === t
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700'
+                    }`}
+                  >
+                    {t === 'analyze' ? <span className="flex items-center gap-1"><BarChart2 size={11} />Analyze</span> : 'Entries'}
+                  </button>
+                ))}
+              </div>
             </div>
-            <EntryBrowser file={selectedFile} accounts={accounts} />
+            {mainTab === 'entries' && <EntryBrowser file={selectedFile} accounts={accounts} />}
+            {mainTab === 'analyze' && (
+              <div className="flex flex-1 overflow-hidden">
+                <AnalysisPanel file={selectedFile} />
+              </div>
+            )}
           </>
         ) : (
           <div className="flex-1 flex items-center justify-center text-zinc-400 dark:text-zinc-500">
             <div className="text-center space-y-2">
               <FileText size={36} className="mx-auto opacity-30" />
               <p className="text-sm">Select a HAR file to browse entries</p>
+              <p className="text-xs text-zinc-400">Supports files up to 300MB+ via streaming</p>
             </div>
           </div>
         )}

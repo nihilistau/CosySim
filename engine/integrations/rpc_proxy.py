@@ -389,3 +389,64 @@ def teardown_by_id(session_id: str) -> Dict[str, Any]:
         return {"error": f"Session {session_id} not found"}
     server.teardown(session)
     return {"ok": True, "session_id": session_id}
+
+
+# ──── HAR parser bridge ───────────────────────────────────────────────────────
+
+def list_har_files_dict(**_: Any) -> Dict[str, Any]:
+    """List all HAR files across configured HAR directories."""
+    from engine.integrations.har_parser import list_har_files_dict as _fn
+    return _fn()
+
+
+def get_entries_dict(
+    filename: str,
+    url_search: str = "",
+    method_filter: str = "",
+    offset: int = 0,
+    limit: int = 100,
+    **_: Any,
+) -> Dict[str, Any]:
+    """Get paginated, filtered entries from a HAR file.
+
+    Args:
+        filename: HAR file name (auto-located across base dirs).
+        url_search: URL substring filter.
+        method_filter: HTTP method filter.
+        offset: Pagination offset.
+        limit: Page size (max 200).
+
+    Returns:
+        Dict with ``total``, ``entries`` (list of HAREntry dicts).
+    """
+    from engine.integrations.har_parser import get_entries_dict as _fn
+    return _fn(
+        filename=filename,
+        url_search=url_search,
+        method_filter=method_filter,
+        offset=int(offset),
+        limit=int(limit),
+    )
+
+
+def get_entry_dict(filename: str, idx: int, **_: Any) -> Dict[str, Any]:
+    """Get a single HAR entry by filename and index."""
+    from engine.integrations.har_parser import get_entry_dict as _fn
+    return _fn(filename=filename, idx=int(idx))
+
+
+def analyze_har_dict(filename: str, **_: Any) -> Dict[str, Any]:
+    """Analyze a HAR file and return a summary."""
+    from engine.integrations.har_parser import analyze_har_dict as _fn
+    return _fn(filename=filename)
+
+
+def import_har_to_pool(
+    filepath: str = "",
+    account_name: str = "",
+    services: Optional[List[str]] = None,
+    **_: Any,
+) -> Dict[str, Any]:
+    """Import cookies from a HAR file into the account pool."""
+    from engine.integrations.har_parser import import_har_to_pool as _fn
+    return _fn(filepath=filepath, account_name=account_name, services=services)
