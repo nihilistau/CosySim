@@ -10,7 +10,8 @@ Keyboard shortcuts:
     S              — stop selected target  (kills thread; port goes down)
     A              — launch all auto-start targets
     O              — open selected in browser
-    I              — HAR import wizard
+    C              — open Nexus Canvas in browser (localhost:5590)
+    I              — HAR import wizard (scans all HAR directories)
     R              — refresh all port statuses
     Q / Ctrl+C     — quit (stops launched subprocesses)
 """
@@ -51,14 +52,21 @@ from textual.widgets import (
 )
 from textual.timer import Timer
 
+# ── HAR directory roots ────────────────────────────────────────────────────
+HAR_REAL_ROOT = Path(r"C:\Files\Models\HAR_Files")
+HAR_LOCAL_ROOT = PROJECT_ROOT / "data" / "har_files"
+ACCOUNTS_COOKIES_DIR = PROJECT_ROOT / "data" / "accounts"    # {acct}_cookies.json
+ACCOUNTS_LEGACY_DIR = PROJECT_ROOT / "data" / "google_accounts"  # {acct}/cookies.json
+
 # ── External services checked in the panel ─────────────────────────────────
 EXTERNAL_SERVICES = [
-    ("LMStudio",     1234, "http://localhost:1234/v1/models"),
-    ("Nexus KMS",    8700, "http://localhost:8700/api/health"),
-    ("ComfyUI",      8188, "http://localhost:8188"),
-    ("TTS Server",   8600, "http://localhost:8600/health"),
-    ("NLM Proxy",    8800, "http://localhost:8800/health"),
-    ("Nexus Canvas", 5590, "http://localhost:5590"),
+    ("LMStudio",      1234, "http://localhost:1234/v1/models"),
+    ("Nexus KMS",     8700, "http://localhost:8700/api/health"),
+    ("ComfyUI",       8188, "http://localhost:8188"),
+    ("TTS Server",    8600, "http://localhost:8600/health"),
+    ("NLM Proxy",     8800, "http://localhost:8800/health"),
+    ("Nexus Canvas",  5590, "http://localhost:5590"),
+    ("GitHub Copilot", 0,   ""),  # token-based, not port
 ]
 
 # ── Colour scheme ───────────────────────────────────────────────────────────
@@ -246,10 +254,11 @@ class CosySimTUI(App[None]):
         Binding("s",       "stop_selected",     "Stop",         show=True),
         Binding("a",       "launch_autostart",  "Auto-start",   show=True),
         Binding("o",       "open_browser",      "Open",         show=True),
+        Binding("c",       "open_canvas",       "Canvas",       show=True),
         Binding("r",       "refresh_status",    "Refresh",      show=True),
         Binding("i",       "import_har",        "Import HAR",   show=True),
         Binding("up",      "cursor_up",         "Up",           show=False),
-        Binding("down",    "cursor_down",        "Down",         show=False),
+        Binding("down",    "cursor_down",       "Down",         show=False),
         Binding("q",       "quit",              "Quit",         show=True),
     ]
 
@@ -294,6 +303,8 @@ class CosySimTUI(App[None]):
                         yield self._build_services_pane()
                     with TabPane("🔑 Accounts", id="tab-accounts"):
                         yield self._build_accounts_pane()
+                    with TabPane("📡 HAR Files", id="tab-har"):
+                        yield self._build_har_pane()
 
                 yield Static(id="details-bar")
 
@@ -309,6 +320,17 @@ class CosySimTUI(App[None]):
         yield Footer()
 
     def _ext_row(self, label: str, port: int, url: str) -> Static:
+        if port == 0:
+            # Token-based service — check for cookies file
+            cookies_path = ACCOUNTS_COOKIES_DIR / "nihilistcod_cookies.json"
+            ok = cookies_path.exists()
+            icon = "[green]●[/]" if ok else "[yellow]○[/]"
+            suffix = "[dim](cookie)[/]"
+            return Static(
+                f" {icon} [bold]{label}[/] {suffix}",
+                id=f"ext-copilot",
+                classes="ServiceStatus",
+            )
         up = _port_up(port)
         icon = "[green]●[/]" if up else "[red]○[/]"
         return Static(
@@ -333,31 +355,102 @@ class CosySimTUI(App[None]):
 
     def _build_accounts_pane(self) -> Widget:
         with ScrollableContainer(id="account-list") as sc:
-            har_root = PROJECT_ROOT / "data" / "har_files"
-            accounts_dir = PROJECT_ROOT / "data" / "google_accounts"
             account_names: List[str] = []
 
-            # Discover accounts from har_files folder structure
-            if har_root.exists():
-                for d in sorted(har_root.iterdir()):
-                    if d.is_dir() and not d.name.startswith("."):
-                        account_names.append(d.name)
+            # Primary: real HAR root (e.g. C:\Files\Models\HAR_Files\nihilistcod\)
+            for har_root in (HAR_REAL_ROOT, HAR_LOCAL_ROOT):
+                if har_root.exists():
+                    for d in sorted(har_root.iterdir()):
+                        if d.is_dir() and not d.name.startswith(".") and d.name not in account_names:
+                            account_names.append(d.name)
+
+            # Also pick up any *_cookies.json accounts not seen in har dirs
+            if ACCOUNTS_COOKIES_DIR.exists():
+                for f in sorted(ACCOUNTS_COOKIES_DIR.glob("*_cookies.json")):
+                    acct = f.stem.removesuffix("_cookies")
+                    if acct not in account_names:
+                        account_names.append(acct)
 
             if not account_names:
-                yield Static(" No accounts found. Press [bold]I[/] to import a HAR.", classes="account-row")
+                yield Static(
+                    " No accounts found. Press [bold]I[/] to import a HAR.",
+                    classes="account-row",
+                )
             else:
                 for acct in account_names:
-                    acct_dir = accounts_dir / acct / "cookies.json"
-                    has_cookies = acct_dir.exists()
+                    # Check both new and legacy cookie formats
+                    new_cookies = ACCOUNTS_COOKIES_DIR / f"{acct}_cookies.json"
+                    legacy_cookies = ACCOUNTS_LEGACY_DIR / acct / "cookies.json"
+                    has_cookies = new_cookies.exists() or legacy_cookies.exists()
                     icon = "[green]✓[/]" if has_cookies else "[yellow]○[/]"
+
+                    # Count HARs across both dirs
                     har_count = 0
-                    har_dir = har_root / acct
-                    if har_dir.exists():
-                        har_count = len(list(har_dir.glob("*.har")))
+                    for har_root in (HAR_REAL_ROOT, HAR_LOCAL_ROOT):
+                        har_dir = har_root / acct
+                        if har_dir.exists():
+                            har_count += sum(1 for _ in har_dir.glob("*.har"))
+
+                    # Detect service types from cookie presence
+                    services: List[str] = []
+                    if new_cookies.exists():
+                        try:
+                            import json as _json
+                            data = _json.loads(new_cookies.read_text())
+                            if any("github" in k for k in data):
+                                services.append("github")
+                            if any("google" in k for k in data):
+                                services.append("google")
+                        except Exception:
+                            pass
+
+                    svc_label = (" [dim]" + ",".join(services) + "[/]") if services else ""
                     yield Static(
-                        f" {icon} [bold]{acct}[/] [dim]({har_count} HARs)[/]",
+                        f" {icon} [bold]{acct}[/]{svc_label} [dim]({har_count} HARs)[/]",
                         classes="account-row",
                     )
+        return sc  # type: ignore[return-value]
+
+    def _build_har_pane(self) -> Widget:
+        """Show all HAR files from all directories, grouped by account."""
+        with ScrollableContainer(id="har-list") as sc:
+            all_files: Dict[str, List[Path]] = {}
+
+            for har_root in (HAR_REAL_ROOT, HAR_LOCAL_ROOT):
+                if not har_root.exists():
+                    continue
+                for d in sorted(har_root.iterdir()):
+                    if not d.is_dir() or d.name.startswith("."):
+                        continue
+                    hars = sorted(d.glob("*.har"))
+                    if hars:
+                        all_files.setdefault(d.name, []).extend(hars)
+
+            if not all_files:
+                yield Static(
+                    " No HAR files found. Capture HARs via the Canvas browser or import manually.",
+                    classes="account-row",
+                )
+            else:
+                total = sum(len(v) for v in all_files.values())
+                yield Static(
+                    f" [bold cyan]{total} HAR files[/] across [bold]{len(all_files)}[/] accounts"
+                    f"  [dim]Press I to import[/]",
+                    classes="account-row",
+                )
+                yield Static("", classes="account-row")
+                for acct, files in sorted(all_files.items()):
+                    total_mb = sum(f.stat().st_size for f in files) / (1024 * 1024)
+                    yield Static(
+                        f" [bold]{acct}[/] [dim]({len(files)} files · {total_mb:.1f} MB)[/]",
+                        classes="account-row",
+                    )
+                    for f in files:
+                        size_mb = f.stat().st_size / (1024 * 1024)
+                        yield Static(
+                            f"   [dim]└ {f.name}  ({size_mb:.1f} MB)[/]",
+                            classes="account-row",
+                        )
         return sc  # type: ignore[return-value]
 
     # ── On mount ──────────────────────────────────────────────────────────
@@ -379,10 +472,18 @@ class CosySimTUI(App[None]):
         # Refresh external service indicators
         for label, port, _ in EXTERNAL_SERVICES:
             try:
-                widget = self.query_one(f"#ext-{port}", Static)
-                up = _port_up(port)
-                icon = "[green]●[/]" if up else "[red]○[/]"
-                widget.update(f" {icon} [bold]{label}[/] [dim]:{port}[/]")
+                if port == 0:
+                    # Token-based (GitHub Copilot) — check cookies file
+                    cookies_path = ACCOUNTS_COOKIES_DIR / "nihilistcod_cookies.json"
+                    ok = cookies_path.exists()
+                    icon = "[green]●[/]" if ok else "[yellow]○[/]"
+                    widget = self.query_one("#ext-copilot", Static)
+                    widget.update(f" {icon} [bold]{label}[/] [dim](cookie)[/]")
+                else:
+                    widget = self.query_one(f"#ext-{port}", Static)
+                    up = _port_up(port)
+                    icon = "[green]●[/]" if up else "[red]○[/]"
+                    widget.update(f" {icon} [bold]{label}[/] [dim]:{port}[/]")
             except NoMatches:
                 pass
         self._update_stats()
@@ -506,6 +607,18 @@ class CosySimTUI(App[None]):
                 thread.start()
                 self._launched_threads[name] = thread
 
+            elif t == "node":
+                # Node.js service — run 'npm run dev' in the script directory
+                script_dir = PROJECT_ROOT / info["script"]
+                proc = subprocess.Popen(
+                    "npm run dev",
+                    cwd=str(script_dir),
+                    shell=True,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                self._launched_procs[name] = proc
+
         except Exception as exc:
             self.call_from_thread(
                 self._log, f"[red]✗[/] {info['label']}: {exc}"
@@ -558,60 +671,97 @@ class CosySimTUI(App[None]):
         self._log(f"[dim]Opening[/] {url}")
         webbrowser.open(url)
 
+    def action_open_canvas(self) -> None:
+        url = "http://localhost:5590"
+        self._log(f"[cyan]Opening Nexus Canvas[/] {url}")
+        webbrowser.open(url)
+
     # ── HAR Import ────────────────────────────────────────────────────────
 
     def action_import_har(self) -> None:
-        self._log("[cyan]HAR import:[/] scanning data/har_files/ for new account HARs...")
+        self._log("[cyan]HAR import:[/] scanning all HAR directories...")
         self._run_har_import()
 
     @work(thread=True)
     def _run_har_import(self) -> None:
-        har_root = PROJECT_ROOT / "data" / "har_files"
-        if not har_root.exists():
-            self.call_from_thread(self._log, "[red]data/har_files/ not found[/]")
-            return
-
-        try:
-            from engine.nexus.google_account_manager import GoogleAccountManager
-            manager = GoogleAccountManager()
-        except Exception as exc:
-            self.call_from_thread(self._log, f"[red]AccountManager unavailable: {exc}[/]")
-            return
-
-        imported = 0
-        for account_dir in sorted(har_root.iterdir()):
-            if not account_dir.is_dir():
+        """Scan both HAR directories and import all accounts."""
+        # Collect all (account, har_file) pairs
+        pairs: List[tuple[str, Path]] = []
+        for har_root in (HAR_REAL_ROOT, HAR_LOCAL_ROOT):
+            if not har_root.exists():
                 continue
-            account_id = account_dir.name
-            # Skip top-level legacy folders
-            if account_id in ("aistudio", "notebooklm", "cosysim"):
-                continue
-            for har_file in sorted(account_dir.glob("*.har")):
-                service = "google"
-                if "aistudio" in har_file.name:
-                    service = "aistudio"
-                elif "notebooklm" in har_file.name:
-                    service = "notebooklm"
-                elif "drive" in har_file.name:
-                    service = "drive"
-                try:
-                    ok = manager.import_from_har(str(har_file), account_id, service)
-                    icon = "[green]✓[/]" if ok else "[yellow]○[/]"
-                    self.call_from_thread(
-                        self._log,
-                        f" {icon} [dim]{account_id}[/] ← {har_file.name}"
-                    )
-                    if ok:
-                        imported += 1
-                except Exception as exc:
-                    self.call_from_thread(
-                        self._log,
-                        f" [red]✗[/] {har_file.name}: {exc}"
-                    )
+            for account_dir in sorted(har_root.iterdir()):
+                if not account_dir.is_dir() or account_dir.name.startswith("."):
+                    continue
+                account_id = account_dir.name
+                for har_file in sorted(account_dir.glob("*.har")):
+                    pairs.append((account_id, har_file))
+
+        if not pairs:
+            self.call_from_thread(self._log, "[yellow]No HAR files found in any directory[/]")
+            return
 
         self.call_from_thread(
             self._log,
-            f"[green bold]HAR import complete.[/] {imported} file(s) imported."
+            f"[dim]Found {len(pairs)} HAR file(s) across "
+            f"{len(set(a for a, _ in pairs))} account(s)[/]"
+        )
+
+        # Try har_parser import_har_to_pool first (works for all service types)
+        try:
+            from engine.integrations.har_parser import import_har_to_pool
+            _use_har_parser = True
+        except ImportError:
+            _use_har_parser = False
+
+        # Fallback: GoogleAccountManager (Google-only)
+        manager = None
+        if not _use_har_parser:
+            try:
+                from engine.nexus.google_account_manager import GoogleAccountManager
+                manager = GoogleAccountManager()
+            except Exception as exc:
+                self.call_from_thread(self._log, f"[red]AccountManager unavailable: {exc}[/]")
+                return
+
+        imported = 0
+        for account_id, har_file in pairs:
+            # Detect service type from filename
+            name_lower = har_file.name.lower()
+            if "github" in name_lower or "copilot" in name_lower:
+                service = "github"
+            elif "aistudio" in name_lower:
+                service = "aistudio"
+            elif "notebooklm" in name_lower:
+                service = "notebooklm"
+            elif "drive" in name_lower:
+                service = "drive"
+            elif "colab" in name_lower:
+                service = "colab"
+            else:
+                service = "google"
+
+            try:
+                if _use_har_parser:
+                    ok = import_har_to_pool(str(har_file), account_id, service)
+                else:
+                    ok = manager.import_from_har(str(har_file), account_id, service)
+                icon = "[green]✓[/]" if ok else "[yellow]○[/]"
+                self.call_from_thread(
+                    self._log,
+                    f" {icon} [dim]{account_id}/{service}[/] ← {har_file.name}"
+                )
+                if ok:
+                    imported += 1
+            except Exception as exc:
+                self.call_from_thread(
+                    self._log,
+                    f" [red]✗[/] {har_file.name}: {exc}"
+                )
+
+        self.call_from_thread(
+            self._log,
+            f"[green bold]HAR import complete.[/] {imported}/{len(pairs)} file(s) imported."
         )
 
     # ── Refresh ───────────────────────────────────────────────────────────

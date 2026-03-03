@@ -46,7 +46,7 @@ for _stream in (sys.stdout, sys.stderr):
 PROJECT_ROOT = Path(__file__).parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-VERSION = "0.78b"
+VERSION = "0.80b"
 
 # ── Catalogues ────────────────────────────────────────────────────────────
 # type: "flask" | "streamlit" | "fastapi"
@@ -100,6 +100,12 @@ SERVICES: Dict[str, Dict[str, Any]] = {
         "factory": "engine.mcp.web_bridge.create_bridge_app",
         "port": 8601, "label": "MCP Bridge",
         "auto_start": False,
+    },
+    "canvas": {
+        "type": "node",
+        "script": "content/apps/notebook_canvas",
+        "port": 5590, "label": "Nexus Canvas",
+        "auto_start": True,
     },
     "nlm_proxy": {
         "type": "flask",
@@ -220,6 +226,9 @@ def _run_single(name: str, info: Dict[str, Any]) -> None:
         import uvicorn  # type: ignore
         uvicorn.run(_import_factory(info["factory"]),
                     host="0.0.0.0", port=info["port"], log_level="warning")
+    elif t == "node":
+        script_dir = PROJECT_ROOT / info["script"]
+        subprocess.run("npm run dev", cwd=str(script_dir), shell=True)
     else:
         print(f"Unknown type '{t}' for '{name}'")
         sys.exit(1)
@@ -256,6 +265,28 @@ def _start_streamlit_proc(info: Dict[str, Any],
              "--browser.gatherUsageStats=false",
              "--logger.level=warning"],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+    except Exception as exc:
+        print(f"  {info['label']}: {exc}")
+        failed.append(info["label"])
+        return None
+
+
+def _start_node_proc(info: Dict[str, Any],
+                     failed: List[str]) -> Optional[subprocess.Popen]:
+    """Start a Node.js service via 'npm run dev' in the given script directory."""
+    script_dir = PROJECT_ROOT / info["script"]
+    if not script_dir.exists():
+        print(f"  {info['label']}: directory not found, skipping")
+        failed.append(info["label"])
+        return None
+    try:
+        return subprocess.Popen(
+            "npm run dev",
+            cwd=str(script_dir),
+            shell=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
         )
     except Exception as exc:
         print(f"  {info['label']}: {exc}")
@@ -303,6 +334,11 @@ def launch_multi(service_names: List[str], scene_names: List[str]) -> None:
             info = ALL_TARGETS[name]
             if info["type"] == "streamlit":
                 proc = _start_streamlit_proc(info, failed)
+                if proc:
+                    all_procs.append(proc)
+                    print(f"    [OK] {info['label']} (PID {proc.pid})")
+            elif info["type"] == "node":
+                proc = _start_node_proc(info, failed)
                 if proc:
                     all_procs.append(proc)
                     print(f"    [OK] {info['label']} (PID {proc.pid})")
