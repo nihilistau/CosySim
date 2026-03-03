@@ -569,65 +569,76 @@ class CosySimTUI(App[None]):
         row = self._rows[self.selected_index]
         self._launch_target(row.target_name, row.info)
 
-    @work(thread=True)
     def action_launch_autostart(self) -> None:
-        self.call_from_thread(self._log, "[bold cyan]Launching all auto-start targets...[/]")
+        """Trigger auto-start in a background thread (never blocks the event loop)."""
+        threading.Thread(target=self._autostart_worker, daemon=True, name="cosysim-autostart").start()
+
+    def _autostart_worker(self) -> None:
+        """Worker: start all auto_start targets sequentially with stagger."""
+        self._log_ts("[bold cyan]Auto-starting all ★ targets…[/]")
         for name, info in ALL_TARGETS.items():
-            if info.get("auto_start"):
-                if _port_up(info["port"]):
-                    self.call_from_thread(
-                        self._log,
-                        f"[yellow]{info['label']}[/] already running on :{info['port']}"
-                    )
-                    continue
-                self.call_from_thread(
-                    self._log,
-                    f"[cyan]Starting[/] [bold]{info['label']}[/] → :{info['port']}"
-                )
-                try:
-                    t = info["type"]
-                    if t == "flask":
-                        mod, cls_name = info["cls"].rsplit(".", 1)
-                        scene_cls = getattr(importlib.import_module(mod), cls_name)
-                        thread = threading.Thread(
-                            target=scene_cls().start, daemon=True, name=f"cosysim-{name}"
-                        )
-                        thread.start()
-                        self._launched_threads[name] = thread
-                    elif t == "streamlit":
-                        script = PROJECT_ROOT / info["script"]
-                        proc = subprocess.Popen(
-                            [sys.executable, "-m", "streamlit", "run", str(script),
-                             f"--server.port={info['port']}", "--server.headless=true",
-                             "--server.address=0.0.0.0", "--browser.gatherUsageStats=false",
-                             "--logger.level=warning"],
-                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                        )
-                        self._launched_procs[name] = proc
-                    elif t == "fastapi":
-                        import uvicorn  # type: ignore
-                        mod2, fn = info["factory"].rsplit(".", 1)
-                        factory = getattr(importlib.import_module(mod2), fn)
-                        thread = threading.Thread(
-                            target=uvicorn.run,
-                            args=(factory(),),
-                            kwargs={"host": "0.0.0.0", "port": info["port"], "log_level": "warning"},
-                            daemon=True, name=f"cosysim-{name}",
-                        )
-                        thread.start()
-                        self._launched_threads[name] = thread
-                    elif t == "node":
-                        script_dir = PROJECT_ROOT / info["script"]
-                        proc = subprocess.Popen(
-                            "npm run dev", cwd=str(script_dir), shell=True,
-                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                        )
-                        self._launched_procs[name] = proc
-                except Exception as exc:
-                    self.call_from_thread(self._log, f"[red]✗[/] {info['label']}: {exc}")
-                time.sleep(0.3)
-        time.sleep(3)
+            if not info.get("auto_start"):
+                continue
+            if _port_up(info["port"]):
+                self._log_ts(f"[yellow]{info['label']}[/] already up :{info['port']}")
+                continue
+            self._log_ts(f"[cyan]→[/] [bold]{info['label']}[/] :{info['port']}")
+            try:
+                self._start_one(name, info)
+            except Exception as exc:
+                import traceback
+                self._log_ts(f"[red]✗[/] {info['label']}: {exc}\n{traceback.format_exc()}")
+            time.sleep(0.5)
+        time.sleep(4)
         self.call_from_thread(self._refresh_all_status)
+
+    def _start_one(self, name: str, info: Dict[str, Any]) -> None:
+        """Start a single target (called from background thread)."""
+        t = info["type"]
+        if t == "flask":
+            mod, cls_name = info["cls"].rsplit(".", 1)
+            scene_cls = getattr(importlib.import_module(mod), cls_name)
+            thread = threading.Thread(
+                target=scene_cls().start, daemon=True, name=f"cosysim-{name}"
+            )
+            thread.start()
+            self._launched_threads[name] = thread
+        elif t == "streamlit":
+            script = PROJECT_ROOT / info["script"]
+            proc = subprocess.Popen(
+                [sys.executable, "-m", "streamlit", "run", str(script),
+                 f"--server.port={info['port']}", "--server.headless=true",
+                 "--server.address=0.0.0.0", "--browser.gatherUsageStats=false",
+                 "--logger.level=warning"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            )
+            self._launched_procs[name] = proc
+        elif t == "fastapi":
+            import uvicorn  # type: ignore
+            mod2, fn = info["factory"].rsplit(".", 1)
+            factory = getattr(importlib.import_module(mod2), fn)
+            thread = threading.Thread(
+                target=uvicorn.run,
+                args=(factory(),),
+                kwargs={"host": "0.0.0.0", "port": info["port"], "log_level": "warning"},
+                daemon=True, name=f"cosysim-{name}",
+            )
+            thread.start()
+            self._launched_threads[name] = thread
+        elif t == "node":
+            script_dir = PROJECT_ROOT / info["script"]
+            proc = subprocess.Popen(
+                "npm run dev", cwd=str(script_dir), shell=True,
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            )
+            self._launched_procs[name] = proc
+
+    def _log_ts(self, msg: str) -> None:
+        """Thread-safe log helper (can be called from any thread)."""
+        try:
+            self.call_from_thread(self._log, msg)
+        except Exception:
+            pass  # app may not be mounted yet
 
     @work(thread=True)
     def _launch_target(self, name: str, info: Dict[str, Any]) -> None:
@@ -636,71 +647,14 @@ class CosySimTUI(App[None]):
                 self._log, f"[yellow]{info['label']}[/] already running on :{info['port']}"
             )
             return
-
         self.call_from_thread(
             self._log, f"[cyan]Starting[/] [bold]{info['label']}[/] → :{info['port']}"
         )
-
         try:
-            t = info["type"]
-            if t == "flask":
-                mod, cls = info["cls"].rsplit(".", 1)
-                scene_cls = getattr(importlib.import_module(mod), cls)
-                thread = threading.Thread(
-                    target=scene_cls().start,
-                    daemon=True,
-                    name=f"cosysim-{name}",
-                )
-                thread.start()
-                self._launched_threads[name] = thread
-
-            elif t == "streamlit":
-                script = PROJECT_ROOT / info["script"]
-                proc = subprocess.Popen(
-                    [sys.executable, "-m", "streamlit", "run", str(script),
-                     f"--server.port={info['port']}",
-                     "--server.headless=true",
-                     "--server.address=0.0.0.0",
-                     "--browser.gatherUsageStats=false",
-                     "--logger.level=warning"],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
-                self._launched_procs[name] = proc
-
-            elif t == "fastapi":
-                import uvicorn  # type: ignore
-                mod, fn = info["factory"].rsplit(".", 1)
-                factory = getattr(importlib.import_module(mod), fn)
-                thread = threading.Thread(
-                    target=uvicorn.run,
-                    args=(factory(),),
-                    kwargs={"host": "0.0.0.0", "port": info["port"], "log_level": "warning"},
-                    daemon=True,
-                    name=f"cosysim-{name}",
-                )
-                thread.start()
-                self._launched_threads[name] = thread
-
-            elif t == "node":
-                # Node.js service — run 'npm run dev' in the script directory
-                script_dir = PROJECT_ROOT / info["script"]
-                proc = subprocess.Popen(
-                    "npm run dev",
-                    cwd=str(script_dir),
-                    shell=True,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
-                self._launched_procs[name] = proc
-
+            self._start_one(name, info)
         except Exception as exc:
-            self.call_from_thread(
-                self._log, f"[red]✗[/] {info['label']}: {exc}"
-            )
+            self.call_from_thread(self._log, f"[red]✗[/] {info['label']}: {exc}")
             return
-
-        # Wait and confirm
         time.sleep(3)
         up = _port_up(info["port"])
         if up:
@@ -735,6 +689,29 @@ class CosySimTUI(App[None]):
             self._log(f"[yellow]⚠[/] Cannot stop [bold]{info['label']}[/] — not a subprocess target")
 
         self._refresh_all_status()
+
+    # ── Explicit key handlers (fallback if BINDINGS priority doesn't fire) ──
+
+    def key_a(self) -> None:
+        self.action_launch_autostart()
+
+    def key_o(self) -> None:
+        self.action_open_browser()
+
+    def key_s(self) -> None:
+        self.action_stop_selected()
+
+    def key_r(self) -> None:
+        self.action_refresh_status()
+
+    def key_c(self) -> None:
+        self.action_open_canvas()
+
+    def key_i(self) -> None:
+        self.action_import_har()
+
+    def key_space(self) -> None:
+        self.action_launch_selected()
 
     # ── Browser ───────────────────────────────────────────────────────────
 
