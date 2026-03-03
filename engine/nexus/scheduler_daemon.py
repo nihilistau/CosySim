@@ -1155,60 +1155,107 @@ def _register_builtin_tasks(daemon: "SchedulerDaemon") -> None:
     )
 
 
-def _news_distill_nlm_callback()-> Dict[str, Any]:
+def _news_distill_nlm_callback() -> Dict[str, Any]:
     """Every hour: distill news articles into Nexus Q&A via NotebookLM notebooks.
 
     Per category (ai_research/tech/world/science):
-    - Fetches latest news items from Nexus
-    - Creates/updates a per-category NLM notebook with article summaries
-    - Distills 20 Q&A pairs per notebook into Nexus
+    - Fetches latest news items from Nexus for the category
+    - Adds article summaries as a text source to the NLM notebook
+    - Asks 5 targeted questions via NLM (Gemini-backed)
+    - Stores Q&A pairs in Nexus under category='news'
     """
-    _CATEGORIES = ("ai_research", "tech", "world", "science")
+    # Permanent NLM notebook IDs per news category
+    _NLM_NOTEBOOKS: Dict[str, str] = {
+        "ai_research": "24221492-0531-4305-bdef-33a5425f6302",
+        "tech": "9504cf8c-b111-4f53-92e0-0833ece14264",
+        "world": "f0a6c72f-4fcb-40a1-8d32-b217a12166fe",
+        "science": "3622eae6-d105-42bb-870c-605d652b919d",
+    }
+    _QUESTIONS: Dict[str, List[str]] = {
+        "ai_research": [
+            "What are the most significant LLM or AI research breakthroughs in this digest?",
+            "What fine-tuning or training techniques are being highlighted?",
+            "Which AI agent or multi-agent developments stand out?",
+            "What local inference or edge-AI trends are emerging?",
+            "Summarise the 3 most actionable insights for AI developers.",
+        ],
+        "tech": [
+            "What are the biggest technology product or platform developments?",
+            "Which hardware or infrastructure trends are notable?",
+            "What open-source technology releases or updates are significant?",
+            "What security or privacy developments should developers watch?",
+            "Summarise the 3 most impactful tech stories in bullet points.",
+        ],
+        "world": [
+            "What are the most consequential geopolitical developments?",
+            "Which economic or trade policy changes are notable?",
+            "What conflicts or diplomatic events stand out?",
+            "How might these world events impact technology or business?",
+            "Summarise the 3 most important world news items in bullet points.",
+        ],
+        "science": [
+            "What are the most exciting scientific research breakthroughs?",
+            "Which emerging technologies have near-term practical applications?",
+            "What space, climate, or energy science developments are significant?",
+            "How might these science developments affect AI or computing?",
+            "Summarise the 3 most impactful science stories in bullet points.",
+        ],
+    }
+
     total_qa = 0
     errors = []
+
     try:
         from engine.nexus.client import get_nexus_client
         client = get_nexus_client()
     except Exception as exc:
         return {"status": "skipped", "reason": f"Nexus unavailable: {exc}"}
 
-    for cat in _CATEGORIES:
+    try:
+        from engine.nexus.nlm_engine import get_nlm_engine
+        nlm = get_nlm_engine()
+        nlm_available = True
+    except Exception:
+        nlm_available = False
+
+    for cat, notebook_id in _NLM_NOTEBOOKS.items():
         try:
             # Fetch recent news items from Nexus for this category
-            results = client.search(f"news {cat}", category="news", limit=10)
+            results = client.search(f"news {cat}", limit=10)
             if not results:
-                continue
+                # No articles yet — ask generic questions about the category
+                results = []
 
-            # Build article summaries as text source
-            summaries: list = []
-            for item in results[:5]:
+            # Build article summaries text
+            summaries: List[str] = []
+            for item in results[:6]:
                 title = item.get("title", "Untitled")
-                content = item.get("content", "")[:600]
+                content = item.get("content", "")[:500]
                 summaries.append(f"## {title}\n{content}")
 
-            if not summaries:
-                continue
+            questions = _QUESTIONS.get(cat, [f"What are the key {cat} developments?"])
 
-            source_text = f"# News Digest: {cat.upper()}\n\n" + "\n\n---\n\n".join(summaries)
+            if nlm_available and summaries:
+                # Inject article digest as a new text source into the notebook
+                digest = f"# News Digest: {cat.upper()} — {__import__('datetime').datetime.utcnow().strftime('%Y-%m-%d %H:%M')}\n\n"
+                digest += "\n\n---\n\n".join(summaries)
+                try:
+                    nlm.add_source(notebook_id, "text", digest)
+                except Exception:
+                    pass  # proceed to ask even if source injection fails
 
-            # Ask Nexus for Q&A generation (NLM pipeline via nexus_ask)
-            questions = [
-                f"What are the most important developments in {cat} news this cycle?",
-                f"What key trends or patterns are emerging in {cat}?",
-                f"What are the implications of the latest {cat} events?",
-                f"Which {cat} story is most likely to have long-term impact?",
-                f"Summarise the {cat} news in 3 key bullet points.",
-            ]
+            # Ask questions via NLM or fall back to nexus_ask
             for q in questions:
                 try:
-                    answer = client.ask(f"{q}\n\nContext:\n{source_text[:1000]}")
-                    if answer and isinstance(answer, dict):
-                        ans_text = answer.get("answer", "")
-                    elif isinstance(answer, str):
-                        ans_text = answer
+                    if nlm_available:
+                        resp = nlm.ask(notebook_id, q)
+                        ans_text = resp.get("answer", "") if isinstance(resp, dict) else str(resp)
                     else:
-                        continue
-                    if len(ans_text) > 20:
+                        ctx = "\n\n".join(summaries)[:800] if summaries else ""
+                        resp = client.ask(f"{q}\n\nContext:\n{ctx}" if ctx else q)
+                        ans_text = resp.get("answer", "") if isinstance(resp, dict) else str(resp)
+
+                    if ans_text and len(ans_text) > 30:
                         client.add_qa(q, ans_text, category="news")
                         total_qa += 1
                 except Exception:
@@ -1217,10 +1264,20 @@ def _news_distill_nlm_callback()-> Dict[str, Any]:
         except Exception as exc:
             errors.append(f"{cat}: {exc}")
 
-    result: Dict[str, Any] = {"status": "ok", "qa_pairs_stored": total_qa}
+    result: Dict[str, Any] = {
+        "status": "ok",
+        "qa_pairs_stored": total_qa,
+        "nlm_used": nlm_available,
+        "categories": list(_NLM_NOTEBOOKS.keys()),
+    }
     if errors:
         result["errors"] = errors
-    logger.info("news_distill_nlm: stored %d Q&A pairs (errors: %s)", total_qa, errors or "none")
+    logger.info(
+        "news_distill_nlm: stored %d Q&A pairs via %s (errors: %s)",
+        total_qa,
+        "NLM" if nlm_available else "nexus_ask fallback",
+        errors or "none",
+    )
     return result
 
 

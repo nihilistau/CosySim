@@ -121,43 +121,71 @@ The system's ultimate goal: **inhabit itself** — AI agents that maintain, impr
 
 ---
 
-## Active: v0.76b — "The Deep Mind" ✅ COMPLETE
+## Active: v0.77b — "The First Mind" ✅ COMPLETE
 
-> v0.76b makes everything persist, matter, and learn: PlayerState saves to disk,
-> NLM auto-distillation feeds Nexus Q&A nightly, relationship tiers drive LLM
-> context and portrait badges, and 40 scheduler tasks run the living world.
+> v0.77b builds the full unified training system: a coder pipeline (10 strategies, 5000+ examples),
+> voice acoustic fine-tuning, conversation model training, NLM notebook-backed news distillation,
+> news rating signal, and 4 new scheduler tasks. The system can now train all model types
+> from automatically collected data.
 
-- [x] Track A: Test suite fixed — 60+ failures resolved (singleton isolation, FastMCP API, path normalisation)
-- [x] Track B: PlayerState persistence — save/load, 4 public properties, debounced auto-save, `session_restored` event
-- [x] Track C: NLM auto-distillation — `news-distill-nlm` scheduler task #40, `news_insight` skill (3-tier)
-- [x] Track D: Economy depth — Grid EventBus subscription confirmed wired (no changes needed)
-- [x] Track F: Character memory depth — `_relationship_tier()`, rich system prompt block, portrait rel badge
-- [x] Auto-wired `/api/character/relationship` + `/api/character/backstory` on every scene via BaseScene
-- [x] Tests: **8,000+ passing**, 40 scheduler tasks, 15 scenes
+- [x] Track A: Finetune status panel in Intel Hub — `/api/finetune/status`, job cards, 30s refresh
+- [x] Track A2: News skills — `summarize_news_category()` 300-word digest
+- [x] Track B: News rating signal — thumbs up/down → `news_ratings.jsonl` → `output_evaluator` training
+- [x] Track B2: Live world-events ticker in Intel Hub (real-time WorldSim events)
+- [x] Track C: Unified training system — ModelZoo (14 types), DataCollector, VoiceTrainer, ConversationTrainer
+- [x] Track C2: Coder pipeline — 10 generation strategies, `coder_pipeline.py`, 8 @skill tools
+- [x] Track C3: Micro-datasets expanded — 5 new model types
+- [x] Track D: NLM news pipeline — 4 real notebook IDs, article digest injection, 5 Q&A per cycle
+- [x] Scheduler: 39 → 44 tasks (collect-flush, model-zoo-train, voice-auto-train, coder-dataset-refresh)
+- [x] 7 new test files, all 6 count-assertion files updated
+- [x] Tests: **~8,700+ passing**, 44 scheduler tasks, 15 scenes
 
 ---
 
-## Next: v0.77 — "The First Mind"
+## Next: v0.78 — "The Data Flywheel"
 
-> v0.77 runs the first real finetune cycle, wires event cascade into launcher startup,
-> and builds the self-improvement benchmark loop that makes the system continuously smarter.
+> v0.78 activates the flywheel: everything that runs collects data, all data gets used
+> to train, all training feeds back into production. The system improves on every cycle.
 
-### Track A — First Finetune Cycle
-- [ ] Check training data: `data/router_training_data/` — verify JSONL count
-- [ ] Run `FinetuneOrchestrator(model="qwen3-0.6b", epochs=3, lora_r=16)`
-- [ ] Benchmark + auto-promote if accuracy improves
-- [ ] Store results in Nexus: `nexus_add("Finetune Cycle 1", results, "history")`
-- [ ] Intel Hub: `/api/finetune/status` card showing model, score, status
+### Track A — Hot-Path Data Collection
+- [ ] Wire `DataCollector.collect_tool_call()` into `VirtualAgent.reply()` on every skill call
+- [ ] Wire `DataCollector.collect_conversation()` into `DialogSystem.close_conversation()`
+- [ ] Wire `DataCollector.collect_grammar_error()` into `InterceptorPipeline` grammar check
+- [ ] Wire `DataCollector.collect_output_rating()` into news rating API endpoint
+- [ ] Wire `DataCollector.collect_code()` into `coder_skills.coder_fix/coder_complete`
 
-### Track B — Event Cascade Launcher Wiring
-- [ ] Wire `event_cascade.get_event_cascade().start()` into `launcher.py`
-- [ ] Intel Hub world-events live ticker (real-time WorldSim event feed)
-- [ ] Per-scene event filter declarations in scene configs
+### Track B — First Training Jobs
+- [ ] Run `generate_coder.py` — build initial 5,000+ example dataset, verify quality
+- [ ] Submit `coder` training job via `CoderPipeline.check_and_train(force=True)`
+- [ ] Submit `tool_dispatch` training job (270M Gemma) — 3 epochs
+- [ ] Submit `conversational` training job (Qwen 1.7B) — from EventChain data
+- [ ] Evaluate all 3 models via `BenchmarkRunner`, auto-promote winners
 
-### Track C — Deep Nexus Seeding
-- [ ] Run `NLM notebook per news category` (AI / tech / world / science)
-- [ ] Distill 50 Q&A per notebook → store in Nexus
-- [ ] Nexus knowledge audit: dedup + reindex
+### Track C — Training Dashboard
+- [ ] Admin panel [TRAINING] tab expansion: one card per MODEL_ZOO entry
+- [ ] Each card: dataset size, last training run, current benchmark score, status badge
+- [ ] "Trigger training" button per model → calls `auto_train.check_and_train_all_zoo()`
+- [ ] Live log stream during training (SSE endpoint)
+- [ ] Sparkline of benchmark scores over time (last 10 runs)
+
+### Track D — Grammar Scanner Interceptor
+- [ ] `engine/agents/interceptors/grammar_scanner_interceptor.py` — post_call, scans for missing
+  punctuation, broken symbols, incomplete sentences; logs to DataCollector
+- [ ] Register in `config/default.yaml` under `comms.interceptors`
+- [ ] Wire results to `grammar_scanner` training dataset
+- [ ] 5 tests in `tests/test_grammar_scanner.py`
+
+### Track E — Output Evaluator Loop
+- [ ] Auto-score every LLM response via `output_evaluator` model (rule-based until trained)
+- [ ] Low-scoring responses flagged in Nexus as `category="improvement"`
+- [ ] Flagged responses reviewed by NLM notebook weekly, best fixes stored as training examples
+- [ ] Close the loop: output quality rises each week without manual intervention
+
+### Track F — Docs + SYSTEM_AUDIT v0.78b
+- [ ] `docs/TRAINING_SYSTEM.md` — full unified training pipeline documentation
+- [ ] `docs/CODER_MODEL.md` — coder model strategy, strategies, deployment
+- [ ] `CHANGELOG.md` + `SYSTEM_AUDIT.md` updated to v0.78b
+- [ ] `config/default.yaml` bumped to `0.78b`
 
 ---
 

@@ -3,7 +3,7 @@
 All notable changes to CosySim are documented here.
 
 ---
-## [0.77b] — 2026 — "THE FIRST MIND" — 🔄 IN PROGRESS
+## [0.77b] — 2026-03 — "THE FIRST MIND" — ✅ COMPLETE
 
 ### New Features
 
@@ -19,16 +19,80 @@ All notable changes to CosySim are documented here.
 - `summarize_news_category(category)` skill — 300-word structured digest from Nexus Q&A
 - `_NEWS_CATEGORIES` constant: `ai_research`, `tech`, `world`, `science`
 - Falls back to wide Nexus search if category-filtered search returns nothing
-- Returns graceful "no intelligence" message when Nexus is empty
 
-### Bug Fixes
-- `test_player_state.py` fixture now redirects `PlayerState._SAVE_PATH` to `tmp_path`
-  so auto-load on `__init__` doesn't pollute tests with real game save data
-- `launcher.py` VERSION corrected from `"0.74b"` → `"0.76b"`
+#### News Rating Signal
+- Thumbs up/down on Intel Hub ticker items and news feed cards
+- `POST /api/news/rate` stores `{title, rating, source, ts}` to `training/datasets/news_ratings.jsonl`
+- `GET /api/news/ratings/stats` returns aggregate stats
+- Ratings feed directly into `output_evaluator` training dataset (Alpaca JSONL format)
+- 5 tests in `tests/test_intel_hub_scene.py`
+
+#### World-Events Live Ticker
+- Intel Hub ticker now streams live world simulation events (`world.event.*`) via Socket.IO
+- `⚡ LIVE` filter button toggles between all news and live events only
+- Ticker items flash on new event arrival with CSS animation
+
+#### Unified Training System — Model Zoo
+- `training/model_zoo.py`: `ModelSpec` dataclass + `MODEL_ZOO` with 14 model types
+  (6 existing + tool_dispatch, grammar_scanner, output_evaluator, conversational, coder,
+  voice_piper, voice_qwen3, voice_orpheus)
+- `get_spec()`, `list_specs()`, `get_nlp_specs()`, `get_voice_specs()`, `get_conversation_specs()`
+
+#### Unified Training System — Data Collector
+- `training/data_collector.py`: `DataCollector` singleton, 8 typed `collect_*` methods
+- Writes to `training/datasets/collected/{type}_live.jsonl` — non-blocking
+- `flush_all()` merges collected data into main training sets
+- Scheduler task `collect-flush` (every_4h) automates flushing
+
+#### Unified Training System — Voice Trainer
+- `training/voice_trainer.py`: `VoiceTrainer` — per-character acoustic fine-tuning
+- **Piper VITS**: `train_piper(character_id)` — runs `piper_train` subprocess on WAV samples
+- **Qwen3-TTS LoRA**: `train_qwen3_lora(character_id)` — fine-tunes LLM backbone + flow-matching decoder
+- **Orpheus LoRA**: `train_orpheus_lora(character_id)` — fine-tunes Llama 3B backbone on character audio
+- `auto_train_all(min_samples=30)` — trains all characters with sufficient data
+
+#### Unified Training System — Conversation Trainer
+- `training/conversation_trainer.py`: `ConversationTrainer` — per-character dialog model training
+- Extracts conversation data from EventChain + Nexus + DataCollector
+- Formats as ShareGPT JSONL for Qwen 1.7B fine-tuning
+
+#### Coder Model — Full Pipeline
+- `training/datasets/generate_coder.py`: 10 generation strategies:
+  FIM-style completion, docstring→impl, bug injection+fix, CosySim convention training,
+  @skill scaffolding, git diff pairs, test generation, class method completion,
+  multi-file context, Nexus coding Q&A — targets 5,000+ examples
+- `training/coder_pipeline.py`: `CoderPipeline` singleton — `build_dataset()` → `check_and_train()`
+  → `evaluate()` → `promote()` → `deploy_to_lmstudio()` → `status()`
+- `engine/skills/builtin/coder_skills.py`: 8 @skill tools —
+  `coder_complete`, `coder_fix`, `coder_generate`, `coder_review` (rule-based),
+  `coder_add_types`, `coder_docstring`, `coder_scaffold_skill`, `coder_status`
+
+#### Dataset Generators
+- `training/datasets/generate_tool_dispatch.py`: auto-generates from 188+ live skills
+- `training/datasets/generate_conversation.py`: extracts from EventChain + Nexus
+
+#### NLM News Pipeline — Real Notebook IDs
+- 4 dedicated NotebookLM notebooks created (AI Research, Technology, World, Science)
+- `_news_distill_nlm_callback` updated: adds article digests as text sources, asks 5 targeted
+  questions per category via `NLMEngine.ask(notebook_id, question)`, falls back to nexus_ask
+- Notebook IDs stored permanently in scheduler task
+
+#### Micro-Datasets Expansion
+- `training/micro_datasets.py`: +5 model types with synthetic templates:
+  tool_dispatch, grammar_scanner, output_evaluator, conversational, coder
+
+#### Scheduler Tasks (40 → 44)
+- `collect-flush` (every_4h): flush DataCollector buffers into training datasets
+- `model-zoo-train` (daily): check all MODEL_ZOO thresholds, submit finetune jobs
+- `voice-auto-train` (weekly): auto-train Piper/Qwen3/Orpheus from collected voice samples
+- `coder-dataset-refresh` (weekly): rescan codebase + Nexus, rebuild coder training dataset
 
 ### Tests
-- 5 new tests for `summarize_news_category` (valid, invalid, empty, exception, word budget)
-- Total test count: ~8,450+
+- 4 new test files: `test_model_zoo.py`, `test_data_collector.py`, `test_voice_trainer.py`,
+  `test_conversation_trainer.py`, `test_coder_pipeline.py`, `test_coder_skills.py`,
+  `test_generate_coder.py`
+- Scheduler count updated: 40 → 44 across 6 test files
+- Total test count: ~8,700+
 
 ---
 ## [0.76b] — 2026 — "THE DEEP MIND" — ✅ COMPLETE
