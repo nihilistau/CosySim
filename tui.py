@@ -300,11 +300,13 @@ class CosySimTUI(App[None]):
                         yield RichLog(id="log-panel", highlight=True, markup=True,
                                       wrap=True, auto_scroll=True)
                     with TabPane("🌐 Services", id="tab-services"):
-                        yield self._build_services_pane()
+                        yield self._build_services_table()
                     with TabPane("🔑 Accounts", id="tab-accounts"):
-                        yield self._build_accounts_pane()
+                        with ScrollableContainer(id="account-list"):
+                            yield from self._accounts_widgets()
                     with TabPane("📡 HAR Files", id="tab-har"):
-                        yield self._build_har_pane()
+                        with ScrollableContainer(id="har-list"):
+                            yield from self._har_widgets()
 
                 yield Static(id="details-bar")
 
@@ -339,119 +341,113 @@ class CosySimTUI(App[None]):
             classes="ServiceStatus",
         )
 
-    def _build_services_pane(self) -> Widget:
-        with Vertical() as v:
-            table = DataTable(id="svc-table")
-            table.add_columns("Name", "Port", "Status", "Label")
-            for name, info in {**SERVICES, **SCENES}.items():
-                up = _port_up(info["port"])
-                table.add_row(
-                    name,
-                    str(info["port"]),
-                    "[green]UP[/]" if up else "[red]down[/]",
-                    info["label"],
-                )
-        return v  # type: ignore[return-value]
+    def _build_services_table(self) -> DataTable:
+        """Return a DataTable of all services/scenes with port status."""
+        table = DataTable(id="svc-table")
+        table.add_columns("Name", "Port", "Status", "Label")
+        for name, info in {**SERVICES, **SCENES}.items():
+            up = _port_up(info["port"])
+            table.add_row(
+                name,
+                str(info["port"]),
+                "[green]UP[/]" if up else "[red]down[/]",
+                info["label"],
+            )
+        return table
 
-    def _build_accounts_pane(self) -> Widget:
-        with ScrollableContainer(id="account-list") as sc:
-            account_names: List[str] = []
+    def _accounts_widgets(self):
+        """Yield account row widgets for the Accounts tab."""
+        account_names: List[str] = []
 
-            # Primary: real HAR root (e.g. C:\Files\Models\HAR_Files\nihilistcod\)
-            for har_root in (HAR_REAL_ROOT, HAR_LOCAL_ROOT):
-                if har_root.exists():
-                    for d in sorted(har_root.iterdir()):
-                        if d.is_dir() and not d.name.startswith(".") and d.name not in account_names:
-                            account_names.append(d.name)
-
-            # Also pick up any *_cookies.json accounts not seen in har dirs
-            if ACCOUNTS_COOKIES_DIR.exists():
-                for f in sorted(ACCOUNTS_COOKIES_DIR.glob("*_cookies.json")):
-                    acct = f.stem.removesuffix("_cookies")
-                    if acct not in account_names:
-                        account_names.append(acct)
-
-            if not account_names:
-                yield Static(
-                    " No accounts found. Press [bold]I[/] to import a HAR.",
-                    classes="account-row",
-                )
-            else:
-                for acct in account_names:
-                    # Check both new and legacy cookie formats
-                    new_cookies = ACCOUNTS_COOKIES_DIR / f"{acct}_cookies.json"
-                    legacy_cookies = ACCOUNTS_LEGACY_DIR / acct / "cookies.json"
-                    has_cookies = new_cookies.exists() or legacy_cookies.exists()
-                    icon = "[green]✓[/]" if has_cookies else "[yellow]○[/]"
-
-                    # Count HARs across both dirs
-                    har_count = 0
-                    for har_root in (HAR_REAL_ROOT, HAR_LOCAL_ROOT):
-                        har_dir = har_root / acct
-                        if har_dir.exists():
-                            har_count += sum(1 for _ in har_dir.glob("*.har"))
-
-                    # Detect service types from cookie presence
-                    services: List[str] = []
-                    if new_cookies.exists():
-                        try:
-                            import json as _json
-                            data = _json.loads(new_cookies.read_text())
-                            if any("github" in k for k in data):
-                                services.append("github")
-                            if any("google" in k for k in data):
-                                services.append("google")
-                        except Exception:
-                            pass
-
-                    svc_label = (" [dim]" + ",".join(services) + "[/]") if services else ""
-                    yield Static(
-                        f" {icon} [bold]{acct}[/]{svc_label} [dim]({har_count} HARs)[/]",
-                        classes="account-row",
-                    )
-        return sc  # type: ignore[return-value]
-
-    def _build_har_pane(self) -> Widget:
-        """Show all HAR files from all directories, grouped by account."""
-        with ScrollableContainer(id="har-list") as sc:
-            all_files: Dict[str, List[Path]] = {}
-
-            for har_root in (HAR_REAL_ROOT, HAR_LOCAL_ROOT):
-                if not har_root.exists():
-                    continue
+        for har_root in (HAR_REAL_ROOT, HAR_LOCAL_ROOT):
+            if har_root.exists():
                 for d in sorted(har_root.iterdir()):
-                    if not d.is_dir() or d.name.startswith("."):
-                        continue
-                    hars = sorted(d.glob("*.har"))
-                    if hars:
-                        all_files.setdefault(d.name, []).extend(hars)
+                    if d.is_dir() and not d.name.startswith(".") and d.name not in account_names:
+                        account_names.append(d.name)
 
-            if not all_files:
+        if ACCOUNTS_COOKIES_DIR.exists():
+            for f in sorted(ACCOUNTS_COOKIES_DIR.glob("*_cookies.json")):
+                acct = f.stem.removesuffix("_cookies")
+                if acct not in account_names:
+                    account_names.append(acct)
+
+        if not account_names:
+            yield Static(
+                " No accounts found. Press [bold]I[/] to import a HAR.",
+                classes="account-row",
+            )
+            return
+
+        for acct in account_names:
+            new_cookies = ACCOUNTS_COOKIES_DIR / f"{acct}_cookies.json"
+            legacy_cookies = ACCOUNTS_LEGACY_DIR / acct / "cookies.json"
+            has_cookies = new_cookies.exists() or legacy_cookies.exists()
+            icon = "[green]✓[/]" if has_cookies else "[yellow]○[/]"
+
+            har_count = 0
+            for har_root in (HAR_REAL_ROOT, HAR_LOCAL_ROOT):
+                har_dir = har_root / acct
+                if har_dir.exists():
+                    har_count += sum(1 for _ in har_dir.glob("*.har"))
+
+            services: List[str] = []
+            if new_cookies.exists():
+                try:
+                    import json as _json
+                    data = _json.loads(new_cookies.read_text(encoding="utf-8"))
+                    if any("github" in k for k in data):
+                        services.append("github")
+                    if any("google" in k for k in data):
+                        services.append("google")
+                except Exception:
+                    pass
+
+            svc_label = (" [dim]" + ",".join(services) + "[/]") if services else ""
+            yield Static(
+                f" {icon} [bold]{acct}[/]{svc_label} [dim]({har_count} HARs)[/]",
+                classes="account-row",
+            )
+
+    def _har_widgets(self):
+        """Yield HAR file list widgets for the HAR Files tab."""
+        all_files: Dict[str, List[Path]] = {}
+
+        for har_root in (HAR_REAL_ROOT, HAR_LOCAL_ROOT):
+            if not har_root.exists():
+                continue
+            for d in sorted(har_root.iterdir()):
+                if not d.is_dir() or d.name.startswith("."):
+                    continue
+                hars = sorted(d.glob("*.har"))
+                if hars:
+                    all_files.setdefault(d.name, []).extend(hars)
+
+        if not all_files:
+            yield Static(
+                " No HAR files found. Capture via Canvas browser or press I to import.",
+                classes="account-row",
+            )
+            return
+
+        total = sum(len(v) for v in all_files.values())
+        yield Static(
+            f" [bold cyan]{total} HAR files[/] across [bold]{len(all_files)}[/] accounts"
+            f"  [dim]Press I to import[/]",
+            classes="account-row",
+        )
+        yield Static("", classes="account-row")
+        for acct, files in sorted(all_files.items()):
+            total_mb = sum(f.stat().st_size for f in files) / (1024 * 1024)
+            yield Static(
+                f" [bold]{acct}[/] [dim]({len(files)} files · {total_mb:.1f} MB)[/]",
+                classes="account-row",
+            )
+            for f in files:
+                size_mb = f.stat().st_size / (1024 * 1024)
                 yield Static(
-                    " No HAR files found. Capture HARs via the Canvas browser or import manually.",
+                    f"   [dim]└ {f.name}  ({size_mb:.1f} MB)[/]",
                     classes="account-row",
                 )
-            else:
-                total = sum(len(v) for v in all_files.values())
-                yield Static(
-                    f" [bold cyan]{total} HAR files[/] across [bold]{len(all_files)}[/] accounts"
-                    f"  [dim]Press I to import[/]",
-                    classes="account-row",
-                )
-                yield Static("", classes="account-row")
-                for acct, files in sorted(all_files.items()):
-                    total_mb = sum(f.stat().st_size for f in files) / (1024 * 1024)
-                    yield Static(
-                        f" [bold]{acct}[/] [dim]({len(files)} files · {total_mb:.1f} MB)[/]",
-                        classes="account-row",
-                    )
-                    for f in files:
-                        size_mb = f.stat().st_size / (1024 * 1024)
-                        yield Static(
-                            f"   [dim]└ {f.name}  ({size_mb:.1f} MB)[/]",
-                            classes="account-row",
-                        )
-        return sc  # type: ignore[return-value]
 
     # ── On mount ──────────────────────────────────────────────────────────
 
