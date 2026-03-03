@@ -1652,6 +1652,9 @@ def show_mcp_monitor():
             with left:
                 st.markdown("**Registered Scenes**")
                 scene_map = status.get("scenes", {})
+                # get_status() returns scenes as a list of keys
+                if isinstance(scene_map, list):
+                    scene_map = {s: {} for s in scene_map}
                 if scene_map:
                     for sid, sdata in scene_map.items():
                         with st.expander(f"🏠 {sid}"):
@@ -1662,6 +1665,8 @@ def show_mcp_monitor():
             with right:
                 st.markdown("**Registered Characters**")
                 char_map = status.get("characters", {})
+                if isinstance(char_map, list):
+                    char_map = {c: {} for c in char_map}
                 if char_map:
                     for cid, cdata in char_map.items():
                         with st.expander(f"👤 {cid}"):
@@ -1671,12 +1676,15 @@ def show_mcp_monitor():
 
             st.divider()
             st.markdown("**Pending Consequences**")
-            consequences = status.get("consequences", [])
-            if consequences:
-                import pandas as pd
-                st.dataframe(pd.DataFrame(consequences), use_container_width=True)
+            consequences = status.get("pending_consequences", status.get("consequences", 0))
+            if isinstance(consequences, list):
+                if consequences:
+                    import pandas as pd
+                    st.dataframe(pd.DataFrame(consequences), use_container_width=True)
+                else:
+                    st.info("No pending consequences.")
             else:
-                st.info("No pending consequences.")
+                st.metric("Pending", int(consequences))
 
         except Exception as exc:
             st.warning(f"MCPFramework unavailable: {exc}")
