@@ -75,14 +75,33 @@ All notable changes to CosySim are documented here.
 - All borders: richer, accent-aware
 - Panel body: inner fade shadow at top/bottom edges for scroll depth
 
+#### Hacking Framework
+- `engine/services/hack_engine.py` — HackEngine singleton with 15 builtin hackable targets
+- Grid puzzle generator: hex-code matrix, solution stamped into grid, timed challenges
+- Cyberdeck stats: `crack_speed` (reduces sequence length) + `trace_resist` (extends timer)
+- Cyberdeck catalog entries (`netrunner_mk1`/`void_runner`/`specter_3000`) updated with stats
+- `get_cyberdeck_stats()` helper on InventoryManager
+- Full REST API via `base_scene.register_hack_route()`:
+  - `GET /api/hack/targets` — list hackable targets + lock status
+  - `POST /api/hack/puzzle` — generate puzzle for target
+  - `POST /api/hack/submit` — evaluate player solution
+  - `POST /api/hack/reset` — reset target lock (admin)
+- 7 @skill tools (hacking pack): `list_hack_targets`, `initiate_hack`, `submit_hack_solution`,
+  `get_hacking_profile`, `can_hack_target`, `register_hack_target`, `reset_hack_target_lock`
+- `content/shared/static/css/cosysim-hack-minigame.css` — full neon-themed overlay
+- `content/shared/static/js/cosysim-hack-minigame.js` — complete mini-game IIFE (`window.CosyHack`)
+  - Grid cell selection, auto-submit on sequence complete, timer countdown (danger state <25%)
+  - Keyboard support (Escape/Enter), `cs:hack:complete` custom event dispatched on outcome
+
 #### Critical Bug Fixes
 - socket.io CDN SRI integrity failures fixed across all 24+ scene templates (local copy at `/shared/js/socket.io.min.js`)
 - Asset Studio tabs crash fixed (`io()` at module level → guarded)
 - Hub/lounge/phone static path double-slash bugs fixed (`/shared/static/` → `/shared/`)
 
 ### Tests
-- 50 new tests: TestInventoryManager (27), TestCrewManager (15), TestInventorySkills (5), TestCrewSkills (4)
-- All 50 passing, thread-safety verified in inventory and crew managers
+- 95 new tests: TestInventoryManager (27), TestCrewManager (15), TestInventorySkills (5), TestCrewSkills (4), TestHacking (45)
+- All 95 passing, thread-safety verified in inventory and crew managers
+- Test isolation fixes: `TestCyberdeckStats` uses `tmp_path` to redirect `_SAVE_PATH`
 
 ---
 ## [0.80b] — 2026-03 — "THE COPILOT LAYER" — ✅ COMPLETE
