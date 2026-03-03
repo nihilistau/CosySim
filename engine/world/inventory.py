@@ -72,10 +72,10 @@ ITEM_CATALOG: Dict[str, Dict[str, Any]] = {
     "optic_implant":     {"name": "Optic Implant",      "category": "cyberware", "rarity": "uncommon",  "slot": "cyberware_2", "desc": "Enhanced vision, thermal"},
     "voice_modulator":   {"name": "Voice Modulator",    "category": "cyberware", "rarity": "uncommon",  "slot": "cyberware_3", "desc": "+1 Social manipulation"},
     "pain_editor":       {"name": "Pain Editor",        "category": "cyberware", "rarity": "rare",      "slot": "cyberware_1", "desc": "Ignore 20% damage penalty"},
-    # ── Cyberdecks ──
-    "netrunner_mk1":     {"name": "Netrunner MK1",      "category": "cyberdeck", "rarity": "common",    "slot": "cyberdeck",   "desc": "Basic hacking deck, 3 slots"},
-    "void_runner":       {"name": "Void Runner",        "category": "cyberdeck", "rarity": "rare",      "slot": "cyberdeck",   "desc": "Advanced deck, 6 slots, ICE breach"},
-    "specter_3000":      {"name": "Specter 3000",       "category": "cyberdeck", "rarity": "legendary", "slot": "cyberdeck",   "desc": "Military-grade, 8 slots, silent"},
+    # ── Cyberdecks (crack_speed: reduces required sequence, trace_resist: extends timer) ──
+    "netrunner_mk1":     {"name": "Netrunner MK1",      "category": "cyberdeck", "rarity": "common",    "slot": "cyberdeck",   "desc": "Basic hacking deck, 3 slots",       "crack_speed": 1, "trace_resist": 1},
+    "void_runner":       {"name": "Void Runner",        "category": "cyberdeck", "rarity": "rare",      "slot": "cyberdeck",   "desc": "Advanced deck, 6 slots, ICE breach","crack_speed": 3, "trace_resist": 3},
+    "specter_3000":      {"name": "Specter 3000",       "category": "cyberdeck", "rarity": "legendary", "slot": "cyberdeck",   "desc": "Military-grade, 8 slots, silent",   "crack_speed": 6, "trace_resist": 6},
     # ── Software ──
     "ice_breaker_v1":    {"name": "ICE Breaker v1",     "category": "software",  "rarity": "common",    "slot": None,          "desc": "Cracks basic security"},
     "shadow_protocol":   {"name": "Shadow Protocol",    "category": "software",  "rarity": "rare",      "slot": None,          "desc": "Masks netrunner signature"},
@@ -329,6 +329,20 @@ class InventoryManager:
         with self._item_lock:
             deck_id = self._equipment.get("cyberdeck")
             return self._items.get(deck_id) if deck_id else None
+
+    def get_cyberdeck_stats(self) -> Dict[str, int]:
+        """Return crack_speed and trace_resist from the equipped cyberdeck.
+
+        Returns ``{"crack_speed": 0, "trace_resist": 0}`` when no deck is equipped.
+        """
+        deck = self.get_cyberdeck()
+        if deck is None:
+            return {"crack_speed": 0, "trace_resist": 0}
+        catalog = ITEM_CATALOG.get(deck.item_id, {})
+        return {
+            "crack_speed": int(catalog.get("crack_speed", 0)),
+            "trace_resist": int(catalog.get("trace_resist", 0)),
+        }
 
     def item_count(self) -> int:
         """Return number of unique item types in inventory."""

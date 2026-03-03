@@ -748,6 +748,81 @@ class BaseScene(ABC):
             except Exception as exc:
                 return Response(_json.dumps({"error": str(exc)}), status=500, mimetype="application/json")
 
+    def register_hack_route(self, app) -> None:
+        """Register ``/api/hack`` REST endpoints on a Flask app.
+
+        Endpoints:
+            GET  /api/hack/targets           — list all hackable targets (optional ?location=)
+            POST /api/hack/puzzle            — generate puzzle (json: target_id)
+            POST /api/hack/submit            — submit solution (json: puzzle_id, cells, elapsed)
+            POST /api/hack/reset             — reset target lock (json: target_id) [admin]
+        """
+        import json as _json
+        from flask import Response, request as _req
+
+        if getattr(app, "_hack_route_registered", False):
+            return
+        app._hack_route_registered = True  # type: ignore[attr-defined]
+
+        @app.route("/api/hack/targets")
+        def _hack_targets():
+            try:
+                from engine.services.hack_engine import get_hack_engine
+                location = _req.args.get("location", "")
+                targets = get_hack_engine().list_targets(location=location)
+                return Response(_json.dumps({"targets": targets}), mimetype="application/json")
+            except Exception as exc:
+                return Response(_json.dumps({"error": str(exc)}), status=500, mimetype="application/json")
+
+        @app.route("/api/hack/puzzle", methods=["POST"])
+        def _hack_puzzle():
+            try:
+                body = _req.get_json(force=True) or {}
+                target_id = body.get("target_id", "")
+                if not target_id:
+                    return Response(_json.dumps({"error": "target_id required"}), status=400, mimetype="application/json")
+                from engine.services.hack_engine import get_hack_engine
+                from engine.world.inventory import get_inventory
+                from engine.world.player_state import get_player_state
+                stats = get_inventory().get_cyberdeck_stats()
+                skill_level = get_player_state().skills.get("hacking", 1)
+                puzzle = get_hack_engine().generate_puzzle(
+                    target_id,
+                    hacking_skill=skill_level,
+                    trace_resist=stats["trace_resist"],
+                    crack_speed=stats["crack_speed"],
+                )
+                status = 400 if "error" in puzzle else 200
+                return Response(_json.dumps(puzzle), status=status, mimetype="application/json")
+            except Exception as exc:
+                return Response(_json.dumps({"error": str(exc)}), status=500, mimetype="application/json")
+
+        @app.route("/api/hack/submit", methods=["POST"])
+        def _hack_submit():
+            try:
+                body = _req.get_json(force=True) or {}
+                puzzle_id = body.get("puzzle_id", "")
+                cells = body.get("cells", [])
+                elapsed = float(body.get("elapsed", 0))
+                if not puzzle_id:
+                    return Response(_json.dumps({"error": "puzzle_id required"}), status=400, mimetype="application/json")
+                from engine.services.hack_engine import get_hack_engine
+                result = get_hack_engine().evaluate_attempt(puzzle_id, cells, elapsed)
+                return Response(_json.dumps(result.to_dict()), mimetype="application/json")
+            except Exception as exc:
+                return Response(_json.dumps({"error": str(exc)}), status=500, mimetype="application/json")
+
+        @app.route("/api/hack/reset", methods=["POST"])
+        def _hack_reset():
+            try:
+                body = _req.get_json(force=True) or {}
+                target_id = body.get("target_id", "")
+                from engine.services.hack_engine import get_hack_engine
+                ok = get_hack_engine().reset_target_lock(target_id)
+                return Response(_json.dumps({"ok": ok}), mimetype="application/json")
+            except Exception as exc:
+                return Response(_json.dumps({"error": str(exc)}), status=500, mimetype="application/json")
+
     def register_bench_route(self, app, socketio=None) -> None:
         """Register ``/api/bench/metrics`` on a Flask app.
 

@@ -14,3 +14,9 @@
 {"model_type": "output_quality", "input": "Help me", "output": "Sure!", "quality": 0.6, "metadata": {}, "source": "runtime", "id": "a0a3d494-376d-40d6-8235-fad7a26762b8", "collected_at": 1772562302.0545864}
 {"model_type": "output_quality", "input": "Hello!", "output": "Hey there!", "quality": 0.8, "metadata": {}, "source": "runtime", "id": "a8c256c4-de1e-48d8-89bb-fa75f9acac67", "collected_at": 1772563810.1650257}
 {"model_type": "output_quality", "input": "Help me", "output": "Sure!", "quality": 0.6, "metadata": {}, "source": "runtime", "id": "1b99bbe0-dfa8-4910-814e-3b27698aae3f", "collected_at": 1772563810.1819992}
+{"model_type": "output_quality", "input": "Hello!", "output": "Hey there!", "quality": 0.8, "metadata": {}, "source": "runtime", "id": "4d9d7f27-2038-4e02-ada7-019872911ccb", "collected_at": 1772566735.0874314}
+{"model_type": "output_quality", "input": "Help me", "output": "Sure!", "quality": 0.6, "metadata": {}, "source": "runtime", "id": "e241f32b-472a-471c-9cc5-c5d3d93214ea", "collected_at": 1772566735.1021607}
+{"model_type": "output_quality", "input": "Hello!", "output": "Hey there!", "quality": 0.8, "metadata": {}, "source": "runtime", "id": "a4ebac11-33b0-42e0-828d-58a35d432b3c", "collected_at": 1772567951.1807454}
+{"model_type": "output_quality", "input": "Help me", "output": "Sure!", "quality": 0.6, "metadata": {}, "source": "runtime", "id": "622ad725-da96-452e-934e-4ba06fd0af28", "collected_at": 1772567951.1963003}
+{"model_type": "output_quality", "input": "Hello!", "output": "Hey there!", "quality": 0.8, "metadata": {}, "source": "runtime", "id": "d61f967f-9377-435a-bf33-35524c17c1b5", "collected_at": 1772567962.9468575}
+{"model_type": "output_quality", "input": "Help me", "output": "Sure!", "quality": 0.6, "metadata": {}, "source": "runtime", "id": "7afa3929-17b0-4839-af34-c1b98b3289c8", "collected_at": 1772567962.965532}
