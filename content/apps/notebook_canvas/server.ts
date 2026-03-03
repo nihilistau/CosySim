@@ -10,6 +10,8 @@ import { Readability } from "@mozilla/readability";
 
 // ── Browser session store ─────────────────────────────────────────────────────
 const CHROME_PATH = "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
+// Persistent Chrome profiles per account — survives restarts, keeps sessions/cookies
+const CHROME_PROFILES_DIR = path.join(process.cwd(), "data", "chrome_profiles");
 const BROWSER_W = 1280, BROWSER_H = 800;
 
 interface HarEntry {
@@ -694,21 +696,36 @@ print(json.dumps(result))
   // ── Puppeteer browser sessions ─────────────────────────────────────────────
   // POST /api/browser/start  — launch headless/headed Chrome, begin HAR capture
   app.post("/api/browser/start", async (req, res) => {
-    const { url, headless = true, account = "default" } = req.body;
+    const { url, headless = false, account = "default" } = req.body;
     const sid = sessionId();
     try {
+      // Persistent profile per account — keeps sessions, cookies, saved passwords
+      const profileDir = path.join(CHROME_PROFILES_DIR, account);
+      fs.mkdirSync(profileDir, { recursive: true });
+
       const browser = await puppeteer.launch({
         executablePath: CHROME_PATH,
-        headless: headless ? true : false,
-        defaultViewport: { width: BROWSER_W, height: BROWSER_H },
+        headless: headless === true,
+        userDataDir: profileDir,
+        defaultViewport: headless ? { width: BROWSER_W, height: BROWSER_H } : null,
         args: [
           "--no-sandbox", "--disable-setuid-sandbox",
-          "--disable-web-security",          // relax CORS for browsing
+          "--disable-blink-features=AutomationControlled",  // hide automation
+          "--disable-web-security",
           "--disable-features=IsolateOrigins,site-per-process",
           `--window-size=${BROWSER_W},${BROWSER_H}`,
+          "--start-maximized",
         ],
+        ignoreDefaultArgs: ["--enable-automation"],  // remove "Chrome is being controlled" bar
       });
       const page = await browser.newPage();
+
+      // Mask automation signals so Google/GitHub don't block login
+      await page.evaluateOnNewDocument(() => {
+        Object.defineProperty(navigator, "webdriver", { get: () => undefined });
+        (window as any).chrome = { runtime: {} };
+      });
+
       const harEntries: HarEntry[] = [];
       const requestTimings = new Map<string, number>();
 

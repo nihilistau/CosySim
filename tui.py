@@ -342,15 +342,14 @@ class CosySimTUI(App[None]):
         )
 
     def _build_services_table(self) -> DataTable:
-        """Return a DataTable of all services/scenes with port status."""
+        """Return a DataTable of all services/scenes (status populated async)."""
         table = DataTable(id="svc-table")
         table.add_columns("Name", "Port", "Status", "Label")
         for name, info in {**SERVICES, **SCENES}.items():
-            up = _port_up(info["port"])
             table.add_row(
                 name,
                 str(info["port"]),
-                "[green]UP[/]" if up else "[red]down[/]",
+                "[dim]…[/]",  # filled in by first background refresh
                 info["label"],
             )
         return table
@@ -453,36 +452,63 @@ class CosySimTUI(App[None]):
 
     def on_mount(self) -> None:
         self._select(0)
-        self._refresh_all_status()
-        self._update_stats()
-        self._refresh_timer = self.set_interval(8, self._refresh_all_status)
-        self._log("CosySim TUI started. [dim]Space[/]=launch [dim]A[/]=autostart [dim]Q[/]=quit")
+        # Status checks run in background — never block the event loop
+        self._do_refresh()
+        self._refresh_timer = self.set_interval(10, self._do_refresh)
+        self._log("CosySim TUI started. [dim]Space[/]=launch [dim]A[/]=autostart [dim]C[/]=canvas [dim]Q[/]=quit")
         if self._autostart:
             self.call_after_refresh(self.action_launch_autostart)
 
     # ── Status refresh ────────────────────────────────────────────────────
 
     def _refresh_all_status(self) -> None:
+        """Called from timer — dispatches threaded refresh to avoid blocking event loop."""
+        self._do_refresh()
+
+    @work(thread=True)
+    def _do_refresh(self) -> None:
+        """All socket checks run in a worker thread — never blocks the UI."""
+        # Check CosySim rows
+        results: Dict[str, bool] = {}
         for row in self._rows:
-            row.refresh_status()
-        # Refresh external service indicators
-        for label, port, _ in EXTERNAL_SERVICES:
-            try:
-                if port == 0:
-                    # Token-based (GitHub Copilot) — check cookies file
-                    cookies_path = ACCOUNTS_COOKIES_DIR / "nihilistcod_cookies.json"
-                    ok = cookies_path.exists()
-                    icon = "[green]●[/]" if ok else "[yellow]○[/]"
-                    widget = self.query_one("#ext-copilot", Static)
-                    widget.update(f" {icon} [bold]{label}[/] [dim](cookie)[/]")
+            results[row.target_name] = _port_up(row.info["port"])
+
+        def _apply_rows() -> None:
+            for row in self._rows:
+                up = results.get(row.target_name, False)
+                row._is_up = up
+                if up:
+                    row.remove_class("-stopped"); row.add_class("-running")
                 else:
-                    widget = self.query_one(f"#ext-{port}", Static)
-                    up = _port_up(port)
-                    icon = "[green]●[/]" if up else "[red]○[/]"
-                    widget.update(f" {icon} [bold]{label}[/] [dim]:{port}[/]")
-            except NoMatches:
-                pass
-        self._update_stats()
+                    row.remove_class("-running"); row.add_class("-stopped")
+                row.refresh()
+
+        self.call_from_thread(_apply_rows)
+
+        # Check external services
+        ext_results: Dict[str, tuple[str, bool]] = {}
+        for label, port, _ in EXTERNAL_SERVICES:
+            if port == 0:
+                cookies_path = ACCOUNTS_COOKIES_DIR / "nihilistcod_cookies.json"
+                ext_results[label] = ("copilot", cookies_path.exists())
+            else:
+                ext_results[label] = (str(port), _port_up(port))
+
+        def _apply_ext() -> None:
+            for label, (key, ok) in ext_results.items():
+                icon = "[green]●[/]" if ok else "[red]○[/]"
+                try:
+                    if key == "copilot":
+                        w = self.query_one("#ext-copilot", Static)
+                        w.update(f" {icon} [bold]{label}[/] [dim](cookie)[/]")
+                    else:
+                        w = self.query_one(f"#ext-{key}", Static)
+                        w.update(f" {icon} [bold]{label}[/] [dim]:{key}[/]")
+                except NoMatches:
+                    pass
+            self._update_stats()
+
+        self.call_from_thread(_apply_ext)
 
     def _update_stats(self) -> None:
         try:
@@ -763,8 +789,8 @@ class CosySimTUI(App[None]):
     # ── Refresh ───────────────────────────────────────────────────────────
 
     def action_refresh_status(self) -> None:
-        self._refresh_all_status()
-        self._log("[dim]Status refreshed[/]")
+        self._do_refresh()
+        self._log("[dim]Refreshing status...[/]")
 
     # ── Logging ───────────────────────────────────────────────────────────
 
