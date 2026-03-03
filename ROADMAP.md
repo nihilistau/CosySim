@@ -1,6 +1,6 @@
 # CosySim Roadmap
 
-> Current: **v0.81b** "THE LIVING CITY" ✅ | Next: **v0.82** "THE OPEN WORLD" | Last updated: 2026-03
+> Current: **v0.82b** "THE OPEN WORLD" 🚧 | Last updated: 2026-03
 
 ## Philosophy
 
@@ -214,43 +214,47 @@ The system's ultimate goal: **inhabit itself** — AI agents that maintain, impr
 
 ---
 
-## Next: v0.82 — "THE OPEN WORLD"
+## Active: v0.82b — "THE OPEN WORLD" 🚧
 
 > v0.82 opens the simulation up: multi-scene player traversal, a persistent city map, NPC
 > schedules visible across scenes, and the first agent-to-agent mission handoff system.
 
-### Track A — City Map & Multi-Scene Traversal
-- [ ] Persistent city map (`engine/world/city_map.py`) — 16 nodes, district groupings, travel costs
-- [ ] Player travel via map: `PlayerState.travel(destination)` — fires `player_travel` event
-- [ ] Quick-travel UI in HUD v2 right panel wired to city map
-- [ ] `travel_time` mechanics — some routes take in-game time, affect energy/heat
+### Track A — City Map & Multi-Scene Traversal ✅ DONE
+- [x] `engine/world/city_map.py` — CityMap singleton, 16 nodes, 6 districts, 24 bidirectional edges
+- [x] `engine/skills/builtin/city_skills.py` — 8 @skill tools (city pack)
+- [x] `base_scene.register_city_route()` — 7 REST endpoints
+- [x] PlayerState extensions: `spend_energy`, `add_heat`, `adjust_reputation`, `adjust_faction`, `add_xp`, `active_location`
+- [x] `tests/test_city_map.py` — 35 tests passing
 
-### Track B — Cross-Scene NPC Presence
-- [ ] NPCScheduler broadcasts NPC location across scenes (Socket.IO `npc_location` event)
-- [ ] Scene UIs show live dot on city map for known NPCs
-- [ ] NPC "spotted elsewhere" dialogue hook in relationship interceptor
-- [ ] Viktor / Mira / Frankie / Lola visible on map when in other scenes
+### Track C — Mission System ✅ DONE
+- [x] `engine/world/mission.py` — MissionManager, 15 builtin missions, 5 types, objectives, rewards
+- [x] `engine/skills/builtin/mission_skills.py` — 9 @skill tools (mission pack)
+- [x] `base_scene.register_mission_route()` — 10 REST endpoints
+- [x] `tests/test_mission.py` — 55 tests passing (63 total for A+C tracks)
 
-### Track C — Mission System
-- [ ] `engine/world/mission.py` — MissionManager, 5 mission types, objectives, rewards
-- [ ] Mission board UI: available / active / completed tabs
-- [ ] Agent-to-agent mission handoff: NPC gives quest → crew executes → result fed back to NPC
-- [ ] 8 @skill tools: mission_list, mission_accept, mission_abandon, mission_status, mission_complete, mission_create, mission_assign_crew, mission_reward
+### Test Suite Overhaul ✅ DONE
+- [x] pytest-xdist `-n auto`: **30 min → 6 min** (8327 tests, 0 failures)
+- [x] Two-tier: `slow` + `integration` markers; default run skips them
+- [x] fastmcp broken files ignored; 5 files marked slow/integration
 
-### Track D — World Events Feed
-- [ ] World Announcer sourced from live WorldSim events, not just static pools
+### Track B — Cross-Scene NPC Presence 🔲
+- [ ] NPCScheduler broadcasts NPC location via Socket.IO `npc_location` event
+- [ ] Scene UIs show live dot on city map for tracked NPCs
+- [ ] NPC "spotted elsewhere" hook in relationship interceptor
+
+### Track D — World Events Feed 🔲
+- [ ] World Announcer sourced from live WorldSim events
 - [ ] `announcer_skills` pack: announce_event, set_station, mute_station, get_feed
-- [ ] Intel Hub "CITY PULSE" panel showing last 50 world events with filter by category
-- [ ] Economy events now include district-level context (e.g., "THE VELVET PIT prices up 15%")
+- [ ] Intel Hub "CITY PULSE" panel — last 50 world events with category filter
 
-### Track E — Docs + Audit v0.82
-- [ ] `docs/WORLD_SYSTEM.md` updated with city map, missions, cross-scene NPC
+### Track E — Docs + Audit v0.82 🔲
+- [ ] `docs/WORLD_SYSTEM.md` updated — city map, missions, cross-scene NPC
 - [ ] `SYSTEM_AUDIT.md` v0.82 section
-- [ ] `CHANGELOG.md` + `ROADMAP.md` updated
+- [ ] CHANGELOG + ROADMAP finalized
 
 ---
 
-## Architecture Principles
+## Completed: v0.81b — "THE LIVING CITY" ✅ COMPLETE
 
 1. **Everything through MCP** — Skills, state, events, and cross-system communication all go through the MCP pipeline
 2. **Nexus as truth** — Prompts, rules, configurations, session history, and experiment results live in Nexus
