@@ -1151,7 +1151,9 @@ class BedroomScene(BedroomCombatMixin, BedroomDialogMixin, BedroomInventoryMixin
         ])
         register_shared_assets(self.app)
         self.register_health_route(self.app)
-        self.register_bench_route(self.app, None)  # socketio not yet created
+        self.register_hud_route(self.app)
+        self.register_announcer_route(self.app)
+        self.register_bench_route(self.app, None)# socketio not yet created
         self.register_tts_route(self.app)
         self.app.config["SECRET_KEY"] = "bedroom_v4_roleplay_secret"
         CORS(self.app)
