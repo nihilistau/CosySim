@@ -1,12 +1,18 @@
-"""Colab direct HTTP client — reverse-engineered from HAR analysis.
+"""Colab direct HTTP client — reverse-engineered from HAR + V8 heap analysis.
 
 Provides access to:
 - Colab AI Agent (AgentCreateTask / AgentUpdateTask / AgentQueryTask)
-- RuntimeService (ListAssignments, tunnel management)
+- AIService: CompleteCode, SmartPaste, AgentQuerySuggestions
+- RuntimeService (ListAssignments, GetRuntimeProxyToken, tunnel management)
 - Jupyter kernel execution via WebSocket
-- UserInfoService (quota, hardware tiers)
+- UserInfoService (quota, hardware tiers / GetUserInfo)
 
-All endpoints confirmed from colab.research.google.com HAR captures.
+All endpoints confirmed from colab.research.google.com HAR captures and
+V8 heap snapshot analysis (heap_deep_parser.py).
+
+Colab tunnel JWT format (ES256, kid=B7PekA):
+  {"aud": "<tunnel-id>", "exp": <unix-ts>, "port": 8080}
+  Tunnel URL: https://colab.research.google.com/tun/m/<tunnel-id>
 """
 from __future__ import annotations
 
@@ -347,6 +353,80 @@ class ColabClient:
         except (IndexError, TypeError):
             pass
         return suggestions
+
+    def get_runtime_proxy_token(self, runtime_id: str) -> Optional[str]:
+        """Fetch a fresh proxy JWT token for a specific Colab runtime.
+
+        Args:
+            runtime_id: Runtime identifier string from list_assignments().
+
+        Returns:
+            JWT proxy token string, or None if unavailable.
+        """
+        url = f"{_COLAB_RPC_BASE}/$rpc/google.internal.colab.v1.RuntimeService/GetRuntimeProxyToken"
+        headers = self._get_headers()
+        body = [runtime_id]
+        resp = self._session.post(url, headers=headers, json=body, timeout=30)
+        resp.raise_for_status()
+        data = resp.json()
+        # Response: ["jwt-token", ["3600"]]  — same format as ListAssignments proxy_info
+        try:
+            return data[0] if data else None
+        except (IndexError, TypeError) as exc:
+            logger.debug("Could not parse proxy token: %s", exc)
+            return None
+
+    def complete_code(
+        self, code: str, cursor_pos: int, notebook_id: str = ""
+    ) -> List[str]:
+        """Request AI code completion suggestions.
+
+        Args:
+            code: Current code cell content.
+            cursor_pos: Cursor position in the code string.
+            notebook_id: Optional notebook identifier for context.
+
+        Returns:
+            List of completion strings.
+        """
+        url = f"{_COLAB_RPC_BASE}/$rpc/google.internal.colab.v1.AIService/CompleteCode"
+        headers = self._get_headers()
+        body = [code, cursor_pos, notebook_id or None]
+        resp = self._session.post(url, headers=headers, json=body, timeout=30)
+        resp.raise_for_status()
+        data = resp.json()
+        # Response: [["completion1", "completion2"]] or similar
+        completions: List[str] = []
+        try:
+            if data and data[0]:
+                completions = [c for c in data[0] if c]
+        except (IndexError, TypeError) as exc:
+            logger.debug("Could not parse completions: %s", exc)
+        return completions
+
+    def smart_paste(self, code: str, notebook_id: str = "") -> str:
+        """Request AI-cleaned/reformatted paste suggestion for code.
+
+        Args:
+            code: Pasted code to reformat or explain.
+            notebook_id: Optional notebook identifier.
+
+        Returns:
+            Reformatted or annotated code string.
+        """
+        url = f"{_COLAB_RPC_BASE}/$rpc/google.internal.colab.v1.AIService/SmartPaste"
+        headers = self._get_headers()
+        body = [code, notebook_id or None]
+        resp = self._session.post(url, headers=headers, json=body, timeout=30)
+        resp.raise_for_status()
+        data = resp.json()
+        # Response: ["reformatted code"] or [["code", "explanation"]]
+        try:
+            if data and data[0]:
+                return str(data[0]) if not isinstance(data[0], list) else str(data[0][0])
+        except (IndexError, TypeError) as exc:
+            logger.debug("Could not parse smart_paste: %s", exc)
+        return code
 
     # ──── Kernel execution ────────────────────────────────────────────────────
 
