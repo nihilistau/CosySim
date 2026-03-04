@@ -236,6 +236,43 @@ MODEL_ZOO: Dict[str, ModelSpec] = {
         character_ids=["aria", "lola", "viktor", "frankie", "mira"],
         voice_backend="orpheus",
     ),
+    "browser_debugger": ModelSpec(
+        id="browser_debugger",
+        display_name="Browser Debugger",
+        description=(
+            "Diagnoses browser/frontend errors and suggests file-level fixes. "
+            "Trained on CDP monitor log: error sequences before/after file changes."
+        ),
+        base_model_alias="qwen-1.7b",
+        task_type="generation",
+        instruction=(
+            "Given these browser errors and the file that was changed, "
+            "explain the root cause and the fix."
+        ),
+        dataset_key="browser_debugger",
+        train_threshold=50,
+        benchmark_instruction="Diagnose this browser error and suggest a fix:",
+        priority=3,
+        collect_from=["cdp_monitor_sessions"],
+        tags=["debugging", "frontend", "browser", "cdp", "errors"],
+    ),
+    "error_classifier": ModelSpec(
+        id="error_classifier",
+        display_name="Error Classifier",
+        description=(
+            "Classifies raw browser/CDP error messages into actionable categories "
+            "(missing_route, duplicate_script, cors_blocked, missing_model, etc.)."
+        ),
+        base_model_alias="qwen-270m",
+        task_type="classification",
+        instruction="Classify this browser error into its category.",
+        dataset_key="error_classifier",
+        train_threshold=100,
+        benchmark_instruction="Classify this browser error:",
+        priority=3,
+        collect_from=["cdp_monitor_events"],
+        tags=["debugging", "classification", "browser", "errors", "cdp"],
+    ),
 }
 
 

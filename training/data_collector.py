@@ -266,6 +266,52 @@ class DataCollector:
         except Exception as e:
             logger.error(f"DataCollector.collect_voice_sample failed: {e}")
 
+    def collect_debug_session(
+        self,
+        errors_before: List[Dict[str, Any]],
+        file_changed: str,
+        errors_after: Optional[List[Dict[str, Any]]] = None,
+        marker_note: str = "",
+    ) -> None:
+        """Collect a browser debugging session for browser_debugger + error_classifier training.
+
+        Called automatically by the CDP data miner, but can also be called manually
+        after a fix cycle to record the session immediately.
+
+        Args:
+            errors_before: List of CDP error dicts before the fix (each has 'msg', 'scene', 'level').
+            file_changed: Relative path of the file that was modified as the fix.
+            errors_after: Errors remaining after the fix. If None, treated as unknown.
+            marker_note: Optional human note describing what was changed.
+        """
+        try:
+            from scripts.cdp_data_miner import (
+                _make_browser_debugger_examples,
+                _make_error_classifier_examples,
+                _append_examples,
+                classify_error,
+            )
+            import time as _time
+
+            window = {
+                "marker":        {"msg": f"file_change: {file_changed}", "ts": ""},
+                "file_changed":  file_changed,
+                "errors_before": errors_before,
+                "errors_after":  errors_after or [],
+                "ts_mark":       "",
+            }
+            debugger_examples   = _make_browser_debugger_examples([window])
+            classifier_examples = _make_error_classifier_examples(errors_before)
+
+            added_d = _append_examples("browser_debugger", debugger_examples)
+            added_c = _append_examples("error_classifier", classifier_examples)
+            logger.info(
+                "DataCollector.collect_debug_session: +%d debugger, +%d classifier examples",
+                added_d, added_c,
+            )
+        except Exception as e:
+            logger.error(f"DataCollector.collect_debug_session failed: {e}")
+
     def flush(self, model_type: str) -> int:
         """Merge live data into training set.
 
