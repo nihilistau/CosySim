@@ -319,7 +319,8 @@ class HeapSnapshot:
             Array of length node_count+1 where arr[n] = first edge for node n.
         """
         nc = self.node_count()
-        starts = _array.array("l", [0] * (nc + 1))
+        # Use 'q' (signed 64-bit) to handle large edge counts in big snapshots
+        starts = _array.array("q", [0] * (nc + 1))
         current_edge = 0
         for n in range(nc):
             starts[n] = current_edge
