@@ -83,7 +83,8 @@ def cmd_health(args: argparse.Namespace) -> None:
     try:
         client = get_nexus_client()
         entries = client.list_entries(limit=500)
-        qa_list = client.find_qa("", limit=500)
+        # find_qa requires a non-empty query — use broad common term for count
+        qa_list = client.find_qa("cosysim", limit=500) or client.find_qa("what", limit=500)
         rules_list = client.get_rules()
         types = dict(Counter(e.content_type for e in entries))
         cats = dict(Counter(e.category for e in entries))
