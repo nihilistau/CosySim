@@ -1,14 +1,14 @@
 # CosySim
 
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/) [![Tests: 8771](https://img.shields.io/badge/tests-8%2C771%20passing-brightgreen.svg)]() [![Grade: A++](https://img.shields.io/badge/audit-A%2B%2B-gold.svg)]() [![Version: 0.84b](https://img.shields.io/badge/version-0.84b-blueviolet.svg)]()
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/) [![Tests: 8811](https://img.shields.io/badge/tests-8%2C811%2B%20passing-brightgreen.svg)]() [![Grade: A++](https://img.shields.io/badge/audit-A%2B%2B-gold.svg)]() [![Version: 0.85b](https://img.shields.io/badge/version-0.85b-blueviolet.svg)]()
 
-> v0.84b — "THE HINDSIGHT LAYER" — Multi-scene AI simulation framework
+> v0.85b — "THE MAINTENANCE LAYER" — Multi-scene AI simulation framework
 
 ## Overview
 
 CosySim orchestrates virtual AI agents across **16 interactive scenes**, each a self-contained Flask+Socket.IO web app with its own LLM agents, MCP skill packs, game logic, and real-time state. The **Universal Neon HUD v2** (glass slide panels, phone overlay, world announcer) surfaces player vitals, inventory, crew, and faction standings live across all scenes via the `PlayerState` singleton. A **214-tool MCP pipeline**, 25+ `@skill` packs, 26-interceptor governance (auto-registry), Nexus KMS knowledge layer, and local LMStudio GPU inference make CosySim a complete agentic simulation OS.
 
-v0.84b completes **Project Hindsight** — a full architectural refactoring that replaces monolithic server files with domain-driven tool modules, a unified `@mcp_tool` decorator, Pydantic-typed Nexus models, and an auto-discovered interceptor registry.
+v0.85b — **THE MAINTENANCE LAYER** — the system begins taking care of itself: Google auth cookies are renewed automatically via CDP from the running Chrome instance, test suite regressions are benchmarked and logged to Nexus weekly, the Nexus bridge CLI is fully operational, and the project has a complete narrative history document (`docs/PROJECT_JOURNAL.md`) for agent onboarding.
 
 ## Architecture
 
@@ -56,7 +56,20 @@ v0.84b completes **Project Hindsight** — a full architectural refactoring that
 
 ## Features by Version Wave
 
-### THE HINDSIGHT LAYER (v0.84b) — Latest
+### THE MAINTENANCE LAYER (v0.85b) — Latest
+
+- **`scripts/har_capture.py`** — 3-mode Google cookie refresh: CDP direct (connects to running Chrome port 9222, `Network.getCookies()`, ~1s zero-UI), launch mode, macro fallback
+- **`scripts/har_watchfolder.py`** — drop-folder auto-import for `.har` files (30s poll)
+- **`GoogleAccountPool`** — staleness API: `cookie_age_days()`, `is_stale()`, `get_stale_accounts()`
+- **Scheduler tasks #48–50** — `cookie-health-check` (daily), `cookie-auto-refresh` (every 72h), `test-suite-benchmark` (weekly, Nexus trend logging + regression alert)
+- **`engine/skills/builtin/google_account_skills.py`** — `google_accounts` pack (4 skills)
+- **Nexus bridge CLI fixed** — `_parse_entry`/`_parse_rule` handle JSON-string DB fields; `bridge health/search/ask/store` all working
+- **`docs/PROJECT_JOURNAL.md`** — 5,000+ word project narrative (v0.51b→v0.84b, 17 chapters) — agent onboarding + alignment source
+- **8,811+ tests, 50 scheduler tasks**
+
+---
+
+### THE HINDSIGHT LAYER (v0.84b)
 
 > Complete architectural refactoring — no new features, pure structural improvement.
 
