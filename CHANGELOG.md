@@ -3,6 +3,48 @@
 All notable changes to CosySim are documented here.
 
 ---
+## [0.85b] — "THE MAINTENANCE LAYER" — 2026-03
+
+The system begins taking care of itself. Google auth cookies are now monitored,
+renewed automatically, and captured directly from running Chrome via CDP — no
+manual HAR exports. The project documents its own history. Training data
+accumulates passively. Infrastructure hardens around operational continuity.
+
+### Auth & Session Management
+- **`scripts/har_capture.py`** — 3-mode automated cookie refresh:
+  - **CDP direct** (default): connects to already-running Chrome on port 9222,
+    calls `Network.getCookies()` silently — zero UI interaction, ~1s execution
+  - **Launch mode**: spawns fresh Chrome with `--remote-debugging-port`, navigates
+    to NLM, extracts cookies, terminates Chrome
+  - **Macro fallback**: `pyautogui` keyboard automation for DevTools HAR export
+  - Auto-saves to `data/accounts/pool.json`; logs event to Nexus
+- **`scripts/har_watchfolder.py`** — drop-folder auto-importer: polls `data/hars/`
+  every 30s, imports any new `.har`, moves to `imported/` or `failed/`
+  - Subcommands: `watch`, `import <file>`, `health`, `status`
+- **`GoogleAccountPool`** — staleness API: `cookie_age_days()`, `is_stale()`,
+  `get_stale_accounts()`, `get_available_accounts(service, exclude_stale)`
+- **Scheduler task #48** `cookie-health-check` (daily) — probes NLM + Colab,
+  Nexus alert if any account is stale
+- **`engine/skills/builtin/google_account_skills.py`** — `google_accounts` pack:
+  `cookie_status`, `har_import`, `cookie_probe`, `har_watchfolder_start`
+- **`scripts/upload_journal_to_nlm.py`** — upload `docs/PROJECT_JOURNAL.md` to
+  NotebookLM via MCP → NLM direct → manual fallback chain
+
+### Knowledge & Documentation
+- **`docs/PROJECT_JOURNAL.md`** — 5,000+ word project narrative, 17 chapters:
+  origins (v0.51b) through every major breakthrough (NLM, Colab, Copilot API,
+  training flywheel) to current state (v0.84b). Designed as NotebookLM onboarding
+  source and agent alignment document. Stored in Nexus (id: `13a12912e5cc4a3a`).
+
+### Training (passive accumulation)
+- Live training data collected: `output_evaluator_live.jsonl` + `tool_dispatch_train.jsonl`
+- `training/data_collector.py`, `training/model_zoo.py` — minor additions from runtime
+
+### Tests
+- Scheduler count: 47 → 48 (cookie-health-check task)
+- All 6 task-count test files updated
+
+---
 ## [0.84b] — "THE HINDSIGHT LAYER" — 2026-03
 
 ### Architecture Refactoring (Project Hindsight)
