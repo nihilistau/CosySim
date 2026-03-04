@@ -63,7 +63,7 @@ class NLMIngestCrawler:
             await self._step("paste_text",  page, self._paste_content)
             await self._step("insert",      page, self._insert_source)
 
-            self._save_har(monitor)
+            await self._save_har(monitor)
 
         return self.notebook_url
 
@@ -78,7 +78,12 @@ class NLMIngestCrawler:
     # ──── UI actions ────────────────────────────────────────────────────────
 
     async def _click_new_notebook(self, page) -> None:
-        for sel in ["button:has-text('New notebook')", "[aria-label='New notebook']"]:
+        for sel in [
+            "[aria-label='Create notebook']",
+            "button:has-text('Create notebook')",
+            "button:has-text('New notebook')",
+            "[aria-label='New notebook']",
+        ]:
             try:
                 await page.click(sel, timeout=8000)
                 await page.wait_for_timeout(1500)
@@ -110,33 +115,39 @@ class NLMIngestCrawler:
         await page.wait_for_timeout(3000)
 
     async def _add_source(self, page) -> None:
-        for sel in ["button:has-text('Add source')", "[aria-label='Add source']"]:
+        # Opens the "Paste copied text" dialog — try upload icon then text buttons
+        for sel in [
+            "[aria-label='Opens the upload source dialogue']",
+            "button:has-text('Upload a source')",
+            "button:has-text('Add source')",
+            "[aria-label='Add source']",
+        ]:
             try:
                 await page.click(sel, timeout=8000)
                 await page.wait_for_timeout(1500)
+                # Now click "Copied text" tab in the dialog
+                for tab in ["button:has-text('Copied text')", "li:has-text('Copied text')"]:
+                    try:
+                        await page.click(tab, timeout=3000)
+                        await page.wait_for_timeout(500)
+                        break
+                    except Exception:
+                        continue
                 return
             except Exception:
                 continue
         raise RuntimeError("'Add source' button not found")
 
     async def _paste_content(self, page) -> None:
-        for sel in ["button:has-text('Copied text')", "li:has-text('Copied text')",
-                    "button:has-text('Paste text')"]:
-            try:
-                await page.click(sel, timeout=5000)
-                await page.wait_for_timeout(1000)
-                break
-            except Exception:
-                continue
-        # JS value injection — instant even for large files
+        # Angular-compatible: use native input setter + InputEvent so the form control validates
         await page.evaluate(
             """([val]) => {
-                const el = document.querySelector('textarea');
+                const el = document.querySelector('textarea.copied-text-input-textarea')
+                         || document.querySelector('textarea');
                 if (!el) return;
-                Object.getOwnPropertyDescriptor(
-                    HTMLTextAreaElement.prototype, 'value'
-                ).set.call(el, val);
-                el.dispatchEvent(new Event('input',  {bubbles: true}));
+                const proto = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value');
+                proto.set.call(el, val);
+                el.dispatchEvent(new InputEvent('input', {bubbles: true, inputType: 'insertText', data: val}));
                 el.dispatchEvent(new Event('change', {bubbles: true}));
             }""",
             [self.content[:500_000]],
@@ -156,7 +167,7 @@ class NLMIngestCrawler:
 
     # ──── HAR dump ──────────────────────────────────────────────────────────
 
-    def _save_har(self, monitor) -> None:
+    async def _save_har(self, monitor) -> None:
         from scripts.argus.config import DATA_DIR
 
         har_dir = DATA_DIR / "har"
@@ -164,7 +175,7 @@ class NLMIngestCrawler:
         har_path = har_dir / f"nlm_ingest_{int(time.time())}.har"
 
         entries = []
-        for req in monitor.drain():
+        for req in await monitor.drain():
             if "notebooklm" not in req.url:
                 continue
             entries.append({
