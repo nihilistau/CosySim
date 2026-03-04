@@ -61,6 +61,57 @@ CosySim is a framework for building AI agent simulation scenes — a game engine
 
 ## Engine Layer
 
+### New Modules (v0.84b "The Hindsight Layer")
+
+Three engine subsystems were added or significantly restructured in v0.84b.
+
+#### Typed Nexus Layer (`engine/nexus/`)
+
+`engine/nexus/models.py` provides 14 Pydantic v2 models for all Nexus API
+responses. The `NexusClient` (`engine/nexus/client.py`) now returns typed objects
+everywhere and exposes three domain sub-clients:
+
+| Sub-client | Attribute | Key Return Types |
+|------------|-----------|------------------|
+| Rules | `client.rules` | `List[NexusRule]` |
+| Sessions | `client.sessions` | `List[SessionLog]` |
+| Memory | `client.memory` | `AgentMemory`, `str` (ask) |
+
+All models include `_DictCompat` so dict-style access (`entry["title"]`,
+`entry.get("title")`) continues to work alongside Pydantic attribute access.
+See [NEXUS_INTEGRATION.md](./NEXUS_INTEGRATION.md#pydantic-model-layer-v084b) for
+the full model reference.
+
+#### Interceptor Registry (`engine/agents/interceptors/`)
+
+The interceptor pipeline is now **auto-discovered**. Each of the 26 interceptors
+lives in its own module under `engine/agents/interceptors/`. The pipeline loader
+scans the directory at startup and registers all `InterceptorBase` subclasses,
+sorted by priority.
+
+This replaces the single `interceptors.py` file from earlier sprints.
+See [INTERCEPTORS.md](./INTERCEPTORS.md) for the complete module list.
+
+#### MCP Tool Decorator (`engine/mcp/decorators.py`)
+
+All MCP tool functions are now decorated with `@mcp_tool`. The decorator provides:
+- Unified exception handling (converts any exception to a structured error response)
+- Automatic JSON serialization of return values
+- Consistent logging with `chain_id` propagation
+
+```python
+from engine.mcp.decorators import mcp_tool
+
+@mcp_tool
+def my_tool(param: str) -> dict:
+    ...  # exceptions auto-caught; return value auto-serialized
+```
+
+The MCP server (`cosysim_server.py`) is now a thin routing wrapper — all domain
+logic lives in the 43 files under `engine/mcp/tools/`.
+
+---
+
 ### New Modules (v0.68 "Dark Renaissance")
 
 13 cross-scene engine modules added in v0.68. All live under `engine/` and are wired into scenes via BaseScene helpers.
@@ -113,7 +164,7 @@ The agent system decouples identity/state from LLM execution:
 | **StreamProcessor** | `stream_processor.py` | Real-time tag extraction from SSE (`[MOOD:x]`, `[ACTION:x]`, `[IMAGE:x]`) |
 | **ContentRouter** | `content_router.py` | Routes response chunks to appropriate handlers |
 | **Evaluator** | `evaluator.py` | Post-inference quality evaluation |
-| **Interceptors** | `interceptors.py` | Built-in interceptor implementations (24 interceptors) |
+| **Interceptors** | `interceptors/` | Auto-discovered interceptor modules (26 interceptors across 26 files) |
 | **Protocols** | `protocols.py` | `IAgent` protocol, `AgentCapability` enum, type definitions |
 
 #### IAgent Protocol
@@ -154,7 +205,8 @@ Model Context Protocol layer — governance, state, dialog, rules, and 107 MCP t
 | Module | Key Classes | Purpose |
 |--------|-------------|---------|
 | `cosysim_server.py` | FastMCP server | 107 `@mcp.tool()` functions across all domains |
-| `tools/` | 8 domain modules | Organized tool implementations (see below) |
+| `tools/` | 43 domain files | Organized tool implementations (see below) |
+| `decorators.py` | `@mcp_tool` | Unified error handling + JSON serialization for all MCP tool functions |
 | `framework.py` | MCPFramework, MCPSceneMixin, MCPCharacterNode, MCPSceneNode | Framework integration for scenes |
 | `comms_framework.py` | AgentGovernor, InterceptorPipeline, GameState, AgentRouter, SkillManifest | Governance and communication |
 | `dialog_system.py` | DialogSystem, DialogTree, ConversationState, SpeechEnhancer | Structured dialog and speech |
@@ -169,7 +221,14 @@ Model Context Protocol layer — governance, state, dialog, rules, and 107 MCP t
 | `skills_server.py` | MCP skills server | Ephemeral tool exposure |
 | `web_bridge.py` | FastAPI bridge | SSE proxy, CORS, file upload |
 
-#### MCP Tools — 8 Domain Modules (`engine/mcp/tools/`)
+#### MCP Tools — 43 Domain Files (`engine/mcp/tools/`)
+
+The `tools/` directory contains 43 domain-specific files. The MCP server
+(`cosysim_server.py`) is a thin routing wrapper — all business logic lives in
+these domain files. Every tool function is decorated with `@mcp_tool`
+(`engine/mcp/decorators.py`) for unified error handling and JSON serialization.
+
+Representative domains:
 
 | Module | Domain | Example Tools |
 |--------|--------|---------------|
@@ -487,7 +546,10 @@ User types message in scene UI
 
 ## Interceptor Pipeline
 
-24 interceptors sorted by priority. PRE interceptors build context before the LLM call. POST interceptors shape the response after.
+26 interceptors auto-discovered from `engine/agents/interceptors/` (26 individual
+modules), sorted by priority. PRE interceptors build context before the LLM call.
+POST interceptors shape the response after. See [INTERCEPTORS.md](./INTERCEPTORS.md)
+for the full module-level reference.
 
 ### Full Pipeline (priority order)
 
@@ -672,7 +734,7 @@ python launcher.py --mode bedroom    # Port 5556
 python launcher.py --mode hub        # Port 8500 (Streamlit)
 python launcher.py --mode admin      # Port 8502 (Streamlit)
 
-# Tests (75 tests)
+# Tests (8,771 tests)
 python -m pytest tests/ -v --tb=short
 
 # Health checks

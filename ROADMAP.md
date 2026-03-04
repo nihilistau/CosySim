@@ -1,6 +1,6 @@
 # CosySim Roadmap
 
-> Current: **v0.83** "THE SOCIAL LAYER" 🚧 | Last updated: 2026-03
+> Current: **v0.84b** "THE HINDSIGHT LAYER" ✅ | Last updated: 2026-03
 
 ## Philosophy
 
@@ -258,37 +258,54 @@ The system's ultimate goal: **inhabit itself** — AI agents that maintain, impr
 - **Tests: 8,327+ passing**, 0 failures
 
 ---
-## Next: v0.83 — "THE SOCIAL LAYER"
+## Completed: v0.83b — "THE SOCIAL LAYER" ✅ COMPLETE
 
-> v0.83 deepens the human element: crews you build and trust, relationships that evolve into
-> alliances, a full item economy, a hacking mini-game, and GhostSignal as a persistent overlay
-> across every scene.
+- **Shop System** — `InventoryManager.get_catalog()`, `buy_item()`, `sell_item()`; 5 REST endpoints; 26 ITEM_CATALOG entries with prices
+- **Shop Modal UI** — `content/shared/templates/shop_modal.html`, `cosysim-shop.css`, `cosysim-shop.js`; `window.CosyShop.open()` API
+- **Crew HUD** — loyalty bars, trust tier stars, role icons in right HUD panel
+- **NeonCity HUD fix** — Jinja2 ChoiceLoader for shared templates
+- **Tests: 8,380+ passing**, 0 failures
 
-### Track A — Crew System (Full Roles)
-- [ ] Hacker / muscle / thief / tech / fixer role specialisations with unique skill trees
-- [ ] Crew recruitment dialogue gating (trust score threshold per role)
-- [ ] Crew loyalty decay over time; loyalty boosts from completed operations
+---
+## Completed: v0.84b — "THE HINDSIGHT LAYER" ✅ COMPLETE
 
-### Track B — Relationship Depth
-- [ ] Trust ladder: acquaintance → ally → crew candidate → sworn crew
-- [ ] Relationship-gated dialogue branches per NPC
-- [ ] Betrayal events: loyalty drop triggers faction consequence
+> Project Hindsight: full architectural refactoring — DDD, Pydantic models, interceptor auto-registry.
+> Grade upgraded from B+ → A++.
 
-### Track C — Inventory System
-- [ ] Items: weapons, cyberware, consumables, data chips, key items
-- [ ] Equip/unequip slots wired to stat modifiers (hacking+, stealth+, etc.)
-- [ ] Shop scenes: buy/sell at Lounge, Tavern, and Asset Studio
+- **`@mcp_tool` decorator** — unified error handling, auto JSON serialisation, `ToolExecutionError`
+- **Domain tool modules** — 43 files in `engine/mcp/tools/`, servers slimmed to thin wrappers
+- **Interceptor auto-registry** — 26 individual modules, `@register_interceptor`, `INTERCEPTOR_CACHE`
+- **Pydantic Nexus models** — 14 typed models in `engine/nexus/models.py` with `_DictCompat`
+- **Typed NexusClient** — all methods return `NexusEntry`/`NexusRule`; 3 domain sub-clients
+- **Engine-wide cleanup** — all raw `requests.*` Nexus HTTP replaced; 0 bare except in tool layer
+- **Tests: 8,771 passing**, 0 failures
 
-### Track D — Hacking Mini-Game
-- [ ] Grid puzzle: 4×4 matrix, sequence capture, timer
-- [ ] Cyberdeck items: buffer size, breach speed, daemon slots
-- [ ] Reward: access codes, NPC leverage, hidden missions unlocked
+---
+## Next: v0.85b — "THE CLEAN SWEEP"
 
-### Track E — GhostSignal Polish
-- [ ] Persistent phone overlay across all scenes (not just hub)
-- [ ] Slide-in drawer from any scene navbar
-- [ ] Push notifications for world events and NPC messages
-- [ ] Scene-to-phone handoff (open app directly from scene UI)
+> v0.85b applies Hindsight patterns to the remaining engine layers: scenes, skills, lmstudio.
+> Closes Phase 9.5 gaps and pushes type safety to the remaining untouched modules.
+
+### Track A — Phase 9.5: Tool Layer Cleanup
+- [ ] Migrate 24 remaining `bare except Exception:` in `engine/mcp/tools/` to use `@mcp_tool`
+- [ ] Add `update_entry()` and `delete_qa()` to `NexusClient` (covers `nexus_distiller.py` 2 raw calls)
+- [ ] Add standalone test for `engine/mcp/_lazy.py`
+
+### Track B — Scene BaseClass Cleanup
+- [ ] Implement `export_scene()` / `import_scene()` in `BaseScene` (remove `NotImplementedError` stubs)
+- [ ] Audit all 16 scenes for remaining inline state management (move to MCP tree)
+
+### Track C — LMStudio Type Safety
+- [ ] Add Pydantic request/response models to `engine/lmstudio/` (parallel to nexus/models.py)
+- [ ] Typed `LMSRequest`, `LMSResponse`, `SSEChunk` models
+
+### Track D — Interceptor Depth
+- [ ] Full interceptor test suite (one test file per interceptor module)
+- [ ] Priority collision detection in `_build_default_pipeline()`
+
+### Track E — Docs Completion
+- [ ] Complete `docs/PROJECT_HINDSIGHT.md` migration guide
+- [ ] All remaining docs updated to v0.84b architecture
 
 ---
 ## Completed: v0.81b — "THE LIVING CITY" ✅ COMPLETE
