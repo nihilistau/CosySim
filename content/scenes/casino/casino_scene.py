@@ -105,6 +105,8 @@ class CasinoScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
         )
         register_shared_assets(self.app)
         self.register_health_route(self.app)
+        self.register_hud_route(self.app)
+        self.register_announcer_route(self.app)
         self.app.config["SECRET_KEY"] = "midnight_casino_noir_2026"
         CORS(self.app)
         self.socketio = SocketIO(self.app, cors_allowed_origins="*", manage_session=False)

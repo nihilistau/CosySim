@@ -25,6 +25,7 @@ from flask_socketio import SocketIO
 
 from engine.scenes.base_scene import BaseScene
 from engine.skills.skill import skill
+from content.shared import register_shared_assets
 
 logger = logging.getLogger(__name__)
 
@@ -337,11 +338,13 @@ class GridScene(BaseScene):
             FileSystemLoader(os.path.normpath(shared_tpl)),
         ])
 
+        register_shared_assets(self.app)
         self._register_routes()
         self._wire_event_cascade()
         self.register_health_route(self.app)
         self.register_bench_route(self.app, self.socketio)
         self.register_hud_route(self.app)
+        self.register_announcer_route(self.app)
         self.register_shop_route(self.app)
         self.register_hack_route(self.app)
         self.register_city_route(self.app)

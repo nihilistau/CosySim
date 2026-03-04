@@ -99,6 +99,9 @@ class IntelHubScene(BaseScene):
         self.register_bench_route(self._app, None)
         self.register_tts_route(self._app)
         self.register_world_events_route(self._app)
+        self.register_health_route(self._app)
+        self.register_hud_route(self._app)
+        self.register_announcer_route(self._app)
 
     # ── BaseScene interface ────────────────────────────────────────────────────
 
