@@ -350,6 +350,8 @@ class GamesScene(BaseScene, NexusSceneMixin):
             return jsonify({"reaction": reaction or ("Brilliant!" if correct else "Not quite...")})
 
         self.register_health_route(app)
+        self.register_hud_route(app)
+        self.register_announcer_route(app)
         try:
             self.mount_overlay(app)
             self.mount_skills_server(app)

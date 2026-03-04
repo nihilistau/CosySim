@@ -52,3 +52,22 @@ class MyScene(BaseScene):
 - Use Jinja2 with `{{ scene_data }}` context
 - Include Socket.IO for real-time updates
 - Static assets served from `static/` directory
+- **NEVER** explicitly load `navbar_v2.css` or `navbar_v2.js` — `navbar_v2.html` is self-contained
+- **NEVER** load `aria_widget.js` — use `{% include 'aria_widget.html' %}` instead
+- Use `{% include 'navbar_v2.html' %}` as the single navbar include
+
+## Required start() Routes
+Every scene `start()` MUST call all of these after Flask setup:
+```python
+from content.shared import register_shared_assets
+register_shared_assets(self.app)        # /shared/* routes — REQUIRED or all shared assets 404
+self.register_health_route(self.app)    # /api/health
+self.register_hud_route(self.app)       # /api/hud/state
+self.register_announcer_route(self.app) # /api/announcer/feed
+```
+
+## Health Check (run after every scene edit)
+```powershell
+python scripts/scene_health_check.py --port <PORT> --fix
+```
+See `.github/instructions/scene-debugging.instructions.md` for full debugging guide.
