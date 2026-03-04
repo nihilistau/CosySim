@@ -168,7 +168,7 @@ def call_tool():
 
         # Normalize result to string
         if isinstance(result, dict):
-            result_text = json.dumps(result)
+            result_text = json.dumps(result, default=str)
         elif result is None:
             result_text = "OK"
         else:

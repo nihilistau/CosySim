@@ -40,7 +40,7 @@ def nexus_nlm_ask(question: str, notebook_id: str = "",
                   notebook_url: str = "") -> str:
     """Ask a question through the NotebookLM research backend."""
     result = _client().nlm_unified_ask(question, notebook_id, notebook_url)
-    return json.dumps(result)
+    return json.dumps(result, default=str)
 
 
 @skill(pack="nexus", description="Check Nexus knowledge base and NLM backend status",
@@ -142,7 +142,7 @@ def nexus_ask(question: str, depth: str = "auto",
     Returns answer, source, confidence, and references.
     """
     result = _client().ask(question, depth=depth, category=category)
-    return json.dumps(result)
+    return json.dumps(result, default=str)
 
 
 # ── Research Sessions (v0.50b) ────────────────────────────────
@@ -155,7 +155,7 @@ def nexus_research(question: str, notebook_id: str = "") -> str:
     stores everything. Returns research_id for follow-up conversations.
     """
     result = _client().research(question, notebook_id=notebook_id)
-    return json.dumps(result)
+    return json.dumps(result, default=str)
 
 
 @skill(pack="nexus", description="Continue a research conversation",
@@ -164,7 +164,7 @@ def nexus_research(question: str, notebook_id: str = "") -> str:
 def nexus_converse(research_id: str, message: str) -> str:
     """Continue an existing research session with a follow-up question."""
     result = _client().converse(research_id, message)
-    return json.dumps(result)
+    return json.dumps(result, default=str)
 
 
 @skill(pack="nexus", description="Complete research and distill Q&A pairs",
@@ -175,7 +175,7 @@ def nexus_finish_research(research_id: str) -> str:
     marks session complete. Knowledge becomes available for future queries.
     """
     result = _client().finish_research(research_id)
-    return json.dumps(result)
+    return json.dumps(result, default=str)
 
 
 # ── YouTube Import (v0.50b) ──────────────────────────────────
@@ -189,4 +189,4 @@ def nexus_youtube(url: str, category: str = "youtube") -> str:
     Stores full transcript in ground truth + searchable entry in knowledge base.
     """
     result = _client().import_youtube(url, category=category)
-    return json.dumps(result)
+    return json.dumps(result, default=str)

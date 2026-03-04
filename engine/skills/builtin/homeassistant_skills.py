@@ -36,7 +36,7 @@ def _ha() -> Any:
 def ha_connect() -> str:
     """Connect to the Home Assistant instance and discover all entities."""
     result = _ha().connect()
-    return json.dumps(result)
+    return json.dumps(result, default=str)
 
 
 @skill(
@@ -80,7 +80,7 @@ def ha_get_state(entity_id: str) -> str:
 def ha_toggle(entity_id: str) -> str:
     """Toggle a device on/off."""
     result = _ha().toggle(entity_id)
-    return json.dumps(result)
+    return json.dumps(result, default=str)
 
 
 @skill(
@@ -92,7 +92,7 @@ def ha_toggle(entity_id: str) -> str:
 def ha_turn_on(entity_id: str) -> str:
     """Turn on a device (light, switch, media player, etc.)."""
     result = _ha().turn_on(entity_id)
-    return json.dumps(result)
+    return json.dumps(result, default=str)
 
 
 @skill(
@@ -104,7 +104,7 @@ def ha_turn_on(entity_id: str) -> str:
 def ha_turn_off(entity_id: str) -> str:
     """Turn off a device."""
     result = _ha().turn_off(entity_id)
-    return json.dumps(result)
+    return json.dumps(result, default=str)
 
 
 @skill(
@@ -130,7 +130,7 @@ def ha_call_service(
         entity_id=entity_id or None,
         data=extra if extra else None,
     )
-    return json.dumps(result)
+    return json.dumps(result, default=str)
 
 
 # ── Automations ─────────────────────────────────────────────────────────
@@ -145,7 +145,7 @@ def ha_call_service(
 def ha_trigger_automation(entity_id: str) -> str:
     """Trigger a specific automation by entity ID."""
     result = _ha().trigger_automation(entity_id)
-    return json.dumps(result)
+    return json.dumps(result, default=str)
 
 
 @skill(
@@ -172,7 +172,7 @@ def ha_list_automations() -> str:
 def ha_send_notification(message: str, title: str = "") -> str:
     """Send a push notification to the user's mobile device."""
     result = _ha().send_notification(message, title=title or None)
-    return json.dumps(result)
+    return json.dumps(result, default=str)
 
 
 @skill(
@@ -189,7 +189,7 @@ def ha_send_news_alert(
 ) -> str:
     """Send a high-relevance news article as a mobile push notification."""
     result = _ha().send_news_alert(title, summary, url=url or None, relevance=relevance)
-    return json.dumps(result)
+    return json.dumps(result, default=str)
 
 
 # ── Phone Sensors ───────────────────────────────────────────────────────
@@ -229,7 +229,7 @@ def ha_push_metrics() -> str:
             if trend.get("count", 0) > 0:
                 metrics_dict[name] = trend.get("last", 0.0)
         result = _ha().push_system_metrics(metrics_dict)
-        return json.dumps(result)
+        return json.dumps(result, default=str)
     except Exception as exc:
         return json.dumps({"error": str(exc)})
 

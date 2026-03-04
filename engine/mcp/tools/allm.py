@@ -62,7 +62,7 @@ def allm_chat(workspace: str, message: str, mode: str = "chat", instance: str = 
     try:
         from engine.integrations.anythingllm import get_anythingllm_client
         result = get_anythingllm_client().chat(workspace, message, mode=mode, instance=instance or None)
-        return json.dumps(result)
+        return json.dumps(result, default=str)
     except Exception as exc:
         return json.dumps({"error": str(exc)})
 

@@ -177,7 +177,7 @@ async def local_agent_claim_task(task_id: str, agent_id: str) -> str:
     """
     from engine.nexus.local_agent_bridge import get_local_agent_bridge
     result = get_local_agent_bridge().claim_task(task_id=task_id, agent_id=agent_id)
-    return json.dumps(result)
+    return json.dumps(result, default=str)
 
 
 @mcp_tool

@@ -56,7 +56,7 @@ def heist_action(character_id: str, action: str) -> str:
     if not game:
         return json.dumps({"error": "No active heist"})
     result = game.perform_action(character_id, action)
-    return json.dumps(result)
+    return json.dumps(result, default=str)
 
 
 @skill(

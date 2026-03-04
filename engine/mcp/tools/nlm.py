@@ -72,7 +72,7 @@ async def notebooklm_node_ask(notebook_id: str, question: str, session_id: str =
             notebook_id, question,
             session_id=session_id or None,
         )
-        return json.dumps(result)
+        return json.dumps(result, default=str)
     except Exception as exc:
         return json.dumps({"error": str(exc)})
 
@@ -115,7 +115,7 @@ async def notebooklm_node_add_source(
             result = hybrid.add_url_source(notebook_id, source_value)
         else:
             result = hybrid.add_text_source(notebook_id, source_value, title=title)
-        return json.dumps(result)
+        return json.dumps(result, default=str)
     except Exception as exc:
         return json.dumps({"error": str(exc)})
 
@@ -141,7 +141,7 @@ async def notebooklm_node_create_notebook(
             description=description,
             topics=[t.strip() for t in topics.split(",") if t.strip()],
         )
-        return json.dumps(result)
+        return json.dumps(result, default=str)
     except Exception as exc:
         return json.dumps({"error": str(exc)})
 
@@ -154,7 +154,7 @@ async def notebooklm_node_list_notebooks() -> str:
     try:
         from engine.mcp.nlm_node_bridge import get_nlm_node_bridge
         result = get_nlm_node_bridge().list_notebooks()
-        return json.dumps(result)
+        return json.dumps(result, default=str)
     except Exception as exc:
         return json.dumps({"error": str(exc)})
 
@@ -167,7 +167,7 @@ async def notebooklm_node_generate_audio(notebook_id: str) -> str:
     try:
         from engine.mcp.nlm_hybrid import get_nlm_hybrid
         result = get_nlm_hybrid().generate_audio(notebook_id)
-        return json.dumps(result)
+        return json.dumps(result, default=str)
     except Exception as exc:
         return json.dumps({"error": str(exc)})
 
@@ -182,7 +182,7 @@ async def notebooklm_node_generate_video(notebook_id: str, style: str = "cinemat
     try:
         from engine.mcp.nlm_hybrid import get_nlm_hybrid
         result = get_nlm_hybrid().generate_video(notebook_id, style)
-        return json.dumps(result)
+        return json.dumps(result, default=str)
     except Exception as exc:
         return json.dumps({"error": str(exc)})
 
@@ -196,7 +196,7 @@ async def notebooklm_node_extract_tables(notebook_id: str, query: str = "") -> s
     try:
         from engine.mcp.nlm_hybrid import get_nlm_hybrid
         result = get_nlm_hybrid().extract_tables(notebook_id, query)
-        return json.dumps(result)
+        return json.dumps(result, default=str)
     except Exception as exc:
         return json.dumps({"error": str(exc)})
 
@@ -209,7 +209,7 @@ async def notebooklm_node_chat_history(notebook_id: str, limit: int = 20) -> str
     try:
         from engine.mcp.nlm_node_bridge import get_nlm_node_bridge
         result = get_nlm_node_bridge().get_chat_history(notebook_id, limit=limit)
-        return json.dumps(result)
+        return json.dumps(result, default=str)
     except Exception as exc:
         return json.dumps({"error": str(exc)})
 
@@ -223,7 +223,7 @@ async def notebooklm_node_health() -> str:
     try:
         from engine.mcp.nlm_hybrid import get_nlm_hybrid
         result = get_nlm_hybrid().health()
-        return json.dumps(result)
+        return json.dumps(result, default=str)
     except Exception as exc:
         return json.dumps({"error": str(exc)})
 
@@ -238,7 +238,7 @@ async def notebooklm_node_setup_auth() -> str:
     try:
         from engine.mcp.nlm_hybrid import get_nlm_hybrid
         result = get_nlm_hybrid().setup_auth()
-        return json.dumps(result)
+        return json.dumps(result, default=str)
     except Exception as exc:
         return json.dumps({"error": str(exc)})
 
