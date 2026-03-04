@@ -3,6 +3,51 @@
 All notable changes to CosySim are documented here.
 
 ---
+## [0.86b] — "THE RECON LAYER" — 2026-03
+
+ARGUS comes online. CosySim now has eyes inside Google's infrastructure — every
+NotebookLM rpcid, every Gemini batchexecute flow, every AI Studio gRPC method is
+mapped, versioned, and stored in Nexus automatically. The system decodes binary
+protocols, reconstructs .proto stubs from heap snapshots and packet captures, and
+runs discovery weekly via the scheduler. Intelligence accumulates without manual
+intervention.
+
+### ARGUS — Automated Reconnaissance & Google Universal Surveyor
+- **`scripts/argus/`** — 19-file API intelligence platform (full package)
+- **CDP bridge** (`cdp_bridge.py`) — WebSocket client for Chrome DevTools Protocol;
+  intercepts all network traffic, takes heap snapshots, accesses V8 internals
+- **Network monitor** (`network_monitor.py`) — attaches to all Chrome tabs, buffers
+  every HTTP request/response for decoder analysis
+- **Crawlers** — Playwright-based UI crawlers attached to running Chrome (no new instance):
+  - `nlm_crawler.py` — 14 flows covering all 24 known NLM rpcids
+  - `gemini_crawler.py` — 10 flows covering all 17 known Gemini rpcids
+  - `aistudio_crawler.py` — 15 flows covering all 136 known AI Studio methods
+- **Decoders**:
+  - `batchexecute.py` — full `f.req` → rpcid+payload decoder + `wrb.fr` response parser
+  - `grpc_web.py` — binary gRPC-web frame decoder + proto field number extractor
+  - `heap_diffing.py` — V8 heap snapshot diff to surface new API shapes between actions
+- **Discovery**:
+  - `endpoint_registry.py` — versioned JSON registry at `data/argus/registry.json`
+  - `rpcid_detector.py` — live scanner for new rpcids in traffic, heap strings, JS bundles
+  - `feature_flag_probe.py` — enumerates NLM hidden flag IDs 300–1500 via `ozz5Z` rpcid
+  - `proto_reconstructor.py` — combines binary wire types + bundle field names → `.proto` stubs
+- **Reporting** (`api_doc_generator.py`, `DiffReporter`) — generates `docs/NLM_API_REFERENCE.md`,
+  `docs/GEMINI_API_REFERENCE.md`, `docs/AISTUDIO_API_REFERENCE.md` from live captures
+- **tshark integration** (`tshark_capture.py`) — subprocess packet capture with `SSLKEYLOGFILE`
+  TLS decryption for binary gRPC payload analysis
+- **Nexus sink** (`nexus_sink.py`) — all discoveries stored as Nexus entries (category: `argus`)
+  with Q&A pairs; agents query `nexus_search("argus rpcid")` for live API intelligence
+- **Orchestrator** (`orchestrator.py`) — master controller with CLI:
+  `python -m scripts.argus.orchestrator [--target nlm|gemini|aistudio|all] [--probe-flags]`
+- **Scheduler tasks** (50 → 52 total):
+  - `argus-weekly-scan` — full crawl of all 3 targets, every 7 days
+  - `argus-diff-report` — diff registry vs baseline, surface new discoveries
+
+### Documentation
+- **`docs/ARGUS.md`** — complete ARGUS system reference (architecture, protocols,
+  CLI usage, TLS setup, output files, known rpcid catalogue, extension guide)
+
+---
 ## [0.85b] — "THE MAINTENANCE LAYER" — 2026-03
 
 The system begins taking care of itself. Google auth cookies are now monitored,

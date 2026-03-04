@@ -42,8 +42,8 @@ async def main():
 
     params = StdioServerParameters(
         command='node',
-        args=[r'C:\\Users\\Knack\\AppData\\Local\\notebooklm-mcp\\index.js'],
-        env=None,
+        args=[r'C:\\Files\\MCP\\notebooklm-mcp\\dist\\index.js'],
+        env={"HEADLESS": "true", "NOTEBOOKLM_NO_GEMINI": "false", "NLM_TIER": "pro"},
     )
     async with stdio_client(params) as (r, w):
         async with ClientSession(r, w) as session:
