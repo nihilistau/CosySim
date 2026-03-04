@@ -262,3 +262,173 @@ class TestHarvestCookiesMock:
             cookies, account = asyncio.run(harvest_cookies())
 
         assert account == "harvested"
+
+
+# ──── ask command ─────────────────────────────────────────────────────────────
+
+class TestArgusAskCommand:
+    """Tests for the cmd_ask NLM interaction command."""
+
+    def _make_mock_ctx(self, initial_msg_count: int, final_answer: str):
+        """Build a mock Playwright context that simulates NLM responding."""
+        mock_page = AsyncMock()
+        mock_page.url = "https://notebooklm.google.com/notebook/test-id"
+
+        # fill/click/focus/keyboard return None (just track calls)
+        mock_page.fill = AsyncMock(return_value=None)
+        mock_page.click = AsyncMock(return_value=None)
+        mock_page.focus = AsyncMock(return_value=None)
+        mock_page.keyboard = AsyncMock()
+        mock_page.keyboard.press = AsyncMock(return_value=None)
+
+        # wait_for_selector succeeds (submit btn enabled)
+        mock_page.wait_for_selector = AsyncMock(return_value=None)
+
+        mock_page.locator = MagicMock()
+        mock_locator = AsyncMock()
+        mock_locator.is_disabled = AsyncMock(return_value=False)
+        mock_page.locator.return_value = mock_locator
+
+        # Call sequence: (before_count), then per poll: (loading, count, read_last)
+        # Stability requires content unchanged AND len > 50 for 2 consecutive polls.
+        # Poll 1: loading=True,  count=N+1, read="Loading..."  → stable=0 (len < 50)
+        # Poll 2: loading=False, count=N+1, read=final_answer  → stable=0 (different)
+        # Poll 3: loading=False, count=N+1, read=final_answer  → stable=1
+        # Poll 4: loading=False, count=N+1, read=final_answer  → stable=2 → done
+        n = initial_msg_count
+        call_log: list = [
+            n,                              # before_count
+            True,  n + 1, "Loading...",     # poll 1
+            False, n + 1, final_answer,     # poll 2 (different from "Loading..." → stable=0)
+            False, n + 1, final_answer,     # poll 3 (stable=1)
+            False, n + 1, final_answer,     # poll 4 (stable=2 → done)
+        ]
+        # Use closure-based async coroutine to avoid StopIteration inside async context
+        call_idx = [0]
+
+        async def _eval_side_effect(*args: object, **kwargs: object) -> object:
+            idx = call_idx[0]
+            call_idx[0] += 1
+            return call_log[idx] if idx < len(call_log) else call_log[-1]
+
+        mock_page.evaluate = AsyncMock(side_effect=_eval_side_effect)
+
+        mock_ctx = MagicMock()
+        mock_ctx.pages = [mock_page]
+        return mock_ctx, mock_page
+
+    def test_ask_returns_stable_answer(self) -> None:
+        """cmd_ask polls until content is stable and returns the answer."""
+        import asyncio
+        from unittest.mock import patch
+        from scripts.argus.tools.__main__ import cmd_ask
+
+        final_answer = "CosySim is a multi-scene AI simulation framework with 15 interactive scenes and Nexus KMS."
+        mock_ctx, mock_page = self._make_mock_ctx(0, final_answer)
+
+        result_holder: list = []
+
+        async def _run():
+            # Capture stdout; patch asyncio.sleep to skip real waits
+            import io, sys
+            buf = io.StringIO()
+            orig = sys.stdout
+            sys.stdout = buf
+            try:
+                with patch("asyncio.sleep", new_callable=AsyncMock):
+                    await cmd_ask(mock_ctx, "What is CosySim?", "notebooklm", 30, raw=False, store=False)
+            finally:
+                sys.stdout = orig
+            result_holder.append(buf.getvalue())
+
+        asyncio.run(_run())
+        out = result_holder[0]
+        assert "What is CosySim?" in out
+        assert "CosySim" in out
+
+    def test_ask_raw_flag_suppresses_header(self) -> None:
+        """--raw prints answer without Q/separator lines."""
+        import asyncio
+        from unittest.mock import patch
+        from scripts.argus.tools.__main__ import cmd_ask
+
+        final_answer = "Raw answer text with enough detail to pass the stability threshold check here."
+        mock_ctx, mock_page = self._make_mock_ctx(2, final_answer)
+
+        output: list = []
+
+        async def _run():
+            import io, sys
+            from unittest.mock import patch
+            buf = io.StringIO()
+            orig = sys.stdout
+            sys.stdout = buf
+            try:
+                with patch("asyncio.sleep", new_callable=AsyncMock):
+                    await cmd_ask(mock_ctx, "Q?", "notebooklm", 30, raw=True, store=False)
+            finally:
+                sys.stdout = orig
+            output.append(buf.getvalue())
+
+        asyncio.run(_run())
+        out = output[0]
+        # raw=True: only the answer, no "Q:" header
+        assert "Raw answer text" in out
+        assert "Q:" not in out
+
+    def test_ask_no_matching_tab(self, capsys: Any) -> None:
+        """cmd_ask prints error when no tab matches url pattern."""
+        import asyncio
+        from scripts.argus.tools.__main__ import cmd_ask
+
+        mock_ctx = MagicMock()
+        mock_ctx.pages = []  # empty — no matching tab
+
+        asyncio.run(cmd_ask(mock_ctx, "hello", "notebooklm", 5, raw=False, store=False))
+        captured = capsys.readouterr()
+        assert "No tab matching" in captured.out
+
+
+# ──── eval --file flag ────────────────────────────────────────────────────────
+
+class TestEvalFileFlag:
+    """Tests for the --file option on the eval command."""
+
+    def test_eval_reads_js_from_file(self, tmp_path: Path) -> None:
+        """cmd_eval loads JS from --file and evaluates it."""
+        import asyncio
+        from scripts.argus.tools.__main__ import cmd_eval
+
+        js_file = tmp_path / "test.js"
+        js_file.write_text("() => 'hello from file'", encoding="utf-8")
+
+        mock_page = AsyncMock()
+        mock_page.url = "https://notebooklm.google.com/"
+        mock_page.evaluate = AsyncMock(return_value="hello from file")
+
+        mock_ctx = MagicMock()
+        mock_ctx.pages = [mock_page]
+
+        output: list = []
+
+        async def _run():
+            import io, sys
+            buf = io.StringIO()
+            orig = sys.stdout
+            sys.stdout = buf
+            try:
+                await cmd_eval(mock_ctx, "notebooklm", js=None, helper=None, interactive=False, file=str(js_file))
+            finally:
+                sys.stdout = orig
+            output.append(buf.getvalue())
+
+        asyncio.run(_run())
+        assert "hello from file" in output[0]
+        # Verify the JS from the file was passed to evaluate
+        mock_page.evaluate.assert_called_once_with("() => 'hello from file'")
+
+    def test_nlm_state_helper_in_js_helpers(self) -> None:
+        """nlm_state helper is present in JS_HELPERS."""
+        from scripts.argus.tools.__main__ import JS_HELPERS
+        assert "nlm_state" in JS_HELPERS
+        assert "chat-message" in JS_HELPERS["nlm_state"] or "response_count" in JS_HELPERS["nlm_state"]
