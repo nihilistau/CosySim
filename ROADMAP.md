@@ -1,6 +1,6 @@
 # CosySim Roadmap
 
-> Current: **v0.84b** "THE HINDSIGHT LAYER" ✅ | Last updated: 2026-03
+> Current: **v0.85b** "THE MAINTENANCE LAYER" ✅ | Last updated: 2026-03
 
 ## Philosophy
 
@@ -281,31 +281,62 @@ The system's ultimate goal: **inhabit itself** — AI agents that maintain, impr
 - **Tests: 8,771 passing**, 0 failures
 
 ---
-## Next: v0.85b — "THE CLEAN SWEEP"
+## Completed: v0.85b — "THE MAINTENANCE LAYER" ✅ COMPLETE
 
-> v0.85b applies Hindsight patterns to the remaining engine layers: scenes, skills, lmstudio.
-> Closes Phase 9.5 gaps and pushes type safety to the remaining untouched modules.
+> The system begins taking care of itself. Google auth is auto-renewed via CDP.
+> Test regressions are tracked. The Nexus bridge CLI works. The project has a journal.
 
-### Track A — Phase 9.5: Tool Layer Cleanup
-- [ ] Migrate 24 remaining `bare except Exception:` in `engine/mcp/tools/` to use `@mcp_tool`
-- [ ] Add `update_entry()` and `delete_qa()` to `NexusClient` (covers `nexus_distiller.py` 2 raw calls)
-- [ ] Add standalone test for `engine/mcp/_lazy.py`
+- **`scripts/har_capture.py`** — CDP cookie capture: connects to running Chrome port 9222, `Network.getCookies()`, ~1s, zero UI. Falls back to launch/macro if needed.
+- **`scripts/har_watchfolder.py`** — drop-folder auto-importer (30s poll, `imported/`/`failed/` dirs)
+- **`GoogleAccountPool`** — `cookie_age_days()`, `is_stale()`, `get_stale_accounts()`, `get_available_accounts()`
+- **Scheduler #48** `cookie-health-check` (daily) — probes NLM/Colab, Nexus alert if stale
+- **Scheduler #49** `cookie-auto-refresh` (every 72h) — silent CDP refresh, no user action needed
+- **Scheduler #50** `test-suite-benchmark` (weekly) — times full pytest suite, logs to Nexus, warns on >20% regression
+- **`google_accounts` skill pack** — 4 skills: `cookie_status`, `har_import`, `cookie_probe`, `har_watchfolder_start`
+- **Nexus bridge CLI** — `_parse_entry`/`_parse_rule` fixed for JSON-string DB fields; fully operational
+- **`docs/PROJECT_JOURNAL.md`** — 5,000+ word project narrative (17 chapters, v0.51b→v0.84b)
+- **Tests: 8,811+ passing**, 50 scheduler tasks
 
-### Track B — Scene BaseClass Cleanup
-- [ ] Implement `export_scene()` / `import_scene()` in `BaseScene` (remove `NotImplementedError` stubs)
-- [ ] Audit all 16 scenes for remaining inline state management (move to MCP tree)
+---
+## Next: v0.86b — "THE KNOWLEDGE LAYER"
 
-### Track C — LMStudio Type Safety
-- [ ] Add Pydantic request/response models to `engine/lmstudio/` (parallel to nexus/models.py)
-- [ ] Typed `LMSRequest`, `LMSResponse`, `SSEChunk` models
+> v0.86b turns Nexus from a write-only store into a living knowledge base that agents
+> actively consult. Q&A cache seeded. NLM conversations grounded in project history.
+> Stale docs brought current. Training flywheel verified running.
 
-### Track D — Interceptor Depth
-- [ ] Full interceptor test suite (one test file per interceptor module)
-- [ ] Priority collision detection in `_build_default_pipeline()`
+### Track A — Nexus Q&A Seeding
+- [ ] Seed 50+ core Q&A pairs from project knowledge (architecture, patterns, conventions)
+- [ ] Distill Q&A from existing 500 Nexus entries via NLM conversation
+- [ ] Wire `nexus_ask()` hit-rate tracking — measure cache effectiveness over time
 
-### Track E — Docs Completion
-- [ ] Complete `docs/PROJECT_HINDSIGHT.md` migration guide
-- [ ] All remaining docs updated to v0.84b architecture
+### Track B — NotebookLM Grounding
+- [ ] Upload `docs/PROJECT_JOURNAL.md` as NLM source (agent onboarding + alignment)
+- [ ] Create `CosySim Architecture` notebook with key engine docs as sources
+- [ ] Scheduler task: weekly NLM distillation of new Nexus entries → Q&A cache
+
+### Track C — Docs Brought Current
+- [ ] `docs/INTERCEPTORS.md` — update for auto-registry, 26-module structure
+- [ ] `docs/MCP_FRAMEWORK.md` — add `@mcp_tool` decorator section
+- [ ] `docs/SYSTEM_AUDIT.md` — add v0.84b + v0.85b audit entries
+- [ ] `docs/PROJECT_HINDSIGHT.md` — migration guide for v0.83b → v0.84b patterns
+
+### Track D — Training Flywheel Health Check
+- [ ] Verify `router-finetune-cycle` task is producing model checkpoints
+- [ ] Check `output_evaluator_live.jsonl` + `tool_dispatch_train.jsonl` data quality
+- [ ] Run one forced finetune cycle: `CoderPipeline.check_and_train(force=True)`
+- [ ] Store benchmark results in Nexus
+
+---
+## Next: v0.85b — "THE CLEAN SWEEP" (superseded by v0.85b THE MAINTENANCE LAYER)
+
+> Original v0.85b plan was architectural cleanup. Redirected to infrastructure/maintenance.
+> Remaining cleanup items moved to v0.86b+ backlog.
+
+### Backlog (deferred)
+- [ ] Migrate remaining `bare except Exception:` in `engine/mcp/tools/` to `@mcp_tool`
+- [ ] `BaseScene.export_scene()` / `import_scene()` implementations
+- [ ] Full interceptor test suite (one file per interceptor module)
+- [ ] LMStudio Pydantic request/response models (`LMSRequest`, `LMSResponse`, `SSEChunk`)
 
 ---
 ## Completed: v0.81b — "THE LIVING CITY" ✅ COMPLETE
