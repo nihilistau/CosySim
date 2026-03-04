@@ -1,14 +1,14 @@
 # CosySim Documentation Index
 
-> All project documentation in one place. v0.81b — 7,800+ tests, 214 MCP tools, 25+ skill packs, 16 scenes.
+> All project documentation in one place. v0.84b — 8,771 tests, 214 MCP tools, 25+ skill packs, 16 scenes.
 
-## Quick Facts — v0.81b
+## Quick Facts — v0.84b
 
 | Metric | Value |
 |--------|-------|
-| Version | **0.81b** (2026-03) — "THE LIVING CITY" |
-| Tests passing | **7,800+** across ~220 files |
-| MCP tools | **214** |
+| Version | **0.84b** (2026) — "THE HINDSIGHT LAYER" |
+| Tests passing | **8,771** across ~220 files |
+| MCP tools | **214** (in 43 domain files) |
 | Skill packs | **25+ packs · 220+ skills** |
 | Game scenes | **10** (phone, bedroom, lounge, tavern, casino, gallery, arena, realm, neoncity, grid) |
 | Utility scenes | **6** (coders, heist, command, games, asset_studio, intel_hub) |
@@ -71,8 +71,9 @@
 | Doc | Description |
 |-----|-------------|
 | [Architecture](ARCHITECTURE.md) | System design, layers, data flow, interceptor pipeline |
-| [Interceptors](INTERCEPTORS.md) | Interceptor pipeline — all 25 hooks, priorities, custom interceptors |
-| [MCP Framework](MCP_FRAMEWORK.md) | Tools, governance, state, dialog, rules, skills |
+| [Interceptors](INTERCEPTORS.md) | Interceptor pipeline — all 26 hooks, priorities, auto-registry (`@register_interceptor`) |
+| [MCP Framework](MCP_FRAMEWORK.md) | Tools, `@mcp_tool` decorator, governance, state, dialog, rules, skills |
+| [Project Hindsight](PROJECT_HINDSIGHT.md) | v0.83b → v0.84b architectural refactor — migration guide, before/after, 9 phases |
 | [Characters](CHARACTERS.md) | Personality, stats, buffs, tags, relationships |
 | [Character System](CHARACTER_SYSTEM.md) | CharacterMemory, ReputationManager, emotion model, speech patterns |
 | [LMStudio](LMSTUDIO.md) | InferenceOrchestrator, model management, routing, streaming, branching |

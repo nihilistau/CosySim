@@ -1,11 +1,14 @@
-# CosySim Interceptor Pipeline — v0.52b
+# CosySim Interceptor Pipeline — v0.84b
 
 The interceptor pipeline is the governance layer that wraps every agent LLM call.
 Interceptors modify prompts **before** the LLM runs (`pre_call`) and process
 replies **after** it returns (`post_call`). This gives CosySim fine-grained
 control over agent behavior without changing agent code.
 
-> **Source:** `engine/agents/interceptors.py` · `engine/mcp/comms_framework.py`
+> **Source:** `engine/agents/interceptors/` (26 modules) · `engine/mcp/comms_framework.py`
+>
+> **v0.84b:** Monolithic `interceptors.py` split into 26 individual module files with auto-registry.
+> See [Project Hindsight](./PROJECT_HINDSIGHT.md) for migration details.
 >
 > See also: [MCP Framework](./MCP_FRAMEWORK.md) · [Skills](./SKILLS.md) · [Architecture](./ARCHITECTURE.md)
 
@@ -125,15 +128,74 @@ These read/modify `ctx["reply"]` after the LLM responds.
 
 ## Registration
 
+### Package Layout
+
+Interceptors live in `engine/agents/interceptors/` — one class per file, 26 files
+total (average ~105 lines each):
+
+```
+engine/agents/interceptors/
+├── __init__.py            ← imports all modules, exports INTERCEPTOR_CACHE
+├── base.py                ← InterceptorBase, @register_interceptor, registry
+├── cache.py               ← INTERCEPTOR_CACHE singleton
+├── nexus_prompt.py        ← NexusPromptInterceptor          (pri 4)
+├── mood_drift.py          ← NaturalMoodDriftInterceptor     (pri 5)
+├── recap.py               ← ConversationRecapInterceptor    (pri 6)
+├── character_registry.py  ← CharacterRegistryInterceptor   (pri 8)
+├── router_injector.py     ← RouterMessageInjector          (pri 10)
+├── dialog_directive.py    ← DialogDirectiveInterceptor     (pri 12)
+├── scene_bedroom.py       ← BedroomSceneInterceptor        (pri 15)
+├── scene_phone.py         ← PhoneSceneInterceptor          (pri 15)
+├── scene_lounge.py        ← LoungeSceneInterceptor         (pri 15)
+├── scene_gallery.py       ← GallerySceneInterceptor        (pri 15)
+├── scene_universal.py     ← UniversalSceneInterceptor      (pri 16)
+├── ambient_events.py      ← AmbientEventInterceptor        (pri 17)
+├── auto_results.py        ← AutoResultInjector             (pri 20)
+├── skill_awareness.py     ← SkillAwarenessInterceptor      (pri 30)
+├── game.py                ← GameInterceptor                (pri 35)
+├── personality_guard.py   ← PersonalityGuardInterceptor    (pri 50)
+├── conversation_variety.py← ConversationVarietyInterceptor (pri 55)
+├── policy_enforcer.py     ← PolicyEnforcerInterceptor      (pri 60)
+├── memory_enhancer.py     ← MemoryEnhancerInterceptor      (pri 70)
+├── response_shaper.py     ← ResponseShaperInterceptor      (pri 80)
+├── tts_style.py           ← TTSStyleInterceptor            (pri 85)
+├── activity_logger.py     ← ActivityLoggerInterceptor      (pri 90)
+├── mood_sync.py           ← MoodSyncInterceptor            (pri 92)
+└── relationship_event.py  ← RelationshipEventInterceptor   (pri 93)
+```
+
 ### How Interceptors Are Loaded
 
-All interceptors are instantiated in `_build_default_pipeline()` inside
-`engine/mcp/comms_framework.py`. Every `AgentGovernor` gets the full pipeline
-by default:
+Every interceptor file decorates its class with `@register_interceptor`. When
+`engine.agents.interceptors` is imported, all modules are loaded and every
+`@register_interceptor` decorator fires, populating the central registry.
+`_build_default_pipeline()` reads the registry to build the pipeline — no
+hardcoded list anywhere.
 
 ```python
+# engine/agents/interceptors/mood_drift.py
+from engine.agents.interceptors.base import InterceptorBase, register_interceptor
+
+@register_interceptor
+class NaturalMoodDriftInterceptor(InterceptorBase):
+    name     = "natural_mood_drift"
+    priority = 5
+    ...
+```
+
+```python
+# engine/mcp/comms_framework.py
+from engine.agents.interceptors import get_interceptor_registry
+
+def _build_default_pipeline():
+    registry = get_interceptor_registry()
+    pipeline = InterceptorPipeline()
+    for cls in registry.values():
+        pipeline.add(cls())   # sorted by priority automatically
+    return pipeline
+
 governor = AgentGovernor(agent, scene="phone")
-# governor.pipeline contains all 25 interceptors, sorted by priority
+# governor.pipeline contains all 26 interceptors, sorted by priority
 ```
 
 ### Config Toggles
@@ -202,16 +264,19 @@ The cache is thread-safe and keyed by `(agent_id, interceptor_name)`.
 
 ## Writing a Custom Interceptor
 
-### 1. Create the Class
+### 1. Create the File
+
+Create a new module in `engine/agents/interceptors/`. One class per file.
 
 ```python
-# engine/agents/my_interceptors.py
-from engine.agents.interceptors import InterceptorBase
+# engine/agents/interceptors/weather.py
+from engine.agents.interceptors.base import InterceptorBase, register_interceptor
 
+@register_interceptor
 class WeatherInterceptor(InterceptorBase):
     """Inject current weather into the scene context."""
     name     = "weather"
-    priority = 18                          # after scene interceptors (15-16)
+    priority = 18                           # after scene interceptors (15–16)
     applicable_scenes = {"realm", "arena"}  # or None for all scenes
 
     def pre_call(self, ctx):
@@ -221,35 +286,34 @@ class WeatherInterceptor(InterceptorBase):
         )
 
     def post_call(self, ctx):
-        # Optional: post-process the reply
         pass
 
     def _get_weather(self, scene):
-        # Your logic here
         return "Heavy rain, low visibility"
 ```
 
-### 2. Register in the Pipeline
+### 2. Done — Auto-Registered
 
-Add to `_build_default_pipeline()` in `engine/mcp/comms_framework.py`:
+The `@register_interceptor` decorator adds the class to the global registry.
+When `engine.agents.interceptors` is imported (which happens at server startup),
+all module files are loaded and all decorated classes are registered.
 
-```python
-from engine.agents.my_interceptors import WeatherInterceptor
+**No changes required** to `__init__.py`, `comms_framework.py`, or any server
+file. The new interceptor appears in every pipeline automatically on next startup.
 
-pipeline.add(WeatherInterceptor())   # auto-sorted by priority
-```
+### 3. Runtime Registration (Optional)
 
-Or register at runtime on an existing governor:
+To add an interceptor to a running governor without restarting:
 
 ```python
 from engine.mcp.comms_framework import get_governor
-from engine.agents.my_interceptors import WeatherInterceptor
+from engine.agents.interceptors.weather import WeatherInterceptor
 
 gov = get_governor(agent, scene="realm")
 gov.pipeline.add(WeatherInterceptor())
 ```
 
-### 3. Remove an Interceptor
+### 4. Remove an Interceptor
 
 ```python
 gov.pipeline.remove("weather")     # by name

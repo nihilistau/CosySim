@@ -1,4 +1,4 @@
-# Nexus Integration Guide — v0.55b
+# Nexus Integration Guide — v0.84b
 
 Nexus is CosySim's central knowledge management system. It provides persistent
 storage, full-text search, namespace-separated knowledge, rules enforcement,
@@ -18,6 +18,7 @@ skills, Copilot CLI, and external tools.
 ├─────────────────────────────────────────────────────────┤
 │  CosySim Engine (Agents, Scenes, Skills)                │
 │  ├── engine/nexus/client.py        NexusClient HTTP     │
+│  ├── engine/nexus/models.py        Pydantic v2 models   │
 │  ├── engine/nexus/nexus_memory.py  NexusMemory system   │
 │  ├── engine/nexus/nexus_namespaces.py  Namespace rules  │
 │  ├── engine/nexus/nexus_distiller.py   4 distillers     │
@@ -26,7 +27,7 @@ skills, Copilot CLI, and external tools.
 │  ├── engine/nexus/control_panel.py Streamlit dashboard  │
 │  ├── engine/skills/builtin/nexus_skills.py   16 skills  │
 │  ├── engine/skills/builtin/coding_skills.py  8 skills   │
-│  └── engine/agents/interceptors.py  NexusPromptIntcptr  │
+│  └── engine/agents/interceptors/   NexusPromptIntcptr   │
 ├─────────────────────────────────────────────────────────┤
 │              HTTP REST API (port 8700)                   │
 ├─────────────────────────────────────────────────────────┤
@@ -121,6 +122,81 @@ ids = client.batch_add([
 The client retries failed requests up to `max_retries` times with exponential
 backoff (0.5s × attempt). If Nexus is unavailable, methods return graceful
 defaults (`None`, `[]`, `False`).
+
+## Pydantic Model Layer (v0.84b)
+
+All Nexus API responses are now typed Pydantic v2 models defined in
+`engine/nexus/models.py`. Dict-style access is preserved via a `_DictCompat`
+mixin so existing code continues to work without changes.
+
+### Available Models
+
+```python
+from engine.nexus.models import NexusEntry, NexusRule, AgentMemory, SessionLog
+
+# NexusEntry  — id, title, content, content_type, tags, category,
+#               quality_score, created_at, updated_at
+# NexusRule   — rule_id, scope, condition, action, priority, enabled
+# AgentMemory — agent_id, content, importance (0.0–1.0), tags, timestamp
+# SessionLog  — session_id, project, summary, turns, created_at
+```
+
+### _DictCompat Backward Compatibility
+
+All models include the `_DictCompat` mixin — existing dict-style access still
+works alongside Pydantic attribute access:
+
+```python
+entry = client.search("query")[0]
+entry.title          # Pydantic attribute (preferred)
+entry["title"]       # __getitem__ via _DictCompat
+entry.get("title")   # .get() via _DictCompat
+```
+
+### Domain Sub-Clients
+
+`get_nexus_client()` exposes three domain sub-clients on the top-level client
+object. Each sub-client groups related API calls and returns typed models.
+
+```python
+from engine.nexus.client import get_nexus_client
+client = get_nexus_client()
+
+# Rules sub-client
+rules = client.rules.get_rules(scope="coding")   # List[NexusRule]
+client.rules.add_rule(...)
+
+# Sessions sub-client
+client.sessions.log_session("CosySim", summary="Fixed auth bug")
+sessions = client.sessions.list_sessions()        # List[SessionLog]
+
+# Memory sub-client
+client.memory.submit("agent_id", "content", importance=0.8)
+answer = client.memory.ask("What did Lola say about the heist?")
+```
+
+The flat methods on the top-level client (`client.get_rules()`,
+`client.log_session()`, etc.) remain available as pass-through aliases.
+
+### NexusEntryCreate Validation
+
+Use `NexusEntryCreate` for validated entry creation. Pydantic raises
+`ValidationError` if required fields are missing or types are wrong:
+
+```python
+from engine.nexus.models import NexusEntryCreate
+
+entry = NexusEntryCreate(
+    title="Interceptor pipeline docs",
+    content="...",
+    content_type="document",   # required
+    tags=["architecture"],     # optional
+    category="system",         # optional
+)
+client.add_entry_validated(entry)
+```
+
+---
 
 ## MCP Skills
 
@@ -477,15 +553,17 @@ python -m engine.nexus.bridge maintain health
 
 ## NexusPromptInterceptor
 
-`engine/agents/interceptors.py` includes a `NexusPromptInterceptor` (priority 4)
-that enriches agent prompts with Nexus knowledge at runtime:
+`engine/agents/interceptors/` contains the auto-discovered interceptor modules
+(26 total). One of these is `NexusPromptInterceptor` (priority 4), which enriches
+agent prompts with Nexus knowledge at runtime:
 
 - Fetches governance rules for the current scope
 - Injects relevant knowledge from Nexus search
 - Loads stored character/scene prompts
 - TTL-cached (5 min) to avoid hammering the API
 
-Registered in `config/default.yaml` under `comms.interceptors`.
+Registered in `config/default.yaml` under `comms.interceptors`. See
+[INTERCEPTORS.md](./INTERCEPTORS.md) for the full interceptor registry.
 
 ## Control Panel
 

@@ -15,7 +15,8 @@
 7. [Interaction Trees](#interaction-trees)
 8. [Skills Integration](#skills-integration)
 9. [Writing a Custom Tool](#writing-a-custom-tool)
-10. [Writing a Custom Interceptor](#writing-a-custom-interceptor)
+10. [MCP Tool Decorator](#mcp-tool-decorator)
+11. [Writing a Custom Interceptor](#writing-a-custom-interceptor)
 
 ---
 
@@ -512,14 +513,22 @@ Manifests are configured in `config/skill_manifests.yaml` and hot-reloadable per
 
 ## Writing a Custom Tool
 
+> **v0.84b pattern:** Use `@mcp_tool` in the domain file, then add a thin
+> wrapper in `cosysim_server.py`. Full details in the
+> [MCP Tool Decorator](#mcp-tool-decorator) section below.
+
 ### Step 1: Create the function in a tools module
 
 ```python
 # engine/mcp/tools/utility_tools.py  (or a new module)
+from engine.mcp.decorators import mcp_tool, ToolExecutionError
 
+@mcp_tool
 def roll_dice(sides: int = 6) -> dict:
     """Roll a dice with N sides."""
     import random
+    if sides < 2:
+        raise ToolExecutionError(f"sides must be >= 2, got {sides}")
     result = random.randint(1, sides)
     return {"roll": result, "sides": sides}
 ```
@@ -555,14 +564,177 @@ scenes:
 
 ---
 
-## Writing a Custom Interceptor
+## MCP Tool Decorator
 
-### Step 1: Extend InterceptorBase
+> **Added in v0.84b (Project Hindsight).** See [Project Hindsight](./PROJECT_HINDSIGHT.md)
+> for full context on the MCP server extraction.
+
+### The Thin Wrapper Pattern
+
+All tool logic in v0.84b lives in domain files under `engine/mcp/tools/`.
+`cosysim_server.py` is a pure thin routing layer — it only holds `@mcp.tool`
+stubs that immediately delegate:
+
+```
+Before v0.84b                         After v0.84b
+─────────────────────────────         ──────────────────────────────────────
+cosysim_server.py (3,088 lines)  →    cosysim_server.py (2,192 lines)
+  all logic here                         thin wrappers only
+                                       engine/mcp/tools/ (43 files, 8,147 lines)
+                                         all logic here
+```
+
+**Rule:** Never add business logic directly in `cosysim_server.py`.
+
+### `@mcp_tool`
+
+`engine/mcp/decorators.py` · decorator `mcp_tool`
+
+Wraps domain functions with:
+
+- **JSON serialisation** — dict/list returns are serialised automatically
+- **Structured errors** — `ToolExecutionError` is caught and returned as
+  `{"error": "..."}` rather than raising to the LLM
+- **Execution timing** — logged at `DEBUG` with tool name and duration
+- **Tool name** — auto-extracted from function name (no decorator argument needed)
 
 ```python
-# engine/agents/interceptors.py  (or your own module)
-from engine.mcp.comms_framework import InterceptorBase, ResponseContext
+# engine/mcp/tools/character_tools.py
+from engine.mcp.decorators import mcp_tool, ToolExecutionError
+from engine.mcp.character_registry import get_character_registry
 
+@mcp_tool
+def get_character_summary(character_id: str) -> str:
+    """Return a full character summary string."""
+    reg = get_character_registry()
+    char = reg.get(character_id)
+    if char is None:
+        raise ToolExecutionError(f"Character not found: {character_id}")
+    return char.to_summary()
+
+@mcp_tool
+def set_character_mood(character_id: str, mood: str) -> dict:
+    reg = get_character_registry()
+    reg.set_state(character_id, mood=mood)
+    return {"ok": True, "character_id": character_id, "mood": mood}
+```
+
+```python
+# cosysim_server.py — thin wrapper only
+from engine.mcp.tools.character_tools import (
+    get_character_summary as _get_character_summary,
+    set_character_mood as _set_character_mood,
+)
+
+@mcp.tool
+def character_get_summary(character_id: str) -> str:
+    """Get a full character summary."""
+    return _get_character_summary(character_id)
+
+@mcp.tool
+def character_set_mood(character_id: str, mood: str) -> dict:
+    """Set a character's mood."""
+    return _set_character_mood(character_id, mood)
+```
+
+### `ToolExecutionError`
+
+`engine/mcp/decorators.py` · exception `ToolExecutionError`
+
+Use for **expected** failures: bad input, resource not found, permission denied.
+These are returned to the LLM as structured error responses — not Python exceptions.
+
+```python
+from engine.mcp.decorators import ToolExecutionError
+
+# Expected failure → returned as {"error": "Scene not active: casino"}
+raise ToolExecutionError("Scene not active: casino")
+
+# Unexpected failure → propagates, logged, returned as generic error
+raise RuntimeError("Database connection lost")
+```
+
+| Error type | When to use | LLM receives |
+|------------|-------------|--------------|
+| `ToolExecutionError` | Bad param, not found, permission | `{"error": "your message"}` |
+| Any other exception | Unexpected crash | `{"error": "internal error"}` + server log |
+
+### Domain File Layout
+
+The 43 domain files in `engine/mcp/tools/` are grouped by responsibility:
+
+| File | Domain | Example functions |
+|------|--------|-------------------|
+| `character_tools.py` | Character state | `get_character_summary`, `set_mood` |
+| `memory_tools.py` | Memory / Nexus | `memory_recall`, `store_memory` |
+| `scene_tools.py` | Scene state | `get_scene_snapshot`, `set_atmosphere` |
+| `wardrobe_tools.py` | Clothing | `change_outfit`, `get_wardrobe_state` |
+| `game_tools.py` | Game sessions | `start_game`, `get_game_state` |
+| `dialog_tools.py` | Dialog / speech | `get_dialog_options`, `speech_enhance` |
+| `media_tools.py` | Images / TTS | `generate_image`, `generate_voice_message` |
+| `utility_tools.py` | Dice, topics, misc | `roll_dice`, `random_topic` |
+| *(35 more)* | Scene-specific | Arena, Casino, Heist, Grid, etc. |
+
+### Adding a New Tool (v0.84b Pattern)
+
+#### Step 1: Add logic to a domain file
+
+```python
+# engine/mcp/tools/utility_tools.py
+
+from engine.mcp.decorators import mcp_tool, ToolExecutionError
+
+@mcp_tool
+def flip_coin() -> dict:
+    """Flip a coin and return the result."""
+    import random
+    return {"result": random.choice(["heads", "tails"])}
+```
+
+#### Step 2: Add a thin wrapper in cosysim_server.py
+
+```python
+# cosysim_server.py
+from engine.mcp.tools.utility_tools import flip_coin as _flip_coin
+
+@mcp.tool
+def flip_coin() -> dict:
+    """Flip a coin."""
+    return _flip_coin()
+```
+
+#### Step 3: (Optional) Register as a skill for manifest control
+
+```python
+from engine.skills import SKILL_REGISTRY
+SKILL_REGISTRY["flip_coin"] = flip_coin
+```
+
+Then add to `config/skill_manifests.yaml`:
+
+```yaml
+scenes:
+  casino:
+    - name: flip_coin
+      trigger: optional
+      description: "Flip a coin — heads or tails"
+```
+
+---
+
+## Writing a Custom Interceptor
+
+> **v0.84b:** Interceptors use `@register_interceptor` auto-registry. See
+> [INTERCEPTORS.md](./INTERCEPTORS.md) for the full reference.
+
+### Step 1: Create the file in the interceptors package
+
+```python
+# engine/agents/interceptors/weather_injector.py
+from engine.agents.interceptors.base import InterceptorBase, register_interceptor
+from engine.mcp.comms_framework import ResponseContext
+
+@register_interceptor
 class WeatherInjector(InterceptorBase):
     """Inject current weather into system prompt before LLM call."""
 
@@ -577,16 +749,23 @@ class WeatherInjector(InterceptorBase):
         pass
 ```
 
-### Step 2: Register in the pipeline
+### Step 2: Done — auto-registered
+
+`@register_interceptor` adds the class to the global registry. No changes to
+`__init__.py`, `comms_framework.py`, or any server file are needed. The
+interceptor appears in all pipelines on the next server startup.
+
+### Step 3: (Optional) Add at runtime
 
 ```python
 from engine.mcp import get_governor
+from engine.agents.interceptors.weather_injector import WeatherInjector
 
 gov = get_governor(my_agent, scene="lounge")
 gov.pipeline.add(WeatherInjector())  # sorted by priority automatically
 ```
 
-### Step 3: (Optional) Remove later
+### Step 4: (Optional) Remove later
 
 ```python
 gov.pipeline.remove("weather_injector")
