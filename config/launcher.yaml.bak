@@ -1,0 +1,48 @@
+scenes:
+  bedroom:
+    auto_start: false
+  casino:
+    auto_start: false
+  coders:
+    auto_start: false
+  command_center:
+    auto_start: false
+  gallery:
+    auto_start: false
+  games:
+    auto_start: false
+  heist:
+    auto_start: false
+  lounge:
+    auto_start: false
+  neoncity:
+    auto_start: false
+  phone:
+    auto_start: true
+  realm:
+    auto_start: false
+  tavern:
+    auto_start: false
+services:
+  admin:
+    auto_start: false
+  assets:
+    auto_start: false
+  bridge:
+    auto_start: false
+  creator:
+    auto_start: false
+  dashboard:
+    auto_start: false
+  hub:
+    auto_start: true
+  nexus_panel:
+    auto_start: true
+  nlm_proxy:
+    auto_start: true
+  system_control:
+    auto_start: true
+  totally_nonexistent_scene_xyz:
+    auto_start: true
+  tts:
+    auto_start: false

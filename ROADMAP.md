@@ -1,6 +1,6 @@
 # CosySim Roadmap
 
-> Current: **v0.85b** "THE MAINTENANCE LAYER" ✅ | Last updated: 2026-03
+> Current: **v0.86b** "THE RECON LAYER" ✅ | Last updated: 2026-03
 
 ## Philosophy
 
@@ -298,11 +298,35 @@ The system's ultimate goal: **inhabit itself** — AI agents that maintain, impr
 - **Tests: 8,811+ passing**, 50 scheduler tasks
 
 ---
-## Next: v0.86b — "THE KNOWLEDGE LAYER"
+## Completed: v0.86b — "THE RECON LAYER" ✅ COMPLETE
 
-> v0.86b turns Nexus from a write-only store into a living knowledge base that agents
-> actively consult. Q&A cache seeded. NLM conversations grounded in project history.
-> Stale docs brought current. Training flywheel verified running.
+> ARGUS comes online. CosySim now has eyes inside Google's infrastructure.
+> The ARGUS console toolkit provides live DOM scanning, JS eval, and direct
+> CDP token harvesting — replacing manual HAR exports permanently.
+
+### ARGUS — Automated Reconnaissance & Google Universal Surveyor ✅
+- [x] 19-file API intelligence platform (`scripts/argus/`) — crawlers, decoders, discovery, reporting
+- [x] CDP bridge, network monitor, batchexecute/gRPC-web decoders
+- [x] NLM/Gemini/AI Studio crawlers + endpoint registry
+- [x] rpcid detector, feature flag prober, proto reconstructor
+- [x] Nexus sink — all discoveries stored as Nexus entries (category: argus)
+- [x] Scheduler tasks 51+52: `argus-weekly-scan`, `argus-diff-report`
+
+### ARGUS Console Toolkit (`scripts/argus/tools/`) ✅
+- [x] `selector_scanner.py` — live DOM scan → unique CSS selectors, saves JSON
+- [x] `token_harvester.py` — CDP cookie harvest → pool.json, SAPISIDHASH generation
+- [x] `console_eval.py` — JS REPL + 10 built-in helpers (buttons, inputs, cookies, etc.)
+- [x] `__main__.py` — unified CLI: `python -m scripts.argus.tools <tabs|scan|eval|tokens|snap|watch|repl>`
+- [x] Token refresh flow wired into `cookie-auto-refresh` scheduler task (prefers ARGUS harvester)
+- [x] 19 tests in `tests/test_argus_tools.py` — all passing
+
+### Documentation ✅
+- [x] `docs/ARGUS.md` — complete ARGUS system reference
+
+- **Tests: 8,830+ passing**, 52 scheduler tasks
+
+---
+## Next: v0.87b — "THE KNOWLEDGE LAYER"
 
 ### Track A — Nexus Q&A Seeding
 - [ ] Seed 50+ core Q&A pairs from project knowledge (architecture, patterns, conventions)

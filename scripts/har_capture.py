@@ -431,7 +431,7 @@ def main() -> None:
     )
 
     account_name = args.account
-    print(f"\n── HAR Capture ────────────────────────────────────────")
+    print(f"\n-- HAR Capture -------------------------------------------")
     print(f"  Account : {account_name}")
     print(f"  Mode    : {args.mode}")
     print(f"  CDP port: {args.port}")

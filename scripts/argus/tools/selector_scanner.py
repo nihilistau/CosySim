@@ -26,10 +26,14 @@ if str(ROOT) not in sys.path:
 
 from scripts.argus.config import CDP_URL, DATA_DIR
 
-# Force UTF-8 on Windows so box-drawing chars print correctly
-if sys.platform == "win32":
-    import io as _io
-    sys.stdout = _io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+# Force UTF-8 on Windows so box-drawing chars print correctly — only at CLI runtime
+def _fix_windows_encoding() -> None:
+    if sys.platform == "win32":
+        import io as _io
+        try:
+            sys.stdout = _io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+        except AttributeError:
+            pass  # pytest capsys replaces sys.stdout with a non-buffer object
 
 # JS that scans all visible interactive elements and returns rich info
 _SCAN_JS = """

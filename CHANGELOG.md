@@ -47,6 +47,26 @@ intervention.
 - **`docs/ARGUS.md`** — complete ARGUS system reference (architecture, protocols,
   CLI usage, TLS setup, output files, known rpcid catalogue, extension guide)
 
+### ARGUS Console Toolkit (`scripts/argus/tools/`)
+The console toolkit turns ARGUS into an interactive live-Chrome workbench.
+Replaces manual HAR exports and browser DevTools copy-paste permanently.
+
+- **`selector_scanner.py`** — scans live DOM for all interactive elements,
+  generates unique CSS selectors (aria-label → id → text → class chain),
+  outputs table + saves `data/argus/selectors/*.json`
+- **`token_harvester.py`** — direct CDP cookie extraction from running Chrome;
+  updates `data/accounts/pool.json` and generates SAPISIDHASH in ~1s;
+  **this is the new standard token refresh flow** — `python -m scripts.argus.tools tokens`
+- **`console_eval.py`** — JS evaluator + pretty-printer; `eval_js(page, expr)` API
+- **`__main__.py`** — unified CLI entry point:
+  `python -m scripts.argus.tools <tabs|scan|eval|tokens|snap|watch|repl>`
+  - 10 built-in JS helpers: `buttons`, `inputs`, `dialogs`, `cookies`, `links`,
+    `forms`, `angular`, `network`, `storage`, `meta`
+- **Scheduler integration** — `cookie-auto-refresh` task now prefers ARGUS token
+  harvester over `har_capture.py`; falls back gracefully if Chrome is unavailable
+- **Tests** — `tests/test_argus_tools.py`: 19 tests (SAPISIDHASH, pool CRUD,
+  selector JS, CLI helpers, mock harvest)
+
 ---
 ## [0.85b] — "THE MAINTENANCE LAYER" — 2026-03
 
