@@ -224,15 +224,8 @@ class DatasetCurator:
     def _fetch_qa(self, limit: int = 5000) -> List[Dict[str, Any]]:
         """Fetch Q&A pairs from Nexus."""
         try:
-            import requests
-            r = requests.get(
-                f"{self._url}/api/qa",
-                params={"limit": limit},
-                timeout=30,
-            )
-            if r.ok:
-                data = r.json()
-                return data.get("qa_pairs", data) if isinstance(data, dict) else data
+            from engine.nexus.client import get_nexus_client
+            return get_nexus_client().find_qa("", limit=limit)
         except Exception as e:
             logger.warning("Failed to fetch Q&A from Nexus: %s", e)
         return []
@@ -244,26 +237,14 @@ class DatasetCurator:
     ) -> List[Dict[str, Any]]:
         """Fetch knowledge entries from Nexus."""
         try:
-            import requests
-            params: Dict[str, Any] = {"limit": limit}
+            from engine.nexus.client import get_nexus_client
+            client = get_nexus_client()
             if content_types:
                 entries = []
                 for ct in content_types:
-                    r = requests.get(
-                        f"{self._url}/api/entries/by-type/{ct}",
-                        params={"limit": limit},
-                        timeout=30,
-                    )
-                    if r.ok:
-                        data = r.json()
-                        items = data.get("data", data) if isinstance(data, dict) else data
-                        if isinstance(items, list):
-                            entries.extend(items)
+                    entries.extend(client.list_by_type(ct, limit=limit))
                 return entries
-            r = requests.get(f"{self._url}/api/entries", params=params, timeout=30)
-            if r.ok:
-                data = r.json()
-                return data.get("data", data) if isinstance(data, dict) else data
+            return client.list_entries(limit=limit)
         except Exception as e:
             logger.warning("Failed to fetch entries from Nexus: %s", e)
         return []

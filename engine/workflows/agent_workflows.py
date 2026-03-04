@@ -106,11 +106,9 @@ def knowledge_distill(
 
         # Fetch Q&A pairs
         try:
-            resp = requests.get(f"{nexus_url}/api/qa", timeout=10)
-            if resp.ok:
-                qa_data = resp.json()
-                if isinstance(qa_data, list):
-                    items.extend([{"type": "qa", **qa} for qa in qa_data])
+            from engine.nexus.client import get_nexus_client
+            qa_data = get_nexus_client().find_qa("", limit=max_items)
+            items.extend([{"type": "qa", **qa} for qa in qa_data])
         except Exception as e:
             result.errors.append(f"Q&A fetch: {e}")
 

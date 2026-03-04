@@ -644,8 +644,8 @@ class TrainingFlywheel:
                 return {"synced": 0, "skipped": 0, "errors": 0}
 
             for entry in entries:
-                question = entry.get("title", "")
-                answer = entry.get("content", "")
+                question = entry.title
+                answer = entry.content
                 if not question or not answer:
                     skipped += 1
                     continue

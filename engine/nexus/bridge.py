@@ -79,18 +79,14 @@ def cmd_rules(args: argparse.Namespace) -> None:
 
 def cmd_health(args: argparse.Namespace) -> None:
     """Check Nexus health and knowledge stats."""
-    import requests
-    base = "http://127.0.0.1:8700"
+    from collections import Counter
     try:
-        entries_r = requests.get(f"{base}/api/entries", params={"limit": 500}, timeout=5)
-        entries = entries_r.json().get("data", []) if entries_r.ok else []
-        qa_r = requests.get(f"{base}/api/qa", params={"limit": 500}, timeout=5)
-        qa_list = qa_r.json().get("data", []) if qa_r.ok else []
-        rules_r = requests.get(f"{base}/api/rules", timeout=5)
-        rules_list = rules_r.json().get("data", []) if rules_r.ok else []
-        from collections import Counter
-        types = dict(Counter(e.get("content_type", "?") for e in entries))
-        cats = dict(Counter(e.get("category", "?") for e in entries))
+        client = get_nexus_client()
+        entries = client.list_entries(limit=500)
+        qa_list = client.find_qa("", limit=500)
+        rules_list = client.get_rules()
+        types = dict(Counter(e.content_type for e in entries))
+        cats = dict(Counter(e.category for e in entries))
         _output({
             "status": "healthy",
             "entries": len(entries),
@@ -122,40 +118,35 @@ def cmd_seed(args: argparse.Namespace) -> None:
 
 def cmd_maintain(args: argparse.Namespace) -> None:
     """Run Nexus maintenance actions."""
-    import requests
-    base = "http://127.0.0.1:8700"
-
     if args.action == "health":
         cmd_health(args)
         return
 
     if args.action == "dedup":
-        entries_r = requests.get(f"{base}/api/entries", params={"limit": 500}, timeout=5)
-        entries = entries_r.json().get("data", []) if entries_r.ok else []
+        client = get_nexus_client()
+        entries = client.list_entries(limit=500)
         seen: dict = {}
         duplicates = []
         for e in entries:
-            title = e.get("title", "").strip().lower()
+            title = e.title.strip().lower()
             if title in seen:
-                duplicates.append({"id": e["id"], "title": e["title"]})
+                duplicates.append({"id": e.id, "title": e.title})
             else:
-                seen[title] = e["id"]
+                seen[title] = e.id
         removed = 0
         for dup in duplicates:
-            r = requests.delete(f"{base}/api/entries/{dup['id']}", timeout=5)
-            if r.ok:
+            if client.delete_entry(dup["id"]):
                 removed += 1
         _output({"found": len(duplicates), "removed": removed, "duplicates": duplicates})
         return
 
     if args.action == "cleanup":
-        entries_r = requests.get(f"{base}/api/entries", params={"limit": 500}, timeout=5)
-        entries = entries_r.json().get("data", []) if entries_r.ok else []
-        low = [e for e in entries if len(e.get("content", "")) < 10]
+        client = get_nexus_client()
+        entries = client.list_entries(limit=500)
+        low = [e for e in entries if len(e.content) < 10]
         removed = 0
         for e in low:
-            r = requests.delete(f"{base}/api/entries/{e['id']}", timeout=5)
-            if r.ok:
+            if client.delete_entry(e.id):
                 removed += 1
         _output({"low_quality": len(low), "removed": removed})
         return

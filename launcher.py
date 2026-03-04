@@ -46,7 +46,7 @@ for _stream in (sys.stdout, sys.stderr):
 PROJECT_ROOT = Path(__file__).parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-VERSION = "0.83b"
+VERSION = "0.84b"
 
 # ── Catalogues ────────────────────────────────────────────────────────────
 # type: "flask" | "streamlit" | "fastapi"

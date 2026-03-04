@@ -11,6 +11,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from engine.nexus.models import NexusEntry
 from engine.nexus.training_flywheel import (
     TrainingExample,
     TrainingFlywheel,
@@ -362,8 +363,8 @@ class TestSyncFromNexus:
         mock_client = MagicMock()
         mock_client.is_available.return_value = True
         mock_client.list_entries.return_value = [
-            {"title": "What is CosySim?", "content": "A simulation framework.", "quality_score": 0.8},
-            {"title": "What is Nexus?", "content": "A knowledge management system.", "quality_score": 0.9},
+            NexusEntry(id="1", title="What is CosySim?", content="A simulation framework.", quality_score=0.8),
+            NexusEntry(id="2", title="What is Nexus?", content="A knowledge management system.", quality_score=0.9),
         ]
         with patch(
             "engine.nexus.client.get_nexus_client",
@@ -391,9 +392,9 @@ class TestSyncFromNexus:
         mock_client = MagicMock()
         mock_client.is_available.return_value = True
         mock_client.list_entries.return_value = [
-            {"title": "", "content": "no title"},
-            {"title": "no content", "content": ""},
-            {"title": "Good Q", "content": "Good A"},
+            NexusEntry(id="1", title="", content="no title"),
+            NexusEntry(id="2", title="no content", content=""),
+            NexusEntry(id="3", title="Good Q", content="Good A"),
         ]
         with patch(
             "engine.nexus.client.get_nexus_client",
@@ -408,7 +409,7 @@ class TestSyncFromNexus:
         mock_client = MagicMock()
         mock_client.is_available.return_value = True
         mock_client.list_entries.return_value = [
-            {"title": "Q1", "content": "A1"},
+            NexusEntry(id="1", title="Q1", content="A1"),
         ]
         with patch(
             "engine.nexus.client.get_nexus_client",

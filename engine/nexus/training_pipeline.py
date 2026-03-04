@@ -136,17 +136,15 @@ class TrainingPipeline:
         )
 
         try:
-            r = requests.post(f"{self._url}/api/entries", json={
-                "title": entry["title"],
-                "content": entry["content"],
-                "content_type": "code",
-                "category": "training",
-                "tags": entry["tags"],
-                "created_by": "training_pipeline",
-            }, timeout=5)
-            if r.ok:
-                data = r.json()
-                return data.get("data", {}).get("id", data.get("id", ""))
+            from engine.nexus.client import get_nexus_client
+            return get_nexus_client().add_entry(
+                title=entry["title"],
+                content=entry["content"],
+                content_type="code",
+                category="training",
+                tags=entry["tags"],
+                created_by="training_pipeline",
+            )
         except Exception as exc:
             logger.warning("TrainingPipeline: capture failed: %s", exc)
 
@@ -170,31 +168,22 @@ class TrainingPipeline:
         Returns:
             Dict with export stats (count, path, etc).
         """
-        import requests
-
         out_path = Path(output_dir)
         out_path.mkdir(parents=True, exist_ok=True)
 
         try:
-            r = requests.get(
-                f"{self._url}/api/search",
-                params={"q": f"dataset:{dataset_type} training", "limit": 500},
-                timeout=10,
+            from engine.nexus.client import get_nexus_client
+            results = get_nexus_client().search(
+                f"dataset:{dataset_type} training", limit=500
             )
-            if not r.ok:
-                return {"error": "Search failed", "count": 0}
-
-            results = r.json()
-            if isinstance(results, dict):
-                results = results.get("data", [])
 
             # Parse and filter
             pairs: List[Dict[str, Any]] = []
             for entry in results:
-                if "training" not in str(entry.get("tags", "")):
+                if "training" not in entry.tags:
                     continue
                 try:
-                    pair = json.loads(entry.get("content", "{}"))
+                    pair = json.loads(entry.content)
                     if pair.get("quality", 0) >= min_quality:
                         pairs.append(pair)
                 except json.JSONDecodeError:
@@ -246,40 +235,28 @@ class TrainingPipeline:
         Returns:
             Dict with counts by dataset type, quality distribution, etc.
         """
-        import requests
-
         try:
-            r = requests.get(
-                f"{self._url}/api/search",
-                params={"q": "training dataset", "limit": 500},
-                timeout=10,
-            )
-            if not r.ok:
-                return {"error": "Search failed"}
-
-            results = r.json()
-            if isinstance(results, dict):
-                results = results.get("data", [])
+            from engine.nexus.client import get_nexus_client
+            results = get_nexus_client().search("training dataset", limit=500)
 
             by_type: Dict[str, int] = {}
             by_quality: Dict[str, int] = {"high": 0, "medium": 0, "low": 0}
             total = 0
 
             for entry in results:
-                tags_str = str(entry.get("tags", ""))
-                if "training" not in tags_str:
+                if "training" not in entry.tags:
                     continue
                 total += 1
 
                 # Count by dataset type
                 for ds_type in DATASET_TYPES:
-                    if f"dataset:{ds_type}" in tags_str:
+                    if f"dataset:{ds_type}" in entry.tags:
                         by_type[ds_type] = by_type.get(ds_type, 0) + 1
                         break
 
                 # Count by quality
                 for q in range(10, -1, -1):
-                    if f"quality:{q}" in tags_str:
+                    if f"quality:{q}" in entry.tags:
                         if q >= 7:
                             by_quality["high"] += 1
                         elif q >= 4:

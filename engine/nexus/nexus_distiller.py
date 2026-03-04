@@ -29,6 +29,8 @@ from typing import Any, Dict, List, Optional
 
 import requests
 
+from engine.nexus.client import get_nexus_client
+
 logger = logging.getLogger(__name__)
 
 NEXUS_URL = "http://127.0.0.1:8700"
@@ -39,12 +41,18 @@ NEXUS_URL = "http://127.0.0.1:8700"
 # ══════════════════════════════════════════════════════════════════════
 
 def _api_get(path: str, params: Dict[str, Any] | None = None) -> list:
-    """GET from Nexus API, returns list."""
+    """GET from Nexus via client, returns list."""
+    p = params or {}
     try:
-        r = requests.get(f"{NEXUS_URL}{path}", params=params or {}, timeout=10)
-        if r.ok:
-            data = r.json()
-            return data.get("data", data) if isinstance(data, dict) else data
+        client = get_nexus_client()
+        if "/api/search" in path:
+            return client.search(p.get("q", ""), limit=int(p.get("limit", 10)))
+        if "/api/qa" in path:
+            return client.find_qa("", limit=int(p.get("limit", 50)))
+        if "/api/rules" in path:
+            return client.get_rules()
+        if "/api/entries" in path:
+            return client.list_entries(limit=int(p.get("limit", 20)))
         return []
     except Exception as e:
         logger.warning("Nexus API error: %s", e)
@@ -52,24 +60,31 @@ def _api_get(path: str, params: Dict[str, Any] | None = None) -> list:
 
 
 def _api_post(path: str, data: Dict[str, Any]) -> Optional[str]:
-    """POST to Nexus API, returns entry ID or None."""
+    """POST to Nexus via client, returns entry ID or None."""
     try:
-        r = requests.post(f"{NEXUS_URL}{path}", json=data, timeout=10)
-        if r.ok:
-            resp = r.json()
-            if isinstance(resp, dict) and "data" in resp:
-                return resp["data"].get("id")
-            return resp.get("id")
-        return None
+        client = get_nexus_client()
+        if "/api/qa" in path:
+            return client.add_qa(
+                question=data.get("question", ""),
+                answer=data.get("answer", ""),
+                category=data.get("category", ""),
+                tags=data.get("tags", []),
+            )
+        return client.add_entry(
+            title=data.get("title", ""),
+            content=data.get("content", ""),
+            content_type=data.get("content_type", "note"),
+            category=data.get("category", ""),
+            tags=data.get("tags", []),
+        )
     except Exception:
         return None
 
 
 def _api_delete(entry_id: str) -> bool:
-    """DELETE entry from Nexus."""
+    """DELETE entry from Nexus via client."""
     try:
-        r = requests.delete(f"{NEXUS_URL}/api/entries/{entry_id}", timeout=5)
-        return r.ok
+        return get_nexus_client().delete_entry(entry_id)
     except Exception:
         return False
 

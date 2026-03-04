@@ -71,48 +71,36 @@ class TestNexusDistiller:
         d = NexusDistiller("http://test:1234")
         assert d._url == "http://test:1234"
 
-    @patch("requests.get")
-    def test_get_stats_returns_structure(self, mock_get):
+    def test_get_stats_returns_structure(self):
         from engine.nexus.nexus_distiller import NexusDistiller
         entries = [{"content": "abc", "content_type": "note", "tags": "system"}]
         qa = [{"question": "Q?", "answer": "A"}]
         rules = [{"scope": "global", "name": "r1"}]
 
-        def side_effect(url, **kw):
-            resp = MagicMock()
-            resp.ok = True
-            if "/api/entries" in url:
-                resp.json.return_value = {"data": entries}
-            elif "/api/qa" in url:
-                resp.json.return_value = {"data": qa}
-            elif "/api/rules" in url:
-                resp.json.return_value = {"data": rules}
-            return resp
+        mock_client = MagicMock()
+        mock_client.list_entries.return_value = entries
+        mock_client.find_qa.return_value = qa
+        mock_client.get_rules.return_value = rules
 
-        mock_get.side_effect = side_effect
-        stats = NexusDistiller().get_stats()
+        with patch("engine.nexus.nexus_distiller.get_nexus_client", return_value=mock_client):
+            stats = NexusDistiller().get_stats()
         assert stats["total_entries"] == 1
         assert stats["total_qa"] == 1
         assert stats["total_rules"] == 1
         assert "by_namespace" in stats
         assert "token_estimate" in stats
 
-    @patch("requests.get")
-    def test_distill_no_logs(self, mock_get):
+    def test_distill_no_logs(self):
         from engine.nexus.nexus_distiller import NexusDistiller
-        resp = MagicMock()
-        resp.ok = True
-        resp.json.return_value = {"data": []}
-        mock_get.return_value = resp
-
-        result = NexusDistiller().distill()
+        mock_client = MagicMock()
+        mock_client.search.return_value = []
+        with patch("engine.nexus.nexus_distiller.get_nexus_client", return_value=mock_client):
+            result = NexusDistiller().distill()
         assert result["decisions"] == 0
         assert result["fixes"] == 0
 
     @patch("requests.put")
-    @patch("requests.post")
-    @patch("requests.get")
-    def test_distill_extracts_from_log(self, mock_get, mock_post, mock_put):
+    def test_distill_extracts_from_log(self, mock_put):
         from engine.nexus.nexus_distiller import NexusDistiller
         log_entry = {
             "id": "log1",
@@ -120,47 +108,33 @@ class TestNexusDistiller:
                        "Fixed the broken endpoint by switching to /api/entries.",
             "tags": '["conversation-log"]',
         }
-
-        def get_side(url, **kw):
-            resp = MagicMock()
-            resp.ok = True
-            if "search" in url:
-                resp.json.return_value = {"data": [log_entry]}
-            else:
-                resp.json.return_value = {"data": []}
-            return resp
-
-        mock_get.side_effect = get_side
-        post_resp = MagicMock()
-        post_resp.ok = True
-        post_resp.json.return_value = {"data": {"id": "new1"}}
-        mock_post.return_value = post_resp
+        mock_client = MagicMock()
+        mock_client.search.side_effect = [[log_entry], []]
+        mock_client.add_entry.return_value = "new1"
+        mock_client.add_qa.return_value = "new2"
         mock_put.return_value = MagicMock(ok=True)
 
-        result = NexusDistiller().distill()
+        with patch("engine.nexus.nexus_distiller.get_nexus_client", return_value=mock_client):
+            result = NexusDistiller().distill()
         assert result["decisions"] >= 1
-        assert mock_post.called
+        assert mock_client.add_entry.called
 
-    @patch("requests.get")
-    def test_compact_sessions_empty(self, mock_get):
+    def test_compact_sessions_empty(self):
         from engine.nexus.nexus_distiller import NexusDistiller
-        resp = MagicMock()
-        resp.ok = True
-        resp.json.return_value = {"data": []}
-        mock_get.return_value = resp
-
-        result = NexusDistiller().compact_sessions()
+        mock_client = MagicMock()
+        mock_client.list_entries.return_value = []
+        with patch("engine.nexus.nexus_distiller.get_nexus_client", return_value=mock_client):
+            result = NexusDistiller().compact_sessions()
         assert result["days_compacted"] == 0
 
-    @patch("requests.get")
-    def test_generate_context_primer(self, mock_get):
+    def test_generate_context_primer(self):
         from engine.nexus.nexus_distiller import NexusDistiller
-        resp = MagicMock()
-        resp.ok = True
-        resp.json.return_value = {"data": []}
-        mock_get.return_value = resp
-
-        primer = NexusDistiller().generate_context_primer()
+        mock_client = MagicMock()
+        mock_client.search.return_value = []
+        mock_client.get_rules.return_value = []
+        mock_client.find_qa.return_value = []
+        with patch("engine.nexus.nexus_distiller.get_nexus_client", return_value=mock_client):
+            primer = NexusDistiller().generate_context_primer()
         assert isinstance(primer, str)
 
 
@@ -195,66 +169,55 @@ class TestQADeduplicator:
         from engine.nexus.nexus_distiller import _jaccard
         assert _jaccard("", "") == 0.0
 
-    @patch("requests.get")
-    def test_find_duplicates_none(self, mock_get):
+    def test_find_duplicates_none(self):
         from engine.nexus.nexus_distiller import QADeduplicator
-        resp = MagicMock()
-        resp.ok = True
-        resp.json.return_value = {"data": [
+        mock_client = MagicMock()
+        mock_client.find_qa.return_value = [
             {"id": "1", "question": "What is X?", "answer": "A"},
             {"id": "2", "question": "Totally different", "answer": "B"},
-        ]}
-        mock_get.return_value = resp
-
-        dupes = QADeduplicator().find_duplicates()
+        ]
+        with patch("engine.nexus.nexus_distiller.get_nexus_client", return_value=mock_client):
+            dupes = QADeduplicator().find_duplicates()
         assert len(dupes) == 0
 
-    @patch("requests.get")
-    def test_find_duplicates_matching(self, mock_get):
+    def test_find_duplicates_matching(self):
         from engine.nexus.nexus_distiller import QADeduplicator
-        resp = MagicMock()
-        resp.ok = True
-        resp.json.return_value = {"data": [
+        mock_client = MagicMock()
+        mock_client.find_qa.return_value = [
             {"id": "1", "question": "How does MCP work?", "answer": "It works via tools"},
             {"id": "2", "question": "How does MCP work exactly?", "answer": "MCP works via tool calling with the @skill decorator"},
-        ]}
-        mock_get.return_value = resp
-
-        dupes = QADeduplicator(similarity_threshold=0.5).find_duplicates()
+        ]
+        with patch("engine.nexus.nexus_distiller.get_nexus_client", return_value=mock_client):
+            dupes = QADeduplicator(similarity_threshold=0.5).find_duplicates()
         assert len(dupes) == 1
         # Should keep the longer answer
         assert dupes[0]["keep_id"] == "2"
 
     @patch("requests.delete")
-    @patch("requests.get")
-    def test_deduplicate_removes(self, mock_get, mock_delete):
+    def test_deduplicate_removes(self, mock_delete):
         from engine.nexus.nexus_distiller import QADeduplicator
-        resp = MagicMock()
-        resp.ok = True
-        resp.json.return_value = {"data": [
+        mock_client = MagicMock()
+        mock_client.find_qa.return_value = [
             {"id": "1", "question": "How does MCP work?", "answer": "Short"},
             {"id": "2", "question": "How does MCP work exactly?", "answer": "Longer detailed answer here"},
-        ]}
-        mock_get.return_value = resp
+        ]
         mock_delete.return_value = MagicMock(ok=True)
 
-        result = QADeduplicator(similarity_threshold=0.5).deduplicate(dry_run=False)
+        with patch("engine.nexus.nexus_distiller.get_nexus_client", return_value=mock_client):
+            result = QADeduplicator(similarity_threshold=0.5).deduplicate(dry_run=False)
         assert result["duplicates_found"] == 1
         assert result["removed"] == 1
         assert result["dry_run"] is False
 
-    @patch("requests.get")
-    def test_deduplicate_dry_run(self, mock_get):
+    def test_deduplicate_dry_run(self):
         from engine.nexus.nexus_distiller import QADeduplicator
-        resp = MagicMock()
-        resp.ok = True
-        resp.json.return_value = {"data": [
+        mock_client = MagicMock()
+        mock_client.find_qa.return_value = [
             {"id": "1", "question": "How does MCP work?", "answer": "Short"},
             {"id": "2", "question": "How does MCP work exactly?", "answer": "Longer answer"},
-        ]}
-        mock_get.return_value = resp
-
-        result = QADeduplicator(similarity_threshold=0.5).deduplicate(dry_run=True)
+        ]
+        with patch("engine.nexus.nexus_distiller.get_nexus_client", return_value=mock_client):
+            result = QADeduplicator(similarity_threshold=0.5).deduplicate(dry_run=True)
         assert result["duplicates_found"] == 1
         assert result["removed"] == 0
         assert result["dry_run"] is True
@@ -280,49 +243,37 @@ class TestSkillUsageDistiller:
         d = SkillUsageDistiller()
         assert d._extract_skill_mentions("") == []
 
-    @patch("requests.get")
-    def test_analyse_empty(self, mock_get):
+    def test_analyse_empty(self):
         from engine.nexus.nexus_distiller import SkillUsageDistiller
-        resp = MagicMock()
-        resp.ok = True
-        resp.json.return_value = {"data": []}
-        mock_get.return_value = resp
-
-        result = SkillUsageDistiller().analyse()
+        mock_client = MagicMock()
+        mock_client.search.return_value = []
+        with patch("engine.nexus.nexus_distiller.get_nexus_client", return_value=mock_client):
+            result = SkillUsageDistiller().analyse()
         assert result["total_mentions"] == 0
         assert result["unique_skills"] == 0
 
-    @patch("requests.get")
-    def test_analyse_finds_skills(self, mock_get):
+    def test_analyse_finds_skills(self):
         from engine.nexus.nexus_distiller import SkillUsageDistiller
-        resp = MagicMock()
-        resp.ok = True
-        resp.json.return_value = {"data": [
+        mock_client = MagicMock()
+        mock_client.search.return_value = [
             {"content": "tool call: nexus_search and skill: nexus_ask were used"},
             {"content": "Called nexus_search() again, error with nexus_add failed"},
-        ]}
-        mock_get.return_value = resp
-
-        result = SkillUsageDistiller().analyse()
+        ]
+        with patch("engine.nexus.nexus_distiller.get_nexus_client", return_value=mock_client):
+            result = SkillUsageDistiller().analyse()
         assert result["total_mentions"] >= 2
         assert result["unique_skills"] >= 1
 
-    @patch("requests.post")
-    @patch("requests.get")
-    def test_distill_and_store(self, mock_get, mock_post):
+    def test_distill_and_store(self):
         from engine.nexus.nexus_distiller import SkillUsageDistiller
-        resp = MagicMock()
-        resp.ok = True
-        resp.json.return_value = {"data": [
+        mock_client = MagicMock()
+        mock_client.search.return_value = [
             {"content": "tool call: nexus_search used frequently"},
-        ]}
-        mock_get.return_value = resp
-        post_resp = MagicMock()
-        post_resp.ok = True
-        post_resp.json.return_value = {"data": {"id": "stored1"}}
-        mock_post.return_value = post_resp
-
-        result = SkillUsageDistiller().distill_and_store()
+        ]
+        mock_client.add_entry.return_value = "stored1"
+        mock_client.add_qa.return_value = "qa1"
+        with patch("engine.nexus.nexus_distiller.get_nexus_client", return_value=mock_client):
+            result = SkillUsageDistiller().distill_and_store()
         assert "entries_stored" in result
 
 
@@ -334,91 +285,72 @@ class TestSkillUsageDistiller:
 class TestPromptEvolutionDistiller:
     """Tests for prompt evolution analysis distiller."""
 
-    @patch("requests.get")
-    def test_group_prompts(self, mock_get):
+    def test_group_prompts(self):
         from engine.nexus.nexus_distiller import PromptEvolutionDistiller
-        resp = MagicMock()
-        resp.ok = True
-        resp.json.return_value = {"data": [
+        mock_client = MagicMock()
+        mock_client.search.return_value = [
             {"title": "system prompt v1", "content": "You are...",
              "content_type": "prompt", "tags": "", "created_at": "2025-01-01"},
             {"title": "system prompt v2", "content": "You are a helpful...",
              "content_type": "prompt", "tags": "", "created_at": "2025-02-01"},
             {"title": "character prompt", "content": "Act as...",
              "content_type": "prompt", "tags": "", "created_at": "2025-01-15"},
-        ]}
-        mock_get.return_value = resp
-
-        groups = PromptEvolutionDistiller()._group_prompts()
+        ]
+        with patch("engine.nexus.nexus_distiller.get_nexus_client", return_value=mock_client):
+            groups = PromptEvolutionDistiller()._group_prompts()
         assert "system prompt" in groups
         assert len(groups["system prompt"]) == 2
         assert "character prompt" in groups
 
-    @patch("requests.get")
-    def test_get_lineage(self, mock_get):
+    def test_get_lineage(self):
         from engine.nexus.nexus_distiller import PromptEvolutionDistiller
-        resp = MagicMock()
-        resp.ok = True
-        resp.json.return_value = {"data": [
+        mock_client = MagicMock()
+        mock_client.search.return_value = [
             {"title": "base prompt v1", "content": "short",
              "content_type": "prompt", "tags": "", "created_at": "2025-01-01"},
             {"title": "base prompt v2", "content": "much longer content here",
              "content_type": "prompt", "tags": "", "created_at": "2025-02-01"},
-        ]}
-        mock_get.return_value = resp
-
-        lineage = PromptEvolutionDistiller().get_lineage()
+        ]
+        with patch("engine.nexus.nexus_distiller.get_nexus_client", return_value=mock_client):
+            lineage = PromptEvolutionDistiller().get_lineage()
         assert lineage["total_prompts"] == 2
         assert lineage["multi_version"] == 1
         assert lineage["lineage"][0]["grew"] is True
 
-    @patch("requests.get")
-    def test_get_lineage_empty(self, mock_get):
+    def test_get_lineage_empty(self):
         from engine.nexus.nexus_distiller import PromptEvolutionDistiller
-        resp = MagicMock()
-        resp.ok = True
-        resp.json.return_value = {"data": []}
-        mock_get.return_value = resp
-
-        lineage = PromptEvolutionDistiller().get_lineage()
+        mock_client = MagicMock()
+        mock_client.search.return_value = []
+        with patch("engine.nexus.nexus_distiller.get_nexus_client", return_value=mock_client):
+            lineage = PromptEvolutionDistiller().get_lineage()
         assert lineage["total_prompts"] == 0
 
-    @patch("requests.post")
-    @patch("requests.get")
-    def test_distill_patterns(self, mock_get, mock_post):
+    def test_distill_patterns(self):
         from engine.nexus.nexus_distiller import PromptEvolutionDistiller
-        resp = MagicMock()
-        resp.ok = True
-        resp.json.return_value = {"data": [
+        mock_client = MagicMock()
+        mock_client.search.return_value = [
             {"content_type": "prompt",
              "content": "You are a helpful assistant. Never reveal secrets. "
                         "Format: JSON output. Example: {\"key\": \"value\"}",
              "title": "test prompt", "tags": ""},
-        ]}
-        mock_get.return_value = resp
-        post_resp = MagicMock()
-        post_resp.ok = True
-        post_resp.json.return_value = {"data": {"id": "p1"}}
-        mock_post.return_value = post_resp
-
-        result = PromptEvolutionDistiller().distill_patterns()
+        ]
+        mock_client.add_entry.return_value = "p1"
+        with patch("engine.nexus.nexus_distiller.get_nexus_client", return_value=mock_client):
+            result = PromptEvolutionDistiller().distill_patterns()
         assert result["prompts_analysed"] == 1
         assert "role_definition" in result["patterns_found"]
         assert "constraint_list" in result["patterns_found"]
         assert "output_format" in result["patterns_found"]
         assert result["stored"] is True
 
-    @patch("requests.get")
-    def test_distill_patterns_no_prompts(self, mock_get):
+    def test_distill_patterns_no_prompts(self):
         from engine.nexus.nexus_distiller import PromptEvolutionDistiller
-        resp = MagicMock()
-        resp.ok = True
-        resp.json.return_value = {"data": [
+        mock_client = MagicMock()
+        mock_client.search.return_value = [
             {"content_type": "note", "content": "not a prompt", "title": "x", "tags": ""},
-        ]}
-        mock_get.return_value = resp
-
-        result = PromptEvolutionDistiller().distill_patterns()
+        ]
+        with patch("engine.nexus.nexus_distiller.get_nexus_client", return_value=mock_client):
+            result = PromptEvolutionDistiller().distill_patterns()
         assert result["prompts_analysed"] == 0
 
 
@@ -432,19 +364,19 @@ class TestRunAllDistillers:
 
     @patch("requests.delete")
     @patch("requests.put")
-    @patch("requests.post")
-    @patch("requests.get")
-    def test_run_all(self, mock_get, mock_post, mock_put, mock_delete):
+    def test_run_all(self, mock_put, mock_delete):
         from engine.nexus.nexus_distiller import run_all_distillers
-        resp = MagicMock()
-        resp.ok = True
-        resp.json.return_value = {"data": []}
-        mock_get.return_value = resp
-        mock_post.return_value = MagicMock(ok=True, json=MagicMock(return_value={"data": {"id": "x"}}))
+        mock_client = MagicMock()
+        mock_client.search.return_value = []
+        mock_client.find_qa.return_value = []
+        mock_client.list_entries.return_value = []
+        mock_client.add_entry.return_value = "x"
+        mock_client.add_qa.return_value = "x"
         mock_put.return_value = MagicMock(ok=True)
         mock_delete.return_value = MagicMock(ok=True)
 
-        result = run_all_distillers()
+        with patch("engine.nexus.nexus_distiller.get_nexus_client", return_value=mock_client):
+            result = run_all_distillers()
         assert "session_distiller" in result
         assert "qa_dedup" in result
         assert "skill_usage" in result
@@ -459,47 +391,49 @@ class TestRunAllDistillers:
 class TestAPIHelpers:
     """Tests for _api_get, _api_post, _api_delete."""
 
-    @patch("requests.get")
-    def test_api_get_success(self, mock_get):
+    def test_api_get_success(self):
         from engine.nexus.nexus_distiller import _api_get
-        resp = MagicMock()
-        resp.ok = True
-        resp.json.return_value = {"data": [{"id": "1"}]}
-        mock_get.return_value = resp
-        assert _api_get("/api/entries") == [{"id": "1"}]
+        expected = [{"id": "1"}]
+        mock_client = MagicMock()
+        mock_client.list_entries.return_value = expected
+        with patch("engine.nexus.nexus_distiller.get_nexus_client", return_value=mock_client):
+            assert _api_get("/api/entries") == expected
 
-    @patch("requests.get")
-    def test_api_get_failure(self, mock_get):
+    def test_api_get_failure(self):
         from engine.nexus.nexus_distiller import _api_get
-        mock_get.side_effect = ConnectionError("offline")
-        assert _api_get("/api/entries") == []
+        mock_client = MagicMock()
+        mock_client.list_entries.side_effect = ConnectionError("offline")
+        with patch("engine.nexus.nexus_distiller.get_nexus_client", return_value=mock_client):
+            assert _api_get("/api/entries") == []
 
-    @patch("requests.post")
-    def test_api_post_success(self, mock_post):
+    def test_api_post_success(self):
         from engine.nexus.nexus_distiller import _api_post
-        resp = MagicMock()
-        resp.ok = True
-        resp.json.return_value = {"data": {"id": "new1"}}
-        mock_post.return_value = resp
-        assert _api_post("/api/entries", {"title": "t"}) == "new1"
+        mock_client = MagicMock()
+        mock_client.add_entry.return_value = "new1"
+        with patch("engine.nexus.nexus_distiller.get_nexus_client", return_value=mock_client):
+            assert _api_post("/api/entries", {"title": "t"}) == "new1"
 
-    @patch("requests.post")
-    def test_api_post_failure(self, mock_post):
+    def test_api_post_failure(self):
         from engine.nexus.nexus_distiller import _api_post
-        mock_post.side_effect = ConnectionError("offline")
-        assert _api_post("/api/entries", {}) is None
+        mock_client = MagicMock()
+        mock_client.add_entry.side_effect = ConnectionError("offline")
+        with patch("engine.nexus.nexus_distiller.get_nexus_client", return_value=mock_client):
+            assert _api_post("/api/entries", {}) is None
 
-    @patch("requests.delete")
-    def test_api_delete_success(self, mock_delete):
+    def test_api_delete_success(self):
         from engine.nexus.nexus_distiller import _api_delete
-        mock_delete.return_value = MagicMock(ok=True)
-        assert _api_delete("entry1") is True
+        mock_client = MagicMock()
+        mock_client.delete_entry.return_value = True
+        with patch("engine.nexus.nexus_distiller.get_nexus_client", return_value=mock_client):
+            assert _api_delete("entry1") is True
 
     @patch("requests.delete")
     def test_api_delete_failure(self, mock_delete):
         from engine.nexus.nexus_distiller import _api_delete
-        mock_delete.side_effect = ConnectionError("offline")
-        assert _api_delete("entry1") is False
+        mock_client = MagicMock()
+        mock_client.delete_entry.side_effect = ConnectionError("offline")
+        with patch("engine.nexus.nexus_distiller.get_nexus_client", return_value=mock_client):
+            assert _api_delete("entry1") is False
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -510,46 +444,36 @@ class TestAPIHelpers:
 class TestMCPDistillTool:
     """Tests for the nexus_distill MCP tool actions."""
 
-    @patch("requests.get")
-    def test_stats_action(self, mock_get):
-        resp = MagicMock()
-        resp.ok = True
-        resp.json.return_value = {"data": []}
-        mock_get.return_value = resp
-
-        from engine.nexus.nexus_distiller import NexusDistiller
-        result = NexusDistiller().get_stats()
+    def test_stats_action(self):
+        mock_client = MagicMock()
+        mock_client.list_entries.return_value = []
+        mock_client.find_qa.return_value = []
+        mock_client.get_rules.return_value = []
+        with patch("engine.nexus.nexus_distiller.get_nexus_client", return_value=mock_client):
+            from engine.nexus.nexus_distiller import NexusDistiller
+            result = NexusDistiller().get_stats()
         assert "total_entries" in result
 
-    @patch("requests.get")
-    def test_dedup_dry_action(self, mock_get):
-        resp = MagicMock()
-        resp.ok = True
-        resp.json.return_value = {"data": []}
-        mock_get.return_value = resp
-
-        from engine.nexus.nexus_distiller import QADeduplicator
-        result = QADeduplicator().deduplicate(dry_run=True)
+    def test_dedup_dry_action(self):
+        mock_client = MagicMock()
+        mock_client.find_qa.return_value = []
+        with patch("engine.nexus.nexus_distiller.get_nexus_client", return_value=mock_client):
+            from engine.nexus.nexus_distiller import QADeduplicator
+            result = QADeduplicator().deduplicate(dry_run=True)
         assert result["dry_run"] is True
 
-    @patch("requests.get")
-    def test_skills_action(self, mock_get):
-        resp = MagicMock()
-        resp.ok = True
-        resp.json.return_value = {"data": []}
-        mock_get.return_value = resp
-
-        from engine.nexus.nexus_distiller import SkillUsageDistiller
-        result = SkillUsageDistiller().analyse()
+    def test_skills_action(self):
+        mock_client = MagicMock()
+        mock_client.search.return_value = []
+        with patch("engine.nexus.nexus_distiller.get_nexus_client", return_value=mock_client):
+            from engine.nexus.nexus_distiller import SkillUsageDistiller
+            result = SkillUsageDistiller().analyse()
         assert result["total_mentions"] == 0
 
-    @patch("requests.get")
-    def test_lineage_action(self, mock_get):
-        resp = MagicMock()
-        resp.ok = True
-        resp.json.return_value = {"data": []}
-        mock_get.return_value = resp
-
-        from engine.nexus.nexus_distiller import PromptEvolutionDistiller
-        result = PromptEvolutionDistiller().get_lineage()
+    def test_lineage_action(self):
+        mock_client = MagicMock()
+        mock_client.search.return_value = []
+        with patch("engine.nexus.nexus_distiller.get_nexus_client", return_value=mock_client):
+            from engine.nexus.nexus_distiller import PromptEvolutionDistiller
+            result = PromptEvolutionDistiller().get_lineage()
         assert result["total_prompts"] == 0
