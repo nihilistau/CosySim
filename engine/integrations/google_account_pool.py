@@ -49,6 +49,14 @@ class GoogleAccount:
         expiry = self.rate_limited.get(service, 0.0)
         return time.time() < expiry
 
+    def cookie_age_days(self) -> float:
+        """Return how many days ago this account's cookies were captured."""
+        return (time.time() - self.added_at) / 86400.0
+
+    def is_stale(self, max_age_days: float = 7.0) -> bool:
+        """Return True if cookies are older than max_age_days."""
+        return self.cookie_age_days() > max_age_days
+
     def to_dict(self) -> Dict[str, Any]:
         """Serialize to JSON-safe dict."""
         return asdict(self)
@@ -251,6 +259,51 @@ class GoogleAccountPool:
         """Get a specific account by name."""
         with self._lock:
             return self._accounts.get(name)
+
+    def get_stale_accounts(self, max_age_days: float = 7.0) -> List[Dict[str, Any]]:
+        """Return accounts whose cookies are older than max_age_days.
+
+        Args:
+            max_age_days: Cookies older than this are considered stale.
+
+        Returns:
+            List of dicts with name, age_days, services.
+        """
+        with self._lock:
+            return [
+                {
+                    "name": acct.name,
+                    "age_days": round(acct.cookie_age_days(), 1),
+                    "services": acct.services,
+                    "added_at": acct.added_at,
+                }
+                for acct in self._accounts.values()
+                if acct.is_stale(max_age_days)
+            ]
+
+    def get_available_accounts(
+        self,
+        service: str,
+        exclude_stale: bool = False,
+        max_age_days: float = 7.0,
+    ) -> List[GoogleAccount]:
+        """Return all accounts eligible for a service.
+
+        Args:
+            service: Service key to filter by.
+            exclude_stale: If True, skip accounts with stale cookies.
+            max_age_days: Age threshold for staleness check.
+
+        Returns:
+            List of eligible GoogleAccount instances.
+        """
+        with self._lock:
+            return [
+                acct for acct in self._accounts.values()
+                if service in acct.services
+                and not acct.is_rate_limited(service)
+                and (not exclude_stale or not acct.is_stale(max_age_days))
+            ]
 
     # ──── Persistence ─────────────────────────────────────────────────────────
 

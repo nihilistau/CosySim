@@ -1171,6 +1171,12 @@ def _register_builtin_tasks(daemon: "SchedulerDaemon") -> None:
         "daily",
         _cdp_mine_callback,
     )
+    daemon.register(
+        "cookie-health-check",
+        "Cookie Health Check — probe Google account pool, warn if stale, store in Nexus",
+        "daily",
+        _cookie_health_check_callback,
+    )
 
 
 def _cdp_mine_callback() -> Dict[str, Any]:
@@ -1198,6 +1204,66 @@ def _cdp_mine_callback() -> Dict[str, Any]:
         }
     except Exception as exc:
         logger.error("cdp_mine failed: %s", exc)
+        return {"status": "error", "error": str(exc)}
+
+
+def _cookie_health_check_callback() -> Dict[str, Any]:
+    """Daily: probe Google account pool, log stale accounts, store result in Nexus."""
+    try:
+        import subprocess
+        import sys
+
+        result = subprocess.run(
+            [sys.executable, "scripts/har_watchfolder.py", "health"],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        if result.returncode != 0:
+            return {"status": "error", "stderr": result.stderr[:300]}
+
+        import json as _json
+        try:
+            report = _json.loads(result.stdout)
+        except Exception:
+            return {"status": "error", "parse_error": result.stdout[:200]}
+
+        stale = report.get("stale_count", 0)
+        total = report.get("total", 0)
+        healthy = report.get("healthy_count", 0)
+
+        if stale:
+            from engine.nexus.client import get_nexus_client
+            client = get_nexus_client()
+            stale_names = [a["name"] for a in report.get("accounts", []) if a.get("stale")]
+            client.add_entry(
+                f"Cookie Health Alert: {stale} stale account(s)",
+                (
+                    f"Daily cookie health check found {stale}/{total} accounts with stale cookies.\n"
+                    f"Stale accounts: {', '.join(stale_names)}\n\n"
+                    "Action required: export a fresh HAR from Chrome and drop it into data/hars/\n"
+                    "The HAR watchfolder will auto-import it within 30 seconds.\n\n"
+                    "How to capture HAR:\n"
+                    "  1. Open notebooklm.google.com in Chrome\n"
+                    "  2. DevTools (F12) → Network tab\n"
+                    "  3. Interact with the page\n"
+                    "  4. Right-click any request → Save all as HAR\n"
+                    "  5. Save to data/hars/<account_name>.har"
+                ),
+                content_type="note",
+                category="system",
+            )
+            logger.warning("cookie_health_check: %d stale accounts: %s", stale, stale_names)
+
+        return {
+            "status": "ok",
+            "total": total,
+            "healthy": healthy,
+            "stale": stale,
+            "accounts": report.get("accounts", []),
+        }
+    except Exception as exc:
+        logger.error("cookie_health_check failed: %s", exc)
         return {"status": "error", "error": str(exc)}
 
 
