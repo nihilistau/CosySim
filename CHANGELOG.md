@@ -3,7 +3,44 @@
 All notable changes to CosySim are documented here.
 
 ---
-## [0.83b] — "THE SOCIAL LAYER" — 2026-03
+## [0.84b] — "THE HINDSIGHT LAYER" — 2026-03
+
+### Architecture Refactoring (Project Hindsight)
+Complete architectural overhaul applying domain-driven design patterns to the engine.
+
+#### Phase 1 — Foundation
+- **`engine/mcp/decorators.py`** — `@mcp_tool` decorator: centralised error handling, automatic JSON serialisation, `ToolExecutionError` typed exception
+- **`engine/nexus/models.py`** — Pydantic v2 model library: `NexusEntry`, `NexusEntryCreate`, `AgentMemory`, `NexusRule`, `SessionLog`, `NLMNotebook`, `NLMSource`, `NLMAnswer`, `BenchmarkResult`, `TrainingRun`, `RouterDecision`, `NewsArticle`, `NexusResponse` — all with `_DictCompat` backward-compat mixin
+
+#### Phase 2–4 — MCP Server Extraction
+- **`engine/mcp/tools/`** — 17 domain tool files extracted from `cosysim_server.py` and `devtools_server.py`; all tool logic moves to domain modules, servers become thin routing wrappers
+- `@mcp_tool` applied across all extracted tools — eliminates bare `except Exception` blocks in tool layer
+
+#### Phase 5 — Interceptor Auto-Registry
+- **`engine/agents/interceptors/`** — monolithic `interceptors.py` (2,468 lines, 26 classes) split into 26 individual module files
+- **`engine/agents/interceptors/cache.py`** — `INTERCEPTOR_CACHE` singleton + `SCENES_WITH_DEDICATED_INTERCEPTOR` set
+- `@register_interceptor` auto-registry — pipeline built dynamically, no hardcoded lists
+- `NexusPromptInterceptor` priority corrected (4→6) to preserve `NaturalMoodDriftInterceptor` ordering
+
+#### Phase 6 — NexusClient Pydantic Split
+- **`engine/nexus/client.py`** — all query methods return typed Pydantic models; `_parse_entry()`/`_parse_rule()` with safe fallbacks; `NexusEntryCreate` validation on writes; lazy sub-client properties
+- **`engine/nexus/rules_client.py`** — `NexusRulesClient` domain facade
+- **`engine/nexus/session_client.py`** — `NexusSessionClient` domain facade
+- **`engine/nexus/memory_client.py`** — `NexusMemoryClient` domain facade
+
+#### Phase 7 — Training Subsystems
+- `training_pipeline.py`, `workflows.py`, `training_flywheel.py` — raw `requests` to Nexus replaced with `get_nexus_client()`; all entry access migrated to dot-notation Pydantic attributes
+
+#### Phase 8 — Remaining Raw Nexus HTTP
+- `bridge.py`, `dataset_curator.py`, `knowledge_evaluator.py`, `nexus_distiller.py`, `nexus_memory.py`, `agent_workflows.py` — all raw `requests.*` Nexus calls replaced with `get_nexus_client()`
+- Scanner (`tools/scan_nexus_requests.py`) confirms only intentional calls remain: LMStudio (localhost:1234) and `control_panel.py` CLI tool
+
+### Tests
+- 8,771 tests, 0 failures (3 flywheel mock tests updated to use `NexusEntry` objects)
+- `test_pipeline_smoke.py` — 147 passed, 1 skipped (per-phase gate)
+
+---
+
 
 ### Added
 - **Shop System** — `InventoryManager.get_catalog()`, `buy_item()`, `sell_item()` with credit deduction; prices on all 26 ITEM_CATALOG entries (`engine/world/inventory.py`)

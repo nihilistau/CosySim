@@ -11,6 +11,8 @@ Usage:
     client.add_entry("Combat Log", "Player defeated dragon", content_type="history")
     client.log_session("sess-1", project="CosySim", commits=["abc123"])
 """
+from __future__ import annotations
+
 import json
 import logging
 import time
@@ -18,7 +20,13 @@ import urllib.parse
 import urllib.request
 import urllib.error
 import threading
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
+
+if TYPE_CHECKING:
+    from engine.nexus.models import NexusEntry, NexusRule
+    from engine.nexus.rules_client import NexusRulesClient
+    from engine.nexus.session_client import NexusSessionClient
+    from engine.nexus.memory_client import NexusMemoryClient
 
 logger = logging.getLogger(__name__)
 
@@ -34,26 +42,90 @@ class NexusClient:
         self._max_retries = max_retries
         self._cache: Dict[str, tuple] = {}  # path -> (data, timestamp)
         self._cache_ttl = 60  # seconds
-    
+        # Domain facades — lazy-init to avoid circular imports
+        self._rules: Optional[NexusRulesClient] = None
+        self._sessions: Optional[NexusSessionClient] = None
+        self._memory: Optional[NexusMemoryClient] = None
+
+    @property
+    def rules(self) -> NexusRulesClient:
+        if self._rules is None:
+            from engine.nexus.rules_client import NexusRulesClient
+            self._rules = NexusRulesClient(self)
+        return self._rules
+
+    @property
+    def sessions(self) -> NexusSessionClient:
+        if self._sessions is None:
+            from engine.nexus.session_client import NexusSessionClient
+            self._sessions = NexusSessionClient(self)
+        return self._sessions
+
+    @property
+    def memory(self) -> NexusMemoryClient:
+        if self._memory is None:
+            from engine.nexus.memory_client import NexusMemoryClient
+            self._memory = NexusMemoryClient(self)
+        return self._memory
+
+    @staticmethod
+    def _parse_entry(d: dict) -> NexusEntry:
+        from engine.nexus.models import NexusEntry
+        try:
+            return NexusEntry.model_validate(d)
+        except Exception:
+            return NexusEntry(
+                id=d.get("id", ""),
+                title=d.get("title", ""),
+                content=d.get("content", ""),
+                created_by=d.get("created_by", ""),
+                content_type=d.get("content_type", "note"),
+                category=d.get("category", ""),
+                tags=d.get("tags", []),
+            )
+
+    @staticmethod
+    def _parse_rule(d: dict) -> NexusRule:
+        from engine.nexus.models import NexusRule
+        try:
+            return NexusRule.model_validate(d)
+        except Exception:
+            return NexusRule(
+                rule_id=d.get("rule_id", d.get("id", "")),
+                scope=d.get("scope", ""),
+                rule_type=d.get("rule_type", ""),
+                condition=d.get("condition", {}),
+                action=d.get("action", {}),
+                active=d.get("active", True),
+            )
+
     # ─── Knowledge Entries ─────────────────────────────────────
-    
-    def search(self, query: str, limit: int = 10) -> List[Dict]:
+
+    def search(self, query: str, limit: int = 10) -> List[NexusEntry]:
         encoded = urllib.parse.urlencode({"q": query, "limit": limit})
         result = self._get(f"/api/search?{encoded}")
-        return result.get("data", []) if result.get("ok") else []
+        data = result.get("data", []) if result.get("ok") else []
+        return [self._parse_entry(d) for d in data]
     
     def add_entry(self, title: str, content: str, content_type: str = "note",
                   category: str = "", tags: list = None,
-                  created_by: str = "cosysim") -> Optional[str]:
-        result = self._post("/api/entries", {
-            "title": title, "content": content, "content_type": content_type,
-            "category": category, "tags": tags or [], "created_by": created_by,
-        })
+                  created_by: str = "cosysim", **kwargs) -> Optional[str]:
+        from engine.nexus.models import NexusEntryCreate
+        try:
+            validated = NexusEntryCreate(
+                title=title, content=content, content_type=content_type,
+                category=category, tags=tags or [], created_by=created_by,
+            )
+        except Exception as exc:
+            logger.warning("NexusEntryCreate validation failed: %s", exc)
+            return None
+        result = self._post("/api/entries", validated.model_dump())
         return result.get("data", {}).get("id") if result.get("ok") else None
     
-    def get_entry(self, entry_id: str) -> Optional[Dict]:
+    def get_entry(self, entry_id: str) -> Optional[NexusEntry]:
         result = self._get(f"/api/entries/{entry_id}")
-        return result.get("data") if result.get("ok") else None
+        data = result.get("data") if result.get("ok") else None
+        return self._parse_entry(data) if data else None
     
     def update_entry(self, entry_id: str, **fields) -> bool:
         result = self._put(f"/api/entries/{entry_id}", fields)
@@ -64,31 +136,35 @@ class NexusClient:
         return result.get("ok", False)
     
     def list_entries(self, content_type: str = "", category: str = "",
-                     limit: int = 20) -> List[Dict]:
+                     limit: int = 20) -> List[NexusEntry]:
         params = []
         if content_type: params.append(f"type={content_type}")
         if category: params.append(f"category={category}")
         params.append(f"limit={limit}")
         result = self._get(f"/api/entries?{'&'.join(params)}")
-        return result.get("data", []) if result.get("ok") else []
+        data = result.get("data", []) if result.get("ok") else []
+        return [self._parse_entry(d) for d in data]
 
     def list_by_type(self, content_type: str, category: str = "",
-                     limit: int = 50) -> List[Dict]:
+                     limit: int = 50) -> List[NexusEntry]:
         """Shortcut: list entries filtered by content_type."""
         params = [f"limit={limit}"]
         if category:
             params.append(f"category={category}")
         result = self._get(f"/api/entries/by-type/{content_type}?{'&'.join(params)}")
-        return result.get("data", []) if result.get("ok") else []
+        data = result.get("data", []) if result.get("ok") else []
+        return [self._parse_entry(d) for d in data]
     
     # ─── Agent Submission ──────────────────────────────────────
     
     def agent_submit(self, agent_id: str, submit_type: str, title: str,
-                     content: str, category: str = "", tags: list = None) -> Optional[str]:
+                     content: str, category: str = "", tags: list = None,
+                     importance: float = 0.5) -> Optional[str]:
         result = self._post("/api/agent/submit", {
             "agent_id": agent_id, "type": submit_type,
             "title": title, "content": content,
             "category": category, "tags": tags or [],
+            "importance": importance,
         })
         return result.get("data", {}).get("entry_id") if result.get("ok") else None
 
@@ -96,7 +172,7 @@ class NexusClient:
 
     def log_session(self, session_id: str = None, project: str = "",
                     repo: str = "", branch: str = "",
-                    agent_id: str = "copilot") -> Optional[str]:
+                    agent_id: str = "copilot", **kwargs) -> Optional[str]:
         """Create a new session record in Nexus. Returns session ID."""
         payload = {
             "project": project, "repo": repo,
@@ -126,22 +202,24 @@ class NexusClient:
 
     # ─── Rules ────────────────────────────────────────────────
 
-    def get_rules(self, scope: str = "", rule_type: str = "") -> List[Dict]:
+    def get_rules(self, scope: str = "", rule_type: str = "") -> List[NexusRule]:
         """Get active rules, optionally filtered by scope and type."""
         params = []
         if scope: params.append(f"scope={scope}")
         if rule_type: params.append(f"type={rule_type}")
         qs = f"?{'&'.join(params)}" if params else ""
         result = self._get(f"/api/rules{qs}")
-        return result.get("data", []) if result.get("ok") else []
+        data = result.get("data", []) if result.get("ok") else []
+        return [self._parse_rule(d) for d in data]
 
     def add_rule(self, scope: str, rule_type: str, name: str,
-                 condition: dict, action: dict,
-                 priority: int = 50) -> Optional[str]:
+                 condition: dict = None, action: dict = None,
+                 priority: int = 50, active: bool = True) -> Optional[str]:
         """Create a new rule. Returns rule ID."""
         result = self._post("/api/rules", {
             "scope": scope, "rule_type": rule_type, "name": name,
-            "condition": condition, "action": action, "priority": priority,
+            "condition": condition or {}, "action": action or {},
+            "priority": priority, "active": active,
         })
         return result.get("data", {}).get("id") if result.get("ok") else None
 
@@ -388,11 +466,11 @@ class NexusClient:
             created_by="benchmark",
         )
 
-    def get_leaderboard(self, method: str = "", limit: int = 20) -> List[Dict]:
+    def get_leaderboard(self, method: str = "", limit: int = 20) -> List[NexusEntry]:
         """Retrieve benchmark entries from Nexus, optionally filtered by method."""
         entries = self.list_by_type("note", category="benchmarks", limit=limit)
         if method:
-            entries = [e for e in entries if method in e.get("content", "")]
+            entries = [e for e in entries if method in (e.get("content") or "")]
         return entries
     
     def _get(self, path: str) -> dict:

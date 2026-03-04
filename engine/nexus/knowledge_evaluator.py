@@ -185,13 +185,10 @@ class KnowledgeCoverageEvaluator:
         except Exception:
             stats = []
 
-        # Use REST stats endpoint directly
+        # Use client stats endpoint
         try:
-            import requests
-            from engine.config import get_config
-            base = get_config().get("nexus.url", "http://localhost:8700")
-            resp = requests.get(f"{base}/api/stats", timeout=5)
-            db_stats = resp.json().get("data", {}) if resp.ok else {}
+            stats_result = client.stats()
+            db_stats = stats_result.get("data", {}) if stats_result.get("ok") else {}
         except Exception:
             db_stats = {}
 
@@ -201,16 +198,10 @@ class KnowledgeCoverageEvaluator:
         # Get category distribution via entries endpoint
         category_counts: Dict[str, int] = {}
         try:
-            import requests
-            from engine.config import get_config
-            base = get_config().get("nexus.url", "http://localhost:8700")
-            resp = requests.get(f"{base}/api/entries?limit=1000", timeout=10)
-            if resp.ok:
-                entries_data = resp.json().get("data", {})
-                entries = entries_data.get("entries", []) if isinstance(entries_data, dict) else entries_data
-                for e in entries:
-                    cat = e.get("category", "uncategorised") or "uncategorised"
-                    category_counts[cat] = category_counts.get(cat, 0) + 1
+            entries = client.list_entries(limit=1000)
+            for e in entries:
+                cat = e.category or "uncategorised"
+                category_counts[cat] = category_counts.get(cat, 0) + 1
         except Exception as exc:
             logger.debug("Could not fetch category distribution: %s", exc)
 
@@ -323,60 +314,27 @@ class KnowledgeCoverageEvaluator:
         coverage_score: float,
         actions_taken: List[str],
     ) -> Optional[int]:
-        """Store a coverage report in Nexus DB via REST API."""
+        """Store a coverage report in Nexus as a knowledge entry."""
         try:
-            import requests
-            from engine.config import get_config
-            base = get_config().get("nexus.url", "http://localhost:8700")
-            payload = {
-                "gap_topics": gap_topics,
-                "underrepresented": underrepresented,
+            entry_content = json.dumps({
+                "score": coverage_score,
+                "gaps": gap_topics,
                 "recommendations": recommendations,
-                "total_entries": total_entries,
-                "coverage_score": coverage_score,
-                "actions_taken": actions_taken,
-            }
-            resp = requests.post(f"{base}/api/coverage", json=payload, timeout=10)
-            if resp.ok:
-                return resp.json().get("data", {}).get("id")
+                "actions": actions_taken,
+            }, indent=2)
+            return client.add_entry(
+                f"Coverage Report {datetime.now(timezone.utc).strftime('%Y-%m-%d')}",
+                entry_content,
+                content_type="note",
+                category="system_metrics",
+            )
         except Exception as exc:
             logger.warning("Coverage report storage failed: %s", exc)
-            # Fallback: store as a knowledge entry
-            try:
-                entry_content = json.dumps({
-                    "score": coverage_score,
-                    "gaps": gap_topics,
-                    "recommendations": recommendations,
-                    "actions": actions_taken,
-                }, indent=2)
-                client.add_entry(
-                    f"Coverage Report {datetime.now(timezone.utc).strftime('%Y-%m-%d')}",
-                    entry_content,
-                    content_type="note",
-                    category="system_metrics",
-                )
-            except Exception:
-                pass
         return None
 
     def _update_report_actions(self, client: Any, actions_taken: List[str]) -> None:
         """Update the most recent coverage report with actions taken."""
-        try:
-            import requests
-            from engine.config import get_config
-            base = get_config().get("nexus.url", "http://localhost:8700")
-            resp = requests.get(f"{base}/api/coverage", timeout=5)
-            if resp.ok:
-                report = resp.json().get("data", {})
-                rid = report.get("id")
-                if rid:
-                    requests.patch(
-                        f"{base}/api/coverage/{rid}",
-                        json={"actions_taken": actions_taken},
-                        timeout=5,
-                    )
-        except Exception as exc:
-            logger.debug("Could not update report actions: %s", exc)
+        logger.debug("Coverage report action update: no-op (coverage endpoint not in client)")
 
     # ── Auto-Distillation ─────────────────────────────────────────────
 

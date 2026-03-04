@@ -117,12 +117,11 @@ class TestKnowledgeDistill:
             {"question": "What is MCP?", "answer": "Model Context Protocol framework.", "category": "architecture"},
             {"question": "How do skills work?", "answer": "Skills are decorated functions registered as tools.", "category": "api"},
         ]
-        mock_resp = MagicMock()
-        mock_resp.ok = True
-        mock_resp.json.return_value = mock_qa
+        mock_client = MagicMock()
+        mock_client.find_qa.return_value = mock_qa
 
         out = str(tmp_path / "distilled.jsonl")
-        with patch("requests.get", return_value=mock_resp):
+        with patch("engine.nexus.client.get_nexus_client", return_value=mock_client):
             r = knowledge_distill(output_path=out, nexus_url="http://fake:8700")
 
         assert r.status == "success"
@@ -131,10 +130,6 @@ class TestKnowledgeDistill:
         assert len(lines) == 2
 
     def test_with_topic_filter(self, tmp_path):
-        mock_qa_resp = MagicMock()
-        mock_qa_resp.ok = True
-        mock_qa_resp.json.return_value = []
-
         mock_search_resp = MagicMock()
         mock_search_resp.ok = True
         mock_search_resp.json.return_value = {
@@ -143,16 +138,23 @@ class TestKnowledgeDistill:
             ]
         }
 
+        mock_client = MagicMock()
+        mock_client.find_qa.return_value = []
+
         out = str(tmp_path / "distilled.jsonl")
-        with patch("requests.get", side_effect=[mock_qa_resp, mock_search_resp]):
+        with patch("engine.nexus.client.get_nexus_client", return_value=mock_client), \
+             patch("requests.get", return_value=mock_search_resp):
             r = knowledge_distill(topic="interceptor", output_path=out)
 
         assert r.status == "success"
         assert r.items_output >= 1
 
     def test_nexus_unreachable(self, tmp_path):
+        mock_client = MagicMock()
+        mock_client.find_qa.side_effect = Exception("Connection refused")
         out = str(tmp_path / "distilled.jsonl")
-        with patch("requests.get", side_effect=Exception("Connection refused")):
+        with patch("engine.nexus.client.get_nexus_client", return_value=mock_client), \
+             patch("requests.get", side_effect=Exception("Connection refused")):
             r = knowledge_distill(output_path=out)
 
         assert r.status in ("partial", "failed")

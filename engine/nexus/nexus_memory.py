@@ -83,8 +83,6 @@ class NexusMemory:
         Returns:
             Entry ID if stored successfully, None otherwise.
         """
-        import requests
-
         base_tags = tags or []
         all_tags = [
             self._namespace,
@@ -104,17 +102,16 @@ class NexusMemory:
         )
 
         try:
-            r = requests.post(f"{self._url}/api/entries", json={
-                "title": entry["title"],
-                "content": entry["content"],
-                "content_type": "memory",
-                "category": "memory",
-                "tags": entry["tags"],
-                "created_by": self._agent_id,
-            }, timeout=5)
-            if r.ok:
-                data = r.json()
-                entry_id = data.get("data", {}).get("id", data.get("id", ""))
+            from engine.nexus.client import get_nexus_client
+            entry_id = get_nexus_client().add_entry(
+                title=entry["title"],
+                content=entry["content"],
+                content_type="memory",
+                category="memory",
+                tags=entry["tags"],
+                created_by=self._agent_id,
+            )
+            if entry_id:
                 self._session_memories.append({
                     "id": entry_id,
                     "content": content,
@@ -281,10 +278,9 @@ class NexusMemory:
         Returns:
             True if deleted successfully.
         """
-        import requests
         try:
-            r = requests.delete(f"{self._url}/api/entries/{entry_id}", timeout=5)
-            return r.ok
+            from engine.nexus.client import get_nexus_client
+            return get_nexus_client().delete_entry(entry_id)
         except Exception:
             return False
 

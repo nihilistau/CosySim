@@ -745,60 +745,22 @@ def _invoke_mcp_tool(tool_name: str, args: Dict, ctx: ResponseContext) -> Any:
 def _build_default_pipeline() -> InterceptorPipeline:
     """Build the default interceptor pipeline for new governors."""
     from engine.agents.interceptors import (
-        NaturalMoodDriftInterceptor,
-        ConversationRecapInterceptor,
-        CharacterRegistryInterceptor,
-        RouterMessageInjector,
-        DialogDirectiveInterceptor,
-        BedroomSceneInterceptor,
-        PhoneSceneInterceptor,
-        LoungeSceneInterceptor,
-        GallerySceneInterceptor,
-        UniversalSceneInterceptor,
-        AmbientEventInterceptor,
-        AutoResultInjector,
-        SkillAwarenessInterceptor,
-        GameSessionInterceptor,
-        GameRulesInterceptor,
-        PersonalityGuardInterceptor,
-        ConversationVarietyInterceptor,
-        PolicyEnforcerInterceptor,
-        MemoryEnhancerInterceptor,
-        ResponseShaperInterceptor,
-        TTSStyleInterceptor,
-        ActivityLoggerInterceptor,
-        MoodSyncInterceptor,
-        RelationshipEventInterceptor,
+        get_all_interceptors,
+        GameInterceptor,
     )
     from engine.agents.dialogue_gate import DialogueGateInterceptor
     from engine.agents.relationship_interceptor import RelationshipContextInterceptor
     pipeline = InterceptorPipeline()
-    pipeline.add(NaturalMoodDriftInterceptor())  #  5
-    pipeline.add(ConversationRecapInterceptor()) #  6
-    pipeline.add(CharacterRegistryInterceptor()) #  8
-    pipeline.add(RouterMessageInjector())        # 10
-    pipeline.add(DialogDirectiveInterceptor())   # 12
-    pipeline.add(BedroomSceneInterceptor())      # 15
-    pipeline.add(PhoneSceneInterceptor())        # 15
-    pipeline.add(LoungeSceneInterceptor())       # 15
-    pipeline.add(GallerySceneInterceptor())      # 15
-    pipeline.add(UniversalSceneInterceptor())    # 16
-    pipeline.add(AmbientEventInterceptor())      # 17
-    pipeline.add(AutoResultInjector())           # 20
-    pipeline.add(SkillAwarenessInterceptor())    # 30
-    pipeline.add(GameSessionInterceptor())       # 35
-    pipeline.add(GameRulesInterceptor())         # 40
-    pipeline.add(DialogueGateInterceptor())      # 45
-    pipeline.add(RelationshipContextInterceptor())  # 46
-    pipeline.add(PersonalityGuardInterceptor())  # 50
-    pipeline.add(ConversationVarietyInterceptor()) # 55
-    pipeline.add(PolicyEnforcerInterceptor())    # 60
-    pipeline.add(MemoryEnhancerInterceptor())    # 70
-    pipeline.add(ResponseShaperInterceptor())    # 80
-    pipeline.add(TTSStyleInterceptor())          # 85
-    pipeline.add(ActivityLoggerInterceptor())    # 90
-    pipeline.add(MoodSyncInterceptor())          # 92
-    pipeline.add(RelationshipEventInterceptor()) # 93
+    for cls in get_all_interceptors():
+        # RelationshipContextInterceptor in registry is the stub; use the full one below
+        if cls.__name__ == "RelationshipContextInterceptor":
+            continue
+        pipeline.add(cls())
+    # GameInterceptor replaces GameSessionInterceptor + GameRulesInterceptor (one instance)
+    if not any(isinstance(i, GameInterceptor) for i in pipeline._interceptors):
+        pipeline.add(GameInterceptor())
+    pipeline.add(DialogueGateInterceptor())          # 45
+    pipeline.add(RelationshipContextInterceptor())   # 46
     return pipeline
 
 

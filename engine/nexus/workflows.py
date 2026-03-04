@@ -51,22 +51,21 @@ class ContentWorkflow:
 
     def _store(self, title: str, content: str, tags: List[str]) -> Optional[str]:
         """Store content in Nexus under the content namespace."""
-        import requests
+        from engine.nexus.client import get_nexus_client
         entry = enforce_namespace(
             title=title, content=content,
             content_type="snippet", category="dialog",
             tags=tags, namespace="content",
         )
         try:
-            r = requests.post(f"{self._url}/api/entries", json={
-                "title": entry["title"],
-                "content": entry["content"],
-                "content_type": "snippet",
-                "category": "dialog",
-                "tags": entry["tags"],
-                "created_by": "content_workflow",
-            }, timeout=5)
-            return r.json().get("data", {}).get("id") if r.ok else None
+            return get_nexus_client().add_entry(
+                title=entry["title"],
+                content=entry["content"],
+                content_type="snippet",
+                category="dialog",
+                tags=entry["tags"],
+                created_by="content_workflow",
+            )
         except Exception:
             return None
 
@@ -227,7 +226,7 @@ class ContentWorkflow:
         Returns:
             List of matching content entries.
         """
-        import requests
+        from engine.nexus.client import get_nexus_client
         query_parts = ["content"]
         if character_id:
             query_parts.append(f"character:{character_id}")
@@ -237,14 +236,7 @@ class ContentWorkflow:
             query_parts.append(f"mood:{mood}")
 
         try:
-            r = requests.get(
-                f"{self._url}/api/search",
-                params={"q": " ".join(query_parts), "limit": 20},
-                timeout=5,
-            )
-            if r.ok:
-                results = r.json()
-                return results.get("data", []) if isinstance(results, dict) else results
+            return get_nexus_client().search(" ".join(query_parts), limit=20)
         except Exception:
             logger.debug("Suppressed exception", exc_info=True)
         return []
@@ -309,8 +301,8 @@ class ResearchWorkflow:
             result["sources"].append({"type": "fts_search", "count": len(search_results)})
             # Synthesize from search results
             snippets = [
-                e.get("content", "")[:200] for e in search_results
-                if isinstance(e, dict)
+                e.content[:200] for e in search_results
+                if e.content
             ]
             if snippets:
                 result["answer"] = (
@@ -348,7 +340,7 @@ class ResearchWorkflow:
         Returns:
             Entry ID if stored.
         """
-        import requests
+        from engine.nexus.client import get_nexus_client
 
         question = result.get("question", "")
         answer = result.get("answer", "")
@@ -366,23 +358,24 @@ class ResearchWorkflow:
         )
 
         try:
-            r = requests.post(f"{self._url}/api/entries", json={
-                "title": entry["title"],
-                "content": entry["content"],
-                "content_type": "research",
-                "category": "research",
-                "tags": entry["tags"],
-                "created_by": "research_workflow",
-            }, timeout=5)
-            if r.ok:
+            nx = get_nexus_client()
+            entry_id = nx.add_entry(
+                title=entry["title"],
+                content=entry["content"],
+                content_type="research",
+                category="research",
+                tags=entry["tags"],
+                created_by="research_workflow",
+            )
+            if entry_id:
                 # Also store as Q&A for future cache hits
-                requests.post(f"{self._url}/api/qa", json={
-                    "question": question,
-                    "answer": answer,
-                    "category": "research",
-                    "tags": ["research", "auto-generated"],
-                }, timeout=5)
-                return r.json().get("data", {}).get("id")
+                nx.add_qa(
+                    question=question,
+                    answer=answer,
+                    category="research",
+                    tags=["research", "auto-generated"],
+                )
+                return entry_id
         except Exception:
             logger.debug("Suppressed exception", exc_info=True)
         return None
@@ -452,12 +445,13 @@ class NotebookWorkflow:
         Returns:
             Dict with creation stats.
         """
-        import requests
+        from engine.nexus.client import get_nexus_client
 
         seeds = self.NOTEBOOK_SEEDS if notebook_id == "all" else {
             notebook_id: self.NOTEBOOK_SEEDS.get(notebook_id, {})
         }
 
+        nx = get_nexus_client()
         created = 0
         for nb_id, seed in seeds.items():
             if not seed:
@@ -480,21 +474,26 @@ class NotebookWorkflow:
                 namespace="research",
             )
 
-            r = requests.post(f"{self._url}/api/entries", json={
-                "title": entry["title"],
-                "content": entry["content"],
-                "content_type": "document",
-                "category": "research",
-                "tags": entry["tags"],
-                "created_by": "notebook_workflow",
-            }, timeout=5)
-            if r.ok:
+            entry_id = nx.add_entry(
+                title=entry["title"],
+                content=entry["content"],
+                content_type="document",
+                category="research",
+                tags=entry["tags"],
+                created_by="notebook_workflow",
+            )
+            if entry_id:
                 created += 1
 
             # Generate and store Q&A pairs for this notebook
             qa_pairs = self._generate_qa(nb_id, seed)
             for qa in qa_pairs:
-                requests.post(f"{self._url}/api/qa", json=qa, timeout=5)
+                nx.add_qa(
+                    question=qa["question"],
+                    answer=qa["answer"],
+                    category=qa.get("category", "research"),
+                    tags=qa.get("tags", []),
+                )
                 created += 1
 
         return {"notebooks_seeded": len(seeds), "entries_created": created}
@@ -555,15 +554,15 @@ class NotebookWorkflow:
 
     def check_nlm_status(self) -> Dict[str, Any]:
         """Check if NotebookLM backends are available."""
-        import requests
+        from engine.nexus.client import get_nexus_client
         status: Dict[str, Any] = {"http": False, "browser": False}
 
         try:
-            r = requests.get(f"{self._url}/api/nlm/health", timeout=5)
-            if r.ok:
-                data = r.json()
-                status["http"] = data.get("status") == "ok"
-                status["details"] = data
+            data = get_nexus_client().nlm_status()
+            if data.get("ok"):
+                inner = data.get("data", {})
+                status["http"] = inner.get("status") == "ok"
+                status["details"] = inner
         except Exception:
             logger.debug("Suppressed exception", exc_info=True)
 
