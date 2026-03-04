@@ -1189,6 +1189,18 @@ def _register_builtin_tasks(daemon: "SchedulerDaemon") -> None:
         "weekly",
         _test_suite_benchmark_callback,
     )
+    daemon.register(
+        "argus-weekly-scan",
+        "ARGUS Weekly Scan — crawl NLM/Gemini/AI Studio via Playwright+CDP, detect new rpcids/methods, store in Nexus",
+        "weekly",
+        _argus_weekly_scan_callback,
+    )
+    daemon.register(
+        "argus-diff-report",
+        "ARGUS Diff Report — compare latest ARGUS registry vs prior scan, store delta in Nexus",
+        "weekly",
+        _argus_diff_report_callback,
+    )
 
 
 def _cdp_mine_callback() -> Dict[str, Any]:
@@ -1405,6 +1417,74 @@ def _fmt_duration(seconds: float) -> str:
         return f"{seconds:.1f}s"
     m, s = divmod(int(seconds), 60)
     return f"{m}m {s:02d}s"
+
+
+def _argus_weekly_scan_callback() -> Dict[str, Any]:
+    """Weekly: run full ARGUS scan (NLM + Gemini + AI Studio) via Playwright + CDP.
+
+    Requires Chrome to be running with ``--remote-debugging-port=9222``
+    and the user to be logged into Google services.
+    On success, stores discoveries in Nexus and regenerates API reference docs.
+    """
+    import asyncio
+    try:
+        from scripts.argus.orchestrator import ArgusOrchestrator
+    except ImportError:
+        return {"status": "skipped", "reason": "ARGUS not installed — run: pip install playwright"}
+
+    try:
+        orchestrator = ArgusOrchestrator()
+        results = asyncio.run(orchestrator.run_full_scan())
+        total_new = sum(r.total_new for r in results)
+        errors = [r.error for r in results if r.error]
+        return {
+            "status": "ok" if not errors else "partial",
+            "total_new_discoveries": total_new,
+            "targets_scanned": [r.target for r in results],
+            "errors": errors,
+        }
+    except Exception as exc:
+        logger.error("argus_weekly_scan failed: %s", exc)
+        return {"status": "error", "error": str(exc)}
+
+
+def _argus_diff_report_callback() -> Dict[str, Any]:
+    """Weekly: compare current ARGUS registry vs previous scan, store delta in Nexus."""
+    try:
+        from scripts.argus.discovery.endpoint_registry import get_registry
+        from scripts.argus.reporting.api_doc_generator import DiffReporter
+        from scripts.argus.nexus_sink import get_sink
+
+        registry = get_registry()
+        diff_result = registry.diff_vs_baseline()
+        total_new = sum(len(v) for v in diff_result.values() if isinstance(v, list) and "unseen" not in "".join(k for k in diff_result))
+
+        # Generate human-readable diff report
+        lines = [
+            "# ARGUS Diff Report (vs Baseline)",
+            "",
+            f"Generated: {__import__('time').strftime('%Y-%m-%d %H:%M')}",
+            "",
+        ]
+        for key, items in diff_result.items():
+            if items:
+                lines.append(f"## {key} ({len(items)})")
+                for item in items:
+                    lines.append(f"- `{item}`")
+                lines.append("")
+
+        report = "\n".join(lines)
+        get_sink().store_diff_report(report)
+        stats = registry.get_stats()
+
+        return {
+            "status": "ok",
+            "stats": stats,
+            "diff": diff_result,
+        }
+    except Exception as exc:
+        logger.error("argus_diff_report failed: %s", exc)
+        return {"status": "error", "error": str(exc)}
 
 
 def _colab_pipeline_sync_callback() -> Dict[str, Any]:
