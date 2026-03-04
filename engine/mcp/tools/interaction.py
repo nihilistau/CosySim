@@ -65,7 +65,7 @@ def perform_interaction(
         )
 
         if "error" in result:
-            return json.dumps(result)
+            return json.dumps(result, default=str)
 
         # Apply stat effects to both characters
         for char_id in [initiator_id, target_id]:

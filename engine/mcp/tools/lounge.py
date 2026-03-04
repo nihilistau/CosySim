@@ -428,7 +428,7 @@ def lounge_heat_tick(
             "delta"        : delta,
             "rules_fired"  : fired,
         }
-        return json.dumps(result)
+        return json.dumps(result, default=str)
 
     except Exception as exc:
         return f"lounge_heat_tick failed: {exc}"

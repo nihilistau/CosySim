@@ -32,7 +32,11 @@ export default function NLMPanel({ activeNotebookId }: Props) {
         const res = await fetch('/api/nlm/notebooks');
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
-        const books: NLMNotebook[] = data.notebooks ?? data ?? [];
+        const books: NLMNotebook[] = Array.isArray(data.notebooks)
+          ? data.notebooks
+          : Array.isArray(data)
+          ? data
+          : [];
         setNlmNotebooks(books);
         if (books.length > 0) setSelectedNlmId(books[0].id);
       } catch (e: any) {

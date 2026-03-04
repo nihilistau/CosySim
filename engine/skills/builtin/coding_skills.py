@@ -99,7 +99,7 @@ def coding_research(question: str, depth: str = "auto") -> str:
     depth: 'shallow' (cache + FTS), 'deep' (includes NLM), 'auto'.
     """
     result = _client().ask(question, depth=depth, category="development")
-    return json.dumps(result)
+    return json.dumps(result, default=str)
 
 
 @skill(pack="coding", description="Store a bug analysis or debugging note",

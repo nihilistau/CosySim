@@ -419,7 +419,7 @@ class GridScene(BaseScene):
             result = self._state.buy_item(data.get("item_id", ""), data.get("quantity", 1))
             if result.get("success") and self.socketio:
                 self.socketio.emit("inventory_update", {"inventory": self._state.get_player_inventory()})
-            return Response(json.dumps(result), mimetype="application/json")
+            return Response(json.dumps(result, default=str), mimetype="application/json")
 
         @app.route("/api/market/sell", methods=["POST"])
         def api_market_sell():
@@ -427,7 +427,7 @@ class GridScene(BaseScene):
             result = self._state.sell_item(data.get("item_id", ""), data.get("quantity", 1))
             if result.get("success") and self.socketio:
                 self.socketio.emit("inventory_update", {"inventory": self._state.get_player_inventory()})
-            return Response(json.dumps(result), mimetype="application/json")
+            return Response(json.dumps(result, default=str), mimetype="application/json")
 
         # ── Station / Map API ─────────────────────────────────────────────────
 
@@ -476,13 +476,13 @@ class GridScene(BaseScene):
             result = self._state.pledge_allegiance(data.get("faction_id", ""))
             if result.get("success") and self.socketio:
                 self.socketio.emit("faction_update", {"faction_id": data.get("faction_id"), "action": "pledge"})
-            return Response(json.dumps(result), mimetype="application/json")
+            return Response(json.dumps(result, default=str), mimetype="application/json")
 
         @app.route("/api/faction/quest/accept", methods=["POST"])
         def api_faction_quest_accept():
             data = request.get_json(silent=True) or {}
             result = self._state.accept_quest(data.get("faction_id", ""))
-            return Response(json.dumps(result), mimetype="application/json")
+            return Response(json.dumps(result, default=str), mimetype="application/json")
 
         @app.route("/api/faction/quest/complete", methods=["POST"])
         def api_faction_quest_complete():
@@ -490,7 +490,7 @@ class GridScene(BaseScene):
             result = self._state.complete_quest(data.get("faction_id", ""))
             if result.get("success") and self.socketio:
                 self.socketio.emit("quest_complete", result)
-            return Response(json.dumps(result), mimetype="application/json")
+            return Response(json.dumps(result, default=str), mimetype="application/json")
 
         # ── Broker / Intel API ────────────────────────────────────────────────
 

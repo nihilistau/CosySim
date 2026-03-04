@@ -31,7 +31,7 @@ def copilot_store_snippet(title: str, code: str, language: str = "python",
         from engine.nexus.copilot_helpers import store_snippet
         tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
         result = store_snippet(title, code, language, tag_list)
-        return json.dumps(result)
+        return json.dumps(result, default=str)
     except Exception as e:
         return json.dumps({"error": str(e)})
 
@@ -43,7 +43,7 @@ def copilot_store_discovery(title: str, finding: str,
     try:
         from engine.nexus.copilot_helpers import store_discovery
         result = store_discovery(title, finding, category)
-        return json.dumps(result)
+        return json.dumps(result, default=str)
     except Exception as e:
         return json.dumps({"error": str(e)})
 
@@ -56,7 +56,7 @@ def copilot_log_progress(task: str, status: str = "completed", details: str = ""
         from engine.nexus.copilot_helpers import log_work_progress
         result = log_work_progress(task, status, details, tests_passed=tests_passed,
                                    commit_sha=commit_sha)
-        return json.dumps(result)
+        return json.dumps(result, default=str)
     except Exception as e:
         return json.dumps({"error": str(e)})
 

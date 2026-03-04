@@ -70,7 +70,7 @@ def mission_status(mission_id: str) -> str:
     result = _mgr().get_status(mission_id)
     if not result:
         return json.dumps({"error": f"Mission {mission_id} not found."})
-    return json.dumps(result)
+    return json.dumps(result, default=str)
 
 
 @skill(

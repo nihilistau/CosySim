@@ -107,7 +107,7 @@ def nexus_store_prompt(name: str, content: str, category: str = "",
         if not nx:
             return json.dumps({"error": "Nexus unavailable"})
         result = nx.store_prompt(name, content, category=category, version=version)
-        return json.dumps(result)
+        return json.dumps(result, default=str)
     except Exception as e:
         return json.dumps({"error": str(e)})
 
@@ -133,7 +133,7 @@ def nexus_research(question: str) -> str:
         if not nx:
             return json.dumps({"error": "Nexus unavailable"})
         result = nx.research(question)
-        return json.dumps(result)
+        return json.dumps(result, default=str)
     except Exception as e:
         return json.dumps({"error": str(e)})
 
@@ -146,7 +146,7 @@ def nexus_converse(research_id: str, message: str) -> str:
         if not nx:
             return json.dumps({"error": "Nexus unavailable"})
         result = nx.converse(research_id, message)
-        return json.dumps(result)
+        return json.dumps(result, default=str)
     except Exception as e:
         return json.dumps({"error": str(e)})
 
@@ -159,7 +159,7 @@ def nexus_finish_research(research_id: str) -> str:
         if not nx:
             return json.dumps({"error": "Nexus unavailable"})
         result = nx.finish_research(research_id)
-        return json.dumps(result)
+        return json.dumps(result, default=str)
     except Exception as e:
         return json.dumps({"error": str(e)})
 
@@ -173,7 +173,7 @@ def nexus_import_youtube(url: str, category: str = "", tags: str = "") -> str:
             return json.dumps({"error": "Nexus unavailable"})
         tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
         result = nx.import_youtube(url, category=category, tags=tag_list)
-        return json.dumps(result)
+        return json.dumps(result, default=str)
     except Exception as e:
         return json.dumps({"error": str(e)})
 
@@ -187,7 +187,7 @@ def nexus_log_session(project: str = "CosySim", repo: str = "",
         if not nx:
             return json.dumps({"error": "Nexus unavailable"})
         result = nx.log_session(project=project, repo=repo, branch=branch)
-        return json.dumps(result)
+        return json.dumps(result, default=str)
     except Exception as e:
         return json.dumps({"error": str(e)})
 

@@ -37,7 +37,7 @@ def allm_connect(instance: str = "") -> str:
         result = _allm().connect(instance=instance)
     else:
         result = _allm().connect_all()
-    return json.dumps(result)
+    return json.dumps(result, default=str)
 
 
 @skill(
@@ -88,7 +88,7 @@ def allm_create_workspace(name: str, instance: str = "") -> str:
     """Create a workspace with the given name."""
     inst = instance or None
     result = _allm().create_workspace(name, instance=inst)
-    return json.dumps(result)
+    return json.dumps(result, default=str)
 
 
 # ── Chat ────────────────────────────────────────────────────────────────
@@ -104,7 +104,7 @@ def allm_chat(workspace: str, message: str, mode: str = "chat", instance: str = 
     """Send a message to an AnythingLLM workspace. Mode: 'chat' or 'query'."""
     inst = instance or None
     result = _allm().chat(workspace, message, mode=mode, instance=inst)
-    text = result.get("textResponse", result.get("text", json.dumps(result)))
+    text = result.get("textResponse", result.get("text", json.dumps(result, default=str)))
     return text if isinstance(text, str) else json.dumps(text)
 
 
@@ -134,7 +134,7 @@ def allm_sync_to_nexus(workspace: str, instance: str = "") -> str:
     """Export workspace Q&A pairs to Nexus knowledge base."""
     inst = instance or None
     result = _allm().sync_to_nexus(workspace, instance=inst)
-    return json.dumps(result)
+    return json.dumps(result, default=str)
 
 
 @skill(
@@ -149,7 +149,7 @@ def allm_sync_from_nexus(
     """Upload Nexus entries as documents to an AnythingLLM workspace."""
     inst = instance or None
     result = _allm().sync_from_nexus(workspace, query=query, limit=limit, instance=inst)
-    return json.dumps(result)
+    return json.dumps(result, default=str)
 
 
 # ── Documents ───────────────────────────────────────────────────────────
@@ -167,4 +167,4 @@ def allm_upload_document(
     """Upload text as a document to an AnythingLLM workspace."""
     inst = instance or None
     result = _allm().upload_document(workspace, title, content, instance=inst)
-    return json.dumps(result)
+    return json.dumps(result, default=str)

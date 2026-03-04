@@ -28,7 +28,7 @@ def roll_dice_logic(sides: int = 6, count: int = 1) -> str:
         "sides": sides,
         "outcome": "odd" if total % 2 == 1 else "even",
     }
-    return json.dumps(result)
+    return json.dumps(result, default=str)
 
 
 def get_random_topic_logic(category: str = "general") -> str:
@@ -100,7 +100,7 @@ def random_pick_logic(
         options = json.loads(options_json) if options_json and options_json != "[]" else None
         weights = json.loads(weights_json) if weights_json and weights_json != "[]" else None
         result  = get_framework().random_pick(n=n, seed=seed, weights=weights, options=options)
-        return json.dumps(result)
+        return json.dumps(result, default=str)
     except Exception as exc:
         return json.dumps({"error": str(exc)})
 

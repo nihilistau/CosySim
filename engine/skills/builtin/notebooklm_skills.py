@@ -268,7 +268,7 @@ def notebooklm_ask_node(
             session_id=session_id or None,
             reset_history=reset_history,
         )
-        return json.dumps(result)
+        return json.dumps(result, default=str)
     except Exception as exc:
         return json.dumps({"error": str(exc)})
 
@@ -328,7 +328,7 @@ def notebooklm_generate_audio_node(notebook_id: str, style: str = "standard") ->
     import json
     try:
         result = _hybrid().generate_audio(notebook_id, style)
-        return json.dumps(result)
+        return json.dumps(result, default=str)
     except Exception as exc:
         return json.dumps({"error": str(exc)})
 
@@ -358,7 +358,7 @@ def notebooklm_generate_video(notebook_id: str, style: str = "cinematic") -> str
     import json
     try:
         result = _hybrid().generate_video(notebook_id, style)
-        return json.dumps(result)
+        return json.dumps(result, default=str)
     except Exception as exc:
         return json.dumps({"error": str(exc)})
 
@@ -385,7 +385,7 @@ def notebooklm_extract_tables(notebook_id: str, query: str = "") -> str:
     import json
     try:
         result = _hybrid().extract_tables(notebook_id, query)
-        return json.dumps(result)
+        return json.dumps(result, default=str)
     except Exception as exc:
         return json.dumps({"error": str(exc)})
 
@@ -410,7 +410,7 @@ def notebooklm_hybrid_health() -> str:
     import json
     try:
         result = _hybrid().health()
-        return json.dumps(result)
+        return json.dumps(result, default=str)
     except Exception as exc:
         return json.dumps({"error": str(exc)})
 
@@ -437,6 +437,6 @@ def notebooklm_setup_auth() -> str:
     import json
     try:
         result = _hybrid().setup_auth()
-        return json.dumps(result)
+        return json.dumps(result, default=str)
     except Exception as exc:
         return json.dumps({"error": str(exc)})
