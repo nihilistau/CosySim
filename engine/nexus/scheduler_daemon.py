@@ -1294,45 +1294,63 @@ def _cookie_health_check_callback() -> Dict[str, Any]:
 def _cookie_auto_refresh_callback() -> Dict[str, Any]:
     """Every 3 days: silently refresh Google cookies via CDP from running Chrome.
 
-    Runs har_capture.py --mode cdp which connects to the already-running Chrome
-    instance on port 9222 and pulls fresh cookies directly — no UI interaction.
-    Falls back through launch → macro if CDP is unavailable.
+    Prefers the ARGUS token harvester (python -m scripts.argus.tools tokens)
+    which uses direct CDP cookie extraction and is faster/more reliable.
+    Falls back to har_capture.py --mode auto if ARGUS tools are unavailable.
     Logs outcome to Nexus.
     """
     import subprocess
     import sys
     import time as _time
 
+    repo_root = str(Path(__file__).parent.parent.parent)
+
+    # Try ARGUS token harvester first (preferred path)
     try:
+        result = subprocess.run(
+            [sys.executable, "-m", "scripts.argus.tools", "tokens"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            cwd=repo_root,
+        )
+        success = result.returncode == 0
+        stdout = result.stdout[-800:] if result.stdout else ""
+        stderr = result.stderr[-400:] if result.stderr else ""
+        method = "argus-token-harvester"
+    except Exception:
+        # Fallback to har_capture.py
         result = subprocess.run(
             [sys.executable, "scripts/har_capture.py", "--mode", "auto"],
             capture_output=True,
             text=True,
             timeout=60,
-            cwd=str(Path(__file__).parent.parent.parent),
+            cwd=repo_root,
         )
         success = result.returncode == 0
         stdout = result.stdout[-800:] if result.stdout else ""
         stderr = result.stderr[-400:] if result.stderr else ""
+        method = "har-capture-fallback"
 
+    try:
         from engine.nexus.client import get_nexus_client
         client = get_nexus_client()
         client.add_entry(
             f"Cookie Auto-Refresh: {'success' if success else 'failed'} — {_time.strftime('%Y-%m-%d %H:%M')}",
-            f"Scheduled cookie refresh via har_capture.py.\n\nOutput:\n{stdout}\n{stderr}",
+            f"Scheduled cookie refresh via {method}.\n\nOutput:\n{stdout}\n{stderr}",
             content_type="note",
             category="system",
             tags=["cookie-refresh", "scheduled", "cdp"],
         )
-        if success:
-            logger.info("cookie_auto_refresh: success")
-        else:
-            logger.warning("cookie_auto_refresh: failed — %s", stderr[:200])
+    except Exception as nexus_exc:
+        logger.warning("cookie_auto_refresh: nexus log failed: %s", nexus_exc)
 
-        return {"status": "ok" if success else "error", "stdout": stdout, "stderr": stderr}
-    except Exception as exc:
-        logger.error("cookie_auto_refresh failed: %s", exc)
-        return {"status": "error", "error": str(exc)}
+    if success:
+        logger.info("cookie_auto_refresh: success via %s", method)
+    else:
+        logger.warning("cookie_auto_refresh: failed via %s — %s", method, stderr[:200])
+
+    return {"status": "ok" if success else "error", "method": method, "stdout": stdout, "stderr": stderr}
 
 
 def _test_suite_benchmark_callback() -> Dict[str, Any]:

@@ -36,10 +36,14 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-# Force UTF-8 output so box-drawing chars work on Windows
-if sys.platform == "win32":
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
+# Force UTF-8 output so box-drawing chars work on Windows — only when running as CLI
+def _fix_windows_encoding() -> None:
+    if sys.platform == "win32":
+        try:
+            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+            sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
+        except AttributeError:
+            pass  # pytest capsys has no .buffer
 
 ROOT = Path(__file__).resolve().parents[3]
 if str(ROOT) not in sys.path:
@@ -310,4 +314,5 @@ async def main(argv: List[str]) -> None:
 
 
 if __name__ == "__main__":
+    _fix_windows_encoding()
     asyncio.run(main(sys.argv[1:]))
