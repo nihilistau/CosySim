@@ -108,6 +108,10 @@
 | [TTS](TTS.md) | Qwen3-TTS server, voice design, streaming |
 | [NotebookLM & Nexus](NOTEBOOKLM.md) | NotebookLM integration via Nexus dual-backend |
 | [NotebookLM SDK v3.0](NOTEBOOKLM_SDK.md) | Full 21-RPC catalogue, rate limiter, complete :8800 proxy API reference, source schema |
+| [NLM Reverse Engineering Journey](NLM_JOURNEY.md) | How we unlocked NLM — V8 heap mining, 61 methods, WebRTC discovery |
+| [NLM API Reference](NLM_API_REFERENCE.md) | Complete batchexecute protocol — 24 rpcids decoded, request/response schemas |
+| [NLM Capabilities](NLM_CAPABILITIES.md) | What we can do: full CRUD, source discovery, Drive export, multi-model, sharing |
+| [NLM SDK Design](NLM_SDK_DESIGN.md) | NLMDirectClient architecture, all methods, error handling, distillation patterns |
 | [Nexus Integration](NEXUS_INTEGRATION.md) | NexusClient, 25+ skills, namespaces, memory, distillers, training, workflows |
 
 ## External Systems
