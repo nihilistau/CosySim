@@ -182,6 +182,108 @@ class ArgusNexusSink:
             content_type="history",
         )
 
+    def store_har_replay(
+        self,
+        target: str,
+        har_path: str,
+        new_rpcids: List[str],
+        known_rpcids: List[str],
+        endpoint_count: int,
+        summary: str,
+    ) -> None:
+        """Store a HAR replay result in Nexus.
+
+        Args:
+            target: ARGUS target name (e.g. "apps_script").
+            har_path: Path to the source HAR file.
+            new_rpcids: Newly discovered rpcids not in any baseline.
+            known_rpcids: Known rpcids confirmed present in the HAR.
+            endpoint_count: Total unique endpoints seen.
+            summary: Human-readable summary string from ReplayResult.
+        """
+        content = (
+            f"# ARGUS HAR Replay — {target} — {_now()[:10]}\n\n"
+            f"**Source:** `{har_path}`\n\n"
+            f"{summary}\n\n"
+        )
+        if new_rpcids:
+            content += f"## NEW rpcids ({len(new_rpcids)})\n"
+            for r in new_rpcids:
+                content += f"- `{r}` — **UNKNOWN** (needs investigation)\n"
+            content += "\n"
+        if known_rpcids:
+            content += f"## Known rpcids confirmed ({len(known_rpcids)})\n"
+            for r in known_rpcids:
+                content += f"- `{r}`\n"
+            content += "\n"
+
+        self.store(
+            title=f"ARGUS HAR Replay: {target} {_now()[:10]}",
+            content=content,
+            content_type="history",
+        )
+
+        # Q&A for each new rpcid
+        for rpcid in new_rpcids:
+            self.store_qa(
+                f"What is the unknown rpcid {rpcid} found in {target} HAR?",
+                f"rpcid `{rpcid}` was found in the {target} HAR replay on {_now()[:10]}. "
+                f"Purpose unknown — requires further investigation with ARGUS crawlers.",
+            )
+
+        if new_rpcids:
+            self.store_qa(
+                f"What new {target} rpcids did ARGUS find in the HAR replay?",
+                f"ARGUS HAR replay of {target} found {len(new_rpcids)} new rpcids: "
+                f"{', '.join(new_rpcids)}. These are not in the known baseline and need investigation.",
+            )
+
+    def store_override_candidates(
+        self,
+        target: str,
+        candidates: Dict[str, List[Any]],
+    ) -> None:
+        """Store client-side override candidates found in HAR payloads.
+
+        Args:
+            target: ARGUS target name.
+            candidates: Dict of field_name → [observed_values].
+        """
+        if not candidates:
+            return
+
+        lines = [
+            f"# Client-side Override Candidates — {target} — {_now()[:10]}\n\n",
+            "Fields found in batchexecute/gRPC payloads that may be overridable client-side:\n\n",
+        ]
+        for field_name, values in sorted(candidates.items()):
+            lines.append(f"## `{field_name}`\n")
+            lines.append(f"Observed values: `{values}`\n\n")
+
+        self.store(
+            title=f"ARGUS Override Candidates: {target}",
+            content="".join(lines),
+            content_type="note",
+        )
+
+        model_fields = {k: v for k, v in candidates.items() if "model" in k.lower()}
+        if model_fields:
+            self.store_qa(
+                f"Can the model be overridden client-side in {target}?",
+                f"Yes — model fields found in {target} payloads: {model_fields}. "
+                f"These can potentially be modified in batchexecute requests to select different models.",
+            )
+
+        quota_fields = {k: v for k, v in candidates.items() if any(
+            q in k.lower() for q in ("quota", "limit", "remaining", "count")
+        )}
+        if quota_fields:
+            self.store_qa(
+                f"Are quotas enforced client-side in {target}?",
+                f"Quota-related fields found in {target} page state/payloads: {quota_fields}. "
+                f"These may be client-side counters that can be reset or bypassed.",
+            )
+
     def store_bulk(self, entries: List[Dict[str, str]]) -> int:
         """Store multiple entries. Returns count stored."""
         count = 0
