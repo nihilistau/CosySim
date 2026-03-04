@@ -127,21 +127,77 @@ to trigger the fallback that returns `{"notebooks": []}`.
 
 ## Chrome CDP Debug Session
 
-Launch Chrome with debugging enabled (one-time setup):
+### Persistent Background Monitor (ALWAYS ON — primary tool)
+
+Launch Chrome with debugging enabled (one-time — persists across sessions):
 ```powershell
 scripts/launch_chrome_debug.ps1
 ```
 
-Then connect via `scripts/cdp_debug.py`:
-```python
-# Navigate to a scene and capture all errors:
-python scripts/cdp_debug.py "http://localhost:5569/" "<TAB_ID>"
+Start the background monitor in a separate terminal (keep running continuously):
+```powershell
+python scripts/cdp_monitor.py start
+# or with live tail:
+python scripts/cdp_monitor.py start --follow
 ```
 
-Get available tab IDs:
+Tail the live log at any time:
 ```powershell
-python -c "import urllib.request,json; print(json.dumps(json.loads(urllib.request.urlopen('http://localhost:9222/json').read()), indent=2))"
+Get-Content logs\cdp.log -Wait -Tail 60
 ```
+
+**CRITICAL WORKFLOW — insert timeline markers before every change:**
+```powershell
+# 1. BEFORE changing a file:
+python scripts/cdp_monitor.py mark "fixing navbar double-load in bedroom.html"
+# 2. Make the file change
+# 3. Restart scene, refresh browser
+# 4. Check what changed:
+python scripts/cdp_monitor.py errors     # errors since last mark
+python scripts/cdp_monitor.py timeline  # full timeline with error counts
+```
+
+### Agent Skills (call from within agents)
+```python
+# CDP skills are registered in engine/skills/builtin/cdp_skills.py
+cdp_mark("fixing X before I change Y")     # insert timeline marker
+cdp_tail(40)                               # last 40 log lines
+cdp_errors()                               # errors since last mark
+cdp_timeline()                            # full marker timeline
+cdp_dom(port=5556, selector=".cs-announcer")  # inspect live DOM element
+cdp_css(port=5556, selector=".cs-announcer")  # computed CSS (z-index, pointer-events...)
+cdp_js("typeof CosyNavbar", port=5556)    # evaluate JS in running tab
+cdp_snap(5556)                            # screenshot before/after
+cdp_status()                              # log summary + error category counts
+```
+
+### Deep Manual Inspection (for hard bugs)
+```powershell
+# DOM inspection
+python scripts/cdp_inspect.py dom --port 5556
+
+# Specific element CSS (click-blocking diagnosis)
+python scripts/cdp_inspect.py css --port 5556 --selector ".cs-announcer"
+
+# Evaluate JS
+python scripts/cdp_inspect.py js --port 5556 --expr "typeof CosyNavbar"
+
+# Full network trace (all requests/responses)
+python scripts/cdp_inspect.py net --port 5556
+
+# List open Chrome tabs
+python scripts/cdp_inspect.py tabs
+```
+
+### Training Data Mining
+CDP logs are automatically mined daily by the `cdp-mine` scheduler task.
+To mine manually:
+```powershell
+python scripts/cdp_data_miner.py run
+# or via skill:
+cdp_mine()
+```
+Output: `training/datasets/collected/browser_debugger_live.jsonl` + `error_classifier_live.jsonl`
 
 ---
 
