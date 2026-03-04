@@ -1,0 +1,171 @@
+"""Upload PROJECT_JOURNAL.md to NotebookLM.
+
+Run this once after a fresh NotebookLM browser auth session:
+    python scripts/upload_journal_to_nlm.py
+
+The script will create a new notebook "CosySim Project Journal & Onboarding"
+and upload the journal as the primary source. The notebook ID is then stored
+in Nexus for future reference.
+
+Requirements:
+    - NotebookLM MCP server authenticated (run notebooklm-setup_auth in Copilot)
+    - OR: use the nlm_direct_client with valid Google cookies in data/accounts/
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import subprocess
+import sys
+from pathlib import Path
+
+logger = logging.getLogger(__name__)
+
+JOURNAL_PATH = Path(__file__).parent.parent / "docs" / "PROJECT_JOURNAL.md"
+NEXUS_URL = "http://localhost:8700"
+
+
+def upload_via_mcp() -> str | None:
+    """Use the NotebookLM MCP tool to create the notebook."""
+    import subprocess
+    result = subprocess.run(
+        [
+            sys.executable, "-c",
+            """
+import asyncio, json, sys
+sys.path.insert(0, '.')
+
+async def main():
+    from mcp import ClientSession, StdioServerParameters
+    from mcp.client.stdio import stdio_client
+
+    params = StdioServerParameters(
+        command='node',
+        args=[r'C:\\Users\\Knack\\AppData\\Local\\notebooklm-mcp\\index.js'],
+        env=None,
+    )
+    async with stdio_client(params) as (r, w):
+        async with ClientSession(r, w) as session:
+            await session.initialize()
+            result = await session.call_tool('create_notebook', {
+                'name': 'CosySim Project Journal & Onboarding',
+                'sources': [{'type': 'file', 'value': r'C:\\Files\\Models\\CosySim\\docs\\PROJECT_JOURNAL.md'}],
+                'description': 'Full project history, philosophy, architecture, and all major breakthroughs',
+                'topics': ['cosysim', 'onboarding', 'architecture', 'philosophy'],
+            })
+            print(json.dumps(result.content[0].text if result.content else '{}'))
+
+asyncio.run(main())
+"""
+        ],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        cwd=str(Path(__file__).parent.parent),
+    )
+    if result.returncode == 0 and result.stdout.strip():
+        try:
+            data = json.loads(result.stdout.strip())
+            return data.get("notebook_url") or data.get("url")
+        except Exception:
+            pass
+    logger.warning("MCP upload failed: %s", result.stderr[:200])
+    return None
+
+
+def upload_via_nlm_direct() -> str | None:
+    """Use the project's NLM direct client (requires valid HAR cookies)."""
+    import sys
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+
+    try:
+        from engine.integrations.google_account_pool import GoogleAccountPool
+        from engine.integrations.nlm_direct_client import NLMDirectClient
+
+        pool = GoogleAccountPool()
+        accounts = pool.get_available_accounts(service="notebooklm")
+        if not accounts:
+            logger.warning("No NLM-capable accounts in pool")
+            return None
+
+        account = accounts[0]
+        client = NLMDirectClient(account)
+
+        content = JOURNAL_PATH.read_text(encoding="utf-8")
+        result = client.create_notebook(
+            title="CosySim Project Journal & Onboarding",
+            sources=[{"type": "text", "content": content, "title": "PROJECT_JOURNAL.md"}],
+        )
+        return result.get("notebook_url") or result.get("url")
+    except Exception as e:
+        logger.warning("NLM direct upload failed: %s", e)
+        return None
+
+
+def store_notebook_in_nexus(notebook_url: str) -> None:
+    """Record the notebook URL in Nexus for future agent reference."""
+    import requests
+
+    try:
+        requests.post(
+            f"{NEXUS_URL}/api/entries",
+            json={
+                "title": "NLM Notebook: CosySim Project Journal & Onboarding",
+                "content": (
+                    f"NotebookLM notebook containing the full CosySim project history.\n"
+                    f"URL: {notebook_url}\n\n"
+                    "Use this notebook to onboard new agents, research project philosophy,\n"
+                    "understand architectural decisions, and query the full project arc.\n\n"
+                    "Source file: docs/PROJECT_JOURNAL.md"
+                ),
+                "content_type": "note",
+                "category": "architecture",
+                "tags": ["onboarding", "notebooklm", "journal"],
+            },
+            timeout=15,
+        )
+        print(f"Stored notebook reference in Nexus")
+    except Exception as e:
+        logger.warning("Could not store in Nexus: %s", e)
+
+
+def main() -> None:
+    logging.basicConfig(level=logging.INFO)
+
+    if not JOURNAL_PATH.exists():
+        print(f"ERROR: Journal not found at {JOURNAL_PATH}")
+        sys.exit(1)
+
+    print(f"Journal: {JOURNAL_PATH} ({JOURNAL_PATH.stat().st_size:,} bytes)")
+    print("Attempting upload to NotebookLM...")
+
+    notebook_url = upload_via_mcp()
+    if not notebook_url:
+        print("MCP upload failed, trying NLM direct client...")
+        notebook_url = upload_via_nlm_direct()
+
+    if notebook_url:
+        print(f"\nSUCCESS: {notebook_url}")
+        store_notebook_in_nexus(notebook_url)
+        print("\nNext steps:")
+        print("  1. Open the notebook in NotebookLM")
+        print("  2. Ask: 'What is the project philosophy?'")
+        print("  3. Ask: 'How does the NotebookLM integration work?'")
+        print("  4. Ask: 'What is the training flywheel?'")
+    else:
+        print("\nCould not upload automatically.")
+        print("Manual upload steps:")
+        print(f"  1. Open https://notebooklm.google.com")
+        print(f"  2. Create new notebook: 'CosySim Project Journal & Onboarding'")
+        print(f"  3. Add source → Upload file: {JOURNAL_PATH}")
+        print(f"  4. Run: python scripts/upload_journal_to_nlm.py --store-url <url>")
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    if len(sys.argv) == 3 and sys.argv[1] == "--store-url":
+        store_notebook_in_nexus(sys.argv[2])
+        print(f"Stored {sys.argv[2]} in Nexus")
+    else:
+        main()
