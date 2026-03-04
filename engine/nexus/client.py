@@ -71,8 +71,25 @@ class NexusClient:
     @staticmethod
     def _parse_entry(d: dict) -> NexusEntry:
         from engine.nexus.models import NexusEntry
+
+        def _parse_tags(raw: Any) -> List[str]:
+            """Tags stored as JSON string in DB; normalise to list."""
+            if isinstance(raw, list):
+                return raw
+            if isinstance(raw, str):
+                try:
+                    parsed = json.loads(raw)
+                    return parsed if isinstance(parsed, list) else []
+                except Exception:
+                    return [t.strip() for t in raw.split(",") if t.strip()]
+            return []
+
         try:
-            return NexusEntry.model_validate(d)
+            # Normalise tags before model_validate so Pydantic never sees a string
+            d2 = dict(d)
+            if "tags" in d2:
+                d2["tags"] = _parse_tags(d2["tags"])
+            return NexusEntry.model_validate(d2)
         except Exception:
             return NexusEntry(
                 id=d.get("id", ""),
@@ -81,21 +98,37 @@ class NexusClient:
                 created_by=d.get("created_by", ""),
                 content_type=d.get("content_type", "note"),
                 category=d.get("category", ""),
-                tags=d.get("tags", []),
+                tags=_parse_tags(d.get("tags", [])),
             )
 
     @staticmethod
     def _parse_rule(d: dict) -> NexusRule:
         from engine.nexus.models import NexusRule
+
+        def _parse_json_field(raw: Any, default: Any) -> Any:
+            """Decode JSON-string fields that Pydantic expects as dict/list."""
+            if isinstance(raw, (dict, list)):
+                return raw
+            if isinstance(raw, str):
+                try:
+                    return json.loads(raw)
+                except Exception:
+                    return default
+            return default
+
         try:
-            return NexusRule.model_validate(d)
+            d2 = dict(d)
+            for field in ("condition", "action"):
+                if field in d2:
+                    d2[field] = _parse_json_field(d2[field], {})
+            return NexusRule.model_validate(d2)
         except Exception:
             return NexusRule(
                 rule_id=d.get("rule_id", d.get("id", "")),
                 scope=d.get("scope", ""),
                 rule_type=d.get("rule_type", ""),
-                condition=d.get("condition", {}),
-                action=d.get("action", {}),
+                condition=_parse_json_field(d.get("condition", {}), {}),
+                action=_parse_json_field(d.get("action", {}), {}),
                 active=d.get("active", True),
             )
 

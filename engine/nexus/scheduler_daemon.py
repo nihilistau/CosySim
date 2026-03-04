@@ -1177,6 +1177,18 @@ def _register_builtin_tasks(daemon: "SchedulerDaemon") -> None:
         "daily",
         _cookie_health_check_callback,
     )
+    daemon.register(
+        "cookie-auto-refresh",
+        "Cookie Auto-Refresh — run har_capture.py --mode cdp to silently renew Google cookies via running Chrome",
+        "every_72h",
+        _cookie_auto_refresh_callback,
+    )
+    daemon.register(
+        "test-suite-benchmark",
+        "Test Suite Benchmark — time the full pytest suite and store results/trends in Nexus",
+        "weekly",
+        _test_suite_benchmark_callback,
+    )
 
 
 def _cdp_mine_callback() -> Dict[str, Any]:
@@ -1265,6 +1277,134 @@ def _cookie_health_check_callback() -> Dict[str, Any]:
     except Exception as exc:
         logger.error("cookie_health_check failed: %s", exc)
         return {"status": "error", "error": str(exc)}
+
+
+def _cookie_auto_refresh_callback() -> Dict[str, Any]:
+    """Every 3 days: silently refresh Google cookies via CDP from running Chrome.
+
+    Runs har_capture.py --mode cdp which connects to the already-running Chrome
+    instance on port 9222 and pulls fresh cookies directly — no UI interaction.
+    Falls back through launch → macro if CDP is unavailable.
+    Logs outcome to Nexus.
+    """
+    import subprocess
+    import sys
+    import time as _time
+
+    try:
+        result = subprocess.run(
+            [sys.executable, "scripts/har_capture.py", "--mode", "auto"],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            cwd=str(Path(__file__).parent.parent.parent),
+        )
+        success = result.returncode == 0
+        stdout = result.stdout[-800:] if result.stdout else ""
+        stderr = result.stderr[-400:] if result.stderr else ""
+
+        from engine.nexus.client import get_nexus_client
+        client = get_nexus_client()
+        client.add_entry(
+            f"Cookie Auto-Refresh: {'success' if success else 'failed'} — {_time.strftime('%Y-%m-%d %H:%M')}",
+            f"Scheduled cookie refresh via har_capture.py.\n\nOutput:\n{stdout}\n{stderr}",
+            content_type="note",
+            category="system",
+            tags=["cookie-refresh", "scheduled", "cdp"],
+        )
+        if success:
+            logger.info("cookie_auto_refresh: success")
+        else:
+            logger.warning("cookie_auto_refresh: failed — %s", stderr[:200])
+
+        return {"status": "ok" if success else "error", "stdout": stdout, "stderr": stderr}
+    except Exception as exc:
+        logger.error("cookie_auto_refresh failed: %s", exc)
+        return {"status": "error", "error": str(exc)}
+
+
+def _test_suite_benchmark_callback() -> Dict[str, Any]:
+    """Weekly: time the full pytest suite and store trend data in Nexus.
+
+    Uses test_timer.py to run and parse the full suite, then stores the result
+    in Nexus with category='testing' so trends are queryable over time.
+    Logs a warning if the suite duration regressed by >20% vs the prior run.
+    """
+    import subprocess
+    import sys
+    import json as _json
+    import time as _time
+    from pathlib import Path as _Path
+
+    root = _Path(__file__).parent.parent.parent
+    history_file = root / "logs" / "test_timings" / "history.jsonl"
+
+    try:
+        # Run the test suite via test_timer so results land in history.jsonl
+        result = subprocess.run(
+            [sys.executable, "scripts/test_timer.py", "run", "--label", "scheduled-weekly"],
+            capture_output=True,
+            text=True,
+            timeout=1800,  # 30-minute hard cap
+            cwd=str(root),
+        )
+
+        # Read the last record from history.jsonl
+        record: Dict[str, Any] = {}
+        if history_file.exists():
+            lines = [l for l in history_file.read_text(encoding="utf-8").splitlines() if l.strip()]
+            if lines:
+                record = _json.loads(lines[-1])
+
+        duration_s = record.get("duration", 0)
+        passed = record.get("stats", {}).get("passed", 0)
+        failed = record.get("stats", {}).get("failed", 0)
+
+        # Regression check: compare with the run before this one
+        regression_warning = ""
+        if len(lines) >= 2:
+            prev = _json.loads(lines[-2])
+            prev_dur = prev.get("duration", duration_s)
+            if prev_dur > 0 and duration_s > prev_dur * 1.20:
+                pct = int((duration_s / prev_dur - 1) * 100)
+                regression_warning = f"⚠️ Suite time regressed +{pct}% ({prev_dur:.0f}s → {duration_s:.0f}s)"
+                logger.warning("test_suite_benchmark: %s", regression_warning)
+
+        from engine.nexus.client import get_nexus_client
+        client = get_nexus_client()
+        client.add_entry(
+            f"Test Suite Benchmark — {_time.strftime('%Y-%m-%d')} — {_fmt_duration(duration_s)}",
+            (
+                f"Scheduled weekly test suite run.\n\n"
+                f"Duration : {_fmt_duration(duration_s)}\n"
+                f"Passed   : {passed}\n"
+                f"Failed   : {failed}\n"
+                f"{regression_warning}\n\n"
+                f"Full record:\n{_json.dumps(record, indent=2)}"
+            ),
+            content_type="note",
+            category="testing",
+            tags=["test-benchmark", "pytest", "scheduled"],
+        )
+
+        return {
+            "status": "ok",
+            "duration_s": duration_s,
+            "passed": passed,
+            "failed": failed,
+            "regression": regression_warning,
+        }
+    except Exception as exc:
+        logger.error("test_suite_benchmark failed: %s", exc)
+        return {"status": "error", "error": str(exc)}
+
+
+def _fmt_duration(seconds: float) -> str:
+    """Format seconds into human-readable duration."""
+    if seconds < 60:
+        return f"{seconds:.1f}s"
+    m, s = divmod(int(seconds), 60)
+    return f"{m}m {s:02d}s"
 
 
 def _colab_pipeline_sync_callback() -> Dict[str, Any]:
