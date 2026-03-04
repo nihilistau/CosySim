@@ -233,13 +233,18 @@ async function startServer() {
     try {
       const r = await fetch(`${LM_STUDIO_URL}/api/v1/models`);
       const data = await r.json();
-      res.json({ models: data.data || [] });
+      const raw: any[] = data.data || data.models || [];
+      // Normalize: LMStudio v1 uses 'key' not 'id'; map key→id; filter to LLM type only
+      const models = raw
+        .filter((m: any) => !m.type || m.type === 'llm')
+        .map((m: any) => ({ ...m, id: m.id || m.key }));
+      res.json({ models });
     } catch (e: any) {
       res.status(503).json({ error: `LMStudio unreachable: ${e.message}` });
     }
   });
 
-  // POST /api/lmstudio/chat — streaming or non-streaming chat completions
+  // POST /api/lmstudio/chat — non-streaming chat completions via LMStudio native /api/v1/chat
   app.post("/api/lmstudio/chat", async (req, res) => {
     const {
       messages = [],
@@ -250,16 +255,24 @@ async function startServer() {
       system = "",
     } = req.body;
 
-    const fullMessages = [
-      ...(system ? [{ role: "system", content: system }] : []),
-      ...messages,
-    ];
+    // Convert OpenAI-style messages to LMStudio native v1 input format
+    const systemParts: string[] = [];
+    const inputItems: any[] = [];
+    for (const msg of messages) {
+      if (msg.role === "system") { systemParts.push(msg.content); continue; }
+      const prefix = msg.role === "assistant" ? "[assistant]: " : "";
+      inputItems.push({ type: "text", content: prefix + (msg.content ?? "") });
+    }
+    if (system) systemParts.unshift(system);
+    // Simplify: single item → plain string
+    const input = inputItems.length === 1 ? inputItems[0].content : inputItems.length === 0 ? "" : inputItems;
 
     const body = JSON.stringify({
       model: model || undefined,
-      messages: fullMessages,
+      input,
+      ...(systemParts.length ? { system_prompt: systemParts.join("\n\n") } : {}),
       temperature,
-      max_tokens,
+      max_output_tokens: max_tokens,
       stream,
     });
 
@@ -286,8 +299,19 @@ async function startServer() {
         res.end();
       } else {
         const data = await r.json();
-        const text = data.choices?.[0]?.message?.content ?? "";
-        res.json({ text, model: data.model, usage: data.usage });
+        // Native v1 response: { output: [{type:"text"|"message",content/text:"..."}, ...], stats, response_id }
+        let text = "";
+        if (Array.isArray(data.output)) {
+          const textItem = data.output.find((o: any) => o.type === "text" || o.type === "message");
+          text = textItem?.content ?? textItem?.text ?? "";
+          if (!text) {
+            const reasoning = data.output.find((o: any) => o.type === "reasoning");
+            text = reasoning?.content ?? reasoning?.text ?? "";
+          }
+        }
+        // Fallback: choices shape or flat content
+        if (!text) text = data.choices?.[0]?.message?.content || data.content || "";
+        res.json({ text, model: data.model_instance_id ?? data.model ?? model, response_id: data.response_id, usage: data.stats });
       }
     } catch (e: any) {
       res.status(503).json({ error: `LMStudio unavailable: ${e.message}` });

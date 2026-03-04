@@ -22,6 +22,14 @@ export default function ChatCanvas({ lmStudioUrl, sources, onAddSource }: Props)
   const [isLoading, setIsLoading] = useState(false);
   const [backend, setBackend] = useState<Backend>('lmstudio');
   const [backendMenuOpen, setBackendMenuOpen] = useState(false);
+  const [lmModel, setLmModel] = useState<string>('');
+
+  useEffect(() => {
+    fetch('/api/lmstudio/models')
+      .then(r => r.json())
+      .then(d => { if (Array.isArray(d.models) && d.models.length > 0) setLmModel(d.models[0].id || d.models[0].key || ''); })
+      .catch(() => {});
+  }, []);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const BACKEND_LABELS: Record<Backend, string> = {
@@ -72,19 +80,19 @@ export default function ChatCanvas({ lmStudioUrl, sources, onAddSource }: Props)
       let responseContent = '';
 
       if (backend === 'lmstudio') {
-        const apiMessages = [
-          { role: 'system', content: systemPrompt },
-          ...messages.map(m => ({ role: m.role, content: m.content })),
-          { role: 'user', content: userMsg.content }
-        ];
-        const res = await fetch(`${lmStudioUrl}/chat/completions`, {
+        const res = await fetch('/api/lmstudio/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model: 'local-model', messages: apiMessages, temperature: 0.7 }),
+          body: JSON.stringify({
+            model: lmModel || undefined,
+            messages: messages.map(m => ({ role: m.role, content: m.content })),
+            system: systemPrompt,
+            temperature: 0.7,
+          }),
         });
         if (!res.ok) throw new Error('LMStudio API error');
         const data = await res.json();
-        responseContent = data.choices[0].message.content;
+        responseContent = data.text ?? data.choices?.[0]?.message?.content ?? '';
 
       } else if (backend === 'aistudio') {
         const res = await fetch('/api/aistudio/generate', {
