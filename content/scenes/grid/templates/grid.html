@@ -6,6 +6,7 @@
 <link rel="stylesheet" href="/shared/css/design_tokens.css">
 <link rel="stylesheet" href="/shared/css/cosysim-animations.css">
 <link rel="stylesheet" href="/static/css/grid.css">
+<link rel="stylesheet" href="/shared/css/cosysim-shop.css">
 <meta name="scene-accent" content="{{ accent_color }}">
 {% endblock %}
 
@@ -241,7 +242,9 @@
 <script>window.SCENE_PARTICLE_CONFIG = { effect:"neon_rain", color:"#00ff88", count:80, speed:1.2 };</script>
 <script src="/shared/js/cosysim-particles.js" defer></script>
 <script src="/shared/js/cosysim-transitions.js" defer></script>
+<script src="/shared/js/cosysim-shop.js" defer></script>
 <script src="/static/js/grid.js" defer></script>
+{% include 'shop_modal.html' %}
 
 </body>
 {% endblock %}

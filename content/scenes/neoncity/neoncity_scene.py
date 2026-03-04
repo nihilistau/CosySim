@@ -199,7 +199,14 @@ class NeonCityScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="neo
             template_folder=str(Path(__file__).parent / "templates"),
             static_folder=str(Path(__file__).parent / "static"),
         )
-        self.app.config["SECRET_KEY"] = "neoncity_v068_dark_renaissance"
+        # Multi-folder Jinja loader: scene templates + shared templates
+        import jinja2
+        _shared_tmpl = str(Path(__file__).parent.parent.parent / "shared" / "templates")
+        self.app.jinja_loader = jinja2.ChoiceLoader([
+            self.app.jinja_loader,
+            jinja2.FileSystemLoader(_shared_tmpl),
+        ])
+        self.app.config["SECRET_KEY"] = "neoncity_v083_social_layer"
         CORS(self.app)
         self.socketio = SocketIO(self.app, cors_allowed_origins="*")
         register_shared_assets(self.app)
@@ -210,6 +217,10 @@ class NeonCityScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="neo
         self.register_health_route(self.app)
         self.register_bench_route(self.app, self.socketio)
         self.register_tts_route(self.app)
+        self.register_hud_route(self.app)
+        self.register_hack_route(self.app)
+        self.register_world_events_route(self.app)
+        self.register_announcer_route(self.app)
 
         # Board-game state (legacy)
         self.state: Optional[NeonCityGameState] = None

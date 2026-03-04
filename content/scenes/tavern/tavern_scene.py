@@ -31,8 +31,10 @@ import logging
 import os
 import threading
 import time
+from pathlib import Path
 from typing import Any, Dict, Optional
 
+import jinja2
 from flask import Flask, jsonify, render_template, request
 from flask_socketio import SocketIO
 
@@ -111,6 +113,11 @@ class TavernScene(BaseScene, NexusSceneMixin):
             template_folder=os.path.join(os.path.dirname(__file__), "templates"),
             static_folder=os.path.join(os.path.dirname(__file__), "static"),
         )
+        _shared_tmpl = str(Path(os.path.dirname(__file__)).parent.parent / "shared" / "templates")
+        self.app.jinja_loader = jinja2.ChoiceLoader([
+            self.app.jinja_loader,
+            jinja2.FileSystemLoader(_shared_tmpl),
+        ])
         self.socketio = SocketIO(self.app, cors_allowed_origins="*", async_mode="threading")
         register_shared_assets(self.app)
 
@@ -369,6 +376,8 @@ class TavernScene(BaseScene, NexusSceneMixin):
 
         # Health route for service discovery
         self.register_health_route(app)
+        self.register_hud_route(app)
+        self.register_shop_route(app)
 
         # Bench metrics + TTS endpoints
         try:

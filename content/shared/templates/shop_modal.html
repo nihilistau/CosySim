@@ -1,0 +1,67 @@
+<!-- shop_modal.html — CosySim Universal Shop Modal
+     Include inside any scene template. Activated by window.CosyShop.open().
+     Requires: cosysim-shop.css + cosysim-shop.js loaded on page.
+-->
+<div id="cs-shop-modal" class="cs-shop" role="dialog" aria-modal="true" aria-label="Shop" hidden>
+  <div class="cs-shop__backdrop" id="cs-shop-backdrop"></div>
+  <div class="cs-shop__panel">
+
+    <!-- Header -->
+    <div class="cs-shop__header">
+      <div class="cs-shop__title">
+        <span class="cs-shop__icon">🛒</span>
+        <span id="cs-shop-title">BLACK MARKET</span>
+      </div>
+      <div class="cs-shop__credits">
+        <span class="cs-shop__credits-label">CREDITS</span>
+        <span class="cs-shop__credits-value" id="cs-shop-credits">₵ ---</span>
+      </div>
+      <button class="cs-shop__close" id="cs-shop-close" aria-label="Close shop">✕</button>
+    </div>
+
+    <!-- Category tabs -->
+    <div class="cs-shop__tabs" id="cs-shop-tabs" role="tablist">
+      <button class="cs-shop__tab cs-shop__tab--active" data-cat="" role="tab">ALL</button>
+      <button class="cs-shop__tab" data-cat="weapon"   role="tab">🔫 WEAPONS</button>
+      <button class="cs-shop__tab" data-cat="cyberdeck" role="tab">💻 DECKS</button>
+      <button class="cs-shop__tab" data-cat="cyberware" role="tab">🦾 CYBERWARE</button>
+      <button class="cs-shop__tab" data-cat="software"  role="tab">💾 SOFTWARE</button>
+      <button class="cs-shop__tab" data-cat="drug"      role="tab">💊 CHEMS</button>
+      <button class="cs-shop__tab" data-cat="food"      role="tab">🍜 FOOD</button>
+      <button class="cs-shop__tab" data-cat="data"      role="tab">📁 DATA</button>
+    </div>
+
+    <!-- Toggle: Buy / Sell -->
+    <div class="cs-shop__mode-bar">
+      <button class="cs-shop__mode cs-shop__mode--active" data-mode="buy">BUY</button>
+      <button class="cs-shop__mode" data-mode="sell">SELL</button>
+    </div>
+
+    <!-- Item grid -->
+    <div class="cs-shop__grid" id="cs-shop-grid" role="list">
+      <div class="cs-shop__loading" id="cs-shop-loading">Loading catalog…</div>
+    </div>
+
+    <!-- Detail / confirm panel -->
+    <div class="cs-shop__detail" id="cs-shop-detail" hidden>
+      <div class="cs-shop__detail-icon" id="cs-shop-detail-icon">📦</div>
+      <div class="cs-shop__detail-body">
+        <div class="cs-shop__detail-name" id="cs-shop-detail-name">Item Name</div>
+        <div class="cs-shop__detail-desc" id="cs-shop-detail-desc">Description.</div>
+        <div class="cs-shop__detail-rarity" id="cs-shop-detail-rarity">COMMON</div>
+      </div>
+      <div class="cs-shop__detail-actions">
+        <div class="cs-shop__qty-row">
+          <button class="cs-shop__qty-btn" id="cs-shop-qty-down">−</button>
+          <span class="cs-shop__qty" id="cs-shop-qty">1</span>
+          <button class="cs-shop__qty-btn" id="cs-shop-qty-up">+</button>
+        </div>
+        <div class="cs-shop__total">Total: <span id="cs-shop-total">₵ ---</span></div>
+        <button class="cs-shop__confirm-btn" id="cs-shop-confirm">BUY</button>
+      </div>
+    </div>
+
+    <!-- Toast -->
+    <div class="cs-shop__toast" id="cs-shop-toast" hidden></div>
+  </div>
+</div>

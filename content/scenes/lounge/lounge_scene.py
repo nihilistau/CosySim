@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from flask import Flask, render_template, jsonify, request
+import jinja2
 from flask_socketio import SocketIO, emit
 from flask_cors import CORS
 
@@ -103,8 +104,15 @@ class LoungeScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
             template_folder=str(Path(__file__).parent / "templates"),
             static_folder=str(Path(__file__).parent / "static"),
         )
+        _shared_tmpl = str(Path(__file__).parent.parent.parent / "shared" / "templates")
+        self.app.jinja_loader = jinja2.ChoiceLoader([
+            self.app.jinja_loader,
+            jinja2.FileSystemLoader(_shared_tmpl),
+        ])
         register_shared_assets(self.app)
         self.register_health_route(self.app)
+        self.register_hud_route(self.app)
+        self.register_shop_route(self.app)
         self.register_tts_route(self.app)
         self.app.config["SECRET_KEY"] = "velvet_lounge_secret_1920s"
         CORS(self.app)

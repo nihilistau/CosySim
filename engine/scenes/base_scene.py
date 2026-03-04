@@ -1141,6 +1141,93 @@ class BaseScene(ABC):
             except Exception as exc:
                 return Response(_json.dumps({"error": str(exc)}), status=500, mimetype="application/json")
 
+    def register_shop_route(self, app) -> None:
+        """Register ``/api/shop`` REST endpoints on a Flask app.
+
+        Endpoints:
+            GET  /api/shop/catalog        — all items with prices (optional ?category=)
+            GET  /api/shop/inventory      — player's current inventory
+            POST /api/shop/buy            — buy item (json: item_id, quantity)
+            POST /api/shop/sell           — sell item (json: item_id, quantity)
+            GET  /api/shop/affordability  — items player can afford
+        """
+        import json as _json
+        from flask import Response, request as _req
+
+        if getattr(app, "_shop_route_registered", False):
+            return
+        app._shop_route_registered = True  # type: ignore[attr-defined]
+
+        @app.route("/api/shop/catalog")
+        def _shop_catalog():
+            try:
+                from engine.world.inventory import get_inventory
+                category = _req.args.get("category", "")
+                inv = get_inventory()
+                catalog = inv.get_catalog(category=category or None)
+                return Response(_json.dumps({"ok": True, "items": catalog}), mimetype="application/json")
+            except Exception as exc:
+                return Response(_json.dumps({"error": str(exc)}), status=500, mimetype="application/json")
+
+        @app.route("/api/shop/inventory")
+        def _shop_inventory():
+            try:
+                from engine.world.inventory import get_inventory
+                inv = get_inventory()
+                return Response(_json.dumps({"ok": True, "inventory": inv.to_dict()}), mimetype="application/json")
+            except Exception as exc:
+                return Response(_json.dumps({"error": str(exc)}), status=500, mimetype="application/json")
+
+        @app.route("/api/shop/buy", methods=["POST"])
+        def _shop_buy():
+            try:
+                body = _req.get_json(force=True) or {}
+                item_id = body.get("item_id", "")
+                quantity = int(body.get("quantity", 1))
+                if not item_id:
+                    return Response(_json.dumps({"error": "item_id required"}), status=400, mimetype="application/json")
+                from engine.world.inventory import get_inventory
+                from engine.world.player_state import get_player_state
+                inv = get_inventory()
+                ps = get_player_state()
+                result = inv.buy_item(item_id, quantity=quantity, player_state=ps)
+                status = 200 if result.get("success") else 400
+                return Response(_json.dumps(result), status=status, mimetype="application/json")
+            except Exception as exc:
+                return Response(_json.dumps({"error": str(exc)}), status=500, mimetype="application/json")
+
+        @app.route("/api/shop/sell", methods=["POST"])
+        def _shop_sell():
+            try:
+                body = _req.get_json(force=True) or {}
+                item_id = body.get("item_id", "")
+                quantity = int(body.get("quantity", 1))
+                if not item_id:
+                    return Response(_json.dumps({"error": "item_id required"}), status=400, mimetype="application/json")
+                from engine.world.inventory import get_inventory
+                from engine.world.player_state import get_player_state
+                inv = get_inventory()
+                ps = get_player_state()
+                result = inv.sell_item(item_id, quantity=quantity, player_state=ps)
+                status = 200 if result.get("success") else 400
+                return Response(_json.dumps(result), status=status, mimetype="application/json")
+            except Exception as exc:
+                return Response(_json.dumps({"error": str(exc)}), status=500, mimetype="application/json")
+
+        @app.route("/api/shop/affordability")
+        def _shop_affordability():
+            try:
+                from engine.world.inventory import get_inventory
+                from engine.world.player_state import get_player_state
+                inv = get_inventory()
+                ps = get_player_state()
+                credits = ps.credits
+                catalog = inv.get_catalog()
+                affordable = [item for item in catalog if item.get("price", 0) <= credits]
+                return Response(_json.dumps({"ok": True, "credits": credits, "items": affordable}), mimetype="application/json")
+            except Exception as exc:
+                return Response(_json.dumps({"error": str(exc)}), status=500, mimetype="application/json")
+
     def register_bench_route(self, app, socketio=None) -> None:
         """Register ``/api/bench/metrics`` on a Flask app.
 

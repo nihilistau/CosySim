@@ -342,6 +342,10 @@ class GridScene(BaseScene):
         self.register_health_route(self.app)
         self.register_bench_route(self.app, self.socketio)
         self.register_hud_route(self.app)
+        self.register_shop_route(self.app)
+        self.register_hack_route(self.app)
+        self.register_city_route(self.app)
+        self.register_mission_route(self.app)
 
         # Import skills so they register with SKILL_REGISTRY
         import content.scenes.grid.grid_skills  # noqa: F401

@@ -314,6 +314,8 @@
 
       // Left panel stats
       this._renderLeftPanel(state);
+      // Right panel (crew + missions)
+      this._renderRightPanel(state);
     }
 
     _setWeather (weather) {
@@ -639,6 +641,40 @@
         return `<div class="cs-hud-slide__skill-row">
           <span class="cs-hud-slide__skill-name">${_esc(name)}</span>
           <div class="cs-hud-slide__skill-pips">${pips}</div>
+        </div>`;
+      }).join('');
+    }
+
+    // ── Right panel rendering ─────────────────────────────────────────────
+
+    _renderRightPanel (state) {
+      if (!state) return;
+      if (state.crew)    this._renderCrew(state.crew);
+    }
+
+    _renderCrew (crew) {
+      const list = document.getElementById('hud-crew-list');
+      if (!list) return;
+      if (!crew || crew.length === 0) {
+        list.innerHTML = '<div class="cs-hud-slide__crew-empty">No crew yet. Build relationships to recruit.</div>';
+        return;
+      }
+      const TIER_ICONS  = { fixer: '🔧', hacker: '💻', muscle: '💪', thief: '🗡️', tech: '⚙️' };
+      const LOYALTY_COLOR = (l) => l >= 80 ? '#00e5ff' : l >= 60 ? '#22c55e' : l >= 40 ? '#f97316' : '#f43f5e';
+      list.innerHTML = crew.map(m => {
+        const roleIcon  = m.role_icon || TIER_ICONS[m.role] || '👤';
+        const loyalty   = Math.max(0, Math.min(100, m.loyalty ?? 50));
+        const loyaltyClr = LOYALTY_COLOR(loyalty);
+        const tier      = loyalty >= 80 ? '★★★' : loyalty >= 60 ? '★★' : loyalty >= 40 ? '★' : '·';
+        const available = m.available ? '' : ' cs-hud-slide__crew-row--busy';
+        return `<div class="cs-hud-slide__crew-row${available}" title="${_esc(m.id)} — ${m.role || '?'} (Loyalty ${loyalty})">
+          <span class="cs-hud-slide__crew-icon">${roleIcon}</span>
+          <span class="cs-hud-slide__crew-name">${_esc(m.id)}</span>
+          <span class="cs-hud-slide__crew-role">${_esc(m.role || '?')}</span>
+          <div class="cs-hud-slide__crew-loyalty-bar">
+            <div class="cs-hud-slide__crew-loyalty-fill" style="width:${loyalty}%;background:${loyaltyClr}"></div>
+          </div>
+          <span class="cs-hud-slide__crew-tier" style="color:${loyaltyClr}">${tier}</span>
         </div>`;
       }).join('');
     }
