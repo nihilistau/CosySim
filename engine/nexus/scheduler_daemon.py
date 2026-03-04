@@ -1165,6 +1165,40 @@ def _register_builtin_tasks(daemon: "SchedulerDaemon") -> None:
         "daily",
         _colab_pipeline_sync_callback,
     )
+    daemon.register(
+        "cdp-mine",
+        "CDP Log Miner — extract browser_debugger/error_classifier training examples from CDP monitor log",
+        "daily",
+        _cdp_mine_callback,
+    )
+
+
+def _cdp_mine_callback() -> Dict[str, Any]:
+    """Daily: mine CDP monitor logs for browser_debugger + error_classifier training data."""
+    try:
+        import subprocess
+        import sys
+        result = subprocess.run(
+            [sys.executable, "scripts/cdp_data_miner.py", "run"],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        if result.returncode != 0:
+            return {"status": "error", "stderr": result.stderr[:500]}
+        # Also trigger DataCollector flush for the two new types
+        from training.data_collector import get_data_collector
+        collector = get_data_collector()
+        flushed_d = collector.flush("browser_debugger")
+        flushed_c = collector.flush("error_classifier")
+        return {
+            "status":   "ok",
+            "stdout":   result.stdout[:500],
+            "flushed":  {"browser_debugger": flushed_d, "error_classifier": flushed_c},
+        }
+    except Exception as exc:
+        logger.error("cdp_mine failed: %s", exc)
+        return {"status": "error", "error": str(exc)}
 
 
 def _colab_pipeline_sync_callback() -> Dict[str, Any]:

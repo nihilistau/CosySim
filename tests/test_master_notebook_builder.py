@@ -353,7 +353,7 @@ class TestSchedulerIntegration:
         from engine.nexus.scheduler_daemon import _register_builtin_tasks
         daemon = MagicMock()
         _register_builtin_tasks(daemon)
-        assert daemon.register.call_count == 46
+        assert daemon.register.call_count == 47
 
     def test_master_notebook_callback_calls_refresh(self) -> None:
         from engine.nexus.scheduler_daemon import _master_notebook_refresh_callback
@@ -383,4 +383,5 @@ class TestGetMasterNotebookBuilder:
         b1 = get_master_notebook_builder()
         b2 = get_master_notebook_builder()
         assert b1 is b2
+
 

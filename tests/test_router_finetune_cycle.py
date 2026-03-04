@@ -330,7 +330,7 @@ class TestAutoPromoteWiring:
         from engine.nexus.scheduler_daemon import _register_builtin_tasks
         daemon = MagicMock()
         _register_builtin_tasks(daemon)
-        assert daemon.register.call_count == 46
+        assert daemon.register.call_count == 47
 
     def test_new_tasks_registered(self):
         from engine.nexus.scheduler_daemon import _register_builtin_tasks
@@ -340,4 +340,5 @@ class TestAutoPromoteWiring:
         task_ids = [call.args[0] for call in daemon.register.call_args_list]
         assert "router-finetune-cycle" in task_ids
         assert "dataset-augment" in task_ids
+
 
