@@ -318,7 +318,13 @@ async def nexus_qa(body: NexusQABody) -> Dict[str, Any]:
 @app.get("/api/nlm/notebooks")
 async def nlm_notebooks() -> Dict[str, Any]:
     try:
-        return await _nexus_proxy("/nlm/notebooks")
+        result = await _nexus_proxy("/nlm/notebooks")
+        # Nexus may return {"ok": true, "data": {"error": ...}} when its NLM service is down
+        if isinstance(result, dict):
+            inner = result.get("data") or result
+            if isinstance(inner, dict) and inner.get("error"):
+                raise RuntimeError(inner["error"])
+        return result
     except Exception:
         from engine.integrations.rpc_proxy import list_nlm_notebooks
         return list_nlm_notebooks()
