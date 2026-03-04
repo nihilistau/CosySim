@@ -156,6 +156,75 @@ AISTUDIO_METHODS: List[str] = [
 # ──── Feature flag probe range ────
 FLAG_ID_RANGE = range(300, 1500)   # enumerate these via ozz5Z (GetFeatureFlags)
 
+# ──── Google Apps Script target ────
+TARGETS["apps_script"] = {
+    "base_url":   "https://script.google.com",
+    "batch_url":  "https://script.google.com/_/AppsPlatformConsoleUi/data/batchexecute",
+    "service":    "AppsPlatformConsoleUi",
+    "har_path":   str(ROOT / "data" / "har_files" / "nihilistcod" / "script.google.com.har"),
+    "notes":      "15 rpcids extracted by ARGUS. Free serverless JS + Workspace access + Web App deploy.",
+}
+
+# ──── Known GAS rpcids (derived from HAR — to be confirmed by ARGUS) ────
+GAS_RPCIDS: Dict[str, str] = {
+    # Discovered + mapped by ARGUS HAR replay — script.google.com 39MB HAR
+    # Service: AppsPlatformConsoleUi /_/AppsPlatformConsoleUi/data/batchexecute
+    # Inferred from source-path patterns in 162 HAR entries:
+    "OOPYjd": "GetProjectState",        # 26 calls — every page, main project loader
+    "OQOG2e": "GetScriptFiles",         # 5 calls — editor + settings + history
+    "AJ6bre":  "GetDeployments",        # 5 calls — editor + history + triggers
+    "pEig0e":  "RunFunction",           # 1 call  — editor run
+    "ivJzse":  "CodeIntelligence",      # 2 calls — editor autocomplete/type-check
+    "toGAmc":  "SaveScript",            # 1 call  — editor save
+    "LuHlxe":  "CompileScript",         # 1 call  — editor compile/validate
+    "UvGaob":  "UpdateProjectSettings", # 1 call  — settings page
+    "KKLVD":   "ListTriggers",          # 1 call  — triggers page
+    "qqL5ld":  "GetVersionContent",     # 1 call  — history page
+    "zzomTc":  "CreateVersion",         # 1 call  — history create version
+    "yFXSbd":  "GetVersionDiff",        # 1 call  — history diff
+    "NFMk7c":  "CreateProject",         # 1 call  — new project
+    "GXx9jd":  "GetProjectMetadata",    # 2 calls — project root
+    "AvwHP":   "ListProjects",          # 1 call  — home page project list
+}
+
+# ──── Client-side override research targets (heap diff priorities) ────
+HEAP_OVERRIDE_TARGETS: Dict[str, Dict] = {
+    "nlm_query_quota": {
+        "target": "notebooklm",
+        "fields_to_find": ["remainingQueries", "queryLimit", "dailyQuota", "queryCount"],
+        "method": "heap_diff_before_after_query",
+        "notes": "Likely client-side counter — decrement may not be server-enforced",
+    },
+    "nlm_model_field": {
+        "target": "notebooklm",
+        "fields_to_find": ["model", "modelVersion", "backendModel", "generationConfig"],
+        "method": "heap_diff_before_after_canvas_prompt",
+        "notes": "CYK0Xb payload — swap to gemini-2.5-pro or gemini-2.0-flash-thinking",
+        "candidate_overrides": ["gemini-2.5-pro", "gemini-2.5-pro-exp-03-25", "gemini-exp-1206"],
+    },
+    "nlm_notebook_limit": {
+        "target": "notebooklm",
+        "fields_to_find": ["notebookCount", "notebookLimit", "maxNotebooks"],
+        "method": "heap_snapshot_on_load",
+        "notes": "Free tier = 100. Counter lives somewhere in initial page state.",
+    },
+    "aistudio_model_list": {
+        "target": "aistudio",
+        "fields_to_find": ["allowedModels", "modelTier", "availableModels"],
+        "method": "intercept_ListModels_response",
+        "notes": "AI Studio model ID is passed client-side — confirmed overridable",
+    },
+    "feature_flags": {
+        "target": "notebooklm",
+        "rpcid": "ozz5Z",   # GetFeatureFlags — same rpcid in NLM and Gemini
+        "probe_range": FLAG_ID_RANGE,
+        "notes": "Flags 400-1200. Some gate longer notebooks, premium models, higher quotas.",
+    },
+}
+
+# ──── Feature flag probe range (defined above, kept here for context) ────
+# FLAG_ID_RANGE = range(300, 1500) — moved above HEAP_OVERRIDE_TARGETS
+
 # ──── Known API keys (rotatable via GenerateCloudApiKey) ────
 AISTUDIO_API_KEYS: List[str] = [
     "REDACTED-GOOGLE-API-KEY",
