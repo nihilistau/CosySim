@@ -3,11 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NEON CITY — CosySim v0.68</title>
+<title>NEON CITY — CosySim v0.83b</title>
 
 <link rel="stylesheet" href="/shared/css/design_tokens.css">
 <link rel="stylesheet" href="/shared/css/cosysim-animations.css">
 <link rel="stylesheet" href="/shared/css/cosysim-scene-fx.css">
+<link rel="stylesheet" href="/shared/css/cosysim-hack-minigame.css">
 <link rel="stylesheet" href="/static/neoncity.css">
 
 <script src="/shared/js/socket.io.min.js"</script>
@@ -15,10 +16,10 @@
 <body data-scene="neoncity">
 <canvas id="cs-particles"></canvas>
 
-<!-- ════════════════════════════════════════════════════════════════
-     NAVBAR
-══════════════════════════════════════════════════════════════════ -->
-<div id="navbar-mount"></div>
+{% set current_scene = 'neoncity' %}
+{% set scene_name    = 'NEON CITY' %}
+{% set scene_accent  = '#06b6d4' %}
+{% include 'navbar_v2.html' %}
 
 <!-- ════════════════════════════════════════════════════════════════
      PARTICLE CANVAS (background)
@@ -365,6 +366,8 @@
      SCRIPTS
 ══════════════════════════════════════════════════════════════════ -->
 <script src="/shared/js/navbar_v2.js" defer></script>
+<script src="/shared/js/cosysim-neon-hud.js" defer></script>
+<script src="/shared/js/cosysim-hack-minigame.js" defer></script>
 <script src="/shared/js/cosysim-particles3d.js"></script>
 <script src="/shared/js/cosysim-bench.js" defer></script>
 <script src="/static/neoncity.js" defer></script>

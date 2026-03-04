@@ -319,6 +319,15 @@
       </div>
     </div>
 
+    {# Shop button #}
+    <div class="cs-hud-slide__section">
+      <div class="cs-hud-slide__section-label">BLACK MARKET</div>
+      <button class="cs-hud-slide__shop-btn" id="hud-shop-open" type="button"
+              onclick="if(window.CosyShop) CosyShop.open({ title: 'BLACK MARKET', apiBase: '/api/shop' })">
+        <span>🛒</span> <span>Open Shop</span>
+      </button>
+    </div>
+
     {# System info #}
     <div class="cs-hud-slide__section">
       <div class="cs-hud-slide__section-label">SYSTEM</div>

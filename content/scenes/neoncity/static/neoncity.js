@@ -43,10 +43,6 @@ class NeonCityScene {
     init() {
         this._initParticles();
         this._setupSocket();
-        // Navbar mount (navbar_v2.js)
-        if (typeof initNavbar === 'function') {
-            initNavbar('navbar-mount', { scene: 'neoncity', accent: '#06b6d4' });
-        }
     }
 
     // ── Particle system ──────────────────────────────────────────────────

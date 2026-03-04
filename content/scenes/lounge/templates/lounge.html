@@ -12,6 +12,7 @@
   <script src="/shared/js/cosysim-core.js"></script>
   <script src="/shared/js/cosysim-stream.js"></script>
   <script src="/shared/js/cosysim-particles3d.js"></script>
+  <link rel="stylesheet" href="/shared/css/cosysim-shop.css">
 </head>
 <body data-scene="lounge">
 <canvas id="cs-particles"></canvas>
@@ -211,7 +212,9 @@
 
 <script src="{{ url_for('static', filename='lounge.js') }}"></script>
 <script src="/shared/js/cosysim-voice.js"></script>
+<script src="/shared/js/cosysim-shop.js"></script>
 <script>window.SCENE_PARTICLE_CONFIG = { scene: 'lounge' };</script>
 <script src="/shared/js/cosysim-particles.js"></script>
+{% include 'shop_modal.html' %}
 </body>
 </html>

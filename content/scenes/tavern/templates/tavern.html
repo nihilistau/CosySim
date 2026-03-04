@@ -5,6 +5,7 @@
 <link rel="stylesheet" href="/shared/css/design_tokens.css">
 <link rel="stylesheet" href="/shared/css/cosysim-animations.css">
 <link rel="stylesheet" href="/shared/css/cosysim-scene-fx.css">
+<link rel="stylesheet" href="/shared/css/cosysim-shop.css">
 {% endblock %}
 
 {% block content %}
@@ -221,6 +222,7 @@
 <script src="/shared/js/socket.io.min.js"</script>
 <script src="{{ url_for('static', filename='tavern.js') }}"></script>
 <script src="/shared/js/cosysim-voice.js"></script>
+<script src="/shared/js/cosysim-shop.js"></script>
 <script>
   document.addEventListener('DOMContentLoaded', () => {
     window.scene = new RustyAnchorScene();
@@ -229,4 +231,5 @@
 </script>
 <script>window.SCENE_PARTICLE_CONFIG = { scene: 'tavern' };</script>
 <script src="/shared/js/cosysim-particles.js"></script>
+{% include 'shop_modal.html' %}
 {% endblock %}

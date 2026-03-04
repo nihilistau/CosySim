@@ -3,6 +3,24 @@
 All notable changes to CosySim are documented here.
 
 ---
+## [0.83b] — "THE SOCIAL LAYER" — 2026-03
+
+### Added
+- **Shop System** — `InventoryManager.get_catalog()`, `buy_item()`, `sell_item()` with credit deduction; prices on all 26 ITEM_CATALOG entries (`engine/world/inventory.py`)
+- **`BaseScene.register_shop_route()`** — 5 REST endpoints: `/api/shop/catalog`, `/api/shop/inventory`, `/api/shop/buy`, `/api/shop/sell`, `/api/shop/affordability`
+- **Shop Modal UI** — `content/shared/templates/shop_modal.html`, `cosysim-shop.css`, `cosysim-shop.js` — universal shop overlay with `window.CosyShop.open()` API
+- **Shop wired** — Grid, Tavern, Lounge scenes all expose shop routes + include shop modal
+- **Crew HUD rendering** — `_renderCrew()` in `cosysim-neon-hud.js`; loyalty bars, trust tier stars (·/★/★★/★★★), role icons
+- **HUD crew row CSS** — `.cs-hud-slide__crew-row` grid layout in `cosysim-neon-hud.css`
+- **HUD shop button** — BLACK MARKET section in right HUD panel (`neon_hud.html`) launches `CosyShop.open()`
+- **NeonCity HUD fix** — replaced broken `initNavbar()` JS mount with Jinja2 `{% include 'navbar_v2.html' %}`; added `jinja2.ChoiceLoader` for shared templates
+- **Tavern & Lounge ChoiceLoaders** — both scenes now resolve shared templates for shop modal
+
+### Tests
+- 8,380+ tests, 0 failures
+- New: `test_v083_social_layer.py` (28 tests): inventory shop methods, shop routes, catalog prices, NeonCity wiring, crew HUD
+
+---
 ## [0.82b] — "THE OPEN WORLD" — 2026-03
 
 ### Added

@@ -66,38 +66,38 @@ EQUIPMENT_SLOTS = [
 # Built-in item catalog (item_id → metadata)
 ITEM_CATALOG: Dict[str, Dict[str, Any]] = {
     # ── Cyberware ──
-    "neural_jack":       {"name": "Neural Jack",        "category": "cyberware", "rarity": "common",    "slot": "cyberware_1", "desc": "+1 Hacking speed"},
-    "reflex_booster":    {"name": "Reflex Booster",     "category": "cyberware", "rarity": "rare",      "slot": "cyberware_2", "desc": "+2 Combat reaction"},
-    "subdermal_armor":   {"name": "Subdermal Armor",    "category": "cyberware", "rarity": "rare",      "slot": "cyberware_1", "desc": "+15 max health"},
-    "optic_implant":     {"name": "Optic Implant",      "category": "cyberware", "rarity": "uncommon",  "slot": "cyberware_2", "desc": "Enhanced vision, thermal"},
-    "voice_modulator":   {"name": "Voice Modulator",    "category": "cyberware", "rarity": "uncommon",  "slot": "cyberware_3", "desc": "+1 Social manipulation"},
-    "pain_editor":       {"name": "Pain Editor",        "category": "cyberware", "rarity": "rare",      "slot": "cyberware_1", "desc": "Ignore 20% damage penalty"},
-    # ── Cyberdecks (crack_speed: reduces required sequence, trace_resist: extends timer) ──
-    "netrunner_mk1":     {"name": "Netrunner MK1",      "category": "cyberdeck", "rarity": "common",    "slot": "cyberdeck",   "desc": "Basic hacking deck, 3 slots",       "crack_speed": 1, "trace_resist": 1},
-    "void_runner":       {"name": "Void Runner",        "category": "cyberdeck", "rarity": "rare",      "slot": "cyberdeck",   "desc": "Advanced deck, 6 slots, ICE breach","crack_speed": 3, "trace_resist": 3},
-    "specter_3000":      {"name": "Specter 3000",       "category": "cyberdeck", "rarity": "legendary", "slot": "cyberdeck",   "desc": "Military-grade, 8 slots, silent",   "crack_speed": 6, "trace_resist": 6},
+    "neural_jack":       {"name": "Neural Jack",        "category": "cyberware", "rarity": "common",    "slot": "cyberware_1", "desc": "+1 Hacking speed",                  "price": 800,   "sell_price": 400},
+    "reflex_booster":    {"name": "Reflex Booster",     "category": "cyberware", "rarity": "rare",      "slot": "cyberware_2", "desc": "+2 Combat reaction",                "price": 2500,  "sell_price": 1250},
+    "subdermal_armor":   {"name": "Subdermal Armor",    "category": "cyberware", "rarity": "rare",      "slot": "cyberware_1", "desc": "+15 max health",                    "price": 2200,  "sell_price": 1100},
+    "optic_implant":     {"name": "Optic Implant",      "category": "cyberware", "rarity": "uncommon",  "slot": "cyberware_2", "desc": "Enhanced vision, thermal",          "price": 1500,  "sell_price": 750},
+    "voice_modulator":   {"name": "Voice Modulator",    "category": "cyberware", "rarity": "uncommon",  "slot": "cyberware_3", "desc": "+1 Social manipulation",            "price": 1200,  "sell_price": 600},
+    "pain_editor":       {"name": "Pain Editor",        "category": "cyberware", "rarity": "rare",      "slot": "cyberware_1", "desc": "Ignore 20% damage penalty",         "price": 3000,  "sell_price": 1500},
+    # ── Cyberdecks ──
+    "netrunner_mk1":     {"name": "Netrunner MK1",      "category": "cyberdeck", "rarity": "common",    "slot": "cyberdeck",   "desc": "Basic hacking deck, 3 slots",       "price": 600,   "sell_price": 300,  "crack_speed": 1, "trace_resist": 1},
+    "void_runner":       {"name": "Void Runner",        "category": "cyberdeck", "rarity": "rare",      "slot": "cyberdeck",   "desc": "Advanced deck, 6 slots, ICE breach","price": 4500,  "sell_price": 2250, "crack_speed": 3, "trace_resist": 3},
+    "specter_3000":      {"name": "Specter 3000",       "category": "cyberdeck", "rarity": "legendary", "slot": "cyberdeck",   "desc": "Military-grade, 8 slots, silent",   "price": 12000, "sell_price": 6000, "crack_speed": 6, "trace_resist": 6},
     # ── Software ──
-    "ice_breaker_v1":    {"name": "ICE Breaker v1",     "category": "software",  "rarity": "common",    "slot": None,          "desc": "Cracks basic security"},
-    "shadow_protocol":   {"name": "Shadow Protocol",    "category": "software",  "rarity": "rare",      "slot": None,          "desc": "Masks netrunner signature"},
-    "data_mine":         {"name": "Data Mine",          "category": "software",  "rarity": "uncommon",  "slot": None,          "desc": "Extract encrypted data packets"},
-    "tracer_kill":       {"name": "Tracer Kill",        "category": "software",  "rarity": "rare",      "slot": None,          "desc": "Destroys tracking daemons"},
+    "ice_breaker_v1":    {"name": "ICE Breaker v1",     "category": "software",  "rarity": "common",    "slot": None,          "desc": "Cracks basic security",             "price": 200,   "sell_price": 80},
+    "shadow_protocol":   {"name": "Shadow Protocol",    "category": "software",  "rarity": "rare",      "slot": None,          "desc": "Masks netrunner signature",         "price": 1800,  "sell_price": 900},
+    "data_mine":         {"name": "Data Mine",          "category": "software",  "rarity": "uncommon",  "slot": None,          "desc": "Extract encrypted data packets",    "price": 750,   "sell_price": 375},
+    "tracer_kill":       {"name": "Tracer Kill",        "category": "software",  "rarity": "rare",      "slot": None,          "desc": "Destroys tracking daemons",         "price": 1500,  "sell_price": 750},
     # ── Weapons ──
-    "monofilament":      {"name": "Monofilament Wire",  "category": "weapon",    "rarity": "uncommon",  "slot": "weapon_main", "desc": "Silent. Lethal."},
-    "nano_blade":        {"name": "Nano Blade",         "category": "weapon",    "rarity": "rare",      "slot": "weapon_main", "desc": "Vibro-edge, cuts through light armor"},
-    "rail_pistol":       {"name": "Rail Pistol",        "category": "weapon",    "rarity": "uncommon",  "slot": "weapon_main", "desc": "Electromagnetic discharge, 15 rounds"},
+    "monofilament":      {"name": "Monofilament Wire",  "category": "weapon",    "rarity": "uncommon",  "slot": "weapon_main", "desc": "Silent. Lethal.",                   "price": 900,   "sell_price": 450},
+    "nano_blade":        {"name": "Nano Blade",         "category": "weapon",    "rarity": "rare",      "slot": "weapon_main", "desc": "Vibro-edge, cuts through light armor","price": 2000,  "sell_price": 1000},
+    "rail_pistol":       {"name": "Rail Pistol",        "category": "weapon",    "rarity": "uncommon",  "slot": "weapon_main", "desc": "Electromagnetic discharge, 15 rounds","price": 1100,  "sell_price": 550},
     # ── Drugs / Chems ──
-    "stim_pack":         {"name": "Stim Pack",          "category": "drug",      "rarity": "common",    "slot": None,          "desc": "+30 energy for 1 hour"},
-    "health_booster":    {"name": "Health Booster",     "category": "drug",      "rarity": "common",    "slot": None,          "desc": "+25 health"},
-    "focus_chip":        {"name": "Focus Chip",         "category": "drug",      "rarity": "uncommon",  "slot": None,          "desc": "+2 Hacking & Tech for 30 mins"},
-    "black_lotus":       {"name": "Black Lotus",        "category": "drug",      "rarity": "rare",      "slot": None,          "desc": "High-grade synthetic. Euphoric. Addictive."},
+    "stim_pack":         {"name": "Stim Pack",          "category": "drug",      "rarity": "common",    "slot": None,          "desc": "+30 energy for 1 hour",             "price": 80,    "sell_price": 30},
+    "health_booster":    {"name": "Health Booster",     "category": "drug",      "rarity": "common",    "slot": None,          "desc": "+25 health",                        "price": 100,   "sell_price": 40},
+    "focus_chip":        {"name": "Focus Chip",         "category": "drug",      "rarity": "uncommon",  "slot": None,          "desc": "+2 Hacking & Tech for 30 mins",     "price": 350,   "sell_price": 150},
+    "black_lotus":       {"name": "Black Lotus",        "category": "drug",      "rarity": "rare",      "slot": None,          "desc": "High-grade synthetic. Euphoric.",   "price": 800,   "sell_price": 400},
     # ── Food ──
-    "synth_ramen":       {"name": "Synth Ramen",        "category": "food",      "rarity": "common",    "slot": None,          "desc": "+20 hunger"},
-    "protein_bar":       {"name": "Protein Bar",        "category": "food",      "rarity": "common",    "slot": None,          "desc": "+10 hunger, +5 energy"},
-    "corp_ration":       {"name": "Corp Ration",        "category": "food",      "rarity": "common",    "slot": None,          "desc": "+15 hunger"},
+    "synth_ramen":       {"name": "Synth Ramen",        "category": "food",      "rarity": "common",    "slot": None,          "desc": "+20 hunger",                        "price": 15,    "sell_price": 5},
+    "protein_bar":       {"name": "Protein Bar",        "category": "food",      "rarity": "common",    "slot": None,          "desc": "+10 hunger, +5 energy",             "price": 20,    "sell_price": 8},
+    "corp_ration":       {"name": "Corp Ration",        "category": "food",      "rarity": "common",    "slot": None,          "desc": "+15 hunger",                        "price": 12,    "sell_price": 5},
     # ── Data / Keys ──
-    "encrypted_file":    {"name": "Encrypted File",     "category": "data",      "rarity": "uncommon",  "slot": None,          "desc": "Contents unknown. Someone wants this."},
-    "corp_keycard":      {"name": "Corp Keycard",       "category": "key",       "rarity": "uncommon",  "slot": None,          "desc": "Access to OmniCorp service elevators"},
-    "ghost_net_token":   {"name": "Ghost Net Token",    "category": "data",      "rarity": "rare",      "slot": None,          "desc": "Darknet access credential"},
+    "encrypted_file":    {"name": "Encrypted File",     "category": "data",      "rarity": "uncommon",  "slot": None,          "desc": "Contents unknown.",                 "price": 500,   "sell_price": 250},
+    "corp_keycard":      {"name": "Corp Keycard",       "category": "key",       "rarity": "uncommon",  "slot": None,          "desc": "Access to OmniCorp service elevators","price": 700,   "sell_price": 350},
+    "ghost_net_token":   {"name": "Ghost Net Token",    "category": "data",      "rarity": "rare",      "slot": None,          "desc": "Darknet access credential",         "price": 1200,  "sell_price": 600},
 }
 
 
@@ -379,6 +379,70 @@ class InventoryManager:
                 "rarity":   cat.get("rarity", "common"),
             })
         return result
+
+    def get_catalog(self, category: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Return the full item catalog as a list, optionally filtered by category.
+
+        Each entry includes all catalog metadata plus ``owned_qty`` so the UI
+        knows how many the player already carries.
+        """
+        with self._item_lock:
+            owned = {item_id: item.quantity for item_id, item in self._items.items()}
+        result = []
+        for item_id, meta in ITEM_CATALOG.items():
+            if category and meta.get("category") != category:
+                continue
+            entry = dict(meta)
+            entry["item_id"] = item_id
+            entry.setdefault("price", 999)
+            entry.setdefault("sell_price", entry["price"] // 2)
+            entry["owned_qty"] = owned.get(item_id, 0)
+            entry["icon"] = ITEM_CATEGORIES.get(meta.get("category", "misc"), {}).get("icon", "📦")
+            result.append(entry)
+        return result
+
+    def buy_item(self, item_id: str, quantity: int = 1, player_state: Any = None) -> Dict[str, Any]:
+        """Attempt to buy *quantity* of *item_id* from the shop.
+
+        Deducts credits via *player_state.spend_credits()*.
+        Returns ``{"success": True, "item_id": ..., "quantity": ..., "cost": ..., "credits_left": ...}``
+        or ``{"success": False, "error": ...}``.
+        """
+        meta = ITEM_CATALOG.get(item_id)
+        if not meta:
+            return {"success": False, "error": f"Unknown item: {item_id}"}
+        price = meta.get("price", 999) * quantity
+        if player_state is not None:
+            if player_state.credits < price:
+                return {"success": False, "error": f"Insufficient credits — need ₵{price}, have ₵{player_state.credits}"}
+            player_state.spend_credits(price)
+        self.add_item(item_id, quantity=quantity)
+        credits_left = getattr(player_state, "credits", 0) if player_state else 0
+        logger.info("Shop buy: %s x%d for ₵%d (balance ₵%d)", item_id, quantity, price, credits_left)
+        return {"success": True, "item_id": item_id, "quantity": quantity, "cost": price, "credits_left": credits_left}
+
+    def sell_item(self, item_id: str, quantity: int = 1, player_state: Any = None) -> Dict[str, Any]:
+        """Sell *quantity* of *item_id* from player inventory.
+
+        Awards credits via *player_state.earn_credits()*.
+        Returns ``{"success": True, "item_id": ..., "quantity": ..., "earned": ..., "credits_left": ...}``
+        or ``{"success": False, "error": ...}``.
+        """
+        meta = ITEM_CATALOG.get(item_id)
+        if not meta:
+            return {"success": False, "error": f"Unknown item: {item_id}"}
+        with self._item_lock:
+            owned = self._items.get(item_id)
+            if not owned or owned.quantity < quantity:
+                have = owned.quantity if owned else 0
+                return {"success": False, "error": f"Only have {have} of {item_id}"}
+        sell_price = meta.get("sell_price", meta.get("price", 100) // 2) * quantity
+        self.remove_item(item_id, quantity=quantity)
+        if player_state is not None:
+            player_state.earn_credits(sell_price)
+        credits_left = getattr(player_state, "credits", 0) if player_state else 0
+        logger.info("Shop sell: %s x%d for ₵%d (balance ₵%d)", item_id, quantity, sell_price, credits_left)
+        return {"success": True, "item_id": item_id, "quantity": quantity, "earned": sell_price, "credits_left": credits_left}
 
     # ── Persistence ───────────────────────────────────────────────────────────
 
