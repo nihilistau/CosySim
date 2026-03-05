@@ -130,13 +130,29 @@ class BaseCrawler:
             await self._monitor.attach_to_new_tabs()
         return page
 
-    async def get_or_open_page(self, url_fragment: str, fallback_url: str) -> Page:
-        """Find an existing tab matching url_fragment, or open fallback_url."""
+    async def get_or_open_page(
+        self,
+        url_fragment: str,
+        fallback_url: str,
+        reload: bool = False,
+    ) -> Page:
+        """Find an existing tab matching url_fragment, or open fallback_url.
+
+        Args:
+            url_fragment: Substring to match in the existing tab URL.
+            fallback_url: URL to open if no matching tab is found.
+            reload:       If True and an existing tab is found, reload it so that
+                          fresh network traffic is captured by the monitor.
+        """
         for page in self._context.pages:
             if url_fragment in page.url:
                 self._page = page
                 if self._monitor:
                     await self._monitor.attach_playwright_page(page)
+                if reload:
+                    logger.info("%s: reloading existing tab %s", self.name, page.url[:80])
+                    await page.reload(wait_until="domcontentloaded")
+                    await asyncio.sleep(1.5)
                 return page
         return await self.open_page(fallback_url)
 
@@ -269,6 +285,124 @@ class BaseCrawler:
             }""")
         except Exception:
             return []
+
+    # ──── JS injection helpers ────
+
+    async def inject_fetch(
+        self,
+        url: str,
+        method: str = "POST",
+        headers: Optional[Dict[str, str]] = None,
+        body: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Fire a fetch() from within the page context so NetworkMonitor captures it.
+
+        Because this runs as page JS, the browser's own cookies/auth are used.
+        The Playwright page listener captures the resulting request.
+
+        Args:
+            url:     Full or relative URL to fetch.
+            method:  HTTP method (default POST).
+            headers: Optional extra headers dict.
+            body:    Optional request body string.
+
+        Returns:
+            Dict with status and responseText, or None on error.
+        """
+        headers = headers or {}
+        js = f"""
+        async () => {{
+            try {{
+                const resp = await fetch({url!r}, {{
+                    method: {method!r},
+                    headers: {headers!r},
+                    body: {body!r},
+                    credentials: 'include',
+                }});
+                const text = await resp.text();
+                return {{ status: resp.status, body: text.slice(0, 2000) }};
+            }} catch(e) {{
+                return {{ status: -1, error: String(e) }};
+            }}
+        }}"""
+        try:
+            return await self._page.evaluate(js)
+        except Exception as exc:
+            logger.debug("%s: inject_fetch failed: %s", self.name, exc)
+            return None
+
+    async def dump_dom_info(self, label: str = "") -> Dict[str, Any]:
+        """Extract visible interactive elements for selector debugging.
+
+        Returns a dict with buttons, inputs, links, and aria-labels found.
+        Useful for diagnosing selector failures.
+        """
+        try:
+            info = await self._page.evaluate("""() => {
+                const sel = (s) => [...document.querySelectorAll(s)]
+                    .map(e => ({
+                        tag: e.tagName,
+                        text: (e.innerText || e.textContent || '').trim().slice(0, 80),
+                        label: e.getAttribute('aria-label') || '',
+                        role: e.getAttribute('role') || '',
+                        id: e.id || '',
+                        cls: e.className.toString().slice(0, 60),
+                        href: e.href || '',
+                        placeholder: e.placeholder || '',
+                        testid: e.getAttribute('data-testid') || '',
+                    }));
+                return {
+                    buttons: sel('button, [role=button]').slice(0, 30),
+                    inputs: sel('input, textarea, [contenteditable=true]').slice(0, 15),
+                    links: sel('a[href]').slice(0, 20),
+                    url: window.location.href,
+                };
+            }""")
+            prefix = f"{self.name}[{label}]" if label else self.name
+            logger.info("%s dom: %d buttons, %d inputs, %d links at %s",
+                        prefix, len(info.get("buttons", [])), len(info.get("inputs", [])),
+                        len(info.get("links", [])), info.get("url", "?"))
+            logger.debug("%s dom dump: %s", prefix, info)
+            return info
+        except Exception as exc:
+            logger.debug("%s: dump_dom_info failed: %s", self.name, exc)
+            return {}
+
+    async def find_element_by_text(self, *texts: str, timeout: int = 5_000) -> Any:
+        """Find the first clickable element whose visible text contains any of *texts.
+
+        Uses Playwright's locator API for robustness. Returns None if nothing found.
+        """
+        for text in texts:
+            try:
+                loc = self._page.get_by_text(text, exact=False)
+                el = loc.first
+                await el.wait_for(state="visible", timeout=timeout)
+                return el
+            except Exception:
+                pass
+        return None
+
+    async def find_button(self, *labels: str, timeout: int = 5_000) -> Any:
+        """Find the first button matching any of the given aria-labels or visible text."""
+        for label in labels:
+            # Try aria-label first (most reliable)
+            try:
+                loc = self._page.get_by_role("button", name=label)
+                el = loc.first
+                await el.wait_for(state="visible", timeout=timeout)
+                return el
+            except Exception:
+                pass
+            # Fallback to text match
+            try:
+                loc = self._page.locator(f"button:has-text('{label}')")
+                el = loc.first
+                await el.wait_for(state="visible", timeout=timeout)
+                return el
+            except Exception:
+                pass
+        return None
 
     # ──── Subclass interface ────
 

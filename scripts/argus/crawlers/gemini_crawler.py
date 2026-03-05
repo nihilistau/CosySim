@@ -40,7 +40,7 @@ class GeminiCrawler(BaseCrawler):
 
     async def run_flows(self) -> List[CrawlStep]:
         """Execute all Gemini flows in sequence."""
-        await self.get_or_open_page("gemini.google.com", GEMINI_URL)
+        await self.get_or_open_page("gemini.google.com", GEMINI_URL, reload=True)
         await asyncio.sleep(2)
 
         # ── Flow 1: Home page (loads models list + feature flags) ──
@@ -111,27 +111,44 @@ class GeminiCrawler(BaseCrawler):
     async def _send_message(self, text: str = "What is 2 + 2?") -> None:
         """Type and send a message in the Gemini chat box."""
         try:
-            # Gemini uses a rich text input
-            input_area = await self._page.wait_for_selector(
-                "rich-textarea div[contenteditable='true'], "
-                "textarea[aria-label*='message'], "
+            sent = False
+            # Try multiple input selectors in order of reliability
+            for selector in [
+                "rich-textarea div[contenteditable='true']",
+                "div[contenteditable='true'][data-placeholder]",
                 "div[role='textbox']",
-                timeout=8_000,
-            )
-            await input_area.click()
-            await input_area.fill(text)
-            await asyncio.sleep(0.3)
+                "textarea[aria-label*='message']",
+                "textarea[aria-label*='Message']",
+                "p.empty",  # Gemini often uses <p> inside contenteditable
+                "[contenteditable='true']",
+            ]:
+                try:
+                    loc = self._page.locator(selector).first
+                    await loc.wait_for(state="visible", timeout=5_000)
+                    await loc.click()
+                    # contenteditable elements need type() not fill()
+                    try:
+                        await loc.fill(text)
+                    except Exception:
+                        await self._page.keyboard.type(text)
+                    sent = True
+                    break
+                except Exception:
+                    continue
 
-            send_btn = await self._page.query_selector(
-                "button[aria-label*='Send'], "
-                "button[aria-label*='send'], "
-                "mat-icon[aria-label*='send']"
-            )
+            if not sent:
+                logger.debug("GeminiCrawler: no input found for send_message")
+                await self.dump_dom_info("send_message")
+                return
+
+            await asyncio.sleep(0.3)
+            # Try send button
+            send_btn = await self.find_button("Send message", "Send", "send")
             if send_btn:
                 await send_btn.click()
             else:
-                await input_area.press("Enter")
-            await asyncio.sleep(4)  # Wait for response to stream
+                await self._page.keyboard.press("Enter")
+            await asyncio.sleep(5)  # Wait for streaming response
         except Exception as exc:
             logger.debug("GeminiCrawler: send_message: %s", exc)
 
@@ -139,11 +156,15 @@ class GeminiCrawler(BaseCrawler):
         """Click the model selector and switch to a different model."""
         try:
             model_btn = await self._page.query_selector(
+                "model-switcher button, "
+                "[aria-label*='Change model'], "
                 "[aria-label*='model'], "
                 "button:has-text('Gemini'), "
                 ".model-selector, "
                 "[data-testid='model-switcher']"
             )
+            if not model_btn:
+                model_btn = await self.find_button("Gemini", "gemini", "model")
             if not model_btn:
                 return
             await model_btn.click()
@@ -151,7 +172,8 @@ class GeminiCrawler(BaseCrawler):
 
             # Pick a model from the dropdown (not the current one)
             model_options = await self._page.query_selector_all(
-                "mat-option, [role='option'], li[data-model]"
+                "mat-option, [role='option'], li[data-model], "
+                "model-option, [class*='model-item']"
             )
             if len(model_options) > 1:
                 await model_options[1].click()

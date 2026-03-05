@@ -50,7 +50,7 @@ class NLMCrawler(BaseCrawler):
 
     async def run_flows(self) -> List[CrawlStep]:
         """Execute all NLM flows in sequence."""
-        page = await self.get_or_open_page("notebooklm.google.com", NLM_URL)
+        page = await self.get_or_open_page("notebooklm.google.com", NLM_URL, reload=True)
         await asyncio.sleep(2)  # Let the SPA fully load
 
         # If we landed directly on a notebook page, use it immediately
@@ -126,50 +126,120 @@ class NLMCrawler(BaseCrawler):
     async def _open_first_notebook(self) -> None:
         """Click the first notebook card to open it."""
         try:
-            # Wait for notebook cards to appear
+            # NLM uses Angular routing — wait for notebook list to render
             await self._page.wait_for_selector(
-                "a[href*='/notebook/'], [data-notebook-id], .notebook-item, "
-                "mat-card[routerlink], [routerlink*='notebook']",
+                "a[href*='/notebook/'], "
+                "[data-notebook-id], "
+                "nb-notebook-card, "
+                ".notebook-card, "
+                "mat-card",
                 timeout=15_000,
             )
-            # Click the first one
+            # Try href-based links first (most reliable)
             notebook_links = await self._page.query_selector_all(
-                "a[href*='/notebook/'], [routerlink*='notebook']"
+                "a[href*='/notebook/']"
             )
             if notebook_links:
-                await notebook_links[0].click()
+                href = await notebook_links[0].get_attribute("href")
+                if href:
+                    nb_url = f"https://notebooklm.google.com{href}" if href.startswith("/") else href
+                    await self._page.goto(nb_url, wait_until="domcontentloaded")
+                    await asyncio.sleep(2)
+                    self._notebook_url = self._page.url
+                    logger.info("NLMCrawler: opened notebook %s", self._notebook_url)
+                    return
+            # Fallback: click the first card
+            cards = await self._page.query_selector_all(
+                "mat-card, nb-notebook-card, .notebook-card, [role='listitem']"
+            )
+            if cards:
+                await cards[0].click()
                 await asyncio.sleep(2)
                 self._notebook_url = self._page.url
-                logger.info("NLMCrawler: opened notebook %s", self._notebook_url)
+                logger.info("NLMCrawler: opened notebook via card click %s", self._notebook_url)
             else:
-                logger.warning("NLMCrawler: no notebook links found")
+                logger.warning("NLMCrawler: no notebook links or cards found on page")
+                # Debug: dump interactive elements to help fix selectors
+                await self.dump_dom_info("open_first_notebook")
         except Exception as exc:
             logger.warning("NLMCrawler: open_first_notebook failed: %s", exc)
+            await self.dump_dom_info("open_first_notebook_err")
 
     async def _send_chat_message(self) -> None:
         """Type and send a simple chat message."""
         try:
-            # NLM chat input — prefer the large query textarea, not the emoji search input
-            textarea = await self._page.wait_for_selector(
-                "textarea:not([placeholder*='emoji']):not([aria-label*='emoji']), "
-                "[contenteditable='true'][data-placeholder]",
-                timeout=8_000,
-            )
-            await textarea.click()
-            await textarea.fill("What are the main topics in this notebook?")
-            await asyncio.sleep(0.3)
-            # Try send button or Enter
-            send_btn = await self._page.query_selector(
-                "button[aria-label*='send'], button[aria-label*='Send'], "
-                "button[type='submit'], mat-icon-button"
-            )
+            # Try Playwright locator API first — more robust than query_selector
+            sent = False
+            for selector in [
+                "textarea[aria-label*='Ask']",
+                "textarea[aria-label*='ask']",
+                "textarea[aria-label*='query']",
+                "textarea[aria-label*='Query']",
+                "textarea[aria-label*='chat']",
+                "textarea[aria-label*='message']",
+                "textarea:not([aria-label*='emoji']):not([aria-label*='search'])",
+                "[contenteditable='true']:not([aria-label*='emoji'])",
+            ]:
+                try:
+                    loc = self._page.locator(selector).first
+                    await loc.wait_for(state="visible", timeout=5_000)
+                    await loc.click()
+                    await loc.fill("What are the main topics in this notebook?")
+                    await asyncio.sleep(0.3)
+                    sent = True
+                    break
+                except Exception:
+                    continue
+
+            if not sent:
+                logger.debug("NLMCrawler: no chat textarea found — trying JS injection")
+                # Inject batchexecute directly for SendChatMessage
+                await self._inject_nlm_chat_message(
+                    "What are the main topics in this notebook?"
+                )
+                await asyncio.sleep(2)
+                return
+
+            # Send via button or Enter
+            send_btn = await self.find_button("Send", "send", "Submit", "submit")
             if send_btn:
                 await send_btn.click()
             else:
-                await textarea.press("Enter")
-            await asyncio.sleep(3)  # Wait for response
+                await self._page.keyboard.press("Enter")
+            await asyncio.sleep(4)  # Wait for response to stream
         except Exception as exc:
             logger.warning("NLMCrawler: send_chat_message failed: %s", exc)
+
+    async def _inject_nlm_chat_message(self, text: str) -> None:
+        """Inject a batchexecute SendChatMessage call via page-context fetch().
+
+        This fires the tJHFsf rpcid directly using the browser's own session,
+        bypassing DOM interaction. NetworkMonitor captures the resulting request.
+        """
+        # Extract current notebook ID from URL
+        nb_id = ""
+        if self._notebook_url:
+            parts = self._notebook_url.rstrip("/").split("/")
+            if "notebook" in parts:
+                idx = parts.index("notebook")
+                if idx + 1 < len(parts):
+                    nb_id = parts[idx + 1]
+
+        import json
+        payload_inner = json.dumps([text, nb_id, [], None, None, None, None, None, None, None, True])
+        f_req_inner = json.dumps([[["tJHFsf", payload_inner, None, "generic"]]])
+        import urllib.parse
+        body = "f.req=" + urllib.parse.quote(f_req_inner)
+
+        result = await self.inject_fetch(
+            url="/_/LabsTailwindUi/data/batchexecute?rpcids=tJHFsf&source-path=%2Fnotebook%2F"
+                + nb_id,
+            method="POST",
+            headers={"content-type": "application/x-www-form-urlencoded;charset=UTF-8"},
+            body=body,
+        )
+        if result:
+            logger.info("NLMCrawler: injected tJHFsf chat → status %s", result.get("status"))
 
     async def _generate_study_guide(self) -> None:
         """Open the studio panel and trigger study guide generation."""
@@ -186,15 +256,28 @@ class NLMCrawler(BaseCrawler):
     async def _click_studio_option(self, option_lower: str, label: str) -> None:
         """Click a studio panel option by label."""
         try:
-            # Look for studio/notebook guide panel
-            btns = await self._page.query_selector_all("button, mat-list-item, [role='button']")
-            for btn in btns:
-                text = (await btn.inner_text()).strip().lower()
-                if option_lower in text or label.lower() in text:
-                    await btn.click()
-                    await asyncio.sleep(2)
-                    return
+            # Try Playwright's robust locator API first
+            btn = await self.find_button(label, option_lower.title())
+            if btn:
+                await btn.click()
+                await asyncio.sleep(2)
+                return
+            # Fallback: scan all clickable elements for text match
+            btns = await self._page.query_selector_all(
+                "button, mat-list-item, [role='button'], mat-chip, "
+                "nb-studio-option, .studio-option"
+            )
+            for b in btns:
+                try:
+                    text = (await b.inner_text()).strip().lower()
+                    if option_lower in text or label.lower() in text:
+                        await b.click()
+                        await asyncio.sleep(2)
+                        return
+                except Exception:
+                    continue
             logger.debug("NLMCrawler: '%s' button not found", label)
+            await self.dump_dom_info(f"studio_{option_lower}")
         except Exception as exc:
             logger.debug("NLMCrawler: %s failed: %s", label, exc)
 
@@ -210,13 +293,23 @@ class NLMCrawler(BaseCrawler):
     async def _open_sources_panel(self) -> None:
         """Open the sources panel to trigger ListSources."""
         try:
+            btn = await self.find_button("Sources", "sources", "Add source")
+            if btn:
+                await btn.click()
+                await asyncio.sleep(1)
+                return
+            # Fallback selectors
             sources_btn = await self._page.query_selector(
                 "[aria-label*='source'], [aria-label*='Source'], "
-                "button:has-text('Sources'), mat-tab:has-text('Sources')"
+                "button:has-text('Sources'), mat-tab:has-text('Sources'), "
+                "nb-sources-panel, [data-panel='sources']"
             )
             if sources_btn:
                 await sources_btn.click()
                 await asyncio.sleep(1)
+            else:
+                # Inject ListSources batchexecute directly
+                await self._inject_nlm_rpcid("jtGGne", "[]")
         except Exception as exc:
             logger.debug("NLMCrawler: open_sources_panel: %s", exc)
 
@@ -263,13 +356,39 @@ class NLMCrawler(BaseCrawler):
             logger.debug("NLMCrawler: add_text_source: %s", exc)
 
     async def _probe_feature_flags(self) -> None:
-        """Trigger a GetFeatureFlags call via JS injection."""
+        """Trigger a GetFeatureFlags call via JS injection + reload."""
         try:
-            # NLM calls ozz5Z (GetFeatureFlags) on page load — just reload
-            await self._page.reload(wait_until="domcontentloaded")
-            await asyncio.sleep(2)
+            # Inject directly — ozz5Z fires on every page load anyway
+            await self._inject_nlm_rpcid("ozz5Z", "[0]")
+            await asyncio.sleep(1)
         except Exception as exc:
             logger.debug("NLMCrawler: probe_feature_flags: %s", exc)
+
+    async def _inject_nlm_rpcid(self, rpcid: str, payload_json: str) -> None:
+        """Inject a batchexecute call for a given NLM rpcid via page-context fetch().
+
+        The request fires from the browser (so session cookies are included) and
+        is captured by the NetworkMonitor's Playwright page listener.
+
+        Args:
+            rpcid:        The batchexecute rpcid string, e.g. "jtGGne".
+            payload_json: JSON string to use as the inner payload, e.g. "[]".
+        """
+        import json
+        import urllib.parse
+        f_req = json.dumps([[[rpcid, payload_json, None, "generic"]]])
+        body = "f.req=" + urllib.parse.quote(f_req)
+        result = await self.inject_fetch(
+            url=f"/_/LabsTailwindUi/data/batchexecute?rpcids={rpcid}",
+            method="POST",
+            headers={"content-type": "application/x-www-form-urlencoded;charset=UTF-8"},
+            body=body,
+        )
+        if result:
+            logger.info(
+                "NLMCrawler: injected rpcid %s → status %s",
+                rpcid, result.get("status"),
+            )
 
     async def _create_and_delete_notebook(self) -> None:
         """Create a temporary notebook and immediately delete it."""
@@ -278,14 +397,22 @@ class NLMCrawler(BaseCrawler):
             await self._page.goto(NLM_URL, wait_until="domcontentloaded")
             await asyncio.sleep(1)
 
-            # Find 'New notebook' button
-            new_btn = await self._page.query_selector(
-                "button:has-text('New notebook'), "
-                "[aria-label*='new notebook'], "
-                "[aria-label*='New notebook'], "
-                "button:has-text('Create')"
+            # Find 'New notebook' button using robust locator
+            new_btn = await self.find_button(
+                "New notebook", "Create notebook", "New", "Create"
             )
             if not new_btn:
+                new_btn = await self._page.query_selector(
+                    "button:has-text('New notebook'), "
+                    "[aria-label*='new notebook'], "
+                    "[aria-label*='New notebook'], "
+                    "button:has-text('Create')"
+                )
+            if not new_btn:
+                logger.debug("NLMCrawler: no 'New notebook' button found")
+                await self.dump_dom_info("create_notebook")
+                # Fallback: inject CreateNotebook rpcid directly
+                await self._inject_nlm_rpcid("VqhFhd", '["ARGUS test notebook",[]]')
                 return
             await new_btn.click()
             await asyncio.sleep(2)
@@ -296,6 +423,7 @@ class NLMCrawler(BaseCrawler):
 
             # Delete it — find the kebab menu / delete option
             menu_btn = await self._page.query_selector(
+                "[aria-label*='more options'], [aria-label*='More options'], "
                 "[aria-label*='more'], [aria-label*='More'], "
                 "button[aria-label*='options'], mat-icon-button"
             )
