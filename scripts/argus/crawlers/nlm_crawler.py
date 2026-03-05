@@ -514,11 +514,11 @@ class NLMCrawler(BaseCrawler):
             headers={"content-type": "application/x-www-form-urlencoded;charset=UTF-8"},
             body=body,
         )
-        if result:
-            logger.info(
-                "NLMCrawler: injected rpcid %s → status %s",
-                rpcid, result.get("status"),
-            )
+        status = result.get("status") if result else "no-result"
+        logger.info("NLMCrawler: injected rpcid %s → status %s", rpcid, status)
+        if result and status not in (200, "200"):
+            body_preview = str(result.get("body", ""))[:200]
+            logger.debug("NLMCrawler: %s response body: %s", rpcid, body_preview)
 
     async def _create_and_delete_notebook(self) -> None:
         """Create a temporary notebook and immediately delete it."""

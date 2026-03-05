@@ -50,6 +50,7 @@ TARGETS: Dict[str, Dict] = {
     },
     "aistudio": {
         "base_url":   "https://aistudio.google.com",
+        "url_aliases": ["ai.google.dev/studio", "aistudio.google.com"],
         "grpc_url":   "https://alkalimakersuite-pa.clients6.google.com/$rpc/google.internal.alkali.applications.makersuite.v1.MakerSuiteService",
         "webchannel": "https://webchannel-alkalimakersuite-pa.clients6.google.com",
         "service":    "MakerSuiteService",

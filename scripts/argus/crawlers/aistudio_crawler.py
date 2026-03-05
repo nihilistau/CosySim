@@ -62,10 +62,9 @@ class AIStudioCrawler(BaseCrawler):
         await self.step("home_page", lambda: self._wait_network_idle())
 
         # ── Flow 2: Playground (new_chat) — triggers StreamGenerateContent ──
-        # Navigate directly to the Playground (/prompts/new_chat) rather than the
-        # saved-prompts list, because generation only fires from an active prompt editor.
-        await self.step("playground",
-                        lambda: self.navigate(f"{AISTUDIO_URL}/prompts/new_chat"))
+        # Click the Playground nav link rather than hardcoding a route that may
+        # redirect to /404 depending on Angular router state.
+        await self.step("playground", self._open_playground)
 
         # ── Flow 3: Send a message in the Playground ──
         await self.step("run_generation", self._run_generation)
@@ -150,6 +149,66 @@ class AIStudioCrawler(BaseCrawler):
         except Exception as exc:
             logger.debug("AIStudioCrawler: open_first_prompt: %s", exc)
 
+    async def _open_playground(self) -> None:
+        """Open a Playground prompt via the sidebar dropdown, then navigate into it."""
+        try:
+            # Vision: confirm sidebar state before clicking
+            sidebar_state = await self._vision_check(
+                "Is the 'Playground' nav link visible in the left sidebar? "
+                "What links are in the sidebar right now?"
+            )
+            logger.info("AIStudioCrawler: sidebar state: %s", sidebar_state[:200])
+
+            # Click the Playground nav item (it's a dropdown of saved prompts)
+            for sel in [
+                "a:has-text('Playground')",
+                "[aria-label='Playground']",
+                "button:has-text('Playground')",
+            ]:
+                try:
+                    loc = self._page.locator(sel).first
+                    await loc.wait_for(state="visible", timeout=3_000)
+                    await loc.click()
+                    await asyncio.sleep(1.0)
+                    break
+                except Exception:
+                    continue
+
+            # Now click the first saved prompt that appeared in the dropdown
+            for sel in [
+                "a[href*='/prompts/']",
+                "ms-prompt-item a",
+                "nav a[href*='prompts']",
+                "[role='menuitem'] a",
+            ]:
+                try:
+                    items = await self._page.query_selector_all(sel)
+                    if items:
+                        href = await items[0].get_attribute("href")
+                        if href:
+                            url = f"https://aistudio.google.com{href}" if href.startswith("/") else href
+                            await self._page.goto(url, wait_until="domcontentloaded")
+                        else:
+                            await items[0].click()
+                        await asyncio.sleep(1.5)
+                        landed = self._page.url
+                        if "/404" not in landed and "/error" not in landed:
+                            logger.info("AIStudioCrawler: opened playground prompt → %s", landed[:80])
+                            return
+                except Exception:
+                    continue
+
+            logger.debug("AIStudioCrawler: playground nav failed, falling back to home")
+            vision_desc = await self._vision_check(
+                "Playground navigation failed. What is on screen right now? "
+                "Is there an error? What URL is showing?"
+            )
+            logger.warning("AIStudioCrawler: playground fallback vision: %s", vision_desc[:200])
+            await self._page.goto(AISTUDIO_URL, wait_until="domcontentloaded")
+            await asyncio.sleep(1)
+        except Exception as exc:
+            logger.debug("AIStudioCrawler: _open_playground: %s", exc)
+
     async def _run_generation(self) -> None:
         """Send a message in the Playground to trigger StreamGenerateContent.
 
@@ -191,7 +250,13 @@ class AIStudioCrawler(BaseCrawler):
                     await run_btn.click()
                 else:
                     await self._page.keyboard.press("Enter")
-                await asyncio.sleep(8)  # Wait for streaming response
+                await asyncio.sleep(5)  # Wait for streaming response
+                # Vision: confirm a response appeared
+                response_check = await self._vision_check(
+                    "Was a response generated? Is there any output text visible below the prompt? "
+                    "What does the response say?"
+                )
+                logger.info("AIStudioCrawler: generation result: %s", response_check[:200])
                 return
 
             # ── Fallback: saved-prompt Run button ──
@@ -205,8 +270,12 @@ class AIStudioCrawler(BaseCrawler):
                 await run_btn.click()
                 await asyncio.sleep(8)
             else:
-                logger.debug("AIStudioCrawler: no run/chat input found")
-                await self.dump_dom_info("run_generation")
+                no_input = await self._vision_check(
+                    "I'm looking for a chat input textarea on this page. "
+                    "Can you see any text input, prompt box, or chat field? "
+                    "What exactly is on screen?"
+                )
+                logger.debug("AIStudioCrawler: no chat input found — vision: %s", no_input[:200])
         except Exception as exc:
             logger.debug("AIStudioCrawler: run_generation: %s", exc)
 
