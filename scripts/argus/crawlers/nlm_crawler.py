@@ -226,6 +226,7 @@ class NLMCrawler(BaseCrawler):
         session = await self._get_nlm_session_params()
         at = session.get("at", "")
         sid = session.get("sid", "")
+        bl = session.get("bl", "")
 
         payload_inner = json.dumps([text, nb_id, [], None, None, None, None, None, None, None, True])
         f_req_inner = json.dumps([[["tJHFsf", payload_inner, None, "generic"]]])
@@ -236,8 +237,11 @@ class NLMCrawler(BaseCrawler):
         params = "rpcids=tJHFsf"
         if sid:
             params += f"&f.sid={urllib.parse.quote(sid)}"
+        if bl:
+            params += f"&bl={urllib.parse.quote(bl)}"
         if nb_id:
             params += f"&source-path=%2Fnotebook%2F{nb_id}"
+        params += "&hl=en-US&rt=c"
 
         result = await self.inject_fetch(
             url=f"/_/LabsTailwindUi/data/batchexecute?{params}",
@@ -316,15 +320,18 @@ class NLMCrawler(BaseCrawler):
                     idx = parts.index("notebook")
                     if idx + 1 < len(parts):
                         nb_id = parts[idx + 1]
-            guide_type = {
-                "study guide": "STUDY_GUIDE",
-                "faq": "FAQ",
-                "briefing": "BRIEFING_DOC",
-                "audio": "AUDIO_OVERVIEW",
-                "insight": "KEY_TOPICS",
-                "analysis": "TIMELINE",
-            }.get(option_lower, "STUDY_GUIDE")
-            payload = f'["{guide_type}",{f"{chr(34)}{nb_id}{chr(34)}" if nb_id else "null"},null,null,null,null,null,null,true]'
+            # guide_type integers from NLM direct client constants
+            guide_type_int = {
+                "study guide": 1,
+                "faq": 2,
+                "briefing": 3,
+                "audio": 4,
+                "insight": 4,
+                "analysis": 5,
+            }.get(option_lower, 1)
+            # Correct payload: [null, notebook_id, guide_type_int, []]
+            import json as _json
+            payload = _json.dumps([None, nb_id if nb_id else None, guide_type_int, []])
             await self._inject_nlm_rpcid("xqEXEf", payload)
             await asyncio.sleep(2)
         except Exception as exc:
@@ -357,8 +364,17 @@ class NLMCrawler(BaseCrawler):
                 await sources_btn.click()
                 await asyncio.sleep(1)
             else:
-                # Inject ListSources batchexecute directly
-                await self._inject_nlm_rpcid("jtGGne", "[]")
+                # Inject ListSources with correct payload: [notebook_id]
+                nb_id = ""
+                if self._notebook_url:
+                    parts = self._notebook_url.rstrip("/").split("/")
+                    if "notebook" in parts:
+                        idx = parts.index("notebook")
+                        if idx + 1 < len(parts):
+                            nb_id = parts[idx + 1]
+                import json as _json
+                payload = _json.dumps([nb_id] if nb_id else [])
+                await self._inject_nlm_rpcid("jtGGne", payload)
         except Exception as exc:
             logger.debug("NLMCrawler: open_sources_panel: %s", exc)
 
@@ -414,18 +430,39 @@ class NLMCrawler(BaseCrawler):
             logger.debug("NLMCrawler: probe_feature_flags: %s", exc)
 
     async def _get_nlm_session_params(self) -> dict:
-        """Extract AT (XSRF) token and f.sid from the live NLM page globals.
+        """Extract AT (XSRF) token, f.sid, and bl (build label) from the live NLM page.
 
-        Returns dict with keys 'at' and 'sid'. Empty strings if not found.
+        Returns dict with keys 'at', 'sid', 'bl'. Empty strings if not found.
         These are required for batchexecute requests to return 200 instead of 400.
+        - at    = WIZ_global_data.SNlM0e  (XSRF/anti-CSRF token)
+        - sid   = WIZ_global_data.FdrFJe  (session ID / f.sid) — primary key
+                  fallback: WIZ_global_data.cfb2h
+        - bl    = extracted from page HTML, e.g. "boq_labs-tailwind-frontend_20260101.03_p0"
         """
         try:
             wiz = await self._page.evaluate(
-                "() => { try { const w = window.WIZ_global_data;"
-                " return w ? {at: w.SNlM0e || '', sid: w.cfb2h || ''} : {}; }"
-                " catch(e) { return {}; } }"
+                "() => { try {"
+                "  const w = window.WIZ_global_data;"
+                "  if (!w) return {};"
+                "  const sid = w.FdrFJe || w.cfb2h || '';"
+                "  return { at: w.SNlM0e || '', sid: sid };"
+                "} catch(e) { return {}; } }"
             )
-            return wiz or {}
+            params = wiz or {}
+
+            # Extract bl from page HTML
+            try:
+                bl_raw = await self._page.evaluate(
+                    "() => { try {"
+                    "  const m = document.documentElement.innerHTML.match(/\"bl\":\"([^\"]+)\"/);"
+                    "  return m ? m[1] : '';"
+                    "} catch(e) { return ''; } }"
+                )
+                params["bl"] = bl_raw or ""
+            except Exception:
+                params["bl"] = ""
+
+            return params
         except Exception:
             return {}
 
@@ -445,6 +482,9 @@ class NLMCrawler(BaseCrawler):
         session = await self._get_nlm_session_params()
         at = session.get("at", "")
         sid = session.get("sid", "")
+        bl = session.get("bl", "")
+        logger.debug("NLMCrawler: inject %s  at=%s sid=%s bl=%s",
+                     rpcid, bool(at), bool(sid), bool(bl))
 
         f_req = json.dumps([[[rpcid, payload_json, None, "generic"]]])
         body = "f.req=" + urllib.parse.quote(f_req)
@@ -454,6 +494,9 @@ class NLMCrawler(BaseCrawler):
         params = f"rpcids={rpcid}"
         if sid:
             params += f"&f.sid={urllib.parse.quote(sid)}"
+        if bl:
+            params += f"&bl={urllib.parse.quote(bl)}"
+        params += "&hl=en-US&rt=c"
 
         nb_id = ""
         if self._notebook_url:
