@@ -144,8 +144,21 @@ class BaseCrawler:
             reload:       If True and an existing tab is found, reload it so that
                           fresh network traffic is captured by the monitor.
         """
+        _error_suffixes = ("/404", "/error", "/not-found", "/notfound", "?error=")
         for page in self._context.pages:
             if url_fragment in page.url:
+                # Skip error/404 pages — navigate to the correct URL instead
+                if any(page.url.endswith(s) or s in page.url for s in _error_suffixes):
+                    logger.info(
+                        "%s: skipping error page %s, navigating to %s",
+                        self.name, page.url[:80], fallback_url,
+                    )
+                    self._page = page
+                    if self._monitor:
+                        await self._monitor.attach_playwright_page(page)
+                    await page.goto(fallback_url, wait_until="domcontentloaded")
+                    await asyncio.sleep(1.5)
+                    return page
                 self._page = page
                 if self._monitor:
                     await self._monitor.attach_playwright_page(page)

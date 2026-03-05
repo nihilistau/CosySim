@@ -58,55 +58,61 @@ class AIStudioCrawler(BaseCrawler):
         await self.get_or_open_page("aistudio.google.com", AISTUDIO_URL, reload=True)
         await asyncio.sleep(2)
 
-        # ── Flow 1: Home page ──
+        # ── Flow 1: Home page / library ──
         await self.step("home_page", lambda: self._wait_network_idle())
 
-        # ── Flow 2: Navigate to prompts list ──
+        # ── Flow 2: Playground (new_chat) — triggers StreamGenerateContent ──
+        # Navigate directly to the Playground (/prompts/new_chat) rather than the
+        # saved-prompts list, because generation only fires from an active prompt editor.
+        await self.step("playground",
+                        lambda: self.navigate(f"{AISTUDIO_URL}/prompts/new_chat"))
+
+        # ── Flow 3: Send a message in the Playground ──
+        await self.step("run_generation", self._run_generation)
+
+        # ── Flow 4: Navigate to saved-prompts list (still triggers ListPrompts) ──
         await self.step("prompts_list",
                         lambda: self.navigate(f"{AISTUDIO_URL}/prompts"))
 
-        # ── Flow 3: Open first prompt ──
+        # ── Flow 5: Open first saved prompt ──
         await self.step("open_prompt", self._open_first_prompt)
 
-        # ── Flow 4: Run generation ──
-        await self.step("run_generation", self._run_generation)
-
-        # ── Flow 5: Change model ──
+        # ── Flow 6: Change model ──
         await self.step("change_model", self._change_model)
 
-        # ── Flow 6: Adjust safety/parameters ──
+        # ── Flow 7: Adjust safety/parameters ──
         await self.step("adjust_parameters", self._adjust_parameters)
 
-        # ── Flow 7: System instructions ──
+        # ── Flow 8: System instructions ──
         await self.step("system_instructions", self._open_system_instructions)
 
-        # ── Flow 8: Function calling ──
+        # ── Flow 9: Function calling ──
         await self.step("function_calling", self._open_function_calling)
 
-        # ── Flow 9: Applets list ──
+        # ── Flow 10: Applets list ──
         await self.step("applets_list",
                         lambda: self.navigate(f"{AISTUDIO_URL}/apps"))
 
-        # ── Flow 10: Open first applet ──
+        # ── Flow 11: Open first applet ──
         await self.step("open_applet", self._open_first_applet)
 
-        # ── Flow 11: Files manager ──
+        # ── Flow 12: Files manager ──
         await self.step("files_manager",
                         lambda: self.navigate(f"{AISTUDIO_URL}/files"))
 
-        # ── Flow 12: Tuning panel ──
+        # ── Flow 13: Tuning panel ──
         await self.step("tuning_panel",
                         lambda: self.navigate(f"{AISTUDIO_URL}/tuning"))
 
-        # ── Flow 13: Cached content ──
+        # ── Flow 14: Cached content ──
         await self.step("cached_content",
                         lambda: self.navigate(f"{AISTUDIO_URL}/cached-content"))
 
-        # ── Flow 14: Settings ──
+        # ── Flow 15: Settings ──
         await self.step("settings",
                         lambda: self.navigate(f"{AISTUDIO_URL}/settings"))
 
-        # ── Flow 15: Get window globals (feature flags, config) ──
+        # ── Flow 16: Get window globals (feature flags, config) ──
         await self.step("extract_globals", self._extract_page_globals)
 
         self._log_method_coverage()
@@ -145,22 +151,61 @@ class AIStudioCrawler(BaseCrawler):
             logger.debug("AIStudioCrawler: open_first_prompt: %s", exc)
 
     async def _run_generation(self) -> None:
-        """Click the Run button to trigger StreamGenerateContent."""
+        """Send a message in the Playground to trigger StreamGenerateContent.
+
+        The Playground (/prompts/new_chat) has a chat input area. Type a message
+        and submit via button or Enter. Also handles existing prompt Run button.
+        """
         try:
-            run_btn = await self.find_button("Run", "run", "Submit", "Generate")
+            # ── Try Playground chat input first (new_chat page) ──
+            chat_input = None
+            for sel in [
+                "textarea[aria-label*='Type something']",
+                "textarea[placeholder*='Type something']",
+                "textarea[aria-label*='message']",
+                "textarea[aria-label*='prompt']",
+                "ms-prompt-input textarea",
+                ".prompt-input textarea",
+                "rich-textarea div[contenteditable='true']",
+                "textarea:not([aria-hidden='true'])",
+            ]:
+                try:
+                    loc = self._page.locator(sel).first
+                    await loc.wait_for(state="visible", timeout=5_000)
+                    chat_input = loc
+                    break
+                except Exception:
+                    continue
+
+            if chat_input:
+                await chat_input.click()
+                await chat_input.fill("What is 2+2? Reply in one sentence.")
+                await asyncio.sleep(0.3)
+                # Try run button first, fallback to Enter
+                run_btn = await self._page.query_selector(
+                    "button[aria-label='Run'], button:has-text('Run'), "
+                    "ms-run-button button, [data-testid='run-button'], "
+                    "button[aria-label*='Send'], button[aria-label*='submit']"
+                )
+                if run_btn:
+                    await run_btn.click()
+                else:
+                    await self._page.keyboard.press("Enter")
+                await asyncio.sleep(8)  # Wait for streaming response
+                return
+
+            # ── Fallback: saved-prompt Run button ──
+            run_btn = await self.find_button("Run", "run prompt", "Submit", "Generate")
             if not run_btn:
                 run_btn = await self._page.query_selector(
-                    "button:has-text('Run'), "
-                    "button[aria-label*='Run'], "
-                    "button[aria-label*='run'], "
-                    "[data-testid='run-button'], "
-                    "ms-run-button button"
+                    "button:has-text('Run'), button[aria-label*='Run'], "
+                    "[data-testid='run-button'], ms-run-button button"
                 )
             if run_btn:
                 await run_btn.click()
-                await asyncio.sleep(5)  # Wait for streaming response
+                await asyncio.sleep(8)
             else:
-                logger.debug("AIStudioCrawler: no run button found")
+                logger.debug("AIStudioCrawler: no run/chat input found")
                 await self.dump_dom_info("run_generation")
         except Exception as exc:
             logger.debug("AIStudioCrawler: run_generation: %s", exc)
