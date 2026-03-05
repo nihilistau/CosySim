@@ -159,6 +159,20 @@ AISTUDIO_METHODS: List[str] = [
     "CreateBatchJob", "GetBatchJob", "ListBatchJobs", "CancelBatchJob",
     # Safety
     "CheckSafety", "GetSafetySettings", "UpdateSafetySettings",
+    # Code Assistant (from HAR 2026-03-05)
+    "CodeAssistantOffline", "StreamCodeAssistantOfflineGenerationUpload",
+    "GetCodeAssistantSnapshot", "LoadCodeAssistantInteractionHistory",
+    "ListCodeAssistantConfigurations", "ListCodeAssistantFeatures",
+    "ListCodeAssistantOfflineGenerations", "ListCodeGenSuggestionCards",
+    "GenerateCodeAssistantSuggestionChips",
+    # User / account (from HAR 2026-03-05)
+    "GenerateAccessToken", "GetLoggingContext", "GetUserPreferences",
+    "ListCloudApiKeys", "ListPromos", "ListUnsetAppletSecrets",
+    "ListRecentApplets", "StoreRecentApplet",
+    # Projects (from HAR 2026-03-05)
+    "ListImportedProjects", "ProvisionAndInitializeApplet",
+    # Misc (from HAR 2026-03-05)
+    "FetchMetricTimeSeries", "Log", "SaveApplet",
 ]
 
 # ──── Feature flag probe range ────
