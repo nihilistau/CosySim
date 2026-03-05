@@ -159,7 +159,7 @@ RULES (follow exactly):
 class ArgusAgent:
     """ARGUS autonomous crawler — v1 REST + ephemeral MCP + anchor-chain context."""
 
-    def __init__(self, target: str, max_turns: int = 25) -> None:
+    def __init__(self, target: str, max_turns: int = 35) -> None:
         self.target = target
         self.max_turns = max_turns
         self._cfg = TARGETS.get(target, {})
@@ -710,7 +710,7 @@ def main() -> None:
         choices=list(TARGETS.keys()) + ["all"],
         default="aistudio",
     )
-    parser.add_argument("--turns", type=int, default=25)
+    parser.add_argument("--turns", type=int, default=35)
     args = parser.parse_args()
 
     logging.basicConfig(
