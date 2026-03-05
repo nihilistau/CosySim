@@ -553,3 +553,181 @@ class TestSafeStr:
     def test_safe_str_coerces_numbers_to_string(self):
         """_safe_str() converts numeric values to their string representation."""
         assert _safe_str([42, "hello"], 0) == "42"
+
+
+# ──── SDK gap method tests ────────────────────────────────────────────────────
+
+class TestSDKGapMethods:
+    """Tests for the 10 SDK gap methods added by ARGUS audit."""
+
+    def _client(self, account, mock_pool):
+        """Return a GASClient with _rpc_call patched out."""
+        with patch("engine.integrations.gas_client.get_account_pool", return_value=mock_pool):
+            with patch.object(requests.Session, "get") as mock_get:
+                mock_get.return_value = MagicMock(
+                    status_code=200,
+                    text='<html>"bl":"bl1" "FdrFJe":"fs1"</html>',
+                    raise_for_status=MagicMock(),
+                )
+                return GASClient(account)
+
+    def test_list_apps_platform_files_delegates_to_get_files(self, account, mock_pool):
+        """list_apps_platform_files() delegates to get_files() (OQOG2e)."""
+        client = self._client(account, mock_pool)
+        expected = [GASFile(name="Code", file_type="SERVER_JS")]
+        with patch.object(client, "get_files", return_value=expected) as mock_gf:
+            result = client.list_apps_platform_files("script-id-1")
+        mock_gf.assert_called_once_with("script-id-1")
+        assert result == expected
+
+    def test_get_script_properties_returns_dict(self, account, mock_pool):
+        """get_script_properties() returns a dict from UvGaob response."""
+        client = self._client(account, mock_pool)
+        with patch.object(client, "_rpc_call", return_value={"API_KEY": "abc"}) as mock_rpc:
+            result = client.get_script_properties("script-id-2")
+        mock_rpc.assert_called_once()
+        assert mock_rpc.call_args[0][0] == "UvGaob"
+        assert result == {"API_KEY": "abc"}
+
+    def test_get_script_properties_returns_empty_on_null(self, account, mock_pool):
+        """get_script_properties() returns {} when rpc returns None."""
+        client = self._client(account, mock_pool)
+        with patch.object(client, "_rpc_call", return_value=None):
+            result = client.get_script_properties("script-id-3")
+        assert result == {}
+
+    def test_get_script_properties_parses_kv_list(self, account, mock_pool):
+        """get_script_properties() parses [[key, value], ...] list format."""
+        client = self._client(account, mock_pool)
+        with patch.object(client, "_rpc_call", return_value=[["KEY1", "val1"], ["KEY2", "val2"]]):
+            result = client.get_script_properties("script-id-4")
+        assert result == {"KEY1": "val1", "KEY2": "val2"}
+
+    def test_set_publish_dialog_preference_uses_kklvd(self, account, mock_pool):
+        """set_publish_dialog_preference() uses KKLVD rpcid."""
+        client = self._client(account, mock_pool)
+        with patch.object(client, "_rpc_call", return_value={"ok": True}) as mock_rpc:
+            result = client.set_publish_dialog_preference("script-id-5")
+        assert mock_rpc.call_args[0][0] == "KKLVD"
+        assert result is True
+
+    def test_set_publish_dialog_preference_returns_false_on_null(self, account, mock_pool):
+        """set_publish_dialog_preference() returns False when rpc fails."""
+        client = self._client(account, mock_pool)
+        with patch.object(client, "_rpc_call", return_value=None):
+            result = client.set_publish_dialog_preference("script-id-6")
+        assert result is False
+
+    def test_list_versions_uses_yfxsbd(self, account, mock_pool):
+        """list_versions() uses yFXSbd rpcid."""
+        client = self._client(account, mock_pool)
+        with patch.object(
+            client, "_rpc_call",
+            return_value=[[[1, "v1 desc", "2024-01-01"], [2, "v2 desc", "2024-06-01"]]]
+        ) as mock_rpc:
+            result = client.list_versions("script-id-7")
+        assert mock_rpc.call_args[0][0] == "yFXSbd"
+        assert len(result) == 2
+        assert result[0]["version_number"] == 1
+
+    def test_list_versions_returns_empty_on_null(self, account, mock_pool):
+        """list_versions() returns [] when rpc returns None."""
+        client = self._client(account, mock_pool)
+        with patch.object(client, "_rpc_call", return_value=None):
+            result = client.list_versions("script-id-8")
+        assert result == []
+
+    def test_get_express_account_picker_model_uses_zzomtc(self, account, mock_pool):
+        """get_express_account_picker_model() uses zzomTc rpcid."""
+        client = self._client(account, mock_pool)
+        with patch.object(client, "_rpc_call", return_value={"accounts": []}) as mock_rpc:
+            result = client.get_express_account_picker_model("script-id-9")
+        assert mock_rpc.call_args[0][0] == "zzomTc"
+        assert result == {"accounts": []}
+
+    def test_get_express_account_picker_model_returns_empty_on_null(self, account, mock_pool):
+        """get_express_account_picker_model() returns {} when rpc fails."""
+        client = self._client(account, mock_pool)
+        with patch.object(client, "_rpc_call", return_value=None):
+            result = client.get_express_account_picker_model("script-id-10")
+        assert result == {}
+
+    def test_get_editor_state_uses_qejt0e(self, account, mock_pool):
+        """get_editor_state() uses qejt0e rpcid."""
+        client = self._client(account, mock_pool)
+        with patch.object(client, "_rpc_call", return_value={"editorState": "ready"}) as mock_rpc:
+            result = client.get_editor_state("script-id-11")
+        assert mock_rpc.call_args[0][0] == "qejt0e"
+        assert result == {"editorState": "ready"}
+
+    def test_get_editor_state_returns_empty_on_null(self, account, mock_pool):
+        """get_editor_state() returns {} when rpc returns None."""
+        client = self._client(account, mock_pool)
+        with patch.object(client, "_rpc_call", return_value=None):
+            result = client.get_editor_state("script-id-12")
+        assert result == {}
+
+    def test_get_apps_platform_file_status_uses_c0vekb(self, account, mock_pool):
+        """get_apps_platform_file_status() uses C0veKb rpcid."""
+        client = self._client(account, mock_pool)
+        with patch.object(client, "_rpc_call", return_value={"status": "ok"}) as mock_rpc:
+            result = client.get_apps_platform_file_status("script-id-13")
+        assert mock_rpc.call_args[0][0] == "C0veKb"
+        assert result == {"status": "ok"}
+
+    def test_get_apps_platform_file_status_returns_empty_on_null(self, account, mock_pool):
+        """get_apps_platform_file_status() returns {} when rpc fails."""
+        client = self._client(account, mock_pool)
+        with patch.object(client, "_rpc_call", return_value=None):
+            result = client.get_apps_platform_file_status("script-id-14")
+        assert result == {}
+
+    def test_set_user_preferences_uses_l650eb(self, account, mock_pool):
+        """set_user_preferences() uses L650eb rpcid."""
+        client = self._client(account, mock_pool)
+        with patch.object(client, "_rpc_call", return_value={}) as mock_rpc:
+            result = client.set_user_preferences(1)
+        assert mock_rpc.call_args[0][0] == "L650eb"
+        assert result is True
+
+    def test_set_user_preferences_returns_false_on_null(self, account, mock_pool):
+        """set_user_preferences() returns False when rpc fails."""
+        client = self._client(account, mock_pool)
+        with patch.object(client, "_rpc_call", return_value=None):
+            result = client.set_user_preferences(1)
+        assert result is False
+
+    def test_get_project_by_url_uses_gckeoc(self, account, mock_pool):
+        """get_project_by_url() uses gckeOc rpcid."""
+        client = self._client(account, mock_pool)
+        with patch.object(
+            client, "_rpc_call",
+            return_value=["sid-123", "My Script", "owner@gmail.com", "", ""]
+        ) as mock_rpc:
+            result = client.get_project_by_url("sid-123")
+        assert mock_rpc.call_args[0][0] == "gckeOc"
+        assert isinstance(result, GASProject)
+        assert result.script_id == "sid-123"
+        assert result.title == "My Script"
+
+    def test_get_project_by_url_returns_none_on_null(self, account, mock_pool):
+        """get_project_by_url() returns None when rpc returns None."""
+        client = self._client(account, mock_pool)
+        with patch.object(client, "_rpc_call", return_value=None):
+            result = client.get_project_by_url("sid-xxx")
+        assert result is None
+
+    def test_get_project_type_uses_wy5y7(self, account, mock_pool):
+        """get_project_type() uses Wy5Y7 rpcid."""
+        client = self._client(account, mock_pool)
+        with patch.object(client, "_rpc_call", return_value="STANDALONE") as mock_rpc:
+            result = client.get_project_type("https://script.google.com/d/sid/edit")
+        assert mock_rpc.call_args[0][0] == "Wy5Y7"
+        assert result == "STANDALONE"
+
+    def test_get_project_type_returns_empty_on_null(self, account, mock_pool):
+        """get_project_type() returns '' when rpc fails."""
+        client = self._client(account, mock_pool)
+        with patch.object(client, "_rpc_call", return_value=None):
+            result = client.get_project_type("https://script.google.com/d/sid/edit")
+        assert result == ""

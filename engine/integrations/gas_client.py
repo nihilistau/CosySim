@@ -1129,6 +1129,269 @@ class GASClient:
             logger.warning("GAS get_project_deployments parse error: %s", exc)
         return deployments
 
+    # ──── SDK gap methods (ARGUS audit) ────────────────────────────────────────
+
+    def list_apps_platform_files(self, script_id: str) -> List[GASFile]:
+        """List all Apps Platform files for a project.
+
+        Uses rpcid ``OQOG2e`` (ListAppsPlatformFiles) — SOURCE_PATH_CONFIRMED.
+        Payload: ``[script_id]`` observed from editor, settings, and history
+        source-paths (5 calls/page).
+
+        Args:
+            script_id: The script/project ID.
+
+        Returns:
+            List of GASFile objects, or empty list on error.
+        """
+        return self.get_files(script_id)
+
+    def get_script_properties(self, script_id: str) -> Dict[str, Any]:
+        """Get user-defined script properties for a project.
+
+        Uses rpcid ``UvGaob`` (GetScriptProperties) — SOURCE_PATH_INFERRED.
+        Payload: ``[script_id]`` from settings source-path.
+
+        Args:
+            script_id: The script/project ID.
+
+        Returns:
+            Dict of property key→value pairs, or empty dict on error.
+        """
+        result = self._rpc_call(
+            "UvGaob",
+            [script_id],
+            source_path=f"/d/{script_id}/settings",
+        )
+        if not result:
+            return {}
+        if isinstance(result, dict):
+            return result
+        if isinstance(result, list):
+            # Wrapped as list of [key, value] pairs
+            props: Dict[str, Any] = {}
+            for item in result:
+                if isinstance(item, list) and len(item) >= 2:
+                    props[str(item[0])] = item[1]
+            return props if props else {"raw": result}
+        return {}
+
+    def set_publish_dialog_preference(
+        self,
+        script_id: str,
+        dialog_type: int = 2,
+    ) -> bool:
+        """Set publish dialog preference for a project.
+
+        Uses rpcid ``KKLVD`` (SetPublishDialogPreference) — SOURCE_PATH_CONFIRMED.
+        Payload: ``[[script_id, null, null, null, null, null, 0], dialog_type]``
+        observed from triggers source-path.
+
+        Args:
+            script_id: The script/project ID.
+            dialog_type: Dialog type integer (2 observed in capture).
+
+        Returns:
+            True if accepted, False otherwise.
+        """
+        result = self._rpc_call(
+            "KKLVD",
+            [[script_id, None, None, None, None, None, 0], dialog_type],
+            source_path=f"/d/{script_id}/triggers",
+        )
+        return result is not None
+
+    def list_versions(self, script_id: str) -> List[Dict[str, Any]]:
+        """List saved versions for a project.
+
+        Uses rpcid ``yFXSbd`` (ListVersions) — SOURCE_PATH_CONFIRMED.
+        Payload: ``[script_id]`` (home + editor source-paths).
+
+        Args:
+            script_id: The script/project ID.
+
+        Returns:
+            List of version dicts with at least ``version_number`` and
+            ``description`` keys; empty list on error.
+        """
+        result = self._rpc_call(
+            "yFXSbd",
+            [script_id],
+            source_path=f"/d/{script_id}/history",
+        )
+        versions: List[Dict[str, Any]] = []
+        if not result or not isinstance(result, list):
+            return versions
+        try:
+            version_list = result[0] if isinstance(result[0], list) else result
+            for entry in version_list:
+                if not isinstance(entry, list):
+                    continue
+                versions.append({
+                    "version_number": entry[0] if entry else None,
+                    "description": _safe_str(entry, 1),
+                    "created_time": _safe_str(entry, 2),
+                })
+        except (IndexError, TypeError) as exc:
+            logger.warning("GAS list_versions parse error: %s", exc)
+        return versions
+
+    def get_express_account_picker_model(self, script_id: str) -> Dict[str, Any]:
+        """Get the express account picker widget model for a project.
+
+        Uses rpcid ``zzomTc`` (GetExpressAccountPickerModel — WidgetService) —
+        SOURCE_PATH_INFERRED; heap string proximity dist=141.
+        Payload observed: ``[script_id, 0, 1, 20]`` from editor source-path.
+
+        Args:
+            script_id: The script/project ID.
+
+        Returns:
+            Account picker model dict, or empty dict on error.
+        """
+        result = self._rpc_call(
+            "zzomTc",
+            [script_id, 0, 1, 20],
+            source_path=f"/d/{script_id}/edit",
+        )
+        if result is None:
+            return {}
+        if isinstance(result, dict):
+            return result
+        if isinstance(result, list):
+            return {"raw": result}
+        return {}
+
+    def get_editor_state(self, script_id: str) -> Dict[str, Any]:
+        """Get editor initialization state for a project.
+
+        Uses rpcid ``qejt0e`` (GetEditorState) — PAYLOAD_CONFIRMED (gold HAR).
+        Called alongside OQOG2e on /edit page load.  Payload: ``[]``.
+
+        Args:
+            script_id: The script/project ID.
+
+        Returns:
+            Editor state dict, or empty dict on error.
+        """
+        result = self._rpc_call(
+            "qejt0e",
+            [],
+            source_path=f"/d/{script_id}/edit",
+        )
+        if result is None:
+            return {}
+        if isinstance(result, dict):
+            return result
+        if isinstance(result, list):
+            return {"raw": result}
+        return {}
+
+    def get_apps_platform_file_status(self, script_id: str) -> Dict[str, Any]:
+        """Get status information for Apps Platform files in a project.
+
+        Uses rpcid ``C0veKb`` (GetAppsPlatformFileStatus) — PAYLOAD_CONFIRMED
+        (gold HAR).  Payload: ``[]``; called from /edit source-path for file
+        status checks (e.g. deployed state, modification flags).
+
+        Args:
+            script_id: The script/project ID.
+
+        Returns:
+            Status dict, or empty dict on error.
+        """
+        result = self._rpc_call(
+            "C0veKb",
+            [],
+            source_path=f"/d/{script_id}/edit",
+        )
+        if result is None:
+            return {}
+        if isinstance(result, dict):
+            return result
+        if isinstance(result, list):
+            return {"raw": result}
+        return {}
+
+    def set_user_preferences(self, preference_value: int = 1) -> bool:
+        """Set user preferences for the Apps Script editor.
+
+        Uses rpcid ``L650eb`` (SetUserPreferences) — PAYLOAD_CONFIRMED (gold
+        HAR).  Payload: ``[1]`` observed from /edit source-path.
+
+        Args:
+            preference_value: Preference integer flag (1 observed in capture).
+
+        Returns:
+            True if accepted, False otherwise.
+        """
+        result = self._rpc_call(
+            "L650eb",
+            [preference_value],
+            source_path="/edit",
+        )
+        return result is not None
+
+    def get_project_by_url(self, script_id: str) -> Optional[GASProject]:
+        """Retrieve project metadata using a project ID (home page lookup).
+
+        Uses rpcid ``gckeOc`` (GetProjectByUrl) — PAYLOAD_CONFIRMED (gold HAR).
+        Payload: ``[project_id]`` from /home/ source-path.
+
+        Args:
+            script_id: The script/project ID (used as the lookup key).
+
+        Returns:
+            GASProject if found, or None on error.
+        """
+        result = self._rpc_call(
+            "gckeOc",
+            [script_id],
+            source_path="/home/",
+        )
+        if not result or not isinstance(result, list):
+            return None
+        try:
+            entry = result[0] if isinstance(result[0], list) else result
+            sid = _safe_str(entry, 0) or script_id
+            return GASProject(
+                script_id=sid,
+                title=_safe_str(entry, 1),
+                owner=_safe_str(entry, 2),
+                created_time=_safe_str(entry, 3),
+                updated_time=_safe_str(entry, 4),
+            )
+        except (IndexError, TypeError) as exc:
+            logger.warning("GAS get_project_by_url parse error: %s", exc)
+        return None
+
+    def get_project_type(self, url: str) -> str:
+        """Look up the project type for a given project URL.
+
+        Uses rpcid ``Wy5Y7`` (GetProjectType) — PAYLOAD_CONFIRMED (gold HAR).
+        Payload: ``[full_url]`` (full script.google.com URL).
+
+        Args:
+            url: Full script.google.com project URL, e.g.
+                ``"https://script.google.com/d/{script_id}/edit"``.
+
+        Returns:
+            Project type string (e.g. ``"STANDALONE"``, ``"BOUND_TO_SHEETS"``),
+            or empty string on error.
+        """
+        result = self._rpc_call(
+            "Wy5Y7",
+            [url],
+            source_path="/home/",
+        )
+        if not result:
+            return ""
+        if isinstance(result, str):
+            return result
+        if isinstance(result, list) and result:
+            return str(result[0]) if result[0] is not None else ""
+        return ""
+
     # ──── High-level helpers ──────────────────────────────────────────────────
 
     def create_webhook_script(
