@@ -81,6 +81,11 @@ class BaseCrawler:
         self._page: Optional[Page] = None
         self._steps: List[CrawlStep] = []
 
+    @property
+    def context(self) -> Optional[BrowserContext]:
+        """The active Playwright BrowserContext (available after start())."""
+        return self._context
+
     # ──── Lifecycle ────
 
     async def start(self) -> "BaseCrawler":

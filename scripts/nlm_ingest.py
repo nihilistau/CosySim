@@ -46,22 +46,31 @@ class NLMIngestCrawler:
         crawler = BaseCrawler(monitor=monitor)
 
         async with crawler:
+            # Navigate to NLM home so "Create new notebook" is available.
             page = await crawler.get_or_open_page("notebooklm", NLM_URL)
+            if "/notebook/" in page.url:
+                logger.info("On notebook page — navigating to NLM home first")
+                await page.goto(NLM_URL, wait_until="networkidle", timeout=30000)
+
             await page.wait_for_load_state("networkidle", timeout=20000)
 
             if "accounts.google.com" in page.url:
                 logger.error("Redirected to login — log into NLM in Chrome first")
                 return None
 
-            await self._step("new_notebook",   page, self._click_new_notebook)
-            await self._step("set_title",      page, self._set_title)
-            await self._step("confirm_create", page, self._confirm_create)
-            self.notebook_url = page.url
+            # Click "Create new notebook" → NLM immediately opens a new notebook
+            # with the add-source dialog visible (URL ends in ?addSource=true).
+            await self._step("new_notebook", page, self._click_new_notebook)
+            # Wait for the new notebook URL to settle
+            await page.wait_for_url("**/notebook/**", timeout=15000)
+            await page.wait_for_timeout(1500)
+            self.notebook_url = page.url.split("?")[0]
             logger.info("Notebook: %s", self.notebook_url)
 
-            await self._step("add_source",  page, self._add_source)
-            await self._step("paste_text",  page, self._paste_content)
-            await self._step("insert",      page, self._insert_source)
+            # The add-source dialog is already open at this point; just click Copied text.
+            await self._step("select_copied_text", page, self._click_copied_text)
+            await self._step("paste_text",         page, self._paste_content)
+            await self._step("insert",             page, self._insert_source)
 
             await self._save_har(monitor)
 
@@ -79,64 +88,34 @@ class NLMIngestCrawler:
 
     async def _click_new_notebook(self, page) -> None:
         for sel in [
+            "button[aria-label='Create new notebook']",
+            "[aria-label='Create new notebook']",
             "[aria-label='Create notebook']",
+            "button:has-text('Create new')",
             "button:has-text('Create notebook')",
-            "button:has-text('New notebook')",
-            "[aria-label='New notebook']",
         ]:
             try:
-                await page.click(sel, timeout=8000)
-                await page.wait_for_timeout(1500)
+                await page.click(sel, timeout=10000)
+                await page.wait_for_timeout(2000)
                 return
             except Exception:
                 continue
-        raise RuntimeError("'New notebook' button not found")
+        raise RuntimeError("'Create new notebook' button not found on NLM home")
 
-    async def _set_title(self, page) -> None:
-        for sel in ["input[placeholder*='Untitled']", "input[aria-label*='title']", "input"]:
-            try:
-                el = await page.wait_for_selector(sel, timeout=5000, state="visible")
-                await el.triple_click()
-                await el.type(self.notebook_name, delay=25)
-                await page.wait_for_timeout(400)
-                return
-            except Exception:
-                continue
-
-    async def _confirm_create(self, page) -> None:
-        for sel in ["button:has-text('Create')", "button[type='submit']"]:
-            try:
-                await page.click(sel, timeout=5000)
-                await page.wait_for_timeout(3000)
-                return
-            except Exception:
-                continue
-        await page.keyboard.press("Enter")
-        await page.wait_for_timeout(3000)
-
-    async def _add_source(self, page) -> None:
-        # Opens the "Paste copied text" dialog — try upload icon then text buttons
+    async def _click_copied_text(self, page) -> None:
+        """Click the 'Copied text' option in the add-source dialog."""
         for sel in [
-            "[aria-label='Opens the upload source dialogue']",
-            "button:has-text('Upload a source')",
-            "button:has-text('Add source')",
-            "[aria-label='Add source']",
+            "button:has-text('Copied text')",
+            "li:has-text('Copied text')",
+            "[aria-label*='Copied text']",
         ]:
             try:
                 await page.click(sel, timeout=8000)
-                await page.wait_for_timeout(1500)
-                # Now click "Copied text" tab in the dialog
-                for tab in ["button:has-text('Copied text')", "li:has-text('Copied text')"]:
-                    try:
-                        await page.click(tab, timeout=3000)
-                        await page.wait_for_timeout(500)
-                        break
-                    except Exception:
-                        continue
+                await page.wait_for_timeout(1000)
                 return
             except Exception:
                 continue
-        raise RuntimeError("'Add source' button not found")
+        raise RuntimeError("'Copied text' tab not found in add-source dialog")
 
     async def _paste_content(self, page) -> None:
         # Angular-compatible: use native input setter + InputEvent so the form control validates
