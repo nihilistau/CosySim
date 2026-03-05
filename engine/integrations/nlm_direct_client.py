@@ -433,6 +433,7 @@ class NLMDirectClient:
         rpc_id: str,
         payload: Any,
         timeout: int = 120,
+        source_path: str = "/",
     ) -> Any:
         """Call any NLM studio operation via the batchexecute endpoint.
 
@@ -443,6 +444,8 @@ class NLMDirectClient:
             rpc_id: NLM rpcid string (e.g. ``'CYK0Xb'``, ``'QA9ei'``).
             payload: Python object — will be JSON-serialised as the inner payload.
             timeout: HTTP request timeout in seconds.
+            source_path: URL source-path parameter (default ``'/'``; use
+                ``'/notebook/{id}'`` for notebook-scoped calls).
 
         Returns:
             Parsed inner response data (list/dict), or ``None`` if unparseable.
@@ -453,7 +456,7 @@ class NLMDirectClient:
         url = (
             f"{_NLM_RPC_ENDPOINT}"
             f"?rpcids={rpc_id}"
-            f"&source-path=/"
+            f"&source-path={urllib.parse.quote(source_path)}"
             f"&f.sid={urllib.parse.quote(str(f_sid))}"
             f"&bl={urllib.parse.quote(bl)}"
             f"&hl=en-US"
@@ -1170,6 +1173,265 @@ class NLMDirectClient:
             "title": result[1] if len(result) > 1 else "Data Table",
             "content": result[2] if len(result) > 2 else str(result),
         }
+
+    # ──── SDK gap methods (ARGUS audit) ───────────────────────────────────────
+
+    def get_notebook(self, notebook_id: str) -> Dict[str, Any]:
+        """Fetch metadata for a single notebook (mFtdI).
+
+        Args:
+            notebook_id: NLM notebook UUID.
+
+        Returns:
+            Notebook metadata dict (id, title, created_at, source_count, etc.).
+        """
+        payload = [notebook_id]
+        result = self._rpc_call("mFtdI", payload, timeout=30)
+        if isinstance(result, dict):
+            return result
+        if isinstance(result, list) and result:
+            return {"id": notebook_id, "raw": result}
+        return {"id": notebook_id}
+
+    def get_source(self, notebook_id: str, source_id: str) -> Dict[str, Any]:
+        """Fetch metadata for a single source (K4YCPe).
+
+        Args:
+            notebook_id: NLM notebook UUID.
+            source_id: Source UUID.
+
+        Returns:
+            Source metadata dict (id, title, type, status, url, etc.).
+        """
+        payload = [notebook_id, source_id]
+        result = self._rpc_call("K4YCPe", payload, timeout=30)
+        if isinstance(result, dict):
+            return result
+        if isinstance(result, list) and result:
+            return {"id": source_id, "notebook_id": notebook_id, "raw": result}
+        return {"id": source_id, "notebook_id": notebook_id}
+
+    def list_sources(self, notebook_id: str) -> List[Dict[str, Any]]:
+        """List all sources for a notebook via jtGGne rpcid.
+
+        This is the metadata-rich sources listing (different from ``get_sources``
+        which uses the hPTbtc rpcid for the source-content endpoint).
+
+        Args:
+            notebook_id: NLM notebook UUID.
+
+        Returns:
+            List of source metadata dicts.
+        """
+        payload = [notebook_id]
+        result = self._rpc_call("jtGGne", payload, timeout=30)
+        if isinstance(result, list):
+            return [
+                item if isinstance(item, dict) else {"raw": item}
+                for item in result
+            ]
+        return []
+
+    def process_source(self, notebook_id: str, source_id: str) -> None:
+        """Trigger reprocessing of a source (bfEAsb).
+
+        Use after uploading a file or when a source has a failed status.
+
+        Args:
+            notebook_id: NLM notebook UUID.
+            source_id: Source UUID to reprocess.
+        """
+        payload = [notebook_id, source_id]
+        self._rpc_call("bfEAsb", payload, timeout=60)
+        logger.debug("Triggered reprocessing of source %s in notebook %s", source_id, notebook_id)
+
+    def add_source(
+        self,
+        notebook_id: str,
+        source_type: str,
+        content: str,
+        title: Optional[str] = None,
+    ) -> str:
+        """Generic add-source wrapper dispatching by type (PoHVkb).
+
+        For convenience when you don't want to call the type-specific methods.
+
+        Args:
+            notebook_id: NLM notebook UUID.
+            source_type: One of ``"url"``, ``"text"``, ``"file"``.
+            content: URL, raw text body, or local file path.
+            title: Optional display title.
+
+        Returns:
+            New source ID string.
+        """
+        source_type = source_type.lower()
+        if source_type == "url":
+            return self.add_source_url(notebook_id, content, title=title)
+        elif source_type == "text":
+            return self.add_source_text(notebook_id, content, title=title or "Text Source")
+        elif source_type in ("file", "path"):
+            return self.add_source_file(notebook_id, content)
+        else:
+            raise ValueError(f"Unknown source_type '{source_type}'. Use 'url', 'text', or 'file'.")
+
+    def send_chat_message(
+        self,
+        notebook_id: str,
+        message: str,
+        conversation_id: Optional[str] = None,
+    ) -> str:
+        """Send a structured chat message to a notebook (tJHFsf).
+
+        This is the batchexecute variant of the chat endpoint (distinct from
+        ``ask()`` which uses the GenerateFreeFormStreamed streaming endpoint).
+        Use for fire-and-forget messages when streaming is not needed.
+
+        Args:
+            notebook_id: NLM notebook UUID.
+            message: User message text.
+            conversation_id: Optional existing conversation ID to continue.
+
+        Returns:
+            Response text string.
+        """
+        payload = [notebook_id, message, conversation_id]
+        result = self._rpc_call("tJHFsf", payload, timeout=120)
+        if isinstance(result, list) and result:
+            return str(result[0])
+        if isinstance(result, str):
+            return result
+        return str(result) if result else ""
+
+    def get_shared_notebook(self, share_token: str) -> Dict[str, Any]:
+        """Access a notebook shared by another user (jzEKsc).
+
+        Args:
+            share_token: The share token or share ID from a shared notebook URL.
+
+        Returns:
+            Shared notebook metadata dict.
+        """
+        payload = [share_token]
+        result = self._rpc_call("jzEKsc", payload, timeout=30)
+        if isinstance(result, dict):
+            return result
+        if isinstance(result, list) and result:
+            return {"share_token": share_token, "raw": result}
+        return {"share_token": share_token}
+
+    def get_notebook_analysis(
+        self,
+        notebook_id: str,
+        analysis_depth: int = 2,
+    ) -> Dict[str, Any]:
+        """Get Gemini's structural analysis of a notebook (VfAZjd).
+
+        Returns conceptual clusters, key themes, source quality signals,
+        and readiness scores for guide/audio generation.
+
+        Args:
+            notebook_id: NLM notebook UUID.
+            analysis_depth: Analysis verbosity (1=summary, 2=detailed).
+
+        Returns:
+            Dict with themes, clusters, coverage_score, ready_for_audio, etc.
+        """
+        payload = [notebook_id, [analysis_depth]]
+        result = self._rpc_call("VfAZjd", payload, timeout=60)
+        if isinstance(result, dict):
+            return result
+        if isinstance(result, list) and result:
+            return {"notebook_id": notebook_id, "analysis": result}
+        return {"notebook_id": notebook_id}
+
+    def get_audio_overview_options(self, notebook_id: str) -> List[Dict[str, Any]]:
+        """Get available audio overview types for a notebook (sqTeoe).
+
+        Returns the list of audio formats available (Deep Dive, Briefing, etc.)
+        along with their estimated generation time and readiness.
+
+        Args:
+            notebook_id: NLM notebook UUID.
+
+        Returns:
+            List of option dicts with type_id, label, estimated_minutes, available.
+        """
+        payload = [
+            [
+                2, None, None,
+                [1, None, None, None, None, None, None, None, None, None, [1]],
+                [[2, 1]],
+            ],
+            None,
+            1,
+        ]
+        result = self._rpc_call("sqTeoe", payload, source_path=f"/notebook/{notebook_id}", timeout=30)
+        if isinstance(result, list):
+            options = []
+            for item in result:
+                if isinstance(item, (list, dict)):
+                    options.append(item if isinstance(item, dict) else {"raw": item})
+            return options
+        return []
+
+    def get_ice_config(self, notebook_id: str) -> Dict[str, Any]:
+        """Fetch WebRTC ICE configuration for live audio (Of0kDd).
+
+        Returns STUN/TURN server configuration needed for WebRTC peer
+        connections (live audio overview streaming).
+
+        Args:
+            notebook_id: NLM notebook UUID.
+
+        Returns:
+            ICE config dict with ice_servers, username, credential.
+        """
+        payload = [notebook_id]
+        result = self._rpc_call("Of0kDd", payload, timeout=15)
+        if isinstance(result, dict):
+            return result
+        if isinstance(result, list) and result:
+            return {"notebook_id": notebook_id, "raw": result}
+        return {"notebook_id": notebook_id}
+
+    def send_sdp_offer(
+        self,
+        notebook_id: str,
+        sdp_offer: str,
+        session_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Send a WebRTC SDP offer for live audio streaming (eyWvXc).
+
+        Used for initiating live two-way audio conversations with a notebook.
+        Requires a prior ``get_ice_config()`` call to obtain STUN/TURN servers.
+
+        Args:
+            notebook_id: NLM notebook UUID.
+            sdp_offer: WebRTC SDP offer string (from RTCPeerConnection.createOffer).
+            session_id: Optional session ID from a prior WebRTC negotiation.
+
+        Returns:
+            Dict with sdp_answer, session_id for the WebRTC connection.
+        """
+        payload = [notebook_id, sdp_offer, session_id]
+        result = self._rpc_call("eyWvXc", payload, timeout=30)
+        if isinstance(result, dict):
+            return result
+        if isinstance(result, list) and len(result) >= 2:
+            return {"sdp_answer": str(result[0]), "session_id": str(result[1])}
+        return {"notebook_id": notebook_id, "raw": result}
+
+    def update_notebook(self, notebook_id: str, new_title: str) -> None:
+        """Rename a notebook — alias for ``update_notebook_title`` (sM6gLf/s0tc2d).
+
+        The auditor expects this name. Delegates to ``update_notebook_title``.
+
+        Args:
+            notebook_id: NLM notebook UUID.
+            new_title: New display title.
+        """
+        self.update_notebook_title(notebook_id, new_title)
 
     # ──── Compound helpers ─────────────────────────────────────────────────────
 

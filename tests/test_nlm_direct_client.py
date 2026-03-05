@@ -186,3 +186,194 @@ def test_share_notebook_private_level(client: NLMDirectClient) -> None:
     with patch.object(client, "_rpc_call", return_value=["https://x.com/s/priv"]) as mock_rpc:
         client.share_notebook("nb-002", share_level=0)
     mock_rpc.assert_called_once_with("dI5Y8", ["nb-002", 0], timeout=30)
+
+
+# ──── SDK gap methods ──────────────────────────────────────────────────────────
+
+
+def test_get_notebook_returns_dict(client: NLMDirectClient) -> None:
+    """Happy path: returns dict result as-is."""
+    with patch.object(client, "_rpc_call", return_value={"id": "nb-1", "title": "T"}) as mock_rpc:
+        result = client.get_notebook("nb-1")
+    assert result["id"] == "nb-1"
+    mock_rpc.assert_called_once_with("mFtdI", ["nb-1"], timeout=30)
+
+
+def test_get_notebook_wraps_list_result(client: NLMDirectClient) -> None:
+    """Wraps list result with notebook_id."""
+    with patch.object(client, "_rpc_call", return_value=["nb-1", "Title", 3]):
+        result = client.get_notebook("nb-1")
+    assert result["id"] == "nb-1"
+    assert "raw" in result
+
+
+def test_get_notebook_returns_id_on_none(client: NLMDirectClient) -> None:
+    """Returns minimal dict when RPC returns None."""
+    with patch.object(client, "_rpc_call", return_value=None):
+        result = client.get_notebook("nb-1")
+    assert result == {"id": "nb-1"}
+
+
+def test_get_source_calls_correct_rpc(client: NLMDirectClient) -> None:
+    """Calls K4YCPe with [notebook_id, source_id]."""
+    with patch.object(client, "_rpc_call", return_value={"id": "s-1"}) as mock_rpc:
+        result = client.get_source("nb-1", "s-1")
+    assert result["id"] == "s-1"
+    mock_rpc.assert_called_once_with("K4YCPe", ["nb-1", "s-1"], timeout=30)
+
+
+def test_get_source_wraps_list(client: NLMDirectClient) -> None:
+    """Wraps list result with id and notebook_id."""
+    with patch.object(client, "_rpc_call", return_value=["s-1", "My Source"]):
+        result = client.get_source("nb-1", "s-1")
+    assert result["id"] == "s-1"
+    assert result["notebook_id"] == "nb-1"
+
+
+def test_list_sources_returns_list_of_dicts(client: NLMDirectClient) -> None:
+    """Parses list of dict items."""
+    rpc_result = [{"id": "s-1", "type": "url"}, {"id": "s-2", "type": "text"}]
+    with patch.object(client, "_rpc_call", return_value=rpc_result) as mock_rpc:
+        sources = client.list_sources("nb-1")
+    assert len(sources) == 2
+    assert sources[0]["id"] == "s-1"
+    mock_rpc.assert_called_once_with("jtGGne", ["nb-1"], timeout=30)
+
+
+def test_list_sources_wraps_non_dict_items(client: NLMDirectClient) -> None:
+    """Wraps non-dict list items in {'raw': item}."""
+    with patch.object(client, "_rpc_call", return_value=[["s-1", "url"], ["s-2", "text"]]):
+        sources = client.list_sources("nb-1")
+    assert all("raw" in s for s in sources)
+
+
+def test_list_sources_returns_empty_on_none(client: NLMDirectClient) -> None:
+    """Returns empty list when RPC returns None."""
+    with patch.object(client, "_rpc_call", return_value=None):
+        assert client.list_sources("nb-1") == []
+
+
+def test_process_source_calls_correct_rpc(client: NLMDirectClient) -> None:
+    """Calls bfEAsb with [notebook_id, source_id]."""
+    with patch.object(client, "_rpc_call", return_value=None) as mock_rpc:
+        client.process_source("nb-1", "s-1")
+    mock_rpc.assert_called_once_with("bfEAsb", ["nb-1", "s-1"], timeout=60)
+
+
+def test_add_source_dispatches_url(client: NLMDirectClient) -> None:
+    """Dispatches 'url' type to add_source_url."""
+    with patch.object(client, "add_source_url", return_value="s-url") as mock:
+        result = client.add_source("nb-1", "url", "https://example.com", title="Ex")
+    mock.assert_called_once_with("nb-1", "https://example.com", title="Ex")
+    assert result == "s-url"
+
+
+def test_add_source_dispatches_text(client: NLMDirectClient) -> None:
+    """Dispatches 'text' type to add_source_text."""
+    with patch.object(client, "add_source_text", return_value="s-text") as mock:
+        result = client.add_source("nb-1", "text", "some content")
+    mock.assert_called_once_with("nb-1", "some content", title="Text Source")
+    assert result == "s-text"
+
+
+def test_add_source_dispatches_file(client: NLMDirectClient) -> None:
+    """Dispatches 'file' type to add_source_file."""
+    with patch.object(client, "add_source_file", return_value="s-file") as mock:
+        result = client.add_source("nb-1", "file", "/path/to/doc.pdf")
+    mock.assert_called_once_with("nb-1", "/path/to/doc.pdf")
+    assert result == "s-file"
+
+
+def test_add_source_raises_on_unknown_type(client: NLMDirectClient) -> None:
+    """Raises ValueError for unknown source type."""
+    with pytest.raises(ValueError, match="Unknown source_type"):
+        client.add_source("nb-1", "video", "https://youtube.com/x")
+
+
+def test_send_chat_message_returns_string(client: NLMDirectClient) -> None:
+    """Returns first list element as string."""
+    with patch.object(client, "_rpc_call", return_value=["Hello from NLM"]) as mock_rpc:
+        result = client.send_chat_message("nb-1", "What is this about?")
+    assert result == "Hello from NLM"
+    mock_rpc.assert_called_once_with("tJHFsf", ["nb-1", "What is this about?", None], timeout=120)
+
+
+def test_send_chat_message_with_conversation_id(client: NLMDirectClient) -> None:
+    """Passes conversation_id through payload."""
+    with patch.object(client, "_rpc_call", return_value=["reply"]) as mock_rpc:
+        client.send_chat_message("nb-1", "Follow up", conversation_id="conv-42")
+    mock_rpc.assert_called_once_with("tJHFsf", ["nb-1", "Follow up", "conv-42"], timeout=120)
+
+
+def test_send_chat_message_returns_empty_on_none(client: NLMDirectClient) -> None:
+    """Returns empty string when RPC returns None."""
+    with patch.object(client, "_rpc_call", return_value=None):
+        assert client.send_chat_message("nb-1", "hello") == ""
+
+
+def test_get_shared_notebook_returns_dict(client: NLMDirectClient) -> None:
+    """Returns dict result from RPC."""
+    with patch.object(client, "_rpc_call", return_value={"id": "nb-shared"}) as mock_rpc:
+        result = client.get_shared_notebook("share-token-123")
+    assert result["id"] == "nb-shared"
+    mock_rpc.assert_called_once_with("jzEKsc", ["share-token-123"], timeout=30)
+
+
+def test_get_shared_notebook_wraps_list(client: NLMDirectClient) -> None:
+    """Wraps list result with share_token."""
+    with patch.object(client, "_rpc_call", return_value=["nb-id", "Shared NB"]):
+        result = client.get_shared_notebook("share-tok")
+    assert result["share_token"] == "share-tok"
+
+
+def test_get_notebook_analysis_passes_depth(client: NLMDirectClient) -> None:
+    """Passes [analysis_depth] as second payload element."""
+    with patch.object(client, "_rpc_call", return_value={"themes": ["A"]}) as mock_rpc:
+        result = client.get_notebook_analysis("nb-1", analysis_depth=2)
+    assert result["themes"] == ["A"]
+    mock_rpc.assert_called_once_with("VfAZjd", ["nb-1", [2]], timeout=60)
+
+
+def test_get_notebook_analysis_wraps_list(client: NLMDirectClient) -> None:
+    """Wraps list result with notebook_id key."""
+    with patch.object(client, "_rpc_call", return_value=[["theme_A"], 0.9]):
+        result = client.get_notebook_analysis("nb-1")
+    assert result["notebook_id"] == "nb-1"
+    assert "analysis" in result
+
+
+def test_get_audio_overview_options_uses_source_path(client: NLMDirectClient) -> None:
+    """Passes notebook source_path to _rpc_call."""
+    with patch.object(client, "_rpc_call", return_value=[[1, "Deep Dive"], [2, "Brief"]]) as mock_rpc:
+        options = client.get_audio_overview_options("nb-1")
+    assert mock_rpc.call_args.kwargs.get("source_path") == "/notebook/nb-1"
+    assert len(options) == 2
+
+
+def test_get_audio_overview_options_returns_empty_on_none(client: NLMDirectClient) -> None:
+    """Returns empty list when RPC returns None."""
+    with patch.object(client, "_rpc_call", return_value=None):
+        assert client.get_audio_overview_options("nb-1") == []
+
+
+def test_get_ice_config_calls_correct_rpc(client: NLMDirectClient) -> None:
+    """Calls Of0kDd with [notebook_id]."""
+    with patch.object(client, "_rpc_call", return_value={"ice_servers": []}) as mock_rpc:
+        result = client.get_ice_config("nb-1")
+    assert "ice_servers" in result
+    mock_rpc.assert_called_once_with("Of0kDd", ["nb-1"], timeout=15)
+
+
+def test_send_sdp_offer_calls_correct_rpc(client: NLMDirectClient) -> None:
+    """Calls eyWvXc with [notebook_id, sdp_offer, session_id]."""
+    with patch.object(client, "_rpc_call", return_value=["sdp-answer", "sess-1"]) as mock_rpc:
+        result = client.send_sdp_offer("nb-1", "v=0\r\n...", session_id="sess-1")
+    assert result["sdp_answer"] == "sdp-answer"
+    mock_rpc.assert_called_once_with("eyWvXc", ["nb-1", "v=0\r\n...", "sess-1"], timeout=30)
+
+
+def test_update_notebook_delegates_to_title(client: NLMDirectClient) -> None:
+    """update_notebook delegates to update_notebook_title."""
+    with patch.object(client, "update_notebook_title") as mock:
+        client.update_notebook("nb-1", "New Title")
+    mock.assert_called_once_with("nb-1", "New Title")
