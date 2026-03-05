@@ -188,32 +188,28 @@ class ArgusAgent:
     # ──── Session init: build anchor chain ────
 
     async def _init_session(self, sections: List[str]) -> None:
-        """Build the three conversation anchors.
+        """Build a single primed anchor (system prompt + nav map in one store call).
 
-        Anchor 1 — _root_id: system prompt only.
-        Anchor 2 — _primed_id: root → full nav map with exact URLs.
-        Anchor 3 — _progress_id: starts equal to _primed_id, advances per section.
+        With max_streams=1, sending multiple store:True calls back-to-back fills
+        the single slot and causes queuing.  One combined message avoids that.
 
-        All tool turns branch from _progress_id so the model always "remembers"
-        exactly where it left off.  Loop kills branch from _primed_id (clean slate).
+        _root_id == _primed_id — the single warm anchor.
+        _progress_id starts there and advances per section visited.
+        Loop kills branch back to _primed_id for a clean context reset.
         """
         tool_list = "\n".join(f"  • {t}()" for t in ARGUS_TOOLS)
 
-        # ── Anchor 1: system prompt ──
-        self._root_id = await self._store_message(
-            f"{SYSTEM_PROMPT}\n\nAvailable tools (via MCP):\n{tool_list}\n\nReply: ARGUS READY",
-            previous_id=None,
-        )
-        logger.info("ARGUS anchor 1 (root)    root_id=%s", self._root_id)
-
-        # ── Anchor 2: nav map ──
         urls = TARGET_SECTION_URLS.get(self.target, {})
         hints = TARGET_NAV_HINTS.get(self.target, {})
         section_list = " → ".join(sections)
         nav_lines = "\n".join(
             f"  {s}: {urls.get(s) or hints.get(s, '?')}" for s in sections
         )
-        nav_map_msg = (
+
+        # Single combined message: system context + tool list + nav map
+        init_msg = (
+            f"{SYSTEM_PROMPT}\n\n"
+            f"Available tools (via MCP):\n{tool_list}\n\n"
             f"NAV MAP — {self.target} ({len(sections)} sections)\n\n"
             f"Visit IN ORDER: {section_list}\n\n"
             f"Exact navigation commands:\n{nav_lines}\n\n"
@@ -222,14 +218,14 @@ class ArgusAgent:
             "  2. argus_get_network_log() — capture all API calls made\n"
             "  3. Move to next section immediately\n\n"
             "DO NOT navigate to any URL not listed above.\n"
-            "Reply: MAP LOADED"
+            "Reply: ARGUS READY"
         )
-        self._primed_id = await self._store_message(nav_map_msg, previous_id=self._root_id)
-        logger.info("ARGUS anchor 2 (primed)  primed_id=%s", self._primed_id)
 
-        # ── Anchor 3: progress starts at primed ──
+        # ONE store call — keeps max_streams=1 happy
+        self._primed_id = await self._store_message(init_msg, previous_id=None)
+        self._root_id = self._primed_id  # alias — no separate root anchor needed
         self._progress_id = self._primed_id
-        logger.info("ARGUS anchor 3 (progress) = primed — crawl ready")
+        logger.info("ARGUS init anchor primed_id=%s — crawl ready", self._primed_id)
 
     # ──── Advance progress anchor after a section is confirmed visited ────
 
