@@ -3,6 +3,43 @@
 All notable changes to CosySim are documented here.
 
 ---
+## [0.87b] — "THE KNOWLEDGE LAYER" — 2026-03
+
+GAS SDK fully mapped with V8 heap + HAR replay evidence. ARGUS gold artifact analysis
+complete — 25 rpcids mapped (15→25), evidence classification system in place. Protocol
+Monitor parser bug fixed (unquote_plus + trailing field strip). Full test coverage for
+heap_analyzer and protocol_monitor_parser. NLM Q&A seeder built.
+
+### GAS SDK — google_apps_script_client (gas_client.py)
+- **25 rpcids mapped** (was 15) with formal evidence classification:
+  - `HEAP_CONFIRMED` (dist<10): `AvwHP` → `GetDeploymentEnvironment`
+  - `PAYLOAD_CONFIRMED`: `kGFage`→`ListProjects`, `KhxE6`→`UpdateAppsPlatformFile`,
+    `iP35l`→`GetProjectContent`, `gckeOc`→`GetProjectByUrl`
+  - `SOURCE_PATH_CONFIRMED` / `SOURCE_PATH_INFERRED`: 20 additional mappings
+- **Key correction**: `kGFage` is `ListProjects` (not `AvwHP` as previously inferred);
+  `AvwHP` is heap-confirmed as `GetDeploymentEnvironment` (dist=4 co-allocated)
+- **4 new methods**: `get_deployment_environment`, `update_apps_platform_file`,
+  `get_project_content`, `get_project_deployments`
+- **Module docstring** rewritten as authoritative evidence registry
+
+### ARGUS Tools
+- **`heap_analyzer.py`** — V8 heap snapshot analyzer: extracts gRPC service paths,
+  maps rpcids by string proximity (only dist<10 reliable); 32 tests
+- **`protocol_monitor_parser.py`** — CDP Protocol Monitor JSON parser: extracts
+  batchexecute POST bodies from CDP network events; **bug fixed** (`_decode_freq`
+  now uses `unquote_plus` + strips trailing form fields); 64 tests
+
+### NLM Q&A Seeder
+- **`scripts/nlm_qa_seeder.py`** — 60-question seeder across 6 categories
+  (architecture, mcp, skills, nexus, lmstudio, scenes); submits via ARGUS
+  BaseCrawler → NLM chat → stores answers in Nexus Q&A cache
+
+### Tests
+- `tests/test_heap_analyzer.py` — 32 tests (new)
+- `tests/test_protocol_monitor_parser.py` — 64 tests (new, after _decode_freq fix)
+- `tests/test_gas_client.py` — 43 tests (2 rpcid assertions corrected)
+
+---
 ## [0.86b] — "THE RECON LAYER" — 2026-03
 
 ARGUS comes online. CosySim now has eyes inside Google's infrastructure — every

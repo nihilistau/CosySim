@@ -113,6 +113,8 @@
 | [NLM Capabilities](NLM_CAPABILITIES.md) | What we can do: full CRUD, source discovery, Drive export, multi-model, sharing |
 | [NLM SDK Design](NLM_SDK_DESIGN.md) | NLMDirectClient architecture, all methods, error handling, distillation patterns |
 | [Nexus Integration](NEXUS_INTEGRATION.md) | NexusClient, 25+ skills, namespaces, memory, distillers, training, workflows |
+| [Google Ecosystem SDK](GOOGLE_ECOSYSTEM_SDK.md) | Drive, Sheets, Colab, NLM clients — cookie auth, Artifact Bus, GPU manager, venv manager |
+| [Google Apps Script](GOOGLE_APPS_SCRIPT.md) | GAS as webhook receiver and scheduled intelligence layer — planned gas_client.py SDK |
 
 ## External Systems
 

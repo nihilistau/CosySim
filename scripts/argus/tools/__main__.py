@@ -5,7 +5,8 @@ to any running Chrome tab via CDP.  No browser UI needed.
 
 Sub-commands:
     scan      — Scan a tab for interactive elements and generate selectors
-    eval      — Evaluate JavaScript in a tab
+    eval      — Evaluate JavaScript in a tab (supports --file for multi-line JS)
+    ask       — Ask NotebookLM a question and wait for the answer
     tokens    — Harvest Google cookies and refresh the account pool
     tabs      — List all open Chrome tabs
     snap      — Take a screenshot of a tab
@@ -20,6 +21,8 @@ Examples:
     python -m scripts.argus.tools scan --filter insert        # filter elements
     python -m scripts.argus.tools eval "document.title"       # quick JS eval
     python -m scripts.argus.tools eval --helper buttons       # built-in helpers
+    python -m scripts.argus.tools eval --file query.js        # run JS from file
+    python -m scripts.argus.tools ask "What is CosySim?"      # ask NLM a question
     python -m scripts.argus.tools tokens                      # harvest + save
     python -m scripts.argus.tools tokens --show               # print only
     python -m scripts.argus.tools snap                        # screenshot NLM
@@ -97,6 +100,20 @@ JS_HELPERS: Dict[str, str] = {
         description: document.querySelector('meta[name=description]')?.content,
         viewport: document.querySelector('meta[name=viewport]')?.content
     })""",
+
+    "nlm_state": """() => ({
+        notebook_title: document.querySelector('notebook-header .notebook-header__name')?.innerText?.trim()
+            || document.querySelector('[aria-label*="notebook"]')?.innerText?.trim() || null,
+        response_count: document.querySelectorAll('response-container').length,
+        last_response: (() => {
+            const items = document.querySelectorAll('response-container');
+            if (!items.length) return null;
+            const last = items[items.length - 1];
+            return last.querySelector('.response-content, .model-response, [class*="response"]')?.innerText?.trim()?.slice(0, 500) || null;
+        })(),
+        query_box_enabled: !document.querySelector('[aria-label="Query box"]')?.disabled,
+        submit_enabled: !document.querySelector('[aria-label="Submit"]')?.disabled
+    })""",
 }
 
 
@@ -132,7 +149,7 @@ async def cmd_scan(ctx, url: str, filter_kw: str, save: bool) -> None:
             save_selectors(elements, name=url.split(".")[0])
 
 
-async def cmd_eval(ctx, url: str, js: Optional[str], helper: Optional[str], interactive: bool) -> None:
+async def cmd_eval(ctx, url: str, js: Optional[str], helper: Optional[str], interactive: bool, file: Optional[str] = None) -> None:
     """Evaluate JS in a tab."""
     page = await find_page(ctx, url)
     if not page:
@@ -145,9 +162,128 @@ async def cmd_eval(ctx, url: str, js: Optional[str], helper: Optional[str], inte
         await _repl(page)
         return
 
-    code = JS_HELPERS.get(helper or "", "") or js or "() => ({title:document.title, url:location.href})"
+    file_js: Optional[str] = None
+    if file:
+        from pathlib import Path
+        file_js = Path(file).read_text(encoding="utf-8")
+
+    code = file_js or JS_HELPERS.get(helper or "", "") or js or "() => ({title:document.title, url:location.href})"
     result = await page.evaluate(code)
     _pp(result)
+
+
+# JS snippets for cmd_ask
+_NLM_COUNT_JS = "() => document.querySelectorAll('chat-message').length"
+
+_NLM_LOADING_JS = """() => {
+    // Returns true while NLM is still generating a response
+    return !!(
+        document.querySelector('[aria-label="Stop generating"]')
+        || document.querySelector('.loading-indicator')
+        || document.querySelector('[aria-busy="true"]')
+    );
+}"""
+
+_NLM_READ_LAST_JS = """() => {
+    // Read the last chat-message (NLM response, not user query)
+    const items = document.querySelectorAll('chat-message');
+    if (!items.length) return null;
+    const last = items[items.length - 1];
+    return last?.innerText?.trim() || null;
+}"""
+
+
+async def cmd_ask(ctx, question: str, url: str, timeout: int, raw: bool, store: bool) -> Optional[str]:
+    """Ask a question in the NLM chat box and wait for the response.
+
+    Returns the answer text, or None on timeout / no matching tab.
+    """
+    page = await find_page(ctx, url)
+    if not page:
+        print(f"[argus] No tab matching '{url}'")
+        return None
+
+    print(f"[argus] Tab: {page.url[:70]}")
+
+    # Count existing responses
+    before_count: int = await page.evaluate(_NLM_COUNT_JS)
+
+    # Use Playwright click + fill to properly trigger Angular form validation
+    query_selector = '[aria-label="Query box"]'
+    await page.click(query_selector)
+    await page.fill(query_selector, question)
+
+    # Wait for Angular to enable submit
+    await asyncio.sleep(0.8)
+
+    submit_selector = '[aria-label="Submit"]'
+    try:
+        await page.wait_for_selector(f'{submit_selector}:not([disabled])', timeout=5000)
+    except Exception:
+        # Fallback: try pressing Enter
+        await page.keyboard.press("Enter")
+
+    # Click submit (or press Enter if button not enabled)
+    submit_btn = page.locator(submit_selector)
+    submit_disabled = await submit_btn.is_disabled()
+    if not submit_disabled:
+        await submit_btn.click()
+    else:
+        await page.focus(query_selector)
+        await page.keyboard.press("Enter")
+
+    print(f"[argus] Question submitted. Waiting for response (timeout={timeout}s)...")
+
+    # Poll until new chat-message appears with stable content
+    deadline = time.time() + timeout
+    answer: Optional[str] = None
+    last_content: str = ""
+    stable_count: int = 0
+    STABLE_NEEDED = 2  # content must be unchanged for 2 consecutive polls (3s)
+
+    while time.time() < deadline:
+        await asyncio.sleep(1.5)
+        is_loading = await page.evaluate(_NLM_LOADING_JS)
+        after_count = await page.evaluate(_NLM_COUNT_JS)
+
+        if after_count > before_count:
+            current_content = await page.evaluate(_NLM_READ_LAST_JS) or ""
+            if current_content == last_content and len(current_content) > 50:
+                stable_count += 1
+            else:
+                stable_count = 0
+                last_content = current_content
+
+            if stable_count >= STABLE_NEEDED and not is_loading:
+                answer = current_content
+                break
+
+        elapsed = int(time.time() - (deadline - timeout))
+        print(f"[argus]   waiting... {elapsed}s  (msgs: {before_count}→{after_count}, loading={is_loading}, stable={stable_count})")
+
+    if not answer:
+        print(f"[argus] Timeout — no new response in {timeout}s")
+        return None
+
+    if raw:
+        print(answer)
+    else:
+        print(f"\n{'─'*70}")
+        print(f"Q: {question}")
+        print(f"{'─'*70}")
+        print(answer)
+        print(f"{'─'*70}")
+
+    if store:
+        try:
+            from engine.nexus.client import get_nexus_client
+            client = get_nexus_client()
+            client.add_qa(question, answer, category="nlm_ask")
+            print(f"[argus] Stored Q&A in Nexus.")
+        except Exception as exc:
+            print(f"[argus] Nexus store failed: {exc}")
+
+    return answer
 
 
 async def cmd_tokens(url: str, show: bool, account: str) -> None:
@@ -254,6 +390,7 @@ async def main(argv: List[str]) -> None:
     pe.add_argument("--url",       default="notebooklm")
     pe.add_argument("--helper",    default=None, choices=list(JS_HELPERS.keys()),
                     help="Run a built-in helper snippet")
+    pe.add_argument("--file",      default=None, help="Read JS from a file")
     pe.add_argument("-i", "--interactive", action="store_true", help="REPL mode")
 
     # tokens
@@ -272,6 +409,14 @@ async def main(argv: List[str]) -> None:
     pw_arg.add_argument("--url",      default="notebooklm")
     pw_arg.add_argument("--filter",   default="")
     pw_arg.add_argument("--interval", type=float, default=3.0)
+
+    # ask
+    pa = sub.add_parser("ask", help="Ask NLM a question and return the answer")
+    pa.add_argument("question",       help="The question to ask")
+    pa.add_argument("--url",          default="notebooklm")
+    pa.add_argument("--timeout",      type=int, default=120, help="Max seconds to wait for response (default: 120)")
+    pa.add_argument("--raw",          action="store_true", help="Print only the raw answer text")
+    pa.add_argument("--store",        action="store_true", help="Store Q&A pair in Nexus after receiving answer")
 
     # repl
     pr = sub.add_parser("repl", help="Interactive JavaScript REPL")
@@ -299,7 +444,10 @@ async def main(argv: List[str]) -> None:
             await cmd_scan(ctx, args.url, args.filter, args.save)
 
         elif args.cmd == "eval":
-            await cmd_eval(ctx, args.url, args.js, args.helper, args.interactive)
+            await cmd_eval(ctx, args.url, args.js, args.helper, args.interactive, getattr(args, "file", None))
+
+        elif args.cmd == "ask":
+            await cmd_ask(ctx, args.question, args.url, args.timeout, args.raw, args.store)
 
         elif args.cmd == "snap":
             await cmd_snap(ctx, args.url, args.out)
