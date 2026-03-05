@@ -29,6 +29,14 @@ DUMPCAP_PATH  = r"C:\Program Files\Wireshark\dumpcap.exe"
 
 # ──── Targets ────
 TARGETS: Dict[str, Dict] = {
+    "google_aim": {
+        "base_url":      "https://www.google.com",
+        "search_url":    "https://www.google.com/search",
+        "folif_url":     "https://www.google.com/async/folif",
+        "service_url":   "https://www.google.com/httpservice/web/AimThreadsService",
+        "service":       "AimThreadsService",
+        "notes": "Google AI Mode (udm=50). Canvas feature released 2026-03-05.",
+    },
     "notebooklm": {
         "base_url":   "https://notebooklm.google.com",
         "batch_url":  "https://notebooklm.google.com/_/LabsTailwindUi/data/batchexecute",
@@ -202,6 +210,102 @@ GAS_OTHER_SERVICE_METHODS: Dict[str, List[str]] = {
     "TriggersService": ["DeleteTrigger"],
     "StorageProjectService": ["GetCloudProjectPermissions"],
 }
+
+# ──── Known AIM (Google AI Mode) endpoints — discovered 2026-03-05 from HAR + heap ────
+# Entry point: GET /search?q=...&udm=50&aep=10
+# Canvas identifier: "aim/canvas" in folif response HTML
+AIM_ENDPOINTS: Dict[str, str] = {
+    # Conversation (GET requests via /async/)
+    "/async/folif":                            "FollowUpInFlow",        # GET — conversation turn (folif = follow-up in flow)
+    "/async/folwr":                            "FollowWithRewrite",     # GET — canvas rewrite/edit mode (folwr = follow with rewrite)
+    "/async/imgv":                             "ImageViewer",           # GET — inline image viewer within AI Mode (udm=50+aep=10)
+    # AimThreadsService methods (POST /httpservice/web/AimThreadsService/{method})
+    "AimThreadsService/ListThreads":           "ListThreads",           # list saved AI Mode threads
+    "AimThreadsService/ListSharedThreads":     "ListSharedThreads",     # list shared threads
+    "AimThreadsService/SearchThreads":         "SearchThreads",         # search threads by keyword
+    "AimThreadsService/GetThreadContext":      "GetThreadContext",      # get thread detail/history
+    "AimThreadsService/ExportThread":          "ExportThread",          # export canvas as JSPB HTML
+    "AimThreadsService/UpdateThread":          "UpdateThread",          # rename/update thread
+    "AimThreadsService/DeleteThreads":         "DeleteThreads",         # delete threads
+    "AimThreadsService/DeleteSharedThreads":   "DeleteSharedThreads",   # un-share threads
+    "AimThreadsService/InitiateShare":         "InitiateShare",         # create share link
+    "AimThreadsService/CreateJourney":         "CreateJourney",         # create project/journey
+    "AimThreadsService/UpdateJourneys":        "UpdateJourneys",        # update journey
+    "AimThreadsService/DeleteJourneys":        "DeleteJourneys",        # delete journeys
+}
+
+# Key parameters observed in AIM requests (from HAR + heap, 2026-03-05)
+AIM_PARAMS_REFERENCE: Dict[str, str] = {
+    "udm":      "50 = AI Mode; required on all AIM requests",
+    "aep":      "10 = AI Exploration Panel; required on all AIM requests",
+    "fmt":      "jspb = JSON-PB response (response starts with )]}')",
+    "msc":      "gwsclient = Google Web Services client identifier",
+    "opi":      "89978449 = opaque ID; consistent across all requests",
+    "stkp":     "session token per conversation turn (from initial search page)",
+    "mstk":     "secondary session token (data-mstk from folif response HTML)",
+    "elrc":     "encoded conversation context (base64 proto) for threading turns",
+    "xsrf":     "XSRF token from __Secure-1PSIDTS cookie or SAPISIDHASH",
+    "csui":     "3 = AI Mode context UI; sent on follow-up turns",
+    "csuir":    "1 = context UI request flag",
+    "cs":       "1 = content safety flag",
+    "ei":       "experiment ID / thread ID extracted from initial page response",
+    "canvasid": "load a specific canvas by ID in a new search (URL param)",
+    "aim_sxs":  "side-by-side mode (AI response alongside classic search)",
+    "aim_padt": "prompt/add-text flag (appears in URL param enum list)",
+    "aim_folif":"follow in flow mode flag",
+    "aim_folwr":"follow with rewrite mode flag",
+    # imgv-specific
+    "tbnid":    "thumbnail ID for imgv image viewer",
+    "imgdii":   "same as tbnid — image display item identifier",
+    "docid":    "document/image document ID for imgv",
+    "yv":       "3 = image viewer version",
+}
+
+# Canvas DOM element attributes (from heap heap jsaction analysis)
+AIM_CANVAS_DOM: Dict[str, str] = {
+    "jscontroller":       "AwlxTd",     # canvas component controller class
+    "data-suuid":         "<uuid>||",   # canvas session UUID (format: alphanum + ||)
+    "data-component-xid": "Z9Ie4d",    # canvas component identifier
+    "folwr-token":        "XSRF:ts",   # separate auth token for /async/folwr ops
+}
+
+# Canvas DOM events with obfuscated handler function names (from heap jsaction chain)
+AIM_CANVAS_EVENTS: Dict[str, str] = {
+    "aimMstkAvailable":             "OxNw6c",  # new mstk token ready → use for next turn
+    "aimRenderComplete":            "iuwyKd",  # full render complete
+    "aimBodyComplete":              "C6rCke",  # response body complete
+    "aimModelResponseStarted":      "R5LEBf",  # model started generating
+    "aimOpenShareManagementView":   "dfHbI",   # open share UI
+    "aimOpenStatefulJourneyCreation": "eA5Ajf", # create journey UI
+    "aimOpenStatefulJourneyHub":    "zAaRWc",  # open journey hub
+    "aimNavigateToZeroState":       "CFLK0e",  # navigate to empty state
+    # Canvas render pipeline (no handlers — dispatched for observability)
+    "aimCanvasBeforeFirstContentPaint": "",
+    "aimCanvasDiffsAvailable":      "",        # incremental diff patches ready
+    "aimCanvasPatchStart":          "",
+    "aimCanvasPatchFinished":       "",
+    "aimCanvasRenderStarted":       "",
+    "aimCanvasRenderFinished":      "",
+    "aimCanvasTitleAvailable":      "",
+    "aimCanvasContainerResize":     "",
+    # Input plate events
+    "aimInputPlateDrag":            "",
+    "aimInputPlateLockInput":       "",
+    "aimInputPlateRequestEdit":     "",
+    "aimInputPlateRequestHide":     "",
+    "aimInputPlateRequestRestore":  "",
+    "aimInputPlateUnlockInput":     "",
+    "aimInputPlateUpdateState":     "",
+    "aimInterrupt":                 "",        # cancel in-flight generation
+}
+
+# ExportThread body format (JSPB array, POST body as JSON string):
+# [null, [mstk_token], thread_ei_id, [export_type], null, 2]
+# export_type 1 = default HTML canvas
+AIM_EXPORT_BODY_FORMAT = "[null,[{mstk}],{thread_ei},[{export_type}],null,2]"
+
+# imgv ID format observed: imgv__1:{n}:async:1:{tbnid}-{docid}-1-__h
+AIM_IMGV_ID_FORMAT = "imgv__1:{counter}:async:1:{tbnid}-{docid}-1-__h"
 
 # ──── Known GAS rpcids (25 mapped — V1 from nihilistcod HAR, V2 from gold HAR + heap analysis) ────
 GAS_RPCIDS: Dict[str, str] = {

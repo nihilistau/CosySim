@@ -10,8 +10,9 @@ import logging
 import os
 import threading
 import time
-from dataclasses import dataclass, field, asdict
 from typing import Dict, List, Optional, Any
+
+from pydantic import BaseModel, ConfigDict, Field
 
 from engine.integrations.har_extractor import HARExtractor, COOKIE_NAMES
 
@@ -22,8 +23,7 @@ _POOL_PATH = os.path.join("data", "accounts", "pool.json")
 
 # ──── Data model ─────────────────────────────────────────────────────────────
 
-@dataclass
-class GoogleAccount:
+class GoogleAccount(BaseModel):
     """A single authenticated Google account.
 
     Attributes:
@@ -36,12 +36,14 @@ class GoogleAccount:
         at_token: XSRF at token, if extracted.
     """
 
+    model_config = ConfigDict(validate_assignment=True)
+
     name: str
-    cookies: Dict[str, str] = field(default_factory=dict)
+    cookies: Dict[str, str] = Field(default_factory=dict)
     authuser: int = 0
-    services: List[str] = field(default_factory=list)
-    rate_limited: Dict[str, float] = field(default_factory=dict)
-    added_at: float = field(default_factory=time.time)
+    services: List[str] = Field(default_factory=list)
+    rate_limited: Dict[str, float] = Field(default_factory=dict)
+    added_at: float = Field(default_factory=time.time)
     at_token: Optional[str] = None
 
     def is_rate_limited(self, service: str) -> bool:
@@ -59,20 +61,12 @@ class GoogleAccount:
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize to JSON-safe dict."""
-        return asdict(self)
+        return self.model_dump()
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "GoogleAccount":
         """Deserialize from dict."""
-        return cls(
-            name=data["name"],
-            cookies=data.get("cookies", {}),
-            authuser=data.get("authuser", 0),
-            services=data.get("services", []),
-            rate_limited=data.get("rate_limited", {}),
-            added_at=data.get("added_at", time.time()),
-            at_token=data.get("at_token"),
-        )
+        return cls.model_validate(data)
 
 
 # ──── Pool ────────────────────────────────────────────────────────────────────
@@ -324,6 +318,13 @@ class GoogleAccountPool:
         try:
             with open(self._path, "r", encoding="utf-8") as fh:
                 data = json.load(fh)
+            # Support legacy format: {"accounts": [{name, cookies, ...}, ...]}
+            if isinstance(data, dict) and "accounts" in data and isinstance(data["accounts"], list):
+                data = {a["name"]: a for a in data["accounts"] if isinstance(a, dict) and "name" in a}
+                # Migrate to new format on disk
+                with open(self._path, "w", encoding="utf-8") as fh:
+                    json.dump(data, fh, indent=2)
+                logger.info("Migrated pool.json from legacy list format → dict format")
             with self._lock:
                 self._accounts = {
                     name: GoogleAccount.from_dict(acct_data)
