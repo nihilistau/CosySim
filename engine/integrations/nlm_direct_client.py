@@ -61,6 +61,13 @@ AUDIO_BRIEF = 2       # ~5 minutes, concise overview
 AUDIO_CRITIQUE = 3    # critical analysis of sources
 AUDIO_DEBATE = 4      # two-host debate on the topic
 
+# Guide type constants (from xqEXEf)
+GUIDE_STUDY = 1       # Study guide with key concepts and explanations
+GUIDE_FAQ = 2         # FAQ format — questions and answers
+GUIDE_BRIEFING = 3    # Executive briefing / summary
+GUIDE_TOC = 4         # Table of contents / outline
+GUIDE_TIMELINE = 5    # Chronological timeline
+
 # MIME types accepted by NLM for file upload (Gemini 3.0 multimodal)
 _MIME_MAP: Dict[str, str] = {
     # Images
@@ -1012,6 +1019,115 @@ class NLMDirectClient:
         payload = [notebook_id, [[None, None, None, [None, new_title]]]]
         self._rpc_call("s0tc2d", payload, timeout=30)
         logger.debug("Renamed notebook %s → '%s'", notebook_id, new_title)
+
+    def create_notebook(self, title: str) -> str:
+        """Create a new empty NotebookLM notebook (VqhFhd).
+
+        Args:
+            title: Display name for the new notebook.
+
+        Returns:
+            New notebook ID string.
+        """
+        payload = [title, None, None]
+        result = self._rpc_call("VqhFhd", payload, timeout=30)
+        if result and isinstance(result, list) and result[0]:
+            return str(result[0])
+        raise RuntimeError(f"create_notebook failed for title='{title}': {result}")
+
+    def delete_notebook(self, notebook_id: str) -> None:
+        """Permanently delete a notebook and all its sources (kVoZqc).
+
+        Args:
+            notebook_id: NLM notebook UUID to delete.
+        """
+        payload = [[notebook_id]]
+        self._rpc_call("kVoZqc", payload, timeout=30)
+        logger.info("Deleted notebook %s", notebook_id)
+
+    def get_chat_history(self, notebook_id: str) -> List[Dict[str, Any]]:
+        """Retrieve the conversation history for a notebook (GzgSEd).
+
+        Each turn is a dict with ``role`` (user/model) and ``text``.
+
+        Args:
+            notebook_id: NLM notebook UUID.
+
+        Returns:
+            List of conversation turn dicts.
+        """
+        payload = [notebook_id]
+        result = self._rpc_call("GzgSEd", payload, timeout=30)
+        turns: List[Dict[str, Any]] = []
+        if isinstance(result, list):
+            for item in result:
+                if isinstance(item, list) and len(item) >= 2:
+                    turns.append({"role": str(item[0]), "text": str(item[1])})
+                elif isinstance(item, dict):
+                    turns.append(item)
+        return turns
+
+    def delete_chat_history(self, notebook_id: str) -> None:
+        """Delete all chat history for a notebook (GfmCOc).
+
+        Args:
+            notebook_id: NLM notebook UUID.
+        """
+        payload = [notebook_id]
+        self._rpc_call("GfmCOc", payload, timeout=30)
+        logger.debug("Deleted chat history for notebook %s", notebook_id)
+
+    def generate_guide(
+        self,
+        notebook_id: str,
+        guide_type: int = GUIDE_STUDY,
+        source_ids: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        """Generate a structured guide from notebook sources (xqEXEf).
+
+        Guide types:
+            GUIDE_STUDY (1)    — Study guide with concepts, definitions, examples
+            GUIDE_FAQ (2)      — FAQ format: natural questions with detailed answers
+            GUIDE_BRIEFING (3) — Executive briefing: key findings, implications
+            GUIDE_TOC (4)      — Table of contents / document outline
+            GUIDE_TIMELINE (5) — Chronological timeline of events/topics
+
+        Args:
+            notebook_id: NLM notebook UUID.
+            guide_type: Type of guide to generate (use GUIDE_* constants).
+            source_ids: Specific source IDs, or None for all sources.
+
+        Returns:
+            Dict with ``id``, ``title``, ``content`` (markdown).
+        """
+        src_list = [[sid] for sid in (source_ids or [])]
+        payload = [None, notebook_id, guide_type, src_list]
+        result = self._rpc_call("xqEXEf", payload, timeout=180)
+        if not result:
+            raise RuntimeError(f"generate_guide returned empty for notebook {notebook_id}")
+        return {
+            "id": result[0] if len(result) > 0 else None,
+            "title": result[1] if len(result) > 1 else f"Guide (type {guide_type})",
+            "content": result[2] if len(result) > 2 else "",
+        }
+
+    def share_notebook(self, notebook_id: str, share_level: int = 1) -> str:
+        """Get or create a shareable link for a notebook (dI5Y8).
+
+        Args:
+            notebook_id: NLM notebook UUID.
+            share_level: 1=anyone_with_link (default), 0=private.
+
+        Returns:
+            Shareable URL string.
+        """
+        payload = [notebook_id, share_level]
+        result = self._rpc_call("dI5Y8", payload, timeout=30)
+        if isinstance(result, list) and result:
+            return str(result[0])
+        if isinstance(result, str):
+            return result
+        raise RuntimeError(f"share_notebook returned no URL for {notebook_id}: {result}")
 
     # ──── Compound helpers ─────────────────────────────────────────────────────
 

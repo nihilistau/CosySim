@@ -10,7 +10,8 @@ import hashlib
 import json
 import logging
 import time
-from typing import Any, Optional
+from pathlib import Path
+from typing import Any, Dict, Iterator, List, Optional
 
 import requests
 
@@ -18,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 GRPC_BASE = "https://alkalimakersuite-pa.clients6.google.com/$rpc/google.internal.alkali.applications.makersuite.v1.MakerSuiteService"
 STREAMING_BASE = "https://webchannel-alkalimakersuite-pa.clients6.google.com"
+_REST_BASE = "https://generativelanguage.googleapis.com/v1beta"
 
 # Confirmed API keys (rotate via GenerateCloudApiKey)
 API_KEYS = [
@@ -506,6 +508,289 @@ class AIStudioClient:
             "input": {"text": prompt},
             "output": {"text": response},
         })
+
+    # ──── Logging ────
+
+    def _rest_request(
+        self,
+        method: str,
+        path: str,
+        data: Optional[Dict[str, Any]] = None,
+        params: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Call the Gemini REST API (v1beta).
+
+        Args:
+            method: HTTP method (GET, POST, DELETE).
+            path: API path relative to v1beta base (e.g. 'files' or 'models/x:embedContent').
+            data: JSON body dict for POST requests.
+            params: Query parameter dict.
+
+        Returns:
+            Response JSON dict.
+
+        Raises:
+            requests.HTTPError: On non-2xx response.
+        """
+        url = f"{_REST_BASE}/{path}"
+        all_params: Dict[str, Any] = {"key": self._api_key}
+        if params:
+            all_params.update(params)
+        resp = self._session.request(
+            method,
+            url,
+            json=data,
+            params=all_params,
+            headers={"Content-Type": "application/json"},
+            timeout=60,
+        )
+        resp.raise_for_status()
+        try:
+            return resp.json()
+        except Exception:
+            return {"raw": resp.text}
+
+    # ──── Streaming ────
+
+    def stream_generate_content(
+        self,
+        model: str,
+        contents: List[Dict[str, Any]],
+        system_instruction: Optional[str] = None,
+        generation_config: Optional[Dict[str, Any]] = None,
+    ) -> Iterator[str]:
+        """Stream generated content token by token (streamGenerateContent).
+
+        Args:
+            model: Model name, e.g. ``"gemini-2.5-flash"``.
+            contents: List of content turn dicts with ``role`` and ``parts``.
+            system_instruction: Optional system prompt text.
+            generation_config: Optional generation parameters.
+
+        Yields:
+            Incremental text chunks as they arrive.
+        """
+        body: Dict[str, Any] = {"contents": contents}
+        if system_instruction:
+            body["systemInstruction"] = {"parts": [{"text": system_instruction}]}
+        if generation_config:
+            body["generationConfig"] = generation_config
+
+        endpoint = (
+            f"{_REST_BASE}/models/{model}:streamGenerateContent"
+            f"?alt=sse&key={self._api_key}"
+        )
+        headers = {"Content-Type": "application/json", "Accept": "text/event-stream"}
+
+        with self._session.post(
+            endpoint, json=body, headers=headers, stream=True, timeout=120
+        ) as resp:
+            resp.raise_for_status()
+            for line in resp.iter_lines(decode_unicode=True):
+                if not line or not line.startswith("data: "):
+                    continue
+                data_str = line[6:]
+                if data_str.strip() == "[DONE]":
+                    break
+                try:
+                    chunk = json.loads(data_str)
+                    for candidate in chunk.get("candidates", []):
+                        for part in candidate.get("content", {}).get("parts", []):
+                            if text := part.get("text"):
+                                yield text
+                except (json.JSONDecodeError, KeyError):
+                    continue
+
+    # ──── Embeddings ────
+
+    def embed_content(
+        self,
+        model: str,
+        content: str,
+        task_type: str = "RETRIEVAL_DOCUMENT",
+        title: Optional[str] = None,
+    ) -> List[float]:
+        """Generate an embedding vector for a piece of text (embedContent).
+
+        Args:
+            model: Embedding model, e.g. ``"text-embedding-004"``.
+            content: Text to embed.
+            task_type: Embedding task type. One of: RETRIEVAL_QUERY,
+                RETRIEVAL_DOCUMENT, SEMANTIC_SIMILARITY, CLASSIFICATION,
+                CLUSTERING, QUESTION_ANSWERING, FACT_VERIFICATION.
+            title: Optional title for RETRIEVAL_DOCUMENT tasks.
+
+        Returns:
+            List of float embedding values.
+        """
+        body: Dict[str, Any] = {
+            "model": f"models/{model}",
+            "content": {"parts": [{"text": content}]},
+            "taskType": task_type,
+        }
+        if title:
+            body["title"] = title
+        result = self._rest_request("POST", f"models/{model}:embedContent", data=body)
+        embedding = result.get("embedding", {})
+        return embedding.get("values", [])
+
+    # ──── File management ────
+
+    def list_files(
+        self,
+        page_size: int = 100,
+        page_token: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """List all uploaded files in the AI Studio account (ListFiles).
+
+        Args:
+            page_size: Maximum number of files to return.
+            page_token: Pagination token from a previous call.
+
+        Returns:
+            Dict with ``files`` list and optional ``nextPageToken``.
+        """
+        params: Dict[str, Any] = {"pageSize": page_size}
+        if page_token:
+            params["pageToken"] = page_token
+        return self._rest_request("GET", "files", params=params)
+
+    def create_file(
+        self,
+        file_path: str,
+        display_name: Optional[str] = None,
+        mime_type: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Upload a file to AI Studio for multimodal inference (CreateFile).
+
+        Supported types: images, audio, video, PDF, text.
+        Uploaded files expire after 48 hours.
+
+        Args:
+            file_path: Local path to the file.
+            display_name: Human-readable name. Defaults to filename.
+            mime_type: MIME type override. Auto-detected if omitted.
+
+        Returns:
+            File metadata dict with ``name``, ``uri``, ``state``, ``mimeType``.
+        """
+        import mimetypes as _mimetypes
+        path = Path(file_path)
+        if not path.exists():
+            raise FileNotFoundError(f"File not found: {file_path}")
+
+        if not mime_type:
+            mime_type, _ = _mimetypes.guess_type(str(path))
+            mime_type = mime_type or "application/octet-stream"
+        if not display_name:
+            display_name = path.name
+
+        # Phase 1: initiate resumable upload
+        metadata = {"file": {"displayName": display_name, "mimeType": mime_type}}
+        init_url = (
+            f"https://generativelanguage.googleapis.com/upload/v1beta/files"
+            f"?uploadType=resumable&key={self._api_key}"
+        )
+        init_headers = {
+            "X-Goog-Upload-Protocol": "resumable",
+            "X-Goog-Upload-Command": "start",
+            "X-Goog-Upload-Header-Content-Length": str(path.stat().st_size),
+            "X-Goog-Upload-Header-Content-Type": mime_type,
+            "Content-Type": "application/json",
+        }
+        init_resp = self._session.post(
+            init_url, json=metadata, headers=init_headers, timeout=30
+        )
+        init_resp.raise_for_status()
+        upload_url = init_resp.headers.get("X-Goog-Upload-URL")
+        if not upload_url:
+            raise RuntimeError("No upload URL returned from AI Studio")
+
+        # Phase 2: upload file data
+        file_data = path.read_bytes()
+        upload_headers = {
+            "Content-Type": mime_type,
+            "X-Goog-Upload-Offset": "0",
+            "X-Goog-Upload-Command": "upload, finalize",
+        }
+        upload_resp = self._session.post(
+            upload_url, data=file_data, headers=upload_headers, timeout=300
+        )
+        upload_resp.raise_for_status()
+        result = upload_resp.json()
+        return result.get("file", result)
+
+    def get_file(self, file_name: str) -> Dict[str, Any]:
+        """Get metadata for an uploaded file (GetFile).
+
+        Args:
+            file_name: File name in format ``files/{id}`` or just the ID.
+
+        Returns:
+            File metadata dict.
+        """
+        if not file_name.startswith("files/"):
+            file_name = f"files/{file_name}"
+        return self._rest_request("GET", file_name)
+
+    def delete_file(self, file_name: str) -> None:
+        """Delete an uploaded file (DeleteFile).
+
+        Args:
+            file_name: File name in format ``files/{id}`` or just the ID.
+        """
+        if not file_name.startswith("files/"):
+            file_name = f"files/{file_name}"
+        self._rest_request("DELETE", file_name)
+        logger.debug("Deleted file %s", file_name)
+
+    # ──── Text-to-speech ────
+
+    def text_to_speech(
+        self,
+        text: str,
+        voice: str = "Kore",
+        model: str = "gemini-2.5-flash-preview-tts",
+        output_path: Optional[str] = None,
+    ) -> bytes:
+        """Convert text to speech using Gemini TTS.
+
+        Args:
+            text: Text to synthesize.
+            voice: Voice name. Options include: Aoede, Charon, Fenrir, Kore,
+                Orus, Puck, Leda, Zephyr, etc.
+            model: TTS model name.
+            output_path: Optional path to save the audio file to.
+
+        Returns:
+            Raw audio bytes. If output_path is given, also saves to file.
+        """
+        body: Dict[str, Any] = {
+            "contents": [{"parts": [{"text": text}], "role": "user"}],
+            "generationConfig": {
+                "responseModalities": ["AUDIO"],
+                "speechConfig": {
+                    "voiceConfig": {"prebuiltVoiceConfig": {"voiceName": voice}}
+                },
+            },
+        }
+        result = self._rest_request("POST", f"models/{model}:generateContent", data=body)
+
+        audio_data = b""
+        for candidate in result.get("candidates", []):
+            for part in candidate.get("content", {}).get("parts", []):
+                if inline_data := part.get("inlineData", {}):
+                    import base64
+                    audio_data = base64.b64decode(inline_data.get("data", ""))
+                    break
+
+        if output_path and audio_data:
+            out = Path(output_path)
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_bytes(audio_data)
+            logger.info("TTS saved to %s (%d bytes)", output_path, len(audio_data))
+
+        return audio_data
 
     # ──── Logging ────
 
