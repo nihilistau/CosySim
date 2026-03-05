@@ -55,7 +55,7 @@ class AIStudioCrawler(BaseCrawler):
 
     async def run_flows(self) -> List[CrawlStep]:
         """Execute all AI Studio flows in sequence."""
-        await self.get_or_open_page("aistudio.google.com", AISTUDIO_URL)
+        await self.get_or_open_page("aistudio.google.com", AISTUDIO_URL, reload=True)
         await asyncio.sleep(2)
 
         # ── Flow 1: Home page ──
@@ -118,30 +118,50 @@ class AIStudioCrawler(BaseCrawler):
         """Click the first prompt in the list."""
         try:
             await self._page.wait_for_selector(
-                "a[href*='/prompts/'], mat-card, .prompt-card, [data-prompt-id]",
+                "a[href*='/prompts/'], mat-card, .prompt-card, "
+                "[data-prompt-id], ms-prompt-item, .item-list-item",
                 timeout=10_000,
             )
-            prompts = await self._page.query_selector_all(
-                "a[href*='/prompts/'], mat-card[routerlink]"
+            # Prefer href-based navigation (avoids Angular routing issues)
+            prompt_links = await self._page.query_selector_all("a[href*='/prompts/']")
+            if prompt_links:
+                href = await prompt_links[0].get_attribute("href")
+                if href:
+                    url = f"https://aistudio.google.com{href}" if href.startswith("/") else href
+                    await self._page.goto(url, wait_until="domcontentloaded")
+                    await asyncio.sleep(2)
+                    return
+            # Fallback: click first card
+            cards = await self._page.query_selector_all(
+                "mat-card, ms-prompt-item, .item-list-item, [role='listitem']"
             )
-            if prompts:
-                await prompts[0].click()
+            if cards:
+                await cards[0].click()
                 await asyncio.sleep(2)
+            else:
+                logger.debug("AIStudioCrawler: no prompt items found")
+                await self.dump_dom_info("open_first_prompt")
         except Exception as exc:
             logger.debug("AIStudioCrawler: open_first_prompt: %s", exc)
 
     async def _run_generation(self) -> None:
         """Click the Run button to trigger StreamGenerateContent."""
         try:
-            run_btn = await self._page.query_selector(
-                "button:has-text('Run'), "
-                "button[aria-label*='Run'], "
-                "button[aria-label*='run'], "
-                "[data-testid='run-button']"
-            )
+            run_btn = await self.find_button("Run", "run", "Submit", "Generate")
+            if not run_btn:
+                run_btn = await self._page.query_selector(
+                    "button:has-text('Run'), "
+                    "button[aria-label*='Run'], "
+                    "button[aria-label*='run'], "
+                    "[data-testid='run-button'], "
+                    "ms-run-button button"
+                )
             if run_btn:
                 await run_btn.click()
-                await asyncio.sleep(4)  # Wait for streaming response
+                await asyncio.sleep(5)  # Wait for streaming response
+            else:
+                logger.debug("AIStudioCrawler: no run button found")
+                await self.dump_dom_info("run_generation")
         except Exception as exc:
             logger.debug("AIStudioCrawler: run_generation: %s", exc)
 
@@ -151,13 +171,21 @@ class AIStudioCrawler(BaseCrawler):
             model_selector = await self._page.query_selector(
                 "mat-select[aria-label*='model'], "
                 "button:has-text('gemini'), "
+                "button[aria-label*='Select model'], "
+                "ms-model-selector, "
                 "[aria-label*='Select model'], "
-                ".model-selector"
+                ".model-selector, "
+                "[data-testid='model-selector']"
             )
+            if not model_selector:
+                # Try locator
+                model_selector = await self.find_button("Select model", "model")
             if model_selector:
                 await model_selector.click()
                 await asyncio.sleep(0.5)
-                options = await self._page.query_selector_all("mat-option, [role='option']")
+                options = await self._page.query_selector_all(
+                    "mat-option, [role='option'], li[data-model]"
+                )
                 if len(options) > 1:
                     await options[1].click()
                     await asyncio.sleep(1)
