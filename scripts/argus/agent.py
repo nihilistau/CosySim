@@ -6,21 +6,21 @@ Architecture:
   2. LMStudio v1 REST /api/v1/chat with integrations=[MCP.ephemeral(ARGUS_MCP_URL)]
      — tools are called server-side, results streamed back via SSE
 
-  3. Three conversation anchors — each is a stored response_id:
+  3. Hybrid conversation state:
 
-       _root_id     — system prompt only (never changes, no tools)
-       _primed_id   — root → full nav map with exact URLs per section (never changes)
-       _progress_id — advances after each section is confirmed visited
+     Server-side (primary):
+       _primed_id   — single init anchor (system prompt + nav map, store=True)
+       _progress_id — advances after each section visit (store=True)
+       previous_response_id used on every tool turn for efficient KV reuse.
+       Loop kill → branch from _primed_id (restore clean context).
 
-     Every tool turn uses previous_response_id = _progress_id.
-     The model "thinks" it is mid-conversation where prior context = accumulated progress.
+     Local mirror (backup):
+       self._history — plain List[Dict] kept in sync with the server-side state.
+       If server state is lost (response_id rejected, model reloaded), _post_turn
+       automatically falls back to replaying self._history as the input array.
+       This makes the agent resilient to LMStudio restarts mid-crawl.
 
-  4. On loop kill → branch from _primed_id (wipes confused state, restores clean map)
-     On section complete → _advance_anchor() stores "Section X done, next: Y" → new
-     _progress_id so the model always knows exactly where it left off.
-
-  5. Turn messages are SHORT — context already loaded from anchor chain.
-     SSE stream parsed in real-time for loop detection + stream kill via aclose().
+  4. SSE stream parsed in real-time for loop detection + stream kill via aclose().
 
 Usage::
 
@@ -34,6 +34,7 @@ import argparse
 import asyncio
 import json
 import logging
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import httpx
@@ -134,10 +135,13 @@ class ArgusAgent:
         self._cfg = TARGETS.get(target, {})
         self._all_network: List[Dict] = []
 
-        # Conversation anchor chain — see module docstring
-        self._root_id: Optional[str] = None      # system prompt anchor
-        self._primed_id: Optional[str] = None    # root + full nav map
-        self._progress_id: Optional[str] = None  # advances on each section visit
+        # Server-side anchor IDs (store=True — efficient KV reuse)
+        self._primed_id: Optional[str] = None    # single init anchor
+        self._progress_id: Optional[str] = None  # advances per section
+
+        # Local history mirror — kept in sync; used as fallback if server state is lost
+        self._history: List[Dict[str, str]] = []
+        self._init_history_len: int = 0  # len(_history) after init — for loop-kill reset
 
         cfg = get_config()
         host = cfg.get("lmstudio.host", "localhost")
@@ -147,6 +151,37 @@ class ArgusAgent:
         self._headers: Dict[str, str] = {"Content-Type": "application/json"}
         if token:
             self._headers["Authorization"] = f"Bearer {token}"
+
+    # ──── Local history persistence ────
+
+    @property
+    def _history_path(self) -> Path:
+        return Path("data/argus") / f"{self.target}_history.json"
+
+    def _save_history(self) -> None:
+        """Persist local history mirror to disk after each store=True turn."""
+        try:
+            self._history_path.parent.mkdir(parents=True, exist_ok=True)
+            self._history_path.write_text(
+                json.dumps(self._history, indent=2, ensure_ascii=False), encoding="utf-8"
+            )
+        except OSError as exc:
+            logger.warning("_save_history failed: %s", exc)
+
+    def _load_history(self) -> bool:
+        """Load history from disk on init (resume support). Returns True if loaded."""
+        if not self._history_path.exists():
+            return False
+        try:
+            data = json.loads(self._history_path.read_text(encoding="utf-8"))
+            if isinstance(data, list) and data:
+                self._history = data
+                self._init_history_len = len(data)
+                logger.info("ARGUS resumed from history (%d messages)", len(data))
+                return True
+        except (json.JSONDecodeError, OSError) as exc:
+            logger.warning("_load_history failed: %s", exc)
+        return False
 
     # ──── MCP integration descriptor ────
 
@@ -225,27 +260,34 @@ class ArgusAgent:
         self._primed_id = await self._store_message(init_msg, previous_id=None)
         self._root_id = self._primed_id  # alias — no separate root anchor needed
         self._progress_id = self._primed_id
+        # Seed local history mirror with the same init exchange
+        self._history = [
+            {"role": "user", "content": init_msg},
+            {"role": "assistant", "content": "ARGUS READY"},
+        ]
+        self._init_history_len = len(self._history)
         logger.info("ARGUS init anchor primed_id=%s — crawl ready", self._primed_id)
 
-    # ──── Advance progress anchor after a section is confirmed visited ────
+    # ──── Advance progress anchor after sections are confirmed visited ────
 
-    async def _advance_anchor(self, section: str, visited: List[str], remaining: List[str]) -> None:
-        """Store a short progress update and advance _progress_id.
+    async def _advance_anchor(self, newly_visited: List[str], visited: List[str], remaining: List[str]) -> None:
+        """Store a single progress update for all newly-visited sections and advance _progress_id.
 
-        The model will "remember" this message as part of the conversation — it
-        knows which sections are done and what comes next without re-reading the
-        full nav map every turn.
+        Accepts a list so we always make exactly ONE store call per turn, regardless
+        of how many sections were completed — prevents slot stacking when a turn
+        visits multiple sections at once.
         """
         hints = TARGET_NAV_HINTS.get(self.target, {})
         visited_str = ", ".join(visited)
         next_section = remaining[0] if remaining else None
+        done_str = ", ".join(f"'{s}'" for s in newly_visited)
 
         if next_section:
             next_hint = hints.get(next_section, f"click the '{next_section}' nav link")
             progress_msg = (
                 f"PROGRESS UPDATE:\n"
-                f"  ✓ Section '{section}' visited.\n"
-                f"  Visited: [{visited_str}]\n"
+                f"  ✓ Sections completed this turn: [{done_str}]\n"
+                f"  Visited so far: [{visited_str}]\n"
                 f"  Remaining: [{', '.join(remaining)}]\n\n"
                 f"Next: '{next_section}'\n"
                 f"Command: {next_hint}\n"
@@ -254,15 +296,18 @@ class ArgusAgent:
         else:
             progress_msg = (
                 f"PROGRESS UPDATE:\n"
-                f"  ✓ Section '{section}' visited.\n"
+                f"  ✓ Sections completed this turn: [{done_str}]\n"
                 f"  ALL SECTIONS COMPLETE: [{visited_str}]\n"
                 f"  Call argus_done now.\n"
                 f"Reply: ACKNOWLEDGED"
             )
 
         new_id = await self._store_message(progress_msg, previous_id=self._progress_id)
-        logger.info("ARGUS anchor advanced → %s  (after '%s')", new_id, section)
+        logger.info("ARGUS anchor advanced → %s  (sections: %s)", new_id, done_str)
         self._progress_id = new_id
+        # Mirror into local history backup
+        self._history.append({"role": "user", "content": progress_msg})
+        self._history.append({"role": "assistant", "content": "ACKNOWLEDGED"})
 
     # ──── Per-turn POST with SSE streaming ────
 
@@ -289,19 +334,27 @@ class ArgusAgent:
             response_id (str) — stored response id for this turn (if available)
         """
         anchor = branch_from or self._progress_id
-        payload: Dict[str, Any] = {
-            "model": ARGUS_MODEL,
-            "input": input_msg,
-            "stream": True,
-            "store": True,
-            "temperature": 0.1,
-            "context_length": 32768,
-            "max_output_tokens": 512,
-            "integrations": [self._mcp_integration()],
-        }
-        if anchor:
-            payload["previous_response_id"] = anchor
 
+        def _build_payload(use_history_fallback: bool = False) -> Dict[str, Any]:
+            payload: Dict[str, Any] = {
+                "model": ARGUS_MODEL,
+                "stream": True,
+                "store": True,
+                "temperature": 0.1,
+                "context_length": 32768,
+                "max_output_tokens": 512,
+                "integrations": [self._mcp_integration()],
+            }
+            if use_history_fallback:
+                # Replay full context from local mirror — no previous_response_id needed
+                payload["input"] = self._history + [{"role": "user", "content": input_msg}]
+            else:
+                payload["input"] = input_msg
+                if anchor:
+                    payload["previous_response_id"] = anchor
+            return payload
+
+        use_fallback = False
         for attempt in range(3):
             try:
                 tool_calls: List[str] = []
@@ -309,9 +362,21 @@ class ArgusAgent:
                 event_type = ""
                 result: Dict[str, Any] = {}
                 loop_killed = False
+                response_id: Optional[str] = None
 
                 async with httpx.AsyncClient(timeout=600.0, headers=self._headers) as client:
-                    async with client.stream("POST", self._base_url, json=payload) as resp:
+                    async with client.stream(
+                        "POST", self._base_url, json=_build_payload(use_fallback)
+                    ) as resp:
+                        if resp.status_code == 422:
+                            # Server-side KV lost — switch to history fallback for this attempt
+                            logger.warning(
+                                "  [T%d] 422 Unprocessable — KV lost, falling back to history replay",
+                                turn,
+                            )
+                            use_fallback = True
+                            await asyncio.sleep(1)
+                            continue
                         resp.raise_for_status()
                         async for line in resp.aiter_lines():
                             if not line:
@@ -362,9 +427,26 @@ class ArgusAgent:
 
                             elif event_type == "chat.end":
                                 result = ev.get("result", ev)
+                                response_id = result.get("response_id") or result.get("id")
 
                 if tool_calls:
                     logger.info("  [T%d] calls: %s", turn, " → ".join(tool_calls))
+
+                # Mirror this turn into local history backup (store=True turns only)
+                if not loop_killed and response_id:
+                    model_reply = result.get("output", [{}])
+                    reply_text = ""
+                    if isinstance(model_reply, list):
+                        for part in model_reply:
+                            if isinstance(part, dict) and part.get("type") == "text":
+                                reply_text = part.get("text", "")
+                                break
+                    elif isinstance(model_reply, str):
+                        reply_text = model_reply
+                    self._history.append({"role": "user", "content": input_msg})
+                    self._history.append({"role": "assistant", "content": reply_text or "(tool calls)"})
+                    self._save_history()
+
                 result["loop_killed"] = loop_killed
                 result["calls"] = tool_calls
                 return result
@@ -487,11 +569,11 @@ class ArgusAgent:
                 visited = list(argus_state.sections_visited)
                 remaining = list(argus_state.sections_remaining)
 
-                # Detect newly completed sections since last turn — advance anchor
+                # Detect newly completed sections since last turn — one advance call for all
                 newly_visited = [s for s in visited if s not in prev_visited]
-                for section in newly_visited:
-                    logger.info("  ✓ Section '%s' confirmed — advancing progress anchor", section)
-                    await self._advance_anchor(section, visited, remaining)
+                if newly_visited:
+                    logger.info("  ✓ Sections confirmed: %s — advancing anchor", newly_visited)
+                    await self._advance_anchor(newly_visited, visited, remaining)
                 prev_visited = visited
 
                 input_msg = self._build_turn_input(
