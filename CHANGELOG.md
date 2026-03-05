@@ -3,6 +3,28 @@
 All notable changes to CosySim are documented here.
 
 ---
+## [0.89b] — "THE LOOP" — 2026-03
+
+ARGUS discoveries now flow automatically into NotebookLM for distillation back into Nexus Q&A,
+closing the self-improving knowledge loop. 53 scheduler tasks. 9,000+ tests.
+
+### ARGUS → NLM → Nexus Pipeline
+- **`scripts/argus/nlm_pipeline.py`** — Full distillation pipeline:
+  - `ArgusDocBuilder`: generates rich Markdown API discovery doc from endpoint registry
+  - `ArgusNLMPipeline.run()`: creates weekly NLM notebook per target (nlm/gemini/aistudio), uploads discovery doc, batch-asks 10–14 targeted questions per target, stores all Q&A in Nexus (`category=argus`)
+  - State file (`data/argus/nlm_pipeline_state.json`) persists notebook IDs across runs so sources accumulate weekly
+  - Graceful offline handling — skips NLM writes when unavailable, always archives doc to Nexus
+  - 37 DISTILLATION_QUESTIONS across 4 question sets (nlm/gemini/aistudio/general)
+- **`engine/nexus/scheduler_daemon.py`** — Added `argus-nlm-distil` task (#53, weekly)
+- **`tests/test_argus_nlm_pipeline.py`** — 27 tests: state persistence, doc builder, notebook create/cache, upload, distillation, Q&A storage, dry run, offline fallback
+
+### ARGUS Agent — History Mirror Fixes (0.88b carry-forward)
+- `_save_history()` / `_load_history()` — persist conversation to `data/argus/{target}_history.json`
+- `_post_turn` rewritten with `_build_payload()` inner fn — 422 fallback sends full history array
+- `remaining = list(sections) if remaining is None else remaining` — fixes empty-list falsy bug
+- `tests/test_argus_agent.py` — 21 tests for all new agent features
+
+---
 ## [0.88b] — "THE SDK LAYER" — 2026-03
 
 All 5 Google service SDKs brought to 100% coverage against the ARGUS rpcid registry.
