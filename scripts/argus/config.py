@@ -162,29 +162,79 @@ TARGETS["apps_script"] = {
     "batch_url":  "https://script.google.com/_/AppsPlatformConsoleUi/data/batchexecute",
     "service":    "AppsPlatformConsoleUi",
     "har_path":   str(ROOT / "data" / "har_files" / "nihilistcod" / "script.google.com.har"),
-    "notes":      "15 rpcids extracted by ARGUS. Free serverless JS + Workspace access + Web App deploy.",
+    "notes":      "25 rpcids mapped by ARGUS. Full ArtifactService proto interface reconstructed from V8 heap.",
 }
 
-# ──── Known GAS rpcids (derived from HAR — to be confirmed by ARGUS) ────
+# ──── Google Cloud Console target ────
+TARGETS["cloud_console"] = {
+    "base_url":   "https://console.cloud.google.com",
+    "entity_api": "https://cloudconsole-pa.clients6.google.com/v3/entityServices",
+    "service":    "cloudconsole-pa",
+    "har_path":   str(ROOT / "data" / "har_files" / "users_dump_folder" / "gold" / "console.cloud.google.com.har"),
+    "notes":      "Cloud Console entity service API. /v3/entityServices/{Service}/schema for proto info.",
+}
+
+# ──── Complete ArtifactService proto interface (39 methods) — reconstructed from V8 heap ────
+# Source: Heap-app-script-20260305T105838.heapsnapshot, 110,645 strings analysed by ARGUS
+# All strings match /ArtifactService.MethodName pattern in heap
+GAS_ARTIFACT_SERVICE_METHODS: List[str] = [
+    "CopyProject", "ListTemplates", "GetProjectDeployments", "GetProjectType",
+    "SetProjectContent", "GetAppsPlatformFile", "GetScriptProperties",
+    "GetAppsPlatformFileStatus", "CancelProcess", "ListDeployments",
+    "ListAppsPlatformFiles", "ListTriggers", "GetAggregateMetrics",
+    "SetProjectType", "UpdateAppsPlatformFile", "SetDeploymentEnvironment",
+    "GetPublishDialogPreference", "ListVersions", "GetDeploymentEnvironment",
+    "SetPublishDialogPreference", "SetGcpProject", "SetScriptProperties",
+    "GetProjectContent", "GetActiveAccountPopupInfo", "ListScriptPermissions",
+    "DeleteAppsPlatformFile", "ListProcesses", "UpsertProjectDeployment",
+]
+
+# Additional services discovered in heap
+GAS_OTHER_SERVICE_METHODS: Dict[str, List[str]] = {
+    "AppsPlatformConsoleUserService": [
+        "GetDthreeInfo", "UpdateUserPreferences", "LogClientMetrics",
+        "GetUserPreferences", "GetNascentExperimentStatus",
+    ],
+    "WidgetService": [
+        "GetAccountMenuModel", "GetExpressAccountPickerModel",
+        "GetAppWidgetModel", "GetCalloutModel",
+    ],
+    "TriggersService": ["DeleteTrigger"],
+    "StorageProjectService": ["GetCloudProjectPermissions"],
+}
+
+# ──── Known GAS rpcids (25 mapped — V1 from nihilistcod HAR, V2 from gold HAR + heap analysis) ────
 GAS_RPCIDS: Dict[str, str] = {
-    # Discovered + mapped by ARGUS HAR replay — script.google.com 39MB HAR
-    # Service: AppsPlatformConsoleUi /_/AppsPlatformConsoleUi/data/batchexecute
-    # Inferred from source-path patterns in 162 HAR entries:
-    "OOPYjd": "GetProjectState",        # 26 calls — every page, main project loader
-    "OQOG2e": "GetScriptFiles",         # 5 calls — editor + settings + history
-    "AJ6bre":  "GetDeployments",        # 5 calls — editor + history + triggers
-    "pEig0e":  "RunFunction",           # 1 call  — editor run
-    "ivJzse":  "CodeIntelligence",      # 2 calls — editor autocomplete/type-check
-    "toGAmc":  "SaveScript",            # 1 call  — editor save
-    "LuHlxe":  "CompileScript",         # 1 call  — editor compile/validate
-    "UvGaob":  "UpdateProjectSettings", # 1 call  — settings page
-    "KKLVD":   "ListTriggers",          # 1 call  — triggers page
-    "qqL5ld":  "GetVersionContent",     # 1 call  — history page
-    "zzomTc":  "CreateVersion",         # 1 call  — history create version
-    "yFXSbd":  "GetVersionDiff",        # 1 call  — history diff
-    "NFMk7c":  "CreateProject",         # 1 call  — new project
-    "GXx9jd":  "GetProjectMetadata",    # 2 calls — project root
-    "AvwHP":   "ListProjects",          # 1 call  — home page project list
+    # === ORIGINAL 15 — source-path inference from nihilistcod 39MB HAR ===
+    # Confidence: HEAP_CONFIRMED = heap dist < 10; PAYLOAD = inferred from payload shape;
+    #             SOURCE_PATH = inferred from source-path URL patterns
+    "OOPYjd": "GetProjectContent",       # 26 calls — every page; project file content loader
+    "OQOG2e": "ListAppsPlatformFiles",   # 5 calls  — editor+settings+history; file listing
+    "AJ6bre":  "GetDeployments",         # 5 calls  — editor+history+triggers; deployment list
+    "pEig0e":  "RunFunction",            # 1 call   — editor; executes a script function
+    "ivJzse":  "ListTriggers",           # 2 calls  — editor; (heap: ArtifactService.ListTriggers dist=153)
+    "toGAmc":  "SaveScript",             # 1 call   — editor; save script files
+    "LuHlxe":  "CompileScript",          # 1 call   — editor; compile/syntax check
+    "UvGaob":  "GetScriptProperties",    # 1 call   — settings; (heap: CopyProject dist=104 — low confidence, overridden by context)
+    "KKLVD":   "SetPublishDialogPreference",  # 1 call — triggers; (heap: SetPublishDialogPreference dist=126)
+    "qqL5ld":  "GetScriptProperties",   # 1 call   — history + settings; (heap: SetPublishDialogPreference dist=208)
+    "zzomTc":  "GetExpressAccountPickerModel",  # 1 call — editor; (heap: WidgetService.GetExpressAccountPickerModel dist=141)
+    "yFXSbd":  "ListVersions",           # 1 call   — home+editor; (heap: ArtifactService.ListVersions dist=314)
+    "NFMk7c":  "CreateProject",          # 1 call   — project root; creates new GAS project
+    "GXx9jd":  "GetProjectMetadata",     # 2 calls  — project root; metadata/info
+    "AvwHP":   "GetDeploymentEnvironment",  # HEAP_CONFIRMED dist=4 — ArtifactService.GetDeploymentEnvironment
+
+    # === NEW 10 — discovered from gold 44MB HAR (script.google.com) ===
+    # Payload analysis provides high confidence mappings
+    "kGFage":  "ListProjects",           # PAYLOAD: [['', None, 3, 1, 0, None, [1, 2]], 50] — pagination params, /home/
+    "gckeOc":  "GetProjectByUrl",        # PAYLOAD: [project_id] from /home/ — project preview/lookup
+    "FoxP1d":  "GetProjectDeployments",  # PAYLOAD: [project_id] from project page
+    "Wy5Y7":   "GetProjectType",         # PAYLOAD: [full_url] — type lookup by URL
+    "qejt0e":  "GetEditorState",         # called with OQOG2e on /edit — editor initialization
+    "C0veKb":  "GetAppsPlatformFileStatus",  # /edit — file status check
+    "iP35l":   "GetProjectContent",      # PAYLOAD: [project_id] on /edit — loads editor files (NEW rpcid for same function?)
+    "KhxE6":   "UpdateAppsPlatformFile", # PAYLOAD: [project_id, [['appsscript', 3, '{manifest_json}']]] — saves manifest
+    "L650eb":  "SetUserPreferences",     # PAYLOAD: [1] on /edit — preference toggle
 }
 
 # ──── Client-side override research targets (heap diff priorities) ────

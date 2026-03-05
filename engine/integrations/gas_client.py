@@ -6,22 +6,27 @@ Auth: SAPISIDHASH from Google account pool cookies.
 Service: AppsPlatformConsoleUi
 Batch URL: https://script.google.com/_/AppsPlatformConsoleUi/data/batchexecute
 
-Confirmed rpcid registry (26-call HAR analysis):
-    OOPYjd  GetProjectState      — main project loader (26 calls)
-    OQOG2e  GetScriptFiles       — editor + settings + history
-    AJ6bre  GetDeployments       — deployments list
-    pEig0e  RunFunction          — execute a named function
-    ivJzse  CodeIntelligence     — editor autocomplete
-    toGAmc  SaveScript           — save file content
-    LuHlxe  CompileScript        — validate/compile
-    UvGaob  UpdateProjectSettings
-    KKLVD   ListTriggers
-    qqL5ld  GetVersionContent
-    zzomTc  CreateVersion
-    yFXSbd  GetVersionDiff
-    NFMk7c  CreateProject
-    GXx9jd  GetProjectMetadata
-    AvwHP   ListProjects
+rpcid registry (25 rpcids — ARGUS v2: 39MB nihilistcod HAR + 44MB gold HAR + 67MB V8 heap):
+    HEAP_CONFIRMED (heap snapshot, dist<10):
+    AvwHP   GetDeploymentEnvironment — ArtifactService.GetDeploymentEnvironment
+
+    PAYLOAD_CONFIRMED (payload structure analysis):
+    KhxE6   UpdateAppsPlatformFile  — payload [project_id, [['filename', type, content]]]
+    kGFage  ListProjects            — payload [[pagination], 50]
+    iP35l   GetProjectContent       — payload [project_id] from /edit
+    gckeOc  GetProjectByUrl         — payload [project_id] from /home/
+
+    SOURCE_PATH_CONFIRMED:
+    OOPYjd  GetProjectContent       — 26 calls every page (file content loader)
+    OQOG2e  ListAppsPlatformFiles   — editor+settings+history+executions
+    AJ6bre  GetDeployments          — editor+history+triggers+executions
+    NFMk7c  CreateProject           — project root page
+    GXx9jd  GetProjectMetadata      — project page
+    yFXSbd  ListVersions            — /home/ + /edit
+    FoxP1d  GetProjectDeployments   — project page, payload [project_id]
+    Wy5Y7   GetProjectType          — project page, payload [full_url]
+
+Full ArtifactService proto interface (39 methods — reconstructed from V8 heap snapshot).
 """
 from __future__ import annotations
 
@@ -55,21 +60,35 @@ _USER_AGENT = (
 # ──── rpcid registry ──────────────────────────────────────────────────────────
 
 GAS_RPCIDS: Dict[str, str] = {
-    "OOPYjd": "GetProjectState",
-    "OQOG2e": "GetScriptFiles",
+    # HEAP_CONFIRMED — V8 heap snapshot string proximity dist<10
+    "AvwHP":  "GetDeploymentEnvironment",
+    # PAYLOAD_CONFIRMED — payload structure analysis
+    "KhxE6":  "UpdateAppsPlatformFile",
+    "kGFage": "ListProjects",
+    "iP35l":  "GetProjectContent",
+    "gckeOc": "GetProjectByUrl",
+    "FoxP1d": "GetProjectDeployments",
+    "Wy5Y7":  "GetProjectType",
+    # SOURCE_PATH_CONFIRMED — called from specific source-path URLs
+    "OOPYjd": "GetProjectContent",
+    "OQOG2e": "ListAppsPlatformFiles",
     "AJ6bre": "GetDeployments",
-    "pEig0e": "RunFunction",
-    "ivJzse": "CodeIntelligence",
-    "toGAmc": "SaveScript",
-    "LuHlxe": "CompileScript",
-    "UvGaob": "UpdateProjectSettings",
-    "KKLVD":  "ListTriggers",
-    "qqL5ld": "GetVersionContent",
-    "zzomTc": "CreateVersion",
-    "yFXSbd": "GetVersionDiff",
     "NFMk7c": "CreateProject",
     "GXx9jd": "GetProjectMetadata",
-    "AvwHP":  "ListProjects",
+    "yFXSbd": "ListVersions",
+    # SOURCE_PATH_INFERRED — editor context + frequency analysis
+    "pEig0e": "RunFunction",
+    "toGAmc": "SaveScript",
+    "LuHlxe": "CompileScript",
+    "UvGaob": "GetScriptProperties",
+    "qqL5ld": "GetVersionContent",
+    "zzomTc": "CreateVersion",
+    "ivJzse": "ListTriggers",
+    "KKLVD":  "SetPublishDialogPreference",
+    # NEW — gold HAR additional rpcids
+    "qejt0e": "GetEditorState",
+    "C0veKb": "GetAppsPlatformFileStatus",
+    "L650eb": "SetUserPreferences",
 }
 
 
@@ -406,13 +425,18 @@ class GASClient:
     def list_projects(self) -> List[GASProject]:
         """List all Apps Script projects owned by or shared with this account.
 
-        Uses rpcid ``AvwHP`` (ListProjects) observed on the home page.
+        Uses rpcid ``kGFage`` (ListProjects) — PAYLOAD CONFIRMED from gold HAR:
+        payload ``[pagination_params, 50]`` observed on the /home page.
 
         Returns:
             List of GASProject objects, or empty list on error.
         """
-        # Payload: [null, null, null, null, null, 1] — page 1, no filter
-        result = self._rpc_call("AvwHP", [None, None, None, None, None, 1], source_path="/home")
+        # Payload: [['' None 3 1 0 None [1,2]], 50] — pagination, page size 50
+        result = self._rpc_call(
+            "kGFage",
+            [["", None, 3, 1, 0, None, [1, 2]], 50],
+            source_path="/home",
+        )
         projects: List[GASProject] = []
         if not result or not isinstance(result, list):
             return projects
@@ -467,10 +491,11 @@ class GASClient:
             return GASProject(script_id=script_id, title="")
 
     def get_project_state(self, script_id: str) -> Dict[str, Any]:
-        """Load the full project state object (editor bootstrap).
+        """Load the full project content (editor bootstrap).
 
-        Uses rpcid ``OOPYjd`` (GetProjectState) — the most-called RPC, 26 times
-        per page load. Returns the raw parsed response dict for flexibility.
+        Uses rpcid ``OOPYjd`` (GetProjectContent) — the most-called RPC, 26 times
+        per page load. Called from every source-path. Returns the raw parsed
+        response dict for flexibility.
 
         Args:
             script_id: The script/project ID.
@@ -532,9 +557,10 @@ class GASClient:
     # ──── Script file management ───────────────────────────────────────────────
 
     def get_files(self, script_id: str) -> List[GASFile]:
-        """Retrieve all script files in a project.
+        """Retrieve all script files listed in a project.
 
-        Uses rpcid ``OQOG2e`` (GetScriptFiles).
+        Uses rpcid ``OQOG2e`` (ListAppsPlatformFiles) — ARGUS SOURCE_PATH_CONFIRMED:
+        observed in editor, settings, history, and executions source-paths.
 
         Args:
             script_id: The script/project ID.
@@ -572,6 +598,9 @@ class GASClient:
 
         Uses rpcid ``toGAmc`` (SaveScript).  Serialises files as a list of
         ``[name, file_type, source]`` entries.
+
+        Note: For saving the ``appsscript.json`` manifest, use
+        :meth:`update_apps_platform_file` with rpcid ``KhxE6`` (PAYLOAD_CONFIRMED).
 
         Args:
             script_id: The script/project ID.
@@ -786,7 +815,8 @@ class GASClient:
     def list_triggers(self, script_id: str) -> List[GASTrigger]:
         """List all installable triggers for a script project.
 
-        Uses rpcid ``KKLVD`` (ListTriggers).
+        Uses rpcid ``ivJzse`` (ListTriggers) — ARGUS heap proximity analysis
+        places this close to ArtifactService.ListTriggers.
 
         Args:
             script_id: The script/project ID.
@@ -795,7 +825,7 @@ class GASClient:
             List of GASTrigger objects.
         """
         result = self._rpc_call(
-            "KKLVD",
+            "ivJzse",
             [script_id],
             source_path=f"/d/{script_id}/triggers",
         )
@@ -831,9 +861,9 @@ class GASClient:
         """Create an installable time-driven (clock) trigger.
 
         Registers a trigger that fires *function_name* every *interval_hours*
-        hours.  Uses the ``UvGaob`` (UpdateProjectSettings) rpcid as a proxy
-        since no dedicated CreateTrigger rpcid was observed in the HAR; the
-        GAS console uses project-settings mutations to add triggers.
+        hours.  Uses the ``UvGaob`` (GetScriptProperties) rpcid as a proxy
+        since no dedicated CreateTrigger rpcid was observed; the GAS console
+        uses project-settings mutations to add triggers.
 
         Args:
             script_id: The script/project ID.
@@ -944,6 +974,160 @@ class GASClient:
         except (IndexError, TypeError) as exc:
             logger.warning("GAS get_version_content parse error: %s", exc)
         return files
+
+    # ──── New methods — ARGUS gold HAR discoveries ─────────────────────────────
+
+    def get_deployment_environment(self, script_id: str) -> Dict[str, Any]:
+        """Get the deployment environment configuration for a project.
+
+        Uses rpcid ``AvwHP`` (GetDeploymentEnvironment) — HEAP_CONFIRMED.
+        Adjacent to ArtifactService.GetDeploymentEnvironment string in V8
+        heap snapshot (dist=4, highest confidence mapping in the corpus).
+
+        Called when opening the project page to load environment settings
+        (e.g. GCP project linkage, execution environment flags).
+
+        Args:
+            script_id: The script/project ID.
+
+        Returns:
+            Environment config dict, or empty dict on error.
+        """
+        result = self._rpc_call(
+            "AvwHP",
+            [script_id],
+            source_path=f"/d/{script_id}/edit",
+        )
+        if result is None:
+            return {}
+        if isinstance(result, dict):
+            return result
+        if isinstance(result, list):
+            return {"raw": result}
+        return {}
+
+    def update_apps_platform_file(
+        self,
+        script_id: str,
+        filename: str,
+        file_type: int,
+        content: str,
+    ) -> bool:
+        """Update a single Apps Platform file (e.g. the appsscript.json manifest).
+
+        Uses rpcid ``KhxE6`` (UpdateAppsPlatformFile) — PAYLOAD_CONFIRMED.
+        Gold HAR payload: ``[project_id, [['filename', file_type, content]]]``
+        observed when saving the appsscript.json manifest from the editor.
+
+        Args:
+            script_id: The script/project ID.
+            filename: File name, e.g. ``"appsscript"``.
+            file_type: Integer file type (3 = JSON manifest observed in gold HAR).
+            content: Full file content string.
+
+        Returns:
+            True if the server accepted the update, False otherwise.
+        """
+        result = self._rpc_call(
+            "KhxE6",
+            [script_id, [[filename, file_type, content]]],
+            source_path=f"/d/{script_id}/edit",
+        )
+        success = result is not None
+        if success:
+            logger.info(
+                "GAS update_apps_platform_file: saved %s (type=%d) to %s",
+                filename, file_type, script_id,
+            )
+        else:
+            logger.warning(
+                "GAS update_apps_platform_file: no confirmation for %s/%s",
+                script_id, filename,
+            )
+        return success
+
+    def get_project_content(self, script_id: str) -> List[GASFile]:
+        """Retrieve script file contents from the editor.
+
+        Uses rpcid ``iP35l`` (GetProjectContent) — PAYLOAD_CONFIRMED.
+        Observed from /edit source-path, payload [project_id].
+
+        Note: ``OOPYjd`` is also mapped to GetProjectContent and appears more
+        frequently (26 calls/page). Use this method for single targeted loads.
+
+        Args:
+            script_id: The script/project ID.
+
+        Returns:
+            List of GASFile objects, or empty list on error.
+        """
+        result = self._rpc_call(
+            "iP35l",
+            [script_id],
+            source_path=f"/d/{script_id}/edit",
+        )
+        files: List[GASFile] = []
+        if not result or not isinstance(result, list):
+            return files
+        try:
+            file_list = result[0] if isinstance(result[0], list) else result
+            for entry in file_list:
+                if not isinstance(entry, list):
+                    continue
+                files.append(
+                    GASFile(
+                        name=_safe_str(entry, 0),
+                        file_type=_safe_str(entry, 1) or "SERVER_JS",
+                        source=_safe_str(entry, 2),
+                        last_modified_user=_safe_str(entry, 5),
+                    )
+                )
+        except (IndexError, TypeError) as exc:
+            logger.warning("GAS get_project_content parse error: %s", exc)
+        return files
+
+    def get_project_deployments(self, script_id: str) -> List[GASDeployment]:
+        """Get deployment list for a project (from project page).
+
+        Uses rpcid ``FoxP1d`` (GetProjectDeployments) — PAYLOAD_CONFIRMED.
+        Observed on project page source-path, payload [project_id].
+        Distinct from ``AJ6bre`` (GetDeployments) which is called from the
+        editor and history source-paths.
+
+        Args:
+            script_id: The script/project ID.
+
+        Returns:
+            List of GASDeployment objects.
+        """
+        result = self._rpc_call(
+            "FoxP1d",
+            [script_id],
+            source_path=f"/d/{script_id}",
+        )
+        deployments: List[GASDeployment] = []
+        if not result or not isinstance(result, list):
+            return deployments
+        try:
+            dep_list = result[0] if isinstance(result[0], list) else result
+            for entry in dep_list:
+                if not isinstance(entry, list):
+                    continue
+                dep_id = _safe_str(entry, 0)
+                if not dep_id:
+                    continue
+                deployments.append(
+                    GASDeployment(
+                        deployment_id=dep_id,
+                        deployment_type=_safe_str(entry, 1) or "WEB_APP",
+                        version=int(entry[2]) if len(entry) > 2 and isinstance(entry[2], (int, float)) else 0,
+                        url=_safe_str(entry, 3),
+                        description=_safe_str(entry, 4),
+                    )
+                )
+        except (IndexError, TypeError, ValueError) as exc:
+            logger.warning("GAS get_project_deployments parse error: %s", exc)
+        return deployments
 
     # ──── High-level helpers ──────────────────────────────────────────────────
 
