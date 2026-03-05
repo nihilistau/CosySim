@@ -1201,9 +1201,15 @@ def _register_builtin_tasks(daemon: "SchedulerDaemon") -> None:
         "weekly",
         _argus_diff_report_callback,
     )
+    daemon.register(
+        "argus-nlm-distil",
+        "ARGUS NLM Distillation — upload discovery doc to NotebookLM, batch-ask API questions, store Q&A in Nexus",
+        "weekly",
+        _argus_nlm_distil_callback,
+    )
 
 
-def _cdp_mine_callback() -> Dict[str, Any]:
+def _cdp_mine_callback()-> Dict[str, Any]:
     """Daily: mine CDP monitor logs for browser_debugger + error_classifier training data."""
     try:
         import subprocess
@@ -1502,6 +1508,22 @@ def _argus_diff_report_callback() -> Dict[str, Any]:
         }
     except Exception as exc:
         logger.error("argus_diff_report failed: %s", exc)
+        return {"status": "error", "error": str(exc)}
+
+
+def _argus_nlm_distil_callback() -> Dict[str, Any]:
+    """Weekly: upload ARGUS discovery document to NotebookLM, distil API Q&A into Nexus."""
+    try:
+        from scripts.argus.nlm_pipeline import ArgusNLMPipeline
+        result = ArgusNLMPipeline().run(target="all")
+        return {
+            "status": "ok",
+            "total_qa": result.get("total_qa", 0),
+            "total_stored": result.get("total_stored", 0),
+            "targets": result.get("targets", []),
+        }
+    except Exception as exc:
+        logger.error("argus_nlm_distil failed: %s", exc)
         return {"status": "error", "error": str(exc)}
 
 
