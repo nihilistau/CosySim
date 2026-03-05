@@ -3,6 +3,55 @@
 All notable changes to CosySim are documented here.
 
 ---
+## [0.88b] — "THE SDK LAYER" — 2026-03
+
+All 5 Google service SDKs brought to 100% coverage against the ARGUS rpcid registry.
+110+ new client methods implemented. 68 new tests. HAR scanner committed.
+
+### SDK Coverage — 100% Across All Services
+| SDK | Before | After | Methods |
+|-----|--------|-------|---------|
+| AIStudio (`aistudio_client.py`) | 21.6% | **100%** | 133/133 |
+| NLM (`nlm_direct_client.py`) | 87.0% | **100%** | 23/23 |
+| GAS (`google_apps_script_client.py`) | 100% | **100%** | 24/24 |
+| Gemini (`gemini_client.py`) | 88.2% | **100%** | 17/17 |
+| GSheets (`google_sheets_client.py`) | 100% | **100%** | — |
+
+### AIStudio SDK — 89 New Methods
+- **Streaming**: bidi session, code assist (live, offline), speech synthesis, video (live, generation)
+- **Applets/Apps**: full CRUD — create, get, list, update, delete, publish, clone, export
+- **Batch jobs**: create, get, list, cancel, delete
+- **Cached content**: create, get, list, update, delete (Gemini REST v1beta)
+- **Tuned models**: create, get, list, update, delete, generate (Gemini REST v1beta)
+- **Corpus / RAG**: create/get/list/update/delete corpus + documents + chunks (Gemini REST v1beta)
+- **Datasets**: create, get, list, delete, import items, annotate
+- **GitHub integration**: create repo, get repo, sync repo
+- **Operations**: get, list, cancel, wait, delete (long-running ops)
+- **Models**: get, list, get capabilities, get model card, list model cards
+- **Safety**: check content, list safety settings, get safety dashboard
+- **Sharing**: share project, list shares, revoke share
+- **Image**: generate, edit, upscale
+- **Infrastructure**: check quota, check global quota, get usage metadata, get billing info,
+  get piper voice config, list piper voice configs, list artifacts, create cloud project
+- **Notifications**: get notification settings, update notification settings, get notification banner
+- **Alias fixes**: `log()` → `Log` rpcid; `stream_code_assistant_offline_generation_upload()`
+
+### NLM SDK — 2 New Methods
+- `get_feature_flags(ozz5Z)` — probes feature flag IDs 0–99
+- `get_locale_preferences(DYBcR)` — returns locale/language/region
+
+### Config Fixes (`scripts/argus/config.py`)
+- NLM: `UNKNOWN_1` → `ListNotebooks`, `UNKNOWN_2` → `GetLocalePreferences`
+- Gemini: `ListLinkedNotebooks` → `GetLinkedNotebooks`, `UNKNOWN_locale` → `GetLocalePreferences`
+
+### ARGUS Tools
+- **`scripts/argus/har_scanner.py`** — HAR file batch processor; scans all `.har` files
+  recursively, extracts batchexecute rpcids, produces discovery reports
+
+### Tests
+- `tests/test_integrations_aistudio_sdk_gap.py` — 68 tests (new), all passing
+
+---
 ## [0.87b] — "THE KNOWLEDGE LAYER" — 2026-03
 
 GAS SDK fully mapped with V8 heap + HAR replay evidence. ARGUS gold artifact analysis
