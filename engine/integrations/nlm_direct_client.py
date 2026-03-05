@@ -1129,6 +1129,48 @@ class NLMDirectClient:
             return result
         raise RuntimeError(f"share_notebook returned no URL for {notebook_id}: {result}")
 
+    def wait_for_source(
+        self,
+        notebook_id: str,
+        source_id: str,
+        max_wait: int = 120,
+        poll_interval: int = 3,
+    ) -> None:
+        """Public alias for _poll_source_ready — wait until a source finishes processing.
+
+        Args:
+            notebook_id: NLM notebook UUID.
+            source_id: Source ID to wait for.
+            max_wait: Maximum seconds to wait.
+            poll_interval: Seconds between polls.
+
+        Raises:
+            TimeoutError: If source is not ready within max_wait seconds.
+        """
+        self._poll_source_ready(notebook_id, source_id, max_wait=max_wait, poll_interval=poll_interval)
+
+    def generate_data_table(self, notebook_id: str) -> Dict[str, Any]:
+        """Generate a structured data table from notebook sources (CCqFvf).
+
+        Extracts tabular data from sources and returns it as a structured
+        table with headers and rows.
+
+        Args:
+            notebook_id: NLM notebook UUID.
+
+        Returns:
+            Dict with ``id``, ``title``, ``content`` (table as text/markdown).
+        """
+        payload = [notebook_id, None, None, [2], [1, None, None, None, None, None, None, None, None, None, [1]]]
+        result = self._rpc_call("CCqFvf", payload, timeout=180)
+        if not result:
+            return {"id": None, "title": "Data Table", "content": ""}
+        return {
+            "id": result[0] if len(result) > 0 else None,
+            "title": result[1] if len(result) > 1 else "Data Table",
+            "content": result[2] if len(result) > 2 else str(result),
+        }
+
     # ──── Compound helpers ─────────────────────────────────────────────────────
 
     def run_knowledge_flywheel(
