@@ -802,6 +802,270 @@ class AIStudioClient:
         """
         return self._post_safe("GetLoggingContext", {})
 
+    def log_event(self, event_type: str, payload: Optional[Dict[str, Any]] = None) -> dict:
+        """Send a structured log event to AI Studio (Log).
+
+        Args:
+            event_type: Event type string.
+            payload: Optional event payload.
+
+        Returns:
+            Log response dict.
+        """
+        body: Dict[str, Any] = {"eventType": event_type}
+        if payload:
+            body["payload"] = payload
+        return self._post_safe("Log", body)
+
+    # ──── Code Assistant ────
+
+    def code_assistant_offline(
+        self, request: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Run an offline Code Assistant generation (CodeAssistantOffline).
+
+        Args:
+            request: Code assistant request payload.
+
+        Returns:
+            Code assistant response dict.
+        """
+        return self._post_safe("CodeAssistantOffline", request)
+
+    def stream_code_assistant_offline_upload(
+        self, generation_id: str, chunk: bytes
+    ) -> Dict[str, Any]:
+        """Upload a chunk for streaming offline code generation (StreamCodeAssistantOfflineGenerationUpload).
+
+        Args:
+            generation_id: Generation session ID.
+            chunk: Bytes chunk to upload.
+
+        Returns:
+            Upload acknowledgement dict.
+        """
+        body: Dict[str, Any] = {
+            "generationId": generation_id,
+            "chunk": chunk.hex() if isinstance(chunk, bytes) else chunk,
+        }
+        return self._post_safe("StreamCodeAssistantOfflineGenerationUpload", body)
+
+    def get_code_assistant_snapshot(
+        self, snapshot_id: str
+    ) -> Dict[str, Any]:
+        """Retrieve a code assistant snapshot (GetCodeAssistantSnapshot).
+
+        Args:
+            snapshot_id: Snapshot identifier.
+
+        Returns:
+            Snapshot dict.
+        """
+        return self._post_safe("GetCodeAssistantSnapshot", {"snapshotId": snapshot_id})
+
+    def load_code_assistant_interaction_history(
+        self, session_id: str, page_size: int = 20
+    ) -> Dict[str, Any]:
+        """Load interaction history for a code assistant session (LoadCodeAssistantInteractionHistory).
+
+        Args:
+            session_id: Session identifier.
+            page_size: Max number of interactions to return.
+
+        Returns:
+            Dict with ``interactions`` list.
+        """
+        return self._post_safe(
+            "LoadCodeAssistantInteractionHistory",
+            {"sessionId": session_id, "pageSize": page_size},
+        )
+
+    def list_code_assistant_configurations(self) -> list[dict]:
+        """List available Code Assistant configurations (ListCodeAssistantConfigurations).
+
+        Returns:
+            List of configuration dicts.
+        """
+        return self._post_safe("ListCodeAssistantConfigurations", {}).get(
+            "configurations", []
+        )
+
+    def list_code_assistant_features(self) -> list[dict]:
+        """List enabled Code Assistant features (ListCodeAssistantFeatures).
+
+        Returns:
+            List of feature descriptor dicts.
+        """
+        return self._post_safe("ListCodeAssistantFeatures", {}).get("features", [])
+
+    def list_code_assistant_offline_generations(
+        self, page_size: int = 50
+    ) -> list[dict]:
+        """List offline code generations (ListCodeAssistantOfflineGenerations).
+
+        Args:
+            page_size: Max results.
+
+        Returns:
+            List of generation dicts.
+        """
+        return self._post_safe(
+            "ListCodeAssistantOfflineGenerations", {"pageSize": page_size}
+        ).get("generations", [])
+
+    def list_code_gen_suggestion_cards(
+        self, context: str = ""
+    ) -> list[dict]:
+        """List code generation suggestion cards (ListCodeGenSuggestionCards).
+
+        Args:
+            context: Optional context string for filtering suggestions.
+
+        Returns:
+            List of suggestion card dicts.
+        """
+        body: Dict[str, Any] = {}
+        if context:
+            body["context"] = context
+        return self._post_safe("ListCodeGenSuggestionCards", body).get("cards", [])
+
+    def generate_code_assistant_suggestion_chips(
+        self, prompt: str, model: str = "gemini-2.5-flash"
+    ) -> list[str]:
+        """Generate quick-action suggestion chips for a prompt (GenerateCodeAssistantSuggestionChips).
+
+        Args:
+            prompt: User prompt to generate chips for.
+            model: Model to use.
+
+        Returns:
+            List of suggestion chip strings.
+        """
+        result = self._post_safe(
+            "GenerateCodeAssistantSuggestionChips",
+            {"prompt": prompt, "model": model},
+        )
+        return result.get("chips", [])
+
+    # ──── Applet management (extended) ────
+
+    def list_recent_applets(self, limit: int = 20) -> list[dict]:
+        """List recently accessed applets (ListRecentApplets).
+
+        Args:
+            limit: Max number of applets to return.
+
+        Returns:
+            List of applet summary dicts.
+        """
+        return self._post_safe("ListRecentApplets", {"limit": limit}).get(
+            "applets", []
+        )
+
+    def store_recent_applet(self, applet_name: str) -> dict:
+        """Record an applet as recently used (StoreRecentApplet).
+
+        Args:
+            applet_name: Applet resource name (``applets/{id}``).
+
+        Returns:
+            Acknowledgement dict.
+        """
+        return self._post_safe("StoreRecentApplet", {"appletName": applet_name})
+
+    def save_applet(self, applet_name: str, updates: Dict[str, Any]) -> dict:
+        """Save / checkpoint an applet's current state (SaveApplet).
+
+        Args:
+            applet_name: Applet resource name.
+            updates: Fields to persist.
+
+        Returns:
+            Updated applet dict.
+        """
+        return self._post_safe(
+            "SaveApplet", {"appletName": applet_name, "updates": updates}
+        )
+
+    def list_unset_applet_secrets(self, applet_name: str) -> list[str]:
+        """List secret keys that have not yet been set for an applet (ListUnsetAppletSecrets).
+
+        Args:
+            applet_name: Applet resource name.
+
+        Returns:
+            List of unset secret key names.
+        """
+        return self._post_safe(
+            "ListUnsetAppletSecrets", {"appletName": applet_name}
+        ).get("secretKeys", [])
+
+    def provision_and_initialize_applet(
+        self, applet_config: Dict[str, Any]
+    ) -> dict:
+        """Provision cloud resources and initialize a new applet (ProvisionAndInitializeApplet).
+
+        Args:
+            applet_config: Applet configuration dict.
+
+        Returns:
+            Provisioning status dict.
+        """
+        return self._post_safe("ProvisionAndInitializeApplet", applet_config)
+
+    # ──── Projects & billing ────
+
+    def list_imported_projects(self, page_size: int = 50) -> list[dict]:
+        """List Google Cloud projects imported into AI Studio (ListImportedProjects).
+
+        Args:
+            page_size: Max results per page.
+
+        Returns:
+            List of project dicts.
+        """
+        return self._post_safe(
+            "ListImportedProjects", {"pageSize": page_size}
+        ).get("projects", [])
+
+    def list_promos(self) -> list[dict]:
+        """List available promotions / credits for the account (ListPromos).
+
+        Returns:
+            List of promo dicts.
+        """
+        return self._post_safe("ListPromos", {}).get("promos", [])
+
+    # ──── Metrics ────
+
+    def fetch_metric_time_series(
+        self,
+        metric_name: str,
+        start_time: Optional[str] = None,
+        end_time: Optional[str] = None,
+        granularity: str = "HOUR",
+    ) -> list[dict]:
+        """Fetch usage metric time-series data (FetchMetricTimeSeries).
+
+        Args:
+            metric_name: Metric identifier (e.g. ``token_count``, ``request_count``).
+            start_time: ISO-8601 start timestamp. Defaults to 24 h ago.
+            end_time: ISO-8601 end timestamp. Defaults to now.
+            granularity: Time bucket size — ``HOUR``, ``DAY``, ``WEEK``.
+
+        Returns:
+            List of ``{timestamp, value}`` dicts.
+        """
+        body: Dict[str, Any] = {
+            "metricName": metric_name,
+            "granularity": granularity,
+        }
+        if start_time:
+            body["startTime"] = start_time
+        if end_time:
+            body["endTime"] = end_time
+        return self._post_safe("FetchMetricTimeSeries", body).get("dataPoints", [])
+
 
 # ──── Singleton ────
 
