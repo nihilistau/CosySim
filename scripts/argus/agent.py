@@ -45,6 +45,7 @@ from scripts.argus.argus_mcp_server import ARGUS_MCP_URL, start_server as start_
 from scripts.argus.browser_tools import get_summary, is_done, set_browser_context
 from scripts.argus.config import CDP_URL, TARGETS
 from scripts.argus.network_monitor import NetworkMonitor
+from scripts.argus.vision_agent import VisionAgent
 
 logger = logging.getLogger(__name__)
 
@@ -64,9 +65,21 @@ ARGUS_TOOLS = [
 ]
 
 TARGET_SECTIONS: Dict[str, List[str]] = {
-    "aistudio":    ["Home", "Playground", "Apps", "Files", "Tuning", "Settings"],
-    "notebooklm":  ["open notebook", "view sources", "generate study guide", "send chat message"],
-    "gemini":      ["start conversation", "send message", "try different model", "explore sidebar"],
+    "aistudio": [
+        "Home", "Playground", "Apps", "Files", "Tuning", "Settings",
+        # Dark corners — rarely crawled, high rpcid yield
+        "Grounding", "API Keys", "Models", "Usage",
+    ],
+    "notebooklm": [
+        "open notebook", "view sources", "generate study guide", "send chat message",
+        # Dark corners — Studio panel features that trigger hidden rpcids
+        "audio overview", "video overview", "data table",
+    ],
+    "gemini": [
+        "start conversation", "send message", "try different model", "explore sidebar",
+        # Dark corners — settings/extensions/history endpoints
+        "extensions", "activity", "advanced settings",
+    ],
 }
 
 # Exact canonical URLs per section — used for URL→section matching in browser_tools
@@ -78,12 +91,19 @@ TARGET_SECTION_URLS: Dict[str, Dict[str, str]] = {
         "Files":      "https://aistudio.google.com/files",
         "Tuning":     "https://aistudio.google.com/tune",
         "Settings":   "https://aistudio.google.com/settings",
+        "Grounding":  "https://aistudio.google.com/grounding",
+        "API Keys":   "https://aistudio.google.com/apikey",
+        "Models":     "https://aistudio.google.com/models",
+        "Usage":      "https://aistudio.google.com/usage",
     },
     "notebooklm": {
         "open notebook": "https://notebooklm.google.com/",
     },
     "gemini": {
         "start conversation": "https://gemini.google.com/",
+        "extensions":         "https://gemini.google.com/extensions",
+        "activity":           "https://myactivity.google.com/product/gemini",
+        "advanced settings":  "https://gemini.google.com/settings",
     },
 }
 
@@ -96,18 +116,28 @@ TARGET_NAV_HINTS: Dict[str, Dict[str, str]] = {
         "Files":      "call argus_navigate('https://aistudio.google.com/files')",
         "Tuning":     "call argus_navigate('https://aistudio.google.com/tune')",
         "Settings":   "call argus_navigate('https://aistudio.google.com/settings')",
+        "Grounding":  "call argus_navigate('https://aistudio.google.com/grounding')",
+        "API Keys":   "call argus_navigate('https://aistudio.google.com/apikey')",
+        "Models":     "call argus_navigate('https://aistudio.google.com/models')",
+        "Usage":      "call argus_navigate('https://aistudio.google.com/usage')",
     },
     "notebooklm": {
-        "open notebook":        "call argus_navigate('https://notebooklm.google.com/')",
-        "view sources":         "click the Sources tab or panel in the current notebook",
+        "open notebook":     "call argus_navigate('https://notebooklm.google.com/')",
+        "view sources":      "click the Sources tab or panel in the current notebook",
         "generate study guide": "click the 'Study guide' button in the notebook Studio panel",
-        "send chat message":    "click the chat input at the bottom and type a test message",
+        "send chat message": "click the chat input at the bottom and type a test message",
+        "audio overview":    "click 'Audio Overview' in the Studio panel, then click Generate",
+        "video overview":    "click 'Video Overview' in the Studio panel, then click Generate",
+        "data table":        "click 'Data table' in the Studio panel to trigger table generation",
     },
     "gemini": {
         "start conversation": "call argus_navigate('https://gemini.google.com/')",
         "send message":       "click the chat input field and type a short test message",
         "try different model": "click the model selector dropdown in the top bar",
         "explore sidebar":    "click the hamburger/menu icon to open the sidebar",
+        "extensions":         "call argus_navigate('https://gemini.google.com/extensions')",
+        "activity":           "call argus_navigate('https://myactivity.google.com/product/gemini')",
+        "advanced settings":  "call argus_navigate('https://gemini.google.com/settings')",
     },
 }
 
@@ -473,15 +503,21 @@ class ArgusAgent:
         loop_killed: bool = False,
         visited: Optional[List[str]] = None,
         remaining: Optional[List[str]] = None,
+        vision_context: Optional[str] = None,
     ) -> str:
         """Build the supervisor injection for this turn.
 
         Turn messages are deliberately SHORT because the model already has full
         context loaded from the anchor chain (_progress_id or _primed_id).
         We only need to state the immediate task + current position.
+
+        Args:
+            vision_context: Optional vision-model description of the current screen.
+                            Injected when ARGUS is stuck (no tool calls) or after a
+                            loop kill to give the model ground truth about the UI state.
         """
         visited = visited or []
-        remaining = remaining or list(sections)
+        remaining = list(sections) if remaining is None else remaining
         next_section = remaining[0] if remaining else None
         url_line = f"Current URL: {current_url}\n" if current_url else ""
         hints = TARGET_NAV_HINTS.get(self.target, {})
@@ -490,38 +526,50 @@ class ArgusAgent:
             # First turn: state is the full nav map (already in _primed_id context)
             first_section = sections[0] if sections else "?"
             hint = hints.get(first_section, f"click the '{first_section}' nav link")
-            return (
+            msg = (
                 f"BEGIN — {self.target}\n"
                 f"{url_line}"
                 f"Start with: argus_screenshot, then navigate to '{first_section}'.\n"
                 f"Command: {hint}"
             )
+            if vision_context:
+                msg += f"\n\nVISION: {vision_context[:400]}"
+            return msg
 
         if loop_killed:
             # Branch from _primed_id — model has clean nav map, we just say what to do
             if next_section:
                 hint = hints.get(next_section, f"click the '{next_section}' nav link")
-                return (
+                msg = (
                     f"LOOP INTERRUPTED.\n"
                     f"{url_line}"
                     f"Execute NOW: {hint}\n"
                     f"Then: argus_get_network_log()\n"
                     f"DO NOT call argus_screenshot first."
                 )
-            return f"LOOP INTERRUPTED.\n{url_line}All sections done — call argus_done."
+            else:
+                msg = f"LOOP INTERRUPTED.\n{url_line}All sections done — call argus_done."
+            if vision_context:
+                msg += f"\n\nVISION (what Chrome shows now): {vision_context[:400]}"
+            return msg
 
         if not remaining:
-            return f"All sections visited.\n{url_line}Call argus_done with a brief summary."
+            msg = f"All sections visited.\n{url_line}Call argus_done with a brief summary."
+            if vision_context:
+                msg += f"\n\nVISION: {vision_context[:400]}"
+            return msg
 
         # Normal turn: progress anchor already has "Section X done, next: Y" context
-        # Just confirm the task for this turn
         hint = hints.get(next_section, f"click the '{next_section}' nav link") if next_section else ""
-        return (
+        msg = (
             f"Turn {turn + 1}/{self.max_turns}\n"
             f"{url_line}"
             f"Next: '{next_section}' — {hint}\n"
             f"After navigating: argus_get_network_log() then move on."
         )
+        if vision_context:
+            msg += f"\n\nVISION (screen state): {vision_context[:400]}"
+        return msg
 
     # ──── Main run (async) ────
 
@@ -554,11 +602,15 @@ class ArgusAgent:
                                 sections=sections, url_hints=url_hints)
             logger.info("ARGUS browser ready — %d sections, url=%s", len(sections), page.url)
 
-            # Build three-anchor chain (root → primed → progress)
+            # Vision agent — gives the model ground truth about stuck/loop-kill states
+            _vision = VisionAgent()
+
+            # Build primed anchor (system prompt + nav map)
             await self._init_session(sections)
 
             loop_killed = False
             prev_visited: List[str] = []
+            vision_context: Optional[str] = None
 
             for turn in range(self.max_turns):
                 logger.info("ARGUS [%s] turn %d/%d", self.target, turn + 1, self.max_turns)
@@ -582,7 +634,9 @@ class ArgusAgent:
                     loop_killed=loop_killed,
                     visited=visited,
                     remaining=remaining,
+                    vision_context=vision_context,  # inject vision diagnosis from prior turn
                 )
+                vision_context = None  # consumed — clear after injection
 
                 # Loop kill → branch from _primed_id (reset context to clean nav map)
                 # Normal turn → branch from _progress_id (accumulated progress context)
@@ -590,6 +644,38 @@ class ArgusAgent:
 
                 result = await self._post_turn(turn, input_msg, branch_from=branch)
                 loop_killed = result.get("loop_killed", False)
+
+                # ── Vision diagnostics ──────────────────────────────────────────
+                # When ARGUS gets stuck or loops, take a Playwright screenshot and ask
+                # the vision model what Chrome is actually showing.  The description is
+                # injected into the NEXT turn's supervisor message so the model has
+                # ground truth about the UI state rather than guessing from context alone.
+                if loop_killed:
+                    try:
+                        vision_context = await _vision.ask_page(
+                            f"ARGUS loop detected on target '{self.target}'. "
+                            "Describe exactly: current URL, page title, and any UI elements visible. "
+                            "Are there error messages, loading spinners, login prompts, or modals?",
+                            page,
+                        )
+                        logger.info("  [T%d] VISION (loop-kill): %s", turn, vision_context[:200])
+                    except Exception as exc:
+                        logger.debug("  [T%d] Vision failed (loop-kill): %s", turn, exc)
+                        vision_context = None
+                elif not result.get("calls"):
+                    try:
+                        next_s = remaining[0] if remaining else "unknown"
+                        vision_context = await _vision.ask_page(
+                            f"ARGUS made no tool calls (stuck before section '{next_s}'). "
+                            "Describe what Chrome is currently showing. "
+                            "Is there a CAPTCHA, login screen, error message, empty page, or loading state?",
+                            page,
+                        )
+                        logger.info("  [T%d] VISION (no-calls): %s", turn, vision_context[:200])
+                    except Exception as exc:
+                        logger.debug("  [T%d] Vision failed (no-calls): %s", turn, exc)
+                        vision_context = None
+                # ────────────────────────────────────────────────────────────────
 
                 # Drain network after every turn
                 new_entries = await monitor.drain(google_only=True)
