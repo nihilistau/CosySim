@@ -6,8 +6,9 @@ from __future__ import annotations
 
 import logging
 import time
-from dataclasses import dataclass, field
 from typing import Dict, List, Optional
+
+from pydantic import BaseModel, ConfigDict, Field
 
 import requests
 
@@ -140,8 +141,7 @@ print("CLOUDFLARED_INSTALLED")
 # ──── Data model ──────────────────────────────────────────────────────────────
 
 
-@dataclass
-class TunnelSession:
+class TunnelSession(BaseModel):
     """Active Colab tunnel session.
 
     Attributes:
@@ -159,6 +159,8 @@ class TunnelSession:
         available_models: List of models available via this session.
     """
 
+    model_config = ConfigDict(validate_assignment=True)
+
     account_name: str
     tunnel_url: str
     tunnel_type: str
@@ -170,7 +172,7 @@ class TunnelSession:
     started_at: float
     last_health_check: float
     healthy: bool = True
-    available_models: List[str] = field(default_factory=list)
+    available_models: List[str] = Field(default_factory=list)
 
 
 # ──── Server ──────────────────────────────────────────────────────────────────
