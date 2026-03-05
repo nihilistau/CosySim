@@ -10,6 +10,10 @@ Designed to wrap Playwright crawl steps:
     # ... playwright does things ...
     traffic = await monitor.drain()   # get everything that happened
     await monitor.stop()
+
+Playwright-native capture is preferred over CDP-bridge when a page object
+is available:
+    await monitor.attach_playwright_page(page)
 """
 from __future__ import annotations
 
@@ -18,7 +22,7 @@ import logging
 import time
 from collections import deque
 from dataclasses import dataclass, field
-from typing import Any, Deque, Dict, List, Optional
+from typing import Any, Deque, Dict, List, Optional, Set
 
 from scripts.argus.cdp_bridge import CDPBridge, CDPSession
 
@@ -150,7 +154,79 @@ class NetworkMonitor:
                     logger.debug("attach_to_new_tabs skip: %s", exc)
         return added
 
-    # ──── Buffer access ────
+    # ──── Playwright-native page capture ────
+
+    async def attach_playwright_page(self, page: Any) -> None:
+        """Register Playwright page-level request/response listeners.
+
+        This is more reliable than CDPBridge for pages opened by Playwright.
+        Call this immediately after opening a page or navigating.
+
+        Args:
+            page: A Playwright Page object.
+        """
+        # Track pages we've already wired to avoid double-registration
+        if not hasattr(self, "_pw_pages"):
+            self._pw_pages: Set[int] = set()
+        page_id = id(page)
+        if page_id in self._pw_pages:
+            return
+        self._pw_pages.add(page_id)
+
+        # Track in-flight requests by Playwright Request object identity
+        pw_in_flight: Dict[int, CapturedRequest] = {}
+
+        def on_request(request: Any) -> None:
+            rid = id(request)
+            try:
+                post_data = request.post_data
+            except Exception:
+                # Binary body (e.g. gzip) — fall back to hex string
+                try:
+                    raw = request.post_data_buffer
+                    post_data = raw.hex() if raw else None
+                except Exception:
+                    post_data = None
+            pw_in_flight[rid] = CapturedRequest(
+                request_id=str(rid),
+                url=request.url,
+                method=request.method,
+                headers=dict(request.headers),
+                post_data=post_data,
+                timestamp=time.time(),
+                tab_url=page.url,
+            )
+
+        async def on_response(response: Any) -> None:
+            rid = id(response.request)
+            captured = pw_in_flight.get(rid)
+            if not captured:
+                return
+            captured.response_status = response.status
+            captured.response_headers = dict(response.headers)
+            captured.response_mime = response.headers.get("content-type", "")
+            captured.finished_at = time.time()
+            # Fetch body for Google API calls
+            if captured.is_google_api:
+                try:
+                    body = await response.body()
+                    captured.response_body = body.decode("utf-8", errors="replace")
+                except Exception:
+                    pass
+            pw_in_flight.pop(rid, None)
+            async with self._lock:
+                self._buffer.append(captured)
+            if captured.is_google_api:
+                logger.debug(
+                    "ARGUS capture: %s %s [%s]",
+                    captured.method, captured.url[:80], captured.response_status
+                )
+
+        page.on("request", on_request)
+        page.on("response", lambda r: asyncio.ensure_future(on_response(r)))
+        logger.debug("NetworkMonitor: wired Playwright capture to page %s", page.url[:60])
+
+
 
     async def drain(self, google_only: bool = True) -> List[CapturedRequest]:
         """Return and clear all buffered requests since the last drain.

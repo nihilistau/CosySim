@@ -172,7 +172,7 @@ class ArgusOrchestrator:
 
         try:
             # Attach CDP network monitor
-            await monitor.start_monitoring()
+            await monitor.start()
 
             # Run the appropriate crawler
             crawler_cls = {"nlm": NLMCrawler, "gemini": GeminiCrawler, "aistudio": AIStudioCrawler}.get(target)
@@ -181,7 +181,9 @@ class ArgusOrchestrator:
                 return result
 
             crawler = crawler_cls(monitor=monitor)
+            await crawler.start()
             steps = await crawler.run_flows()
+            await crawler.stop()
 
             # Decode all captured traffic
             be_decoder = BatchExecuteDecoder()
@@ -191,10 +193,9 @@ class ArgusOrchestrator:
             for step in steps:
                 for req in step.traffic:
                     if req.is_batchexecute:
-                        decoded = be_decoder.decode_request(req.post_data or "")
-                        decoded_resp = be_decoder.decode_response(req.response_body or "")
+                        calls = be_decoder.decode_request(req.post_data or "")
                         # Each decoded call becomes a crawl_results entry
-                        for call in decoded.calls:
+                        for call in calls:
                             tgt = "nlm" if "notebooklm" in req.url else "gemini"
                             crawl_results.append({
                                 "type": f"{tgt}_rpcid",

@@ -122,7 +122,12 @@ class BaseCrawler:
         self._page = page
         page.set_default_timeout(ACTION_TIMEOUT_MS)
         page.set_default_navigation_timeout(NAV_TIMEOUT_MS)
+        if self._monitor:
+            await self._monitor.attach_playwright_page(page)
         await page.goto(url, wait_until="domcontentloaded")
+        await asyncio.sleep(0.3)
+        if self._monitor:
+            await self._monitor.attach_to_new_tabs()
         return page
 
     async def get_or_open_page(self, url_fragment: str, fallback_url: str) -> Page:
@@ -130,6 +135,8 @@ class BaseCrawler:
         for page in self._context.pages:
             if url_fragment in page.url:
                 self._page = page
+                if self._monitor:
+                    await self._monitor.attach_playwright_page(page)
                 return page
         return await self.open_page(fallback_url)
 
@@ -153,8 +160,7 @@ class BaseCrawler:
     async def _wait_network_idle(self, timeout: int = NETWORK_IDLE_MS) -> None:
         """Wait for network activity to settle."""
         try:
-            await self._page.wait_for_load_state("networkidle",
-                                                  timeout=NAV_TIMEOUT_MS)
+            await self._page.wait_for_load_state("networkidle", timeout=5_000)
         except Exception:
             # networkidle can time out on SPAs — that's OK
             await asyncio.sleep(timeout / 1000)
@@ -183,7 +189,7 @@ class BaseCrawler:
 
     async def screenshot(self, label: str) -> Path:
         path = REPORTS_DIR / f"{self.name}_{label}_{int(time.time())}.png"
-        await self._page.screenshot(path=str(path), full_page=True)
+        await self._page.screenshot(path=str(path), full_page=False, timeout=5_000)
         logger.debug("Screenshot: %s", path)
         return path
 

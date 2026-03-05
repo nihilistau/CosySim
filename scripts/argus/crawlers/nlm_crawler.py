@@ -53,17 +53,20 @@ class NLMCrawler(BaseCrawler):
         page = await self.get_or_open_page("notebooklm.google.com", NLM_URL)
         await asyncio.sleep(2)  # Let the SPA fully load
 
-        # ── Flow 1: Home page / list notebooks ──
-        await self.step("list_notebooks",
-                        lambda: self._wait_network_idle())
+        # If we landed directly on a notebook page, use it immediately
+        if "/notebook/" in page.url:
+            self._notebook_url = page.url
+            logger.info("NLMCrawler: already on notebook %s", self._notebook_url)
+            await self.step("list_notebooks", lambda: self._wait_network_idle())
+        else:
+            # ── Flow 1: Home page / list notebooks ──
+            await self.step("list_notebooks", lambda: self._wait_network_idle())
+            # ── Flow 2: Open first notebook ──
+            await self.step("open_notebook", self._open_first_notebook)
 
-        # ── Flow 2: Open first notebook ──
-        await self.step("open_notebook",
-                        self._open_first_notebook)
-
-        if not self._notebook_url:
-            logger.warning("NLMCrawler: no notebook found — skipping detail flows")
-            return self._steps
+            if not self._notebook_url:
+                logger.warning("NLMCrawler: no notebook found — skipping detail flows")
+                return self._steps
 
         # ── Flow 3: Chat message ──
         await self.step("send_chat_message",
@@ -146,8 +149,10 @@ class NLMCrawler(BaseCrawler):
     async def _send_chat_message(self) -> None:
         """Type and send a simple chat message."""
         try:
+            # NLM chat input — prefer the large query textarea, not the emoji search input
             textarea = await self._page.wait_for_selector(
-                "textarea, [contenteditable='true'], input[type='text']",
+                "textarea:not([placeholder*='emoji']):not([aria-label*='emoji']), "
+                "[contenteditable='true'][data-placeholder]",
                 timeout=8_000,
             )
             await textarea.click()
