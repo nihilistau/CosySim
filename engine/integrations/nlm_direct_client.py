@@ -1572,6 +1572,50 @@ class NLMDirectClient:
         )
         return audio_path, source_id
 
+    # ──── Account / feature flags ──────────────────────────────────────────────
+
+    def get_feature_flags(self, flag_ids: Optional[List[int]] = None) -> Dict[str, Any]:
+        """Probe NotebookLM feature flag values (GetFeatureFlags / ozz5Z).
+
+        Args:
+            flag_ids: List of integer flag IDs to probe. Defaults to a broad range.
+
+        Returns:
+            Dict mapping flag_id → value.
+        """
+        if flag_ids is None:
+            flag_ids = list(range(300, 400))
+        payload = [[[fid, None, None] for fid in flag_ids]]
+        result = self._rpc_call("ozz5Z", payload, timeout=30)
+        flags: Dict[str, Any] = {}
+        if isinstance(result, list):
+            for item in result:
+                try:
+                    if isinstance(item, list) and len(item) >= 2:
+                        flags[str(item[0])] = item[1]
+                except Exception:
+                    pass
+        return flags
+
+    def get_locale_preferences(self) -> Dict[str, str]:
+        """Return user locale and regional preferences (GetLocalePreferences / DYBcR).
+
+        Returns:
+            Dict with locale, language, region strings.
+        """
+        result = self._rpc_call("DYBcR", [None], timeout=15)
+        if isinstance(result, list) and result:
+            raw = result[0] if isinstance(result[0], list) else result
+            try:
+                return {
+                    "locale": str(raw[0]) if len(raw) > 0 else "en",
+                    "language": str(raw[1]) if len(raw) > 1 else "en",
+                    "region": str(raw[2]) if len(raw) > 2 else "",
+                }
+            except Exception:
+                return {"locale": str(raw[0]) if raw else "en"}
+        return {"locale": "en"}
+
 
 # ──── Factory ─────────────────────────────────────────────────────────────────
 
