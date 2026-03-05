@@ -300,10 +300,10 @@ async def _main() -> None:
         probe_flags=args.probe_flags,
     )
 
-    print("\n── ARGUS Scan Summary ──")
+    print("\n-- ARGUS Scan Summary --")
     for r in results:
-        status = "✅" if not r.error else f"❌ {r.error[:60]}"
-        print(f"  {r.target:12s} {status:50s} +{r.total_new:3d} new  ({r.duration_s:.1f}s)")
+        status = "OK" if not r.error else f"ERR {r.error[:60]}"
+        print(f"  {r.target:12s} {status:56s} +{r.total_new:3d} new  ({r.duration_s:.1f}s)")
     total = sum(r.total_new for r in results)
     print(f"\n  TOTAL NEW DISCOVERIES: {total}")
 

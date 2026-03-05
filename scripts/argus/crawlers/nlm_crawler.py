@@ -211,12 +211,7 @@ class NLMCrawler(BaseCrawler):
             logger.warning("NLMCrawler: send_chat_message failed: %s", exc)
 
     async def _inject_nlm_chat_message(self, text: str) -> None:
-        """Inject a batchexecute SendChatMessage call via page-context fetch().
-
-        This fires the tJHFsf rpcid directly using the browser's own session,
-        bypassing DOM interaction. NetworkMonitor captures the resulting request.
-        """
-        # Extract current notebook ID from URL
+        """Inject a batchexecute SendChatMessage call via page-context fetch()."""
         nb_id = ""
         if self._notebook_url:
             parts = self._notebook_url.rstrip("/").split("/")
@@ -226,14 +221,26 @@ class NLMCrawler(BaseCrawler):
                     nb_id = parts[idx + 1]
 
         import json
+        import urllib.parse
+
+        session = await self._get_nlm_session_params()
+        at = session.get("at", "")
+        sid = session.get("sid", "")
+
         payload_inner = json.dumps([text, nb_id, [], None, None, None, None, None, None, None, True])
         f_req_inner = json.dumps([[["tJHFsf", payload_inner, None, "generic"]]])
-        import urllib.parse
         body = "f.req=" + urllib.parse.quote(f_req_inner)
+        if at:
+            body += "&at=" + urllib.parse.quote(at)
+
+        params = "rpcids=tJHFsf"
+        if sid:
+            params += f"&f.sid={urllib.parse.quote(sid)}"
+        if nb_id:
+            params += f"&source-path=%2Fnotebook%2F{nb_id}"
 
         result = await self.inject_fetch(
-            url="/_/LabsTailwindUi/data/batchexecute?rpcids=tJHFsf&source-path=%2Fnotebook%2F"
-                + nb_id,
+            url=f"/_/LabsTailwindUi/data/batchexecute?{params}",
             method="POST",
             headers={"content-type": "application/x-www-form-urlencoded;charset=UTF-8"},
             body=body,
@@ -256,28 +263,70 @@ class NLMCrawler(BaseCrawler):
     async def _click_studio_option(self, option_lower: str, label: str) -> None:
         """Click a studio panel option by label."""
         try:
+            # NLM Studio options are often Angular Material expansion panel headers
             # Try Playwright's robust locator API first
             btn = await self.find_button(label, option_lower.title())
             if btn:
                 await btn.click()
                 await asyncio.sleep(2)
                 return
-            # Fallback: scan all clickable elements for text match
+
+            # Try broader Angular Material / NLM selectors
+            selectors = [
+                f"mat-expansion-panel-header:has-text('{label}')",
+                f"mat-expansion-panel-header[aria-label*='{label}']",
+                f"nb-studio-option:has-text('{label}')",
+                f".studio-option:has-text('{label}')",
+                f"[aria-label*='{label}']",
+                f"[aria-label*='{option_lower}']",
+            ]
+            for sel in selectors:
+                try:
+                    el = await self._page.query_selector(sel)
+                    if el:
+                        await el.click()
+                        await asyncio.sleep(2)
+                        return
+                except Exception:
+                    continue
+
+            # Fallback: scan all clickable elements for text match (case-insensitive)
             btns = await self._page.query_selector_all(
                 "button, mat-list-item, [role='button'], mat-chip, "
-                "nb-studio-option, .studio-option"
+                "nb-studio-option, .studio-option, mat-expansion-panel-header"
             )
             for b in btns:
                 try:
                     text = (await b.inner_text()).strip().lower()
-                    if option_lower in text or label.lower() in text:
+                    aria = (await b.get_attribute("aria-label") or "").lower()
+                    if option_lower in text or option_lower in aria or label.lower() in text:
                         await b.click()
                         await asyncio.sleep(2)
                         return
                 except Exception:
                     continue
-            logger.debug("NLMCrawler: '%s' button not found", label)
+
+            # Last resort: inject xqEXEf (GenerateGuide) directly
+            logger.debug("NLMCrawler: '%s' button not found — injecting xqEXEf", label)
             await self.dump_dom_info(f"studio_{option_lower}")
+            nb_id = ""
+            if self._notebook_url:
+                parts = self._notebook_url.rstrip("/").split("/")
+                if "notebook" in parts:
+                    idx = parts.index("notebook")
+                    if idx + 1 < len(parts):
+                        nb_id = parts[idx + 1]
+            guide_type = {
+                "study guide": "STUDY_GUIDE",
+                "faq": "FAQ",
+                "briefing": "BRIEFING_DOC",
+                "audio": "AUDIO_OVERVIEW",
+                "insight": "KEY_TOPICS",
+                "analysis": "TIMELINE",
+            }.get(option_lower, "STUDY_GUIDE")
+            payload = f'["{guide_type}",{f"{chr(34)}{nb_id}{chr(34)}" if nb_id else "null"},null,null,null,null,null,null,true]'
+            await self._inject_nlm_rpcid("xqEXEf", payload)
+            await asyncio.sleep(2)
         except Exception as exc:
             logger.debug("NLMCrawler: %s failed: %s", label, exc)
 
@@ -364,11 +413,27 @@ class NLMCrawler(BaseCrawler):
         except Exception as exc:
             logger.debug("NLMCrawler: probe_feature_flags: %s", exc)
 
+    async def _get_nlm_session_params(self) -> dict:
+        """Extract AT (XSRF) token and f.sid from the live NLM page globals.
+
+        Returns dict with keys 'at' and 'sid'. Empty strings if not found.
+        These are required for batchexecute requests to return 200 instead of 400.
+        """
+        try:
+            wiz = await self._page.evaluate(
+                "() => { try { const w = window.WIZ_global_data;"
+                " return w ? {at: w.SNlM0e || '', sid: w.cfb2h || ''} : {}; }"
+                " catch(e) { return {}; } }"
+            )
+            return wiz or {}
+        except Exception:
+            return {}
+
     async def _inject_nlm_rpcid(self, rpcid: str, payload_json: str) -> None:
         """Inject a batchexecute call for a given NLM rpcid via page-context fetch().
 
-        The request fires from the browser (so session cookies are included) and
-        is captured by the NetworkMonitor's Playwright page listener.
+        Extracts the live AT (XSRF) token and f.sid from WIZ_global_data so the
+        request returns 200 rather than 400.
 
         Args:
             rpcid:        The batchexecute rpcid string, e.g. "jtGGne".
@@ -376,10 +441,32 @@ class NLMCrawler(BaseCrawler):
         """
         import json
         import urllib.parse
+
+        session = await self._get_nlm_session_params()
+        at = session.get("at", "")
+        sid = session.get("sid", "")
+
         f_req = json.dumps([[[rpcid, payload_json, None, "generic"]]])
         body = "f.req=" + urllib.parse.quote(f_req)
+        if at:
+            body += "&at=" + urllib.parse.quote(at)
+
+        params = f"rpcids={rpcid}"
+        if sid:
+            params += f"&f.sid={urllib.parse.quote(sid)}"
+
+        nb_id = ""
+        if self._notebook_url:
+            parts = self._notebook_url.rstrip("/").split("/")
+            if "notebook" in parts:
+                idx = parts.index("notebook")
+                if idx + 1 < len(parts):
+                    nb_id = parts[idx + 1]
+        if nb_id:
+            params += f"&source-path=%2Fnotebook%2F{nb_id}"
+
         result = await self.inject_fetch(
-            url=f"/_/LabsTailwindUi/data/batchexecute?rpcids={rpcid}",
+            url=f"/_/LabsTailwindUi/data/batchexecute?{params}",
             method="POST",
             headers={"content-type": "application/x-www-form-urlencoded;charset=UTF-8"},
             body=body,
