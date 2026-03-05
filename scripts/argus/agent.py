@@ -703,6 +703,78 @@ class ArgusAgent:
         return asyncio.run(self.run_async())
 
 
+def _process_and_store(target: str, network_entries: List[Dict], summary: str) -> None:
+    """Decode captured network entries and store new discoveries in Nexus."""
+    from scripts.argus.decoders.batchexecute import BatchExecuteDecoder
+    from scripts.argus.decoders.grpc_web import GrpcWebDecoder
+    from scripts.argus.nexus_sink import ArgusNexusSink
+    from scripts.argus.config import NLM_RPCIDS, GEMINI_RPCIDS, AISTUDIO_METHODS
+
+    sink = ArgusNexusSink()
+    be_decoder = BatchExecuteDecoder()
+    grpc_decoder = GrpcWebDecoder()
+
+    known_nlm = set(NLM_RPCIDS.keys())
+    known_gemini = set(GEMINI_RPCIDS.keys())
+    known_ais = set(AISTUDIO_METHODS) if isinstance(AISTUDIO_METHODS, (list, set)) else set()
+
+    new_nlm: List[str] = []
+    new_gemini: List[str] = []
+    new_ais: List[str] = []
+    new_endpoints: List[str] = []
+
+    for entry in network_entries:
+        url = entry.get("url", "")
+        method = entry.get("method", "")
+        post_data = entry.get("post_data", "") or ""
+        body = entry.get("response_body", "") or ""
+
+        # batchexecute (NLM + Gemini)
+        if "batchexecute" in url:
+            for req in be_decoder.decode_request(post_data, url):
+                rpcid = req.rpcid
+                if "notebooklm" in url and rpcid not in known_nlm:
+                    new_nlm.append(rpcid)
+                    sink.store_new_rpcid(rpcid, "Unknown", "nlm", f"URL: {url[:80]}")
+                elif "gemini" in url and rpcid not in known_gemini:
+                    new_gemini.append(rpcid)
+                    sink.store_new_rpcid(rpcid, "Unknown", "gemini", f"URL: {url[:80]}")
+
+        # gRPC-web (AI Studio)
+        if "$rpc/" in url or "clients6.google.com" in url:
+            parts = url.split("/")
+            if len(parts) >= 2:
+                method_name = parts[-1]
+                if method_name not in known_ais:
+                    new_ais.append(method_name)
+                    sink.store_new_aistudio_method(method_name, "/".join(parts[-3:-1]))
+
+        # Unknown Google API endpoint
+        if ("googleapis.com" in url or "google.com" in url) and \
+           "batchexecute" not in url and "$rpc/" not in url and \
+           "www.google.com" not in url and method == "POST":
+            new_endpoints.append(url[:100])
+
+    stats = {
+        "nlm_rpcids_seen": len(known_nlm),
+        "nlm_rpcids_total": len(known_nlm),
+        "gemini_rpcids_seen": len(known_gemini),
+        "gemini_rpcids_total": len(known_gemini),
+        "aistudio_methods_seen": len(known_ais),
+        "aistudio_methods_total": len(known_ais),
+    }
+
+    # Store scan summary (even if no new discoveries — records coverage)
+    sink.store_scan_results(new_nlm, new_gemini, new_ais, new_endpoints, stats)
+
+    total_new = len(new_nlm) + len(new_gemini) + len(new_ais) + len(new_endpoints)
+    logger.info(
+        "ARGUS [%s] stored: %d network entries → %d new discoveries (%d NLM, %d Gemini, %d AIS, %d other)",
+        target, len(network_entries), total_new,
+        len(new_nlm), len(new_gemini), len(new_ais), len(new_endpoints),
+    )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="ARGUS autonomous crawl agent")
     parser.add_argument(
@@ -711,6 +783,7 @@ def main() -> None:
         default="aistudio",
     )
     parser.add_argument("--turns", type=int, default=35)
+    parser.add_argument("--no-store", action="store_true", help="Skip Nexus storage")
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -726,10 +799,13 @@ def main() -> None:
     for target in targets:
         agent = ArgusAgent(target=target, max_turns=args.turns)
         result = agent.run()
-        print(f"\n[{target}] Network entries: {len(result['network_entries'])}")
+        entries = result["network_entries"]
+        print(f"\n[{target}] Network entries: {len(entries)}")
         if result["summary"]:
             summary = result["summary"][:300].encode("utf-8", errors="replace").decode("utf-8")
             print(f"[{target}] Summary: {summary}")
+        if not args.no_store:
+            _process_and_store(target, entries, result.get("summary", ""))
 
 
 if __name__ == "__main__":
