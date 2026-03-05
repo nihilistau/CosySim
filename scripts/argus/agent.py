@@ -245,8 +245,14 @@ class ArgusAgent:
         if previous_id:
             payload["previous_response_id"] = previous_id
         async with httpx.AsyncClient(timeout=60.0, headers=self._headers) as client:
-            r = await client.post(self._base_url, json=payload)
-            r.raise_for_status()
+            for attempt in range(3):
+                r = await client.post(self._base_url, json=payload)
+                if r.status_code == 500 and attempt < 2:
+                    logger.warning("_store_message got 500 (attempt %d/3) — retrying in 5s", attempt + 1)
+                    await asyncio.sleep(5)
+                    continue
+                r.raise_for_status()
+                break
             data = r.json()
         return data.get("response_id") or data.get("id") or ""
 
@@ -332,7 +338,11 @@ class ArgusAgent:
                 f"Reply: ACKNOWLEDGED"
             )
 
-        new_id = await self._store_message(progress_msg, previous_id=self._progress_id)
+        try:
+            new_id = await self._store_message(progress_msg, previous_id=self._progress_id)
+        except Exception as exc:
+            logger.warning("_advance_anchor store failed (%s) — continuing without anchor update", exc)
+            return
         logger.info("ARGUS anchor advanced → %s  (sections: %s)", new_id, done_str)
         self._progress_id = new_id
         # Mirror into local history backup

@@ -104,6 +104,15 @@ GEMINI_RPCIDS: Dict[str, str] = {
     "jPv1oc": "GetCachedContent",
     "ozz5Z":  "GetFeatureFlags",
     "DYBcR":  "GetLocalePreferences",
+    # ──── Discovered live by ARGUS crawler 2026-03-05 ────
+    "MaZiqc": "Unknown",      # captured in live conversation turn
+    "maGuAc": "Unknown",      # captured in live conversation turn
+    "o30O0e": "Unknown",      # captured in live conversation turn
+    "qpEbW":  "Unknown",      # captured in live conversation turn
+    "L5adhe": "Unknown",      # captured repeatedly — likely heartbeat/session
+    "aPya6c": "Unknown",      # captured in live conversation turn
+    "CNgdBe": "Unknown",      # captured in live conversation turn
+    "ku4Jyf": "Unknown",      # captured in live conversation turn
 }
 
 # ──── Known AI Studio methods (136 decoded) ────
