@@ -79,15 +79,15 @@ NLM_RPCIDS: Dict[str, str] = {
     "Of0kDd": "GetIceConfig",
     "eyWvXc": "SendSdpOffer",
     "ozz5Z":  "GetFeatureFlags",
-    "ub2Bae": "UNKNOWN_1",
-    "DYBcR":  "UNKNOWN_2",
+    "ub2Bae": "ListNotebooks",
+    "DYBcR":  "GetLocalePreferences",
     "sqTeoe": "GetAudioOverviewOptions",
 }
 
 # ──── Known Gemini rpcids (17 decoded) ────
 GEMINI_RPCIDS: Dict[str, str] = {
     "boaYGb": "ProxyUnaryCall",           # returns thoughtSignature
-    "NXpLKc": "ListLinkedNotebooks",      # Gemini-NLM bridge
+    "NXpLKc": "GetLinkedNotebooks",      # Gemini-NLM bridge
     "jKHnxe": "GenerateContent",
     "r7Bvze": "StreamGenerateContent",
     "mMEAEd": "CountTokens",
@@ -102,7 +102,7 @@ GEMINI_RPCIDS: Dict[str, str] = {
     "sPOurf": "DeleteCachedContent",
     "jPv1oc": "GetCachedContent",
     "ozz5Z":  "GetFeatureFlags",
-    "DYBcR":  "UNKNOWN_locale",
+    "DYBcR":  "GetLocalePreferences",
 }
 
 # ──── Known AI Studio methods (136 decoded) ────

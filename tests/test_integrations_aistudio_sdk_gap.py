@@ -1,6 +1,6 @@
 """Tests for SDK gap methods added to engine.integrations.aistudio_client.
 
-Covers the 18 new MakerSuiteService methods extracted from HAR 2026-03-05.
+Covers all new MakerSuiteService methods (HAR 2026-03-05 + bulk implementation).
 All network calls are mocked — no real HTTP traffic.
 """
 from __future__ import annotations
@@ -204,3 +204,324 @@ def test_get_aistudio_client_returns_instance() -> None:
         c = get_aistudio_client(cookies=FAKE_COOKIES)
     _mod._client = None  # reset singleton
     assert isinstance(c, AIStudioClient)
+
+
+# ──── Bulk methods (89 SDK gap fill) ─────────────────────────────────────────
+
+def test_log_alias_delegates_to_log_event(client: AIStudioClient) -> None:
+    mock = _mock_post(client, {})
+    client.log("test_event", {"k": "v"})
+    mock.assert_called_once_with("Log", {"eventType": "test_event", "payload": {"k": "v"}})
+
+
+def test_stream_code_assistant_offline_generation_upload_alias(client: AIStudioClient) -> None:
+    mock = _mock_post(client, {"ack": True})
+    result = client.stream_code_assistant_offline_generation_upload("gen-1", b"\xff")
+    assert result["ack"] is True
+    assert mock.call_args[0][0] == "StreamCodeAssistantOfflineGenerationUpload"
+
+
+# ── Applets (extended) ──
+
+def test_update_applet(client: AIStudioClient) -> None:
+    mock = _mock_post(client, {"appletId": "a1", "displayName": "new"})
+    result = client.update_applet("a1", {"displayName": "new"})
+    assert result["displayName"] == "new"
+    assert mock.call_args[0][0] == "UpdateApplet"
+
+
+def test_delete_applet(client: AIStudioClient) -> None:
+    mock = _mock_post(client, {})
+    client.delete_applet("a1")
+    mock.assert_called_once_with("DeleteApplet", {"appletId": "a1"})
+
+
+def test_clone_applet(client: AIStudioClient) -> None:
+    mock = _mock_post(client, {"appletId": "a2"})
+    client.clone_applet("a1", "Clone")
+    assert mock.call_args[0][1]["displayName"] == "Clone"
+
+
+def test_undeploy_applet(client: AIStudioClient) -> None:
+    mock = _mock_post(client, {})
+    client.undeploy_applet("a1")
+    mock.assert_called_once_with("UndeployApplet", {"appletId": "a1"})
+
+
+# ── Apps ──
+
+def test_create_app(client: AIStudioClient) -> None:
+    mock = _mock_post(client, {"name": "apps/x"})
+    client.create_app("MyApp", {"model": "gemini-2.5-flash"})
+    assert mock.call_args[0][0] == "CreateApp"
+
+
+def test_get_app(client: AIStudioClient) -> None:
+    mock = _mock_post(client, {"name": "apps/x"})
+    client.get_app("apps/x")
+    mock.assert_called_once_with("GetApp", {"appName": "apps/x"})
+
+
+def test_list_apps(client: AIStudioClient) -> None:
+    _mock_post(client, {"apps": [{"name": "apps/x"}]})
+    result = client.list_apps()
+    assert result == [{"name": "apps/x"}]
+
+
+def test_update_app(client: AIStudioClient) -> None:
+    mock = _mock_post(client, {})
+    client.update_app("apps/x", {"displayName": "Updated"})
+    assert mock.call_args[0][0] == "UpdateApp"
+
+
+def test_delete_app(client: AIStudioClient) -> None:
+    mock = _mock_post(client, {})
+    client.delete_app("apps/x")
+    mock.assert_called_once_with("DeleteApp", {"appName": "apps/x"})
+
+
+# ── Batch jobs ──
+
+def test_create_batch_job(client: AIStudioClient) -> None:
+    mock = _mock_post(client, {"name": "jobs/j1", "state": "PENDING"})
+    result = client.create_batch_job("gemini-2.5-flash", "gs://bucket/input.jsonl")
+    assert result["state"] == "PENDING"
+    assert mock.call_args[0][0] == "CreateBatchJob"
+
+
+def test_get_batch_job(client: AIStudioClient) -> None:
+    mock = _mock_post(client, {"name": "jobs/j1", "state": "SUCCEEDED"})
+    result = client.get_batch_job("jobs/j1")
+    assert result["state"] == "SUCCEEDED"
+    mock.assert_called_once_with("GetBatchJob", {"jobName": "jobs/j1"})
+
+
+def test_list_batch_jobs(client: AIStudioClient) -> None:
+    _mock_post(client, {"jobs": [{"name": "jobs/j1"}]})
+    assert client.list_batch_jobs() == [{"name": "jobs/j1"}]
+
+
+def test_cancel_batch_job(client: AIStudioClient) -> None:
+    mock = _mock_post(client, {})
+    client.cancel_batch_job("jobs/j1")
+    mock.assert_called_once_with("CancelBatchJob", {"jobName": "jobs/j1"})
+
+
+# ── Safety ──
+
+def test_check_safety(client: AIStudioClient) -> None:
+    mock = _mock_post(client, {"blocked": False, "safetyRatings": []})
+    result = client.check_safety("Hello world")
+    assert result["blocked"] is False
+    assert mock.call_args[0][1]["text"] == "Hello world"
+
+
+def test_get_safety_settings(client: AIStudioClient) -> None:
+    mock = _mock_post(client, {"categories": []})
+    client.get_safety_settings()
+    mock.assert_called_once_with("GetSafetySettings", {})
+
+
+def test_update_safety_settings(client: AIStudioClient) -> None:
+    mock = _mock_post(client, {})
+    client.update_safety_settings({"HARM_CATEGORY_HATE_SPEECH": "BLOCK_LOW_AND_ABOVE"})
+    assert mock.call_args[0][0] == "UpdateSafetySettings"
+
+
+# ── Notifications ──
+
+def test_list_notifications(client: AIStudioClient) -> None:
+    _mock_post(client, {"notifications": [{"id": "n1", "title": "Update"}]})
+    result = client.list_notifications()
+    assert result[0]["title"] == "Update"
+
+
+def test_mark_notification_read(client: AIStudioClient) -> None:
+    mock = _mock_post(client, {})
+    client.mark_notification_read("n1")
+    mock.assert_called_once_with("MarkNotificationRead", {"notificationId": "n1"})
+
+
+def test_dismiss_notification(client: AIStudioClient) -> None:
+    mock = _mock_post(client, {})
+    client.dismiss_notification("n1")
+    mock.assert_called_once_with("DismissNotification", {"notificationId": "n1"})
+
+
+# ── Prompts (extended) ──
+
+def test_get_prompt(client: AIStudioClient) -> None:
+    mock = _mock_post(client, {"name": "prompts/p1", "text": "Hello"})
+    result = client.get_prompt("prompts/p1")
+    assert result["text"] == "Hello"
+    mock.assert_called_once_with("GetPrompt", {"promptName": "prompts/p1"})
+
+
+def test_update_prompt(client: AIStudioClient) -> None:
+    mock = _mock_post(client, {"name": "prompts/p1"})
+    client.update_prompt("prompts/p1", {"displayName": "Updated"})
+    assert mock.call_args[0][0] == "UpdatePrompt"
+
+
+def test_delete_prompt(client: AIStudioClient) -> None:
+    mock = _mock_post(client, {})
+    client.delete_prompt("prompts/p1")
+    mock.assert_called_once_with("DeletePrompt", {"promptName": "prompts/p1"})
+
+
+# ── Sharing ──
+
+def test_share_prompt(client: AIStudioClient) -> None:
+    mock = _mock_post(client, {"sharedWith": ["bob@example.com"]})
+    client.share_prompt("prompts/p1", ["bob@example.com"])
+    assert mock.call_args[0][1]["shareWith"] == ["bob@example.com"]
+
+
+def test_get_shared_prompt(client: AIStudioClient) -> None:
+    mock = _mock_post(client, {"shareId": "abc123"})
+    client.get_shared_prompt("abc123")
+    mock.assert_called_once_with("GetSharedPrompt", {"shareId": "abc123"})
+
+
+def test_list_shared_prompts(client: AIStudioClient) -> None:
+    _mock_post(client, {"sharedPrompts": [{"shareId": "s1"}]})
+    result = client.list_shared_prompts()
+    assert result == [{"shareId": "s1"}]
+
+
+# ── User settings ──
+
+def test_get_user_settings(client: AIStudioClient) -> None:
+    mock = _mock_post(client, {"theme": "dark"})
+    result = client.get_user_settings()
+    assert result["theme"] == "dark"
+    mock.assert_called_once_with("GetUserSettings", {})
+
+
+def test_update_user_settings(client: AIStudioClient) -> None:
+    mock = _mock_post(client, {})
+    client.update_user_settings({"theme": "light"})
+    assert mock.call_args[0][1]["theme"] == "light"
+
+
+def test_get_usage_metadata(client: AIStudioClient) -> None:
+    mock = _mock_post(client, {"tokenUsage": 1000})
+    result = client.get_usage_metadata()
+    assert result["tokenUsage"] == 1000
+    mock.assert_called_once_with("GetUsageMetadata", {})
+
+
+# ── Infrastructure ──
+
+def test_check_quota(client: AIStudioClient) -> None:
+    mock = _mock_post(client, {"available": True})
+    result = client.check_quota("gemini-2.5-flash")
+    assert result["available"] is True
+    assert mock.call_args[0][1]["model"] == "gemini-2.5-flash"
+
+
+def test_check_quota_global(client: AIStudioClient) -> None:
+    mock = _mock_post(client, {"available": True})
+    client.check_quota()
+    assert mock.call_args[0][1] == {}
+
+
+def test_get_billing_info(client: AIStudioClient) -> None:
+    mock = _mock_post(client, {"credits": 300})
+    result = client.get_billing_info()
+    assert result["credits"] == 300
+    mock.assert_called_once_with("GetBillingInfo", {})
+
+
+def test_create_cloud_project(client: AIStudioClient) -> None:
+    mock = _mock_post(client, {"projectId": "proj-abc"})
+    result = client.create_cloud_project("Test Project")
+    assert result["projectId"] == "proj-abc"
+    assert mock.call_args[0][0] == "CreateCloudProject"
+
+
+# ── GitHub integration ──
+
+def test_create_git_hub_repository(client: AIStudioClient) -> None:
+    mock = _mock_post(client, {"repoUrl": "https://github.com/user/repo"})
+    result = client.create_git_hub_repository("app-1", "my-repo")
+    assert "repoUrl" in result
+    assert mock.call_args[0][1]["repoName"] == "my-repo"
+
+
+def test_get_git_hub_repository(client: AIStudioClient) -> None:
+    mock = _mock_post(client, {"repoUrl": "https://github.com/user/repo"})
+    client.get_git_hub_repository("app-1")
+    mock.assert_called_once_with("GetGitHubRepository", {"appletId": "app-1"})
+
+
+def test_sync_git_hub_repository(client: AIStudioClient) -> None:
+    mock = _mock_post(client, {"status": "SYNCED"})
+    result = client.sync_git_hub_repository("app-1")
+    assert result["status"] == "SYNCED"
+
+
+# ── Model cards ──
+
+def test_get_model_card(client: AIStudioClient) -> None:
+    mock = _mock_post(client, {"model": "gemini-2.5-flash", "description": "..."})
+    client.get_model_card("gemini-2.5-flash")
+    mock.assert_called_once_with("GetModelCard", {"model": "gemini-2.5-flash"})
+
+
+def test_list_model_cards(client: AIStudioClient) -> None:
+    _mock_post(client, {"modelCards": [{"model": "gemini-2.5-flash"}]})
+    result = client.list_model_cards()
+    assert result == [{"model": "gemini-2.5-flash"}]
+
+
+def test_get_model_capabilities(client: AIStudioClient) -> None:
+    mock = _mock_post(client, {"supportsStreaming": True})
+    result = client.get_model_capabilities("gemini-2.5-flash")
+    assert result["supportsStreaming"] is True
+
+
+# ── Datasets ──
+
+def test_create_dataset(client: AIStudioClient) -> None:
+    mock = _mock_post(client, {"name": "datasets/d1"})
+    client.create_dataset("My Dataset", "test data")
+    assert mock.call_args[0][0] == "CreateDataset"
+
+
+def test_list_datasets(client: AIStudioClient) -> None:
+    _mock_post(client, {"datasets": [{"name": "datasets/d1"}]})
+    assert client.list_datasets() == [{"name": "datasets/d1"}]
+
+
+def test_import_dataset_items(client: AIStudioClient) -> None:
+    mock = _mock_post(client, {"imported": 5})
+    client.import_dataset_items("datasets/d1", [{"input": "x", "output": "y"}])
+    assert mock.call_args[0][0] == "ImportDatasetItems"
+    assert mock.call_args[0][1]["datasetName"] == "datasets/d1"
+
+
+def test_annotate_dataset(client: AIStudioClient) -> None:
+    mock = _mock_post(client, {"operationName": "ops/1"})
+    client.annotate_dataset("datasets/d1", {"annotationType": "CLASSIFICATION"})
+    assert mock.call_args[0][0] == "AnnotateDataset"
+
+
+# ── Tuned models ──
+
+def test_get_model_card_returns_dict(client: AIStudioClient) -> None:
+    _mock_post(client, {"model": "gemini-2.5-flash"})
+    result = client.get_model_card("gemini-2.5-flash")
+    assert isinstance(result, dict)
+
+
+def test_speech_to_text_returns_string(client: AIStudioClient) -> None:
+    _mock_post(client, {"transcript": "Hello world"})
+    result = client.gemini_speech_to_text(b"audio-bytes", "en-US")
+    assert result == "Hello world"
+
+
+def test_speech_to_text_empty_on_error(client: AIStudioClient) -> None:
+    _mock_post(client, {})
+    result = client.gemini_speech_to_text(b"bad-audio")
+    assert result == ""
