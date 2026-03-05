@@ -80,6 +80,24 @@ class BaseCrawler:
         self._context: Optional[BrowserContext] = None
         self._page: Optional[Page] = None
         self._steps: List[CrawlStep] = []
+        self._vision: Optional[Any] = None  # VisionAgent, lazy-loaded
+
+    async def _vision_check(self, question: str) -> str:
+        """Take a Playwright screenshot and ask the vision model a question.
+
+        Lazy-loads the VisionAgent on first call. Returns the model's response.
+        Falls back gracefully if LMStudio is unavailable.
+        """
+        if self._page is None:
+            return "ERROR: no page open"
+        try:
+            if self._vision is None:
+                from scripts.argus.vision_agent import get_vision_agent
+                self._vision = get_vision_agent()
+            return await self._vision.ask_page(question, self._page)
+        except Exception as exc:
+            logger.debug("%s: vision_check failed: %s", self.name, exc)
+            return f"ERROR: {exc}"
 
     @property
     def context(self) -> Optional[BrowserContext]:
@@ -147,21 +165,38 @@ class BaseCrawler:
         _error_suffixes = ("/404", "/error", "/not-found", "/notfound", "?error=")
         for page in self._context.pages:
             if url_fragment in page.url:
-                # Skip error/404 pages — navigate to the correct URL instead
-                if any(page.url.endswith(s) or s in page.url for s in _error_suffixes):
-                    logger.info(
-                        "%s: skipping error page %s, navigating to %s",
-                        self.name, page.url[:80], fallback_url,
-                    )
-                    self._page = page
-                    if self._monitor:
-                        await self._monitor.attach_playwright_page(page)
-                    await page.goto(fallback_url, wait_until="domcontentloaded")
-                    await asyncio.sleep(1.5)
-                    return page
                 self._page = page
                 if self._monitor:
                     await self._monitor.attach_playwright_page(page)
+                # If on an error page, click "Go to library" or sidebar Home rather
+                # than doing a full page.goto — the sidebar is still rendered.
+                if any(page.url.endswith(s) or s in page.url for s in _error_suffixes):
+                    logger.info(
+                        "%s: on error page %s — clicking sidebar nav to escape",
+                        self.name, page.url[:80],
+                    )
+                    escaped = False
+                    for sel in [
+                        "a:has-text('Go to library')",
+                        "button:has-text('Go to library')",
+                        "a:has-text('Home')",
+                        "[aria-label='Home']",
+                    ]:
+                        try:
+                            loc = page.locator(sel).first
+                            await loc.wait_for(state="visible", timeout=2_000)
+                            await loc.click()
+                            await asyncio.sleep(1.5)
+                            escaped = True
+                            break
+                        except Exception:
+                            continue
+                    if not escaped:
+                        # Hard navigate as last resort
+                        await page.goto(fallback_url, wait_until="domcontentloaded")
+                        await asyncio.sleep(1.5)
+                    return page
+                self._page = page
                 if reload:
                     logger.info("%s: reloading existing tab %s", self.name, page.url[:80])
                     await page.reload(wait_until="domcontentloaded")
@@ -181,9 +216,17 @@ class BaseCrawler:
     # ──── Navigation helpers ────
 
     async def navigate(self, url: str, wait: str = "domcontentloaded") -> None:
-        """Navigate to URL and wait for network idle."""
+        """Navigate to URL and wait for network idle.
+
+        If the resulting URL is a 404/error page, logs a warning but does not
+        raise — callers should check self._page.url if they need to guard.
+        """
         assert self._page, "No page open — call open_page() first"
         await self._page.goto(url, wait_until=wait)
+        landed = self._page.url
+        _error_suffixes = ("/404", "/error", "/not-found", "/notfound", "?error=")
+        if any(landed.endswith(s) or s in landed for s in _error_suffixes):
+            logger.warning("%s: navigate(%s) landed on error page %s", self.name, url, landed[:80])
         await self._wait_network_idle()
 
     async def _wait_network_idle(self, timeout: int = NETWORK_IDLE_MS) -> None:
@@ -257,6 +300,17 @@ class BaseCrawler:
         except Exception as exc:
             s.error = str(exc)
             logger.warning("ARGUS %s: step [%s] failed: %s", self.name, name, exc)
+            # Vision snapshot on failure — ask the model what went wrong
+            try:
+                vision_desc = await self._vision_check(
+                    f"Step '{name}' just failed in the crawler. "
+                    "What is currently visible on the page? "
+                    "Any error messages, missing elements, or unexpected state?"
+                )
+                logger.warning("ARGUS %s: vision on failure [%s]: %s", self.name, name, vision_desc[:300])
+                s.note(f"vision-on-failure: {vision_desc[:200]}")
+            except Exception:
+                pass
         self._steps.append(s.finish())
         return s
 
