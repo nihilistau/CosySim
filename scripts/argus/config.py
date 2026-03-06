@@ -73,7 +73,7 @@ NLM_RPCIDS: Dict[str, str] = {
     "GzgSEd": "GetChatHistory",
     "GfmCOc": "DeleteChatHistory",
     "xqEXEf": "GenerateGuide",
-    "sqTeoe": "GetAudioOverview",
+    "sqTeoe": "GetAudioOverview",         # also used for GetAudioOverviewOptions
     "VfAZjd": "GetNotebookAnalysis",
     "dI5Y8":  "ShareNotebook",
     "jzEKsc": "GetSharedNotebook",
@@ -82,7 +82,6 @@ NLM_RPCIDS: Dict[str, str] = {
     "ozz5Z":  "GetFeatureFlags",
     "ub2Bae": "ListNotebooks",
     "DYBcR":  "GetLocalePreferences",
-    "sqTeoe": "GetAudioOverviewOptions",
 }
 
 # ──── Known Gemini rpcids (17 decoded) ────

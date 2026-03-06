@@ -749,6 +749,9 @@ def _process_and_store(target: str, network_entries: List[Dict], summary: str) -
                 elif "gemini" in url and rpcid not in known_gemini:
                     new_gemini.append(rpcid)
                     sink.store_new_rpcid(rpcid, "Unknown", "gemini", f"URL: {url[:80]}")
+                else:
+                    # Unknown batchexecute service — log for investigation
+                    logger.debug("Unhandled batchexecute rpcid %s from URL: %s", rpcid, url[:100])
 
         # gRPC-web (AI Studio)
         if "$rpc/" in url or "clients6.google.com" in url:

@@ -413,6 +413,7 @@ class TestStoreMessage:
 
         async def _run():
             class FakeResp:
+                status_code = 200
                 def raise_for_status(self): pass
                 def json(self): return {"response_id": "stored-001"}
 
@@ -433,6 +434,7 @@ class TestStoreMessage:
 
         async def _run():
             class FakeResp:
+                status_code = 200
                 def raise_for_status(self): pass
                 def json(self): return {"response_id": "r2"}
 
