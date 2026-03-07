@@ -49,6 +49,7 @@ def mock_router():
         result.answer = answer
         result.source_tier = source_tier
         result.was_cached = source_tier == "cache"
+        result.stored_in_nexus = False
         return result
 
     router.route.side_effect = lambda q, **kw: make_result()
@@ -120,6 +121,7 @@ class TestSessionMetrics:
         assert m.llm_calls == 0
         assert m.tools_used == []
         assert m.files_edited == []
+        assert m.domains_touched == []
         assert m.decisions_stored == 0
         assert m.qa_pairs_generated == 0
 
@@ -137,7 +139,8 @@ class TestSessionMetrics:
         expected_keys = {
             "duration_seconds", "nexus_searches", "nexus_cache_hits",
             "nlm_asks", "llm_calls", "total_queries", "compute_saved_pct",
-            "tools_used", "files_edited", "decisions_stored", "qa_pairs_generated",
+            "tools_used", "files_edited", "domains_touched",
+            "decisions_stored", "qa_pairs_generated",
         }
         assert expected_keys == set(d.keys())
 
@@ -179,9 +182,11 @@ class TestSessionMetrics:
         m = SessionMetrics()
         m.tools_used = ["edit", "create", "grep"]
         m.files_edited = ["a.py", "b.py"]
+        m.domains_touched = ["nexus", "copilot_assistant"]
         d = m.to_dict()
         assert d["tools_used"] == 3
         assert d["files_edited"] == 2
+        assert d["domains_touched"] == 2
 
 
 # ──── Initialization Tests ────
@@ -259,10 +264,13 @@ class TestSessionStart:
         assert ctx["task"] == "Add caching"
 
     def test_empty_task_returns_minimal_context(self, bridge):
-        """Empty task skips Nexus searches."""
+        """Empty task skips task search but still loads resume/startup context."""
         ctx = bridge.session_start("")
         assert ctx["task"] == ""
         assert ctx["knowledge"] == []
+        assert "onboarding" in ctx
+        assert "startup_services" in ctx
+        assert "resume_handoff" in ctx["onboarding"]
 
     def test_searches_nexus_for_knowledge(self, bridge, mock_nexus):
         """Nexus search is called for non-empty task (at least once for task knowledge)."""
@@ -324,6 +332,14 @@ class TestSessionStart:
             ctx = b.session_start("task")
         assert ctx["task"] == "task"
         assert ctx["knowledge"] == []
+        assert "startup_services" in ctx
+
+    def test_startup_services_attached_for_runtime(self, bridge):
+        """session_start exposes best-effort startup service load state."""
+        startup = {"nexus": {"loaded": True}, "task_scheduler": {"loaded": True}}
+        with patch.object(bridge, "_warm_start_services", return_value=startup):
+            ctx = bridge.session_start("task")
+        assert ctx["startup_services"] == startup
 
     def test_search_exception_caught(self, bridge, mock_nexus):
         """Nexus search exception doesn't crash."""
@@ -342,6 +358,17 @@ class TestSessionStart:
         mock_nexus.get_rules.side_effect = RuntimeError("fail")
         ctx = bridge.session_start("task")
         assert "rules" not in ctx
+
+    def test_runtime_task_loads_runtime_context(self, bridge, mock_nexus):
+        """Copilot runtime tasks receive additional runtime guidance and knowledge."""
+        mock_nexus.search.return_value = [
+            {"title": "Runtime hardening", "content": "Keep hooks non-blocking while syncing tool payloads."}
+        ]
+        ctx = bridge.session_start("Harden Copilot runtime hooks")
+        assert "runtime_context" in ctx
+        assert ctx["runtime_context"]["guidance"]
+        assert ctx["runtime_context"]["knowledge"][0]["title"] == "Runtime hardening"
+        assert any("backfill" in item.lower() for item in ctx["runtime_context"]["guidance"])
 
 
 # ──── session_end Tests ────
@@ -426,6 +453,70 @@ class TestPrePlan:
         assert result["qa_pairs"][0]["question"] == "Q1?"
         assert result["qa_pairs"][0]["answer"] == "NLM answer text"
         assert result["qa_pairs"][0]["source"] == "nlm"
+        assert result["action_manifest"]["task"] == "task"
+        assert result["action_manifest"]["steps"][0]["step_id"] == "step-01"
+        assert result["recommendations"]
+
+    @patch("engine.nexus.knowledge_forge.generate_questions")
+    def test_storebacks_new_answers(self, mock_gen_q, bridge, mock_nexus):
+        """Newly discovered pre-plan answers are persisted to Nexus."""
+        mock_gen_q.return_value = ["Q1?"]
+
+        bridge.pre_plan("task")
+
+        mock_nexus.add_qa.assert_called_once()
+        kwargs = mock_nexus.add_qa.call_args.kwargs
+        assert kwargs["question"] == "Q1?"
+        assert kwargs["answer"] == "NLM answer text"
+        assert kwargs["category"] == "plan"
+        assert "pre-plan" in kwargs["tags"]
+        assert "source:nlm" in kwargs["tags"]
+
+    @patch("engine.nexus.knowledge_forge.generate_questions")
+    def test_stores_action_manifest_entry(self, mock_gen_q, bridge, mock_nexus):
+        """Structured manifest artifact is stored in Nexus."""
+        mock_gen_q.return_value = ["Q1?"]
+
+        result = bridge.pre_plan("task")
+
+        assert result["manifest_entry_id"] == "entry-456"
+        kwargs = mock_nexus.add_entry.call_args.kwargs
+        assert kwargs["title"] == "Action Manifest: task"
+        assert kwargs["content_type"] == "plan"
+        assert kwargs["category"] == "copilot-preplan"
+        assert "action-manifest" in kwargs["tags"]
+
+    @patch("engine.nexus.knowledge_forge.generate_questions")
+    def test_skips_storeback_for_cached_answers(self, mock_gen_q, bridge, mock_nexus, mock_router):
+        """Cached pre-plan answers are not redundantly stored again."""
+        route_result = MagicMock()
+        route_result.answer = "cached"
+        route_result.source_tier = "cache"
+        route_result.was_cached = True
+        route_result.stored_in_nexus = False
+        mock_router.route.side_effect = None
+        mock_router.route.return_value = route_result
+        mock_gen_q.return_value = ["Q?"]
+
+        bridge.pre_plan("task")
+
+        mock_nexus.add_qa.assert_not_called()
+
+    @patch("engine.nexus.knowledge_forge.generate_questions")
+    def test_skips_storeback_when_router_already_stored(self, mock_gen_q, bridge, mock_nexus, mock_router):
+        """Router-managed storage is not duplicated by pre_plan."""
+        route_result = MagicMock()
+        route_result.answer = "already stored"
+        route_result.source_tier = "nlm"
+        route_result.was_cached = False
+        route_result.stored_in_nexus = True
+        mock_router.route.side_effect = None
+        mock_router.route.return_value = route_result
+        mock_gen_q.return_value = ["Q?"]
+
+        bridge.pre_plan("task")
+
+        mock_nexus.add_qa.assert_not_called()
 
     @patch("engine.nexus.knowledge_forge.generate_questions")
     def test_answer_truncated_to_500(self, mock_gen_q, bridge, mock_router):
@@ -629,10 +720,37 @@ class TestTrackToolUse:
         bridge.track_tool_use("edit", {"path": "src/main.py"})
         assert "src/main.py" in bridge._metrics.files_edited
 
+    def test_tracks_touched_domains_for_repo_files(self, bridge):
+        """Edited repo files are classified into architectural domains."""
+        bridge.track_tool_use("edit", {"path": "engine/nexus/copilot_bridge.py"})
+        assert "nexus" in bridge._metrics.domains_touched
+        assert "copilot_assistant" in bridge._metrics.domains_touched
+
     def test_tracks_create_file(self, bridge):
         """Create tool records the file path."""
         bridge.track_tool_use("create", {"path": "tests/test_new.py"})
         assert "tests/test_new.py" in bridge._metrics.files_edited
+
+    def test_tracks_write_file(self, bridge):
+        """Modern write tool records the target file path."""
+        bridge.track_tool_use("write", {"file_path": "engine/runtime.py"})
+        assert "engine/runtime.py" in bridge._metrics.files_edited
+
+    def test_tracks_apply_patch_files(self, bridge):
+        """apply_patch extracts edited files from patch text."""
+        patch = "\n".join([
+            "*** Begin Patch",
+            "*** Update File: engine/nexus/copilot_bridge.py",
+            "@@",
+            "-old",
+            "+new",
+            "*** Add File: tests/test_runtime_hooks.py",
+            "+content",
+            "*** End Patch",
+        ])
+        bridge.track_tool_use("apply_patch", {"input": patch})
+        assert "engine/nexus/copilot_bridge.py" in bridge._metrics.files_edited
+        assert "tests/test_runtime_hooks.py" in bridge._metrics.files_edited
 
     def test_no_duplicate_files(self, bridge):
         """Same file edited twice is only recorded once."""
@@ -655,6 +773,25 @@ class TestTrackToolUse:
         """Edit with empty path doesn't add to files_edited."""
         bridge.track_tool_use("edit", {"path": ""})
         assert bridge._metrics.files_edited == []
+
+    def test_parallel_tool_tracks_nested_edits(self, bridge):
+        """Nested parallel tool payloads are unfolded for edit tracking."""
+        bridge.track_tool_use("parallel", {
+            "tool_uses": [
+                {
+                    "recipient_name": "functions.edit",
+                    "parameters": {"path": "engine/a.py"},
+                },
+                {
+                    "recipient_name": "functions.apply_patch",
+                    "parameters": {
+                        "input": "*** Begin Patch\n*** Update File: tests/test_a.py\n@@\n-old\n+new\n*** End Patch"
+                    },
+                },
+            ]
+        })
+        assert "engine/a.py" in bridge._metrics.files_edited
+        assert "tests/test_a.py" in bridge._metrics.files_edited
 
 
 # ──── track_error Tests ────
@@ -1057,18 +1194,28 @@ class TestGetOnboardingContext:
     def test_returns_dict_with_all_keys(self, bridge, mock_nexus):
         """Returns dict with rules, decisions, architecture_overview, active_todos."""
         with patch.object(bridge, "get_decision_history", return_value=[]):
-            with patch("engine.nexus.task_scheduler.get_task_scheduler", side_effect=ImportError):
+            with (
+                patch("engine.nexus.task_scheduler.get_task_scheduler", side_effect=ImportError),
+                patch("engine.nexus.operator_inbox.get_operator_inbox", side_effect=ImportError),
+            ):
                 result = bridge.get_onboarding_context()
         assert "rules" in result
         assert "recent_decisions" in result
         assert "architecture_overview" in result
         assert "active_todos" in result
+        assert "operator_directives" in result
+        assert "resume_handoff" in result
+        assert "system_inventory" in result
+        assert "capture_policy" in result
 
     def test_loads_coding_rules(self, bridge, mock_nexus):
         """Coding rules are loaded from Nexus."""
         mock_nexus.get_rules.return_value = ["Use absolute imports", "No print()"]
         with patch.object(bridge, "get_decision_history", return_value=[]):
-            with patch("engine.nexus.task_scheduler.get_task_scheduler", side_effect=ImportError):
+            with (
+                patch("engine.nexus.task_scheduler.get_task_scheduler", side_effect=ImportError),
+                patch("engine.nexus.operator_inbox.get_operator_inbox", side_effect=ImportError),
+            ):
                 result = bridge.get_onboarding_context()
         assert len(result["rules"]) > 0
 
@@ -1085,9 +1232,78 @@ class TestGetOnboardingContext:
             {"title": "Architecture", "content": "MCP tree manages state"}
         ]
         with patch.object(bridge, "get_decision_history", return_value=[]):
-            with patch("engine.nexus.task_scheduler.get_task_scheduler", side_effect=ImportError):
+            with (
+                patch("engine.nexus.task_scheduler.get_task_scheduler", side_effect=ImportError),
+                patch("engine.nexus.operator_inbox.get_operator_inbox", side_effect=ImportError),
+            ):
                 result = bridge.get_onboarding_context()
         assert "MCP tree" in result["architecture_overview"]
+
+    def test_system_inventory_loaded(self, bridge, mock_nexus):
+        """Onboarding context includes the canonical system inventory."""
+        with patch.object(bridge, "get_decision_history", return_value=[]):
+            with (
+                patch("engine.nexus.task_scheduler.get_task_scheduler", side_effect=ImportError),
+                patch("engine.nexus.operator_inbox.get_operator_inbox", side_effect=ImportError),
+            ):
+                result = bridge.get_onboarding_context()
+        assert result["system_inventory"]["summary"]["domain_count"] >= 10
+        assert result["capture_policy"]["backfill_external_discoveries"] is True
+
+    def test_resume_handoff_loaded(self, bridge, mock_nexus):
+        """Onboarding context includes the latest persisted restart handoff when present."""
+        handoff = {"title": "Restart handoff", "content": "Ready todos on resume: notebooklm"}
+        with (
+            patch.object(bridge, "get_decision_history", return_value=[]),
+            patch.object(bridge, "_load_resume_handoff", return_value=handoff),
+            patch("engine.nexus.task_scheduler.get_task_scheduler", side_effect=ImportError),
+            patch("engine.nexus.operator_inbox.get_operator_inbox", side_effect=ImportError),
+        ):
+            result = bridge.get_onboarding_context()
+        assert result["resume_handoff"] == handoff
+
+    def test_active_todos_and_operator_directives_loaded(self, bridge, mock_nexus):
+        """Onboarding context includes scheduler todos and pending operator directives."""
+        scheduler = MagicMock()
+        scheduler.get_pending_tasks.return_value = [
+            MagicMock(title="Operator: Add control panel", priority=1, status="pending"),
+        ]
+        inbox = MagicMock()
+        inbox.pending_for_onboarding.return_value = {
+            "summary": {"pending": 1},
+            "items": [{"item_id": "op-1", "title": "Add control panel"}],
+        }
+
+        with (
+            patch.object(bridge, "get_decision_history", return_value=[]),
+            patch("engine.nexus.task_scheduler.get_task_scheduler", return_value=scheduler),
+            patch("engine.nexus.operator_inbox.get_operator_inbox", return_value=inbox),
+        ):
+            result = bridge.get_onboarding_context()
+
+        assert result["active_todos"][0]["title"] == "Operator: Add control panel"
+        assert result["active_todos"][0]["status"] == "pending"
+        assert result["operator_directives"]["summary"]["pending"] == 1
+        assert result["operator_directives"]["items"][0]["title"] == "Add control panel"
+
+
+class TestBackfillExternalDiscovery:
+    """Tests for the Nexus miss -> backfill helper."""
+
+    def test_backfill_external_discovery_stores_entry_and_qa(self, bridge, mock_nexus):
+        """CopilotBridge can backfill external discoveries into Nexus."""
+        result = bridge.backfill_external_discovery(
+            question="What should happen on a Nexus miss?",
+            answer="Store the answer back into Nexus.",
+            source="user directive",
+            category="system",
+            tags=["nexus", "workflow"],
+        )
+
+        mock_nexus.add_entry.assert_called_once()
+        mock_nexus.add_qa.assert_called_once()
+        assert result["entry_id"] == "entry-456"
+        assert result["qa_id"] == "qa-stored-123"
 
 
 # ──── get_decision_history Tests ────
@@ -1152,4 +1368,3 @@ class TestGetDecisionHistory:
         result = bridge.get_decision_history("nlm routing")
         sources = [d.get("source") for d in result]
         assert "qa_cache" in sources
-
