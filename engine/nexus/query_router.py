@@ -3,10 +3,13 @@
 Routes all queries through a confidence-scored pipeline:
   1. Q&A Cache (instant, high confidence)
   2. FTS Knowledge Search (fast, medium confidence)
-  3. LLM Fallback (slow, variable confidence)
+  3. Nexus Smart Ask / NotebookLM-backed research
+  4. Direct NotebookLM unified ask (when smart ask cannot answer)
+  5. LLM Fallback (slow, variable confidence)
 
-LLM answers are automatically stored back in Nexus for future reuse,
-creating a self-improving knowledge loop that reduces LLM calls over time.
+NLM and LLM answers are automatically stored back in Nexus for future reuse,
+creating a self-improving knowledge loop that reduces expensive fallback calls
+over time.
 
 Usage:
     from engine.nexus.query_router import get_query_router
@@ -36,7 +39,7 @@ logger = logging.getLogger(__name__)
 class QueryResult:
     """Result from the query router pipeline."""
     answer: str = ""
-    source: str = "none"          # cache | search | llm | none
+    source: str = "none"          # cache | search | nexus-* | nlm* | llm | none
     confidence: float = 0.0       # 0.0 to 1.0
     cached: bool = False          # Was this served from Nexus?
     tokens_saved: int = 0         # Estimated tokens saved vs LLM call
@@ -62,6 +65,7 @@ class RouterStats:
     total_queries: int = 0
     cache_hits: int = 0
     search_hits: int = 0
+    nlm_hits: int = 0
     llm_fallbacks: int = 0
     no_answer: int = 0
     total_tokens_saved: int = 0
@@ -70,13 +74,14 @@ class RouterStats:
     def hit_rate(self) -> float:
         if self.total_queries == 0:
             return 0.0
-        return (self.cache_hits + self.search_hits) / self.total_queries
+        return (self.cache_hits + self.search_hits + self.nlm_hits) / self.total_queries
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             "total_queries": self.total_queries,
             "cache_hits": self.cache_hits,
             "search_hits": self.search_hits,
+            "nlm_hits": self.nlm_hits,
             "llm_fallbacks": self.llm_fallbacks,
             "no_answer": self.no_answer,
             "total_tokens_saved": self.total_tokens_saved,
@@ -88,10 +93,12 @@ class RouterStats:
 class NexusQueryRouter:
     """Routes queries through Nexus-first pipeline with LLM fallback.
 
-    The router implements a 3-tier lookup:
+    The router implements a 5-tier lookup:
       1. Q&A Cache — exact or fuzzy match on previously answered questions
       2. FTS Search — synthesise answer from matching knowledge entries
-      3. LLM Fallback — send to LMStudio, store answer back in Nexus
+      3. Nexus Smart Ask — server-side cache → FTS → NotebookLM pipeline
+      4. Direct NotebookLM ask — use the unified backend before local GPU
+      5. LLM Fallback — send to LMStudio, store answer back in Nexus
 
     Over time, as more answers accumulate in Nexus, fewer LLM calls are needed.
     """
@@ -131,7 +138,8 @@ class NexusQueryRouter:
     def query(self, question: str, min_confidence: float = 0.3,
               use_llm: bool = True, category: str = "",
               tags: Optional[List[str]] = None,
-              source_hint: str = "system") -> QueryResult:
+              source_hint: str = "system",
+              depth: str = "auto") -> QueryResult:
         """Route a query through the Nexus-first pipeline.
 
         Args:
@@ -141,6 +149,7 @@ class NexusQueryRouter:
             category: Category filter for Nexus search.
             tags: Tags to apply when storing new answers.
             source_hint: Who's asking (system, agent, copilot, scene).
+            depth: "shallow", "auto", or "deep" for the Nexus smart-ask tier.
 
         Returns:
             QueryResult with answer, source, confidence, and metadata.
@@ -186,13 +195,23 @@ class NexusQueryRouter:
             return result
 
         # Tier 3: Nexus Smart Ask (server-side pipeline)
-        result = self._try_nexus_ask(client, question, category)
+        result = self._try_nexus_ask(client, question, category, depth=depth)
         if result and result.confidence >= min_confidence:
             result.query_time_ms = (time.time() - start) * 1000
             self._store_local_cache(cache_key, result)
             return result
 
-        # Tier 4: LLM Fallback
+        # Tier 4: Direct NotebookLM ask
+        result = self._try_direct_nlm(client, question)
+        if result and result.confidence >= min_confidence:
+            self._store_qa(client, question, result.answer, category, tags, source_hint)
+            with self._lock:
+                self._stats.answers_stored += 1
+            result.query_time_ms = (time.time() - start) * 1000
+            self._store_local_cache(cache_key, result)
+            return result
+
+        # Tier 5: LLM Fallback
         if use_llm:
             result = self._llm_fallback(question, category, tags, source_hint)
             if result.answer and len(result.answer) >= self.MIN_ANSWER_LENGTH:
@@ -292,16 +311,20 @@ class NexusQueryRouter:
         return None
 
     def _try_nexus_ask(self, client, question: str,
-                       category: str = "") -> Optional[QueryResult]:
-        """Tier 3: Use Nexus server-side smart Q&A pipeline."""
+                       category: str = "", depth: str = "auto") -> Optional[QueryResult]:
+        """Tier 3: Use Nexus server-side smart Q&A / NotebookLM pipeline."""
         try:
-            result = client.ask(question, depth="shallow", category=category)
+            ask_depth = depth if depth in {"shallow", "auto", "deep"} else "auto"
+            result = client.ask(question, depth=ask_depth, category=category)
             answer = result.get("answer", "")
             if answer and len(answer) >= self.MIN_ANSWER_LENGTH:
                 source = result.get("source", "nexus")
                 confidence = result.get("confidence", 0.5)
                 with self._lock:
-                    self._stats.cache_hits += 1
+                    if source == "nlm":
+                        self._stats.nlm_hits += 1
+                    else:
+                        self._stats.cache_hits += 1
                     tokens_saved = self._estimate_tokens(answer)
                     self._stats.total_tokens_saved += tokens_saved
                 return QueryResult(
@@ -316,10 +339,54 @@ class NexusQueryRouter:
             logger.debug("Nexus ask failed: %s", exc)
         return None
 
+    def _try_direct_nlm(self, client, question: str) -> Optional[QueryResult]:
+        """Tier 4: Ask NotebookLM directly through the unified backend."""
+        if not self._nlm_backend_available(client):
+            return None
+
+        try:
+            result = client.nlm_unified_ask(question)
+            if not isinstance(result, dict):
+                return None
+
+            payload = result.get("data") if isinstance(result.get("data"), dict) else result
+            answer = payload.get("answer", "")
+            if not answer or len(answer) < self.MIN_ANSWER_LENGTH:
+                return None
+
+            raw_source = str(
+                payload.get("source")
+                or result.get("backend")
+                or payload.get("backend")
+                or "nlm"
+            )
+            source = raw_source if raw_source.startswith("nlm") else f"nlm-{raw_source}"
+            confidence = float(payload.get("confidence", result.get("confidence", 0.8)))
+            sources = payload.get("sources", result.get("sources", []))
+            backend = result.get("backend") or payload.get("backend", "")
+
+            with self._lock:
+                self._stats.nlm_hits += 1
+                tokens_saved = self._estimate_tokens(answer)
+                self._stats.total_tokens_saved += tokens_saved
+
+            return QueryResult(
+                answer=answer,
+                source=source,
+                confidence=confidence,
+                cached=True,
+                tokens_saved=tokens_saved,
+                sources=sources if isinstance(sources, list) else [],
+                metadata={"backend": backend} if backend else {},
+            )
+        except Exception as exc:
+            logger.debug("Direct NotebookLM ask failed: %s", exc)
+        return None
+
     def _llm_fallback(self, question: str, category: str = "",
                       tags: Optional[List[str]] = None,
                       source_hint: str = "system") -> QueryResult:
-        """Tier 4: Send to LLM and store the answer back in Nexus."""
+        """Tier 5: Send to LLM and store the answer back in Nexus."""
         with self._lock:
             self._stats.llm_fallbacks += 1
 
@@ -408,6 +475,52 @@ class NexusQueryRouter:
             logger.debug("Stored Q&A in Nexus: %s", question[:60])
         except Exception as exc:
             logger.debug("Failed to store Q&A: %s", exc)
+
+    def _nlm_backend_available(self, client) -> bool:
+        """Best-effort check for any direct NotebookLM backend availability."""
+        try:
+            status = client.nlm_status()
+        except Exception as exc:
+            logger.debug("NLM status check failed; attempting unified ask anyway: %s", exc)
+            return True
+
+        details = (
+            status.get("data")
+            if isinstance(status, dict) and isinstance(status.get("data"), dict)
+            else status
+        )
+        if not isinstance(details, dict):
+            return True
+
+        active_backend = details.get("active_backend")
+        if isinstance(active_backend, str):
+            return active_backend.lower() != "none"
+
+        tiers = details.get("tiers")
+        if isinstance(tiers, dict):
+            nlm_tier = tiers.get("nlm")
+            if isinstance(nlm_tier, dict) and "available" in nlm_tier:
+                return bool(nlm_tier.get("available"))
+
+        observed_backend_state = False
+        for key in ("http", "browser"):
+            backend = details.get(key)
+            if isinstance(backend, dict) and "available" in backend:
+                observed_backend_state = True
+                if backend.get("available"):
+                    return True
+            elif isinstance(backend, bool):
+                observed_backend_state = True
+                if backend:
+                    return True
+
+        if "status" in details:
+            return details.get("status") == "ok"
+
+        if observed_backend_state:
+            return False
+
+        return True
 
     # ── Local Cache ─────────────────────────────────────────────────
 

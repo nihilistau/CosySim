@@ -27,15 +27,18 @@ Called by:
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
 import sys
 import time
+import urllib.parse
 import urllib.request
 import urllib.error
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +54,9 @@ STATE_FILE = REPO_ROOT / ".github" / "hooks" / "logs" / "notebook_bootstrap.json
 
 # Max chars per source text upload
 MAX_SOURCE_CHARS = 50_000
+SCHEDULED_DISTILL_INTERVAL_HOURS = 24 * 7
+SOURCE_WAIT_TIMEOUT_SECONDS = 90
+SOURCE_WAIT_POLL_SECONDS = 3
 
 # Standard distillation questions asked for each notebook after seeding
 ARCHITECTURE_QUESTIONS = [
@@ -134,6 +140,21 @@ def _nlm_get(path: str, timeout: int = 10) -> Optional[dict]:
         return None
 
 
+def _nlm_delete(path: str, timeout: int = 30) -> Optional[dict]:
+    """DELETE against the NLM proxy."""
+    try:
+        req = urllib.request.Request(
+            f"{NLM_PROXY_URL}{path}",
+            method="DELETE",
+            headers={"Accept": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return json.loads(resp.read())
+    except Exception as e:
+        logger.warning("NLM DELETE %s failed: %s", path, e)
+        return None
+
+
 def _nexus_post(path: str, data: dict) -> Optional[dict]:
     """POST to Nexus API."""
     try:
@@ -152,16 +173,20 @@ def _nexus_post(path: str, data: dict) -> Optional[dict]:
 def _nexus_search(query: str, category: str = "", limit: int = 20) -> list[dict]:
     """Search Nexus for entries."""
     try:
-        params = f"search={urllib.request.quote(query)}&limit={limit}"
-        if category:
-            params += f"&category={urllib.request.quote(category)}"
+        params = urllib.parse.urlencode({
+            "q": query,
+            "limit": limit,
+            **({"category": category} if category else {}),
+        })
         req = urllib.request.Request(
-            f"{NEXUS_URL}/api/entries?{params}",
+            f"{NEXUS_URL}/api/search?{params}",
             headers={"Accept": "application/json"},
         )
         with urllib.request.urlopen(req, timeout=10) as resp:
             data = json.loads(resp.read())
-        return data.get("data", data) if isinstance(data, dict) else (data or [])
+        if isinstance(data, dict):
+            return data.get("results", data.get("data", [])) or []
+        return data or []
     except Exception:
         return []
 
@@ -179,7 +204,6 @@ def _load_state() -> dict:
 
 def _save_state(state: dict) -> None:
     STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-    from datetime import datetime, timezone
     state["last_bootstrap"] = datetime.now(timezone.utc).isoformat()
     STATE_FILE.write_text(json.dumps(state, indent=2))
 
@@ -278,12 +302,12 @@ def _collect_copilot_instruction_sources() -> list[dict]:
 
 
 def _collect_session_history_sources() -> list[dict]:
-    """Collect recent session checkpoints from Nexus for the history notebook."""
+    """Collect recent session history from the synced copilot-history corpus."""
     sources = []
 
-    # Pull session history entries from Nexus
-    entries = _nexus_search("session", category="sessions", limit=50)
-    entries += _nexus_search("checkpoint", category="copilot-hooks", limit=50)
+    # Pull from the same synced history corpus used by session_distillation.
+    entries = _nexus_search("session", category="copilot-history", limit=50)
+    entries += _nexus_search("checkpoint", category="copilot-history", limit=50)
 
     if entries:
         merged = ["# Recent Copilot Session History\n"]
@@ -420,16 +444,26 @@ def _get_or_create_notebook(name: str, description: str, state: dict) -> Optiona
 
 def _add_text_source(notebook_url: str, title: str, content: str) -> bool:
     """Add a text source to a notebook via the NLM proxy."""
-    result = _nlm_post(f"/notebooks/{_nb_id(notebook_url)}/sources", {
+    notebook_id = _nb_id(notebook_url)
+
+    result = _nlm_post(f"/notebooks/{notebook_id}/sources/text", {
+        "title": title,
+        "content": content,
+    }, timeout=60)
+    if result and (result.get("ok") or result.get("source_id") or result.get("id")):
+        logger.info("  Added source: %s", title)
+        return True
+
+    result = _nlm_post(f"/notebooks/{notebook_id}/sources", {
         "type": "text",
         "title": title,
         "content": content,
         "notebook_url": notebook_url,
     }, timeout=60)
     if result and result.get("ok"):
-        logger.info("  Added source: %s", title)
+        logger.info("  Added source via fallback route: %s", title)
         return True
-    # Try alternative endpoint
+
     result = _nlm_post("/add_source", {
         "notebook_url": notebook_url,
         "source": {"type": "text", "value": content, "title": title},
@@ -442,6 +476,101 @@ def _nb_id(notebook_url: str) -> str:
     return notebook_url.rstrip("/").split("/")[-1].split("?")[0]
 
 
+def _source_hash(title: str, content: str, source_type: str) -> str:
+    """Build a stable content hash for a notebook source."""
+    payload = json.dumps(
+        {"title": title, "content": content, "type": source_type},
+        sort_keys=True,
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _parse_timestamp(value: str) -> Optional[datetime]:
+    """Parse an ISO timestamp from persisted state."""
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def _list_notebook_sources(notebook_url: str) -> list[dict[str, Any]]:
+    """List all current sources for a notebook."""
+    result = _nlm_get(f"/notebooks/{_nb_id(notebook_url)}/sources", timeout=30)
+    if isinstance(result, dict):
+        sources = result.get("sources", [])
+        return sources if isinstance(sources, list) else []
+    return result if isinstance(result, list) else []
+
+
+def _delete_notebook_source(notebook_url: str, source_id: str) -> bool:
+    """Delete a single notebook source by ID."""
+    result = _nlm_delete(
+        f"/notebooks/{_nb_id(notebook_url)}/sources/{urllib.parse.quote(source_id)}",
+        timeout=60,
+    )
+    return bool(result and (result.get("deleted") or result.get("ok")))
+
+
+def _delete_matching_sources(notebook_url: str, title: str) -> int:
+    """Delete all notebook sources that match the given title."""
+    deleted = 0
+    for source in _list_notebook_sources(notebook_url):
+        if source.get("title") != title:
+            continue
+        source_id = str(source.get("id", "")).strip()
+        if source_id and _delete_notebook_source(notebook_url, source_id):
+            deleted += 1
+    return deleted
+
+
+def _wait_for_notebook_sources(
+    notebook_url: str,
+    timeout: int = SOURCE_WAIT_TIMEOUT_SECONDS,
+    interval: int = SOURCE_WAIT_POLL_SECONDS,
+) -> bool:
+    """Wait until NotebookLM reports all notebook sources as processed."""
+    notebook_id = _nb_id(notebook_url)
+    result = _nlm_get(
+        f"/notebooks/{notebook_id}/sources/wait?timeout={timeout}&interval={interval}",
+        timeout=timeout + 10,
+    )
+    if result and result.get("ready"):
+        return True
+    logger.warning("Notebook sources not ready for distillation: %s", result)
+    return False
+
+
+def _should_distill(
+    nb_state: dict[str, Any],
+    questions: list[str],
+    distill: bool,
+    scheduled: bool,
+    sources_changed: bool,
+) -> tuple[bool, str]:
+    """Decide whether this notebook should run a distillation pass."""
+    if not distill or not questions:
+        return False, ""
+
+    if not scheduled:
+        return True, "manual_distill"
+
+    if sources_changed:
+        return True, "sources_changed"
+
+    last_attempt = _parse_timestamp(
+        str(nb_state.get("last_distill_attempt_at") or nb_state.get("last_distilled_at") or "")
+    )
+    if last_attempt is None:
+        return True, "first_scheduled_distill"
+
+    if datetime.now(timezone.utc) - last_attempt >= timedelta(hours=SCHEDULED_DISTILL_INTERVAL_HOURS):
+        return True, "stale_scheduled_distill"
+
+    return False, ""
+
+
 def bootstrap_notebook(
     name: str,
     description: str,
@@ -450,6 +579,7 @@ def bootstrap_notebook(
     state: dict,
     distill: bool = True,
     force: bool = False,
+    scheduled: bool = False,
 ) -> dict:
     """
     Bootstrap a single NLM notebook:
@@ -459,7 +589,15 @@ def bootstrap_notebook(
 
     Returns result summary.
     """
-    result = {"notebook": name, "sources_added": 0, "qa_stored": 0, "error": None}
+    result = {
+        "notebook": name,
+        "sources_added": 0,
+        "sources_deleted": 0,
+        "qa_stored": 0,
+        "distilled": False,
+        "distill_reason": "",
+        "error": None,
+    }
 
     nb_url = _get_or_create_notebook(name, description, state)
     if not nb_url:
@@ -468,29 +606,59 @@ def bootstrap_notebook(
 
     nb_state = state.get("notebooks_detail", {}).get(name, {})
     seeded_sources = set(nb_state.get("seeded_sources", []))
+    source_hashes = dict(nb_state.get("source_hashes", {}))
+    sources_changed = False
 
     for source in sources:
         title = source["title"]
-        if not force and title in seeded_sources:
-            logger.info("  Source already seeded: %s", title)
-            continue
+        source_type = str(source.get("type", "text"))
         content = source.get("content", "")
         if not content.strip():
             continue
+        current_hash = _source_hash(title, content, source_type)
+        known_hash = str(source_hashes.get(title, ""))
+
+        if not force and known_hash == current_hash:
+            logger.info("  Source already synced: %s", title)
+            continue
+
+        if title in seeded_sources:
+            deleted = _delete_matching_sources(nb_url, title)
+            result["sources_deleted"] += deleted
+
         if _add_text_source(nb_url, title, content):
             seeded_sources.add(title)
+            source_hashes[title] = current_hash
             result["sources_added"] += 1
+            sources_changed = True
         time.sleep(0.5)  # rate limit
 
     # Update state
     detail = state.setdefault("notebooks_detail", {}).setdefault(name, {})
     detail["seeded_sources"] = list(seeded_sources)
+    detail["source_hashes"] = source_hashes
     detail["notebook_url"] = nb_url
 
-    if distill and questions and result["sources_added"] > 0:
+    should_distill, reason = _should_distill(
+        nb_state=detail,
+        questions=questions,
+        distill=distill,
+        scheduled=scheduled,
+        sources_changed=sources_changed,
+    )
+
+    if should_distill:
+        result["distill_reason"] = reason
+        if sources_changed and not _wait_for_notebook_sources(nb_url):
+            result["error"] = "Notebook sources were not ready for distillation"
+            return result
         logger.info("  Distilling Q&A from %s (%d questions)...", name, len(questions))
         qa_stored = _distill_qa(nb_url, questions, category=f"nlm-{name}")
         result["qa_stored"] = qa_stored
+        result["distilled"] = True
+        detail["last_distill_attempt_at"] = datetime.now(timezone.utc).isoformat()
+        if qa_stored > 0:
+            detail["last_distilled_at"] = detail["last_distill_attempt_at"]
 
     return result
 
@@ -554,7 +722,12 @@ NOTEBOOK_CONFIGS = {
 }
 
 
-def bootstrap_all(notebooks: list[str] | None = None, force: bool = False, distill: bool = True) -> dict:
+def bootstrap_all(
+    notebooks: list[str] | None = None,
+    force: bool = False,
+    distill: bool = True,
+    scheduled: bool = False,
+) -> dict:
     """
     Bootstrap all (or specified) NLM notebooks.
 
@@ -562,6 +735,7 @@ def bootstrap_all(notebooks: list[str] | None = None, force: bool = False, disti
         notebooks: List of notebook keys (arch/copilot/history), or None for all.
         force: Re-add all sources even if already seeded.
         distill: Ask distillation questions after seeding.
+        scheduled: Apply scheduler-safe distillation rules instead of manual behavior.
 
     Returns:
         Summary dict with per-notebook results.
@@ -585,6 +759,7 @@ def bootstrap_all(notebooks: list[str] | None = None, force: bool = False, disti
             state=state,
             distill=distill,
             force=force,
+            scheduled=scheduled,
         )
         results[key] = result
         _save_state(state)  # save after each notebook
@@ -616,7 +791,7 @@ def refresh_history_notebook(distill: bool = True) -> dict:
 def run_notebook_bootstrap() -> dict:
     """Scheduler callback — weekly notebook bootstrap/refresh."""
     try:
-        results = bootstrap_all(distill=False)  # no distill in scheduler (quota cost)
+        results = bootstrap_all(distill=True, scheduled=True)
         return {"status": "ok", "results": results}
     except Exception as e:
         logger.error("notebook-bootstrap failed: %s", e)

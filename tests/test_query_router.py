@@ -37,14 +37,15 @@ class TestRouterStats:
         assert s.hit_rate() == 0.0
 
     def test_hit_rate_calculation(self):
-        s = RouterStats(total_queries=10, cache_hits=3, search_hits=2)
-        assert s.hit_rate() == 0.5
+        s = RouterStats(total_queries=10, cache_hits=3, search_hits=2, nlm_hits=1)
+        assert s.hit_rate() == 0.6
 
     def test_to_dict(self):
-        s = RouterStats(total_queries=5, cache_hits=2, llm_fallbacks=1)
+        s = RouterStats(total_queries=5, cache_hits=2, nlm_hits=1, llm_fallbacks=1)
         d = s.to_dict()
         assert d["total_queries"] == 5
         assert d["cache_hits"] == 2
+        assert d["nlm_hits"] == 1
         assert "nexus_hit_rate" in d
 
 
@@ -156,8 +157,102 @@ class TestNexusAsk:
         result = self.router.query("What is nothing?", use_llm=False)
         assert result.answer == ""
 
+    def test_nexus_ask_uses_deep_depth_when_requested(self):
+        self.mock_client.ask.return_value = {
+            "answer": "NotebookLM-backed answer with enough detail to be valid.",
+            "source": "nlm",
+            "confidence": 0.8,
+            "sources": ["notebook"],
+        }
+        result = self.router.query("Deep question?", use_llm=False, depth="deep")
+        self.mock_client.ask.assert_called_once_with(
+            "Deep question?",
+            depth="deep",
+            category="",
+        )
+        assert result.source == "nexus-nlm"
 
-# ── Tier 4: LLM Fallback ────────────────────────────────────────────────
+    def test_nexus_ask_defaults_invalid_depth_to_auto(self):
+        self.mock_client.ask.return_value = {
+            "answer": "Auto depth answer with enough detail to be valid.",
+            "source": "ask",
+            "confidence": 0.6,
+            "sources": ["router"],
+        }
+        self.router.query("Odd depth?", use_llm=False, depth="weird")
+        self.mock_client.ask.assert_called_once_with(
+            "Odd depth?",
+            depth="auto",
+            category="",
+        )
+
+
+# ── Tier 4: Direct NotebookLM Fallback ─────────────────────────────────
+
+class TestDirectNLMFallback:
+    def setup_method(self):
+        self.router = NexusQueryRouter(llm_callback=lambda q: f"LLM says: {q}")
+        self.mock_client = MagicMock()
+        self.router._client = self.mock_client
+        self.mock_client.is_available.return_value = True
+        self.mock_client.find_qa.return_value = []
+        self.mock_client.search.return_value = []
+        self.mock_client.ask.return_value = {}
+
+    def test_direct_nlm_hit_before_llm(self):
+        self.mock_client.nlm_status.return_value = {
+            "ok": True,
+            "data": {"active_backend": "browser"},
+        }
+        self.mock_client.nlm_unified_ask.return_value = {
+            "answer": "NotebookLM browser answer with enough detail to be reused later.",
+            "backend": "browser",
+            "confidence": 0.82,
+            "sources": ["nb-1"],
+        }
+
+        result = self.router.query("What did NotebookLM find?")
+
+        assert result.source == "nlm-browser"
+        assert result.confidence == 0.82
+        assert result.cached is True
+        assert self.router.stats.nlm_hits == 1
+        assert self.router.stats.llm_fallbacks == 0
+        self.mock_client.add_qa.assert_called_once()
+
+    def test_direct_nlm_skips_when_no_backend_available(self):
+        self.mock_client.nlm_status.return_value = {
+            "ok": True,
+            "data": {"active_backend": "none"},
+        }
+
+        result = self.router.query("Fallback to LLM?")
+
+        assert result.source == "llm"
+        self.mock_client.nlm_unified_ask.assert_not_called()
+
+    def test_direct_nlm_uses_nested_payload(self):
+        self.mock_client.nlm_status.return_value = {
+            "ok": True,
+            "data": {"http": {"available": True}},
+        }
+        self.mock_client.nlm_unified_ask.return_value = {
+            "backend": "http",
+            "data": {
+                "answer": "Nested NotebookLM payload answer that is long enough to accept.",
+                "confidence": 0.77,
+                "sources": ["nb-2"],
+            },
+        }
+
+        result = self.router.query("Use the nested payload?")
+
+        assert result.source == "nlm-http"
+        assert result.confidence == 0.77
+        assert result.sources == ["nb-2"]
+
+
+# ── Tier 5: LLM Fallback ────────────────────────────────────────────────
 
 class TestLLMFallback:
     def setup_method(self):
