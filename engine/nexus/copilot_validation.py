@@ -27,14 +27,18 @@ SESSION_LOGGER_HOOKS_FILE = REPO_ROOT / ".github" / "hooks" / "session-logger" /
 REQUIRED_MAIN_HOOK_CHECKS = (
     ("sessionStart", "nexus_session_logger.py start"),
     ("sessionStart", "get_copilot_bridge().session_start"),
+    ("sessionStart", "copilot_hook_control.py run sessionStart"),
     ("userPromptSubmitted", "nexus_session_logger.py prompt"),
     ("sessionEnd", "get_copilot_bridge().session_end"),
+    ("sessionEnd", "copilot_hook_control.py run sessionEnd"),
     ("sessionEnd", "nexus_session_logger.py end"),
     ("preCompaction", "nexus_session_logger.py compact"),
+    ("preCompaction", "copilot_hook_control.py run preCompaction"),
     ("postToolUse", "log-tool-usage.ps1"),
     ("postToolUse", "get_copilot_bridge().track_tool_use"),
     ("preToolUse", "check-tool-safety.ps1"),
     ("errorOccurred", "log-errors.ps1"),
+    ("errorOccurred", "copilot_hook_control.py run errorOccurred"),
     ("errorOccurred", "get_copilot_bridge().track_error"),
 )
 
@@ -52,6 +56,7 @@ REQUIRED_HOOK_FILES = (
     ".github/hooks/scripts/log-errors.ps1",
     "engine/nexus/nexus_session_logger.py",
     "engine/nexus/copilot_bridge.py",
+    "engine/nexus/copilot_hook_control.py",
 )
 
 
@@ -125,6 +130,7 @@ def _entry_drift_issues(
     *,
     title: str,
     path: Path,
+    category: str,
     content: str,
     expected_type: str,
     expected_tags: List[str],
@@ -133,7 +139,11 @@ def _entry_drift_issues(
     source_issues: List[Dict[str, str]] = []
     existing_content = sync_config._entry_field(existing, "content", "")  # noqa: SLF001
     existing_type = sync_config._entry_field(existing, "content_type", "")  # noqa: SLF001
-    existing_tags = list(sync_config._entry_field(existing, "tags", []) or [])  # noqa: SLF001
+    existing_tags = sync_config._normalized_tags(  # noqa: SLF001
+        category,
+        list(sync_config._entry_field(existing, "tags", []) or []),  # noqa: SLF001
+    )
+    normalized_expected_tags = sync_config._normalized_tags(category, expected_tags)  # noqa: SLF001
     if existing_content != content:
         source_issues.append(
             _issue(
@@ -150,7 +160,7 @@ def _entry_drift_issues(
                 source=str(path),
             )
         )
-    if existing_tags != expected_tags:
+    if existing_tags != normalized_expected_tags:
         source_issues.append(
             _issue(
                 "tags_drift",
@@ -242,6 +252,7 @@ def validate_nexus_sync(
                     existing,
                     title=title,
                     path=path,
+                    category=category,
                     content=content,
                     expected_type=expected_type,
                     expected_tags=expected_tags,
@@ -437,6 +448,22 @@ def validate_runtime_health(
             _issue(
                 "resume_handoff_missing",
                 "Onboarding context does not expose a resume handoff slot.",
+                severity="warning",
+            )
+        )
+    if "context_packet" not in onboarding:
+        issues.append(
+            _issue(
+                "context_packet_missing",
+                "Onboarding context does not expose a persisted context packet slot.",
+                severity="warning",
+            )
+        )
+    if "control_context_packet" not in onboarding:
+        issues.append(
+            _issue(
+                "control_context_packet_missing",
+                "Onboarding context does not expose a control flywheel startup packet slot.",
                 severity="warning",
             )
         )

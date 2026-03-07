@@ -45,15 +45,29 @@ def _make_expander(dry_run: bool = False) -> QAExpander:
     e._nexus.stats.return_value = {"qa_count": 300}
     e._nexus.list_entries = MagicMock(side_effect=AttributeError("no list_entries"))
     e._hybrid = MagicMock()
-    e._hybrid.ask.return_value = {
-        "answer": (
-            "1. What is the MCPFramework?\n"
-            "2. How does state management work in CosySim?\n"
-            "3. What singletons does MCPFramework expose?\n"
-            "4. How do scene nodes attach to the framework tree?\n"
-            "5. What persistence options does MCPFramework support?"
-        )
-    }
+    e._training_flywheel = MagicMock()
+    def _hybrid_ask_side_effect(
+        notebook_id: str,
+        prompt: str,
+        session_id: str = "",
+    ) -> dict:
+        if "generate exactly" in prompt:
+            return {
+                "answer": (
+                    "1. What is the MCPFramework?\n"
+                    "2. How does state management work in CosySim?\n"
+                    "3. What singletons does MCPFramework expose?\n"
+                    "4. How do scene nodes attach to the framework tree?\n"
+                    "5. What persistence options does MCPFramework support?"
+                )
+            }
+        return {
+            "answer": (
+                "CosySim uses a tree of MCP nodes to persist scene and character "
+                "state between turns, with shared singletons coordinating access."
+            )
+        }
+    e._hybrid.ask.side_effect = _hybrid_ask_side_effect
     e._hybrid.create_notebook.return_value = {"notebook_id": "nb-expand-test"}
     return e
 
@@ -264,10 +278,42 @@ class TestStorePairs:
     def test_truncates_answer_content(self) -> None:
         e = _make_expander()
         entry = _make_entry(content="X" * 5000)
+        e._hybrid.ask.side_effect = lambda notebook_id, prompt, session_id="": {
+            "answer": "Y" * 4000,
+        }
         e._store_pairs(entry, ["What is X?"], e._nexus)
         call_kwargs = e._nexus.add_qa.call_args[1]
         answer = call_kwargs.get("answer", "")
         assert len(answer) <= 1600  # 1500 chars + source tag
+
+    def test_uses_distilled_answer_instead_of_raw_entry_content(self) -> None:
+        e = _make_expander()
+        entry = _make_entry(content="RAW CONTENT " * 200)
+        e._store_pairs(entry, ["What is X?"], e._nexus)
+        call_kwargs = e._nexus.add_qa.call_args[1]
+        answer = call_kwargs.get("answer", "")
+        assert answer.startswith("CosySim uses a tree of MCP nodes")
+        assert "RAW CONTENT" not in answer
+
+    def test_skips_question_when_distillation_returns_unsupported(self) -> None:
+        e = _make_expander()
+        e._hybrid.ask.side_effect = lambda notebook_id, prompt, session_id="": {
+            "answer": "UNSUPPORTED",
+        }
+        stored = e._store_pairs(_make_entry(), ["What is X?"], e._nexus)
+        assert stored == 0
+        e._nexus.add_qa.assert_not_called()
+
+    def test_compounds_training_flywheel_on_success(self) -> None:
+        e = _make_expander()
+        flywheel = MagicMock()
+        e._training_flywheel = flywheel
+        stored = e._store_pairs(_make_entry(), ["What is X?"], e._nexus)
+        assert stored == 1
+        flywheel.collect_from_qa.assert_called_once()
+        call_kwargs = flywheel.collect_from_qa.call_args.kwargs
+        assert call_kwargs["source"] == "qa_expander"
+        assert call_kwargs["model"] == "notebooklm"
 
     def test_handles_nexus_exception(self) -> None:
         e = _make_expander()
@@ -314,7 +360,7 @@ class TestRunLive:
         # Give expander a notebook ID so it doesn't try to create one
         e._state["notebook_id"] = "nb-x"
         e.run(batch_size=3)
-        assert e._hybrid.ask.call_count == 3
+        assert e._hybrid.ask.call_count >= 3
 
     def test_run_stores_pairs_in_nexus(self) -> None:
         e = _make_expander(dry_run=False)
@@ -401,7 +447,7 @@ class TestSchedulerIntegration:
         from engine.nexus.scheduler_daemon import _register_builtin_tasks
         daemon = MagicMock()
         _register_builtin_tasks(daemon)
-        assert daemon.register.call_count == 53
+        assert daemon.register.call_count == 55
 
     def test_qa_expansion_callback_calls_run(self) -> None:
         from engine.nexus.scheduler_daemon import _qa_expansion_callback

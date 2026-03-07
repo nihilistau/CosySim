@@ -23,12 +23,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from scripts.argus.config import DATA_DIR, TSHARK_PATH
+from scripts.argus.config import TSHARK_PATH
+from scripts.argus.paths import PCAP_DIR, SSLKEYS_PATH
 
 logger = logging.getLogger(__name__)
 
-SSL_KEYLOG = DATA_DIR / "sslkeys.log"
-PCAP_DIR = DATA_DIR / "pcap"
+SSL_KEYLOG = SSLKEYS_PATH
 
 
 @dataclass
@@ -60,7 +60,7 @@ class TsharkCapture:
     # ──── Capture control ────
 
     def start(self, output_name: str = "argus_capture") -> Path:
-        """Start a tshark capture, writing to data/argus/pcap/<output_name>.pcapng.
+        """Start a tshark capture, writing to artifacts/argus/pcap/<output_name>.pcapng.
 
         Returns the path to the output pcapng file.
         """

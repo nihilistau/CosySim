@@ -13,15 +13,19 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from engine.integrations.google_service_profiles import (
+    GOOGLE_COOKIE_NAMES,
+    describe_google_services,
+    normalize_google_service_name,
+    normalize_google_services,
+)
+from engine.integrations.har_extractor import HARExtractor
+
 logger = logging.getLogger(__name__)
 
 # ──── Constants ────
 
-_GOOGLE_AUTH_COOKIES = {
-    "__Secure-1PSID", "__Secure-3PSID", "__Secure-1PAPISID", "__Secure-3PAPISID",
-    "SAPISID", "SID", "HSID", "SSID", "APISID", "__Secure-1PSIDTS", "__Secure-3PSIDTS",
-    "NID", "SIDCC", "__Secure-1PSIDCC", "__Secure-3PSIDCC",
-}
+_GOOGLE_AUTH_COOKIES = set(GOOGLE_COOKIE_NAMES)
 
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data" / "google_accounts"
 
@@ -160,6 +164,7 @@ class GoogleAccountManager:
         Returns:
             True on success, False on failure.
         """
+        canonical_service = normalize_google_service_name(service)
         path = Path(har_path)
         if not path.exists():
             logger.error("HAR file not found: %s", har_path)
@@ -171,15 +176,24 @@ class GoogleAccountManager:
             logger.error("Failed to parse HAR file %s: %s", har_path, exc)
             return False
 
+        extractor = HARExtractor(har_path)
+        extracted = extractor.to_account_dict(account_id, [canonical_service])
         entries = har.get("log", {}).get("entries", [])
-        cookies: Dict[str, str] = {}
+        cookies: Dict[str, str] = dict(extracted.get("cookies", {}))
         api_keys: Dict[str, str] = {}
-
-        target_hosts = {"notebooklm.google.com", "alkalimakersuite-pa.clients6.google.com"}
+        detected_services = normalize_google_services(
+            extracted.get("detected_services") or [canonical_service]
+        )
+        services = normalize_google_services([canonical_service] + detected_services)
+        service_sessions = {
+            normalize_google_service_name(name): dict(session)
+            for name, session in (extracted.get("service_sessions") or {}).items()
+            if isinstance(session, dict) and session
+        }
 
         for entry in entries:
             url: str = entry.get("request", {}).get("url", "")
-            if not any(host in url for host in target_hosts):
+            if not any(host in url for host in ("notebooklm.google.com", "alkalimakersuite-pa.clients6.google.com")):
                 continue
 
             headers: List[Dict[str, str]] = entry.get("request", {}).get("headers", [])
@@ -187,21 +201,8 @@ class GoogleAccountManager:
                 name_lower = header.get("name", "").lower()
                 value = header.get("value", "")
 
-                if name_lower == "cookie":
-                    parsed = self._parse_cookie_header(value)
-                    for k, v in parsed.items():
-                        if k in _GOOGLE_AUTH_COOKIES and v:
-                            cookies[k] = v
-
-                elif header.get("name", "") == "X-Goog-Api-Key" and value:
+                if header.get("name", "") == "X-Goog-Api-Key" and value:
                     api_keys["aistudio"] = value
-
-            # Also check the HAR cookies array
-            for cookie in entry.get("request", {}).get("cookies", []):
-                name = cookie.get("name", "")
-                value = cookie.get("value", "")
-                if name in _GOOGLE_AUTH_COOKIES and value:
-                    cookies[name] = value
 
         if not cookies:
             logger.warning("No auth cookies found in %s for account %s", har_path, account_id)
@@ -209,9 +210,16 @@ class GoogleAccountManager:
 
         data: Dict[str, Any] = {
             "account_id": account_id,
-            "service": service,
+            "service": canonical_service,
+            "services": services,
+            "detected_services": detected_services,
             "cookies": cookies,
             "api_keys": api_keys,
+            "at_token": extracted.get("at_token"),
+            "nlm_session": extracted.get("nlm_session") or {},
+            "service_sessions": service_sessions,
+            "service_profiles": describe_google_services(services, service_sessions),
+            "domains": extracted.get("domains", []),
             "imported_at": time.time(),
             "last_used": None,
             "rate_limited_until": None,
@@ -236,11 +244,17 @@ class GoogleAccountManager:
             Account dict with cookies, or None if none available.
         """
         now = time.time()
+        canonical_service = normalize_google_service_name(service)
         candidates: List[Dict[str, Any]] = []
 
         for account_id in self._all_account_ids():
             data = self._load_account(account_id)
             if data is None:
+                continue
+            available_services = normalize_google_services(
+                data.get("services") or [data.get("service", "google")]
+            )
+            if canonical_service not in available_services and canonical_service != "google":
                 continue
             rate_until = data.get("rate_limited_until")
             if rate_until and now < rate_until:
@@ -342,10 +356,16 @@ class GoogleAccountManager:
             Count of available accounts.
         """
         now = time.time()
+        canonical_service = normalize_google_service_name(service)
         count = 0
         for account_id in self._all_account_ids():
             data = self._load_account(account_id)
             if data is None:
+                continue
+            available_services = normalize_google_services(
+                data.get("services") or [data.get("service", "google")]
+            )
+            if canonical_service not in available_services and canonical_service != "google":
                 continue
             rate_until = data.get("rate_limited_until")
             if not rate_until or now >= rate_until:

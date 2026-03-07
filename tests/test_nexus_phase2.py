@@ -123,6 +123,18 @@ class TestNamespaceEnforcement:
         assert "existing" in result.get("tags", [])
 
 
+class TestNamespaceTagNormalization:
+    """Tests for normalize_namespace_tags()."""
+
+    def test_normalize_namespace_tags_adds_namespace_tag(self):
+        from engine.nexus.nexus_namespaces import normalize_namespace_tags
+
+        result = normalize_namespace_tags("sessions", ["manual"])
+        assert result["namespace"] == "copilot"
+        assert "copilot" in result["tags"]
+        assert "manual" in result["tags"]
+
+
 class TestInteractionRules:
     """Tests for generate_interaction_rules()."""
 

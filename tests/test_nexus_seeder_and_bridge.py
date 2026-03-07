@@ -630,6 +630,76 @@ class TestBridgeQA:
         assert output["status"] == "stored"
 
 
+class TestBridgeBackfill:
+    """Tests for cmd_backfill."""
+
+    @patch("engine.nexus.bridge.capture_external_discovery")
+    def test_backfill_routes_to_capture_helper(self, mock_capture, capsys):
+        """cmd_backfill stores a reusable note plus Q&A pair."""
+        from engine.nexus.bridge import cmd_backfill
+
+        capture_result = MagicMock()
+        capture_result.to_dict.return_value = {
+            "entry_id": "entry-1",
+            "qa_id": "qa-1",
+            "stored": True,
+        }
+        mock_capture.return_value = capture_result
+
+        args = Namespace(
+            question="What is the rule?",
+            answer="Backfill the discovery.",
+            source="external docs",
+            title="",
+            category="research",
+            tags="nexus,backfill",
+            details="Found outside Nexus.",
+        )
+        cmd_backfill(args)
+
+        mock_capture.assert_called_once_with(
+            question="What is the rule?",
+            answer="Backfill the discovery.",
+            source="external docs",
+            title="",
+            category="research",
+            tags=["nexus", "backfill"],
+            details="Found outside Nexus.",
+        )
+        output = json.loads(capsys.readouterr().out)
+        assert output["stored"] is True
+
+
+class TestBridgeInventory:
+    """Tests for cmd_inventory."""
+
+    @patch("engine.nexus.bridge.build_system_inventory")
+    def test_inventory_outputs_json_snapshot(self, mock_build, capsys):
+        """cmd_inventory emits inventory JSON by default."""
+        from engine.nexus.bridge import cmd_inventory
+
+        mock_build.return_value = {"summary": {"domain_count": 10}, "domains": []}
+        args = Namespace(store=False, title="System inventory snapshot", format="json", include_catalog=False)
+        cmd_inventory(args)
+
+        mock_build.assert_called_once_with(include_catalog=False)
+        output = json.loads(capsys.readouterr().out)
+        assert output["summary"]["domain_count"] == 10
+
+    @patch("engine.nexus.bridge.store_system_inventory_snapshot")
+    def test_inventory_store_writes_snapshot(self, mock_store, capsys):
+        """cmd_inventory can store the system snapshot back into Nexus."""
+        from engine.nexus.bridge import cmd_inventory
+
+        mock_store.return_value = {"entry_id": "entry-9", "qa_id": "qa-9", "stored": True}
+        args = Namespace(store=True, title="Architecture snapshot", format="json", include_catalog=False)
+        cmd_inventory(args)
+
+        mock_store.assert_called_once_with(title="Architecture snapshot")
+        output = json.loads(capsys.readouterr().out)
+        assert output["entry_id"] == "entry-9"
+
+
 class TestBridgeRules:
     """Tests for cmd_rules."""
 
@@ -670,33 +740,20 @@ class TestBridgeRules:
 class TestBridgeHealth:
     """Tests for cmd_health."""
 
-    @patch("requests.get")
-    def test_health_aggregates_stats(self, mock_get, capsys):
+    @patch("engine.nexus.bridge.get_nexus_client")
+    def test_health_aggregates_stats(self, mock_get_client, capsys):
         """cmd_health fetches entries, qa, rules and aggregates counts."""
         from engine.nexus.bridge import cmd_health
 
-        # Mock entries response
-        entries_resp = MagicMock()
-        entries_resp.ok = True
-        entries_resp.json.return_value = {
-            "data": [
-                {"content_type": "note", "category": "dev"},
-                {"content_type": "note", "category": "arch"},
-                {"content_type": "code", "category": "dev"},
-            ]
-        }
-
-        # Mock qa response
-        qa_resp = MagicMock()
-        qa_resp.ok = True
-        qa_resp.json.return_value = {"data": [{"question": "Q1"}, {"question": "Q2"}]}
-
-        # Mock rules response
-        rules_resp = MagicMock()
-        rules_resp.ok = True
-        rules_resp.json.return_value = {"data": [{"name": "rule1"}]}
-
-        mock_get.side_effect = [entries_resp, qa_resp, rules_resp]
+        mock_client = MagicMock()
+        mock_client.list_entries.return_value = [
+            MagicMock(content_type="note", category="dev"),
+            MagicMock(content_type="note", category="arch"),
+            MagicMock(content_type="code", category="dev"),
+        ]
+        mock_client.find_qa.return_value = [{"question": "Q1"}, {"question": "Q2"}]
+        mock_client.get_rules.return_value = [{"name": "rule1"}]
+        mock_get_client.return_value = mock_client
 
         args = Namespace()
         cmd_health(args)
@@ -709,12 +766,14 @@ class TestBridgeHealth:
         assert output["by_type"]["note"] == 2
         assert output["by_type"]["code"] == 1
 
-    @patch("requests.get")
-    def test_health_reports_error_when_nexus_down(self, mock_get, capsys):
+    @patch("engine.nexus.bridge.get_nexus_client")
+    def test_health_reports_error_when_nexus_down(self, mock_get_client, capsys):
         """cmd_health outputs error status when Nexus is unreachable."""
         from engine.nexus.bridge import cmd_health
 
-        mock_get.side_effect = Exception("Connection refused")
+        mock_client = MagicMock()
+        mock_client.list_entries.side_effect = Exception("Connection refused")
+        mock_get_client.return_value = mock_client
 
         args = Namespace()
         cmd_health(args)
@@ -752,25 +811,19 @@ class TestBridgeSeed:
 class TestBridgeMaintainDedup:
     """Tests for cmd_maintain dedup action."""
 
-    @patch("requests.delete")
-    @patch("requests.get")
-    def test_dedup_finds_and_removes_duplicates(self, mock_get, mock_delete, capsys):
+    @patch("engine.nexus.bridge.get_nexus_client")
+    def test_dedup_finds_and_removes_duplicates(self, mock_get_client, capsys):
         """cmd_maintain('dedup') identifies duplicate titles and deletes them."""
         from engine.nexus.bridge import cmd_maintain
 
-        # Mock GET entries — two entries with same title
-        entries_resp = MagicMock()
-        entries_resp.ok = True
-        entries_resp.json.return_value = {
-            "data": [
-                {"id": "e-1", "title": "Architecture Overview"},
-                {"id": "e-2", "title": "Architecture Overview"},  # duplicate
-                {"id": "e-3", "title": "Something Else"},
-            ]
-        }
-
-        mock_get.return_value = entries_resp
-        mock_delete.return_value = MagicMock(ok=True)
+        mock_client = MagicMock()
+        mock_client.list_entries.return_value = [
+            MagicMock(id="e-1", title="Architecture Overview"),
+            MagicMock(id="e-2", title="Architecture Overview"),
+            MagicMock(id="e-3", title="Something Else"),
+        ]
+        mock_client.delete_entry.return_value = True
+        mock_get_client.return_value = mock_client
 
         args = Namespace(action="dedup")
         cmd_maintain(args)
@@ -780,23 +833,18 @@ class TestBridgeMaintainDedup:
         assert output["removed"] == 1
         assert output["duplicates"][0]["id"] == "e-2"
 
-    @patch("requests.delete")
-    @patch("requests.get")
-    def test_dedup_case_insensitive_matching(self, mock_get, mock_delete, capsys):
+    @patch("engine.nexus.bridge.get_nexus_client")
+    def test_dedup_case_insensitive_matching(self, mock_get_client, capsys):
         """Dedup normalizes titles to lowercase for comparison."""
         from engine.nexus.bridge import cmd_maintain
 
-        entries_resp = MagicMock()
-        entries_resp.ok = True
-        entries_resp.json.return_value = {
-            "data": [
-                {"id": "e-1", "title": "My Title"},
-                {"id": "e-2", "title": "  my title  "},  # same after strip+lower
-            ]
-        }
-
-        mock_get.return_value = entries_resp
-        mock_delete.return_value = MagicMock(ok=True)
+        mock_client = MagicMock()
+        mock_client.list_entries.return_value = [
+            MagicMock(id="e-1", title="My Title"),
+            MagicMock(id="e-2", title="  my title  "),
+        ]
+        mock_client.delete_entry.return_value = True
+        mock_get_client.return_value = mock_client
 
         args = Namespace(action="dedup")
         cmd_maintain(args)
@@ -804,21 +852,17 @@ class TestBridgeMaintainDedup:
         output = json.loads(capsys.readouterr().out)
         assert output["found"] == 1
 
-    @patch("requests.get")
-    def test_dedup_no_duplicates(self, mock_get, capsys):
+    @patch("engine.nexus.bridge.get_nexus_client")
+    def test_dedup_no_duplicates(self, mock_get_client, capsys):
         """Dedup with no duplicates reports zero found/removed."""
         from engine.nexus.bridge import cmd_maintain
 
-        entries_resp = MagicMock()
-        entries_resp.ok = True
-        entries_resp.json.return_value = {
-            "data": [
-                {"id": "e-1", "title": "Unique A"},
-                {"id": "e-2", "title": "Unique B"},
-            ]
-        }
-
-        mock_get.return_value = entries_resp
+        mock_client = MagicMock()
+        mock_client.list_entries.return_value = [
+            MagicMock(id="e-1", title="Unique A"),
+            MagicMock(id="e-2", title="Unique B"),
+        ]
+        mock_get_client.return_value = mock_client
 
         args = Namespace(action="dedup")
         cmd_maintain(args)
@@ -827,23 +871,18 @@ class TestBridgeMaintainDedup:
         assert output["found"] == 0
         assert output["removed"] == 0
 
-    @patch("requests.delete")
-    @patch("requests.get")
-    def test_dedup_handles_delete_failure(self, mock_get, mock_delete, capsys):
+    @patch("engine.nexus.bridge.get_nexus_client")
+    def test_dedup_handles_delete_failure(self, mock_get_client, capsys):
         """Dedup counts only successfully deleted entries."""
         from engine.nexus.bridge import cmd_maintain
 
-        entries_resp = MagicMock()
-        entries_resp.ok = True
-        entries_resp.json.return_value = {
-            "data": [
-                {"id": "e-1", "title": "Dup"},
-                {"id": "e-2", "title": "Dup"},
-            ]
-        }
-
-        mock_get.return_value = entries_resp
-        mock_delete.return_value = MagicMock(ok=False)  # delete fails
+        mock_client = MagicMock()
+        mock_client.list_entries.return_value = [
+            MagicMock(id="e-1", title="Dup"),
+            MagicMock(id="e-2", title="Dup"),
+        ]
+        mock_client.delete_entry.return_value = False
+        mock_get_client.return_value = mock_client
 
         args = Namespace(action="dedup")
         cmd_maintain(args)
@@ -856,24 +895,19 @@ class TestBridgeMaintainDedup:
 class TestBridgeMaintainCleanup:
     """Tests for cmd_maintain cleanup action."""
 
-    @patch("requests.delete")
-    @patch("requests.get")
-    def test_cleanup_removes_low_quality_entries(self, mock_get, mock_delete, capsys):
+    @patch("engine.nexus.bridge.get_nexus_client")
+    def test_cleanup_removes_low_quality_entries(self, mock_get_client, capsys):
         """cmd_maintain('cleanup') removes entries with content < 10 chars."""
         from engine.nexus.bridge import cmd_maintain
 
-        entries_resp = MagicMock()
-        entries_resp.ok = True
-        entries_resp.json.return_value = {
-            "data": [
-                {"id": "e-1", "content": "short"},      # < 10 chars → low quality
-                {"id": "e-2", "content": "A" * 100},     # >= 10 chars → ok
-                {"id": "e-3", "content": "tiny"},         # < 10 chars → low quality
-            ]
-        }
-
-        mock_get.return_value = entries_resp
-        mock_delete.return_value = MagicMock(ok=True)
+        mock_client = MagicMock()
+        mock_client.list_entries.return_value = [
+            MagicMock(id="e-1", content="short"),
+            MagicMock(id="e-2", content="A" * 100),
+            MagicMock(id="e-3", content="tiny"),
+        ]
+        mock_client.delete_entry.return_value = True
+        mock_get_client.return_value = mock_client
 
         args = Namespace(action="cleanup")
         cmd_maintain(args)
@@ -881,20 +915,16 @@ class TestBridgeMaintainCleanup:
         output = json.loads(capsys.readouterr().out)
         assert output["low_quality"] == 2
         assert output["removed"] == 2
-        assert mock_delete.call_count == 2
+        assert mock_client.delete_entry.call_count == 2
 
-    @patch("requests.get")
-    def test_cleanup_no_low_quality(self, mock_get, capsys):
+    @patch("engine.nexus.bridge.get_nexus_client")
+    def test_cleanup_no_low_quality(self, mock_get_client, capsys):
         """Cleanup with all good entries reports zero."""
         from engine.nexus.bridge import cmd_maintain
 
-        entries_resp = MagicMock()
-        entries_resp.ok = True
-        entries_resp.json.return_value = {
-            "data": [{"id": "e-1", "content": "A" * 50}]
-        }
-
-        mock_get.return_value = entries_resp
+        mock_client = MagicMock()
+        mock_client.list_entries.return_value = [MagicMock(id="e-1", content="A" * 50)]
+        mock_get_client.return_value = mock_client
 
         args = Namespace(action="cleanup")
         cmd_maintain(args)
@@ -988,6 +1018,32 @@ class TestBridgeCLI:
         args = mock_cmd.call_args[0][0]
         assert args.question == "Q?"
         assert args.answer == "A."
+
+    @patch("engine.nexus.bridge.cmd_backfill")
+    def test_cli_backfill_command(self, mock_cmd):
+        """main() routes 'backfill' to cmd_backfill."""
+        from engine.nexus.bridge import main
+
+        with patch("sys.argv", ["bridge", "backfill", "Q?", "A.", "--source", "docs"]):
+            main()
+
+        mock_cmd.assert_called_once()
+        args = mock_cmd.call_args[0][0]
+        assert args.question == "Q?"
+        assert args.answer == "A."
+        assert args.source == "docs"
+
+    @patch("engine.nexus.bridge.cmd_inventory")
+    def test_cli_inventory_command(self, mock_cmd):
+        """main() routes 'inventory' to cmd_inventory."""
+        from engine.nexus.bridge import main
+
+        with patch("sys.argv", ["bridge", "inventory", "--store"]):
+            main()
+
+        mock_cmd.assert_called_once()
+        args = mock_cmd.call_args[0][0]
+        assert args.store is True
 
     @patch("engine.nexus.bridge.cmd_rules")
     def test_cli_rules_command(self, mock_cmd):

@@ -36,6 +36,9 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from engine.control_plane_registry import LAUNCHER_CONFIG_PATH, build_launcher_catalogues
+from engine.port_registry import get_port, get_target_metadata
+
 # Unicode on Windows cp1252 consoles
 for _stream in (sys.stdout, sys.stderr):
     try:
@@ -49,144 +52,27 @@ sys.path.insert(0, str(PROJECT_ROOT))
 VERSION = "0.89b"
 
 # ── Catalogues ────────────────────────────────────────────────────────────
-# type: "flask" | "streamlit" | "fastapi"
-# auto_start defaults here; config/launcher.yaml overrides them at runtime.
-
-SERVICES: Dict[str, Dict[str, Any]] = {
-    "hub": {
-        "type": "flask",
-        "cls":  "content.scenes.hub.hub_flask.HubScene",
-        "port": 8500, "label": "CosySim Hub",
-        "auto_start": True,
-    },
-    "nexus_panel": {
-        "type": "flask",
-        "cls":  "content.scenes.nexus_panel.nexus_panel_scene.NexusPanelScene",
-        "port": 5570, "label": "Nexus Control Panel",
-        "auto_start": True,
-    },
-    "dashboard": {
-        "type": "streamlit",
-        "script": "content/scenes/dashboard/dashboard_v2.py",
-        "port": 8501, "label": "System Dashboard",
-        "auto_start": False,
-    },
-    "admin": {
-        "type": "streamlit",
-        "script": "content/scenes/admin/admin_panel.py",
-        "port": 8502, "label": "Admin Panel",
-        "auto_start": False,
-    },
-    "assets": {
-        "type": "streamlit",
-        "script": "content/scenes/assets/asset_generator.py",
-        "port": 8503, "label": "Asset Generator",
-        "auto_start": False,
-    },
-    "creator": {
-        "type": "streamlit",
-        "script": "content/scenes/hub/scene_creator.py",
-        "port": 8504, "label": "Scene Creator",
-        "auto_start": False,
-    },
-    "tts": {
-        "type": "fastapi",
-        "factory": "engine.tts.qwen3_server.create_tts_app",
-        "port": 8600, "label": "TTS Server",
-        "auto_start": False,
-    },
-    "bridge": {
-        "type": "fastapi",
-        "factory": "engine.mcp.web_bridge.create_bridge_app",
-        "port": 8601, "label": "MCP Bridge",
-        "auto_start": False,
-    },
-    "canvas": {
-        "type": "node",
-        "script": "content/apps/notebook_canvas",
-        "port": 5590, "label": "Nexus Canvas",
-        "auto_start": True,
-    },
-    "canvas_api": {
-        "type": "fastapi",
-        "factory": "engine.api.canvas_api.create_app",
-        "port": 5595, "label": "Canvas API",
-        "auto_start": True,
-    },
-    "nlm_proxy": {
-        "type": "flask",
-        "cls":  "engine.mcp.nlm_live_proxy.NLMProxyServer",
-        "port": 8800, "label": "NLM Live Proxy",
-        "auto_start": False,
-    },
-    "system_control": {
-        "type": "flask",
-        "cls": "content.scenes.system_control.system_control_scene.SystemControlScene",
-        "port": 5575, "label": "System Control Panel",
-        "auto_start": True,
-    },
-}
-
-SCENES: Dict[str, Dict[str, Any]] = {
-    "phone":          {"type": "flask", "cls": "content.scenes.phone.phone_scene_v2.PhoneSceneV2",
-                       "port": 5555, "label": "SIGNAL",                 "auto_start": True},
-    "bedroom":        {"type": "flask", "cls": "content.scenes.bedroom.bedroom_scene.BedroomScene",
-                       "port": 5556, "label": "THE PENTHOUSE",          "auto_start": True},
-    "lounge":         {"type": "flask", "cls": "content.scenes.lounge.lounge_scene.LoungeScene",
-                       "port": 5557, "label": "THE VELVET PIT",         "auto_start": False},
-    "tavern":         {"type": "flask", "cls": "content.scenes.tavern.tavern_scene.TavernScene",
-                       "port": 5558, "label": "THE RUSTY ANCHOR",       "auto_start": False},
-    "casino":         {"type": "flask", "cls": "content.scenes.casino.casino_scene.CasinoScene",
-                       "port": 5559, "label": "CLUB NOIR",              "auto_start": False},
-    "gallery":        {"type": "flask", "cls": "content.scenes.gallery.gallery_scene.GalleryScene",
-                       "port": 5560, "label": "THE OBSCURA",            "auto_start": False},
-    "arena":          {"type": "flask", "cls": "content.scenes.arena.ArenaScene",
-                       "port": 5561, "label": "THE COLOSSEUM",          "auto_start": False},
-    "realm":          {"type": "flask", "cls": "content.scenes.realm.realm_scene.RealmScene",
-                       "port": 5562, "label": "THE SHATTERED THRONE",   "auto_start": False},
-    "neoncity":       {"type": "flask", "cls": "content.scenes.neoncity.neoncity_scene.NeonCityScene",
-                       "port": 5563, "label": "NEON CITY",              "auto_start": False},
-    "coders":         {"type": "flask", "cls": "content.scenes.coders.coders_scene.CodersRoomScene",
-                       "port": 5564, "label": "THE LAB",                "auto_start": False},
-    "heist":          {"type": "flask", "cls": "content.scenes.heist.heist_scene.HeistScene",
-                       "port": 5565, "label": "THE SCORE",              "auto_start": False},
-    "command_center": {"type": "flask",
-                       "cls": "content.scenes.command_center.command_center_scene.CommandCenterScene",
-                       "port": 5566, "label": "Command Center",         "auto_start": False},
-    "games":          {"type": "flask", "cls": "content.scenes.games.games_scene.GamesScene",
-                       "port": 5567, "label": "THE ARCADE",             "auto_start": False},
-    "grid":           {"type": "flask", "cls": "content.scenes.grid.grid_scene.GridScene",
-                       "port": 5569, "label": "THE GRID",               "auto_start": False},
-    "intel_hub":      {"type": "flask",
-                       "cls": "content.scenes.intel_hub.intel_hub_scene.IntelHubScene",
-                       "port": 5580, "label": "THE BRIEFING ROOM",      "auto_start": False},
-    "asset_studio":   {"type": "flask",
-                       "cls": "content.scenes.asset_studio.asset_studio_scene.AssetStudioScene",
-                       "port": 5568, "label": "ASSET STUDIO",           "auto_start": False},
-}
-
-ALL_TARGETS: Dict[str, Dict[str, Any]] = {**SERVICES, **SCENES}
+SERVICES: Dict[str, Dict[str, Any]] = {}
+SCENES: Dict[str, Dict[str, Any]] = {}
+ALL_TARGETS: Dict[str, Dict[str, Any]] = {}
 
 # ── Config loader ─────────────────────────────────────────────────────────
 
-_LAUNCHER_CFG = PROJECT_ROOT / "config" / "launcher.yaml"
+_LAUNCHER_CFG = LAUNCHER_CONFIG_PATH
 
 
 def _load_config() -> None:
-    """Apply auto_start overrides from config/launcher.yaml."""
-    if not _LAUNCHER_CFG.exists():
-        return
-    try:
-        import yaml  # type: ignore
-        with open(_LAUNCHER_CFG) as fh:
-            cfg = yaml.safe_load(fh) or {}
-        for group_key, catalogue in (("services", SERVICES), ("scenes", SCENES)):
-            for name, settings in (cfg.get(group_key) or {}).items():
-                if name in catalogue and isinstance(settings, dict):
-                    if "auto_start" in settings:
-                        catalogue[name]["auto_start"] = bool(settings["auto_start"])
-    except Exception as exc:
-        print(f"  Warning: launcher.yaml load error: {exc}")
+    """Rebuild launcher catalogues from the shared control-plane registry."""
+    services, scenes, all_targets = build_launcher_catalogues(get_port)
+    SERVICES.clear()
+    SERVICES.update(services)
+    SCENES.clear()
+    SCENES.update(scenes)
+    ALL_TARGETS.clear()
+    ALL_TARGETS.update(all_targets)
+
+
+_load_config()
 
 
 # ── Low-level helpers ─────────────────────────────────────────────────────
@@ -206,6 +92,11 @@ def _import_class(dotted: str):
 def _import_factory(dotted: str):
     mod, fn = dotted.rsplit(".", 1)
     return getattr(importlib.import_module(mod), fn)()
+
+
+def _hub_url() -> str:
+    """Return the canonical hub URL."""
+    return f"http://localhost:{get_port('hub')}"
 
 
 # ── Single-target runner (foreground / blocking) ──────────────────────────
@@ -389,7 +280,7 @@ def launch_multi(service_names: List[str], scene_names: List[str]) -> None:
         icon = "[UP]" if _port_up(port) else "[--]"
         note = " FAILED" if name in failed else ""
         print(f"    {icon} {label:.<35s} :{port}{note}")
-    print(f"\n  {total} target(s) launched.  Hub -> http://localhost:8500\n")
+    print(f"\n  {total} target(s) launched.  Hub -> {_hub_url()}\n")
 
     try:
         signal.signal(signal.SIGINT, signal.default_int_handler)
@@ -465,8 +356,9 @@ def cmd_status() -> None:
     print(f"  Python {sys.version.split()[0]}  |  {PROJECT_ROOT}\n")
 
     print("  External Services:")
-    for label, port in [("LMStudio", 1234), ("Nexus KMS", 8700)]:
-        print(f"    {'[UP]' if _port_up(port) else '[--]'} {label:.<22} :{port}")
+    for target_id in ("lmstudio", "nexus"):
+        meta = get_target_metadata(target_id)
+        print(f"    {'[UP]' if _port_up(meta['port']) else '[--]'} {meta['label']:.<22} :{meta['port']}")
 
     print("\n  Services:")
     for name, info in SERVICES.items():
@@ -518,6 +410,13 @@ def cmd_init_db() -> None:
 # ── Interactive menu ──────────────────────────────────────────────────────
 
 def interactive_menu() -> None:
+    def _format_targets(names: List[str], per_line: int = 6) -> str:
+        lines = []
+        for start in range(0, len(names), per_line):
+            chunk = "  ".join(names[start:start + per_line])
+            lines.append(f"    {chunk}")
+        return "\n".join(lines)
+
     print(f"""
 =================================================================
   CosySim v{VERSION}  --  AI Agent Simulation Framework
@@ -530,11 +429,10 @@ def interactive_menu() -> None:
     all       -- every known target
 
   Single Scene  (type name):
-    phone  bedroom  lounge  casino  gallery  arena
-    realm  neoncity  coders  heist  games  intel_hub
+{_format_targets(list(SCENES))}
 
   Single Service  (type name):
-    hub  nexus_panel  dashboard  admin  tts  bridge
+{_format_targets(list(SERVICES))}
 
   Info & Tools:
     list | status | test | init-db | housekeep | q (quit)

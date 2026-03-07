@@ -1,6 +1,8 @@
-"""Direct NotebookLM HTTP client — reverse-engineered from HAR analysis.
+"""Direct NotebookLM HTTP client — reverse-engineered from HAR/CDP analysis.
 
-Bypasses browser automation entirely. Two endpoint families:
+Runs direct private-RPC HTTP calls after browser-attached auth/session capture
+has established fresh NotebookLM cookies and session metadata. Two endpoint
+families:
 
 1. GenerateFreeFormStreamed — multi-turn notebook chat (ask / ask_streaming)
 2. batchexecute — all studio operations: create_note, generate_audio,
@@ -16,6 +18,7 @@ rpcid registry: data/nlm_rpc_registry.json v4.0
 """
 from __future__ import annotations
 
+import datetime
 import json
 import logging
 import mimetypes
@@ -54,6 +57,9 @@ _USER_AGENT = (
     "AppleWebKit/537.36 (KHTML, like Gecko) "
     "Chrome/145.0.0.0 Safari/537.36"
 )
+_NLM_ARTIFACTS_PATH = Path(__file__).resolve().parents[2] / "data" / "nlm_artifacts.json"
+_NLM_META_PATH = Path(__file__).resolve().parents[2] / "data" / "nlm_meta.json"
+_NLM_BUILD_LABEL_PREFIX = "boq_labs-tailwind-frontend_"
 
 # Audio type constants (from sqTeoe GET_AUDIO_OPTIONS)
 AUDIO_DEEP_DIVE = 1   # ~30 minutes, two-host conversation
@@ -112,9 +118,223 @@ class NLMDirectClient:
         self._session.headers.update({"User-Agent": _USER_AGENT})
         self._bl: Optional[str] = None
         self._f_sid: Optional[str] = None
+        raw_at_token = getattr(account, "at_token", None)
+        self._at_token: Optional[str] = raw_at_token if isinstance(raw_at_token, str) and raw_at_token else None
+        self._session_params_loaded = False
         self._reqid = 1000000
+        self._prime_saved_session_params()
 
     # ──── Page params ─────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _is_valid_nlm_build_label(build_label: Optional[str]) -> bool:
+        """Return True when a build label matches NotebookLM's frontend naming."""
+        return bool(build_label and build_label.startswith(_NLM_BUILD_LABEL_PREFIX))
+
+    def _load_saved_session_params(self) -> Dict[str, str]:
+        """Load any persisted NotebookLM session data from the account and disk."""
+        session: Dict[str, str] = {}
+
+        account_service_sessions = getattr(self._account, "service_sessions", None)
+        if isinstance(account_service_sessions, dict):
+            notebooklm_session = account_service_sessions.get("notebooklm")
+            if isinstance(notebooklm_session, dict):
+                for key in ("bl", "f_sid", "at", "source_path", "notebook_id"):
+                    value = notebooklm_session.get(key)
+                    if isinstance(value, str) and value:
+                        session[key] = value
+
+        account_session = getattr(self._account, "nlm_session", None)
+        if isinstance(account_session, dict):
+            for key in ("bl", "f_sid", "at", "source_path", "notebook_id"):
+                value = account_session.get(key)
+                if isinstance(value, str) and value and key not in session:
+                    session[key] = value
+
+        if _NLM_META_PATH.exists():
+            try:
+                meta = json.loads(_NLM_META_PATH.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                logger.debug("Could not read NotebookLM metadata from %s", _NLM_META_PATH, exc_info=True)
+            else:
+                for key in ("bl", "f_sid", "at"):
+                    value = meta.get(key)
+                    if isinstance(value, str) and value and key not in session:
+                        session[key] = value
+
+        if "bl" in session and not self._is_valid_nlm_build_label(session["bl"]):
+            session.pop("bl", None)
+
+        return session
+
+    def _persist_session_params(
+        self,
+        bl: Optional[str],
+        f_sid: Optional[str],
+        at_token: Optional[str],
+    ) -> None:
+        """Persist NotebookLM session params back to the account and metadata file."""
+        current_session = getattr(self._account, "nlm_session", None)
+        account_session = dict(current_session) if isinstance(current_session, dict) else {}
+
+        if bl and self._is_valid_nlm_build_label(bl):
+            account_session["bl"] = bl
+        if f_sid:
+            account_session["f_sid"] = f_sid
+        if at_token:
+            account_session["at"] = at_token
+
+        if account_session:
+            try:
+                setattr(self._account, "nlm_session", account_session)
+            except AttributeError:
+                logger.debug("Could not persist NotebookLM session to account object", exc_info=True)
+
+        current_service_sessions = getattr(self._account, "service_sessions", None)
+        service_sessions = dict(current_service_sessions) if isinstance(current_service_sessions, dict) else {}
+        notebooklm_session = dict(service_sessions.get("notebooklm", {}))
+        notebooklm_session.update(account_session)
+        if notebooklm_session:
+            service_sessions["notebooklm"] = notebooklm_session
+            try:
+                setattr(self._account, "service_sessions", service_sessions)
+            except AttributeError:
+                logger.debug("Could not persist NotebookLM service session to account object", exc_info=True)
+
+        existing_meta: Dict[str, Any] = {}
+        if _NLM_META_PATH.exists():
+            try:
+                existing_meta = json.loads(_NLM_META_PATH.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                logger.debug("Could not read existing NotebookLM metadata", exc_info=True)
+
+        updated_meta = dict(existing_meta)
+        if bl and self._is_valid_nlm_build_label(bl):
+            updated_meta["bl"] = bl
+            updated_meta["bl_updated_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        if f_sid:
+            updated_meta["f_sid"] = f_sid
+        if at_token:
+            updated_meta["at"] = at_token
+
+        if updated_meta:
+            _NLM_META_PATH.parent.mkdir(parents=True, exist_ok=True)
+            _NLM_META_PATH.write_text(json.dumps(updated_meta, indent=2), encoding="utf-8")
+
+    def _prime_saved_session_params(self) -> None:
+        """Seed the client with any persisted NotebookLM session state."""
+        saved = self._load_saved_session_params()
+        if saved.get("bl") and saved.get("f_sid"):
+            self._set_session_params(
+                saved.get("bl"),
+                saved.get("f_sid"),
+                saved.get("at"),
+                persist=False,
+            )
+            return
+        if saved.get("at") and not self._at_token:
+            self._at_token = saved["at"]
+
+    def _get_offline_build_label(self) -> Optional[str]:
+        """Return the latest ARGUS-mined NLM build label if available."""
+        try:
+            data = json.loads(_NLM_ARTIFACTS_PATH.read_text(encoding="utf-8"))
+        except (FileNotFoundError, OSError, json.JSONDecodeError):
+            return None
+
+        build_label = data.get("build_info", {}).get("build_label")
+        if isinstance(build_label, str) and self._is_valid_nlm_build_label(build_label):
+            return build_label
+        return None
+
+    def _extract_page_params(self, html: str) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+        """Extract build label, f.sid, and at token from the live NLM page."""
+        bl: Optional[str] = None
+        f_sid: Optional[str] = None
+        at_token: Optional[str] = None
+        wiz_data: Dict[str, Any] = {}
+
+        wiz_match = re.search(r"WIZ_global_data\s*=\s*({.*?});", html, re.DOTALL)
+        if wiz_match:
+            try:
+                wiz_data = json.loads(wiz_match.group(1))
+            except json.JSONDecodeError:
+                logger.debug("Could not parse WIZ_global_data from NLM homepage")
+
+        for key in ("IxjpMA", "FdrFJe"):
+            value = wiz_data.get(key)
+            if value not in (None, ""):
+                f_sid = str(value)
+                break
+
+        if not f_sid:
+            for pattern in (
+                r'"IxjpMA"\s*:\s*"([^"]+)"',
+                r'"FdrFJe"\s*:\s*"([^"]+)"',
+                r"f\.sid=([^&\"']+)",
+            ):
+                match = re.search(pattern, html)
+                if match:
+                    f_sid = urllib.parse.unquote(match.group(1))
+                    break
+
+        wiz_at_token = wiz_data.get("SNlM0e")
+        if isinstance(wiz_at_token, str) and wiz_at_token:
+            at_token = wiz_at_token
+        else:
+            at_match = re.search(r'"SNlM0e"\s*:\s*"([^"]+)"', html)
+            if at_match:
+                at_token = at_match.group(1)
+
+        for key in ("QrtxK", "cfb2h", "bl"):
+            value = wiz_data.get(key)
+            if isinstance(value, str) and self._is_valid_nlm_build_label(value):
+                bl = value
+                break
+
+        if not bl:
+            for pattern in (
+                r'"bl"\s*:\s*"([^"]+)"',
+                r'cfb_data["\s:]+\{["\s]*bl["\s:]+(["\'])([^"\']+)\1',
+                r"(boq_[A-Za-z0-9._-]+)",
+            ):
+                match = re.search(pattern, html)
+                if not match:
+                    continue
+                candidate = match.group(2) if match.lastindex and match.lastindex > 1 else match.group(1)
+                if self._is_valid_nlm_build_label(candidate):
+                    bl = candidate
+                    break
+
+        return bl, f_sid, at_token
+
+    def _set_session_params(
+        self,
+        bl: Optional[str],
+        f_sid: Optional[str],
+        at_token: Optional[str],
+        persist: bool = True,
+    ) -> None:
+        """Cache the current NLM session parameters."""
+        resolved_bl = bl or self._bl
+        resolved_f_sid = f_sid or self._f_sid
+        resolved_at_token = at_token or self._at_token
+
+        self._bl = resolved_bl
+        self._f_sid = resolved_f_sid
+        self._at_token = resolved_at_token
+        if resolved_at_token and getattr(self._account, "at_token", None) != resolved_at_token:
+            setattr(self._account, "at_token", resolved_at_token)
+        self._session_params_loaded = bool(self._bl and self._f_sid)
+        if persist:
+            self._persist_session_params(self._bl, self._f_sid, self._at_token)
+
+    def _clear_session_params(self) -> None:
+        """Clear cached NLM session parameters to force a refresh."""
+        self._bl = None
+        self._f_sid = None
+        self._at_token = None
+        self._session_params_loaded = False
 
     def _get_page_params(self) -> Tuple[str, str]:
         """Fetch build label (bl) and session fingerprint (f.sid) from NLM homepage.
@@ -127,6 +347,16 @@ class NLMDirectClient:
         """
         if self._bl and self._f_sid:
             return self._bl, self._f_sid
+
+        saved_session = self._load_saved_session_params()
+        saved_bl = saved_session.get("bl")
+        saved_f_sid = saved_session.get("f_sid")
+        saved_at_token = saved_session.get("at")
+        if saved_at_token and not self._at_token:
+            self._at_token = saved_at_token
+        if saved_bl and saved_f_sid:
+            self._set_session_params(saved_bl, saved_f_sid, saved_at_token, persist=False)
+            return self._bl or saved_bl, self._f_sid or saved_f_sid
 
         pool = get_account_pool()
         cookie_header = pool.get_cookie_header(self._account)
@@ -142,49 +372,36 @@ class NLMDirectClient:
         resp.raise_for_status()
         html = resp.text
 
-        # Extract bl from cfb_data or inline script
-        bl: Optional[str] = None
-        f_sid: Optional[str] = None
-
-        # Pattern: "bl":"boq_labs-tailwind-frontend_20260301.03_p0"
-        bl_match = re.search(r'"bl"\s*:\s*"([^"]+)"', html)
-        if bl_match:
-            bl = bl_match.group(1)
-
-        # Also try alternate pattern: cfb_data":{"bl":"..."}
-        if not bl:
-            cfb_match = re.search(r'cfb_data["\s:]+\{["\s]*bl["\s:]+(["\'])([^"\']+)\1', html)
-            if cfb_match:
-                bl = cfb_match.group(2)
-
-        # Extract f.sid from WIZ_global_data: "FdrFJe":"...", or similar
-        fsid_match = re.search(r'"FdrFJe"\s*:\s*"([^"]+)"', html)
-        if fsid_match:
-            f_sid = fsid_match.group(1)
-
-        # Fallback: look for SNlM0e (older pattern used as session token)
-        if not f_sid:
-            snl_match = re.search(r'"SNlM0e"\s*:\s*"([^"]+)"', html)
-            if snl_match:
-                f_sid = snl_match.group(1)
+        bl, f_sid, at_token = self._extract_page_params(html)
 
         if not bl:
-            # Use a reasonable default based on observed values
-            bl = "boq_labs-tailwind-frontend_20260301.03_p0"
-            logger.warning("Could not extract bl from NLM page, using default: %s", bl)
+            bl = saved_bl
+        if not bl:
+            bl = self._get_offline_build_label()
+            if bl:
+                logger.warning("Could not extract bl from NLM page, using ARGUS build label: %s", bl)
 
         if not f_sid:
-            f_sid = str(int(time.time() * 1000))
-            logger.warning("Could not extract f.sid from NLM page, using timestamp: %s", f_sid)
+            f_sid = saved_f_sid
 
-        self._bl = bl
-        self._f_sid = f_sid
-        logger.debug("NLM page params: bl=%s f.sid=%s", bl, f_sid)
+        if not f_sid:
+            raise ValueError("Could not extract f.sid from NLM page")
+
+        if not bl:
+            raise ValueError("Could not determine NotebookLM build label")
+
+        self._set_session_params(bl, f_sid, at_token or saved_at_token)
+        logger.debug(
+            "NLM page params: bl=%s f.sid=%s at_present=%s",
+            bl,
+            f_sid,
+            bool(self._at_token),
+        )
         return bl, f_sid
 
     # ──── Auth headers ────────────────────────────────────────────────────────
 
-    def _get_headers(self) -> Dict[str, str]:
+    def _get_headers(self, source_path: str = "/") -> Dict[str, str]:
         """Build NLM request headers.
 
         Returns:
@@ -192,15 +409,25 @@ class NLMDirectClient:
         """
         pool = get_account_pool()
         cookie_header = pool.get_cookie_header(self._account)
+        referer = f"{_NLM_BASE}{source_path}" if source_path != "/" else f"{_NLM_BASE}/"
         return {
             "Accept": "*/*",
             "Accept-Language": "en-US,en;q=0.9",
             "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
             "Cookie": cookie_header,
             "Origin": _NLM_ORIGIN,
-            "Referer": f"{_NLM_BASE}/",
+            "Referer": referer,
             "User-Agent": _USER_AGENT,
             "X-Same-Domain": "1",
+            "sec-ch-ua": '"Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"',
+            "sec-ch-ua-mobile": "?0",
+            "sec-ch-ua-platform": '"Windows"',
+            "sec-fetch-dest": "empty",
+            "sec-fetch-mode": "cors",
+            "sec-fetch-site": "same-origin",
+            "x-browser-channel": "stable",
+            "x-browser-year": "2026",
+            "DNT": "1",
         }
 
     # ──── Request building ────────────────────────────────────────────────────
@@ -354,7 +581,7 @@ class NLMDirectClient:
             conversation_history=conversation_history,
         )
 
-        headers = self._get_headers()
+        headers = self._get_headers(source_path=f"/notebook/{notebook_id}")
         resp = self._session.post(url, headers=headers, data=body, timeout=120)
         resp.raise_for_status()
 
@@ -391,7 +618,7 @@ class NLMDirectClient:
             question=question,
         )
 
-        headers = self._get_headers()
+        headers = self._get_headers(source_path=f"/notebook/{notebook_id}")
         with self._session.post(
             url, headers=headers, data=body, stream=True, timeout=120
         ) as resp:
@@ -434,6 +661,7 @@ class NLMDirectClient:
         payload: Any,
         timeout: int = 120,
         source_path: str = "/",
+        _retried: bool = False,
     ) -> Any:
         """Call any NLM studio operation via the batchexecute endpoint.
 
@@ -465,14 +693,47 @@ class NLMDirectClient:
         )
 
         payload_json = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
-        f_req_inner = json.dumps([[rpc_id, payload_json, "generic"]])
-        body = "f.req=" + urllib.parse.quote(f_req_inner)
+        f_req_calls = [[[rpc_id, payload_json, None, "generic"]]]
+        body_dict: Dict[str, str] = {
+            "f.req": json.dumps(f_req_calls, ensure_ascii=False, separators=(",", ":"))
+        }
+        if self._at_token:
+            body_dict["at"] = self._at_token
+        body = urllib.parse.urlencode(body_dict)
 
-        headers = self._get_headers()
+        headers = self._get_headers(source_path=source_path)
         resp = self._session.post(url, headers=headers, data=body, timeout=timeout)
-        resp.raise_for_status()
+        try:
+            resp.raise_for_status()
+        except requests.HTTPError:
+            if not _retried and resp.status_code in (400, 401, 403):
+                logger.warning(
+                    "NLM batchexecute %s returned HTTP %s; refreshing session params",
+                    rpc_id,
+                    resp.status_code,
+                )
+                self._clear_session_params()
+                return self._rpc_call(
+                    rpc_id,
+                    payload,
+                    timeout=timeout,
+                    source_path=source_path,
+                    _retried=True,
+                )
+            raise
 
-        return self._parse_rpc_response(resp.text, rpc_id)
+        result = self._parse_rpc_response(resp.text, rpc_id)
+        if result is None and not _retried:
+            logger.warning("NLM batchexecute %s returned null; refreshing session params", rpc_id)
+            self._clear_session_params()
+            return self._rpc_call(
+                rpc_id,
+                payload,
+                timeout=timeout,
+                source_path=source_path,
+                _retried=True,
+            )
+        return result
 
     def _parse_rpc_response(self, raw: str, rpc_id: str) -> Any:
         """Extract the inner payload from a batchexecute response.

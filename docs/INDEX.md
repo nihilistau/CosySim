@@ -1,20 +1,20 @@
 # CosySim Documentation Index
 
-> All project documentation in one place. v0.84b — 8,771 tests, 214 MCP tools, 25+ skill packs, 16 scenes.
+> All project documentation in one place. Runtime snapshot synced to `launcher.py`, `engine.port_registry`, `engine.skills`, and current pytest collection.
 
-## Quick Facts — v0.84b
+## Quick Facts — v0.90b
 
 | Metric | Value |
 |--------|-------|
-| Version | **0.84b** (2026) — "THE HINDSIGHT LAYER" |
-| Tests passing | **8,771** across ~220 files |
-| MCP tools | **214** (in 43 domain files) |
-| Skill packs | **25+ packs · 220+ skills** |
+| Version | **0.90b** (2026) — "THE BASELINE" |
+| Pytest collection | **9,646 total / 9,260 default-selected** |
+| MCP tool modules | **42** extracted modules in `engine/mcp/tools/` |
+| Skill registry | **31 packs · 278 skills** after `import engine.skills` |
 | Game scenes | **10** (phone, bedroom, lounge, tavern, casino, gallery, arena, realm, neoncity, grid) |
-| Utility scenes | **6** (coders, heist, command, games, asset_studio, intel_hub) |
-| Scheduler tasks | **44** builtin autonomous tasks |
-| Engine modules (v0.68+) | **15** new living-world modules |
-| Workflow variants | **15** (image + Wan 2.2 video) |
+| Utility scenes | **6** (coders, heist, command_center, games, asset_studio, intel_hub) |
+| Launcher services | **12** |
+| Scheduler tasks | **55** builtin autonomous tasks |
+| Canonical ports | **35** named endpoints in the port registry |
 
 ### Scene Ports (All 16)
 
@@ -31,7 +31,7 @@
 | neoncity | NEON CITY | 5563 |
 | coders | THE LAB | 5564 |
 | heist | THE SCORE | 5565 |
-| command | Command Center | 5566 |
+| command_center | Command Center | 5566 |
 | games | THE ARCADE | 5567 |
 | asset_studio | ASSET STUDIO | 5568 |
 | grid | THE GRID | 5569 |
@@ -87,7 +87,7 @@
 | [Asset Studio](ASSET_STUDIO.md) | ComfyUI integration — 15 workflow variants, tuning engine, scene injection, benchmarking |
 | [News System](NEWS_SYSTEM.md) | Automated news ingestion, NLM distillation, Nexus Q&A feeds, Intel Hub ticker |
 | [Scenes Reference](SCENES.md) | All 16 scenes — mechanics, APIs, rules |
-| [Skills](SKILLS.md) | @skill decorator, 25+ built-in packs (220+ skills) |
+| [Skills](SKILLS.md) | `@skill` decorator, builtin pack layout, runtime registry, MCP-facing metadata |
 | [Admin Guide](ADMIN_GUIDE.md) | Admin panel pages and operations |
 | [System Control Panel](SYSTEM_CONTROL.md) | Config editor, service health, launcher, NLM proxy, Git — port 5575 |
 | [World System](WORLD_SYSTEM.md) | WorldSim, WorldState, NPCScheduler, NPCState, SceneDirector, autonomous NPC ticks |
@@ -112,7 +112,7 @@
 | [NLM API Reference](NLM_API_REFERENCE.md) | Complete batchexecute protocol — 24 rpcids decoded, request/response schemas |
 | [NLM Capabilities](NLM_CAPABILITIES.md) | What we can do: full CRUD, source discovery, Drive export, multi-model, sharing |
 | [NLM SDK Design](NLM_SDK_DESIGN.md) | NLMDirectClient architecture, all methods, error handling, distillation patterns |
-| [Nexus Integration](NEXUS_INTEGRATION.md) | NexusClient, 25+ skills, namespaces, memory, distillers, training, workflows |
+| [Nexus Integration](NEXUS_INTEGRATION.md) | NexusClient, namespaces, memory, distillers, training, and research workflows |
 | [Google Ecosystem SDK](GOOGLE_ECOSYSTEM_SDK.md) | Drive, Sheets, Colab, NLM clients — cookie auth, Artifact Bus, GPU manager, venv manager |
 | [Google Apps Script](GOOGLE_APPS_SCRIPT.md) | GAS as webhook receiver and scheduled intelligence layer — planned gas_client.py SDK |
 
@@ -137,7 +137,7 @@
 | [Training System](TRAINING_SYSTEM.md) | v0.81b Data Flywheel — DataCollector, Model Zoo (14 types), AutoTrain, scheduler tasks, admin dashboard |
 | [Coder Model](CODER_MODEL.md) | Local coder model — Llama 3.2-3B + LoRA, 10 data strategies, 8 coder skills, benchmark promotion |
 | [Fine-Tuning Guide](FINETUNING_GUIDE.md) | End-to-end: datasets → MicroDatasetManager → FinetuneOrchestrator → ModelRegistry → promote |
-| [Testing](TESTING.md) | Test commands, fixtures, writing tests (7,800+ tests, ~220 files) |
+| [Testing](TESTING.md) | Test commands, fixtures, marker rules, and manual-vs-automated test guidance |
 
 ## Development
 

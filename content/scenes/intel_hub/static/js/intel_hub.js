@@ -88,6 +88,8 @@ class BriefingRoomScene {
     this.particles = null;
     this._pollTimer = null;
     this._clockTimer = null;
+    this._pollCount = 0;
+    this.operatorTargets = [];
   }
 
   /** Bootstrap everything */
@@ -96,6 +98,7 @@ class BriefingRoomScene {
     this._setupSocket();
     this._setupClock();
     this._setupTickerRating();
+    this._bindOperatorConsole();
     this.loadDashboard();
     this._pollLoop();
     this._refreshRatingStats();
@@ -190,6 +193,7 @@ class BriefingRoomScene {
         this._loadSceneHealth(),
         this._loadScheduler(),
         this._loadNlm(),
+        this._loadOperator(),
       ]);
     } catch (e) {
       console.warn('[BriefingRoom] loadDashboard error:', e);
@@ -267,6 +271,272 @@ class BriefingRoomScene {
       _setText('nlm-last-cycle', last.timestamp ? last.timestamp.slice(0, 16) : '—');
       _setText('nlm-gaps', gaps.length);
     } catch (_) { /* silent */ }
+  }
+
+  _bindOperatorConsole() {
+    const form = document.getElementById('operator-form');
+    if (form) {
+      form.addEventListener('submit', (event) => {
+        event.preventDefault();
+        this._submitOperatorForm();
+      });
+    }
+
+    const refreshBtn = document.getElementById('operator-refresh-btn');
+    if (refreshBtn) {
+      refreshBtn.addEventListener('click', () => this._loadOperator());
+    }
+
+    const processBtn = document.getElementById('operator-process-btn');
+    if (processBtn) {
+      processBtn.addEventListener('click', () => this._processOperatorInbox());
+    }
+  }
+
+  async _loadOperator() {
+    const data = await _safeApi('/api/operator/status?limit=12', {});
+    this.operatorTargets = data.command_targets || [];
+    this._populateOperatorTargets(this.operatorTargets);
+    this._renderOperatorSummary(data);
+    this._renderOperatorInbox(data.inbox || {});
+    this._renderOperatorQueue(data.queue || {});
+    this._renderOperatorActivity(data.activity || {});
+    this._renderOperatorGit(data.git || {});
+  }
+
+  async _submitOperatorForm() {
+    const payload = {
+      title: (document.getElementById('operator-title')?.value || '').trim(),
+      item_type: document.getElementById('operator-item-type')?.value || 'note',
+      priority: Number(document.getElementById('operator-priority')?.value || 60),
+      dispatch_mode: document.getElementById('operator-dispatch-mode')?.value || 'queue',
+      scene_id: document.getElementById('operator-scene-id')?.value || '',
+      character_id: (document.getElementById('operator-character-id')?.value || '').trim(),
+      author: (document.getElementById('operator-author')?.value || 'operator').trim() || 'operator',
+      tags: (document.getElementById('operator-tags')?.value || '')
+        .split(',')
+        .map(tag => tag.trim())
+        .filter(Boolean),
+      content: (document.getElementById('operator-content')?.value || '').trim(),
+      create_task: Boolean(document.getElementById('operator-create-task')?.checked),
+      turns: Number(document.getElementById('operator-turns')?.value || 1),
+    };
+
+    if (!payload.title || !payload.content) {
+      this._showOperatorToast('Title and content are required.', 'error');
+      return;
+    }
+
+    const submitBtn = document.querySelector('#operator-form button[type="submit"]');
+    if (submitBtn) submitBtn.disabled = true;
+    try {
+      const result = await _api('/api/operator/inbox', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+      const dispatch = result.dispatch;
+      const processing = result.processing;
+      let message = 'Saved to operator inbox.';
+      if (dispatch && dispatch.mode && dispatch.mode !== 'queue') {
+        message = dispatch.ok
+          ? `Saved + live ${dispatch.mode} dispatch succeeded.`
+          : `Saved, but live ${dispatch.mode} dispatch failed.`;
+      } else if (processing && processing.created_tasks) {
+        message = `Saved + queued ${processing.created_tasks} task.`;
+      }
+      this._showOperatorToast(message, dispatch && dispatch.ok === false ? 'error' : 'info');
+      ['operator-title', 'operator-tags', 'operator-content', 'operator-character-id'].forEach((id) => {
+        const field = document.getElementById(id);
+        if (field) field.value = '';
+      });
+      await this._loadOperator();
+    } catch (error) {
+      this._showOperatorToast(`Submit failed: ${error.message}`, 'error');
+    } finally {
+      if (submitBtn) submitBtn.disabled = false;
+    }
+  }
+
+  async _processOperatorInbox() {
+    const processBtn = document.getElementById('operator-process-btn');
+    if (processBtn) processBtn.disabled = true;
+    try {
+      const result = await _api('/api/operator/inbox/process', {
+        method: 'POST',
+        body: JSON.stringify({ limit: 10 }),
+      });
+      this._showOperatorToast(
+        result.processed
+          ? `Processed ${result.processed} inbox item(s).`
+          : 'No pending operator items to process.',
+      );
+      await this._loadOperator();
+    } catch (error) {
+      this._showOperatorToast(`Process failed: ${error.message}`, 'error');
+    } finally {
+      if (processBtn) processBtn.disabled = false;
+    }
+  }
+
+  _populateOperatorTargets(targets) {
+    const select = document.getElementById('operator-scene-id');
+    if (!select) return;
+    const current = select.value;
+    const options = ['<option value="">Select target scene</option>']
+      .concat((targets || []).map(target => {
+        const label = `${target.label || target.id} :${target.port || '—'}`;
+        return `<option value="${_esc(target.id || '')}">${_esc(label)}</option>`;
+      }))
+      .join('');
+    select.innerHTML = options;
+    if (current) select.value = current;
+  }
+
+  _renderOperatorSummary(data) {
+    const inboxSummary = data.inbox?.summary || {};
+    const queueSummary = data.queue?.summary || {};
+    const git = data.git || {};
+    const activity = data.activity || {};
+    _setText('operator-summary-pending', inboxSummary.pending ?? 0);
+    _setText('operator-summary-queued', queueSummary.pending ?? 0);
+    _setText('operator-summary-active', activity.active_count ?? 0);
+    _setText('operator-summary-branch', git.branch || '—');
+    const badge = document.getElementById('operator-status-badge');
+    if (badge) {
+      badge.textContent = `P${inboxSummary.pending ?? 0} • Q${queueSummary.pending ?? 0}`;
+    }
+    _setText('operator-submit-hint', git.dirty ? 'repo has local changes' : 'repo clean');
+  }
+
+  _renderOperatorInbox(inbox) {
+    const items = inbox.items || [];
+    const summary = inbox.summary || {};
+    _setText('operator-inbox-meta', `${summary.pending ?? 0} pending / ${summary.total ?? 0} total`);
+    const container = document.getElementById('operator-inbox-list');
+    if (!container) return;
+    if (!items.length) {
+      container.innerHTML = '<div class="feed-placeholder">No operator items yet.</div>';
+      return;
+    }
+    container.innerHTML = items.map(item => `
+      <article class="operator-item">
+        <div class="operator-item__header">
+          <span class="operator-item__title">${_esc(item.title || 'Untitled')}</span>
+          <span class="operator-badge operator-badge--${_esc(item.status || 'pending')}">${_esc(item.status || 'pending')}</span>
+        </div>
+        <div class="operator-item__meta">
+          <span>${_esc(item.item_type || 'note')} • p${_esc(item.priority ?? 0)}</span>
+          <span>${_relTime(item.created_at)}</span>
+        </div>
+        <div class="operator-item__body">${_esc((item.content || '').slice(0, 280))}</div>
+        <div class="operator-item__footer">
+          ${(item.task_id ? `task ${_esc(item.task_id)}` : 'no task yet')}
+          ${(item.metadata?.dispatch_mode && item.metadata.dispatch_mode !== 'queue') ? ` • ${_esc(item.metadata.dispatch_mode)}` : ''}
+        </div>
+      </article>
+    `).join('');
+  }
+
+  _renderOperatorQueue(queue) {
+    const tasks = queue.tasks || [];
+    const summary = queue.summary || {};
+    _setText(
+      'operator-queue-meta',
+      `${summary.pending ?? 0} pending / ${summary.in_progress ?? 0} active / ${summary.completed ?? 0} done`,
+    );
+    const container = document.getElementById('operator-queue-list');
+    if (!container) return;
+    if (!tasks.length) {
+      container.innerHTML = '<div class="feed-placeholder">Queue is empty.</div>';
+      return;
+    }
+    container.innerHTML = tasks.slice(0, 12).map(task => `
+      <article class="operator-item">
+        <div class="operator-item__header">
+          <span class="operator-item__title">${_esc(task.title || task.id || 'Untitled task')}</span>
+          <span class="operator-badge operator-badge--${_esc((task.status || 'pending').toLowerCase())}">${_esc(task.status || 'pending')}</span>
+        </div>
+        <div class="operator-item__meta">
+          <span>priority ${_esc(task.priority ?? 0)}</span>
+          <span>${_relTime(task.created_at)}</span>
+        </div>
+        <div class="operator-item__body">${_esc((task.description || '').slice(0, 220))}</div>
+      </article>
+    `).join('');
+  }
+
+  _renderOperatorActivity(activity) {
+    const active = activity.active || [];
+    const recent = activity.recent || [];
+    _setText('operator-activity-meta', `${activity.active_count ?? 0} active / ${activity.recent_count ?? 0} recent`);
+    const container = document.getElementById('operator-activity-list');
+    if (!container) return;
+    const rows = [];
+    active.forEach(item => {
+      rows.push({
+        title: `[LIVE] ${item.label || item.kind || 'activity'}`,
+        meta: `${item.scene || 'system'} • ${item.elapsed_ms || 0}ms`,
+      });
+    });
+    recent.forEach(item => {
+      rows.push({
+        title: item.label || item.kind || 'activity',
+        meta: `${item.agent_id || 'system'} • ${item.duration_ms || 0}ms`,
+      });
+    });
+    if (!rows.length) {
+      container.innerHTML = '<div class="feed-placeholder">No active work reported.</div>';
+      return;
+    }
+    container.innerHTML = rows.slice(0, 14).map(item => `
+      <article class="operator-item">
+        <div class="operator-item__title">${_esc(item.title)}</div>
+        <div class="operator-item__meta"><span>${_esc(item.meta)}</span></div>
+      </article>
+    `).join('');
+  }
+
+  _renderOperatorGit(git) {
+    _setText('operator-git-dirty', git.dirty ? 'DIRTY TREE' : 'TREE CLEAN');
+    const card = document.getElementById('operator-git-card');
+    if (!card) return;
+    if (!git.available) {
+      card.innerHTML = '<div class="feed-placeholder">Git summary unavailable.</div>';
+      return;
+    }
+    const changes = Array.isArray(git.changes) ? git.changes.slice(0, 6) : [];
+    const latest = git.latest_commit || {};
+    card.innerHTML = `
+      <div class="operator-detail-row">
+        <span class="operator-detail-row__key">Branch</span>
+        <span class="operator-detail-row__val operator-detail-row__val--mono">${_esc(git.branch || '—')}</span>
+      </div>
+      <div class="operator-detail-row">
+        <span class="operator-detail-row__key">Latest commit</span>
+        <span class="operator-detail-row__val">${_esc(latest.sha || '—')} ${_esc(latest.relative_time || '')}</span>
+      </div>
+      <div class="operator-detail-row">
+        <span class="operator-detail-row__key">Subject</span>
+        <span class="operator-detail-row__val">${_esc(latest.subject || '—')}</span>
+      </div>
+      <div class="operator-detail-row">
+        <span class="operator-detail-row__key">Changed files</span>
+        <span class="operator-detail-row__val">${_esc(git.change_count ?? 0)}</span>
+      </div>
+      ${changes.length ? `<div class="operator-item__body">${_esc(changes.join('\n'))}</div>` : '<div class="operator-item__body">No pending file changes.</div>'}
+    `;
+  }
+
+  _showOperatorToast(message, kind = 'info') {
+    const toast = document.getElementById('operator-toast');
+    if (!toast) return;
+    toast.hidden = false;
+    toast.dataset.kind = kind;
+    toast.textContent = message;
+    clearTimeout(this._operatorToastTimer);
+    this._operatorToastTimer = setTimeout(() => {
+      toast.hidden = true;
+    }, 3500);
   }
 
   // ── Render helpers ─────────────────────────────────────
@@ -597,6 +867,10 @@ class BriefingRoomScene {
   _pollLoop() {
     this._pollTimer = setInterval(() => {
       this._loadOverview();
+      this._pollCount += 1;
+      if (this._pollCount % 2 === 0) {
+        this._loadOperator();
+      }
     }, 8000);
   }
 

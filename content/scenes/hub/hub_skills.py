@@ -10,6 +10,7 @@ import logging
 import socket
 from typing import Any, Dict, List
 
+from engine.port_registry import ALL_SCENE_TARGETS, build_target_listing
 from engine.skills.skill import skill
 
 logger = logging.getLogger(__name__)
@@ -26,23 +27,10 @@ def _port_open(port: int) -> bool:
         return False
 
 
-# ── Scene catalogue (mirrored for standalone skill use) ─────────────
+# ── Scene catalogue (built from canonical registry for standalone skill use) ─
 _SCENE_PORTS: List[Dict[str, Any]] = [
-    {"id": "phone",          "port": 5555, "label": "SIGNAL"},
-    {"id": "bedroom",        "port": 5556, "label": "THE PENTHOUSE"},
-    {"id": "lounge",         "port": 5557, "label": "THE PIT"},
-    {"id": "tavern",         "port": 5558, "label": "RUSTY ANCHOR"},
-    {"id": "casino",         "port": 5559, "label": "CLUB NOIR"},
-    {"id": "gallery",        "port": 5560, "label": "THE OBSCURA"},
-    {"id": "realm",          "port": 5562, "label": "SHATTERED THRONE"},
-    {"id": "neoncity",       "port": 5563, "label": "NEON CITY"},
-    {"id": "coders",         "port": 5564, "label": "THE LAB"},
-    {"id": "heist",          "port": 5565, "label": "THE SCORE"},
-    {"id": "command_center", "port": 5566, "label": "ADMIN"},
-    {"id": "games",          "port": 5567, "label": "THE ARCADE"},
-    {"id": "arena",          "port": 5561, "label": "THE COLOSSEUM"},
-    {"id": "nexus_panel",    "port": 5570, "label": "NEXUS PANEL"},
-    {"id": "intel_hub",      "port": 5580, "label": "INTEL HUB"},
+    {"id": target["id"], "port": target["port"], "label": target["label"]}
+    for target in build_target_listing(ALL_SCENE_TARGETS)
 ]
 
 

@@ -95,7 +95,8 @@ class TestGroups:
         scenes = reg.for_group("scenes")
         assert "phone" in scenes
         assert "bedroom" in scenes
-        assert len(scenes) == 17
+        assert "grid" in scenes
+        assert len(scenes) == 18
 
     def test_tts_group(self):
         reg = _fresh_registry()
@@ -169,3 +170,54 @@ class TestConvenienceFunctions:
                 from engine.port_registry import get_service_url
                 url = get_service_url("nexus", path="/api/health")
                 assert url == "http://localhost:8700/api/health"
+
+
+class TestCanonicalControlPlaneHelpers:
+    def test_aliases_resolve_to_canonical_ports(self):
+        reg = _fresh_registry()
+        assert reg.get("qwen3_tts") == reg.get("tts") == 8600
+        assert reg.get("web_bridge") == reg.get("bridge") == 8601
+        assert reg.get("notebooklm_proxy") == reg.get("nlm_proxy") == 8800
+
+    def test_build_scene_port_map_matches_launcher_truth(self):
+        from engine.port_registry import build_scene_port_map
+
+        scene_ports = build_scene_port_map()
+        assert scene_ports[5565] == "heist"
+        assert scene_ports[5566] == "command_center"
+        assert scene_ports[5567] == "games"
+        assert scene_ports[5568] == "asset_studio"
+        assert scene_ports[5575] == "system_control"
+        assert scene_ports[5580] == "intel_hub"
+
+    def test_build_scene_listing_has_correct_phone_and_bedroom_ports(self):
+        from engine.port_registry import build_scene_listing
+
+        scenes = {scene["id"]: scene for scene in build_scene_listing()}
+        assert scenes["bedroom"]["port"] == 5556
+        assert scenes["bedroom"]["name"] == "THE PENTHOUSE"
+        assert scenes["phone"]["port"] == 5555
+        assert scenes["phone"]["name"] == "SIGNAL"
+
+    def test_build_health_endpoints_uses_canonical_urls(self):
+        from engine.port_registry import build_health_endpoints
+
+        endpoints = {endpoint["id"]: endpoint for endpoint in build_health_endpoints()}
+        assert endpoints["command_center"]["port"] == 5566
+        assert endpoints["command_center"]["url"] == "http://localhost:5566/api/health"
+        assert endpoints["tts"]["url"] == "http://localhost:8600/health"
+        assert endpoints["lmstudio"]["url"] == "http://localhost:1234/api/v1/models"
+
+    def test_build_target_listing_includes_health_url_metadata(self):
+        from engine.port_registry import build_target_listing
+
+        targets = {target["id"]: target for target in build_target_listing(("lmstudio", "bedroom"))}
+        assert targets["lmstudio"]["health_url"] == "http://localhost:1234/api/v1/models"
+        assert targets["bedroom"]["health_url"] == "http://localhost:5556/api/health"
+
+    def test_hub_catalogue_targets_include_new_control_plane_surfaces(self):
+        from engine.port_registry import HUB_CATALOGUE_TARGETS
+
+        assert "grid" in HUB_CATALOGUE_TARGETS
+        assert "asset_studio" in HUB_CATALOGUE_TARGETS
+        assert "system_control" in HUB_CATALOGUE_TARGETS

@@ -296,7 +296,7 @@ class CasinoScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
         return self.player_chips
 
     def _economy_spend(self, amount: int, reason: str = "casino_buy_in") -> bool:
-        """Deduct credits via EconomyManager; fall back to chip deduction."""
+        """Deduct credits via EconomyManager; expose degraded fallback explicitly."""
         try:
             if self._economy:
                 ok = self._economy.spend("player", amount, reason=reason)
@@ -304,31 +304,57 @@ class CasinoScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
                     self._log_transaction("debit", amount, reason)
                 return ok
         except Exception as exc:
-            logger.debug("economy_spend error: %s", exc)
-        # fallback
+            logger.warning("CLUB NOIR: economy spend degraded for %s: %s", reason, exc)
+            self._log_transaction(
+                "debit",
+                amount,
+                reason,
+                degraded=True,
+                error=str(exc),
+                backend="local_fallback",
+            )
+        # Explicit local fallback
         if self.player_chips >= amount:
             self.player_chips -= amount
-            self._log_transaction("debit", amount, reason)
             return True
         return False
 
     def _economy_credit(self, amount: int, reason: str = "casino_cashout") -> None:
-        """Add credits via EconomyManager; fall back to chip addition."""
+        """Add credits via EconomyManager; expose degraded fallback explicitly."""
         try:
             if self._economy:
                 self._economy.earn("player", amount, reason=reason)
                 self._log_transaction("credit", amount, reason)
                 return
         except Exception as exc:
-            logger.debug("economy_credit error: %s", exc)
+            logger.warning("CLUB NOIR: economy credit degraded for %s: %s", reason, exc)
+            self._log_transaction(
+                "credit",
+                amount,
+                reason,
+                degraded=True,
+                error=str(exc),
+                backend="local_fallback",
+            )
         self.player_chips += amount
-        self._log_transaction("credit", amount, reason)
 
-    def _log_transaction(self, tx_type: str, amount: int, reason: str) -> None:
+    def _log_transaction(
+        self,
+        tx_type: str,
+        amount: int,
+        reason: str,
+        *,
+        degraded: bool = False,
+        error: str = "",
+        backend: str = "economy_manager",
+    ) -> None:
         self._transactions.append({
             "type": tx_type,
             "amount": amount,
             "reason": reason,
+            "degraded": degraded,
+            "backend": backend,
+            "error": error,
             "ts": int(time.time()),
         })
         if len(self._transactions) > 20:
@@ -534,7 +560,14 @@ class CasinoScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
 
         Returns dict with: text, mood, image_requests, action_tags.
         """
-        result = {"text": "", "mood": None, "image_requests": [], "action_tags": []}
+        result = {
+            "text": "",
+            "mood": None,
+            "image_requests": [],
+            "action_tags": [],
+            "degraded": False,
+            "error": None,
+        }
         try:
             from engine.agents.virtual_agent_manager import get_virtual_agent_manager
             from engine.agents.virtual_agent import InferenceRequest
@@ -607,7 +640,10 @@ class CasinoScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
 
             return result
         except Exception as exc:
-            logger.debug("Casino agent reply failed: %s", exc)
+            logger.warning("Casino agent reply failed: %s", exc)
+            result["degraded"] = True
+            result["error"] = str(exc)
+            result["text"] = "The table goes quiet for a beat. The house voice cuts out. (LLM unavailable)"
             return result
 
     def _get_governance_context(self, character_id: str) -> str:
@@ -934,13 +970,16 @@ class CasinoScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
             "hand_history": self.hand_history[-5:],
             "events": self.events_log[-5:],
         }
-        # Sync to SceneStateManager for MCP skills / interceptors
-        try:
-            self._state_mgr.update_stats("casino", chips=self.player_chips,
-                                          mira_chips=self.mira_chips, pot=self.pot,
-                                          round=self.round_number, phase=self.current_phase)
-        except Exception:
-            pass
+        # Sync explicit table state for MCP skills / interceptors
+        self._state_mgr.set_scene_state(
+            SCENE_ID,
+            player_chips=self.player_chips,
+            mira_chips=self.mira_chips,
+            pot=self.pot,
+            round=self.round_number,
+            phase=self.current_phase,
+            game_active=self.game_active,
+        )
         return state
 
     # ══════════════════════════════════════════════════════════════════
@@ -1156,6 +1195,8 @@ class CasinoScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
                 "character": target,
                 "message": reply_data.get("text") or "...",
                 "mood": reply_data.get("mood"),
+                "degraded": bool(reply_data.get("degraded")),
+                "error": reply_data.get("error"),
             })
 
         # ── CLUB NOIR v0.68 handlers ─────────────────────────────────

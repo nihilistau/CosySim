@@ -81,6 +81,18 @@ def _wipe_singletons() -> None:
     once at import time and the registry is safe to share across modules.
     """
     try:
+        import engine.config as _m
+        _m._config_instance = None
+    except Exception:
+        pass
+    try:
+        import engine.port_registry as _m
+        _m._registry = None
+        if hasattr(_m, "_control_plane_catalogue"):
+            _m._control_plane_catalogue.cache_clear()
+    except Exception:
+        pass
+    try:
         import engine.mcp.framework as _m
         _m._FW_INSTANCE = None
     except Exception:

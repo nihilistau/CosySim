@@ -100,6 +100,7 @@ class NexusSceneMixin:
                 use_llm=use_llm,
                 category=getattr(self, "_nexus_scene_id", "scene"),
                 source_hint=f"scene:{getattr(self, '_nexus_scene_id', 'unknown')}",
+                depth=depth,
             )
             return result.answer if result.answer else None
         except Exception:

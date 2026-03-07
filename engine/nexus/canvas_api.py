@@ -169,10 +169,15 @@ def get_accounts() -> Tuple[Any, int]:
             masked.append({
                 "account_id": acct.get("account_id", ""),
                 "service": acct.get("service", "google"),
+                "services": acct.get("services", []),
+                "detected_services": acct.get("detected_services", []),
                 "cookies_count": len(cookies),
                 "is_rate_limited": acct.get("is_rate_limited", False),
                 "last_used": acct.get("last_used"),
                 "request_count": acct.get("request_count", 0),
+                "has_at_token": bool(acct.get("at_token")),
+                "has_service_sessions": bool(acct.get("service_sessions")),
+                "service_profiles": acct.get("service_profiles", {}),
             })
         available = sum(1 for a in masked if not a["is_rate_limited"])
         return jsonify({"accounts": masked, "total": len(masked), "available": available}), 200
@@ -211,7 +216,13 @@ def import_har() -> Tuple[Any, int]:
         if success:
             acct_data = manager._load_account(account_id)  # noqa: SLF001
             cookies_extracted = len((acct_data or {}).get("cookies", {}))
-        return jsonify({"success": success, "account_id": account_id, "cookies_extracted": cookies_extracted}), 200
+        return jsonify({
+            "success": success,
+            "account_id": account_id,
+            "cookies_extracted": cookies_extracted,
+            "detected_services": (acct_data or {}).get("detected_services", []) if success else [],
+            "services": (acct_data or {}).get("services", []) if success else [],
+        }), 200
     except Exception as exc:
         logger.error("import_har() error: %s", exc)
         return jsonify({"error": str(exc)}), 500
@@ -898,6 +909,10 @@ def accounts_list_compute() -> Tuple[Any, int]:
                 "name": name,
                 "tier": tier_info.tier if tier_info else "unknown",
                 "services": acct_info.get("services", []),
+                "detected_services": acct_info.get("detected_services", []),
+                "service_profiles": acct_info.get("service_profiles", {}),
+                "has_service_sessions": acct_info.get("has_service_sessions", False),
+                "has_nlm_session": acct_info.get("has_nlm_session", False),
                 "hardware": tier_info.hardware if tier_info else [],
                 "usage": usage,
                 "limits": limits,

@@ -632,3 +632,28 @@ class TestInjectToSceneRoutes:
         target = tmp_path / "content" / "scenes" / "phone" / "static" / "img" / "aria_portrait.png"
         assert target.exists()
 
+
+def test_asset_studio_scene_list_uses_canonical_registry():
+    from content.scenes.asset_studio.asset_studio_scene import AssetStudioScene
+
+    with patch.object(AssetStudioScene, "_mcp_init", return_value=None), \
+         patch.object(AssetStudioScene, "mount_overlay", return_value=None), \
+         patch.object(AssetStudioScene, "mount_skills_server", return_value=None), \
+         patch.object(AssetStudioScene, "register_health_route", return_value=None), \
+         patch.object(AssetStudioScene, "register_hud_route", return_value=None), \
+         patch.object(AssetStudioScene, "register_announcer_route", return_value=None), \
+         patch.object(AssetStudioScene, "register_bench_route", return_value=None), \
+         patch.object(AssetStudioScene, "register_tts_route", return_value=None), \
+         patch.object(AssetStudioScene, "_register_socket_events", return_value=None):
+        scene = AssetStudioScene(host="127.0.0.1")
+
+    client = scene.app.test_client()
+    response = client.get("/api/scenes/list")
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    scenes = {scene["id"]: scene for scene in data["scenes"]}
+    assert scenes["bedroom"]["port"] == 5556
+    assert scenes["bedroom"]["name"] == "THE PENTHOUSE"
+    assert scenes["phone"]["port"] == 5555
+    assert scenes["phone"]["name"] == "SIGNAL"
+

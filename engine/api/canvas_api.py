@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import logging
 import os
+from urllib.parse import quote
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -230,17 +231,89 @@ def training_capture(body: CaptureBody) -> Dict[str, Any]:
 
 # ──── Nexus knowledge ─────────────────────────────────────────────────────────
 
-NEXUS_KMS = "http://localhost:8700"
+
+def _resolve_service_base_url(service: str, config_key: str) -> str:
+    """Resolve a local service base URL from config first, then port registry."""
+    from engine.config import get_config
+    from engine.port_registry import get_port, get_service_url
+
+    cfg = get_config()
+    configured = cfg.get(config_key, "")
+    if configured:
+        return str(configured).rstrip("/")
+
+    if service == "lmstudio":
+        host = str(cfg.get("lmstudio.host", "127.0.0.1")).strip() or "127.0.0.1"
+        port = int(get_port("lmstudio", int(cfg.get("lmstudio.port", 1234))))
+        return f"http://{host}:{port}"
+
+    return get_service_url(service).rstrip("/")
+
+
+def _resolve_nexus_base_url() -> str:
+    return _resolve_service_base_url("nexus", "nexus.base_url")
+
+
+def _resolve_lmstudio_base_url() -> str:
+    return _resolve_service_base_url("lmstudio", "lmstudio.base_url")
+
+
+def _resolve_lmstudio_headers() -> Dict[str, str]:
+    """Build LMStudio auth headers from env-first runtime configuration."""
+    from engine.config import get_config
+
+    cfg = get_config()
+    token = (
+        os.environ.get("LMSTUDIO_API_TOKEN", "").strip()
+        or os.environ.get("LOCAL_LM_STUDIO_TOKEN", "").strip()
+        or str(cfg.get("lmstudio.api_token", "")).strip()
+    )
+    return {"Authorization": f"Bearer {token}"} if token else {}
+
+
+def _augment_degraded_response(
+    payload: Dict[str, Any],
+    *,
+    primary_backend: str,
+    fallback_backend: str,
+    error: Exception,
+) -> Dict[str, Any]:
+    """Annotate a fallback response so callers can see degraded runtime state."""
+    enriched = dict(payload)
+    enriched["degraded"] = True
+    enriched["fallback_from"] = primary_backend
+    enriched["backend"] = fallback_backend
+    enriched["warning"] = (
+        f"{primary_backend} unavailable; served by {fallback_backend} fallback"
+    )
+    enriched.setdefault("error", str(error))
+    return enriched
+
+
+def _serialize_rule(rule: Any) -> Dict[str, Any]:
+    if hasattr(rule, "model_dump"):
+        return rule.model_dump()
+    if isinstance(rule, dict):
+        return rule
+    return {
+        "rule_id": getattr(rule, "rule_id", ""),
+        "scope": getattr(rule, "scope", ""),
+        "rule_type": getattr(rule, "rule_type", ""),
+        "condition": getattr(rule, "condition", {}),
+        "action": getattr(rule, "action", {}),
+        "active": getattr(rule, "active", True),
+    }
 
 
 async def _nexus_proxy(path: str, method: str = "GET", body: Any = None) -> Any:
-    """Try Nexus KMS first; fall through on error."""
+    """Try Nexus KMS first; raise on error so callers can apply explicit fallback."""
     import httpx
+    nexus_base_url = _resolve_nexus_base_url()
     async with httpx.AsyncClient(timeout=5.0) as client:
         if method == "GET":
-            r = await client.get(f"{NEXUS_KMS}/api{path}")
+            r = await client.get(f"{nexus_base_url}/api{path}")
         else:
-            r = await client.post(f"{NEXUS_KMS}/api{path}", json=body)
+            r = await client.post(f"{nexus_base_url}/api{path}", json=body)
         r.raise_for_status()
         return r.json()
 
@@ -253,10 +326,16 @@ async def nexus_search(
 ) -> Dict[str, Any]:
     query = q or (body or {}).get("q") or (body or {}).get("query") or ""
     try:
-        return await _nexus_proxy(f"/search?q={query}")
-    except Exception:
+        return await _nexus_proxy(f"/search?q={quote(query)}")
+    except Exception as exc:
+        logger.warning("Nexus search proxy failed for %r: %s", query, exc)
         from engine.integrations.rpc_proxy import nexus_search_python
-        return nexus_search_python(query=query)
+        return _augment_degraded_response(
+            nexus_search_python(query=query),
+            primary_backend="nexus_kms",
+            fallback_backend="python",
+            error=exc,
+        )
 
 
 @app.post("/api/nexus/ask")
@@ -267,10 +346,16 @@ async def nexus_ask(
 ) -> Dict[str, Any]:
     question = q or (body or {}).get("question") or ""
     try:
-        return await _nexus_proxy(f"/ask?q={question}")
-    except Exception:
+        return await _nexus_proxy(f"/ask?q={quote(question)}")
+    except Exception as exc:
+        logger.warning("Nexus ask proxy failed for %r: %s", question, exc)
         from engine.integrations.rpc_proxy import nexus_ask_direct
-        return nexus_ask_direct(question=question)
+        return _augment_degraded_response(
+            nexus_ask_direct(question=question),
+            primary_backend="nexus_kms",
+            fallback_backend="python",
+            error=exc,
+        )
 
 
 class NexusAddBody(BaseModel):
@@ -284,17 +369,51 @@ class NexusAddBody(BaseModel):
 async def nexus_add(body: NexusAddBody) -> Dict[str, Any]:
     try:
         return await _nexus_proxy("/add", "POST", body.model_dump())
-    except Exception:
+    except Exception as exc:
+        logger.warning("Nexus add proxy failed for %r: %s", body.title, exc)
         from engine.integrations.rpc_proxy import nexus_add_python
-        return nexus_add_python(**body.model_dump())
+        return _augment_degraded_response(
+            nexus_add_python(**body.model_dump()),
+            primary_backend="nexus_kms",
+            fallback_backend="python",
+            error=exc,
+        )
 
 
 @app.get("/api/nexus/rules")
 async def nexus_rules(scope: str = Query(default="global")) -> Dict[str, Any]:
     try:
-        return await _nexus_proxy(f"/rules?scope={scope}")
-    except Exception:
-        return {"rules": []}
+        result = await _nexus_proxy(f"/rules?scope={quote(scope)}")
+        if isinstance(result, dict):
+            result.setdefault("scope", scope)
+        return result
+    except Exception as exc:
+        logger.warning("Nexus rules proxy failed for scope %r: %s", scope, exc)
+        try:
+            from engine.nexus.client import get_nexus_client
+
+            rules = get_nexus_client().get_rules(scope=scope)
+            return _augment_degraded_response(
+                {"rules": [_serialize_rule(rule) for rule in rules], "scope": scope},
+                primary_backend="nexus_kms",
+                fallback_backend="python",
+                error=exc,
+            )
+        except Exception as fallback_exc:
+            logger.warning(
+                "Nexus rules python fallback failed for scope %r: %s",
+                scope,
+                fallback_exc,
+            )
+            return {
+                "rules": [],
+                "scope": scope,
+                "degraded": True,
+                "backend": "unavailable",
+                "warning": "Nexus rules backend unavailable",
+                "error": str(fallback_exc),
+                "fallback_from": "nexus_kms",
+            }
 
 
 class NexusQABody(BaseModel):
@@ -307,10 +426,21 @@ class NexusQABody(BaseModel):
 async def nexus_qa(body: NexusQABody) -> Dict[str, Any]:
     try:
         return await _nexus_proxy("/qa", "POST", body.model_dump())
-    except Exception:
+    except Exception as exc:
+        logger.warning("Nexus QA proxy failed for %r: %s", body.question, exc)
         from engine.integrations.rpc_proxy import nexus_add_python
         content = f"Q: {body.question}\nA: {body.answer}"
-        return nexus_add_python(title=body.question, content=content, content_type="qa", category=body.category)
+        return _augment_degraded_response(
+            nexus_add_python(
+                title=body.question,
+                content=content,
+                content_type="qa",
+                category=body.category,
+            ),
+            primary_backend="nexus_kms",
+            fallback_backend="python",
+            error=exc,
+        )
 
 
 # ──── NotebookLM ──────────────────────────────────────────────────────────────
@@ -325,9 +455,15 @@ async def nlm_notebooks() -> Dict[str, Any]:
             if isinstance(inner, dict) and inner.get("error"):
                 raise RuntimeError(inner["error"])
         return result
-    except Exception:
+    except Exception as exc:
+        logger.warning("NLM notebooks proxy failed: %s", exc)
         from engine.integrations.rpc_proxy import list_nlm_notebooks
-        return list_nlm_notebooks()
+        return _augment_degraded_response(
+            list_nlm_notebooks(),
+            primary_backend="nexus_kms",
+            fallback_backend="python",
+            error=exc,
+        )
 
 
 class NLMAskBody(BaseModel):
@@ -339,9 +475,15 @@ class NLMAskBody(BaseModel):
 async def nlm_ask(body: NLMAskBody) -> Dict[str, Any]:
     try:
         return await _nexus_proxy("/nlm/ask", "POST", body.model_dump())
-    except Exception:
+    except Exception as exc:
+        logger.warning("NLM ask proxy failed for %r: %s", body.question, exc)
         from engine.integrations.rpc_proxy import nlm_ask_python
-        return nlm_ask_python(question=body.question, notebook_id=body.notebook_id)
+        return _augment_degraded_response(
+            nlm_ask_python(question=body.question, notebook_id=body.notebook_id),
+            primary_backend="nexus_kms",
+            fallback_backend="python",
+            error=exc,
+        )
 
 
 # ──── Compute (Colab JIT) ─────────────────────────────────────────────────────
@@ -460,8 +602,26 @@ def rpc_proxy(body: Dict[str, Any]) -> Dict[str, Any]:
 
 # ──── Canvas bridge (Python → Node ingest) ───────────────────────────────────
 
-_CANVAS_NODE_URL = os.environ.get("CANVAS_NODE_URL", "http://localhost:5590")
+_CANVAS_NODE_URL = os.environ.get("CANVAS_NODE_URL", "").strip()
 _CANVAS_API_KEY = os.environ.get("INTERNAL_API_KEY", "cosysim-canvas-internal")
+
+
+def _resolve_canvas_node_url() -> str:
+    """Resolve the Canvas Node ingest URL from env/config/registry."""
+    from engine.config import get_config
+    from engine.port_registry import get_port
+
+    if _CANVAS_NODE_URL:
+        return _CANVAS_NODE_URL.rstrip("/")
+
+    cfg = get_config()
+    configured = str(cfg.get("canvas.node_url", "")).strip()
+    if configured:
+        return configured.rstrip("/")
+
+    host = str(cfg.get("canvas.host", "127.0.0.1")).strip() or "127.0.0.1"
+    port = int(get_port("canvas", int(cfg.get("canvas.port", 5590))))
+    return f"http://{host}:{port}"
 
 
 def send_to_canvas(
@@ -481,23 +641,37 @@ def send_to_canvas(
         timeout: Request timeout in seconds.
 
     Returns:
-        {"status": "ok", "nodeId": "...", "notebook_id": "..."} or {"error": ...}.
+        {"status": "ok", "nodeId": "...", "notebook_id": "..."}.
+
+    Raises:
+        RuntimeError: If the Canvas ingest server is unreachable or returns an
+            error payload.
     """
+    import httpx
+
+    payload: Dict[str, Any] = {"content": content, "source": source, "type": node_type}
+    if notebook_id:
+        payload["notebook_id"] = notebook_id
+
+    canvas_url = _resolve_canvas_node_url()
     try:
-        import httpx
-        payload: Dict[str, Any] = {"content": content, "source": source, "type": node_type}
-        if notebook_id:
-            payload["notebook_id"] = notebook_id
         r = httpx.post(
-            f"{_CANVAS_NODE_URL}/api/external/ingest",
+            f"{canvas_url}/api/external/ingest",
             json=payload,
             headers={"x-api-key": _CANVAS_API_KEY},
             timeout=timeout,
         )
-        return r.json()
+        r.raise_for_status()
+        data = r.json()
     except Exception as exc:
-        logger.warning("send_to_canvas failed: %s", exc)
-        return {"error": str(exc)}
+        logger.warning("send_to_canvas failed via %s: %s", canvas_url, exc)
+        raise RuntimeError(f"Canvas ingest unavailable at {canvas_url}: {exc}") from exc
+
+    if not isinstance(data, dict):
+        raise RuntimeError(f"Canvas ingest returned invalid payload from {canvas_url}")
+    if data.get("error"):
+        raise RuntimeError(str(data["error"]))
+    return data
 
 
 class CanvasPushBody(BaseModel):
@@ -510,38 +684,43 @@ class CanvasPushBody(BaseModel):
 @app.post("/api/canvas/push")
 def canvas_push(body: CanvasPushBody) -> Dict[str, Any]:
     """Push content into the Canvas Node server from any Python caller."""
-    return send_to_canvas(
-        content=body.content,
-        source=body.source,
-        node_type=body.type,
-        notebook_id=body.notebook_id,
-    )
+    try:
+        return send_to_canvas(
+            content=body.content,
+            source=body.source,
+            node_type=body.type,
+            notebook_id=body.notebook_id,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 # ──── LMStudio direct proxy ───────────────────────────────────────────────────
 
-_LMSTUDIO_URL = os.environ.get("LOCAL_LM_STUDIO_URL", "http://localhost:1234")
-
 
 @app.get("/api/lmstudio/health")
 async def lmstudio_health() -> Dict[str, Any]:
+    lmstudio_url = _resolve_lmstudio_base_url()
+    lmstudio_headers = _resolve_lmstudio_headers()
     try:
         import httpx
-        async with httpx.AsyncClient(timeout=3.0) as client:
-            r = await client.get(f"{_LMSTUDIO_URL}/api/v1/models")
+        async with httpx.AsyncClient(timeout=3.0, headers=lmstudio_headers) as client:
+            r = await client.get(f"{lmstudio_url}/api/v1/models")
             models = [m["id"] for m in r.json().get("data", [])]
-        return {"status": "ok", "url": _LMSTUDIO_URL, "models": models}
+        return {"status": "ok", "url": lmstudio_url, "models": models}
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"LMStudio offline: {exc}")
 
 
 @app.get("/api/lmstudio/models")
 async def lmstudio_models() -> Dict[str, Any]:
+    lmstudio_url = _resolve_lmstudio_base_url()
+    lmstudio_headers = _resolve_lmstudio_headers()
     try:
         import httpx
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            r = await client.get(f"{_LMSTUDIO_URL}/api/v1/models")
-            return {"models": r.json().get("data", [])}
+        async with httpx.AsyncClient(timeout=5.0, headers=lmstudio_headers) as client:
+            r = await client.get(f"{lmstudio_url}/api/v1/models")
+            return {"models": r.json().get("data", []), "url": lmstudio_url}
     except Exception as exc:
         raise HTTPException(status_code=503, detail=str(exc))
 

@@ -70,6 +70,8 @@ def test_import_from_har_saves_cookies(manager: GoogleAccountManager, sample_har
     assert "SAPISID" in acct["cookies"]
     assert acct["cookies"]["SAPISID"] == "abc123SAPISID"
     assert acct["api_keys"].get("aistudio") == "AIza_test_key"
+    assert "notebooklm" in acct["services"]
+    assert acct["service_profiles"]["notebooklm"]["protocols"] == ["batchexecute", "html"]
 
 
 def test_import_from_har_filters_irrelevant_cookies(
@@ -209,6 +211,13 @@ def test_cookies_saved_and_reloaded(manager: GoogleAccountManager, sample_har: P
     acct = mgr2._load_account("persist_test")
     assert acct is not None
     assert "SAPISID" in acct["cookies"]
+
+
+def test_get_account_filters_by_service(manager: GoogleAccountManager, sample_har: Path) -> None:
+    """get_account should honor service filtering when service metadata exists."""
+    manager.import_from_har(str(sample_har), "acct1", service="notebooklm")
+    result = manager.get_account(service="aistudio")
+    assert result is None
 
 
 def test_no_accounts_returns_none(manager: GoogleAccountManager) -> None:

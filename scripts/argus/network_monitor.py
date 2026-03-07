@@ -231,9 +231,14 @@ class NetworkMonitor:
     async def drain(self, google_only: bool = True) -> List[CapturedRequest]:
         """Return and clear all buffered requests since the last drain.
 
+        Yields control to the event loop first so any pending
+        ensure_future(on_response(...)) tasks can complete and write to the
+        buffer before we clear it.
+
         Args:
             google_only: If True, only return requests to Google APIs.
         """
+        await asyncio.sleep(0.05)  # flush pending on_response futures
         async with self._lock:
             items = list(self._buffer)
             self._buffer.clear()

@@ -10,9 +10,29 @@
       },
       {
         "type": "command",
-        "powershell": "python -c \"from engine.nexus.copilot_bridge import get_copilot_bridge; import json, sys; data=json.load(sys.stdin) if not sys.stdin.isatty() else {}; ctx=get_copilot_bridge().session_start(data.get('task','')); print(json.dumps(ctx))\"",
-        "bash": "python3 -c \"from engine.nexus.copilot_bridge import get_copilot_bridge; import json,sys; data=json.load(sys.stdin) if not sys.stdin.isatty() else {}; ctx=get_copilot_bridge().session_start(data.get('task','')); print(json.dumps(ctx))\"",
+        "powershell": "python engine/nexus/nexus_session_logger.py start 2>$null; exit 0",
+        "bash": "python3 engine/nexus/nexus_session_logger.py start 2>/dev/null; true",
         "timeoutSec": 10
+      },
+      {
+        "type": "command",
+        "powershell": "python -c \"from engine.nexus.copilot_bridge import get_copilot_bridge; import json, sys; raw=sys.stdin.read(); data=json.loads(raw) if raw.strip() else {}; task=data.get('task') or data.get('message') or data.get('prompt') or ''; ctx=get_copilot_bridge().session_start(task); print(json.dumps(ctx))\"",
+        "bash": "python3 -c \"from engine.nexus.copilot_bridge import get_copilot_bridge; import json,sys; raw=sys.stdin.read(); data=json.loads(raw) if raw.strip() else {}; task=data.get('task') or data.get('message') or data.get('prompt') or ''; ctx=get_copilot_bridge().session_start(task); print(json.dumps(ctx))\"",
+        "timeoutSec": 10
+      },
+      {
+        "type": "command",
+        "powershell": "python engine/nexus/copilot_hook_control.py run sessionStart --stdin-json 2>$null; exit 0",
+        "bash": "python3 engine/nexus/copilot_hook_control.py run sessionStart --stdin-json 2>/dev/null; true",
+        "timeoutSec": 10
+      }
+    ],
+    "userPromptSubmitted": [
+      {
+        "type": "command",
+        "powershell": "python engine/nexus/nexus_session_logger.py prompt 2>$null; exit 0",
+        "bash": "python3 engine/nexus/nexus_session_logger.py prompt 2>/dev/null; true",
+        "timeoutSec": 5
       }
     ],
     "sessionEnd": [
@@ -24,8 +44,14 @@
       },
       {
         "type": "command",
-        "powershell": "python -c \"from engine.nexus.copilot_bridge import get_copilot_bridge; import json,sys; data=json.load(sys.stdin) if not sys.stdin.isatty() else {}; get_copilot_bridge().session_end(data.get('summary',''))\"",
-        "bash": "python3 -c \"from engine.nexus.copilot_bridge import get_copilot_bridge; import json,sys; data=json.load(sys.stdin) if not sys.stdin.isatty() else {}; get_copilot_bridge().session_end(data.get('summary',''))\"",
+        "powershell": "python -c \"from engine.nexus.copilot_bridge import get_copilot_bridge; import json,sys; raw=sys.stdin.read(); data=json.loads(raw) if raw.strip() else {}; summary=data.get('summary') or data.get('message') or ''; get_copilot_bridge().session_end(summary)\"",
+        "bash": "python3 -c \"from engine.nexus.copilot_bridge import get_copilot_bridge; import json,sys; raw=sys.stdin.read(); data=json.loads(raw) if raw.strip() else {}; summary=data.get('summary') or data.get('message') or ''; get_copilot_bridge().session_end(summary)\"",
+        "timeoutSec": 10
+      },
+      {
+        "type": "command",
+        "powershell": "python engine/nexus/copilot_hook_control.py run sessionEnd --stdin-json 2>$null; exit 0",
+        "bash": "python3 engine/nexus/copilot_hook_control.py run sessionEnd --stdin-json 2>/dev/null; true",
         "timeoutSec": 10
       },
       {
@@ -41,6 +67,12 @@
         "powershell": "python engine/nexus/nexus_session_logger.py compact 2>$null; exit 0",
         "bash": "python3 engine/nexus/nexus_session_logger.py compact 2>/dev/null; true",
         "timeoutSec": 30
+      },
+      {
+        "type": "command",
+        "powershell": "python engine/nexus/copilot_hook_control.py run preCompaction --stdin-json 2>$null; exit 0",
+        "bash": "python3 engine/nexus/copilot_hook_control.py run preCompaction --stdin-json 2>/dev/null; true",
+        "timeoutSec": 15
       }
     ],
     "postToolUse": [
@@ -49,6 +81,12 @@
         "powershell": "pwsh -File .github/hooks/scripts/log-tool-usage.ps1",
         "bash": "mkdir -p .github/hooks/logs && cat | jq -c '{toolName: .toolName, timestamp: .timestamp}' >> .github/hooks/logs/tools.jsonl",
         "timeoutSec": 3
+      },
+      {
+        "type": "command",
+        "powershell": "python -c \"from engine.nexus.copilot_bridge import get_copilot_bridge; import json,sys; raw=sys.stdin.read(); data=json.loads(raw) if raw.strip() else {}; payload=data.get('input'); params=payload if isinstance(payload, dict) else ({'input': payload} if payload is not None else {}); get_copilot_bridge().track_tool_use(data.get('toolName',''), params)\"",
+        "bash": "python3 -c \"from engine.nexus.copilot_bridge import get_copilot_bridge; import json,sys; raw=sys.stdin.read(); data=json.loads(raw) if raw.strip() else {}; payload=data.get('input'); params=payload if isinstance(payload, dict) else ({'input': payload} if payload is not None else {}); get_copilot_bridge().track_tool_use(data.get('toolName',''), params)\"",
+        "timeoutSec": 5
       }
     ],
     "preToolUse": [
@@ -65,6 +103,18 @@
         "powershell": "pwsh -File .github/hooks/scripts/log-errors.ps1",
         "bash": "mkdir -p .github/hooks/logs && cat | jq -c '{error: .error, toolName: .toolName, timestamp: .timestamp}' >> .github/hooks/logs/errors.jsonl",
         "timeoutSec": 3
+      },
+      {
+        "type": "command",
+        "powershell": "python -c \"from engine.nexus.copilot_bridge import get_copilot_bridge; import json,sys; raw=sys.stdin.read(); data=json.loads(raw) if raw.strip() else {}; get_copilot_bridge().track_error(data.get('toolName','unknown'), str(data.get('error',''))[:200])\"",
+        "bash": "python3 -c \"from engine.nexus.copilot_bridge import get_copilot_bridge; import json,sys; raw=sys.stdin.read(); data=json.loads(raw) if raw.strip() else {}; get_copilot_bridge().track_error(data.get('toolName','unknown'), str(data.get('error',''))[:200])\"",
+        "timeoutSec": 5
+      },
+      {
+        "type": "command",
+        "powershell": "python engine/nexus/copilot_hook_control.py run errorOccurred --stdin-json 2>$null; exit 0",
+        "bash": "python3 engine/nexus/copilot_hook_control.py run errorOccurred --stdin-json 2>/dev/null; true",
+        "timeoutSec": 10
       }
     ]
   }

@@ -1205,6 +1205,7 @@ class TestGetOnboardingContext:
         assert "active_todos" in result
         assert "operator_directives" in result
         assert "resume_handoff" in result
+        assert "control_context_packet" in result
         assert "system_inventory" in result
         assert "capture_policy" in result
 
@@ -1261,6 +1262,57 @@ class TestGetOnboardingContext:
         ):
             result = bridge.get_onboarding_context()
         assert result["resume_handoff"] == handoff
+
+    def test_context_packet_loaded(self, bridge, mock_nexus):
+        """Onboarding context includes the latest structured context packet when present."""
+        packet = {"packet_type": "compaction", "session": {"focus": "Bring it home"}}
+        with (
+            patch.object(bridge, "get_decision_history", return_value=[]),
+            patch.object(bridge, "_load_context_packet", return_value=packet),
+            patch("engine.nexus.task_scheduler.get_task_scheduler", side_effect=ImportError),
+            patch("engine.nexus.operator_inbox.get_operator_inbox", side_effect=ImportError),
+        ):
+            result = bridge.get_onboarding_context()
+        assert result["context_packet"] == packet
+
+    def test_control_context_packet_loaded(self, bridge, mock_nexus):
+        """Onboarding context includes the latest control-flywheel startup packet when present."""
+        packet = {
+            "immediate_summary": "Resume from control notebook artifact.",
+            "startup_focus": ["NotebookLM flywheel", "scheduler"],
+            "watch_surfaces": ["hooks", "auth"],
+        }
+        with (
+            patch.object(bridge, "get_decision_history", return_value=[]),
+            patch.object(bridge, "_load_control_context_packet", return_value=packet),
+            patch("engine.nexus.task_scheduler.get_task_scheduler", side_effect=ImportError),
+            patch("engine.nexus.operator_inbox.get_operator_inbox", side_effect=ImportError),
+        ):
+            result = bridge.get_onboarding_context()
+        assert result["control_context_packet"] == packet
+
+    def test_load_control_context_packet_parses_stored_entry(self, bridge, mock_nexus):
+        """Control flywheel context packets are parsed from Nexus search results."""
+        mock_nexus.search.return_value = [
+            {
+                "title": "Control Flywheel Context Packet — 2026-03-07T00:00:00Z",
+                "content": json.dumps(
+                    {
+                        "immediate_summary": "Use the latest flywheel artifact.",
+                        "startup_focus": ["control notebook", "task scheduler"],
+                        "watch_surfaces": ["hooks", "notebooklm"],
+                    }
+                ),
+                "id": "ctx-1",
+            }
+        ]
+
+        result = bridge._load_control_context_packet(mock_nexus)
+
+        assert result["entry_id"] == "ctx-1"
+        assert result["immediate_summary"] == "Use the latest flywheel artifact."
+        assert result["startup_focus"] == ["control notebook", "task scheduler"]
+        assert result["watch_surfaces"] == ["hooks", "notebooklm"]
 
     def test_active_todos_and_operator_directives_loaded(self, bridge, mock_nexus):
         """Onboarding context includes scheduler todos and pending operator directives."""

@@ -4,6 +4,7 @@ Usage:
     python scripts/scene_health_check.py              # check all running scenes
     python scripts/scene_health_check.py --port 5569  # check one scene
     python scripts/scene_health_check.py --fix        # print fix suggestions
+    python scripts/scene_health_check.py --host 127.0.0.1  # custom scene host
     python scripts/scene_health_check.py --chrome 9222 # custom debug port
 
 What it checks (per scene):
@@ -37,33 +38,12 @@ import urllib.request
 from dataclasses import dataclass, field
 from typing import Any
 
+from engine.port_registry import build_scene_port_map
+
 # ── Scene registry ─────────────────────────────────────────────────────────────
-# port → scene key (keep in sync with navbar_v2.html + launcher.yaml)
-SCENE_PORTS: dict[int, str] = {
-    5555: "phone",
-    5556: "bedroom",
-    5557: "lounge",
-    5558: "tavern",
-    5559: "casino",
-    5560: "gallery",
-    5561: "arena",
-    5562: "realm",
-    5563: "neoncity",
-    5564: "coders",
-    5565: "games",
-    5566: "heist",
-    5567: "asset_studio",
-    5568: "command_center",
-    5569: "grid",
-    5570: "nexus_panel",
-    5571: "system_control",
-    5572: "intel_hub",
-    5575: "system_control",
-    5580: "intel_hub",
-    8500: "hub",
-    8501: "dashboard",
-    8502: "admin",
-}
+# port → scene key (canonicalised via engine.port_registry)
+SCENE_PORTS: dict[int, str] = build_scene_port_map()
+DEFAULT_HOST = "localhost"
 
 # Routes every scene should expose
 REQUIRED_ROUTES = ["/api/health", "/api/hud/state", "/api/announcer/feed"]
@@ -122,10 +102,25 @@ def _http_get(url: str, timeout: float = 3.0) -> tuple[int, bytes]:
         return 0, b""
 
 
-def _check_scene_http(port: int) -> SceneResult:
+def _scene_base_url(port: int, host: str = DEFAULT_HOST) -> str:
+    """Return the canonical HTTP base URL for a scene."""
+    return f"http://{host}:{port}"
+
+
+def _chrome_http_url(port: int, path: str, host: str = DEFAULT_HOST) -> str:
+    """Return the canonical HTTP URL for the Chrome debug endpoint."""
+    return f"http://{host}:{port}{path}"
+
+
+def _chrome_ws_url(tab_id: str, port: int, host: str = DEFAULT_HOST) -> str:
+    """Return the canonical websocket URL for a Chrome DevTools tab."""
+    return f"ws://{host}:{port}/devtools/page/{tab_id}"
+
+
+def _check_scene_http(port: int, host: str = DEFAULT_HOST) -> SceneResult:
     name = SCENE_PORTS.get(port, f"port_{port}")
     result = SceneResult(port=port, name=name)
-    base = f"http://localhost:{port}"
+    base = _scene_base_url(port, host)
 
     # Reachability + health
     status, body = _http_get(f"{base}/api/health")
@@ -164,7 +159,12 @@ def _check_scene_http(port: int) -> SceneResult:
 
 # ── CDP helpers ────────────────────────────────────────────────────────────────
 
-async def _cdp_check_page(ws_url: str, page_url: str, tab_id: str) -> tuple[list[str], list[str]]:
+async def _cdp_check_page(
+    page_url: str,
+    tab_id: str,
+    chrome_port: int = 9222,
+    chrome_host: str = DEFAULT_HOST,
+) -> tuple[list[str], list[str]]:
     """Navigate to page_url and collect console errors + pattern matches.
 
     Returns: (console_errors, known_bug_messages)
@@ -179,7 +179,7 @@ async def _cdp_check_page(ws_url: str, page_url: str, tab_id: str) -> tuple[list
 
     try:
         async with websockets.connect(
-            f"ws://localhost:9222/devtools/page/{tab_id}",
+            _chrome_ws_url(tab_id, chrome_port, chrome_host),
             max_size=10_000_000,
             open_timeout=5,
         ) as ws:
@@ -234,9 +234,12 @@ async def _cdp_check_page(ws_url: str, page_url: str, tab_id: str) -> tuple[list
     return console_errors, list(set(known_bugs))
 
 
-async def _get_chrome_tab(chrome_port: int = 9222) -> str | None:
+async def _get_chrome_tab(
+    chrome_port: int = 9222,
+    chrome_host: str = DEFAULT_HOST,
+) -> str | None:
     """Return the first non-devtools tab ID from Chrome debug port."""
-    status, body = _http_get(f"http://localhost:{chrome_port}/json")
+    status, body = _http_get(_chrome_http_url(chrome_port, "/json", chrome_host))
     if not body:
         return None
     tabs = json.loads(body)
@@ -250,7 +253,9 @@ async def _get_chrome_tab(chrome_port: int = 9222) -> str | None:
 
 async def check_scenes(
     ports: list[int] | None = None,
+    host: str = DEFAULT_HOST,
     chrome_port: int = 9222,
+    chrome_host: str = DEFAULT_HOST,
     use_cdp: bool = True,
     show_fixes: bool = False,
 ) -> list[SceneResult]:
@@ -259,7 +264,7 @@ async def check_scenes(
         ports = sorted(SCENE_PORTS.keys())
 
     # HTTP checks (fast, parallel)
-    results = [_check_scene_http(p) for p in ports]
+    results = [_check_scene_http(p, host=host) for p in ports]
     running = [r for r in results if r.reachable]
 
     if not running:
@@ -269,14 +274,15 @@ async def check_scenes(
     # CDP check — reuse one tab, navigate sequentially
     tab_id = None
     if use_cdp:
-        tab_id = await _get_chrome_tab(chrome_port)
+        tab_id = await _get_chrome_tab(chrome_port, chrome_host)
         if tab_id:
             for r in running:
                 if r.root_status == 200:
                     errors, bugs = await _cdp_check_page(
-                        f"ws://localhost:{chrome_port}/devtools/page/{tab_id}",
-                        f"http://localhost:{r.port}/",
+                        f"{_scene_base_url(r.port, host)}/",
                         tab_id,
+                        chrome_port=chrome_port,
+                        chrome_host=chrome_host,
                     )
                     r.console_errors = errors
                     r.known_bugs = bugs
@@ -330,16 +336,20 @@ def print_report(results: list[SceneResult], show_fixes: bool = False) -> int:
 def main() -> None:
     parser = argparse.ArgumentParser(description="CosySim scene health checker")
     parser.add_argument("--port", type=int, help="Check only this port")
+    parser.add_argument("--host", default=DEFAULT_HOST, help="Scene host (default: localhost)")
     parser.add_argument("--fix", action="store_true", help="Show fix suggestions")
     parser.add_argument("--no-cdp", action="store_true", help="Skip CDP/JS checks")
     parser.add_argument("--chrome", type=int, default=9222, help="Chrome debug port")
+    parser.add_argument("--chrome-host", default=DEFAULT_HOST, help="Chrome debug host (default: localhost)")
     args = parser.parse_args()
 
     ports = [args.port] if args.port else None
     results = asyncio.run(
         check_scenes(
             ports=ports,
+            host=args.host,
             chrome_port=args.chrome,
+            chrome_host=args.chrome_host,
             use_cdp=not args.no_cdp,
             show_fixes=args.fix,
         )

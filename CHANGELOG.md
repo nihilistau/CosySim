@@ -3,10 +3,198 @@
 All notable changes to CosySim are documented here.
 
 ---
+## [0.90b] — "THE BASELINE" — 2026-03
+
+Baseline reconciliation release. 145 files committed covering control plane
+stabilization, runtime enforcement, Nexus flywheel, ARGUS pipeline hardening,
+operator cockpit, NotebookLM auth realignment, and control flywheel wiring.
+All docs reconciled to match measured reality. 55 scheduler tasks. 9,260 tests
+passing (9,646 total, 386 deselected).
+
+### Reconciliation
+- Fixed scheduler task count assertions across 5 test files (53 → 55)
+- Reconciled README.md, docs/INDEX.md test counts to match `pytest --collect-only`
+- Reconciled scheduler task badge from 53 to 55
+- Removed stale Nexus entry/QA claims from documentation surfaces
+
+---
 ## [0.89b] — "THE LOOP" — 2026-03
 
 ARGUS discoveries now flow automatically into NotebookLM for distillation back into Nexus Q&A,
-closing the self-improving knowledge loop. 53 scheduler tasks. 9,000+ tests.
+closing the self-improving knowledge loop. 55 scheduler tasks. 9,000+ tests.
+
+### Developer Workflow
+- **`scripts/smart_test.py`** — tightened the fast validation path for local work:
+  - preserves requested domain order and changed-test order
+  - auto-enables `pytest-xdist` for multi-file smart runs when available
+  - adds `--serial`, `--workers`, and `--xdist-dist` controls
+  - lightens smoke coverage by swapping `tests/test_asset_studio_workflows.py`
+    for `tests/test_asset_studio.py`
+- **`tests/test_smart_test.py`** — focused regression coverage for the smart runner
+  and xdist command construction
+- **`tests/conftest.py`** — module-level test isolation now resets the config and
+  port-registry singletons so serial runs cannot inherit poisoned cached ports
+  from earlier mocked modules
+
+### Operator Cockpit
+- Added a durable off-turn operator ingress lane:
+  - **`engine/nexus/operator_inbox.py`** stores operator notes, questions,
+    directions, feature requests, and bugs in Nexus while tracking workflow state
+    locally in `data/operator_inbox_state.json`
+  - pending inbox items can be promoted into **TaskScheduler** tasks and mirrored
+    into Copilot plan-digest Nexus entries for later onboarding and planning
+- Added scheduler automation for operator intake:
+  - **`engine/nexus/scheduler_daemon.py`** now registers scheduler task #54,
+    `operator-inbox-sync`, using `nexus.operator_inbox.auto_sync_schedule`
+  - **`config/default.yaml`** now exposes:
+    - `nexus.operator_inbox.state_path`
+    - `nexus.operator_inbox.auto_sync_schedule`
+    - `nexus.operator_inbox.plan_digest_limit`
+- Upgraded **Intel Hub** into the first mobile/LAN operator console slice:
+  - **`content/scenes/intel_hub/intel_hub_scene.py`** now exposes `/api/operator/status`,
+    `/api/operator/inbox`, `/api/operator/inbox/process`, and `/api/operator/queue`
+  - the Intel Hub UI now includes an operator submission form, inbox view, task
+    queue, git summary, live activity feed, and optional live Command Center
+    passthrough (`queue`, `narrative`, `directive`, `broadcast`)
+- **`engine/nexus/copilot_bridge.py`** onboarding context now includes pending
+  `operator_directives` alongside active scheduler todos so future Copilot sessions
+  can fold off-turn instructions back into planning
+- Added/updated focused regression coverage:
+  - `tests/test_operator_inbox.py`
+  - `tests/test_intel_hub_scene.py`
+  - `tests/test_scheduler_daemon.py`
+  - `tests/test_task_scheduler.py`
+  - `tests/test_copilot_bridge.py`
+- Verified with:
+  - focused operator cockpit suite: `90 passed`
+  - Copilot bridge integration suite: `117 passed`
+  - Intel Hub scene health check + smart validation: passed
+
+### Nexus Flywheel
+- Tightened the current Nexus / NotebookLM flywheel across the active Q&A paths:
+  - `engine/nexus/bootstrap_notebooks.py` now uses the real Nexus search
+    endpoint and the aligned `copilot-history` category when building history
+    notebook sources
+  - `engine/nexus/query_router.py` and `engine/scenes/nexus_mixin.py` now pass
+    caller depth through correctly so `depth="deep"` can escalate into the
+    NotebookLM-backed Nexus ask path instead of always behaving like shallow mode
+  - `engine/nexus/qa_expander.py` now distills a per-question answer via
+    NotebookLM-backed asks before storing Q&A, and skips unsupported questions
+    instead of caching raw entry content as a success-shaped answer
+  - successful expander pairs now compound directly into
+    `engine/nexus/training_flywheel.py` through `collect_from_qa(...)`
+  - `engine/nexus/qa_generator.py` no longer writes directly to a hardcoded
+    Nexus SQLite path; it now uses the configured Nexus client for read/write
+    access, resolves LMStudio URLs from config, tags generated provenance, and
+    also syncs successful generated pairs into the training flywheel
+  - `engine/nexus/notebooklm_flywheel.py` now turns the dedicated
+    `copilot-system-control` notebook into a two-pass control artifact:
+    - grounded multi-question control sweep
+    - strict JSON report prompt
+    - Nexus artifact/context/raw-report storage
+    - TaskScheduler task creation
+    - TrainingFlywheel capture for Q&A, NLM turns, and downstream task envelopes
+  - `engine/nexus/copilot_bridge.py` onboarding now loads the latest control
+    flywheel startup packet into `control_context_packet`, and
+    `engine/nexus/copilot_validation.py` verifies that the startup slot stays
+    exposed for restart/session-start priming
+  - `engine/nexus/bootstrap_notebooks.py` now records the control notebook URL in
+    bootstrap results and triggers the control flywheel immediately after the
+    weekly control notebook refresh
+  - `engine/nexus/scheduler_daemon.py` now registers scheduler task #55,
+    `control-notebook-flywheel`, to keep the control artifact loop running every 8 hours
+  - `config/default.yaml` now exposes the `notebooklm.flywheel.*` control block
+    for interval, task cap, distillation category, and multi-ask question defaults
+- Added/updated focused regression coverage:
+  - `tests/test_bootstrap_notebooks.py`
+  - `tests/test_notebooklm_flywheel.py`
+  - `tests/test_query_router.py`
+  - `tests/test_nexus_mixin.py`
+  - `tests/test_qa_expander.py`
+  - `tests/test_qa_generator.py`
+  - `tests/test_scheduler_daemon.py`
+- Verified with:
+  - focused flywheel suite: `91 passed`
+  - default full regression: `9200 passed, 376 deselected, 127 warnings`
+
+### Google Research Layer
+- Re-aligned the live NotebookLM auth stack around the intended browser-attached
+  workflow instead of a HAR-only fallback story:
+  - `scripts/har_capture.py` now correctly reads `Runtime.evaluate` payloads from
+    live CDP tabs, captures `bl`, `f_sid`, `at`, and notebook context, and
+    updates the modern account/session model
+  - `scripts/argus/tools/token_harvester.py` now prefers direct CDP harvesting,
+    falls back to Playwright only when needed, and writes into
+    `GoogleAccountPool` with `service_sessions` / `nlm_session` metadata instead
+    of the older legacy-only pool layout
+  - `scripts/argus/tools/__main__.py` token refresh command now forwards the full
+    harvested auth bundle instead of cookies alone
+  - `docs/NOTEBOOKLM.md` now documents the real browser/CDP/HAR/private-RPC
+    architecture and the preferred live refresh commands
+- Verified with:
+  - `python -m pytest tests\test_argus_tools.py tests\test_har_capture.py -q`
+    → `30 passed`
+  - `python scripts\har_capture.py --mode cdp --account knack112358 --services notebooklm`
+    → live cookies + NotebookLM session metadata refreshed
+  - `python -m scripts.argus.tools.token_harvester --show --account knack112358`
+    → live CDP bundle captured successfully
+  - `NLMDirectClient.list_notebooks()` → returned live notebook data after refresh
+- Hardened the current browser-attached NotebookLM operating path for active work:
+  - `scripts/argus/tools/__main__.py` `cmd_ask()` now targets the live query-box
+    submit button and tolerates current `response-container` rendering, so ARGUS
+    notebook Q&A works against the latest NotebookLM UI again
+  - `scripts/nlm_ingest.py` now supports `--notebook-url` to reopen an existing
+    notebook and append a pasted-text source through the ARGUS browser flow
+  - `engine/nexus/bootstrap_notebooks.py` now seeds the dedicated
+    `copilot-system-control` notebook through a browser bundle fallback and
+    distills its questions back into Nexus via ARGUS when the proxy upload path
+    is not the reliable surface
+- Verified with:
+  - `python -m pytest tests\test_bootstrap_notebooks.py tests\test_argus_tools.py tests\test_har_capture.py -q`
+    → `43 passed`
+  - `python -m engine.nexus.bootstrap_notebooks --notebook control --distill`
+    → created `copilot-system-control` notebook `933ba855-50b9-446e-946b-ae439375d850`,
+      uploaded the control bundle, and stored `6` distilled Q&A entries in Nexus
+  - `python -m scripts.argus.tools eval --url 933ba855-50b9-446e-946b-ae439375d850 ...`
+    → confirmed notebook title `copilot-system-control` and live query box availability
+
+### Runtime Enforcement
+- Replaced success-shaped runtime fallbacks in the first audited tranche:
+  - `content/scenes/lounge/lounge_scene.py` now exposes `degraded` and `error`
+    metadata when the governed reply pipeline is unavailable
+  - `content/scenes/casino/casino_scene.py` now surfaces explicit unavailable
+    chat copy and records degraded local economy fallback transactions with
+    backend/error metadata
+  - `engine/api/canvas_api.py` now resolves the canonical Canvas ingest URL and
+    returns HTTP `503` from `/api/canvas/push` when the ingest backend fails
+  - `engine/integrations/compute_router.py` now selects Copilot accounts by
+    service capability instead of a hardcoded username and reports Copilot
+    misses/failures through `degraded_backends`
+- Added focused regression coverage for the runtime-enforcement contract:
+  - `tests/test_lounge.py`
+  - `tests/test_casino_revamp.py`
+  - `tests/test_canvas_runtime_api.py`
+  - `tests/test_compute_router.py`
+- Verified with:
+  - focused runtime suite: `159 passed`
+  - adjacent scene/economy suite: `61 passed`
+  - default full regression: `9184 passed, 376 deselected, 127 warnings`
+
+### Control Plane Health Alignment
+- Removed the remaining legacy hardcoded control-plane URLs in active runtime
+  surfaces:
+  - `launcher.py` hub banner now uses the canonical hub URL helper
+  - `content/scenes/hub/hub_scene.py` scene cards and quick actions now derive
+    ports and links from `engine.port_registry`
+  - the legacy Streamlit hub now launches the canonical `asset_studio` target
+    instead of the stale `assets` alias for the asset-studio card
+  - `content/scenes/intel_hub/intel_hub_scene.py` now derives LMStudio and
+    Whisper STT URLs from the canonical port registry
+  - `scripts/scene_health_check.py` now supports configurable scene and Chrome
+    hosts via `--host` and `--chrome-host`
+- Added focused regression coverage:
+  - `tests/test_launcher.py`
+  - updated hub / intel hub / scene health tests
 
 ### ARGUS → NLM → Nexus Pipeline
 - **`scripts/argus/nlm_pipeline.py`** — Full distillation pipeline:

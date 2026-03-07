@@ -5,14 +5,20 @@ applyTo: 'engine/nexus/**/*.py,engine/skills/builtin/nexus_skills.py,engine/skil
 
 # Nexus Knowledge System — Agent Usage Guide
 
-Nexus is the central knowledge backbone. Every coding agent should use it as
-**first port of call** for information retrieval, storage, and rules.
+Nexus is the central knowledge backbone. Treat CosySim governance as
+**repository + Nexus synchronized**: the repo is the live editable surface, and
+Nexus is the durable mirrored memory/rules layer.
+
+Every coding agent should use Nexus as the **first port of call** for
+information retrieval, storage, and rules.
 
 ## When to Use Nexus
 
 ### Before Starting Work
-1. **Search first** — `nexus_search("topic")` or `nexus_ask("question")` before
-   writing code. Check if there's an existing answer, design decision, or pattern.
+1. **Query Nexus first** — `nexus_smart_query("question")` before writing code.
+   Use `nexus_search("topic")` or `nexus_ask("question")` when you need more
+   explicit control. Check if there's an existing answer, design decision, or
+   pattern before spending more compute.
 2. **Check rules** — `nexus_get_rules(scope="scene:X")` to understand constraints.
 3. **Load prompts** — `nexus_get_prompts(category="system")` for stored system prompts.
 
@@ -22,11 +28,22 @@ Nexus is the central knowledge backbone. Every coding agent should use it as
 5. **Log sessions** — `nexus_log_session(project="CosySim", summary="what I did")`
 6. **Store code snippets** — Reusable patterns, templates, boilerplate via
    `coding_store_snippet(title, code, language, tags)`
+7. **Keep durable outputs recoverable** — histories, changelog notes, memories,
+   rules, decisions, and learned improvements belong in Nexus rather than only
+   transient chat context.
+8. **Backfill Nexus misses** — If Nexus does not contain the answer and you find
+   it elsewhere, write it back into Nexus before finishing the task. Prefer
+   both:
+   - a reusable knowledge entry
+   - a direct Q&A pair for the discovered question
 
 ### After Work
-7. **Store Q&A** — If you answered a question during work, cache it for future agents:
+9. **Store Q&A** — If you answered a question during work, cache it for future agents:
    `nexus_ask` stores answers automatically, or explicitly via `add_qa()`
-8. **Research results** — `nexus_finish_research(research_id)` distills Q&A pairs
+10. **Research results** — `nexus_finish_research(research_id)` distills Q&A pairs
+11. **Preserve session outputs** — make sure histories, changelog-worthy outcomes,
+    decisions, and improvements are stored back into Nexus for reuse by later
+    agents.
 
 ## Smart Query Router (Preferred Entry Point)
 
@@ -50,6 +67,22 @@ back to an LLM, and auto-stores LLM answers for future reuse:
 Nexus answers instantly without using tokens. This is the core of the
 "always be improving Nexus" loop.
 
+If MCP tools are unavailable, fall back to `python -m engine.nexus.bridge ...`,
+but do not invert the order: the bridge is fallback, `nexus_smart_query` is the
+preferred front door whenever the MCP path is available.
+
+Useful bridge helpers:
+
+```powershell
+python -m engine.nexus.bridge backfill "Question?" "Answer." --source "docs/path"
+python -m engine.nexus.bridge inventory --store
+```
+
+- `backfill` stores a reusable note plus a Q&A pair when knowledge was found
+  outside Nexus.
+- `inventory --store` snapshots the canonical system split into Nexus for later
+  retrieval by agents and operators.
+
 ## Smart Q&A Pipeline
 
 The `nexus_ask(question, depth)` skill uses a 3-tier lookup:
@@ -68,6 +101,20 @@ The `NexusQueryRouter` adds a 4th tier (LLM fallback) and auto-stores answers:
 - Use `depth="shallow"` for quick lookups (no NLM)
 - Use `depth="deep"` when you need thorough research
 - Use `depth="auto"` (default) to let the system decide
+
+## NotebookLM Sequencing
+
+NotebookLM is a deep-research lane, not the first operational dependency.
+
+Required order:
+1. restore or verify NotebookLM authentication
+2. restore or verify library health and notebook inventory
+3. use NotebookLM for deeper research/distillation
+4. store distilled outputs back into Nexus
+5. let future `nexus_smart_query` calls reuse that result
+
+Do not describe NotebookLM as the main working dependency while auth or library
+recovery is still unfinished.
 
 ## Research Sessions
 

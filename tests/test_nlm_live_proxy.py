@@ -931,6 +931,46 @@ class TestRefreshSessionTokens:
             proxy_mod._COOKIES_FILE = original_cookies
             proxy_mod._META_FILE = original_meta
 
+    def test_rejects_identity_frontend_build_labels(self, tmp_path: Path) -> None:
+        """Identity/login build labels must not overwrite NotebookLM session metadata."""
+        import engine.mcp.nlm_live_proxy as proxy_mod
+        from unittest.mock import patch, MagicMock
+
+        original_cookies = proxy_mod._COOKIES_FILE
+        original_meta = proxy_mod._META_FILE
+        proxy_mod._COOKIES_FILE = tmp_path / "cookies3.json"
+        proxy_mod._META_FILE = tmp_path / "meta3.json"
+        proxy_mod._COOKIES_FILE.write_text(json.dumps({"SID": "test"}), encoding="utf-8")
+        proxy_mod._META_FILE.write_text(
+            json.dumps({
+                "bl": "boq_labs-tailwind-frontend_20260305.05_p0",
+                "f_sid": "existing_fsid",
+                "at": "existing_at",
+            }),
+            encoding="utf-8",
+        )
+
+        fake_html = (
+            'WIZ_global_data = {"FdrFJe": "bad_fsid", "SNlM0e": "bad_at", '
+            '"QrtxK": "boq_identityfrontendauthuiserver_20260303.04_p0"};'
+        )
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = fake_html.encode()
+        mock_resp.__enter__ = lambda s: s
+        mock_resp.__exit__ = MagicMock(return_value=False)
+
+        try:
+            with patch("urllib.request.urlopen", return_value=mock_resp):
+                result = proxy_mod.refresh_session_tokens()
+            assert result is False
+            meta = json.loads(proxy_mod._META_FILE.read_text())
+            assert meta["bl"] == "boq_labs-tailwind-frontend_20260305.05_p0"
+            assert meta["f_sid"] == "existing_fsid"
+            assert meta["at"] == "existing_at"
+        finally:
+            proxy_mod._COOKIES_FILE = original_cookies
+            proxy_mod._META_FILE = original_meta
+
 
 # ── NLMClient class ────────────────────────────────────────────────────
 
@@ -1485,4 +1525,3 @@ class TestRateLimiter:
         rl = proxy_mod._RateLimiter(min_gap_seconds=1.0)
         rl.set_gap(2.5)
         assert rl._min_gap == 2.5
-

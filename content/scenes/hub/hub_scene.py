@@ -13,12 +13,18 @@ import streamlit as st
 import sys
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 import subprocess
 import socket
 import json
 import requests
 
+from engine.port_registry import (
+    HUB_HEALTH_TARGETS,
+    build_health_endpoints,
+    get_port,
+    get_service_url,
+)
 
 def _service_up(url: str, timeout: float = 1.0) -> bool:
     """Check if an HTTP service responds."""
@@ -170,85 +176,195 @@ st.markdown("""
 
 # ── Scene Definitions ────────────────────────────────────────────────
 
-SCENE_CATEGORIES = {
-    "core": {
-        "label": "🎮 Core Scenes",
-        "scenes": [
-            {"name": "Phone",         "icon": "📱", "port": 5555, "mode": "phone",
-             "desc": "Simulated Android — texting, photos, galleries, voice messages, apps",
-             "color": "#667eea"},
-            {"name": "Bedroom",       "icon": "🛏️", "port": 5556, "mode": "bedroom",
-             "desc": "Multi-agent roleplay — characters, outfits, moods, director scenarios",
-             "color": "#f093fb"},
-            {"name": "Velvet Lounge", "icon": "🎷", "port": 5557, "mode": "lounge",
-             "desc": "1920s jazz speakeasy — Lola & Viktor, heat/trust, MCP dialog",
-             "color": "#c9a84c"},
-            {"name": "Casino Royale", "icon": "🎰", "port": 5559, "mode": "casino",
-             "desc": "Texas Hold'em with AI bluffing, moods, bets, and card counting",
-             "color": "#dc2626"},
-            {"name": "Art Gallery",   "icon": "🖼️", "port": 5560, "mode": "gallery",
-             "desc": "Streaming art critique, branching debate, image generation",
-             "color": "#8b5cf6"},
-            {"name": "The Colosseum", "icon": "⚔️", "port": 5561, "mode": "arena",
-             "desc": "Tactical arena combat with betting and AI fighters",
-             "color": "#059669"},
-        ],
-    },
-    "showcase": {
-        "label": "⚡ v0.50a Showcase",
-        "scenes": [
-            {"name": "The Realm",       "icon": "⚔️", "port": 5562, "mode": "realm",
-             "desc": "AI-directed LitRPG — dual-agent Director + Assistant, murder mystery, inventory, fourth-wall mechanics",
-             "color": "#e94560"},
-            {"name": "NeonCity",        "icon": "🌃", "port": 5563, "mode": "neoncity",
-             "desc": "Cyberpunk strategy board — procedural grid, Glitch Storm, loot nodes, AI opponents",
-             "color": "#00d4ff"},
-            {"name": "Coders Room",     "icon": "💻", "port": 5564, "mode": "coders",
-             "desc": "AI agent idle sim — agents write real Python, review, test in sandboxed pipelines",
-             "color": "#10b981"},
-            {"name": "Dragon's Flagon", "icon": "🍺", "port": 5558, "mode": "tavern",
-             "desc": "Fantasy tavern — 4 NPCs, quests, dice gambling, reputation, atmosphere, MCP showcase",
-             "color": "#d4a344"},
-        ],
-    },
-    "tools": {
-        "label": "🛠️ Tools & Services",
-        "scenes": [
-            {"name": "Dashboard",       "icon": "📊", "port": 8501, "mode": "dashboard",
-             "desc": "Character stats, relationship levels, activity feed",
-             "color": "#764ba2"},
-            {"name": "Admin Panel",     "icon": "🎛️", "port": 8502, "mode": "admin",
-             "desc": "Character editor, asset manager, conversation explorer, model config",
-             "color": "#f5576c"},
-            {"name": "Asset Studio", "icon": "🎨", "port": 5568, "mode": "assets",
-             "desc": "Generate images, videos, voices and stories via ComfyUI / TTS",
-             "color": "#0ea5e9"},
-            {"name": "TTS Server",      "icon": "🎙️", "port": 8600, "mode": "tts",
-             "desc": "Voice generation — voicemails, narration, character voices",
-             "color": "#10b981"},
-            {"name": "MCP Bridge",      "icon": "🔌", "port": 8601, "mode": "bridge",
-             "desc": "LMStudio ↔ CosySim bridge — SSE streaming, MCP tools",
-             "color": "#f59e0b"},
-        ],
-    },
-}
+
+def _scene_entry(
+    name: str,
+    icon: str,
+    target_id: str,
+    mode: str,
+    desc: str,
+    color: str,
+) -> Dict[str, Any]:
+    """Build a scene card entry from canonical control-plane metadata."""
+    return {
+        "name": name,
+        "icon": icon,
+        "port": get_port(target_id),
+        "mode": mode,
+        "desc": desc,
+        "color": color,
+        "url": get_service_url(target_id),
+    }
+
+
+def _build_scene_categories() -> Dict[str, Dict[str, Any]]:
+    """Return legacy hub scene groupings with canonical ports and URLs."""
+    return {
+        "core": {
+            "label": "🎮 Core Scenes",
+            "scenes": [
+                _scene_entry(
+                    "Phone",
+                    "📱",
+                    "phone",
+                    "phone",
+                    "Simulated Android — texting, photos, galleries, voice messages, apps",
+                    "#667eea",
+                ),
+                _scene_entry(
+                    "Bedroom",
+                    "🛏️",
+                    "bedroom",
+                    "bedroom",
+                    "Multi-agent roleplay — characters, outfits, moods, director scenarios",
+                    "#f093fb",
+                ),
+                _scene_entry(
+                    "Velvet Lounge",
+                    "🎷",
+                    "lounge",
+                    "lounge",
+                    "1920s jazz speakeasy — Lola & Viktor, heat/trust, MCP dialog",
+                    "#c9a84c",
+                ),
+                _scene_entry(
+                    "Casino Royale",
+                    "🎰",
+                    "casino",
+                    "casino",
+                    "Texas Hold'em with AI bluffing, moods, bets, and card counting",
+                    "#dc2626",
+                ),
+                _scene_entry(
+                    "Art Gallery",
+                    "🖼️",
+                    "gallery",
+                    "gallery",
+                    "Streaming art critique, branching debate, image generation",
+                    "#8b5cf6",
+                ),
+                _scene_entry(
+                    "The Colosseum",
+                    "⚔️",
+                    "arena",
+                    "arena",
+                    "Tactical arena combat with betting and AI fighters",
+                    "#059669",
+                ),
+            ],
+        },
+        "showcase": {
+            "label": "⚡ v0.50a Showcase",
+            "scenes": [
+                _scene_entry(
+                    "The Realm",
+                    "⚔️",
+                    "realm",
+                    "realm",
+                    "AI-directed LitRPG — dual-agent Director + Assistant, murder mystery, inventory, fourth-wall mechanics",
+                    "#e94560",
+                ),
+                _scene_entry(
+                    "NeonCity",
+                    "🌃",
+                    "neoncity",
+                    "neoncity",
+                    "Cyberpunk strategy board — procedural grid, Glitch Storm, loot nodes, AI opponents",
+                    "#00d4ff",
+                ),
+                _scene_entry(
+                    "Coders Room",
+                    "💻",
+                    "coders",
+                    "coders",
+                    "AI agent idle sim — agents write real Python, review, test in sandboxed pipelines",
+                    "#10b981",
+                ),
+                _scene_entry(
+                    "Dragon's Flagon",
+                    "🍺",
+                    "tavern",
+                    "tavern",
+                    "Fantasy tavern — 4 NPCs, quests, dice gambling, reputation, atmosphere, MCP showcase",
+                    "#d4a344",
+                ),
+            ],
+        },
+        "tools": {
+            "label": "🛠️ Tools & Services",
+            "scenes": [
+                _scene_entry(
+                    "Dashboard",
+                    "📊",
+                    "dashboard",
+                    "dashboard",
+                    "Character stats, relationship levels, activity feed",
+                    "#764ba2",
+                ),
+                _scene_entry(
+                    "Admin Panel",
+                    "🎛️",
+                    "admin",
+                    "admin",
+                    "Character editor, asset manager, conversation explorer, model config",
+                    "#f5576c",
+                ),
+                _scene_entry(
+                    "Asset Studio",
+                    "🎨",
+                    "asset_studio",
+                    "asset_studio",
+                    "Generate images, videos, voices and stories via ComfyUI / TTS",
+                    "#0ea5e9",
+                ),
+                _scene_entry(
+                    "TTS Server",
+                    "🎙️",
+                    "tts",
+                    "tts",
+                    "Voice generation — voicemails, narration, character voices",
+                    "#10b981",
+                ),
+                _scene_entry(
+                    "MCP Bridge",
+                    "🔌",
+                    "bridge",
+                    "bridge",
+                    "LMStudio ↔ CosySim bridge — SSE streaming, MCP tools",
+                    "#f59e0b",
+                ),
+            ],
+        },
+    }
+
+
+def _build_quick_actions() -> List[Dict[str, str]]:
+    """Return quick-action links backed by canonical control-plane URLs."""
+    return [
+        {
+            "button": "🎛️ Admin Panel",
+            "open_label": "Admin Panel",
+            "url": get_service_url("admin"),
+        },
+        {
+            "button": "📱 Phone Scene",
+            "open_label": "Phone Scene",
+            "url": get_service_url("phone"),
+        },
+        {
+            "button": "🛏️ Bedroom",
+            "open_label": "Bedroom",
+            "url": get_service_url("bedroom"),
+        },
+    ]
+
+
+SCENE_CATEGORIES = _build_scene_categories()
+QUICK_ACTIONS = _build_quick_actions()
 
 HEALTH_SERVICES = [
-    ("LMStudio",  "http://localhost:1234/v1/models"),
-    ("ComfyUI",   "http://localhost:8188/system_stats"),
-    ("TTS",       "http://localhost:8600/status"),
-    ("MCP",       "http://localhost:8601/health"),
-    ("Phone",     "http://localhost:5555/api/health"),
-    ("Bedroom",   "http://localhost:5556/api/health"),
-    ("Lounge",    "http://localhost:5557/api/health"),
-    ("Casino",    "http://localhost:5559/api/health"),
-    ("Gallery",   "http://localhost:5560/api/health"),
-    ("Arena",     "http://localhost:5561/api/health"),
-    ("Realm",     "http://localhost:5562/api/health"),
-    ("NeonCity",  "http://localhost:5563/api/health"),
-    ("Coders",    "http://localhost:5564/api/health"),
-    ("Tavern",    "http://localhost:5558/api/health"),
-    ("Admin",     "http://localhost:8502"),
+    (endpoint["name"], endpoint["url"])
+    for endpoint in build_health_endpoints(HUB_HEALTH_TARGETS)
 ]
 
 
@@ -277,12 +393,9 @@ def main():
     # Sidebar
     with st.sidebar:
         st.markdown("### ⚡ Quick Actions")
-        if st.button("🎛️ Admin Panel", use_container_width=True):
-            st.markdown("[Open Admin](http://localhost:8502)")
-        if st.button("📱 Phone Scene", use_container_width=True):
-            st.markdown("[Open Phone](http://localhost:5555)")
-        if st.button("🛏️ Bedroom", use_container_width=True):
-            st.markdown("[Open Bedroom](http://localhost:5556)")
+        for action in QUICK_ACTIONS:
+            if st.button(action["button"], use_container_width=True):
+                st.markdown(f"[Open {action['open_label']}]({action['url']})")
 
         st.markdown("---")
         st.markdown("### 📊 System")
@@ -338,7 +451,7 @@ def _show_scenes():
                 with col:
                     running = _port_open(scene["port"])
                     status = "🟢 Running" if running else "⚫ Stopped"
-                    url = f"http://localhost:{scene['port']}"
+                    url = scene["url"]
 
                     st.markdown(
                         f"""<div class="scene-card" style="background:linear-gradient(135deg, {scene['color']} 0%, {scene['color']}99 100%);">

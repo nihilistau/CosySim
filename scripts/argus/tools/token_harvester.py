@@ -15,7 +15,6 @@ import asyncio
 import hashlib
 import json
 import logging
-import os
 import sys
 import time
 from pathlib import Path
@@ -25,7 +24,20 @@ ROOT = Path(__file__).resolve().parents[3]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from engine.integrations.google_account_pool import GoogleAccount, GoogleAccountPool
+from engine.integrations.google_service_profiles import normalize_google_services
+from scripts.har_capture import (
+    NLM_URL,
+    _build_nlm_session_metadata,
+    _get_account_name_from_tab,
+    _get_cdp_tabs,
+    _get_cookies_from_tab,
+    _get_nlm_session_from_tab,
+    _navigate_and_get_cookies,
+    _select_cdp_tab,
+)
 from scripts.argus.config import CDP_URL
+from scripts.argus.paths import TOKENS_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +50,8 @@ _GOOGLE_DOMAINS = [
 ]
 
 _POOL_PATH = ROOT / "data" / "accounts" / "pool.json"
-_TOKEN_DIR = ROOT / "data" / "argus" / "tokens"
+_TOKEN_DIR = TOKENS_DIR
+_DEFAULT_SERVICES = ["notebooklm", "aistudio", "colab"]
 
 # Same list as har_extractor.py — these are the cookies we need
 COOKIE_NAMES = [
@@ -65,6 +78,53 @@ def generate_sapisid_hash(sapisid: str, origin: str = "https://notebooklm.google
 # ──── CDP cookie extraction ───────────────────────────────────────────────────
 
 async def harvest_cookies(url_pattern: str = "notebooklm") -> Tuple[Dict[str, str], str]:
+    """Backward-compatible wrapper returning only cookies and account name."""
+    capture = await harvest_capture(url_pattern)
+    return capture.get("cookies", {}), capture.get("account_name", "harvested")
+
+
+async def _harvest_via_direct_cdp(url_pattern: str = "notebooklm") -> Optional[Dict[str, Any]]:
+    """Harvest cookies and NotebookLM session metadata via direct CDP calls."""
+    tabs = _get_cdp_tabs()
+    if not tabs:
+        return None
+
+    preferred_patterns = [url_pattern] if url_pattern else []
+    ws_url, page_url = _select_cdp_tab(tabs, preferred_patterns=preferred_patterns)
+    if not ws_url:
+        return None
+
+    cookies = await _get_cookies_from_tab(ws_url)
+    wants_notebooklm = "notebooklm" in (url_pattern or "").lower()
+    ensure_notebooklm = wants_notebooklm and "notebooklm.google.com" not in page_url
+
+    if len(cookies) < 3 and wants_notebooklm:
+        logger.info("Direct CDP harvested too few cookies; navigating the live tab to NotebookLM")
+        cookies = await _navigate_and_get_cookies(ws_url, NLM_URL)
+        ensure_notebooklm = False
+        page_url = NLM_URL
+
+    if not cookies:
+        return None
+
+    nlm_session: Dict[str, str] = {}
+    if wants_notebooklm or "notebooklm.google.com" in page_url:
+        nlm_session = await _get_nlm_session_from_tab(ws_url, ensure_notebooklm=ensure_notebooklm)
+
+    account_name = await _get_account_name_from_tab(ws_url) or "harvested"
+    at_token = nlm_session.get("at")
+    return {
+        "cookies": cookies,
+        "account_name": account_name,
+        "authuser": 0,
+        "at_token": at_token,
+        "nlm_session": nlm_session,
+        "service_sessions": {"notebooklm": nlm_session} if nlm_session else {},
+        "services": list(_DEFAULT_SERVICES),
+    }
+
+
+async def _harvest_via_playwright(url_pattern: str = "notebooklm") -> Optional[Dict[str, Any]]:
     """Harvest Google cookies from the running Chrome instance.
 
     Connects via CDP, reads cookies from the NLM tab context, and returns
@@ -114,52 +174,153 @@ async def harvest_cookies(url_pattern: str = "notebooklm") -> Tuple[Dict[str, st
             except Exception:
                 pass
 
-        return cookies, account_name
+        nlm_session: Dict[str, str] = {}
+        if nlm_page:
+            try:
+                page_data = await nlm_page.evaluate(
+                    """() => ({
+                        bl: (() => {
+                            const wiz = window.WIZ_global_data || {};
+                            const explicit = wiz.QrtxK || wiz.cfb2h || wiz.bl || '';
+                            if (typeof explicit === 'string' && explicit.startsWith('boq_labs-tailwind-frontend_')) {
+                                return explicit;
+                            }
+                            for (const value of Object.values(wiz)) {
+                                if (typeof value === 'string' && value.startsWith('boq_labs-tailwind-frontend_')) {
+                                    return value;
+                                }
+                            }
+                            return '';
+                        })(),
+                        f_sid: (window.WIZ_global_data && (window.WIZ_global_data.IxjpMA || window.WIZ_global_data.FdrFJe)) || '',
+                        at: (window.WIZ_global_data && window.WIZ_global_data.SNlM0e) || '',
+                        href: location.href,
+                    })"""
+                )
+                if isinstance(page_data, dict):
+                    nlm_session = _build_nlm_session_metadata(page_data)
+            except Exception:
+                logger.debug("Could not extract NotebookLM session metadata via Playwright", exc_info=True)
+
+        return {
+            "cookies": cookies,
+            "account_name": account_name,
+            "authuser": 0,
+            "at_token": nlm_session.get("at"),
+            "nlm_session": nlm_session,
+            "service_sessions": {"notebooklm": nlm_session} if nlm_session else {},
+            "services": list(_DEFAULT_SERVICES),
+        }
+
+
+async def harvest_capture(url_pattern: str = "notebooklm") -> Dict[str, Any]:
+    """Harvest a full browser auth bundle from the live Chrome session."""
+    try:
+        capture = await _harvest_via_direct_cdp(url_pattern)
+    except Exception:
+        logger.warning("Direct CDP harvest failed; falling back to Playwright", exc_info=True)
+        capture = None
+
+    if capture and capture.get("cookies"):
+        return capture
+
+    fallback = await _harvest_via_playwright(url_pattern)
+    return fallback or {
+        "cookies": {},
+        "account_name": "harvested",
+        "authuser": 0,
+        "at_token": None,
+        "nlm_session": {},
+        "service_sessions": {},
+        "services": list(_DEFAULT_SERVICES),
+    }
 
 
 # ──── Pool update ─────────────────────────────────────────────────────────────
 
-def update_account_pool(cookies: Dict[str, str], account_name: str) -> None:
-    """Update data/accounts/pool.json with fresh cookies."""
-    _POOL_PATH.parent.mkdir(parents=True, exist_ok=True)
+def update_account_pool(
+    cookies: Dict[str, str],
+    account_name: str,
+    *,
+    session: Optional[Dict[str, str]] = None,
+    services: Optional[List[str]] = None,
+    authuser: int = 0,
+    at_token: Optional[str] = None,
+    service_sessions: Optional[Dict[str, Dict[str, str]]] = None,
+    pool_path: Optional[Path] = None,
+) -> None:
+    """Update the account pool with fresh cookies and session metadata."""
+    pool_path = pool_path or _POOL_PATH
+    pool_path.parent.mkdir(parents=True, exist_ok=True)
     _TOKEN_DIR.mkdir(parents=True, exist_ok=True)
 
-    # Load existing pool
-    pool_data: List[Dict[str, Any]] = []
-    if _POOL_PATH.exists():
-        try:
-            pool_data = json.loads(_POOL_PATH.read_text(encoding="utf-8")).get("accounts", [])
-        except Exception:
-            pool_data = []
+    normalized_services = normalize_google_services(services or _DEFAULT_SERVICES)
+    normalized_session = dict(session or {})
+    normalized_service_sessions = {
+        service_name: dict(service_session)
+        for service_name, service_session in (service_sessions or {}).items()
+        if isinstance(service_session, dict) and service_session
+    }
+    if normalized_session and "notebooklm" not in normalized_service_sessions:
+        normalized_service_sessions["notebooklm"] = dict(normalized_session)
 
-    # Find or create entry
-    existing = next((a for a in pool_data if a["name"] == account_name), None)
+    pool = GoogleAccountPool(pool_path=str(pool_path))
+    existing = pool.get_by_name(account_name)
+    merged_at_token = at_token or normalized_session.get("at")
+
     if existing:
-        existing["cookies"].update(cookies)
-        existing["added_at"] = time.time()
-        existing["services"] = list(set(existing.get("services", []) + ["nlm", "gemini", "colab"]))
+        merged_cookies = dict(existing.cookies)
+        merged_cookies.update({name: value for name, value in cookies.items() if value})
+        existing.cookies = merged_cookies
+        existing.added_at = time.time()
+        existing.authuser = authuser
+        existing.services = normalize_google_services(existing.services + normalized_services)
+        if merged_at_token:
+            existing.at_token = merged_at_token
+
+        if normalized_session:
+            existing.nlm_session = {**existing.nlm_session, **normalized_session}
+
+        for service_name, service_session in normalized_service_sessions.items():
+            merged_session = dict(existing.service_sessions.get(service_name, {}))
+            merged_session.update({key: value for key, value in service_session.items() if value})
+            existing.service_sessions[service_name] = merged_session
+
+        pool.add_account(existing)
         logger.info("Updated existing account: %s", account_name)
     else:
-        pool_data.append({
-            "name": account_name,
-            "cookies": cookies,
-            "authuser": 0,
-            "services": ["nlm", "gemini", "colab"],
-            "rate_limited": {},
-            "added_at": time.time(),
-            "at_token": None,
-        })
+        account = GoogleAccount(
+            name=account_name,
+            cookies={name: value for name, value in cookies.items() if value},
+            authuser=authuser,
+            services=normalized_services,
+            at_token=merged_at_token,
+            nlm_session=normalized_session,
+            service_sessions=normalized_service_sessions,
+        )
+        pool.add_account(account)
         logger.info("Added new account: %s", account_name)
 
-    _POOL_PATH.write_text(
-        json.dumps({"accounts": pool_data}, indent=2),
-        encoding="utf-8",
-    )
-    logger.info("Pool saved → %s (%d accounts)", _POOL_PATH, len(pool_data))
+    pool.save()
+    logger.info("Pool saved → %s", pool_path)
 
     # Also save a timestamped snapshot
     snap = _TOKEN_DIR / f"{account_name}_{int(time.time())}.json"
-    snap.write_text(json.dumps(cookies, indent=2), encoding="utf-8")
+    snap.write_text(
+        json.dumps(
+            {
+                "account_name": account_name,
+                "authuser": authuser,
+                "services": normalized_services,
+                "cookies": {name: value for name, value in cookies.items() if value},
+                "nlm_session": normalized_session,
+                "service_sessions": normalized_service_sessions,
+                "at_token": merged_at_token,
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
     logger.info("Snapshot → %s", snap)
 
 
@@ -199,7 +360,9 @@ async def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)-8s %(message)s")
 
     print("[harvester] Connecting to Chrome...")
-    cookies, account_name = await harvest_cookies(args.url)
+    capture = await harvest_capture(args.url)
+    cookies = capture.get("cookies", {})
+    account_name = capture.get("account_name", "harvested")
 
     if args.account:
         account_name = args.account
@@ -207,7 +370,15 @@ async def main() -> None:
     print_cookies(cookies, account_name)
 
     if not args.show and cookies:
-        update_account_pool(cookies, account_name)
+        update_account_pool(
+            cookies,
+            account_name,
+            session=capture.get("nlm_session"),
+            services=capture.get("services"),
+            authuser=int(capture.get("authuser", 0) or 0),
+            at_token=capture.get("at_token"),
+            service_sessions=capture.get("service_sessions"),
+        )
         print(f"\n[harvester] Pool updated. Direct clients will use fresh cookies on next call.")
     elif args.show:
         print("\n[harvester] --show mode: not saving to pool.")

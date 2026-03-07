@@ -36,8 +36,8 @@ for _s in (sys.stdout, sys.stderr):
     except (AttributeError, OSError):
         pass
 
-# ── Import launcher catalogue without executing main() ─────────────────────
 from launcher import SERVICES, SCENES, ALL_TARGETS, VERSION, _port_up  # noqa: E402
+from engine.port_registry import TUI_EXTERNAL_TARGETS, build_target_listing  # noqa: E402
 
 from textual import on, work
 from textual.app import App, ComposeResult
@@ -60,14 +60,9 @@ ACCOUNTS_LEGACY_DIR = PROJECT_ROOT / "data" / "google_accounts"  # {acct}/cookie
 
 # ── External services checked in the panel ─────────────────────────────────
 EXTERNAL_SERVICES = [
-    ("LMStudio",      1234, "http://localhost:1234/v1/models"),
-    ("Nexus KMS",     8700, "http://localhost:8700/api/health"),
-    ("ComfyUI",       8188, "http://localhost:8188"),
-    ("TTS Server",    8600, "http://localhost:8600/health"),
-    ("NLM Proxy",     8800, "http://localhost:8800/health"),
-    ("Nexus Canvas",  5590, "http://localhost:5590"),
-    ("GitHub Copilot", 0,   ""),  # token-based, not port
-]
+    (target["label"], target["port"], target["health_url"])
+    for target in build_target_listing(TUI_EXTERNAL_TARGETS)
+] + [("GitHub Copilot", 0, "")]
 
 # ── Colour scheme ───────────────────────────────────────────────────────────
 TUI_CSS = """

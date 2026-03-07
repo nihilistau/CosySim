@@ -5,7 +5,9 @@ import base64
 import requests
 from playwright.async_api import async_playwright
 
-SCREENSHOT = r"C:\Files\Models\CosySim\data\har_files\users_dump_folder\screenshots\vision_test.png"
+from scripts.argus.paths import SCREENSHOTS_DIR
+
+SCREENSHOT = str(SCREENSHOTS_DIR / "vision_test.png")
 LMSTUDIO   = "http://localhost:1234/v1/chat/completions"
 MODEL      = "qwen/qwen3-vl-4b"
 

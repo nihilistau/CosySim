@@ -338,6 +338,84 @@ class CopilotBridge:
 
         return {}
 
+    def _load_context_packet(self, nexus: Any) -> Dict[str, Any]:
+        """Load the latest persisted Copilot context packet from Nexus."""
+        if not nexus:
+            return {}
+
+        try:
+            from engine.nexus.copilot_context import parse_context_packet
+
+            results = nexus.search("copilot context packet compaction checkpoint", limit=8) or []
+            for result in results:
+                title = str(result.get("title", "")) if isinstance(result, dict) else ""
+                content = str(result.get("content", "")) if isinstance(result, dict) else str(result)
+                if "context packet" not in title.lower():
+                    continue
+                parsed = parse_context_packet(content)
+                if parsed:
+                    parsed["title"] = title
+                    parsed["entry_id"] = result.get("id", "") if isinstance(result, dict) else ""
+                    return parsed
+                return {
+                    "title": title,
+                    "content": content[:1500],
+                    "entry_id": result.get("id", "") if isinstance(result, dict) else "",
+                }
+        except Exception as exc:
+            logger.debug("Context packet search failed: %s", exc)
+
+        return {}
+
+    def _load_control_context_packet(self, nexus: Any) -> Dict[str, Any]:
+        """Load the latest NotebookLM control-flywheel context packet from Nexus."""
+        if not nexus:
+            return {}
+
+        try:
+            results = nexus.search("control flywheel context packet startup focus", limit=8) or []
+            for result in results:
+                title = str(result.get("title", "")) if isinstance(result, dict) else ""
+                content = str(result.get("content", "")) if isinstance(result, dict) else str(result)
+                lowered_title = title.lower()
+                if "control flywheel context packet" not in lowered_title:
+                    continue
+
+                parsed = {}
+                try:
+                    candidate = json.loads(content)
+                    if isinstance(candidate, dict):
+                        parsed = candidate
+                except Exception:
+                    parsed = {}
+
+                if parsed:
+                    return {
+                        "title": title,
+                        "entry_id": result.get("id", "") if isinstance(result, dict) else "",
+                        "immediate_summary": str(parsed.get("immediate_summary", "")).strip(),
+                        "startup_focus": [
+                            str(item).strip()
+                            for item in parsed.get("startup_focus", [])
+                            if str(item).strip()
+                        ],
+                        "watch_surfaces": [
+                            str(item).strip()
+                            for item in parsed.get("watch_surfaces", [])
+                            if str(item).strip()
+                        ],
+                    }
+
+                return {
+                    "title": title,
+                    "content": content[:1500],
+                    "entry_id": result.get("id", "") if isinstance(result, dict) else "",
+                }
+        except Exception as exc:
+            logger.debug("Control context packet search failed: %s", exc)
+
+        return {}
+
     # ──── Session Lifecycle ────
 
     def session_start(self, task_description: str = "") -> Dict[str, Any]:
@@ -856,6 +934,8 @@ class CopilotBridge:
             "active_todos": [],
             "operator_directives": {"summary": {}, "items": []},
             "resume_handoff": {},
+            "context_packet": {},
+            "control_context_packet": {},
             "system_inventory": {},
             "capture_policy": {
                 "nexus_first": True,
@@ -927,6 +1007,16 @@ class CopilotBridge:
             context["resume_handoff"] = self._load_resume_handoff(nexus)
         except Exception as exc:
             logger.debug("Resume handoff load failed: %s", exc)
+
+        try:
+            context["context_packet"] = self._load_context_packet(nexus)
+        except Exception as exc:
+            logger.debug("Context packet load failed: %s", exc)
+
+        try:
+            context["control_context_packet"] = self._load_control_context_packet(nexus)
+        except Exception as exc:
+            logger.debug("Control context packet load failed: %s", exc)
 
         logger.info(
             "Onboarding context: %d rules, %d decisions",

@@ -17,10 +17,11 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from engine.skills.skill import skill
+from scripts.argus.paths import SCREENSHOTS_DIR
 
 logger = logging.getLogger(__name__)
 
-SCREENSHOT_DIR = Path(r"C:\Files\Models\CosySim\data\har_files\users_dump_folder\screenshots")
+SCREENSHOT_DIR = SCREENSHOTS_DIR
 VISION_MODEL   = "qwen/qwen3-vl-4b"
 
 

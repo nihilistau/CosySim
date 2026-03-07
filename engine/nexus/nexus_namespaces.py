@@ -257,6 +257,50 @@ def validate_entry(
     }
 
 
+def normalize_namespace_tags(
+    category: str,
+    tags: Optional[List[str]] = None,
+    namespace: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Normalize tags for a namespace-aware payload.
+
+    This is the lightweight companion to ``enforce_namespace()`` for payloads
+    that are not full knowledge entries, such as Q&A pairs or derived history
+    exports that still need consistent namespace tagging.
+
+    Args:
+        category: Payload category.
+        tags: Existing payload tags.
+        namespace: Explicit namespace, if already known.
+
+    Returns:
+        Dict with ``namespace``, ``tags``, ``warnings``, and ``errors``.
+    """
+    tag_set = set(tags or [])
+    effective_namespace = namespace or detect_namespace(category, list(tag_set))
+    ns = NAMESPACES.get(effective_namespace)
+    if ns is None:
+        return {
+            "namespace": effective_namespace,
+            "tags": sorted(tag_set),
+            "warnings": [],
+            "errors": [f"Unknown namespace: {effective_namespace}"],
+        }
+
+    for auto_tag in ns.auto_tags:
+        tag_set.add(auto_tag)
+    for req in ns.required_tags:
+        if req not in tag_set:
+            tag_set.add(req)
+
+    return {
+        "namespace": effective_namespace,
+        "tags": sorted(tag_set),
+        "warnings": [],
+        "errors": [],
+    }
+
+
 def enforce_namespace(
     title: str,
     content: str,
@@ -282,8 +326,11 @@ def enforce_namespace(
     """
     tags = tags or []
     result = validate_entry(title, content_type, category, tags, namespace)
+    normalized = normalize_namespace_tags(category, tags, result["namespace"])
 
     for w in result.get("warnings", []):
+        logger.debug("NexusNamespace: %s", w)
+    for w in normalized.get("warnings", []):
         logger.debug("NexusNamespace: %s", w)
 
     return {
@@ -291,11 +338,11 @@ def enforce_namespace(
         "content": content,
         "content_type": content_type,
         "category": category,
-        "tags": result["fixed_tags"],
-        "namespace": result["namespace"],
-        "valid": result["valid"],
-        "warnings": result["warnings"],
-        "errors": result["errors"],
+        "tags": normalized["tags"],
+        "namespace": normalized["namespace"],
+        "valid": result["valid"] and not normalized["errors"],
+        "warnings": result["warnings"] + normalized["warnings"],
+        "errors": result["errors"] + normalized["errors"],
     }
 
 

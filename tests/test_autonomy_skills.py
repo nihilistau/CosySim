@@ -152,6 +152,7 @@ class TestSkillRegistration:
             "experiment_list_templates",
             "copilot_sync_config", "copilot_config_status",
             "copilot_list_instructions", "copilot_list_agents",
+            "copilot_validate_runtime",
             "knowledge_graph_build", "knowledge_graph_gaps",
             "knowledge_graph_clusters", "knowledge_graph_search",
             "knowledge_graph_research_tasks",
@@ -531,7 +532,7 @@ class TestIntegrationFlow:
         daemon = MagicMock()
         _register_builtin_tasks(daemon)
         task_ids = [c.args[0] for c in daemon.register.call_args_list]
-        assert daemon.register.call_count == 53
+        assert daemon.register.call_count == 55
         assert "knowledge-quality" in task_ids
         assert "notebook-rotation" in task_ids
         assert "news-fetch" in task_ids
@@ -608,7 +609,7 @@ class TestIntegrationFlow:
         from engine.nexus.scheduler_daemon import get_scheduler_daemon
         daemon = get_scheduler_daemon()
         status = daemon.status()
-        assert status["task_count"] == 53
+        assert status["task_count"] == 55
 
     def test_scheduler_daemon_task_ids(self):
         """SchedulerDaemon has the expected task IDs."""

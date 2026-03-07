@@ -7,8 +7,8 @@ __pycache__/
 node_modules/
 
 # Runtime data (databases, vector stores, backups)
-data/
 backups/
+/artifacts/
 
 # Visual Studio Code files
 .vscode
@@ -104,7 +104,6 @@ dist/
 content/simulation/media/images/
 content/simulation/media/voice/
 content/simulation/media/video/
-*.har
 
 # Python bytecode
 *.pyc
@@ -113,3 +112,28 @@ __pycache__/
 # Copilot hook logs
 .github/hooks/logs/
 unsloth_compiled_cache/
+
+# Raw ARGUS / capture artifacts
+data/har_files/users_dump_folder/
+data/har_files/**/*.har
+data/har_files/**/*.heaptimeline
+data/har_files/**/*.heapsnapshot
+data/har_files/**/*.pcap
+data/har_files/**/*.pcapng
+data/har_files/**/*.trace
+
+# Runtime data artifacts (not source code)
+data/chrome_*/
+data/uploads/
+data/heap_output/
+data/nlm_screenshots/
+data/argus/
+data/accounts/
+data/*.json
+data/*.png
+data/*.tmp
+data/*.db
+content/apps/*/data/
+
+# Copilot session files
+copilot-session-*.md

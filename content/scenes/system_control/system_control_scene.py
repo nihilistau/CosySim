@@ -26,6 +26,7 @@ from flask import Flask, jsonify, render_template, request
 from flask_cors import CORS
 
 from engine.config import get_config
+from engine.port_registry import build_health_endpoints, get_port, get_service_url
 from engine.scenes.base_scene import BaseScene
 from engine.scenes.nexus_mixin import NexusSceneMixin
 from content.shared import register_shared_assets
@@ -33,7 +34,7 @@ from content.shared import register_shared_assets
 logger = logging.getLogger(__name__)
 
 SCENE_ID = "system_control"
-DEFAULT_PORT = 5575
+DEFAULT_PORT = get_port(SCENE_ID)
 
 # ── Config file catalogue ────────────────────────────────────────────────────
 
@@ -55,27 +56,7 @@ _EDITABLE_CONFIGS: Dict[str, str] = {
 }
 
 # Known service endpoints for health checks
-_SERVICE_ENDPOINTS: List[Dict[str, Any]] = [
-    {"id": "nexus", "name": "Nexus KMS", "url": "http://localhost:8700/api/health", "port": 8700},
-    {"id": "nlm_proxy", "name": "NLM Proxy", "url": "http://localhost:8800/health", "port": 8800},
-    {"id": "hub", "name": "Scene Hub", "url": "http://localhost:8500/health", "port": 8500},
-    {"id": "nexus_panel", "name": "Nexus Panel", "url": "http://localhost:5570/api/health", "port": 5570},
-    {"id": "command_center", "name": "Command Center", "url": "http://localhost:5566/api/health", "port": 5566},
-    {"id": "bedroom", "name": "Bedroom", "url": "http://localhost:5556/api/health", "port": 5556},
-    {"id": "phone", "name": "Phone", "url": "http://localhost:5555/api/health", "port": 5555},
-    {"id": "heist", "name": "Heist", "url": "http://localhost:5565/api/health", "port": 5565},
-    {"id": "realm", "name": "Realm", "url": "http://localhost:5562/api/health", "port": 5562},
-    {"id": "neoncity", "name": "NeonCity", "url": "http://localhost:5563/api/health", "port": 5563},
-    {"id": "lounge", "name": "Lounge", "url": "http://localhost:5557/api/health", "port": 5557},
-    {"id": "tavern", "name": "Tavern", "url": "http://localhost:5558/api/health", "port": 5558},
-    {"id": "casino", "name": "Casino", "url": "http://localhost:5559/api/health", "port": 5559},
-    {"id": "arena", "name": "Arena", "url": "http://localhost:5561/api/health", "port": 5561},
-    {"id": "games", "name": "Games", "url": "http://localhost:5567/api/health", "port": 5567},
-    {"id": "lmstudio", "name": "LMStudio", "url": "http://localhost:1234/api/v1/models", "port": 1234},
-    {"id": "comfyui", "name": "ComfyUI", "url": "http://localhost:8188/system_stats", "port": 8188},
-    {"id": "tts", "name": "TTS Server", "url": "http://localhost:8600/health", "port": 8600},
-    {"id": "system_control", "name": "System Control", "url": "http://localhost:5575/api/health", "port": 5575},
-]
+_SERVICE_ENDPOINTS: List[Dict[str, Any]] = build_health_endpoints()
 
 
 def _http_get(url: str, timeout: float = 3.0) -> Optional[Dict[str, Any]]:
@@ -379,15 +360,15 @@ class SystemControlScene(BaseScene, NexusSceneMixin):
         @app.route("/api/nlm/status")
         def nlm_status():
             """Get NLM proxy status."""
-            data = _http_get("http://localhost:8800/health")
+            data = _http_get(get_service_url("nlm_proxy", path="/health"))
             if data is None:
-                return jsonify({"online": False, "error": "NLM proxy unreachable at :8800"})
+                return jsonify({"online": False, "error": f"NLM proxy unreachable at :{get_port('nlm_proxy')}"})
             return jsonify({"online": True, **data})
 
         @app.route("/api/nlm/notebooks")
         def nlm_notebooks():
             """List NLM notebooks via proxy."""
-            data = _http_get("http://localhost:8800/notebooks")
+            data = _http_get(get_service_url("nlm_proxy", path="/notebooks"))
             if data is None:
                 return jsonify({"error": "NLM proxy unreachable"}), 503
             return jsonify(data)
@@ -401,7 +382,7 @@ class SystemControlScene(BaseScene, NexusSceneMixin):
             """
             import urllib.request
             import urllib.error
-            proxy_url = "http://localhost:8800/cookies/import"
+            proxy_url = get_service_url("nlm_proxy", path="/cookies/import")
             try:
                 if request.is_json:
                     body = json.dumps(request.json or {}).encode()
@@ -422,7 +403,7 @@ class SystemControlScene(BaseScene, NexusSceneMixin):
             import urllib.request
             try:
                 req = urllib.request.Request(
-                    "http://localhost:8800/cookies/capture",
+                    get_service_url("nlm_proxy", path="/cookies/capture"),
                     data=b"{}",
                     headers={"Content-Type": "application/json"},
                 )
@@ -436,9 +417,9 @@ class SystemControlScene(BaseScene, NexusSceneMixin):
         @app.route("/api/nexus/status")
         def nexus_status():
             """Get Nexus health summary."""
-            data = _http_get("http://localhost:8700/api/health")
+            data = _http_get(get_service_url("nexus", path="/api/health"))
             if data is None:
-                return jsonify({"online": False, "error": "Nexus unreachable at :8700"})
+                return jsonify({"online": False, "error": f"Nexus unreachable at :{get_port('nexus')}"})
             return jsonify({"online": True, **data})
 
         @app.route("/api/nexus/search")
@@ -454,7 +435,7 @@ class SystemControlScene(BaseScene, NexusSceneMixin):
                 return jsonify({"error": "missing q parameter"}), 400
             limit = request.args.get("limit", 10, type=int)
             params = urllib.parse.urlencode({"q": q, "limit": limit})
-            data = _http_get(f"http://localhost:8700/api/search?{params}")
+            data = _http_get(get_service_url("nexus", path=f"/api/search?{params}"))
             if data is None:
                 return jsonify({"error": "Nexus unreachable"}), 503
             return jsonify(data)
@@ -464,9 +445,9 @@ class SystemControlScene(BaseScene, NexusSceneMixin):
         @app.route("/api/lmstudio")
         def lmstudio_status():
             """Get LMStudio model list and status."""
-            data = _http_get("http://localhost:1234/api/v1/models")
+            data = _http_get(get_service_url("lmstudio", path="/api/v1/models"))
             if data is None:
-                return jsonify({"online": False, "error": "LMStudio unreachable at :1234"})
+                return jsonify({"online": False, "error": f"LMStudio unreachable at :{get_port('lmstudio')}"})
             models = data.get("data", [])
             return jsonify({
                 "online": True,

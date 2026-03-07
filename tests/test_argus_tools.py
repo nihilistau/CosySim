@@ -57,9 +57,9 @@ class TestUpdateAccountPool:
             th.update_account_pool({"SID": "abc"}, "testuser")
         assert pool_path.exists()
         data = json.loads(pool_path.read_text())
-        assert len(data["accounts"]) == 1
-        assert data["accounts"][0]["name"] == "testuser"
-        assert data["accounts"][0]["cookies"]["SID"] == "abc"
+        assert len(data) == 1
+        assert data["testuser"]["name"] == "testuser"
+        assert data["testuser"]["cookies"]["SID"] == "abc"
 
     def test_updates_existing_account(self, tmp_path: Path) -> None:
         from scripts.argus.tools import token_harvester as th
@@ -67,15 +67,15 @@ class TestUpdateAccountPool:
         token_dir = tmp_path / "tokens"
         pool_path.parent.mkdir(parents=True)
         pool_path.write_text(json.dumps({
-            "accounts": [{
+            "testuser": {
                 "name": "testuser",
                 "cookies": {"SID": "old"},
                 "authuser": 0,
-                "services": ["nlm"],
+                "services": ["notebooklm"],
                 "rate_limited": {},
                 "added_at": 0.0,
                 "at_token": None,
-            }]
+            }
         }))
         with (
             patch.object(th, "_POOL_PATH", pool_path),
@@ -83,8 +83,8 @@ class TestUpdateAccountPool:
         ):
             th.update_account_pool({"SID": "new", "HSID": "xyz"}, "testuser")
         data = json.loads(pool_path.read_text())
-        assert len(data["accounts"]) == 1
-        cookies = data["accounts"][0]["cookies"]
+        assert len(data) == 1
+        cookies = data["testuser"]["cookies"]
         assert cookies["SID"] == "new"
         assert cookies["HSID"] == "xyz"
 
@@ -94,9 +94,9 @@ class TestUpdateAccountPool:
         token_dir = tmp_path / "tokens"
         pool_path.parent.mkdir(parents=True)
         pool_path.write_text(json.dumps({
-            "accounts": [{"name": "alice", "cookies": {}, "authuser": 0,
-                          "services": [], "rate_limited": {}, "added_at": 0.0,
-                          "at_token": None}]
+            "alice": {"name": "alice", "cookies": {}, "authuser": 0,
+                       "services": [], "rate_limited": {}, "added_at": 0.0,
+                       "at_token": None}
         }))
         with (
             patch.object(th, "_POOL_PATH", pool_path),
@@ -104,7 +104,7 @@ class TestUpdateAccountPool:
         ):
             th.update_account_pool({"SID": "x"}, "bob")
         data = json.loads(pool_path.read_text())
-        assert len(data["accounts"]) == 2
+        assert len(data) == 2
 
     def test_handles_corrupt_pool(self, tmp_path: Path) -> None:
         from scripts.argus.tools import token_harvester as th
@@ -118,7 +118,26 @@ class TestUpdateAccountPool:
         ):
             th.update_account_pool({"SID": "x"}, "testuser")
         data = json.loads(pool_path.read_text())
-        assert len(data["accounts"]) == 1
+        assert len(data) == 1
+
+    def test_persists_nlm_session_metadata(self, tmp_path: Path) -> None:
+        from scripts.argus.tools import token_harvester as th
+
+        pool_path = tmp_path / "accounts" / "pool.json"
+        token_dir = tmp_path / "tokens"
+        with (
+            patch.object(th, "_POOL_PATH", pool_path),
+            patch.object(th, "_TOKEN_DIR", token_dir),
+        ):
+            th.update_account_pool(
+                {"SID": "abc"},
+                "testuser",
+                session={"bl": "boq_labs-tailwind-frontend_20260305.10_p0", "f_sid": "123", "at": "token"},
+                service_sessions={"notebooklm": {"notebook_id": "nb-1"}},
+            )
+        data = json.loads(pool_path.read_text())
+        assert data["testuser"]["nlm_session"]["bl"] == "boq_labs-tailwind-frontend_20260305.10_p0"
+        assert data["testuser"]["service_sessions"]["notebooklm"]["notebook_id"] == "nb-1"
 
 
 # ──── Selector Scanner JS ─────────────────────────────────────────────────────
@@ -244,7 +263,10 @@ class TestHarvestCookiesMock:
             {"name": "HSID", "value": "hsid_value", "domain": ".google.com"},
         ]
         mock_pw = self._make_mock_pw(all_cookies, "test@example.com")
-        with patch("playwright.async_api.async_playwright", return_value=mock_pw):
+        with (
+            patch("scripts.argus.tools.token_harvester._harvest_via_direct_cdp", new=AsyncMock(return_value=None)),
+            patch("playwright.async_api.async_playwright", return_value=mock_pw),
+        ):
             cookies, account = asyncio.run(harvest_cookies())
 
         assert "SID" in cookies
@@ -258,10 +280,37 @@ class TestHarvestCookiesMock:
         from scripts.argus.tools.token_harvester import harvest_cookies
 
         mock_pw = self._make_mock_pw([{"name": "SID", "value": "x"}], None)
-        with patch("playwright.async_api.async_playwright", return_value=mock_pw):
+        with (
+            patch("scripts.argus.tools.token_harvester._harvest_via_direct_cdp", new=AsyncMock(return_value=None)),
+            patch("playwright.async_api.async_playwright", return_value=mock_pw),
+        ):
             cookies, account = asyncio.run(harvest_cookies())
 
         assert account == "harvested"
+
+    def test_harvest_prefers_direct_cdp_bundle(self) -> None:
+        """Direct CDP capture should win when it succeeds."""
+        import asyncio
+        from scripts.argus.tools.token_harvester import harvest_capture
+
+        with patch(
+            "scripts.argus.tools.token_harvester._harvest_via_direct_cdp",
+            new=AsyncMock(
+                return_value={
+                    "cookies": {"SID": "sid_value"},
+                    "account_name": "direct-user",
+                    "authuser": 0,
+                    "at_token": None,
+                    "nlm_session": {},
+                    "service_sessions": {},
+                    "services": ["notebooklm"],
+                }
+            ),
+        ):
+            capture = asyncio.run(harvest_capture())
+
+        assert capture["account_name"] == "direct-user"
+        assert capture["cookies"]["SID"] == "sid_value"
 
 
 # ──── ask command ─────────────────────────────────────────────────────────────
@@ -286,8 +335,12 @@ class TestArgusAskCommand:
 
         mock_page.locator = MagicMock()
         mock_locator = AsyncMock()
+        mock_locator.wait_for = AsyncMock(return_value=None)
         mock_locator.is_disabled = AsyncMock(return_value=False)
-        mock_page.locator.return_value = mock_locator
+        mock_locator.click = AsyncMock(return_value=None)
+        mock_locator_group = MagicMock()
+        mock_locator_group.first = mock_locator
+        mock_page.locator.return_value = mock_locator_group
 
         # Call sequence: (before_count), then per poll: (loading, count, read_last)
         # Stability requires content unchanged AND len > 50 for 2 consecutive polls.
@@ -345,6 +398,7 @@ class TestArgusAskCommand:
         out = result_holder[0]
         assert "What is CosySim?" in out
         assert "CosySim" in out
+        assert any("submit-button" in str(call.args[0]) for call in mock_page.locator.call_args_list)
 
     def test_ask_raw_flag_suppresses_header(self) -> None:
         """--raw prints answer without Q/separator lines."""

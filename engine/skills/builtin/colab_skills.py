@@ -1,7 +1,9 @@
 """Colab and NLM direct-access skill pack.
 
-Exposes the Colab AI Agent and NLM direct HTTP client as MCP @skill tools
-so LLM agents can query Gemini and NotebookLM without browser automation.
+Exposes the Colab AI Agent and the direct NotebookLM private-RPC client as MCP
+@skill tools. NotebookLM calls run without a browser in the request path, but
+they still rely on browser-attached auth/session capture established elsewhere
+in the stack.
 """
 from __future__ import annotations
 
@@ -175,14 +177,15 @@ def colab_suggestions(context: str) -> str:
 @skill(
     pack="colab",
     description=(
-        "Ask NotebookLM directly via HTTP API — fast, no browser automation needed. "
+        "Ask NotebookLM directly via its private RPC surface using the browser-attached "
+        "cookie/session pool. Fast once auth is refreshed from live Chrome or HAR recovery. "
         "Requires a notebook_id (UUID) and source_ids (comma-separated UUIDs). "
         "Returns grounded answers from your notebook sources."
     ),
     category="SYSTEM",
 )
 def nlm_direct_ask(notebook_id: str, source_ids: str, question: str) -> str:
-    """Query NotebookLM directly without browser automation.
+    """Query NotebookLM directly through the stored browser-auth session.
 
     Args:
         notebook_id: NotebookLM notebook UUID.
@@ -198,7 +201,7 @@ def nlm_direct_ask(notebook_id: str, source_ids: str, question: str) -> str:
     if client is None:
         return (
             "No NotebookLM account available. "
-            "Import one with: pool.import_from_har(har_path, 'name', ['notebooklm'])"
+            "Refresh one with scripts\\har_capture.py --mode cdp or import a fresh HAR."
         )
 
     source_list = [s.strip() for s in source_ids.split(",") if s.strip()]

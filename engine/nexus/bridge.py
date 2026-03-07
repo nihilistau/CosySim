@@ -9,6 +9,8 @@ Usage:
     python -m engine.nexus.bridge ask "How does state management work?"
     python -m engine.nexus.bridge store "Title" "Content" --type note --category dev
     python -m engine.nexus.bridge qa "Question?" "Answer."
+    python -m engine.nexus.bridge backfill "Question?" "Answer." --source docs
+    python -m engine.nexus.bridge inventory --store
     python -m engine.nexus.bridge rules [scope]
     python -m engine.nexus.bridge health
     python -m engine.nexus.bridge seed [docs|qa|rules|prompts|conventions|all]
@@ -23,6 +25,12 @@ import sys
 from typing import Any
 
 from engine.nexus.client import get_nexus_client
+from engine.nexus.knowledge_capture import capture_external_discovery
+from engine.system_registry import (
+    build_system_inventory,
+    render_system_inventory_text,
+    store_system_inventory_snapshot,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +76,39 @@ def cmd_qa(args: argparse.Namespace) -> None:
         category=args.category,
     )
     _output({"status": "stored", "result": result})
+
+
+def cmd_backfill(args: argparse.Namespace) -> None:
+    """Backfill externally discovered knowledge into Nexus as note + Q&A."""
+    result = capture_external_discovery(
+        question=args.question,
+        answer=args.answer,
+        source=args.source,
+        title=args.title,
+        category=args.category,
+        tags=args.tags.split(",") if args.tags else [],
+        details=args.details,
+    )
+    _output(result.to_dict())
+
+
+def cmd_inventory(args: argparse.Namespace) -> None:
+    """Render or store the canonical CosySim system inventory."""
+    if args.store:
+        result = store_system_inventory_snapshot(title=args.title)
+        if args.format == "text":
+            print(render_system_inventory_text(include_catalog=args.include_catalog))
+            print("")
+            print(f"Stored entry_id={result['entry_id']} qa_id={result['qa_id']}")
+            return
+        _output(result)
+        return
+
+    if args.format == "text":
+        print(render_system_inventory_text(include_catalog=args.include_catalog))
+        return
+
+    _output(build_system_inventory(include_catalog=args.include_catalog))
 
 
 def cmd_rules(args: argparse.Namespace) -> None:
@@ -190,6 +231,25 @@ def main() -> None:
     p.add_argument("answer", help="Answer")
     p.add_argument("--category", default="development", help="Category")
     p.set_defaults(func=cmd_qa)
+
+    # backfill
+    p = subs.add_parser("backfill", help="Backfill external discovery into Nexus")
+    p.add_argument("question", help="Question or retrieval key")
+    p.add_argument("answer", help="Discovered answer")
+    p.add_argument("--source", required=True, help="Where the information was found")
+    p.add_argument("--title", default="", help="Optional knowledge entry title")
+    p.add_argument("--category", default="research", help="Category")
+    p.add_argument("--tags", default="", help="Comma-separated tags")
+    p.add_argument("--details", default="", help="Optional extra details/context")
+    p.set_defaults(func=cmd_backfill)
+
+    # inventory
+    p = subs.add_parser("inventory", help="Show or store the canonical system inventory")
+    p.add_argument("--store", action="store_true", help="Store the inventory snapshot in Nexus")
+    p.add_argument("--title", default="System inventory snapshot", help="Stored entry title")
+    p.add_argument("--format", default="json", choices=["json", "text"], help="Output format")
+    p.add_argument("--include-catalog", action="store_true", help="Include full service and scene catalogues")
+    p.set_defaults(func=cmd_inventory)
 
     # rules
     p = subs.add_parser("rules", help="Get governance rules")

@@ -163,6 +163,14 @@ class TestGetAllScenesStatusSkill:
             assert "port"   in scene
             assert "status" in scene
 
+    def test_get_all_scenes_status_includes_grid_and_asset_studio(self) -> None:
+        """The status skill should report newer launcher scenes as well."""
+        data = self._call()
+        ids = {scene["id"] for scene in data["scenes"]}
+
+        assert "grid" in ids
+        assert "asset_studio" in ids
+
 
 # ══════════════════════════════════════════════════════════════════════
 # 4. get_world_status skill

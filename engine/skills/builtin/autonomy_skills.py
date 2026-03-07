@@ -697,6 +697,15 @@ def copilot_list_agents() -> str:
     return json.dumps(_copilot_cfg().list_agents(), default=str)
 
 
+@skill(pack="autonomy", description="Validate Copilot sync, hooks, and runtime health",
+       tags=["copilot", "validation", "autonomy"], category=SkillCategory.SYSTEM)
+def copilot_validate_runtime() -> str:
+    """Run the Copilot validation report and return the structured result."""
+    from engine.nexus.copilot_validation import run_copilot_validation
+
+    return json.dumps(run_copilot_validation(), default=str)
+
+
 # ═══════════════════════════════════════════════════════════════════
 # KNOWLEDGE GRAPH SKILLS
 # ═══════════════════════════════════════════════════════════════════

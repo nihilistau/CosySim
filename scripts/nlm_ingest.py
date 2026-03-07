@@ -1,4 +1,4 @@
-"""Ingest a local file into a new NotebookLM notebook.
+"""Ingest a local file into a NotebookLM notebook.
 
 Uses the ARGUS BaseCrawler (CDP attach + NetworkMonitor) so all the
 Playwright / Chrome plumbing is already handled.  Captures every
@@ -7,6 +7,7 @@ batchexecute call to HAR so we can later call NLM directly without a browser.
 Usage:
     python scripts/nlm_ingest.py                           # PROJECT_JOURNAL.md
     python scripts/nlm_ingest.py --file docs/ARGUS.md --name "ARGUS Docs"
+    python scripts/nlm_ingest.py --file docs/ARGUS.md --name "ARGUS Docs" --notebook-url https://notebooklm.google.com/notebook/...
 """
 from __future__ import annotations
 
@@ -31,12 +32,12 @@ NLM_URL      = "https://notebooklm.google.com"
 # ──── Crawler ─────────────────────────────────────────────────────────────────
 
 class NLMIngestCrawler:
-    """Drive the NLM create-notebook + add-source flow via ARGUS BaseCrawler."""
+    """Drive NotebookLM create-notebook + add-source flows via ARGUS BaseCrawler."""
 
-    def __init__(self, notebook_name: str, content: str) -> None:
+    def __init__(self, notebook_name: str, content: str, notebook_url: str | None = None) -> None:
         self.notebook_name = notebook_name
         self.content       = content
-        self.notebook_url: str | None = None
+        self.notebook_url  = notebook_url
 
     async def run(self) -> str | None:
         from scripts.argus.crawlers.base_crawler import BaseCrawler
@@ -46,31 +47,42 @@ class NLMIngestCrawler:
         crawler = BaseCrawler(monitor=monitor)
 
         async with crawler:
-            # Navigate to NLM home so "Create new notebook" is available.
-            page = await crawler.get_or_open_page("notebooklm", NLM_URL)
-            if "/notebook/" in page.url:
-                logger.info("On notebook page — navigating to NLM home first")
-                await page.goto(NLM_URL, wait_until="networkidle", timeout=30000)
+            target_url = self.notebook_url or NLM_URL
+            page = await crawler.get_or_open_page("notebooklm", target_url)
 
-            await page.wait_for_load_state("networkidle", timeout=20000)
+            if self.notebook_url:
+                logger.info("Opening existing notebook for ingest: %s", self.notebook_url)
+                if self.notebook_url not in page.url:
+                    await page.goto(self.notebook_url, wait_until="domcontentloaded", timeout=30000)
+                await self._wait_for_notebook_ready(page)
+            else:
+                # Navigate to NLM home so "Create new notebook" is available.
+                if "/notebook/" in page.url:
+                    logger.info("On notebook page — navigating to NLM home first")
+                    await page.goto(NLM_URL, wait_until="networkidle", timeout=30000)
+                await page.wait_for_load_state("networkidle", timeout=20000)
 
             if "accounts.google.com" in page.url:
                 logger.error("Redirected to login — log into NLM in Chrome first")
                 return None
 
-            # Click "Create new notebook" → NLM immediately opens a new notebook
-            # with the add-source dialog visible (URL ends in ?addSource=true).
-            await self._step("new_notebook", page, self._click_new_notebook)
-            # Wait for the new notebook URL to settle
-            await page.wait_for_url("**/notebook/**", timeout=15000)
-            await page.wait_for_timeout(1500)
-            self.notebook_url = page.url.split("?")[0]
-            logger.info("Notebook: %s", self.notebook_url)
+            if self.notebook_url:
+                self.notebook_url = page.url.split("?")[0]
+                await self._step("open_add_source", page, self._open_add_source_dialog)
+            else:
+                # Click "Create new notebook" → NLM immediately opens a new notebook
+                # with the add-source dialog visible (URL ends in ?addSource=true).
+                await self._step("new_notebook", page, self._click_new_notebook)
+                # Wait for the new notebook URL to settle
+                await page.wait_for_url("**/notebook/**", timeout=15000)
+                await page.wait_for_timeout(1500)
+                self.notebook_url = page.url.split("?")[0]
+                logger.info("Notebook: %s", self.notebook_url)
 
-            # The add-source dialog is already open at this point; just click Copied text.
             await self._step("select_copied_text", page, self._click_copied_text)
             await self._step("paste_text",         page, self._paste_content)
             await self._step("insert",             page, self._insert_source)
+            await self._step("set_title",          page, self._set_notebook_title)
 
             await self._save_har(monitor)
 
@@ -101,6 +113,42 @@ class NLMIngestCrawler:
             except Exception:
                 continue
         raise RuntimeError("'Create new notebook' button not found on NLM home")
+
+    async def _open_add_source_dialog(self, page) -> None:
+        """Open the add-source dialog for an existing notebook."""
+        if await page.locator("textarea.copied-text-input-textarea").count():
+            return
+
+        for sel in [
+            "button[aria-label='Add source']",
+            "button[aria-label='Add sources']",
+            "button.add-source-button",
+            "button:has-text('Add sources')",
+            "button:has-text('Upload a source')",
+        ]:
+            try:
+                await page.click(sel, timeout=10000)
+                await page.wait_for_timeout(1500)
+                return
+            except Exception:
+                continue
+        raise RuntimeError("'Add source' button not found on notebook page")
+
+    async def _wait_for_notebook_ready(self, page) -> None:
+        """Wait for an existing notebook page to become interactive."""
+        for sel in [
+            "button[aria-label='Add source']",
+            "button[aria-label='Add sources']",
+            "button.add-source-button",
+            "input.title-input",
+            "textarea[aria-label='Query box']",
+        ]:
+            try:
+                await page.wait_for_selector(sel, timeout=20000, state="visible")
+                return
+            except Exception:
+                continue
+        raise RuntimeError("Notebook page did not become interactive")
 
     async def _click_copied_text(self, page) -> None:
         """Click the 'Copied text' option in the add-source dialog."""
@@ -143,6 +191,29 @@ class NLMIngestCrawler:
                 continue
         await page.keyboard.press("Enter")
         await page.wait_for_timeout(5000)
+
+    async def _set_notebook_title(self, page) -> None:
+        """Apply the requested notebook title once the add-source dialog closes."""
+        if not self.notebook_name:
+            return
+
+        for sel in [
+            "input.title-input",
+            "input[aria-label*='title']",
+            "input[name='title']",
+        ]:
+            try:
+                await page.wait_for_selector(sel, timeout=8000, state="visible")
+                await page.click(sel, timeout=5000)
+                await page.fill(sel, self.notebook_name, timeout=5000)
+                await page.keyboard.press("Tab")
+                await page.wait_for_timeout(1000)
+                logger.info("Notebook title set: %s", self.notebook_name)
+                return
+            except Exception:
+                continue
+
+        raise RuntimeError("Notebook title input not found")
 
     # ──── HAR dump ──────────────────────────────────────────────────────────
 
@@ -200,7 +271,7 @@ async def _main(args: argparse.Namespace) -> int:
     name    = args.name or src.stem.replace("_", " ").title()
     print(f"File    : {src} ({len(content):,} chars)\nNotebook: {name}\n")
 
-    url = await NLMIngestCrawler(name, content).run()
+    url = await NLMIngestCrawler(name, content, notebook_url=args.notebook_url).run()
 
     if url and "notebooklm" in url:
         print(f"\n✓  {url}")
@@ -218,6 +289,7 @@ def main() -> None:
     p = argparse.ArgumentParser(description="Ingest a file into NotebookLM via ARGUS crawler")
     p.add_argument("--file", default=str(PROJECT_ROOT / "docs" / "PROJECT_JOURNAL.md"))
     p.add_argument("--name", default="CosySim Project Journal & Onboarding")
+    p.add_argument("--notebook-url", default=None, help="Add the file to an existing NotebookLM notebook URL")
     sys.exit(asyncio.run(_main(p.parse_args())))
 
 

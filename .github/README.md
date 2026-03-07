@@ -1,96 +1,178 @@
-# .github/ — Copilot Customization System
+# .github/ — Copilot Operating Manual
 
-This directory contains a layered GitHub Copilot customization system
-designed for the CosySim AI simulation framework.
+This directory contains CosySim's Copilot-facing operating surface: repository
+instructions, custom agents, and runtime hooks that keep Copilot aligned with
+Nexus and the audited system priorities.
 
-## Architecture
+## Current Direction
 
-```
-┌─────────────────────────────────────────────────────────┐
-│  Layer 1: Global (Personal)                             │
-│  ~/.copilot/copilot-instructions.md    CLI persona      │
-│  ~/.github/copilot-instructions.md     IDE persona      │
-├─────────────────────────────────────────────────────────┤
-│  Layer 2: Shared Rules (Cross-Project)                  │
-│  ~/.config/copilot/shared-rules/                        │
-│  ├── system-architecture.instructions.md                │
-│  ├── git-workflow.instructions.md                       │
-│  └── security.instructions.md                           │
-│  (Loaded via COPILOT_CUSTOM_INSTRUCTIONS_DIRS env var)  │
-├─────────────────────────────────────────────────────────┤
-│  Layer 3: Repository (This Project)                     │
-│  .github/copilot-instructions.md       Master context   │
-│  .github/instructions/*.instructions.md  Path-specific  │
-│  .github/agents/*.agent.md             Custom agents    │
-│  .github/hooks/                        Session hooks    │
-└─────────────────────────────────────────────────────────┘
+- **First wave:** core stabilization + enforcement
+- **Governance source of truth:** repository + Nexus synchronized
+- **NotebookLM strategy:** restore auth and library health first, then integrate deeply
+- **Advanced GUI:** after foundations are stable
+- **Agent mandate:** store and reuse histories, changelogs, memories, rules, and improvements through Nexus
+
+## What Lives Here
+
+```text
+.github/
+├── copilot-instructions.md        # Repository-wide operating policy
+├── instructions/                  # Path-specific rules
+├── agents/                        # Custom agent playbooks
+├── hooks/                         # Session/runtime hook wiring
+├── workflows/                     # GitHub automation for Copilot-related setup/autofix
+└── README.md                      # This operating manual
 ```
 
-## Priority Order (highest → lowest)
+## Operating Model
 
-1. **Personal** — `~/.copilot/copilot-instructions.md`
-2. **Path-Specific** — `.github/instructions/*.instructions.md` (with `applyTo` globs)
-3. **Repository-Wide** — `.github/copilot-instructions.md`
-4. **Shared Rules** — `~/.config/copilot/shared-rules/` (via env var)
-5. **Organization** — (if applicable)
+### 1. Repository + Nexus stay synchronized
+The repository is the live editable surface for instructions, agents, and hook
+wiring. Nexus is the persistent operational memory and governance layer.
+CosySim is designed so the two stay synchronized rather than compete.
 
-Rules merge additively when there's no conflict. Higher priority wins on conflicts.
+`engine/nexus/copilot_self_config.py` is the bridge for that model. It syncs
+instruction files, agent definitions, hook definitions, and preferences between
+repo files and Nexus-backed storage. `engine/nexus/seed_copilot_rules.py`
+refreshes the mirrored Copilot/docs entries in Nexus and now deduplicates stale
+exact-title mirrors after sync.
 
-## Instructions (8 files)
+### 2. Nexus-first retrieval
+Copilot should not start from zero when the system already knows something.
 
-| File | Applies To | Purpose |
-|------|-----------|---------|
-| `python.instructions.md` | `**/*.py` | Import style, type hints, docstrings, naming |
-| `scenes.instructions.md` | `content/scenes/**/*.py` | BaseScene lifecycle, MCP wiring |
-| `mcp-framework.instructions.md` | `engine/mcp/**`, `engine/skills/**`, `engine/agents/**` | Skills, interceptors, state |
-| `testing.instructions.md` | `tests/**/*.py` | pytest fixtures, mocking, assertions |
-| `lmstudio.instructions.md` | `engine/lmstudio/**/*.py` | v1 API, streaming, conversations |
-| `config.instructions.md` | `config/**/*.yaml` | Dot-notation access, file hierarchy |
-| `frontend.instructions.md` | `content/scenes/**/templates/**`, `**/static/**` | Jinja2, JS, CSS, Socket.IO |
-| `deployment.instructions.md` | Startup scripts, deployment files | Service ordering, health checks |
+Preferred order:
+1. `nexus_smart_query(question)`
+2. `nexus_search(query)` / `nexus_ask(question)` when more explicit control helps
+3. NotebookLM-backed research after auth/library are healthy
+4. local LLM fallback only after the shared knowledge paths are exhausted
 
-## Agents (8 agents)
+If MCP tools are unavailable, use the CLI bridge in `engine/nexus/bridge.py`.
+That fallback supports `search`, `ask`, `rules`, `store`, `qa`, `backfill`,
+`inventory`, `health`, `seed`, and `maintain`.
 
-| Agent | Description |
-|-------|-------------|
-| `scene-builder` | Scaffold new scenes from scratch |
-| `scene-debugger` | Diagnose and fix scene/agent issues |
-| `scene-auditor` | Rate scenes against AAA quality standard |
-| `skill-developer` | Create and register MCP skill packs |
-| `test-writer` | Generate pytest test suites |
-| `doc-writer` | Maintain documentation system |
-| `codebase-navigator` | Explain architecture, trace call chains |
-| `system-architect` | Cross-project architecture decisions |
+### 3. Self-maintaining loop
 
-### Using Agents
-
-In VS Code Copilot Chat, reference an agent with `@agent-name`:
-```
-@scene-builder Create a new "tavern" scene with NPC bartering mechanics
-@scene-auditor Audit the casino scene against AAA standard
-@test-writer Generate tests for engine/mcp/dialog_system.py
+```text
+repo assets → Copilot runtime → hooks + agents → Nexus history/rules/memory
+     ▲                                                │
+     └──────────── copilot_self_config sync ──────────┘
+                          │
+                          └── NotebookLM research distills back into Nexus
 ```
 
-In Copilot CLI, agents are available as context when working in this repo.
+The goal is not just task completion. The goal is a system that remembers what
+it learned and improves the next session.
+
+## Key Runtime Assets
+
+| File | Role |
+|------|------|
+| `../engine/nexus/copilot_bridge.py` | Pulls task-aware Nexus context into sessions and records session metrics |
+| `../engine/nexus/copilot_self_config.py` | Syncs instructions, agents, hooks, and preferences with Nexus |
+| `../engine/nexus/copilot_validation.py` | Validates Copilot Nexus sync drift, hook integrity, and runtime health |
+| `../engine/nexus/seed_copilot_rules.py` | Refreshes Copilot/docs mirrors in Nexus and deduplicates stale exact-title mirrors |
+| `../engine/nexus/nexus_session_logger.py` | Exports histories, checkpoints, compaction snapshots, and git context |
+| `../engine/nexus/scheduler_daemon.py` | Runs recurring maintenance and background follow-up work |
+| `../engine/nexus/task_scheduler.py` | Generates and tracks agent tasks/templates |
+| `./hooks/cosysim-hooks.json` | Main hook pack used by Copilot runtime |
+| `./hooks/session-logger/hooks.json` | Dedicated session logging hooks |
+
+## Instructions
+
+Path-specific instructions are in [`./instructions/`](./instructions/). The set
+covers Python, scenes, MCP/framework work, Nexus, tests, LMStudio, config,
+frontend, deployment, and scene debugging.
+
+Use them as the fine-grained rules. Keep `copilot-instructions.md` focused on
+cross-cutting operating policy.
+
+## Agents
+
+Custom agents are in [`./agents/`](./agents/). They cover:
+- workflow orchestration
+- codebase navigation and architecture
+- bug fixing, feature building, refactoring, and review
+- scene building/debugging/auditing
+- skills, tests, benchmarks, config optimization
+- documentation and knowledge curation
+- integration testing and system architecture
+
+The Copilot workflow entry point is
+[`./agents/copilot-workflow.agent.md`](./agents/copilot-workflow.agent.md).
+Use it for multi-step tasks that need Nexus, hooks, system awareness, or
+cross-file coordination.
 
 ## Hooks
 
-### Session Logger (`hooks/session-logger/`)
-Logs session start/end and prompt submissions to `.github/hooks/logs/session.log`.
-Uses PowerShell commands compatible with Windows.
+Hooks are not incidental here; they are part of the operating model.
 
-## Environment Setup
+### Main hook pack
+[`./hooks/cosysim-hooks.json`](./hooks/cosysim-hooks.json) wires:
+- session start logging
+- `copilot_bridge` context retrieval
+- session end export
+- pre-compaction checkpoint export
+- tool usage logging
+- pre-tool safety and governance checks
+- error logging
 
-The `COPILOT_CUSTOM_INSTRUCTIONS_DIRS` user environment variable points to
-`~/.config/copilot/shared-rules/` for cross-project rules that apply to
-CosySim, Nexus, and any future projects.
+### Session logger hook pack
+[`./hooks/session-logger/hooks.json`](./hooks/session-logger/hooks.json) runs
+`engine/nexus/nexus_session_logger.py` on session start, prompt submission, and
+session end.
 
-## Maintenance
+### Hook expectations
+- Hooks should reinforce Nexus-first behavior, not replace it.
+- Agents should still store durable learnings intentionally.
+- Governance checks should be obeyed, not bypassed.
 
-- **Adding a new instruction:** Create `.instructions.md` in `instructions/`,
-  set `applyTo` glob in YAML frontmatter, update this README
-- **Adding a new agent:** Create `.agent.md` in `agents/`, set `description`
-  and `name` in YAML frontmatter, update this README
-- **Updating rules:** Edit the relevant file. CLI sessions need `/resume` to
-  reload; IDE sessions reload automatically
-- **Verification:** Use `/session` command in Copilot CLI to see active files
+## NotebookLM Lane
+
+NotebookLM is important, but not as the very first priority.
+
+Current order:
+1. restore browser-attached authentication reliability (`scripts\har_capture.py`,
+   ARGUS token harvesting, HAR recovery)
+2. restore/verify library health and notebook inventory
+3. reconnect deep research workflows
+4. distill results back into Nexus for long-term reuse
+
+Do not document NotebookLM as the main operational dependency unless the
+auth/library foundation is working.
+
+## What "Done" Looks Like for Copilot Work
+
+A Copilot-facing change is in good shape when:
+- repo docs, instructions, agents, and hooks describe the same system
+- Nexus-first behavior is explicit and practical
+- `nexus_smart_query` is presented as the preferred entry point
+- CLI bridge fallback is documented without replacing MCP-first guidance
+- histories, changelogs, memories, rules, and improvements are routed into Nexus
+- NotebookLM is framed as a deep-research lane after auth/library recovery
+- GUI ambitions are clearly sequenced after stabilization and enforcement
+
+## Maintenance Notes
+
+When you add or change:
+- **instructions** → update this README if the role of the instruction set changes
+- **agents** → keep the agent roster and responsibilities coherent
+- **hooks** → document the operational consequence here
+- **knowledge workflow** → keep `copilot-instructions.md`, the workflow agent,
+  and onboarding docs in sync
+
+After changing Copilot instructions, hooks, agents, or the Copilot operating
+docs, run:
+
+```powershell
+python -m engine.nexus.seed_copilot_rules
+python -m engine.nexus.copilot_validation --json
+```
+
+The reseed step now also removes redundant exact-title Copilot/doc mirrors from
+Nexus so the validator stays clean.
+
+## Related Documents
+
+- Repository policy: [`./copilot-instructions.md`](./copilot-instructions.md)
+- Workflow agent: [`./agents/copilot-workflow.agent.md`](./agents/copilot-workflow.agent.md)
+- Agent onboarding: [`../docs/AGENT_ONBOARDING.md`](../docs/AGENT_ONBOARDING.md)

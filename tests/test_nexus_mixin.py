@@ -194,6 +194,13 @@ class TestNexusAsk:
         with patch("engine.nexus.query_router.get_query_router", return_value=mock_router):
             answer = scene.nexus_ask("What is 6*7?")
         assert answer == "42"
+        mock_router.query.assert_called_once_with(
+            "What is 6*7?",
+            use_llm=False,
+            category=getattr(scene, "_nexus_scene_id", "scene"),
+            source_hint=f"scene:{getattr(scene, '_nexus_scene_id', 'unknown')}",
+            depth="shallow",
+        )
 
     def test_router_returns_empty_falls_back_to_client(self):
         client = _make_mock_client()
@@ -225,6 +232,26 @@ class TestNexusAsk:
         mock_router.query.return_value = mock_result
         with patch("engine.nexus.query_router.get_query_router", return_value=mock_router):
             assert scene.nexus_ask("gone?") is None
+
+    def test_deep_nexus_ask_passes_deep_to_router(self):
+        client = _make_mock_client()
+        scene = _init_scene(client)
+        mock_result = MagicMock()
+        mock_result.answer = "deep answer"
+        mock_router = MagicMock()
+        mock_router.query.return_value = mock_result
+
+        with patch("engine.nexus.query_router.get_query_router", return_value=mock_router):
+            answer = scene.nexus_ask("research this", depth="deep")
+
+        assert answer == "deep answer"
+        mock_router.query.assert_called_once_with(
+            "research this",
+            use_llm=True,
+            category=getattr(scene, "_nexus_scene_id", "scene"),
+            source_hint=f"scene:{getattr(scene, '_nexus_scene_id', 'unknown')}",
+            depth="deep",
+        )
 
     def test_returns_none_on_exception(self):
         client = _make_mock_client()

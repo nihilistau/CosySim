@@ -1,12 +1,83 @@
 # CosySim Roadmap
 
-> Current: **v0.86b** "THE RECON LAYER" ✅ | Last updated: 2026-03
+> Current: **v0.90b** "THE BASELINE" ✅ | Last updated: 2026-03
 
 ## Philosophy
 
 CosySim is a **meta-system** — a playground for designing, testing, benchmarking, and evolving AI agent interactions. Every scene is a self-contained experiment combining agents, state, game logic, and UI. The framework exists so that agents (and humans) can methodically explore what works, feed results back into the system, and continuously improve.
 
 The system's ultimate goal: **inhabit itself** — AI agents that maintain, improve, and expand CosySim autonomously, guided by Nexus knowledge, NotebookLM intelligence, and fine-tuned local models.
+
+---
+
+## Current Shipped State: v0.90b — "THE BASELINE" ✅
+
+- **v0.89b — THE LOOP** closed the ARGUS → NotebookLM → Nexus distillation loop.
+- **v0.90b — THE BASELINE** reconciled all doc surfaces, fixed stale test assertions,
+  and committed 145 files of accumulated control-plane, runtime enforcement,
+  operator cockpit, and flywheel work as one coherent baseline.
+- Current baseline: **16 scenes, 55 scheduler tasks, 9,260 tests passing
+  (9,646 total), version 0.90b**.
+
+## Current Planning Focus (2026-03)
+
+The next work should follow the already-started system-first program rather than
+the historical pre-0.87 roadmap snapshots below.
+
+The control-plane stabilization tranche is now closed enough to move on:
+- shared control-plane truth now drives launcher, hub surfaces, system control,
+  intel hub, TUI, and scene health tooling
+- the default regression gate is green after the remaining legacy hardcoded
+  control-plane URLs were removed
+- the first runtime-enforcement tranche is also closed:
+  - lounge/casino runtime failures now surface explicit degraded state
+  - Canvas push failures no longer pretend success
+  - compute-router Copilot routing no longer depends on a hardcoded username
+
+### 1. Keep the developer loop fast while foundation work continues
+- Prefer `python scripts\smart_test.py` for diff-based validation during active work.
+- Use `python scripts\smart_test.py --smoke` for quick sanity checks and
+  `python scripts\smart_test.py --domain <name>` for targeted domain runs.
+- Keep the standard repo pytest command as the tranche-closing regression gate,
+  but avoid paying the full-suite cost on every iteration.
+
+### 2. Strengthen the Nexus flywheel
+- Deepen NotebookLM, ARGUS, and Nexus ingestion/distillation now that the
+  control plane and first runtime-enforcement tranche are both closed.
+- Focus on reusable Q&A capture, scheduled refresh, and compounding retrieval.
+- Current flywheel tranche progress:
+  - history notebook ingress is aligned with the real Nexus search/category path
+  - deep query-router asks now pass depth through to the NotebookLM-backed route
+  - Q&A compounding now distills stored answers and feeds successful generated
+    pairs into the training flywheel instead of caching raw entry dumps
+  - the dedicated `copilot-system-control` notebook now feeds a recurring
+    two-pass control artifact loop that stores Nexus artifacts, creates
+    TaskScheduler tasks, and compounds the training flywheel
+- Next inside this lane:
+  - scheduled/session/news ingress tightening
+  - wider deep-query exposure on MCP-facing Nexus tool surfaces where needed
+  - flywheel observability and quality metrics
+
+### 3. Continue runtime hardening in follow-on sweeps
+- Keep removing silent-success fallbacks from remaining scene/service paths as
+  they are discovered.
+- Preserve the explicit degraded-state contract added in the current tranche.
+
+### 4. Build richer control surfaces after the foundation holds
+- The first **operator-cockpit** slice is now in place inside Intel Hub:
+  - LAN/mobile-friendly operator console
+  - Nexus-backed off-turn inbox ingestion
+  - scheduler queue visibility
+  - git + live activity visibility
+  - live Command Center passthrough hooks
+- Next in this lane:
+  - broaden from Intel Hub into a fuller cross-device control panel
+  - add notifications/ticket ergonomics and deeper command routing
+  - keep folding operator notes back into Copilot/Nexus planning automatically
+- system-control MCP rewrite
+- browser control platform
+- assistant interface platform
+- scene plugin boundaries
 
 ---
 
@@ -326,41 +397,24 @@ The system's ultimate goal: **inhabit itself** — AI agents that maintain, impr
 - **Tests: 8,830+ passing**, 52 scheduler tasks
 
 ---
-## Next: v0.87b — "THE KNOWLEDGE LAYER"
+## Completed: v0.87b — "THE KNOWLEDGE LAYER" ✅ COMPLETE
 
-### Track A — Nexus Q&A Seeding
-- [ ] Seed 50+ core Q&A pairs from project knowledge (architecture, patterns, conventions)
-- [ ] Distill Q&A from existing 500 Nexus entries via NLM conversation
-- [ ] Wire `nexus_ask()` hit-rate tracking — measure cache effectiveness over time
+- GAS SDK fully mapped with V8 heap + HAR replay evidence
+- ARGUS gold artifact analysis completed with evidence classification
+- `heap_analyzer.py` and `protocol_monitor_parser.py` shipped with test coverage
+- `scripts/nlm_qa_seeder.py` added the first dedicated NLM Q&A seeding loop
 
-### Track B — NotebookLM Grounding
-- [ ] Upload `docs/PROJECT_JOURNAL.md` as NLM source (agent onboarding + alignment)
-- [ ] Create `CosySim Architecture` notebook with key engine docs as sources
-- [ ] Scheduler task: weekly NLM distillation of new Nexus entries → Q&A cache
+## Completed: v0.88b — "THE SDK LAYER" ✅ COMPLETE
 
-### Track C — Docs Brought Current
-- [ ] `docs/INTERCEPTORS.md` — update for auto-registry, 26-module structure
-- [ ] `docs/MCP_FRAMEWORK.md` — add `@mcp_tool` decorator section
-- [ ] `docs/SYSTEM_AUDIT.md` — add v0.84b + v0.85b audit entries
-- [ ] `docs/PROJECT_HINDSIGHT.md` — migration guide for v0.83b → v0.84b patterns
+- All 5 Google service SDKs brought to 100% coverage against the ARGUS registry
+- 110+ client methods implemented across AI Studio, NLM, GAS, Gemini, and Sheets
+- HAR scanner added for recursive rpcid discovery/reporting
 
-### Track D — Training Flywheel Health Check
-- [ ] Verify `router-finetune-cycle` task is producing model checkpoints
-- [ ] Check `output_evaluator_live.jsonl` + `tool_dispatch_train.jsonl` data quality
-- [ ] Run one forced finetune cycle: `CoderPipeline.check_and_train(force=True)`
-- [ ] Store benchmark results in Nexus
+## Completed: v0.89b — "THE LOOP" ✅ COMPLETE
 
----
-## Next: v0.85b — "THE CLEAN SWEEP" (superseded by v0.85b THE MAINTENANCE LAYER)
-
-> Original v0.85b plan was architectural cleanup. Redirected to infrastructure/maintenance.
-> Remaining cleanup items moved to v0.86b+ backlog.
-
-### Backlog (deferred)
-- [ ] Migrate remaining `bare except Exception:` in `engine/mcp/tools/` to `@mcp_tool`
-- [ ] `BaseScene.export_scene()` / `import_scene()` implementations
-- [ ] Full interceptor test suite (one file per interceptor module)
-- [ ] LMStudio Pydantic request/response models (`LMSRequest`, `LMSResponse`, `SSEChunk`)
+- ARGUS discoveries now flow into NotebookLM and back into Nexus automatically
+- Weekly `argus-nlm-distil` scheduler task closes the research → distillation → reuse loop
+- History mirror fixes carried forward to keep ARGUS agent conversations durable
 
 ---
 ## Completed: v0.81b — "THE LIVING CITY" ✅ COMPLETE

@@ -441,6 +441,19 @@ class TestSceneCatalogue:
         ports = [s["port"] for s in SCENE_CATALOGUE]
         assert len(ports) == len(set(ports)), "Duplicate ports in catalogue"
 
+    def test_catalogue_uses_canonical_lounge_label(self):
+        from content.scenes.hub.hub_flask import SCENE_CATALOGUE
+
+        lounge = next(scene for scene in SCENE_CATALOGUE if scene["id"] == "lounge")
+        assert lounge["label"] == "THE VELVET PIT"
+
+    def test_catalogue_includes_grid_and_system_control(self):
+        from content.scenes.hub.hub_flask import SCENE_CATALOGUE
+
+        ids = {scene["id"] for scene in SCENE_CATALOGUE}
+        assert "grid" in ids
+        assert "system_control" in ids
+
 
 # ═══════════════════════════════════════════════════════════════
 #  _port_open helper

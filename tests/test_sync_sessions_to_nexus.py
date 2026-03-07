@@ -16,6 +16,7 @@ from engine.nexus.sync_sessions_to_nexus import (
     _get_session_detail,
     _get_sessions,
     _load_state,
+    _post_nexus,
     _save_state,
     _session_hash,
     run_session_sync,
@@ -308,6 +309,30 @@ class TestStateHelpers:
             _save_state({"synced": {"abc": {"hash": "xyz123"}}})
             loaded = _load_state()
         assert loaded["synced"]["abc"]["hash"] == "xyz123"
+
+
+class TestPostNexus:
+    def test_posts_entries_through_client(self) -> None:
+        client = MagicMock()
+        client.add_entry.return_value = "entry-42"
+
+        with patch(
+            "engine.nexus.client.get_nexus_client",
+            return_value=client,
+        ):
+            result = _post_nexus(
+                "/entries",
+                {
+                    "title": "Session abc",
+                    "content": "Content",
+                    "content_type": "history",
+                    "category": "copilot-history",
+                    "tags": ["copilot"],
+                },
+            )
+
+        assert result == {"id": "entry-42"}
+        client.add_entry.assert_called_once()
 
 
 # ──── sync_session ────────────────────────────────────────────────────────────
