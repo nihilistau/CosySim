@@ -11,6 +11,7 @@ from engine.nexus.task_scheduler import (
     TaskPriority,
     TaskScheduler,
     TaskStatus,
+    get_task_scheduler,
 )
 
 
@@ -323,6 +324,19 @@ def test_get_queue_status(scheduler):
     assert status["completed"] == 1
 
 
+def test_get_pending_tasks_respects_limit(scheduler):
+    """get_pending_tasks returns the requested number of tasks."""
+    scheduler.create_task(title="Low", priority=TaskPriority.LOW)
+    scheduler.create_task(title="Critical", priority=TaskPriority.CRITICAL)
+    scheduler.create_task(title="Medium", priority=TaskPriority.MEDIUM)
+
+    pending = scheduler.get_pending_tasks(limit=2)
+
+    assert len(pending) == 2
+    assert pending[0].title == "Critical"
+    assert pending[1].title == "Medium"
+
+
 # ── TaskScheduler.load_from_nexus ───────────────────────────────────────
 
 @patch("engine.nexus.task_scheduler.requests.get")
@@ -353,6 +367,20 @@ def test_load_from_nexus_handles_failure(mock_get, scheduler):
 
     count = scheduler.load_from_nexus()
     assert count == 0
+
+
+def test_get_task_scheduler_preloads_from_nexus_once():
+    """Singleton creation preloads persisted tasks from Nexus."""
+    import engine.nexus.task_scheduler as mod
+
+    mod._scheduler = None
+    try:
+        with patch.object(TaskScheduler, "load_from_nexus", return_value=3) as mock_load:
+            scheduler = get_task_scheduler()
+        assert isinstance(scheduler, TaskScheduler)
+        mock_load.assert_called_once_with()
+    finally:
+        mod._scheduler = None
 
 
 # ── Enums ───────────────────────────────────────────────────────────────

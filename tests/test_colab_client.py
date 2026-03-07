@@ -47,11 +47,21 @@ def sample_har_data() -> Dict[str, Any]:
                                 "SAPISID=test_sapisid; "
                                 "__Secure-1PAPISID=test_1papisid; "
                                 "__Secure-3PAPISID=test_3papisid; "
+                                "OSID=test_osid; "
+                                "__Secure-OSID=test_secure_osid; "
+                                "__Secure-BUCKET=test_bucket; "
                                 "SIDCC=test_sidcc; "
                                 "__Secure-1PSIDCC=test_1psidcc; "
                                 "__Secure-3PSIDCC=test_3psidcc; "
+                                "__Secure-1PSIDTS=test_1psidts; "
+                                "__Secure-1PSIDRTS=test_1psidrts; "
+                                "__Secure-3PSIDTS=test_3psidts; "
+                                "__Secure-3PSIDRTS=test_3psidrts; "
                                 "AEC=test_aec; "
-                                "NID=test_nid"
+                                "NID=test_nid; "
+                                "LSID=test_lsid; "
+                                "CONSENT=test_consent; "
+                                "SEARCH_SAMESITE=test_search_samesite"
                             )},
                         ],
                         "cookies": [
@@ -64,11 +74,21 @@ def sample_har_data() -> Dict[str, Any]:
                             {"name": "SAPISID", "value": "test_sapisid"},
                             {"name": "__Secure-1PAPISID", "value": "test_1papisid"},
                             {"name": "__Secure-3PAPISID", "value": "test_3papisid"},
+                            {"name": "OSID", "value": "test_osid"},
+                            {"name": "__Secure-OSID", "value": "test_secure_osid"},
+                            {"name": "__Secure-BUCKET", "value": "test_bucket"},
                             {"name": "SIDCC", "value": "test_sidcc"},
                             {"name": "__Secure-1PSIDCC", "value": "test_1psidcc"},
                             {"name": "__Secure-3PSIDCC", "value": "test_3psidcc"},
+                            {"name": "__Secure-1PSIDTS", "value": "test_1psidts"},
+                            {"name": "__Secure-1PSIDRTS", "value": "test_1psidrts"},
+                            {"name": "__Secure-3PSIDTS", "value": "test_3psidts"},
+                            {"name": "__Secure-3PSIDRTS", "value": "test_3psidrts"},
                             {"name": "AEC", "value": "test_aec"},
                             {"name": "NID", "value": "test_nid"},
+                            {"name": "LSID", "value": "test_lsid"},
+                            {"name": "CONSENT", "value": "test_consent"},
+                            {"name": "SEARCH_SAMESITE", "value": "test_search_samesite"},
                         ],
                         "postData": {
                             "mimeType": "application/x-www-form-urlencoded",
@@ -78,14 +98,34 @@ def sample_har_data() -> Dict[str, Any]:
                         "headersSize": -1,
                         "bodySize": 100,
                     },
-                    "response": {
-                        "status": 200,
-                        "content": {"text": "[]", "mimeType": "application/json"},
+                        "response": {
+                            "status": 200,
+                            "content": {"text": "[]", "mimeType": "application/json"},
+                        },
                     },
-                }
-            ]
+                    {
+                        "request": {
+                            "method": "POST",
+                            "url": (
+                                "https://notebooklm.google.com/_/LabsTailwindUi/data/batchexecute"
+                                "?rpcids=wXbhsf&source-path=%2Fnotebook%2Fnb-uuid-123"
+                                "&f.sid=-12345&bl=boq_labs-tailwind-frontend_20260305.05_p0"
+                            ),
+                            "headers": [],
+                            "cookies": [],
+                            "postData": {
+                                "mimeType": "application/x-www-form-urlencoded",
+                                "text": "f.req=%5B%5D&at=test_at_token",
+                            },
+                        },
+                        "response": {
+                            "status": 200,
+                            "content": {"text": "[]", "mimeType": "application/json"},
+                        },
+                    }
+                ]
+            }
         }
-    }
 
 
 @pytest.fixture
@@ -121,7 +161,7 @@ def pool_with_account(tmp_path):
 
 class TestHARExtractor:
     def test_har_extractor_reads_cookies(self, har_file):
-        """HARExtractor.extract_cookies returns all 14 canonical cookies."""
+        """HARExtractor.extract_cookies returns all canonical Google auth cookies."""
         from engine.integrations.har_extractor import HARExtractor, COOKIE_NAMES
 
         extractor = HARExtractor(har_file)
@@ -158,7 +198,9 @@ class TestHARExtractor:
         assert result["name"] == "myaccount"
         assert result["authuser"] == 0
         assert result["at_token"] == "test_at_token"
-        assert len(result["cookies"]) >= 14
+        assert result["nlm_session"]["bl"] == "boq_labs-tailwind-frontend_20260305.05_p0"
+        assert result["nlm_session"]["f_sid"] == "-12345"
+        assert len(result["cookies"]) >= 24
 
     def test_har_extractor_missing_cookies_returns_empty(self, tmp_path):
         """HARExtractor returns empty dict when no cookies found."""
@@ -189,6 +231,38 @@ class TestHARExtractor:
         cookies = extractor.extract_cookies("google.com")
         assert cookies == {}
 
+    def test_har_extractor_detects_service_bundles(self, har_file):
+        """HARExtractor surfaces service-aware bundle metadata."""
+        from engine.integrations.har_extractor import HARExtractor
+
+        extractor = HARExtractor(har_file)
+        bundles = extractor.extract_service_bundles()
+
+        assert "colab" in bundles
+        assert "notebooklm" in bundles
+        assert bundles["notebooklm"]["session"]["bl"] == "boq_labs-tailwind-frontend_20260305.05_p0"
+        assert "batchexecute" in bundles["notebooklm"]["protocols"]
+        assert bundles["colab"]["cookie_count"] >= 24
+
+
+class TestGoogleServiceProfiles:
+    def test_normalize_google_service_aliases(self):
+        """Historical aliases normalize to canonical Google service names."""
+        from engine.integrations.google_service_profiles import normalize_google_services
+
+        assert normalize_google_services(["nlm", "google_drive", "gemini", "nlm"]) == [
+            "notebooklm",
+            "drive",
+            "aistudio",
+        ]
+
+    def test_detect_google_services_from_har_urls(self, har_file):
+        """Registered Google services are detected from HAR request URLs."""
+        from engine.integrations.har_extractor import HARExtractor
+
+        extractor = HARExtractor(har_file)
+        assert extractor.detect_services() == ["notebooklm", "colab"]
+
 
 # ──── GoogleAccountPool tests ─────────────────────────────────────────────────
 
@@ -204,6 +278,42 @@ class TestGoogleAccountPool:
         assert account.authuser == 0
         assert "colab" in account.services
         assert account.cookies.get("SID") == "test_sid"
+
+    def test_account_pool_import_from_har_normalizes_service_and_persists_nlm_meta(self, har_file, tmp_path):
+        """NotebookLM imports normalize aliases and persist session metadata."""
+        from engine.integrations.google_account_pool import GoogleAccountPool
+
+        pool_path = tmp_path / "pool.json"
+        pool = GoogleAccountPool(pool_path=str(pool_path))
+        account = pool.import_from_har(har_file, "testaccount", "nlm")
+
+        assert "notebooklm" in account.services
+        assert account.at_token == "test_at_token"
+        assert account.nlm_session["bl"] == "boq_labs-tailwind-frontend_20260305.05_p0"
+        assert account.service_sessions["notebooklm"]["f_sid"] == "-12345"
+
+        meta_path = tmp_path / "nlm_meta.json"
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        assert meta["bl"] == "boq_labs-tailwind-frontend_20260305.05_p0"
+        assert meta["f_sid"] == "-12345"
+
+        cookies_path = tmp_path / "nlm_cookies.json"
+        exported_cookies = json.loads(cookies_path.read_text(encoding="utf-8"))
+        assert exported_cookies["SAPISID"] == "test_sapisid"
+        assert exported_cookies["OSID"] == "test_osid"
+
+    def test_account_pool_list_accounts_surfaces_service_profiles(self, har_file, tmp_path):
+        """Account summaries expose service profile metadata for Nexus/UI surfaces."""
+        from engine.integrations.google_account_pool import GoogleAccountPool
+
+        pool = GoogleAccountPool(pool_path=str(tmp_path / "pool.json"))
+        pool.import_from_har(har_file, "testaccount")
+
+        accounts = pool.list_accounts()
+        assert len(accounts) == 1
+        assert "notebooklm" in accounts[0]["service_profiles"]
+        assert accounts[0]["service_profiles"]["notebooklm"]["has_session"] is True
+        assert "colab" in accounts[0]["detected_services"]
 
     def test_account_pool_rotation(self, tmp_path):
         """get_account rotates round-robin across eligible accounts."""
@@ -717,4 +827,3 @@ class TestColabSkills:
             result = nlm_direct_ask("nb-id", "src-1", "question?")
 
         assert "No NotebookLM account" in result
-

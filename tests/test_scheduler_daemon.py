@@ -308,12 +308,12 @@ class TestBuiltinTasks:
     """Tests for the builtin scheduler tasks."""
 
     def test_builtin_task_count(self) -> None:
-        """Scheduler daemon registers exactly 37 builtin tasks."""
+        """Scheduler daemon registers the full builtin task catalog."""
         from engine.nexus.scheduler_daemon import _register_builtin_tasks
 
         daemon = MagicMock()
         _register_builtin_tasks(daemon)
-        assert daemon.register.call_count == 53
+        assert daemon.register.call_count == 55
 
     def test_doc_sync_task_registered(self) -> None:
         from engine.nexus.scheduler_daemon import _register_builtin_tasks
@@ -322,6 +322,54 @@ class TestBuiltinTasks:
         _register_builtin_tasks(daemon)
         task_ids = [call.args[0] for call in daemon.register.call_args_list]
         assert "doc-sync" in task_ids
+
+    def test_operator_inbox_sync_task_registered(self) -> None:
+        from engine.nexus.scheduler_daemon import _register_builtin_tasks
+
+        daemon = MagicMock()
+        _register_builtin_tasks(daemon)
+        task_ids = [call.args[0] for call in daemon.register.call_args_list]
+        assert "operator-inbox-sync" in task_ids
+
+    def test_control_notebook_flywheel_task_registered(self) -> None:
+        from engine.nexus.scheduler_daemon import _register_builtin_tasks
+
+        daemon = MagicMock()
+        _register_builtin_tasks(daemon)
+        task_ids = [call.args[0] for call in daemon.register.call_args_list]
+        assert "control-notebook-flywheel" in task_ids
+
+    def test_control_notebook_flywheel_callback_runs_followup(self) -> None:
+        from engine.nexus.scheduler_daemon import _control_notebook_flywheel_callback
+
+        with patch(
+            "engine.nexus.notebooklm_flywheel.run_control_notebook_flywheel",
+            return_value={"status": "ok", "tasks_created": 2},
+        ) as mock_run:
+            result = _control_notebook_flywheel_callback()
+
+        assert result["status"] == "ok"
+        assert result["tasks_created"] == 2
+        mock_run.assert_called_once_with(reason="scheduler")
+
+    def test_operator_inbox_sync_callback_processes_pending_items(self) -> None:
+        from engine.nexus.scheduler_daemon import _operator_inbox_sync_callback
+
+        inbox = MagicMock()
+        inbox.process_items.return_value = {"ok": True, "processed": 2, "created_tasks": 2}
+        config = MagicMock()
+        config.get.side_effect = lambda key, default=None: {
+            "nexus.operator_inbox.plan_digest_limit": 4,
+        }.get(key, default)
+
+        with (
+            patch("engine.config.get_config", return_value=config),
+            patch("engine.nexus.operator_inbox.get_operator_inbox", return_value=inbox),
+        ):
+            result = _operator_inbox_sync_callback()
+
+        inbox.process_items.assert_called_once_with(limit=4)
+        assert result["processed"] == 2
 
     def test_doc_sync_callback_runs_without_crash(self, tmp_path: Path) -> None:
         """_doc_sync_callback handles subprocess errors gracefully."""

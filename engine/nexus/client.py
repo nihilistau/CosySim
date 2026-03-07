@@ -32,6 +32,44 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_URL = "http://localhost:8700"
 
+
+def _resolve_governance_actor(agent_id: str = "", created_by: str = "") -> str:
+    """Resolve the effective actor used for client-side governance checks."""
+    if agent_id:
+        return agent_id
+
+    created_by_normalized = (created_by or "").strip().lower()
+    trusted_prefixes = (
+        "copilot",
+        "nexus",
+        "session",
+        "research",
+        "content",
+        "workflow",
+        "benchmark",
+        "api",
+        "system",
+    )
+    trusted_suffixes = (
+        "_workflow",
+        "_sync",
+        "_logger",
+        "_bridge",
+        "_pipeline",
+        "_distiller",
+        "_generator",
+    )
+
+    if not created_by_normalized:
+        return "copilot"
+    if created_by_normalized == "cosysim":
+        return "copilot"
+    if created_by_normalized.startswith(trusted_prefixes):
+        return "copilot"
+    if created_by_normalized.endswith(trusted_suffixes):
+        return "copilot"
+    return created_by_normalized
+
 class NexusClient:
     """HTTP client for Nexus REST API with retry and caching."""
     
@@ -101,6 +139,91 @@ class NexusClient:
                 tags=_parse_tags(d.get("tags", [])),
             )
 
+    def _check_governance(
+        self,
+        operation: str,
+        agent_id: str = "",
+        created_by: str = "",
+    ) -> str:
+        """Resolve actor identity and enforce mutation permissions."""
+        from engine.nexus.governance_rules import get_governance_manager
+
+        actor = _resolve_governance_actor(agent_id=agent_id, created_by=created_by)
+        mgr = get_governance_manager()
+        if not mgr.check_permissions(actor, operation):
+            logger.warning(
+                "Governance denied Nexus %s for actor '%s'",
+                operation,
+                actor,
+            )
+            raise PermissionError(f"Agent '{actor}' is not permitted to perform '{operation}'")
+        return actor
+
+    def _normalize_entry_payload(
+        self,
+        title: str,
+        content: str,
+        content_type: str,
+        category: str,
+        tags: list | None,
+        created_by: str,
+        namespace: str = "",
+    ) -> dict:
+        """Normalize a knowledge-entry payload through namespace governance."""
+        from engine.nexus.models import NexusEntryCreate
+        from engine.nexus.nexus_namespaces import enforce_namespace
+
+        normalized = enforce_namespace(
+            title=title,
+            content=content,
+            content_type=content_type,
+            category=category,
+            tags=tags or [],
+            namespace=namespace or None,
+        )
+        if normalized.get("errors"):
+            logger.warning(
+                "Nexus entry governance rejected '%s': %s",
+                title[:80],
+                "; ".join(normalized["errors"]),
+            )
+            raise ValueError("; ".join(normalized["errors"]))
+        for warning in normalized.get("warnings", []):
+            logger.debug("Nexus entry governance advisory: %s", warning)
+
+        validated = NexusEntryCreate(
+            title=normalized["title"],
+            content=normalized["content"],
+            content_type=normalized["content_type"],
+            category=normalized["category"],
+            tags=normalized["tags"],
+            created_by=created_by,
+        )
+        return validated.model_dump()
+
+    def _normalize_namespace_tags(
+        self,
+        category: str,
+        tags: list | None,
+        namespace: str = "",
+    ) -> list:
+        """Normalize namespace tags for non-entry payloads."""
+        from engine.nexus.nexus_namespaces import normalize_namespace_tags
+
+        normalized = normalize_namespace_tags(
+            category=category,
+            tags=tags or [],
+            namespace=namespace or None,
+        )
+        if normalized.get("errors"):
+            logger.warning(
+                "Nexus namespace normalization rejected category '%s': %s",
+                category,
+                "; ".join(normalized["errors"]),
+            )
+            raise ValueError("; ".join(normalized["errors"]))
+        return normalized["tags"]
+
     @staticmethod
     def _parse_rule(d: dict) -> NexusRule:
         from engine.nexus.models import NexusRule
@@ -142,17 +265,23 @@ class NexusClient:
     
     def add_entry(self, title: str, content: str, content_type: str = "note",
                   category: str = "", tags: list = None,
-                  created_by: str = "cosysim", **kwargs) -> Optional[str]:
-        from engine.nexus.models import NexusEntryCreate
+                  created_by: str = "cosysim", agent_id: str = "",
+                  namespace: str = "", **kwargs) -> Optional[str]:
         try:
-            validated = NexusEntryCreate(
-                title=title, content=content, content_type=content_type,
-                category=category, tags=tags or [], created_by=created_by,
+            self._check_governance("write", agent_id=agent_id, created_by=created_by)
+            payload = self._normalize_entry_payload(
+                title=title,
+                content=content,
+                content_type=content_type,
+                category=category,
+                tags=tags,
+                created_by=created_by,
+                namespace=namespace,
             )
         except Exception as exc:
             logger.warning("NexusEntryCreate validation failed: %s", exc)
             return None
-        result = self._post("/api/entries", validated.model_dump())
+        result = self._post("/api/entries", payload)
         return result.get("data", {}).get("id") if result.get("ok") else None
     
     def get_entry(self, entry_id: str) -> Optional[NexusEntry]:
@@ -160,11 +289,50 @@ class NexusClient:
         data = result.get("data") if result.get("ok") else None
         return self._parse_entry(data) if data else None
     
-    def update_entry(self, entry_id: str, **fields) -> bool:
+    def update_entry(self, entry_id: str, agent_id: str = "", namespace: str = "", **fields) -> bool:
+        try:
+            current = self.get_entry(entry_id)
+            created_by = fields.get(
+                "created_by",
+                current.get("created_by", "") if current else "",
+            )
+            self._check_governance("write", agent_id=agent_id, created_by=created_by)
+
+            relevant = {"title", "content", "content_type", "category", "tags"}
+            if namespace or any(key in fields for key in relevant):
+                current_payload = current or {}
+                normalized = self._normalize_entry_payload(
+                    title=fields.get("title", current_payload.get("title", "")),
+                    content=fields.get("content", current_payload.get("content", "")),
+                    content_type=fields.get("content_type", current_payload.get("content_type", "note")),
+                    category=fields.get("category", current_payload.get("category", "")),
+                    tags=fields.get("tags", current_payload.get("tags", [])),
+                    created_by=created_by or current_payload.get("created_by", "cosysim"),
+                    namespace=namespace,
+                )
+                if "title" in fields:
+                    fields["title"] = normalized["title"]
+                if "content" in fields:
+                    fields["content"] = normalized["content"]
+                if "content_type" in fields:
+                    fields["content_type"] = normalized["content_type"]
+                if "category" in fields:
+                    fields["category"] = normalized["category"]
+                fields["tags"] = normalized["tags"]
+        except Exception as exc:
+            logger.warning("Nexus update_entry governance failed: %s", exc)
+            return False
         result = self._put(f"/api/entries/{entry_id}", fields)
         return result.get("ok", False)
     
-    def delete_entry(self, entry_id: str) -> bool:
+    def delete_entry(self, entry_id: str, agent_id: str = "") -> bool:
+        try:
+            current = self.get_entry(entry_id)
+            created_by = current.get("created_by", "") if current else ""
+            self._check_governance("delete", agent_id=agent_id, created_by=created_by)
+        except Exception as exc:
+            logger.warning("Nexus delete_entry governance failed: %s", exc)
+            return False
         result = self._delete(f"/api/entries/{entry_id}")
         return result.get("ok", False)
     
@@ -207,6 +375,11 @@ class NexusClient:
                     repo: str = "", branch: str = "",
                     agent_id: str = "copilot", **kwargs) -> Optional[str]:
         """Create a new session record in Nexus. Returns session ID."""
+        try:
+            self._check_governance("write", agent_id=agent_id, created_by=agent_id)
+        except Exception as exc:
+            logger.warning("Nexus log_session governance failed: %s", exc)
+            return None
         payload = {
             "project": project, "repo": repo,
             "branch": branch, "agent_id": agent_id,
@@ -216,8 +389,13 @@ class NexusClient:
         result = self._post("/api/sessions", payload)
         return result.get("data", {}).get("id") if result.get("ok") else None
 
-    def update_session(self, session_id: str, **fields) -> bool:
+    def update_session(self, session_id: str, agent_id: str = "copilot", **fields) -> bool:
         """Update session (summary, commits, files_changed, status, etc.)."""
+        try:
+            self._check_governance("write", agent_id=agent_id, created_by=agent_id)
+        except Exception as exc:
+            logger.warning("Nexus update_session governance failed: %s", exc)
+            return False
         result = self._put(f"/api/sessions/{session_id}", fields)
         return result.get("ok", False)
 
@@ -247,8 +425,14 @@ class NexusClient:
 
     def add_rule(self, scope: str, rule_type: str, name: str,
                  condition: dict = None, action: dict = None,
-                 priority: int = 50, active: bool = True) -> Optional[str]:
+                 priority: int = 50, active: bool = True,
+                 agent_id: str = "copilot") -> Optional[str]:
         """Create a new rule. Returns rule ID."""
+        try:
+            self._check_governance("admin", agent_id=agent_id, created_by=agent_id)
+        except Exception as exc:
+            logger.warning("Nexus add_rule governance failed: %s", exc)
+            return None
         result = self._post("/api/rules", {
             "scope": scope, "rule_type": rule_type, "name": name,
             "condition": condition or {}, "action": action or {},
@@ -276,9 +460,30 @@ class NexusClient:
 
     # ─── Batch Operations ─────────────────────────────────────
 
-    def batch_add(self, entries: List[Dict]) -> List[str]:
+    def batch_add(self, entries: List[Dict], agent_id: str = "copilot") -> List[str]:
         """Add multiple entries in one request. Returns list of IDs."""
-        result = self._post("/api/batch", {"entries": entries})
+        normalized_entries: List[Dict[str, Any]] = []
+        for entry in entries:
+            created_by = entry.get("created_by", "cosysim")
+            effective_agent = entry.get("agent_id", agent_id)
+            try:
+                self._check_governance("write", agent_id=effective_agent, created_by=created_by)
+                normalized_entries.append(
+                    self._normalize_entry_payload(
+                        title=entry.get("title", ""),
+                        content=entry.get("content", ""),
+                        content_type=entry.get("content_type", "note"),
+                        category=entry.get("category", ""),
+                        tags=entry.get("tags", []),
+                        created_by=created_by,
+                        namespace=entry.get("namespace", ""),
+                    )
+                )
+            except Exception as exc:
+                logger.warning("Skipping batch Nexus entry due to governance failure: %s", exc)
+        if not normalized_entries:
+            return []
+        result = self._post("/api/batch", {"entries": normalized_entries})
         if result.get("ok"):
             return result.get("data", {}).get("ids", [])
         return []
@@ -361,11 +566,22 @@ class NexusClient:
 
     def add_qa(self, question: str, answer: str,
                category: str = "", tags: list = None,
-               quality_score: float = 0.5) -> Optional[str]:
+               quality_score: float = 0.5, agent_id: str = "",
+               namespace: str = "") -> Optional[str]:
         """Store a Q&A pair."""
+        try:
+            self._check_governance("write", agent_id=agent_id, created_by=agent_id)
+            normalized_tags = self._normalize_namespace_tags(
+                category=category,
+                tags=tags,
+                namespace=namespace,
+            )
+        except Exception as exc:
+            logger.warning("Nexus add_qa governance failed: %s", exc)
+            return None
         result = self._post("/api/qa", {
             "question": question, "answer": answer,
-            "category": category, "tags": tags or [],
+            "category": category, "tags": normalized_tags,
             "quality_score": quality_score,
         })
         return result.get("data", {}).get("id") if result.get("ok") else None

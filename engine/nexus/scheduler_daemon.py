@@ -554,6 +554,25 @@ def _news_fetch_callback() -> Dict[str, Any]:
     }
 
 
+def _operator_inbox_sync_callback() -> Dict[str, Any]:
+    """Promote pending operator inbox items into tasks and plan digests."""
+    try:
+        from engine.config import get_config
+        from engine.nexus.operator_inbox import get_operator_inbox
+
+        cfg = get_config()
+        limit = int(cfg.get("nexus.operator_inbox.plan_digest_limit", 10))
+        return get_operator_inbox().process_items(limit=limit)
+    except Exception as exc:
+        logger.warning("Operator inbox sync failed: %s", exc)
+        return {
+            "ok": False,
+            "processed": 0,
+            "created_tasks": 0,
+            "errors": [str(exc)],
+        }
+
+
 def _test_monitor_callback() -> Dict[str, Any]:
     """Run test suite and auto-generate bug-fix tasks from failures."""
     import subprocess
@@ -847,6 +866,17 @@ def _notebook_bootstrap_callback() -> Dict[str, Any]:
         return {"error": str(exc)}
 
 
+def _control_notebook_flywheel_callback() -> Dict[str, Any]:
+    """Recurring control-notebook distillation into Nexus artifacts and agent tasks."""
+    try:
+        from engine.nexus.notebooklm_flywheel import run_control_notebook_flywheel
+
+        return run_control_notebook_flywheel(reason="scheduler")
+    except Exception as exc:
+        logger.error("Control notebook flywheel failed: %s", exc)
+        return {"error": str(exc)}
+
+
 def _session_distillation_callback() -> Dict[str, Any]:
     """Daily distillation of Copilot session history into NLM Q&A pairs."""
     try:
@@ -889,6 +919,16 @@ def _copilot_self_sync_callback() -> Dict[str, Any]:
 
 def _register_builtin_tasks(daemon: "SchedulerDaemon") -> None:
     """Register all built-in autonomous tasks."""
+    try:
+        from engine.config import get_config
+
+        operator_inbox_schedule = get_config().get(
+            "nexus.operator_inbox.auto_sync_schedule",
+            "every_15m",
+        )
+    except Exception:
+        operator_inbox_schedule = "every_15m"
+
     daemon.register(
         "nexus-maintenance",
         "Nexus Health Report",
@@ -986,6 +1026,12 @@ def _register_builtin_tasks(daemon: "SchedulerDaemon") -> None:
         _notebook_bootstrap_callback,
     )
     daemon.register(
+        "control-notebook-flywheel",
+        "Control Notebook Flywheel — distill the control notebook into Nexus artifacts, tasks, and training examples",
+        "every_8h",
+        _control_notebook_flywheel_callback,
+    )
+    daemon.register(
         "session-distillation",
         "Copilot Session Distillation",
         "daily",
@@ -1002,6 +1048,12 @@ def _register_builtin_tasks(daemon: "SchedulerDaemon") -> None:
         "Copilot Config Sync to Nexus",
         "weekly",
         _copilot_self_sync_callback,
+    )
+    daemon.register(
+        "operator-inbox-sync",
+        "Operator Inbox Sync",
+        operator_inbox_schedule,
+        _operator_inbox_sync_callback,
     )
     daemon.register(
         "master-notebook-refresh",

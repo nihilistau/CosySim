@@ -446,7 +446,168 @@
         <div class="feed-placeholder">Scanning city frequencies…</div>
       </div>
     </section>
+
+    <!-- ──── OPERATOR CONSOLE ──── -->
+    <section class="intel-panel intel-panel--operator intel-panel--full" id="panel-operator-console" aria-label="Operator Console">
+      <div class="panel-header">
+        <span class="panel-badge">⌘</span>
+        <span class="panel-title">OPERATOR CONSOLE</span>
+        <span class="panel-badge" id="operator-status-badge">SYNCING</span>
+        <button class="panel-refresh-btn" id="operator-refresh-btn" title="Refresh operator console" aria-label="Refresh operator console">↻</button>
+      </div>
+      <div class="panel-body operator-console">
+        <div class="operator-summary-grid" id="operator-summary-grid">
+          <div class="operator-summary-card">
+            <span class="operator-summary-label">Pending Notes</span>
+            <span class="operator-summary-value" id="operator-summary-pending">—</span>
+          </div>
+          <div class="operator-summary-card">
+            <span class="operator-summary-label">Queued Tasks</span>
+            <span class="operator-summary-value" id="operator-summary-queued">—</span>
+          </div>
+          <div class="operator-summary-card">
+            <span class="operator-summary-label">Active Work</span>
+            <span class="operator-summary-value" id="operator-summary-active">—</span>
+          </div>
+          <div class="operator-summary-card">
+            <span class="operator-summary-label">Git Branch</span>
+            <span class="operator-summary-value operator-summary-value--mono" id="operator-summary-branch">—</span>
+          </div>
+        </div>
+
+        <div class="operator-grid">
+          <section class="operator-subpanel" aria-label="Submit operator note">
+            <div class="operator-subpanel__header">
+              <span>Submit to Nexus + Queue</span>
+              <span class="operator-subpanel__meta" id="operator-submit-hint">queue-only by default</span>
+            </div>
+            <form class="operator-form" id="operator-form">
+              <div class="operator-form__row">
+                <label class="operator-field">
+                  <span>Title</span>
+                  <input type="text" id="operator-title" maxlength="160" placeholder="Short request or note" required>
+                </label>
+                <label class="operator-field">
+                  <span>Type</span>
+                  <select id="operator-item-type">
+                    <option value="note">Note</option>
+                    <option value="direction">Direction</option>
+                    <option value="question">Question</option>
+                    <option value="feature">Feature</option>
+                    <option value="bug">Bug</option>
+                  </select>
+                </label>
+              </div>
+              <div class="operator-form__row">
+                <label class="operator-field">
+                  <span>Priority</span>
+                  <select id="operator-priority">
+                    <option value="40">Low</option>
+                    <option value="60" selected>Normal</option>
+                    <option value="80">High</option>
+                    <option value="95">Critical</option>
+                  </select>
+                </label>
+                <label class="operator-field">
+                  <span>Dispatch</span>
+                  <select id="operator-dispatch-mode">
+                    <option value="queue">Queue only</option>
+                    <option value="narrative">Live narrative</option>
+                    <option value="directive">Live directive</option>
+                    <option value="broadcast">Live broadcast</option>
+                  </select>
+                </label>
+              </div>
+              <div class="operator-form__row">
+                <label class="operator-field">
+                  <span>Target scene</span>
+                  <select id="operator-scene-id">
+                    <option value="">Select target scene</option>
+                  </select>
+                </label>
+                <label class="operator-field">
+                  <span>Character (directive only)</span>
+                  <input type="text" id="operator-character-id" placeholder="aria / lola / viktor">
+                </label>
+              </div>
+              <div class="operator-form__row">
+                <label class="operator-field">
+                  <span>Author</span>
+                  <input type="text" id="operator-author" value="operator" maxlength="60">
+                </label>
+                <label class="operator-field">
+                  <span>Tags</span>
+                  <input type="text" id="operator-tags" placeholder="comma,separated,tags">
+                </label>
+              </div>
+              <label class="operator-field operator-field--full">
+                <span>Content</span>
+                <textarea id="operator-content" rows="7" placeholder="Feature request, direction, bug note, vague idea, or exact instruction." required></textarea>
+              </label>
+              <div class="operator-form__actions">
+                <label class="operator-toggle">
+                  <input type="checkbox" id="operator-create-task" checked>
+                  <span>Create scheduler task</span>
+                </label>
+                <label class="operator-toggle">
+                  <input type="number" id="operator-turns" min="1" max="6" value="1">
+                  <span>Directive turns</span>
+                </label>
+                <button type="submit" class="intel-btn">SUBMIT</button>
+              </div>
+            </form>
+          </section>
+
+          <section class="operator-subpanel" aria-label="Operator inbox and queue">
+            <div class="operator-subpanel__header">
+              <span>Inbox & Queue</span>
+              <div class="operator-actions-inline">
+                <button class="intel-btn intel-btn--sm" id="operator-process-btn" type="button">PROCESS PENDING</button>
+              </div>
+            </div>
+            <div class="operator-split">
+              <div class="operator-split__column">
+                <div class="operator-list-header">
+                  <span>Inbox</span>
+                  <span class="operator-list-meta" id="operator-inbox-meta">—</span>
+                </div>
+                <div class="operator-list" id="operator-inbox-list">
+                  <div class="feed-placeholder">Loading inbox…</div>
+                </div>
+              </div>
+              <div class="operator-split__column">
+                <div class="operator-list-header">
+                  <span>Task Queue</span>
+                  <span class="operator-list-meta" id="operator-queue-meta">—</span>
+                </div>
+                <div class="operator-list" id="operator-queue-list">
+                  <div class="feed-placeholder">Loading queue…</div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="operator-subpanel" aria-label="Git and live activity">
+            <div class="operator-subpanel__header">
+              <span>Git & Activity</span>
+              <span class="operator-subpanel__meta" id="operator-git-dirty">—</span>
+            </div>
+            <div class="operator-detail-card" id="operator-git-card">
+              <div class="feed-placeholder">Loading git summary…</div>
+            </div>
+            <div class="operator-list-header">
+              <span>Current Work</span>
+              <span class="operator-list-meta" id="operator-activity-meta">—</span>
+            </div>
+            <div class="operator-list operator-list--activity" id="operator-activity-list">
+              <div class="feed-placeholder">Loading activity…</div>
+            </div>
+          </section>
+        </div>
+      </div>
+    </section>
   </main><!-- /intel-layout -->
+  <div class="operator-toast" id="operator-toast" hidden></div>
   <!-- Mission Control auto-refresh -->
   <script>
     (function() {

@@ -386,12 +386,12 @@ def lounge_heat_tick(
         eng = _get_rules_engine()
 
         # Read current heat
-        scene_state = ssm.get_character_state(scene_id) if hasattr(ssm, "get_character_state") else {}
+        scene_state = ssm.get_scene_state(scene_id) if hasattr(ssm, "get_scene_state") else {}
         current = int((scene_state or {}).get("heat_level", 0))
         new_heat = max(0, min(100, current + delta))
 
         # Persist
-        ssm.update_stats(scene_id, heat_level=new_heat)
+        ssm.set_scene_state(scene_id, heat_level=new_heat)
 
         fired = []
         if new_heat >= 85:

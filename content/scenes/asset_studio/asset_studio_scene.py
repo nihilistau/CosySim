@@ -18,6 +18,7 @@ from flask import Flask, jsonify, render_template, request, send_from_directory
 from flask_cors import CORS
 from flask_socketio import SocketIO
 
+from engine.port_registry import build_scene_listing, get_port
 from engine.scenes.base_scene import BaseScene
 from engine.scenes.nexus_mixin import NexusSceneMixin
 from engine.mcp.framework import MCPSceneMixin, get_framework
@@ -26,7 +27,7 @@ from content.shared import register_shared_assets
 logger = logging.getLogger(__name__)
 
 SCENE_ID = "asset_studio"
-DEFAULT_PORT = 5568
+DEFAULT_PORT = get_port(SCENE_ID)
 
 
 class AssetStudioScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="asset_studio"):
@@ -35,7 +36,7 @@ class AssetStudioScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="
     SCENE_METADATA = {
         "name": "asset_studio",
         "display_name": "ASSET STUDIO",
-        "port": 5568,
+        "port": DEFAULT_PORT,
         "type": "system",
         "accent_color": "#f59e0b",
         "accent_rgb": "245 158 11",
@@ -395,17 +396,7 @@ class AssetStudioScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="
         @app.route("/api/scenes/list")
         def api_scenes_list():
             """List available scenes for inject-to-scene dropdown."""
-            scenes = [
-                {"id": "bedroom", "name": "THE PENTHOUSE", "port": 5555},
-                {"id": "phone", "name": "SIGNAL", "port": 5556},
-                {"id": "lounge", "name": "THE VELVET PIT", "port": 5557},
-                {"id": "tavern", "name": "THE RUSTY ANCHOR", "port": 5558},
-                {"id": "casino", "name": "CLUB NOIR", "port": 5559},
-                {"id": "gallery", "name": "THE OBSCURA", "port": 5560},
-                {"id": "arena", "name": "THE COLOSSEUM", "port": 5561},
-                {"id": "realm", "name": "THE SHATTERED THRONE", "port": 5562},
-                {"id": "neoncity", "name": "NEON CITY", "port": 5563},
-            ]
+            scenes = build_scene_listing()
             return jsonify({"status": "ok", "scenes": scenes})
 
 

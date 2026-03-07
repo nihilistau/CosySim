@@ -1,9 +1,9 @@
 """ARGUS HAR batch processor — scan .har files to populate the endpoint registry.
 
-Reads all .har files from data/har_files/ recursively, extracts every
+Reads all .har files from artifacts/argus/har/ recursively, extracts every
 batchexecute and gRPC-web request, decodes them with ARGUS decoders, and
-populates the endpoint registry.  First-seen request/response payloads per
-rpcid are saved to data/argus/payloads/ for SDK implementation reference.
+populates the endpoint registry. First-seen request/response payloads per
+rpcid are saved to artifacts/argus/payloads/ for SDK implementation reference.
 
 CLI::
 
@@ -23,18 +23,16 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
-from scripts.argus.config import DATA_DIR, GAS_RPCIDS, GEMINI_RPCIDS, NLM_RPCIDS, ROOT
+from scripts.argus.config import GAS_RPCIDS, GEMINI_RPCIDS, NLM_RPCIDS
 from scripts.argus.decoders.batchexecute import BatchExecuteDecoder, BatchRequest, BatchResponse
 from scripts.argus.decoders.grpc_web import GrpcWebDecoder
 from scripts.argus.discovery.endpoint_registry import EndpointRegistry, get_registry
+from scripts.argus.paths import HAR_DIR, HAR_SCAN_REPORT_PATH, PAYLOADS_DIR
 
 logger = logging.getLogger(__name__)
 
 # ──── Paths ────────────────────────────────────────────────────────────────────
-
-HAR_DIR = ROOT / "data" / "har_files"
-PAYLOADS_DIR = DATA_DIR / "payloads"
-REPORT_PATH = DATA_DIR / "har_scan_report.json"
+REPORT_PATH = HAR_SCAN_REPORT_PATH
 
 
 # ──── ScanStats ────────────────────────────────────────────────────────────────
@@ -79,7 +77,7 @@ class HarScanner:
 
     Args:
         payloads_dir: Override directory for payload JSON files (default:
-            data/argus/payloads/).
+            artifacts/argus/payloads/).
         registry: Override EndpointRegistry instance (default: shared singleton).
     """
 
@@ -185,7 +183,7 @@ class HarScanner:
         different sub-folders are processed only once.
 
         Args:
-            dir: Root directory to scan (default: data/har_files/).
+            dir: Root directory to scan (default: artifacts/argus/har/).
 
         Returns:
             Aggregated ScanStats across all processed files.  rpcid counts

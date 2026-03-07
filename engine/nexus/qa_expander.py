@@ -1,7 +1,8 @@
 """QA Expander — reverse-generates Q&A pairs from every Nexus knowledge entry.
 
 For each Nexus entry, asks NLM:
-  "What 5 questions does this knowledge entry answer?"
+  1. "What 5 questions does this knowledge entry answer?"
+  2. "For each question, what is the distilled answer from this entry?"
 
 Each generated pair is stored back in Nexus as a cached Q&A item, dramatically
 increasing the cache hit rate for the 4-tier query router. Designed to compound:
@@ -61,6 +62,17 @@ _PROMPT_TEMPLATE = (
     "KNOWLEDGE ENTRY:\nTitle: {title}\nType: {content_type}\n\n{content}"
 )
 
+_ANSWER_PROMPT_TEMPLATE = (
+    "Read this knowledge entry carefully and answer the question using ONLY the "
+    "information in the entry. Return 2-5 concise sentences that directly answer "
+    "the question for a developer. If the entry does not answer the question, "
+    "return exactly: UNSUPPORTED\n\n"
+    "QUESTION: {question}\n\n"
+    "KNOWLEDGE ENTRY:\nTitle: {title}\nType: {content_type}\n\n{content}"
+)
+
+_MAX_STORED_ANSWER_LEN = 1600
+
 # ── State helpers ─────────────────────────────────────────────────────────────
 
 def _load_state() -> Dict[str, Any]:
@@ -102,6 +114,12 @@ def _get_nexus() -> Any:
     return get_nexus_client()
 
 
+def _get_training_flywheel() -> Any:
+    """Lazy-load the training flywheel singleton."""
+    from engine.nexus.training_flywheel import get_training_flywheel
+    return get_training_flywheel()
+
+
 # ── Question parsing ──────────────────────────────────────────────────────────
 
 def _parse_questions(raw: str) -> List[str]:
@@ -139,6 +157,7 @@ class QAExpander:
         self._state = _load_state()
         self._nexus: Optional[Any] = None
         self._hybrid: Optional[Any] = None
+        self._training_flywheel: Optional[Any] = None
 
     def _client(self) -> Any:
         if self._nexus is None:
@@ -149,6 +168,11 @@ class QAExpander:
         if self._hybrid is None:
             self._hybrid = _get_hybrid()
         return self._hybrid
+
+    def _flywheel(self) -> Any:
+        if self._training_flywheel is None:
+            self._training_flywheel = _get_training_flywheel()
+        return self._training_flywheel
 
     def _get_or_find_notebook(self) -> str:
         """Return the expansion notebook ID, creating one if needed."""
@@ -249,33 +273,105 @@ class QAExpander:
             logger.warning("NLM expand failed for '%s': %s", title[:50], exc)
             return []
 
+    def _distill_answer(
+        self,
+        entry: Dict[str, Any],
+        question: str,
+        notebook_id: str,
+    ) -> str:
+        """Ask NLM to distill a concise answer for one generated question."""
+        title = entry.get("title", "untitled")
+        content = entry.get("content", "")[:2000]
+        content_type = entry.get("content_type", "note")
+        session_key = hashlib.sha1(
+            f"{_entry_hash(entry)}:{question}".encode("utf-8")
+        ).hexdigest()[:12]
+        prompt = _ANSWER_PROMPT_TEMPLATE.format(
+            question=question,
+            title=title,
+            content_type=content_type,
+            content=content,
+        )
+        try:
+            nlm = self._nlm()
+            result = nlm.ask(
+                notebook_id,
+                prompt,
+                session_id=f"qa-answer-{session_key}",
+            )
+            raw_answer = result.get("answer", "") if isinstance(result, dict) else str(result)
+        except Exception as exc:
+            logger.debug(
+                "NLM answer distillation failed for '%s' question '%s': %s",
+                title[:50],
+                question[:80],
+                exc,
+            )
+            return ""
+
+        answer = raw_answer.strip()
+        if answer.upper().startswith("A:"):
+            answer = answer[2:].strip()
+        if not answer or answer.upper() == "UNSUPPORTED":
+            return ""
+
+        source_note = f"\n\n[Source: '{title}']"
+        max_body_len = max(0, _MAX_STORED_ANSWER_LEN - len(source_note))
+        answer = answer[:max_body_len].rstrip()
+        if not answer:
+            return ""
+        return f"{answer}{source_note}"
+
     def _store_pairs(
         self,
         entry: Dict[str, Any],
         questions: List[str],
         nexus: Any,
+        notebook_id: str = "",
     ) -> int:
-        """Store each question + the original content as a Q&A pair in Nexus.
+        """Store distilled Q&A pairs in Nexus and feed them into training data.
 
         Returns count stored.
         """
-        content = entry.get("content", "")
         title = entry.get("title", "untitled")
         category = entry.get("category", "knowledge")
         stored = 0
+        expansion_notebook_id = (
+            notebook_id or self.notebook_id or self._state.get("notebook_id", "")
+        )
+        training_flywheel = None
+
+        try:
+            training_flywheel = self._flywheel()
+        except Exception as exc:
+            logger.debug("Training flywheel unavailable during QA expansion: %s", exc)
 
         for question in questions:
-            # Answer is the original entry content (truncated if long)
-            answer = content[:1500]
-            if len(content) > 1500:
-                answer += f"\n\n[Source: '{title}' — see full entry for details]"
+            answer = self._distill_answer(entry, question, expansion_notebook_id)
+            if not answer:
+                logger.debug(
+                    "Skipping QA pair for '%s' because answer distillation returned no content",
+                    question[:80],
+                )
+                continue
             try:
-                nexus.add_qa(
+                qa_id = nexus.add_qa(
                     question=question,
                     answer=answer,
                     category=f"expanded-{category}",
+                    quality_score=0.75,
                 )
+                if not qa_id:
+                    continue
                 stored += 1
+                if training_flywheel is not None:
+                    training_flywheel.collect_from_qa(
+                        question=question,
+                        answer=answer,
+                        source="qa_expander",
+                        confidence=0.75,
+                        model="notebooklm",
+                    )
             except Exception as exc:
                 logger.debug("Could not store Q&A pair: %s", exc)
         return stored
@@ -327,7 +423,7 @@ class QAExpander:
             questions = self._expand_entry(entry, notebook_id)
             entry_stored = 0
             if questions:
-                entry_stored = self._store_pairs(entry, questions, nexus)
+                entry_stored = self._store_pairs(entry, questions, nexus, notebook_id=notebook_id)
                 pairs_stored += entry_stored
                 pairs_generated += len(questions)
 

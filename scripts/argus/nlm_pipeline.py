@@ -31,13 +31,14 @@ import json
 import logging
 import time
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+from scripts.argus.paths import NLM_PIPELINE_STATE_PATH
 
 logger = logging.getLogger(__name__)
 
 # ── State file — persists notebook IDs across runs ─────────────────────────
-_STATE_FILE = Path("data/argus/nlm_pipeline_state.json")
+_STATE_FILE = NLM_PIPELINE_STATE_PATH
 
 # ── Notebook naming — one notebook per target, refreshed weekly ────────────
 _NOTEBOOK_PREFIX = "ARGUS API Intelligence"

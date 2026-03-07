@@ -240,7 +240,7 @@ pool.mark_rate_limited("knack112358")  # Sets cooldown
 next_account = pool.get_available_account()  # Returns non-limited account
 
 # Import fresh cookies from HAR
-pool.import_from_har("data/har_files/fresh.har", "knack112358", ["notebooklm"])
+pool.import_from_har("artifacts/argus/har/fresh.har", "knack112358", ["notebooklm"])
 pool.save()
 ```
 

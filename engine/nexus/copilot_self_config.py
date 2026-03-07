@@ -76,6 +76,107 @@ class CopilotSelfConfig:
         self._hooks_dir = self._root / ".github" / "hooks"
         self._cache: Dict[str, Any] = {}
 
+    @staticmethod
+    def _entry_field(entry: Any, field: str, default: Any = "") -> Any:
+        """Read a field from either a Nexus model or a plain dict."""
+        if isinstance(entry, dict):
+            return entry.get(field, default)
+        return getattr(entry, field, default)
+
+    @staticmethod
+    def _normalized_tags(category: str, tags: Optional[List[str]] = None) -> List[str]:
+        """Normalize tags the same way Nexus persistence does."""
+        try:
+            from engine.nexus.nexus_namespaces import normalize_namespace_tags
+
+            normalized = normalize_namespace_tags(category=category, tags=list(tags or []))
+            if not normalized.get("errors"):
+                return list(normalized.get("tags", []))
+        except Exception as exc:
+            logger.debug("Could not normalize Copilot sync tags for %s: %s", category, exc)
+        return sorted({tag for tag in (tags or []) if tag})
+
+    def _find_existing_entry(
+        self,
+        client: Any,
+        query: str,
+        expected_title: str,
+        category: str,
+    ) -> Optional[Any]:
+        """Find an exact matching Nexus entry instead of skipping on any loose hit."""
+        results = client.search(query, limit=10)
+        for entry in results or []:
+            if (
+                self._entry_field(entry, "title") == expected_title
+                and self._entry_field(entry, "category") == category
+            ):
+                return entry
+        return None
+
+    def _sync_entry(
+        self,
+        client: Any,
+        *,
+        query: str,
+        title: str,
+        content: str,
+        content_type: str,
+        category: str,
+        tags: List[str],
+    ) -> str:
+        """Create or update a Copilot config entry in Nexus."""
+        normalized_tags = self._normalized_tags(category, tags)
+        existing = self._find_existing_entry(client, query, title, category)
+        if existing is None:
+            client.add_entry(
+                title=title,
+                content=content,
+                content_type=content_type,
+                category=category,
+                tags=normalized_tags,
+            )
+            return "stored"
+
+        same_content = self._entry_field(existing, "content") == content
+        same_type = self._entry_field(existing, "content_type") == content_type
+        existing_tags = self._normalized_tags(category, list(self._entry_field(existing, "tags", []) or []))
+        if same_content and same_type and existing_tags == normalized_tags:
+            return "skipped"
+
+        entry_id = self._entry_field(existing, "id")
+        if entry_id and client.update_entry(
+            entry_id,
+            title=title,
+            content=content,
+            content_type=content_type,
+            category=category,
+            tags=normalized_tags,
+        ):
+            return "updated"
+
+        if entry_id and hasattr(client, "delete_entry"):
+            try:
+                if client.delete_entry(entry_id):
+                    client.add_entry(
+                        title=title,
+                        content=content,
+                        content_type=content_type,
+                        category=category,
+                        tags=normalized_tags,
+                    )
+                    return "updated"
+            except Exception as exc:
+                logger.debug("Failed to recreate stale Copilot config entry %s: %s", title, exc)
+
+        client.add_entry(
+            title=title,
+            content=content,
+            content_type=content_type,
+            category=category,
+            tags=normalized_tags,
+        )
+        return "stored"
+
     # ── Instruction Files ───────────────────────────────────────────
 
     def list_instructions(self) -> List[Dict[str, str]]:
@@ -105,6 +206,7 @@ class CopilotSelfConfig:
     def sync_instructions_to_nexus(self) -> Dict[str, int]:
         """Push all instruction files to Nexus."""
         stored = 0
+        updated = 0
         skipped = 0
         instructions = self.list_instructions()
 
@@ -118,26 +220,25 @@ class CopilotSelfConfig:
         for info in instructions:
             content = Path(info["path"]).read_text(encoding="utf-8")
             try:
-                # Check if already in Nexus
-                existing = client.search(
-                    f"copilot instruction {info['name']}", limit=1
-                )
-                if existing:
-                    skipped += 1
-                    continue
-
-                client.add_entry(
+                outcome = self._sync_entry(
+                    client,
+                    query=f"copilot instruction {info['name']}",
                     title=f"[Copilot Instruction] {info['name']}",
                     content=content,
                     content_type="document",
                     category=NEXUS_CATEGORIES["instructions"],
                     tags=["copilot", "instruction", info["name"]],
                 )
-                stored += 1
+                if outcome == "stored":
+                    stored += 1
+                elif outcome == "updated":
+                    updated += 1
+                else:
+                    skipped += 1
             except Exception as exc:
                 logger.debug("Failed to store instruction %s: %s", info["name"], exc)
 
-        return {"stored": stored, "skipped": skipped}
+        return {"stored": stored, "updated": updated, "skipped": skipped}
 
     def get_instructions_from_nexus(self) -> List[Dict[str, Any]]:
         """Retrieve instruction files from Nexus."""
@@ -178,6 +279,7 @@ class CopilotSelfConfig:
     def sync_agents_to_nexus(self) -> Dict[str, int]:
         """Push all agent definitions to Nexus."""
         stored = 0
+        updated = 0
         skipped = 0
         agents = self.list_agents()
 
@@ -191,25 +293,25 @@ class CopilotSelfConfig:
         for info in agents:
             content = Path(info["path"]).read_text(encoding="utf-8")
             try:
-                existing = client.search(
-                    f"copilot agent {info['name']}", limit=1
-                )
-                if existing:
-                    skipped += 1
-                    continue
-
-                client.add_entry(
+                outcome = self._sync_entry(
+                    client,
+                    query=f"copilot agent {info['name']}",
                     title=f"[Copilot Agent] {info['name']}",
                     content=content,
                     content_type="document",
                     category=NEXUS_CATEGORIES["agents"],
                     tags=["copilot", "agent", info["name"]],
                 )
-                stored += 1
+                if outcome == "stored":
+                    stored += 1
+                elif outcome == "updated":
+                    updated += 1
+                else:
+                    skipped += 1
             except Exception as exc:
                 logger.debug("Failed to store agent %s: %s", info["name"], exc)
 
-        return {"stored": stored, "skipped": skipped}
+        return {"stored": stored, "updated": updated, "skipped": skipped}
 
     # ── Hook Scripts ────────────────────────────────────────────────
 
@@ -232,6 +334,7 @@ class CopilotSelfConfig:
     def sync_hooks_to_nexus(self) -> Dict[str, int]:
         """Push hook scripts to Nexus."""
         stored = 0
+        updated = 0
         skipped = 0
         hooks = self.list_hooks()
 
@@ -245,25 +348,25 @@ class CopilotSelfConfig:
         for info in hooks:
             content = Path(info["path"]).read_text(encoding="utf-8")
             try:
-                existing = client.search(
-                    f"copilot hook {info['name']}", limit=1
-                )
-                if existing:
-                    skipped += 1
-                    continue
-
-                client.add_entry(
+                outcome = self._sync_entry(
+                    client,
+                    query=f"copilot hook {info['name']}",
                     title=f"[Copilot Hook] {info['name']}",
                     content=content,
                     content_type="code",
                     category=NEXUS_CATEGORIES["hooks"],
                     tags=["copilot", "hook", info["name"]],
                 )
-                stored += 1
+                if outcome == "stored":
+                    stored += 1
+                elif outcome == "updated":
+                    updated += 1
+                else:
+                    skipped += 1
             except Exception as exc:
                 logger.debug("Failed to store hook %s: %s", info["name"], exc)
 
-        return {"stored": stored, "skipped": skipped}
+        return {"stored": stored, "updated": updated, "skipped": skipped}
 
     # ── Full Sync ───────────────────────────────────────────────────
 
@@ -281,17 +384,23 @@ class CopilotSelfConfig:
             r.get("stored", 0) for r in result.values()
             if isinstance(r, dict)
         )
+        total_updated = sum(
+            r.get("updated", 0) for r in result.values()
+            if isinstance(r, dict)
+        )
         total_skipped = sum(
             r.get("skipped", 0) for r in result.values()
             if isinstance(r, dict)
         )
         result["summary"] = {
             "total_stored": total_stored,
+            "total_updated": total_updated,
             "total_skipped": total_skipped,
         }
         logger.info(
-            "Copilot config sync: %d stored, %d skipped",
+            "Copilot config sync: %d stored, %d updated, %d skipped",
             total_stored,
+            total_updated,
             total_skipped,
         )
         return result

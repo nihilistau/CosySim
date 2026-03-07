@@ -294,13 +294,15 @@ class TaskScheduler:
         logger.info("Task %s claimed by %s (direct)", task_id, agent_id)
         return task
 
-    def get_pending_tasks(self) -> List[AgentTask]:
-        """Return all pending (unclaimed) tasks sorted by priority."""
+    def get_pending_tasks(self, limit: Optional[int] = None) -> List[AgentTask]:
+        """Return pending (unclaimed) tasks sorted by priority."""
         pending = [
             t for t in self._tasks.values()
             if t.status == TaskStatus.PENDING
         ]
         pending.sort(key=lambda t: (t.priority, t.created_at))
+        if limit is not None:
+            return pending[: max(1, int(limit))]
         return pending
 
 
@@ -877,4 +879,8 @@ def get_task_scheduler() -> TaskScheduler:
     global _scheduler
     if _scheduler is None:
         _scheduler = TaskScheduler()
+        try:
+            _scheduler.load_from_nexus()
+        except Exception as exc:
+            logger.debug("TaskScheduler Nexus preload failed: %s", exc)
     return _scheduler

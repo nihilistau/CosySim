@@ -24,15 +24,15 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional, Tuple
 
+from scripts.argus.paths import SCREENSHOT_SCRIPT_PATH, SCREENSHOTS_DIR
+
 if TYPE_CHECKING:
     from playwright.async_api import Page
 
 logger = logging.getLogger(__name__)
 
-SCREENSHOT_SCRIPT = Path(
-    r"C:\Files\Models\CosySim\data\har_files\users_dump_folder\screenshots\screenshot.ps1"
-)
-SCREENSHOT_DIR = SCREENSHOT_SCRIPT.parent
+SCREENSHOT_SCRIPT = SCREENSHOT_SCRIPT_PATH
+SCREENSHOT_DIR = SCREENSHOTS_DIR
 VISION_MODEL = "qwen/qwen3-vl-4b"
 
 SYSTEM_PROMPT = (

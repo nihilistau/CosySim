@@ -293,6 +293,21 @@ class TestNlmProxyEndpoints:
         data = json.loads(resp.data)
         assert data.get("online") is False or data.get("error") is not None
 
+    def test_nlm_status_uses_canonical_proxy_url(self, sc_client) -> None:
+        with (
+            patch(
+                "content.scenes.system_control.system_control_scene.get_service_url",
+                return_value="http://proxy.test/health",
+            ) as mock_get_service_url,
+            patch(
+                "content.scenes.system_control.system_control_scene._http_get",
+                return_value=None,
+            ),
+        ):
+            sc_client.get("/api/nlm/status")
+
+        mock_get_service_url.assert_called_with("nlm_proxy", path="/health")
+
 
 # ── Nexus health & search ──────────────────────────────────────────────
 
@@ -344,6 +359,21 @@ class TestLMStudioEndpoints:
         data = json.loads(resp.data)
         assert data.get("online") is True
         assert isinstance(data.get("models"), list)
+
+    def test_lmstudio_status_uses_canonical_model_url(self, sc_client) -> None:
+        with (
+            patch(
+                "content.scenes.system_control.system_control_scene.get_service_url",
+                return_value="http://lmstudio.test/api/v1/models",
+            ) as mock_get_service_url,
+            patch(
+                "content.scenes.system_control.system_control_scene._http_get",
+                return_value={"data": []},
+            ),
+        ):
+            sc_client.get("/api/lmstudio")
+
+        mock_get_service_url.assert_called_with("lmstudio", path="/api/v1/models")
 
 
 # ── Log viewer ─────────────────────────────────────────────────────────
@@ -421,3 +451,12 @@ class TestEditableConfigsCatalogue:
         # Verify all entries have required fields
         for ep in _SERVICE_ENDPOINTS:
             assert "id" in ep and "name" in ep and "url" in ep and "port" in ep
+
+    def test_service_endpoints_use_canonical_ports(self) -> None:
+        from content.scenes.system_control.system_control_scene import _SERVICE_ENDPOINTS
+
+        endpoints = {ep["id"]: ep for ep in _SERVICE_ENDPOINTS}
+        assert endpoints["command_center"]["port"] == 5566
+        assert endpoints["bedroom"]["port"] == 5556
+        assert endpoints["phone"]["port"] == 5555
+        assert endpoints["tts"]["port"] == 8600

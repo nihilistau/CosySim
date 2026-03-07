@@ -3,22 +3,21 @@ NotebookLM Proxy — bridges CosySim skills to the NLM Live Proxy server.
 
 Architecture
 ~~~~~~~~~~~~
-This proxy talks to ``nlm_live_proxy.py`` (a Flask server at :8800) which
-uses HAR-extracted Google auth cookies to make direct batchexecute calls to
-NotebookLM.
+This proxy talks to ``nlm_live_proxy.py`` (a Flask server at :8800) which uses
+browser-attached Google auth/session capture (CDP preferred, HAR import as
+recovery) to make direct batchexecute calls to NotebookLM.
 
 Flow::
 
     CosySim skill  ──▶  NotebookLMProxy  ──HTTP──▶  NLM Live Proxy (:8800)
                                                           │
                                                batchexecute to Google
-                                              (using HAR session cookies)
+                                     (using browser-captured session cookies)
 
-Cookie setup:
-    1. User opens notebooklm.google.com in Chrome, does some interactions.
-    2. DevTools → Network → Save all as HAR with content.
-    3. POST the HAR to :8800/cookies/import  — or use Nexus Panel upload.
-    4. Proxy serves live batchexecute requests until cookies expire.
+Cookie/session setup:
+    1. Preferred: capture cookies from a live Chrome NotebookLM tab via CDP.
+    2. Recovery: save a fresh HAR with content and import it into the proxy.
+    3. Proxy serves direct batchexecute requests until the session expires.
 
 Configuration (``config/default.yaml`` under ``notebooklm`` key)::
 
@@ -226,7 +225,7 @@ class NotebookLMProxy:
     def add_source(self, notebook_id: str, source_type: str, source_value: str) -> Dict[str, Any]:
         """Not supported via batchexecute reverse-engineered API."""
         return {"error": "not_supported",
-                "detail": "add_source requires the NotebookLM web UI or official API"}
+                "detail": "add_source currently requires the browser-driven NotebookLM tooling or another live UI automation path"}
 
     def generate_audio(self, notebook_id: str, customization: str = "") -> Dict[str, Any]:
         """Not supported via batchexecute reverse-engineered API."""

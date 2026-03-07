@@ -52,7 +52,8 @@ ROOT = Path(__file__).resolve().parents[3]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from scripts.argus.config import CDP_URL, DATA_DIR
+from scripts.argus.config import CDP_URL
+from scripts.argus.paths import SCREENSHOTS_DIR
 
 # ──── helpers ─────────────────────────────────────────────────────────────────
 
@@ -111,8 +112,12 @@ JS_HELPERS: Dict[str, str] = {
             const last = items[items.length - 1];
             return last.querySelector('.response-content, .model-response, [class*="response"]')?.innerText?.trim()?.slice(0, 500) || null;
         })(),
-        query_box_enabled: !document.querySelector('[aria-label="Query box"]')?.disabled,
-        submit_enabled: !document.querySelector('[aria-label="Submit"]')?.disabled
+        query_box_enabled: !document.querySelector('textarea[aria-label="Query box"]')?.disabled,
+        submit_enabled: !(
+            document.querySelector('button.submit-button[aria-label="Submit"]')
+            || document.querySelector('query-box [aria-label="Submit"]')
+            || document.querySelector('[aria-label="Submit"]')
+        )?.disabled
     })""",
 }
 
@@ -173,7 +178,7 @@ async def cmd_eval(ctx, url: str, js: Optional[str], helper: Optional[str], inte
 
 
 # JS snippets for cmd_ask
-_NLM_COUNT_JS = "() => document.querySelectorAll('chat-message').length"
+_NLM_COUNT_JS = "() => document.querySelectorAll('response-container, chat-message').length"
 
 _NLM_LOADING_JS = """() => {
     // Returns true while NLM is still generating a response
@@ -185,12 +190,32 @@ _NLM_LOADING_JS = """() => {
 }"""
 
 _NLM_READ_LAST_JS = """() => {
-    // Read the last chat-message (NLM response, not user query)
-    const items = document.querySelectorAll('chat-message');
+    // Read the last rendered NotebookLM response.
+    const items = document.querySelectorAll('response-container, chat-message');
     if (!items.length) return null;
     const last = items[items.length - 1];
     return last?.innerText?.trim() || null;
 }"""
+
+_NLM_QUERY_BOX_SELECTOR = 'textarea[aria-label="Query box"]'
+_NLM_QUERY_SUBMIT_SELECTORS = [
+    "query-box button.submit-button[aria-label='Submit']",
+    "button.submit-button[aria-label='Submit']",
+    "query-box [aria-label='Submit']",
+    "[aria-label='Submit']",
+]
+
+
+async def _find_first_locator(page, selectors: List[str], timeout: int = 1500):
+    """Return the first attached locator for the provided selectors."""
+    for selector in selectors:
+        locator = page.locator(selector).first
+        try:
+            await locator.wait_for(state="attached", timeout=timeout)
+            return selector, locator
+        except Exception:
+            continue
+    return None, None
 
 
 async def cmd_ask(ctx, question: str, url: str, timeout: int, raw: bool, store: bool) -> Optional[str]:
@@ -209,24 +234,26 @@ async def cmd_ask(ctx, question: str, url: str, timeout: int, raw: bool, store: 
     before_count: int = await page.evaluate(_NLM_COUNT_JS)
 
     # Use Playwright click + fill to properly trigger Angular form validation
-    query_selector = '[aria-label="Query box"]'
+    query_selector = _NLM_QUERY_BOX_SELECTOR
+    await page.wait_for_selector(query_selector, timeout=5000)
     await page.click(query_selector)
     await page.fill(query_selector, question)
 
     # Wait for Angular to enable submit
     await asyncio.sleep(0.8)
 
-    submit_selector = '[aria-label="Submit"]'
+    submit_selector, submit_btn = await _find_first_locator(page, _NLM_QUERY_SUBMIT_SELECTORS)
     try:
-        await page.wait_for_selector(f'{submit_selector}:not([disabled])', timeout=5000)
+        if submit_selector:
+            await page.wait_for_selector(f"{submit_selector}:not([disabled])", timeout=5000)
+        else:
+            raise RuntimeError("No submit button located")
     except Exception:
         # Fallback: try pressing Enter
         await page.keyboard.press("Enter")
 
     # Click submit (or press Enter if button not enabled)
-    submit_btn = page.locator(submit_selector)
-    submit_disabled = await submit_btn.is_disabled()
-    if not submit_disabled:
+    if submit_btn is not None and not await submit_btn.is_disabled():
         await submit_btn.click()
     else:
         await page.focus(query_selector)
@@ -288,12 +315,23 @@ async def cmd_ask(ctx, question: str, url: str, timeout: int, raw: bool, store: 
 
 async def cmd_tokens(url: str, show: bool, account: str) -> None:
     """Harvest Google cookies and update account pool."""
-    from scripts.argus.tools.token_harvester import harvest_cookies, update_account_pool, print_cookies
-    cookies, detected_name = await harvest_cookies(url)
+    from scripts.argus.tools.token_harvester import harvest_capture, print_cookies, update_account_pool
+
+    capture = await harvest_capture(url)
+    cookies = capture.get("cookies", {})
+    detected_name = capture.get("account_name", "harvested")
     name = account or detected_name
     print_cookies(cookies, name)
     if not show and cookies:
-        update_account_pool(cookies, name)
+        update_account_pool(
+            cookies,
+            name,
+            session=capture.get("nlm_session"),
+            services=capture.get("services"),
+            authuser=int(capture.get("authuser", 0) or 0),
+            at_token=capture.get("at_token"),
+            service_sessions=capture.get("service_sessions"),
+        )
 
 
 async def cmd_snap(ctx, url: str, out: Optional[str]) -> None:
@@ -302,7 +340,8 @@ async def cmd_snap(ctx, url: str, out: Optional[str]) -> None:
     if not page:
         print(f"[argus] No tab matching '{url}'")
         return
-    path = out or str(DATA_DIR / f"screenshot_{int(time.time())}.png")
+    SCREENSHOTS_DIR.mkdir(parents=True, exist_ok=True)
+    path = out or str(SCREENSHOTS_DIR / f"screenshot_{int(time.time())}.png")
     await page.screenshot(path=path, full_page=False)
     print(f"[argus] Screenshot → {path}")
 
@@ -340,7 +379,8 @@ async def _repl(page) -> None:
         if line == "exit":
             break
         if line == "snap":
-            path = str(DATA_DIR / f"repl_snap_{int(time.time())}.png")
+            SCREENSHOTS_DIR.mkdir(parents=True, exist_ok=True)
+            path = str(SCREENSHOTS_DIR / f"repl_snap_{int(time.time())}.png")
             await page.screenshot(path=path)
             print(f"→ {path}")
             continue

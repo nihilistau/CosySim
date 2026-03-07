@@ -99,6 +99,59 @@ class TestCasinoSceneMetadata:
         assert "#f97316" == result.get("accent_color")
 
 
+class TestCasinoRuntimeEnforcement:
+    def test_agent_reply_marks_degraded_when_inference_fails(self):
+        """Casino chat failures should be explicit, not empty success-shaped replies."""
+        from content.scenes.casino.casino_scene import CasinoScene
+
+        scene = object.__new__(CasinoScene)
+
+        with patch(
+            "engine.agents.virtual_agent_manager.get_virtual_agent_manager",
+            side_effect=RuntimeError("lm down"),
+        ):
+            result = scene._get_agent_reply("dealer_jack", "hello")
+
+        assert result["degraded"] is True
+        assert result["error"] == "lm down"
+        assert "LLM unavailable" in result["text"]
+
+    def test_economy_spend_logs_degraded_local_fallback(self):
+        """Economy fallback must be recorded as degraded runtime state."""
+        from content.scenes.casino.casino_scene import CasinoScene
+
+        scene = object.__new__(CasinoScene)
+        scene._economy = MagicMock()
+        scene._economy.spend.side_effect = RuntimeError("economy down")
+        scene._transactions = []
+        scene.player_chips = 250
+
+        ok = scene._economy_spend(100, reason="casino_buy_in:blackjack")
+
+        assert ok is True
+        assert scene.player_chips == 150
+        assert scene._transactions[-1]["degraded"] is True
+        assert scene._transactions[-1]["backend"] == "local_fallback"
+        assert "economy down" in scene._transactions[-1]["error"]
+
+    def test_economy_credit_logs_degraded_local_fallback(self):
+        """Economy credit fallback must also record degraded runtime state."""
+        from content.scenes.casino.casino_scene import CasinoScene
+
+        scene = object.__new__(CasinoScene)
+        scene._economy = MagicMock()
+        scene._economy.earn.side_effect = RuntimeError("economy down")
+        scene._transactions = []
+        scene.player_chips = 250
+
+        scene._economy_credit(75, reason="casino_cashout")
+
+        assert scene.player_chips == 325
+        assert scene._transactions[-1]["degraded"] is True
+        assert scene._transactions[-1]["backend"] == "local_fallback"
+        assert "economy down" in scene._transactions[-1]["error"]
+
+
 # ══════════════════════════════════════════════════════════════════════
 #  2. Skills registered in SKILL_REGISTRY
 # ══════════════════════════════════════════════════════════════════════

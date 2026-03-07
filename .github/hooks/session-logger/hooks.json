@@ -8,6 +8,13 @@
         "args": ["engine/nexus/nexus_session_logger.py", "start"],
         "cwd": ".",
         "timeoutSec": 10
+      },
+      {
+        "type": "command",
+        "command": "python",
+        "args": ["engine/nexus/copilot_hook_control.py", "run", "sessionStart"],
+        "cwd": ".",
+        "timeoutSec": 10
       }
     ],
     "sessionEnd": [
@@ -15,6 +22,13 @@
         "type": "command",
         "command": "python",
         "args": ["engine/nexus/nexus_session_logger.py", "end"],
+        "cwd": ".",
+        "timeoutSec": 10
+      },
+      {
+        "type": "command",
+        "command": "python",
+        "args": ["engine/nexus/copilot_hook_control.py", "run", "sessionEnd"],
         "cwd": ".",
         "timeoutSec": 10
       }
@@ -26,6 +40,22 @@
         "args": ["engine/nexus/nexus_session_logger.py", "prompt"],
         "cwd": ".",
         "timeoutSec": 5
+      }
+    ],
+    "preCompaction": [
+      {
+        "type": "command",
+        "command": "python",
+        "args": ["engine/nexus/nexus_session_logger.py", "compact"],
+        "cwd": ".",
+        "timeoutSec": 15
+      },
+      {
+        "type": "command",
+        "command": "python",
+        "args": ["engine/nexus/copilot_hook_control.py", "run", "preCompaction"],
+        "cwd": ".",
+        "timeoutSec": 10
       }
     ]
   }

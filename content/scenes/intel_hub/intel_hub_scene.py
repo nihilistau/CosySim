@@ -34,6 +34,7 @@ from typing import Any, Dict, List, Optional
 from flask import Flask, jsonify, render_template, request
 
 from engine.config import get_config
+from engine.port_registry import ALL_SCENE_TARGETS, build_target_listing, get_port, get_service_url
 from engine.scenes.base_scene import BaseScene
 
 try:
@@ -50,7 +51,7 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 SCENE_ID = "intel_hub"
-DEFAULT_PORT = 5580
+DEFAULT_PORT = get_port(SCENE_ID)
 
 SCENE_METADATA = {
     "name": "intel_hub",
@@ -68,6 +69,16 @@ SCENE_METADATA = {
         "world events", "scene health grid",
     ],
 }
+
+
+def _lmstudio_models_url() -> str:
+    """Return the canonical LMStudio models endpoint URL."""
+    return get_service_url("lmstudio", path="/api/v1/models")
+
+
+def _default_whisper_url() -> str:
+    """Return the canonical Whisper STT server URL."""
+    return get_service_url("whisper_stt")
 
 # ──── Scene ───────────────────────────────────────────────────────────────────
 
@@ -370,6 +381,66 @@ class IntelHubScene(BaseScene):
         def api_scheduler_history():
             limit = int(request.args.get("limit", 50))
             return jsonify(_get_scheduler_history(limit))
+
+        # ── Operator cockpit ───────────────────────────────────────────────────
+
+        @app.route("/api/operator/status")
+        def api_operator_status():
+            limit = int(request.args.get("limit", 12))
+            return jsonify(_get_operator_status(limit=limit))
+
+        @app.route("/api/operator/inbox")
+        def api_operator_inbox():
+            limit = int(request.args.get("limit", 20))
+            status = request.args.get("status", "")
+            item_type = request.args.get("item_type", "")
+            return jsonify(_get_operator_inbox_items(
+                status=status,
+                item_type=item_type,
+                limit=limit,
+            ))
+
+        @app.route("/api/operator/inbox", methods=["POST"])
+        def api_operator_inbox_submit():
+            data = request.get_json(silent=True) or {}
+            result = _submit_operator_inbox_item(data)
+            if result.get("item"):
+                item_title = result["item"].get("title", "")[:60]
+                self._log_activity("operator", f"Inbox item submitted: {item_title}")
+                dispatch = result.get("dispatch")
+                if isinstance(dispatch, dict) and dispatch.get("mode") and dispatch.get("mode") != "queue":
+                    status_text = "ok" if dispatch.get("ok") else "failed"
+                    self._log_activity(
+                        "operator",
+                        f"Live {dispatch.get('mode')} dispatch {status_text}: {item_title}",
+                    )
+                processing = result.get("processing")
+                if isinstance(processing, dict) and processing.get("created_tasks"):
+                    self._log_activity(
+                        "operator",
+                        f"Queued {processing.get('created_tasks', 0)} operator task(s)",
+                    )
+            status_code = 200 if result.get("ok") else 400
+            return jsonify(result), status_code
+
+        @app.route("/api/operator/inbox/process", methods=["POST"])
+        def api_operator_inbox_process():
+            data = request.get_json(silent=True) or {}
+            limit = int(data.get("limit", 10))
+            result = _process_operator_inbox(limit=limit)
+            if result.get("processed"):
+                self._log_activity(
+                    "operator",
+                    f"Processed {result.get('processed', 0)} inbox item(s)",
+                )
+            status_code = 200 if result.get("ok", True) else 500
+            return jsonify(result), status_code
+
+        @app.route("/api/operator/queue")
+        def api_operator_queue():
+            limit = int(request.args.get("limit", 20))
+            status = request.args.get("status", "")
+            return jsonify(_get_operator_queue(status=status, limit=limit))
 
         # ── Conversation Analyzer ─────────────────────────────────────────────
 
@@ -779,6 +850,9 @@ class IntelHubScene(BaseScene):
             "lmstudio": {"available": False, "models": []},
             "scheduler": {"running": False, "task_count": 0, "next_run": None},
             "system": _get_system_resources(),
+            "operator": {"inbox": {"pending": 0}, "queue": {}},
+            "activity": _get_activity_snapshot(limit=5),
+            "git": _get_git_status_summary(),
         }
         try:
             from engine.nexus.client import get_nexus_client
@@ -795,7 +869,7 @@ class IntelHubScene(BaseScene):
             pass
         try:
             import requests
-            r = requests.get("http://localhost:1234/api/v1/models", timeout=2)
+            r = requests.get(_lmstudio_models_url(), timeout=2)
             if r.ok:
                 models = r.json().get("data", [])
                 overview["lmstudio"] = {"available": True, "models": [m.get("id") for m in models]}
@@ -807,6 +881,14 @@ class IntelHubScene(BaseScene):
             overview["scheduler"] = {
                 "running": daemon.is_running(),
                 "task_count": len(daemon.get_task_list()),
+            }
+        except Exception:
+            pass
+        try:
+            operator_inbox = _get_operator_inbox_items(status="pending", limit=5)
+            overview["operator"] = {
+                "inbox": operator_inbox.get("summary", {}),
+                "queue": _get_operator_queue(limit=5).get("summary", {}),
             }
         except Exception:
             pass
@@ -1255,6 +1337,244 @@ def _get_scheduler_history(limit: int = 50) -> Dict[str, Any]:
         return {"error": str(exc), "history": []}
 
 
+def _get_git_status_summary() -> Dict[str, Any]:
+    """Return a compact git summary for the operator cockpit."""
+    try:
+        branch = subprocess.check_output(
+            ["git", "--no-pager", "branch", "--show-current"],
+            cwd=REPO_ROOT,
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+        short_status = subprocess.check_output(
+            ["git", "--no-pager", "status", "--short"],
+            cwd=REPO_ROOT,
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).splitlines()
+        latest_commit = subprocess.check_output(
+            ["git", "--no-pager", "log", "-1", "--pretty=format:%h|%s|%cr"],
+            cwd=REPO_ROOT,
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+        commit_parts = latest_commit.split("|", 2) if latest_commit else []
+        return {
+            "available": True,
+            "branch": branch,
+            "dirty": bool(short_status),
+            "changes": short_status[:20],
+            "change_count": len(short_status),
+            "latest_commit": {
+                "sha": commit_parts[0] if len(commit_parts) > 0 else "",
+                "subject": commit_parts[1] if len(commit_parts) > 1 else "",
+                "relative_time": commit_parts[2] if len(commit_parts) > 2 else "",
+            },
+        }
+    except Exception as exc:
+        logger.debug("Failed to get git summary: %s", exc)
+        return {"available": False, "error": str(exc)}
+
+
+def _get_activity_snapshot(limit: int = 10) -> Dict[str, Any]:
+    """Return recent system activity from the shared activity bus."""
+    try:
+        from engine.services.activity_bus import get_activity_bus
+
+        snapshot = get_activity_bus().snapshot()
+        active = snapshot.get("active", [])
+        recent = snapshot.get("history", [])
+        return {
+            "active": active[:limit],
+            "recent": recent[:limit],
+            "active_count": len(active),
+            "recent_count": len(recent),
+        }
+    except Exception as exc:
+        logger.debug("Failed to get activity snapshot: %s", exc)
+        return {"active": [], "recent": [], "active_count": 0, "recent_count": 0, "error": str(exc)}
+
+
+def _get_command_targets() -> List[Dict[str, Any]]:
+    """Return available scene targets for operator command routing."""
+    try:
+        return build_target_listing(ALL_SCENE_TARGETS)
+    except Exception as exc:
+        logger.debug("Failed to build command targets: %s", exc)
+        return [{"id": "intel_hub", "label": "Intel Hub", "port": 5580, "error": str(exc)}]
+
+
+def _get_operator_queue(status: str = "", limit: int = 20) -> Dict[str, Any]:
+    """Return operator-facing task queue data."""
+    try:
+        from engine.nexus.task_scheduler import get_task_scheduler
+
+        scheduler = get_task_scheduler()
+        tasks = scheduler.list_tasks(status=status or None)[: max(1, int(limit))]
+        return {
+            "summary": scheduler.get_queue_status(),
+            "tasks": [task.to_dict() for task in tasks],
+        }
+    except Exception as exc:
+        logger.error("Failed to get operator queue: %s", exc)
+        return {"summary": {}, "tasks": [], "error": str(exc)}
+
+
+def _get_operator_inbox_items(
+    status: str = "",
+    item_type: str = "",
+    limit: int = 20,
+) -> Dict[str, Any]:
+    """Return operator inbox items and summary."""
+    try:
+        from engine.nexus.operator_inbox import get_operator_inbox
+
+        inbox = get_operator_inbox()
+        items = inbox.list_items(status=status or None, item_type=item_type or None, limit=limit)
+        return {
+            "summary": inbox.get_summary(),
+            "items": [item.to_dict() for item in items],
+        }
+    except Exception as exc:
+        logger.error("Failed to get operator inbox: %s", exc)
+        return {"summary": {}, "items": [], "error": str(exc)}
+
+
+def _dispatch_operator_command(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Send a live operator command through Command Center surfaces."""
+    dispatch_mode = str(data.get("dispatch_mode", "queue")).strip().lower()
+    if dispatch_mode == "queue":
+        return {"ok": True, "mode": "queue", "queued_only": True}
+
+    content = str(data.get("content", "")).strip()
+    scene_id = str(data.get("scene_id", "")).strip()
+    character_id = str(data.get("character_id", "")).strip()
+    turns_raw = data.get("turns", 1)
+    turns = int(turns_raw) if str(turns_raw).strip() else 1
+
+    if not content:
+        return {"ok": False, "mode": dispatch_mode, "error": "content is required for live dispatch"}
+    if not scene_id:
+        return {"ok": False, "mode": dispatch_mode, "error": "scene_id is required for live dispatch"}
+
+    try:
+        import requests
+
+        if dispatch_mode == "directive" and character_id:
+            url = get_service_url("command_center", path="/api/scene_control/directive")
+            payload = {
+                "scene_id": scene_id,
+                "character_id": character_id,
+                "directive": content,
+                "turns": max(1, turns),
+            }
+        elif dispatch_mode in {"narrative", "broadcast", "directive"}:
+            url = get_service_url("command_center", path=f"/api/scenes/{scene_id}/inject")
+            payload = {"type": dispatch_mode, "content": content}
+        else:
+            return {"ok": False, "mode": dispatch_mode, "error": f"Unsupported dispatch mode: {dispatch_mode}"}
+
+        response = requests.post(url, json=payload, timeout=10)
+        try:
+            body = response.json()
+        except ValueError:
+            body = {"raw": response.text}
+        return {
+            "ok": response.ok,
+            "mode": dispatch_mode,
+            "status_code": response.status_code,
+            "url": url,
+            "payload": payload,
+            "response": body,
+        }
+    except Exception as exc:
+        logger.error("Operator live dispatch failed: %s", exc)
+        return {"ok": False, "mode": dispatch_mode, "error": str(exc)}
+
+
+def _submit_operator_inbox_item(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Submit a new operator inbox item and optionally queue or dispatch it."""
+    try:
+        from engine.nexus.operator_inbox import get_operator_inbox
+
+        inbox = get_operator_inbox()
+        create_task = bool(data.get("create_task", True))
+        raw_priority = data.get("priority", "normal")
+        if isinstance(raw_priority, (int, float)):
+            if raw_priority >= 90:
+                priority = "critical"
+            elif raw_priority >= 75:
+                priority = "high"
+            elif raw_priority <= 45:
+                priority = "low"
+            else:
+                priority = "normal"
+        else:
+            priority = str(raw_priority).strip().lower() or "normal"
+        item = inbox.submit_item(
+            title=str(data.get("title", "")).strip(),
+            content=str(data.get("content", "")).strip(),
+            item_type=str(data.get("item_type", "note")).strip(),
+            priority=priority,
+            source="intel_hub",
+            author=str(data.get("author", "operator")).strip() or "operator",
+            tags=data.get("tags") or [],
+            metadata={
+                "scene_id": str(data.get("scene_id", "")).strip(),
+                "dispatch_mode": str(data.get("dispatch_mode", "queue")).strip().lower(),
+                "character_id": str(data.get("character_id", "")).strip(),
+                "turns": int(data.get("turns", 1) or 1),
+            },
+        )
+
+        result: Dict[str, Any] = {"ok": True, "item": item.to_dict()}
+        dispatch = _dispatch_operator_command(data)
+        if dispatch.get("mode") != "queue":
+            result["dispatch"] = dispatch
+            if dispatch.get("ok") and not create_task:
+                inbox.update_item_status(
+                    item.item_id,
+                    status="integrated",
+                    processor_notes=f"Live dispatch succeeded via {dispatch.get('mode')}.",
+                )
+
+        if create_task:
+            processing = inbox.process_items(item_ids=[item.item_id], limit=1)
+            result["processing"] = processing
+            if not processing.get("ok", True):
+                result["ok"] = False
+
+        latest = inbox.get_item(item.item_id)
+        result["item"] = latest.to_dict() if latest else item.to_dict()
+        return result
+    except Exception as exc:
+        logger.error("Failed to submit operator inbox item: %s", exc)
+        return {"ok": False, "error": str(exc)}
+
+
+def _process_operator_inbox(limit: int = 10) -> Dict[str, Any]:
+    """Process pending operator inbox items into the queue and plan digests."""
+    try:
+        from engine.nexus.operator_inbox import get_operator_inbox
+
+        return get_operator_inbox().process_items(limit=limit)
+    except Exception as exc:
+        logger.error("Failed to process operator inbox: %s", exc)
+        return {"ok": False, "error": str(exc), "processed": 0}
+
+
+def _get_operator_status(limit: int = 12) -> Dict[str, Any]:
+    """Return a unified operator cockpit status payload."""
+    return {
+        "timestamp": _now(),
+        "inbox": _get_operator_inbox_items(limit=limit),
+        "queue": _get_operator_queue(limit=limit),
+        "activity": _get_activity_snapshot(limit=limit),
+        "git": _get_git_status_summary(),
+        "command_targets": _get_command_targets(),
+    }
+
+
 def _run_conversation_analysis(text: str, mode: str = "auto") -> Dict[str, Any]:
     """Run conversation analysis on provided text."""
     try:
@@ -1442,36 +1762,21 @@ def _get_world_state_summary() -> Dict[str, Any]:
 def _get_scene_health() -> Dict[str, Any]:
     """Return health status for all registered scenes."""
     import requests as _req
-    _KNOWN_SCENES = [
-        {"name": "phone",       "display": "SIGNAL",             "port": 5555},
-        {"name": "bedroom",     "display": "THE PENTHOUSE",      "port": 5556},
-        {"name": "lounge",      "display": "THE PIT",            "port": 5557},
-        {"name": "tavern",      "display": "RUSTY ANCHOR",       "port": 5558},
-        {"name": "casino",      "display": "CLUB NOIR",          "port": 5559},
-        {"name": "gallery",     "display": "THE OBSCURA",        "port": 5560},
-        {"name": "arena",       "display": "THE COLOSSEUM",      "port": 5561},
-        {"name": "realm",       "display": "SHATTERED THRONE",   "port": 5562},
-        {"name": "neoncity",    "display": "NEON CITY",          "port": 5563},
-        {"name": "coders",      "display": "THE LAB",            "port": 5564},
-        {"name": "heist",       "display": "THE SCORE",          "port": 5565},
-        {"name": "games",       "display": "THE ARCADE",         "port": 5567},
-        {"name": "intel_hub",   "display": "THE BRIEFING ROOM",  "port": 5580},
-    ]
     results = []
-    for scene in _KNOWN_SCENES:
+    for scene in build_target_listing(ALL_SCENE_TARGETS):
         status = "unknown"
         latency_ms = None
         try:
             import time as _time
             t0 = _time.monotonic()
-            r = _req.get(f"http://localhost:{scene['port']}/api/health", timeout=1.5)
+            r = _req.get(scene["health_url"], timeout=1.5)
             latency_ms = round((_time.monotonic() - t0) * 1000)
             status = "online" if r.ok else "error"
         except Exception:
             status = "offline"
         results.append({
-            "name": scene["name"],
-            "display": scene["display"],
+            "name": scene["id"],
+            "display": scene["label"],
             "port": scene["port"],
             "status": status,
             "latency_ms": latency_ms,
@@ -1564,7 +1869,7 @@ def _get_vtt_config() -> Dict[str, Any]:
         return {
             "success": True,
             "config": {
-                "whisper_url": cfg.get("stt.server_url", "http://localhost:5051"),
+                "whisper_url": cfg.get("stt.server_url", _default_whisper_url()),
                 "whisper_model": cfg.get("stt.model", "base"),
                 "default_backend": cfg.get("stt.default_backend", "web_speech"),
                 "language": cfg.get("stt.language", "en-US"),

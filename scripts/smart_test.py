@@ -43,10 +43,11 @@ Domains:
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import subprocess
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional, Sequence, Set
 
 # ──── Repository root ─────────────────────────────────────────────────────────
 
@@ -313,7 +314,7 @@ SMOKE_TESTS: List[str] = [
     "test_nexus_bridge.py",
     "test_query_router.py",
     "test_router_v3_client.py",
-    "test_asset_studio_workflows.py",
+    "test_asset_studio.py",
     "test_scheduler_daemon.py",
     "test_story_arc.py",
     "test_scene_imports.py",
@@ -433,7 +434,63 @@ def _resolve_test_files(patterns: List[str]) -> List[Path]:
     return found
 
 
-def _tests_for_domains(domains: Set[str], changed_files: Optional[List[str]] = None) -> List[Path]:
+def _ordered_unique(items: Sequence[str]) -> List[str]:
+    """Return items in first-seen order without duplicates."""
+    ordered: List[str] = []
+    seen: Set[str] = set()
+    for item in items:
+        if item and item not in seen:
+            ordered.append(item)
+            seen.add(item)
+    return ordered
+
+
+def _xdist_available() -> bool:
+    """Return True when pytest-xdist is importable."""
+    return importlib.util.find_spec("xdist") is not None
+
+
+def _has_parallel_override(pytest_args: Sequence[str]) -> bool:
+    """Return True when pytest args already control xdist behavior explicitly."""
+    for index, arg in enumerate(pytest_args):
+        if arg == "-n" or arg.startswith("-n=") or arg.startswith("--numprocesses"):
+            return True
+        if arg.startswith("--dist"):
+            return True
+        if arg == "-p" and index + 1 < len(pytest_args) and pytest_args[index + 1] == "no:xdist":
+            return True
+        if arg.startswith("-p") and "no:xdist" in arg:
+            return True
+    return False
+
+
+def _parallel_pytest_args(
+    enable_parallel: bool,
+    pytest_args: Sequence[str],
+    serial: bool,
+    workers: str,
+    xdist_dist: str,
+) -> List[str]:
+    """Return automatic pytest-xdist args when parallel execution is appropriate."""
+    if not enable_parallel or serial or _has_parallel_override(pytest_args) or not _xdist_available():
+        return []
+    return ["-n", workers, f"--dist={xdist_dist}"]
+
+
+def _build_pytest_command(
+    pytest_targets: Sequence[str],
+    extra_args: Sequence[str],
+    enable_parallel: bool,
+    serial: bool,
+    workers: str,
+    xdist_dist: str,
+) -> List[str]:
+    """Build the final pytest command, injecting automatic xdist args when useful."""
+    parallel_args = _parallel_pytest_args(enable_parallel, extra_args, serial, workers, xdist_dist)
+    return [sys.executable, "-m", "pytest", *pytest_targets, *parallel_args, *extra_args]
+
+
+def _tests_for_domains(domains: Sequence[str], changed_files: Optional[List[str]] = None) -> List[Path]:
     """Collect all test files for the given set of domains.
 
     If '_self' is in domains, resolve changed test files directly.
@@ -458,18 +515,33 @@ def _tests_for_domains(domains: Set[str], changed_files: Optional[List[str]] = N
                 test_files.append(p)
                 seen.add(p)
 
-    return sorted(test_files)
+    return test_files
 
 
-def _run_pytest(test_files: List[Path], extra_args: List[str]) -> int:
+def _run_pytest(
+    test_files: List[Path],
+    extra_args: List[str],
+    serial: bool,
+    workers: str,
+    xdist_dist: str,
+) -> int:
     """Run pytest on the given test files. Returns exit code."""
     if not test_files:
         print("No test files to run.")
         return 0
-    cmd = [sys.executable, "-m", "pytest"] + [str(f) for f in test_files] + extra_args
+    parallel_args = _parallel_pytest_args(
+        enable_parallel=len(test_files) > 1,
+        pytest_args=extra_args,
+        serial=serial,
+        workers=workers,
+        xdist_dist=xdist_dist,
+    )
+    cmd = [sys.executable, "-m", "pytest"] + [str(f) for f in test_files] + parallel_args + extra_args
     print(f"\n>> Running {len(test_files)} test file(s):")
     for f in test_files:
         print(f"   {f.relative_to(ROOT)}")
+    if parallel_args:
+        print(f"   [parallel] {' '.join(parallel_args)}")
     print()
     return subprocess.run(cmd, cwd=ROOT).returncode
 
@@ -514,6 +586,22 @@ def main() -> None:
         help="Show which test files would run without running them.",
     )
     parser.add_argument(
+        "--serial",
+        action="store_true",
+        help="Disable automatic pytest-xdist parallelism.",
+    )
+    parser.add_argument(
+        "--workers",
+        default="auto",
+        help="Worker count for automatic pytest-xdist parallelism (default: auto).",
+    )
+    parser.add_argument(
+        "--xdist-dist",
+        default="loadfile",
+        choices=["load", "loadfile", "loadscope", "worksteal"],
+        help="Distribution strategy for automatic pytest-xdist parallelism.",
+    )
+    parser.add_argument(
         "pytest_args",
         nargs="*",
         help="Extra arguments passed through to pytest (e.g. -v --tb=short).",
@@ -531,7 +619,14 @@ def main() -> None:
     # ── Full suite ────────────────────────────────────────────────────────────
     if args.full:
         print("!! Running FULL test suite -- this will take 10+ minutes.")
-        cmd = [sys.executable, "-m", "pytest", "tests/"] + extra_pytest_args
+        cmd = _build_pytest_command(
+            pytest_targets=["tests/"],
+            extra_args=extra_pytest_args,
+            enable_parallel=True,
+            serial=args.serial,
+            workers=args.workers,
+            xdist_dist=args.xdist_dist,
+        )
         sys.exit(subprocess.run(cmd, cwd=ROOT).returncode)
 
     # ── Smoke test ────────────────────────────────────────────────────────────
@@ -542,12 +637,12 @@ def main() -> None:
             for f in smoke_files:
                 print(f"  {f.relative_to(ROOT)}")
             return
-        sys.exit(_run_pytest(smoke_files, extra_pytest_args))
+        sys.exit(_run_pytest(smoke_files, extra_pytest_args, args.serial, args.workers, args.xdist_dist))
 
     # ── Domain selector ───────────────────────────────────────────────────────
     if args.domain:
-        requested = {d.strip() for d in args.domain.split(",")}
-        invalid = requested - set(DOMAIN_TESTS.keys())
+        requested = _ordered_unique([d.strip() for d in args.domain.split(",") if d.strip()])
+        invalid = set(requested) - set(DOMAIN_TESTS.keys())
         if invalid:
             print(f"Unknown domain(s): {', '.join(sorted(invalid))}")
             print(f"Valid domains: {', '.join(sorted(DOMAIN_TESTS.keys()))}")
@@ -558,7 +653,7 @@ def main() -> None:
             for f in test_files:
                 print(f"  {f.relative_to(ROOT)}")
             return
-        sys.exit(_run_pytest(test_files, extra_pytest_args))
+        sys.exit(_run_pytest(test_files, extra_pytest_args, args.serial, args.workers, args.xdist_dist))
 
     # ── Git-diff based selection (default) ────────────────────────────────────
     changed = _git_changed_files(since=args.since)
@@ -568,7 +663,7 @@ def main() -> None:
         print("or --domain <name> to run a specific domain.")
         return
 
-    all_domains: Set[str] = set()
+    ordered_domains: List[str] = []
     file_domain_map: Dict[str, List[str]] = {}
     trigger_smoke = False
     for f in changed:
@@ -576,7 +671,9 @@ def main() -> None:
         file_domain_map[f] = domains
         if "_smoke" in domains:
             trigger_smoke = True
-        all_domains.update(d for d in domains if not d.startswith("_"))
+        for domain in domains:
+            if not domain.startswith("_") and domain not in ordered_domains:
+                ordered_domains.append(domain)
 
     # Print what triggered what
     print(f"Changed files (since {args.since}):")
@@ -589,7 +686,11 @@ def main() -> None:
         print("conftest.py changed -- upgrading to smoke test coverage.")
         test_files = _resolve_test_files(SMOKE_TESTS)
     else:
-        test_files = _tests_for_domains(all_domains, changed_files=changed)
+        requested_domains = []
+        if any("_self" in domains for domains in file_domain_map.values()):
+            requested_domains.append("_self")
+        requested_domains.extend(ordered_domains)
+        test_files = _tests_for_domains(requested_domains, changed_files=changed)
 
     if not test_files:
         print("No matching test files found for changed files.")
@@ -602,7 +703,7 @@ def main() -> None:
             print(f"  {f.relative_to(ROOT)}")
         return
 
-    sys.exit(_run_pytest(test_files, extra_pytest_args))
+    sys.exit(_run_pytest(test_files, extra_pytest_args, args.serial, args.workers, args.xdist_dist))
 
 
 if __name__ == "__main__":

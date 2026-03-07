@@ -117,9 +117,10 @@ def asset_mgr():
 def hub_module(mock_st, asset_mgr):
     """Import hub_scene with streamlit + engine deps mocked."""
     mock_requests = MagicMock()
+    mock_config = MagicMock(get=lambda key, default=None: default)
     with patch.dict(sys.modules, {"streamlit": mock_st, "requests": mock_requests}):
         with patch("engine.assets.AssetManager", return_value=asset_mgr):
-            with patch("engine.config.ConfigManager", return_value=MagicMock()):
+            with patch("engine.config.ConfigManager", return_value=mock_config):
                 mod_key = "content.scenes.hub.hub_scene"
                 sys.modules.pop(mod_key, None)
                 import content.scenes.hub.hub_scene as hub_scene
@@ -129,9 +130,10 @@ def hub_module(mock_st, asset_mgr):
 @pytest.fixture
 def creator_module(mock_st, asset_mgr):
     """Import scene_creator with streamlit + engine deps mocked."""
+    mock_config = MagicMock(get=lambda key, default=None: default)
     with patch.dict(sys.modules, {"streamlit": mock_st}):
         with patch("engine.assets.AssetManager", return_value=asset_mgr):
-            with patch("engine.config.ConfigManager", return_value=MagicMock()):
+            with patch("engine.config.ConfigManager", return_value=mock_config):
                 mod_key = "content.scenes.hub.scene_creator"
                 sys.modules.pop(mod_key, None)
                 import content.scenes.hub.scene_creator as scene_creator
@@ -246,6 +248,39 @@ class TestSceneCategories:
             assert "label" in cat
             assert isinstance(cat["label"], str)
             assert len(cat["label"]) > 0
+
+    def test_ports_derive_from_port_registry(self, mock_st, asset_mgr):
+        import engine.port_registry as port_registry
+
+        real_get_port = port_registry.get_port
+        overrides = {
+            "phone": 6105,
+            "bedroom": 6106,
+            "admin": 9102,
+            "asset_studio": 6168,
+        }
+
+        def _fake_get_port(service, default=None):
+            return overrides.get(service, real_get_port(service, default))
+
+        def _fake_get_service_url(service, path=""):
+            return f"http://localhost:{_fake_get_port(service)}{path}"
+
+        with patch.dict(sys.modules, {"streamlit": mock_st, "requests": MagicMock()}):
+            with patch("engine.assets.AssetManager", return_value=asset_mgr):
+                with patch("engine.config.ConfigManager", return_value=MagicMock()):
+                    with patch("engine.port_registry.get_port", side_effect=_fake_get_port):
+                        with patch("engine.port_registry.get_service_url", side_effect=_fake_get_service_url):
+                            mod_key = "content.scenes.hub.hub_scene"
+                            sys.modules.pop(mod_key, None)
+                            import content.scenes.hub.hub_scene as hub_scene
+
+        assert hub_scene.SCENE_CATEGORIES["core"]["scenes"][0]["port"] == 6105
+        assert hub_scene.SCENE_CATEGORIES["core"]["scenes"][1]["port"] == 6106
+        assert hub_scene.SCENE_CATEGORIES["tools"]["scenes"][1]["port"] == 9102
+        assert hub_scene.SCENE_CATEGORIES["tools"]["scenes"][2]["mode"] == "asset_studio"
+        assert hub_scene.SCENE_CATEGORIES["tools"]["scenes"][2]["port"] == 6168
+        assert hub_scene.QUICK_ACTIONS[0]["url"] == "http://localhost:9102"
 
 
 class TestHealthServices:

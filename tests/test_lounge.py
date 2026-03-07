@@ -36,7 +36,7 @@ def _mock_ssm():
     ssm = MagicMock()
     ssm.get_atmosphere.return_value = {}
     ssm.get_narrative_entries.return_value = []
-    ssm.get_character_state.return_value = {}
+    ssm.get_scene_state.return_value = {}
     return ssm
 
 
@@ -247,7 +247,7 @@ class TestHeatManagement:
 
     def test_tick_heat_syncs_state(self, lounge):
         lounge._tick_heat(10)
-        lounge._test_ssm.update_stats.assert_called_with("lounge_scene", heat_level=10)
+        lounge._test_ssm.set_scene_state.assert_called_with(SCENE_ID, heat_level=10)
 
     def test_tick_heat_warning_threshold(self, lounge):
         """Heat >= 65 should fire heat_warning_rule."""
@@ -429,6 +429,17 @@ class TestGetPluginInfo:
         info = lounge.get_plugin_info()
         assert "skill_packs" in info
         assert "memory" in info["skill_packs"]
+
+
+class TestAgentReplyRuntimeEnforcement:
+    def test_get_agent_reply_marks_degraded_when_agent_missing(self, lounge):
+        """Missing agents should surface explicit degraded runtime metadata."""
+        with patch.object(lounge, "_get_or_create_agent", return_value=None):
+            result = lounge._get_agent_reply(LOLA_ID, "hello")
+
+        assert result["degraded"] is True
+        assert result["error"] == "agent unavailable"
+        assert isinstance(result["text"], str) and result["text"]
 
 
 # ══════════════════════════════════════════════════════════════════════

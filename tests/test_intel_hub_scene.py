@@ -1,6 +1,7 @@
 """Tests for Intel Hub scene."""
 from __future__ import annotations
 
+from collections import deque
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -45,7 +46,8 @@ def hub_app():
         scene._app = app
         scene._host = "0.0.0.0"
         scene._port = 5580
-        scene._activity = []
+        scene._activity = deque()
+        scene._socketio = None
         scene._stop_event = MagicMock()
         scene._register_routes()
 
@@ -86,6 +88,66 @@ class TestIntelHubConfig:
             cfg = yaml.safe_load(cfg_path.read_text())
             intel_hub_cfg = cfg.get("scenes", {}).get("intel_hub", {})
             assert intel_hub_cfg.get("port") == 5580
+
+
+class TestSceneHealthHelper:
+    def test_get_scene_health_includes_registry_backed_scenes(self):
+        """Scene health helper should cover the current launcher-managed scene set."""
+        mock_response = MagicMock(ok=True)
+
+        with patch("requests.get", return_value=mock_response):
+            from content.scenes.intel_hub.intel_hub_scene import _get_scene_health
+
+            data = _get_scene_health()
+
+        names = {scene["name"] for scene in data["scenes"]}
+        assert "grid" in names
+        assert "asset_studio" in names
+        assert data["online"] == data["total"]
+
+    def test_system_overview_uses_canonical_lmstudio_url(self):
+        """LMStudio status should use the canonical service URL."""
+        from content.scenes.intel_hub.intel_hub_scene import IntelHubScene
+
+        scene = IntelHubScene.__new__(IntelHubScene)
+        mock_response = MagicMock(ok=True)
+        mock_response.json.return_value = {"data": [{"id": "model-a"}]}
+
+        with (
+            patch("content.scenes.intel_hub.intel_hub_scene._get_system_resources", return_value={}),
+            patch("content.scenes.intel_hub.intel_hub_scene._get_operator_inbox_items", return_value={"summary": {}}),
+            patch("content.scenes.intel_hub.intel_hub_scene._get_operator_queue", return_value={"summary": {}}),
+            patch(
+                "content.scenes.intel_hub.intel_hub_scene.get_service_url",
+                return_value="http://localhost:4321/api/v1/models",
+            ) as mock_url,
+            patch("requests.get", return_value=mock_response) as mock_get,
+        ):
+            overview = scene._get_overview()
+
+        assert overview["lmstudio"]["available"] is True
+        assert overview["lmstudio"]["models"] == ["model-a"]
+        mock_url.assert_any_call("lmstudio", path="/api/v1/models")
+        mock_get.assert_any_call("http://localhost:4321/api/v1/models", timeout=2)
+
+    def test_vtt_config_uses_canonical_whisper_fallback(self):
+        """Whisper fallback URL should come from the canonical port registry."""
+        from content.scenes.intel_hub.intel_hub_scene import _get_vtt_config
+
+        with (
+            patch(
+                "engine.config.get_config",
+                return_value=MagicMock(get=lambda key, default=None: default),
+            ),
+            patch(
+                "content.scenes.intel_hub.intel_hub_scene.get_service_url",
+                return_value="http://localhost:6501",
+            ) as mock_url,
+        ):
+            data = _get_vtt_config()
+
+        assert data["config"]["whisper_url"] == "http://localhost:6501"
+        mock_url.assert_called_once_with("whisper_stt")
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -167,6 +229,61 @@ class TestUserProfileRoutes:
         )
         assert resp.status_code == 400
         assert "error" in resp.get_json()
+
+
+class TestOperatorRoutes:
+    """Tests for the operator cockpit APIs."""
+
+    def test_get_operator_status_returns_payload(self, hub_app):
+        client, _ = hub_app
+        with patch(
+            "content.scenes.intel_hub.intel_hub_scene._get_operator_status",
+            return_value={
+                "inbox": {"summary": {"pending": 2}, "items": []},
+                "queue": {"summary": {"pending": 3}, "tasks": []},
+                "activity": {"active": [], "recent": [], "active_count": 0, "recent_count": 0},
+                "git": {"available": True, "branch": "main", "dirty": False},
+                "command_targets": [{"id": "bedroom", "label": "Bedroom", "port": 5555}],
+            },
+        ):
+            resp = client.get("/api/operator/status")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["inbox"]["summary"]["pending"] == 2
+        assert data["queue"]["summary"]["pending"] == 3
+        assert data["git"]["branch"] == "main"
+
+    def test_post_operator_inbox_submits_item(self, hub_app):
+        client, _ = hub_app
+        with patch(
+            "content.scenes.intel_hub.intel_hub_scene._submit_operator_inbox_item",
+            return_value={
+                "ok": True,
+                "item": {"title": "Add operator note"},
+                "processing": {"created_tasks": 1},
+            },
+        ):
+            resp = client.post(
+                "/api/operator/inbox",
+                json={"title": "Add operator note", "content": "Persist this into Nexus."},
+                content_type="application/json",
+            )
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["ok"] is True
+        assert data["processing"]["created_tasks"] == 1
+
+    def test_get_operator_queue_returns_summary(self, hub_app):
+        client, _ = hub_app
+        with patch(
+            "content.scenes.intel_hub.intel_hub_scene._get_operator_queue",
+            return_value={"summary": {"pending": 1}, "tasks": [{"title": "Operator: Example"}]},
+        ):
+            resp = client.get("/api/operator/queue")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["summary"]["pending"] == 1
+        assert data["tasks"][0]["title"] == "Operator: Example"
 
 
 # ──────────────────────────────────────────────────────────────────────────────

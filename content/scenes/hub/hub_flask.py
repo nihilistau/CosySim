@@ -15,39 +15,173 @@ from typing import Any, Dict, List, Optional
 import jinja2
 from flask import Flask, jsonify, render_template
 
+from engine.port_registry import HUB_CATALOGUE_TARGETS, build_target_listing, get_port
 from engine.scenes.base_scene import BaseScene
 from content.shared import register_shared_assets
 
 logger = logging.getLogger(__name__)
 
 SCENE_ID = "hub"
-DEFAULT_PORT = 8500
+DEFAULT_PORT = get_port(SCENE_ID)
 
 _SCENE_DIR = Path(__file__).parent
 
 # ── Scene catalogue ──────────────────────────────────────────────────
 # Groups: "neon_world" | "action" | "system"
-SCENE_CATALOGUE: List[Dict[str, Any]] = [
-    # 🏙️ NEON WORLD
-    {"id": "bedroom",   "port": 5556, "label": "THE PENTHOUSE",     "subtitle": "Desire & Danger",      "icon": "🏙️", "group": "neon_world", "accent": "#ec4899", "desc": "Intimate roleplay with emotional AI companions"},
-    {"id": "neoncity",  "port": 5563, "label": "NEON CITY",         "subtitle": "Streets Never Sleep",   "icon": "🌃", "group": "neon_world", "accent": "#06b6d4", "desc": "Cyberpunk city exploration and noir stories"},
-    {"id": "lounge",    "port": 5557, "label": "THE PIT",           "subtitle": "Underground Jazz",      "icon": "🎵", "group": "neon_world", "accent": "#a855f7", "desc": "Jazz bar with NPCs, drinks, and mood contagion"},
-    {"id": "tavern",    "port": 5558, "label": "RUSTY ANCHOR",      "subtitle": "Last Round Standing",   "icon": "⚓", "group": "neon_world", "accent": "#d97706", "desc": "Gritty dockside tavern with quests and barkeep wisdom"},
-    {"id": "casino",    "port": 5559, "label": "CLUB NOIR",         "subtitle": "High-Stakes Shadows",   "icon": "🎴", "group": "neon_world", "accent": "#f97316", "desc": "Blackjack, poker, and a dealer who never blinks"},
-    {"id": "phone",     "port": 5555, "label": "SIGNAL",            "subtitle": "Dark Net Comms",        "icon": "📡", "group": "neon_world", "accent": "#22c55e", "desc": "Encrypted messaging, calls, photo/video sharing"},
-    # ⚔️ ACTION
-    {"id": "arena",     "port": 5561, "label": "THE COLOSSEUM",     "subtitle": "Blood Sport Circuit",   "icon": "⚔️", "group": "action",     "accent": "#ef4444", "desc": "Tactical arena combat with betting and AI fighters"},
-    {"id": "heist",     "port": 5565, "label": "THE SCORE",         "subtitle": "One Last Job",          "icon": "🔓", "group": "action",     "accent": "#f59e0b", "desc": "Plan and execute elaborate heists with your AI crew"},
-    {"id": "realm",     "port": 5562, "label": "SHATTERED THRONE",  "subtitle": "Kingdoms in Ruin",      "icon": "🏰", "group": "action",     "accent": "#8b5cf6", "desc": "Open-world RPG with quest chains and exploration"},
-    {"id": "gallery",   "port": 5560, "label": "THE OBSCURA",       "subtitle": "Forbidden Visions",     "icon": "🎨", "group": "action",     "accent": "#e879f9", "desc": "AI-generated art exhibition and dark curation"},
-    # 🖥️ SYSTEM
-    {"id": "coders",    "port": 5564, "label": "THE LAB",           "subtitle": "Code & Chaos",          "icon": "🧪", "group": "system",     "accent": "#10b981", "desc": "Multi-agent programming collaboration"},
-    {"id": "games",     "port": 5567, "label": "THE ARCADE",        "subtitle": "Play to Win",           "icon": "🎮", "group": "system",     "accent": "#3b82f6", "desc": "Mystery investigation and truth-or-dare with AI GameMaster"},
-    {"id": "command_center", "port": 5566, "label": "ADMIN",        "subtitle": "System Override",       "icon": "📡", "group": "system",     "accent": "#64748b", "desc": "Real-time system monitoring and control"},
-    {"id": "nexus_panel",    "port": 5570, "label": "NEXUS PANEL",  "subtitle": "Knowledge Engine",      "icon": "🧠", "group": "system",     "accent": "#7c3aed", "desc": "Knowledge management, Librarian AI, workflows"},
-    {"id": "nexus_canvas",   "port": 5590, "label": "NEXUS CANVAS", "subtitle": "The Data Flywheel",     "icon": "🎨", "group": "system",     "accent": "#06b6d4", "desc": "Visual AI workspace: notebooks, NLM, AI Studio, training review"},
-    {"id": "intel_hub",      "port": 5580, "label": "INTEL HUB",   "subtitle": "All Seeing Eye",        "icon": "◆",  "group": "system",     "accent": "#0ea5e9", "desc": "Unified control: Nexus, Copilot, NLM, fine-tuning, scheduler"},
-]
+_SCENE_PRESENTATION: Dict[str, Dict[str, str]] = {
+    "bedroom": {
+        "subtitle": "Desire & Danger",
+        "icon": "🏙️",
+        "group": "neon_world",
+        "accent": "#ec4899",
+        "desc": "Intimate roleplay with emotional AI companions",
+    },
+    "neoncity": {
+        "subtitle": "Streets Never Sleep",
+        "icon": "🌃",
+        "group": "neon_world",
+        "accent": "#06b6d4",
+        "desc": "Cyberpunk city exploration and noir stories",
+    },
+    "grid": {
+        "subtitle": "Underground Exchange",
+        "icon": "🕸️",
+        "group": "neon_world",
+        "accent": "#00ff88",
+        "desc": "Faction markets, broker intel, and the city's back-channel routes",
+    },
+    "lounge": {
+        "subtitle": "Underground Jazz",
+        "icon": "🎵",
+        "group": "neon_world",
+        "accent": "#a855f7",
+        "desc": "Jazz bar with NPCs, drinks, and mood contagion",
+    },
+    "tavern": {
+        "subtitle": "Last Round Standing",
+        "icon": "⚓",
+        "group": "neon_world",
+        "accent": "#d97706",
+        "desc": "Gritty dockside tavern with quests and barkeep wisdom",
+    },
+    "casino": {
+        "subtitle": "High-Stakes Shadows",
+        "icon": "🎴",
+        "group": "neon_world",
+        "accent": "#f97316",
+        "desc": "Blackjack, poker, and a dealer who never blinks",
+    },
+    "phone": {
+        "subtitle": "Dark Net Comms",
+        "icon": "📡",
+        "group": "neon_world",
+        "accent": "#22c55e",
+        "desc": "Encrypted messaging, calls, photo/video sharing",
+    },
+    "arena": {
+        "subtitle": "Blood Sport Circuit",
+        "icon": "⚔️",
+        "group": "action",
+        "accent": "#ef4444",
+        "desc": "Tactical arena combat with betting and AI fighters",
+    },
+    "heist": {
+        "subtitle": "One Last Job",
+        "icon": "🔓",
+        "group": "action",
+        "accent": "#f59e0b",
+        "desc": "Plan and execute elaborate heists with your AI crew",
+    },
+    "realm": {
+        "subtitle": "Kingdoms in Ruin",
+        "icon": "🏰",
+        "group": "action",
+        "accent": "#8b5cf6",
+        "desc": "Open-world RPG with quest chains and exploration",
+    },
+    "gallery": {
+        "subtitle": "Forbidden Visions",
+        "icon": "🎨",
+        "group": "action",
+        "accent": "#e879f9",
+        "desc": "AI-generated art exhibition and dark curation",
+    },
+    "coders": {
+        "subtitle": "Code & Chaos",
+        "icon": "🧪",
+        "group": "system",
+        "accent": "#10b981",
+        "desc": "Multi-agent programming collaboration",
+    },
+    "games": {
+        "subtitle": "Play to Win",
+        "icon": "🎮",
+        "group": "system",
+        "accent": "#3b82f6",
+        "desc": "Mystery investigation and truth-or-dare with AI GameMaster",
+    },
+    "command_center": {
+        "subtitle": "System Override",
+        "icon": "📡",
+        "group": "system",
+        "accent": "#64748b",
+        "desc": "Real-time system monitoring and control",
+    },
+    "asset_studio": {
+        "subtitle": "Generate Everything",
+        "icon": "🖼️",
+        "group": "system",
+        "accent": "#0ea5e9",
+        "desc": "Asset generation, curation, and scene injection for every pipeline",
+    },
+    "nexus_panel": {
+        "subtitle": "Knowledge Engine",
+        "icon": "🧠",
+        "group": "system",
+        "accent": "#7c3aed",
+        "desc": "Knowledge management, Librarian AI, and workflow control",
+    },
+    "canvas": {
+        "subtitle": "The Data Flywheel",
+        "icon": "🎨",
+        "group": "system",
+        "accent": "#06b6d4",
+        "desc": "Visual AI workspace: notebooks, NLM, AI Studio, and training review",
+    },
+    "intel_hub": {
+        "subtitle": "All Seeing Eye",
+        "icon": "◆",
+        "group": "system",
+        "accent": "#0ea5e9",
+        "desc": "Unified control: Nexus, Copilot, NLM, fine-tuning, and scheduler oversight",
+    },
+    "system_control": {
+        "subtitle": "Operator Console",
+        "icon": "🛠️",
+        "group": "system",
+        "accent": "#22c55e",
+        "desc": "Live service truth, config editing, proxy control, and health visibility",
+    },
+}
+
+
+def _build_scene_catalogue() -> List[Dict[str, Any]]:
+    """Build the hub catalogue from canonical control-plane metadata plus hub-only presentation."""
+    catalogue: List[Dict[str, Any]] = []
+    for target in build_target_listing(HUB_CATALOGUE_TARGETS):
+        presentation = _SCENE_PRESENTATION[target["id"]]
+        catalogue.append(
+            {
+                "id": target["id"],
+                "port": target["port"],
+                "label": target["label"],
+                **presentation,
+            }
+        )
+    return catalogue
+
+
+SCENE_CATALOGUE: List[Dict[str, Any]] = _build_scene_catalogue()
 
 # Group metadata for section headers
 SCENE_GROUPS: List[Dict[str, str]] = [

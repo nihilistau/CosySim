@@ -511,6 +511,11 @@ _GRPC_CHAT_URL = (
 )
 
 
+def _is_valid_nlm_build_label(build_label: Optional[str]) -> bool:
+    """Return True when a build label matches NotebookLM's frontend pattern."""
+    return bool(build_label and build_label.startswith("boq_labs-tailwind-frontend_"))
+
+
 # ════════════════════════════════════════════════════════════════════════════
 # META / BUILD LABEL MANAGEMENT
 #
@@ -621,6 +626,23 @@ def refresh_session_tokens() -> bool:
         except Exception as exc:
             logger.warning("Failed to parse WIZ_global_data: %s", exc)
 
+    invalid_build_label: Optional[str] = None
+    for key in ("QrtxK", "cfb2h"):
+        val = wiz.get(key)
+        if isinstance(val, str) and val.startswith("boq_") and not _is_valid_nlm_build_label(val):
+            invalid_build_label = val
+            break
+    if not invalid_build_label:
+        match = re.search(r'"(boq_[^"]+)"', html)
+        if match and not _is_valid_nlm_build_label(match.group(1)):
+            invalid_build_label = match.group(1)
+    if invalid_build_label or "identityfrontendauthuiserver" in html.lower():
+        logger.warning(
+            "Token refresh landed on a non-NotebookLM page; refusing to persist session tokens (build=%s)",
+            invalid_build_label or "unknown",
+        )
+        return False
+
     meta = _load_meta()
     updated = False
 
@@ -642,7 +664,7 @@ def refresh_session_tokens() -> bool:
     # Only accept values that look like real build labels (boq_ prefix)
     for key in ("QrtxK", "cfb2h"):
         val = wiz.get(key)
-        if val and isinstance(val, str) and val.startswith("boq_"):
+        if val and isinstance(val, str) and _is_valid_nlm_build_label(val):
             new_bl = val
             if new_bl != meta.get("bl"):
                 meta["bl"] = new_bl

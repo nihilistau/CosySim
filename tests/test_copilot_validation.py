@@ -19,6 +19,9 @@ class _FakeSyncConfig:
     def _entry_field(self, entry, field: str, default=""):  # noqa: ANN001
         return entry.get(field, default)
 
+    def _normalized_tags(self, category: str, tags: list[str] | None = None) -> list[str]:
+        return sorted({tag for tag in (tags or []) if tag})
+
 
 class _FakeClient:
     def __init__(self, entries_by_category: dict[str, list[dict]] | None = None) -> None:
@@ -67,16 +70,19 @@ def _write_hook_runtime(root: Path) -> None:
             "sessionStart": [
                 {"powershell": "python engine/nexus/nexus_session_logger.py start"},
                 {"powershell": "python -c \"get_copilot_bridge().session_start('x')\""},
+                {"powershell": "python engine/nexus/copilot_hook_control.py run sessionStart"},
             ],
             "userPromptSubmitted": [
                 {"powershell": "python engine/nexus/nexus_session_logger.py prompt"},
             ],
             "sessionEnd": [
                 {"powershell": "python -c \"get_copilot_bridge().session_end('x')\""},
+                {"powershell": "python engine/nexus/copilot_hook_control.py run sessionEnd"},
                 {"powershell": "python engine/nexus/nexus_session_logger.py end"},
             ],
             "preCompaction": [
                 {"powershell": "python engine/nexus/nexus_session_logger.py compact"},
+                {"powershell": "python engine/nexus/copilot_hook_control.py run preCompaction"},
             ],
             "postToolUse": [
                 {"powershell": "pwsh -File .github/hooks/scripts/log-tool-usage.ps1"},
@@ -87,6 +93,7 @@ def _write_hook_runtime(root: Path) -> None:
             ],
             "errorOccurred": [
                 {"powershell": "pwsh -File .github/hooks/scripts/log-errors.ps1"},
+                {"powershell": "python engine/nexus/copilot_hook_control.py run errorOccurred"},
                 {"powershell": "python -c \"get_copilot_bridge().track_error('x', 'y')\""},
             ],
         }
@@ -115,6 +122,7 @@ def _write_hook_runtime(root: Path) -> None:
     nexus_dir.mkdir(parents=True, exist_ok=True)
     (nexus_dir / "nexus_session_logger.py").write_text("# logger", encoding="utf-8")
     (nexus_dir / "copilot_bridge.py").write_text("# bridge", encoding="utf-8")
+    (nexus_dir / "copilot_hook_control.py").write_text("# hook control", encoding="utf-8")
 
 
 def test_validate_nexus_sync_reports_current_sources(tmp_path: Path) -> None:
@@ -231,6 +239,40 @@ def test_validate_nexus_sync_prefers_exact_current_mirror_among_duplicates(tmp_p
     assert any(issue["code"] == "duplicate_exact_title" for issue in report["issues"])
 
 
+def test_validate_nexus_sync_ignores_tag_order_drift(tmp_path: Path) -> None:
+    """Validator should treat equivalent tag sets as current even if order differs."""
+    source_file = tmp_path / "guide.md"
+    source_file.write_text("latest guidance", encoding="utf-8")
+    source = {
+        "path": source_file,
+        "title": "[Copilot Rules] Guide",
+        "category": "copilot-rules",
+        "tags": ["copilot", "project", "instructions", "cosysim"],
+    }
+    state = {str(source_file): mod._file_hash(source_file)}
+    sync_config = _FakeSyncConfig({
+        "[Copilot Rules] Guide": {
+            "title": "[Copilot Rules] Guide",
+            "content": "latest guidance",
+            "content_type": "document",
+            "category": "copilot-rules",
+            "tags": ["copilot", "cosysim", "instructions", "project"],
+        }
+    })
+
+    report = mod.validate_nexus_sync(
+        sources=[source],
+        state=state,
+        client=_FakeClient({
+            "copilot-rules": [sync_config.entries["[Copilot Rules] Guide"]],
+        }),
+        sync_config=sync_config,
+    )
+
+    assert report["ok"] is True
+    assert report["issues"] == []
+
+
 def test_validate_hook_integrity_passes_with_required_manifests(tmp_path: Path) -> None:
     """Hook validation passes when manifests and scripts are present."""
     _write_hook_runtime(tmp_path)
@@ -257,6 +299,7 @@ def test_validate_runtime_health_reports_expected_surfaces() -> None:
     onboarding = {
         "rules": [{"title": "rule"}],
         "resume_handoff": {},
+        "control_context_packet": {},
         "capture_policy": {
             "nexus_first": True,
             "backfill_external_discoveries": True,
@@ -291,6 +334,46 @@ def test_validate_runtime_health_reports_expected_surfaces() -> None:
     assert report["ok"] is True
     assert report["runtime_context_loaded"] is True
     assert report["system_inventory_summary"]["domain_count"] == 10
+
+
+def test_validate_runtime_health_warns_when_control_context_slot_missing() -> None:
+    """Runtime validation should flag missing control flywheel startup packet slot."""
+    onboarding = {
+        "rules": [{"title": "rule"}],
+        "resume_handoff": {},
+        "context_packet": {},
+        "capture_policy": {
+            "nexus_first": True,
+            "backfill_external_discoveries": True,
+            "preferred_capture": ["knowledge_entry", "qa_pair"],
+        },
+        "system_inventory": {
+            "summary": {
+                "domain_count": 10,
+                "nexus_first": True,
+            }
+        },
+    }
+    bridge = _FakeBridge(
+        onboarding=onboarding,
+        session_context={
+            "onboarding": onboarding,
+            "runtime_context": {"guidance": ["Backfill discoveries into Nexus."]},
+            "startup_services": {
+                "nexus": {"loaded": True},
+                "task_scheduler": {"loaded": True},
+                "operator_inbox": {"loaded": True},
+                "system_inventory": {"loaded": True},
+            },
+        },
+    )
+
+    report = mod.validate_runtime_health(
+        bridge=bridge,
+        config=_FakeConfig(),
+    )
+
+    assert any(issue["code"] == "control_context_packet_missing" for issue in report["issues"])
 
 
 def test_validate_runtime_health_flags_missing_capture_policy() -> None:

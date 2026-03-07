@@ -4,7 +4,7 @@ Audits each integration client against its known API baseline (rpcid configs)
 using AST-based method extraction.  Reports implemented methods, coverage %, gaps
 (missing implementations), and extra methods (in SDK but not in the known API).
 
-Also cross-references payload files in data/argus/payloads/ to flag which
+Also cross-references payload files in artifacts/argus/payloads/ to flag which
 discovered rpcids have SDK coverage.
 
 CLI::
@@ -25,19 +25,18 @@ from typing import Any, Dict, List, Optional, Union
 
 from scripts.argus.config import (
     AISTUDIO_METHODS,
-    DATA_DIR,
     GAS_RPCIDS,
     GEMINI_RPCIDS,
     NLM_RPCIDS,
     ROOT,
 )
+from scripts.argus.paths import PAYLOADS_DIR, SDK_AUDIT_REPORT_PATH
 
 logger = logging.getLogger(__name__)
 
 # ──── Paths ────────────────────────────────────────────────────────────────────
 
-PAYLOADS_DIR = DATA_DIR / "payloads"
-AUDIT_REPORT_PATH = DATA_DIR / "sdk_audit.json"
+AUDIT_REPORT_PATH = SDK_AUDIT_REPORT_PATH
 
 _INTEGRATIONS_DIR = ROOT / "engine" / "integrations"
 
@@ -123,7 +122,7 @@ class SDKAuditor:
 
     Args:
         payloads_dir: Directory containing rpcid payload files (default:
-            data/argus/payloads/).
+            artifacts/argus/payloads/).
     """
 
     def __init__(self, payloads_dir: Optional[Path] = None) -> None:

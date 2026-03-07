@@ -19,10 +19,7 @@ import argparse
 import hashlib
 import json
 import logging
-import os
 import sqlite3
-import urllib.error
-import urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -30,7 +27,6 @@ from typing import Any, Dict, List, Optional
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
-NEXUS_URL = os.environ.get("NEXUS_URL", "http://localhost:8700")
 # Actual path: ~/.copilot/session-store.db (flat file, no subdirectory)
 SESSION_STORE_DB = Path.home() / ".copilot" / "session-store.db"
 STATE_FILE = (
@@ -46,19 +42,27 @@ STATE_FILE = (
 
 
 def _post_nexus(path: str, data: Dict[str, Any], timeout: int = 8) -> Optional[Dict]:
-    """POST to Nexus API. Returns response dict or None on failure."""
+    """Write to Nexus through the governed client path."""
+    del timeout  # kept for backward-compatible signature
     try:
-        url = f"{NEXUS_URL}/api{path}"
-        body = json.dumps(data).encode()
-        req = urllib.request.Request(
-            url, data=body, method="POST",
-            headers={"Content-Type": "application/json"},
-        )
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            return json.loads(resp.read())
+        from engine.nexus.client import get_nexus_client
+
+        client = get_nexus_client()
+        if path == "/entries":
+            entry_id = client.add_entry(
+                title=data.get("title", ""),
+                content=data.get("content", ""),
+                content_type=data.get("content_type", "history"),
+                category=data.get("category", ""),
+                tags=data.get("tags", []),
+                created_by=data.get("created_by", "copilot_session_sync"),
+                agent_id=data.get("agent_id", "copilot"),
+                namespace=data.get("namespace", "copilot"),
+            )
+            return {"id": entry_id} if entry_id else None
     except Exception as exc:
         logger.debug("Nexus POST %s failed: %s", path, exc)
-        return None
+    return None
 
 
 # ── State helpers ─────────────────────────────────────────────────────────────

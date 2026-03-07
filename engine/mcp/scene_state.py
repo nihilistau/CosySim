@@ -30,6 +30,10 @@ Quick start::
     mgr.update_stats("char_1", arousal=+15, happiness=-5)
     snap = mgr.get_stats("char_1")                           # StatsSnapshot
 
+    # Scene state
+    mgr.set_scene_state("bedroom", heat_level=35, phase="afterglow")
+    state = mgr.get_scene_state("bedroom")
+
     # Narrative
     mgr.add_narrative("bedroom", "char_1 kisses char_2 softly on the neck.")
     tail = mgr.get_narrative("bedroom", limit=10)
@@ -375,6 +379,7 @@ class SceneStateManager:
         self._interactions: Dict[str, List[InteractionRecord]] = {}  # keyed by scene_id
         self._narrative   = NarrativeLog(maxlen=200)
         self._scene_atmospheres: Dict[str, Dict] = {}           # keyed by scene_id
+        self._scene_state: Dict[str, Dict[str, Any]] = {}       # keyed by scene_id
 
     # ── Wardrobe ──────────────────────────────────────────────────────
 
@@ -428,16 +433,27 @@ class SceneStateManager:
                 self._stats[character_id] = StatsSnapshot()
         return self._stats[character_id]
 
+    def _validate_stat_keys(self, values: Dict[str, Any]) -> None:
+        unsupported = sorted(k for k in values if k not in STAT_KEYS)
+        if unsupported:
+            raise ValueError(
+                "Unsupported SceneStateManager stats: "
+                f"{', '.join(unsupported)}. "
+                "Use set_scene_state() for scene-level fields or StateCoordinator "
+                "for non-stat character fields."
+            )
+
     def update_stats(self, character_id: str, **deltas) -> StatsSnapshot:
+        self._validate_stat_keys(deltas)
         stats = self.get_stats(character_id)
         stats.adjust(**deltas)
         return stats
 
     def set_stats(self, character_id: str, **values) -> StatsSnapshot:
+        self._validate_stat_keys(values)
         stats = self.get_stats(character_id)
         for k, v in values.items():
-            if k in STAT_KEYS:
-                setattr(stats, k, float(v))
+            setattr(stats, k, float(v))
         stats.clamp()
         return stats
 
@@ -553,6 +569,19 @@ class SceneStateManager:
         with self._lock:
             return dict(self._scene_atmospheres.get(scene_id, {}))
 
+    # ── Scene state ───────────────────────────────────────────────────
+
+    def set_scene_state(self, scene_id: str, **values: Any) -> Dict[str, Any]:
+        with self._lock:
+            if scene_id not in self._scene_state:
+                self._scene_state[scene_id] = {}
+            self._scene_state[scene_id].update(values)
+            return dict(self._scene_state[scene_id])
+
+    def get_scene_state(self, scene_id: str) -> Dict[str, Any]:
+        with self._lock:
+            return dict(self._scene_state.get(scene_id, {}))
+
     # ── Full snapshot ─────────────────────────────────────────────────
 
     def get_scene_snapshot(self, scene_id: str, character_ids: Optional[List[str]] = None) -> Dict:
@@ -572,6 +601,7 @@ class SceneStateManager:
             "scene_id":           scene_id,
             "characters":         characters_data,
             "atmosphere":         self.get_atmosphere(scene_id),
+            "scene_state":        self.get_scene_state(scene_id),
             "recent_narrative":   self.get_narrative(scene_id, limit=15),
             "recent_interactions": self.recent_interactions(scene_id, limit=5),
         }

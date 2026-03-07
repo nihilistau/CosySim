@@ -23,6 +23,41 @@ def client() -> NLMDirectClient:
     return NLMDirectClient(account)
 
 
+def test_get_page_params_prefers_preloaded_values(client: NLMDirectClient) -> None:
+    """Explicitly preloaded session params are used without hitting the network."""
+    client._bl = "boq_test_label"
+    client._f_sid = "-12345"
+
+    with patch.object(client._session, "get") as mock_get:
+        result = client._get_page_params()
+
+    assert result == ("boq_test_label", "-12345")
+    mock_get.assert_not_called()
+
+
+def test_load_saved_session_params_prefers_service_sessions() -> None:
+    """NotebookLM service_sessions are treated as the canonical saved session source."""
+    account = MagicMock()
+    account.service_sessions = {
+        "notebooklm": {
+            "bl": "boq_labs-tailwind-frontend_20260305.05_p0",
+            "f_sid": "-99999",
+            "at": "service-at",
+        }
+    }
+    account.nlm_session = {
+        "bl": "boq_labs-tailwind-frontend_20260304.01_p0",
+        "f_sid": "-12345",
+        "at": "legacy-at",
+    }
+
+    client = NLMDirectClient(account)
+
+    assert client._bl == "boq_labs-tailwind-frontend_20260305.05_p0"
+    assert client._f_sid == "-99999"
+    assert client._at_token == "service-at"
+
+
 # ──── create_notebook ──────────────────────────────────────────────────────────
 
 

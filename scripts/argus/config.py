@@ -1,22 +1,18 @@
 """ARGUS configuration — all known baselines, targets, and constants."""
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Dict, List
 
-# ──── Paths ────
-ROOT = Path(__file__).resolve().parents[2]          # CosySim root
-DATA_DIR = ROOT / "data" / "argus"
-DATA_DIR.mkdir(parents=True, exist_ok=True)
-
-REGISTRY_PATH   = DATA_DIR / "registry.json"
-SSLKEYS_PATH    = DATA_DIR / "sslkeys.log"
-CAPTURES_DIR    = DATA_DIR / "captures"
-HEAP_DIR        = DATA_DIR / "heaps"
-REPORTS_DIR     = DATA_DIR / "reports"
-
-for _d in (CAPTURES_DIR, HEAP_DIR, REPORTS_DIR):
-    _d.mkdir(parents=True, exist_ok=True)
+from scripts.argus.paths import (
+    CAPTURES_DIR,
+    DATA_DIR,
+    HAR_DIR,
+    HEAP_DIR,
+    REGISTRY_PATH,
+    REPORTS_DIR,
+    ROOT,
+    SSLKEYS_PATH,
+)
 
 # ──── Chrome CDP ────
 CDP_HOST = "localhost"
@@ -192,7 +188,7 @@ TARGETS["apps_script"] = {
     "base_url":   "https://script.google.com",
     "batch_url":  "https://script.google.com/_/AppsPlatformConsoleUi/data/batchexecute",
     "service":    "AppsPlatformConsoleUi",
-    "har_path":   str(ROOT / "data" / "har_files" / "nihilistcod" / "script.google.com.har"),
+    "har_path":   str(HAR_DIR / "nihilistcod" / "script.google.com.har"),
     "notes":      "25 rpcids mapped by ARGUS. Full ArtifactService proto interface reconstructed from V8 heap.",
 }
 
@@ -201,7 +197,7 @@ TARGETS["cloud_console"] = {
     "base_url":   "https://console.cloud.google.com",
     "entity_api": "https://cloudconsole-pa.clients6.google.com/v3/entityServices",
     "service":    "cloudconsole-pa",
-    "har_path":   str(ROOT / "data" / "har_files" / "users_dump_folder" / "gold" / "console.cloud.google.com.har"),
+    "har_path":   str(HAR_DIR / "users_dump_folder" / "gold" / "console.cloud.google.com.har"),
     "notes":      "Cloud Console entity service API. /v3/entityServices/{Service}/schema for proto info.",
 }
 

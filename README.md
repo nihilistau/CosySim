@@ -1,14 +1,25 @@
 # CosySim
 
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/) [![Tests: 8811](https://img.shields.io/badge/tests-8%2C811%2B%20passing-brightgreen.svg)]() [![Grade: A++](https://img.shields.io/badge/audit-A%2B%2B-gold.svg)]() [![Version: 0.85b](https://img.shields.io/badge/version-0.85b-blueviolet.svg)]()
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/) [![Version: 0.90b](https://img.shields.io/badge/version-0.90b-blueviolet.svg)]() [![Scenes: 16](https://img.shields.io/badge/scenes-16-6f42c1.svg)]() [![Scheduler: 55](https://img.shields.io/badge/scheduler-55-0a7f5a.svg)]()
 
-> v0.85b — "THE MAINTENANCE LAYER" — Multi-scene AI simulation framework
+> v0.90b — "THE BASELINE" — Multi-scene AI simulation framework
 
 ## Overview
 
-CosySim orchestrates virtual AI agents across **16 interactive scenes**, each a self-contained Flask+Socket.IO web app with its own LLM agents, MCP skill packs, game logic, and real-time state. The **Universal Neon HUD v2** (glass slide panels, phone overlay, world announcer) surfaces player vitals, inventory, crew, and faction standings live across all scenes via the `PlayerState` singleton. A **214-tool MCP pipeline**, 25+ `@skill` packs, 26-interceptor governance (auto-registry), Nexus KMS knowledge layer, and local LMStudio GPU inference make CosySim a complete agentic simulation OS.
+CosySim is a local-first AI simulation framework built around **16 launcher-managed scenes** and **12 launcher-managed services**. The runtime combines Flask/Socket.IO scenes, LMStudio inference, Nexus knowledge tooling, a canonical port registry, **31 auto-registered skill packs / 278 registered skills** (`import engine.skills`), and **42 extracted MCP tool modules** (`engine/mcp/tools/`).
 
-v0.85b — **THE MAINTENANCE LAYER** — the system begins taking care of itself: Google auth cookies are renewed automatically via CDP from the running Chrome instance, test suite regressions are benchmarked and logged to Nexus weekly, the Nexus bridge CLI is fully operational, and the project has a complete narrative history document (`docs/PROJECT_JOURNAL.md`) for agent onboarding.
+## Runtime Snapshot
+
+| Metric | Value |
+|--------|-------|
+| Version | **0.90b** — "THE BASELINE" (`launcher.py`, `config/default.yaml`) |
+| Pytest collection | **9,646 total / 9,260 default-selected** (`python -m pytest tests/ --collect-only -q`) |
+| Scenes | **16** launcher-managed scenes (`launcher.SCENES`) |
+| Services | **12** launcher-managed services (`launcher.SERVICES`) |
+| Skill registry | **31 packs / 278 skills** after `import engine.skills` |
+| MCP tool modules | **42** modules in `engine/mcp/tools/` |
+| Scheduler tasks | **55** builtin tasks (`tests/test_scheduler_daemon.py`) |
+| Canonical ports | **35** named endpoints in `engine.port_registry._DEFAULT_PORTS` |
 
 ## Architecture
 
@@ -20,19 +31,19 @@ v0.85b — **THE MAINTENANCE LAYER** — the system begins taking care of itself
 ┌────────────────────────────▼────────────────────────────────────────┐
 │              16 Scenes  (Flask / Socket.IO)                         │
 │  phone·bedroom·lounge·tavern·casino·gallery·arena·realm·neoncity   │
-│  coders·heist·command·games·asset_studio·grid·intel_hub             │
+│  coders·heist·command_center·games·asset_studio·grid·intel_hub      │
 └──────────┬──────────────────────────────────────┬───────────────────┘
            │                                      │
 ┌──────────▼──────────┐              ┌────────────▼────────────────────┐
-│ 214+ Skills         │              │  MCP Pipeline  (26 interceptors) │
-│ (25+ skill packs)   │◄────────────►│  auto-registry · @mcp_tool       │
+│ 278 Skills          │              │  MCP Pipeline  (26 interceptors) │
+│ (31 skill packs)    │◄────────────►│  auto-registry · @mcp_tool       │
 └──────────┬──────────┘              └────────────┬────────────────────┘
            │                                      │
 ┌──────────▼──────────────────────────────────────▼───────────────────┐
 │                        Engine Layer                                  │
 │  agents/mcp/scenes · lmstudio · nexus · world · integrations        │
 │  ┌─────────────────────────────┐  ┌─────────────────────────────┐   │
-│  │  engine/mcp/tools/ (43)     │  │  engine/nexus/models.py     │   │
+│  │  engine/mcp/tools/ (42)     │  │  engine/nexus/models.py     │   │
 │  │  domain tool logic          │  │  Pydantic v2 typed models   │   │
 │  └─────────────────────────────┘  └─────────────────────────────┘   │
 │  ┌─────────────────────────────┐  ┌─────────────────────────────┐   │
@@ -56,16 +67,13 @@ v0.85b — **THE MAINTENANCE LAYER** — the system begins taking care of itself
 
 ## Features by Version Wave
 
-### THE MAINTENANCE LAYER (v0.85b) — Latest
+### THE LOOP (v0.89b) — Latest
 
-- **`scripts/har_capture.py`** — 3-mode Google cookie refresh: CDP direct (connects to running Chrome port 9222, `Network.getCookies()`, ~1s zero-UI), launch mode, macro fallback
-- **`scripts/har_watchfolder.py`** — drop-folder auto-import for `.har` files (30s poll)
-- **`GoogleAccountPool`** — staleness API: `cookie_age_days()`, `is_stale()`, `get_stale_accounts()`
-- **Scheduler tasks #48–50** — `cookie-health-check` (daily), `cookie-auto-refresh` (every 72h), `test-suite-benchmark` (weekly, Nexus trend logging + regression alert)
-- **`engine/skills/builtin/google_account_skills.py`** — `google_accounts` pack (4 skills)
-- **Nexus bridge CLI fixed** — `_parse_entry`/`_parse_rule` handle JSON-string DB fields; `bridge health/search/ask/store` all working
-- **`docs/PROJECT_JOURNAL.md`** — 5,000+ word project narrative (v0.51b→v0.84b, 17 chapters) — agent onboarding + alignment source
-- **8,811+ tests, 50 scheduler tasks**
+- **ARGUS → NotebookLM → Nexus loop** — `scripts/argus/nlm_pipeline.py` creates and reuses per-target notebooks, asks distillation questions, and stores resulting Q&A back into Nexus.
+- **Browser-attached NotebookLM auth** — live Chrome CDP refresh (`scripts\har_capture.py`) and ARGUS token harvesting now keep the modern cookie/session pool aligned with real NotebookLM session metadata (`bl`, `f_sid`, `at`, notebook context).
+- **Scheduler task #53** — `engine/nexus/scheduler_daemon.py` adds `argus-nlm-distil` to keep the knowledge loop running automatically.
+- **Focused coverage** — `tests/test_argus_nlm_pipeline.py` validates state persistence, notebook create/cache flow, upload, distillation, and offline fallback handling.
+- **Current testing snapshot** — default pytest selection currently collects **9,125** tests out of **9,497** total.
 
 ---
 
@@ -125,105 +133,6 @@ v0.85b — **THE MAINTENANCE LAYER** — the system begins taking care of itself
 - 13 engine modules: EventBus, EconomyManager, ContentGate, ContentEngine, CharacterMemory, ReputationManager, SceneDirector, ConsequenceStore, InvestigationBoard, ArenaEngine, WorldState, WorldSim, EventCascade
 - Black glass design system, Three.js 3D particles (12 presets), `navbar_v2`, admin overlay (8 tabs)
 
----
-
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│  Browser (Neon HUD v2: glass panels · phone overlay · announcer)    │
-└────────────────────────────┬────────────────────────────────────────┘
-                             │ Socket.IO / REST
-┌────────────────────────────▼────────────────────────────────────────┐
-│              16 Scenes  (Flask / Socket.IO)                         │
-│  phone·bedroom·lounge·tavern·casino·gallery·arena·realm·neoncity   │
-│  coders·heist·command·games·asset_studio·grid·intel_hub             │
-└──────────┬──────────────────────────────────────┬───────────────────┘
-           │                                      │
-┌──────────▼──────────┐              ┌────────────▼────────────────────┐
-│ 214+ Skills         │              │  MCP Pipeline  (25 interceptors) │
-│ (25+ skill packs)   │◄────────────►│  pre/post hooks · governance     │
-└──────────┬──────────┘              └────────────┬────────────────────┘
-           │                                      │
-┌──────────▼──────────────────────────────────────▼───────────────────┐
-│                        Engine Layer                                  │
-│  agents/mcp/scenes · lmstudio · nexus · world · integrations        │
-│  ┌──────────────────────────┐  ┌────────────────────────────────┐   │
-│  │  Inventory / Crew        │  │  WorldSim / PlayerState        │   │
-│  │  engine/world/           │  │  economy tick · event cascade  │   │
-│  └──────────────────────────┘  └────────────────────────────────┘   │
-└────────┬──────────────────────────────────────────┬─────────────────┘
-         │                                          │
-┌────────▼──────────────┐              ┌────────────▼──────────────────┐
-│  LMStudio v1 API      │              │  Nexus KMS  :8700             │
-│  :1234 (CUDA)         │              │  FTS5 · NLM · Q&A · news      │
-└───────────────────────┘              └───────────────────────────────┘
-         │
-┌────────▼─────────────────────────────────────────────────────────────┐
-│  External Services                                                    │
-│  Qwen3 TTS :8600 · ComfyUI :8188 · Asset Studio :5568               │
-└──────────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## Features by Version Wave
-
-### THE LIVING CITY (v0.81b) — Latest
-
-- **Inventory System** — `engine/world/inventory.py`: 25 catalog items, 10 categories, 14 equipment slots, thread-safe, persistent JSON storage
-- **Crew System** — `engine/world/crew.py`: 9 roles, loyalty 0–100, XP/levelling (1–5), operations (recon / heist / extraction / deal / hit / hack), persistent JSON storage
-- **HUD v2 — Glass Slide Panels**: Left panel (health/hunger/energy bars, economy, implants, 12-slot inventory grid, skill pips) + Right panel (phone overlay iframe, quick travel, crew status, system health, Nexus search)
-- **Phone Overlay**: Lazy-loaded iframe to SIGNAL :5555, slide-in animation, detach button
-- **World Announcer**: 5 station themes, 7 badge categories, Socket.IO live feed, fallback messages
-- **PlayerState Expanded**: `health` / `hunger` / `energy` vitals (0–100), `skills` dict, `implants` list
-- **Relationship Types**: 12 types (brother / friend / lover / crew / enemy / etc.), auto-upgrade from score, protected types
-- **15 new `@skill` tools**: `inventory_skills` (7) + `crew_skills` (8)
-- **REST APIs**: `/api/inventory` (5 endpoints), `/api/crew` (6 endpoints)
-- **socket.io CDN fix**: local copy served across all 24+ scene templates
-- **50 new tests**: `TestInventoryManager`, `TestCrewManager`, `TestInventorySkills`, `TestCrewSkills`
-- **7,800+ tests passing · 25+ skill packs · 16 scenes**
-
----
-
-### THE COPILOT LAYER (v0.80b)
-
-- **GitHub Copilot internal API** — 26 frontier models (Claude Opus 4.6, Sonnet 4.6, GPT-5.2 Codex, Gemini 3.1 Pro Preview, etc.)
-- `GithubCopilotClient` — auto-refresh token, thread management, SSE streaming, 9 `@skill` tools
-- **Compute Router**: tunnel → copilot → lmstudio priority chain
-- **Nexus Canvas** — `CopilotPanel` with model selector and streaming chat
-- **8,811 tests**
-
----
-
-### THE COMPUTE LAYER (v0.79b)
-
-- Google Account Pool + HAR auth, Colab AI Agent RPC client, NotebookLM Direct HTTP client
-- Google Drive integration, JIT tunnel server (FastAPI + cloudflared on free Colab GPUs)
-- **ComputeRouter**: tunnel → colab_agent → lmstudio; `JITSession` context manager
-- **Nexus Canvas**: `ComputePanel`, `HarExplorer`, `RpcExplorer`, `NexusPanel`
-- 13 new `@skill` tools, 46 scheduler tasks
-
----
-
-### NEON CITY (v0.75–v0.78b)
-
-- Universal Neon HUD, THE GRID scene (4 zones, faction hub), 70+ world events
-- Economy tick (90s), WorldSim, EventCascade 3-tier fan-out, 6 factions
-- **Unified Training System**: ModelZoo (14 types), DataCollector, VoiceTrainer, CoderPipeline
-- **NLM news pipeline**: 12 RSS sources, 4 categories, distillation, rating signal
-- Router v3 (2,080 examples, 16-class, live fine-tuned), 44 scheduler tasks
-
----
-
-### Dark Renaissance (v0.68–v0.73b)
-
-- 13 engine modules: EventBus, EconomyManager, ContentGate, ContentEngine, CharacterMemory, ReputationManager, SceneDirector, ConsequenceStore, InvestigationBoard, ArenaEngine, WorldState, WorldSim, EventCascade
-- Black glass design system, Three.js 3D particles (12 presets), `navbar_v2`, admin overlay (8 tabs)
-- Asset Studio (9-tab, Wan 2.2 GGUF video, A++ tuning engine), Arena scene, news pipeline
-
----
-
 ## Scenes
 
 | Scene | Display Name | Port | Type |
@@ -239,7 +148,7 @@ v0.85b — **THE MAINTENANCE LAYER** — the system begins taking care of itself
 | `neoncity` | NEON CITY | 5563 | game |
 | `coders` | THE LAB | 5564 | utility |
 | `heist` | THE SCORE | 5565 | utility |
-| `command` | Command Center | 5566 | utility |
+| `command_center` | Command Center | 5566 | utility |
 | `games` | THE ARCADE | 5567 | utility |
 | `asset_studio` | ASSET STUDIO | 5568 | utility |
 | `grid` | THE GRID | 5569 | game |
@@ -249,39 +158,15 @@ v0.85b — **THE MAINTENANCE LAYER** — the system begins taking care of itself
 
 ## Skill Packs
 
-| Pack | Skills | Description |
-|------|-------:|-------------|
-| `world` | 10 | PlayerState, economy, heat, factions |
-| `inventory` | 7 | Items, equipment slots, catalog |
-| `crew` | 8 | Recruitment, loyalty, operations |
-| `relationship` | 8 | NPC relationships, crew tags, types |
-| `nexus` | 12 | Knowledge search, Q&A, research |
-| `coding` | 8 | Code gen, review, explain, snippets |
-| `copilot` | 9 | 26 frontier models via Copilot API |
-| `colab` | 13 | Colab GPU, Drive, NLM direct |
-| `training` | 10 | Fine-tuning, datasets, benchmarks |
-| `profile` | 11 | User profile, conversation analysis, backups |
-| `media` | 8 | ComfyUI portraits, video, audio |
-| `tts` | 6 | Voice synthesis, Piper/Orpheus/Qwen3 |
-| `home` | 15 | Home Assistant 15 skills |
-| `news` | 6 | RSS pipeline, distillation, rating |
-| `arena` | 8 | Card game, betting, commentary |
-| `grid` | 10 | Zone navigation, vendors, faction ops |
-| `scene` | 6 | Scene management, transitions |
-| `lore` | 5 | NPC backstories, world lore, seeding |
-| `economy` | 8 | EconomyManager, transactions, debt |
-| `narrative` | 6 | Story arcs, faction events, daily challenges |
-| `characters` | 8 | CharacterMemory, reputation, emotions |
-| `comms` | 6 | Phone assistant, AnythingLLM bridge |
-| `system` | 10 | Scheduler, health, admin, config |
-| `debug` | 5 | Diagnostics, trace, hot-reload |
-| `nlm` | 10 | NotebookLM forge, batch-ask, distill |
+- Importing `engine.skills` currently registers **31 packs / 278 skills**.
+- Frequently used packs include `autonomy`, `nexus`, `notebooklm`, `nlm_forge`, `coding`, `coder`, `comfyui`, `tts`, `voice`, `training`, `homeassistant`, `relationships`, and `player_profile`.
+- Source of truth: `engine/skills/builtin/` and the runtime registry in `engine/skills/registry.py`.
 
 ---
 
 ## Key Engine Systems
 
-- **MCPFramework** — State tree singleton, 214 tools (106 main + 108 devtools), `@skill` decorator, governed skill calls
+- **MCPFramework** — State tree singleton, tool routing, `@skill` integration, governed tool calls
 - **`@mcp_tool` Decorator** — Unified error handling + JSON serialization for all MCP tools (`engine/mcp/decorators.py`)
 - **InterceptorPipeline** — 26 hooks (pre/post), auto-registry via `@register_interceptor`, personality enforcement, content gating, context injection
 - **`INTERCEPTOR_CACHE`** — TTL-based cache for interceptor instances (`engine/agents/interceptors/cache.py`)
@@ -294,7 +179,7 @@ v0.85b — **THE MAINTENANCE LAYER** — the system begins taking care of itself
 - **Nexus KMS** — FTS5 + 4-tier NLM router (cache → FTS → NLM → LLM), Q&A distillation, prompt versioning, news pipeline
 - **NexusClient** — Typed returns (`List[NexusEntry]`), domain sub-clients (`rules`, `sessions`, `memory`)
 - **HUD v2** — 32px strip + left/right glass slide panels, phone overlay iframe, world announcer widget
-- **Training Pipeline** — ModelZoo 14 types, DataCollector, FinetuneOrchestrator (Unsloth QLoRA), BenchmarkRunner, 44 scheduler tasks
+- **Training Pipeline** — ModelZoo 14 types, DataCollector, FinetuneOrchestrator (Unsloth QLoRA), BenchmarkRunner, scheduler-driven upkeep
 - **DialogSystem** — Conversation threading, context windows, per-character memory
 - **AgentGovernor** — Budget tracking, cooldown enforcement, prerequisite checking
 
@@ -322,8 +207,8 @@ v0.85b — **THE MAINTENANCE LAYER** — the system begins taking care of itself
 # Install
 pip install -r requirements.txt && npm install
 
-# Run tests (~7,800 tests)
-python -m pytest tests/ -v --tb=short --ignore=tests/test_agent_loop.py --ignore=tests/live_wire_test.py
+# Run the default pytest selection
+python -m pytest tests/ -v --tb=short
 
 # Launch a scene
 python launcher.py --mode bedroom    # http://localhost:5556
@@ -344,10 +229,10 @@ CosySim/
 ├── engine/
 │   ├── agents/       # CharacterAgent, VirtualAgent, InterceptorPipeline
 │   │   └── interceptors/  # 26 auto-registered interceptor modules
-│   ├── mcp/          # MCPFramework, DialogSystem, Governor, MCP Server (214 tools)
-│   │   ├── tools/    # 43 domain tool files (Hindsight extraction)
+│   ├── mcp/          # MCP framework, dialog system, governor, tool handlers
+│   │   ├── tools/    # 42 extracted domain tool modules
 │   │   └── decorators.py  # @mcp_tool unified decorator
-│   ├── skills/       # @skill decorator, registry, 25+ builtin packs
+│   ├── skills/       # @skill decorator, registry, 31 auto-registered packs
 │   ├── lmstudio/     # Orchestrator, model manager, router, SSE streaming
 │   ├── nexus/        # Nexus KMS client, NLM engine, news pipeline, CLI
 │   │   └── models.py # 14 Pydantic v2 typed models
@@ -361,7 +246,7 @@ CosySim/
 │   ├── scenes/       # 16 scene implementations
 │   └── simulation/   # Database, character system, services
 ├── config/           # YAML/JSON config (default, dev, prod, voices, skills, mcp)
-├── tests/            # pytest suite (8,771+ tests)
+├── tests/            # pytest suite + manual harnesses
 ├── docs/             # Documentation (INDEX.md entry point)
 ├── training/         # Fine-tuning pipelines and data
 ├── main.py           # Application entry point
@@ -372,17 +257,17 @@ CosySim/
 
 ## Testing
 
-CosySim has **8,771 automated tests** covering engine modules, skill packs, scene logic, REST APIs, and integration flows.
+Current pytest collection snapshot: **9,497 total tests**, with **9,125 selected by default** under the repository's marker filter (`not slow and not integration`). The live-wire harness in `tests/live_wire_test.py` is manual script entrypoint code and no longer executes during collection.
 
 ```bash
-# Full suite (parallel, ~6 min)
-python -m pytest tests/ -n auto --tb=short --ignore=tests/test_agent_loop.py --ignore=tests/live_wire_test.py
+# Default suite
+python -m pytest tests/ -v --tb=short
 
 # Single file
-python -m pytest tests/test_inventory.py -v
+python -m pytest tests/test_port_registry.py -v
 
 # By marker
-python -m pytest -m "not slow" tests/
+python -m pytest -m "integration" tests/
 ```
 
 ---

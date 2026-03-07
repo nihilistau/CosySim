@@ -45,6 +45,7 @@ from scripts.argus.argus_mcp_server import ARGUS_MCP_URL, start_server as start_
 from scripts.argus.browser_tools import get_summary, is_done, set_browser_context
 from scripts.argus.config import CDP_URL, TARGETS
 from scripts.argus.network_monitor import NetworkMonitor
+from scripts.argus.paths import history_path
 from scripts.argus.vision_agent import VisionAgent
 
 logger = logging.getLogger(__name__)
@@ -186,7 +187,7 @@ class ArgusAgent:
 
     @property
     def _history_path(self) -> Path:
-        return Path("data/argus") / f"{self.target}_history.json"
+        return history_path(self.target)
 
     def _save_history(self) -> None:
         """Persist local history mirror to disk after each store=True turn."""

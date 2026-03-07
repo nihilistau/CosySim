@@ -16,6 +16,8 @@ from engine.integrations.compute_router import (
     AccountTier,
     ComputeRouter,
     ComputeUnavailableError,
+    _resolve_lmstudio_base_url,
+    _resolve_lmstudio_headers,
     get_compute_router,
 )
 from engine.integrations.google_account_pool import GoogleAccount
@@ -299,7 +301,7 @@ def test_route_falls_back_to_lmstudio() -> None:
     chat_resp = MagicMock()
     chat_resp.status_code = 200
     chat_resp.json.return_value = {
-        "choices": [{"message": {"content": "local response"}}]
+        "output": [{"type": "message", "content": "local response"}]
     }
 
     with patch(
@@ -309,12 +311,29 @@ def test_route_falls_back_to_lmstudio() -> None:
         with patch(
             "engine.integrations.colab_client.get_colab_client", return_value=None
         ):
-            with patch("requests.get", return_value=models_resp):
-                with patch("requests.post", return_value=chat_resp):
-                    result = router.route_inference("hello", fallback_to_local=True)
+            with patch(
+                "engine.integrations.compute_router._resolve_lmstudio_base_url",
+                return_value="http://lmstudio.internal:4321",
+            ):
+                with patch(
+                    "engine.integrations.compute_router._resolve_lmstudio_headers",
+                    return_value={},
+                ):
+                    with patch("requests.get", return_value=models_resp) as mock_get:
+                        with patch("requests.post", return_value=chat_resp) as mock_post:
+                            result = router.route_inference("hello", fallback_to_local=True)
 
     assert result["backend"] == "lmstudio"
     assert result["response"] == "local response"
+    assert result["degraded"] is True
+    assert any("copilot unavailable" in item for item in result["degraded_backends"])
+    assert any("colab_agent unavailable" in item for item in result["degraded_backends"])
+    mock_get.assert_called_once_with("http://lmstudio.internal:4321/api/v1/models", timeout=2)
+    mock_post.assert_called_once_with(
+        "http://lmstudio.internal:4321/api/v1/chat",
+        json={"model": "qwen3", "input": "hello", "stream": False},
+        timeout=60,
+    )
 
 
 def test_route_raises_when_all_unavailable() -> None:
@@ -324,7 +343,11 @@ def test_route_raises_when_all_unavailable() -> None:
     mock_server = MagicMock()
     mock_server._sessions = {}
 
-    with patch.object(router, "_try_copilot", return_value=None):
+    with patch.object(
+        router,
+        "_try_copilot",
+        return_value=(None, "copilot unavailable: no github account with valid cookies"),
+    ):
         with patch(
             "engine.integrations.colab_tunnel_server.get_tunnel_server",
             return_value=mock_server,
@@ -335,6 +358,47 @@ def test_route_raises_when_all_unavailable() -> None:
                 with patch("requests.get", side_effect=Exception("no lmstudio")):
                     with pytest.raises(ComputeUnavailableError):
                         router.route_inference("hello")
+
+
+def test_try_copilot_uses_service_account_without_hardcoded_username() -> None:
+    """Copilot routing should prefer the service-selected GitHub account."""
+    router = ComputeRouter()
+    github_account = GoogleAccount(
+        name="github-primary",
+        services=["github"],
+        cookies={"session": "cookie"},
+    )
+    pool = MagicMock()
+    pool.get_account.return_value = github_account
+    pool.get_by_name.return_value = None
+    client = MagicMock()
+    client.ask.return_value = "copilot reply"
+
+    with patch("engine.integrations.google_account_pool.get_account_pool", return_value=pool):
+        with patch(
+            "engine.integrations.github_copilot_client.get_copilot_client",
+            return_value=client,
+        ):
+            result, error = router._try_copilot("hello", "balanced")
+
+    assert error is None
+    assert result is not None
+    assert result["account"] == "github-primary"
+    assert result["model"] == "claude-sonnet-4.6"
+
+
+def test_try_copilot_returns_explicit_failure_reason_when_no_account() -> None:
+    """Copilot misses should feed degraded_backends with a concrete reason."""
+    router = ComputeRouter()
+    pool = MagicMock()
+    pool.get_account.return_value = None
+    pool.get_by_name.return_value = None
+
+    with patch("engine.integrations.google_account_pool.get_account_pool", return_value=pool):
+        result, error = router._try_copilot("hello", "auto")
+
+    assert result is None
+    assert error == "copilot unavailable: no github account with valid cookies"
 
 
 # ──── Tunnel-related tests ────────────────────────────────────────────────────
@@ -460,8 +524,12 @@ def test_compute_status_returns_all_backends() -> None:
             "engine.integrations.colab_tunnel_server.get_tunnel_server",
             return_value=mock_server,
         ):
-            with patch("requests.get", return_value=mock_lms_resp):
-                status = router.get_status()
+            with patch(
+                "engine.integrations.compute_router._resolve_lmstudio_headers",
+                return_value={},
+            ):
+                with patch("requests.get", return_value=mock_lms_resp):
+                    status = router.get_status()
 
     assert "accounts" in status
     assert "tunnels" in status
@@ -486,10 +554,46 @@ def test_compute_status_lmstudio_unavailable() -> None:
             "engine.integrations.colab_tunnel_server.get_tunnel_server",
             return_value=mock_server,
         ):
-            with patch("requests.get", side_effect=Exception("refused")):
-                status = router.get_status()
+            with patch(
+                "engine.integrations.compute_router._resolve_lmstudio_base_url",
+                return_value="http://lmstudio.internal:4321",
+            ):
+                with patch(
+                    "engine.integrations.compute_router._resolve_lmstudio_headers",
+                    return_value={},
+                ):
+                    with patch("requests.get", side_effect=Exception("refused")):
+                        status = router.get_status()
 
     assert status["lmstudio"]["available"] is False
+    assert status["lmstudio"]["degraded"] is True
+    assert status["lmstudio"]["url"] == "http://lmstudio.internal:4321"
+    assert "refused" in status["lmstudio"]["error"]
+
+
+def test_resolve_lmstudio_base_url_uses_config_host_and_registry_port() -> None:
+    """LMStudio URL resolution uses config host and canonical registry port."""
+    fake_cfg = MagicMock()
+
+    def _cfg_get(path: str, default: Any = None) -> Any:
+        values = {
+            "lmstudio.base_url": "",
+            "lmstudio.host": "lmstudio.internal",
+            "lmstudio.port": 9999,
+        }
+        return values.get(path, default)
+
+    fake_cfg.get.side_effect = _cfg_get
+
+    with patch("engine.config.get_config", return_value=fake_cfg):
+        with patch("engine.port_registry.get_port", return_value=4321):
+            assert _resolve_lmstudio_base_url() == "http://lmstudio.internal:4321"
+
+
+def test_resolve_lmstudio_headers_prefers_env_token() -> None:
+    """LMStudio auth headers prefer environment overrides over config."""
+    with patch.dict("os.environ", {"LMSTUDIO_API_TOKEN": "env-token"}, clear=False):
+        assert _resolve_lmstudio_headers() == {"Authorization": "Bearer env-token"}
 
 
 # ──── Reset ───────────────────────────────────────────────────────────────────

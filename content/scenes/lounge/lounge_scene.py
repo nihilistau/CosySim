@@ -335,8 +335,8 @@ class LoungeScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
         heat = self.heat_level
         ssm  = self._ssm
 
-        # Update heat as a tracked stat in scene state
-        ssm.update_stats("lounge_scene", heat_level=heat)
+        # Persist heat as explicit scene state, not character stats
+        ssm.set_scene_state(SCENE_ID, heat_level=heat)
 
         # Sync heat to StateCoordinator for governance visibility
         try:
@@ -371,6 +371,7 @@ class LoungeScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
         """Reduce heat (time passes, tension eases)."""
         with self._heat_lock:
             self.heat_level = max(0, self.heat_level - delta)
+        self._ssm.set_scene_state(SCENE_ID, heat_level=self.heat_level)
         if self.heat_level < 40:
             self._apply_rule("heat_clear_rule")
         self.socketio.emit("heat_update", {"heat": self.heat_level}, namespace="/")
@@ -525,7 +526,7 @@ class LoungeScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
 
     def _get_scene_flag(self, flag: str) -> Any:
         try:
-            state = self._ssm.get_character_state(SCENE_ID) or {}
+            state = self._ssm.get_scene_state(SCENE_ID) or {}
             return state.get(flag, False)
         except Exception:
             return False
@@ -757,12 +758,21 @@ class LoungeScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
 
         Returns dict with: text, mood, image_requests, action_tags.
         """
-        result = {"text": "", "mood": None, "image_requests": [], "action_tags": []}
+        result = {
+            "text": "",
+            "mood": None,
+            "image_requests": [],
+            "action_tags": [],
+            "degraded": False,
+            "error": None,
+        }
         try:
             from engine.mcp.comms_framework import get_governor, InteractionPolicy
 
             agent = self._get_or_create_agent(character_id)
             if agent is None:
+                result["degraded"] = True
+                result["error"] = "agent unavailable"
                 result["text"] = self._fallback_reply(character_id, user_message)
                 return result
 
@@ -796,6 +806,8 @@ class LoungeScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
 
         except Exception as exc:
             logger.warning("_get_agent_reply(%s) failed: %s", character_id, exc)
+            result["degraded"] = True
+            result["error"] = str(exc)
             result["text"] = self._fallback_reply(character_id, user_message)
             return result
 
@@ -1144,6 +1156,8 @@ class LoungeScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
                 "reply"       : reply,
                 "from"        : target,
                 "mood"        : reply_data.get("mood"),
+                "degraded"    : bool(reply_data.get("degraded")),
+                "error"       : reply_data.get("error"),
                 "trust"       : self.guest_trust,
                 "heat"        : self.heat_level,
                 "turn"        : self.turn_count,

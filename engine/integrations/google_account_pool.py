@@ -5,20 +5,114 @@ NotebookLM, and AI Studio integrations. Persists state to disk.
 """
 from __future__ import annotations
 
+import datetime
 import json
 import logging
 import os
 import threading
 import time
+from pathlib import Path
 from typing import Dict, List, Optional, Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from engine.integrations.har_extractor import HARExtractor, COOKIE_NAMES
+from engine.integrations.har_extractor import HARExtractor
+from engine.integrations.google_service_profiles import (
+    describe_google_services,
+    get_google_service_profile,
+    normalize_google_service_name,
+    normalize_google_services,
+)
 
 logger = logging.getLogger(__name__)
 
 _POOL_PATH = os.path.join("data", "accounts", "pool.json")
+def _normalize_service_name(service: str) -> str:
+    """Normalize historical service aliases to canonical names."""
+    return normalize_google_service_name(service)
+
+
+def _normalize_services(services: List[str]) -> List[str]:
+    """Normalize and de-duplicate service names while preserving order."""
+    return normalize_google_services(services)
+
+
+def _get_nlm_meta_path(pool_path: str) -> Path:
+    """Return the NotebookLM metadata path associated with a pool file."""
+    return _get_service_export_path(pool_path, "nlm_meta.json")
+
+
+def _get_service_export_path(pool_path: str, filename: str) -> Path:
+    """Return a service artifact path associated with a pool file."""
+    resolved = Path(pool_path).resolve()
+    if resolved.name == "pool.json" and resolved.parent.name == "accounts":
+        return resolved.parent.parent / filename
+    return resolved.parent / filename
+
+
+def _persist_nlm_meta(meta_path: Path, session: Dict[str, str]) -> None:
+    """Persist NotebookLM session metadata for the live proxy and tooling."""
+    if not session:
+        return
+
+    existing: Dict[str, Any] = {}
+    if meta_path.exists():
+        try:
+            existing = json.loads(meta_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            logger.debug("Could not read existing NLM metadata from %s", meta_path, exc_info=True)
+
+    updated = dict(existing)
+    if session.get("bl"):
+        updated["bl"] = session["bl"]
+        updated["bl_updated_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    if session.get("f_sid"):
+        updated["f_sid"] = session["f_sid"]
+    if session.get("at"):
+        updated["at"] = session["at"]
+
+    meta_path.parent.mkdir(parents=True, exist_ok=True)
+    meta_path.write_text(json.dumps(updated, indent=2), encoding="utf-8")
+
+
+def _persist_service_cookies(
+    export_path: Path,
+    cookies: Dict[str, str],
+    cookie_names: List[str] | tuple[str, ...],
+) -> None:
+    """Persist a service-specific cookie export file."""
+    filtered = {
+        key: value
+        for key, value in cookies.items()
+        if key in set(cookie_names) and value
+    }
+    if not filtered:
+        return
+
+    export_path.parent.mkdir(parents=True, exist_ok=True)
+    export_path.write_text(json.dumps(filtered, indent=2), encoding="utf-8")
+
+
+def _persist_service_artifacts(pool_path: str, account: "GoogleAccount") -> None:
+    """Persist any known service-specific runtime artifacts for an account."""
+    for service in account.services:
+        profile = get_google_service_profile(service)
+        if profile.cookie_export_filename:
+            _persist_service_cookies(
+                _get_service_export_path(pool_path, profile.cookie_export_filename),
+                account.cookies,
+                profile.cookie_names,
+            )
+
+        if (
+            profile.name == "notebooklm"
+            and profile.session_meta_filename
+            and account.nlm_session
+        ):
+            _persist_nlm_meta(
+                _get_service_export_path(pool_path, profile.session_meta_filename),
+                account.nlm_session,
+            )
 
 
 # ──── Data model ─────────────────────────────────────────────────────────────
@@ -34,6 +128,7 @@ class GoogleAccount(BaseModel):
         rate_limited: Mapping of service -> Unix timestamp when rate limit expires.
         added_at: Unix timestamp when account was added to the pool.
         at_token: XSRF at token, if extracted.
+        nlm_session: NotebookLM-specific session metadata extracted from HAR.
     """
 
     model_config = ConfigDict(validate_assignment=True)
@@ -45,6 +140,8 @@ class GoogleAccount(BaseModel):
     rate_limited: Dict[str, float] = Field(default_factory=dict)
     added_at: float = Field(default_factory=time.time)
     at_token: Optional[str] = None
+    nlm_session: Dict[str, str] = Field(default_factory=dict)
+    service_sessions: Dict[str, Dict[str, str]] = Field(default_factory=dict)
 
     def is_rate_limited(self, service: str) -> bool:
         """Return True if this account is currently rate-limited for service."""
@@ -90,7 +187,7 @@ class GoogleAccountPool:
         self,
         har_path: str,
         account_name: str,
-        services: Optional[List[str]] = None,
+        services: Optional[List[str] | str] = None,
     ) -> GoogleAccount:
         """Import a Google account from a HAR file.
 
@@ -102,41 +199,92 @@ class GoogleAccountPool:
         Returns:
             The created GoogleAccount.
         """
-        if services is None:
-            services = ["colab", "notebooklm"]
-
         extractor = HARExtractor(har_path)
-        data = extractor.to_account_dict(account_name)
+        detected_services = extractor.detect_services()
+        if services is None:
+            requested_services = detected_services or ["colab", "notebooklm"]
+        elif isinstance(services, str):
+            requested_services = [services]
+        else:
+            requested_services = list(services)
+        normalized_services = _normalize_services(requested_services)
+
+        data = extractor.to_account_dict(account_name, normalized_services or detected_services)
         cookies = data["cookies"]
+        detected_services = _normalize_services(data.get("detected_services") or detected_services)
+        service_sessions = {
+            _normalize_service_name(service): dict(session)
+            for service, session in (data.get("service_sessions") or {}).items()
+            if isinstance(session, dict) and session
+        }
+        nlm_session = service_sessions.get("notebooklm") or data.get("nlm_session") or {}
 
         if not cookies:
             raise ValueError(
                 f"No Google cookies found in HAR file: {har_path}"
             )
 
-        account = GoogleAccount(
-            name=account_name,
-            cookies=cookies,
-            authuser=data["authuser"],
-            services=services,
-            at_token=data.get("at_token"),
-        )
-
         with self._lock:
+            existing = self._accounts.get(account_name)
+            merged_services = _normalize_services(
+                (existing.services if existing else []) + normalized_services + detected_services
+            )
+            merged_service_sessions = dict(existing.service_sessions) if existing else {}
+            for service_name, session in service_sessions.items():
+                merged_session = dict(merged_service_sessions.get(service_name, {}))
+                for key, value in session.items():
+                    if value:
+                        merged_session[key] = value
+                if merged_session:
+                    merged_service_sessions[service_name] = merged_session
+
+            merged_nlm_session = dict(existing.nlm_session) if existing else {}
+            for key, value in (merged_service_sessions.get("notebooklm") or nlm_session).items():
+                if value:
+                    merged_nlm_session[key] = value
+
+            account = GoogleAccount(
+                name=account_name,
+                cookies=cookies,
+                authuser=data["authuser"],
+                services=merged_services,
+                rate_limited=dict(existing.rate_limited) if existing else {},
+                added_at=time.time(),
+                at_token=merged_nlm_session.get("at") or data.get("at_token") or (
+                    existing.at_token if existing else None
+                ),
+                nlm_session=merged_nlm_session,
+                service_sessions=merged_service_sessions,
+            )
             self._accounts[account_name] = account
+
+        _persist_service_artifacts(self._path, account)
 
         logger.info(
             "Imported account '%s' with %d cookies for services: %s",
             account_name,
             len(cookies),
-            services,
+            account.services,
         )
         return account
 
     def add_account(self, account: GoogleAccount) -> None:
         """Add a pre-constructed GoogleAccount to the pool."""
+        account.services = _normalize_services(account.services)
+        account.rate_limited = {
+            _normalize_service_name(service): expiry
+            for service, expiry in account.rate_limited.items()
+        }
+        account.service_sessions = {
+            _normalize_service_name(service): dict(session)
+            for service, session in account.service_sessions.items()
+            if isinstance(session, dict) and session
+        }
+        if not account.nlm_session and account.service_sessions.get("notebooklm"):
+            account.nlm_session = dict(account.service_sessions["notebooklm"])
         with self._lock:
             self._accounts[account.name] = account
+        _persist_service_artifacts(self._path, account)
 
     def remove_account(self, account_name: str) -> None:
         """Remove an account from the pool."""
@@ -156,16 +304,17 @@ class GoogleAccountPool:
         Returns:
             A GoogleAccount, or None if no accounts are available.
         """
+        canonical_service = _normalize_service_name(service)
         with self._lock:
             eligible = [
                 acct for acct in self._accounts.values()
-                if service in acct.services and not acct.is_rate_limited(service)
+                if canonical_service in acct.services and not acct.is_rate_limited(canonical_service)
             ]
             if not eligible:
                 return None
 
-            idx = self._rotation_indices.get(service, 0) % len(eligible)
-            self._rotation_indices[service] = (idx + 1) % len(eligible)
+            idx = self._rotation_indices.get(canonical_service, 0) % len(eligible)
+            self._rotation_indices[canonical_service] = (idx + 1) % len(eligible)
             return eligible[idx]
 
     def mark_rate_limited(
@@ -181,14 +330,15 @@ class GoogleAccountPool:
             service: The service that is rate-limited.
             duration_seconds: How many seconds until the limit expires.
         """
+        canonical_service = _normalize_service_name(service)
         with self._lock:
             account = self._accounts.get(account_name)
             if account:
-                account.rate_limited[service] = time.time() + duration_seconds
+                account.rate_limited[canonical_service] = time.time() + duration_seconds
                 logger.warning(
                     "Account '%s' rate-limited for '%s' for %ds",
                     account_name,
-                    service,
+                    canonical_service,
                     duration_seconds,
                 )
 
@@ -199,10 +349,11 @@ class GoogleAccountPool:
             account_name: The account to unblock.
             service: The service to unblock.
         """
+        canonical_service = _normalize_service_name(service)
         with self._lock:
             account = self._accounts.get(account_name)
             if account:
-                account.rate_limited.pop(service, None)
+                account.rate_limited.pop(canonical_service, None)
 
     # ──── Cookie header helpers ────────────────────────────────────────────────
 
@@ -242,10 +393,15 @@ class GoogleAccountPool:
                 result.append({
                     "name": acct.name,
                     "services": acct.services,
+                    "detected_services": sorted(set(acct.services) | set(acct.service_sessions.keys())),
                     "cookie_count": len(acct.cookies),
                     "authuser": acct.authuser,
                     "rate_limited": active_limits,
                     "added_at": acct.added_at,
+                    "has_at_token": bool(acct.at_token),
+                    "has_nlm_session": bool(acct.nlm_session),
+                    "has_service_sessions": bool(acct.service_sessions),
+                    "service_profiles": describe_google_services(acct.services, acct.service_sessions),
                 })
             return result
 
@@ -291,11 +447,12 @@ class GoogleAccountPool:
         Returns:
             List of eligible GoogleAccount instances.
         """
+        canonical_service = _normalize_service_name(service)
         with self._lock:
             return [
                 acct for acct in self._accounts.values()
-                if service in acct.services
-                and not acct.is_rate_limited(service)
+                if canonical_service in acct.services
+                and not acct.is_rate_limited(canonical_service)
                 and (not exclude_stale or not acct.is_stale(max_age_days))
             ]
 
@@ -326,10 +483,22 @@ class GoogleAccountPool:
                     json.dump(data, fh, indent=2)
                 logger.info("Migrated pool.json from legacy list format → dict format")
             with self._lock:
-                self._accounts = {
-                    name: GoogleAccount.from_dict(acct_data)
-                    for name, acct_data in data.items()
-                }
+                self._accounts = {}
+                for name, acct_data in data.items():
+                    account = GoogleAccount.from_dict(acct_data)
+                    account.services = _normalize_services(account.services)
+                    account.rate_limited = {
+                        _normalize_service_name(service): expiry
+                        for service, expiry in account.rate_limited.items()
+                    }
+                    account.service_sessions = {
+                        _normalize_service_name(service): dict(session)
+                        for service, session in account.service_sessions.items()
+                        if isinstance(session, dict) and session
+                    }
+                    if not account.nlm_session and account.service_sessions.get("notebooklm"):
+                        account.nlm_session = dict(account.service_sessions["notebooklm"])
+                    self._accounts[name] = account
             logger.debug("Loaded %d accounts from %s", len(self._accounts), self._path)
         except Exception as exc:
             logger.error("Failed to load account pool: %s", exc)

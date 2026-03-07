@@ -569,6 +569,15 @@ notebooklm:
   timeout: 120                         # per-request timeout seconds
   metadata_path: "data/nlm_notebooks.json"  # notebook metadata persistence
   rate_limit_seconds: 1.5              # minimum gap between outbound NLM calls
+  flywheel:
+    enabled: true
+    min_interval_hours: 8
+    max_tasks: 6
+    distill_category: "notebooklm-flywheel"
+    multi_ask_questions:
+      - "Summarize the current Copilot/Nexus/NotebookLM control-plane state in 6 grounded bullet points. Prefer concrete modules, files, and runtime surfaces over general advice."
+      - "List the highest-value integration gaps or brittle control-plane surfaces that should be addressed next so the system keeps compounding instead of re-discovering context."
+      - "List the most important auth freshness, credential keepalive, checkpoint, compaction, scheduler, or browser-session actions the system should keep checking to stay reliable."
 
 comms:
   governance_enabled: true      # route CharacterAgent.reply() through interceptors
@@ -603,6 +612,10 @@ nexus:
   enabled: true
   base_url: "http://localhost:8700"
   auto_submit: false
+  operator_inbox:
+    state_path: "data/operator_inbox_state.json"
+    auto_sync_schedule: "every_15m"
+    plan_digest_limit: 10
 
 # GitHub Codespace remote execution
 codespace:

@@ -144,7 +144,7 @@ python -m engine.nexus.bridge search "AI Studio method"
 Chrome must be launched with `SSLKEYLOGFILE` for tshark to decrypt HTTPS:
 
 ```powershell
-$env:SSLKEYLOGFILE = "C:\Files\Models\CosySim\data\argus\sslkeys.log"
+$env:SSLKEYLOGFILE = "C:\Files\Models\CosySim\artifacts\argus\tls\sslkeys.log"
 Start-Process "chrome.exe"
 ```
 
@@ -175,7 +175,9 @@ Chrome must be running. ARGUS attaches to the existing session without closing y
 | `data/argus/registry.json` | Versioned endpoint + rpcid registry (all discoveries) |
 | `data/argus/feature_flags.json` | Active NLM feature flag IDs |
 | `data/argus/protos/*.proto` | Reconstructed .proto stubs |
-| `data/argus/pcap/*.pcapng` | Raw packet captures (tshark) |
+| `artifacts/argus/har/**/*.har` | Raw imported HAR captures and dumps |
+| `artifacts/argus/screenshots/*.png` | Vision/browser screenshots and debug captures |
+| `artifacts/argus/pcap/*.pcapng` | Raw packet captures (tshark) |
 | `docs/NLM_API_REFERENCE.md` | Auto-generated NLM API reference |
 | `docs/GEMINI_API_REFERENCE.md` | Auto-generated Gemini API reference |
 | `docs/AISTUDIO_API_REFERENCE.md` | Auto-generated AI Studio API reference |

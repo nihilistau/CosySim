@@ -1,293 +1,224 @@
 # CosySim Agent Onboarding Guide
 
-> Everything an AI agent (Copilot CLI or local LMStudio model) needs to start
-> contributing to the CosySim codebase.
+> Practical operating manual for Copilot-facing agents working in CosySim.
+> This guide is intentionally aligned with the current audited priorities,
+> active hook/runtime assets, and the Nexus-first knowledge loop.
 
-## Environment Setup
+## Mission
 
-### Prerequisites
-- **Python 3.10+** (verify: `python --version`)
-- **NVIDIA GPU** with CUDA (verify: `nvidia-smi`)
-- **LMStudio** running at localhost:1234 (verify: `curl http://localhost:1234/api/v1/models`)
-- **Git** configured (verify: `git --no-pager status`)
+CosySim is being operated with a clear execution order:
 
-### Install Dependencies
-```bash
-pip install -r requirements.txt
+1. **First wave = core stabilization + enforcement**
+2. **Governance source of truth = repository + Nexus synchronized**
+3. **NotebookLM = restore auth/library first, then integrate deeply**
+4. **Advanced GUI comes after foundations are stable**
+5. **Agents must store and reuse histories, changelogs, memories, rules, and improvements through Nexus**
+
+If you are unsure what to do next, choose the action that strengthens these
+priorities instead of widening scope.
+
+## The Operating Loop
+
+```text
+repo files define the live working surface
+        ↓
+Copilot runtime executes instructions, agents, and hooks
+        ↓
+bridge/logger/scheduler capture context and maintenance tasks
+        ↓
+Nexus stores reusable history, rules, memory, changelog, and improvements
+        ↓
+future agents query Nexus first instead of rediscovering the same answers
+        ↓
+NotebookLM deep research feeds back into Nexus once auth/library are healthy
 ```
 
-### Verify Environment
-```bash
-python -c "from engine.config import get_config; print('Config OK')"
-python -m pytest tests/test_config.py -v --tb=short  # Quick sanity check
-```
+Your task is not only to complete work. Your task is to make the next work block
+cheaper, safer, and better informed.
 
-## System Map
+## Source of Truth Model
 
-| Project | Path | Purpose |
-|---------|------|---------|
-| CosySim | C:\Files\Models\CosySim | Multi-scene AI simulation framework (v0.59b) |
-| Nexus KMS | C:\Files\Nexus | Knowledge management system |
-| MCP Servers | C:\Files\MCP | LMStudio + AnythingLLM bridges |
+Treat CosySim as a synchronized two-surface system:
 
-### Services
+| Surface | Role |
+|--------|------|
+| Repository | Editable instructions, agent definitions, hooks, docs, code, and bootstrap configuration |
+| Nexus | Durable operational memory: rules, histories, changelogs, reusable Q&A, decisions, plans, improvements |
 
-| Service | Port | Health Check |
-|---------|------|-------------|
-| LMStudio | 1234 | `GET /api/v1/models` |
-| Nexus API | 8700 | `GET /api/health` |
-| Nexus Panel | 5570 | `GET /` |
-| TTS Server | 8600 | `GET /health` |
-| Web Bridge | 8601 | `GET /health` |
-| Hub | 8500 | `GET /health` |
-| ComfyUI | 8188 | `GET /` (optional) |
+Do not describe one as replacing the other. The target state is **repo + Nexus
+synchronized**.
 
-### Service Startup Order
-1. **LMStudio** — must be running first (external)
-2. **ComfyUI** — if image generation needed (external)
-3. **Nexus KMS**: `cd C:\Files\Nexus && python -m nexus`
-4. **CosySim TTS**: `powershell start_servers.ps1`
-5. **CosySim Scenes**: `python launcher.py --scene bedroom`
-6. **CosySim Hub**: `python launcher.py --hub`
+`engine/nexus/copilot_self_config.py` exists specifically to support that model
+by syncing instructions, agents, hooks, and preferences between the repository
+and Nexus-backed storage.
 
-## Step 1: Search Nexus First
+## Step 1: Query Nexus First
 
-> **Nexus-First Mandate:** BEFORE any work, search Nexus. If Nexus has the answer,
-> use it (zero compute cost). If Nexus misses, use `nlm_ask()` (free Gemini compute,
-> auto-stored). AFTER work, store decisions, patterns, and Q&A back in Nexus.
-> Every skip wastes compute that compounds forever.
+### Preferred entry point
+Use **`nexus_smart_query(question)` first** whenever MCP tools are available.
+It is the preferred front door for retrieval because it checks shared knowledge
+before spending more compute.
 
-Before writing ANY code, search Nexus for existing knowledge:
+Supporting tools:
+- `nexus_search(query)`
+- `nexus_ask(question)`
+- `nexus_get_rules(scope)`
+- `nexus_add(...)`
+- `nexus_add_qa(...)`
+- `nexus_router_stats()`
 
-```python
-# Via Python
-from engine.nexus.client import get_nexus_client
-client = get_nexus_client()
-results = client.search("interceptor pipeline")
-answer = client.ask("How does state persistence work?")
-```
+### CLI bridge fallback
+If MCP tools are unavailable, fall back to the standalone bridge:
 
-```bash
-# Via CLI
-python -m engine.nexus.cli search "interceptor pipeline"
-python -m engine.nexus.cli ask "How does state work?"
-```
-
-## Step 2: Understand the Architecture
-
-### Key Singletons
-```python
-from engine.config import get_config              # ConfigManager
-from engine.mcp import get_framework              # MCPFramework
-from engine.mcp import get_character_registry      # CharacterRegistry
-from engine.mcp import get_dialog_system           # DialogSystem
-from engine.mcp import get_rules_engine            # SceneRulesEngine
-from engine.mcp import get_scene_state_manager     # SceneStateManager
-from engine.mcp import get_governor                # AgentGovernor
-from engine.mcp import get_router                  # AgentRouter
-from engine.scenes.base_scene import BaseScene     # Scene base class
-from engine.skills.skill import skill              # @skill decorator
-from engine.nexus.client import get_nexus_client   # Nexus KMS client
-from engine.lmstudio.orchestrator import get_orchestrator  # Multi-model orchestrator
-```
-
-### Inference Flow
-```
-VirtualAgent.reply() → build_request() → InferenceRequest
-  → VirtualAgentManager.infer()
-    → InferenceOrchestrator.infer()
-      → _select_tier(task_type, priority, profile)
-      → resource_manager.acquire(agent_id, role)
-      → client.chat(messages, model, config)
-      → return LMSResponse
-```
-
-### Project Structure
-```
-CosySim/
-├── engine/         # Core framework — modify carefully
-│   ├── mcp/        # MCPFramework, DialogSystem, GameMCP, Governor, MCP Server
-│   ├── agents/     # VirtualAgent, InterceptorPipeline, StreamProcessor
-│   ├── lmstudio/   # LMS client, router, orchestrator, model manager
-│   ├── scenes/     # BaseScene, SceneManager, SceneRegistry
-│   ├── skills/     # @skill decorator, registry, 20+ builtin packs
-│   ├── services/   # Activity bus, resilience, housekeeping
-│   ├── pipeline/   # VirtualPipeline, token routing
-│   ├── tts/        # TTS manager (Piper, Orpheus, Qwen3)
-│   ├── nexus/      # Nexus client, NLM engine, governance, scheduler
-│   ├── assistant/  # System + phone assistants
-│   ├── integrations/ # AnythingLLM, Home Assistant
-│   └── config.py   # ConfigManager singleton
-├── content/        # Game content
-│   ├── scenes/     # 18 scene implementations
-│   └── simulation/ # Database, character system, services
-├── config/         # YAML/JSON config
-├── tests/          # pytest suite (136 files, 4,476+ tests)
-├── docs/           # Documentation (INDEX.md entry point)
-└── .github/        # Copilot agents, instructions, hooks
-```
-
-## Step 3: Know the Rules
-
-### Governance Enforcement
-
-CosySim has **active** governance enforcement at three levels:
-1. **Copilot hooks** (`check-tool-safety.ps1`) — blocks edits with reject/block violations
-2. **Python decorator** (`@governed`) — blocks function calls for unauthorized agents
-3. **`enforce_governance()`** — raises `GovernanceError` on blocking violations
-
-```python
-from engine.nexus.governance_rules import governed, enforce_governance, GovernanceError
-
-# Decorator-based enforcement
-@governed(operation="write", agent_id="qwen3-0.6b")
-def my_function(): ...
-
-# Manual enforcement
-try:
-    enforce_governance(filepath="engine/config.py", agent_id="tiny-0.6b", operation="write")
-except GovernanceError as e:
-    print(f"Blocked: {e.rule} — {e}")
-```
-
-### Always
-- Use absolute imports: `from engine.config import get_config`
-- Add type hints to ALL function signatures
-- Use `logger = logging.getLogger(__name__)` — never `print()`
-- Mock external services in tests (LMStudio, ComfyUI, TTS, Nexus)
-- Sync mutable state to MCPFramework tree
-- Use `get_config().get("dot.path", default)` for config
-- Run tests after changes
-- Store decisions/findings in Nexus
-
-### Never
-- Store game state in local Python variables
-- Make real API calls in tests
-- Use relative imports
-- Hardcode ports, paths, or model names
-- Use `print()` for output
-- Skip tests
-
-## Step 4: Run Tests
-
-```bash
-# Full suite (must pass before and after changes)
-python -m pytest tests/ -v --tb=short --ignore=tests/test_agent_loop.py --ignore=tests/live_wire_test.py
-
-# Single file
-python -m pytest tests/test_bedroom_game.py -v
-
-# By pattern
-python -m pytest tests/ -k "test_inference" -v
-```
-
-## Step 5: Common Tasks
-
-### Add a New Skill
-```python
-# engine/skills/builtin/my_skills.py or content/scenes/{name}/{name}_skills.py
-from engine.skills.skill import skill
-
-@skill(
-    pack="my_pack",
-    description="What this skill does (LLM-facing)",
-    category="game",
-    cooldown=5.0,
-    cost=1.0,
-    tags=["tag1", "tag2"]
-)
-def my_skill(target: str, amount: int = 1) -> str:
-    """Brief description for the LLM."""
-    return "Result string"
-```
-
-### Add a New Scene
-1. Create directory: `content/scenes/{name}/`
-2. Create `__init__.py` with class inheriting `BaseScene`
-3. Override: `start()`, `stop()`, `get_plugin_info()`
-4. Create `{name}_skills.py` with `@skill` functions
-5. Create `templates/` and `static/` directories
-6. Register scene node: `fw.get_or_create("scenes.{name}", MCPSceneNode)`
-7. Add tests in `tests/test_{name}.py`
-
-### Fix a Bug
-1. Search Nexus for known issues: `nexus_search("bug topic")`
-2. Reproduce with a test
-3. Trace the call chain (check interceptors, governor, agent flow)
-4. Make minimal fix
-5. Verify tests pass
-6. Store fix in Nexus: `nexus_add("Bug Fix: ...", details, "note")`
-7. Commit: `git commit -m "fix: description"`
-
-## Step 6: Git Conventions
-
-```bash
-# Conventional commits
-git commit -m "feat: add new skill for X" -m "Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>"
-git commit -m "fix: resolve state sync issue in lounge" -m "Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>"
-git commit -m "test: add gallery scene tests" -m "Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>"
-```
-
-Prefixes: `feat:`, `fix:`, `docs:`, `test:`, `chore:`, `refactor:`
-
-## Step 7: After Completing Work
-
-1. **Store decisions**: `nexus_add("Decision: ...", content, "decision")`
-2. **Store Q&A**: `nexus_add_qa("How does X work?", "X works by...")`
-3. **Log session**: `nexus_log_session("CosySim")`
-4. **Update tests**: Ensure new code has test coverage
-5. **Update docs**: If you changed APIs or behavior
-
-## MCP Tools Available
-
-The CosySim MCP server provides **108+ tools**. Key categories:
-- **Nexus**: search, ask, smart_query, add, add_qa, rules, prompts, research, maintain
-- **NLM**: notebook management, deep storage, knowledge distillation
-- **Governance**: validate, enforce, check permissions, seed rules
-- **System**: status, skills, benchmarks, scheduler, metrics, diagnostics
-- **News**: fetch, store, digest, sources
-- **AnythingLLM**: connect, status, workspaces, chat, sync
-- **Home Assistant**: entities, states, toggle, notify, sensors
-- **Phone Assistant**: chat, status, mode, history
-- **Knowledge Graph**: build, gaps, clusters, research tasks
-- **Training**: stats, export, sync to Nexus
-
-## Troubleshooting
-
-### Common Failures
-
-| Symptom | Cause | Fix |
-|---------|-------|-----|
-| `RuntimeError: Default configuration not found!` | Config not loaded | Ensure `config/default.yaml` exists and run from project root |
-| `ConnectionError` on Nexus calls | Nexus server not running | `cd C:\Files\Nexus && python -m nexus` |
-| `ConnectionRefusedError` on LMStudio | LMStudio not started | Start LMStudio, verify `curl localhost:1234/api/v1/models` |
-| Tests failing with `ModuleNotFoundError` | Wrong directory | Run from `C:\Files\Models\CosySim` |
-| `GovernanceError` on file edit | Coding standard violation | Fix relative imports, remove print(), add logger |
-
-### Emergency Debug Commands
-```bash
-# Check service health
-curl http://localhost:1234/api/v1/models    # LMStudio
-curl http://localhost:8700/api/health        # Nexus
-python -c "from engine.config import get_config; print(get_config().get('version'))"
-
-# Quick test run (fast subset)
-python -m pytest tests/test_config.py tests/test_skill_registry.py -v
-
-# Check governance
-python -m engine.nexus.governance_rules validate engine/config.py
-
-# Nexus health
+```powershell
+python -m engine.nexus.bridge search "topic"
+python -m engine.nexus.bridge ask "How does this work?" --depth auto
+python -m engine.nexus.bridge rules "global"
+python -m engine.nexus.bridge store "Decision: ..." "..." --type decision --category architecture
+python -m engine.nexus.bridge qa "Question?" "Answer." --category development
+python -m engine.nexus.bridge backfill "Question?" "Answer." --source "where it was found"
+python -m engine.nexus.bridge inventory --store
 python -m engine.nexus.bridge health
 ```
 
-## Quick Reference Card
+The bridge is the fallback path. It does not replace the MCP-first workflow.
 
-| Action | Command |
-|--------|---------|
-| Run tests | `python -m pytest tests/ -v --tb=short --ignore=tests/test_agent_loop.py --ignore=tests/live_wire_test.py` |
-| Search Nexus | `python -m engine.nexus.cli search "query"` |
-| Ask Nexus | `python -m engine.nexus.cli ask "question"` |
-| Check health | `python launcher.py --status` |
-| Launch scene | `python launcher.py --mode {scene_name}` |
-| List skills | `python -c "from engine.skills.registry import get_skill_registry; r=get_skill_registry(); print(r.list_packs())"` |
+## Step 2: Understand the Runtime Assets
+
+These files are part of the operating system for Copilot work, not background
+implementation details.
+
+| Asset | Why it matters |
+|------|-----------------|
+| `engine/nexus/copilot_bridge.py` | Pulls task-aware context from Nexus/NLM at session boundaries and records session metrics |
+| `engine/nexus/copilot_self_config.py` | Syncs repo instructions, agents, hooks, and preferences with Nexus |
+| `engine/nexus/copilot_validation.py` | Validates Copilot Nexus sync drift, hook integrity, and runtime health |
+| `engine/nexus/seed_copilot_rules.py` | Refreshes Copilot/docs mirrors in Nexus and deduplicates stale exact-title mirrors |
+| `engine/nexus/nexus_session_logger.py` | Exports session history, checkpoints, compaction snapshots, and git context |
+| `engine/nexus/scheduler_daemon.py` | Runs recurring maintenance and autonomous tasks |
+| `engine/nexus/task_scheduler.py` | Manages generated and template-based agent tasks |
+| `.github/hooks/cosysim-hooks.json` | Main hook pack for session lifecycle, safety checks, tool logging, and compaction export |
+| `.github/hooks/session-logger/hooks.json` | Dedicated start/prompt/end session export hooks |
+
+## Step 3: Follow the Priority Order
+
+### What to optimize first
+1. broken foundations
+2. governance enforcement
+3. persistence and session recovery
+4. Nexus knowledge quality and reuse
+5. NotebookLM auth/library recovery
+6. deep research automation
+7. advanced GUI and polish
+
+### Practical interpretation
+- If a hook, rule, session export, or knowledge sync is weak, fix that before
+  proposing new visual layers.
+- If NotebookLM auth or library state is unreliable, repair that before writing
+  docs that assume deep NotebookLM automation already works.
+- If work produces useful history, convert it into Nexus data rather than
+  leaving it only in transient chat context.
+
+## Step 4: Respect Governance and Enforcement
+
+CosySim actively uses enforcement, not just style guidance.
+
+### Enforcement surfaces
+1. **Copilot hooks** — tool safety and reminder gates
+2. **Governance rules** — validation and blocking logic for protected changes
+3. **Repository instructions** — path-specific rules for file types and subsystems
+4. **Nexus-backed knowledge/rules** — persistent rule and context layer
+
+### Working stance
+- obey hook and governance feedback
+- prefer minimal, governed changes over broad speculative rewrites
+- keep repo instructions and Nexus rules mutually consistent
+- record any new durable rule or exception in Nexus
+- after changing Copilot-facing instructions/hooks/docs, reseed and validate the
+  Copilot control plane before moving on
+
+## Step 5: Preserve History Deliberately
+
+The mandate is explicit: agents must store and reuse histories, changelogs,
+memories, rules, and improvements through Nexus.
+
+### Minimum persistence expectations
+Store or export, as appropriate:
+- session history
+- checkpoint summaries
+- compaction snapshots
+- changelog-worthy outcomes
+- architecture decisions
+- reusable Q&A
+- bug analyses and fixes
+- rule clarifications
+- improvement ideas worth scheduling later
+
+### Manual commands you should know
+
+```powershell
+python engine/nexus/nexus_session_logger.py checkpoint
+python engine/nexus/nexus_session_logger.py compact
+python engine/nexus/nexus_session_logger.py end
+python -m engine.nexus.seed_copilot_rules
+python -m engine.nexus.copilot_validation --json
+```
+
+Hooks already automate much of this, but you should use the manual commands when
+preserving context matters.
+
+## Step 6: Use NotebookLM in the Right Sequence
+
+NotebookLM is part of the long-term loop, but it is not the first dependency to
+assume is healthy.
+
+### Required sequence
+1. restore or verify NotebookLM authentication
+2. restore or verify notebook library health
+3. use NotebookLM for deeper research or distillation
+4. push distilled knowledge back into Nexus
+5. let future `nexus_smart_query` calls reuse that result
+
+### Why this matters
+Without auth/library recovery, deep NotebookLM integration becomes fragile and
+creates documentation drift. The stable system path is **repair first, then
+integrate deeply**.
+
+## Step 7: Keep GUI Work in Its Lane
+
+Advanced GUI work is not banned. It is sequenced.
+
+Only prioritize it after:
+- stabilization work is under control
+- enforcement and governance are reliable
+- session history and Nexus reuse are functioning
+- NotebookLM recovery is no longer the blocker
+
+If a task choice is ambiguous, the non-GUI foundation task wins.
+
+## Practical Checklist for Any Task
+
+Before work:
+- identify the real priority tier the task belongs to
+- query Nexus with `nexus_smart_query(...)`
+- check repo instructions and any relevant agent docs
+- verify whether NotebookLM health matters for the task
+
+During work:
+- follow governance and hook feedback
+- keep changes practical and internally consistent
+- capture durable decisions as you go
+- avoid widening scope into GUI/polish unless foundations are already stable
+
+After work:
+- store decisions, reusable Q&A, and improvements in Nexus
+- ensure session history/checkpoints are recoverable
+- add or update changelog-style notes if the work affects the system narrative
+- queue follow-up maintenance through scheduler/task systems when useful
+
+## Related Documents
+
+- Copilot repository policy: [`../.github/copilot-instructions.md`](../.github/copilot-instructions.md)
+- Copilot operating manual: [`../.github/README.md`](../.github/README.md)
+- Workflow agent: [`../.github/agents/copilot-workflow.agent.md`](../.github/agents/copilot-workflow.agent.md)
+- Nexus path rules: [`../.github/instructions/nexus.instructions.md`](../.github/instructions/nexus.instructions.md)

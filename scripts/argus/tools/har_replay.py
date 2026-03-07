@@ -7,12 +7,12 @@ script.google.com capture from nihilistcod).
 
 Usage:
     # CLI
-    python -m scripts.argus.tools.har_replay --har data/har_files/nihilistcod/script.google.com.har
-    python -m scripts.argus.tools.har_replay --har data/har_files/nihilistcod/script.google.com.har --target apps_script --report
+    python -m scripts.argus.tools.har_replay --har artifacts/argus/har/nihilistcod/script.google.com.har
+    python -m scripts.argus.tools.har_replay --har artifacts/argus/har/nihilistcod/script.google.com.har --target apps_script --report
 
     # Python
     from scripts.argus.tools.har_replay import HARReplayer
-    replayer = HARReplayer("data/har_files/nihilistcod/script.google.com.har")
+    replayer = HARReplayer("artifacts/argus/har/nihilistcod/script.google.com.har")
     results = replayer.run()
     print(results.summary())
 """

@@ -102,6 +102,89 @@ class ComputeUnavailableError(Exception):
     """Raised when no compute backend is available for inference."""
 
 
+def _resolve_lmstudio_base_url() -> str:
+    """Resolve the canonical LMStudio base URL from config and port registry."""
+    from engine.config import get_config
+    from engine.port_registry import get_port
+
+    cfg = get_config()
+    configured = cfg.get("lmstudio.base_url", "")
+    if configured:
+        return str(configured).rstrip("/")
+
+    host = str(cfg.get("lmstudio.host", "127.0.0.1")).strip() or "127.0.0.1"
+    port = int(get_port("lmstudio", int(cfg.get("lmstudio.port", 1234))))
+    return f"http://{host}:{port}"
+
+
+def _resolve_lmstudio_headers() -> Dict[str, str]:
+    """Build LMStudio auth headers from env-first runtime configuration."""
+    from engine.config import get_config
+
+    cfg = get_config()
+    token = (
+        os.environ.get("LMSTUDIO_API_TOKEN", "").strip()
+        or os.environ.get("LOCAL_LM_STUDIO_TOKEN", "").strip()
+        or str(cfg.get("lmstudio.api_token", "")).strip()
+    )
+    return {"Authorization": f"Bearer {token}"} if token else {}
+
+
+def _extract_lmstudio_response_text(payload: Dict[str, Any]) -> str:
+    """Extract text content from LMStudio native v1 or compat responses."""
+    output_items = payload.get("output")
+    if isinstance(output_items, list):
+        text_parts: List[str] = []
+        for item in output_items:
+            if not isinstance(item, dict):
+                continue
+            if item.get("type") not in {"text", "message"}:
+                continue
+            text_value = item.get("text") or item.get("content") or ""
+            if text_value:
+                text_parts.append(str(text_value))
+        if text_parts:
+            return "\n".join(text_parts).strip()
+
+    choices = payload.get("choices", [])
+    if choices:
+        message = choices[0].get("message", {})
+        content = message.get("content", "")
+        if content:
+            return str(content).strip()
+
+    content = payload.get("content", "")
+    return str(content).strip()
+
+
+def _append_degraded_metadata(
+    result: Dict[str, Any],
+    backend_failures: List[str],
+) -> Dict[str, Any]:
+    """Attach explicit degradation metadata to a successful fallback response."""
+    if not backend_failures:
+        return result
+
+    enriched = dict(result)
+    enriched["degraded"] = True
+    enriched["degraded_backends"] = backend_failures
+    return enriched
+
+
+def _select_copilot_account(pool: Any) -> Optional[GoogleAccount]:
+    """Pick a GitHub-capable account without hardcoding a specific username."""
+    preferred = pool.get_account("github")
+    if preferred is not None and preferred.cookies:
+        return preferred
+
+    for account_name in ("nihilistcod",):
+        candidate = pool.get_by_name(account_name)
+        if candidate is not None and "github" in candidate.services and candidate.cookies:
+            return candidate
+
+    return None
+
+
 # ──── JIT Session context manager ────────────────────────────────────────────
 
 
@@ -549,7 +632,7 @@ class ComputeRouter:
         self,
         prompt: str,
         model_hint: str = "auto",
-    ) -> Optional[Dict[str, Any]]:
+    ) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
         """Attempt to route an inference request through GitHub Copilot.
 
         Only proceeds if a GitHub account with valid cookies is available in
@@ -566,18 +649,18 @@ class ComputeRouter:
 
         Returns:
             Result dict (response, backend, model, account) on success, or
-            ``None`` if Copilot is unavailable.
+            ``None`` plus a degradation reason if Copilot is unavailable.
         """
         try:
             from engine.integrations.google_account_pool import get_account_pool
 
             pool = get_account_pool()
-            account = pool.get_by_name("nihilistcod") or pool.get_account("github")
-            if account is None or "github" not in account.services:
-                return None
+            account = _select_copilot_account(pool)
+            if account is None:
+                return None, "copilot unavailable: no github account with valid cookies"
             # Basic sanity: need at least some cookies
             if not account.cookies:
-                return None
+                return None, f"copilot unavailable: account {account.name} has no cookies"
 
             from engine.integrations.github_copilot_client import get_copilot_client
 
@@ -593,15 +676,18 @@ class ComputeRouter:
 
             client = get_copilot_client(account.name)
             response = client.ask(prompt, model=copilot_model)
-            return {
-                "response": response,
-                "backend": ROUTE_COPILOT,
-                "model": copilot_model,
-                "account": account.name,
-            }
+            return (
+                {
+                    "response": response,
+                    "backend": ROUTE_COPILOT,
+                    "model": copilot_model,
+                    "account": account.name,
+                },
+                None,
+            )
         except Exception as exc:
             logger.debug("Copilot routing failed, falling through: %s", exc)
-            return None
+            return None, f"copilot unavailable: inference failed ({exc})"
 
     # ──── Inference routing ───────────────────────────────────────────────────
 
@@ -630,18 +716,23 @@ class ComputeRouter:
         """
         start = time.time()
         model = model_preference if model_preference != "auto" else "gemini-2.5-flash-exp"
+        backend_failures: List[str] = []
 
         # 0. Try GitHub Copilot
-        copilot_result = self._try_copilot(prompt, model_preference)
+        copilot_result, copilot_failure = self._try_copilot(prompt, model_preference)
         if copilot_result is not None:
             copilot_result["latency_ms"] = int((time.time() - start) * 1000)
             return copilot_result
+        if copilot_failure:
+            backend_failures.append(copilot_failure)
 
         # 1. Try active tunnel sessions
         try:
             from engine.integrations.colab_tunnel_server import get_tunnel_server
             server = get_tunnel_server()
             healthy_sessions = [s for s in server._sessions.values() if s.healthy]
+            if not healthy_sessions:
+                backend_failures.append("tunnel unavailable: no healthy sessions")
             for session in healthy_sessions:
                 try:
                     resp = requests.post(
@@ -652,17 +743,26 @@ class ComputeRouter:
                     if resp.status_code == 200:
                         data = resp.json()
                         self.track_usage(session.account_name, "colab_requests_per_day")
-                        return {
-                            "response": data.get("response", ""),
-                            "backend": "tunnel",
-                            "model": data.get("model", model),
-                            "account": session.account_name,
-                            "latency_ms": int((time.time() - start) * 1000),
-                        }
+                        return _append_degraded_metadata(
+                            {
+                                "response": data.get("response", ""),
+                                "backend": "tunnel",
+                                "model": data.get("model", model),
+                                "account": session.account_name,
+                                "latency_ms": int((time.time() - start) * 1000),
+                            },
+                            backend_failures,
+                        )
+                    backend_failures.append(
+                        f"tunnel unavailable: {session.tunnel_url} returned HTTP {resp.status_code}"
+                    )
                 except Exception as exc:
-                    logger.debug("Tunnel %s inference failed: %s", session.tunnel_url, exc)
+                    message = f"tunnel unavailable: {session.tunnel_url} failed ({exc})"
+                    backend_failures.append(message)
+                    logger.warning("Tunnel inference failed for %s: %s", session.tunnel_url, exc)
         except Exception as exc:
-            logger.debug("Could not access tunnel server: %s", exc)
+            backend_failures.append(f"tunnel unavailable: server access failed ({exc})")
+            logger.warning("Could not access tunnel server: %s", exc)
 
         # 2. Try Colab AI agent
         try:
@@ -673,21 +773,40 @@ class ComputeRouter:
                 if client is not None:
                     response = client.ask(prompt)
                     self.track_usage(account.name, "colab_requests_per_day")
-                    return {
-                        "response": response,
-                        "backend": "colab_agent",
-                        "model": "gemini-2.5-flash-exp",
-                        "account": account.name,
-                        "latency_ms": int((time.time() - start) * 1000),
-                    }
+                    return _append_degraded_metadata(
+                        {
+                            "response": response,
+                            "backend": "colab_agent",
+                            "model": "gemini-2.5-flash-exp",
+                            "account": account.name,
+                            "latency_ms": int((time.time() - start) * 1000),
+                        },
+                        backend_failures,
+                    )
+                backend_failures.append(
+                    f"colab_agent unavailable: no client for account {account.name}"
+                )
+            else:
+                backend_failures.append(
+                    f"colab_agent unavailable: no eligible {require_tier or 'free'} tier account"
+                )
         except Exception as exc:
-            logger.debug("Colab agent inference failed: %s", exc)
+            backend_failures.append(f"colab_agent unavailable: inference failed ({exc})")
+            logger.warning("Colab agent inference failed: %s", exc)
 
         # 3. Try LMStudio
         if fallback_to_local:
+            lmstudio_base_url = _resolve_lmstudio_base_url()
+            lmstudio_headers = _resolve_lmstudio_headers()
+            model_request: Dict[str, Any] = {"timeout": 2}
+            chat_request: Dict[str, Any] = {"timeout": 60}
+            if lmstudio_headers:
+                model_request["headers"] = lmstudio_headers
+                chat_request["headers"] = lmstudio_headers
             try:
                 models_resp = requests.get(
-                    "http://localhost:1234/api/v1/models", timeout=2
+                    f"{lmstudio_base_url}/api/v1/models",
+                    **model_request,
                 )
                 if models_resp.status_code == 200:
                     models_data = models_resp.json()
@@ -697,28 +816,46 @@ class ComputeRouter:
                         model_id = model_list[0]["id"] if model_list else "default"
 
                     lms_resp = requests.post(
-                        "http://localhost:1234/api/v1/chat/completions",
+                        f"{lmstudio_base_url}/api/v1/chat",
                         json={
                             "model": model_id,
-                            "messages": [{"role": "user", "content": prompt}],
+                            "input": prompt,
+                            "stream": False,
                         },
-                        timeout=60,
+                        **chat_request,
                     )
                     if lms_resp.status_code == 200:
                         lms_data = lms_resp.json()
-                        response_text = lms_data["choices"][0]["message"]["content"]
-                        return {
-                            "response": response_text,
-                            "backend": "lmstudio",
-                            "model": model_id,
-                            "account": "local",
-                            "latency_ms": int((time.time() - start) * 1000),
-                        }
+                        response_text = _extract_lmstudio_response_text(lms_data)
+                        return _append_degraded_metadata(
+                            {
+                                "response": response_text,
+                                "backend": "lmstudio",
+                                "model": model_id,
+                                "account": "local",
+                                "latency_ms": int((time.time() - start) * 1000),
+                                "lmstudio_url": lmstudio_base_url,
+                            },
+                            backend_failures,
+                        )
+                    backend_failures.append(
+                        f"lmstudio unavailable: chat returned HTTP {lms_resp.status_code}"
+                    )
+                else:
+                    backend_failures.append(
+                        f"lmstudio unavailable: models returned HTTP {models_resp.status_code}"
+                    )
             except Exception as exc:
-                logger.debug("LMStudio inference failed: %s", exc)
+                backend_failures.append(
+                    f"lmstudio unavailable: request failed at {lmstudio_base_url} ({exc})"
+                )
+                logger.warning("LMStudio inference failed via %s: %s", lmstudio_base_url, exc)
+        else:
+            backend_failures.append("lmstudio skipped: local fallback disabled")
 
         raise ComputeUnavailableError(
-            "No compute backend available (tunnel, colab_agent, lmstudio all failed or unavailable)"
+            "No compute backend available; "
+            + "; ".join(backend_failures or ["all backends unavailable"])
         )
 
     def route_embedding(self, texts: List[str]) -> Dict[str, Any]:
@@ -813,17 +950,39 @@ class ComputeRouter:
         except Exception as exc:
             logger.debug("Could not get tunnel info: %s", exc)
 
-        lmstudio: Dict[str, Any] = {"available": False, "models": []}
+        lmstudio_url = _resolve_lmstudio_base_url()
+        lmstudio: Dict[str, Any] = {
+            "available": False,
+            "models": [],
+            "url": lmstudio_url,
+            "degraded": False,
+        }
         try:
-            resp = requests.get("http://localhost:1234/api/v1/models", timeout=2)
+            request_kwargs: Dict[str, Any] = {"timeout": 2}
+            lmstudio_headers = _resolve_lmstudio_headers()
+            if lmstudio_headers:
+                request_kwargs["headers"] = lmstudio_headers
+            resp = requests.get(f"{lmstudio_url}/api/v1/models", **request_kwargs)
             if resp.status_code == 200:
                 data = resp.json()
                 lmstudio = {
                     "available": True,
                     "models": [m["id"] for m in data.get("data", [])],
+                    "url": lmstudio_url,
+                    "degraded": False,
                 }
-        except Exception:
-            pass
+            else:
+                lmstudio["degraded"] = True
+                lmstudio["error"] = f"HTTP {resp.status_code} from /api/v1/models"
+                logger.warning(
+                    "LMStudio status probe returned HTTP %s via %s",
+                    resp.status_code,
+                    lmstudio_url,
+                )
+        except Exception as exc:
+            lmstudio["degraded"] = True
+            lmstudio["error"] = str(exc)
+            logger.warning("LMStudio status probe failed via %s: %s", lmstudio_url, exc)
 
         return {"accounts": accounts_info, "tunnels": tunnels, "lmstudio": lmstudio}
 

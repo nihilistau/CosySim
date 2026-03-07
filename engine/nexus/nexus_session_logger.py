@@ -50,10 +50,58 @@ def _now() -> str:
 
 
 def _post(path: str, data: dict, timeout: int = 5, method: str = "POST") -> dict | None:
-    """Post or PUT to Nexus API. Returns response or None on failure."""
+    """Post or PUT to Nexus, preferring the governed client path."""
+    payload = dict(data)
+    try:
+        from engine.nexus.client import get_nexus_client
+
+        client = get_nexus_client()
+        if path == "/api/entries" and method == "POST":
+            entry_id = client.add_entry(
+                title=payload.get("title", ""),
+                content=payload.get("content", ""),
+                content_type=payload.get("content_type", "history"),
+                category=payload.get("category", ""),
+                tags=payload.get("tags", []),
+                created_by=payload.get("created_by", "copilot_session_logger"),
+                agent_id=payload.get("agent_id", "copilot"),
+                namespace=payload.get("namespace", "copilot"),
+            )
+            return {"id": entry_id, "ok": bool(entry_id)} if entry_id else None
+        if path == "/api/qa" and method == "POST":
+            qa_id = client.add_qa(
+                question=payload.get("question", ""),
+                answer=payload.get("answer", ""),
+                category=payload.get("category", ""),
+                tags=payload.get("tags", []),
+                quality_score=payload.get("quality_score", 0.7),
+                agent_id=payload.get("agent_id", "copilot"),
+                namespace=payload.get("namespace", "copilot"),
+            )
+            return {"id": qa_id, "ok": bool(qa_id)} if qa_id else None
+        if path == "/api/sessions" and method == "POST":
+            session_id = client.log_session(
+                session_id=payload.get("id"),
+                project=payload.get("project", ""),
+                repo=payload.get("repo", ""),
+                branch=payload.get("branch", ""),
+                agent_id=payload.get("agent_id", "copilot"),
+                summary=payload.get("summary", ""),
+                status=payload.get("status", ""),
+                metadata=payload.get("metadata", {}),
+            )
+            return {"id": session_id, "ok": bool(session_id)} if session_id else None
+        if path.startswith("/api/sessions/") and method == "PUT":
+            session_id = path.rsplit("/", 1)[-1]
+            effective_agent = payload.pop("agent_id", "copilot")
+            ok = client.update_session(session_id, agent_id=effective_agent, **payload)
+            return {"ok": ok}
+    except Exception:
+        logger.debug("Suppressed exception", exc_info=True)
+
     try:
         url = f"{NEXUS_URL}{path}"
-        body = json.dumps(data).encode()
+        body = json.dumps(payload).encode()
         req = urllib.request.Request(url, data=body, method=method,
                                      headers={"Content-Type": "application/json"})
         with urllib.request.urlopen(req, timeout=timeout) as resp:
@@ -84,6 +132,61 @@ def _load_session() -> dict:
 def _save_session(data: dict):
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     SESSION_FILE.write_text(json.dumps(data, indent=2))
+
+
+def _merge_session(updates: dict) -> dict:
+    """Merge updates into the current session file without dropping side-channel state."""
+    session = _load_session()
+    for key, value in updates.items():
+        if value is not None:
+            session[key] = value
+    _save_session(session)
+    return session
+
+
+def _run_hook_control(event: str, *, payload: dict | None = None, store: bool = True) -> dict:
+    """Run the Copilot hook control runtime without blocking session export."""
+    try:
+        from engine.nexus.copilot_hook_control import run_hook
+
+        snapshot = run_hook(event, payload=payload or {}, store=store)
+        return snapshot if isinstance(snapshot, dict) else {}
+    except Exception:
+        logger.debug("Suppressed exception", exc_info=True)
+        return {}
+
+
+def _store_context_packet(
+    packet_type: str,
+    *,
+    session: dict,
+    git_ctx: dict,
+    history: dict,
+    hook_snapshot: dict | None = None,
+) -> dict:
+    """Build and persist a structured context packet for resume/compaction reloads."""
+    try:
+        from engine.nexus.copilot_context import build_context_packet, packet_entry_payload
+
+        packet = build_context_packet(
+            packet_type,
+            session=session,
+            git_ctx=git_ctx,
+            history=history,
+            hook_snapshot=hook_snapshot or {},
+            generated_at=_now(),
+        )
+        payload = packet_entry_payload(packet, branch=str(git_ctx.get("branch", "")))
+        result = _post("/api/entries", payload)
+        if result and result.get("id"):
+            session["last_context_packet_id"] = result["id"]
+            session["last_context_packet_type"] = packet_type
+            session["last_context_packet_at"] = packet.get("generated_at", "")
+            _save_session(session)
+        return packet
+    except Exception:
+        logger.debug("Suppressed exception", exc_info=True)
+        return {}
 
 
 def _git(cmd: str) -> str:
@@ -229,6 +332,18 @@ def _build_history_entry(session: dict, git_ctx: dict, history: dict) -> str:
     lines.append(f"Branch: {git_ctx.get('branch', '?')}")
     lines.append(f"Prompts: {session.get('prompts', '?')}")
     lines.append(f"CWD: {session.get('cwd', '?')}")
+    if session.get("session_id"):
+        lines.append(f"Copilot session ID: {session['session_id']}")
+    if session.get("nexus_session_id"):
+        lines.append(f"Nexus session ID: {session['nexus_session_id']}")
+    lines.append(
+        "Knowledge consulted: "
+        + ("yes" if session.get("nexus_consulted") else "no")
+    )
+    if session.get("nexus_last_tool"):
+        lines.append(f"Last knowledge tool: {session['nexus_last_tool']}")
+    if session.get("nexus_last_success_at"):
+        lines.append(f"Last knowledge sync: {session['nexus_last_success_at']}")
     lines.append("")
 
     if git_ctx.get("last_commit"):
@@ -295,14 +410,13 @@ def handle_start():
     """Called on session start — create session record with git context."""
     git_ctx = _get_git_context()
     session_id = _find_session_id()
-    session = {
+    session = _merge_session({
         "started_at": _now(),
         "prompts": 0,
         "cwd": os.getcwd(),
         "git": git_ctx,
-        "session_id": session_id,
-    }
-    _save_session(session)
+        "session_id": session_id or _load_session().get("session_id"),
+    })
     _log_local("SESSION_START", session)
 
     branch_info = f" on branch '{git_ctx.get('branch', '?')}'" if git_ctx.get("branch") else ""
@@ -453,6 +567,9 @@ def handle_end():
 def handle_prompt():
     """Called on user prompt submission — increment counter and check for new checkpoints."""
     session = _load_session()
+    session_id = session.get("session_id") or _find_session_id()
+    if session_id:
+        session["session_id"] = session_id
     session["prompts"] = session.get("prompts", 0) + 1
     session["last_prompt_at"] = _now()
     _save_session(session)
@@ -524,6 +641,20 @@ def handle_checkpoint():
     if session_id:
         session["session_id"] = session_id
     _auto_export_checkpoints(session)
+    git_ctx = _get_git_context()
+    history = _get_session_history(session_id) if session_id else {}
+    hook_snapshot = _run_hook_control(
+        "checkpoint",
+        payload={"session_id": session_id, "event": "checkpoint"},
+        store=True,
+    )
+    _store_context_packet(
+        "checkpoint",
+        session=session,
+        git_ctx=git_ctx,
+        history=history,
+        hook_snapshot=hook_snapshot,
+    )
     _log_local("CHECKPOINT_MANUAL")
 
 
@@ -542,6 +673,11 @@ def handle_compaction():
     if session_id:
         session["session_id"] = session_id
     _auto_export_checkpoints(session)
+    hook_snapshot = _run_hook_control(
+        "preCompaction",
+        payload={"session_id": session_id, "event": "preCompaction"},
+        store=True,
+    )
 
     # Build compaction snapshot
     history: dict = {}
@@ -554,6 +690,12 @@ def handle_compaction():
         f"Prompts so far: {session.get('prompts', '?')}",
         f"Session started: {session.get('started_at', '?')}",
     ]
+    if session.get("nexus_consulted"):
+        snapshot_parts.append("Knowledge consulted: yes")
+        if session.get("nexus_last_tool"):
+            snapshot_parts.append(f"Last knowledge tool: {session['nexus_last_tool']}")
+        if session.get("nexus_last_success_at"):
+            snapshot_parts.append(f"Last knowledge sync: {session['nexus_last_success_at']}")
 
     if git_ctx.get("last_commit"):
         snapshot_parts.append(f"Last commit: {git_ctx['last_commit']}")
@@ -585,6 +727,13 @@ def handle_compaction():
         "tags": ["copilot", "compaction", "snapshot",
                  git_ctx.get("branch", "")],
     })
+    _store_context_packet(
+        "compaction",
+        session=session,
+        git_ctx=git_ctx,
+        history=history,
+        hook_snapshot=hook_snapshot,
+    )
 
     _log_local("COMPACTION", {
         "prompts": session.get("prompts", 0),
