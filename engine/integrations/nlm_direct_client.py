@@ -32,6 +32,7 @@ from typing import Any, Dict, Generator, Iterator, List, Optional, Tuple
 import requests
 
 from engine.integrations.google_account_pool import GoogleAccount, get_account_pool
+from engine.integrations.nlm_rpc_registry import get_rpc_registry
 
 logger = logging.getLogger(__name__)
 
@@ -127,7 +128,28 @@ class NLMDirectClient:
         self._at_token: Optional[str] = raw_at_token if isinstance(raw_at_token, str) and raw_at_token else None
         self._session_params_loaded = False
         self._reqid = 1000000
+        try:
+            self._registry = get_rpc_registry()
+        except Exception:
+            self._registry = None
         self._prime_saved_session_params()
+
+    # ──── Registry helpers ────────────────────────────────────────────────────
+
+    def _rpcid(self, operation: str, tier: str = "primary") -> Optional[str]:
+        """Look up an rpcid from the registry, returning None if unavailable."""
+        if not self._registry:
+            return None
+        try:
+            return self._registry.get_rpcid(operation, tier)
+        except (KeyError, ValueError):
+            return None
+
+    def _rpcid_pair(self, operation: str) -> tuple:
+        """Return (primary_rpcid, fallback_rpcid) from registry, with None for missing."""
+        primary = self._rpcid(operation, "primary")
+        fallback = self._rpcid(operation, "fallback")
+        return primary, fallback
 
     # ──── Page params ─────────────────────────────────────────────────────────
 
@@ -958,9 +980,9 @@ class NLMDirectClient:
         Returns:
             Source ID string.
         """
-        # HAR-confirmed payload for URL source: [nb_id, null, [url]]
         payload = [notebook_id, None, [url]]
-        result = self._rpc_call("izAoDd", payload)
+        rpcid = self._rpcid("add_source") or "izAoDd"
+        result = self._rpc_call(rpcid, payload)
         if result and isinstance(result, list) and result[0]:
             return result[0] if isinstance(result[0], str) else str(result[0][0])
         raise RuntimeError(f"add_source_url failed for {url}: {result}")
@@ -979,9 +1001,9 @@ class NLMDirectClient:
         Returns:
             Source ID string.
         """
-        # HAR-confirmed payload: [[title, content], null, null, 3]
         payload = [[title, content], None, None, 3]
-        result = self._rpc_call("izAoDd", payload)
+        rpcid = self._rpcid("add_source") or "izAoDd"
+        result = self._rpc_call(rpcid, payload)
         if result and isinstance(result, list) and result[0]:
             return result[0] if isinstance(result[0], str) else str(result[0][0])
         raise RuntimeError(f"add_source_text failed for '{title}': {result}")
@@ -1030,8 +1052,9 @@ class NLMDirectClient:
         logger.debug("Uploading %s (%s) to notebook %s", path.name, mime_type, notebook_id)
 
         # Step 1: Register the upload — o4cbdc returns upload URL + source ID
+        rpcid = self._rpcid("upload_file") or "o4cbdc"
         payload = [[[path.name]], notebook_id, [2], [1, None, None, [1]]]
-        result = self._rpc_call("o4cbdc", payload, timeout=30)
+        result = self._rpc_call(rpcid, payload, timeout=30)
         if not result or not result[0]:
             raise RuntimeError(f"File upload registration failed for {path.name}: {result}")
 
@@ -1068,7 +1091,8 @@ class NLMDirectClient:
             source_id: Source ID to delete.
         """
         payload = [[[source_id]], [1]]
-        self._rpc_call("LBwxtb", payload)
+        rpcid = self._rpcid("delete_source") or "LBwxtb"
+        self._rpc_call(rpcid, payload)
         logger.debug("Deleted source %s from notebook %s", source_id, notebook_id)
 
     def get_sources(self, notebook_id: str) -> List[str]:
@@ -1081,7 +1105,8 @@ class NLMDirectClient:
             List of source ID strings.
         """
         payload = [[], None, notebook_id, 20]
-        result = self._rpc_call("hPTbtc", payload)
+        rpcid = self._rpcid("list_sources") or "hPTbtc"
+        result = self._rpc_call(rpcid, payload)
         source_ids: List[str] = []
         if result:
             for item in result:
@@ -1112,7 +1137,8 @@ class NLMDirectClient:
         deadline = time.time() + max_wait
         while time.time() < deadline:
             payload = [notebook_id, None, 0]
-            result = self._rpc_call("rLM1Ne", payload, timeout=30)
+            rpcid = self._rpcid("poll_source") or "rLM1Ne"
+            result = self._rpc_call(rpcid, payload, timeout=30)
             # result=None means all sources are ready (no pending)
             if result is None:
                 return
@@ -1132,12 +1158,10 @@ class NLMDirectClient:
     # ──── Studio generation ────────────────────────────────────────────────────
 
     def create_note(self, notebook_id: str, prompt: str) -> Dict[str, Any]:
-        """Generate a custom report/document via Gemini 3.0 (CYK0Xb).
+        """Generate a custom report/document via Gemini (CYK0Xb).
 
         The prompt is your creative brief — up to ~10,000 words.
         Gemini reads the ENTIRE prompt plus every source in the notebook.
-        Use this for: analysis reports, code generation, data extraction,
-        Q&A JSON generation, documentation, any structured output.
 
         Args:
             notebook_id: NLM notebook UUID.
@@ -1146,8 +1170,9 @@ class NLMDirectClient:
         Returns:
             Dict with ``id``, ``title``, ``content`` (markdown).
         """
+        rpcid = self._rpcid("create_note") or "CYK0Xb"
         payload = [notebook_id, prompt]
-        result = self._rpc_call("CYK0Xb", payload, timeout=180)
+        result = self._rpc_call(rpcid, payload, timeout=180)
         if not result:
             raise RuntimeError(f"create_note returned empty response for notebook {notebook_id}")
         # result shape: [artifact_id, title, markdown_content]
@@ -1189,7 +1214,8 @@ class NLMDirectClient:
             ``poll_artifact()`` until status is COMPLETE, then ``download_audio()``.
         """
         payload = [None, [audio_type], [focus_text, 1], 5, notebook_id]
-        result = self._rpc_call("QA9ei", payload, timeout=60)
+        rpcid = self._rpcid("generate_audio") or "QA9ei"
+        result = self._rpc_call(rpcid, payload, timeout=60)
         if not result or len(result) < 2:
             raise RuntimeError(f"generate_audio returned unexpected result: {result}")
         logger.info(
@@ -1223,7 +1249,8 @@ class NLMDirectClient:
         deadline = time.time() + max_wait
         while time.time() < deadline:
             payload = [None, notebook_id, filter_str]
-            result = self._rpc_call("gArtLc", payload, timeout=30)
+            rpcid = self._rpcid("list_artifacts") or "gArtLc"
+            result = self._rpc_call(rpcid, payload, timeout=30)
             if isinstance(result, list):
                 for artifact in result:
                     if not isinstance(artifact, dict):
@@ -1297,7 +1324,8 @@ class NLMDirectClient:
         """
         src_list = [[sid] for sid in (source_ids or [])]
         payload = [None, notebook_id, src_list]
-        result = self._rpc_call("ciyUvf", payload, timeout=120)
+        rpcid = self._rpcid("generate_flashcards") or "ciyUvf"
+        result = self._rpc_call(rpcid, payload, timeout=120)
         cards: List[Dict[str, str]] = []
         if isinstance(result, list):
             for card in result:
@@ -1329,7 +1357,8 @@ class NLMDirectClient:
         """
         src_list = [[sid] for sid in (source_ids or [])]
         payload = [None, notebook_id, [None, None, quiz_type, src_list]]
-        result = self._rpc_call("R7cb6c", payload, timeout=120)
+        rpcid = self._rpcid("generate_quiz") or "R7cb6c"
+        result = self._rpc_call(rpcid, payload, timeout=120)
         return result if isinstance(result, list) else []
 
     def generate_mind_map(self, source_ids: List[str]) -> Dict[str, Any]:
@@ -1347,7 +1376,8 @@ class NLMDirectClient:
         """
         src_list = [[sid] for sid in source_ids]
         payload = [src_list]
-        result = self._rpc_call("yyryJe", payload, timeout=120)
+        rpcid = self._rpcid("generate_mind_map") or "yyryJe"
+        result = self._rpc_call(rpcid, payload, timeout=120)
         return result if isinstance(result, dict) else {}
 
     def generate_blog_post(
@@ -1367,7 +1397,8 @@ class NLMDirectClient:
             Generated long-form content string.
         """
         payload = [None, [1], artifact_id, notebook_id, [[None, [prompt]]]]
-        result = self._rpc_call("LBwxtb", payload, timeout=180)
+        rpcid = self._rpcid("generate_blog_post") or "LBwxtb"
+        result = self._rpc_call(rpcid, payload, timeout=180)
         if isinstance(result, list) and result:
             return str(result[0])
         return str(result) if result else ""
@@ -1382,7 +1413,8 @@ class NLMDirectClient:
             Markdown summary string.
         """
         payload = [[[[source_id]]]]
-        result = self._rpc_call("tr032e", payload, timeout=60)
+        rpcid = self._rpcid("get_source_summary") or "tr032e"
+        result = self._rpc_call(rpcid, payload, timeout=60)
         if isinstance(result, list) and result:
             return str(result[0])
         return str(result) if result else ""
@@ -1402,7 +1434,8 @@ class NLMDirectClient:
             Google Sheets URL string.
         """
         payload = [None, artifact_id, None, title, 2]
-        result = self._rpc_call("Krh3pd", payload, timeout=60)
+        rpcid = self._rpcid("export_to_sheets") or "Krh3pd"
+        result = self._rpc_call(rpcid, payload, timeout=60)
         if isinstance(result, list) and result:
             return str(result[0])
         raise RuntimeError(f"export_to_sheets returned no URL: {result}")
@@ -1412,23 +1445,30 @@ class NLMDirectClient:
     def list_notebooks(self) -> List[Dict[str, Any]]:
         """List all notebooks in this account.
 
-        Tries the current ``wXbhsf`` rpcid first, falls back to legacy ``ub2Bae``.
+        Rpcids and payloads are resolved from the YAML registry when available,
+        with hardcoded fallbacks for robustness.
 
         Returns:
             List of notebook dicts/lists with id, name, and metadata.
         """
         import base64
 
-        for rpcid, payload in [("wXbhsf", [None, 1, None, [2]]), ("ub2Bae", [[2]])]:
+        primary, fallback = self._rpcid_pair("list_notebooks")
+        candidates = [
+            (primary or "wXbhsf", [None, 1, None, [2]]),
+            (fallback or "ub2Bae", [[2]]),
+        ]
+
+        for rpcid, payload in candidates:
             try:
                 result = self._rpc_call(rpcid, payload, timeout=30)
                 if not isinstance(result, list):
                     continue
 
-                # wXbhsf returns [[nb1, nb2, ...], ...] — unwrap the outer layer
+                # Pro-tier rpcid returns [[nb1, nb2, ...], ...] — unwrap the outer layer
                 items = result
                 if (
-                    rpcid == "wXbhsf"
+                    rpcid != (fallback or "ub2Bae")
                     and len(result) >= 1
                     and isinstance(result[0], list)
                     and result[0]
@@ -1449,14 +1489,14 @@ class NLMDirectClient:
                 if notebooks:
                     return notebooks
             except Exception:
-                if rpcid == "wXbhsf":
-                    logger.debug("wXbhsf failed, trying legacy ub2Bae")
+                if rpcid == candidates[0][0]:
+                    logger.debug("%s failed, trying fallback %s", rpcid, candidates[1][0])
                     continue
                 raise
         return []
 
     def get_artifacts(self, notebook_id: str) -> List[Dict[str, Any]]:
-        """List all artifacts in a notebook (gArtLc).
+        """List all artifacts in a notebook.
 
         Args:
             notebook_id: NLM notebook UUID.
@@ -1464,27 +1504,28 @@ class NLMDirectClient:
         Returns:
             List of artifact dicts with id, status, type, download_url.
         """
+        rpcid = self._rpcid("list_artifacts") or "gArtLc"
         filter_str = 'NOT artifact.status = "ARTIFACT_STATUS_SUGGESTED"'
         payload = [None, notebook_id, filter_str]
-        result = self._rpc_call("gArtLc", payload, timeout=30)
+        result = self._rpc_call(rpcid, payload, timeout=30)
         return result if isinstance(result, list) else []
 
     def update_notebook_title(self, notebook_id: str, new_title: str) -> None:
-        """Rename a notebook (s0tc2d).
+        """Rename a notebook.
 
         Args:
             notebook_id: NLM notebook UUID.
             new_title: New display name.
         """
+        rpcid = self._rpcid("update_notebook") or "s0tc2d"
         payload = [notebook_id, [[None, None, None, [None, new_title]]]]
-        self._rpc_call("s0tc2d", payload, timeout=30)
+        self._rpc_call(rpcid, payload, timeout=30)
         logger.debug("Renamed notebook %s → '%s'", notebook_id, new_title)
 
     def create_notebook(self, title: str) -> str:
         """Create a new empty NotebookLM notebook.
 
-        Uses the current ``CCqFvf`` rpcid (replaces the retired ``VqhFhd``).
-        The payload structure was captured from the live NLM UI in June 2026.
+        Rpcids resolved from YAML registry with hardcoded fallbacks.
 
         Args:
             title: Display name for the new notebook.
@@ -1492,20 +1533,22 @@ class NLMDirectClient:
         Returns:
             New notebook ID string.
         """
+        primary, fallback = self._rpcid_pair("create_notebook")
+        rpcid_pro = primary or "CCqFvf"
+        rpcid_legacy = fallback or "VqhFhd"
+
         payload = [title, None, None, [2], [1, None, None, None, None, None, None, None, None, None, [1]]]
-        result = self._rpc_call("CCqFvf", payload, timeout=30)
+        result = self._rpc_call(rpcid_pro, payload, timeout=30)
         if result and isinstance(result, list):
-            # CCqFvf returns [title, None, uuid, ...] — UUID at index 2
             nb_id = result[2] if len(result) > 2 and result[2] else None
             if nb_id:
                 return str(nb_id)
-            # Fallback: check index 0 if index 2 is empty
             if result[0] and len(str(result[0])) > 10:
                 return str(result[0])
-        # Fallback: try the legacy VqhFhd rpcid
+        # Fallback: try the legacy rpcid
         try:
             payload_legacy = [title, None, None]
-            result = self._rpc_call("VqhFhd", payload_legacy, timeout=30)
+            result = self._rpc_call(rpcid_legacy, payload_legacy, timeout=30)
             if result and isinstance(result, list) and result[0]:
                 return str(result[0])
         except Exception:
@@ -1515,17 +1558,21 @@ class NLMDirectClient:
     def delete_notebook(self, notebook_id: str) -> None:
         """Permanently delete a notebook and all its sources.
 
-        Uses WWINqb (Pro tier) with kVoZqc as legacy fallback.
+        Uses Pro-tier rpcid with legacy fallback, both from registry.
 
         Args:
             notebook_id: NLM notebook UUID to delete.
         """
+        primary, fallback = self._rpcid_pair("delete_notebook")
+        rpcid_pro = primary or "WWINqb"
+        rpcid_legacy = fallback or "kVoZqc"
+
         payload = [[notebook_id], [2]]
         try:
-            self._rpc_call("WWINqb", payload, timeout=30)
+            self._rpc_call(rpcid_pro, payload, timeout=30)
         except Exception:
-            logger.debug("WWINqb failed, falling back to kVoZqc")
-            self._rpc_call("kVoZqc", [[notebook_id]], timeout=30)
+            logger.debug("%s failed, falling back to %s", rpcid_pro, rpcid_legacy)
+            self._rpc_call(rpcid_legacy, [[notebook_id]], timeout=30)
         logger.info("Deleted notebook %s", notebook_id)
 
     def get_chat_history(self, notebook_id: str) -> List[Dict[str, Any]]:
@@ -1540,7 +1587,8 @@ class NLMDirectClient:
             List of conversation turn dicts.
         """
         payload = [notebook_id]
-        result = self._rpc_call("GzgSEd", payload, timeout=30)
+        rpcid = self._rpcid("get_chat_history") or "GzgSEd"
+        result = self._rpc_call(rpcid, payload, timeout=30)
         turns: List[Dict[str, Any]] = []
         if isinstance(result, list):
             for item in result:
@@ -1557,7 +1605,8 @@ class NLMDirectClient:
             notebook_id: NLM notebook UUID.
         """
         payload = [notebook_id]
-        self._rpc_call("GfmCOc", payload, timeout=30)
+        rpcid = self._rpcid("delete_chat_history") or "GfmCOc"
+        self._rpc_call(rpcid, payload, timeout=30)
         logger.debug("Deleted chat history for notebook %s", notebook_id)
 
     def generate_guide(
@@ -1585,7 +1634,8 @@ class NLMDirectClient:
         """
         src_list = [[sid] for sid in (source_ids or [])]
         payload = [None, notebook_id, guide_type, src_list]
-        result = self._rpc_call("xqEXEf", payload, timeout=180)
+        rpcid = self._rpcid("generate_guide") or "xqEXEf"
+        result = self._rpc_call(rpcid, payload, timeout=180)
         if not result:
             raise RuntimeError(f"generate_guide returned empty for notebook {notebook_id}")
         return {
@@ -1605,7 +1655,8 @@ class NLMDirectClient:
             Shareable URL string.
         """
         payload = [notebook_id, share_level]
-        result = self._rpc_call("dI5Y8", payload, timeout=30)
+        rpcid = self._rpcid("share_notebook") or "dI5Y8"
+        result = self._rpc_call(rpcid, payload, timeout=30)
         if isinstance(result, list) and result:
             return str(result[0])
         if isinstance(result, str):
@@ -1645,7 +1696,8 @@ class NLMDirectClient:
             Dict with ``id``, ``title``, ``content`` (table as text/markdown).
         """
         payload = [notebook_id, None, None, [2], [1, None, None, None, None, None, None, None, None, None, [1]]]
-        result = self._rpc_call("CCqFvf", payload, timeout=180)
+        rpcid = self._rpcid("generate_data_table") or "CCqFvf"
+        result = self._rpc_call(rpcid, payload, timeout=180)
         if not result:
             return {"id": None, "title": "Data Table", "content": ""}
         return {
@@ -1666,7 +1718,8 @@ class NLMDirectClient:
             Notebook metadata dict (id, title, created_at, source_count, etc.).
         """
         payload = [notebook_id]
-        result = self._rpc_call("mFtdI", payload, timeout=30)
+        rpcid = self._rpcid("get_notebook_metadata") or "mFtdI"
+        result = self._rpc_call(rpcid, payload, timeout=30)
         if isinstance(result, dict):
             return result
         if isinstance(result, list) and result:
@@ -1684,7 +1737,8 @@ class NLMDirectClient:
             Source metadata dict (id, title, type, status, url, etc.).
         """
         payload = [notebook_id, source_id]
-        result = self._rpc_call("K4YCPe", payload, timeout=30)
+        rpcid = self._rpcid("get_source_metadata") or "K4YCPe"
+        result = self._rpc_call(rpcid, payload, timeout=30)
         if isinstance(result, dict):
             return result
         if isinstance(result, list) and result:
@@ -1704,7 +1758,8 @@ class NLMDirectClient:
             List of source metadata dicts.
         """
         payload = [notebook_id]
-        result = self._rpc_call("jtGGne", payload, timeout=30)
+        rpcid = self._rpcid("list_sources_metadata") or "jtGGne"
+        result = self._rpc_call(rpcid, payload, timeout=30)
         if isinstance(result, list):
             return [
                 item if isinstance(item, dict) else {"raw": item}
@@ -1722,7 +1777,8 @@ class NLMDirectClient:
             source_id: Source UUID to reprocess.
         """
         payload = [notebook_id, source_id]
-        self._rpc_call("bfEAsb", payload, timeout=60)
+        rpcid = self._rpcid("process_source") or "bfEAsb"
+        self._rpc_call(rpcid, payload, timeout=60)
         logger.debug("Triggered reprocessing of source %s in notebook %s", source_id, notebook_id)
 
     def add_source(
@@ -1776,7 +1832,8 @@ class NLMDirectClient:
             Response text string.
         """
         payload = [notebook_id, message, conversation_id]
-        result = self._rpc_call("tJHFsf", payload, timeout=120)
+        rpcid = self._rpcid("send_chat_message") or "tJHFsf"
+        result = self._rpc_call(rpcid, payload, timeout=120)
         if isinstance(result, list) and result:
             return str(result[0])
         if isinstance(result, str):
@@ -1793,7 +1850,8 @@ class NLMDirectClient:
             Shared notebook metadata dict.
         """
         payload = [share_token]
-        result = self._rpc_call("jzEKsc", payload, timeout=30)
+        rpcid = self._rpcid("get_shared_notebook") or "jzEKsc"
+        result = self._rpc_call(rpcid, payload, timeout=30)
         if isinstance(result, dict):
             return result
         if isinstance(result, list) and result:
@@ -1818,7 +1876,8 @@ class NLMDirectClient:
             Dict with themes, clusters, coverage_score, ready_for_audio, etc.
         """
         payload = [notebook_id, [analysis_depth]]
-        result = self._rpc_call("VfAZjd", payload, timeout=60)
+        rpcid = self._rpcid("get_notebook_analysis") or "VfAZjd"
+        result = self._rpc_call(rpcid, payload, timeout=60)
         if isinstance(result, dict):
             return result
         if isinstance(result, list) and result:
@@ -1846,7 +1905,8 @@ class NLMDirectClient:
             None,
             1,
         ]
-        result = self._rpc_call("sqTeoe", payload, source_path=f"/notebook/{notebook_id}", timeout=30)
+        rpcid = self._rpcid("get_audio_options") or "sqTeoe"
+        result = self._rpc_call(rpcid, payload, source_path=f"/notebook/{notebook_id}", timeout=30)
         if isinstance(result, list):
             options = []
             for item in result:
@@ -1868,7 +1928,8 @@ class NLMDirectClient:
             ICE config dict with ice_servers, username, credential.
         """
         payload = [notebook_id]
-        result = self._rpc_call("Of0kDd", payload, timeout=15)
+        rpcid = self._rpcid("get_ice_config") or "Of0kDd"
+        result = self._rpc_call(rpcid, payload, timeout=15)
         if isinstance(result, dict):
             return result
         if isinstance(result, list) and result:
@@ -1895,7 +1956,8 @@ class NLMDirectClient:
             Dict with sdp_answer, session_id for the WebRTC connection.
         """
         payload = [notebook_id, sdp_offer, session_id]
-        result = self._rpc_call("eyWvXc", payload, timeout=30)
+        rpcid = self._rpcid("send_sdp_offer") or "eyWvXc"
+        result = self._rpc_call(rpcid, payload, timeout=30)
         if isinstance(result, dict):
             return result
         if isinstance(result, list) and len(result) >= 2:
@@ -2066,7 +2128,8 @@ class NLMDirectClient:
         if flag_ids is None:
             flag_ids = list(range(300, 400))
         payload = [[[fid, None, None] for fid in flag_ids]]
-        result = self._rpc_call("ozz5Z", payload, timeout=30)
+        rpcid = self._rpcid("get_feature_flags") or "ozz5Z"
+        result = self._rpc_call(rpcid, payload, timeout=30)
         flags: Dict[str, Any] = {}
         if isinstance(result, list):
             for item in result:
@@ -2083,7 +2146,8 @@ class NLMDirectClient:
         Returns:
             Dict with locale, language, region strings.
         """
-        result = self._rpc_call("DYBcR", [None], timeout=15)
+        rpcid = self._rpcid("get_locale_preferences") or "DYBcR"
+        result = self._rpc_call(rpcid, [None], timeout=15)
         if isinstance(result, list) and result:
             raw = result[0] if isinstance(result[0], list) else result
             try:
