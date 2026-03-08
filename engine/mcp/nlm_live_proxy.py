@@ -195,6 +195,11 @@ from flask import Flask, jsonify, request
 
 from engine.config import get_config
 
+try:
+    from engine.integrations.nlm_rpc_registry import get_rpc_registry as _get_registry
+except Exception:
+    _get_registry = None  # type: ignore[assignment]
+
 logger = logging.getLogger(__name__)
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -299,7 +304,15 @@ except ImportError:
         return None
 
 def _rpc(operation: str, fallback: str) -> str:
-    """Get RPC ID from registry, falling back to hardcoded value."""
+    """Get RPC ID from YAML registry, then old mapper, then hardcoded fallback."""
+    if _get_registry is not None:
+        try:
+            reg = _get_registry()
+            rpcid = reg.get_rpcid(operation)
+            if rpcid:
+                return rpcid
+        except Exception:
+            pass
     if _registry_available:
         rid = _get_rpc_id(operation)
         if rid:
@@ -309,91 +322,91 @@ def _rpc(operation: str, fallback: str) -> str:
 # Readable aliases (resolved at call time via _rpc() in actual calls)
 # Each constant has: confirmed date · payload signature · response shape · gotchas
 
-RPC_SESSION_INIT = "ZwVcOc"
+RPC_SESSION_INIT = _rpc("session_init", "ZwVcOc")
 # HAR-confirmed 2026-02-20.  Initialises an NLM browser session.
 # Payload: [] (empty)
 # Response: [session_token, account_info, ...]
 
-RPC_LIST_SOURCES = "wXbhsf"
+RPC_LIST_SOURCES = _rpc("list_sources", "wXbhsf")
 # HAR-confirmed 2026-02-20.  Lists all sources in a notebook.
 # Payload: [null, 1, null, [2]]
 # Response: [[[notebook_name, [source_obj, ...]]], ...]
 # Source obj: [[uid], title, [meta: word_count@1, src_type@6, url_list@7], ...]
 
-RPC_LIST_NOTEBOOKS = "ub2Bae"
+RPC_LIST_NOTEBOOKS = _rpc("list_notebooks", "ub2Bae")
 # HAR-confirmed 2026-02-20.  Lists all notebooks for the authenticated account.
 # Payload: [[2]]
 # Response: [[[nb_obj, ...]], ...]  — nb_obj contains UUID and name strings.
 
-RPC_LIST_AUDIO_TYPES = "sqTeoe"
+RPC_LIST_AUDIO_TYPES = _rpc("list_audio_types", "sqTeoe")
 # HAR-confirmed 2026-02-24.  Returns available audio overview types/voices.
 # ⚠️ v3.0 correction: was wrongly mapped as "list all notebooks" in v2.x.
 # Payload: [notebook_id]
 # Response: list of audio type descriptors
 
-RPC_LOAD_NOTEBOOK = "rLM1Ne"
+RPC_LOAD_NOTEBOOK = _rpc("load_notebook", "rLM1Ne")
 # HAR-confirmed 2026-02-20.  Loads a notebook with source processing status.
 # Used by /sources/wait polling — returns word_count per source (0 = still processing).
 # Payload: [notebook_id, null, [2], null, 0]
 # Response: same shape as wXbhsf but richer per-source metadata.
 
-RPC_NOTEBOOK_INFO = "e3bVqc"
+RPC_NOTEBOOK_INFO = _rpc("notebook_info", "e3bVqc")
 # HAR-confirmed 2026-02-20.  Returns raw notebook content/document data.
 # Payload: [null, null, notebook_id]
 # Response: nested document structure (use _extract_strings for text).
 
-RPC_GET_THREAD_IDS = "hPTbtc"
+RPC_GET_THREAD_IDS = _rpc("get_thread_ids", "hPTbtc")
 # HAR-confirmed 2026-02-24.  Returns conversation thread IDs for a notebook.
 # ⚠️ v3.0 correction: was wrongly mapped as "list sources paged" in v2.x.
 # Payload: [[], null, notebook_id, page_size]
 # Response: [[thread_id_list], ...] where each item is [thread_uuid, ...]
 
-RPC_READ_THREAD = "khqZz"
+RPC_READ_THREAD = _rpc("read_thread", "khqZz")
 # HAR-confirmed 2026-02-24.  Reads all messages in a conversation thread.
 # ⚠️ v3.0 correction: was wrongly mapped as "sub-notebook sources" in v2.x.
 # Payload: [[], null, null, thread_id, page_size]
 # Response: nested message objects (use _extract_strings for text content).
 
-RPC_USER_PROFILE = "JFMDGd"
+RPC_USER_PROFILE = _rpc("user_profile", "JFMDGd")
 # HAR-confirmed 2026-02-24.  Returns user profile: email, name, queries remaining.
 # ⚠️ v3.0 correction: was wrongly mapped as "sources condensed" in v2.x.
 # Payload: [notebook_id, [2]]
 # Response: [[email, name, ...], null, queries_remaining, ...]
 
-RPC_AI_SUMMARY = "VfAZjd"
+RPC_AI_SUMMARY = _rpc("ai_summary", "VfAZjd")
 # HAR-confirmed 2026-02-20.  Fetches or generates the AI summary of a notebook.
 # Payload: [notebook_id, [2]]
 # Response: nested text structure — join _extract_strings(data, 50).
 
-RPC_LIST_ARTIFACTS = "gArtLc"
+RPC_LIST_ARTIFACTS = _rpc("list_artifacts", "gArtLc")
 # HAR-confirmed 2026-02-20.  Lists notes and saved artifacts in a notebook.
 # Payload: [[2], notebook_id, "NOT artifact.status = \"ARTIFACT_STATUS_SUGGESTED\""]
 # Response: nested artifact objects with title/content strings.
 
-RPC_MIND_MAP = "cFji9"
+RPC_MIND_MAP = _rpc("mind_map", "cFji9")
 # HAR-confirmed 2026-02-24.  Generates/returns D3-format mind map JSON.
 # ⚠️ v3.0 correction: was wrongly mapped as "conversation history" in v2.x.
 # Payload: [notebook_id, null, null, [2]]
 # Response: [json_string, ...] — parse inner JSON for D3 hierarchy.
 
-RPC_ACCOUNT_STATE = "ozz5Z"
+RPC_ACCOUNT_STATE = _rpc("account_state", "ozz5Z")
 # HAR-confirmed 2026-02-20.  Returns account state including storage quota.
 # Also aliased as RPC_USER_QUOTA (same ID, different usage context).
 # Payload: [[[null, "1", 627], [null,null,null,null,null,null,null,null,null,[null,null,4]], 1]]]
 # Response: complex nested quota structure.
 
-RPC_READ_SOURCE = "tr032e"
+RPC_READ_SOURCE = _rpc("read_source", "tr032e")
 # HAR-confirmed 2026-02-22.  Reads the full text content of a notebook source.
 # Returns the complete markdown-formatted text.  Expensive for large sources.
 # Payload: [[[[source_uuid]]]]
 # Response: nested text chunks — join via _extract_strings(data, 10).
 
-RPC_RESUME_SESSION = "CCqFvf"
+RPC_RESUME_SESSION = _rpc("resume_session", "CCqFvf")
 # HAR-confirmed 2026-02-27.  ⭐ v3.0 new.  Loads the last active notebook.
 # Payload: []
 # Response: notebook_id and basic metadata.
 
-RPC_RENAME_NOTEBOOK = "s0tc2d"
+RPC_RENAME_NOTEBOOK = _rpc("rename_notebook", "s0tc2d")
 # HAR-confirmed 2026-02-28.  ⭐ CRITICAL v3.1 CORRECTION.
 # This RPC was WRONGLY mapped as RPC_CHAT_MESSAGE in all v2.x code.
 # A fresh HAR on 2026-02-28 definitively confirmed s0tc2d = RENAME_NOTEBOOK.
@@ -401,7 +414,7 @@ RPC_RENAME_NOTEBOOK = "s0tc2d"
 # Payload: [notebook_id, [[null, null, null, [null, "new_name"]]]]
 # Response: [new_name, null, notebook_id, emoji_char, ...]
 
-RPC_CREATE_NOTE = "CYK0Xb"
+RPC_CREATE_NOTE = _rpc("create_note", "CYK0Xb")
 # HAR-confirmed 2026-02-22.  Citation-annotate Q&A (was called "legacy chat" in v2.x).
 # ⚠️ v3.0 correction: this is NOT real chat — it annotates text with source citations.
 # Used for Q&A distillation: returns cited answers grounded in notebook sources.
@@ -409,29 +422,29 @@ RPC_CREATE_NOTE = "CYK0Xb"
 # Response: [[answer_id, markdown_answer_with_citations], ...]
 # Citations appear as [source_uuid] markers in the answer text.
 
-RPC_GENERATE_DOC = "ciyUvf"
+RPC_GENERATE_DOC = _rpc("generate_doc", "ciyUvf")
 # HAR-confirmed 2026-02-22.  Generates a document/report from selected sources.
 # Payload: [_WRITE_CONFIG, notebook_id, [[src_id_1], [src_id_2], ...]]
 # Response: [[title, description, null, [[src_ids]]], ...]
 
-RPC_SAVE_REPORT = "R7cb6c"
+RPC_SAVE_REPORT = _rpc("save_report", "R7cb6c")
 # HAR-confirmed 2026-02-22.  Saves a note artifact to a notebook.
 # Payload: [_WRITE_CONFIG, notebook_id, [null, null, note_type, [[src_id], ...]]]
 # Response: [[note_id, title, note_type_int, [[source_ids]]], ...]
 
-RPC_FAST_RESEARCH_START = "Ljjv0c"
+RPC_FAST_RESEARCH_START = _rpc("fast_research_start", "Ljjv0c")
 # HAR-confirmed 2026-02-27.  ⭐ v3.0 new.  Starts a fast research session.
 # Payload: [[query, 1], null, 1, notebook_id]
 # Response: [session_id, ...]
 
-RPC_ADD_RESEARCH_SOURCE = "LBwxtb"
+RPC_ADD_RESEARCH_SOURCE = _rpc("add_research_source", "LBwxtb")
 # HAR-confirmed 2026-02-28.  ⭐ v3.1 new.
 # Adds an AI-generated research document as a notebook source.
 # Called AFTER start_deep_research (QA9ei) with the AI-authored content.
 # Payload: [null, [1], session_id, notebook_id, [[null, [title, content]]]]
 # Response: source metadata including new source UUID.
 
-RPC_ADD_SOURCE = "izAoDd"
+RPC_ADD_SOURCE = _rpc("add_source", "izAoDd")
 # HAR-confirmed 2026-02-28.  ⭐ v3.1 new.
 # Adds a URL or YouTube video as a notebook source.
 # The source object shape differs by content type (see add_source_url docstring):
@@ -440,7 +453,7 @@ RPC_ADD_SOURCE = "izAoDd"
 # Payload: [[source_obj], notebook_id, [2], _SOURCE_CONFIG]
 # Response: new source metadata including UUID.  Status is "processing" initially.
 
-RPC_START_DEEP_RESEARCH = "QA9ei"
+RPC_START_DEEP_RESEARCH = _rpc("start_deep_research", "QA9ei")
 # HAR-confirmed 2026-02-28.  ⭐ v3.1 new.
 # Starts an async deep research session on a given topic.
 # NLM generates a research document in the background (takes 10-60 seconds).
@@ -448,36 +461,36 @@ RPC_START_DEEP_RESEARCH = "QA9ei"
 # Payload: [null, [1], ["topic", 1], 5, notebook_id]
 # Response: [session_uuid, ...]
 
-RPC_DELETE_SOURCE = "tGMBJ"
+RPC_DELETE_SOURCE = _rpc("delete_source", "tGMBJ")
 # HAR-confirmed 2026-02-28.  ⭐ v3.1 new.
 # Deletes a source from a notebook by UUID.
 # Payload: [[[source_uuid]], [2]]
 # Response: acknowledgement (empty or minimal).
 
-RPC_USER_QUOTA = "ozz5Z"
+RPC_USER_QUOTA = _rpc("account_state", "ozz5Z")
 # Same ID as RPC_ACCOUNT_STATE — used in get_user_quota() specifically for
 # the quota/storage usage payload variant.
 
 # ── New RPCs confirmed from HAR 2026-03-01 manual_testing.har ──────────────
-RPC_USER_PLAN        = "ZwVcOc"   # GET_USER_PLAN — quota limits (NOT delete_notebook — has no nb_id arg)
-RPC_OPEN_NOTEBOOK    = "CCqFvf"   # OPEN_NOTEBOOK — called when entering a notebook, returns state
-RPC_SOURCE_STATUS    = "rLM1Ne"   # POLL_SOURCE_STATUS — poll until source indexed (arg[4]=0 first, 1=continuing)
-RPC_PENDING_SOURCES  = "hPTbtc"   # GET_PENDING_SOURCES — [[], null, nb_id, 20]
-RPC_NOTEBOOK_DETAILS = "JFMDGd"   # GET_NOTEBOOK_DETAILS — [nb_id, [2]]
-RPC_NOTEBOOK_CONTENT = "VfAZjd"   # GET_NOTEBOOK_CONTENT — [nb_id, [2]]
-RPC_SAVE_NOTE = "cYAfTb"  # SAVE_NOTE — live auto-save as you type [nb_id, note_id, [[["<html>","title",[],0]]], [2]]
-RPC_SOURCE_DETAIL    = "hizoJc"   # GET_SOURCE_DETAIL — [[src_id], [2], [2]]
-RPC_REGISTER_FILES   = "o4cbdc"   # REGISTER_FILE_UPLOAD — [[[fn1],[fn2]], nb_id, [2], [1,...,[1]]]
-RPC_SYNC_NOTES = "cFji9"  # SYNC_NOTES — delta poll for note changes [nb_id, null, [prev_ts_sec, prev_ts_nano], [2]]. Returns [[note_objects], [current_ts]]. No prev_ts on first call.
-RPC_NOTEBOOK_STATE   = "e3bVqc"   # GET_NOTEBOOK_STATE — [null, null, nb_id]
+RPC_USER_PLAN        = _rpc("user_plan", "ZwVcOc")   # GET_USER_PLAN — quota limits (NOT delete_notebook — has no nb_id arg)
+RPC_OPEN_NOTEBOOK    = _rpc("open_notebook", "CCqFvf")   # OPEN_NOTEBOOK — called when entering a notebook, returns state
+RPC_SOURCE_STATUS    = _rpc("source_status", "rLM1Ne")   # POLL_SOURCE_STATUS — poll until source indexed (arg[4]=0 first, 1=continuing)
+RPC_PENDING_SOURCES  = _rpc("pending_sources", "hPTbtc")   # GET_PENDING_SOURCES — [[], null, nb_id, 20]
+RPC_NOTEBOOK_DETAILS = _rpc("notebook_details", "JFMDGd")   # GET_NOTEBOOK_DETAILS — [nb_id, [2]]
+RPC_NOTEBOOK_CONTENT = _rpc("notebook_content", "VfAZjd")   # GET_NOTEBOOK_CONTENT — [nb_id, [2]]
+RPC_SAVE_NOTE = _rpc("save_note", "cYAfTb")  # SAVE_NOTE — live auto-save as you type [nb_id, note_id, [[["<html>","title",[],0]]], [2]]
+RPC_SOURCE_DETAIL    = _rpc("source_detail", "hizoJc")   # GET_SOURCE_DETAIL — [[src_id], [2], [2]]
+RPC_REGISTER_FILES   = _rpc("register_files", "o4cbdc")   # REGISTER_FILE_UPLOAD — [[[fn1],[fn2]], nb_id, [2], [1,...,[1]]]
+RPC_SYNC_NOTES = _rpc("sync_notes", "cFji9")  # SYNC_NOTES — delta poll for note changes [nb_id, null, [prev_ts_sec, prev_ts_nano], [2]]. Returns [[note_objects], [current_ts]]. No prev_ts on first call.
+RPC_NOTEBOOK_STATE   = _rpc("notebook_state", "e3bVqc")   # GET_NOTEBOOK_STATE — [null, null, nb_id]
 
 # ── New RPCs confirmed from HAR 2026-03-01 addnote-saveresptonote-convsource.har ──
-RPC_CREATE_NOTE      = "CYK0Xb"   # CREATE_NOTE — [nb_id, content_html, [1], null, title, null, [2]]. Also used for "save response to note" (pass AI response as content).
-RPC_LIST_NOTES       = "khqZz"    # LIST_NOTES — [[],null,null,notes_container_id,20]. Returns notes with full markdown content.
-RPC_LIST_SOURCES     = "wXbhsf"   # LIST_SOURCES — [null,1,null,[2]]. Returns all sources in all notebooks (sidebar list).
-RPC_GET_AUDIO_OPTIONS = "sqTeoe"  # GET_AUDIO_OPTIONS — [[2,null,null,[1,...],[[2,1]]],null,1]. Returns audio format types: Deep dive, Brief, Critique, Debate.
-RPC_GET_ARTIFACTS    = "gArtLc"   # GET_ARTIFACTS — [[2,...],nb_id,filter_str]. filter_str uses SQL-like syntax e.g. 'NOT artifact.status = "ARTIFACT_STATUS_SUGGESTED"'
-RPC_GET_SOURCE_SUMMARY = "tr032e" # GET_SOURCE_SUMMARY — [[[[source_id]]]]. Returns AI-generated markdown summary of a source. NEW — never seen in prior HARs.
+RPC_CREATE_NOTE      = _rpc("create_note", "CYK0Xb")   # CREATE_NOTE — [nb_id, content_html, [1], null, title, null, [2]]. Also used for "save response to note" (pass AI response as content).
+RPC_LIST_NOTES       = _rpc("list_notes", "khqZz")    # LIST_NOTES — [[],null,null,notes_container_id,20]. Returns notes with full markdown content.
+RPC_LIST_SOURCES     = _rpc("list_sources", "wXbhsf")   # LIST_SOURCES — [null,1,null,[2]]. Returns all sources in all notebooks (sidebar list).
+RPC_GET_AUDIO_OPTIONS = _rpc("get_audio_options", "sqTeoe")  # GET_AUDIO_OPTIONS — [[2,null,null,[1,...],[[2,1]]],null,1]. Returns audio format types: Deep dive, Brief, Critique, Debate.
+RPC_GET_ARTIFACTS    = _rpc("get_artifacts", "gArtLc")   # GET_ARTIFACTS — [[2,...],nb_id,filter_str]. filter_str uses SQL-like syntax e.g. 'NOT artifact.status = "ARTIFACT_STATUS_SUGGESTED"'
+RPC_GET_SOURCE_SUMMARY = _rpc("get_source_summary", "tr032e") # GET_SOURCE_SUMMARY — [[[[source_id]]]]. Returns AI-generated markdown summary of a source. NEW — never seen in prior HARs.
 
 # ── Response Length Constants ────────────────────────────────────────────
 # Passed as second element of response-config arrays in several RPCs.
@@ -502,6 +515,20 @@ _WRITE_CONFIG = [2, None, None,
 # This is the "source creation metadata" envelope — confirmed from HAR.
 # Position [0] = 1 signals "create new source"; the [1] at position 10 is flags.
 _SOURCE_CONFIG = [1, None, None, None, None, None, None, None, None, None, [1]]
+
+# Override from registry if available
+if _get_registry is not None:
+    try:
+        _reg = _get_registry()
+        _wc = _reg.get_shared_config("write_config")
+        if _wc:
+            _WRITE_CONFIG = _wc
+        _sc = _reg.get_shared_config("source_config")
+        if _sc:
+            _SOURCE_CONFIG = _sc
+        del _reg, _wc, _sc
+    except Exception:
+        pass
 
 # gRPC endpoint for real free-form chat (GenerateFreeFormStreamed)
 _GRPC_CHAT_URL = (
@@ -1067,7 +1094,8 @@ def _batchexecute_multi(
 
     return results
 
-
+
+
 # ════════════════════════════════════════════════════════════════════════════
 # RESPONSE PARSING
 #
@@ -2377,7 +2405,7 @@ def export_notebook(
     }
 
     # Summary
-    _, data = _batchexecute("VfAZjd", json.dumps([notebook_id, [2]]), cookies, notebook_id)
+    _, data = _batchexecute(RPC_NOTEBOOK_CONTENT, json.dumps([notebook_id, [2]]), cookies, notebook_id)
     archive["summary"] = "\n\n".join(_extract_strings(data, 50)) if data and not isinstance(data, dict) else ""
 
     # Sources with optional full content
@@ -2481,7 +2509,7 @@ def export_all_notebooks(
         Each archive follows the export_notebook() return structure.
     """
     import datetime
-    _, data = _batchexecute("ub2Bae", "[[2]]", cookies)
+    _, data = _batchexecute(RPC_LIST_NOTEBOOKS, "[[2]]", cookies)
     notebook_ids: List[Dict[str, str]] = []
     try:
         for nb in (data[0] if isinstance(data, list) and data else []):
@@ -2611,7 +2639,7 @@ def generate_document(
     """
     source_array = [[sid] for sid in source_ids]
     args = json.dumps([_WRITE_CONFIG, notebook_id, source_array])
-    _, data = _batchexecute("ciyUvf", args, cookies, notebook_id)
+    _, data = _batchexecute(RPC_GENERATE_DOC, args, cookies, notebook_id)
     return _parse_generate_response(data, source_ids)
 
 
@@ -2655,7 +2683,7 @@ def save_note_report(
     source_array = [[sid] for sid in source_ids]
     note_body = [None, None, note_type, source_array]
     args = json.dumps([_WRITE_CONFIG, notebook_id, note_body])
-    _, data = _batchexecute("R7cb6c", args, cookies, notebook_id)
+    _, data = _batchexecute(RPC_SAVE_REPORT, args, cookies, notebook_id)
     return _parse_save_note_response(data)
 
 
@@ -2764,7 +2792,7 @@ class NLMClient:
         cookies = _load_cookies()
         if not cookies:
             return []
-        _, data = _batchexecute("ub2Bae", "[[2]]", cookies)
+        _, data = _batchexecute(RPC_LIST_NOTEBOOKS, "[[2]]", cookies)
         if not data or isinstance(data, dict):
             return []
         notebooks = []
@@ -2795,9 +2823,9 @@ class NLMClient:
         """
         cookies = _load_cookies()
         result: Dict[str, Any] = {"notebook_id": notebook_id}
-        _, data = _batchexecute("VfAZjd", json.dumps([notebook_id, [2]]), cookies, notebook_id)
+        _, data = _batchexecute(RPC_NOTEBOOK_CONTENT, json.dumps([notebook_id, [2]]), cookies, notebook_id)
         result["summary"] = "\n\n".join(_extract_strings(data, 50)) if data and not isinstance(data, dict) else ""
-        _, data = _batchexecute("wXbhsf", json.dumps([None, 1, None, [2]]), cookies, notebook_id)
+        _, data = _batchexecute(RPC_LIST_SOURCES, json.dumps([None, 1, None, [2]]), cookies, notebook_id)
         if data and not isinstance(data, dict):
             result["notebook_name"], result["sources"] = _extract_sources(data)
         else:
@@ -2810,7 +2838,7 @@ class NLMClient:
         )
         notes = _dedup(_extract_strings(data, 80)) if data and not isinstance(data, dict) else []
         result["notes"] = [n for n in notes if len(n) > 100]
-        _, data = _batchexecute("cFji9", json.dumps([notebook_id, None, None, [2]]), cookies, notebook_id)
+        _, data = _batchexecute(RPC_SYNC_NOTES, json.dumps([notebook_id, None, None, [2]]), cookies, notebook_id)
         convos = _dedup(_extract_strings(data, 80)) if data and not isinstance(data, dict) else []
         result["conversations"] = [c for c in convos if len(c) > 100]
         result["stats"] = {
@@ -2830,7 +2858,7 @@ class NLMClient:
             List of source dicts.
         """
         cookies = _load_cookies()
-        _, data = _batchexecute("wXbhsf", json.dumps([None, 1, None, [2]]), cookies, notebook_id)
+        _, data = _batchexecute(RPC_LIST_SOURCES, json.dumps([None, 1, None, [2]]), cookies, notebook_id)
         if not data or isinstance(data, dict):
             return []
         _, sources = _extract_sources(data)
@@ -2848,7 +2876,7 @@ class NLMClient:
         """
         cookies = _load_cookies()
         args = json.dumps([[], None, notebook_id, page_size])
-        _, data = _batchexecute("hPTbtc", args, cookies, notebook_id)
+        _, data = _batchexecute(RPC_PENDING_SOURCES, args, cookies, notebook_id)
         if not data or isinstance(data, dict):
             return []
         messages = []
@@ -2871,7 +2899,7 @@ class NLMClient:
         """
         cookies = _load_cookies()
         args = json.dumps([[2], notebook_id, "NOT artifact.status = \"ARTIFACT_STATUS_SUGGESTED\""])
-        _, data = _batchexecute("gArtLc", args, cookies, notebook_id)
+        _, data = _batchexecute(RPC_GET_ARTIFACTS, args, cookies, notebook_id)
         if not data or isinstance(data, dict):
             return []
         notes = _dedup(_extract_strings(data, 80))
@@ -3113,7 +3141,7 @@ class NLMClient:
             Summary text string.
         """
         cookies = _load_cookies()
-        _, data = _batchexecute("VfAZjd", json.dumps([notebook_id, [2]]), cookies, notebook_id)
+        _, data = _batchexecute(RPC_NOTEBOOK_CONTENT, json.dumps([notebook_id, [2]]), cookies, notebook_id)
         return "\n\n".join(_extract_strings(data, 50)) if data and not isinstance(data, dict) else ""
 
     def get_user_quota(self) -> Dict[str, Any]:
@@ -3400,7 +3428,7 @@ def create_nlm_proxy_app() -> Flask:
         cookies = _cookies()
         if not cookies:
             return _no_cookies()
-        _, data = _batchexecute("ub2Bae", "[[2]]", cookies)
+        _, data = _batchexecute(RPC_LIST_NOTEBOOKS, "[[2]]", cookies)
         if data is None:
             return jsonify({"error": "no_data", "notebooks": []}), 502
         if isinstance(data, dict) and "error" in data:
@@ -3429,7 +3457,7 @@ def create_nlm_proxy_app() -> Flask:
         if not cookies:
             return _no_cookies()
         args = json.dumps([None, 1, None, [2]])
-        _, data = _batchexecute("wXbhsf", args, cookies, notebook_id)
+        _, data = _batchexecute(RPC_LIST_SOURCES, args, cookies, notebook_id)
         if data is None or (isinstance(data, dict) and "error" in data):
             return jsonify(data or {"error": "no_data"}), 502
         name, sources = _extract_sources(data)
@@ -3442,7 +3470,7 @@ def create_nlm_proxy_app() -> Flask:
         if not cookies:
             return _no_cookies()
         args = json.dumps([notebook_id, [2]])
-        _, data = _batchexecute("VfAZjd", args, cookies, notebook_id)
+        _, data = _batchexecute(RPC_NOTEBOOK_CONTENT, args, cookies, notebook_id)
         if data is None or (isinstance(data, dict) and "error" in data):
             return jsonify(data or {"error": "no_data"}), 502
         summary = "\n\n".join(_extract_strings(data, 50))
@@ -3455,7 +3483,7 @@ def create_nlm_proxy_app() -> Flask:
             return _no_cookies()
         args = json.dumps([[2], notebook_id,
                            "NOT artifact.status = \"ARTIFACT_STATUS_SUGGESTED\""])
-        _, data = _batchexecute("gArtLc", args, cookies, notebook_id)
+        _, data = _batchexecute(RPC_GET_ARTIFACTS, args, cookies, notebook_id)
         if data is None or (isinstance(data, dict) and "error" in data):
             return jsonify(data or {"error": "no_data"}), 502
         notes = _dedup(_extract_strings(data, 80))
@@ -3468,7 +3496,7 @@ def create_nlm_proxy_app() -> Flask:
         if not cookies:
             return _no_cookies()
         args = json.dumps([notebook_id, None, None, [2]])
-        _, data = _batchexecute("cFji9", args, cookies, notebook_id)
+        _, data = _batchexecute(RPC_SYNC_NOTES, args, cookies, notebook_id)
         if data is None or (isinstance(data, dict) and "error" in data):
             return jsonify(data or {"error": "no_data"}), 502
         convos = _dedup(_extract_strings(data, 80))
@@ -3481,7 +3509,7 @@ def create_nlm_proxy_app() -> Flask:
         if not cookies:
             return _no_cookies()
         args = json.dumps([None, None, notebook_id])
-        _, data = _batchexecute("e3bVqc", args, cookies, notebook_id)
+        _, data = _batchexecute(RPC_NOTEBOOK_STATE, args, cookies, notebook_id)
         if data is None or (isinstance(data, dict) and "error" in data):
             return jsonify(data or {"error": "no_data"}), 502
         docs = _dedup(_extract_strings(data, 100))
@@ -3498,12 +3526,12 @@ def create_nlm_proxy_app() -> Flask:
         result: Dict[str, Any] = {"notebook_id": notebook_id}
 
         # Summary
-        _, data = _batchexecute("VfAZjd", json.dumps([notebook_id, [2]]),
+        _, data = _batchexecute(RPC_NOTEBOOK_CONTENT, json.dumps([notebook_id, [2]]),
                                 cookies, notebook_id)
         result["summary"] = "\n\n".join(_extract_strings(data, 50)) if data and not isinstance(data, dict) else ""
 
         # Sources
-        _, data = _batchexecute("wXbhsf", json.dumps([None, 1, None, [2]]),
+        _, data = _batchexecute(RPC_LIST_SOURCES, json.dumps([None, 1, None, [2]]),
                                 cookies, notebook_id)
         if data and not isinstance(data, dict):
             result["notebook_name"], result["sources"] = _extract_sources(data)
@@ -3521,7 +3549,7 @@ def create_nlm_proxy_app() -> Flask:
         result["notes"] = [n for n in notes if len(n) > 100]
 
         # Conversations
-        _, data = _batchexecute("cFji9", json.dumps([notebook_id, None, None, [2]]),
+        _, data = _batchexecute(RPC_SYNC_NOTES, json.dumps([notebook_id, None, None, [2]]),
                                 cookies, notebook_id)
         convos = _dedup(_extract_strings(data, 80)) if data and not isinstance(data, dict) else []
         result["conversations"] = [c for c in convos if len(c) > 100]
