@@ -63,10 +63,15 @@ def test_load_saved_session_params_prefers_service_sessions() -> None:
 
 def test_create_notebook_returns_id(client: NLMDirectClient) -> None:
     """Happy path: returns notebook ID from RPC result."""
-    with patch.object(client, "_rpc_call", return_value=["nb-abc123"]) as mock_rpc:
+    # CCqFvf returns [title, None, uuid, ...]
+    with patch.object(client, "_rpc_call", return_value=["Test Notebook", None, "nb-abc123"]) as mock_rpc:
         result = client.create_notebook("Test Notebook")
     assert result == "nb-abc123"
-    mock_rpc.assert_called_once_with("VqhFhd", ["Test Notebook", None, None], timeout=30)
+    mock_rpc.assert_called_once_with(
+        "CCqFvf",
+        ["Test Notebook", None, None, [2], [1, None, None, None, None, None, None, None, None, None, [1]]],
+        timeout=30,
+    )
 
 
 def test_create_notebook_raises_on_none(client: NLMDirectClient) -> None:
@@ -87,10 +92,10 @@ def test_create_notebook_raises_on_empty_list(client: NLMDirectClient) -> None:
 
 
 def test_delete_notebook_calls_correct_rpc(client: NLMDirectClient) -> None:
-    """Calls kVoZqc with [[notebook_id]] payload."""
+    """Calls WWINqb with [[notebook_id], [2]] payload (Pro tier)."""
     with patch.object(client, "_rpc_call", return_value=None) as mock_rpc:
         client.delete_notebook("nb-xyz")
-    mock_rpc.assert_called_once_with("kVoZqc", [["nb-xyz"]], timeout=30)
+    mock_rpc.assert_called_once_with("WWINqb", [["nb-xyz"], [2]], timeout=30)
 
 
 def test_delete_notebook_returns_none(client: NLMDirectClient) -> None:
@@ -98,6 +103,20 @@ def test_delete_notebook_returns_none(client: NLMDirectClient) -> None:
     with patch.object(client, "_rpc_call", return_value=None):
         result = client.delete_notebook("nb-xyz")
     assert result is None
+
+
+def test_delete_notebook_fallback_to_legacy(client: NLMDirectClient) -> None:
+    """Falls back to kVoZqc when WWINqb fails."""
+    calls: list = []
+
+    def side_effect(rpcid: str, payload: list, timeout: int = 30) -> None:
+        calls.append(rpcid)
+        if rpcid == "WWINqb":
+            raise Exception("rpcid not found")
+
+    with patch.object(client, "_rpc_call", side_effect=side_effect):
+        client.delete_notebook("nb-xyz")
+    assert calls == ["WWINqb", "kVoZqc"]
 
 
 # ──── get_chat_history ─────────────────────────────────────────────────────────

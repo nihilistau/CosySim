@@ -18,6 +18,7 @@ rpcid registry: data/nlm_rpc_registry.json v4.0
 """
 from __future__ import annotations
 
+import asyncio
 import datetime
 import json
 import logging
@@ -60,6 +61,10 @@ _USER_AGENT = (
 _NLM_ARTIFACTS_PATH = Path(__file__).resolve().parents[2] / "data" / "nlm_artifacts.json"
 _NLM_META_PATH = Path(__file__).resolve().parents[2] / "data" / "nlm_meta.json"
 _NLM_BUILD_LABEL_PREFIX = "boq_labs-tailwind-frontend_"
+
+# Chrome DevTools Protocol — used for live token refresh from running NLM tabs
+_CDP_PORT = 9222
+_CDP_TABS_URL = f"http://localhost:{_CDP_PORT}/json"
 
 # Audio type constants (from sqTeoe GET_AUDIO_OPTIONS)
 AUDIO_DEEP_DIVE = 1   # ~30 minutes, two-host conversation
@@ -330,11 +335,170 @@ class NLMDirectClient:
             self._persist_session_params(self._bl, self._f_sid, self._at_token)
 
     def _clear_session_params(self) -> None:
-        """Clear cached NLM session parameters to force a refresh."""
+        """Clear cached AND persisted NLM session parameters to force a live refresh."""
         self._bl = None
         self._f_sid = None
         self._at_token = None
         self._session_params_loaded = False
+        # Wipe persisted params from the account object
+        for attr in ("nlm_session", ):
+            obj = getattr(self._account, attr, None)
+            if isinstance(obj, dict):
+                for key in ("bl", "f_sid", "at"):
+                    obj.pop(key, None)
+        svc = getattr(self._account, "service_sessions", None)
+        if isinstance(svc, dict) and isinstance(svc.get("notebooklm"), dict):
+            for key in ("bl", "f_sid", "at"):
+                svc["notebooklm"].pop(key, None)
+        # Wipe persisted params from the meta file
+        if _NLM_META_PATH.exists():
+            try:
+                meta = json.loads(_NLM_META_PATH.read_text(encoding="utf-8"))
+                for key in ("bl", "f_sid", "at"):
+                    meta.pop(key, None)
+                _NLM_META_PATH.write_text(json.dumps(meta, indent=2), encoding="utf-8")
+            except (OSError, json.JSONDecodeError):
+                pass
+
+    # ──── CDP-based live token refresh ────────────────────────────────────────
+
+    def _refresh_from_cdp(self) -> bool:
+        """Extract fresh session tokens from a live NotebookLM Chrome tab via CDP.
+
+        Chrome must be running with ``--remote-debugging-port=9222``. The
+        ``websockets`` library connects to the tab's DevTools WebSocket and
+        evaluates JavaScript to read ``WIZ_global_data`` directly from the
+        authenticated page — bypassing the HTTP-fetch token path that goes
+        stale when the page's session fingerprint drifts.
+
+        Also refreshes cookies from the live browser session into the account
+        pool so that subsequent HTTP calls carry fresh auth.
+
+        Returns:
+            True if fresh tokens were successfully extracted and set.
+        """
+        try:
+            import websockets  # noqa: F811
+        except ImportError:
+            logger.debug("websockets not installed — CDP refresh unavailable")
+            return False
+
+        try:
+            tabs_resp = requests.get(_CDP_TABS_URL, timeout=3)
+            tabs = tabs_resp.json()
+        except Exception:
+            logger.debug("Chrome CDP not reachable at port %d", _CDP_PORT)
+            return False
+
+        nlm_tabs = [
+            t for t in tabs
+            if "notebooklm" in t.get("url", "").lower()
+            and t.get("webSocketDebuggerUrl")
+            and t.get("type") == "page"
+        ]
+        if not nlm_tabs:
+            logger.debug("No NotebookLM tabs found in Chrome CDP")
+            return False
+
+        async def _extract() -> Optional[Dict[str, str]]:
+            ws_url = nlm_tabs[0]["webSocketDebuggerUrl"]
+            async with websockets.connect(ws_url, max_size=10 * 1024 * 1024) as ws:
+                msg_id = 0
+
+                # 1. Extract WIZ_global_data tokens
+                msg_id += 1
+                expr = (
+                    "JSON.stringify({"
+                    "  bl: (() => {"
+                    "    const wiz = window.WIZ_global_data || {};"
+                    "    for (const v of Object.values(wiz)) {"
+                    "      if (typeof v === 'string' && v.startsWith('boq_labs-tailwind-frontend_')) return v;"
+                    "    }"
+                    "    return '';"
+                    "  })(),"
+                    "  f_sid: (window.WIZ_global_data && (window.WIZ_global_data.IxjpMA || window.WIZ_global_data.FdrFJe)) || '',"
+                    "  at: (window.WIZ_global_data && window.WIZ_global_data.SNlM0e) || ''"
+                    "})"
+                )
+                await ws.send(json.dumps({
+                    "id": msg_id,
+                    "method": "Runtime.evaluate",
+                    "params": {"expression": expr, "returnByValue": True},
+                }))
+                tokens: Dict[str, str] = {}
+                while True:
+                    raw = await ws.recv()
+                    msg = json.loads(raw)
+                    if msg.get("id") == msg_id:
+                        val = (
+                            msg.get("result", {})
+                            .get("result", {})
+                            .get("value", "")
+                        )
+                        if val:
+                            tokens = json.loads(val)
+                        break
+
+                if not tokens.get("bl") or not tokens.get("f_sid"):
+                    return None
+
+                # 2. Extract fresh cookies from the browser
+                msg_id += 1
+                await ws.send(json.dumps({
+                    "id": msg_id,
+                    "method": "Network.getCookies",
+                    "params": {"urls": [
+                        "https://notebooklm.google.com",
+                        "https://google.com",
+                        "https://accounts.google.com",
+                    ]},
+                }))
+                while True:
+                    raw = await ws.recv()
+                    msg = json.loads(raw)
+                    if msg.get("id") == msg_id:
+                        browser_cookies = {
+                            c["name"]: c["value"]
+                            for c in msg.get("result", {}).get("cookies", [])
+                            if c.get("name") and c.get("value")
+                        }
+                        tokens["_cookies"] = browser_cookies
+                        break
+
+            return tokens
+
+        try:
+            loop = asyncio.new_event_loop()
+            result = loop.run_until_complete(_extract())
+            loop.close()
+        except Exception as exc:
+            logger.warning("CDP token extraction failed: %s", exc)
+            return False
+
+        if not result or not result.get("bl") or not result.get("f_sid"):
+            return False
+
+        # Apply the fresh tokens
+        self._set_session_params(
+            result["bl"], result["f_sid"], result.get("at"), persist=True
+        )
+
+        # Apply fresh cookies to the account pool
+        browser_cookies = result.get("_cookies", {})
+        if browser_cookies:
+            pool = get_account_pool()
+            existing = getattr(self._account, "cookies", {}) or {}
+            existing.update(browser_cookies)
+            self._account.cookies = existing
+            pool.save()
+            logger.info(
+                "CDP refresh: applied %d cookies + fresh tokens (bl=%s… f_sid=%s)",
+                len(browser_cookies),
+                result["bl"][:40],
+                result["f_sid"],
+            )
+
+        return True
 
     def _get_page_params(self) -> Tuple[str, str]:
         """Fetch build label (bl) and session fingerprint (f.sid) from NLM homepage.
@@ -383,6 +547,12 @@ class NLMDirectClient:
 
         if not f_sid:
             f_sid = saved_f_sid
+
+        if not f_sid or not bl:
+            # HTTP page fetch failed to get valid tokens — try CDP as live fallback
+            if self._refresh_from_cdp():
+                if self._bl and self._f_sid:
+                    return self._bl, self._f_sid
 
         if not f_sid:
             raise ValueError("Could not extract f.sid from NLM page")
@@ -708,11 +878,13 @@ class NLMDirectClient:
         except requests.HTTPError:
             if not _retried and resp.status_code in (400, 401, 403):
                 logger.warning(
-                    "NLM batchexecute %s returned HTTP %s; refreshing session params",
+                    "NLM batchexecute %s returned HTTP %s; attempting CDP token refresh",
                     rpc_id,
                     resp.status_code,
                 )
                 self._clear_session_params()
+                if not self._refresh_from_cdp():
+                    logger.warning("CDP refresh unavailable — falling back to HTTP page params")
                 return self._rpc_call(
                     rpc_id,
                     payload,
@@ -724,8 +896,9 @@ class NLMDirectClient:
 
         result = self._parse_rpc_response(resp.text, rpc_id)
         if result is None and not _retried:
-            logger.warning("NLM batchexecute %s returned null; refreshing session params", rpc_id)
+            logger.warning("NLM batchexecute %s returned null; attempting CDP token refresh", rpc_id)
             self._clear_session_params()
+            self._refresh_from_cdp()
             return self._rpc_call(
                 rpc_id,
                 payload,
@@ -1237,27 +1410,50 @@ class NLMDirectClient:
     # ──── Notebook management ──────────────────────────────────────────────────
 
     def list_notebooks(self) -> List[Dict[str, Any]]:
-        """List all notebooks in this account (ub2Bae).
+        """List all notebooks in this account.
+
+        Tries the current ``wXbhsf`` rpcid first, falls back to legacy ``ub2Bae``.
 
         Returns:
-            List of notebook dicts with id, name, and metadata.
+            List of notebook dicts/lists with id, name, and metadata.
         """
         import base64
-        payload = [[2]]
-        result = self._rpc_call("ub2Bae", payload, timeout=30)
-        notebooks: List[Dict[str, Any]] = []
-        if not isinstance(result, list):
-            return notebooks
-        for item in result:
+
+        for rpcid, payload in [("wXbhsf", [None, 1, None, [2]]), ("ub2Bae", [[2]])]:
             try:
-                if isinstance(item, str):
-                    decoded = base64.b64decode(item).decode("utf-8")
-                    notebooks.append(json.loads(decoded))
-                elif isinstance(item, (list, dict)):
-                    notebooks.append(item)  # type: ignore[arg-type]
+                result = self._rpc_call(rpcid, payload, timeout=30)
+                if not isinstance(result, list):
+                    continue
+
+                # wXbhsf returns [[nb1, nb2, ...], ...] — unwrap the outer layer
+                items = result
+                if (
+                    rpcid == "wXbhsf"
+                    and len(result) >= 1
+                    and isinstance(result[0], list)
+                    and result[0]
+                    and isinstance(result[0][0], list)
+                ):
+                    items = result[0]
+
+                notebooks: List[Dict[str, Any]] = []
+                for item in items:
+                    try:
+                        if isinstance(item, str):
+                            decoded = base64.b64decode(item).decode("utf-8")
+                            notebooks.append(json.loads(decoded))
+                        elif isinstance(item, (list, dict)):
+                            notebooks.append(item)  # type: ignore[arg-type]
+                    except Exception:
+                        notebooks.append({"raw": item})
+                if notebooks:
+                    return notebooks
             except Exception:
-                notebooks.append({"raw": item})
-        return notebooks
+                if rpcid == "wXbhsf":
+                    logger.debug("wXbhsf failed, trying legacy ub2Bae")
+                    continue
+                raise
+        return []
 
     def get_artifacts(self, notebook_id: str) -> List[Dict[str, Any]]:
         """List all artifacts in a notebook (gArtLc).
@@ -1285,7 +1481,10 @@ class NLMDirectClient:
         logger.debug("Renamed notebook %s → '%s'", notebook_id, new_title)
 
     def create_notebook(self, title: str) -> str:
-        """Create a new empty NotebookLM notebook (VqhFhd).
+        """Create a new empty NotebookLM notebook.
+
+        Uses the current ``CCqFvf`` rpcid (replaces the retired ``VqhFhd``).
+        The payload structure was captured from the live NLM UI in June 2026.
 
         Args:
             title: Display name for the new notebook.
@@ -1293,20 +1492,40 @@ class NLMDirectClient:
         Returns:
             New notebook ID string.
         """
-        payload = [title, None, None]
-        result = self._rpc_call("VqhFhd", payload, timeout=30)
-        if result and isinstance(result, list) and result[0]:
-            return str(result[0])
+        payload = [title, None, None, [2], [1, None, None, None, None, None, None, None, None, None, [1]]]
+        result = self._rpc_call("CCqFvf", payload, timeout=30)
+        if result and isinstance(result, list):
+            # CCqFvf returns [title, None, uuid, ...] — UUID at index 2
+            nb_id = result[2] if len(result) > 2 and result[2] else None
+            if nb_id:
+                return str(nb_id)
+            # Fallback: check index 0 if index 2 is empty
+            if result[0] and len(str(result[0])) > 10:
+                return str(result[0])
+        # Fallback: try the legacy VqhFhd rpcid
+        try:
+            payload_legacy = [title, None, None]
+            result = self._rpc_call("VqhFhd", payload_legacy, timeout=30)
+            if result and isinstance(result, list) and result[0]:
+                return str(result[0])
+        except Exception:
+            pass
         raise RuntimeError(f"create_notebook failed for title='{title}': {result}")
 
     def delete_notebook(self, notebook_id: str) -> None:
-        """Permanently delete a notebook and all its sources (kVoZqc).
+        """Permanently delete a notebook and all its sources.
+
+        Uses WWINqb (Pro tier) with kVoZqc as legacy fallback.
 
         Args:
             notebook_id: NLM notebook UUID to delete.
         """
-        payload = [[notebook_id]]
-        self._rpc_call("kVoZqc", payload, timeout=30)
+        payload = [[notebook_id], [2]]
+        try:
+            self._rpc_call("WWINqb", payload, timeout=30)
+        except Exception:
+            logger.debug("WWINqb failed, falling back to kVoZqc")
+            self._rpc_call("kVoZqc", [[notebook_id]], timeout=30)
         logger.info("Deleted notebook %s", notebook_id)
 
     def get_chat_history(self, notebook_id: str) -> List[Dict[str, Any]]:
