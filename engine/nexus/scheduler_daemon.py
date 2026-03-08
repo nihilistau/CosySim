@@ -1231,8 +1231,8 @@ def _register_builtin_tasks(daemon: "SchedulerDaemon") -> None:
     )
     daemon.register(
         "cookie-auto-refresh",
-        "Cookie Auto-Refresh — run har_capture.py --mode cdp to silently renew Google cookies via running Chrome",
-        "every_72h",
+        "Cookie Auto-Refresh — CDP cookie extraction from running Chrome every 12h",
+        "every_12h",
         _cookie_auto_refresh_callback,
     )
     daemon.register(

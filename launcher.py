@@ -49,7 +49,7 @@ for _stream in (sys.stdout, sys.stderr):
 PROJECT_ROOT = Path(__file__).parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-VERSION = "0.89b"
+VERSION = "0.90b"
 
 # ── Catalogues ────────────────────────────────────────────────────────────
 SERVICES: Dict[str, Dict[str, Any]] = {}
