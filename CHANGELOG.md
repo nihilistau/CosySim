@@ -49,11 +49,27 @@ tasks. 9,400+ tests.
   - Dual data path: EventChain (audit) + DataCollector (training)
   - Error isolation: DataCollector failures never break the interceptor pipeline
 
+#### Template & Frontend Fixes
+- Fixed broken `<script>` tags across 21 scene templates (missing `>` on
+  opening tag caused complete JS loading failure in all affected scenes)
+- Fixed `grid.html` and `tavern.html` incorrectly using `{% extends %}` instead
+  of `{% include %}` for `navbar_v2.html`
+- Fixed `system_control` and `command_center` missing `navbar_v2.html` include
+- Added jinja2 `ChoiceLoader` for shared templates in command_center and
+  system_control scenes
+- Fixed floating RADIO announcer button appearing without live data
+- Updated `navbar_v2.html` scene registry from 16 to 21 entries
+
 #### TUI Polish
-- System health panel showing Nexus stats and LMStudio model info
-- Version badge with scene count
+- LMStudio health check now sends bearer auth token from config
+- Startup message shows scene/service/total counts and keybindings
+- Quick stats panel shows auto-start target count
+- Health summary action lists down scenes and auto-start count
+- Canvas open action uses `port_registry` instead of hardcoded URL
+- Version badge with Rich cyan markup and scene count
 - `H` key binding for health panel toggle
 - Dynamic cookie path resolution via glob
+- Removed empty `unknown_scene_xyz` directory
 
 ### Phase 7 — Lab Break, NLM Chain, LMLink
 
