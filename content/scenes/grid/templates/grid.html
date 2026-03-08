@@ -1,17 +1,18 @@
-{% extends "navbar_v2.html" %}
-
-{% block title %}THE GRID — Neon City{% endblock %}
-
-{% block head_extra %}
-<link rel="stylesheet" href="/shared/css/design_tokens.css">
-<link rel="stylesheet" href="/shared/css/cosysim-animations.css">
-<link rel="stylesheet" href="/static/css/grid.css">
-<link rel="stylesheet" href="/shared/css/cosysim-shop.css">
-<meta name="scene-accent" content="{{ accent_color }}">
-{% endblock %}
-
-{% block content %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>THE GRID — Neon City</title>
+  <link rel="stylesheet" href="/shared/css/design_tokens.css">
+  <link rel="stylesheet" href="/shared/css/cosysim-animations.css">
+  <link rel="stylesheet" href="/static/css/grid.css">
+  <link rel="stylesheet" href="/shared/css/cosysim-shop.css">
+  <meta name="scene-accent" content="{{ accent_color }}">
+</head>
 <body data-scene="grid" style="--cs-scene-accent:{{ accent_color }}; --cs-scene-accent-rgb:0 255 136;">
+
+{% include 'navbar_v2.html' %}
 
 <!-- ═══ PAGE WRAPPER ═══════════════════════════════════════════════════════ -->
 <div class="grid-wrapper">
@@ -238,7 +239,7 @@
 <canvas id="cs-particles" class="cs-particles-canvas" aria-hidden="true"></canvas>
 
 <!-- ══ Scripts ═══════════════════════════════════════════════════════════ -->
-<script src="/shared/js/socket.io.min.js"</script>
+<script src="/shared/js/socket.io.min.js"></script>
 <script>window.SCENE_PARTICLE_CONFIG = { effect:"neon_rain", color:"#00ff88", count:80, speed:1.2 };</script>
 <script src="/shared/js/cosysim-particles.js" defer></script>
 <script src="/shared/js/cosysim-transitions.js" defer></script>
@@ -247,4 +248,4 @@
 {% include 'shop_modal.html' %}
 
 </body>
-{% endblock %}
+</html>

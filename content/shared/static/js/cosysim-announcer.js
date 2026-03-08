@@ -63,6 +63,7 @@
     _items:        [],
     _index:        0,
     _pinned:       false,
+    _hasLiveData:  false,
     _stationIdx:   0,
     _timer:        null,
     _pollTimer:    null,
@@ -91,8 +92,11 @@
 
       this._bindEvents();
       this._loadItems().then(() => {
-        this._show();
-        this._startAutoAdvance();
+        // Only show when live data arrived (not just fallback filler)
+        if (this._hasLiveData) {
+          this._show();
+          this._startAutoAdvance();
+        }
       });
 
       // Periodic refresh
@@ -160,6 +164,11 @@
 
         if (items.length) {
           this._items = items;
+          this._hasLiveData = true;
+          if (!this._els.root.classList.contains(VISIBLE_CLASS)) {
+            this._show();
+            this._startAutoAdvance();
+          }
           this._stationIdx = (data.station_index ?? 0) % STATIONS.length;
           this._updateStation();
           this._renderList();
@@ -178,6 +187,11 @@
             })).filter(e => e.text);
             if (events.length) {
               this._items = [...events, ...FALLBACK_MESSAGES.slice(0, 5)];
+              this._hasLiveData = true;
+              if (!this._els.root.classList.contains(VISIBLE_CLASS)) {
+                this._show();
+                this._startAutoAdvance();
+              }
               this._renderList();
               return;
             }
@@ -217,6 +231,12 @@
       this._items.unshift(item);
       if (this._items.length > 30) this._items.length = 30;
       this._index = 0;
+      this._hasLiveData = true;
+      // Auto-show on first live event if not already visible
+      if (!this._els.root.classList.contains(VISIBLE_CLASS)) {
+        this._show();
+        this._startAutoAdvance();
+      }
       this._renderCurrent();
       this._renderList();
       this._flash();

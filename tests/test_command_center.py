@@ -45,6 +45,12 @@ class TestCommandCenterScene:
                     template_folder=str(scene_dir / "templates"),
                     static_folder=str(scene_dir / "static"),
                 )
+                import jinja2
+                _shared_tmpl = str(scene_dir.parent.parent / "shared" / "templates")
+                s.app.jinja_loader = jinja2.ChoiceLoader([
+                    s.app.jinja_loader,
+                    jinja2.FileSystemLoader(_shared_tmpl),
+                ])
                 CORS(s.app)
                 s.socketio = SocketIO(s.app, async_mode="threading")
                 s._collector = None
