@@ -1,0 +1,218 @@
+================================================================================
+HEAP SNAPSHOT MINING REPORT
+Source: data\har_files\Heap-20260305T014003.heapsnapshot
+Total unique findings: 1712
+================================================================================
+
+
+────────────────────────────────────────────────────────────
+[SAPISID]  (1 unique values)
+────────────────────────────────────────────────────────────
+  VALUE: TctybpgXIaoKC0Vp/AxXHVKQlHeT9MtjQM
+  CTX:   Fr;lOO0Vd:OT","OTZ=8472742_12_12_133440_16_395520; SEARCH_SAMESITE=CgQIk6AB; APISID=pLRd1FfIWCqyzB8F/AhqXIOVnuW-Tpbxnz; SAPISID=TctybpgXIaoKC0Vp/AxXHVKQlHeT9MtjQM; __Secure-1PAPISID=TctybpgXIaoKC0Vp/A
+
+
+────────────────────────────────────────────────────────────
+[__Secure-1PAPISID]  (1 unique values)
+────────────────────────────────────────────────────────────
+  VALUE: TctybpgXIaoKC0Vp/AxXHVKQlHeT9MtjQM
+  CTX:   95520; SEARCH_SAMESITE=CgQIk6AB; APISID=pLRd1FfIWCqyzB8F/AhqXIOVnuW-Tpbxnz; SAPISID=TctybpgXIaoKC0Vp/AxXHVKQlHeT9MtjQM; __Secure-1PAPISID=TctybpgXIaoKC0Vp/AxXHVKQlHeT9MtjQM; __Secure-3PAPISID=TctybpgX
+
+
+────────────────────────────────────────────────────────────
+[__Secure-3PAPISID]  (1 unique values)
+────────────────────────────────────────────────────────────
+  VALUE: TctybpgXIaoKC0Vp/AxXHVKQlHeT9MtjQM
+  CTX:   8F/AhqXIOVnuW-Tpbxnz; SAPISID=TctybpgXIaoKC0Vp/AxXHVKQlHeT9MtjQM; __Secure-1PAPISID=TctybpgXIaoKC0Vp/AxXHVKQlHeT9MtjQM; __Secure-3PAPISID=TctybpgXIaoKC0Vp/AxXHVKQlHeT9MtjQM; SID=g.a0007QjIF022rzAdvxxJ
+
+
+────────────────────────────────────────────────────────────
+[APISID]  (2 unique values)
+────────────────────────────────────────────────────────────
+  VALUE: pLRd1FfIWCqyzB8F/AhqXIOVnuW-Tpbxnz
+  CTX:   sfSb;dowIGb:ebZ3mb;eBAeSb:zbML3c;iFQyKf:QIhFr;lOO0Vd:OT","OTZ=8472742_12_12_133440_16_395520; SEARCH_SAMESITE=CgQIk6AB; APISID=pLRd1FfIWCqyzB8F/AhqXIOVnuW-Tpbxnz; SAPISID=TctybpgXIaoKC0Vp/AxXHVKQlHeT9
+
+  VALUE: TctybpgXIaoKC0Vp/AxXHVKQlHeT9MtjQM
+  CTX:   r;lOO0Vd:OT","OTZ=8472742_12_12_133440_16_395520; SEARCH_SAMESITE=CgQIk6AB; APISID=pLRd1FfIWCqyzB8F/AhqXIOVnuW-Tpbxnz; SAPISID=TctybpgXIaoKC0Vp/AxXHVKQlHeT9MtjQM; __Secure-1PAPISID=TctybpgXIaoKC0Vp/Ax
+
+
+────────────────────────────────────────────────────────────
+[SIDCC]  (1 unique values)
+────────────────────────────────────────────────────────────
+  VALUE: AKEyXzWpSjAUgUjL6WqcRsiFyhOlh9e54JcX1PcmYBKIYi0PolgkCB_xk4qiEztcJQV-wqkBhQ
+  CTX:   C1pbSmFr5aLz2Oz5VdlmwPXaSPlRyWiA79pJJIL5AACgYKAQISARYSFQHGX2MifVTTyvEfFK61dPB-pFPqvxoVAUF8yKomeynJhugKa6N_gZkkWhd00076; SIDCC=AKEyXzWpSjAUgUjL6WqcRsiF … Yi0PolgkCB_xk4qiEztcJQV-wqkBhQ","<div class=\"i
+
+
+────────────────────────────────────────────────────────────
+[at_token]  (1 unique values)
+────────────────────────────────────────────────────────────
+  VALUE: AIXQIkaz3oPeBNtilaUUjA5xIl32:1772634895832
+  CTX:   0vrja.apps.googleusercontent.com\",\"QrtxK\":\"0\",\"S06Grb\":\"101377838414306824456\",\"S6lZl\":96797242,\"SNlM0e\":\"AIXQIkaz3oPeBNtilaUUjA5xIl32:1772634895832\",\"TSDtV\":\"%.@.[[null,[[45733487,n
+
+
+────────────────────────────────────────────────────────────
+[api_key_AIza]  (4 unique values)
+────────────────────────────────────────────────────────────
+  VALUE: AIzaSyC_pzrI0AjEDXDYcg7kkq3uQEjnXV50pBM
+  CTX:   a(e,d,a,b,h[11],c)}return BVb};_.aU=function(a,b){return{type:","window.WIZ_global_data = {\"AfY8Hf\":true,\"B8SWKb\":\"AIzaSyC_pzrI0AjEDXDYcg7kkq3uQEjnXV50pBM\",\"DpimGf\":false,\"EP1ykd\":[\"/_/*\",
+
+  VALUE: AIzaSyCbsbvGCe7C9mCtdaTycZB2eUFuzsYKG_E
+  CTX:   ring","xB","Bafut","getTrans","transformTo","params","RelativeOrientationSensor","Luxembourg","Account alert","\u0135","AIzaSyCbsbvGCe7C9mCtdaTycZB2eUFuzsYKG_E","R9","Dcaron","get title","Y2a","remove
+
+  VALUE: AIzaSyDwCkYaJHhiH0tFnoFV0Hw5Rle5Jo7xpnA
+  CTX:   b","deleteUint64GbigintWrapperMapField","FLOODLIGHT_COUNTING_METHOD_STANDARD","[Title Bar] Set title","rpcid:UVycre:1","AIzaSyDwCkYaJHhiH0tFnoFV0Hw5Rle5Jo7xpnA","^\\S+@\\S+\\.\\S+$","jspb$extensions$t
+
+  VALUE: AIzaSyAqoygJvgM7TiIuokH5MJoxjM2UmNYWTMA
+  CTX:   s://www.googleapis.com/appsmarket/v2/installedApps/X6l-G19krjMgjB2JDExf6kYtE84TwHp8DWvwEkIdMVnnZD6n4Su7yUHb-VHfJqfG?key=AIzaSyAqoygJvgM7TiIuokH5MJoxjM2UmNYWTMA","coerceToNullishBytesAsStringByteString
+
+
+────────────────────────────────────────────────────────────
+[email]  (1 unique values)
+────────────────────────────────────────────────────────────
+  VALUE: knack112358@gmail.com
+  CTX:   7493658,105739270,105813236],\"gGcLoe\":false,\"hsFLT\":\"%.@.null,1000,2]\",\"iCzhFc\":false,\"nQyAE\":{},\"oPEP7c\":\"knack112358@gmail.com\",\"p9hQne\":\"https://www.gstatic.com/_/boq-one-goo","var
+
+
+────────────────────────────────────────────────────────────
+[oauth_client_id]  (1 unique values)
+────────────────────────────────────────────────────────────
+  VALUE: 371316423795-luo3ln0198apr966qa7dkrmrsj30vrja.apps.googleusercontent.com
+  CTX:   wind-frontend_20260302.14_p0\",\"LoQv7e\":true,\"MT7f9b\":[],\"MUE6Ne\":\"LabsTailwindUi\",\"PMF0Je\":true,\"QGcrse\":\"371316423795-luo3ln0198apr966q … rja.apps.googleusercontent.com\",\"QrtxK\":\"0\
+
+
+────────────────────────────────────────────────────────────
+[gapi_path]  (7 unique values)
+────────────────────────────────────────────────────────────
+  VALUE: https://www.googleapis.com/auth/drive
+  CTX:   Closed","Ccedil","IntersectionObserver","Xza","frameBorder","Uja","\u2A5C","screen_resolution","insertAdjacentElement","https://www.googleapis.com/auth/drive","addControls","Gana","\u2A80","Gq","setIn
+
+  VALUE: https://www.googleapis.com/auth/plus.people.recommended
+  CTX:   ways in which you can use NotebookLM to digest all the I/O news \u2013 which is great, because there's plenty of it.","https://www.googleapis.com/auth/plus.people.recommended","ScopeWithImportScripts"
+
+  VALUE: https://www.googleapis.com/auth/plus.me
+  CTX:   odule$contents$google3$third_party$javascript$safevalues$builders$html_builders_joinHtmls","%1F","getExtensionCountFn","https://www.googleapis.com/auth/plus.me","set onseeking","RFixed64StringExtWFixe
+
+  VALUE: https://translate-pa.googleapis.com/v1/textToSpeech
+  CTX:   _sanitizer$sanitizer_table$sanitizer_table_isCustomElement","\u2CAA","get ariaAtomic","vary","Rxb","border-left-color","https://translate-pa.googleapis.com/v1/textToSpeech","Kj","?\\w+)(?:\\(([\\w|=-]
+
+  VALUE: https://translate-pa.googleapis.com/v1/supportedLanguages
+  CTX:   5461691","mdc-circular-progress","Qk","UNSPECIFIED","Cha","flood-color","captureVisibleTab","afb","clientX","T$a","EY","https://translate-pa.googleapis.com/v1/supportedLanguages","sa_IN","/LabsTailwin
+
+  VALUE: https://www.googleapis.com/appsmarket/v2/installedApps/X6l-G19krjMgjB2JDExf6kYtE84TwHp8DWvwEkIdMVnnZD6n4Su7yUHb-VHfJqfG?key=AIzaSyAqoygJvgM7TiIuokH
+  CTX:   d","getInt64GbigintInt64GbigintMapField","TextTrackList","jspb$extensions$translating$frontend$RenderSegment","Assign","https://www.googleapis.com/app … fG?key=AIzaSyAqoygJvgM7TiIuokH5MJoxjM2UmNYWTMA"
+
+  VALUE: https://fonts.googleapis.com/css2?family=Google+Sans+Text:ital,wght@0,400;0,500;0,700;1,400;1,500;1,700&amp;display=swap\
+  CTX:   onts.googleapis.com\">","<link rel=\"preconnect\" href=\"https://fonts.gstatic.com\">","<link rel=\"stylesheet\" href=\"https://fonts.googleapis.com/c … ;1,500;1,700&amp;display=swap\" nonce=\"\">","<
+
+
+────────────────────────────────────────────────────────────
+[nlm_rpc_path]  (5 unique values)
+────────────────────────────────────────────────────────────
+  VALUE: /_/LabsTailwindUi/data/batchexecute
+  CTX:   bject (internal cache) / chrome-extension://pncmdlebcopjodenlllcomedphdmeogm","65618","_.iW","131141","65569","305696","/_/LabsTailwindUi/data/batchexecute","1081","1772634895840","1772634897062","373
+
+  VALUE: /_/LabsTailwindUi/data/batchexecute?rpcids=wXbhsf&source-path=%2F&bl=boq_labs-tailwind-frontend_20260302.14_p0&f.si
+  CTX:   m for _.Pq)",".render","Ojb.l",".hideObject",".sync.set",".sync.get",".sync.clear",".sync.remove","l.useUTF8","232310","/_/LabsTailwindUi/data/batchex … d-frontend_20260302.14_p0&f.sid=-70084973700170
+
+  VALUE: /_/LabsTailwindUi/data/batchexecute?rpcids=ZwVcOc&source-path=%2F&bl=boq_labs-tailwind-frontend_20260302.14_p0&f.si
+  CTX:   bortController (prototype) / https://notebooklm.google.com","Comment (internal cache) / https://notebooklm.google.com","/_/LabsTailwindUi/data/batchex … d-frontend_20260302.14_p0&f.sid=-70084973700170
+
+  VALUE: /_/LabsTailwindUi/data/batchexecute?rpcids=ozz5Z&source-path=%2F&bl=boq_labs-tailwind-frontend_20260302.14_p0&f.sid
+  CTX:   $.Ba","I$.Ba","J$.Ba","_.fy.Ba","GL.Rm","GL.clear","_.n.key","Ns.set","Ns.get","Ns.remove","Ns.vA","Cs.JA.Ua.Tz","991","/_/LabsTailwindUi/data/batchex … -frontend_20260302.14_p0&f.sid=-700849737001705
+
+  VALUE: /_/LabsTailwindUi/data/batchexecute?rpcids=ub2Bae&source-path=%2F&bl=boq_labs-tailwind-frontend_20260302.14_p0&f.si
+  CTX:   feedback","209715200","[null,[1,null,null,null,null,null,null,null,null,null,[1]]]",".hasChildren","[null,1,null,[2]]","/_/LabsTailwindUi/data/batchex … d-frontend_20260302.14_p0&f.sid=-70084973700170
+
+
+────────────────────────────────────────────────────────────
+[uuid_generic]  (1687 unique values)
+────────────────────────────────────────────────────────────
+  VALUE: 31c20c44-8c94-4f81-a2b8-a020a761d122
+  CTX:   at64","setProto3Uint32FieldIfNotNullish","responseStart","onStringMap_","getLanguageOrUndefined","Hindi (Latin)","Darr","31c20c44-8c94-4f81-a2b8-a020a761d122","145","homepage-plus-gradient1","setHeigh
+
+  VALUE: 787d622b-ebe7-4f4a-9d8d-eefa2336a357
+  CTX:   VBa","gb_9a","IOb","clearNonfiniteForm","rcuQ6b:npT2md;qRPDvb:.CLIENT;MZ56ec:.CLIENT","bhb","verticalThresholdsPercent","787d622b-ebe7-4f4a-9d8d-eefa2336a357","ebu_KE","vtp_eventSettingsTable","module
+
+  VALUE: 50170774-124e-4147-a03e-dc67a02503d7
+  CTX:   nts$jspb$internal$transfer_array_setDestroyTransferredArraysForTesting","\\s","page_location","event_usage","0 -1334px","50170774-124e-4147-a03e-dc67a02503d7","font-weight","getAlertMid","XXa","verbar
+
+  VALUE: 929ec18c-7b8b-4106-af85-3a671155ae02
+  CTX:   IgnoringDefault","module$contents$google3$third_party$javascript$safevalues$dom$globals$location_module","remove","$hb","929ec18c-7b8b-4106-af85-3a671155ae02","Bi","set async","v6","\uA75C","setString
+
+  VALUE: 1c3173fe-d739-4100-8bf1-494445f6e046
+  CTX:   dule$contents$google3$third_party$javascript$safevalues$dom$elements$button_module","\u01E6","getCanonicalLocales","NP","1c3173fe-d739-4100-8bf1-494445f6e046","set family","__aev","nlt","ARa","module$
+
+  VALUE: 953b658a-579b-4b3c-b280-43b3781babf3
+  CTX:   InPictureElement","PresentationReceiver","activate","vRa","setFormalitySettings","%WrapForValidIteratorPrototype%.next","953b658a-579b-4b3c-b280-43b3781babf3","dBb","hasListeners","module$exports$jspb
+
+  VALUE: bec06e03-7cf2-4989-bf17-bcb0ac9927a0
+  CTX:   ment_","aAa","\u1F88","horizontal","translating.ModelSpecification","TRUSTED_CONTEXTS","setStringUint64GbigintMapField","bec06e03-7cf2-4989-bf17-bcb0ac9927a0","\u0224","\uFB14","PRECONDITION_FAILED","
+
+  VALUE: 79409cc2-9245-4fdd-a249-20550e019162
+  CTX:   TWORK_AUTHENTICATION_REQUIRED","permissions","\u038A","LJa","STATE_INVALID","h3a","ar_SA","isInTable","NUM_SEVEN","gce","79409cc2-9245-4fdd-a249-20550e019162","get onpointerlockchange","original_vendo
+
+  VALUE: 505ee4b1-ad05-4673-a06b-1ec106c2b940
+  CTX:   state","/cb=","\u029E","POINTER_EVENTS","kabuverdianu","module$contents$soy_$$isURI","mat-icon-location","EEE, d MMM y","505ee4b1-ad05-4673-a06b-1ec106c2b940","resolveFragmentIdentifierURLs","XMLHttpR
+
+  VALUE: 42f3aa38-2b65-419d-815f-64b304e5ea6f
+  CTX:   frameElement","module$contents$jspb$internal_immutability_copyArrayToMessageWithImmutableFields","SVGStopElement","PLN","42f3aa38-2b65-419d-815f-64b304e5ea6f","setRepeatedEnumField","addAllBackends","
+
+  VALUE: 9b3cc97d-fae6-47b9-b3e2-7497e5e6efc4
+  CTX:   rapperField","clearScore","clearHasPrecedingSpace","messageToImmutableCaching","\uA738","set onsubmit","ASSUME_FIREFOX","9b3cc97d-fae6-47b9-b3e2-7497e5e6efc4","setLocationHref","$H","putAllStringBytes
+
+  VALUE: 5881d15d-7b82-4002-8613-df59b6eece4c
+  CTX:   nitizeStyleElement","You have reached the maximum number of notebooks.","countInContext","setFormalityLevel","prodCast","5881d15d-7b82-4002-8613-df59b6eece4c","J9c","XRDOMOverlayState","Marshall Islan
+
+  VALUE: fed8c379-f735-4165-9ee3-a79b643279d8
+  CTX:   Effects]: Unable to fetch projects","mask-size","bd","module$contents$jspb_internal_binary_readInt32Oneof","RWSfixed64","fed8c379-f735-4165-9ee3-a79b643279d8","getReadonlyUint32WrapperMapField","EDITO
+
+  VALUE: 0fa0025c-4984-47e4-9e71-9faa0cd8c1c7
+  CTX:   setHref","Sint64BytesMap","text-size-adjust","SIMPLE_FROUND_POLYFILL","Summarise","getHighEntropyValues","Isb","easter","0fa0025c-4984-47e4-9e71-9faa0cd8c1c7","eventName","getTypeOrUndefined","ges","N
+
+  VALUE: 61efeea1-cdca-44cf-ac84-1b1a0924338a
+  CTX:   r","0fa0025c-4984-47e4-9e71-9faa0cd8c1c7","eventName","getTypeOrUndefined","ges","NavigationTransition","get wholeText","61efeea1-cdca-44cf-ac84-1b1a0924338a","Ancient Egyptian","checklist enter","mdc
+
+  VALUE: d2c79efa-a3e8-41c2-a874-013ca001e4f5
+  CTX:   04B8","gh","set commandForElement","\u1E19","Yw","sanitizedContentCss","v4a","Im","Pra","LICENSES","SecurityError","fc","d2c79efa-a3e8-41c2-a874-013ca001e4f5","class ne2Ple-oshW8e-V67aGc role tooltip 
+
+  VALUE: 74dc7f14-54cb-481b-9ee8-8347a6f5cba1
+  CTX:   appav","Dopf","eparsl","\u2A86","$jscomp$optchain$tmpm2055384931$0","[Sources] Fetch source content request","cQ","ecy","74dc7f14-54cb-481b-9ee8-8347a6f5cba1","module$contents$goog$html$SafeHtml_getSt
+
+  VALUE: 62a4ab6d-865d-4661-8a10-ca67574cf81f
+  CTX:   tpos","getEnableMarkMandatoryFieldsWithRequired","ltg","jspb$o$translating$frontend$ContactDetail","Bmb","ng-component","62a4ab6d-865d-4661-8a10-ca67574cf81f","phmmat","started","Udblac","set innerHTM
+
+  VALUE: 3782c628-4c78-4c59-a62d-375901c3fbad
+  CTX:   la","Wt","GROUP_DM","\u29A6","PerformanceElementTiming","module$contents$jspb_internal_adapters_setFlagsForSlicedArray","3782c628-4c78-4c59-a62d-375901c3fbad","right","clickAt","ALLOW_DISPLAY_FEATURES
+
+  VALUE: 1241f5d1-d91c-4bce-910c-6c559500e9a1
+  CTX:   "Xb","unsafe_access_globals","h9c","bdo","__zone_symbol__state","__kBitsPerCharTableShift","Mk","RetryStatus_","\u2282","1241f5d1-d91c-4bce-910c-6c559500e9a1","kC","Ttb","[DocumentGuide] fetch documen
+
+  VALUE: 24d50377-8c14-4851-bcc2-b2d67b039041
+  CTX:   lders$resource_url_builders_toAbsoluteResourceUrl","userRole","GetMsgOptions","$Ka","WAIT_FOR_USERSCRIPT_PROPERTY_NAME","24d50377-8c14-4851-bcc2-b2d67b039041","jua","isUndefined","qTnoBf","\u230E","li
+
+  VALUE: C3A59A15-B128-4482-8329-D9775EC1BF61
+  CTX:   64","get wakeLock","eu","\u1F25\u03B9","^gad_source[_=](\\d+)$","source_update","Et","_&ae","Crna Gora","PORT","\u03BC","C3A59A15-B128-4482-8329-D9775EC1BF61","\u047C","setFocusable","module$contents$
+
+  VALUE: e4ddc6f8-ada2-4aaa-b9dc-c3ff7c325bf8
+  CTX:   "ol=","set onkeydown","module$contents$jspb_internal_adapters_getRepeatedWrapperFieldInternal","exempted jspb subclass","e4ddc6f8-ada2-4aaa-b9dc-c3ff7c325bf8","Latin","pk","nd","rcuQ6b:npT2md;","event
+
+  VALUE: 4eb5bb8b-2910-44f5-a590-2084480053a9
+  CTX:   tents$jspb_internal_binary_readSfixed64","sr_Cyrl_ME","get defaultChecked","Angika","addAllCorrectionType","imageSizes","4eb5bb8b-2910-44f5-a590-2084480053a9","/LabsTailwindOrchestrationService.Delete
+
+  VALUE: 3b5dbaa9-6126-47bc-8a64-013eae6cd129
+  CTX:   tails","$Xa","Sign out of all accounts","upsellmessaging","aDa","module$contents$jspb_internal_binary_readInt64Gbigint","3b5dbaa9-6126-47bc-8a64-013eae6cd129","gb_0e","OFF","A6c","\u25EC","\\/widget\\
+
+  VALUE: 34510332-d39c-499e-882d-e48393d612cd
+  CTX:   gent$platform_version","getOneofInt64FieldOrUndefined_asString","gl","K2b","CWD6bf","vtp_limitDataSources","brainstorm","34510332-d39c-499e-882d-e48393d612cd","RSa","cF","OLa","Canarias","handleGetCSS
+
+  VALUE: b1afb86d-dc79-41dd-9c46-97ad304a3ef7
+  CTX:   BD","gbar.a","%EF%BC%8C","FIa","BoolSfixed64Map","/LabsTailwindOrchestrationService.DiscoverSources","goto","rEb","BQb","b1afb86d-dc79-41dd-9c46-97ad304a3ef7","qtb","EIGHT","getStringEnumMapField","ps
+
+  VALUE: 9349d57c-4dd8-4722-a405-5085af370769
+  CTX:   SourcesEffects]: Unable to propagate first projects fetch","__module_taskSetTestHitParams","jq","ECa","\u0109","retain","9349d57c-4dd8-4722-a405-5085af370769","nYa","Dwa","\u0229","VIRTUAL_SCROLLABLE"
+
+  VALUE: a117274d-8bc6-4fc9-b0f1-35d254869ae2
+  CTX:   ts$jspb$binary$writer_REJECT_UNPAIRED_SURROGATES","\u019C","\u2D0E","\u1FD0","configSettingsVariable","zbML3c","\u0184","a117274d-8bc6-4fc9-b0f1-35d254869ae2","GPUTexture","xE","getReadonlyEntryList",
+
+  VALUE: fd83db91-8be0-406a-bac3-5d46ff2ec5c2
+  CTX:   ","getUint64BytesMapField","Clipperton Island","dMDg0Yz","internal.getAndResetEventUsage","[^\\[,:][\\[\\{]","creative","fd83db91-8be0-406a-bac3-5d46ff2ec5c2","Animation","deleteBooleanUint32MapField"

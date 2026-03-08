@@ -1,0 +1,1 @@
+{"instruction": "Scan this text for grammar errors and missing symbols. List all issues or respond 'OK' if clean.", "input": "def bar():\n    return 2", "output": "OK", "model_type": "grammar_scanner"}

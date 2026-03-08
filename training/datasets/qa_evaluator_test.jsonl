@@ -1,0 +1,3 @@
+{"instruction": "Classify this Q&A pair as ESSENTIAL, USEFUL, or SKIP for the knowledge cache.", "input": "In CosySim, can you help me?", "output": "SKIP", "model_type": "qa_evaluator"}
+{"instruction": "Classify this Q&A pair as ESSENTIAL, USEFUL, or SKIP for the knowledge cache.", "input": "How does the interceptor pipeline work?", "output": "ESSENTIAL", "model_type": "qa_evaluator"}
+{"instruction": "Classify this Q&A pair as ESSENTIAL, USEFUL, or SKIP for the knowledge cache.", "input": "What port does the Nexus KMS run on?", "output": "ESSENTIAL", "model_type": "qa_evaluator"}
