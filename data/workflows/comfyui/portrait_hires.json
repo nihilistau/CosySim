@@ -1,0 +1,33 @@
+{
+  "1": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": "juggernautXL_ragnarokBy.safetensors"}},
+  "2": {"class_type": "VAELoader", "inputs": {"vae_name": "sdxl_vae.safetensors"}},
+  "3": {"class_type": "CLIPTextEncode", "inputs": {"clip": ["1", 1], "text": "masterpiece, best quality, highly detailed portrait photograph"}},
+  "4": {"class_type": "CLIPTextEncode", "inputs": {"clip": ["1", 1], "text": "ugly, deformed, blurry, low quality"}},
+  "5": {"class_type": "EmptyLatentImage", "inputs": {"width": 896, "height": 1152, "batch_size": 1}},
+  "6": {
+    "class_type": "KSampler",
+    "inputs": {
+      "model": ["1", 0], "positive": ["3", 0], "negative": ["4", 0],
+      "latent_image": ["5", 0], "seed": 42, "steps": 25, "cfg": 6.5,
+      "sampler_name": "dpmpp_2m", "scheduler": "karras", "denoise": 1.0
+    }
+  },
+  "7": {"class_type": "VAEDecode", "inputs": {"samples": ["6", 0], "vae": ["2", 0]}},
+  "8": {"class_type": "UltralyticsDetectorProvider", "inputs": {"model_name": "bbox/face_yolov8s.pt"}},
+  "9": {
+    "class_type": "FaceDetailer",
+    "inputs": {
+      "image": ["7", 0], "model": ["1", 0], "clip": ["1", 1], "vae": ["2", 0],
+      "positive": ["3", 0], "negative": ["4", 0], "bbox_detector": ["8", 0],
+      "guide_size": 384, "guide_size_for": true, "max_size": 1024,
+      "seed": 42, "steps": 20, "cfg": 6.5, "sampler_name": "dpmpp_2m",
+      "scheduler": "karras", "denoise": 0.45, "feather": 5, "noise_mask": true,
+      "force_inpaint": true, "bbox_threshold": 0.5, "bbox_dilation": 10,
+      "bbox_crop_factor": 3.0, "sam_detection_hint": "center-1", "sam_dilation": 0,
+      "sam_threshold": 0.93, "sam_bbox_expansion": 0, "sam_mask_hint_threshold": 0.7,
+      "sam_mask_hint_use_negative": "False", "wildcard": "", "cycle": 1,
+      "inpaint_model": false, "noise_mask_feather": 20
+    }
+  },
+  "10": {"class_type": "SaveImage", "inputs": {"filename_prefix": "portrait_hires", "images": ["9", 0]}}
+}

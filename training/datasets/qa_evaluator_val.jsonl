@@ -1,0 +1,2 @@
+{"instruction": "Classify this Q&A pair as ESSENTIAL, USEFUL, or SKIP for the knowledge cache.", "input": "When using Nexus, what port does the Nexus KMS run on?", "output": "ESSENTIAL", "model_type": "qa_evaluator"}
+{"instruction": "Classify this Q&A pair as ESSENTIAL, USEFUL, or SKIP for the knowledge cache.", "input": "What port does Nexus run on?", "output": "ESSENTIAL", "model_type": "qa_evaluator"}

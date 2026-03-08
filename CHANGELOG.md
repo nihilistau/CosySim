@@ -5,11 +5,59 @@ All notable changes to CosySim are documented here.
 ---
 ## [0.91b] — "THE EVOLUTION" — 2026-03
 
-Phase 7 system evolution sprint. Lab Break scene, NLM chain-prompting engine,
-LMLink federation, smart notebook fleet, ARGUS/NLM agent instructions.
-20 scenes. 55 scheduler tasks. 9,300+ tests.
+Phase 7–8 system evolution sprint. Lab Break scene, NLM chain-prompting engine,
+LMLink federation, smart notebook fleet, bidirectional LMStudio server control,
+vision/evaluation MCP skills, training pipeline wiring. 20 scenes. 55 scheduler
+tasks. 9,400+ tests.
 
-### New Scene — Lab Break (port 5571)
+### Phase 8 — LMStudio Bidirectional Control & Skills
+
+#### Server Controller & Agent Isolation
+- `engine/lmstudio/server_controller.py` (~806 lines) — ServerController class
+  for model lifecycle management, agent instance isolation via SDK
+  `load_new_instance()`, health monitoring, and `build_request_config()`
+- `engine/lmstudio/lmlink_manager.py` (~660 lines) — LMLinkManager for
+  multi-instance federation routing with affinity rules, failover, 4 strategies
+- `engine/lmstudio/task_queue.py` (~641 lines) — priority task queue with
+  model-affinity dispatch, 6 task types, 5 priority levels, metrics collection
+- `engine/skills/builtin/lmstudio_server_skills.py` — 15 MCP skills for server
+  control, LMLink federation, and task queue management
+- 72 tests in `tests/test_lmstudio_server_stack.py` — all passing
+
+#### Vision Skills (5 MCP skills, pack="vision")
+- `screen_to_text` — describe screen content via VLM
+- `ui_analysis` — structured UI element extraction
+- `compare_screenshots` — visual diff analysis between two images
+- `read_text_from_image` — OCR-style text extraction via VLM
+- `capture_screenshot` — desktop screenshot capture (Windows)
+- Helper: `_image_to_data_url()`, `_ask_vision()`, `_resolve_vision_model()`
+
+#### Evaluation Skills (8 MCP skills, pack="evaluation")
+- `eval_leaderboard` — model benchmark leaderboard
+- `eval_history` — benchmark history with optional model filter
+- `eval_run_benchmark` — trigger benchmark run for specific or all models
+- `eval_collector_stats` — DataCollector pipeline statistics
+- `eval_flush_data` — flush collected training data to disk
+- `eval_flywheel_stats` — TrainingFlywheel pipeline statistics
+- `eval_store_result` — store evaluation results in Nexus
+- `eval_prune_low_quality` — prune low-quality training data
+
+#### Training Pipeline Wiring
+- `ActivityLoggerInterceptor` now feeds DataCollector alongside EventChain:
+  - `collect_tool_call()` for each auto-executed skill dispatch
+  - `collect_conversation()` for replies > 20 chars with valid history
+  - Dual data path: EventChain (audit) + DataCollector (training)
+  - Error isolation: DataCollector failures never break the interceptor pipeline
+
+#### TUI Polish
+- System health panel showing Nexus stats and LMStudio model info
+- Version badge with scene count
+- `H` key binding for health panel toggle
+- Dynamic cookie path resolution via glob
+
+### Phase 7 — Lab Break, NLM Chain, LMLink
+
+#### New Scene — Lab Break (port 5571)
 - Full 3D CSS lab environment with observation room split view
 - VitalStats system: health, hunger, energy, stress with background tick thread
 - EmotionalState system: fear, anger, hope, trust, desperation, confusion

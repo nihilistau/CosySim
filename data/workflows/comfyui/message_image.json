@@ -1,0 +1,25 @@
+{
+  "1": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": "juggernautXL_ragnarokBy.safetensors"}},
+  "2": {"class_type": "VAELoader", "inputs": {"vae_name": "sdxl_vae.safetensors"}},
+  "3": {
+    "class_type": "LoraLoader",
+    "inputs": {
+      "model": ["1", 0], "clip": ["1", 1],
+      "lora_name": "sdxl_lightning_8step_lora.safetensors",
+      "strength_model": 1.0, "strength_clip": 1.0
+    }
+  },
+  "4": {"class_type": "CLIPTextEncode", "inputs": {"clip": ["3", 1], "text": "chat message image, detailed, vivid"}},
+  "5": {"class_type": "CLIPTextEncode", "inputs": {"clip": ["3", 1], "text": "ugly, deformed, blurry"}},
+  "6": {"class_type": "EmptyLatentImage", "inputs": {"width": 768, "height": 512, "batch_size": 1}},
+  "7": {
+    "class_type": "KSampler",
+    "inputs": {
+      "model": ["3", 0], "positive": ["4", 0], "negative": ["5", 0],
+      "latent_image": ["6", 0], "seed": 42, "steps": 8, "cfg": 2.0,
+      "sampler_name": "dpmpp_2m", "scheduler": "sgm_uniform", "denoise": 1.0
+    }
+  },
+  "8": {"class_type": "VAEDecode", "inputs": {"samples": ["7", 0], "vae": ["2", 0]}},
+  "9": {"class_type": "SaveImage", "inputs": {"filename_prefix": "message_img", "images": ["8", 0]}}
+}

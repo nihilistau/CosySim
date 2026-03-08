@@ -127,6 +127,13 @@ _SCENE_PRESENTATION: Dict[str, Dict[str, str]] = {
         "accent": "#64748b",
         "desc": "Real-time system monitoring and control",
     },
+    "lab_break": {
+        "subtitle": "Escape the Lab",
+        "icon": "🧬",
+        "group": "action",
+        "accent": "#14b8a6",
+        "desc": "3D laboratory escape — convince the observer you are real",
+    },
     "asset_studio": {
         "subtitle": "Generate Everything",
         "icon": "🖼️",

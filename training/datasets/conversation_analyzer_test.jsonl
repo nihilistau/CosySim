@@ -1,0 +1,1 @@
+{"instruction": "Extract structured user facts from this conversation snippet.", "input": "I love working with AI systems", "output": "{\"preferences\":{\"domain\":\"AI systems\"}}", "model_type": "conversation_analyzer"}

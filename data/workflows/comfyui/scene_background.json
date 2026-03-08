@@ -1,0 +1,17 @@
+{
+  "1": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": "juggernautXL_ragnarokBy.safetensors"}},
+  "2": {"class_type": "VAELoader", "inputs": {"vae_name": "sdxl_vae.safetensors"}},
+  "3": {"class_type": "CLIPTextEncode", "inputs": {"clip": ["1", 1], "text": "cinematic background, wide shot, detailed environment"}},
+  "4": {"class_type": "CLIPTextEncode", "inputs": {"clip": ["1", 1], "text": "ugly, deformed, blurry, text, watermark"}},
+  "5": {"class_type": "EmptyLatentImage", "inputs": {"width": 1024, "height": 576, "batch_size": 1}},
+  "6": {
+    "class_type": "KSampler",
+    "inputs": {
+      "model": ["1", 0], "positive": ["3", 0], "negative": ["4", 0],
+      "latent_image": ["5", 0], "seed": 42, "steps": 25, "cfg": 6.5,
+      "sampler_name": "dpmpp_2m", "scheduler": "karras", "denoise": 1.0
+    }
+  },
+  "7": {"class_type": "VAEDecode", "inputs": {"samples": ["6", 0], "vae": ["2", 0]}},
+  "8": {"class_type": "SaveImage", "inputs": {"filename_prefix": "scene_bg", "images": ["7", 0]}}
+}

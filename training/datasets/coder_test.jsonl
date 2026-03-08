@@ -1,0 +1,1 @@
+{"instruction": "Complete or generate the requested code following CosySim conventions.", "input": "# Write a Python function to get config\ndef get_config():", "output": "def get_config():\n    from engine.config import get_config as _gc\n    return _gc()", "model_type": "coder"}
