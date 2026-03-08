@@ -1,4 +1,6 @@
 scenes:
+  asset_studio:
+    auto_start: false
   bedroom:
     auto_start: false
   casino:
@@ -11,8 +13,12 @@ scenes:
     auto_start: false
   games:
     auto_start: false
+  grid:
+    auto_start: false
   heist:
     auto_start: false
+  intel_hub:
+    auto_start: true
   lounge:
     auto_start: false
   neoncity:
@@ -41,8 +47,6 @@ services:
   nlm_proxy:
     auto_start: true
   system_control:
-    auto_start: true
-  totally_nonexistent_scene_xyz:
     auto_start: true
   tts:
     auto_start: false
