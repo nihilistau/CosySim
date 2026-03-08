@@ -1,0 +1,1351 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# NotebookLM RPC Registry — Single Source of Truth
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# Every batchexecute rpcid, payload template, configurable parameter, and
+# shared config object lives here.  Both nlm_direct_client.py and
+# nlm_live_proxy.py consume this registry through nlm_rpc_registry.py.
+#
+# The tier_marker and model parameters are CLIENT-SIDE hints — the server
+# honours whatever values we send regardless of actual account tier.
+# Tested: free-tier accounts can select pro-tier models and limits.
+#
+# Maintainer: Copilot + ARGUS rpcid detection pipeline
+# Last verified: 2026-06-10 via live CDP traffic capture
+# ═══════════════════════════════════════════════════════════════════════════════
+
+meta:
+  version: "4.0"
+  updated: "2026-06-10"
+  base_url: "https://notebooklm.google.com"
+  rpc_path: "/_/LabsTailwindUi/data/batchexecute"
+  grpc_chat_path: >-
+    /_/LabsTailwindUi/data/
+    google.internal.labs.tailwind.orchestration.v1.
+    LabsTailwindOrchestrationService/GenerateFreeFormStreamed
+  build_label_prefix: "boq_labs-tailwind-frontend_"
+
+# ─── Configurable Parameters ─────────────────────────────────────────────────
+# These are client-side values we embed in payloads.  The server respects
+# whatever we send — tier gating is NOT enforced server-side.
+parameters:
+  tier_marker:
+    description: "Account tier hint sent to NLM. Server does NOT enforce gating."
+    type: array
+    default: [2]
+    options:
+      free: [1]
+      pro: [2]
+      # Experimental — try [3] for Ultra-tier features if available
+      ultra: [3]
+
+  response_length:
+    description: "Controls verbosity of NLM response payloads."
+    type: integer
+    default: 4
+    options:
+      default: 4
+      longer: 1
+      shorter: 2
+
+  doc_type:
+    description: "Document/note output format."
+    type: integer
+    default: 2
+    options:
+      brief: 2
+      deep: 9
+
+  analysis_depth:
+    description: "Depth of notebook structural analysis (VfAZjd)."
+    type: integer
+    default: 2
+    options:
+      summary: 1
+      detailed: 2
+
+  page_size:
+    description: "Number of results per page for list/thread RPCs."
+    type: integer
+    default: 20
+
+  share_level:
+    description: "Notebook sharing level."
+    type: integer
+    default: 1
+    options:
+      private: 0
+      anyone_with_link: 1
+
+  audio_type:
+    description: "Audio overview format."
+    type: integer
+    default: 1
+    options:
+      deep_dive: 1
+      brief: 2
+      critique: 3
+      debate: 4
+
+  guide_type:
+    description: "Structured guide format."
+    type: integer
+    default: 1
+    options:
+      study: 1
+      faq: 2
+      briefing: 3
+      toc: 4
+      timeline: 5
+
+  research_depth:
+    description: "Deep research intensity level."
+    type: integer
+    default: 5
+    options:
+      shallow: 1
+      medium: 3
+      deep: 5
+      exhaustive: 10
+
+  model_quality:
+    description: >
+      Model quality hint embedded in write_config [[tier, quality]].
+      Higher values may select more capable Gemini variants.
+    type: array
+    default: [2, 1]
+    options:
+      standard: [2, 1]
+      high: [2, 2]
+      # Experimental — try different combinations
+      fast: [1, 1]
+      ultra: [3, 1]
+
+# ─── Shared Config Objects ────────────────────────────────────────────────────
+# Reusable payload fragments referenced by multiple operations.
+shared_configs:
+  write_config:
+    description: >
+      Write operation metadata envelope used by generate_doc (ciyUvf),
+      save_report (R7cb6c), and audio options (sqTeoe).
+      Structure: [doc_type, null, null, source_config, [model_quality]]
+    value: [2, null, null, [1, null, null, null, null, null, null, null, null, null, [1]], [[2, 1]]]
+    configurable_slots:
+      0: doc_type
+      4: model_quality
+
+  source_config:
+    description: >
+      Source creation metadata envelope used by add_source (izAoDd),
+      register_files (o4cbdc), and create_notebook (CCqFvf).
+      Position 0 = create flag (1=new), position 10 = feature flags.
+    value: [1, null, null, null, null, null, null, null, null, null, [1]]
+    configurable_slots:
+      0: "create_flag (1=create new)"
+
+# ─── RPC Operations ──────────────────────────────────────────────────────────
+# Each operation defines:
+#   rpcid          — current (Pro-tier) rpcid string
+#   fallback_rpcid — legacy (Free-tier) rpcid, used as retry if primary fails
+#   payload        — template with $param references to parameters above
+#   requires_notebook — whether source-path includes /notebook/<id>
+#   timeout        — default timeout in seconds
+#   confirmed      — date this rpcid was last verified via HAR/CDP
+#   category       — functional group (session|notebook|source|chat|artifact|research|account|webrtc)
+#   description    — human-readable purpose
+#   response_hint  — brief note on how to parse the response
+operations:
+
+  # ──── Session / Account ────────────────────────────────────────────────────
+
+  session_init:
+    rpcid: "ZwVcOc"
+    fallback_rpcid: null
+    payload: []
+    requires_notebook: false
+    timeout: 15
+    confirmed: "2026-02-20"
+    category: session
+    description: "Initialize NLM browser session; also returns user plan/quota limits."
+    response_hint: "[session_token, account_info, ...]"
+    service_method: null
+    aliases: [user_plan]
+
+  get_feature_flags:
+    rpcid: "ozz5Z"
+    fallback_rpcid: null
+    payload: "$flag_ids_payload"
+    requires_notebook: false
+    timeout: 30
+    confirmed: "2026-02-20"
+    category: account
+    description: "Probe feature flags and account state/storage quota."
+    response_hint: "Nested flag_id → value mappings."
+    service_method: null
+    aliases: [account_state, user_quota]
+
+  get_locale:
+    rpcid: "DYBcR"
+    fallback_rpcid: null
+    payload: [null]
+    requires_notebook: false
+    timeout: 15
+    confirmed: "2026-06-10"
+    category: account
+    description: "Return user locale, language, and regional preferences."
+    response_hint: "[locale, language, region]"
+    service_method: null
+
+  mutate_account:
+    rpcid: null
+    fallback_rpcid: null
+    payload: []
+    requires_notebook: false
+    timeout: 30
+    confirmed: "2026-03-05"
+    category: account
+    description: "Account mutation (settings, preferences). Discovered via ARGUS heap."
+    response_hint: "Unknown — needs live capture."
+    service_method: "LabsTailwindOrchestrationService.MutateAccount"
+    source: argus_heap
+
+  generate_access_token:
+    rpcid: null
+    fallback_rpcid: null
+    payload: []
+    requires_notebook: false
+    timeout: 30
+    confirmed: "2026-03-05"
+    category: account
+    description: "Generate access token for API operations. Discovered via ARGUS heap."
+    response_hint: "Unknown — needs live capture."
+    service_method: "LabsTailwindOrchestrationService.GenerateAccessToken"
+    source: argus_heap
+
+  submit_feedback:
+    rpcid: null
+    fallback_rpcid: null
+    payload: []
+    requires_notebook: false
+    timeout: 30
+    confirmed: "2026-03-05"
+    category: account
+    description: "Submit user feedback to NLM. Discovered via ARGUS heap."
+    response_hint: "Unknown — needs live capture."
+    service_method: "LabsTailwindOrchestrationService.SubmitFeedback"
+    source: argus_heap
+
+  # ──── Notebook CRUD ────────────────────────────────────────────────────────
+
+  list_notebooks:
+    rpcid: "wXbhsf"
+    fallback_rpcid: "ub2Bae"
+    payload: [null, 1, null, "$tier_marker"]
+    fallback_payload: ["$tier_marker"]
+    requires_notebook: false
+    timeout: 30
+    confirmed: "2026-06-10"
+    category: notebook
+    description: "List all notebooks for the authenticated account."
+    response_hint: >
+      Pro (wXbhsf): [[ [nb1, nb2, ...] ]] — each nb is [title, null, uuid, ...]
+      Legacy (ub2Bae): [[[nb_obj, ...]]] — each nb_obj has UUID and name strings.
+    service_method: "LabsTailwindOrchestrationService.ListRecentlyViewedProjects"
+    notes: >
+      Same rpcid as list_sources (wXbhsf) but called WITHOUT notebook context.
+      With notebook context it lists sources instead.
+    configurable:
+      - tier_marker
+
+  create_notebook:
+    rpcid: "CCqFvf"
+    fallback_rpcid: "VqhFhd"
+    payload: ["$title", null, null, "$tier_marker", "$source_config"]
+    fallback_payload: ["$title", null, null]
+    requires_notebook: false
+    timeout: 30
+    confirmed: "2026-06-10"
+    category: notebook
+    description: "Create a new empty notebook."
+    response_hint: >
+      Pro (CCqFvf): [title, null, uuid, ...] — UUID at index 2.
+      Legacy (VqhFhd): [uuid, title, ...] — UUID at index 0.
+    service_method: "LabsTailwindOrchestrationService.CreateProject"
+    configurable:
+      - tier_marker
+      - source_config
+
+  delete_notebook:
+    rpcid: "WWINqb"
+    fallback_rpcid: "kVoZqc"
+    payload: [["$notebook_id"], "$tier_marker"]
+    fallback_payload: [["$notebook_id"]]
+    requires_notebook: false
+    timeout: 30
+    confirmed: "2026-06-10"
+    category: notebook
+    description: "Delete a notebook by UUID."
+    response_hint: "Minimal acknowledgement."
+    service_method: "LabsTailwindOrchestrationService.RemoveRecentlyViewedProject"
+    configurable:
+      - tier_marker
+
+  rename_notebook:
+    rpcid: "s0tc2d"
+    fallback_rpcid: null
+    payload: ["$notebook_id", [[null, null, null, [null, "$new_name"]]]]
+    requires_notebook: true
+    timeout: 30
+    confirmed: "2026-02-28"
+    category: notebook
+    description: "Rename a notebook."
+    response_hint: "[new_name, null, notebook_id, emoji, ...]"
+    service_method: null
+
+  open_notebook:
+    rpcid: "CCqFvf"
+    fallback_rpcid: null
+    payload: []
+    requires_notebook: true
+    timeout: 30
+    confirmed: "2026-02-27"
+    category: notebook
+    description: "Open/resume last active notebook — returns notebook state."
+    response_hint: "Notebook ID and metadata."
+    service_method: "LabsTailwindOrchestrationService.GetProject"
+    notes: "Same rpcid as create_notebook but called WITH notebook context."
+
+  load_notebook:
+    rpcid: "rLM1Ne"
+    fallback_rpcid: null
+    payload: ["$notebook_id", null, "$tier_marker", null, 0]
+    requires_notebook: true
+    timeout: 30
+    confirmed: "2026-02-20"
+    category: notebook
+    description: "Load notebook with full source processing status."
+    response_hint: "Per-source metadata with word_count (0 = still processing)."
+    service_method: "LabsTailwindOrchestrationService.GetProject"
+    configurable:
+      - tier_marker
+    aliases: [source_status, poll_source_status]
+
+  get_notebook_info:
+    rpcid: "e3bVqc"
+    fallback_rpcid: null
+    payload: [null, null, "$notebook_id"]
+    requires_notebook: true
+    timeout: 30
+    confirmed: "2026-02-20"
+    category: notebook
+    description: "Get raw notebook content/document structure."
+    response_hint: "Nested document structure."
+    service_method: "LabsTailwindOrchestrationService.GetProject"
+    aliases: [notebook_state]
+
+  get_notebook_details:
+    rpcid: "JFMDGd"
+    fallback_rpcid: null
+    payload: ["$notebook_id", "$tier_marker"]
+    requires_notebook: true
+    timeout: 30
+    confirmed: "2026-02-24"
+    category: notebook
+    description: "Get notebook details: user profile, email, queries remaining."
+    response_hint: "[[email, name, ...], null, queries_remaining, ...]"
+    service_method: "LabsTailwindOrchestrationService.GetProjectAnalytics"
+    configurable:
+      - tier_marker
+    aliases: [user_profile]
+
+  get_notebook_analysis:
+    rpcid: "VfAZjd"
+    fallback_rpcid: null
+    payload: ["$notebook_id", ["$analysis_depth"]]
+    requires_notebook: true
+    timeout: 60
+    confirmed: "2026-02-20"
+    category: notebook
+    description: "Get AI structural analysis of notebook: themes, clusters, coverage."
+    response_hint: "Nested text structure — join _extract_strings(data, 50)."
+    service_method: "LabsTailwindOrchestrationService.GetMagicIndex"
+    configurable:
+      - analysis_depth
+    aliases: [ai_summary, notebook_content]
+
+  get_notebook_metadata:
+    rpcid: "mFtdI"
+    fallback_rpcid: null
+    payload: ["$notebook_id"]
+    requires_notebook: true
+    timeout: 30
+    confirmed: "2026-06-10"
+    category: notebook
+    description: "Fetch metadata for a single notebook (title, created_at, source_count)."
+    response_hint: "Notebook metadata dict."
+    service_method: "LabsTailwindOrchestrationService.GetProject"
+
+  share_notebook:
+    rpcid: "dI5Y8"
+    fallback_rpcid: null
+    payload: ["$notebook_id", "$share_level"]
+    requires_notebook: false
+    timeout: 30
+    confirmed: "2026-06-10"
+    category: notebook
+    description: "Get or create a shareable link for a notebook."
+    response_hint: "[shareable_url]"
+    service_method: null
+    configurable:
+      - share_level
+
+  get_shared_notebook:
+    rpcid: "jzEKsc"
+    fallback_rpcid: null
+    payload: ["$share_token"]
+    requires_notebook: false
+    timeout: 30
+    confirmed: "2026-06-10"
+    category: notebook
+    description: "Access a notebook shared by another user via share token."
+    response_hint: "Shared notebook metadata."
+    service_method: null
+
+  remove_recently_viewed:
+    rpcid: null
+    fallback_rpcid: null
+    payload: []
+    requires_notebook: false
+    timeout: 30
+    confirmed: "2026-03-05"
+    category: notebook
+    description: "Remove notebook from recently-viewed list. Discovered via ARGUS heap."
+    response_hint: "Unknown — needs live capture."
+    service_method: "LabsTailwindOrchestrationService.RemoveRecentlyViewedProject"
+    source: argus_heap
+
+  # ──── Sources ──────────────────────────────────────────────────────────────
+
+  list_sources:
+    rpcid: "wXbhsf"
+    fallback_rpcid: null
+    payload: [null, 1, null, "$tier_marker"]
+    requires_notebook: true
+    timeout: 30
+    confirmed: "2026-02-20"
+    category: source
+    description: "List all sources in a notebook (sidebar list)."
+    response_hint: "[[[notebook_name, [source_obj, ...]]]] — source_obj has uid, title, meta."
+    service_method: "LabsTailwindOrchestrationService.LoadSource"
+    notes: "Same rpcid as list_notebooks — WITH notebook context lists sources."
+    configurable:
+      - tier_marker
+
+  list_sources_advanced:
+    rpcid: "jtGGne"
+    fallback_rpcid: null
+    payload: ["$notebook_id"]
+    requires_notebook: true
+    timeout: 30
+    confirmed: "2026-06-10"
+    category: source
+    description: "List sources with rich metadata (different from wXbhsf sidebar list)."
+    response_hint: "List of source metadata dicts."
+    service_method: "LabsTailwindOrchestrationService.LoadSource"
+
+  add_source:
+    rpcid: "izAoDd"
+    fallback_rpcid: null
+    payload: [["$source_obj"], "$notebook_id", "$tier_marker", "$source_config"]
+    requires_notebook: true
+    timeout: 60
+    confirmed: "2026-02-28"
+    category: source
+    description: >
+      Add URL, YouTube, or pasted-text source to a notebook.
+      URL: source_obj[2] = url.  YouTube: source_obj[7] = [url].
+    response_hint: "New source metadata with UUID. Status = processing initially."
+    service_method: "LabsTailwindOrchestrationService.AddSources"
+    configurable:
+      - tier_marker
+      - source_config
+
+  register_files:
+    rpcid: "o4cbdc"
+    fallback_rpcid: null
+    payload: [[["$filenames"]], "$notebook_id", "$tier_marker", "$source_config"]
+    requires_notebook: true
+    timeout: 30
+    confirmed: "2026-03-01"
+    category: source
+    description: "Register file uploads — returns upload URLs for PUT."
+    response_hint: "Upload URL(s) for each registered filename."
+    service_method: "LabsTailwindOrchestrationService.AddSources"
+    configurable:
+      - tier_marker
+      - source_config
+
+  delete_source:
+    rpcid: "tGMBJ"
+    fallback_rpcid: null
+    payload: [[["$source_id"]], "$tier_marker"]
+    requires_notebook: true
+    timeout: 30
+    confirmed: "2026-02-28"
+    category: source
+    description: "Delete a source from a notebook by UUID."
+    response_hint: "Minimal acknowledgement."
+    service_method: "LabsTailwindOrchestrationService.ActOnSources"
+    configurable:
+      - tier_marker
+
+  read_source:
+    rpcid: "tr032e"
+    fallback_rpcid: null
+    payload: [[[["$source_id"]]]]
+    requires_notebook: false
+    timeout: 60
+    confirmed: "2026-02-22"
+    category: source
+    description: "Read full text of a source. Expensive for large sources."
+    response_hint: "Nested text chunks — join via _extract_strings(data, 10)."
+    service_method: "LabsTailwindOrchestrationService.LoadSource"
+    aliases: [get_source_summary]
+
+  get_source_detail:
+    rpcid: "hizoJc"
+    fallback_rpcid: null
+    payload: [["$source_id"], "$tier_marker", "$tier_marker"]
+    requires_notebook: true
+    timeout: 30
+    confirmed: "2026-03-01"
+    category: source
+    description: "Get detailed metadata for a single source."
+    response_hint: "Source metadata with type, url, word count, status."
+    service_method: "LabsTailwindOrchestrationService.LoadSource"
+    configurable:
+      - tier_marker
+
+  get_source_metadata:
+    rpcid: "K4YCPe"
+    fallback_rpcid: null
+    payload: ["$notebook_id", "$source_id"]
+    requires_notebook: true
+    timeout: 30
+    confirmed: "2026-06-10"
+    category: source
+    description: "Fetch metadata for a specific source."
+    response_hint: "Source metadata dict."
+    service_method: "LabsTailwindOrchestrationService.LoadSource"
+
+  process_source:
+    rpcid: "bfEAsb"
+    fallback_rpcid: null
+    payload: ["$notebook_id", "$source_id"]
+    requires_notebook: true
+    timeout: 60
+    confirmed: "2026-06-10"
+    category: source
+    description: "Trigger reprocessing of a failed or stale source."
+    response_hint: "Acknowledgement."
+    service_method: "LabsTailwindOrchestrationService.ActOnSources"
+
+  discover_sources:
+    rpcid: null
+    fallback_rpcid: null
+    payload: []
+    requires_notebook: true
+    timeout: 60
+    confirmed: "2026-03-05"
+    category: source
+    description: "Auto-discover relevant sources for a notebook. Discovered via ARGUS heap."
+    response_hint: "Unknown — needs live capture."
+    service_method: "LabsTailwindOrchestrationService.DiscoverSources"
+    source: argus_heap
+
+  list_discover_sources_job:
+    rpcid: null
+    fallback_rpcid: null
+    payload: []
+    requires_notebook: true
+    timeout: 30
+    confirmed: "2026-03-05"
+    category: source
+    description: "Poll status of source discovery job. Discovered via ARGUS heap."
+    response_hint: "Unknown — needs live capture."
+    service_method: "LabsTailwindOrchestrationService.ListDiscoverSourcesJob"
+    source: argus_heap
+
+  add_tentative_sources:
+    rpcid: null
+    fallback_rpcid: null
+    payload: []
+    requires_notebook: true
+    timeout: 60
+    confirmed: "2026-03-05"
+    category: source
+    description: "Add tentative (suggested) sources to a notebook. Discovered via ARGUS heap."
+    response_hint: "Unknown — needs live capture."
+    service_method: "LabsTailwindOrchestrationService.AddTentativeSources"
+    source: argus_heap
+
+  # ──── Chat / Q&A ───────────────────────────────────────────────────────────
+
+  create_note:
+    rpcid: "CYK0Xb"
+    fallback_rpcid: null
+    payload: ["$notebook_id", "$question_text"]
+    requires_notebook: true
+    timeout: 180
+    confirmed: "2026-02-22"
+    category: chat
+    description: >
+      Citation-grounded Q&A — ask a question and get an answer with source
+      citations embedded as [source_uuid] markers.
+    response_hint: "[[answer_id, markdown_answer_with_citations], ...]"
+    service_method: "LabsTailwindOrchestrationService.CreateNote"
+    notes: >
+      NOT the real multi-turn chat (that uses GenerateFreeFormStreamed gRPC).
+      This is single-shot Q&A with citation annotations.
+    aliases: [ask_with_citations]
+
+  get_thread_ids:
+    rpcid: "hPTbtc"
+    fallback_rpcid: null
+    payload: [[], null, "$notebook_id", "$page_size"]
+    requires_notebook: true
+    timeout: 30
+    confirmed: "2026-02-24"
+    category: chat
+    description: "Get conversation thread IDs and pending sources list."
+    response_hint: "[[thread_id_list], ...]"
+    service_method: "LabsTailwindOrchestrationService.ListChatTurns"
+    configurable:
+      - page_size
+    aliases: [pending_sources]
+
+  read_thread:
+    rpcid: "khqZz"
+    fallback_rpcid: null
+    payload: [[], null, null, "$thread_id", "$page_size"]
+    requires_notebook: true
+    timeout: 30
+    confirmed: "2026-02-24"
+    category: chat
+    description: "Read all messages in a conversation thread."
+    response_hint: "Nested message objects."
+    service_method: "LabsTailwindOrchestrationService.ListChatTurns"
+    configurable:
+      - page_size
+    aliases: [list_notes]
+
+  get_chat_history:
+    rpcid: "GzgSEd"
+    fallback_rpcid: null
+    payload: ["$notebook_id"]
+    requires_notebook: true
+    timeout: 30
+    confirmed: "2026-06-10"
+    category: chat
+    description: "Get full chat history for a notebook."
+    response_hint: "Chat history with messages."
+    service_method: "LabsTailwindOrchestrationService.ListChatTurns"
+
+  delete_chat_history:
+    rpcid: "GfmCOc"
+    fallback_rpcid: null
+    payload: ["$notebook_id"]
+    requires_notebook: true
+    timeout: 30
+    confirmed: "2026-06-10"
+    category: chat
+    description: "Delete entire chat history for a notebook."
+    response_hint: "Acknowledgement."
+    service_method: "LabsTailwindOrchestrationService.DeleteNotes"
+
+  streaming_chat:
+    rpcid: "tJHFsf"
+    fallback_rpcid: null
+    payload: ["$notebook_id", "$message", "$conversation_id"]
+    requires_notebook: true
+    timeout: 120
+    confirmed: "2026-06-10"
+    category: chat
+    description: "Multi-turn streaming chat within a notebook context."
+    response_hint: "Response text string."
+    service_method: "LabsTailwindOrchestrationService.GenerateFreeFormStreamed"
+
+  # ──── Artifacts / Notes / Documents ────────────────────────────────────────
+
+  list_artifacts:
+    rpcid: "gArtLc"
+    fallback_rpcid: null
+    payload: ["$tier_marker", "$notebook_id", "$filter_str"]
+    requires_notebook: true
+    timeout: 30
+    confirmed: "2026-02-20"
+    category: artifact
+    description: "List notes and saved artifacts in a notebook."
+    response_hint: "Nested artifact objects with title/content strings."
+    service_method: "LabsTailwindOrchestrationService.ListArtifacts"
+    configurable:
+      - tier_marker
+    aliases: [get_artifacts]
+    notes: >
+      filter_str uses SQL-like syntax, e.g.
+      'NOT artifact.status = "ARTIFACT_STATUS_SUGGESTED"'
+
+  generate_doc:
+    rpcid: "ciyUvf"
+    fallback_rpcid: null
+    payload: ["$write_config", "$notebook_id", "$source_ids_nested"]
+    requires_notebook: true
+    timeout: 120
+    confirmed: "2026-02-22"
+    category: artifact
+    description: "Generate a document/report from selected sources."
+    response_hint: "[[title, description, null, [[src_ids]]], ...]"
+    service_method: "LabsTailwindOrchestrationService.GenerateDocumentGuides"
+    configurable:
+      - write_config (inherits doc_type, model_quality)
+
+  save_report:
+    rpcid: "R7cb6c"
+    fallback_rpcid: null
+    payload: ["$write_config", "$notebook_id", [null, null, "$note_type", "$source_ids_nested"]]
+    requires_notebook: true
+    timeout: 120
+    confirmed: "2026-02-22"
+    category: artifact
+    description: "Save a note artifact to a notebook."
+    response_hint: "[[note_id, title, note_type_int, [[source_ids]]], ...]"
+    service_method: "LabsTailwindOrchestrationService.UpdateArtifact"
+    configurable:
+      - write_config (inherits doc_type, model_quality)
+
+  save_note:
+    rpcid: "cYAfTb"
+    fallback_rpcid: null
+    payload: ["$notebook_id", "$note_id", [[["$html_content", "$title", [], 0]]], "$tier_marker"]
+    requires_notebook: true
+    timeout: 30
+    confirmed: "2026-03-01"
+    category: artifact
+    description: "Live auto-save of a note as user types."
+    response_hint: "Save acknowledgement."
+    service_method: "LabsTailwindOrchestrationService.UpdateArtifact"
+    configurable:
+      - tier_marker
+
+  sync_notes:
+    rpcid: "cFji9"
+    fallback_rpcid: null
+    payload: ["$notebook_id", null, "$prev_timestamp", "$tier_marker"]
+    requires_notebook: true
+    timeout: 30
+    confirmed: "2026-03-01"
+    category: artifact
+    description: "Poll for note deltas since a timestamp. null timestamp = first call."
+    response_hint: "[[note_objects], [current_ts_sec, current_ts_nano]]"
+    service_method: "LabsTailwindOrchestrationService.GetNotes"
+    configurable:
+      - tier_marker
+    aliases: [mind_map]
+    notes: "Same rpcid as mind_map (cFji9) — different payload structure."
+
+  generate_guide:
+    rpcid: "xqEXEf"
+    fallback_rpcid: null
+    payload: [null, "$notebook_id", "$guide_type", "$source_ids_nested"]
+    requires_notebook: true
+    timeout: 180
+    confirmed: "2026-06-10"
+    category: artifact
+    description: >
+      Generate a structured guide: study, FAQ, briefing, TOC, or timeline.
+    response_hint: "[id, title, content_markdown]"
+    service_method: "LabsTailwindOrchestrationService.GenerateNotebookGuide"
+    configurable:
+      - guide_type
+
+  generate_mind_map:
+    rpcid: "yyryJe"
+    fallback_rpcid: null
+    payload: [["$source_ids"]]
+    requires_notebook: false
+    timeout: 120
+    confirmed: "2026-06-10"
+    category: artifact
+    description: "Generate D3-format mind map JSON from sources."
+    response_hint: "[json_string] — parse inner JSON for D3 hierarchy."
+    service_method: "LabsTailwindOrchestrationService.GetMagicView"
+
+  export_to_sheets:
+    rpcid: "Krh3pd"
+    fallback_rpcid: null
+    payload: [null, "$artifact_id", null, "$title", 2]
+    requires_notebook: false
+    timeout: 60
+    confirmed: "2026-06-10"
+    category: artifact
+    description: "Export an artifact/table to Google Sheets."
+    response_hint: "Sheets URL or metadata."
+    service_method: "LabsTailwindOrchestrationService.ExportToDrive"
+
+  generate_data_table:
+    rpcid: "CCqFvf"
+    fallback_rpcid: null
+    payload: ["$notebook_id", null, null, "$tier_marker", "$source_config"]
+    requires_notebook: true
+    timeout: 180
+    confirmed: "2026-06-10"
+    category: artifact
+    description: "Generate a structured data table from notebook sources."
+    response_hint: "[id, title, content]"
+    service_method: "LabsTailwindOrchestrationService.GenerateMagicView"
+    configurable:
+      - tier_marker
+      - source_config
+    notes: "Same rpcid as create_notebook (CCqFvf) — context changes behaviour."
+
+  get_artifact:
+    rpcid: null
+    fallback_rpcid: null
+    payload: []
+    requires_notebook: true
+    timeout: 30
+    confirmed: "2026-03-05"
+    category: artifact
+    description: "Get a single artifact by ID. Discovered via ARGUS heap."
+    response_hint: "Unknown — needs live capture."
+    service_method: "LabsTailwindOrchestrationService.GetArtifact"
+    source: argus_heap
+
+  delete_artifact:
+    rpcid: null
+    fallback_rpcid: null
+    payload: []
+    requires_notebook: true
+    timeout: 30
+    confirmed: "2026-03-05"
+    category: artifact
+    description: "Delete an artifact by ID. Discovered via ARGUS heap."
+    response_hint: "Unknown — needs live capture."
+    service_method: "LabsTailwindOrchestrationService.DeleteArtifact"
+    source: argus_heap
+
+  get_artifact_customizations:
+    rpcid: null
+    fallback_rpcid: null
+    payload: []
+    requires_notebook: true
+    timeout: 30
+    confirmed: "2026-03-05"
+    category: artifact
+    description: "Get artifact customization options (audio/video/doc types). Discovered via ARGUS heap."
+    response_hint: "Unknown — needs live capture."
+    service_method: "LabsTailwindOrchestrationService.GetArtifactCustomizationChoices"
+    source: argus_heap
+
+  list_model_options:
+    rpcid: null
+    fallback_rpcid: null
+    payload: []
+    requires_notebook: false
+    timeout: 30
+    confirmed: "2026-03-05"
+    category: account
+    description: "List available Gemini model options. Discovered via ARGUS heap."
+    response_hint: "Unknown — needs live capture. Critical for model selection."
+    service_method: "LabsTailwindOrchestrationService.ListModelOptions"
+    source: argus_heap
+
+  execute_writing_function:
+    rpcid: null
+    fallback_rpcid: null
+    payload: []
+    requires_notebook: true
+    timeout: 120
+    confirmed: "2026-03-05"
+    category: artifact
+    description: "Execute a writing function (streaming gRPC). Discovered via ARGUS heap."
+    response_hint: "Unknown — streaming gRPC, needs live capture."
+    service_method: "LabsTailwindOrchestrationService.ExecuteWritingFunction"
+    source: argus_heap
+    notes: "Uses gRPC streaming path, not batchexecute."
+
+  # ──── Research ─────────────────────────────────────────────────────────────
+
+  fast_research_start:
+    rpcid: "Ljjv0c"
+    fallback_rpcid: null
+    payload: [["$query", 1], null, 1, "$notebook_id"]
+    requires_notebook: true
+    timeout: 60
+    confirmed: "2026-02-27"
+    category: research
+    description: "Start a fast research session."
+    response_hint: "[session_id, ...]"
+    service_method: null
+
+  start_deep_research:
+    rpcid: "QA9ei"
+    fallback_rpcid: null
+    payload: [null, [1], ["$topic", 1], "$research_depth", "$notebook_id"]
+    requires_notebook: true
+    timeout: 60
+    confirmed: "2026-02-28"
+    category: research
+    description: >
+      Start async deep research — NLM generates a doc in background (10-60s).
+      Poll via add_research_source (LBwxtb) to retrieve the generated doc.
+    response_hint: "[session_uuid, ...]"
+    configurable:
+      - research_depth
+
+  add_research_source:
+    rpcid: "LBwxtb"
+    fallback_rpcid: null
+    payload: [null, [1], "$session_id", "$notebook_id", [[null, ["$title", "$content"]]]]
+    requires_notebook: true
+    timeout: 180
+    confirmed: "2026-02-28"
+    category: research
+    description: "Add AI-generated research doc as a notebook source."
+    response_hint: "Source metadata with new UUID."
+
+  # ──── Audio / Media ────────────────────────────────────────────────────────
+
+  get_audio_options:
+    rpcid: "sqTeoe"
+    fallback_rpcid: null
+    payload: ["$write_config", null, 1]
+    requires_notebook: true
+    timeout: 30
+    confirmed: "2026-02-24"
+    category: media
+    description: >
+      Get available audio overview types: Deep Dive, Brief, Critique, Debate.
+    response_hint: "List of audio type descriptors with labels and availability."
+    service_method: "LabsTailwindOrchestrationService.GetArtifactCustomizationChoices"
+    configurable:
+      - write_config (inherits doc_type, model_quality)
+
+  # ──── WebRTC (Live Audio) ──────────────────────────────────────────────────
+
+  get_ice_config:
+    rpcid: "Of0kDd"
+    fallback_rpcid: null
+    payload: ["$notebook_id"]
+    requires_notebook: false
+    timeout: 15
+    confirmed: "2026-06-10"
+    category: webrtc
+    description: "Fetch STUN/TURN ICE configuration for WebRTC live audio."
+    response_hint: "ICE config with servers, username, credential."
+    service_method: null
+
+  send_sdp_offer:
+    rpcid: "eyWvXc"
+    fallback_rpcid: null
+    payload: ["$notebook_id", "$sdp_offer", "$session_id"]
+    requires_notebook: false
+    timeout: 30
+    confirmed: "2026-06-10"
+    category: webrtc
+    description: "Send WebRTC SDP offer for live two-way audio streaming."
+    response_hint: "{sdp_answer, session_id}"
+    service_method: null
+
+  # ──── HAR Detection Markers ────────────────────────────────────────────────
+  # These rpcids are checked in nlm_ingest.py HAR scanning but not actively called.
+  har_markers:
+    - rpcid: "PoHVkb"
+      description: "Legacy notebook operation — checked in HAR capture"
+    - rpcid: "wIlBFe"
+      description: "Legacy notebook operation — checked in HAR capture"
+
+# ─── MIME Types (file upload) ────────────────────────────────────────────────
+# Gemini 3.0 is fully multimodal — all these types are accepted as sources.
+mime_types:
+  images:
+    ".jpg": "image/jpeg"
+    ".jpeg": "image/jpeg"
+    ".png": "image/png"
+    ".gif": "image/gif"
+    ".webp": "image/webp"
+    ".bmp": "image/bmp"
+  audio:
+    ".mp3": "audio/mpeg"
+    ".wav": "audio/wav"
+    ".ogg": "audio/ogg"
+    ".m4a": "audio/mp4"
+    ".flac": "audio/flac"
+  video:
+    ".mp4": "video/mp4"
+    ".mov": "video/quicktime"
+    ".webm": "video/webm"
+    ".avi": "video/x-msvideo"
+    ".mkv": "video/x-matroska"
+  documents:
+    ".pdf": "application/pdf"
+    ".txt": "text/plain"
+    ".md": "text/plain"
+    ".html": "text/html"
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# NLM Quota Events — Client-side observables for rate-limit detection
+# ═══════════════════════════════════════════════════════════════════════════════
+# Discovered via ARGUS heap dump (2026-03-05). These are RxJS observable names
+# that fire when the NLM SPA detects a quota has been hit. Useful for
+# client-side detection before the server returns 429.
+quota_events:
+  audio_overview:
+    observable: "audioOverviewQuotaReached$"
+    description: "Fires when audio overview generation quota is exhausted."
+    detection: "Listen via `__zone_symbol__ON_PROPERTYquotaReached` or SPA globals."
+  deep_research:
+    observable: "deepResearchQuotaReached$"
+    description: "Fires when deep research quota is exhausted."
+  notebook_limit:
+    observable: "notebookLimitReached$"
+    description: "Fires when max notebook count is reached (100 free / 500 pro)."
+  source_limit:
+    observable: "sourceLimitReached$"
+    description: "Fires when max sources per notebook is reached (50 free / 300 pro)."
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# NLM Service Identity — Internal product metadata from ARGUS heap
+# ═══════════════════════════════════════════════════════════════════════════════
+nlm_identity:
+  service_name: "LabsTailwindUi"
+  orchestration_service: "LabsTailwindOrchestrationService"
+  product_id: 269
+  service_pid: 666
+  rpc_path: "/_/LabsTailwindUi/data/batchexecute"
+  grpc_streaming_path: >-
+    /_/LabsTailwindUi/data/
+    google.internal.labs.tailwind.orchestration.v1.
+    LabsTailwindOrchestrationService/{method}
+  oauth_client_id: "371316423795-mrd6ba2tnp6ua1k3e5b07rr31smkl6hs.apps.googleusercontent.com"
+  base_urls:
+    consumer: "https://notebooklm.google.com"
+    enterprise: "https://notebooklm.google/app"
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Gemini batchexecute RPC IDs — Discovered via ARGUS HAR capture
+# ═══════════════════════════════════════════════════════════════════════════════
+# These are the batchexecute rpcids used by gemini.google.com (BardChatUi).
+# Protocol: batchexecute POST to /_/BardChatUi/data/batchexecute
+# Auth: Cookie-based (SID, PSID, HSID, SSID, SAPISID) + SAPISIDHASH header
+gemini:
+  meta:
+    service_name: "BardChatUi"
+    rpc_path: "/_/BardChatUi/data/batchexecute"
+    base_url: "https://gemini.google.com"
+    auth_method: "cookie_sapisidhash"
+    source: "argus_har_capture_2026-03-05"
+
+  rpcids:
+    otAQ7b:
+      description: "Main chat generation — sends message, returns response"
+      category: chat
+      confirmed: "2026-03-05"
+
+    K4WWud:
+      description: "Conversation management — list, create, delete conversations"
+      category: conversation
+      confirmed: "2026-03-05"
+
+    ozz5Z:
+      description: "Feature flags / account state — shared with NLM"
+      category: account
+      confirmed: "2026-03-05"
+      notes: "Same rpcid used across NLM and Gemini (shared WIZ infrastructure)"
+
+    CNgdBe:
+      description: "Model selection / configuration"
+      category: model
+      confirmed: "2026-03-05"
+
+    GPRiHf:
+      description: "Response rating / feedback"
+      category: feedback
+      confirmed: "2026-03-05"
+
+    maGuAc:
+      description: "Upload attachment / file"
+      category: upload
+      confirmed: "2026-03-05"
+
+    ESY5D:
+      description: "Get conversation history / details"
+      category: conversation
+      confirmed: "2026-03-05"
+
+    MaZiqc:
+      description: "Extension/plugin interaction"
+      category: extension
+      confirmed: "2026-03-05"
+
+    aPya6c:
+      description: "Session initialization / heartbeat"
+      category: session
+      confirmed: "2026-03-05"
+
+    cYRIkd:
+      description: "User preferences / settings"
+      category: account
+      confirmed: "2026-03-05"
+
+    qpEbW:
+      description: "Search conversation history"
+      category: search
+      confirmed: "2026-03-05"
+
+    o30O0e:
+      description: "Image generation request"
+      category: media
+      confirmed: "2026-03-05"
+
+    DYBcR:
+      description: "Locale / language preferences — shared with NLM"
+      category: account
+      confirmed: "2026-03-05"
+      notes: "Same rpcid used in NLM get_locale"
+
+    L5adhe:
+      description: "Draft / edit message"
+      category: chat
+      confirmed: "2026-03-05"
+
+    ku4Jyf:
+      description: "Code execution request"
+      category: code
+      confirmed: "2026-03-05"
+
+    PCck7e:
+      description: "Share conversation"
+      category: sharing
+      confirmed: "2026-03-05"
+
+    NXpLKc:
+      description: "Get linked notebooks (cross-product bridge)"
+      category: integration
+      confirmed: "2026-03-05"
+      notes: "Bridge between Gemini and NotebookLM"
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# AI Studio gRPC Methods — MakerSuiteService via ARGUS heap + HAR
+# ═══════════════════════════════════════════════════════════════════════════════
+# These use gRPC-Web protocol, NOT batchexecute.
+# Target: alkalimakersuite-pa.clients6.google.com
+# Service: google.internal.alkali.applications.makersuite.v2.MakerSuiteService
+# Auth: Cookie-based + Authorization: SAPISIDHASH
+aistudio:
+  meta:
+    service_name: "MakerSuiteService"
+    grpc_host: "alkalimakersuite-pa.clients6.google.com"
+    webchannel_host: "webchannel-alkalimakersuite-pa.clients6.google.com"
+    base_url: "https://aistudio.google.com"
+    auth_method: "cookie_sapisidhash"
+    protocol: "grpc-web"
+    source: "argus_heap_capture_2026-03-05"
+
+  methods:
+    # ── Core Generation ──
+    GenerateContent:
+      category: generation
+      streaming: false
+      description: "Single-shot content generation"
+    StreamGenerateContent:
+      category: generation
+      streaming: true
+      description: "Streaming content generation"
+    BidiGenerateContent:
+      category: generation
+      streaming: true
+      description: "Bidirectional streaming generation (live mode)"
+    GenerateImage:
+      category: generation
+      streaming: false
+      description: "Image generation request"
+    GenerateVideo:
+      category: generation
+      streaming: false
+      description: "Video generation request"
+    GetGenerateVideoOperation:
+      category: generation
+      streaming: false
+      description: "Poll video generation status"
+    StreamExtractVideoFrames:
+      category: generation
+      streaming: true
+      description: "Extract frames from video stream"
+
+    # ── Prompt Management ──
+    CreatePrompt:
+      category: prompts
+      streaming: false
+      description: "Create a saved prompt"
+    ListPrompts:
+      category: prompts
+      streaming: false
+      description: "List saved prompts"
+
+    # ── Model Management ──
+    ListModels:
+      category: models
+      streaming: false
+      description: "List available Gemini models"
+    GetModel:
+      category: models
+      streaming: false
+      description: "Get model details and capabilities"
+    CountTokens:
+      category: models
+      streaming: false
+      description: "Count tokens for a prompt"
+
+    # ── Project / Applet ──
+    ListRecentApplets:
+      category: project
+      streaming: false
+      description: "List recently used applets"
+    GetApplet:
+      category: project
+      streaming: false
+      description: "Get applet configuration"
+    ProvisionAndInitializeApplet:
+      category: project
+      streaming: false
+      description: "Provision and initialize a new applet"
+    GetSession:
+      category: project
+      streaming: false
+      description: "Get active session state"
+    ListCloudProjects:
+      category: project
+      streaming: false
+      description: "List linked GCP projects"
+    ListImportedProjects:
+      category: project
+      streaming: false
+      description: "List imported projects"
+    GetDataset:
+      category: project
+      streaming: false
+      description: "Get dataset for fine-tuning"
+    CreateInteraction:
+      category: project
+      streaming: false
+      description: "Create an interaction record"
+
+    # ── User ──
+    GetUserPreferences:
+      category: user
+      streaming: false
+      description: "Get user preferences and settings"
+    GetUserRestrictions:
+      category: user
+      streaming: false
+      description: "Get account restrictions and limits"
+    GenerateAccessToken:
+      category: user
+      streaming: false
+      description: "Generate API access token"
+    ListPromos:
+      category: user
+      streaming: false
+      description: "List available promotional offers"
+    GenerateTitle:
+      category: user
+      streaming: false
+      description: "Auto-generate title for conversation"
+    FetchMetricTimeSeries:
+      category: user
+      streaming: false
+      description: "Fetch usage metrics time series"
+
+    # ── Code Assistant ──
+    ListCodeAssistantConfigurations:
+      category: code
+      streaming: false
+      description: "List code assistant configurations"
+    StreamCodeAssistantOfflineGeneration:
+      category: code
+      streaming: true
+      description: "Stream offline code generation"
+    GenerateCodeAssistantSuggestionChips:
+      category: code
+      streaming: false
+      description: "Generate suggestion chips for code assistant"
+    CancelCodeAssistantOfflineGeneration:
+      category: code
+      streaming: false
+      description: "Cancel offline code generation"
+    ListCodeAssistantOfflineGenerations:
+      category: code
+      streaming: false
+      description: "List offline code generation jobs"
+    LoadCodeAssistantInteractionHistory:
+      category: code
+      streaming: false
+      description: "Load code assistant interaction history"
+
+    # ── Proxy ──
+    ProxyUnaryCall:
+      category: proxy
+      streaming: false
+      description: "Universal proxy for unary gRPC calls — potential gateway to all services"
+      notes: "This could be used to call arbitrary backend services through AI Studio"
+
+    # ── Content (batch) ──
+    batchGenerateContent:
+      category: generation
+      streaming: false
+      description: "Batch content generation (multiple prompts)"
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Google Colab gRPC Methods — Discovered via ARGUS heap
+# ═══════════════════════════════════════════════════════════════════════════════
+colab:
+  meta:
+    service_name: "ColabService"
+    base_url: "https://colab.research.google.com"
+    auth_method: "cookie_sapisidhash"
+    protocol: "grpc-web"
+    oauth_client_id: "1014160490159-a1bsrg3drn17hsr0ho5d2qso1ut5p25g.apps.googleusercontent.com"
+    source: "argus_heap_capture_2026-03-05"
+
+  methods:
+    AgentCreateTask:
+      category: agent
+      description: "Create an agent task (code execution, analysis)"
+    AgentQueryTask:
+      category: agent
+      description: "Query agent task status and results"
+    AgentUpdateTask:
+      category: agent
+      description: "Update agent task parameters"
+    AgentQuerySuggestions:
+      category: agent
+      description: "Get AI suggestions for current context"
+    CompleteCode:
+      category: code
+      description: "AI code completion"
+    SmartPaste:
+      category: code
+      description: "Intelligent paste with format adaptation"
+    GetRuntimeProxyToken:
+      category: runtime
+      description: "Get token for runtime proxy access"
+    ListAssignments:
+      category: education
+      description: "List educational assignments (Colab for Education)"
+    GetUserInfo:
+      category: user
+      description: "Get current user profile and quota"
+    ExecuteCell:
+      category: runtime
+      description: "Execute a notebook cell"
