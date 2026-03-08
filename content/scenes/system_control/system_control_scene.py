@@ -153,6 +153,12 @@ class SystemControlScene(BaseScene, NexusSceneMixin):
             template_folder=str(scene_dir / "templates"),
             static_folder=str(scene_dir / "static"),
         )
+        import jinja2
+        _shared_tmpl = str(scene_dir.parent.parent / "shared" / "templates")
+        self.app.jinja_loader = jinja2.ChoiceLoader([
+            self.app.jinja_loader,
+            jinja2.FileSystemLoader(_shared_tmpl),
+        ])
         self.app.config["SECRET_KEY"] = cfg.get("flask.secret_key", "system-control-key")
         register_shared_assets(self.app)
         CORS(self.app)

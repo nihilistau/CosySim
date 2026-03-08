@@ -5,12 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CosySim Command Center</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/command_center.css') }}">
-    <script src="/shared/js/socket.io.min.js"</script>
     <link rel="stylesheet" href="/shared/css/design_tokens.css">
-    <script src="/shared/js/cosysim-core.js"></script>
-    <script src="/shared/js/cosysim-stream.js"></script>
 </head>
-<body>
+<body data-scene="command_center">
+
+    {% include 'navbar_v2.html' %}
+
     <header class="cc-header">
         <h1>⚡ COSYSIM COMMAND CENTER</h1>
         <div class="cc-header-status">
@@ -406,6 +406,9 @@
         </div>
     </section>
 
+    <script src="/shared/js/socket.io.min.js"></script>
+    <script src="/shared/js/cosysim-core.js"></script>
+    <script src="/shared/js/cosysim-stream.js"></script>
     <script src="{{ url_for('static', filename='js/command_center.js') }}"></script>
 </body>
 </html>

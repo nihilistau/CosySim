@@ -59,6 +59,12 @@ class CommandCenterScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id
             template_folder=str(scene_dir / "templates"),
             static_folder=str(scene_dir / "static"),
         )
+        import jinja2
+        _shared_tmpl = str(scene_dir.parent.parent / "shared" / "templates")
+        self.app.jinja_loader = jinja2.ChoiceLoader([
+            self.app.jinja_loader,
+            jinja2.FileSystemLoader(_shared_tmpl),
+        ])
         register_shared_assets(self.app)
         CORS(self.app)
         self.socketio = SocketIO(

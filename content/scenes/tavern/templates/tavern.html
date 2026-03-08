@@ -1,15 +1,19 @@
-{% extends "navbar_v2.html" %}
-{% block title %}THE RUSTY ANCHOR{% endblock %}
-{% block extra_head %}
-<link rel="stylesheet" href="{{ url_for('static', filename='tavern.css') }}">
-<link rel="stylesheet" href="/shared/css/design_tokens.css">
-<link rel="stylesheet" href="/shared/css/cosysim-animations.css">
-<link rel="stylesheet" href="/shared/css/cosysim-scene-fx.css">
-<link rel="stylesheet" href="/shared/css/cosysim-shop.css">
-{% endblock %}
-
-{% block content %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>THE RUSTY ANCHOR</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='tavern.css') }}">
+  <link rel="stylesheet" href="/shared/css/design_tokens.css">
+  <link rel="stylesheet" href="/shared/css/cosysim-animations.css">
+  <link rel="stylesheet" href="/shared/css/cosysim-scene-fx.css">
+  <link rel="stylesheet" href="/shared/css/cosysim-shop.css">
+</head>
 <body data-scene="tavern" class="tavern-layout">
+
+{% include 'navbar_v2.html' %}
+
 <canvas id="cs-particles"></canvas>
 
   <!-- ══════════════════════════════════════════════════════════
@@ -215,11 +219,7 @@
     })();
   </script>
 
-</body>
-{% endblock %}
-
-{% block scripts %}
-<script src="/shared/js/socket.io.min.js"</script>
+<script src="/shared/js/socket.io.min.js"></script>
 <script src="{{ url_for('static', filename='tavern.js') }}"></script>
 <script src="/shared/js/cosysim-voice.js"></script>
 <script src="/shared/js/cosysim-shop.js"></script>
@@ -232,4 +232,6 @@
 <script>window.SCENE_PARTICLE_CONFIG = { scene: 'tavern' };</script>
 <script src="/shared/js/cosysim-particles.js"></script>
 {% include 'shop_modal.html' %}
-{% endblock %}
+
+</body>
+</html>

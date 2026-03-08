@@ -4,12 +4,11 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>⚙️ System Control</title>
-  <link rel="stylesheet" href="/static/cosysim-shared.css" />
   <link rel="stylesheet" href="/static/css/system_control.css" />
 </head>
-<body class="dark-theme">
-  <!-- Shared navbar -->
-  <div id="cosysim-navbar"></div>
+<body class="dark-theme" data-scene="system_control">
+
+  {% include 'navbar_v2.html' %}
 
   <div class="sc-layout">
     <!-- Sidebar nav -->
@@ -220,7 +219,7 @@
     </main>
   </div>
 
-  <script src="/static/cosysim-navbar.js"></script>
+  <script src="/shared/js/socket.io.min.js"></script>
   <script src="/static/js/system_control.js"></script>
 </body>
 </html>
