@@ -36,6 +36,7 @@ _DEFAULT_PORTS: Dict[str, int] = {
     "games": 5567,
     "asset_studio": 5568,
     "grid": 5569,
+    "lab_break": 5571,
     "intel_hub": 5580,
     # Launcher-managed services
     "hub": 8500,
@@ -74,6 +75,7 @@ SERVICE_GROUPS: Dict[str, List[str]] = {
         "phone", "bedroom", "lounge", "tavern", "casino", "gallery",
         "arena", "realm", "neoncity", "coders", "heist",
         "command_center", "games", "asset_studio", "grid",
+        "lab_break",
         "intel_hub", "nexus_panel", "system_control",
     ],
     "streamlit": ["hub", "dashboard", "admin", "assets", "creator"],
@@ -104,6 +106,7 @@ SCENE_HEALTH_TARGETS: Tuple[str, ...] = (
     "games",
     "asset_studio",
     "grid",
+    "lab_break",
     "nexus_panel",
     "system_control",
     "intel_hub",
@@ -127,6 +130,7 @@ HUB_CATALOGUE_TARGETS: Tuple[str, ...] = (
     "coders",
     "games",
     "command_center",
+    "lab_break",
     "asset_studio",
     "nexus_panel",
     "canvas",
@@ -158,6 +162,7 @@ HUB_HEALTH_TARGETS: Tuple[str, ...] = (
     "heist",
     "games",
     "grid",
+    "lab_break",
     "asset_studio",
 )
 

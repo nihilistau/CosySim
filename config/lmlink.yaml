@@ -1,0 +1,72 @@
+# ──────────────────────────────────────────────────────────────────
+# LMLink Configuration — Multi-Instance Model Federation
+#
+# LMLink connects multiple LMStudio instances (local or remote via
+# Tailscale) so the "client" instance can load remote models as if
+# they were local. This config defines peers, routing policies, and
+# failover behavior.
+# ──────────────────────────────────────────────────────────────────
+
+lmlink:
+  enabled: false
+  
+  # Local instance identity
+  local:
+    name: "workstation"
+    host: "localhost"
+    port: 1234
+    gpu: "nvidia"
+    vram_mb: 12288
+    capabilities: [inference, embedding, vision]
+
+  # Remote peers
+  peers:
+    - name: "nuc"
+      host: ""              # Set to Tailscale IP (e.g., 100.x.x.x)
+      port: 1234
+      capabilities: [inference]
+      max_models: 2
+      max_context: 8192
+      priority: 2            # Lower = preferred (1 = highest)
+      tags: [remote, always-on]
+      
+  # Routing policy
+  routing:
+    strategy: "capability_first"   # capability_first | round_robin | least_loaded | local_first
+    
+    # Model-to-peer affinity rules
+    affinity:
+      - pattern: "*70B*"
+        prefer: workstation       # Large models stay on GPU workstation
+      - pattern: "*vision*"
+        prefer: workstation       # Vision models need GPU
+      - pattern: "*0.6B*"
+        prefer: nuc               # Tiny models can run on NUC
+      - pattern: "*router*"
+        prefer: nuc               # Router model is lightweight
+    
+    # Failover behavior
+    failover:
+      enabled: true
+      max_retries: 2
+      retry_delay_ms: 1000
+      fallback_to_local: true    # If all peers fail, try local
+    
+    # Load balancing
+    load_balance:
+      check_interval_seconds: 30
+      max_queue_depth: 5         # Max pending requests before overflow to peer
+      vram_threshold_pct: 90     # Overflow if VRAM > this percentage
+
+  # Health monitoring
+  health:
+    check_interval_seconds: 60
+    timeout_ms: 5000
+    auto_reconnect: true
+    max_reconnect_attempts: 3
+
+  # Discovery (future: auto-discover LMLink peers on network)
+  discovery:
+    enabled: false
+    broadcast_port: 5353
+    protocol: "mdns"             # mdns | manual

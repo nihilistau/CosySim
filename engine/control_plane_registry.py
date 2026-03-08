@@ -185,6 +185,12 @@ SCENE_DEFS: Dict[str, Dict[str, Any]] = {
         "label": "ASSET STUDIO",
         "auto_start": False,
     },
+    "lab_break": {
+        "type": "flask",
+        "cls": "content.scenes.lab_break.lab_break_scene.LabBreakScene",
+        "label": "LAB BREAK",
+        "auto_start": False,
+    },
 }
 
 SERVICE_IDS: Tuple[str, ...] = tuple(SERVICE_DEFS.keys())
