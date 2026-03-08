@@ -10,10 +10,11 @@ Keyboard shortcuts:
     S              — stop selected target  (kills thread; port goes down)
     A              — launch all auto-start targets
     O              — open selected in browser
-    C              — open Nexus Canvas in browser (localhost:5590)
+    C              — open Nexus Canvas in browser
     I              — HAR import wizard (scans all HAR directories)
     R              — refresh all port statuses
     H              — show system health summary
+    L              — show log panel
     Q / Ctrl+C     — quit (stops launched subprocesses)
 """
 from __future__ import annotations
@@ -313,7 +314,10 @@ class CosySimTUI(App[None]):
 
             # Right panel — external services + system health
             with Vertical(id="right-panel"):
-                yield Static(f"  CosySim v{VERSION}", classes="panel-title")
+                yield Static(
+                    f"  [bold]CosySim[/] [cyan]v{VERSION}[/]",
+                    classes="panel-title",
+                )
                 yield Rule()
                 yield Static("  EXTERNAL SERVICES", classes="section-title")
                 for label, port, url in EXTERNAL_SERVICES:
@@ -324,7 +328,7 @@ class CosySimTUI(App[None]):
                 yield Static(id="lmstudio-health", classes="account-row")
                 yield Static(id="lmstudio-model", classes="account-row")
                 yield Rule()
-                yield Static("  QUICK STATS", classes="panel-title")
+                yield Static("  QUICK STATS", classes="section-title")
                 yield Static(id="stats-label", classes="account-row")
 
         yield Footer()
@@ -459,10 +463,21 @@ class CosySimTUI(App[None]):
 
     def on_mount(self) -> None:
         self._select(0)
-        # Status checks run in background — never block the event loop
         self._do_refresh()
         self._refresh_timer = self.set_interval(10, self._do_refresh)
-        self._log("CosySim TUI started. [dim]↑↓[/]=navigate [dim]Space[/]=launch [dim]A[/]=autostart [dim]L[/]=log [dim]O[/]=open [dim]C[/]=canvas [dim]Q[/]=quit")
+        total = len(self._rows)
+        scenes = sum(1 for r in self._rows if r.group == "scene")
+        svcs = sum(1 for r in self._rows if r.group == "service")
+        self._log(
+            f"[bold cyan]CosySim v{VERSION}[/] ready — "
+            f"[dim]{scenes} scenes · {svcs} services · {total} targets[/]"
+        )
+        self._log(
+            "[dim]Keys:[/] [bold]↑↓[/]=nav  [bold]Space[/]=launch  "
+            "[bold]A[/]=autostart  [bold]S[/]=stop  [bold]O[/]=open  "
+            "[bold]C[/]=canvas  [bold]H[/]=health  [bold]R[/]=refresh  "
+            "[bold]I[/]=HAR  [bold]Q[/]=quit"
+        )
         if self._autostart:
             self.call_after_refresh(self.action_launch_autostart)
 
@@ -541,11 +556,11 @@ class CosySimTUI(App[None]):
 
     def _fetch_system_health(self) -> Dict[str, str]:
         """Probe Nexus and LMStudio for health info (runs in worker thread)."""
+        import urllib.request
         info: Dict[str, str] = {}
 
         # Nexus health
         try:
-            import urllib.request
             req = urllib.request.Request(
                 "http://localhost:8700/api/health",
                 headers={"Accept": "application/json"},
@@ -564,12 +579,20 @@ class CosySimTUI(App[None]):
         except Exception:
             info["nexus_line"] = " [red]○[/] [bold]Nexus[/] [dim]offline[/]"
 
-        # LMStudio health + loaded model
+        # LMStudio health + loaded model (with bearer auth)
         try:
-            import urllib.request
+            headers: Dict[str, str] = {"Accept": "application/json"}
+            try:
+                from engine.config import get_config
+                token = get_config().get("lmstudio.api_token", "")
+                if token:
+                    headers["Authorization"] = f"Bearer {token}"
+            except Exception:
+                pass
+
             req = urllib.request.Request(
                 "http://localhost:1234/api/v1/models",
-                headers={"Accept": "application/json"},
+                headers=headers,
             )
             with urllib.request.urlopen(req, timeout=3) as resp:
                 data = _json_mod.loads(resp.read())
@@ -577,15 +600,15 @@ class CosySimTUI(App[None]):
                 if models:
                     model_id = models[0].get("id", "unknown")
                     short = model_id.split("/")[-1] if "/" in model_id else model_id
-                    if len(short) > 35:
-                        short = short[:32] + "..."
+                    if len(short) > 30:
+                        short = short[:27] + "…"
                     info["lmstudio_line"] = (
                         f" [green]●[/] [bold]LMStudio[/]  "
                         f"[cyan]{len(models)}[/] model(s)"
                     )
                     info["model_line"] = f"   [dim]└ {short}[/]"
                 else:
-                    info["lmstudio_line"] = " [yellow]●[/] [bold]LMStudio[/] [dim]no models loaded[/]"
+                    info["lmstudio_line"] = " [yellow]●[/] [bold]LMStudio[/] [dim]no models[/]"
                     info["model_line"] = ""
         except Exception:
             info["lmstudio_line"] = " [red]○[/] [bold]LMStudio[/] [dim]offline[/]"
@@ -600,9 +623,11 @@ class CosySimTUI(App[None]):
             up_svcs = sum(1 for r in self._rows if r.group == "service" and r._is_up)
             total_scenes = sum(1 for r in self._rows if r.group == "scene")
             total_svcs = sum(1 for r in self._rows if r.group == "service")
+            auto_count = sum(1 for r in self._rows if r.info.get("auto_start"))
             widget.update(
                 f" [green]{up_svcs}[/][dim]/{total_svcs}[/] services  "
-                f"[green]{up_scenes}[/][dim]/{total_scenes}[/] scenes"
+                f"[green]{up_scenes}[/][dim]/{total_scenes}[/] scenes\n"
+                f" [dim]{auto_count} auto-start targets[/]"
             )
         except NoMatches:
             pass
@@ -659,23 +684,32 @@ class CosySimTUI(App[None]):
             tc.active = "tab-log"
         except NoMatches:
             pass
-        self._log("[bold cyan]─── System Health Summary ───[/]")
+        self._log("[bold cyan]───── System Health Summary ─────[/]")
         up_scenes = sum(1 for r in self._rows if r.group == "scene" and r._is_up)
         up_svcs = sum(1 for r in self._rows if r.group == "service" and r._is_up)
         total_scenes = sum(1 for r in self._rows if r.group == "scene")
         total_svcs = sum(1 for r in self._rows if r.group == "service")
-        self._log(f" Services: [green]{up_svcs}[/]/{total_svcs}  Scenes: [green]{up_scenes}[/]/{total_scenes}")
+        auto_count = sum(1 for r in self._rows if r.info.get("auto_start"))
+        self._log(
+            f"  Services: [green]{up_svcs}[/]/{total_svcs}  "
+            f"Scenes: [green]{up_scenes}[/]/{total_scenes}  "
+            f"Auto-start: {auto_count}"
+        )
         for label, port, _ in EXTERNAL_SERVICES:
             if port == 0:
                 ok = any(ACCOUNTS_COOKIES_DIR.glob("*_cookies.json")) if ACCOUNTS_COOKIES_DIR.exists() else False
                 icon = "[green]●[/]" if ok else "[red]○[/]"
-                self._log(f" {icon} {label}")
+                self._log(f"  {icon} {label}")
             else:
                 up = _port_up(port)
                 icon = "[green]●[/]" if up else "[red]○[/]"
-                self._log(f" {icon} {label} :{port}")
-        self._log(f" Version: [bold]{VERSION}[/]")
-        self._log("[bold cyan]─────────────────────────────[/]")
+                self._log(f"  {icon} {label} :{port}")
+        # Show up/down scenes
+        down_scenes = [r.info["label"] for r in self._rows if r.group == "scene" and not r._is_up]
+        if down_scenes and len(down_scenes) < total_scenes:
+            self._log(f"  [dim]Down: {', '.join(down_scenes[:8])}{'…' if len(down_scenes) > 8 else ''}[/]")
+        self._log(f"  Version: [bold]{VERSION}[/]")
+        self._log("[bold cyan]────────────────────────────────[/]")
 
     # ── Launch / Stop ─────────────────────────────────────────────────────
 
@@ -881,7 +915,11 @@ class CosySimTUI(App[None]):
         webbrowser.open(url)
 
     def action_open_canvas(self) -> None:
-        url = "http://localhost:5590"
+        try:
+            from engine.port_registry import get_service_url
+            url = get_service_url("canvas")
+        except Exception:
+            url = "http://localhost:5590"
         self._log(f"[cyan]Opening Nexus Canvas[/] {url}")
         webbrowser.open(url)
 
