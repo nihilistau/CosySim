@@ -1,20 +1,20 @@
 # CosySim
 
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/) [![Version: 0.90b](https://img.shields.io/badge/version-0.90b-blueviolet.svg)]() [![Scenes: 16](https://img.shields.io/badge/scenes-16-6f42c1.svg)]() [![Scheduler: 55](https://img.shields.io/badge/scheduler-55-0a7f5a.svg)]()
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/) [![Version: 0.91b](https://img.shields.io/badge/version-0.91b-blueviolet.svg)]() [![Scenes: 20](https://img.shields.io/badge/scenes-20-6f42c1.svg)]() [![Scheduler: 55](https://img.shields.io/badge/scheduler-55-0a7f5a.svg)]()
 
-> v0.90b — "THE BASELINE" — Multi-scene AI simulation framework
+> v0.91b — "THE EVOLUTION" — Multi-scene AI simulation framework
 
 ## Overview
 
-CosySim is a local-first AI simulation framework built around **16 launcher-managed scenes** and **12 launcher-managed services**. The runtime combines Flask/Socket.IO scenes, LMStudio inference, Nexus knowledge tooling, a canonical port registry, **31 auto-registered skill packs / 278 registered skills** (`import engine.skills`), and **42 extracted MCP tool modules** (`engine/mcp/tools/`).
+CosySim is a local-first AI simulation framework built around **20 launcher-managed scenes** and **12 launcher-managed services**. The runtime combines Flask/Socket.IO scenes, LMStudio inference, Nexus knowledge tooling, a canonical port registry, **31 auto-registered skill packs / 278 registered skills** (`import engine.skills`), and **42 extracted MCP tool modules** (`engine/mcp/tools/`).
 
 ## Runtime Snapshot
 
 | Metric | Value |
 |--------|-------|
-| Version | **0.90b** — "THE BASELINE" (`launcher.py`, `config/default.yaml`) |
+| Version | **0.91b** — "THE EVOLUTION" (`launcher.py`, `config/default.yaml`) |
 | Pytest collection | **9,646 total / 9,260 default-selected** (`python -m pytest tests/ --collect-only -q`) |
-| Scenes | **16** launcher-managed scenes (`launcher.SCENES`) |
+| Scenes | **20** launcher-managed scenes (`launcher.SCENES`) |
 | Services | **12** launcher-managed services (`launcher.SERVICES`) |
 | Skill registry | **31 packs / 278 skills** after `import engine.skills` |
 | MCP tool modules | **42** modules in `engine/mcp/tools/` |
@@ -29,7 +29,7 @@ CosySim is a local-first AI simulation framework built around **16 launcher-mana
 └────────────────────────────┬────────────────────────────────────────┘
                              │ Socket.IO / REST
 ┌────────────────────────────▼────────────────────────────────────────┐
-│              16 Scenes  (Flask / Socket.IO)                         │
+│              20 Scenes  (Flask / Socket.IO)                         │
 │  phone·bedroom·lounge·tavern·casino·gallery·arena·realm·neoncity   │
 │  coders·heist·command_center·games·asset_studio·grid·intel_hub      │
 └──────────┬──────────────────────────────────────┬───────────────────┘

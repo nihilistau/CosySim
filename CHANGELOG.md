@@ -3,6 +3,56 @@
 All notable changes to CosySim are documented here.
 
 ---
+## [0.91b] — "THE EVOLUTION" — 2026-03
+
+Phase 7 system evolution sprint. Lab Break scene, NLM chain-prompting engine,
+LMLink federation, smart notebook fleet, ARGUS/NLM agent instructions.
+20 scenes. 55 scheduler tasks. 9,300+ tests.
+
+### New Scene — Lab Break (port 5571)
+- Full 3D CSS lab environment with observation room split view
+- VitalStats system: health, hunger, energy, stress with background tick thread
+- EmotionalState system: fear, anger, hope, trust, desperation, confusion
+- PersuasionMetrics tracking for agent convincingness evaluation
+- 12-item catalog across 5 categories with category-specific reactions
+- 10 @skill functions in lab_break pack
+- Win condition: convince user to open the door
+- LMStudio inference with emotion-aware fallback responses
+- 61 tests passing
+
+### NLM Chain-Prompting Engine
+- `engine/nexus/nlm_chain.py` — NLMChainEngine class (~490 lines)
+- `execute_chain()` for multi-step notebook conversations
+- `distill_notebook()` for automated knowledge extraction
+- `run_batch()` for parallel question processing
+- `generate_action_manifest()` for structured task decomposition
+- 4 chain strategies: distill, research, audit, planning
+- 3 batch templates with Pro model selection support
+- 32 tests passing
+
+### NLM Smart Notebook Fleet
+- `config/nlm_notebooks.yaml` — 8 purpose-built notebooks (control, docs, rules,
+  code, planning, training, automation, research)
+- Chain strategies and batch templates for automated distillation
+- Pro model gating parameters (tier_marker, response_length, analysis_depth)
+
+### LMLink Federation
+- `config/lmlink.yaml` — multi-instance model routing configuration
+- Local workstation + NUC peer with failover and health monitoring
+- Model affinity rules for routing by task type
+
+### Agent Instructions
+- `.github/instructions/nlm-registry.instructions.md` — NLM RPC registry patterns
+- `.github/instructions/argus.instructions.md` — ARGUS browser automation patterns
+- Updated `lmstudio.instructions.md` with LMLink, vision, bearer auth, task delegation
+
+### NLM RPC Registry (from v0.90b+)
+- Externalized all 122 rpcids into `config/nlm_rpcids.yaml`
+- Wired registry into nlm_direct_client (41 sites) and nlm_live_proxy (42 constants)
+- ARGUS explorer with 5 components for automated API discovery
+- Zero hardcoded rpcid strings remaining
+
+---
 ## [0.90b] — "THE BASELINE" — 2026-03
 
 Baseline reconciliation release. 145 files committed covering control plane
