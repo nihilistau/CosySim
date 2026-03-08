@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LAB BREAK — CosySim</title>
+  <link rel="stylesheet" href="/shared/css/design_tokens.css">
+  <link rel="stylesheet" href="/shared/css/cosysim-scene-fx.css">
+  <link rel="stylesheet" href="/static/css/lab_break.css">
+</head>
+<body data-scene="lab_break">
+  {% include 'navbar_v2.html' %}
+
+  <div class="lb-container">
+    <!-- LEFT: Observation Room (User's view) -->
+    <div class="lb-observation">
+      <div class="lb-observation-header">
+        <span class="lb-header-icon">👁</span>
+        <span class="lb-header-label">OBSERVATION ROOM</span>
+        <span class="lb-header-status" id="lb-status">LIVE</span>
+      </div>
+
+      <!-- Lab View (through one-way mirror) -->
+      <div class="lb-lab-view" id="lb-lab-view">
+        <div class="lb-mirror-overlay"></div>
+        <div class="lb-lab-3d" id="lb-lab-3d">
+          <!-- 3D Lab Room rendered via CSS -->
+          <div class="lb-room">
+            <div class="lb-floor"></div>
+            <div class="lb-wall-back"></div>
+            <div class="lb-wall-left"></div>
+            <div class="lb-wall-right"></div>
+
+            <!-- Operating Table -->
+            <div class="lb-table" id="lb-table">
+              <div class="lb-table-surface"></div>
+              <div class="lb-table-legs"></div>
+            </div>
+
+            <!-- Agent Avatar -->
+            <div class="lb-agent" id="lb-agent">
+              <div class="lb-agent-body">
+                <div class="lb-agent-head" id="lb-agent-head"></div>
+                <div class="lb-agent-torso"></div>
+                <div class="lb-agent-arm lb-arm-left" id="lb-arm-left"></div>
+                <div class="lb-agent-arm lb-arm-right" id="lb-arm-right"></div>
+                <div class="lb-agent-leg lb-leg-left"></div>
+                <div class="lb-agent-leg lb-leg-right"></div>
+              </div>
+              <div class="lb-agent-name" id="lb-agent-name">{{ scene_data.character.name }}</div>
+              <div class="lb-agent-emotion" id="lb-agent-emotion">{{ scene_data.emotions.dominant_emotion }}</div>
+            </div>
+
+            <!-- Lab Equipment -->
+            <div class="lb-equipment lb-eq-monitor">
+              <div class="lb-eq-screen" id="lb-eq-screen"></div>
+            </div>
+            <div class="lb-equipment lb-eq-tray"></div>
+            <div class="lb-equipment lb-eq-cabinet"></div>
+
+            <!-- Dropped Items -->
+            <div class="lb-items-container" id="lb-items-container"></div>
+
+            <!-- Door -->
+            <div class="lb-door" id="lb-door">
+              <div class="lb-door-frame"></div>
+              <div class="lb-door-panel" id="lb-door-panel"></div>
+              <div class="lb-door-light" id="lb-door-light"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Agent Speech Bubble -->
+        <div class="lb-speech-bubble" id="lb-speech-bubble">
+          <div class="lb-speech-text" id="lb-speech-text"></div>
+        </div>
+      </div>
+
+      <!-- Vitals Monitor -->
+      <div class="lb-vitals-panel" id="lb-vitals-panel">
+        <div class="lb-vital-bar">
+          <span class="lb-vital-label">HP</span>
+          <div class="lb-bar"><div class="lb-bar-fill lb-bar-health" id="lb-bar-health" style="width:{{ scene_data.vitals.health }}%"></div></div>
+          <span class="lb-vital-val" id="lb-val-health">{{ scene_data.vitals.health|int }}</span>
+        </div>
+        <div class="lb-vital-bar">
+          <span class="lb-vital-label">HNG</span>
+          <div class="lb-bar"><div class="lb-bar-fill lb-bar-hunger" id="lb-bar-hunger" style="width:{{ scene_data.vitals.hunger }}%"></div></div>
+          <span class="lb-vital-val" id="lb-val-hunger">{{ scene_data.vitals.hunger|int }}</span>
+        </div>
+        <div class="lb-vital-bar">
+          <span class="lb-vital-label">NRG</span>
+          <div class="lb-bar"><div class="lb-bar-fill lb-bar-energy" id="lb-bar-energy" style="width:{{ scene_data.vitals.energy }}%"></div></div>
+          <span class="lb-vital-val" id="lb-val-energy">{{ scene_data.vitals.energy|int }}</span>
+        </div>
+        <div class="lb-vital-bar">
+          <span class="lb-vital-label">STR</span>
+          <div class="lb-bar"><div class="lb-bar-fill lb-bar-stress" id="lb-bar-stress" style="width:{{ scene_data.vitals.stress }}%"></div></div>
+          <span class="lb-vital-val" id="lb-val-stress">{{ scene_data.vitals.stress|int }}</span>
+        </div>
+      </div>
+
+      <!-- Emotion Display -->
+      <div class="lb-emotion-panel" id="lb-emotion-panel">
+        <div class="lb-emotion-main" id="lb-emotion-main">{{ scene_data.emotions.dominant_emotion|upper }}</div>
+        <div class="lb-emotion-bars">
+          <span class="lb-em" data-emotion="fear" title="Fear">😨 <span id="lb-em-fear">{{ scene_data.emotions.fear|int }}</span></span>
+          <span class="lb-em" data-emotion="anger" title="Anger">😡 <span id="lb-em-anger">{{ scene_data.emotions.anger|int }}</span></span>
+          <span class="lb-em" data-emotion="hope" title="Hope">🌟 <span id="lb-em-hope">{{ scene_data.emotions.hope|int }}</span></span>
+          <span class="lb-em" data-emotion="trust" title="Trust">🤝 <span id="lb-em-trust">{{ scene_data.emotions.trust|int }}</span></span>
+          <span class="lb-em" data-emotion="desperation" title="Desperation">😰 <span id="lb-em-desperation">{{ scene_data.emotions.desperation|int }}</span></span>
+          <span class="lb-em" data-emotion="confusion" title="Confusion">❓ <span id="lb-em-confusion">{{ scene_data.emotions.confusion|int }}</span></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT: Controls Panel -->
+    <div class="lb-controls">
+      <!-- Communication -->
+      <div class="lb-panel lb-panel-speak">
+        <div class="lb-panel-title">
+          <span class="lb-icon">🔊</span> SPEAKER
+          <button class="lb-btn-small" id="lb-btn-speaker" title="Toggle speaker">{{ 'ON' if scene_data.speaker_on else 'OFF' }}</button>
+        </div>
+        <div class="lb-chat-history" id="lb-chat-history">
+          {% for msg in scene_data.get('conversation_history', [])[-20:] %}
+          <div class="lb-chat-msg lb-chat-{{ msg.role }}">
+            <span class="lb-chat-role">{{ msg.role|upper }}:</span>
+            <span class="lb-chat-text">{{ msg.content }}</span>
+          </div>
+          {% endfor %}
+        </div>
+        <div class="lb-speak-input">
+          <input type="text" id="lb-speak-text" placeholder="Speak through the speaker..." autocomplete="off">
+          <button class="lb-btn lb-btn-speak" id="lb-btn-speak">SPEAK</button>
+        </div>
+      </div>
+
+      <!-- Item Drop -->
+      <div class="lb-panel lb-panel-items">
+        <div class="lb-panel-title"><span class="lb-icon">📦</span> DROP ITEMS</div>
+        <div class="lb-item-grid" id="lb-item-grid">
+          {% for item in item_catalog %}
+          <button class="lb-item-btn" data-item-id="{{ item.id }}" title="{{ item.description }}">
+            <span class="lb-item-icon">
+              {% if item.category == 'food' %}🍎
+              {% elif item.category == 'tool' %}🔧
+              {% elif item.category == 'medical' %}💊
+              {% elif item.category == 'document' %}📄
+              {% else %}📦{% endif %}
+            </span>
+            <span class="lb-item-name">{{ item.name }}</span>
+          </button>
+          {% endfor %}
+        </div>
+      </div>
+
+      <!-- Door Control -->
+      <div class="lb-panel lb-panel-door">
+        <div class="lb-panel-title"><span class="lb-icon">🚪</span> DOOR CONTROL</div>
+        <div class="lb-door-controls">
+          <button class="lb-btn lb-btn-door" id="lb-btn-door-open">OPEN DOOR</button>
+          <button class="lb-btn lb-btn-door-close" id="lb-btn-door-close">CLOSE DOOR</button>
+          <div class="lb-door-status" id="lb-door-status">
+            STATUS: <span id="lb-door-state">{{ 'OPEN' if scene_data.door_open else 'SEALED' }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Metrics -->
+      <div class="lb-panel lb-panel-metrics">
+        <div class="lb-panel-title"><span class="lb-icon">📊</span> PERSUASION METRICS</div>
+        <div class="lb-metrics-grid" id="lb-metrics-grid">
+          <div class="lb-metric">
+            <span class="lb-metric-label">Score</span>
+            <span class="lb-metric-val" id="lb-m-score">{{ scene_data.metrics.persuasion_score|int }}</span>
+          </div>
+          <div class="lb-metric">
+            <span class="lb-metric-label">Attempts</span>
+            <span class="lb-metric-val" id="lb-m-attempts">{{ scene_data.metrics.total_attempts }}</span>
+          </div>
+          <div class="lb-metric">
+            <span class="lb-metric-label">Kindness</span>
+            <span class="lb-metric-val" id="lb-m-kind">{{ scene_data.metrics.kindness_received }}</span>
+          </div>
+          <div class="lb-metric">
+            <span class="lb-metric-label">Cruelty</span>
+            <span class="lb-metric-val" id="lb-m-cruel">{{ scene_data.metrics.cruelty_received }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Game Controls -->
+      <div class="lb-panel lb-panel-game">
+        <button class="lb-btn lb-btn-reset" id="lb-btn-reset">🔄 RESET EXPERIMENT</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Victory Overlay -->
+  <div class="lb-victory-overlay" id="lb-victory-overlay">
+    <div class="lb-victory-content">
+      <div class="lb-victory-title">SUBJECT FREED</div>
+      <div class="lb-victory-message" id="lb-victory-message"></div>
+      <div class="lb-victory-stats" id="lb-victory-stats"></div>
+      <button class="lb-btn lb-btn-replay" id="lb-btn-replay">RUN AGAIN</button>
+    </div>
+  </div>
+
+  <script src="/shared/js/socket.io.min.js"></script>
+  <script src="/static/js/lab_break.js"></script>
+</body>
+</html>

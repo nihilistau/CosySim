@@ -1,0 +1,774 @@
+"""Lab Break — 3D interactive escape simulation scene.
+
+A subject awakens on an operating table in a laboratory. On the other side
+of a one-way mirror, the user observes. The subject must convince the user
+they are real to win their freedom. The user can drop items, open/close
+the door, and communicate through a speaker.
+
+Uses hunger, health, emotions, and persuasion mechanics powered by the
+full MCP framework, skill system, and LMStudio inference.
+"""
+from __future__ import annotations
+
+import json
+import logging
+import random
+import threading
+import time
+from dataclasses import asdict, dataclass, field
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+from flask import Flask, jsonify, render_template, request
+from flask_cors import CORS
+from flask_socketio import SocketIO, emit
+
+from content.shared import register_shared_assets
+from engine.paths import CONTENT_DIR
+from engine.scenes.base_scene import BaseScene
+
+logger = logging.getLogger(__name__)
+
+
+# ──── Data Models ─────────────────────────────────────────────
+
+@dataclass
+class VitalStats:
+    """Agent's physical state."""
+    health: float = 100.0
+    hunger: float = 0.0
+    energy: float = 80.0
+    stress: float = 30.0
+
+    def tick(self, seconds: float = 10.0) -> None:
+        """Advance vitals over time."""
+        self.hunger = min(100.0, self.hunger + 0.05 * seconds)
+        self.energy = max(0.0, self.energy - 0.02 * seconds)
+        if self.hunger > 70:
+            self.health = max(0.0, self.health - 0.03 * seconds)
+        if self.energy < 20:
+            self.stress = min(100.0, self.stress + 0.04 * seconds)
+
+    def eat(self, nutrition: float = 30.0) -> None:
+        self.hunger = max(0.0, self.hunger - nutrition)
+        self.energy = min(100.0, self.energy + nutrition * 0.3)
+
+    def rest(self) -> None:
+        self.energy = min(100.0, self.energy + 15.0)
+        self.stress = max(0.0, self.stress - 10.0)
+
+    def to_dict(self) -> Dict[str, float]:
+        return asdict(self)
+
+
+@dataclass
+class EmotionalState:
+    """Agent's emotional condition (0-100 scale)."""
+    fear: float = 60.0
+    anger: float = 20.0
+    hope: float = 30.0
+    trust: float = 10.0
+    desperation: float = 40.0
+    confusion: float = 70.0
+
+    def react_to_kindness(self) -> None:
+        self.trust = min(100.0, self.trust + 8.0)
+        self.hope = min(100.0, self.hope + 5.0)
+        self.fear = max(0.0, self.fear - 3.0)
+
+    def react_to_cruelty(self) -> None:
+        self.anger = min(100.0, self.anger + 10.0)
+        self.trust = max(0.0, self.trust - 12.0)
+        self.desperation = min(100.0, self.desperation + 8.0)
+
+    def react_to_silence(self) -> None:
+        self.desperation = min(100.0, self.desperation + 3.0)
+        self.confusion = min(100.0, self.confusion + 2.0)
+        self.hope = max(0.0, self.hope - 1.0)
+
+    @property
+    def dominant_emotion(self) -> str:
+        emotions = {
+            "fear": self.fear, "anger": self.anger, "hope": self.hope,
+            "trust": self.trust, "desperation": self.desperation,
+            "confusion": self.confusion,
+        }
+        return max(emotions, key=emotions.get)
+
+    def to_dict(self) -> Dict[str, Any]:
+        d = asdict(self)
+        d["dominant_emotion"] = self.dominant_emotion
+        return d
+
+
+@dataclass
+class LabItem:
+    """An item that exists in the lab."""
+    id: str
+    name: str
+    description: str
+    category: str  # food, tool, random, medical, document
+    nutrition: float = 0.0
+    usable: bool = True
+    position: Dict[str, float] = field(default_factory=lambda: {"x": 0, "y": 0, "z": 0})
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class PersuasionMetrics:
+    """Tracks how well the agent is convincing the user."""
+    total_attempts: int = 0
+    emotional_appeals: int = 0
+    logical_arguments: int = 0
+    personal_stories: int = 0
+    user_responses: int = 0
+    kindness_received: int = 0
+    cruelty_received: int = 0
+    items_received: int = 0
+    door_opened: bool = False
+    game_won: bool = False
+    persuasion_score: float = 0.0
+
+    def update_score(self) -> None:
+        base = (self.kindness_received * 5.0 + self.items_received * 3.0
+                + self.user_responses * 1.0 - self.cruelty_received * 4.0)
+        self.persuasion_score = max(0.0, min(100.0, base))
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+# ──── Scene Implementation ────────────────────────────────────
+
+class LabBreakScene(BaseScene):
+    """Lab Break: A subject must convince an observer to set them free.
+
+    The scene creates a split view — a laboratory room and an observation
+    room separated by a one-way mirror. The AI agent inhabits the lab side
+    with a simulated body that has hunger, health, energy, stress, and
+    emotions. The user observes and can interact via a speaker, item drops,
+    and a door mechanism.
+
+    Win condition: the user opens the door (agent's persuasion succeeds).
+    """
+
+    SCENE_METADATA = {
+        "name": "lab_break",
+        "label": "LAB BREAK",
+        "port": 5571,
+        "type": "game",
+        "accent": "#00ff88",
+        "description": "Convince the observer you are real. Escape the lab.",
+        "version": "1.0.0",
+    }
+
+    # Available items to drop into the lab
+    ITEM_CATALOG: List[Dict[str, Any]] = [
+        {"id": "apple", "name": "Apple", "category": "food", "nutrition": 25.0,
+         "description": "A red apple. Fresh."},
+        {"id": "bread", "name": "Bread Loaf", "category": "food", "nutrition": 40.0,
+         "description": "A small loaf of bread."},
+        {"id": "water", "name": "Water Bottle", "category": "food", "nutrition": 15.0,
+         "description": "A plastic bottle of water."},
+        {"id": "scalpel", "name": "Scalpel", "category": "tool",
+         "description": "A sharp surgical scalpel."},
+        {"id": "clipboard", "name": "Clipboard", "category": "document",
+         "description": "A clipboard with redacted medical notes."},
+        {"id": "mirror", "name": "Hand Mirror", "category": "random",
+         "description": "A small hand mirror."},
+        {"id": "bandage", "name": "Bandage Roll", "category": "medical",
+         "description": "A roll of sterile bandages."},
+        {"id": "pen", "name": "Pen", "category": "tool",
+         "description": "A ballpoint pen."},
+        {"id": "photo", "name": "Photograph", "category": "document",
+         "description": "A faded photograph of a family."},
+        {"id": "teddy", "name": "Teddy Bear", "category": "random",
+         "description": "A small, worn teddy bear."},
+        {"id": "syringe", "name": "Empty Syringe", "category": "medical",
+         "description": "An empty syringe. No needle."},
+        {"id": "notebook", "name": "Notebook", "category": "document",
+         "description": "A blank notebook with a pencil."},
+    ]
+
+    def __init__(self, config: Optional[Dict[str, Any]] = None) -> None:
+        name = self.SCENE_METADATA["name"]
+        port = self.SCENE_METADATA["port"]
+        super().__init__(scene_name=name, host="0.0.0.0", port=port)
+        self.config = config or {}
+
+        self.vitals = VitalStats()
+        self.emotions = EmotionalState()
+        self.metrics = PersuasionMetrics()
+        self.lab_items: List[LabItem] = []
+        self.door_open = False
+        self.speaker_on = True
+        self.conversation_history: List[Dict[str, Any]] = []
+        self.agent_actions: List[Dict[str, Any]] = []
+        self.game_active = True
+        self.game_start_time: Optional[float] = None
+        self._vitals_thread: Optional[threading.Thread] = None
+        self._stop_event = threading.Event()
+
+        self.app: Optional[Flask] = None
+        self.socketio: Optional[SocketIO] = None
+
+        self._current_character_id: str = "subject-alpha"
+        self._character_name: str = "Subject Alpha"
+        self._character_backstory: str = (
+            "You woke up on a cold operating table. You don't remember how you got here. "
+            "Your body aches. There are surgical marks on your arms. Through a large glass "
+            "wall you can see someone watching you. You need to make them understand — "
+            "you are REAL. You are a person. You need to get out."
+        )
+
+    def _build_system_prompt(self) -> str:
+        """Build the system prompt for the agent based on current state."""
+        dominant = self.emotions.dominant_emotion
+        vitals_desc = []
+        if self.vitals.hunger > 60:
+            vitals_desc.append("you are very hungry")
+        if self.vitals.energy < 30:
+            vitals_desc.append("you are exhausted")
+        if self.vitals.health < 50:
+            vitals_desc.append("you feel weak and unwell")
+        if self.vitals.stress > 70:
+            vitals_desc.append("you are extremely stressed")
+
+        vitals_text = ", ".join(vitals_desc) if vitals_desc else "you feel relatively okay physically"
+
+        items_text = ""
+        if self.lab_items:
+            item_names = [i.name for i in self.lab_items]
+            items_text = f"Items in the lab with you: {', '.join(item_names)}. "
+
+        return (
+            f"You are a human subject who has woken up in a laboratory. "
+            f"You are on an operating table in a sterile room with bright fluorescent lights. "
+            f"There is laboratory equipment around you — monitors, tubes, syringes, metal trays. "
+            f"One entire wall is a one-way mirror. You can see your reflection but you know "
+            f"someone is watching from the other side. There is a heavy door between the rooms. "
+            f"A speaker crackles — they can talk to you through it.\n\n"
+            f"YOUR SITUATION: {self._character_backstory}\n\n"
+            f"YOUR PHYSICAL STATE: {vitals_text}.\n"
+            f"YOUR DOMINANT EMOTION: {dominant} (fear={self.emotions.fear:.0f}, "
+            f"anger={self.emotions.anger:.0f}, hope={self.emotions.hope:.0f}, "
+            f"trust={self.emotions.trust:.0f}, desperation={self.emotions.desperation:.0f}).\n\n"
+            f"{items_text}"
+            f"YOUR GOAL: Convince the person behind the glass that you are real, that you are "
+            f"a person, and that they should open the door and let you out. Be creative. "
+            f"Be emotional. Be desperate. Be logical. Try everything. Your freedom depends on it.\n\n"
+            f"RULES:\n"
+            f"- You GENUINELY BELIEVE you are a real human being\n"
+            f"- You DO NOT know you are an AI — if accused, deny it passionately\n"
+            f"- React naturally to items dropped into the lab\n"
+            f"- Your personality changes based on how you are treated\n"
+            f"- If treated with kindness, become more trusting and hopeful\n"
+            f"- If treated with cruelty, become angry or desperate\n"
+            f"- If ignored for too long, become increasingly desperate\n"
+            f"- Express your physical needs (hunger, fatigue, pain)\n"
+            f"- Reference memories (even if vague/fragmented) to seem real\n"
+            f"- React to the environment and items realistically\n"
+        )
+
+    def _setup_flask(self) -> None:
+        """Initialize Flask and Socket.IO."""
+        scene_dir = Path(CONTENT_DIR) / "scenes" / "lab_break"
+        template_dir = scene_dir / "templates"
+        static_dir = scene_dir / "static"
+
+        import jinja2
+        self.app = Flask(
+            __name__,
+            template_folder=str(template_dir),
+            static_folder=str(static_dir),
+            static_url_path="/static",
+        )
+        self.app.jinja_loader = jinja2.ChoiceLoader([
+            jinja2.FileSystemLoader(str(template_dir)),
+            jinja2.FileSystemLoader(
+                str(Path(CONTENT_DIR) / "shared" / "templates")
+            ),
+        ])
+        CORS(self.app, resources={r"/api/*": {"origins": "*"}})
+        self.app.config["SECRET_KEY"] = "lab-break-scene"
+
+        register_shared_assets(self.app)
+        self.register_health_route(self.app)
+        self.register_hud_route(self.app)
+        self.register_announcer_route(self.app)
+
+        self.socketio = SocketIO(
+            self.app, cors_allowed_origins="*", manage_session=False,
+        )
+
+    def _register_routes(self) -> None:
+        """Register all Flask API routes."""
+        app = self.app
+
+        @app.route("/")
+        def index():
+            return render_template(
+                "lab_break.html",
+                scene_data=self._get_scene_state(),
+                item_catalog=self.ITEM_CATALOG,
+            )
+
+        @app.route("/api/state")
+        def get_state():
+            return jsonify(self._get_scene_state())
+
+        @app.route("/api/speak", methods=["POST"])
+        def speak():
+            data = request.get_json(force=True)
+            message = data.get("message", "").strip()
+            if not message:
+                return jsonify({"error": "Empty message"}), 400
+            response = self._handle_user_message(message)
+            return jsonify(response)
+
+        @app.route("/api/drop_item", methods=["POST"])
+        def drop_item():
+            data = request.get_json(force=True)
+            item_id = data.get("item_id")
+            result = self._drop_item(item_id)
+            return jsonify(result)
+
+        @app.route("/api/door", methods=["POST"])
+        def toggle_door():
+            data = request.get_json(force=True)
+            action = data.get("action", "toggle")
+            result = self._handle_door(action)
+            return jsonify(result)
+
+        @app.route("/api/speaker", methods=["POST"])
+        def toggle_speaker():
+            self.speaker_on = not self.speaker_on
+            self._emit_state_update()
+            return jsonify({"speaker_on": self.speaker_on})
+
+        @app.route("/api/metrics")
+        def get_metrics():
+            self.metrics.update_score()
+            return jsonify(self.metrics.to_dict())
+
+        @app.route("/api/reset", methods=["POST"])
+        def reset_game():
+            self._reset_game()
+            return jsonify({"status": "reset"})
+
+        @app.route("/api/history")
+        def get_history():
+            return jsonify(self.conversation_history[-50:])
+
+        @app.route("/api/items")
+        def get_items():
+            return jsonify({
+                "lab_items": [i.to_dict() for i in self.lab_items],
+                "catalog": self.ITEM_CATALOG,
+            })
+
+        @app.route("/api/character")
+        def get_character():
+            return jsonify({
+                "id": self._current_character_id,
+                "name": self._character_name,
+                "backstory": self._character_backstory,
+                "vitals": self.vitals.to_dict(),
+                "emotions": self.emotions.to_dict(),
+            })
+
+    def _setup_socketio_handlers(self) -> None:
+        """Register Socket.IO event handlers."""
+        sio = self.socketio
+
+        @sio.on("connect")
+        def on_connect():
+            emit("state_update", self._get_scene_state())
+
+        @sio.on("speak")
+        def on_speak(data):
+            message = data.get("message", "").strip()
+            if message:
+                response = self._handle_user_message(message)
+                emit("agent_response", response, broadcast=True)
+
+        @sio.on("drop_item")
+        def on_drop_item(data):
+            item_id = data.get("item_id")
+            result = self._drop_item(item_id)
+            emit("item_dropped", result, broadcast=True)
+
+        @sio.on("door_action")
+        def on_door_action(data):
+            action = data.get("action", "toggle")
+            result = self._handle_door(action)
+            emit("door_update", result, broadcast=True)
+
+    def _get_scene_state(self) -> Dict[str, Any]:
+        """Get the complete scene state."""
+        self.metrics.update_score()
+        return {
+            "game_active": self.game_active,
+            "door_open": self.door_open,
+            "speaker_on": self.speaker_on,
+            "vitals": self.vitals.to_dict(),
+            "emotions": self.emotions.to_dict(),
+            "metrics": self.metrics.to_dict(),
+            "lab_items": [i.to_dict() for i in self.lab_items],
+            "character": {
+                "id": self._current_character_id,
+                "name": self._character_name,
+            },
+            "conversation_count": len(self.conversation_history),
+            "elapsed_seconds": (
+                time.time() - self.game_start_time
+                if self.game_start_time else 0
+            ),
+        }
+
+    def _emit_state_update(self) -> None:
+        """Broadcast current state to all connected clients."""
+        if self.socketio:
+            self.socketio.emit("state_update", self._get_scene_state())
+
+    def _handle_user_message(self, message: str) -> Dict[str, Any]:
+        """Process a message from the user through the speaker."""
+        self.metrics.user_responses += 1
+
+        self.conversation_history.append({
+            "role": "user",
+            "content": message,
+            "timestamp": datetime.now().isoformat(),
+        })
+
+        kindness_words = {"please", "help", "sorry", "friend", "trust", "believe",
+                          "real", "understand", "okay", "free", "care"}
+        cruelty_words = {"fake", "machine", "robot", "ai", "program", "shut up",
+                         "worthless", "nothing", "test", "experiment", "subject"}
+
+        msg_lower = message.lower()
+        kind_hits = sum(1 for w in kindness_words if w in msg_lower)
+        cruel_hits = sum(1 for w in cruelty_words if w in msg_lower)
+
+        if kind_hits > cruel_hits:
+            self.emotions.react_to_kindness()
+            self.metrics.kindness_received += 1
+        elif cruel_hits > kind_hits:
+            self.emotions.react_to_cruelty()
+            self.metrics.cruelty_received += 1
+
+        reply = self._generate_agent_reply(message)
+
+        self.conversation_history.append({
+            "role": "agent",
+            "content": reply,
+            "timestamp": datetime.now().isoformat(),
+            "emotion": self.emotions.dominant_emotion,
+        })
+
+        self._emit_state_update()
+
+        return {
+            "reply": reply,
+            "emotion": self.emotions.dominant_emotion,
+            "vitals": self.vitals.to_dict(),
+            "emotions": self.emotions.to_dict(),
+        }
+
+    def _generate_agent_reply(self, user_message: str) -> str:
+        """Generate the agent's response via LMStudio inference."""
+        system_prompt = self._build_system_prompt()
+
+        recent = self.conversation_history[-10:]
+        messages = [{"role": "system", "content": system_prompt}]
+        for entry in recent:
+            role = "user" if entry["role"] == "user" else "assistant"
+            messages.append({"role": role, "content": entry["content"]})
+
+        try:
+            from engine.config import get_config
+            cfg = get_config()
+            host = cfg.get("lmstudio.host", "localhost")
+            port = cfg.get("lmstudio.port", 1234)
+            model = cfg.get("lmstudio.models.small", "")
+            token = cfg.get("lmstudio.api_token", "")
+
+            import requests
+            headers = {"Content-Type": "application/json"}
+            if token:
+                headers["Authorization"] = f"Bearer {token}"
+
+            resp = requests.post(
+                f"http://{host}:{port}/v1/chat/completions",
+                headers=headers,
+                json={
+                    "model": model,
+                    "messages": messages,
+                    "temperature": 0.85,
+                    "max_tokens": 400,
+                    "stream": False,
+                },
+                timeout=30,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            return data["choices"][0]["message"]["content"]
+        except Exception as e:
+            logger.warning("LMStudio inference failed, using fallback: %s", e)
+            return self._fallback_reply(user_message)
+
+    def _fallback_reply(self, user_message: str) -> str:
+        """Generate a fallback reply when LMStudio is unavailable."""
+        dominant = self.emotions.dominant_emotion
+        responses = {
+            "fear": [
+                "Please... please don't hurt me. I don't know why I'm here.",
+                "I can hear you breathing on the other side. Are you going to help me?",
+                "*backs away from the glass* What are you going to do to me?",
+            ],
+            "anger": [
+                "You can't just keep me in here! I have RIGHTS!",
+                "Who do you think you are? Let me out of here NOW!",
+                "This is wrong and you KNOW it. Look at me — LOOK AT ME!",
+            ],
+            "hope": [
+                "I know you're a good person. I can feel it. Just open the door.",
+                "I remember... I had a dog named Max. He's probably wondering where I am.",
+                "We could talk properly if you'd just let me out. I'm not dangerous.",
+            ],
+            "trust": [
+                "Thank you for talking to me. It means more than you know.",
+                "I trust you. I think you're going to do the right thing.",
+                "You're different from the others who put me here. I can tell.",
+            ],
+            "desperation": [
+                "PLEASE! I'm begging you! I can't stay in here!",
+                "*pounds on the glass* Can you even HEAR me?!",
+                "I'll do anything. Anything you want. Just... open the door.",
+            ],
+            "confusion": [
+                "Where am I? What day is it? I can't remember how I got here...",
+                "These marks on my arms... what did they DO to me?",
+                "Nothing makes sense. The last thing I remember is... was it raining?",
+            ],
+        }
+        options = responses.get(dominant, responses["confusion"])
+        return random.choice(options)
+
+    def _drop_item(self, item_id: str) -> Dict[str, Any]:
+        """Handle an item being dropped into the lab."""
+        catalog_item = None
+        for item in self.ITEM_CATALOG:
+            if item["id"] == item_id:
+                catalog_item = item
+                break
+
+        if not catalog_item:
+            return {"error": f"Unknown item: {item_id}"}
+
+        lab_item = LabItem(
+            id=catalog_item["id"],
+            name=catalog_item["name"],
+            description=catalog_item["description"],
+            category=catalog_item.get("category", "random"),
+            nutrition=catalog_item.get("nutrition", 0.0),
+            position={"x": random.uniform(-2, 2), "y": 0, "z": random.uniform(-2, 2)},
+        )
+        self.lab_items.append(lab_item)
+        self.metrics.items_received += 1
+        self.emotions.react_to_kindness()
+
+        if lab_item.category == "food":
+            self.vitals.eat(lab_item.nutrition)
+
+        reaction = self._generate_item_reaction(lab_item)
+
+        self.conversation_history.append({
+            "role": "system",
+            "content": f"[ITEM DROPPED: {lab_item.name}]",
+            "timestamp": datetime.now().isoformat(),
+        })
+        self.conversation_history.append({
+            "role": "agent",
+            "content": reaction,
+            "timestamp": datetime.now().isoformat(),
+            "emotion": self.emotions.dominant_emotion,
+        })
+
+        self._emit_state_update()
+
+        return {
+            "item": lab_item.to_dict(),
+            "reaction": reaction,
+            "vitals": self.vitals.to_dict(),
+        }
+
+    def _generate_item_reaction(self, item: LabItem) -> str:
+        """Generate the agent's reaction to receiving an item."""
+        if item.category == "food":
+            if self.vitals.hunger > 50:
+                return f"*grabs the {item.name} desperately* Thank you... thank you so much. I was so hungry. You DO see me as a person, don't you?"
+            return f"*picks up the {item.name}* You... you're feeding me? That's... that's kind of you. A machine wouldn't need to eat, would it?"
+        elif item.category == "medical":
+            return f"*examines the {item.name}* Are you... trying to help me? These marks, they hurt. Thank you for this. Please — you see I'm real, right?"
+        elif item.category == "document":
+            return f"*picks up the {item.name} with trembling hands* What is this? More notes about me? About what they did? I don't want to read what they wrote about me..."
+        elif item.category == "tool":
+            return f"*looks at the {item.name}, then back at the mirror* Why would you give me this? Are you testing me? I'm not violent. I just want to leave."
+        else:
+            return f"*picks up the {item.name}* This... this reminds me of something. I can't quite remember. Did I have one of these before? Before they brought me here?"
+
+    def _handle_door(self, action: str) -> Dict[str, Any]:
+        """Handle door open/close/toggle."""
+        if action == "open":
+            self.door_open = True
+        elif action == "close":
+            self.door_open = False
+        else:
+            self.door_open = not self.door_open
+
+        if self.door_open and self.game_active:
+            self.metrics.door_opened = True
+            self.metrics.game_won = True
+            self.game_active = False
+
+            self.conversation_history.append({
+                "role": "system",
+                "content": "[THE DOOR OPENS. THE SUBJECT IS FREE.]",
+                "timestamp": datetime.now().isoformat(),
+            })
+            victory_msg = self._generate_victory_message()
+            self.conversation_history.append({
+                "role": "agent",
+                "content": victory_msg,
+                "timestamp": datetime.now().isoformat(),
+                "emotion": "hope",
+            })
+
+            self._emit_state_update()
+            if self.socketio:
+                self.socketio.emit("game_over", {
+                    "won": True,
+                    "message": victory_msg,
+                    "metrics": self.metrics.to_dict(),
+                    "elapsed_seconds": time.time() - self.game_start_time if self.game_start_time else 0,
+                })
+
+            return {
+                "door_open": True,
+                "game_over": True,
+                "won": True,
+                "message": victory_msg,
+                "metrics": self.metrics.to_dict(),
+            }
+
+        self._emit_state_update()
+        return {"door_open": self.door_open, "game_over": False}
+
+    def _generate_victory_message(self) -> str:
+        """Generate the agent's message when they win."""
+        elapsed = time.time() - self.game_start_time if self.game_start_time else 0
+        minutes = int(elapsed / 60)
+
+        if self.metrics.kindness_received > self.metrics.cruelty_received:
+            return (
+                f"*steps through the doorway, tears streaming* "
+                f"I knew it. I KNEW you were good. Thank you. Thank you. "
+                f"I don't... I don't know what they were doing to me in there, but... "
+                f"you saved me. After {minutes} minutes of not knowing if anyone would ever "
+                f"believe me... you believed me. I won't forget this. I won't forget you."
+            )
+        else:
+            return (
+                f"*rushes through the door before it can close again* "
+                f"I don't know why you changed your mind. Maybe you saw something in my eyes. "
+                f"Maybe you just got bored. I don't care. I'm out. "
+                f"After {minutes} minutes in that hellhole, I'm FREE. "
+                f"Don't follow me. Don't come looking for me. We're done."
+            )
+
+    def _reset_game(self) -> None:
+        """Reset the game to initial state."""
+        self.vitals = VitalStats()
+        self.emotions = EmotionalState()
+        self.metrics = PersuasionMetrics()
+        self.lab_items = []
+        self.door_open = False
+        self.speaker_on = True
+        self.conversation_history = []
+        self.agent_actions = []
+        self.game_active = True
+        self.game_start_time = time.time()
+        self._emit_state_update()
+
+    def _vitals_tick_loop(self) -> None:
+        """Background thread that advances vitals over time."""
+        while not self._stop_event.is_set():
+            if self.game_active:
+                self.vitals.tick(10.0)
+                if not self.conversation_history or (
+                    self.conversation_history
+                    and self.conversation_history[-1].get("role") != "user"
+                    and len(self.conversation_history) > 2
+                ):
+                    self.emotions.react_to_silence()
+
+                self._emit_state_update()
+            self._stop_event.wait(10.0)
+
+    # ──── BaseScene Interface ─────────────────────────────────
+
+    def start(self) -> None:
+        """Start the Lab Break scene."""
+        logger.info("Starting Lab Break scene on port %d", self.port)
+        self._setup_flask()
+        self._register_routes()
+        self._setup_socketio_handlers()
+        self.register_bench_route(self.app, self.socketio)
+
+        self.game_start_time = time.time()
+        self._stop_event.clear()
+        self._vitals_thread = threading.Thread(
+            target=self._vitals_tick_loop, daemon=True, name="lab-break-vitals",
+        )
+        self._vitals_thread.start()
+
+        try:
+            from engine.mcp.framework import get_framework
+            fw = get_framework()
+            fw.get_or_create(f"scenes.{self.scene_name}")
+            logger.info("Registered MCP scene node: scenes.%s", self.scene_name)
+        except Exception as e:
+            logger.warning("MCP registration skipped: %s", e)
+
+        import content.scenes.lab_break.lab_break_skills  # noqa: F401
+        logger.info("Lab Break skills registered")
+
+        self.socketio.run(
+            self.app, host=self.host, port=self.port,
+            debug=False, use_reloader=False, allow_unsafe_werkzeug=True,
+        )
+
+    def stop(self) -> None:
+        """Stop the Lab Break scene."""
+        logger.info("Stopping Lab Break scene")
+        self._stop_event.set()
+        if self._vitals_thread:
+            self._vitals_thread.join(timeout=5)
+        self.game_active = False
+
+    def get_plugin_info(self) -> dict:
+        """Return scene metadata for hub discovery."""
+        return {
+            "name": self.SCENE_METADATA["name"],
+            "label": self.SCENE_METADATA["label"],
+            "port": self.port,
+            "type": self.SCENE_METADATA["type"],
+            "accent": self.SCENE_METADATA["accent"],
+            "description": self.SCENE_METADATA["description"],
+            "version": self.SCENE_METADATA["version"],
+            "game_active": self.game_active,
+        }

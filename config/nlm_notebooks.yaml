@@ -1,0 +1,290 @@
+# ──────────────────────────────────────────────────────────────────
+# NLM Notebook Fleet Configuration
+# Defines purpose-built notebooks, chain-prompting strategies,
+# and batch operation pipelines for the NotebookLM system.
+# ──────────────────────────────────────────────────────────────────
+
+fleet:
+  # Global defaults for all notebook operations
+  defaults:
+    tier_marker: 2            # Pro-tier model selection
+    response_length: 4        # Default response length
+    write_config: [[2, 1]]    # [model_tier, quality_level]
+    max_retries: 3
+    retry_delay_seconds: 5
+    batch_delay_ms: 500       # Delay between batch operations
+
+  # ── Purpose-Built Notebooks ──────────────────────────────────
+  notebooks:
+    control:
+      name: "copilot-system-control"
+      purpose: "System orchestration, startup context, health summaries"
+      url: "https://notebooklm.google.com/notebook/933ba855-50b9-446e-946b-ae439375d850"
+      refresh_interval_hours: 168   # Weekly
+      sources:
+        - type: system_inventory
+          title: "CosySim System Inventory"
+        - type: copilot_instructions
+          title: "Copilot Instructions Bundle"
+        - type: changelog
+          title: "Recent CHANGELOG"
+        - type: session_history
+          title: "Recent Session History"
+      distillation_questions:
+        - "What is the current system health status and what needs attention?"
+        - "What are the top 3 priorities for the next work session?"
+        - "What decisions were made recently that affect system architecture?"
+        - "What are the most common failure modes and how to fix them?"
+        - "Summarize the Nexus knowledge gaps that should be filled."
+        - "What agent tasks are pending or blocked?"
+
+    documentation:
+      name: "cosysim-documentation"
+      purpose: "SDK-quality documentation synthesis and gap analysis"
+      refresh_interval_hours: 336   # Bi-weekly
+      sources:
+        - type: docs_bundle
+          title: "CosySim Documentation"
+          paths:
+            - docs/MCP_FRAMEWORK.md
+            - docs/INTERCEPTORS.md
+            - docs/NEXUS_INTEGRATION.md
+            - docs/LMSTUDIO.md
+            - docs/TRAINING_SYSTEM.md
+        - type: readme
+          title: "README.md"
+        - type: architecture_notes
+          title: "Architecture Notes from Nexus"
+      distillation_questions:
+        - "Generate a comprehensive API reference for the MCP skill system."
+        - "What documentation gaps exist? List every undocumented public API."
+        - "Create a getting-started guide for new contributors."
+        - "What are the most confusing parts of the system and how could docs clarify them?"
+
+    rules:
+      name: "cosysim-governance-rules"
+      purpose: "Governance rules, conventions, enforcement patterns"
+      refresh_interval_hours: 168
+      sources:
+        - type: instructions_bundle
+          title: "All Instruction Files"
+          paths:
+            - .github/instructions/*.md
+            - .github/copilot-instructions.md
+        - type: nexus_rules
+          title: "Nexus Governance Rules Export"
+      distillation_questions:
+        - "List every coding convention with examples of correct and incorrect usage."
+        - "What governance rules exist and how are they enforced at runtime?"
+        - "Generate a compliance checklist for new scene development."
+        - "What rules are implicit but not codified? Suggest new rules."
+
+    coding:
+      name: "cosysim-coding-patterns"
+      purpose: "Code patterns, snippets, refactoring guides"
+      refresh_interval_hours: 336
+      sources:
+        - type: code_bundle
+          title: "Core Engine Code"
+          paths:
+            - engine/mcp/mcp_framework.py
+            - engine/scenes/base_scene.py
+            - engine/skills/skill.py
+            - engine/agents/virtual_agent.py
+        - type: test_patterns
+          title: "Test Pattern Examples"
+          paths:
+            - tests/conftest.py
+            - tests/test_bedroom_game.py
+      distillation_questions:
+        - "Generate a complete code template for creating a new scene from scratch."
+        - "Show the correct pattern for creating a new skill pack with tests."
+        - "What are the most common coding mistakes in this codebase?"
+        - "Generate a refactoring guide for converting hardcoded values to config."
+
+    planning:
+      name: "cosysim-planning"
+      purpose: "Sprint planning, task decomposition, action manifests"
+      refresh_interval_hours: 72   # Refreshed often for active planning
+      sources:
+        - type: roadmap
+          title: "ROADMAP.md"
+        - type: changelog
+          title: "CHANGELOG.md"
+        - type: active_todos
+          title: "Active Tasks & Todos"
+        - type: session_summaries
+          title: "Recent Session Summaries"
+      distillation_questions:
+        - "Break the next roadmap milestone into 10-15 minute executable tasks."
+        - "What tasks can be parallelized and which have dependencies?"
+        - "Generate an action manifest with validation gates for the next sprint."
+        - "What technical debt should be addressed before new features?"
+
+    training:
+      name: "cosysim-training-data"
+      purpose: "Training data curation, model evaluation, fine-tuning guides"
+      refresh_interval_hours: 336
+      sources:
+        - type: training_docs
+          title: "Training System Documentation"
+          paths:
+            - docs/TRAINING_SYSTEM.md
+            - docs/FINETUNING_GUIDE.md
+            - docs/CODER_MODEL.md
+        - type: benchmark_results
+          title: "Latest Benchmark Results"
+        - type: training_metrics
+          title: "Training Pipeline Metrics"
+      distillation_questions:
+        - "What model types are most needed and what training data is available?"
+        - "Generate a training data quality checklist."
+        - "What fine-tuning strategies would improve router accuracy?"
+        - "Analyze benchmark trends and suggest optimization targets."
+
+    news:
+      name: "cosysim-news-feed"
+      purpose: "Curated AI/tech news distillation and trend analysis"
+      refresh_interval_hours: 8    # Multiple times per day
+      sources:
+        - type: news_articles
+          title: "Latest AI/Tech News"
+          categories: [ai, tech, science]
+          max_articles: 20
+      distillation_questions:
+        - "Summarize the top 5 most important developments."
+        - "What trends are emerging that affect local AI inference?"
+        - "Are there new models, techniques, or tools we should integrate?"
+        - "Generate a briefing for the system operator."
+
+    argus:
+      name: "cosysim-argus-discoveries"
+      purpose: "API surface analysis, rpcid tracking, service changes"
+      refresh_interval_hours: 168
+      sources:
+        - type: registry_snapshot
+          title: "NLM RPC Registry Snapshot"
+        - type: argus_results
+          title: "Latest ARGUS Discovery Results"
+        - type: heap_analysis
+          title: "Heap Analysis Findings"
+      distillation_questions:
+        - "What new API endpoints or rpcids have been discovered?"
+        - "Which operations are undocumented and need investigation?"
+        - "Generate a complete API reference from the registry data."
+        - "What changes since the last scan could affect our integrations?"
+
+  # ── Chain-Prompting Strategies ──────────────────────────────
+  chains:
+    double_prompt:
+      description: "Two-pass: generate artifact → refine into executable output"
+      steps:
+        - name: generate_artifact
+          prompt_template: |
+            Based on the sources in this notebook, generate a structured {artifact_type}
+            covering: {topic}. Format as JSON with clear sections, dependencies, and
+            validation criteria.
+          output_as_source: true    # Feed output back as new source
+        - name: refine_for_agents
+          prompt_template: |
+            Using the {artifact_type} you just generated, create an action manifest
+            with tasks small enough for a local 4B parameter model to execute.
+            Each task must include: description, target files, validation command,
+            estimated complexity (1-5).
+
+    research_deep:
+      description: "Multi-question research with progressive depth"
+      steps:
+        - name: overview
+          prompt_template: "Give a comprehensive overview of {topic}."
+        - name: details
+          prompt_template: "Now go deeper: what are the implementation details, edge cases, and gotchas for {topic}?"
+        - name: examples
+          prompt_template: "Show production-ready code examples for {topic} following our project conventions."
+        - name: gaps
+          prompt_template: "What's missing? What pitfalls should we watch for? What alternatives exist?"
+
+    knowledge_distill:
+      description: "Extract and structure knowledge from sources"
+      steps:
+        - name: extract_facts
+          prompt_template: "Extract every factual claim, API endpoint, configuration option, and code pattern from the sources."
+        - name: generate_qa
+          prompt_template: "Generate 20 Q&A pairs that capture the most important knowledge from these sources. Format as JSON array of {question, answer} objects."
+        - name: identify_gaps
+          prompt_template: "What information is referenced but not fully explained? What would a developer need to know that isn't covered?"
+
+    task_decompose:
+      description: "Break complex task into agent-executable steps"
+      steps:
+        - name: understand
+          prompt_template: "Analyze this task: {task_description}. What are the requirements, constraints, and success criteria?"
+        - name: decompose
+          prompt_template: |
+            Break the task into sequential steps. Each step must be:
+            - Completable in under 15 minutes
+            - Testable with a specific validation command
+            - Self-contained (no implicit dependencies)
+            Format as JSON array.
+        - name: create_manifest
+          prompt_template: |
+            Create an Action Manifest from the decomposed steps.
+            Include milestones, dependency graph, and validation gates.
+            Format as a complete JSON action manifest.
+
+    code_review:
+      description: "Deep code review via notebook-grounded analysis"
+      steps:
+        - name: analyze
+          prompt_template: "Analyze the code in the sources for bugs, security issues, performance problems, and convention violations."
+        - name: suggest
+          prompt_template: "For each issue found, provide a specific fix with code. Prioritize by severity."
+
+  # ── Batch Operation Templates ────────────────────────────────
+  batches:
+    full_distillation:
+      description: "Distill all fleet notebooks and store results in Nexus"
+      notebooks: [control, documentation, rules, coding, planning, training]
+      strategy: sequential
+      store_in_nexus: true
+      nexus_category: "nlm-distillation"
+
+    daily_refresh:
+      description: "Refresh time-sensitive notebooks"
+      notebooks: [control, news, planning]
+      strategy: parallel
+      store_in_nexus: true
+
+    weekly_deep:
+      description: "Full deep distillation of all notebooks"
+      notebooks: [control, documentation, rules, coding, planning, training, argus]
+      strategy: sequential
+      chain: knowledge_distill
+      store_in_nexus: true
+
+  # ── Artifact Types ──────────────────────────────────────────
+  artifacts:
+    action_manifest:
+      description: "Dependency-aware task list for agent execution"
+      format: json
+      schema_ref: "engine/nexus/action_manifest.py"
+
+    knowledge_brief:
+      description: "Structured summary of a topic for agent consumption"
+      format: json
+      fields: [topic, summary, key_facts, code_examples, references]
+
+    code_template:
+      description: "Production-ready code template with placeholders"
+      format: python
+      includes_tests: true
+
+    training_batch:
+      description: "Curated Q&A pairs for model fine-tuning"
+      format: jsonl
+      fields: [question, answer, category, confidence, source]
+
+    compliance_report:
+      description: "Governance compliance check results"
+      format: json
+      fields: [rules_checked, violations, warnings, score]

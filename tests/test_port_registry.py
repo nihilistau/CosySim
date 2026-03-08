@@ -96,7 +96,7 @@ class TestGroups:
         assert "phone" in scenes
         assert "bedroom" in scenes
         assert "grid" in scenes
-        assert len(scenes) == 18
+        assert len(scenes) == 19
 
     def test_tts_group(self):
         reg = _fresh_registry()
