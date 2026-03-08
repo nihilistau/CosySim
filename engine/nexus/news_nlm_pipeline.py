@@ -7,6 +7,11 @@ After news articles are fetched and stored in Nexus, this pipeline:
 4. Stores Q&A pairs in Nexus (news category) for agent consumption
 5. Persists notebook ID for continuity across runs
 
+The pipeline uses a multi-strategy approach for NotebookLM access:
+- Primary: NLMDirectClient (batchexecute RPCs via browser-attached cookies)
+- Secondary: NLMClient from nlm_live_proxy (ask_batch with citations)
+- Fallback: NLM hybrid router (routes through node bridge / proxy)
+
 Usage:
     python -m engine.nexus.news_nlm_pipeline --articles-limit 20
     python -m engine.nexus.news_nlm_pipeline --dry-run
@@ -78,13 +83,64 @@ class NewsNLMPipeline:
     Designed to be called after the news-fetch scheduler task has stored
     articles in Nexus. Reads the digest from Nexus or accepts a pre-built
     text block, uploads to NLM, distils answers, and stores them back.
+
+    NLM access strategy (in priority order):
+    1. NLMDirectClient — batchexecute RPCs using browser-attached cookies
+       from the GoogleAccountPool. Supports create_notebook + add_source_text.
+    2. NLMClient — nlm_live_proxy batch-ask with citations (CYK0Xb RPC).
+       Used for distillation questions after notebook/source creation.
+    3. NLM hybrid router — last resort, routes through node bridge.
     """
 
     def __init__(self) -> None:
         self._state = _load_state()
+        self._direct_client = None
+        self._proxy_client = None
+
+    def _get_nlm_direct_client(self):
+        """Lazy-load NLMDirectClient from the GoogleAccountPool.
+
+        Returns:
+            NLMDirectClient instance, or None if unavailable.
+        """
+        if self._direct_client is not None:
+            return self._direct_client
+        try:
+            from engine.integrations.google_account_pool import get_account_pool
+            from engine.integrations.nlm_direct_client import NLMDirectClient
+            pool = get_account_pool()
+            account = pool.get_account("notebooklm")
+            if account is None:
+                account = pool.get_by_name("knack112358")
+            if account:
+                self._direct_client = NLMDirectClient(account)
+                return self._direct_client
+            logger.debug("No NotebookLM-capable account in pool")
+        except Exception as exc:
+            logger.debug("Could not load NLM direct client: %s", exc)
+        return None
+
+    def _get_nlm_proxy_client(self):
+        """Lazy-load NLMClient from nlm_live_proxy for batch asking.
+
+        Returns:
+            NLMClient instance, or None if no cookies available.
+        """
+        if self._proxy_client is not None:
+            return self._proxy_client
+        try:
+            from engine.mcp.nlm_live_proxy import NLMClient
+            client = NLMClient()
+            if client.has_cookies():
+                self._proxy_client = client
+                return self._proxy_client
+            logger.debug("NLM proxy client has no cookies")
+        except Exception as exc:
+            logger.debug("Could not load NLM proxy client: %s", exc)
+        return None
 
     def _get_hybrid(self):
-        """Lazy-load NLM hybrid router."""
+        """Lazy-load NLM hybrid router (fallback path)."""
         from engine.mcp.nlm_hybrid import get_nlm_hybrid
         return get_nlm_hybrid()
 
@@ -95,6 +151,11 @@ class NewsNLMPipeline:
 
     def _get_or_create_notebook(self) -> Optional[str]:
         """Get current week's news notebook ID, creating it if needed.
+
+        Strategy:
+        1. Check state file for existing notebook ID (reuse within same week).
+        2. Try NLMDirectClient.create_notebook() — proven batchexecute RPC path.
+        3. Return None if creation fails (pipeline skips distillation).
 
         Returns:
             Notebook ID string, or None if NLM unavailable.
@@ -107,26 +168,22 @@ class NewsNLMPipeline:
             logger.debug("Reusing news notebook %s for week %s", notebook_id, week)
             return notebook_id
 
-        # Create a new notebook for this week
-        hybrid = self._get_hybrid()
         notebook_name = f"{_NOTEBOOK_NAME_PREFIX} {week}"
-        try:
-            from engine.mcp.nlm_node_bridge import get_nlm_node_bridge
-            result = get_nlm_node_bridge().create_notebook(
-                title=notebook_name,
-                description=(
-                    f"Daily AI/tech news intelligence for week {week}. "
-                    "Articles fetched, filtered, and distilled via CosySim news pipeline."
-                ),
-            )
-            if isinstance(result, dict) and result.get("notebook_id"):
-                notebook_id = result["notebook_id"]
-                self._state[notebook_key] = notebook_id
-                _save_state(self._state)
-                logger.info("Created news notebook %s → %s", notebook_name, notebook_id)
-                return notebook_id
-        except Exception as exc:
-            logger.debug("Could not create news notebook: %s", exc)
+
+        # Primary: NLMDirectClient.create_notebook() via browser-attached cookies
+        direct = self._get_nlm_direct_client()
+        if direct:
+            try:
+                notebook_id = direct.create_notebook(notebook_name)
+                if notebook_id:
+                    self._state[notebook_key] = notebook_id
+                    _save_state(self._state)
+                    logger.info("Created news notebook %s -> %s (direct)", notebook_name, notebook_id)
+                    return notebook_id
+            except Exception as exc:
+                logger.warning("NLMDirectClient.create_notebook failed: %s", exc)
+
+        logger.warning("News notebook creation failed — no NLM path available")
         return None
 
     def _build_digest_text(self, articles: List[Any], max_articles: int = 20) -> str:
@@ -166,6 +223,11 @@ class NewsNLMPipeline:
     def _upload_digest(self, notebook_id: str, digest_text: str) -> bool:
         """Upload the digest as a text source to the NLM notebook.
 
+        Strategy:
+        1. Try NLMDirectClient.add_source_text() — proven batchexecute RPC.
+        2. Try nlm_live_proxy.add_text_source() with disk cookies.
+        3. Return False if both fail.
+
         Args:
             notebook_id: Target NLM notebook.
             digest_text: Full formatted text of today's news.
@@ -174,23 +236,42 @@ class NewsNLMPipeline:
             True if upload succeeded.
         """
         today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        source_title = f"News Digest {today}"
+
+        # Primary: NLMDirectClient.add_source_text()
+        direct = self._get_nlm_direct_client()
+        if direct:
+            try:
+                source_id = direct.add_source_text(notebook_id, source_title, digest_text)
+                if source_id:
+                    logger.info("Uploaded news digest to notebook %s via direct client", notebook_id)
+                    return True
+            except Exception as exc:
+                logger.debug("NLMDirectClient.add_source_text failed: %s", exc)
+
+        # Secondary: nlm_live_proxy module-level add_text_source()
         try:
-            from engine.mcp.nlm_node_bridge import get_nlm_node_bridge
-            result = get_nlm_node_bridge().add_source(
-                notebook_id,
-                text_content=digest_text,
-                title=f"News Digest {today}",
-            )
-            if isinstance(result, dict) and not result.get("error"):
-                logger.info("Uploaded news digest to notebook %s", notebook_id)
-                return True
-            logger.debug("Upload returned: %s", result)
+            from engine.mcp.nlm_live_proxy import add_text_source, _load_cookies
+            cookies = _load_cookies()
+            if cookies:
+                result = add_text_source(notebook_id, source_title, digest_text, cookies)
+                if isinstance(result, dict) and result.get("source_id"):
+                    logger.info("Uploaded news digest to notebook %s via proxy", notebook_id)
+                    return True
+                logger.debug("Proxy upload returned: %s", result)
         except Exception as exc:
-            logger.debug("Digest upload failed: %s", exc)
+            logger.debug("Proxy add_text_source failed: %s", exc)
+
+        logger.warning("Digest upload failed — no NLM path available for notebook %s", notebook_id)
         return False
 
     def _run_distillation(self, notebook_id: str) -> List[Dict[str, str]]:
         """Run batch distillation questions against the news notebook.
+
+        Strategy:
+        1. Try NLMClient.ask_batch() — direct batchexecute RPC with citations.
+        2. Fall back to NLM hybrid router.
+        3. Return empty list if all paths fail.
 
         Args:
             notebook_id: NLM notebook containing today's news.
@@ -198,22 +279,39 @@ class NewsNLMPipeline:
         Returns:
             List of {question, answer} dicts from NLM.
         """
-        try:
-            hybrid = self._get_hybrid()
-            results = hybrid.ask_batch(notebook_id, DISTILLATION_QUESTIONS)
-            qa_pairs = []
-            for q, r in zip(DISTILLATION_QUESTIONS, results):
-                if isinstance(r, dict):
-                    answer = r.get("answer", "")
-                else:
-                    answer = str(r)
-                if answer and "error" not in answer.lower()[:20]:
-                    qa_pairs.append({"question": q, "answer": answer})
-            logger.info("Distilled %d Q&A pairs from news notebook", len(qa_pairs))
-            return qa_pairs
-        except Exception as exc:
-            logger.debug("Distillation batch failed: %s", exc)
+        results = None
+
+        # Primary: NLMClient.ask_batch() from nlm_live_proxy (citations via CYK0Xb)
+        proxy = self._get_nlm_proxy_client()
+        if proxy:
+            try:
+                results = proxy.ask_batch(notebook_id, DISTILLATION_QUESTIONS)
+            except Exception as exc:
+                logger.debug("NLMClient.ask_batch failed: %s", exc)
+
+        # Secondary: NLM hybrid router (tries node bridge then proxy)
+        if results is None:
+            try:
+                hybrid = self._get_hybrid()
+                results = hybrid.ask_batch(notebook_id, DISTILLATION_QUESTIONS)
+            except Exception as exc:
+                logger.debug("Hybrid ask_batch failed: %s", exc)
+                return []
+
+        if results is None:
             return []
+
+        qa_pairs = []
+        for q, r in zip(DISTILLATION_QUESTIONS, results):
+            if isinstance(r, dict):
+                answer = r.get("answer", "")
+            else:
+                answer = str(r)
+            if answer and "error" not in answer.lower()[:20]:
+                qa_pairs.append({"question": q, "answer": answer})
+
+        logger.info("Distilled %d Q&A pairs from news notebook", len(qa_pairs))
+        return qa_pairs
 
     def _store_qa_to_nexus(self, qa_pairs: List[Dict[str, str]], date_label: str) -> int:
         """Store distilled Q&A pairs into Nexus.

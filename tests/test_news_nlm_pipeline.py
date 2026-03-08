@@ -27,24 +27,29 @@ def pipeline(tmp_path):
     """Fresh pipeline with mocked state file in tmp_path."""
     p = NewsNLMPipeline()
     p._state = {}
+    p._direct_client = None
+    p._proxy_client = None
     return p
 
 
 @pytest.fixture
-def mock_node():
-    node = MagicMock()
-    node.create_notebook.return_value = {"notebook_id": "nb-news-123"}
-    node.add_source.return_value = {"success": True}
-    return node
+def mock_direct_client():
+    """Mocked NLMDirectClient for notebook creation/upload."""
+    client = MagicMock()
+    client.create_notebook.return_value = "nb-news-123"
+    client.add_source_text.return_value = "src-abc"
+    return client
 
 
 @pytest.fixture
-def mock_hybrid(mock_node):
-    h = MagicMock()
-    h.ask_batch.return_value = [
+def mock_proxy_client():
+    """Mocked NLMClient for batch asking."""
+    client = MagicMock()
+    client.has_cookies.return_value = True
+    client.ask_batch.return_value = [
         {"answer": f"Answer {i}"} for i in range(len(DISTILLATION_QUESTIONS))
     ]
-    return h
+    return client
 
 
 @pytest.fixture
@@ -126,28 +131,35 @@ def test_get_or_create_notebook_reuses_existing(pipeline):
     week = _get_week_label()
     pipeline._state[f"news_notebook_{week}"] = "nb-existing"
 
-    with patch("engine.mcp.nlm_node_bridge.get_nlm_node_bridge") as mock_get:
-        nb_id = pipeline._get_or_create_notebook()
+    nb_id = pipeline._get_or_create_notebook()
 
     assert nb_id == "nb-existing"
-    mock_get.assert_not_called()
 
 
-def test_get_or_create_notebook_creates_new(pipeline, mock_node):
-    """Creates new notebook when none exists for current week."""
-    with patch("engine.mcp.nlm_node_bridge.get_nlm_node_bridge", return_value=mock_node), \
-         patch("engine.nexus.news_nlm_pipeline._save_state"):
+def test_get_or_create_notebook_creates_new(pipeline, mock_direct_client):
+    """Creates new notebook via NLMDirectClient when none exists for current week."""
+    pipeline._direct_client = mock_direct_client
+    with patch("engine.nexus.news_nlm_pipeline._save_state"):
         nb_id = pipeline._get_or_create_notebook()
 
     assert nb_id == "nb-news-123"
-    mock_node.create_notebook.assert_called_once()
+    mock_direct_client.create_notebook.assert_called_once()
 
 
 def test_get_or_create_notebook_returns_none_on_failure(pipeline):
-    """Returns None when NLM notebook creation fails."""
-    with patch("engine.mcp.nlm_node_bridge.get_nlm_node_bridge", side_effect=Exception("offline")):
+    """Returns None when no NLM client is available."""
+    with patch.object(pipeline, "_get_nlm_direct_client", return_value=None):
         nb_id = pipeline._get_or_create_notebook()
 
+    assert nb_id is None
+
+
+def test_get_or_create_notebook_handles_direct_client_exception(pipeline, mock_direct_client):
+    """Returns None when NLMDirectClient raises during creation."""
+    mock_direct_client.create_notebook.side_effect = Exception("RPC failed")
+    pipeline._direct_client = mock_direct_client
+
+    nb_id = pipeline._get_or_create_notebook()
     assert nb_id is None
 
 
@@ -183,18 +195,41 @@ def test_build_digest_includes_urls(pipeline, sample_articles):
 
 # ── Upload ────────────────────────────────────────────────────────────────
 
-def test_upload_digest_success(pipeline, mock_node):
-    """Returns True when upload succeeds."""
-    with patch("engine.mcp.nlm_node_bridge.get_nlm_node_bridge", return_value=mock_node):
-        success = pipeline._upload_digest("nb-123", "# Digest\nContent here")
+def test_upload_digest_success_direct(pipeline, mock_direct_client):
+    """Returns True when direct client upload succeeds."""
+    pipeline._direct_client = mock_direct_client
+    success = pipeline._upload_digest("nb-123", "# Digest\nContent here")
 
     assert success is True
-    mock_node.add_source.assert_called_once()
+    mock_direct_client.add_source_text.assert_called_once()
+
+
+def test_upload_digest_falls_back_to_proxy(pipeline):
+    """Falls back to nlm_live_proxy when direct client fails."""
+    pipeline._direct_client = None
+    mock_cookies = {"SID": "abc"}
+    with patch("engine.mcp.nlm_live_proxy.add_text_source", return_value={"source_id": "s1"}) as mock_add, \
+         patch("engine.mcp.nlm_live_proxy._load_cookies", return_value=mock_cookies):
+        success = pipeline._upload_digest("nb-123", "text")
+
+    assert success is True
+    mock_add.assert_called_once()
 
 
 def test_upload_digest_failure_returns_false(pipeline):
-    """Returns False when upload raises."""
-    with patch("engine.mcp.nlm_node_bridge.get_nlm_node_bridge", side_effect=Exception("down")):
+    """Returns False when all upload paths fail."""
+    pipeline._direct_client = None
+    with patch("engine.mcp.nlm_live_proxy.add_text_source", side_effect=Exception("down")), \
+         patch("engine.mcp.nlm_live_proxy._load_cookies", return_value={"SID": "abc"}):
+        success = pipeline._upload_digest("nb-123", "text")
+
+    assert success is False
+
+
+def test_upload_digest_no_clients_returns_false(pipeline):
+    """Returns False when no NLM clients are available."""
+    with patch.object(pipeline, "_get_nlm_direct_client", return_value=None), \
+         patch("engine.mcp.nlm_live_proxy._load_cookies", return_value=None):
         success = pipeline._upload_digest("nb-123", "text")
 
     assert success is False
@@ -202,30 +237,48 @@ def test_upload_digest_failure_returns_false(pipeline):
 
 # ── Distillation ──────────────────────────────────────────────────────────
 
-def test_run_distillation_returns_qa_pairs(pipeline, mock_hybrid):
+def test_run_distillation_returns_qa_pairs(pipeline, mock_proxy_client):
     """Distillation returns Q&A pairs for all questions."""
-    with patch("engine.mcp.nlm_hybrid.get_nlm_hybrid", return_value=mock_hybrid):
-        pairs = pipeline._run_distillation("nb-123")
+    pipeline._proxy_client = mock_proxy_client
+    pairs = pipeline._run_distillation("nb-123")
 
     assert len(pairs) == len(DISTILLATION_QUESTIONS)
     assert all("question" in p and "answer" in p for p in pairs)
+    mock_proxy_client.ask_batch.assert_called_once()
 
 
 def test_run_distillation_skips_error_answers(pipeline):
     """Distillation skips pairs where the answer indicates an error."""
-    mock_h = MagicMock()
+    mock_client = MagicMock()
+    mock_client.has_cookies.return_value = True
     responses = [{"answer": "error: quota exceeded"}] + [{"answer": "Valid answer"}] * (len(DISTILLATION_QUESTIONS) - 1)
-    mock_h.ask_batch.return_value = responses
+    mock_client.ask_batch.return_value = responses
+    pipeline._proxy_client = mock_client
 
-    with patch("engine.mcp.nlm_hybrid.get_nlm_hybrid", return_value=mock_h):
-        pairs = pipeline._run_distillation("nb-123")
-
+    pairs = pipeline._run_distillation("nb-123")
     assert len(pairs) == len(DISTILLATION_QUESTIONS) - 1
 
 
+def test_run_distillation_falls_back_to_hybrid(pipeline):
+    """Falls back to hybrid when proxy client is unavailable."""
+    pipeline._proxy_client = None
+    mock_hybrid = MagicMock()
+    mock_hybrid.ask_batch.return_value = [
+        {"answer": f"Hybrid answer {i}"} for i in range(len(DISTILLATION_QUESTIONS))
+    ]
+    with patch.object(pipeline, "_get_nlm_proxy_client", return_value=None), \
+         patch.object(pipeline, "_get_hybrid", return_value=mock_hybrid):
+        pairs = pipeline._run_distillation("nb-123")
+
+    assert len(pairs) == len(DISTILLATION_QUESTIONS)
+    mock_hybrid.ask_batch.assert_called_once()
+
+
 def test_run_distillation_handles_exception(pipeline):
-    """Returns empty list when ask_batch raises."""
-    with patch("engine.mcp.nlm_hybrid.get_nlm_hybrid", side_effect=Exception("offline")):
+    """Returns empty list when all ask paths raise."""
+    pipeline._proxy_client = None
+    with patch.object(pipeline, "_get_nlm_proxy_client", return_value=None), \
+         patch.object(pipeline, "_get_hybrid", side_effect=Exception("offline")):
         pairs = pipeline._run_distillation("nb-123")
 
     assert pairs == []
@@ -277,21 +330,21 @@ def test_run_dry_run_skips_upload(pipeline, sample_articles):
 
 def test_run_skips_when_notebook_unavailable(pipeline, sample_articles):
     """Returns error when NLM notebook cannot be created."""
-    with patch("engine.mcp.nlm_node_bridge.get_nlm_node_bridge", side_effect=Exception("offline")):
+    with patch.object(pipeline, "_get_nlm_direct_client", return_value=None):
         result = pipeline.run(articles=sample_articles)
 
     assert "error" in result
     assert result["uploaded"] is False
 
 
-def test_run_full_pipeline_success(pipeline, sample_articles, mock_node, mock_hybrid, mock_nexus):
+def test_run_full_pipeline_success(pipeline, sample_articles, mock_direct_client, mock_proxy_client, mock_nexus):
     """Full pipeline run stores Q&A pairs and consolidated insight."""
     week = _get_week_label()
     pipeline._state[f"news_notebook_{week}"] = "nb-news-123"
+    pipeline._direct_client = mock_direct_client
+    pipeline._proxy_client = mock_proxy_client
 
-    with patch("engine.mcp.nlm_node_bridge.get_nlm_node_bridge", return_value=mock_node), \
-         patch("engine.mcp.nlm_hybrid.get_nlm_hybrid", return_value=mock_hybrid), \
-         patch("engine.nexus.client.get_nexus_client", return_value=mock_nexus), \
+    with patch("engine.nexus.client.get_nexus_client", return_value=mock_nexus), \
          patch("time.sleep"):
         result = pipeline.run(articles=sample_articles)
 
@@ -301,13 +354,12 @@ def test_run_full_pipeline_success(pipeline, sample_articles, mock_node, mock_hy
     assert mock_nexus.add_entry.called  # consolidated insight entry
 
 
-def test_run_skips_distillation_when_upload_fails(pipeline, sample_articles, mock_node):
+def test_run_skips_distillation_when_upload_fails(pipeline, sample_articles):
     """Distillation is skipped when upload fails."""
     week = _get_week_label()
     pipeline._state[f"news_notebook_{week}"] = "nb-news-123"
-    mock_node.add_source.return_value = {"error": "upload failed"}
 
-    with patch("engine.mcp.nlm_node_bridge.get_nlm_node_bridge", return_value=mock_node), \
+    with patch.object(pipeline, "_upload_digest", return_value=False), \
          patch("time.sleep"):
         result = pipeline.run(articles=sample_articles)
 
@@ -315,15 +367,15 @@ def test_run_skips_distillation_when_upload_fails(pipeline, sample_articles, moc
     assert result["qa_count"] == 0
 
 
-def test_run_falls_back_to_nexus_digest(pipeline, mock_node, mock_hybrid, mock_nexus):
+def test_run_falls_back_to_nexus_digest(pipeline, mock_direct_client, mock_proxy_client, mock_nexus):
     """When no articles provided, reads digest from Nexus."""
     week = _get_week_label()
     pipeline._state[f"news_notebook_{week}"] = "nb-news-123"
+    pipeline._direct_client = mock_direct_client
+    pipeline._proxy_client = mock_proxy_client
     mock_nexus.search.return_value = [{"content": "# Digest from Nexus\nFull content."}]
 
-    with patch("engine.mcp.nlm_node_bridge.get_nlm_node_bridge", return_value=mock_node), \
-         patch("engine.mcp.nlm_hybrid.get_nlm_hybrid", return_value=mock_hybrid), \
-         patch("engine.nexus.client.get_nexus_client", return_value=mock_nexus), \
+    with patch("engine.nexus.client.get_nexus_client", return_value=mock_nexus), \
          patch("time.sleep"):
         result = pipeline.run()  # no articles
 
@@ -335,9 +387,7 @@ def test_run_returns_error_when_no_content(pipeline):
     week = _get_week_label()
     pipeline._state[f"news_notebook_{week}"] = "nb-news-123"
 
-    with patch("engine.mcp.nlm_node_bridge.get_nlm_node_bridge") as mock_nb_mod, \
-         patch("engine.nexus.client.get_nexus_client") as mock_nx:
-        mock_nb_mod.return_value = MagicMock()
+    with patch("engine.nexus.client.get_nexus_client") as mock_nx:
         mock_nx.return_value = MagicMock(search=MagicMock(return_value=[]))
         result = pipeline.run()
 
