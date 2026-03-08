@@ -299,58 +299,57 @@ class HousekeepingService:
             "cleaned": 0,
         }
 
-        print("🏠 CosySim Housekeeping")
-        print("=" * 50)
+        logger.info("CosySim Housekeeping")
+        logger.info("=" * 50)
 
         # 1. Service health
-        print("\n🔍 Checking services...")
+        logger.info("Checking services...")
         report["services"] = self.check_services()
         for name, info in report["services"].items():
-            icon = "✅" if info["status"] == "healthy" else "❌"
             ms = f" ({info.get('response_ms', 0):.0f}ms)" if "response_ms" in info else ""
-            print(f"  {icon} {name}: {info['status']}{ms}")
+            logger.info("%s: %s%s", name, info["status"], ms)
 
         # 2. DB integrity
-        print("\n🗄️  Checking database integrity...")
+        logger.info("Checking database integrity...")
         report["integrity"] = self.check_integrity()
         integrity = report["integrity"]
-        print(f"  Records: {integrity['total_records']} | Files: {integrity['total_files']}")
+        logger.info("Records: %d | Files: %d", integrity["total_records"], integrity["total_files"])
         if integrity["orphan_records"]:
-            print(f"  ⚠️  {len(integrity['orphan_records'])} orphan records (file missing)")
+            logger.warning("%d orphan records (file missing)", len(integrity["orphan_records"]))
         if integrity["orphan_files"]:
-            print(f"  ⚠️  {len(integrity['orphan_files'])} unregistered files")
+            logger.warning("%d unregistered files", len(integrity["orphan_files"]))
         if not integrity["orphan_records"] and not integrity["orphan_files"]:
-            print("  ✅ All clean")
+            logger.info("All clean")
 
         # 3. Media ingest
-        print("\n📥 Scanning for new media...")
+        logger.info("Scanning for new media...")
         report["ingested"] = self.ingest_new_media(character_id)
         if report["ingested"]:
-            print(f"  ✅ Ingested {len(report['ingested'])} new files")
+            logger.info("Ingested %d new files", len(report["ingested"]))
             for item in report["ingested"]:
-                print(f"     {item['type']}: {item['name']}")
+                logger.debug("%s: %s", item["type"], item["name"])
         else:
-            print("  No new files found")
+            logger.info("No new files found")
 
         # 4. Cleanup
-        print("\n🧹 Cleanup...")
+        logger.info("Cleanup...")
         report["cleaned"] = self.cleanup_temp_files()
-        print(f"  Removed {report['cleaned']} stale cache files")
+        logger.info("Removed %d stale cache files", report["cleaned"])
 
-        print(f"\n{'=' * 50}")
-        print("✅ Housekeeping complete")
+        logger.info("=" * 50)
+        logger.info("Housekeeping complete")
 
         return report
 
     def watch(self, interval: int = 60, character_id: str = "default"):
         """Run housekeeping in a loop."""
-        print(f"👀 Watching every {interval}s (Ctrl+C to stop)")
+        logger.info("Watching every %ds (Ctrl+C to stop)", interval)
         try:
             while True:
                 self.run_all(character_id)
                 time.sleep(interval)
         except KeyboardInterrupt:
-            print("\n🛑 Housekeeping stopped")
+            logger.info("Housekeeping stopped")
 
 
 # ── CLI entry point ───────────────────────────────────────────────────

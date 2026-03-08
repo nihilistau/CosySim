@@ -131,6 +131,16 @@ scenes:
     nexus_cache_enabled: true
     adult_enabled: false
 
+  grid:
+    host: "localhost"
+    port: 5569
+    debug: false
+
+  lab_break:
+    host: "localhost"
+    port: 5571
+    debug: false
+
   hub:
     host: "localhost"
     port: 8500

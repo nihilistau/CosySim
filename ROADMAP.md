@@ -1,6 +1,6 @@
 # CosySim Roadmap
 
-> Current: **v0.90b** "THE BASELINE" ✅ | Last updated: 2026-03
+> Current: **v0.91b** "THE EVOLUTION" ✅ | Last updated: 2026-03
 
 ## Philosophy
 
@@ -10,14 +10,17 @@ The system's ultimate goal: **inhabit itself** — AI agents that maintain, impr
 
 ---
 
-## Current Shipped State: v0.90b — "THE BASELINE" ✅
+## Current Shipped State: v0.91b — "THE EVOLUTION" ✅
 
 - **v0.89b — THE LOOP** closed the ARGUS → NotebookLM → Nexus distillation loop.
 - **v0.90b — THE BASELINE** reconciled all doc surfaces, fixed stale test assertions,
   and committed 145 files of accumulated control-plane, runtime enforcement,
   operator cockpit, and flywheel work as one coherent baseline.
-- Current baseline: **16 scenes, 55 scheduler tasks, 9,260 tests passing
-  (9,646 total), version 0.90b**.
+- **v0.91b — THE EVOLUTION** added Lab Break scene, NLM chain-prompting engine,
+  LMLink federation, bidirectional LMStudio server control, vision/evaluation
+  MCP skills, training pipeline wiring, and template/navbar repairs.
+- Current baseline: **20 scenes, 55 scheduler tasks, 9,575 tests passing
+  (9,963 total), version 0.91b**.
 
 ## Current Planning Focus (2026-03)
 

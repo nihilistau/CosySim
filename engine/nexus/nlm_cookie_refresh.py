@@ -25,14 +25,14 @@ async def _run_refresh() -> bool:
     """Open browser, wait for NLM login, extract and save cookies."""
     from playwright.async_api import async_playwright
 
-    print("\n" + "=" * 60)
-    print("NLM Cookie Refresh")
-    print("=" * 60)
-    print("A Chromium browser window will open.")
-    print("NOTE: The 'not secure' warning is normal — it's just Playwright's")
-    print("      Chromium build. Your login is still sent securely to Google.")
-    print(f"Timeout: {_TIMEOUT_SECONDS}s ({_TIMEOUT_SECONDS//60} minutes)")
-    print("=" * 60 + "\n")
+    logger.info("=" * 60)
+    logger.info("NLM Cookie Refresh")
+    logger.info("=" * 60)
+    logger.info("A Chromium browser window will open.")
+    logger.info("NOTE: The 'not secure' warning is normal — it's just Playwright's "
+                "Chromium build. Your login is still sent securely to Google.")
+    logger.info("Timeout: %ds (%d minutes)", _TIMEOUT_SECONDS, _TIMEOUT_SECONDS // 60)
+    logger.info("=" * 60)
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=False)
@@ -47,8 +47,8 @@ async def _run_refresh() -> bool:
         page = await ctx.new_page()
         await page.goto(_NLM_URL)
 
-        print("Waiting for you to log in and reach the NLM homepage...")
-        print("(You have 10 minutes — take your time)\n")
+        logger.info("Waiting for you to log in and reach the NLM homepage...")
+        logger.info("You have 10 minutes — take your time")
 
         deadline = asyncio.get_event_loop().time() + _TIMEOUT_SECONDS
         last_print = 0.0
@@ -61,11 +61,11 @@ async def _run_refresh() -> bool:
             now = asyncio.get_event_loop().time()
             remaining = int(deadline - now)
             if now - last_print >= 30:
-                print(f"  Still waiting... {remaining}s remaining. Current: {url[:70]}")
+                logger.info("Still waiting... %ds remaining. Current: %s", remaining, url[:70])
                 last_print = now
             await page.wait_for_timeout(1000)
         else:
-            print(f"\n✗ Timed out after {_TIMEOUT_SECONDS}s — no cookies saved.")
+            logger.error("Timed out after %ds — no cookies saved.", _TIMEOUT_SECONDS)
             await browser.close()
             return False
 
@@ -80,14 +80,14 @@ async def _run_refresh() -> bool:
         await browser.close()
 
         if not all_cookies:
-            print("✗ No cookies found — not logged in?")
+            logger.error("No cookies found — not logged in?")
             return False
 
         _COOKIES_FILE.parent.mkdir(parents=True, exist_ok=True)
         _COOKIES_FILE.write_text(json.dumps(all_cookies, indent=2), encoding="utf-8")
-        print(f"\n✓ Saved {len(all_cookies)} cookies to {_COOKIES_FILE}")
+        logger.info("Saved %d cookies to %s", len(all_cookies), _COOKIES_FILE)
         key_present = [k for k in ("SID", "SSID", "__Secure-1PSID", "OSID") if k in all_cookies]
-        print(f"  Key cookies: {', '.join(key_present)}")
+        logger.debug("Key cookies: %s", ", ".join(key_present))
         return True
 
 
@@ -96,7 +96,7 @@ def main() -> None:
     logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(message)s")
     ok = asyncio.run(_run_refresh())
     if ok:
-        print("\nCookies saved. You can now run the NLM automation:\n  python -m engine.nexus.nlm_automation\n")
+        logger.info("Cookies saved. You can now run the NLM automation: python -m engine.nexus.nlm_automation")
     else:
         import sys
         sys.exit(1)
