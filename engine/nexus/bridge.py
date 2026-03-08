@@ -123,17 +123,21 @@ def cmd_health(args: argparse.Namespace) -> None:
     from collections import Counter
     try:
         client = get_nexus_client()
+        # Use stats() for accurate total counts instead of limited list_entries()
+        stats = client.stats()
+        stats_data = stats.get("data", stats) if isinstance(stats, dict) else {}
+        total_entries = stats_data.get("knowledge_entries", 0)
+        total_qa = stats_data.get("qa_pairs", 0)
+        total_rules = stats_data.get("rules", 0)
+        # Still fetch a sample for type/category breakdown
         entries = client.list_entries(limit=500)
-        # find_qa requires a non-empty query — use broad common term for count
-        qa_list = client.find_qa("cosysim", limit=500) or client.find_qa("what", limit=500)
-        rules_list = client.get_rules()
         types = dict(Counter(e.content_type for e in entries))
         cats = dict(Counter(e.category for e in entries))
         _output({
             "status": "healthy",
-            "entries": len(entries),
-            "qa_pairs": len(qa_list),
-            "rules": len(rules_list),
+            "entries": total_entries,
+            "qa_pairs": total_qa,
+            "rules": total_rules,
             "by_type": types,
             "by_category": cats,
         })

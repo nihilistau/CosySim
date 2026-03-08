@@ -742,17 +742,22 @@ class TestBridgeHealth:
 
     @patch("engine.nexus.bridge.get_nexus_client")
     def test_health_aggregates_stats(self, mock_get_client, capsys):
-        """cmd_health fetches entries, qa, rules and aggregates counts."""
+        """cmd_health uses stats() for accurate counts and list_entries for breakdown."""
         from engine.nexus.bridge import cmd_health
 
         mock_client = MagicMock()
+        mock_client.stats.return_value = {
+            "data": {
+                "knowledge_entries": 17970,
+                "qa_pairs": 2748,
+                "rules": 361,
+            }
+        }
         mock_client.list_entries.return_value = [
             MagicMock(content_type="note", category="dev"),
             MagicMock(content_type="note", category="arch"),
             MagicMock(content_type="code", category="dev"),
         ]
-        mock_client.find_qa.return_value = [{"question": "Q1"}, {"question": "Q2"}]
-        mock_client.get_rules.return_value = [{"name": "rule1"}]
         mock_get_client.return_value = mock_client
 
         args = Namespace()
@@ -760,9 +765,9 @@ class TestBridgeHealth:
 
         output = json.loads(capsys.readouterr().out)
         assert output["status"] == "healthy"
-        assert output["entries"] == 3
-        assert output["qa_pairs"] == 2
-        assert output["rules"] == 1
+        assert output["entries"] == 17970
+        assert output["qa_pairs"] == 2748
+        assert output["rules"] == 361
         assert output["by_type"]["note"] == 2
         assert output["by_type"]["code"] == 1
 
@@ -772,7 +777,7 @@ class TestBridgeHealth:
         from engine.nexus.bridge import cmd_health
 
         mock_client = MagicMock()
-        mock_client.list_entries.side_effect = Exception("Connection refused")
+        mock_client.stats.side_effect = Exception("Connection refused")
         mock_get_client.return_value = mock_client
 
         args = Namespace()
