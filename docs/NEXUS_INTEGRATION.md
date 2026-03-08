@@ -1,650 +1,1068 @@
-# Nexus Integration Guide — v0.84b
+# Nexus Integration Guide
 
-Nexus is CosySim's central knowledge management system. It provides persistent
-storage, full-text search, namespace-separated knowledge, rules enforcement,
-session tracking, prompt versioning, memory systems, training data capture,
-knowledge distillation, and a control panel — accessible from agents, scenes,
-skills, Copilot CLI, and external tools.
+> v0.91b — 85 engine modules, 5-tier query router, 55 scheduler tasks, 93 skills
+
+Nexus is CosySim's central knowledge management system — a persistent SQLite + FTS5
+backbone that stores entries, rules, Q&A pairs, session history, prompts, benchmarks,
+and training data. Every agent, scene, skill, and Copilot session consumes and
+contributes to Nexus. The system is designed to compound: every interaction makes
+future interactions cheaper and more accurate.
+
+---
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│  Copilot CLI (GitHub Copilot Agent)                     │
-│  ├── Session hooks     → auto-log sessions              │
-│  ├── CLI bridge        → search/ask/store from terminal  │
-│  ├── Distillers        → extract reusable knowledge      │
-│  └── Memory loop       → persist context across sessions │
-├─────────────────────────────────────────────────────────┤
-│  CosySim Engine (Agents, Scenes, Skills)                │
-│  ├── engine/nexus/client.py        NexusClient HTTP     │
-│  ├── engine/nexus/models.py        Pydantic v2 models   │
-│  ├── engine/nexus/nexus_memory.py  NexusMemory system   │
-│  ├── engine/nexus/nexus_namespaces.py  Namespace rules  │
-│  ├── engine/nexus/nexus_distiller.py   4 distillers     │
-│  ├── engine/nexus/training_pipeline.py  Training data   │
-│  ├── engine/nexus/workflows.py     Content/Research     │
-│  ├── engine/nexus/control_panel.py Streamlit dashboard  │
-│  ├── engine/skills/builtin/nexus_skills.py   16 skills  │
-│  ├── engine/skills/builtin/coding_skills.py  8 skills   │
-│  └── engine/agents/interceptors/   NexusPromptIntcptr   │
-├─────────────────────────────────────────────────────────┤
-│              HTTP REST API (port 8700)                   │
-├─────────────────────────────────────────────────────────┤
-│  Nexus Server (C:\Files\Nexus)                          │
-│  ├── nexus/db/store.py      NexusStore (SQLite + FTS5)  │
-│  ├── nexus/api/routes.py    Flask routes (~640)          │
-│  ├── nexus/nlm/             NotebookLM backends          │
-│  └── nexus/db/schema.py     v2 schema (14 tables)       │
-├─────────────────────────────────────────────────────────┤
-│  Dashboard / Control Panel                               │
-│  ├── port 8701  Nexus Dashboard (Flask)                  │
-│  └── port 8702  Control Panel (Streamlit, 8 pages)       │
-└─────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│  Copilot CLI / GitHub Copilot Agent                          │
+│  ├── CopilotBridge       session start/end, pre-plan, metrics│
+│  ├── CopilotSelfConfig   sync instructions/agents/hooks      │
+│  ├── CopilotValidation   drift detection, hook integrity      │
+│  ├── SeedCopilotRules    mirror repo assets into Nexus        │
+│  └── SessionLogger       checkpoint/compact/end export        │
+├──────────────────────────────────────────────────────────────┤
+│  CosySim Engine (Agents, Scenes, Skills)                      │
+│  ├── NexusClient          HTTP client for Nexus API (40+ methods)
+│  ├── NexusQueryRouter     5-tier smart routing (cache→FTS→NLM→LLM)
+│  ├── TrainingFlywheel     auto-collect training data from runtime│
+│  ├── TaskScheduler        agent task ticketing with templates   │
+│  ├── SchedulerDaemon      55 recurring tasks (cron-like)       │
+│  ├── OperatorInbox        off-turn directive intake            │
+│  ├── KnowledgeCapture     dual-write backfill helper           │
+│  ├── ActionManifest       structured pre-plan artifacts        │
+│  ├── BootstrapNotebooks   NLM notebook fleet management        │
+│  ├── NLMChain             multi-step chain-prompting           │
+│  ├── NotebookLMFlywheel   control notebook → tasks → training  │
+│  ├── QAExpander           reverse-generate Q&A from entries    │
+│  ├── QAGenerator          rule-based + LLM Q&A generation      │
+│  ├── NewsPipeline         fetch → dedup → store → distill      │
+│  ├── GoogleAccountManager multi-account cookie pool            │
+│  └── 85 total modules in engine/nexus/                        │
+├──────────────────────────────────────────────────────────────┤
+│  Skills Layer (93 Nexus-aware skills)                         │
+│  ├── nexus_skills.py      17 skills (search, ask, store, NLM) │
+│  ├── coding_skills.py      9 skills (snippets, decisions, bugs)│
+│  └── autonomy_skills.py   67 skills (scheduler, training, gov)│
+├──────────────────────────────────────────────────────────────┤
+│              Nexus HTTP REST API (port 8700)                  │
+├──────────────────────────────────────────────────────────────┤
+│  Nexus Server (C:\Files\Nexus)                                │
+│  ├── SQLite + FTS5         Full-text search engine             │
+│  ├── Flask REST API        CRUD + search + rules + sessions    │
+│  └── 3-layer DB            entries, rules, Q&A cache           │
+└──────────────────────────────────────────────────────────────┘
 ```
 
-## Namespaces
+### Database Layers
 
-All knowledge entries are namespace-tagged to enforce separation between
-systems. Seven namespaces exist, each with allowed content types, categories,
-and access control rules.
+| Layer | Table | Purpose |
+|-------|-------|---------|
+| Knowledge | `entries` | Notes, code, docs, prompts, transcripts, memories, plans |
+| Rules | `rules` | Governance rules with scope, conditions, actions |
+| Q&A Cache | `qa_pairs` | Direct question→answer lookup (fastest tier) |
 
-| Namespace | Purpose | Allowed Types | Example Tags |
-|-----------|---------|---------------|--------------|
-| `system` | Core framework docs, architecture, API | note, code, prompt, document | `system`, `architecture` |
-| `scene` | Per-scene knowledge, configs, templates | note, prompt, code | `scene:bedroom`, `scene:realm` |
-| `agent` | Character profiles, personality, behavior | note, prompt, memory | `agent`, `agent:lola` |
-| `copilot` | Session logs, decisions, conventions | history, note, document | `copilot`, `session` |
-| `training` | Fine-tuning data, datasets, experiments | code, note, document | `training`, `finetune` |
-| `research` | Research sessions, NLM outputs, findings | document, note | `research`, `nlm` |
-| `content` | Greetings, reactions, scene descriptions | note, code | `content`, `greetings` |
+### Content Types
 
-### Namespace Enforcement
+| Type | Use For |
+|------|---------|
+| `note` | General knowledge, observations, decisions |
+| `code` | Code snippets, patterns, templates |
+| `prompt` | System/agent prompts (versioned) |
+| `document` | Design docs, specs, guides |
+| `transcript` | YouTube/video transcripts |
+| `research` | Research session artifacts |
+| `memory` | Agent memories/observations |
+| `history` | Session histories, changelogs |
+| `plan` | Implementation plans, action manifests |
 
-`engine/nexus/nexus_namespaces.py` provides:
-- `detect_namespace(category, tags)` — auto-detect namespace from entry metadata
-- `validate_entry(entry)` — check entry matches namespace rules
-- `enforce_namespace(entry)` — auto-tag and validate before storing
-- `can_access(agent_id, namespace)` — check access permissions
+---
 
-22 enforcement rules are installed in Nexus governing cross-namespace access.
+## Nexus-First Workflow
 
-## NexusClient
+Every agent must follow this pattern:
 
-Located at `engine/nexus/client.py`. Singleton via `get_nexus_client()`.
+### Before Work
+1. **Query Nexus first** — `nexus_smart_query("question")` or `nexus_ask("question")`
+2. **Check rules** — `nexus_get_rules(scope="scene:X")`
+3. **Load prompts** — `nexus_get_prompts(category="system")`
+
+### During Work
+4. **Store decisions** — `nexus_add(title, content, content_type="note", category="architecture")`
+5. **Log sessions** — `nexus_log_session(project="CosySim", summary="...")`
+6. **Store snippets** — `coding_store_snippet(title, code, language, tags)`
+
+### After Work
+7. **Store Q&A** — `nexus_add_qa(question, answer, category)`
+8. **Backfill misses** — if Nexus didn't have the answer and you found it elsewhere, write it back
+9. **Distill research** — `nexus_finish_research(research_id)`
+
+---
+
+## NexusClient API
+
+`engine/nexus/client.py` — HTTP client for the Nexus REST API.
 
 ```python
 from engine.nexus.client import get_nexus_client
 client = get_nexus_client()
+```
 
-# Knowledge CRUD
-results = client.search("combat mechanics", limit=10)
-entry_id = client.add_entry("Title", "Content", content_type="note")
-client.update_entry(entry_id, content="Updated")
+### Core Operations
+
+```python
+# Search
+results = client.search("interceptor pipeline", limit=10)
+
+# Add entry
+entry_id = client.add_entry(
+    title="Decision: Use FTS5",
+    content="Chose FTS5 over vector search for...",
+    content_type="note",
+    category="architecture",
+    tags=["database", "search"]
+)
+
+# Get / Update / Delete
+entry = client.get_entry(entry_id)
+client.update_entry(entry_id, content="Updated content")
 client.delete_entry(entry_id)
 
-# Q&A Pipeline (cache → FTS5 → NLM)
-answer = client.ask("How does the interceptor pipeline work?")
-qa_id = client.add_qa("What is Nexus?", "Central knowledge management system.")
-results = client.find_qa("rules engine", limit=5)
-
-# Rules Engine
-rules = client.get_rules(scope="scene:tavern", rule_type="validation")
-rule_id = client.add_rule("global", "quality_gate", "min_length",
-                          condition={"min_words": 10}, action={"reject": True})
-
-# Prompt Versioning
-pid = client.store_prompt("tavern_host", "You are a gruff bartender...",
-                          category="scene", version="2")
-prompts = client.get_prompts(category="scene", name="tavern")
-
-# Sessions
-sid = client.log_session(project="CosySim", repo="CosySim", branch="master")
-client.update_session(sid, summary="Fixed bugs", commits=["abc123"])
-
-# Research (multi-turn with NLM)
-session = client.research("combat mechanics deep dive")
-reply = client.converse(session["id"], "What about critical hits?")
-summary = client.finish_research(session["id"])
-
-# YouTube Import
-entry_id = client.import_youtube("https://youtube.com/watch?v=...", tags=["tutorial"])
-
-# Batch Operations
-ids = client.batch_add([
-    {"title": "A", "content": "...", "content_type": "note"},
-    {"title": "B", "content": "...", "content_type": "note"},
-])
+# List by type
+notes = client.list_by_type("note", category="architecture", limit=50)
 ```
 
-### Retry & Resilience
-
-The client retries failed requests up to `max_retries` times with exponential
-backoff (0.5s × attempt). If Nexus is unavailable, methods return graceful
-defaults (`None`, `[]`, `False`).
-
-## Pydantic Model Layer (v0.84b)
-
-All Nexus API responses are now typed Pydantic v2 models defined in
-`engine/nexus/models.py`. Dict-style access is preserved via a `_DictCompat`
-mixin so existing code continues to work without changes.
-
-### Available Models
+### Q&A Operations
 
 ```python
-from engine.nexus.models import NexusEntry, NexusRule, AgentMemory, SessionLog
+# Smart ask (4-tier routing)
+result = client.ask("How does the interceptor pipeline work?", depth="auto")
+# → {answer, source, confidence, sources, qa_id}
 
-# NexusEntry  — id, title, content, content_type, tags, category,
-#               quality_score, created_at, updated_at
-# NexusRule   — rule_id, scope, condition, action, priority, enabled
-# AgentMemory — agent_id, content, importance (0.0–1.0), tags, timestamp
-# SessionLog  — session_id, project, summary, turns, created_at
+# Direct Q&A
+pairs = client.find_qa("interceptor pipeline", limit=5)
+client.add_qa("How does X work?", "X works by...", category="dev")
 ```
 
-### _DictCompat Backward Compatibility
-
-All models include the `_DictCompat` mixin — existing dict-style access still
-works alongside Pydantic attribute access:
+### Research Sessions
 
 ```python
-entry = client.search("query")[0]
-entry.title          # Pydantic attribute (preferred)
-entry["title"]       # __getitem__ via _DictCompat
-entry.get("title")   # .get() via _DictCompat
+# Multi-turn research via NotebookLM
+session = client.research("MCP state management best practices")
+followup = client.converse(session["research_id"], "What about persistence?")
+done = client.finish_research(session["research_id"])
 ```
 
-### Domain Sub-Clients
-
-`get_nexus_client()` exposes three domain sub-clients on the top-level client
-object. Each sub-client groups related API calls and returns typed models.
+### Session Management
 
 ```python
-from engine.nexus.client import get_nexus_client
-client = get_nexus_client()
-
-# Rules sub-client
-rules = client.rules.get_rules(scope="coding")   # List[NexusRule]
-client.rules.add_rule(...)
-
-# Sessions sub-client
-client.sessions.log_session("CosySim", summary="Fixed auth bug")
-sessions = client.sessions.list_sessions()        # List[SessionLog]
-
-# Memory sub-client
-client.memory.submit("agent_id", "content", importance=0.8)
-answer = client.memory.ask("What did Lola say about the heist?")
-```
-
-The flat methods on the top-level client (`client.get_rules()`,
-`client.log_session()`, etc.) remain available as pass-through aliases.
-
-### NexusEntryCreate Validation
-
-Use `NexusEntryCreate` for validated entry creation. Pydantic raises
-`ValidationError` if required fields are missing or types are wrong:
-
-```python
-from engine.nexus.models import NexusEntryCreate
-
-entry = NexusEntryCreate(
-    title="Interceptor pipeline docs",
-    content="...",
-    content_type="document",   # required
-    tags=["architecture"],     # optional
-    category="system",         # optional
+session_id = client.log_session(
+    project="CosySim", branch="main",
+    summary="Implemented query router", status="completed"
 )
-client.add_entry_validated(entry)
+client.update_session(session_id, summary="Added NLM fallback tier")
+```
+
+### Rules Engine
+
+```python
+rules = client.get_rules(scope="scene:bedroom", rule_type="governance")
+client.add_rule(
+    scope="global", rule_type="enforcement",
+    name="nexus-first", condition="before_task",
+    action="query_nexus"
+)
+```
+
+### NotebookLM Integration
+
+```python
+answer = client.nlm_ask("What are the core components?", notebook_id="abc")
+unified = client.nlm_unified_ask("Architecture overview")
+status = client.nlm_status()
+notebooks = client.nlm_list_notebooks()
+```
+
+### Health & Benchmarks
+
+```python
+health = client.health()            # {status, entries, qa_pairs, rules}
+stats = client.stats()              # Detailed statistics
+available = client.is_available()   # Quick connectivity check
+
+client.store_benchmark("qwen3-0.6b", "routing", {"accuracy": 0.92})
+leaderboard = client.get_leaderboard("routing", limit=10)
+```
+
+### Sub-Clients
+
+```python
+client.rules.get_rules(scope="global")    # NexusRulesClient
+client.sessions.list(project="CosySim")   # NexusSessionClient
+client.memory.recall(agent_id="copilot")  # NexusMemoryClient
 ```
 
 ---
 
-## MCP Skills
+## NexusQueryRouter — 5-Tier Smart Routing
 
-### Nexus Pack (16 skills)
+`engine/nexus/query_router.py` — the preferred entry point for all information retrieval.
 
-| Skill | Description |
-|-------|-------------|
-| `nexus_search` | Full-text search across all entries |
-| `nexus_add` | Store a knowledge entry |
-| `nexus_ask` | Smart Q&A (cache → FTS5 → NLM pipeline) |
-| `nexus_nlm_ask` | Query NotebookLM backends directly |
-| `nexus_status` | Database stats + backend health |
-| `nexus_log_session` | Create/update session records |
-| `nexus_store_prompt` | Store prompt with version tag |
-| `nexus_search_prompts` | Find prompts by name/category |
-| `nexus_get_rules` | Get active rules for a scope |
-| `nexus_submit_idea` | Submit improvement ideas |
-| `nexus_changelog` | Query change history |
-| `nexus_research` | Start a multi-turn research session |
-| `nexus_converse` | Continue a research conversation |
-| `nexus_finish_research` | Close research session, return summary |
-| `nexus_youtube` | Import YouTube transcript into knowledge base |
+### Pipeline
 
-### NLM Forge Pack (10 skills)
-
-| Skill | Description |
-|-------|-------------|
-| `nlm_ask` | Query NLM backends (Gemini via proxy or local NLM service) |
-| `nlm_batch_ask` | Batch multiple questions to NLM in one call |
-| `nlm_distill` | Distill long content into concise knowledge entries |
-| `nlm_decompose` | Break complex problems into sub-tasks |
-| `nlm_analyze` | Analyze code or text with NLM reasoning |
-| `nlm_solve` | Multi-step problem solving with NLM |
-| `nlm_build_topic` | Build comprehensive topic summaries from knowledge base |
-| `nlm_status` | Check NLM backend health and router stats |
-| `nlm_cache_stats` | View Q&A cache hit rates and tier distribution |
-| `nlm_guided_distill` | Interactive guided distillation with suggestions |
-
-### Skill Totals
-
-| Pack | Count |
-|------|-------|
-| Nexus | 16 |
-| Coding | 8 |
-| NLM Forge | 10 |
-| **Total Nexus-layer skills** | **34** |
-
-### Coding Pack (8 skills)
-
-| Skill | Description |
-|-------|-------------|
-| `coding_store_snippet` | Store reusable code snippets |
-| `coding_store_decision` | Record architecture decisions |
-| `coding_research` | Research APIs and libraries |
-| `coding_store_bug` | Record bug analysis and fix |
-| `coding_log_session` | Track development sessions |
-
-### MCP Server Tools (in cosysim_server.py)
-
-| Tool | Description |
-|------|-------------|
-| `nexus_remember` | Store a memory for a character or Copilot |
-| `nexus_recall` | Retrieve relevant memories by query |
-| `nexus_memory_context` | Get formatted context window for prompt injection |
-| `capture_training_data` | Capture an interaction for fine-tuning datasets |
-| `generate_content` | Generate greetings/reactions for characters |
-| `seed_nexus` | Run the knowledge seeder (docs/rules/prompts/qa/all) |
-| `nexus_maintain` | Run maintenance (health/dedup/cleanup/reindex) |
-| `nexus_distill` | Run distillers (stats/distill/compact/primer/dedup/skills/prompts/lineage/all) |
-| `nexus_export_session` | Export current Copilot session to Nexus |
-
-## Memory System
-
-`engine/nexus/nexus_memory.py` provides a unified memory layer for both
-Copilot sessions and CosySim characters. Memories are stored as Nexus entries
-with namespace separation and importance scoring.
-
-```python
-from engine.nexus.nexus_memory import get_copilot_memory, get_character_memory
-
-# Copilot memory
-mem = get_copilot_memory()
-mem.remember("Project uses FTS5 for search", importance=0.8)
-relevant = mem.recall("search implementation", top_k=5)
-context = mem.get_context_window(max_chars=2000)
-
-# Character memory
-lola_mem = get_character_memory("lola")
-lola_mem.remember("User prefers casual conversation", importance=0.7)
+```
+Question arrives
+    │
+    ▼
+1. Q&A Cache ──────── Direct lookup in Nexus Q&A pairs
+    │ miss              Instant, high confidence
+    ▼
+2. FTS Knowledge ──── Full-text search across entries
+    │ miss              Fast, medium confidence
+    ▼
+3. Nexus Smart Ask ── Server-side pipeline (cache → FTS → NLM)
+    │ miss              Medium speed, high confidence
+    ▼
+4. Direct NLM Ask ─── NotebookLM unified ask
+    │ miss              Slower, high confidence (grounded)
+    ▼
+5. LLM Fallback ───── Local LMStudio inference
+                        Variable confidence, uses tokens
 ```
 
-### Memory Types
+### Auto-Store Behavior
 
-| Type | Default Importance | Use For |
-|------|--------------------|---------|
-| `observation` | 0.5 | What happened |
-| `preference` | 0.7 | What user/character likes |
-| `fact` | 0.8 | Established facts |
-| `emotion` | 0.6 | Emotional states observed |
-| `decision` | 0.9 | Decisions made |
-| `summary` | 0.7 | Compacted summaries |
-| `interaction` | 0.3 | Routine interactions |
+Every answer from tiers 4 and 5 is automatically stored back into Nexus as a Q&A
+pair. This creates a self-improving loop: the first time a question is asked it
+costs tokens; every subsequent time it's served from cache for free.
 
-### Memory Operations
-
-- `remember(content, importance, memory_type)` — Store with auto-namespace
-- `recall(query, top_k)` — Search by relevance
-- `get_context_window(max_chars)` — Format for prompt injection
-- `compact(max_memories)` — Merge old memories into summaries
-- `forget()` — Clear all memories for this agent
-
-## Knowledge Distillers
-
-`engine/nexus/nexus_distiller.py` provides 4 distillers that process raw
-session data into reusable knowledge, keeping the knowledge base lean.
-
-### NexusDistiller (Session Distiller)
-
-Extracts decisions, bug fixes, and file conventions from conversation logs.
+### Usage
 
 ```python
-from engine.nexus.nexus_distiller import NexusDistiller
-d = NexusDistiller()
-d.distill()             # Extract from conversation logs
-d.compact_sessions()    # Merge daily session entries
-d.get_stats()           # Knowledge base statistics
-d.generate_context_primer()  # Compact context for new sessions
+from engine.nexus.query_router import get_query_router
+
+router = get_query_router()
+
+# Query with smart routing
+result = router.query("How does state sync work?", min_confidence=0.3)
+# → QueryResult(answer="...", source="cache", confidence=0.95, cached=True,
+#               tokens_saved=450, query_time_ms=12.3)
+
+# Check router effectiveness
+stats = router.stats
+# → RouterStats(total_queries=142, cache_hits=98, search_hits=22,
+#               nlm_hits=15, llm_fallbacks=7, total_tokens_saved=45000)
 ```
 
-### QADeduplicator
+### QueryResult Fields
 
-Finds and merges near-duplicate Q&A pairs using word-level Jaccard similarity.
+| Field | Type | Description |
+|-------|------|-------------|
+| `answer` | str | The answer text |
+| `source` | str | Which tier answered: `cache`, `search`, `nexus-*`, `nlm*`, `llm` |
+| `confidence` | float | 0.0–1.0 confidence score |
+| `cached` | bool | Whether this was a cache hit |
+| `tokens_saved` | int | Estimated tokens saved vs direct LLM |
+| `query_time_ms` | float | Total query time in milliseconds |
+
+---
+
+## Training Flywheel
+
+`engine/nexus/training_flywheel.py` — automatic training data collection from every
+system interaction, exportable in JSONL, ShareGPT, and DPO formats.
+
+### Collection Sources
 
 ```python
-from engine.nexus.nexus_distiller import QADeduplicator
-dedup = QADeduplicator(similarity_threshold=0.75)
-dedup.deduplicate(dry_run=True)   # Preview duplicates
-dedup.deduplicate(dry_run=False)  # Remove duplicates (keeps longer answer)
+from engine.nexus.training_flywheel import TrainingFlywheel
+flywheel = TrainingFlywheel()
+
+# From task completions
+flywheel.collect_from_task(task_id, description, result, model="qwen3-0.6b")
+
+# From Q&A pairs (auto-wired from QA Expander and Generator)
+flywheel.collect_from_qa(question, answer, source="cache", quality=0.7)
+
+# From NotebookLM research
+flywheel.collect_from_nlm(question, answer, notebook_id="abc", quality=0.8)
+
+# From router decisions (DPO training)
+flywheel.collect_from_routing(question, chosen_source="cache", rejected_source="llm")
+
+# Direct preference pairs
+flywheel.collect_preference(question, preferred_answer, rejected_answer)
 ```
 
-### SkillUsageDistiller
-
-Analyses session logs for MCP skill/tool usage patterns: frequency, errors,
-underutilisation.
+### Export Formats
 
 ```python
-from engine.nexus.nexus_distiller import SkillUsageDistiller
-su = SkillUsageDistiller()
-su.analyse()             # Get usage statistics
-su.distill_and_store()   # Analyse and store findings in Nexus
+# Instruction-tuning format: {instruction, output}
+jsonl = flywheel.export_jsonl(min_quality=0.5)
+
+# Conversational format: {conversations: [{from, value}]}
+sharegpt = flywheel.export_sharegpt(min_quality=0.5)
+
+# Preference format: {prompt, chosen, rejected}
+dpo = flywheel.export_dpo()
+
+# Sync from Nexus Q&A
+flywheel.sync_from_nexus()
 ```
 
-### PromptEvolutionDistiller
+---
 
-Tracks prompt versions over time, analyses structural patterns (role defs,
-constraints, guardrails, output formats), and stores best-practice findings.
+## Scheduler Daemon — 55 Recurring Tasks
+
+`engine/nexus/scheduler_daemon.py` — lightweight cron-like daemon with persistent
+state, schedule parsing, and thread-pool execution.
+
+### Task Categories
+
+| Category | Count | Key Tasks |
+|----------|-------|-----------|
+| Nexus Maintenance | 3 | `nexus-health`, `nexus-dedup`, `nexus-quality-eval` |
+| Knowledge | 5 | `qa-expansion`, `qa-cache-prune`, `coverage-eval` |
+| Training | 6 | `training-sync`, `model-zoo-train`, `coder-dataset-refresh` |
+| Notebooks | 4 | `notebook-bootstrap`, `master-notebook-refresh`, `nlm-content-seed` |
+| Control Plane | 3 | `copilot-rules-refresh`, `copilot-self-sync`, `control-notebook-flywheel` |
+| Router | 3 | `router-data-export`, `router-v3-retrain`, `router-finetune-cycle` |
+| Experiments | 2 | `experiment-scan`, `improvement-review` |
+| News | 3 | `news-fetch`, `news-distill-nlm`, `ha-news-push` |
+| Sessions | 2 | `session-distillation`, `qa-generation` |
+| System | 4 | `system-reflection`, `doc-sync`, `metrics-collect` |
+| NotebookLM | 5 | `nlm-cookie-refresh`, `argus-weekly-scan`, `argus-diff-report` |
+| World Sim | 3 | `npc-world-tick`, `world-sim-tick`, `director-tick` |
+| Scene/Content | 4 | `scene-lore-seed`, `daily-challenge-seed`, `content-refresh` |
+| Auth/Health | 4 | `cookie-health-check`, `cookie-auto-refresh`, `test-suite-benchmark` |
+| Governance | 1 | `governance-audit` |
+| Operator | 1 | `operator-inbox-sync` |
+| Testing | 1 | `test-monitor` |
+
+### Usage
 
 ```python
-from engine.nexus.nexus_distiller import PromptEvolutionDistiller
-pe = PromptEvolutionDistiller()
-pe.get_lineage()         # Prompt version history
-pe.distill_patterns()    # Analyse and store prompt patterns
+from engine.nexus.scheduler_daemon import TaskSchedulerDaemon
+
+daemon = TaskSchedulerDaemon()
+daemon.start(interval_seconds=60)   # Check due tasks every 60s
+
+# Manual trigger
+result = daemon.run_task("nexus-health")
+
+# Status
+status = daemon.status()
+tasks = daemon.list_tasks()
+
+daemon.stop()
 ```
 
-### Running All Distillers
+### CLI
 
-```bash
-python -m engine.nexus.nexus_distiller all     # Run all distillers
-python -m engine.nexus.nexus_distiller stats    # Knowledge base stats
-python -m engine.nexus.nexus_distiller dedup    # Deduplicate Q&A
-python -m engine.nexus.nexus_distiller skills   # Skill usage analysis
-python -m engine.nexus.nexus_distiller prompts  # Prompt pattern analysis
-python -m engine.nexus.nexus_distiller lineage  # Prompt version history
+```powershell
+# Start daemon
+python -m engine.nexus.scheduler_daemon start
+
+# Run specific task
+python -m engine.nexus.scheduler_daemon run nexus-health
+
+# List all tasks
+python -m engine.nexus.scheduler_daemon list
 ```
 
-Or via MCP tool: `nexus_distill(action="all")`
+---
 
-## Training Pipeline
+## Task Scheduler — Agent Ticketing
 
-`engine/nexus/training_pipeline.py` captures agent interactions for
-fine-tuning datasets. Interactions are stored in Nexus and exported as JSONL.
+`engine/nexus/task_scheduler.py` — ticketing system for local and Copilot agents
+with priorities, dependencies, templates, and auto-generation.
+
+### AgentTask Model
 
 ```python
-from engine.nexus.training_pipeline import get_training_pipeline
-tp = get_training_pipeline()
+@dataclass
+class AgentTask:
+    id: str                        # UUID
+    title: str                     # Short name
+    description: str               # Full description
+    priority: int                  # CRITICAL=0, HIGH=1, MEDIUM=2, LOW=3, BACKGROUND=4
+    complexity: str                # LOW, MEDIUM, HIGH
+    status: str                    # PENDING, CLAIMED, IN_PROGRESS, COMPLETED, FAILED, BLOCKED
+    claimed_by: str                # Agent ID
+    parent_id: str                 # Parent task (subtask support)
+    subtask_ids: List[str]         # Child tasks
+    target_files: List[str]        # Files to modify
+    allowed_operations: List[str]  # read, edit, create, test, execute
+```
 
-# Capture an interaction
-tp.capture_interaction(
-    user_message="Hello",
-    agent_response="Hi there!",
-    context={"scene": "bedroom"},
-    quality_score=0.9,
+### Task Workflow
+
+```python
+from engine.nexus.task_scheduler import TaskScheduler
+
+scheduler = TaskScheduler()
+
+# Create task
+task = scheduler.create_task(
+    title="Fix interceptor ordering",
+    description="Reorder interceptors to run safety check first",
+    priority=1,  # HIGH
+    target_files=["engine/agents/interceptors/pipeline.py"]
 )
 
-# Export dataset
-tp.export_dataset(dataset_type="chat", output_dir="training/data")
+# Agent claims next available
+task = scheduler.claim_task(agent_id="local-agent-1", priority_filter=2)
 
-# Generate synthetic training data
-synthetic = tp.generate_synthetic(dataset_type="chat", count=50)
+# Complete or fail
+scheduler.complete_task(task.id, result="Fixed ordering", quality_score=0.9)
+scheduler.fail_task(task.id, reason="Dependency missing", retry=True)
 ```
 
-## Content & Research Workflows
-
-`engine/nexus/workflows.py` provides 3 workflow classes.
-
-### ContentWorkflow
-
-Generates pre-baked content (greetings, reactions, scene descriptions) to reduce
-runtime LLM calls.
+### Auto-Generation
 
 ```python
-from engine.nexus.workflows import ContentWorkflow
-cw = ContentWorkflow()
-cw.generate_greetings("lola", personality_tags=["flirty", "warm"])
-cw.generate_reactions("lola")
-cw.generate_scene_descriptions("bedroom")
-content = cw.lookup_content("lola", "greetings", mood="happy")
+# From test failures
+tasks = scheduler.generate_from_test_failures(pytest_output)
+
+# From benchmark regressions
+tasks = scheduler.generate_from_benchmark(benchmark_output, regression_pct=10.0)
+
+# From stale knowledge
+tasks = scheduler.generate_from_stale_knowledge(days=30)
+
+# From templates
+task = scheduler.from_template("feature", title="Add vision skills")
 ```
 
-### ResearchWorkflow
+---
 
-Wraps the Nexus Q&A → FTS5 → NLM pipeline for structured research.
+## Operator Inbox
+
+`engine/nexus/operator_inbox.py` — durable communication path for off-turn user
+directives, notes, questions, and feature requests.
+
+### Workflow States
+
+```
+pending → queued → integrated → done
+                 → blocked (with reason)
+```
+
+### Usage
 
 ```python
-from engine.nexus.workflows import ResearchWorkflow
-rw = ResearchWorkflow()
-result = rw.research("How should we handle agent memory persistence?", depth="deep")
-rw.store_findings(result)
+from engine.nexus.operator_inbox import OperatorInbox
+
+inbox = OperatorInbox()
+
+# Submit directive
+item_id = inbox.submit_item(
+    item_type="feature",
+    title="Add vision model support",
+    description="Wire Qwen2-VL into ARGUS",
+    priority="high",
+    tags=["vision", "argus"]
+)
+
+# Process pending items
+inbox.process_items(query="vision", processor_fn=my_handler)
+
+# Get items for Copilot onboarding
+directives = inbox.pending_for_onboarding(limit=5)
 ```
 
-### NotebookWorkflow
+### Integration Points
+- **Scheduler**: `operator-inbox-sync` task processes pending items
+- **Intel Hub**: `/api/operator/*` routes for web UI
+- **Copilot Bridge**: `session_start()` loads pending operator directives
 
-Seeds NotebookLM notebooks with project knowledge and generates Q&A pairs.
-
-```python
-from engine.nexus.workflows import NotebookWorkflow
-nw = NotebookWorkflow()
-nw.seed_notebook_knowledge(scope="architecture")
-nw.check_nlm_status()
-```
-
-## NLM Intelligence Layer
-
-Added in Sprint 14 (v0.55b), the NLM Intelligence Layer provides a 4-tier
-knowledge routing pipeline and NLM-powered knowledge operations.
-
-### NLM Engine (`engine/nexus/nlm_engine.py`)
-
-The NLM Engine provides dual-backend access to NotebookLM intelligence:
-
-```python
-from engine.nexus.nlm_engine import get_nlm_engine
-
-nlm = get_nlm_engine()
-answer = nlm.ask("How does the interceptor pipeline work?")
-batch = nlm.batch_ask(["Q1?", "Q2?", "Q3?"])
-```
-
-- **Backend 1:** localhost:8800 proxy → Google Gemini (free compute)
-- **Backend 2:** localhost:3000 local NLM service
-- Automatic failover between backends
-- All answers cached in Nexus Q&A for compound improvement
-
-### NLM Router (`engine/nexus/nlm_router.py`)
-
-The 4-tier router provides intelligent query routing:
-
-```
-Query → Tier 1 (Q&A Cache) → Tier 2 (FTS5 Search) → Tier 3 (NLM Engine) → Tier 4 (Local LLM)
-```
-
-| Tier | Source | Latency | Cost |
-|------|--------|---------|------|
-| T1 Cache | Nexus Q&A pairs | <10ms | Free |
-| T2 FTS5 | Nexus full-text search | <50ms | Free |
-| T3 NLM | NotebookLM/Gemini | ~2s | Free (Gemini) |
-| T4 LLM | Local LMStudio model | ~5s | GPU compute |
-
-Answers from Tier 3/4 are automatically promoted to Tier 1 cache, so repeated
-questions are instant. The router tracks hit rates per tier for monitoring.
-
-### Knowledge Forge (`engine/nexus/knowledge_forge.py`)
-
-The Knowledge Forge provides NLM-powered knowledge operations:
-
-```python
-from engine.nexus.knowledge_forge import get_knowledge_forge
-
-forge = get_knowledge_forge()
-forge.distill("Long technical content...")    # → concise summary stored in Nexus
-forge.decompose("Complex problem")            # → sub-task breakdown
-forge.analyze("Code snippet")                 # → analysis with recommendations
-forge.solve("Multi-step problem")             # → step-by-step solution
-forge.build_topic("interceptors")             # → comprehensive topic summary
-```
+---
 
 ## Copilot Bridge
 
-`engine/nexus/copilot_bridge.py` integrates Nexus into the Copilot CLI session
-lifecycle, providing automatic knowledge consultation and session tracking.
+`engine/nexus/copilot_bridge.py` — makes Copilot CLI self-improving via Nexus and
+NotebookLM integration.
 
-### Lifecycle Hooks
-
-| Hook | When | What It Does |
-|------|------|-------------|
-| `pre_plan` | Before agent plans work | Searches Nexus for relevant context, returns knowledge primer |
-| `analyze` | During code analysis | Queries NLM for architectural guidance |
-| `guide` | During implementation | Provides best-practice recommendations from knowledge base |
-| `validate` | After changes | Checks decisions against stored conventions and rules |
-| `post_session` | Session end | Extracts decisions/Q&A from session, stores in Nexus |
-
-### Savings Tracking
-
-The bridge tracks compute savings from cache hits vs. full NLM/LLM calls:
+### Session Lifecycle
 
 ```python
-from engine.nexus.copilot_bridge import get_copilot_bridge
+from engine.nexus.copilot_bridge import CopilotBridge
 
-bridge = get_copilot_bridge()
-stats = bridge.get_savings()
-# → {"cache_hits": 142, "nlm_calls_saved": 89, "estimated_tokens_saved": 45000}
+bridge = CopilotBridge()
+
+# Session start — warm-load all services, build context
+context = bridge.session_start(task_description="Fix interceptor ordering")
+# Returns: {nexus, nlm, router, forge, context, resume_handoff,
+#           operator_directives, control_context_packet, startup_services}
+
+# Pre-plan — ask NLM, build action manifest
+plan = bridge.pre_plan(
+    task_description="Fix interceptor ordering",
+    context_files=["engine/agents/interceptors/pipeline.py"]
+)
+# Returns: {preplan_qa, action_manifest, recommendations}
+
+# Session end — distill learnings, store metrics
+bridge.session_end(summary="Fixed interceptor ordering, added safety-first rule")
 ```
 
-## Knowledge Seeder
+### What Gets Loaded at Session Start
 
-`engine/nexus/nexus_seeder.py` performs idempotent knowledge seeding from
-project documentation. Run manually or via MCP tool.
+| Resource | Source | Purpose |
+|----------|--------|---------|
+| Resume handoff | Nexus entry | Previous session state and decisions |
+| Context packets | Nexus entries | Architecture docs, control-plane rules |
+| Control context | Nexus flywheel | Latest control notebook summary |
+| Operator directives | Operator inbox | Pending user notes/questions |
+| Startup services | Runtime | Nexus, router, forge, scheduler, inbox health |
 
-```bash
-python -m engine.nexus.nexus_seeder all       # Seed everything
-python -m engine.nexus.nexus_seeder docs       # Documentation only
-python -m engine.nexus.nexus_seeder rules      # Governance rules only
-python -m engine.nexus.nexus_seeder qa         # Q&A pairs only
-python -m engine.nexus.nexus_seeder prompts    # Agent prompts only
+### Metrics Tracked
+
+```python
+bridge.metrics  # SessionMetrics
+# → searches, nlm_asks, cache_hits, files_edited, tools_used,
+#   errors, decisions_stored, qa_stored, tokens_saved
 ```
 
-Or via MCP tool: `seed_nexus(source="all")`
+---
 
-## Nexus CLI Bridge
+## Copilot Self-Configuration
 
-`engine/nexus/bridge.py` provides standalone Nexus access from the terminal
-without requiring the MCP server.
+### CopilotSelfConfig (`engine/nexus/copilot_self_config.py`)
 
-```bash
-python -m engine.nexus.bridge search "interceptor pipeline"
-python -m engine.nexus.bridge ask "How does state management work?"
-python -m engine.nexus.bridge store "Decision" "Use FTS5 for search"
-python -m engine.nexus.bridge qa "What is X?" "X is..."
+Synchronizes Copilot configuration between the repository and Nexus:
+
+```python
+from engine.nexus.copilot_self_config import CopilotSelfConfig
+
+config = CopilotSelfConfig()
+
+# Sync repo → Nexus (hash-based dedup)
+result = config.sync_all_to_nexus()
+# → {instructions: {stored, updated, skipped}, agents: {...}, hooks: {...}}
+
+# Read from Nexus
+instructions = config.get_instructions_from_nexus()
+
+# Preferences (session-learned)
+config.store_preference("preferred_model", "qwen3-0.6b")
+model = config.get_preference("preferred_model", "default-model")
+```
+
+### SeedCopilotRules (`engine/nexus/seed_copilot_rules.py`)
+
+Seeds all Copilot rules, instructions, agents, and docs into Nexus:
+
+```powershell
+python -m engine.nexus.seed_copilot_rules
+# → "8 stored / 3 updated / 37 skipped / 0 errors / 9 deduped"
+```
+
+**Sources seeded:**
+- `~/.copilot/copilot-instructions.md` (global)
+- `.github/copilot-instructions.md` (project)
+- `.github/instructions/*.instructions.md` (12 path-specific)
+- `.github/agents/*.agent.md` (19 agent definitions)
+- `CHANGELOG.md`, `docs/ARCHITECTURE.md`, `docs/AGENT_ONBOARDING.md`
+
+### CopilotValidation (`engine/nexus/copilot_validation.py`)
+
+Validates three surfaces:
+
+1. **Nexus Sync Drift** — are Copilot mirrors current in Nexus?
+2. **Hook Integrity** — do all hook manifests and referenced scripts exist?
+3. **Runtime Health** — can CopilotBridge and CopilotSelfConfig initialize?
+
+```powershell
+python -m engine.nexus.copilot_validation --json
+# → {ok: true, issue_count: 0, warning_count: 0, error_count: 0}
+```
+
+---
+
+## Knowledge Capture
+
+`engine/nexus/knowledge_capture.py` — standardized dual-write pattern for
+backfilling external discoveries.
+
+### The Pattern
+
+When Nexus doesn't have the answer and you find it elsewhere:
+
+```python
+from engine.nexus.knowledge_capture import capture_external_discovery
+
+result = capture_external_discovery(
+    question="How does SceneStateManager work?",
+    answer="SceneStateManager coordinates...",
+    source="engine/mcp/scene_state.py",
+    category="architecture"
+)
+# Writes BOTH:
+# 1. A reusable knowledge entry (discoverable via search)
+# 2. A direct Q&A pair (instant via question match)
+```
+
+### CLI
+
+```powershell
+python -m engine.nexus.bridge backfill "How does X work?" "X works by..." --source docs
+```
+
+---
+
+## Action Manifest
+
+`engine/nexus/action_manifest.py` — structured artifact from pre-plan Q&A that
+agents can consume without reloading task context.
+
+### Format
+
+```json
+{
+  "manifest_id": "preplan-fix-interceptor-ordering",
+  "task": "Fix interceptor ordering",
+  "summary": "Reorder interceptors to run safety check first",
+  "context_files": ["engine/agents/interceptors/pipeline.py"],
+  "steps": [
+    {
+      "step_id": "step-1",
+      "action_type": "edit",
+      "title": "Move SafetyInterceptor to position 0",
+      "target_file": "engine/agents/interceptors/pipeline.py",
+      "dependencies": [],
+      "validation": ["Import succeeds", "Tests pass"]
+    }
+  ],
+  "milestones": [
+    {
+      "milestone_id": "m1",
+      "title": "Safety-first ordering implemented",
+      "step_ids": ["step-1"],
+      "dependencies": []
+    }
+  ],
+  "next_actions": ["Run interceptor tests", "Verify governance chain"]
+}
+```
+
+### Action Types
+
+| Type | Description |
+|------|-------------|
+| `RESEARCH` | Investigate before implementing |
+| `EDIT` | Modify existing file |
+| `SHELL` | Run a command |
+| `TEST` | Run tests to verify |
+
+---
+
+## Session Logger
+
+`engine/nexus/nexus_session_logger.py` — exports Copilot CLI session events to Nexus.
+
+### Commands
+
+```powershell
+# Checkpoint — export current checkpoint to Nexus
+python engine/nexus/nexus_session_logger.py checkpoint
+
+# Compact — full snapshot before context compaction
+python engine/nexus/nexus_session_logger.py compact
+
+# End — finalize session, distill Q&A, store summary
+python engine/nexus/nexus_session_logger.py end
+```
+
+### What Gets Exported
+
+| Command | Captures |
+|---------|----------|
+| `checkpoint` | Checkpoint title, overview, modified files, git context |
+| `compact` | All checkpoints, decisions, plan state, git diff |
+| `end` | Full session history, distilled Q&A, key decisions, metrics |
+
+### Hook Integration
+
+The session logger is wired into Copilot hooks via `.github/hooks/`:
+- `sessionStart` → `handle_start()`
+- `sessionEnd` → `handle_end()`
+- `userPromptSubmitted` → `handle_prompt()` (auto-detects new checkpoints)
+- `preCompaction` → `handle_compaction()`
+
+---
+
+## Bridge CLI
+
+`engine/nexus/bridge.py` — standalone CLI for Nexus operations when MCP tools
+are unavailable.
+
+### Commands
+
+```powershell
+# Search knowledge
+python -m engine.nexus.bridge search "interceptor pipeline" --limit 10
+
+# Smart ask (5-tier routing)
+python -m engine.nexus.bridge ask "How does state sync work?" --depth auto
+
+# Store entry
+python -m engine.nexus.bridge store "Decision: Use FTS5" "content..." --type note --category architecture
+
+# Store Q&A
+python -m engine.nexus.bridge qa "How does X work?" "X works by..." --category dev
+
+# Backfill external discovery (entry + Q&A)
+python -m engine.nexus.bridge backfill "Question?" "Answer." --source docs
+
+# System inventory
+python -m engine.nexus.bridge inventory --store
+
+# Rules lookup
 python -m engine.nexus.bridge rules global
+
+# Health check
 python -m engine.nexus.bridge health
+
+# Seed knowledge base
 python -m engine.nexus.bridge seed all
+
+# Maintenance
 python -m engine.nexus.bridge maintain health
+python -m engine.nexus.bridge maintain dedup
+python -m engine.nexus.bridge maintain cleanup
 ```
 
-## NexusPromptInterceptor
+---
 
-`engine/agents/interceptors/` contains the auto-discovered interceptor modules
-(26 total). One of these is `NexusPromptInterceptor` (priority 4), which enriches
-agent prompts with Nexus knowledge at runtime:
+## NotebookLM Integration
 
-- Fetches governance rules for the current scope
-- Injects relevant knowledge from Nexus search
-- Loads stored character/scene prompts
-- TTL-cached (5 min) to avoid hammering the API
+### Bootstrap Notebooks (`engine/nexus/bootstrap_notebooks.py`)
 
-Registered in `config/default.yaml` under `comms.interceptors`. See
-[INTERCEPTORS.md](./INTERCEPTORS.md) for the full interceptor registry.
+Manages a fleet of purpose-built NotebookLM notebooks:
 
-## Control Panel
-
-`engine/nexus/control_panel.py` is a Streamlit dashboard on port 8702 with
-8 pages: Knowledge Browser, Q&A Manager, Rules Editor, Session Viewer,
-Memory Explorer, Training Data, Distiller Dashboard, System Health.
-
-```bash
-streamlit run engine/nexus/control_panel.py --server.port 8702
-```
-
-## Rules Engine
-
-Rules are scope-based governance policies. Each rule has:
-- **scope**: `global`, `collection:{type}`, `agent:{id}`, `scene:{id}`
-- **rule_type**: `validation`, `access`, `auto_action`, `quality_gate`
-- **condition**: JSON expression evaluated against context
-- **action**: JSON action to take when condition matches
-- **priority**: 0–100 (higher = evaluated first)
+| Notebook | Sources | Purpose |
+|----------|---------|---------|
+| `cosysim-architecture` | README, docs/, engine structure | Design and architecture questions |
+| `copilot-instructions` | .github/ rules, agents, instructions | Runtime rules for agents |
+| `copilot-session-history` | Recent session checkpoints | Session history distillation |
+| `cosysim-codebase` | Engine Python source (chunked) | Code analysis and patterns |
+| `copilot-system-control` | System state, plans, configs | Control-plane orchestration |
 
 ```python
-client.add_rule(
-    scope="scene:tavern",
-    rule_type="quality_gate",
-    name="min_response_length",
-    condition={"min_words": 15},
-    action={"reject_if_below": True, "fallback": "Please elaborate."},
-    priority=80
+from engine.nexus.bootstrap_notebooks import bootstrap_all
+
+# Bootstrap all notebooks with distillation
+result = bootstrap_all(distill=True)
+
+# Scheduler: "notebook-bootstrap" task runs weekly
+```
+
+### NLM Chain Engine (`engine/nexus/nlm_chain.py`)
+
+Multi-step chain-prompting with progressive research:
+
+```python
+from engine.nexus.nlm_chain import NLMChainEngine
+
+engine = NLMChainEngine()
+
+# Single notebook distillation
+result = engine.distill_notebook(notebook_id, questions=[
+    "What are the core components?",
+    "How does governance work?",
+    "What are the key patterns?"
+])
+
+# Multi-step chain
+result = engine.execute_chain("architecture-review", notebook_id,
+    initial_question="What are the architectural gaps?"
+)
+
+# Batch across notebooks
+result = engine.run_batch("weekly-review")
+
+# Generate action manifest from Q&A
+manifest = engine.generate_action_manifest("Fix gaps", qa_pairs)
+```
+
+### NotebookLM Flywheel (`engine/nexus/notebooklm_flywheel.py`)
+
+Control notebook → structured artifact → tasks → training data:
+
+```
+1. Multi-Ask Phase    — Ask grounded control-plane questions
+2. Report Phase       — Generate strict JSON artifact
+3. Storage Phase      — Store artifact + context packet in Nexus
+4. Task Phase         — Create TaskScheduler items for agents
+5. Training Phase     — Feed TrainingFlywheel with Q&A + task envelopes
+```
+
+```python
+from engine.nexus.notebooklm_flywheel import NotebookLMFlywheel
+
+flywheel = NotebookLMFlywheel()
+result = flywheel.run(
+    questions=["What is the system state?", "What needs attention?"],
+    create_tasks=True,
+    collect_training=True
 )
 ```
 
-## Session Tracking
+---
 
-The session logger (`engine/nexus/nexus_session_logger.py`) automatically
-captures Copilot CLI session lifecycle events via `.github/hooks/`:
+## Q&A Generation
 
-- **Session start**: Records git context, CWD, branch
-- **Session end**: Exports full conversation history, checkpoints, plans,
-  extracts key decisions as Q&A
-- **Prompt count**: Tracks number of prompts per session
+### QA Expander (`engine/nexus/qa_expander.py`)
 
-See [Copilot Bridge](#copilot-bridge) above for full details.
+Reverse-generates Q&A from existing Nexus entries via NotebookLM:
 
-## API Routes
+```
+For each entry:
+  1. Ask NLM: "What 5 questions does this entry answer?"
+  2. For each question: distill the answer via NLM
+  3. Store as Nexus Q&A pair
+  4. Feed into TrainingFlywheel
+```
 
-| Method | Route | Purpose |
-|--------|-------|---------|
-| GET | `/api/search?q=...` | Full-text search |
-| GET/POST | `/api/entries` | List/create entries |
-| GET/PUT/DELETE | `/api/entries/<id>` | Entry CRUD |
-| GET | `/api/entries/by-type/<type>` | Type-filtered listing |
-| GET/POST | `/api/rules` | List/create rules |
-| PUT/DELETE | `/api/rules/<id>` | Rule CRUD |
-| GET/POST | `/api/sessions` | List/create sessions |
-| GET/PUT | `/api/sessions/<id>` | Session CRUD |
-| GET/POST | `/api/qa` | List/create Q&A pairs |
-| DELETE | `/api/qa/<id>` | Delete Q&A pair |
-| POST | `/api/batch` | Bulk entry creation |
-| GET | `/api/stats` | Database statistics |
-| GET | `/api/health` | Health check |
+```python
+from engine.nexus.qa_expander import QAExpander
+
+expander = QAExpander()
+result = expander.run(batch_size=20)  # Expand next 20 entries
+stats = expander.stats()               # Progress: expanded, remaining
+```
+
+### QA Generator (`engine/nexus/qa_generator.py`)
+
+Two-mode Q&A generation:
+
+| Mode | Speed | Quality | Pairs/Run |
+|------|-------|---------|-----------|
+| Rule-based | Instant | Medium | 200–800 |
+| LLM-based | Slower | High | ~200 |
+
+```python
+from engine.nexus.qa_generator import run_rule_based, run_llm_based
+
+# Rule-based: parse titles → generate questions
+count = run_rule_based(limit=800)
+
+# LLM-based: send content to LMStudio → generate Q&A
+count = run_llm_based(limit=200, n_pairs_each=2)
+```
+
+---
+
+## News Pipeline
+
+`engine/nexus/news/` — automated news ingestion with 4-stage pipeline.
+
+### Pipeline Stages
+
+```
+1. Fetch     — RSS feeds per category (tech, AI, world, science)
+2. Dedup     — Content-hash deduplication
+3. Store     — Create Nexus entries with category="news"
+4. Distill   — Generate Q&A from article summaries
+```
+
+### Components
+
+| File | Purpose |
+|------|---------|
+| `news_pipeline.py` | Main orchestration |
+| `rss_fetcher.py` | RSS feed fetching |
+| `dedup_filter.py` | Content hash dedup |
+| `source_registry.py` | Category → sources mapping |
+| `news_models.py` | NewsItem, NewsDigest models |
+
+### Scheduler Integration
+
+- `news-fetch` — runs 3×/day, fetches from all sources
+- `news-distill-nlm` — runs 1 hour after fetch, distills via NLM
+
+---
+
+## Google Account Manager
+
+`engine/nexus/google_account_manager.py` — multi-account cookie pool for
+authenticated access to Google services.
+
+### Services Supported
+
+| Service | Auth Method | Cookie Keys |
+|---------|------------|-------------|
+| NotebookLM | batchexecute + cookies | SAPISID, SID, NID, HSID |
+| AI Studio | gRPC-Web + cookies | Same |
+| Colab | gRPC + cookies | Same |
+
+### Features
+
+- **Round-robin rotation** — auto-selects next available account
+- **Rate-limit backoff** — skips rate-limited accounts
+- **HAR import** — extract cookies from browser HAR files
+- **Cookie health** — `cookie_age_days()`, `is_stale()`
+- **Service sessions** — per-service session metadata (bl, f_sid, at tokens)
+
+### Usage
+
+```python
+from engine.nexus.google_account_manager import GoogleAccountManager
+
+mgr = GoogleAccountManager()
+account = mgr.get_account(service="notebooklm")
+mgr.mark_rate_limited("account-1", "notebooklm", backoff_minutes=30)
+```
+
+---
+
+## Skills Reference
+
+### Nexus Skills (17 skills, pack="nexus")
+
+| Skill | Description |
+|-------|-------------|
+| `nexus_search` | Search the Nexus knowledge base |
+| `nexus_add` | Add a knowledge entry |
+| `nexus_ask` | Smart Q&A — cache → knowledge → NLM research |
+| `nexus_nlm_ask` | Query NotebookLM via best backend |
+| `nexus_status` | Check Nexus and NLM backend status |
+| `nexus_log_session` | Log a session to Nexus |
+| `nexus_store_prompt` | Store a versioned prompt |
+| `nexus_search_prompts` | Search stored prompts |
+| `nexus_get_rules` | Get active governance rules |
+| `nexus_submit_idea` | Submit an improvement idea |
+| `nexus_changelog` | Query change history |
+| `nexus_research` | Start deep research via NLM |
+| `nexus_converse` | Continue a research conversation |
+| `nexus_finish_research` | Complete and distill research |
+| `nexus_youtube` | Import YouTube transcript |
+| `nexus_smart_query` | Smart query with 5-tier routing |
+| `nexus_router_stats` | Get router effectiveness stats |
+
+### Coding Skills (9 skills, pack="coding")
+
+| Skill | Description |
+|-------|-------------|
+| `coding_store_snippet` | Store reusable code snippet |
+| `coding_search` | Search code patterns and dev knowledge |
+| `coding_store_decision` | Store architecture/design decision |
+| `coding_log_session` | Log development session |
+| `coding_research` | Research API/library/tech topic |
+| `coding_store_bug` | Store bug analysis or debugging note |
+| `coding_store_test_pattern` | Store test strategy or pattern |
+| `coding_project_status` | Get project status from Nexus |
+| `coding_search_qa` | Search Q&A pairs for dev answers |
+
+### Autonomy Skills (67 skills, pack="autonomy")
+
+| Category | Count | Key Skills |
+|----------|-------|------------|
+| Scheduler | 3 | `scheduler_status`, `scheduler_run_now`, `scheduler_list_tasks` |
+| News | 4 | `news_fetch`, `news_fetch_and_store`, `news_digest`, `news_list_sources` |
+| NLM Notebooks | 5 | `nlm_notebook_list`, `nlm_notebook_seed_docs`, `nlm_notebook_rotate` |
+| Nexus Quality | 3 | `nexus_quality_report`, `nexus_full_maintenance`, `nexus_backup` |
+| Governance | 6 | `governance_validate_file`, `governance_enforce`, `governance_stats` |
+| Task Management | 4 | `tasks_from_test_failures`, `task_from_template`, `task_list_templates` |
+| Test Diagnostics | 2 | `diagnose_failures`, `diagnose_test_file` |
+| Training | 7 | `training_collect_task`, `training_export_jsonl`, `training_sync_nexus` |
+| Metrics | 10 | `metrics_record`, `metrics_trend`, `metrics_dashboard`, `reflection_run` |
+| Copilot | 1 | `copilot_validate_runtime` |
+| Smart Query | 2 | `nexus_smart_query`, `nexus_router_stats` |
+| Other | 20 | Various system, health, knowledge, and research skills |
+
+---
+
+## Module Inventory
+
+85 Python files in `engine/nexus/`:
+
+| Category | Files | Key Modules |
+|----------|-------|-------------|
+| Core Client | 5 | `client.py`, `models.py`, `rules_client.py`, `session_client.py`, `memory_client.py` |
+| Query Routing | 3 | `query_router.py`, `cache_pipeline.py`, `source_pyramid.py` |
+| Copilot Integration | 7 | `copilot_bridge.py`, `copilot_self_config.py`, `copilot_validation.py`, `copilot_context.py`, `copilot_helpers.py`, `copilot_hook_control.py`, `seed_copilot_rules.py` |
+| Session Management | 4 | `nexus_session_logger.py`, `session_distillation.py`, `sync_sessions_to_nexus.py`, `session_client.py` |
+| Knowledge | 8 | `knowledge_capture.py`, `knowledge_forge.py`, `knowledge_graph.py`, `knowledge_evaluator.py`, `nexus_distiller.py`, `nexus_memory.py`, `nexus_namespaces.py`, `nexus_seeder.py` |
+| Training | 5 | `training_flywheel.py`, `training_pipeline.py`, `teacher_pipeline.py`, `dataset_curator.py`, `router_finetune_cycle.py` |
+| Q&A Generation | 2 | `qa_expander.py`, `qa_generator.py` |
+| NotebookLM | 12 | `bootstrap_notebooks.py`, `nlm_chain.py`, `notebooklm_flywheel.py`, `nlm_engine.py`, `nlm_automation.py`, `nlm_router.py`, `nlm_deep_storage.py`, `nlm_qa_distiller.py`, `nlm_notebook_manager.py`, `nlm_rpc_mapper.py`, `nlm_cookie_refresh.py`, `nlm_har_capture.py` |
+| Scheduling | 3 | `scheduler_daemon.py`, `task_scheduler.py`, `action_manifest.py` |
+| News | 6 | `news/` directory: `news_pipeline.py`, `rss_fetcher.py`, `dedup_filter.py`, `source_registry.py`, `news_models.py`, `news_feed_api.py` |
+| Google Auth | 2 | `google_account_manager.py`, `har_extractor.py` |
+| Integrations | 4 | `aistudio_client.py`, `canvas_api.py`, `lms_task_bridge.py`, `local_agent_bridge.py` |
+| Governance | 2 | `governance_rules.py`, `seed_nexus.py` |
+| Operator | 2 | `operator_inbox.py`, `consumer_briefing.py` |
+| Metrics | 3 | `meta_metrics.py`, `experiment_framework.py`, `experiment_proposals.py` |
+| System | 6 | `self_maintenance.py`, `system_reflection.py`, `auto_diagnosis.py`, `backup_manager.py`, `history_miner.py`, `conversation_analyzer.py` |
+| Content | 4 | `daily_challenge.py`, `url_ingest.py`, `url_manager.py`, `vscode_history_extractor.py` |
+| CLI | 3 | `bridge.py`, `cli.py`, `nlm_cli.py` |
+| Misc | 4 | `workflows.py`, `control_panel.py`, `user_profile.py`, `space_exporter.py`, `agent_tags.py`, `review_sheet.py` |
+
+---
 
 ## Configuration
 
+All Nexus-related config lives in `config/default.yaml`:
+
 ```yaml
-# config/default.yaml
 nexus:
-  url: http://localhost:8700
-  enabled: true
-  auto_submit: false
-  submit_threshold: 0.7
+  host: localhost
+  port: 8700
+  timeout: 30
+  max_retries: 3
+  retry_delay: 0.5
+
+  operator_inbox:
+    enabled: true
+    state_file: data/operator_inbox_state.json
+    auto_promote: true
+
+  scheduler:
+    interval_seconds: 60
+    state_file: data/scheduler_state.json
+    enabled: true
+
+  query_router:
+    min_confidence: 0.3
+    use_llm: false
+    local_cache_ttl: 300
+
+notebooklm:
+  flywheel:
+    interval_hours: 24
+    max_tasks_per_run: 10
+    distillation_category: control-plane-report
+    control_questions:
+      - "Summarize the current system state"
+      - "What gaps need attention?"
+      - "What actions should continue?"
 ```
 
-## Content Types
+---
 
-| Type | Purpose |
-|------|---------|
-| `note` | General knowledge, observations |
-| `code` | Code snippets, patterns, templates |
-| `prompt` | System/agent prompts (versioned) |
-| `document` | Design docs, specs, guides |
-| `history` | Session logs, conversation records |
-| `transcript` | YouTube/video transcripts |
-| `research` | Research session artifacts |
-| `memory` | Agent/Copilot memories |
+## Testing
+
+```powershell
+# Core Nexus tests
+python -m pytest tests/test_query_router.py tests/test_training_flywheel.py -v
+
+# Copilot integration
+python -m pytest tests/test_copilot_bridge.py tests/test_copilot_validation.py -v
+
+# Scheduler and tasks
+python -m pytest tests/test_scheduler_daemon.py tests/test_task_scheduler.py -v
+
+# Full Nexus-related suite
+python -m pytest tests/test_query_router.py tests/test_copilot_bridge.py tests/test_copilot_validation.py tests/test_copilot_self_config.py tests/test_seed_copilot_rules.py tests/test_bootstrap_notebooks.py tests/test_scheduler_daemon.py tests/test_training_flywheel.py tests/test_operator_inbox.py tests/test_knowledge_capture.py tests/test_action_manifest.py tests/test_qa_expander.py tests/test_qa_generator.py -v
+```
+
+---
+
+## See Also
+
+- [Architecture](ARCHITECTURE.md) — Full engine subsystem overview
+- [MCP Framework](MCP_FRAMEWORK.md) — Skill decorator and interceptor patterns
+- [Scenes](SCENES.md) — Scene-level Nexus integration via NexusSceneMixin
+- [Configuration](CONFIGURATION.md) — `config/default.yaml` Nexus settings
+- [Agent Onboarding](AGENT_ONBOARDING.md) — How agents consume Nexus context

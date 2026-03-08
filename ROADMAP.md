@@ -18,8 +18,9 @@ The system's ultimate goal: **inhabit itself** — AI agents that maintain, impr
   operator cockpit, and flywheel work as one coherent baseline.
 - **v0.91b — THE EVOLUTION** added Lab Break scene, NLM chain-prompting engine,
   LMLink federation, bidirectional LMStudio server control, vision/evaluation
-  MCP skills, training pipeline wiring, and template/navbar repairs.
-- Current baseline: **20 scenes, 55 scheduler tasks, 9,575 tests passing
+  MCP skills, training pipeline wiring, template/navbar repairs, and a complete
+  documentation rewrite (8 core docs reconciled against measured codebase reality).
+- Current baseline: **20 scenes, 55 scheduler tasks, 9,577 tests passing
   (9,963 total), version 0.91b**.
 
 ## Current Planning Focus (2026-03)
@@ -216,57 +217,16 @@ The control-plane stabilization tranche is now closed enough to move on:
 
 ---
 
-## Next: v0.78 — "The Data Flywheel"
+## v0.78 — "The Data Flywheel" (Rolled into v0.79b–v0.91b)
 
-> v0.78 activates the flywheel: everything that runs collects data, all data gets used
-> to train, all training feeds back into production. The system improves on every cycle.
-
-### Track A — Hot-Path Data Collection
-- [ ] Wire `DataCollector.collect_tool_call()` into `VirtualAgent.reply()` on every skill call
-- [ ] Wire `DataCollector.collect_conversation()` into `DialogSystem.close_conversation()`
-- [ ] Wire `DataCollector.collect_grammar_error()` into `InterceptorPipeline` grammar check
-- [ ] Wire `DataCollector.collect_output_rating()` into news rating API endpoint
-- [ ] Wire `DataCollector.collect_code()` into `coder_skills.coder_fix/coder_complete`
-
-### Track B — First Training Jobs
-- [ ] Run `generate_coder.py` — build initial 5,000+ example dataset, verify quality
-- [ ] Submit `coder` training job via `CoderPipeline.check_and_train(force=True)`
-- [ ] Submit `tool_dispatch` training job (270M Gemma) — 3 epochs
-- [ ] Submit `conversational` training job (Qwen 1.7B) — from EventChain data
-- [ ] Evaluate all 3 models via `BenchmarkRunner`, auto-promote winners
-
-### Track C — Training Dashboard
-- [ ] Admin panel [TRAINING] tab expansion: one card per MODEL_ZOO entry
-- [ ] Each card: dataset size, last training run, current benchmark score, status badge
-- [ ] "Trigger training" button per model → calls `auto_train.check_and_train_all_zoo()`
-- [ ] Live log stream during training (SSE endpoint)
-- [ ] Sparkline of benchmark scores over time (last 10 runs)
-
-### Track D — Grammar Scanner Interceptor
-- [ ] `engine/agents/interceptors/grammar_scanner_interceptor.py` — post_call, scans for missing
-  punctuation, broken symbols, incomplete sentences; logs to DataCollector
-- [ ] Register in `config/default.yaml` under `comms.interceptors`
-- [ ] Wire results to `grammar_scanner` training dataset
-- [ ] 5 tests in `tests/test_grammar_scanner.py`
-
-### Track E — Output Evaluator Loop
-- [ ] Auto-score every LLM response via `output_evaluator` model (rule-based until trained)
-- [ ] Low-scoring responses flagged in Nexus as `category="improvement"`
-- [ ] Flagged responses reviewed by NLM notebook weekly, best fixes stored as training examples
-- [ ] Close the loop: output quality rises each week without manual intervention
-
-### Track F — Docs + SYSTEM_AUDIT v0.78b
-- [ ] `docs/TRAINING_SYSTEM.md` — full unified training pipeline documentation
-- [ ] `docs/CODER_MODEL.md` — coder model strategy, strategies, deployment
-- [ ] `CHANGELOG.md` + `SYSTEM_AUDIT.md` updated to v0.78b
-- [ ] `config/default.yaml` bumped to `0.78b`
+> The v0.78 items were absorbed into the subsequent version sprints rather than
+> shipping as a standalone release. DataCollector wiring, training dashboard,
+> grammar scanning, and output evaluation were built incrementally across
+> v0.79b–v0.91b as supporting infrastructure matured.
 
 ---
 
 ## Completed: v0.75 — "NEON CITY" ✅ COMPLETE
-
-
----
 
 ## Completed: v0.80b — "THE COPILOT LAYER" ✅ COMPLETE
 
@@ -420,78 +380,10 @@ The control-plane stabilization tranche is now closed enough to move on:
 - History mirror fixes carried forward to keep ARGUS agent conversations durable
 
 ---
-## Completed: v0.81b — "THE LIVING CITY" ✅ COMPLETE
+## Completed: v0.50a–v0.54b — Early Foundation ✅
 
-1. **Everything through MCP** — Skills, state, events, and cross-system communication all go through the MCP pipeline
-2. **Nexus as truth** — Prompts, rules, configurations, session history, and experiment results live in Nexus
-3. **NLM-first** — Research, analysis, and knowledge generation go through NotebookLM (free Gemini) before LMStudio
-4. **Local-first** — No cloud dependencies. LMStudio, ChromaDB, ComfyUI, TTS all run locally
-5. **Test-driven** — Every feature gets tests. 7,443 passing at v0.71b
-6. **Scene independence** — Scenes are self-contained. Adding a scene shouldn't break others
-7. **Agent freedom within rails** — Governance pipeline enforces consistency without killing creativity
-8. **Profile-aware** — Conversation analyzer builds persistent user profile; all agents use it
-9. **Self-improving** — Scheduler runs autonomously: news fetch, QA mining, benchmark cycles, fine-tuning
-10. **Voice-first** — Every character speaks. Every input has a mic. TTS/STT on every scene
-
-
-### v0.50a — Master Consolidation & Nexus Integration
-- Unified 13 scenes on BaseScene + MCP pipeline
-- 194 MCP skills across 26 packs
-- 25-interceptor governance pipeline
-- LMStudio v1 API with stateful conversations, branching, streaming
-- Nexus knowledge system with ChromaDB, FTS5, plugin hooks
-- Session logger, knowledge seeding, experiment framework
-- Cross-scene agent state persistence
-- Training pipeline Nexus integration
-
-### v0.50b — Nexus Expansion & Scene Polish
-- Nexus Q&A distillation cache, Research Manager, YouTube ingestion
-- Plugin system with lifecycle hooks
-- Scene quality uplift (22 new skills across 5 scenes)
-- Experiment framework with 4 skills
-- Bedroom v5→v6 (furniture overhaul, director avatar, camera views, room layout)
-- Deprecation cleanup (88 warnings → 2 third-party)
-- 1,839 tests passing, 263 Nexus tests
-
-### v0.51 — Multi-Model Orchestration & Agent Intelligence ✅
-- [x] InferenceOrchestrator — unified facade bridging ModelManager, InferenceRouter, ResourceManager
-- [x] Big/small agent routing via tier selection (classify→router, act→gpu_primary, background→cpu_utility)
-- [x] JIT model loading with TTL-based eviction (ModelManager JIT_TTL mode with reaper thread)
-- [x] Concurrency controls — 6 ResourceManager strategies (SINGLE_BIG, CONCURRENT, MULTI_SMALL, JIT_SWAP, SPECULATIVE, HYBRID)
-- [x] Model capability profiles (InferenceConfig + LoadConfig with from_agent_profile/from_yaml)
-- [x] Nexus 4-tier query router (Q&A cache → FTS5 → NLM synthesis → deep research)
-- [x] Nexus control panel (8-page Streamlit dashboard on :8702)
-- [x] URL system — ingestion, chunking, heading extraction
-- [x] Config validator — 22-key schema validation with enum + range checks
-- [x] 10 Copilot agents (.github/agents/) + 9 instruction files (.github/instructions/)
-- [x] 1,903 tests passing
-
-### v0.51b — Sprint 6+7: URL System, llmster, Audit Hardening ✅
-- [x] URL manager with heading/chunking patterns for web content ingestion
-- [x] llmster CLI bridge — 5 MCP tools wrapping `lms.exe` commands
-- [x] 92 MCP tools batch-hardened with try/except error handling
-- [x] 3 critical bug fixes (LoadConfig import, duplicate nexus_maintain, hardcoded port)
-- [x] 4 YAML sections annotated as RESERVED (stt, security, testing, observability)
-- [x] `llm.custom_context` config key for agent context injection
-- [x] 5 new test files: lounge (79), gallery (49), games (60), activity_bus (33), resilience (30)
-- [x] All 11 scenes migrated to governance framework (build_governance_context + StateCoordinator)
-- [x] 144 MCP server tools, 160 MCP skills across 25 packs
-- [x] 2,613 tests passing across 75+ files
-
-### v0.52b — Sprint 8: Knowledge Seeding, Tuning, Agent System ✅
-- [x] Nexus knowledge dump — 49-model catalog, settings guide, technical findings stored
-- [x] Nexus audit rules — structured audit requirements enforced
-
-### v0.53b — Training Pipeline & Metrics ✅
-- [x] Training pipeline wiring and metrics collection
-- [x] Metrics backup and audit systems
-
-### v0.54b — NLM Intelligence Layer ✅
-- [x] NLM Engine, Knowledge Forge, NLM Router (4-tier: cache → FTS → synthesis → deep research)
-- [x] Copilot Bridge session hooks
-- [x] 10 NLM forge MCP skills
-- [x] NLM CLI (16 commands)
-- [x] Nexus Control Panel upgrades — 28 new routes, NLM Lab tab
+*(Master consolidation, Nexus integration, multi-model orchestration, NLM intelligence.
+See CHANGELOG.md for full details.)*
 - [x] HAR extractor for NotebookLM
 
 ### v0.55b — Full-Project Audit & Hardening ✅
