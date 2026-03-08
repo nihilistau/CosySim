@@ -1,815 +1,905 @@
-# CosySim MCP Framework
+# MCP Framework
 
-> **Audience:** Developers extending or debugging the CosySim agent / governance layer.
+> CosySim v0.91b — Model Context Protocol implementation powering agent
+> governance, skill dispatch, interceptor pipelines, state management,
+> and character-scene coordination.
 
----
-
-## Table of Contents
-
-1. [Overview](#overview)
-2. [MCP Server (cosysim_server.py)](#mcp-server-cosysim_serverpy)
-3. [Governance Pipeline](#governance-pipeline)
-4. [State Management](#state-management)
-5. [Dialog System](#dialog-system)
-6. [Rules Engine](#rules-engine)
-7. [Interaction Trees](#interaction-trees)
-8. [Skills Integration](#skills-integration)
-9. [Writing a Custom Tool](#writing-a-custom-tool)
-10. [MCP Tool Decorator](#mcp-tool-decorator)
-11. [Writing a Custom Interceptor](#writing-a-custom-interceptor)
+The MCP Framework is CosySim's core runtime substrate. Every character
+reply flows through this pipeline: skill discovery → pre-call interceptors
+→ LLM inference → post-call interceptors → tag extraction → state sync.
+The framework manages 43 MCP tool files, 45 skill packs, 28 interceptor
+classes, and 10 singleton subsystems.
 
 ---
 
-## Overview
-
-CosySim is a multi-agent simulation framework built on the **Model Context Protocol (MCP)** pattern. An ephemeral MCP server (`cosysim_server.py`) exposes every simulation action — memory, character state, scene manipulation, dialog, media — as discrete tool calls that LLM agents can invoke.
-
-### Why MCP?
-
-MCP provides a structured, tool-call interface between LLM agents and the simulation. Instead of free-form text commands, every agent action is a typed function with validated parameters and structured return values. This gives us:
-
-- **Governance hooks** — every tool call passes through the interceptor pipeline where policy, personality, and scene rules can shape or block it.
-- **Auditability** — every invocation is logged with the agent ID, scene, and parameters.
-- **Composability** — tools can be mixed per-scene via skill manifests without code changes.
-
-### Architecture Layers
+## Architecture Overview
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│  config/                YAML configuration               │
-│  ├── default.yaml       All settings: scenes, agents,    │
-│  │                      LMStudio, framework params       │
-│  └── skill_manifests    Per-scene skill rosters          │
-├──────────────────────────────────────────────────────────┤
-│  engine/                Reusable technology               │
-│  ├── mcp/               MCPFramework, tools/, governance │
-│  ├── skills/            @skill decorator, registry       │
-│  ├── agents/            CharacterAgent, interceptors     │
-│  ├── lmstudio/          ModelManager, VRAM management    │
-│  ├── tts/               Text-to-speech server            │
-│  └── services/          Housekeeping, media ingest       │
-├──────────────────────────────────────────────────────────┤
-│  content/               Game content                     │
-│  ├── scenes/            Phone, Bedroom, Lounge, Casino   │
-│  ├── characters/        Character definitions            │
-│  └── simulation/        Shared game logic                │
-└──────────────────────────────────────────────────────────┘
+User message
+     │
+     ▼
+┌─────────────────────────┐
+│     AgentGovernor       │ ← governance pipeline
+│  ┌───────────────────┐  │
+│  │ 1. Load Manifest  │  │    SkillManifest per scene
+│  │ 2. AUTO Skills    │  │    inject results into context
+│  │ 3. Pre-Call       │──┼──▶ InterceptorPipeline (28 classes)
+│  │ 4. LLM Inference  │──┼──▶ VirtualAgentManager → LMSClient
+│  │ 5. Parse Response │  │    StreamProcessor tag extraction
+│  │ 6. Post-Call      │──┼──▶ InterceptorPipeline
+│  │ 7. Return Reply   │  │
+│  └───────────────────┘  │
+└─────────────────────────┘
+     │
+     ▼
+Response + mood + images + stat changes + actions
 ```
 
 ---
 
-## MCP Server (cosysim_server.py)
+## MCPFramework
 
-The MCP server is the single entry point for all agent tool calls. It registers **107 `@mcp.tool` functions** that delegate to **8 domain modules** in `engine/mcp/tools/`.
+The root singleton in `engine/mcp/framework.py`. Every scene, character,
+timer, and state operation routes through this class.
 
-### Tool Categories
-
-| Module | Category | Example tools |
-|--------|----------|---------------|
-| `memory_tools.py` | Memory | `memory_recall`, `store_memory` |
-| `character_tools.py` | Character | `character_get_summary`, `mood_contagion`, `relationship_adjust` |
-| `game_tools.py` | Game | Game state CRUD, session management |
-| `scene_tools.py` | Scene | `get_scene_snapshot`, `set_scene_atmosphere`, `environment_change` |
-| `wardrobe_tools.py` | Wardrobe | Clothing management, outfit changes |
-| `dialog_tools.py` | Dialog | `get_dialog_options`, `speech_enhance`, `set_response_directive` |
-| `media_tools.py` | Media | `generate_image`, `generate_voice_message` |
-| `utility_tools.py` | Utility | Dice rolls, random topics, benchmarks |
-
-### How Tools Are Registered
-
-Each domain module exposes plain functions. `cosysim_server.py` imports them and wraps each one with `@mcp.tool`:
+### Access
 
 ```python
-# cosysim_server.py (simplified)
-from engine.mcp.tools.character_tools import get_character_summary
+from engine.mcp.framework import get_framework
 
-@mcp.tool
-def character_get_summary(character_id: str) -> str:
-    return get_character_summary(character_id)
+fw = get_framework()
 ```
 
-The LLM sees these as available tool calls in its context. The `SkillAwarenessInterceptor` (priority 30) controls which tools are advertised per scene via the skill manifest.
+### Scene Management
 
-### How Tools Are Invoked
+| Method | Purpose |
+|--------|---------|
+| `get_or_create(path, node_class)` | Get or create scene/character node at path |
+| `register_scene(scene_id, node)` | Register a scene node |
+| `unregister_scene(scene_id)` | Unregister a scene |
+| `get_scene(scene_id)` | Get scene node |
+| `list_scenes()` | All registered scenes |
+| `get_scene_state(scene_id)` | Scene state dict |
 
-```
-LLM decides to call tool  ──►  MCP server receives call
-    ──►  Route to domain module function
-    ──►  Function reads/writes state via singletons (GameState, CharacterRegistry, etc.)
-    ──►  Return structured result to LLM
+### Character Management
+
+| Method | Purpose |
+|--------|---------|
+| `register_character(scene_id, character)` | Add character to scene |
+| `unregister_character(scene_id, character_id)` | Remove character |
+| `get_character(scene_id, character_id)` | Get character node |
+| `list_characters(scene_id)` | Characters in scene |
+| `move_character(character_id, from_scene, to_scene)` | Cross-scene transfer |
+
+### Timer Management
+
+| Method | Purpose |
+|--------|---------|
+| `create_timer(timer_id, duration, callback)` | Create countdown timer |
+| `cancel_timer(timer_id)` | Cancel running timer |
+| `get_timer(timer_id)` | Timer status |
+| `list_timers()` | All active timers |
+
+### Scheduled Consequences
+
+| Method | Purpose |
+|--------|---------|
+| `schedule_consequence(delay, action, context)` | Delayed action |
+| `cancel_consequence(consequence_id)` | Cancel scheduled action |
+| `get_pending_consequences()` | Upcoming consequences |
+| `process_consequences()` | Tick pending consequences |
+
+### State & Events
+
+| Method | Purpose |
+|--------|---------|
+| `emit_event(event_type, data)` | Broadcast event |
+| `on_event(event_type, handler)` | Register event listener |
+| `get_state_snapshot()` | Full framework state dump |
+| `persist_state()` | Save to disk (if enabled) |
+| `load_state()` | Restore from disk |
+
+### Tree Operations
+
+| Method | Purpose |
+|--------|---------|
+| `resolve(path)` | Navigate MCP node tree by dot-path |
+| `tree_dump()` | Full tree as JSON |
+| `find_nodes(predicate)` | Search nodes by condition |
+
+---
+
+## MCPSceneNode
+
+Per-scene state container in `engine/mcp/framework.py`.
+
+### Public Methods
+
+| Method | Purpose |
+|--------|---------|
+| `add_character(character_id, character_data)` | Register character |
+| `remove_character(character_id)` | Unregister character |
+| `get_character(character_id)` | Get character state |
+| `list_characters()` | All characters in scene |
+| `set_state(key, value)` | Scene-level state |
+| `get_state(key, default)` | Read scene state |
+| `get_full_state()` | All scene state |
+| `add_rule(rule_id, rule)` | Add scene rule |
+| `remove_rule(rule_id)` | Remove scene rule |
+| `get_rules()` | Active rules |
+| `emit_event(event_type, data)` | Scene-scoped event |
+| `on_event(event_type, handler)` | Scene event listener |
+| `get_event_history(limit)` | Recent events |
+| `get_metadata()` | Scene metadata |
+
+---
+
+## MCPCharacterNode
+
+Per-character state container in `engine/mcp/framework.py`.
+
+### Public Methods
+
+| Method | Purpose |
+|--------|---------|
+| `get_scene_id()` | Current scene |
+| `get_scenes()` | All scenes character is in |
+| `join_scene(scene_id)` | Add to scene |
+| `leave_scene(scene_id)` | Remove from scene |
+| `set_state(key, value)` | Character state |
+| `get_state(key, default)` | Read state |
+| `get_full_state()` | All character state |
+| `send_message(target_id, message)` | Cross-scene messaging |
+| `get_messages(since)` | Incoming messages |
+| `update_stats(stat_deltas)` | Emotional/physical updates |
+| `get_stats()` | Current stats |
+| `start_stream()` | Enable streaming |
+| `stop_stream()` | Disable streaming |
+| `is_streaming()` | Stream status |
+
+---
+
+## MCPTimer
+
+Passive countdown timer with progress tracking.
+
+```python
+timer = MCPTimer(
+    timer_id="bomb_countdown",
+    duration_seconds=300,
+    callback=on_timer_expire,
+    metadata={"scene": "heist"},
+)
+
+timer.progress       # 0.0 → 1.0
+timer.remaining_ms   # milliseconds left
+timer.is_expired     # bool
 ```
 
 ---
 
-## Governance Pipeline
+## Skill System
 
-Every LLM interaction passes through the **AgentGovernor**, which wraps a `CharacterAgent` with a pipeline of interceptors that shape requests and responses.
-
-### AgentGovernor
-
-`engine/mcp/comms_framework.py` · class `AgentGovernor`
-
-The governor implements the `IAgent` protocol and orchestrates a single turn:
-
-```
-AgentGovernor.reply(user_message)
-    │
-    ├─ Build ResponseContext {
-    │      system_prompt, policy, skill_manifest,
-    │      user_message, agent_id, scene
-    │  }
-    │
-    ├─ pipeline.run_pre(ctx)        ← 20 PRE interceptors inject/shape
-    │
-    ├─ CharacterAgent.reply(...)    ← single LLM call
-    │
-    ├─ ctx["reply"] = llm_response
-    │
-    └─ pipeline.run_post(ctx)       ← 4 POST interceptors shape/log
-          │
-          └─► return ctx["reply"]
-```
-
-Any pre-interceptor can set `ctx["abort"] = True` to skip the LLM call entirely.
-
-### build_governance_context()
-
-`engine/mcp/comms_framework.py` · function `build_governance_context()`
-
-For scenes that call the LLM directly (streaming, special pipelines) but still want interceptor-generated directives:
+### @skill Decorator
 
 ```python
-from engine.mcp.comms_framework import build_governance_context
+from engine.skills.registry import skill
 
-# Returns multi-line string of interceptor injections to append to system prompt
-gov_ctx = build_governance_context(agent_id="lola", scene="bedroom",
-                                    user_message="Hello")
+@skill(
+    pack="bedroom",                    # grouping (scene/module name)
+    description="LLM-facing desc",    # what the LLM sees
+    category="GAME",                   # see categories below
+    cooldown=5.0,                      # min seconds between calls
+    cost=1.0,                          # budget tracking
+    tags=["intimate", "social"],       # free-form tags
+    prerequisites=["other_skill"],     # must run first
+    nexus_first=False,                 # query Nexus before executing
+)
+def my_skill(target: str, amount: int = 1) -> str:
+    """Brief description for the LLM."""
+    return "Result string"
 ```
 
-This builds a `ResponseContext`, runs all pre-interceptors, and returns the accumulated `system_prompt` without making an LLM call.
+### Decorator Parameters
 
-### Full Interceptor Pipeline (24 interceptors)
+| Parameter | Type | Default | Purpose |
+|-----------|------|---------|---------|
+| `name` | `str` | function name | Skill identifier |
+| `description` | `str` | docstring | LLM-facing description |
+| `pack` | `str` | `""` | Skill grouping |
+| `tags` | `List[str]` | `[]` | Discovery tags |
+| `category` | `str` | `"GAME"` | Classification |
+| `cooldown` | `float` | `0.0` | Min seconds between calls |
+| `prerequisites` | `List[str]` | `[]` | Required prior skills |
+| `cost` | `float` | `1.0` | Budget tracking |
+| `nexus_first` | `bool` | `False` | Query Nexus before executing |
 
-| Priority | Interceptor | Phase | Purpose |
-|----------|-------------|-------|---------|
-| 5 | `NaturalMoodDriftInterceptor` | pre | Subtle per-interaction stat drift & inner-thought hints |
-| 6 | `ConversationRecapInterceptor` | pre | Injects conversation recap context |
-| 8 | `CharacterRegistryInterceptor` | pre | Syncs character mood/energy to sys-prompt |
-| 10 | `RouterMessageInjector` | pre | Injects pending inter-agent router messages |
-| 12 | `DialogDirectiveInterceptor` | pre | Applies active dialog directives |
-| 15 | `BedroomSceneInterceptor` | pre | Bedroom-specific sys-prompt + heat gating |
-| 15 | `PhoneSceneInterceptor` | pre | Phone scene sys-prompt + ConversationHeat |
-| 15 | `LoungeSceneInterceptor` | pre | Lounge scene sys-prompt additions |
-| 15 | `GallerySceneInterceptor` | pre | Gallery scene sys-prompt additions |
-| 16 | `UniversalSceneInterceptor` | pre | Catch-all for scenes without a dedicated interceptor |
-| 17 | `AmbientEventInterceptor` | pre | Random micro-events (25% chance per call) |
-| 20 | `AutoResultInjector` | pre | Injects auto-triggered skill results |
-| 30 | `SkillAwarenessInterceptor` | pre | Lists REQUIRED / AVAILABLE tools per scene |
-| 35 | `GameInterceptor` | pre | Injects active game session state + rules |
-| 45 | *(reserved)* | pre | Custom interceptor slot |
-| 50 | `PersonalityGuardInterceptor` | pre | Forbidden topics, required tone |
-| 55 | `ConversationVarietyInterceptor` | pre | Adjusts tone using ConversationHeat directives |
-| 60 | `PolicyEnforcerInterceptor` | pre | Enforces max-token prompt reminder |
-| 70 | `MemoryEnhancerInterceptor` | pre | Injects top-k semantic memories |
-| 80 | `ResponseShaperInterceptor` | post | Strips leaked skill sections, trims |
-| 85 | `TTSStyleInterceptor` | post | Builds `ctx["tts_meta"]` for CosyVoice |
-| 90 | `ActivityLoggerInterceptor` | post | Logs interaction to DB |
-| 92 | `MoodSyncInterceptor` | post | Strips `[MOOD:xxx]` tag, syncs registry, evaluates threshold rules |
-| 93 | `RelationshipEventInterceptor` | post | Emits relationship change events |
+### Skill Categories
+
+| Category | Purpose |
+|----------|---------|
+| `COMMUNICATION` | Messaging, speech, social interaction |
+| `MEMORY` | Recall, store, search memories |
+| `MEDIA` | Image generation, TTS, video |
+| `GAME` | Game mechanics, economy, combat |
+| `SOCIAL` | Relationships, reputation, factions |
+| `ENVIRONMENT` | World state, weather, location |
+| `SYSTEM` | Config, admin, infrastructure |
+| `NARRATIVE` | Story, quests, world building |
+
+### SkillRegistry
+
+Thread-safe singleton in `engine/skills/registry.py`:
+
+```python
+from engine.skills.registry import SKILL_REGISTRY
+
+# Registration (automatic at import via @skill)
+SKILL_REGISTRY.register(skill_entry)
+
+# Discovery
+skills = SKILL_REGISTRY.get_pack("bedroom")        # all bedroom skills
+skills = SKILL_REGISTRY.get_by_category("GAME")     # all game skills
+skills = SKILL_REGISTRY.get_by_tag("combat")         # tagged skills
+skill = SKILL_REGISTRY.get("bedroom.set_mood")       # exact lookup
+all_skills = SKILL_REGISTRY.list_all()               # everything
+count = SKILL_REGISTRY.count()                        # total count
+```
 
 ---
 
-## State Management
+## Skill Pack Inventory (45 Packs)
 
-State is distributed across four systems. The **CharacterStateCoordinator** acts as the single write-through API that keeps them in sync.
+### Scene Skills (20 packs)
 
-### SceneStateManager
+| Pack | File | Skills | Scene |
+|------|------|--------|-------|
+| `bedroom` | `bedroom_skills.py` | 8 | Bedroom (5556) |
+| `phone` | `phone_skills.py` | 6 | Phone (5555) |
+| `lounge` | `lounge_skills.py` | 7 | Lounge (5557) |
+| `tavern` | `tavern_skills.py` | 8 | Tavern (5558) |
+| `casino` | `casino_skills.py` | 9 | Casino (5559) |
+| `gallery` | `gallery_skills.py` | 6 | Gallery (5560) |
+| `arena` | `arena_skills.py` | 10 | Arena (5561) |
+| `realm` | `realm_skills.py` | 9 | Realm (5562) |
+| `neoncity` | `neoncity_skills.py` | 7 | NeonCity (5563) |
+| `coders` | `coders_skills.py` | 8 | Coders (5564) |
+| `heist` | `heist_skills.py` | 11 | Heist (5565) |
+| `command_center` | `command_center_skills.py` | 5 | Command Center (5566) |
+| `games` | `games_skills.py` | 6 | Games (5567) |
+| `asset_studio` | `asset_studio_skills.py` | 7 | Asset Studio (5568) |
+| `grid` | `grid_skills.py` | 6 | Grid (5569) |
+| `nexus_panel` | `nexus_panel_skills.py` | 4 | Nexus Panel (5570) |
+| `lab_break` | `lab_break_skills.py` | 9 | Lab Break (5571) |
+| `system_control` | `system_control_skills.py` | 5 | System Control (5575) |
+| `intel_hub` | `intel_hub_skills.py` | 6 | Intel Hub (5580) |
+| `hub` | `hub_skills.py` | 3 | Hub (8500) |
 
-`engine/mcp/scene_state.py` — Per-scene state: character stats, clothing, narrative, timed actions, atmosphere.
+### Engine Skills (25 packs)
 
-```python
-from engine.mcp.scene_state import get_scene_state_manager
-
-ssm = get_scene_state_manager()
-ssm.update_stats("bedroom", "lola", {"arousal": +10, "happiness": +5})
-stats = ssm.get_stats("bedroom", "lola")
-```
-
-### CharacterRegistry
-
-`engine/mcp/character_registry.py` — Character profiles, personality, skills, restrictions, mood/energy/inhibition state.
-
-```python
-from engine.mcp.character_registry import get_character_registry
-
-reg = get_character_registry()
-reg.set_state("lola", mood="flirty", energy=80.0)
-state = reg.get_state("lola")
-```
-
-### CharacterStateCoordinator
-
-`engine/mcp/state_coordinator.py` — Unified write-through API. Routes fields to the correct store automatically.
-
-```python
-from engine.mcp.state_coordinator import get_coordinator
-
-coord = get_coordinator()
-
-# Single call routes mood → Registry, arousal → SSM, emits event, optionally persists
-coord.update("lola", mood="flirty", arousal=+10, energy=-5)
-coord.update("lola", arousal=50, mode="set")   # absolute instead of delta
-
-state = coord.get_full_state("lola")
-```
-
-| Field group | Target store | Examples |
-|-------------|-------------|----------|
-| Registry fields | `CharacterRegistry.set_state()` | mood, mood_intensity, energy, inhibition, focus |
-| Stats fields | `SceneStateManager.update_stats()` | arousal, happiness, anger, fear, drunkenness, tiredness |
-| Restrictions | `CharacterRegistry.add/remove_restriction()` | add_restriction, remove_restriction |
-
-Every `update()` emits a `state_changed` event on the ActivityBus. Pass `persist=True` to also write to the database.
-
-> **Convention:** All scenes, interceptors, and MCP tools should use the coordinator — never call `set_state()` / `update_stats()` directly.
-
-### TagRegistry
-
-`engine/mcp/tag_registry.py` — Central registry for inline behavioral tags (`[MOOD:xxx]`, `[IMAGE:xxx]`, `[ACTION:xxx]`, etc.) with decay support. Tags are parsed from LLM output and routed to the appropriate system.
+| Pack | File | Skills | Purpose |
+|------|------|--------|---------|
+| `nexus` | `nexus_skills.py` | 17 | Knowledge CRUD, search, Q&A |
+| `coding` | `coding_skills.py` | 9 | Code snippets, search, analysis |
+| `autonomy` | `autonomy_skills.py` | 67 | System management, governance |
+| `copilot` | `copilot_skills.py` | 9 | GitHub Copilot integration |
+| `colab` | `colab_skills.py` | 13 | Google Colab integration |
+| `memory` | `memory_skills.py` | 6 | RAG vector memory |
+| `character` | `character_skills.py` | 8 | Character state, relationships |
+| `social` | `social_skills.py` | 5 | Relationships, reputation |
+| `world` | `world_skills.py` | 6 | World state, events, time |
+| `economy` | `economy_skills.py` | 4 | Credits, market, transactions |
+| `city` | `city_skills.py` | 8 | City zones, locations |
+| `mission` | `mission_skills.py` | 9 | Quests, objectives |
+| `news` | `news_skills.py` | 4 | News pipeline, insights |
+| `media` | `media_skills.py` | 5 | Image gen, TTS, video |
+| `google_account` | `google_account_skills.py` | 4 | Account pool management |
+| `comfyui` | `comfyui_skills.py` | 6 | ComfyUI workflow dispatch |
+| `tts` | `tts_skills.py` | 3 | Text-to-speech |
+| `faction` | `faction_skills.py` | 5 | Faction standings |
+| `lmstudio_server` | `lmstudio_server_skills.py` | 7 | Model lifecycle |
+| `inference` | `inference_skills.py` | 5 | Benchmark, delegate |
+| `vision` | `vision_skills.py` | 4 | VLM image analysis |
+| `evaluation` | `evaluation_skills.py` | 4 | Response quality rating |
+| `conversation` | `conversation_skills.py` | 4 | Conversation management |
+| `game_common` | `game_common_skills.py` | 5 | Dice, topics, state |
+| `training` | `training_skills.py` | 3 | Data collection, flywheel |
 
 ---
 
-## Dialog System
+## Interceptor Pipeline
 
-`engine/mcp/dialog_system.py` · class `DialogSystem`
+### InterceptorBase
 
-The dialog system manages contextual dialog options, speech style enhancement, and temporary behavior steering.
+All interceptors extend `InterceptorBase` in `engine/mcp/comms_framework.py`:
 
-### Dialog Options
+```python
+class InterceptorBase:
+    priority: int = 50               # lower = runs first
+    applicable_scenes: List[str]     # empty = all scenes
+    name: str                        # display name
 
-Per-scene dialog trees with context-aware choices:
+    def pre_call(self, request: Dict, context: ResponseContext) -> Dict:
+        """Modify request before LLM call."""
+        return request
+
+    def post_call(self, response: str, context: ResponseContext) -> str:
+        """Modify response after LLM call."""
+        return response
+```
+
+### InterceptorPipeline
+
+The pipeline runs all applicable interceptors in priority order:
+
+```python
+pipeline = InterceptorPipeline(scene_id="bedroom")
+# pre_call: priority 10, 12, 15, ..., 70 (ascending)
+request = pipeline.run_pre_call(request, context)
+# LLM inference happens here
+response = pipeline.run_post_call(response, context)
+# post_call: same priority order
+```
+
+### Interceptor Inventory (28 Classes)
+
+| # | File | Class | Priority | Scenes | Purpose |
+|---|------|-------|----------|--------|---------|
+| 1 | `activity_logger.py` | ActivityLogger | 10 | all | Log tool calls to DataCollector |
+| 2 | `ambient_event.py` | AmbientEvent | 30 | game | Inject world events into context |
+| 3 | `auto_result.py` | AutoResult | 20 | all | Inject AUTO skill results |
+| 4 | `bedroom_scene.py` | BedroomScene | 40 | bedroom | Bedroom-specific logic |
+| 5 | `cache.py` | Cache | 5 | all | Response cache v1 |
+| 6 | `_cache.py` | CacheV2 | 5 | all | Response cache v2 |
+| 7 | `character_registry.py` | CharacterRegistry | 15 | all | Inject character state |
+| 8 | `conversation_recap.py` | ConversationRecap | 25 | all | Summarize long conversations |
+| 9 | `conversation_variety.py` | ConversationVariety | 55 | all | Detect repetition, inject variety |
+| 10 | `dialog_directive.py` | DialogDirective | 12 | all | Enforce response directives |
+| 11 | `game.py` | GameInterceptor | 35 | game | Game session mechanics |
+| 12 | `gallery_scene.py` | GalleryScene | 40 | gallery | Gallery art context |
+| 13 | `lounge_scene.py` | LoungeScene | 40 | lounge | Lounge ambiance |
+| 14 | `memory_enhancer.py` | MemoryEnhancer | 18 | all | RAG memory injection |
+| 15 | `mood_sync.py` | MoodSync | 60 | all | Sync mood state after reply |
+| 16 | `natural_mood_drift.py` | NaturalMoodDrift | 62 | all | Gradual mood decay |
+| 17 | `nexus_prompt.py` | NexusPrompt | 22 | all | Inject Nexus knowledge |
+| 18 | `personality_guard.py` | PersonalityGuard | 45 | all | Character consistency |
+| 19 | `phone_scene.py` | PhoneScene | 40 | phone | Phone message formatting |
+| 20 | `policy_enforcer.py` | PolicyEnforcer | 8 | all | InteractionPolicy enforcement |
+| 21 | `relationship_context.py` | RelationshipContext | 46 | all | Inject relationship metrics |
+| 22 | `relationship_event.py` | RelationshipEvent | 65 | all | Track relationship changes |
+| 23 | `response_shaper.py` | ResponseShaper | 70 | all | Format/tone refinement |
+| 24 | `router_message.py` | RouterMessage | 50 | all | Cross-scene message routing |
+| 25 | `skill_awareness.py` | SkillAwareness | 16 | all | Inject available skills |
+| 26 | `tts_style.py` | TTSStyle | 68 | all | TTS style hints |
+| 27 | `universal_scene.py` | UniversalScene | 38 | all | Global scene context |
+| 28 | `__init__.py` | `get_all_interceptors()` | — | — | Discovery function |
+
+### Pre-Call Flow (System Prompt Building)
+
+```
+PolicyEnforcer (8)    → enforce limits, forbidden topics
+Cache (5)             → check cache, short-circuit if hit
+ActivityLogger (10)   → start timing
+DialogDirective (12)  → inject response directives
+CharacterRegistry (15)→ inject character state
+SkillAwareness (16)   → inject available skills list
+MemoryEnhancer (18)   → inject relevant RAG memories
+AutoResult (20)       → inject AUTO skill results
+NexusPrompt (22)      → inject Nexus knowledge
+ConversationRecap (25)→ summarize if history too long
+AmbientEvent (30)     → inject world events
+GameInterceptor (35)  → inject game session state
+UniversalScene (38)   → global context
+[Scene]-specific (40) → scene-customized context
+PersonalityGuard (45) → character consistency prompt
+RelationshipContext(46)→ relationship tier + memories
+RouterMessage (50)    → cross-scene messages
+```
+
+### Post-Call Flow (Response Processing)
+
+```
+ConversationVariety(55)→ detect repetition
+MoodSync (60)          → extract [MOOD:x], sync state
+NaturalMoodDrift (62)  → decay mood toward neutral
+RelationshipEvent (65) → detect relationship changes
+TTSStyle (68)          → inject TTS hints
+ResponseShaper (70)    → format/tone refinement
+```
+
+---
+
+## AgentGovernor
+
+The governance wrapper in `engine/mcp/comms_framework.py` (lines 506–726).
+
+### Reply Pipeline
+
+```python
+governor = get_governor(agent, scene="bedroom")
+
+response = governor.reply(
+    user_message="Hello, how are you?",
+    chain_id="conv_001",
+    history=previous_messages,
+    skip_gov=False,
+)
+```
+
+#### Full Pipeline Steps:
+
+1. **Load SkillManifest** for the scene
+2. **Execute AUTO skills** — results injected into context
+3. **Build ResponseContext** — mutable dict passed through pipeline
+4. **Run pre-call interceptors** — modify system prompt, inject context
+5. **LLM inference** via VirtualAgentManager
+6. **Parse response** — StreamProcessor extracts inline tags
+7. **Run post-call interceptors** — shape/validate response
+8. **Return final reply**
+
+### Public Methods
+
+| Method | Purpose |
+|--------|---------|
+| `reply(user_message, *, chain_id, history, skip_gov)` | Full governed reply |
+| `quick_query(prompt, max_tokens)` | Fast query (bypass governance) |
+| `context_dump(user_message)` | Dry-run snapshot (no LLM call) |
+
+### Governance Context
+
+- **SkillManifest** — auto/optional/required skills per scene
+- **InteractionPolicy** — token limits, forbidden topics, tone
+- **ResponseContext** — mutable dict: system_prompt, messages, reply, metadata
+
+### governance_context Propagation
+
+```
+AgentGovernor.reply()
+  → CharacterAgent.reply(governance_context=ctx)
+    → VirtualAgent.reply(governance_context=ctx)
+      → build_request() appends ctx after system prompt
+```
+
+Without this propagation, interceptor injections are silently lost.
+
+---
+
+## DialogSystem
+
+Conversation tracking and speech style management in
+`engine/mcp/dialog_system.py`.
+
+### Access
 
 ```python
 from engine.mcp.dialog_system import get_dialog_system
 
 ds = get_dialog_system()
-options = ds.get_options("bedroom", "lola", context={"mood": "playful"})
-# [DialogOption(label="Tease her", text="...", tag="flirty"), ...]
 ```
 
-### Speech Enhancement
+### Public Methods
 
-`SpeechEnhancer` transforms plain text into character-appropriate speech styles:
+| Method | Purpose |
+|--------|---------|
+| `start_conversation(scene_id, character_id, user_id)` | Begin tracking |
+| `add_turn(conv_id, role, content, metadata)` | Record a turn |
+| `get_conversation(conv_id)` | Full conversation state |
+| `end_conversation(conv_id, reason)` | Close conversation |
+| `get_speech_style(character_id)` | Character's speech patterns |
+| `set_response_directive(conv_id, directive)` | Set next-reply directive |
+
+### Conversation Tracking
+
+- Creates a conversation ID per character-user pair
+- Tracks: turns, mood progression, topic shifts, directive queue
+- Speech styles loaded from character profile
+- Response directives consumed once (single-use instructions)
+
+---
+
+## EventChain
+
+Audit logging with typed events in `engine/mcp/event_chain.py`.
+
+### MCP Tools
+
+| Tool | Purpose |
+|------|---------|
+| `get_chain_events(chain_id, limit)` | Browse event history |
+| `log_event(chain_id, event_type, actor, summary, payload, character_id)` | Record event |
+
+### Event Types
+
+- `conversation`, `skill_call`, `state_change`, `scene_event`,
+  `relationship`, `economy`, `combat`, `quest`, `system`
+
+### Usage
 
 ```python
-enhanced = ds.enhance_speech("lola", "Hello there",
-                              style="playful")  # or "teasing", "vulnerable", "dominant"
-```
+from engine.mcp.event_chain import get_event_chain
 
-Available styles: `playful`, `teasing`, `vulnerable`, `dominant`, `seductive`, and more (see `SpeechStyle` constants).
-
-### ResponseDirective
-
-Temporary behavior steering injected by the director or scene logic:
-
-```python
-ds.set_directive("bedroom", "lola",
-                  force_response="Ask about the gift",
-                  must_include=["surprise"],
-                  style_lock="vulnerable")
-```
-
-The `DialogDirectiveInterceptor` (priority 12) picks up active directives and injects them into the system prompt before the LLM call.
-
-### ConversationHeat
-
-`engine/mcp/scene_rules_engine.py` · class `ConversationHeat`
-
-A thermal model tracking conversation intensity on a **0–100 scale**:
-
-| Range | Tier | Directive injected |
-|-------|------|--------------------|
-| < 30 | Normal | *(none)* |
-| 30–59 | WARM | Flirty, playful energy; innuendo and light teasing |
-| 60–79 | HOT | Suggestive and seductive; escalation encouraged |
-| ≥ 80 | INTENSE | Passionate and explicit; full adult content |
-
-Messages are scanned for keywords that auto-bump heat (e.g. `kiss` +15, `intimate` +20, `touch` +10). Per-message bump is capped at +25. Heat decays at −2/min after 30 seconds idle.
-
-```python
-from engine.mcp.scene_rules_engine import get_conversation_heat
-
-heat = get_conversation_heat()
-heat.analyze_message("phone_aria_thread1", "She leaned in to kiss him")
-level = heat.get("phone_aria_thread1")          # e.g. 45.0
-directive = heat.get_directive("phone_aria_thread1")
+chain = get_event_chain()
+chain.log("conv_001", "conversation", actor="lola",
+          summary="Greeted the player", payload={"mood": "happy"})
+events = chain.get_events("conv_001", limit=20)
 ```
 
 ---
 
-## Rules Engine
+## SceneStateManager
 
-`engine/mcp/scene_rules_engine.py` · class `SceneRulesEngine`
+Per-scene, per-character state management in `engine/mcp/scene_state.py`.
 
-A data-driven rules engine that governs scene behavior, available actions, and character permissions.
+### Access
 
-### RuleDefinition
+```python
+from engine.mcp.scene_state import get_scene_state_manager
 
-Named rules with conditions, effects, and priorities:
+ssm = get_scene_state_manager()
+```
+
+### STAT_KEYS (0–100 Scale)
+
+```python
+STAT_KEYS = [
+    "arousal", "horniness", "pleasure", "happiness",
+    "anger", "fear", "drunkenness", "tiredness",
+    "explicitness", "openness", "affection", "dominance",
+]
+```
+
+### Character State Methods
+
+| Method | Purpose |
+|--------|---------|
+| `update_stats(char_id, **kwargs)` | Adjust emotional/physical stats |
+| `get_stats(char_id)` | Get StatsSnapshot |
+| `give_clothing(char_id, item)` | Add wearable |
+| `remove_clothing(char_id, item_id)` | Strip item |
+| `start_timed_action(char_id, action, duration)` | Long-form action timer |
+| `poll_timed_action(token)` | Check action status |
+
+### Scene State Methods
+
+| Method | Purpose |
+|--------|---------|
+| `set_scene_state(scene_id, **kwargs)` | Scene-level state |
+| `get_scene_state(scene_id)` | Read scene state |
+| `add_narrative(scene_id, text, entry_type, character_id)` | Log narrative event |
+| `get_narrative(scene_id, limit)` | Recent narrative events |
+
+### Data Types
+
+**StatsSnapshot:** Named dict of all STAT_KEYS with 0–100 values.
+
+**ClothingItem:**
+```python
+@dataclass
+class ClothingItem:
+    item_id: str
+    name: str
+    category: str       # top, bottom, shoes, accessory, underwear
+    color: str
+    style: str
+    worn: bool = True
+```
+
+**CharacterWardrobe:** Ordered clothing inventory with `wear()`, `remove()`, `list_worn()`.
+
+---
+
+## SceneRulesEngine
+
+Centralized governance rules in `engine/mcp/scene_rules_engine.py`.
+
+### Access
 
 ```python
 from engine.mcp.scene_rules_engine import get_rules_engine
 
-eng = get_rules_engine()
-
-# Register a triggered rule
-eng.add_rule("bedroom", RuleDefinition(
-    rule_id="intimate_unlock",
-    label="Unlock intimate actions",
-    rule_type="triggered",
-    conditions=[RuleCondition(stat="arousal", operator=">=", value=70)],
-    effects=[RuleEffect(action="unlock_actions", params={"group": "intimate"})],
-    priority=10
-))
-
-# Evaluate threshold rules after stat changes
-triggered = eng.evaluate_threshold_rules("bedroom", "lola",
-    {"arousal": 70, "happiness": 50})
-for rule in triggered:
-    eng.apply_rule("bedroom", rule["rule_id"], target_ids=["lola"])
+rules = get_rules_engine()
 ```
 
-Rule types: `always_on` (active every turn), `triggered` (fires when stat thresholds crossed), `director_only` (manually invoked).
+### Public Methods
 
-### ActionDefinition
+| Method | Purpose |
+|--------|---------|
+| `get_rules_text(scene_id)` | Full rules for system prompt |
+| `get_available_actions(scene_id, character_id, stats)` | Allowed actions |
+| `check_permission(scene_id, character_id, action_id)` | Permission check |
+| `apply_rule(scene_id, rule_id, target_ids, issuer)` | Execute a rule |
 
-Available actions per scene, with intimacy levels and stat conditions:
+### Data Types
 
-```python
-action = ActionDefinition(
-    action_id="kiss",
-    label="Kiss",
-    intimacy_level=2,
-    conditions={"arousal": 30},
-    effects={"arousal": +15, "happiness": +10}
-)
-```
+**RuleCondition:** stat/state thresholds (AND logic)
 
-### PermissionMatrix
+**ActionDefinition:** named action with intimacy requirement, condition, effects
 
-Per-scene, per-character action permission table:
+**RuleDefinition:** named rule — `always_on`, `triggered`, or `director_only`
 
-```python
-matrix = PermissionMatrix()
-matrix.allow("bedroom", "lola", "kiss")
-matrix.deny("bedroom", "lola", "leave_scene")
-can = matrix.check("bedroom", "lola", "kiss")  # True
-```
-
-### Threshold Rules Flow
-
-```
-LLM response arrives
-    → MoodSyncInterceptor.post_call() (priority 92)
-        → sync mood/energy to CharacterRegistry
-        → gather stats from SSM + CharacterRegistry
-        → SceneRulesEngine.evaluate_threshold_rules()
-        → apply_rule() for each triggered rule
-```
+**RuleEffect Types:**
+- `stat_adjust` — modify stat by delta
+- `state_set` — set state flag
+- `add_restriction` / `remove_restriction` — toggle restrictions
+- `add_narrative` — log narrative event
+- `set_directive` — set response directive
+- `scene_event` — emit scene event
+- `set_atmosphere` — change scene ambiance
 
 ---
 
-## Interaction Trees
+## StreamProcessor
 
-`engine/mcp/interaction_trees.py`
+Real-time SSE processing in `engine/agents/stream_processor.py`.
 
-Interaction trees define branching interaction paths with phases, stat effects, and requirements.
+### Inline Tag Patterns
 
-### Core Data Model
+| Tag | Example | Extraction |
+|-----|---------|------------|
+| `[MOOD:X]` | `[MOOD:happy]` | `mood_tags` list |
+| `[IMAGE:X]` | `[IMAGE:sunset scene]` | `image_requests` list |
+| `[SELFIE:X]` | `[SELFIE:winking]` | `image_requests` list |
+| `[ACTION:X]` | `[ACTION:sit down]` | `action_tags` list |
+| `[STAT:X±N]` | `[STAT:arousal+10]` | `stat_deltas` list |
+| `[VOICE:X]` | `[VOICE:whisper]` | `voice_style` |
+| `[SEND:X]` | `[SEND:lola]` | routing target |
+| `[EVENT:X]` | `[EVENT:alarm]` | scene event |
+| `[MEMORY:X]` | `[MEMORY:user likes coffee]` | memory store |
+| `[THINK:X]` | `[THINK:considering options]` | reasoning |
+
+### ProcessedResponse
 
 ```python
 @dataclass
-class InteractionSubtype:
-    id: str
-    label: str
-    description: str
-    duration: float            # seconds
-    intimacy: int              # 1–5
-    stat_effects: Dict[str, float]
-    phases: List[str]          # e.g. ["beginning", "peak", "afterglow"]
-    fragments: List[str]       # sample narrative lines
-    requires: Dict[str, float] # minimum stat thresholds
-
-@dataclass
-class InteractionType:
-    id: str
-    label: str
-    description: str
-    subtypes: List[InteractionSubtype]
+class ProcessedResponse:
+    raw_text: str                     # with tags
+    clean_text: str                   # tags stripped
+    reasoning_content: str            # chain-of-thought
+    mood_tags: List[str]
+    image_requests: List[str]
+    action_tags: List[str]
+    stat_deltas: List[StatDelta]
+    voice_style: Optional[str]
+    tool_calls: List[ToolCallRecord]
+    response_id: str
+    model: str
+    input_tokens: int
+    output_tokens: int
+    reasoning_tokens: int
+    server_tps: float
+    time_to_first_token_s: float
+    model_load_time_s: float
+    latency_ms: float
 ```
 
-### Built-in Interaction Sets
-
-**Bedroom** (6 types): `cuddle`, `kiss`, `caress`, `striptease`, `oral`, `penetration`
-**Phone** (6 types): phone-specific interaction variants
-
-Each type contains multiple subtypes with escalating intimacy levels (1–5).
-
-### Phase Management
-
-Subtypes define ordered phases that represent narrative progression:
+### Constructor Callbacks
 
 ```python
-subtype.phases  # ["beginning", "building", "peak", "afterglow"]
-```
-
-### Requirements Checking
-
-Interactions check minimum stat thresholds before firing:
-
-```python
-interaction = BEDROOM_INTERACTIONS["kiss"]
-subtype = interaction.get_subtype("neck_kiss")
-# subtype.requires = {"arousal": 30, "affection": 20}
-# Only available when character stats meet these minimums
-
-result = get_interaction_result(interaction_type="kiss", subtype="neck_kiss",
-                                 character_stats=current_stats)
-```
-
----
-
-## Skills Integration
-
-### The @skill Decorator
-
-`engine/skills/skill.py`
-
-Every tool available to agents is registered as a skill:
-
-```python
-from engine.skills.skill import skill, SkillCategory
-
-@skill(
-    name="serve_drink",
-    pack="casino",
-    description="Serve a cocktail to a player",
-    tags=["casino", "social"],
-    category=SkillCategory.SOCIAL,
-    cooldown=5.0,
-    prerequisites=["get_scene_snapshot"],
-    cost=1.0
+processor = StreamProcessor(
+    on_delta=lambda chunk: print(chunk, end=""),
+    on_tool_call=lambda tc: handle_tool(tc),
+    on_mood=lambda mood: update_mood(mood),
+    on_image_request=lambda prompt: queue_image(prompt),
+    on_action=lambda action: execute_action(action),
+    on_stat_delta=lambda sd: apply_stat(sd),
+    on_tag=lambda tag_type, value: log_tag(tag_type, value),
 )
-def serve_drink(drink_id: str, target: str = "player") -> str:
-    return f"Served {drink_id} to {target}"
 ```
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `name` | str | function name | Skill identifier |
-| `pack` | str | `"default"` | Group name for related skills |
-| `description` | str | `""` | LLM-facing description |
-| `tags` | list | `[]` | Searchable tags |
-| `category` | SkillCategory | `""` | Category constant |
-| `cooldown` | float | `0.0` | Minimum seconds between invocations |
-| `prerequisites` | list | `[]` | Required skill names that must exist |
-| `cost` | float | `1.0` | Relative compute/resource cost |
-
-### Skill Packs
-
-Skills are grouped into packs — some scene-specific, some built-in:
-
-| Pack | Skills | Description |
-|------|--------|-------------|
-| `character` | speak_as, speech_enhance, character_get_summary | Character voice and identity |
-| `memory` | memory_recall, store_memory | Long-term memory |
-| `environment` | set_scene_atmosphere, environment_change | Scene atmosphere |
-| `narrative` | inject_story_beat, get_dialog_options, set_response_directive | Story direction |
-| `social` | mood_contagion, relationship_adjust, scene_broadcast, get_scene_snapshot | Social dynamics |
-| `tts` / `voice` | generate_voice_message | Voice synthesis |
-| `comfyui` | generate_image | Image generation |
-
-### Skill Manifest (Per-Scene)
-
-`SkillManifest` controls which skills are available per scene and how the LLM interacts with them:
-
-| Trigger | Meaning |
-|---------|---------|
-| `auto` | Fires automatically every turn; result injected into pre-call context |
-| `optional` | LLM is told the skill exists but chooses whether to call it |
-| `required` | LLM must call this skill before replying |
-
-Manifests are configured in `config/skill_manifests.yaml` and hot-reloadable per scene.
-
-### How the LLM Invokes Skills
-
-1. `SkillAwarenessInterceptor` (priority 30) reads the scene manifest and lists `REQUIRED` / `AVAILABLE` tools in the system prompt.
-2. The LLM responds with a tool-call in its output.
-3. The MCP server routes the call to the registered skill function.
-4. The result is returned to the LLM for incorporation into its reply.
-5. `AutoResultInjector` (priority 20) handles `auto`-trigger skills by pre-injecting their results before the LLM call.
-
----
-
-## Writing a Custom Tool
-
-> **v0.84b pattern:** Use `@mcp_tool` in the domain file, then add a thin
-> wrapper in `cosysim_server.py`. Full details in the
-> [MCP Tool Decorator](#mcp-tool-decorator) section below.
-
-### Step 1: Create the function in a tools module
+### Usage
 
 ```python
-# engine/mcp/tools/utility_tools.py  (or a new module)
-from engine.mcp.decorators import mcp_tool, ToolExecutionError
+# Generator-based
+result = StreamProcessor.process_generator(client.chat_stream(msgs))
 
-@mcp_tool
-def roll_dice(sides: int = 6) -> dict:
-    """Roll a dice with N sides."""
-    import random
-    if sides < 2:
-        raise ToolExecutionError(f"sides must be >= 2, got {sides}")
-    result = random.randint(1, sides)
-    return {"roll": result, "sides": sides}
-```
-
-### Step 2: Add the wrapper in cosysim_server.py
-
-```python
-# cosysim_server.py
-from engine.mcp.tools.utility_tools import roll_dice as _roll_dice
-
-@mcp.tool
-def roll_dice(sides: int = 6) -> dict:
-    """Roll a dice with N sides."""
-    return _roll_dice(sides)
-```
-
-### Step 3: (Optional) Register as a skill for manifest control
-
-```python
-from engine.skills import SKILL_REGISTRY
-SKILL_REGISTRY["roll_dice"] = roll_dice
-```
-
-Then add it to the scene's skill manifest in `config/skill_manifests.yaml`:
-
-```yaml
-scenes:
-  casino:
-    - name: roll_dice
-      trigger: optional
-      description: "Roll a dice (1–N sides)"
+# Event-based
+processor.on_event(stream_event)   # typed LMSStreamEvent
+processor.feed_content(chunk)      # raw content string
+result = processor.result()        # final ProcessedResponse
 ```
 
 ---
 
-## MCP Tool Decorator
+## VirtualAgent / VirtualAgentManager
 
-> **Added in v0.84b (Project Hindsight).** See [Project Hindsight](./PROJECT_HINDSIGHT.md)
-> for full context on the MCP server extraction.
+### VirtualAgent
 
-### The Thin Wrapper Pattern
-
-All tool logic in v0.84b lives in domain files under `engine/mcp/tools/`.
-`cosysim_server.py` is a pure thin routing layer — it only holds `@mcp.tool`
-stubs that immediately delegate:
-
-```
-Before v0.84b                         After v0.84b
-─────────────────────────────         ──────────────────────────────────────
-cosysim_server.py (3,088 lines)  →    cosysim_server.py (2,192 lines)
-  all logic here                         thin wrappers only
-                                       engine/mcp/tools/ (43 files, 8,147 lines)
-                                         all logic here
-```
-
-**Rule:** Never add business logic directly in `cosysim_server.py`.
-
-### `@mcp_tool`
-
-`engine/mcp/decorators.py` · decorator `mcp_tool`
-
-Wraps domain functions with:
-
-- **JSON serialisation** — dict/list returns are serialised automatically
-- **Structured errors** — `ToolExecutionError` is caught and returned as
-  `{"error": "..."}` rather than raising to the LLM
-- **Execution timing** — logged at `DEBUG` with tool name and duration
-- **Tool name** — auto-extracted from function name (no decorator argument needed)
+Decoupled agent identity in `engine/agents/virtual_agent.py`:
 
 ```python
-# engine/mcp/tools/character_tools.py
-from engine.mcp.decorators import mcp_tool, ToolExecutionError
+class VirtualAgent:
+    def reply(self, user_message: str) -> str:
+        """Route through VirtualAgentManager."""
+
+    def quick_query(self, prompt: str, max_tokens: int = 200) -> str:
+        """Fast query."""
+
+    def get_state(self) -> Dict[str, Any]:
+        """Character local state mirror."""
+
+    def load_state(self) -> None:
+        """Restore persisted state."""
+
+    def save_state(self) -> None:
+        """Persist state."""
+```
+
+### VirtualAgentManager
+
+Centralized inference server in `engine/agents/virtual_agent_manager.py`:
+
+```python
+class VirtualAgentManager:
+    def create_agent(
+        self, character, *, scene=None, model=None, skill_packs=None
+    ) -> VirtualAgent:
+        """Create and register agent."""
+
+    def infer(self, request: InferenceRequest) -> InferenceResponse:
+        """Single LLM inference (routed)."""
+
+    def infer_batch(self, requests: List[InferenceRequest]) -> List[InferenceResponse]:
+        """Parallel inference."""
+
+    def infer_stream(
+        self, request: InferenceRequest, on_event=None
+    ) -> Generator[str, None, None]:
+        """Streaming inference with typed SSE events."""
+
+    def get_stats(self) -> Dict:
+        """Request/token/latency stats."""
+```
+
+### Inference Flow
+
+```
+VirtualAgent.reply()
+  → InferenceRequest
+    → VirtualAgentManager.infer()
+      → ConversationManager (stateful fast-path) or LMSClient.chat()
+        → StreamProcessor (if streaming)
+          → InferenceResponse
+```
+
+---
+
+## CharacterRegistry
+
+Character profile management in `engine/mcp/character_registry.py`.
+
+```python
 from engine.mcp.character_registry import get_character_registry
 
-@mcp_tool
-def get_character_summary(character_id: str) -> str:
-    """Return a full character summary string."""
-    reg = get_character_registry()
-    char = reg.get(character_id)
-    if char is None:
-        raise ToolExecutionError(f"Character not found: {character_id}")
-    return char.to_summary()
-
-@mcp_tool
-def set_character_mood(character_id: str, mood: str) -> dict:
-    reg = get_character_registry()
-    reg.set_state(character_id, mood=mood)
-    return {"ok": True, "character_id": character_id, "mood": mood}
+registry = get_character_registry()
+character = registry.get("lola")          # by ID
+characters = registry.get_by_scene("bedroom")
+all_chars = registry.list_all()
 ```
 
-```python
-# cosysim_server.py — thin wrapper only
-from engine.mcp.tools.character_tools import (
-    get_character_summary as _get_character_summary,
-    set_character_mood as _set_character_mood,
-)
+Characters loaded from `content/characters/` YAML profiles with:
+- traits, backstory, speech patterns
+- emotional state (12 STAT_KEYS)
+- relationships (with other characters)
+- inventory, wardrobe
+- scene membership
 
-@mcp.tool
-def character_get_summary(character_id: str) -> str:
-    """Get a full character summary."""
-    return _get_character_summary(character_id)
+---
 
-@mcp.tool
-def character_set_mood(character_id: str, mood: str) -> dict:
-    """Set a character's mood."""
-    return _set_character_mood(character_id, mood)
-```
+## MCP Server (cosysim_server.py)
 
-### `ToolExecutionError`
+FastMCP-based server exposing 30+ MCP tools:
 
-`engine/mcp/decorators.py` · exception `ToolExecutionError`
+### Execution Modes
 
-Use for **expected** failures: bad input, resource not found, permission denied.
-These are returned to the LLM as structured error responses — not Python exceptions.
+| Mode | Command | Use Case |
+|------|---------|----------|
+| stdio | `python -m engine.mcp.cosysim_server` | mcp.json integration |
+| HTTP | `python -m engine.mcp.cosysim_server --http` | Direct HTTP |
+| Mount | `app.mount("/mcp", mcp.http_app())` | Embedded in Flask |
 
-```python
-from engine.mcp.decorators import ToolExecutionError
+### MCP Tools (Sample)
 
-# Expected failure → returned as {"error": "Scene not active: casino"}
-raise ToolExecutionError("Scene not active: casino")
+| Tool | Purpose |
+|------|---------|
+| `search_memory(query, character_id, top_k)` | RAG vector search |
+| `store_memory(text, character_id, metadata)` | Persist to ChromaDB |
+| `get_character_state(character_id)` | Mood, energy, relationships |
+| `adjust_relationship(char_a, char_b, field, delta)` | Modify trust/attraction |
+| `generate_image_request(prompt, width, height)` | ComfyUI proxy |
+| `get_chain_events(chain_id, limit)` | Browse EventChain |
+| `log_event(chain_id, event_type, actor, summary)` | Record event |
+| `list_characters()` | Character directory |
+| `get_my_skills(scene)` | Available skills |
+| `roll_dice(sides, count)` | Random outcomes |
+| `get_game_state(game_id, key)` | Read game state |
+| `set_game_state(game_id, key, value)` | Write game state |
+| `start_game(game_id, scene, config_json)` | Initialize game |
 
-# Unexpected failure → propagates, logged, returned as generic error
-raise RuntimeError("Database connection lost")
-```
+### MCP Resources
 
-| Error type | When to use | LLM receives |
-|------------|-------------|--------------|
-| `ToolExecutionError` | Bad param, not found, permission | `{"error": "your message"}` |
-| Any other exception | Unexpected crash | `{"error": "internal error"}` + server log |
+| Resource URI | Data |
+|-------------|------|
+| `config://cosysim` | YAML config snapshot |
+| `benchmark://summary` | KPI timing |
+| `character://{id}` | Full profile + state |
+| `chain://{chain_id}` | EventChain tree as JSON |
+| `scene://{name}/status` | Scene health |
 
-### Domain File Layout
+---
 
-The 43 domain files in `engine/mcp/tools/` are grouped by responsibility:
+## Singletons Reference
 
-| File | Domain | Example functions |
-|------|--------|-------------------|
-| `character_tools.py` | Character state | `get_character_summary`, `set_mood` |
-| `memory_tools.py` | Memory / Nexus | `memory_recall`, `store_memory` |
-| `scene_tools.py` | Scene state | `get_scene_snapshot`, `set_atmosphere` |
-| `wardrobe_tools.py` | Clothing | `change_outfit`, `get_wardrobe_state` |
-| `game_tools.py` | Game sessions | `start_game`, `get_game_state` |
-| `dialog_tools.py` | Dialog / speech | `get_dialog_options`, `speech_enhance` |
-| `media_tools.py` | Images / TTS | `generate_image`, `generate_voice_message` |
-| `utility_tools.py` | Dice, topics, misc | `roll_dice`, `random_topic` |
-| *(35 more)* | Scene-specific | Arena, Casino, Heist, Grid, etc. |
+| Singleton | Module | Access |
+|-----------|--------|--------|
+| `MCPFramework` | `engine/mcp/framework.py` | `get_framework()` |
+| `CharacterRegistry` | `engine/mcp/character_registry.py` | `get_character_registry()` |
+| `DialogSystem` | `engine/mcp/dialog_system.py` | `get_dialog_system()` |
+| `SceneRulesEngine` | `engine/mcp/scene_rules_engine.py` | `get_rules_engine()` |
+| `SceneStateManager` | `engine/mcp/scene_state.py` | `get_scene_state_manager()` |
+| `SkillRegistry` | `engine/skills/registry.py` | `SKILL_REGISTRY` |
+| `SkillManifest` | `engine/mcp/comms_framework.py` | `get_skill_manifest()` |
+| `GameState` | `engine/mcp/comms_framework.py` | `get_game_state()` |
+| `AgentRouter` | `engine/mcp/comms_framework.py` | `get_router()` |
+| `VirtualAgentManager` | `engine/agents/virtual_agent_manager.py` | `get_virtual_agent_manager()` |
 
-### Adding a New Tool (v0.84b Pattern)
+---
 
-#### Step 1: Add logic to a domain file
+## Configuration
 
-```python
-# engine/mcp/tools/utility_tools.py
-
-from engine.mcp.decorators import mcp_tool, ToolExecutionError
-
-@mcp_tool
-def flip_coin() -> dict:
-    """Flip a coin and return the result."""
-    import random
-    return {"result": random.choice(["heads", "tails"])}
-```
-
-#### Step 2: Add a thin wrapper in cosysim_server.py
-
-```python
-# cosysim_server.py
-from engine.mcp.tools.utility_tools import flip_coin as _flip_coin
-
-@mcp.tool
-def flip_coin() -> dict:
-    """Flip a coin."""
-    return _flip_coin()
-```
-
-#### Step 3: (Optional) Register as a skill for manifest control
-
-```python
-from engine.skills import SKILL_REGISTRY
-SKILL_REGISTRY["flip_coin"] = flip_coin
-```
-
-Then add to `config/skill_manifests.yaml`:
+MCP framework settings in `config/default.yaml`:
 
 ```yaml
-scenes:
-  casino:
-    - name: flip_coin
-      trigger: optional
-      description: "Flip a coin — heads or tails"
+comms:
+  interceptors:
+    - PolicyEnforcer
+    - Cache
+    - ActivityLogger
+    - DialogDirective
+    - CharacterRegistry
+    - SkillAwareness
+    - MemoryEnhancer
+    - AutoResult
+    - NexusPrompt
+    - ConversationRecap
+    - AmbientEvent
+    - GameInterceptor
+    - UniversalScene
+    - BedroomScene
+    - LoungeScene
+    - GalleryScene
+    - PhoneScene
+    - PersonalityGuard
+    - RelationshipContext
+    - RouterMessage
+    - ConversationVariety
+    - MoodSync
+    - NaturalMoodDrift
+    - RelationshipEvent
+    - TTSStyle
+    - ResponseShaper
+  pipeline:
+    max_interceptors: 30
+    timeout_per_interceptor_ms: 5000
+
+mcp:
+  state_persistence: true
+  state_file: "data/mcp_state.json"
+  timer_tick_ms: 1000
+  consequence_tick_ms: 5000
 ```
 
 ---
 
-## Writing a Custom Interceptor
+## Metrics Summary
 
-> **v0.84b:** Interceptors use `@register_interceptor` auto-registry. See
-> [INTERCEPTORS.md](./INTERCEPTORS.md) for the full reference.
-
-### Step 1: Create the file in the interceptors package
-
-```python
-# engine/agents/interceptors/weather_injector.py
-from engine.agents.interceptors.base import InterceptorBase, register_interceptor
-from engine.mcp.comms_framework import ResponseContext
-
-@register_interceptor
-class WeatherInjector(InterceptorBase):
-    """Inject current weather into system prompt before LLM call."""
-
-    name     = "weather_injector"
-    priority = 45                   # slot in pipeline (0–100+)
-
-    def pre_call(self, ctx: ResponseContext) -> None:
-        weather = fetch_weather()
-        ctx["system_prompt"] += f"\n[Current weather: {weather}]"
-
-    def post_call(self, ctx: ResponseContext) -> None:
-        pass
-```
-
-### Step 2: Done — auto-registered
-
-`@register_interceptor` adds the class to the global registry. No changes to
-`__init__.py`, `comms_framework.py`, or any server file are needed. The
-interceptor appears in all pipelines on the next server startup.
-
-### Step 3: (Optional) Add at runtime
-
-```python
-from engine.mcp import get_governor
-from engine.agents.interceptors.weather_injector import WeatherInjector
-
-gov = get_governor(my_agent, scene="lounge")
-gov.pipeline.add(WeatherInjector())  # sorted by priority automatically
-```
-
-### Step 4: (Optional) Remove later
-
-```python
-gov.pipeline.remove("weather_injector")
-```
-
-### Priority Guidelines
-
-| Range | Convention |
-|-------|-----------|
-| 1–10 | Early state sync (mood drift, registry sync) |
-| 10–20 | Message/directive injection |
-| 15–17 | Scene-specific interceptors |
-| 20–40 | Skill awareness, game state |
-| 45–70 | Guards, policy, memory |
-| 80–93 | Post-processing (shaping, TTS, logging, mood sync) |
-
----
-
-## Module Exports Quick Reference
-
-### `from engine.mcp import ...`
-
-| Symbol | Type | Purpose |
-|--------|------|---------|
-| `get_governor` | function | Create/get a governor for an agent |
-| `AgentGovernor` | class | Governance wrapper for any IAgent |
-| `InterceptorBase` | ABC | Base class for custom interceptors |
-| `InterceptorPipeline` | class | Ordered interceptor container |
-| `ResponseContext` | class | Dict-like context bag for one turn |
-| `InteractionPolicy` | dataclass | Per-turn policy configuration |
-| `build_governance_context` | function | Build interceptor context without a governor |
-| `GameState` | class | Game key/value store |
-| `get_game_state` | function | Get singleton GameState |
-| `AgentRouter` | class | Inter-agent message inbox |
-| `get_router` | function | Get singleton AgentRouter |
-| `SkillManifest` | class | Scene→skill registry |
-| `get_skill_manifest` | function | Get singleton SkillManifest |
-
-### `from engine.agents import ...`
-
-| Symbol | Type | Purpose |
-|--------|------|---------|
-| `CharacterAgent` | class | Primary LLM conversational agent |
-| `AgentGovernor` | class | (re-export from mcp) |
-| `get_governor` | function | (re-export from mcp) |
-| `IAgent` | Protocol | Structural interface contract |
-| `AgentCapability` | Enum | Declared agent capabilities |
+| Metric | Value |
+|--------|-------|
+| MCP tool files | 43 |
+| Builtin skill packs | 45 |
+| Interceptor classes | 28 |
+| MCPFramework public methods | 40+ |
+| Singletons | 10 |
+| STAT_KEYS | 12 |
+| Inline tag patterns | 10 |
+| SSE event types processed | 19 |
+| Skill categories | 8 |

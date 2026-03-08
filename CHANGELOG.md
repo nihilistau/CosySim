@@ -7,8 +7,28 @@ All notable changes to CosySim are documented here.
 
 Phase 7–8 system evolution sprint. Lab Break scene, NLM chain-prompting engine,
 LMLink federation, smart notebook fleet, bidirectional LMStudio server control,
-vision/evaluation MCP skills, training pipeline wiring. 20 scenes. 55 scheduler
-tasks. 9,400+ tests.
+vision/evaluation MCP skills, training pipeline wiring, full documentation
+rewrite. 20 scenes. 55 scheduler tasks. 9,577 tests passing (9,963 total).
+
+### Pre-Documentation Cleanup
+- Removed UTF-8 BOM from tavern `__init__.py` (was blocking imports)
+- Updated `docs/INDEX.md`: v0.90b→v0.91b, scene count 16→20, added lab_break
+- Updated `ROADMAP.md`: v0.90b→v0.91b, added v0.91b milestone
+- Added missing grid + lab_break scene configs to `config/default.yaml`
+- Converted `print()` → `logger` in housekeeping.py, nlm_cookie_refresh.py,
+  har_extractor.py
+
+### Documentation Rewrite
+- Complete rewrite of 8 core documentation files:
+  - `README.md` — project overview, architecture, quickstart
+  - `docs/INDEX.md` — documentation hub with categorized links
+  - `docs/ARCHITECTURE.md` — 10-domain system architecture reference
+  - `docs/SCENES.md` — all 20 scenes with ports, features, API routes
+  - `docs/NEXUS_INTEGRATION.md` — Nexus knowledge system deep dive
+  - `docs/LMSTUDIO.md` — LMStudio integration, LMLink, vision, task queue
+  - `docs/MCP_FRAMEWORK.md` — skills, interceptors, governance, state
+  - `ROADMAP.md` — streamlined forward-looking roadmap
+- All docs reconciled against measured codebase reality (grep/test counts)
 
 ### Phase 8 — LMStudio Bidirectional Control & Skills
 

@@ -1,40 +1,97 @@
 # CosySim Scenes Guide
 
+> v0.91b — 20 Flask scenes, ~613 HTTP routes, ~51 Socket.IO event types
+
 Complete reference for every scene in the CosySim simulation framework.
 
 ---
 
 ## Scene Architecture
 
-Every game scene in CosySim follows the same architecture:
+Every scene inherits from `BaseScene` (`engine/scenes/base_scene.py`) and runs as
+an independent Flask web server on a dedicated port. The base class provides:
 
-- **BaseScene** (`engine/scenes/base_scene.py`) — Abstract base class providing asset management, character loading, save/load, and lifecycle hooks. Each scene binds to a `host:port` and maintains an `active_characters` dict.
-- **MCPSceneMixin** (`engine/mcp/framework.py`) — Mixin that wires a scene into the MCP governance framework. Declared via `class MyScene(BaseScene, MCPSceneMixin, mcp_scene_id="my_scene")`. Automatically registers the scene node, patches character enter/leave, and enables skills, rules, and state management.
-- **SCENE_METADATA** — Dict on each scene class declaring `title`, `description`, `genre`, `max_characters`, and `features`. Used by the Command Center and Hub for discovery.
-- **Flask + SocketIO** — Each scene runs a Flask web server with SocketIO for real-time client updates. Templates live in `content/scenes/<name>/templates/`.
-- **Auto-registration** — Skills (`@skill` decorator), rules (registered via `SceneRulesEngine`), and characters (loaded from the asset database) are wired up in `__init__`.
+- **Lifecycle hooks** — `start()`, `stop()`, `get_plugin_info()`
+- **Character management** — `active_characters` dict, `on_character_added/removed`
+- **Shared route registration** — `register_health_route()`, `register_hud_route()`,
+  `register_announcer_route()`, `register_bench_route()`
+- **Shared assets** — `register_shared_assets(app)` mounts `/shared/*` CSS/JS/templates
+- **Save/load** — `save_state()`, `load_state()` for persistence across restarts
+
+Scenes may additionally mix in:
+
+| Mixin | Purpose | Scenes using it |
+|-------|---------|-----------------|
+| `MCPSceneMixin` | MCP governance: skills, rules, timers, event bus | 14 |
+| `NexusSceneMixin` | Nexus KMS integration: knowledge, state persistence | 16 |
+| Custom mixins | Scene-specific decomposition (e.g., BedroomCombatMixin) | 1 (bedroom) |
+
+### SCENE_METADATA
+
+Every scene class declares a `SCENE_METADATA` dict used by the Hub and control
+plane for discovery:
+
+```python
+SCENE_METADATA = {
+    "name": "my_scene",
+    "display_name": "MY SCENE",
+    "type": "game",          # game | utility | service
+    "port": 5570,
+    "description": "...",
+    "features": ["chat", "economy"],
+}
+```
 
 ### Port Map
 
-| Port | Scene | Display Name | Genre |
-|------|-------|-------------|-------|
-| 5555 | Phone | SIGNAL | Social simulation |
-| 5556 | Bedroom | THE PENTHOUSE | Adult roleplay |
-| 5557 | Lounge | THE VELVET PIT | Social / speakeasy |
-| 5558 | Tavern | THE RUSTY ANCHOR | Fantasy RPG tavern |
-| 5559 | Casino | CLUB NOIR | Gambling simulation |
-| 5560 | Gallery | THE OBSCURA | Creative / art |
-| 5561 | Arena | THE COLOSSEUM | Tactical card game |
-| 5562 | Realm | THE SHATTERED THRONE | Fantasy RPG |
-| 5563 | Neon City | NEON CITY | Cyberpunk strategy |
-| 5564 | Coders Room | THE LAB | Coding simulation |
-| 5565 | Heist | THE SCORE | Crime co-op |
-| 5566 | Command Center | — | System monitoring |
-| 5567 | Games Arcade | THE ARCADE | Mini-games |
-| 5580 | Intel Hub | THE BRIEFING ROOM | Admin / intelligence |
-| 8500 | Hub | THE TERMINAL | Scene launcher |
-| 8501 | Dashboard | — | Character management (Streamlit) |
-| 8502 | Admin Panel | — | System admin (Streamlit) |
+| Port | Scene | Display Name | Type |
+|------|-------|-------------|------|
+| 5555 | phone | SIGNAL | Game |
+| 5556 | bedroom | THE PENTHOUSE | Game |
+| 5557 | lounge | THE VELVET PIT | Game |
+| 5558 | tavern | THE RUSTY ANCHOR | Game |
+| 5559 | casino | CLUB NOIR | Game |
+| 5560 | gallery | THE OBSCURA | Game |
+| 5561 | arena | THE COLOSSEUM | Game |
+| 5562 | realm | THE SHATTERED THRONE | Game |
+| 5563 | neoncity | NEON CITY | Service |
+| 5564 | coders | THE LAB | Game |
+| 5565 | heist | THE SCORE | Game |
+| 5566 | command_center | Command Center | Service |
+| 5567 | games | THE ARCADE | Game |
+| 5568 | asset_studio | ASSET STUDIO | Utility |
+| 5569 | grid | THE GRID | Service |
+| 5570 | nexus_panel | Nexus Control Panel | Utility |
+| 5571 | lab_break | LAB BREAK | Game |
+| 5575 | system_control | System Control Panel | Utility |
+| 5580 | intel_hub | THE BRIEFING ROOM | Utility |
+| 8500 | hub | THE TERMINAL | Utility |
+
+Service ports: Nexus (8700), TTS (8600), NLM Proxy (8800), Canvas (5590/5595).
+
+---
+
+## Required start() Pattern
+
+Every scene's `start()` method MUST register these shared routes after Flask
+setup to ensure health checks, HUD state, announcer feeds, and shared CSS/JS
+work correctly:
+
+```python
+def start(self):
+    self.app = Flask(__name__, template_folder="templates")
+    self.socketio = SocketIO(self.app, cors_allowed_origins="*")
+
+    from content.shared import register_shared_assets
+    register_shared_assets(self.app)        # /shared/* routes
+    self.register_health_route(self.app)    # /api/health
+    self.register_hud_route(self.app)       # /api/hud/state
+    self.register_announcer_route(self.app) # /api/announcer/feed
+    self.register_bench_route(self.app)     # /api/bench
+
+    # ... scene-specific routes, Socket.IO handlers, character loading ...
+    self.socketio.run(self.app, host=self.host, port=self.port)
+```
 
 ---
 
@@ -44,79 +101,92 @@ Every game scene in CosySim follows the same architecture:
 
 ```
 content/scenes/my_scene/
-├── __init__.py
-├── my_scene_scene.py      # Scene class
-├── my_scene_skills.py     # MCP skill functions
-├── my_scene_rules.py      # Rule definitions
-└── templates/
-    └── index.html          # Frontend UI
+├── __init__.py            # exports MyScene
+├── my_scene_scene.py      # BaseScene subclass
+├── my_scene_skills.py     # @skill decorated functions
+├── templates/
+│   └── my_scene.html      # Jinja2 UI template
+└── static/
+    ├── css/
+    │   └── my_scene.css
+    └── js/
+        └── my_scene.js
 ```
 
 ### 2. Scene Class
 
 ```python
 from engine.scenes.base_scene import BaseScene
-from engine.mcp.framework import MCPSceneMixin
 
-class MyScene(BaseScene, MCPSceneMixin, mcp_scene_id="my_scene"):
+class MyScene(BaseScene):
     SCENE_METADATA = {
-        "title": "My Scene",
-        "description": "What the scene does.",
-        "genre": "genre_tag",
-        "max_characters": 4,
-        "features": ["feature_a", "feature_b"],
+        "name": "my_scene",
+        "display_name": "MY SCENE",
+        "type": "game",
+        "port": 5570,
+        "description": "What this scene does.",
+        "features": ["chat", "economy"],
     }
 
-    def __init__(self, host="0.0.0.0", port=5570):
+    def __init__(self, host: str = "0.0.0.0", port: int = 5570):
         super().__init__(scene_name="my_scene", host=host, port=port)
-        self._mcp_init()
-        self.app = Flask(__name__, template_folder="templates")
-        self.socketio = SocketIO(self.app, cors_allowed_origins="*")
-        # Register routes, load characters, register rules...
 ```
 
 ### 3. Skills File
 
-Define callable tools that LLM agents can invoke:
+Use the `@skill` decorator pattern — skills are auto-registered when the module
+is imported:
 
 ```python
-from engine.mcp.framework import get_framework
+from engine.skills.registry import skill
+from engine.scenes.base_scene import BaseScene
 
-def register_my_scene_skills(scene):
-    fw = get_framework()
-    node = fw.get_scene("my_scene")
-
-    @node.skill("my_scene_status", "Get current scene state")
-    def status():
-        return scene.get_state_dict()
+@skill(
+    pack="my_scene",
+    description="Get the current scene state",
+    category="game",
+)
+def my_scene_status() -> str:
+    scene = BaseScene.get_active_scene("my_scene")
+    if not scene:
+        return "Scene not running"
+    return str(scene.get_state_dict())
 ```
 
-### 4. Rules File
+### 4. Registration
 
-Register MCP rules with conditions, effects, and actions:
+Add the scene to these files:
 
-```python
-def register_my_scene_rules(scene_node):
-    scene_node.add_rule(Rule(
-        name="example_gate",
-        conditions={"stat_name": {"min": 50}},
-        effects={"unlock": "feature_x"},
-    ))
+| File | What to add |
+|------|-------------|
+| `engine/port_registry.py` | `_PORTS["my_scene"] = 5570`, `SERVICE_GROUPS["scenes"]`, `SCENE_HEALTH_TARGETS`, `HUB_CATALOGUE_TARGETS` |
+| `engine/control_plane_registry.py` | Entry in `SCENE_DEFS` with class path, label, type |
+| `config/default.yaml` | `scenes.my_scene` config block |
+| `launcher.py` | Entry in `SCENES` dict |
+
+### 5. Template
+
+```html
+{% include 'navbar_v2.html' %}
+{% include 'aria_widget.html' %}
+<body data-scene="my_scene">
+  <!-- Scene content -->
+  <script src="/shared/js/socket.io.min.js"></script>
+  <script src="/shared/js/cosysim-particles.js"></script>
+</body>
 ```
 
-### 5. Registration
-
-In `__init__.py`, export the scene class. The Hub and launcher discover scenes automatically.
+**NEVER** explicitly load `navbar_v2.css` or `navbar_v2.js` — `navbar_v2.html`
+is self-contained. **NEVER** load `aria_widget.js` — use the include.
 
 ---
 
-## Dark Renaissance Visual System (v0.68)
+## Visual System
 
-All scenes were revamped in v0.68 with a unified "black glass" design language. The system is implemented in `content/shared/static/` and included in every scene's base template.
+All scenes share a unified cyberpunk "dark glass" design language implemented
+in `content/shared/static/`.
 
-### Design Tokens (`design_tokens.css`)
-
-Extended token set defining the black glass palette:
+### Design Tokens
 
 | Token | Value | Usage |
 |-------|-------|-------|
@@ -126,749 +196,899 @@ Extended token set defining the black glass palette:
 | `--accent` | Per-scene hex | Primary highlight colour |
 | `--accent-glow` | `0 0 24px var(--accent)` | Neon glow shadow |
 
-Each scene declares its own accent colour via a CSS variable override in its root template.
+Each scene declares its own accent colour:
 
-| Scene | Accent |
-|-------|--------|
-| THE PENTHOUSE | `#ec4899` |
-| NEON CITY | `#06b6d4` |
-| SIGNAL | `#10b981` |
-| THE VELVET PIT | `#f59e0b` |
-| THE RUSTY ANCHOR | `#92400e` |
-| CLUB NOIR | `#f97316` |
-| THE OBSCURA | `#7c3aed` |
-| THE SCORE | `#e11d48` |
-| THE SHATTERED THRONE | `#059669` |
-| THE LAB | `#4ade80` |
-| THE ARCADE | `#8b5cf6` |
-| THE TERMINAL | `#3b82f6` |
-| THE BRIEFING ROOM | `#06b6d4` |
-| THE COLOSSEUM | `#f59e0b` |
+| Scene | Accent | Scene | Accent |
+|-------|--------|-------|--------|
+| bedroom | `#ec4899` | arena | `#f59e0b` |
+| phone | `#10b981` | realm | `#059669` |
+| lounge | `#f59e0b` | neoncity | `#06b6d4` |
+| tavern | `#92400e` | coders | `#4ade80` |
+| casino | `#f97316` | heist | `#e11d48` |
+| gallery | `#7c3aed` | games | `#8b5cf6` |
+| hub | `#3b82f6` | intel_hub | `#06b6d4` |
+| grid | `#00ff88` | lab_break | `#22d3ee` |
 
-### Component Library (`cosysim-components.css`)
-
-Shared component classes: `.glass-panel`, `.glass-card`, `.neon-btn`, `.stat-bar`, `.heat-ring`, `.bench-hud`, `.voice-indicator`.
-
-### Animation Library (`cosysim-animations.css`)
-
-Keyframe library: `glowPulse`, `fadeInUp`, `scanLine`, `particleDrift`. Used by components and scene-specific effects.
-
-### 3D Particle System (`cosysim-particles3d.js`)
-
-Three.js-based particle field rendered to a `<canvas>` behind the scene UI.
-
-- **10,000 particles** at 60fps via `requestAnimationFrame`
-- **12 presets:** `nebula`, `matrix`, `embers`, `snowfall`, `stardust`, `smoke`, `sparks`, `data_stream`, `void`, `aurora`, `ocean`, `inferno`
-- Each scene selects its preset in the template: `CosyParticles.init({ preset: 'embers', accent: '#ec4899' })`
-- Responds to mouse/touch parallax
-
-### Universal Chrome
+### Shared Components
 
 | Component | Files | Purpose |
 |-----------|-------|---------|
-| **Navbar v2** | `navbar_v2.{html,css,js}` | Top navigation: scene switcher, bench metrics, voice toggle, Aria button |
-| **Admin Overlay** | `admin_overlay.{html,css,js}` | Slide-in 8-tab hacker panel (State, Characters, Engine, Economy, Events, Content, Director, Debug) |
-| **Aria Widget** | `aria_widget.{html,css,js}` | Floating assistant button — expands to inline chat, routes to Phone/Nexus |
-| **Voice Settings** | `voice_settings.html` | TTS/STT config modal embedded in Navbar v2 |
-
-### BenchHUD (`cosysim-bench.js`)
-
-Live metrics overlay injected by `BaseScene.register_bench_route()`:
-
-```
-┌─────────────────────────────┐
-│ MODEL   qwen3-14b            │
-│ LATENCY 342ms  TOKENS 847   │
-│ NEXUS   L2-cached            │
-└─────────────────────────────┘
-```
-
-Polls `/api/bench` every 2s. Visible in top-right corner of every scene.
-
-### VoiceManager (`cosysim-voice.js`)
-
-Client-side voice orchestration:
-- **TTS backends:** Piper · Orpheus · Qwen3 (selected per character)
-- **STT:** Web Speech API with push-to-talk
-- **Persistence:** Voice prefs stored in `localStorage` per character
-- **API:** `VoiceManager.speak(text, charId)`, `VoiceManager.listen(callback)`
+| **Navbar v2** | `navbar_v2.{html,css,js}` | Top nav: scene switcher, bench, voice, Aria |
+| **Admin Overlay** | `admin_overlay.{html,css,js}` | 8-tab hacker panel (State, Characters, Engine, Economy, Events, Content, Director, Debug) |
+| **Aria Widget** | `aria_widget.{html,css,js}` | Floating assistant — expands to chat |
+| **Voice Settings** | `voice_settings.html` | TTS/STT config modal |
+| **BenchHUD** | `cosysim-bench.js` | Live inference metrics overlay |
+| **VoiceManager** | `cosysim-voice.js` | TTS (Piper/Orpheus/Qwen3) + STT |
+| **Particle System** | `cosysim-particles.js` | Per-scene canvas particle effects |
+| **Scene FX** | `cosysim-scene-fx.css` | Per-scene ambient CSS animations |
+| **Transitions** | `cosysim-transitions.js` | Cross-scene page fade transitions |
+| **Portrait Overlay** | `portrait.{html,css,js}` | Character portrait + mood badge |
 
 ---
 
-## Scene Reference
+## Scene Reference — Game Scenes
 
 ---
 
 ### Phone — SIGNAL (port 5555)
 
-**SIGNAL** — An iOS-style phone interface with messaging, calls, and character social media. Characters send autonomous texts and maintain relationships.
+**Class:** `PhoneSceneV2` · **Routes:** 66 · **Skills:** 6
 
-**Genre:** Social simulation · **Max characters:** 5
+An iOS-style phone interface with messaging, calls, and character social media.
+Characters send autonomous texts and maintain relationships.
 
 #### Apps
-- **Messages** — Thread-based DMs and group chats with characters
+
+- **Messages** — Thread-based DMs and group chats
 - **Hacker** — Character state inspection, profile reading, message interception
-- **Games** — Arcade mini-games (trivia, would-you-rather, story chain) and Truth or Dare
+- **Games** — Arcade mini-games (trivia, would-you-rather, story chain, truth-or-dare)
 - **Gallery** — Photo and video browser
 - **Voice Messages** — Audio clip playback
-- **Voice Studio** — Premade voice collection / TTS
+- **Voice Studio** — TTS voice collection
 - **Research (NotebookLM)** — Knowledge-base Q&A
 
-#### MCP Skills (6)
+#### Skills
+
 | Skill | Description |
 |-------|-------------|
 | `phone_send_message` | Text a character |
 | `phone_check_messages` | Get threads and unread counts |
-| `phone_start_game` | Start arcade game (trivia, truth_or_dare, etc.) |
+| `phone_start_game` | Start arcade game |
 | `phone_game_action` | Submit a game move |
 | `phone_generate_image` | Generate AI images |
 | `phone_toggle_autotxt` | Mute/unmute autonomous texting |
 
-#### Game Mechanics
-- **Conversation threading** — PhoneDB-backed threads with stateful `ConversationManager`; last 20 messages loaded per reply; previous response IDs reduce token usage by ~80%.
-- **Autonomous texting** — Background ticker schedules character-initiated messages based on relationship warmth: Cold (10–30 min), Warm (3–10 min), Hot (1–4 min), Obsessed (20–90 sec). Mode-specific prompts (casual → flirty → intimate → explicit).
-- **Heat gates** — Stat thresholds (trust ≥ 35, affection ≥ 50, etc.) unlock progressively intimate conversation modes.
-- **Group chats** — Multiple members in a single thread; AI replies from each character independently.
+#### Key Routes
 
-#### Key API Endpoints
 | Method | Path | Purpose |
 |--------|------|---------|
-| GET | `/api/threads` | List all message threads |
-| POST | `/api/thread/<id>/send` | Send message (spawns async reply) |
-| GET | `/api/contacts` | List characters with mood and unread count |
-| POST | `/api/games/start` | Start truth-or-dare session |
-| GET | `/api/hacker/targets` | List characters with full state |
-| POST | `/api/hacker/<id>/intercept` | Inject system-level directives |
+| POST | `/api/messages/send` | Send message to character |
+| GET | `/api/messages/threads` | List message threads |
+| GET | `/api/messages/thread/<id>` | Get thread history |
+| POST | `/api/games/start` | Start arcade game |
+| POST | `/api/tts/speak` | Text-to-speech for messages |
+| GET | `/api/nlm/ask` | NotebookLM Q&A |
 
-#### State Management
-- **PhoneDB** for persistent messages, threads, and media
-- **ConversationManager** for server-side KV conversation cache
-- **MCP Governor pipeline** wraps every character reply through interceptors
-- **SocketIO events:** `message_new`, `thread_updated`, `typing`, `mood_update`
+#### State
+
+- `phone_v2.db` — message threads, game state, contact list
+- Auto-texting system with configurable intervals per character
+- Message threading with read/unread tracking
 
 ---
 
 ### Bedroom — THE PENTHOUSE (port 5556)
 
-**THE PENTHOUSE** — Adult roleplay scene with detailed 3D avatars, a clothing system, bed-game mechanics, and heat-gated explicit content progression.
+**Class:** `BedroomScene` · **Routes:** 67 · **Skills:** 11 · **Mixins:** BedroomCombatMixin
 
-**Genre:** Adult roleplay · **Max characters:** 3
+An adult roleplay scene featuring Lola as the primary character with full
+emotion system, outfit management, and room-based location mechanics.
 
-#### MCP Skills (10)
+#### Skills
+
 | Skill | Description |
 |-------|-------------|
-| `bedroom_character_status` | Get character positions, stats, moods |
-| `bedroom_adjust_stat` | Modify a character stat by delta |
-| `bedroom_give_line` | Script dialogue for a character |
-| `bedroom_whisper` | Send hidden directive to a character |
-| `bedroom_add_prop` | Place furniture/props in room |
-| `bedroom_set_time` | Change lighting (morning → midnight) |
-| `bedroom_start_game` | Start intimate gameplay scenario |
-| `bedroom_game_action` | Submit game action |
-| `bedroom_set_scenario` | Configure scenario and mood |
-| `bedroom_fire_event` | Trigger custom narrative event |
+| `bedroom_status` | Scene state — mood, outfit, time, location |
+| `bedroom_suggestion` | Suggest an activity |
+| `bedroom_set_mood` | Set room mood lighting |
+| `bedroom_change_outfit` | Change character outfit |
+| `bedroom_game_action` | Trigger a game mechanic |
+| `bedroom_roll_dice` | Roll dice for outcomes |
+| `bedroom_move_room` | Change room location |
+| `bedroom_inventory` | View inventory |
+| `bedroom_combat_attack` | Combat attack action |
+| `bedroom_combat_defend` | Combat defense action |
+| `bedroom_combat_status` | Current combat state |
 
-#### Game Mechanics
-- **Bed Game** — Turn-based intimate game tracked by `BedGameState`. Players, turns, rounds, escalation level (1–5). Escalation tiers reward increasingly explicit actions with points and bonuses.
-- **Intimacy gates** — 8 tiers gated by stat thresholds: Light Touch (always), Kiss (warmth ≥ 30), Caress (arousal ≥ 40), Striptease (arousal ≥ 55), Intimate (arousal ≥ 70 + consent), Explicit (arousal ≥ 80), Depraved (arousal ≥ 90), Aftercare (arousal ≤ 20).
-- **Consent system** — Grant consent (arousal ≥ 45, trust ≥ 35) or withdraw consent (blocks all intimate actions).
-- **Director mode** — Whisper hidden instructions, force lines/actions, broadcast, enter as participant.
-- **Scenarios** — 8 premade: romantic_evening, truth_or_dare, spa_night, slave_master, voyeur, threesome, edging_challenge, roleplay_fantasy.
+#### Key Routes
 
-#### Scene Rules
-- 14 escalating actions (cuddle → deep kiss → striptease → bondage → orgasm → aftercare)
-- Director-only overrides: Lights Off, Mood Lift, Escalate, Reset, Max Arousal, Strip Everyone
-- Timed actions with durations (striptease 45s, massage 120s, intimate 180s)
-
-#### Key API Endpoints
 | Method | Path | Purpose |
 |--------|------|---------|
-| GET | `/api/scene/state` | Full scene state |
-| POST | `/api/character/load` | Load character into scene |
-| POST | `/api/director/whisper` | Hidden instruction to character |
-| POST | `/api/bedgame/start` | Start bed game |
-| POST | `/api/bedgame/action` | Perform game action |
-| POST | `/api/scenario/set` | Activate premade scenario |
-| POST | `/api/event/fire` | Fire custom narrative event |
+| POST | `/api/chat` | Chat with character |
+| POST | `/api/suggest` | Get activity suggestion |
+| POST | `/api/mood` | Set room mood |
+| POST | `/api/outfit` | Change outfit |
+| GET | `/api/characters` | List characters |
+| GET | `/api/state` | Full game state |
 
-#### State Management
-- **AgentStats** — 10 stats per character: arousal, horniness, drunkenness, tiredness, happiness, anger, fear, pleasure, explicitness, openness (all 0–100).
-- **CharacterProfile** — Personality keys (bold_dominant, shy_submissive, playful_tease, etc.), outfit, position, held props, base stats.
-- **BedGameState** — Active game, players, turns, rounds, escalation level, scores, streak tracking.
-- **Props** — 27 items with stat effects (vibrator, bondage gear, etc.); **Positions** — 20 options; **Outfits** — 15 options.
+#### State
+
+- Emotion system (0–100 per axis: happiness, arousal, trust, comfort)
+- Room graph with connected locations
+- Outfit system with unlockable items
+- Time-of-day cycle affecting dialogue context
+- Combat system via BedroomCombatMixin
 
 ---
 
 ### Lounge — THE VELVET PIT (port 5557)
 
-**THE VELVET PIT** — A 1920s underground jazz speakeasy. Two resident characters powered entirely by the MCP framework with consequence chains, timers, and trust gates.
+**Class:** `LoungeScene` · **Routes:** 16 · **Skills:** 4
 
-**Genre:** Social · **Max characters:** 5
+A speakeasy social scene with character conversations, drinking games, and
+ambient event generation.
 
-#### MCP Skills (10)
+#### Skills
+
 | Skill | Description |
 |-------|-------------|
-| `lounge_status` | Full status: trust, heat, song, secrets, mood |
-| `lounge_order_drink` | Trust-gated cocktails with stat effects (10s cooldown) |
-| `lounge_menu` | View cocktail menu with trust requirements |
-| `lounge_request_song` | Request song from playlist, shifts mood (15s cooldown) |
-| `lounge_share_secret` | Intimacy-leveled sharing, builds trust (20s cooldown) |
-| `lounge_ask_secret` | Progressive secret unlocks from NPCs (30s cooldown) |
-| `lounge_back_room` | Access back room (trust ≥70 gate, 15s cooldown) |
-| `lounge_cool_down` | Reduce heat via chill/change_subject/buy_round (20s cooldown) |
-| `lounge_dream_whisper` | Enter character's dreamspace (trust ≥60, 60s cooldown) |
-| `lounge_mirror_soul` | Reflect character's emotions (trust ≥30, 45s cooldown) |
+| `lounge_status` | Scene state — patrons, vibe, events |
+| `lounge_order_drink` | Order a drink for credits |
+| `lounge_start_game` | Start a drinking game |
+| `lounge_gossip` | Get gossip from characters |
 
-#### Game Mechanics
-- **Heat meter** — 0–100, ticks every 180 seconds via MCPTimer. At ≥ 65 mood shifts to alert; at ≥ 85 enforcement consequences trigger.
-- **Trust economy** — 0–100 trust score gates secrets, back room access (≥ 60), and premium pours.
-- **Music system** — Active song plays via MCPTimer; song completion triggers mood_contagion.
-- **Cocktail system** — Drinks affect mood, stats, and scene atmosphere via consequence chains.
-- **Random events** — MCPFramework.random_pick each turn for atmospheric surprises.
-- **Cross-agent comms** — Lola ↔ Viktor communicate via MCPFramework.cross_scene_send.
+#### Key Routes
 
-#### Characters
-| Character | Role | Personality |
-|-----------|------|-------------|
-| **Lola Voss** (29) | Singer / speakeasy owner | Warm, assertive, sensual, witty. Warm smoky contralto, faint Eastern European accent. |
-| **Viktor Marlowe** (38) | Bartender / silent guardian | Assertive, dominant, low warmth. Deep baritone, short sentences. |
-
-#### Key API Endpoints
 | Method | Path | Purpose |
 |--------|------|---------|
-| GET | `/api/state` | Atmosphere, song, heat, character moods |
-| POST | `/api/order` | Order cocktail |
-| POST | `/api/message` | Send message to character |
-| POST | `/api/back_room` | Attempt back room access (trust-gated) |
-| POST | `/api/ask_secret` | Request character secret |
+| POST | `/api/chat` | Chat with lounge character |
+| POST | `/api/order` | Order a drink |
+| GET | `/api/state` | Current lounge state |
+| GET | `/api/events` | Recent lounge events |
 
-#### State Management
-- Framework-first: most state lives in MCPFramework / SceneStateManager.
-- Thin in-memory layer: `turn_count`, `heat_level`, `guest_trust`, `secrets_revealed`, `current_song`, `in_back_room`.
-- CharacterRegistry tracks mood, mood_intensity, energy for Lola and Viktor.
+#### State
+
+- Patron list with mood tracking
+- Economy integration (drink prices, credits)
+- Ambient event generation (arguments, music changes, arrivals)
 
 ---
 
 ### Tavern — THE RUSTY ANCHOR (port 5558)
 
-**THE RUSTY ANCHOR** — A fantasy RPG tavern showcasing every MCP framework feature. Gold economy, reputation system, quest board, dice gambling, rumor mill, and time-of-day cycle.
+**Class:** `TavernScene` · **Routes:** 15 · **Skills:** 4
 
-**Genre:** Fantasy RPG · **Max characters:** 4
+A fantasy RPG tavern with character interactions, dice games, and a barter
+economy.
 
-#### MCP Skills (10)
+#### Skills
+
 | Skill | Description |
 |-------|-------------|
-| `tavern_status` | Full status: gold, stats, reputation, atmosphere, time |
-| `tavern_order_drink` | Buy drinks with gold, consequence chains (5s cooldown) |
-| `tavern_check_reputation` | View reputation with specific NPC |
-| `tavern_hear_rumor` | Discover rumors (some unlock quests) |
-| `tavern_quest_board` | Accept, progress, or list quests (8s cooldown) |
-| `tavern_dice` | Start, roll, or hold in dice gambling (5s cooldown) |
-| `tavern_influence` | buy_round, calm crowd, or propose toast (10s cooldown) |
-| `tavern_request_song` | Request song from bard (MCPTimer, 15s cooldown) |
-| `tavern_trade` | Buy/sell items with reputation discounts (5s cooldown) |
-| `tavern_advance_time` | Advance time of day (15s cooldown) |
+| `tavern_status` | Tavern state — patrons, atmosphere |
+| `tavern_order` | Order food or drink |
+| `tavern_barter` | Negotiate prices |
+| `tavern_dice_game` | Play a dice game |
 
-#### Game Mechanics
-- **Gold economy** — Earn from quests/gambling, spend on drinks/trades
-- **6-stat system** — Charm, Wit, Strength, Luck, Lore, Stealth (10-100)
-- **Reputation** — Per-NPC (Greta, Bard, Merchant, Stranger), 5 tiers: Stranger → Regular → Trusted → Honored → Legend
-- **Quest board** — 5 quests with multi-step progression
-- **Dice gambling** — Roll-and-hold mechanics with gold stakes
-- **Atmosphere** — Calm → Lively → Rowdy → Brawl, affects NPC behavior
-- **Time cycle** — Morning → Afternoon → Evening → Night → Late Night
-- **Rumor mill** — 8 rumors, some unlock quest content
-- **Stranger mechanic** — Mysterious figure appears and disappears
+#### Key Routes
 
-#### Characters
-| Character | Role |
-|-----------|------|
-| **Greta** | Barkeep — warm, no-nonsense, knows everyone's business |
-| **Bard** | Traveling musician — stories, songs, rumors |
-| **Merchant** | Trader — sells items, negotiates prices |
-| **Stranger** | Hooded figure — quest giver with hidden agenda |
-
-#### Key API Endpoints
 | Method | Path | Purpose |
 |--------|------|---------|
-| GET | `/api/state` | Full tavern state |
-| POST | `/api/order` | Order a drink |
-| POST | `/api/quest` | Quest actions (accept/progress) |
-| POST | `/api/dice` | Dice game actions |
-| POST | `/api/trade` | Buy/sell items |
-| POST | `/api/rumor` | Hear a rumor |
+| POST | `/api/chat` | Chat with tavern character |
+| POST | `/api/order` | Order food/drink |
+| POST | `/api/barter` | Barter with merchant |
+| POST | `/api/dice` | Roll dice |
+
+#### State
+
+- Menu system with item prices
+- Barter mechanic with haggling
+- Dice game with wager system
 
 ---
 
 ### Casino — CLUB NOIR (port 5559)
 
-**CLUB NOIR** — A noir underground poker den with blackjack, poker, roulette, and slots. AI dealers and characters with personality-driven gambling styles.
+**Class:** `CasinoScene` · **Routes:** 16 · **Skills:** 6
 
-**Genre:** Gambling simulation · **Max characters:** 5
+A neon-noir casino with blackjack, poker, slots, and a high-roller VIP area.
+Economy is wired through the chip/credit system.
 
-#### MCP Skills (9)
+#### Skills
+
 | Skill | Description |
 |-------|-------------|
-| `casino_table_status` | Get round, phase, pot, player chips, community cards |
-| `casino_bet` | Place bet with chip management (5s cooldown) |
-| `casino_fold` | Fold hand and forfeit pot |
-| `casino_all_in` | Push all remaining chips into pot (30s cooldown) |
-| `casino_order_drink` | Order cocktail with stat effects |
-| `casino_read_opponent` | Analyze opponent bluff tells (15s cooldown) |
-| `casino_check` | Check/call — stay in hand without raising (3s cooldown) |
-| `casino_raise` | Raise the bet (min $10, 5s cooldown) |
-| `casino_bluff` | Bluff with style: confident/nervous/aggressive (20s cooldown) |
+| `casino_status` | Casino state — chips, tables, jackpot |
+| `casino_blackjack` | Play blackjack |
+| `casino_slots` | Pull the slots |
+| `casino_poker_bet` | Place poker bet |
+| `casino_exchange` | Exchange credits ↔ chips |
+| `casino_vip_access` | Check VIP status |
 
-#### Game Mechanics
-- **Texas Hold'em poker** — Community cards, betting rounds, hand evaluation, showdown.
-- **Chip economy** — Players start with 500 chips; bets tracked in pot.
-- **Bluffing system** — Characters have poker "tells" (nervous habits) that can be read.
-- **Phases** — lobby → deal → bet → showdown → result.
-- **Drink system** — Cocktails modify confidence, focus, luck stats.
-- **Consequence chains** — Delayed effects (drunk penalties, luck streaks).
+#### Key Routes
 
-#### Characters
-| Character | Role | Personality |
-|-----------|------|-------------|
-| **Dealer Jack** (45) | House dealer | Low warmth, high dominance, deep measured voice. 20 years reading people. |
-| **Hustler Mira** (31) | Fellow player | Warm, witty, playful. Expert card counter from Macau. |
-
-#### Key API Endpoints
 | Method | Path | Purpose |
 |--------|------|---------|
-| GET | `/api/state` | Current game state |
-| POST | `/api/new-hand` | Deal new poker hand |
-| POST | `/api/bet` | Place bet |
-| POST | `/api/bluff` | Attempt bluff |
-| POST | `/api/showdown` | Reveal cards, determine winner |
-| POST | `/api/fold` | Fold current hand |
+| POST | `/api/chat` | Chat with casino character |
+| POST | `/api/blackjack/hit` | Blackjack hit |
+| POST | `/api/blackjack/stand` | Blackjack stand |
+| POST | `/api/slots/pull` | Pull slot machine |
+| POST | `/api/exchange` | Credit ↔ chip exchange |
+| GET | `/api/state` | Casino game state |
 
-#### State Management
-- In-memory game state: pot, player_chips, phase, round_number.
-- MCPSceneStateManager tracks confidence, focus, luck, charm, recklessness (0–100).
-- MCPGameSession records turn history for hand replay.
-- save_state/load_state for persistence across restarts.
+#### State
+
+- Chip balance per player
+- Card deck state for blackjack/poker
+- Slot machine RNG with jackpot accumulation
+- Economy degraded-fallback tracking
 
 ---
 
 ### Gallery — THE OBSCURA (port 5560)
 
-**THE OBSCURA** — An AI art gallery where characters evaluate, create, and debate generated artwork. Showcases image generation integration.
+**Class:** `GalleryScene` · **Routes:** 20 · **Skills:** 6
 
-**Genre:** Creative · **Max characters:** 5
+An interactive art gallery where AI generates artworks, characters critique
+them, and exhibitions rotate on schedule.
 
-#### MCP Skills (8)
+#### Skills
+
 | Skill | Description |
 |-------|-------------|
-| `gallery_exhibition_status` | Get theme, prestige, artwork count, visitors |
-| `gallery_create_art` | Submit artwork in 10 validated styles (20s cooldown) |
-| `gallery_critique` | 3-axis scoring (technique/emotion/originality, 10s cooldown) |
-| `gallery_change_room` | Navigate rooms (prestige-gated private_collection) |
-| `gallery_art_debate` | Skill roll with prestige bonus (30s cooldown) |
-| `gallery_set_theme` | Change exhibition theme from 6 options |
-| `gallery_auction` | Simulated bidding war for artworks (30s cooldown) |
-| `gallery_patron_interact` | Greet, tour, or inspire gallery patrons (10s cooldown) |
+| `gallery_status` | Gallery state — exhibitions, visitors |
+| `gallery_create_art` | Generate new artwork via ComfyUI |
+| `gallery_critique` | Get AI critique of artwork |
+| `gallery_curate` | Arrange exhibition layout |
+| `gallery_auction` | Start art auction |
+| `gallery_visit` | Visit a gallery section |
 
-#### Game Mechanics
-- **Exhibition system** — Themed exhibitions enforce style consistency (Dreams Unveiled, Neon Futures, Raw Emotions).
-- **Art creation** — Characters generate artworks via AI image generation with `[IMAGE:prompt]` tags.
-- **Evaluation system** — Structured 3-point scoring: Technique (0–10), Emotion (0–10), Originality (0–10). Average ≥ 9.0 triggers "Masterpiece Declaration" event.
-- **Debate mechanics** — Characters debate artwork merits with rebuttals.
-- **Room navigation** — 5 rooms: Main Hall (10 cap, bright), Modern Wing (6, dramatic), Sculpture Garden (8, dappled), Dark Room (4, UV/projection), Private Collection (3, invitation-only, trust ≥ 60).
+#### Key Routes
 
-#### Characters
-Characters are dynamically assigned roles from the database on startup:
-- **Curator** — Exhibition design and art history
-- **Critic** — Evaluating composition, technique, emotional impact
-- **Artist** — Creating new works inspired by the exhibition
-- **Visitor** — Experiencing art with fresh eyes
-
-#### Key API Endpoints
 | Method | Path | Purpose |
 |--------|------|---------|
-| GET | `/api/state` | Exhibition theme, artwork count, room |
-| POST | `/api/artwork/create` | Generate artwork via AI |
-| POST | `/api/evaluate` | Structured artwork evaluation |
-| POST | `/api/debate` | Challenge character to art debate |
-| POST | `/api/exhibition/set` | Switch exhibition theme |
+| POST | `/api/generate` | Generate artwork |
+| GET | `/api/gallery` | List current exhibitions |
+| POST | `/api/critique` | Get AI art critique |
+| POST | `/api/auction/bid` | Place auction bid |
+| GET | `/api/state` | Gallery state |
 
-#### State Management
-- Database-backed character profiles.
-- In-memory: `artworks` dict (title, style, description, evaluations), `characters` dict (role, mood, evaluations count, current_room), `active_exhibition`.
-- Streaming-enabled conversations (v2.7 default).
+#### State
+
+- Exhibition collections with artwork metadata
+- Auction system with bidding history
+- Art generation history linked to ComfyUI
 
 ---
 
 ### Arena — THE COLOSSEUM (port 5561)
 
-**THE COLOSSEUM** — Tactical card game where two AI agents compete head-to-head in a Rock-Paper-Scissors mechanic with counters and combos. Live betting, NLM match commentary, and a BenchHUD showing both model latencies side by side.
+**Class:** `ArenaScene` · **Routes:** 14 · **Skills:** 7
 
-**Genre:** Tactical card game · **Max characters:** 2 (agent vs agent)
+A tactical card battle arena with deck building, turn-based combat, and
+tournament brackets.
 
-#### Game Mechanics
-- **Card system** — RPS-based card types with counter chains and combo multipliers. Each agent holds a hand drawn from a faction deck.
-- **Live betting** — Players wager credits on each round outcome. Odds update in real time based on agent win streaks.
-- **NLM commentary** — InvestigationBoard pipes match events to NLM for live play-by-play narration.
-- **BenchHUD** — Dual latency display: left agent model latency vs right agent model latency, Nexus tier, token count per turn.
-- **Economy integration** — EconomyManager tracks credits across sessions; winnings persist cross-scene.
-- **Event bus** — Match events (card_played, round_won, combo_triggered) broadcast via EventBus to Hub overlay.
+#### Skills
 
-#### Engine Modules Used
-`ArenaEngine` · `EconomyManager` · `EventBus` · `InvestigationBoard` (NLM commentary) · `WorldStateInterceptor`
+| Skill | Description |
+|-------|-------------|
+| `arena_status` | Arena state — matches, standings |
+| `arena_challenge` | Challenge another fighter |
+| `arena_play_card` | Play a card from hand |
+| `arena_draw_card` | Draw from deck |
+| `arena_view_hand` | View current hand |
+| `arena_deck_build` | Modify deck composition |
+| `arena_tournament` | Join or view tournament |
 
-#### Key API Endpoints
+#### Key Routes
+
 | Method | Path | Purpose |
 |--------|------|---------|
-| GET | `/api/state` | Current match state (hands, scores, credits) |
-| POST | `/api/match/new` | Start new match (select agent configs) |
-| POST | `/api/match/play` | Play a card for the current turn |
-| GET | `/api/bench` | BenchHUD payload (latencies, tokens, tier) |
-| GET | `/api/commentary` | Latest NLM match commentary |
+| POST | `/api/match/start` | Start arena match |
+| POST | `/api/match/play` | Play card |
+| POST | `/api/match/draw` | Draw card |
+| GET | `/api/deck` | View deck |
+| GET | `/api/tournament` | Tournament bracket |
+| GET | `/api/state` | Arena state |
 
-#### State Management
-- `ArenaEngine` — match state, hands, scores, round history, combo tracker.
-- `EconomyManager` — credit balances, bet escrow, payout ledger.
-- EventBus broadcasts all round events to subscribed scenes.
-- SocketIO: `round_result`, `combo_triggered`, `commentary_update`, `bench_update`.
+#### State
+
+- Deck system with card types, costs, and effects
+- Match state (turns, HP, hand, graveyard)
+- Tournament brackets with elimination tracking
 
 ---
 
 ### Realm — THE SHATTERED THRONE (port 5562)
 
-**THE SHATTERED THRONE** — A director-guided LitRPG visual novel with quests, exploration, and character skills. Features a dual-agent system with a fourth-wall-breaking companion.
+**Class:** `RealmScene` · **Routes:** 31 · **Skills:** 14
 
-**Genre:** Fantasy RPG · **Max characters:** 4
+A full-featured LitRPG with a dual-agent system (Director narrates, Assistant
+provides fourth-wall commentary), d20 combat, inventory, and murder mystery
+sub-games.
 
-#### MCP Skills (18)
+#### Skills
+
 | Skill | Description |
 |-------|-------------|
-| `realm_inventory` | List items |
-| `realm_add_item` | Add item to inventory |
-| `realm_remove_item` | Remove item |
-| `realm_stats` | Show HP/MP/Level/XP/Attributes |
-| `realm_skill_check` | d20 + stat mod vs DC |
+| `realm_status` | Full game state |
+| `realm_inventory` | View/manage inventory |
+| `realm_equip` | Equip weapon or armor |
+| `realm_use_item` | Consume item |
 | `realm_adjust_hp` | Heal or damage |
 | `realm_start_combat` | Initiate encounter |
 | `realm_combat_attack` | Roll d20 + STR to attack |
 | `realm_combat_defend` | Halve incoming damage |
 | `realm_combat_flee` | Attempt escape |
 | `realm_combat_use_item` | Use consumable in combat |
-| `realm_director_status` | Check patience, mutiny status |
+| `realm_director_status` | Check patience, mutiny state |
 | `realm_fourth_wall_steal` | Break fourth wall |
 | `realm_desperation_dice` | Sacrifice max HP to reset Director context |
-| `realm_murder_status` | Murder mystery: phase, clues, accusations remaining |
-| `realm_murder_accuse` | Accuse suspect + weapon + room |
-| `realm_location` | Current location and connections |
-| `realm_move` | Travel (may trigger random encounters) |
+| `realm_murder_status` | Murder mystery: phase, clues, accusations |
 
-#### Game Mechanics
-- **Dual-agent system** — Director (game master) narrates and presents choices; Assistant (fourth-wall companion) provides commentary and can break the fourth wall.
-- **Gameplay loop** — Director presents narration + 2–4 choices → player selects → Director processes via LLM → state updates (HP, XP, inventory) → repeat.
-- **Skill checks** — d20 + stat_mod (stat ÷ 2 − 5) vs DC. Nat 20 = critical success; Nat 1 = critical failure.
-- **Combat** — Initiative (d20 + AGI), weapon damage + STR mod, crit on nat 20 (2× damage), death at HP ≤ 0 → lose random item, respawn at 50% HP.
-- **Exploration** — Room discovery: 30% encounter, 40% loot, 30% empty. Locked doors require skill checks.
-- **Murder mystery** — Sub-game with investigation phases, clue gathering (3+ unlock accusation), suspect interrogation. Wrong accusation = −25 HP.
-- **Director patience** — Decreases each turn; at 0 → mutiny (forced narrative, no player choice).
+#### Mechanics
 
-#### Scene Rules
-- Level up on XP overflow: +10 max HP, +5 max MP, +2 to random stat, XP multiplier ×1.5
-- Fourth-wall mechanics: Assistant can steal UI elements, force context resets
-- Available skills: persuasion, lockpicking, arcana, athletics, stealth, intimidation, deception, investigation, survival
+- **Dual-agent** — Director (game master) + Assistant (fourth-wall companion)
+- **Combat** — d20 + stat_mod vs DC. Nat 20 = critical. Death at HP ≤ 0 → lose item, respawn
+- **Exploration** — Room discovery: 30% encounter, 40% loot, 30% empty
+- **Murder mystery** — Investigation phases, 3+ clues to unlock accusation
+- **Director patience** — Decreases each turn; at 0 → mutiny (forced narrative)
+- **Skill checks** — persuasion, lockpicking, arcana, athletics, stealth, intimidation, deception, investigation, survival
 
-#### Key API Endpoints
+#### Key Routes
+
 | Method | Path | Purpose |
 |--------|------|---------|
-| GET | `/api/game` | Fetch current game state |
 | POST | `/api/game/new` | Initialize new game |
 | POST | `/api/game/action` | Execute player action |
 | POST | `/api/choice` | Submit player choice |
 | POST | `/api/director/infer` | Get Director narration + choices |
 | POST | `/api/assistant/infer` | Get Assistant commentary |
+| GET | `/api/game` | Fetch current game state |
 
-#### State Management
-- `RealmGameState` — Player stats (HP, MP, XP, Level, STR/AGI/INT/CHA/LCK), inventory, location graph, active quests, combat state, murder mystery state.
-- Stateful Director/Assistant conversation IDs maintain continuity.
-- Director patience meter controls difficulty and mutiny events.
+#### State
+
+- `RealmGameState` — HP, MP, XP, Level, STR/AGI/INT/CHA/LCK, inventory, location graph, quests, combat, murder mystery
+- Stateful Director/Assistant conversation IDs
+- Director patience meter
 
 ---
 
 ### Neon City — NEON CITY (port 5563)
 
-**NEON CITY** — A cyberpunk battle-royale board game on a shrinking grid with hacking, factions, and street events.
+**Class:** `NeonCityScene` · **Routes:** 17 · **Skills:** 8
 
-**Genre:** Cyberpunk · **Max characters:** 5
+A cyberpunk battle-royale board game on a shrinking grid with hacking, factions,
+and dynamic street events.
 
-#### MCP Skills (8)
+#### Skills
+
 | Skill | Description |
 |-------|-------------|
-| `neoncity_status` | Get turn, storm radius, alive players, firewall status |
-| `neoncity_player_info` | Get HP, position, weapons, implants |
+| `neoncity_status` | Turn, storm radius, alive players |
+| `neoncity_player_info` | HP, position, weapons, implants |
 | `neoncity_move` | Move on grid (may discover loot) |
 | `neoncity_attack` | Attack player with weapon |
-| `neoncity_hack` | Breach AI firewall at target location |
-| `neoncity_storm_status` | Get storm boundary and danger zones |
-| `neoncity_trigger_event` | Trigger random event (blackout, drone strike) |
-| `neoncity_end_turn` | Process AI turns and advance round |
+| `neoncity_hack` | Breach AI firewall |
+| `neoncity_storm_status` | Storm boundary and danger zones |
+| `neoncity_trigger_event` | Trigger random event |
+| `neoncity_end_turn` | Process AI turns, advance round |
 
-#### Game Mechanics
-- **12×12 grid** with procedural loot locations (caches, upgrades, weapons, implants).
-- **Glitch Storm** — Shrinking safe zone each round; players outside take 15 damage/turn, inside regenerate 5 HP.
-- **Combat** — Turn-based with weapons, accuracy modifiers, critical hits (10% chance, 2× damage).
-- **Hacking** — Progressive firewall breaching to defeat an AI target at grid center.
-- **AI opponents** — Up to 3 AI players with behavior profiles (aggressive, opportunist, flee at 25% HP).
-- **Dynamic events** — 30% chance per turn (blackouts, drone strikes, supply drops).
+#### Mechanics
 
-#### Scene Rules
-- Zone rules: storm damage, safe zone shrinking, regeneration inside zone
-- Combat: weapon accuracy, crits, kill detection
-- Hacking: progressive firewall layers, breach mechanics
+- **12×12 grid** with procedural loot locations
+- **Glitch Storm** — Shrinking safe zone; outside = 15 damage/turn
+- **Combat** — Turn-based with weapons, accuracy, criticals (10%, 2× damage)
+- **Hacking** — Progressive firewall breaching to defeat AI at grid center
+- **AI opponents** — Up to 3 AI players with behavior profiles
+- **Events** — 30% per turn: blackouts, drone strikes, supply drops
 
-#### Key API Endpoints
+#### Key Routes
+
 | Method | Path | Purpose |
 |--------|------|---------|
 | POST | `/api/game/new` | Start new game |
-| POST | `/api/game/move` | Move player on grid |
+| POST | `/api/game/move` | Move player |
 | POST | `/api/game/attack` | Combat attack |
-| POST | `/api/game/hack` | Breach AI firewall |
+| POST | `/api/game/hack` | Breach firewall |
 | POST | `/api/game/end_turn` | End turn, process AI |
-
-#### State Management
-- `NeonCityGameState` — Players, grid, storm radius, firewall layers, turn/round counters.
-- MCP framework integration for narrative context and governance.
-- SocketIO for real-time state sync.
 
 ---
 
 ### Coders Room — THE LAB (port 5564)
 
-**THE LAB** — An AI coding room where agents collaboratively write, review, and test Python code in an idle-simulation loop.
+**Class:** `CodersRoomScene` · **Routes:** 10 · **Skills:** 6
 
-**Genre:** Coding simulation · **Max characters:** 3
+An AI coding room where agents collaboratively write, review, and test Python
+code in an idle-simulation loop with a 5-phase pipeline.
 
-#### MCP Skills (6)
+#### Skills
+
 | Skill | Description |
 |-------|-------------|
-| `coders_status` | Get simulation state (ticks, features, agents) |
-| `coders_agent_info` | Get agent stats (lines written, reviews, tests) |
+| `coders_status` | Simulation state (ticks, features, agents) |
+| `coders_agent_info` | Agent stats (lines written, reviews, tests) |
 | `coders_add_feature` | Queue a feature request |
 | `coders_feature_list` | List pipeline and completed features |
-| `coders_run_code` | Execute Python in sandboxed subprocess (10s timeout) |
+| `coders_run_code` | Execute Python in sandbox (10s timeout) |
 | `coders_tick` | Advance pipeline by one tick |
 
-#### Game Mechanics
-- **5-phase pipeline** — FEATURE → DESIGN → CODING → REVIEW → TESTING.
-- **Role-based agents** — Reviewer (writes specs), Writer (generates code), QA (runs tests).
-- **Real code generation** — LLM generates actual Python code in markdown blocks.
-- **Sandboxed execution** — 10-second timeout subprocess with pytest for test validation.
-- **Auto-queuing** — New features auto-generated when queue is empty.
-- **Failure handling** — Consecutive test failures trigger rollback to DESIGN phase.
+#### Mechanics
 
-#### Scene Rules
-- Pipeline phase gates (each phase must pass before advancing)
-- Code quality gates enforced during REVIEW
-- Test coverage requirements during TESTING
+- **5-phase pipeline** — FEATURE → DESIGN → CODING → REVIEW → TESTING
+- **Role-based agents** — Reviewer (specs), Writer (code), QA (tests)
+- **Real code generation** — LLM generates actual Python
+- **Sandboxed execution** — 10-second subprocess with pytest
+- **Failure handling** — Consecutive failures trigger rollback to DESIGN
 
-#### Characters
-Three AI agents with mood, status, and task tracking:
-- **Reviewer** — Specification and design
-- **Writer** — Code generation
-- **QA** — Testing and validation
+#### Key Routes
 
-#### Key API Endpoints
 | Method | Path | Purpose |
 |--------|------|---------|
 | POST | `/api/start` | Start simulation |
 | POST | `/api/stop` | Stop simulation |
-| GET | `/api/state` | Get current state |
-| POST | `/api/feature/add` | Queue feature request |
+| GET | `/api/state` | Current state |
+| POST | `/api/feature/add` | Queue feature |
 | POST | `/api/tick` | Manual pipeline advance |
-
-#### State Management
-- `CodersRoomState` — Agents, feature queue, pipeline metrics (lines written, tests run, completed count).
-- Tick-based loop (configurable interval, default 15s).
-- Agent stats sync to StateCoordinator for cross-system visibility.
 
 ---
 
 ### Heist — THE SCORE (port 5565)
 
-**THE SCORE** — Cooperative heist planning and execution with specialized crew roles. The player directs a crew through phase-gated operations.
+**Class:** `HeistScene` · **Routes:** 14 · **Skills:** 7
 
-**Genre:** Crime co-op · **Max characters:** 4
+Cooperative heist planning and execution with specialized crew roles and
+phase-gated operations.
 
-#### MCP Skills (6)
+#### Skills
+
 | Skill | Description |
 |-------|-------------|
-| `heist_status` | Phase, suspicion, crew status, obstacles, loot |
-| `heist_action` | Perform crew action (disable_alarm, hack_door, persuade, etc.) |
-| `heist_advance_phase` | Progress to next phase |
-| `heist_collect_loot` | Grab loot (default $50k) |
-| `heist_crew_check` | Get crew member skills and status |
-| `heist_obstacles` | List remaining barriers to clear |
+| `heist_status` | Current heist state |
+| `heist_plan` | Start planning phase |
+| `heist_assign_role` | Assign crew member role |
+| `heist_execute` | Execute heist phase |
+| `heist_abort` | Abort current heist |
+| `heist_intel` | Gather intel on target |
+| `heist_getaway` | Initiate getaway |
 
-#### Game Mechanics
-- **Phase system** — PLANNING → APPROACH → EXECUTION → ESCAPE → COMPLETE. Each phase gates available actions and AI prompts.
-- **Suspicion meter** — 0–100; affects action success rates. Low (< 30%) = calm; Medium (30–60%) = guards suspicious; High (> 60%) = danger, one mistake = bust.
-- **Specialty-based skill checks** — Each crew member excels at certain actions (e.g., Ghost: 85% hack_door, 30% fight).
-- **Autonomous tick** — Crew makes independent decisions in background via VirtualPipeline.
-- **Action tags** — `[ACTION:action_name]` in crew AI response auto-executes the action.
-- **Leaderboard** — SharedBoard tracks highest-value heists.
+#### Mechanics
 
-#### Scene Rules
-- Phase-gated directives (planning: discuss strategy; approach: stealth/disguises; execution: speed/obstacles; escape: getaway/roadblocks)
-- Suspicion escalation affects available options
-- Specialty emphasis: crew nudged toward their strengths
+- **Phase-gated** — Planning → Recon → Execution → Getaway
+- **Crew roles** — Hacker, Muscle, Thief, Driver, Inside Man
+- **Heat system** — Failed checks increase heat; too high triggers police
+- **Multiple targets** — Bank, casino vault, corp server, museum
+- **Crew synergy** — Role combinations unlock special actions
 
-#### Characters (Crew)
-| Character | Role | Specialty |
-|-----------|------|-----------|
-| **Ghost** | Hacker | disable_alarm, hack_door, loop_cameras, jam_comms |
-| **Tank** | Muscle | breach_door, fight, carry_loot |
-| **Silk** | Talker | persuade, bribe, distract |
-| **Wheels** | Driver | drive, scout, getaway |
+#### Key Routes
 
-Each has health, morale, and status (ok/injured/arrested).
-
-#### Key API Endpoints
 | Method | Path | Purpose |
 |--------|------|---------|
-| GET | `/api/game` | Fetch heist state |
-| POST | `/api/game/new` | Start new heist (select venue + crew) |
-| POST | `/api/game/action` | Crew performs action |
-| POST | `/api/game/advance` | Move to next phase |
-| POST | `/api/game/loot` | Collect loot |
-| POST | `/api/chat` | Send message to crew member |
-| GET | `/api/venues` | List heist targets |
-
-#### State Management
-- Phase, suspicion (0–100), crew status (health, morale, arrested/injured flags).
-- Obstacles remaining (alarm, guards, safe, cameras).
-- Loot haul vs target; venues with distinct layouts, guard counts, and loot values.
+| POST | `/api/heist/start` | Begin heist planning |
+| POST | `/api/heist/assign` | Assign crew roles |
+| POST | `/api/heist/execute` | Execute phase |
+| POST | `/api/heist/abort` | Abort heist |
+| GET | `/api/heist/state` | Current heist state |
 
 ---
 
-### Command Center (port 5566)
+### Games — THE ARCADE (port 5567)
 
-**Command Center** — System observatory dashboard showing real-time metrics, pipeline status, cross-scene activity, live scene monitoring, and remote scene control.
+**Class:** `GamesScene` · **Routes:** 20 · **Skills:** 6
 
-**Genre:** System monitoring · **Max characters:** 0 (observatory only)
+A multi-game arcade hub with trivia, chess puzzles, word games, and
+leaderboards.
 
-#### MCP Skills (6)
+#### Skills
+
 | Skill | Description |
 |-------|-------------|
-| `cc_scene_list` | List all active scenes with status and character count |
-| `cc_scene_status` | Detailed scene state, characters, heat |
-| `cc_scene_feed` | Recent chat messages from a scene |
-| `cc_character_status` | Character mood, energy, stats, relationships |
-| `cc_inject_event` | Inject narrative/directive/broadcast into a scene |
-| `cc_system_status` | Monitor CPU, RAM, GPU, LMStudio status |
+| `games_status` | Arcade state, available games |
+| `games_start` | Start a new game session |
+| `games_action` | Submit game action |
+| `games_leaderboard` | View leaderboard |
+| `games_challenge` | Challenge another player |
+| `games_hint` | Get hint for current puzzle |
 
-#### Features
-- **Real-time monitoring** — CPU/RAM/GPU usage with alert thresholds (GPU VRAM > 80% yellow, > 95% red).
-- **Cross-scene view** — Monitor all active scenes simultaneously (state, characters, live chat).
-- **Live scene control** — Inject narratives, directives, or broadcast system messages into any scene.
-- **Character viewer** — Inspect any character's mood, energy, stats, and relationships across scenes.
-- **Training capture** — Export high-quality scene data as JSONL for model fine-tuning.
-- **Alert system** — Queue depth, latency thresholds, node status (green/yellow/red).
-- **Activity bus** — Current and historical event tracking.
+#### Mechanics
 
-#### Key API Endpoints
+- **Multiple game types** — Trivia, chess puzzles, word association, memory
+- **Leaderboard system** — Per-game rankings with score tracking
+- **AI opponents** — Configurable difficulty levels
+- **Challenge mode** — Player-vs-character matches
+
+#### Key Routes
+
 | Method | Path | Purpose |
 |--------|------|---------|
-| GET | `/api/dashboard` | Full system state |
-| GET | `/api/scenes` | List active scenes with summaries |
-| GET | `/api/scenes/<id>` | Detailed scene state |
-| GET | `/api/scenes/<id>/feed` | Recent chat messages |
-| GET | `/api/characters/<id>` | Character details across scenes |
-| POST | `/api/training/export` | Export training data as JSONL |
-| GET | `/api/system` | System metrics snapshot |
-| GET | `/api/alerts` | Alert history |
+| POST | `/api/game/start` | Start game session |
+| POST | `/api/game/action` | Submit action |
+| GET | `/api/leaderboard` | View scores |
+| GET | `/api/games/list` | Available games |
+| GET | `/api/state` | Arcade state |
 
-#### State Management
-- Lazy-loads MetricsCollector, MetricsDB, ActivityBus, SystemMonitor singletons.
-- Scene summaries extracted from each running scene (phase, heat, state, SCENE_METADATA).
-- Background ticker thread (1s default) updates dashboard.
-- Director-only access for injection and stat editing.
+---
+
+### Lab Break — LAB BREAK (port 5571)
+
+**Class:** `LabBreakScene` · **Routes:** 13 · **Skills:** 8
+
+A psychological survival horror escape room where characters have vitals
+(hunger, energy, stress, sanity), emotional bonds, and must be persuaded to
+cooperate for escape.
+
+#### Skills
+
+| Skill | Description |
+|-------|-------------|
+| `lab_status` | Full lab state — areas, vitals, bonds |
+| `lab_inspect` | Inspect an area or object |
+| `lab_move` | Move to adjacent area |
+| `lab_interact` | Interact with object or character |
+| `lab_persuade` | Attempt persuasion (difficulty check) |
+| `lab_rest` | Rest to restore energy/sanity |
+| `lab_feed` | Feed a character (reduces hunger) |
+| `lab_escape_attempt` | Attempt escape (requires conditions) |
+
+#### Mechanics
+
+- **Vitals system** — hunger, energy, stress, sanity (0–100 each)
+- **Emotional bonds** — trust/fear/loyalty between characters
+- **Persuasion** — Difficulty checks based on relationship + sanity
+- **Area exploration** — Connected rooms with discoverable objects
+- **Escape conditions** — Multiple requirements must be met
+- **Degradation** — Vitals decay over time; low sanity → hallucinations
+
+#### Key Routes
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| POST | `/api/game/new` | Start new lab scenario |
+| POST | `/api/game/action` | Execute action |
+| GET | `/api/game/state` | Current lab state |
+| GET | `/api/game/vitals` | Character vitals |
+| POST | `/api/game/persuade` | Attempt persuasion |
+
+---
+
+## Scene Reference — Utility Scenes
 
 ---
 
 ### Hub — THE TERMINAL (port 8500)
 
-**THE TERMINAL** — Central launcher and navigation for the entire CosySim system. Runs as a Streamlit application.
+**Class:** `HubScene` · **Routes:** 14
+
+The central navigation hub and scene launcher. Renders discovery cards for all
+registered scenes using the port registry.
 
 #### Features
-- **Scene launcher** with live status indicators (🟢 Running / ⚫ Stopped) for 14 services across 3 categories:
-  - **Core Scenes (6):** Phone, Bedroom, Lounge, Casino, Gallery, Arena
-  - **v0.50b Showcase (3):** Realm, Neon City, Coders Room
-  - **Tools & Services (5):** Dashboard, Admin, Asset Generator, TTS Server, MCP Bridge
-- **System health monitoring** — HTTP health checks against all scene ports.
-- **Asset browser** — View total assets, characters, images.
-- **Tutorials** — Getting started guides, game guides, MCP framework docs.
-- **Settings** — System config, paths, version info.
+
+- **Scene cards** — Auto-generated from `HUB_CATALOGUE_TARGETS` in port registry
+- **Status dots** — Green/red indicator per scene based on health checks
+- **Quick actions** — Launch scene, view health, open admin
+- **Scene creator** — `scene_creator.py` wizard for scaffolding new scenes
+
+#### Key Routes
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/` | Hub landing page |
+| GET | `/api/scenes/list` | All discoverable scenes |
+| GET | `/api/scenes/status` | Health check all scenes |
+| GET | `/api/health` | Hub health |
 
 ---
 
-### Admin Panel (port 8502)
+### Asset Studio — ASSET STUDIO (port 5568)
 
-**Admin Panel** — Unified 14-page system management interface. Runs as a Streamlit application.
+**Class:** `AssetStudioScene` · **Routes:** 33 · **Skills:** 8
 
-#### Pages
-| # | Page | Purpose |
-|---|------|---------|
-| 1 | 📊 Dashboard | System stats and asset overview |
-| 2 | 🗂️ Asset Browser | Browse all asset types |
-| 3 | 👥 Character Manager | Create, edit, delete characters |
-| 4 | 🎭 Personality Manager | Manage personality presets and custom profiles |
-| 5 | 🎬 Scene Manager | Configure and manage scenes |
-| 6 | 💾 Media Manager | Manage images, videos, audio |
-| 7 | 🔗 Conversation Explorer | Browse saved conversations |
-| 8 | ⚙️ Config Editor | Edit system configuration files |
-| 9 | 📊 LMStudio Integration | Model management and configuration |
-| 10 | 🎨 Asset Generator | ComfyUI and TTS integration |
-| 11 | 🧠 RAG Editor | Memory and embeddings management |
-| 12 | ⛓️ Chains Manager | Workflow chain management |
-| 13 | 📜 Logs Viewer | System and scene log browser |
-| 14 | 💾 Backups | Database backup and restore |
+ComfyUI-powered asset generation studio for character portraits, scene
+backgrounds, and UI elements.
 
----
+#### Skills
 
-### Dashboard (port 8501)
-
-**Dashboard** — Character-centric monitoring and state management. Runs as a Streamlit application.
-
-#### Pages
-- **📊 Dashboard** — Stats overview (character count, personalities, roles, memories), recent activity
-- **👤 Characters** — Create, view, edit characters (name, age, sex, physical traits, tags, metadata)
-- **🎭 Personalities** — View/create personality templates with system prompts, traits, values
-- **🎬 Roles** — Manage character roles with context and scenarios
-- **💾 Memories** — Browse, add, edit, search character memories (RAG-backed)
-- **🚀 Deploy** — Launch scenes with selected character
-- **⚙️ Settings** — Database paths, reset options
-
-#### State Tracked
-Mood, energy, relationship level, arousal, memory count per character.
-
----
-
-### Games Arcade — THE ARCADE (port 5567)
-
-**THE ARCADE** — Mini-game collection wrapped as a proper BaseScene with MCP skills. Hosts Mystery Investigation and Truth or Dare as sub-modules.
-
-**Genre:** Mini-games · **Max characters:** 0
-
-#### MCP Skills (7)
 | Skill | Description |
 |-------|-------------|
-| `games_status` | Get active game and current state |
-| `games_mystery_start` | Start a mystery case (3 cases available) |
-| `games_mystery_clue` | Get next clue (with red herrings) |
-| `games_mystery_accuse` | Accuse a suspect (fuzzy matching) |
-| `games_tod_start` | Start Truth or Dare |
-| `games_tod_roll` | Roll 1-6 (odd=truth, even=dare) |
-| `games_tod_answer` | Submit answer with score |
+| `studio_status` | Studio state, queue status |
+| `studio_generate` | Generate image via ComfyUI |
+| `studio_list_assets` | List generated assets |
+| `studio_get_asset` | Get specific asset details |
+| `studio_delete_asset` | Delete asset |
+| `studio_workflows` | List available workflows |
+| `studio_queue_status` | ComfyUI queue position |
+| `studio_inject` | Inject asset into scene |
 
-#### Sub-Games
+#### Features
 
-**Truth or Dare** — Roll-based party game with 15 truths + 15 dares, 1pt per truth / 2pts per dare.
+- **Workflow library** — Portrait, landscape, video (Wan 2.2 GGUF), upscale
+- **Asset database** — `data/asset_registry.db` with tags, metadata, character links
+- **Scene injection** — Push generated assets directly into scene templates
+- **Batch generation** — Queue multiple prompts
+- **Tab UI** — Generate, Library, Images, Portraits, Workflows
 
-**Mystery Investigation** — 3 cases (Heirloom, Poisoning, Masterpiece) with 5 clues each, red herrings, and fuzzy-match accusations.
+#### Key Routes
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| POST | `/api/generate` | Submit generation job |
+| GET | `/api/assets` | List all assets |
+| GET | `/api/assets/<id>` | Get asset details |
+| DELETE | `/api/assets/<id>` | Delete asset |
+| GET | `/api/workflows` | Available ComfyUI workflows |
+| GET | `/api/queue` | Queue status |
+
+---
+
+### Nexus Panel — Nexus Control Panel (port 5570)
+
+**Class:** `NexusPanelScene` · **Routes:** 114 · **Skills:** 6
+
+The richest route surface in CosySim. Full Nexus knowledge management with
+CRUD, search, research sessions, rule management, and analytics dashboards.
+
+#### Skills
+
+| Skill | Description |
+|-------|-------------|
+| `nexus_panel_status` | Panel state, entry counts |
+| `nexus_panel_search` | Search knowledge base |
+| `nexus_panel_add` | Add knowledge entry |
+| `nexus_panel_stats` | Knowledge analytics |
+| `nexus_panel_rules` | List governance rules |
+| `nexus_panel_health` | Nexus system health |
+
+#### Features
+
+- **Knowledge CRUD** — Create, read, update, delete Nexus entries
+- **Full-text search** — FTS5-powered search across all knowledge
+- **Research sessions** — Multi-turn NotebookLM research management
+- **Rule browser** — View and manage governance rules
+- **Analytics** — Entry counts by category, growth trends, Q&A cache stats
+- **Import/Export** — Bulk knowledge import and backup
+- **Query router stats** — Cache hit rates, tier usage
+
+#### Key Routes (subset of 114)
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/api/entries` | List/search entries |
+| POST | `/api/entries` | Create entry |
+| GET | `/api/entries/<id>` | Get entry |
+| PUT | `/api/entries/<id>` | Update entry |
+| DELETE | `/api/entries/<id>` | Delete entry |
+| GET | `/api/search` | Full-text search |
+| GET | `/api/rules` | List rules |
+| GET | `/api/stats` | Knowledge stats |
+| POST | `/api/research/start` | Start research session |
+| GET | `/api/qa` | Q&A cache entries |
+
+---
+
+### Intel Hub — THE BRIEFING ROOM (port 5580)
+
+**Class:** `IntelHubScene` · **Routes:** 77 · **Skills:** 5
+
+Intelligence dashboard with operator console, system health monitoring, news
+feeds, benchmark tracking, and operator inbox integration.
+
+#### Skills
+
+| Skill | Description |
+|-------|-------------|
+| `intel_status` | Intel Hub state |
+| `intel_news` | Latest curated news |
+| `intel_benchmarks` | Benchmark history |
+| `intel_system_health` | System service health |
+| `intel_operator_notes` | Operator inbox digest |
+
+#### Features
+
+- **Operator console** — Submit notes, view queue, process directives
+- **System health** — Real-time service status (Nexus, LMStudio, TTS, NLM)
+- **News feed** — Curated AI/tech/world news from pipeline
+- **Benchmark dashboard** — SVG sparkline charts, quality trends
+- **World events** — Live ticker from WorldSim
+- **Git summary** — Recent commits and branch status
+- **Activity log** — Recent system operations
+
+#### Key Routes (subset of 77)
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/api/intel/status` | System overview |
+| GET | `/api/intel/news` | News feed |
+| GET | `/api/intel/benchmarks` | Benchmark data |
+| GET | `/api/intel/health` | Service health checks |
+| POST | `/api/operator/submit` | Submit operator note |
+| GET | `/api/operator/queue` | Operator queue |
+| POST | `/api/operator/process` | Process pending notes |
+
+---
+
+### System Control — System Control Panel (port 5575)
+
+**Class:** `SystemControlScene` · **Routes:** 12
+
+System administration panel exposing service management, port registry, and
+configuration controls.
+
+#### Features
+
+- **Service management** — Start/stop/restart individual services
+- **Port registry** — View canonical port assignments
+- **Config viewer** — Read current `default.yaml` configuration
+- **Log viewer** — Tail service log files
+- **Health dashboard** — Aggregate health status
+
+#### Key Routes
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/api/services` | List all services |
+| POST | `/api/services/<name>/restart` | Restart service |
+| GET | `/api/ports` | Port registry dump |
+| GET | `/api/config` | Config viewer |
+| GET | `/api/logs/<service>` | Tail log file |
+
+---
+
+## Scene Reference — Service Scenes
+
+---
+
+### Command Center (port 5566)
+
+**Class:** `CommandCenterScene` · **Routes:** 38 · **Skills:** 5
+
+Real-time system monitoring dashboard with command execution, scheduler
+visibility, and system metrics.
+
+#### Skills
+
+| Skill | Description |
+|-------|-------------|
+| `cmd_status` | Command center state |
+| `cmd_execute` | Execute system command |
+| `cmd_scheduler` | View scheduler tasks |
+| `cmd_metrics` | System performance metrics |
+| `cmd_logs` | View system logs |
+
+#### Features
+
+- **Command execution** — Run system commands with output capture
+- **Scheduler dashboard** — All 55 scheduler tasks with status
+- **System metrics** — CPU, memory, GPU, network
+- **Log streaming** — Real-time log output via Socket.IO
+- **Alert system** — Configurable thresholds for health alerts
+
+#### Key Routes
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| POST | `/api/command/execute` | Execute command |
+| GET | `/api/scheduler/tasks` | List scheduler tasks |
+| GET | `/api/metrics` | System metrics |
+| GET | `/api/logs/stream` | Log stream (SSE) |
+| GET | `/api/state` | Center state |
+
+---
+
+### Grid — THE GRID (port 5569)
+
+**Class:** `GridScene` · **Routes:** 15 · **Skills:** 6
+
+An underground marketplace and faction hub with dynamic economy, price
+fluctuations driven by WorldSim events, and faction allegiance mechanics.
+
+#### Skills
+
+| Skill | Description |
+|-------|-------------|
+| `grid_status` | Grid state — market, factions |
+| `grid_buy_item` | Buy from market |
+| `grid_sell_item` | Sell to market |
+| `grid_get_market_prices` | Current price list |
+| `grid_faction_pledge` | Pledge to a faction |
+| `grid_broker_intel` | Buy intel from broker |
+
+#### Zones
+
+- **THE MARKET** — Buy/sell items, prices fluctuate with economy_tick events
+- **THE STATION** — Neon City travel hub, SVG map of scene locations
+- **THE DEN** — Faction headquarters, allegiance, and faction quests
+- **THE BROKER** — Information trading, Nexus-powered intel feed
+
+#### Key Routes
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/api/market/items` | Market catalogue |
+| POST | `/api/market/buy` | Buy item |
+| POST | `/api/market/sell` | Sell item |
+| GET | `/api/market/price_history/<id>` | Price history |
+| POST | `/api/faction/pledge` | Faction pledge |
+| GET | `/api/state` | Grid state |
+
+---
+
+## Socket.IO Event Reference
+
+| Event | Direction | Scenes | Purpose |
+|-------|-----------|--------|---------|
+| `message` | Server→Client | All chat scenes | Character message |
+| `state_update` | Server→Client | Most scenes | Game state change |
+| `hud_update` | Server→Client | All via HUD | Player state / world update |
+| `world_event` | Server→Client | All via HUD | World event notification |
+| `price_update` | Server→Client | Grid, Casino | Economy price change |
+| `connect` | Client→Server | All | Socket.IO connection |
+| `chat` | Client→Server | Chat scenes | Player chat message |
+| `action` | Client→Server | Game scenes | Player action |
+| `typing` | Server→Client | Phone, Bedroom | Character typing indicator |
+| `new_message` | Server→Client | Phone | Incoming text message |
+| `game_update` | Server→Client | Games, Arena | Game state change |
+| `combat_update` | Server→Client | Arena, Realm | Combat state change |
+| `economy_banner` | Server→Client | Grid, Casino | Major economy event |
+
+---
+
+## Route Distribution
+
+| Rank | Scene | Routes | Type |
+|------|-------|--------|------|
+| 1 | nexus_panel | 114 | Utility |
+| 2 | intel_hub | 77 | Utility |
+| 3 | bedroom | 67 | Game |
+| 4 | phone | 66 | Game |
+| 5 | command_center | 38 | Service |
+| 6 | asset_studio | 33 | Utility |
+| 7 | realm | 31 | Game |
+| 8 | games | 20 | Game |
+| 9 | gallery | 20 | Game |
+| 10 | neoncity | 17 | Service |
+
+**Total routes:** ~613 across 20 Flask scenes
+**Average:** 30.6 per scene · **Median:** 17
+
+---
+
+## Mixin Usage
+
+| Mixin | Count | Scenes |
+|-------|-------|--------|
+| `NexusSceneMixin` | 16 | bedroom, phone, lounge, tavern, casino, gallery, arena, realm, neoncity, coders, heist, games, grid, lab_break, intel_hub, nexus_panel |
+| `MCPSceneMixin` | 14 | bedroom, phone, lounge, tavern, casino, gallery, arena, realm, neoncity, coders, heist, games, grid, lab_break |
+| `BedroomCombatMixin` | 1 | bedroom |
+
+---
+
+## Health Checking
+
+Run after any scene change:
+
+```powershell
+python scripts/scene_health_check.py --port <PORT> --fix
+```
+
+This validates:
+- `/api/health` returns 200
+- All shared assets load (`/shared/css/`, `/shared/js/`)
+- Navbar v2 renders
+- Socket.IO connects
+- Scene-specific routes respond
+
+Full scene health sweep:
+
+```powershell
+python scripts/scene_health_check.py --all
+```
+
+---
+
+## See Also
+
+- [Architecture](ARCHITECTURE.md) — Engine subsystem details
+- [MCP Framework](MCP_FRAMEWORK.md) — Skill and interceptor patterns
+- [Nexus Integration](NEXUS_INTEGRATION.md) — Knowledge system wiring
+- [Configuration](CONFIGURATION.md) — `config/default.yaml` scene settings
