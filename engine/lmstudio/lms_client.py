@@ -539,6 +539,7 @@ class LMSClient:
         # Convenience overrides (merged into config)
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
+        stop_strings: Optional[List[str]] = None,
         integrations: Optional[List[Dict]] = None,
         response_format: Optional[Dict] = None,
         store: Optional[bool] = None,
@@ -550,12 +551,15 @@ class LMSClient:
         MCP servers via ``integrations`` (ephemeral or plugin).
 
         Args:
+            stop_strings: Optional list of sequences that stop generation
+                          when the model produces any of them.
             store: If False, server won't store the conversation (no response_id
                    returned).  Default None means server default (True).
         """
         # Build effective config
         effective = self._build_config(config, temperature=temperature,
                                         max_tokens=max_tokens,
+                                        stop_strings=stop_strings,
                                         integrations=integrations,
                                         response_format=response_format,
                                         model=model)
@@ -1321,6 +1325,7 @@ class LMSClient:
         *,
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
+        stop_strings: Optional[List[str]] = None,
         integrations: Optional[List[Dict]] = None,
         response_format: Optional[Dict] = None,
         model: Optional[str] = None,
@@ -1335,6 +1340,8 @@ class LMSClient:
             base.temperature = temperature
         if max_tokens is not None:
             base.max_output_tokens = max_tokens
+        if stop_strings is not None:
+            base.stop_strings = stop_strings
         if integrations is not None:
             base.integrations = integrations
         if response_format is not None:

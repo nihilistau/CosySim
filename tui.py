@@ -13,11 +13,13 @@ Keyboard shortcuts:
     C              — open Nexus Canvas in browser (localhost:5590)
     I              — HAR import wizard (scans all HAR directories)
     R              — refresh all port statuses
+    H              — show system health summary
     Q / Ctrl+C     — quit (stops launched subprocesses)
 """
 from __future__ import annotations
 
 import importlib
+import json as _json_mod
 import socket
 import subprocess
 import sys
@@ -252,6 +254,7 @@ class CosySimTUI(App[None]):
         Binding("a",       "launch_autostart",  "Auto-start",   show=True,  priority=True),
         Binding("o",       "open_browser",      "Open",         show=True,  priority=True),
         Binding("c",       "open_canvas",       "Canvas",       show=True,  priority=True),
+        Binding("h",       "show_health",       "Health",       show=True,  priority=True),
         Binding("l",       "show_log",          "Log",          show=True,  priority=True),
         Binding("r",       "refresh_status",    "Refresh",      show=True,  priority=True),
         Binding("i",       "import_har",        "Import HAR",   show=False, priority=True),
@@ -308,11 +311,18 @@ class CosySimTUI(App[None]):
 
                 yield Static(id="details-bar")
 
-            # Right panel — external services
+            # Right panel — external services + system health
             with Vertical(id="right-panel"):
-                yield Static("  EXTERNAL SERVICES", classes="panel-title")
+                yield Static(f"  CosySim v{VERSION}", classes="panel-title")
+                yield Rule()
+                yield Static("  EXTERNAL SERVICES", classes="section-title")
                 for label, port, url in EXTERNAL_SERVICES:
                     yield self._ext_row(label, port, url)
+                yield Rule()
+                yield Static("  SYSTEM HEALTH", classes="section-title")
+                yield Static(id="nexus-health", classes="account-row")
+                yield Static(id="lmstudio-health", classes="account-row")
+                yield Static(id="lmstudio-model", classes="account-row")
                 yield Rule()
                 yield Static("  QUICK STATS", classes="panel-title")
                 yield Static(id="stats-label", classes="account-row")
@@ -321,9 +331,8 @@ class CosySimTUI(App[None]):
 
     def _ext_row(self, label: str, port: int, url: str) -> Static:
         if port == 0:
-            # Token-based service — check for cookies file
-            cookies_path = ACCOUNTS_COOKIES_DIR / "nihilistcod_cookies.json"
-            ok = cookies_path.exists()
+            # Token-based service — check for ANY account cookies file
+            ok = any(ACCOUNTS_COOKIES_DIR.glob("*_cookies.json")) if ACCOUNTS_COOKIES_DIR.exists() else False
             icon = "[green]●[/]" if ok else "[yellow]○[/]"
             suffix = "[dim](cookie)[/]"
             return Static(
@@ -487,8 +496,8 @@ class CosySimTUI(App[None]):
         ext_results: Dict[str, tuple[str, bool]] = {}
         for label, port, _ in EXTERNAL_SERVICES:
             if port == 0:
-                cookies_path = ACCOUNTS_COOKIES_DIR / "nihilistcod_cookies.json"
-                ext_results[label] = ("copilot", cookies_path.exists())
+                ok = any(ACCOUNTS_COOKIES_DIR.glob("*_cookies.json")) if ACCOUNTS_COOKIES_DIR.exists() else False
+                ext_results[label] = ("copilot", ok)
             else:
                 ext_results[label] = (str(port), _port_up(port))
 
@@ -507,6 +516,82 @@ class CosySimTUI(App[None]):
             self._update_stats()
 
         self.call_from_thread(_apply_ext)
+
+        # Fetch system health (Nexus + LMStudio)
+        health_info = self._fetch_system_health()
+
+        def _apply_health() -> None:
+            try:
+                nexus_w = self.query_one("#nexus-health", Static)
+                nexus_w.update(health_info.get("nexus_line", " [dim]Nexus: unknown[/]"))
+            except NoMatches:
+                pass
+            try:
+                lms_w = self.query_one("#lmstudio-health", Static)
+                lms_w.update(health_info.get("lmstudio_line", " [dim]LMStudio: unknown[/]"))
+            except NoMatches:
+                pass
+            try:
+                model_w = self.query_one("#lmstudio-model", Static)
+                model_w.update(health_info.get("model_line", ""))
+            except NoMatches:
+                pass
+
+        self.call_from_thread(_apply_health)
+
+    def _fetch_system_health(self) -> Dict[str, str]:
+        """Probe Nexus and LMStudio for health info (runs in worker thread)."""
+        info: Dict[str, str] = {}
+
+        # Nexus health
+        try:
+            import urllib.request
+            req = urllib.request.Request(
+                "http://localhost:8700/api/health",
+                headers={"Accept": "application/json"},
+            )
+            with urllib.request.urlopen(req, timeout=3) as resp:
+                data = _json_mod.loads(resp.read())
+                entries = data.get("entries", data.get("entry_count", "?"))
+                qa = data.get("qa_pairs", data.get("qa_count", "?"))
+                rules = data.get("rules", data.get("rule_count", "?"))
+                info["nexus_line"] = (
+                    f" [green]●[/] [bold]Nexus[/]  "
+                    f"[cyan]{entries}[/] entries  "
+                    f"[cyan]{qa}[/] Q&A  "
+                    f"[cyan]{rules}[/] rules"
+                )
+        except Exception:
+            info["nexus_line"] = " [red]○[/] [bold]Nexus[/] [dim]offline[/]"
+
+        # LMStudio health + loaded model
+        try:
+            import urllib.request
+            req = urllib.request.Request(
+                "http://localhost:1234/api/v1/models",
+                headers={"Accept": "application/json"},
+            )
+            with urllib.request.urlopen(req, timeout=3) as resp:
+                data = _json_mod.loads(resp.read())
+                models = data.get("data", [])
+                if models:
+                    model_id = models[0].get("id", "unknown")
+                    short = model_id.split("/")[-1] if "/" in model_id else model_id
+                    if len(short) > 35:
+                        short = short[:32] + "..."
+                    info["lmstudio_line"] = (
+                        f" [green]●[/] [bold]LMStudio[/]  "
+                        f"[cyan]{len(models)}[/] model(s)"
+                    )
+                    info["model_line"] = f"   [dim]└ {short}[/]"
+                else:
+                    info["lmstudio_line"] = " [yellow]●[/] [bold]LMStudio[/] [dim]no models loaded[/]"
+                    info["model_line"] = ""
+        except Exception:
+            info["lmstudio_line"] = " [red]○[/] [bold]LMStudio[/] [dim]offline[/]"
+            info["model_line"] = ""
+
+        return info
 
     def _update_stats(self) -> None:
         try:
@@ -566,6 +651,31 @@ class CosySimTUI(App[None]):
             tc.active = "tab-log"
         except NoMatches:
             pass
+
+    def action_show_health(self) -> None:
+        """Log a system health summary to the log panel."""
+        try:
+            tc = self.query_one(TabbedContent)
+            tc.active = "tab-log"
+        except NoMatches:
+            pass
+        self._log("[bold cyan]─── System Health Summary ───[/]")
+        up_scenes = sum(1 for r in self._rows if r.group == "scene" and r._is_up)
+        up_svcs = sum(1 for r in self._rows if r.group == "service" and r._is_up)
+        total_scenes = sum(1 for r in self._rows if r.group == "scene")
+        total_svcs = sum(1 for r in self._rows if r.group == "service")
+        self._log(f" Services: [green]{up_svcs}[/]/{total_svcs}  Scenes: [green]{up_scenes}[/]/{total_scenes}")
+        for label, port, _ in EXTERNAL_SERVICES:
+            if port == 0:
+                ok = any(ACCOUNTS_COOKIES_DIR.glob("*_cookies.json")) if ACCOUNTS_COOKIES_DIR.exists() else False
+                icon = "[green]●[/]" if ok else "[red]○[/]"
+                self._log(f" {icon} {label}")
+            else:
+                up = _port_up(port)
+                icon = "[green]●[/]" if up else "[red]○[/]"
+                self._log(f" {icon} {label} :{port}")
+        self._log(f" Version: [bold]{VERSION}[/]")
+        self._log("[bold cyan]─────────────────────────────[/]")
 
     # ── Launch / Stop ─────────────────────────────────────────────────────
 
