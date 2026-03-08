@@ -611,13 +611,13 @@ def _cmd_refresh_cookies(har_path: str) -> None:
     extractor = HARExtractor()
     cookies = extractor.extract_cookies(har_path)
     if not cookies:
-        print(f"ERROR: No auth cookies found in {har_path}")
+        logger.error("No auth cookies found in %s", har_path)
         raise SystemExit(1)
 
     cookies_file = Path(__file__).resolve().parents[2] / "data" / "nlm_cookies.json"
     cookies_file.parent.mkdir(parents=True, exist_ok=True)
     cookies_file.write_text(json.dumps(cookies, indent=2), encoding="utf-8")
-    print(f"Saved {len(cookies)} cookies to {cookies_file}")
+    logger.info("Saved %d cookies to %s", len(cookies), cookies_file)
 
     # Verify cookies work
     try:
@@ -629,11 +629,11 @@ def _cmd_refresh_cookies(har_path: str) -> None:
             timeout=10,
         )
         if resp.status_code == 302:
-            print("WARNING: Cookies may be expired (302 redirect to login)")
+            logger.warning("Cookies may be expired (302 redirect to login)")
         else:
-            print(f"OK: Cookies verified (HTTP {resp.status_code})")
+            logger.info("Cookies verified (HTTP %d)", resp.status_code)
     except Exception as exc:
-        print(f"Could not verify: {exc}")
+        logger.warning("Could not verify: %s", exc)
 
 
 if __name__ == "__main__":

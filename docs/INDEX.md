@@ -2,21 +2,23 @@
 
 > All project documentation in one place. Runtime snapshot synced to `launcher.py`, `engine.port_registry`, `engine.skills`, and current pytest collection.
 
-## Quick Facts — v0.90b
+## Quick Facts — v0.91b
 
 | Metric | Value |
 |--------|-------|
-| Version | **0.90b** (2026) — "THE BASELINE" |
-| Pytest collection | **9,646 total / 9,260 default-selected** |
+| Version | **0.91b** (2026) — "THE EVOLUTION" |
+| Pytest collection | **9,963 total / 9,575 default-selected** |
 | MCP tool modules | **42** extracted modules in `engine/mcp/tools/` |
 | Skill registry | **31 packs · 278 skills** after `import engine.skills` |
-| Game scenes | **10** (phone, bedroom, lounge, tavern, casino, gallery, arena, realm, neoncity, grid) |
+| Game scenes | **11** (phone, bedroom, lounge, tavern, casino, gallery, arena, realm, neoncity, grid, lab_break) |
 | Utility scenes | **6** (coders, heist, command_center, games, asset_studio, intel_hub) |
+| Service scenes | **3** (hub, nexus_panel, system_control) |
+| Streamlit apps | **3** (dashboard, admin, assets) |
 | Launcher services | **12** |
 | Scheduler tasks | **55** builtin autonomous tasks |
 | Canonical ports | **35** named endpoints in the port registry |
 
-### Scene Ports (All 16)
+### Scene Ports (All 20)
 
 | Scene | Display Name | Port |
 |-------|-------------|------|
@@ -36,6 +38,10 @@
 | asset_studio | ASSET STUDIO | 5568 |
 | grid | THE GRID | 5569 |
 | intel_hub | THE BRIEFING ROOM | 5580 |
+| lab_break | THE LAB BREAK | 5571 |
+| nexus_panel | NEXUS PANEL | 5570 |
+| system_control | SYSTEM CONTROL | 5575 |
+| hub | HUB | 8500 |
 
 ### v0.68 Engine Modules
 

@@ -1,4 +1,4 @@
-﻿"""THE RUSTY ANCHOR — v0.68 'Dark Renaissance' gritty dockside tavern."""
+"""THE RUSTY ANCHOR — v0.68 'Dark Renaissance' gritty dockside tavern."""
 from .tavern_scene import TavernScene
 from . import tavern_skills as _tavern_skills  # noqa: F401 — register @skill decorators
 
