@@ -102,6 +102,12 @@ from .tool_registry    import (
 )
 # Llmster daemon manager
 from .llmster_manager  import LlmsterManager, get_llmster_manager
+# Server-side controller (bidirectional control)
+from .server_controller import ServerController, get_server_controller, ModelInstance, ServerHealth
+# LMLink federation manager
+from .lmlink_manager   import LMLinkManager, get_lmlink_manager, LMLinkPeer, AffinityRule, RoutingDecision
+# Task queue with model-affinity routing
+from .task_queue        import TaskQueue, get_task_queue, Task, TaskType, TaskPriority, TaskStatus
 
 __all__ = [
     # Native v1 (the only inference path)
@@ -134,4 +140,10 @@ __all__ = [
     "SDKToolRegistry", "ToolScope", "get_tool_registry", "reset_tool_registry",
     # Llmster daemon
     "LlmsterManager", "get_llmster_manager",
+    # Server controller (bidirectional)
+    "ServerController", "get_server_controller", "ModelInstance", "ServerHealth",
+    # LMLink federation
+    "LMLinkManager", "get_lmlink_manager", "LMLinkPeer", "AffinityRule", "RoutingDecision",
+    # Task queue
+    "TaskQueue", "get_task_queue", "Task", "TaskType", "TaskPriority", "TaskStatus",
 ]
