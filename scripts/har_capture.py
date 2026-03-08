@@ -694,7 +694,7 @@ def main() -> None:
         sys.exit(1)
 
     cookie_count = len(capture["cookies"])
-    print(f"\n✓ Captured {cookie_count} cookies via {used_mode}")
+    print(f"\n[OK] Captured {cookie_count} cookies via {used_mode}")
     if capture.get("nlm_session"):
         session = capture["nlm_session"]
         print(
