@@ -3,6 +3,31 @@
 All notable changes to CosySim are documented here.
 
 ---
+## [0.93b] — "SPRINT 1: THE FIX" — 2026-03
+
+Critical bug fixes and dead code removal — first sprint of the v1.0 scene overhaul.
+9,587 tests passing.
+
+### Bug Fixes
+- **Scene navigation**: Hub scene cards changed from `<div>` to `<a>` with
+  `data-scene-nav` + `href` — integrates with `cosysim-transitions.js` for
+  proper fade-through-black navigation
+- **Phone chat combining**: Fixed race condition in `PhoneDB.get_or_create_dm()`
+  with `threading.Lock`; added backend DM thread deduplication in
+  `get_threads()` to merge duplicates by `char_id`
+- **Penthouse (bedroom)**: Restored missing `<canvas id="bedroom-canvas">`
+  inside `#scene-container` wrapper — Three.js 3D scene was silently failing
+  since v0.68 template rewrite
+- **lab_break crash**: Fixed import `from engine.skills.registry import skill`
+  → `from engine.skills import skill`
+
+### Dead Code Removal
+- Removed legacy navbar v1 (`cosysim-navbar.js/css`) from `_INJECT_TAGS` —
+  was conflicting with navbar v2 and shadowing `navigateTo()` function
+- Deleted `content/scenes/unknown_scene_xyz/` placeholder directory
+- Removed `totally_nonexistent_scene_xyz` from `config/launcher.yaml`
+
+---
 ## [0.92b] — "THE HARDENING" — 2026-03
 
 Runtime hardening, flywheel observability, operator cockpit expansion, and

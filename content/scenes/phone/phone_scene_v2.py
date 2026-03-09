@@ -704,6 +704,9 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE
             try:
                 threads = self.phone_db.list_threads()
                 # Enrich each thread with character name + avatar from main DB
+                # and deduplicate DMs by character (race-condition clean-up).
+                dm_by_char: Dict[str, Dict] = {}
+                group_threads: List[Dict] = []
                 for t in threads:
                     members = t.get("members", [])
                     if t.get("type") == "dm" and members:
@@ -715,7 +718,22 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE
                             t["char_avatar"] = (char_row.get("avatar_url")
                                                 or char_row.get("image_url") or "")
                             t["char_id"]     = char_id
-                return jsonify({"ok": True, "threads": threads})
+                        # Keep only the most-recently-updated thread per character
+                        if char_id not in dm_by_char:
+                            dm_by_char[char_id] = t
+                        else:
+                            existing = dm_by_char[char_id]
+                            if t["updated_at"] > existing["updated_at"]:
+                                t["unread"] = t.get("unread", 0) + existing.get("unread", 0)
+                                dm_by_char[char_id] = t
+                            else:
+                                existing["unread"] = existing.get("unread", 0) + t.get("unread", 0)
+                    else:
+                        group_threads.append(t)
+
+                result = list(dm_by_char.values()) + group_threads
+                result.sort(key=lambda x: x["updated_at"], reverse=True)
+                return jsonify({"ok": True, "threads": result})
             except Exception as exc:
                 logger.error("list_threads: %s", exc)
                 return jsonify({"ok": False, "error": str(exc)}), 500

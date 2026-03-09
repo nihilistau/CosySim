@@ -9,11 +9,11 @@ SHARED_STATIC_DIR = str(_Path(__file__).parent / "static")
 _PORTRAIT_TEMPLATE_PATH = _Path(__file__).parent / "templates" / "portrait_overlay.html"
 _PORTRAITS_DIR = _Path(__file__).parent / "static" / "img" / "portraits"
 
-# Script/CSS tags auto-injected into every HTML response
+# Script/CSS tags auto-injected into every HTML response.
+# NOTE: Legacy cosysim-navbar.js/css REMOVED in v0.93b — navbar_v2.html
+# is the standard nav include.  cosysim-assistant.js kept until Aria v3.
 _INJECT_TAGS = (
     '\n<!-- CosySim Shared -->'
-    '\n<link rel="stylesheet" href="/shared/css/cosysim-navbar.css">'
-    '\n<script src="/shared/js/cosysim-navbar.js" defer></script>'
     '\n<script src="/shared/js/cosysim-assistant.js" defer></script>'
     '\n<link rel="stylesheet" href="/shared/css/cosysim-assistant.css">'
     '\n<link rel="stylesheet" href="/shared/css/cosysim-phone-panel.css">'
