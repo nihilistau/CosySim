@@ -34,6 +34,8 @@ import time
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+logger = logging.getLogger(__name__)
+
 import jinja2
 from flask import Flask, jsonify, render_template, request
 from flask_socketio import SocketIO
@@ -243,7 +245,11 @@ class TavernScene(BaseScene, NexusSceneMixin):
 
         @app.route("/api/health")
         def health():
-            return jsonify(self.get_health())
+            try:
+                return jsonify(self.get_health())
+            except Exception:
+                logger.exception("Health check failed")
+                return jsonify({"status": "error", "scene": "tavern", "reason": "health check raised"}), 500
 
         @app.route("/api/status")
         def status():

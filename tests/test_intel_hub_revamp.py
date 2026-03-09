@@ -62,6 +62,8 @@ def hub_app(scene_module):
         scene._port = 5580
         import collections
         scene._activity = collections.deque(maxlen=200)
+        scene._notification_subscribers = []
+        scene._socketio = None
         scene._stop_event = MagicMock()
         scene._register_routes()
         yield app.test_client()

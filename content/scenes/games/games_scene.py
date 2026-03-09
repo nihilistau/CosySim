@@ -17,6 +17,8 @@ import random
 import time
 from typing import Any, Dict, List, Optional
 
+logger = logging.getLogger(__name__)
+
 from flask import Flask, jsonify, render_template, request
 from flask_socketio import SocketIO, emit
 
@@ -261,7 +263,11 @@ class GamesScene(BaseScene, NexusSceneMixin):
 
         @app.route("/api/health")
         def health():
-            return jsonify(self.get_health())
+            try:
+                return jsonify(self.get_health())
+            except Exception:
+                logger.exception("Health check failed")
+                return jsonify({"status": "error", "scene": "games", "reason": "health check raised"}), 500
 
         @app.route("/api/status")
         def status():

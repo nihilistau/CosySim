@@ -190,3 +190,61 @@ def nexus_youtube(url: str, category: str = "youtube") -> str:
     """
     result = _client().import_youtube(url, category=category)
     return json.dumps(result, default=str)
+
+
+# ── Flywheel Observability ────────────────────────────────────
+
+@skill(pack="nexus", description="Get flywheel metrics: router stats, training pipeline, scheduler health",
+       tags=["nexus", "flywheel", "metrics", "observability"], category=SkillCategory.SYSTEM)
+def nexus_flywheel_stats() -> str:
+    """Return combined flywheel metrics across the query router, training pipeline, and scheduler.
+
+    Includes: cache hit rates, tokens saved, QA growth, training example counts,
+    quality distribution, scheduler task states, and overall flywheel health.
+    """
+    stats: dict = {"router": {}, "training": {}, "scheduler": {}, "nexus": {}}
+
+    try:
+        from engine.nexus.query_router import get_query_router
+        router = get_query_router()
+        stats["router"] = router.stats.to_dict()
+    except Exception:
+        stats["router"] = {"error": "query router unavailable"}
+
+    try:
+        from engine.nexus.training_flywheel import get_training_flywheel
+        flywheel = get_training_flywheel()
+        stats["training"] = flywheel.stats()
+    except Exception:
+        stats["training"] = {"error": "training flywheel unavailable"}
+
+    try:
+        from engine.nexus.scheduler_daemon import get_scheduler_daemon
+        daemon = get_scheduler_daemon()
+        daemon_status = daemon.status()
+        stats["scheduler"] = {
+            "running": daemon_status.get("running", False),
+            "task_count": daemon_status.get("task_count", 0),
+            "tasks_by_state": _scheduler_task_summary(daemon_status.get("tasks", [])),
+        }
+    except Exception:
+        stats["scheduler"] = {"error": "scheduler daemon unavailable"}
+
+    try:
+        nexus_status = _client().status()
+        stats["nexus"] = {
+            "entries": nexus_status.get("entries", 0),
+            "qa_pairs": nexus_status.get("qa_pairs", 0),
+            "rules": nexus_status.get("rules", 0),
+        }
+    except Exception:
+        stats["nexus"] = {"error": "nexus client unavailable"}
+
+    return json.dumps(stats, default=str)
+
+
+def _scheduler_task_summary(tasks: list) -> dict:
+    """Summarize scheduler tasks into enabled/disabled/errored counts."""
+    enabled = sum(1 for t in tasks if t.get("enabled", True))
+    errored = sum(1 for t in tasks if t.get("error_count", 0) > 0)
+    return {"enabled": enabled, "disabled": len(tasks) - enabled, "with_errors": errored}

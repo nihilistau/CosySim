@@ -28,9 +28,11 @@ if TYPE_CHECKING:
     from engine.nexus.session_client import NexusSessionClient
     from engine.nexus.memory_client import NexusMemoryClient
 
+from engine.port_registry import get_service_url
+
 logger = logging.getLogger(__name__)
 
-_DEFAULT_URL = "http://localhost:8700"
+_DEFAULT_URL = get_service_url("nexus")
 
 
 def _resolve_governance_actor(agent_id: str = "", created_by: str = "") -> str:

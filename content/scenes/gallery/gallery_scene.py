@@ -1262,7 +1262,11 @@ class GalleryScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE
 
         @app.route("/api/health")
         def health():
-            return jsonify(self.get_health())
+            try:
+                return jsonify(self.get_health())
+            except Exception:
+                logger.exception("Health check failed")
+                return jsonify({"status": "error", "scene": "gallery", "reason": "health check raised"}), 500
 
         @app.route("/api/economy")
         def api_economy():

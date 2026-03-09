@@ -1431,6 +1431,136 @@ body {
   }
 }
 
+/* ── Deep-mobile (≤480px) ── */
+
+@media (max-width: 480px) {
+  /* All grids collapse to single column */
+  .intel-layout {
+    grid-template-columns: 1fr;
+    gap: 8px;
+    padding: 6px;
+  }
+
+  /* Header stacks vertically */
+  .briefing-header {
+    flex-direction: column;
+    height: auto;
+    padding: 8px 10px;
+    gap: 6px;
+  }
+  .briefing-header__title {
+    font-size: 14px;
+  }
+  .briefing-header__right {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .status-board {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .status-board__item {
+    min-width: 70px;
+    font-size: 11px;
+  }
+
+  /* Panels: reduce padding, ensure touch targets */
+  .intel-panel {
+    padding: 10px;
+    border-radius: 6px;
+  }
+  .intel-panel__header {
+    font-size: 11px;
+    gap: 6px;
+    min-height: 44px;
+  }
+  .panel-refresh-btn {
+    min-width: 44px;
+    min-height: 44px;
+    font-size: 16px;
+  }
+  .panel-badge {
+    font-size: 9px;
+    padding: 2px 6px;
+  }
+
+  /* Touch-friendly interactive elements */
+  button, select, input, textarea,
+  .operator-toggle,
+  .operator-form__actions button {
+    min-height: 44px;
+    font-size: 14px;
+  }
+
+  /* Stat rows */
+  .stat-row {
+    font-size: 11px;
+    padding: 4px 0;
+  }
+  .stat-row__label {
+    min-width: 90px;
+  }
+
+  /* Operator grids */
+  .operator-summary-grid,
+  .operator-grid,
+  .operator-form__row,
+  .operator-split {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+  .operator-subpanel {
+    padding: 8px;
+  }
+  .operator-form__actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  /* Benchmark grid */
+  .benchmark-grid {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+  .benchmark-card {
+    padding: 10px;
+  }
+
+  /* Scene health grid */
+  .scene-health-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 4px;
+  }
+
+  /* Economy grid */
+  .econ-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* Operator lists */
+  .operator-list {
+    max-height: 200px;
+  }
+
+  /* News ticker adjust */
+  .news-ticker {
+    height: 36px;
+    font-size: 11px;
+  }
+
+  /* City-pulse event details */
+  .cp-event__desc {
+    font-size: 10px;
+  }
+
+  /* Notification toast: full width on mobile */
+  .notification-toast-container {
+    left: 6px;
+    right: 6px;
+    max-width: 100%;
+  }
+}
+
 /* ──── News Ticker ──── */
 .news-ticker-container {
   position: fixed;
@@ -1840,4 +1970,93 @@ body {
   font-size: 8px;
   color: rgba(6, 182, 212, 0.45);
   margin-top: 2px;
+}
+
+/* ════════════════════════════════════════════════
+   NOTIFICATION TOASTS (SSE-driven)
+════════════════════════════════════════════════ */
+
+.notification-toast-container {
+  position: fixed;
+  top: 64px;
+  right: 16px;
+  z-index: 950;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 380px;
+  pointer-events: none;
+}
+
+.notification-toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: rgba(6, 13, 26, 0.95);
+  border: 1px solid rgba(6, 182, 212, 0.25);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
+  animation: notif-slide-in 0.3s ease forwards;
+  max-width: 100%;
+  cursor: pointer;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.notification-toast.is-dismissing {
+  opacity: 0;
+  transform: translateX(40px);
+}
+
+.notification-toast--info    { border-left: 3px solid var(--accent); }
+.notification-toast--success { border-left: 3px solid var(--online); }
+.notification-toast--warning { border-left: 3px solid var(--warning); }
+.notification-toast--error   { border-left: 3px solid var(--offline); }
+
+.notification-toast__icon {
+  font-size: 16px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.notification-toast__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.notification-toast__title {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: #e2e8f0;
+  margin-bottom: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notification-toast__message {
+  font-size: 11px;
+  color: var(--fg-dim);
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.notification-toast__time {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: rgba(6, 182, 212, 0.4);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+@keyframes notif-slide-in {
+  from { transform: translateX(40px); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
 }

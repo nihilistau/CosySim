@@ -3,6 +3,46 @@
 All notable changes to CosySim are documented here.
 
 ---
+## [0.92b] — "THE HARDENING" — 2026-03
+
+Runtime hardening, flywheel observability, operator cockpit expansion, and
+system-control MCP skills. 9,587 tests passing.
+
+### Track A — Flywheel Observability
+- `nexus_flywheel_stats()` skill in nexus_skills.py — combines query router
+  stats, training flywheel stats, scheduler status, and Nexus entry counts
+- `_scheduler_task_summary()` helper for aggregated task state
+
+### Track B — Runtime Hardening
+- Wrapped `register_health_route()` in base_scene.py with try/except → 500 JSON
+- Wrapped 6 scene-specific `/api/health` overrides (casino, gallery, games,
+  system_control, tavern, intel_hub) with error-safe handlers
+- Fixed 5 critical silent-return patterns in nlm_direct_client and lms_client
+  with debug logging before bare returns
+- Replaced hardcoded localhost URLs with `get_service_url()` across 9 engine
+  files: nexus client, nexus_seeder, canvas_api, nlm_hybrid, tts, benchmark,
+  workflow_manager, scene_art, logging monitor
+
+### Track C — Operator Cockpit (Intel Hub)
+- `/api/flywheel/stats` route for flywheel metrics panel
+- Flywheel panel HTML + JS in Intel Hub dashboard
+- `/api/notifications/stream` SSE endpoint with fan-out queue architecture
+- Real-time notification toasts (info/success/warning/error severity)
+- `_push_notification()` wired into `_log_activity()` for live event streaming
+- @media (max-width: 480px) deep-mobile CSS breakpoint
+
+### Track D — System Control MCP Skills
+- `engine/skills/builtin/system_management_skills.py` — 7 new skills:
+  service_health_check, service_url_resolve, flywheel_control, config_get,
+  config_set, discover_scenes, system_overview
+- `scan_scene_directories()` in control_plane_registry.py — filesystem scene
+  discovery with comparison against SCENE_DEFS registry
+
+### Gemini Damage Repair
+- Salvaged good changes from Gemini 3.1 Pro session, reverted destructive ones
+- Restored 9 files broken by automated refactoring
+
+---
 ## [0.91b] — "THE EVOLUTION" — 2026-03
 
 Phase 7–8 system evolution sprint. Lab Break scene, NLM chain-prompting engine,

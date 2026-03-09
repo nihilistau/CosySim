@@ -363,10 +363,19 @@ class BaseScene(ABC):
 
         @app.route("/api/health")
         def _health():
-            return Response(
-                _json.dumps(self.get_health()),
-                mimetype="application/json",
-            )
+            try:
+                return Response(
+                    _json.dumps(self.get_health()),
+                    mimetype="application/json",
+                )
+            except Exception:
+                logger.exception("Health check failed for %s", self.scene_name)
+                return Response(
+                    _json.dumps({"status": "error", "scene": self.scene_name,
+                                 "reason": "health check raised an exception"}),
+                    status=500,
+                    mimetype="application/json",
+                )
 
         # Auto-wire portrait overlay character routes
         self.register_character_routes(app)
