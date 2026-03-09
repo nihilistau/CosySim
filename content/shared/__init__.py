@@ -11,11 +11,11 @@ _PORTRAITS_DIR = _Path(__file__).parent / "static" / "img" / "portraits"
 
 # Script/CSS tags auto-injected into every HTML response.
 # NOTE: Legacy cosysim-navbar.js/css REMOVED in v0.93b — navbar_v2.html
-# is the standard nav include.  cosysim-assistant.js kept until Aria v3.
+# is the standard nav include.  cosysim-assistant.js REMOVED in v0.95b —
+# cosysim-aria-portrait.js (loaded via aria_widget.html include) is the
+# unified Aria system.
 _INJECT_TAGS = (
     '\n<!-- CosySim Shared -->'
-    '\n<script src="/shared/js/cosysim-assistant.js" defer></script>'
-    '\n<link rel="stylesheet" href="/shared/css/cosysim-assistant.css">'
     '\n<link rel="stylesheet" href="/shared/css/cosysim-phone-panel.css">'
     '\n<script src="/shared/js/cosysim-phone-panel.js" defer></script>'
     '\n<link rel="stylesheet" href="/shared/css/portrait.css">'
