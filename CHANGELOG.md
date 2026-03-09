@@ -32,6 +32,18 @@ scenes, route standardization across all 19 scenes. 9,587+ tests passing.
 - **command_center**: Added missing health, HUD, announcer, and inventory routes
 - All 19 Flask-based scenes now register: health, HUD, announcer, inventory
 
+### Aria Consolidation
+- Removed redundant `cosysim-assistant.js` + CSS from `_INJECT_TAGS` — was
+  conflicting with `cosysim-aria-portrait.js` (loaded via `aria_widget.html`)
+- `cosysim-aria-portrait.js` is now the single Aria system (animated SVG
+  portrait, 4 display modes, voice events, navbar integration)
+
+### Audit Results
+- Design tokens (`design_tokens.css`): 265 properties, well-organized — no
+  changes needed
+- Navbar/HUD (`navbar_v2.html` + `cosysim-neon-hud.js`): fully functional,
+  inventory rendering via `/api/hud/state` polling — no changes needed
+
 ---
 ## [0.93b] — "SPRINT 1: THE FIX" — 2026-03
 
