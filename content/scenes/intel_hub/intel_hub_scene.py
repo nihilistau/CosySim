@@ -115,8 +115,9 @@ class IntelHubScene(BaseScene):
         self.register_health_route(self._app)
         self.register_hud_route(self._app)
         self.register_announcer_route(self._app)
+        self.register_inventory_route(self._app)
 
-    # ── BaseScene interface ────────────────────────────────────────────────────
+    # ── BaseScene interface────────────────────────────────────────────────────
 
     def start(self) -> None:
         """Start THE BRIEFING ROOM Flask server."""

@@ -3,6 +3,36 @@
 All notable changes to CosySim are documented here.
 
 ---
+## [0.95b] — "SPRINT 2: THE DEEP REWORK" — 2026-03
+
+Deep rework: Penthouse 3D restored, Phone OS activated, inventory wired to all
+scenes, route standardization across all 19 scenes. 9,587+ tests passing.
+
+### Critical Fixes
+- **Penthouse 3D restored**: Added Three.js r128 + OrbitControls CDN script tags
+  to `bedroom.html` — the 3D room was silently crashing because `THREE` was
+  undefined (template rewrite in v0.68 dropped the library includes)
+- **Phone OS activated**: Changed `phone/__init__.py` to export the real
+  `PhoneSceneV2` from `phone_scene_v2.py` (40+ routes, PhoneDB, MCP governor,
+  autonomous texting) instead of aliasing the simple `NeonPhone` 6-contact demo
+- **Phone V2 routes**: Added `register_hud_route()` and `register_announcer_route()`
+  to PhoneSceneV2 — were previously missing
+
+### Inventory System Activation
+- Wired `register_inventory_route()` to ALL 19 game scenes — inventory REST API
+  (`/api/inventory/*`) now accessible from every scene
+- Scenes: bedroom, casino, coders, gallery, games, grid, heist, hub, intel_hub,
+  lab_break, lounge, neoncity, nexus_panel, realm, tavern, asset_studio, phone,
+  arena, command_center, system_control
+
+### Route Standardization
+- **system_control**: Added missing `register_health_route()` — was the only
+  scene without it (16/17 → 17/17)
+- **arena**: Added missing `register_hud_route()` and `register_announcer_route()`
+- **command_center**: Added missing health, HUD, announcer, and inventory routes
+- All 19 Flask-based scenes now register: health, HUD, announcer, inventory
+
+---
 ## [0.93b] — "SPRINT 1: THE FIX" — 2026-03
 
 Critical bug fixes and dead code removal — first sprint of the v1.0 scene overhaul.

@@ -113,6 +113,7 @@ class LoungeScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
         self.register_health_route(self.app)
         self.register_hud_route(self.app)
         self.register_announcer_route(self.app)
+        self.register_inventory_route(self.app)
         self.register_shop_route(self.app)
         self.register_tts_route(self.app)
         self.app.config["SECRET_KEY"] = "velvet_lounge_secret_1920s"
