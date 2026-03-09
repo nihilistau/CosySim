@@ -11,8 +11,6 @@ Public API::
     from engine import SceneRegistry
     from engine.paths import paths, ROOT
 
-v0.68 modules::
-
     from engine import get_economy_manager, EconomyManager
     from engine import get_character_memory, CharacterMemoryInterceptor
     from engine import get_reputation_manager, ReputationInterceptor
