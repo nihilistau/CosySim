@@ -125,7 +125,7 @@ def _run_single(name: str, info: Dict[str, Any]) -> None:
                     host="0.0.0.0", port=info["port"], log_level="warning")
     elif t == "node":
         script_dir = PROJECT_ROOT / info["script"]
-        subprocess.run("npm run dev", cwd=str(script_dir), shell=True)
+        subprocess.run(["npm", "run", "dev"], cwd=str(script_dir))
     else:
         print(f"Unknown type '{t}' for '{name}'")
         sys.exit(1)
@@ -179,9 +179,8 @@ def _start_node_proc(info: Dict[str, Any],
         return None
     try:
         return subprocess.Popen(
-            "npm run dev",
+            ["npm", "run", "dev"],
             cwd=str(script_dir),
-            shell=True,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
@@ -292,12 +291,32 @@ def launch_multi(service_names: List[str], scene_names: List[str]) -> None:
                 print(f"  Warning: not responding: {', '.join(down)}")
     except KeyboardInterrupt:
         print("\n  Shutting down...")
+        # Gracefully stop the living world systems before killing subprocesses
+        try:
+            from engine.world.world_sim import get_world_sim
+            get_world_sim().stop()
+            print("  WorldSim stopped.")
+        except Exception:
+            pass
+        try:
+            from engine.world.event_cascade import get_event_cascade
+            get_event_cascade().stop()
+            print("  EventCascade stopped.")
+        except Exception:
+            pass
+        try:
+            from engine.events.cross_scene_relay import get_cross_scene_relay
+            get_cross_scene_relay().stop()
+        except Exception:
+            pass
+        # Terminate subprocess-based targets (streamlit, node)
         for proc in all_procs:
             try:
                 proc.terminate()
             except Exception:
                 pass
         print("  Done.\n")
+
 
 
 # ── High-level launchers ──────────────────────────────────────────────────

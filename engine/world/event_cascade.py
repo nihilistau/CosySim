@@ -218,8 +218,9 @@ class EventCascade:
                 target_scene=evt.scene,
             )
             return True
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("EventCascade attempt 1 (EventBus) failed for %s→%s: %s",
+                         evt.event_type, evt.scene, exc)
 
         # Attempt 2: MCPFramework Socket.IO emit
         try:
@@ -231,8 +232,9 @@ class EventCascade:
                     room=f"scene_{evt.scene}",
                 )
                 return True
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("EventCascade attempt 2 (Socket.IO) failed for %s→%s: %s",
+                         evt.event_type, evt.scene, exc)
 
         # Attempt 3: Store in MCPFramework for scene to poll
         try:
@@ -244,8 +246,9 @@ class EventCascade:
                 # Keep only last 20 events
                 node.set("pending_world_events", pending[-20:])
                 return True
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("EventCascade attempt 3 (MCP poll store) failed for %s→%s: %s",
+                         evt.event_type, evt.scene, exc)
 
         return False
 

@@ -27,8 +27,6 @@ import sys
 from collections import Counter, defaultdict
 from typing import Any, Dict, List, Optional
 
-import requests
-
 from engine.nexus.client import get_nexus_client
 
 logger = logging.getLogger(__name__)
@@ -213,7 +211,7 @@ class NexusDistiller:
                 if stored:
                     counts["fixes"] += 1
 
-            # Mark as distilled by updating tags
+            # Mark as distilled by updating tags (via NexusClient — no raw HTTP)
             existing_tags = log_entry.get("tags", "")
             if isinstance(existing_tags, str):
                 try:
@@ -224,13 +222,9 @@ class NexusDistiller:
                 tag_list = existing_tags or []
             tag_list.append("distilled")
             try:
-                requests.put(
-                    f"{self._url}/api/entries/{entry_id}",
-                    json={"tags": tag_list},
-                    timeout=5,
-                )
+                get_nexus_client().update_entry(entry_id, tags=tag_list)
             except Exception:
-                logger.debug("Suppressed exception", exc_info=True)
+                logger.debug("Could not mark entry %s as distilled", entry_id, exc_info=True)
 
         # Process session summaries for pattern extraction
         summaries = _api_get("/api/search", {"q": "session ended summary", "limit": 50})
@@ -502,15 +496,14 @@ class QADeduplicator:
         removed = 0
 
         if not dry_run:
+            client = get_nexus_client()
             for d in dupes:
                 try:
-                    r = requests.delete(
-                        f"{self._url}/api/qa/{d['remove_id']}", timeout=5,
-                    )
-                    if r.ok:
+                    # QA items are stored as entries in Nexus — use delete_entry
+                    if client.delete_entry(d["remove_id"]):
                         removed += 1
                 except Exception:
-                    logger.debug("Suppressed exception", exc_info=True)
+                    logger.debug("Could not delete duplicate QA %s", d.get("remove_id"), exc_info=True)
 
         return {
             "duplicates_found": len(dupes),

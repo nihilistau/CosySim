@@ -25,6 +25,7 @@ from pathlib import Path
 import json
 from datetime import datetime
 import logging
+import threading
 
 logger = logging.getLogger(__name__)
 
@@ -101,6 +102,10 @@ class BaseScene(ABC):
         self.streaming_enabled: bool = True
         self._active_streams: int = 0
         self._total_stream_tokens: int = 0
+
+        # Graceful-shutdown signal — set in stop(); subclass long-running loops
+        # can check ``self._stop_event.is_set()`` to exit cleanly.
+        self._stop_event: threading.Event = threading.Event()
 
         # Scene metadata — subclasses override SCENE_METADATA for rich description
         self.scene_metadata: Dict[str, Any] = getattr(self.__class__, "SCENE_METADATA", {
@@ -266,6 +271,8 @@ class BaseScene(ABC):
     @abstractmethod
     def stop(self) -> None:
         """Stop the scene and persist character state to database."""
+        # Signal any in-process loops that a stop has been requested
+        self._stop_event.set()
         try:
             from engine.mcp.character_registry import get_character_registry
             get_character_registry().persist_to_db()
@@ -521,7 +528,7 @@ class BaseScene(ABC):
                             "ts": int(_time.time()),
                         })
                 except Exception:
-                    pass
+                    _bslogger.debug("Announcer: world_state events unavailable", exc_info=True)
 
                 # Pull recent world event log
                 try:
@@ -535,7 +542,7 @@ class BaseScene(ABC):
                             "ts": entry.get("ts", int(_time.time())),
                         })
                 except Exception:
-                    pass
+                    _bslogger.debug("Announcer: world_state event_log unavailable", exc_info=True)
 
                 # Faction standings changes as rumour feed
                 try:
@@ -551,14 +558,14 @@ class BaseScene(ABC):
                                 "ts": int(_time.time()),
                             })
                 except Exception:
-                    pass
+                    _bslogger.debug("Announcer: player_state faction_standings unavailable", exc_info=True)
 
                 # Scene-specific announcements (scenes can override this)
                 try:
                     scene_items = scene_ref._get_announcer_items()
                     items.extend(scene_items)
                 except Exception:
-                    pass
+                    _bslogger.debug("Announcer: scene-specific items unavailable", exc_info=True)
 
                 # De-dupe and trim
                 seen: set = set()

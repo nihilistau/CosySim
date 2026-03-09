@@ -9,7 +9,10 @@ from datetime import datetime, timezone
 from functools import lru_cache
 from typing import Any, Dict, List, Sequence
 
-from engine.nexus.knowledge_capture import capture_entry_and_qa
+# NOTE: engine.nexus.knowledge_capture is imported lazily inside
+# store_system_inventory_snapshot() so that importing this module does not
+# fail when the Nexus KMS service is offline or its dependencies are missing.
+
 from engine.port_registry import get_target_metadata
 
 logger = logging.getLogger(__name__)
@@ -316,6 +319,9 @@ def store_system_inventory_snapshot(
     client: Any = None,
 ) -> Dict[str, Any]:
     """Store the current system inventory in Nexus as a document plus Q&A."""
+    # Import lazily so this module is always importable even when Nexus is offline.
+    from engine.nexus.knowledge_capture import capture_entry_and_qa  # noqa: PLC0415
+
     inventory = build_system_inventory(include_catalog=True)
     content = (
         f"{render_system_inventory_text(include_catalog=True)}\n\n"
