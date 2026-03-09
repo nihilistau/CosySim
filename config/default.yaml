@@ -589,6 +589,76 @@ notebooklm:
       - "List the highest-value integration gaps or brittle control-plane surfaces that should be addressed next so the system keeps compounding instead of re-discovering context."
       - "List the most important auth freshness, credential keepalive, checkpoint, compaction, scheduler, or browser-session actions the system should keep checking to stay reliable."
 
+# ──── NeonCity 2 Game Systems ────
+
+# Character neurochemistry — drives NPC emotional behaviour
+neurochemistry:
+  enabled: true
+  tick_interval_seconds: 60     # how often decay/recovery runs (1 game hour)
+  save_interval_ticks: 5        # persist every N ticks
+  detailed_prompt_injection: false  # true = full NT levels in prompt; false = summary
+  interceptor_priority: 4       # lower = earlier in pipeline
+  baselines:
+    dopamine: 0.45
+    serotonin: 0.50
+    oxytocin: 0.30
+    cortisol: 0.25
+    adrenaline: 0.15
+    endorphins: 0.40
+  half_lives:
+    dopamine: 4.0
+    serotonin: 12.0
+    oxytocin: 6.0
+    cortisol: 3.0
+    adrenaline: 2.0
+    endorphins: 5.0
+  tolerance_decay_rate: 0.02    # per tick
+  tolerance_gain_rate: 0.1      # per stimulus application
+
+# Skill progression — player skills and level system
+skill_progression:
+  enabled: true
+  max_skill_level: 5
+  max_global_level: 50
+  auto_xp_on_check: true        # award XP on skill checks automatically
+  level_thresholds: [0, 100, 300, 600, 1000, 2000]
+  diminishing_returns:
+    0: 1.0
+    1: 0.85
+    2: 0.65
+    3: 0.45
+    4: 0.30
+    5: 0.20
+  difficulty_xp_multipliers:
+    trivial: 0.25
+    easy: 0.5
+    medium: 1.0
+    hard: 1.5
+    very_hard: 2.0
+    legendary: 3.0
+    impossible: 5.0
+
+# Territory control — faction warfare and crew HQ
+territory:
+  enabled: true
+  war_threshold: 10.0           # control shift % that triggers faction war
+  faction_tick_interval: 300    # seconds between autonomous faction moves
+  max_event_history: 100
+  districts:
+    - DOWNTOWN
+    - COMBAT_ZONE
+    - HIGHRISE
+    - UNDERWORLD
+    - TECH_DISTRICT
+    - OUTSKIRTS
+  factions:
+    - OmniCorp
+    - NeoTech
+    - BlackMarket
+    - Ghost_Net
+    - SynthSec
+    - DeepState
+
 comms:
   governance_enabled: true      # route CharacterAgent.reply() through interceptors
   skill_manifest_path: "config/skill_manifests.yaml"
