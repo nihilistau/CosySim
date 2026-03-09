@@ -17,9 +17,11 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Optional
 
+from engine.port_registry import get_service_url
+
 logger = logging.getLogger(__name__)
 
-NEXUS_URL = "http://localhost:8700"
+NEXUS_URL = get_service_url("nexus")
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 

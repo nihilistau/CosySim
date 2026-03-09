@@ -265,3 +265,59 @@ def build_launcher_catalogues(
 
     _apply_launcher_overrides(services, scenes)
     return services, scenes, {**services, **scenes}
+
+
+# ──── Dynamic scene discovery ─────────────────────────────────────────────────
+
+
+def scan_scene_directories() -> Dict[str, Any]:
+    """Scan ``content/scenes/`` for directories that look like scenes.
+
+    A directory qualifies as a scene candidate when it contains an
+    ``__init__.py`` file and is not prefixed with ``_`` (archives/internal).
+    The results are compared against ``SCENE_DEFS`` so callers can see which
+    directories are registered and which are potentially new/unregistered.
+
+    Returns:
+        Dict with ``registered``, ``unregistered``, ``archived``, and
+        ``total_dirs`` keys.
+    """
+    scenes_root = PROJECT_ROOT / "content" / "scenes"
+    if not scenes_root.is_dir():
+        return {"error": "content/scenes directory not found", "registered": [], "unregistered": [], "archived": []}
+
+    registered: list[str] = []
+    unregistered: list[str] = []
+    archived: list[str] = []
+
+    for child in sorted(scenes_root.iterdir()):
+        if not child.is_dir():
+            continue
+        name = child.name
+
+        # Skip hidden/dunder directories
+        if name.startswith("__"):
+            continue
+
+        # Archived directories (prefixed with _)
+        if name.startswith("_"):
+            archived.append(name)
+            continue
+
+        # Must have __init__.py to be a scene candidate
+        if not (child / "__init__.py").exists():
+            continue
+
+        if name in SCENE_DEFS:
+            registered.append(name)
+        else:
+            unregistered.append(name)
+
+    return {
+        "registered": registered,
+        "unregistered": unregistered,
+        "archived": archived,
+        "total_dirs": len(registered) + len(unregistered) + len(archived),
+        "registered_count": len(registered),
+        "unregistered_count": len(unregistered),
+    }

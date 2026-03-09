@@ -31,7 +31,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from flask import Flask, jsonify, render_template, request
+from queue import Empty, Queue
+from flask import Flask, Response, jsonify, render_template, request
 
 from engine.config import get_config
 from engine.port_registry import ALL_SCENE_TARGETS, build_target_listing, get_port, get_service_url
@@ -102,6 +103,7 @@ class IntelHubScene(BaseScene):
             register_shared_assets(self._app)
         self._socketio: Optional[Any] = None
         self._activity: deque = deque(maxlen=200)
+        self._notification_subscribers: List[Queue] = []
         self._stop_event = threading.Event()
         self._push_thread: Optional[threading.Thread] = None
         self._register_routes()
@@ -172,8 +174,12 @@ class IntelHubScene(BaseScene):
         @app.route("/health")
         @app.route("/api/health")
         def health():
-            return jsonify({"status": "ok", "scene": SCENE_ID, "port": self._port,
-                            "display_name": SCENE_METADATA["display_name"]})
+            try:
+                return jsonify({"status": "ok", "scene": SCENE_ID, "port": self._port,
+                                "display_name": SCENE_METADATA["display_name"]})
+            except Exception:
+                logger.exception("Health check failed")
+                return jsonify({"status": "error", "scene": SCENE_ID, "reason": "health check raised"}), 500
 
         # ── TTS control ───────────────────────────────────────────────────────
 
@@ -381,6 +387,44 @@ class IntelHubScene(BaseScene):
         def api_scheduler_history():
             limit = int(request.args.get("limit", 50))
             return jsonify(_get_scheduler_history(limit))
+
+        # ── Flywheel metrics ─────────────────────────────────────────────────
+
+        @app.route("/api/flywheel/stats")
+        def api_flywheel_stats():
+            return jsonify(_get_flywheel_stats())
+
+        # ── SSE notification stream ──────────────────────────────────────────
+
+        @app.route("/api/notifications/stream")
+        def api_notification_stream():
+            q: Queue = Queue(maxsize=50)
+            self._notification_subscribers.append(q)
+
+            def _generate():
+                try:
+                    yield "data: {\"type\":\"connected\"}\n\n"
+                    while not self._stop_event.is_set():
+                        try:
+                            event = q.get(timeout=15)
+                            yield f"data: {json.dumps(event, default=str)}\n\n"
+                        except Empty:
+                            yield ": keepalive\n\n"
+                finally:
+                    try:
+                        self._notification_subscribers.remove(q)
+                    except ValueError:
+                        pass
+
+            return Response(
+                _generate(),
+                mimetype="text/event-stream",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "X-Accel-Buffering": "no",
+                    "Connection": "keep-alive",
+                },
+            )
 
         # ── Operator cockpit ───────────────────────────────────────────────────
 
@@ -902,6 +946,35 @@ class IntelHubScene(BaseScene):
                 self._socketio.emit("activity_item", entry)
             except Exception:
                 pass
+        self._push_notification(category, message)
+
+    def _push_notification(
+        self,
+        category: str,
+        message: str,
+        severity: str = "info",
+        title: Optional[str] = None,
+    ) -> None:
+        """Push a notification event to all SSE subscribers."""
+        event = {
+            "type": "notification",
+            "severity": severity,
+            "category": category,
+            "title": title or category.upper(),
+            "message": message,
+            "ts": _now(),
+        }
+        dead: List[Queue] = []
+        for q in self._notification_subscribers:
+            try:
+                q.put_nowait(event)
+            except Exception:
+                dead.append(q)
+        for q in dead:
+            try:
+                self._notification_subscribers.remove(q)
+            except ValueError:
+                pass
 
 
 # ──── API Helpers ─────────────────────────────────────────────────────────────
@@ -1335,6 +1408,55 @@ def _get_scheduler_history(limit: int = 50) -> Dict[str, Any]:
         return {"history": history or []}
     except Exception as exc:
         return {"error": str(exc), "history": []}
+
+
+def _get_flywheel_stats() -> Dict[str, Any]:
+    """Collect flywheel metrics: query router, training pipeline, scheduler, Nexus."""
+    stats: Dict[str, Any] = {"router": {}, "training": {}, "scheduler": {}, "nexus": {}}
+
+    try:
+        from engine.nexus.query_router import get_query_router
+        router = get_query_router()
+        stats["router"] = router.stats.to_dict()
+    except Exception:
+        stats["router"] = {"error": "unavailable"}
+
+    try:
+        from engine.nexus.training_flywheel import get_training_flywheel
+        fw = get_training_flywheel()
+        stats["training"] = fw.stats()
+    except Exception:
+        stats["training"] = {"error": "unavailable"}
+
+    try:
+        from engine.nexus.scheduler_daemon import get_scheduler_daemon
+        daemon = get_scheduler_daemon()
+        st = daemon.status()
+        tasks = st.get("tasks", [])
+        enabled = sum(1 for t in tasks if t.get("enabled", True))
+        errored = sum(1 for t in tasks if t.get("error_count", 0) > 0)
+        stats["scheduler"] = {
+            "running": st.get("running", False),
+            "task_count": st.get("task_count", 0),
+            "enabled": enabled,
+            "with_errors": errored,
+        }
+    except Exception:
+        stats["scheduler"] = {"error": "unavailable"}
+
+    try:
+        from engine.nexus.client import get_nexus_client
+        client = get_nexus_client()
+        ns = client.status()
+        stats["nexus"] = {
+            "entries": ns.get("entries", 0),
+            "qa_pairs": ns.get("qa_pairs", 0),
+            "rules": ns.get("rules", 0),
+        }
+    except Exception:
+        stats["nexus"] = {"error": "unavailable"}
+
+    return stats
 
 
 def _get_git_status_summary() -> Dict[str, Any]:

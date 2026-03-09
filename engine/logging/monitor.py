@@ -108,24 +108,17 @@ class SystemMonitor:
         """Ping known services and return health status."""
         services = {}
 
-        # LMStudio
         services["lmstudio"] = self._ping_http(
-            self._get_url("lmstudio.base_url", "http://localhost:1234") + "/v1/models"
+            self._resolve_base("lmstudio", "lmstudio.base_url", "http://localhost:1234") + "/v1/models"
         )
-
-        # ComfyUI
         services["comfyui"] = self._ping_http(
-            self._get_url("comfyui.base_url", "http://localhost:8188") + "/system_stats"
+            self._resolve_base("comfyui", "comfyui.base_url", "http://localhost:8188") + "/system_stats"
         )
-
-        # TTS server
         services["tts"] = self._ping_http(
-            self._get_url("tts.server_url", "http://localhost:8600") + "/status"
+            self._resolve_base("tts", "tts.server_url", "http://localhost:8600") + "/status"
         )
-
-        # MCP server (CosySim)
         services["mcp"] = self._ping_http(
-            self._get_url("mcp.base_url", "http://localhost:8700") + "/health"
+            self._resolve_base("nexus", "mcp.base_url", "http://localhost:8700") + "/health"
         )
 
         return services
@@ -155,12 +148,20 @@ class SystemMonitor:
         except Exception:
             return default
 
+    def _resolve_base(self, service: str, config_key: str, fallback: str) -> str:
+        """Resolve service base URL via port registry → config → hardcoded fallback."""
+        try:
+            from engine.port_registry import get_service_url
+            return get_service_url(service)
+        except Exception:
+            return self._get_url(config_key, fallback)
+
     # ── LMStudio model info ─────────────────────────────────────────────
     def get_loaded_model(self) -> Optional[str]:
         """Ask LMStudio which model is loaded."""
         try:
             import requests
-            url = self._get_url("lmstudio.base_url", "http://localhost:1234")
+            url = self._resolve_base("lmstudio", "lmstudio.base_url", "http://localhost:1234")
             resp = requests.get(f"{url}/v1/models", timeout=3)
             if resp.status_code == 200:
                 data = resp.json()

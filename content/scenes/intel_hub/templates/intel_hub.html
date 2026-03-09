@@ -243,6 +243,35 @@
       </div>
     </section>
 
+    <!-- [6b] Flywheel Metrics -->
+    <section class="intel-panel intel-panel--flywheel" id="panel-flywheel" aria-label="Flywheel Metrics">
+      <header class="panel-header">
+        <span class="panel-icon">⚙</span>
+        <span class="panel-title">FLYWHEEL</span>
+        <span class="panel-badge" id="flywheel-badge">—</span>
+        <button class="panel-refresh-btn" onclick="window.briefingRoom && window.briefingRoom._loadFlywheelPanel()" title="Refresh" aria-label="Refresh flywheel">↻</button>
+      </header>
+      <div class="panel-body">
+        <div style="font-size:0.68rem;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:0.25rem;">QUERY ROUTER</div>
+        <div class="stat-rows" id="flywheel-router">
+          <div class="stat-row"><span class="stat-key">Hit Rate</span><span class="stat-val" id="fw-hit-rate">—</span></div>
+          <div class="stat-row"><span class="stat-key">Queries</span><span class="stat-val" id="fw-queries">—</span></div>
+          <div class="stat-row"><span class="stat-key">Tokens Saved</span><span class="stat-val" id="fw-tokens-saved">—</span></div>
+        </div>
+        <div style="font-size:0.68rem;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin:0.4rem 0 0.25rem;">TRAINING</div>
+        <div class="stat-rows" id="flywheel-training">
+          <div class="stat-row"><span class="stat-key">Examples</span><span class="stat-val" id="fw-examples">—</span></div>
+          <div class="stat-row"><span class="stat-key">Quality</span><span class="stat-val" id="fw-quality">—</span></div>
+        </div>
+        <div style="font-size:0.68rem;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin:0.4rem 0 0.25rem;">NEXUS</div>
+        <div class="stat-rows" id="flywheel-nexus">
+          <div class="stat-row"><span class="stat-key">Entries</span><span class="stat-val" id="fw-entries">—</span></div>
+          <div class="stat-row"><span class="stat-key">Q&amp;A</span><span class="stat-val" id="fw-qa">—</span></div>
+          <div class="stat-row"><span class="stat-key">Rules</span><span class="stat-val" id="fw-rules">—</span></div>
+        </div>
+      </div>
+    </section>
+
     <!-- ── BOTTOM ROW ─────────────────────────────── -->
 
     <!-- [7] Scene Health Grid -->
@@ -608,6 +637,7 @@
     </section>
   </main><!-- /intel-layout -->
   <div class="operator-toast" id="operator-toast" hidden></div>
+  <div class="notification-toast-container" id="notification-container"></div>
   <!-- Mission Control auto-refresh -->
   <script>
     (function() {

@@ -184,7 +184,11 @@ class SystemControlScene(BaseScene, NexusSceneMixin):
 
         @app.route("/api/health")
         def health():
-            return jsonify({"status": "ok", "scene": SCENE_ID, "port": self.port})
+            try:
+                return jsonify({"status": "ok", "scene": SCENE_ID, "port": self.port})
+            except Exception:
+                logger.exception("Health check failed")
+                return jsonify({"status": "error", "scene": SCENE_ID, "reason": "health check raised"}), 500
 
         @app.route("/api/plugin_info")
         def plugin_info():

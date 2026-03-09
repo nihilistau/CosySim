@@ -114,3 +114,13 @@
 {"instruction": "Context: dialog_turn:0 char:aria scene:bedroom\n\nOutput: excited", "output": "SCORE: 1\nREASON: Collected from dialog_mood", "input": "", "metadata": {"rating": 1, "source": "dialog_mood"}}
 {"instruction": "Context: dialog_turn:0 char:aria scene:bedroom\n\nOutput: happy", "output": "SCORE: 1\nREASON: Collected from dialog_mood", "input": "", "metadata": {"rating": 1, "source": "dialog_mood"}}
 {"instruction": "Context: dialog_turn:0 char:aria scene:bedroom\n\nOutput: excited", "output": "SCORE: 1\nREASON: Collected from dialog_mood", "input": "", "metadata": {"rating": 1, "source": "dialog_mood"}}
+{"instruction": "Context: dialog_turn:0 char:aria scene:bedroom\n\nOutput: happy", "output": "SCORE: 1\nREASON: Collected from dialog_mood", "input": "", "metadata": {"rating": 1, "source": "dialog_mood"}}
+{"instruction": "Context: dialog_turn:0 char:aria scene:bedroom\n\nOutput: excited", "output": "SCORE: 1\nREASON: Collected from dialog_mood", "input": "", "metadata": {"rating": 1, "source": "dialog_mood"}}
+{"instruction": "Context: dialog_turn:0 char:aria scene:bedroom\n\nOutput: happy", "output": "SCORE: 1\nREASON: Collected from dialog_mood", "input": "", "metadata": {"rating": 1, "source": "dialog_mood"}}
+{"instruction": "Context: dialog_turn:0 char:aria scene:bedroom\n\nOutput: excited", "output": "SCORE: 1\nREASON: Collected from dialog_mood", "input": "", "metadata": {"rating": 1, "source": "dialog_mood"}}
+{"instruction": "Context: dialog_turn:0 char:aria scene:bedroom\n\nOutput: happy", "output": "SCORE: 1\nREASON: Collected from dialog_mood", "input": "", "metadata": {"rating": 1, "source": "dialog_mood"}}
+{"instruction": "Context: dialog_turn:0 char:aria scene:bedroom\n\nOutput: excited", "output": "SCORE: 1\nREASON: Collected from dialog_mood", "input": "", "metadata": {"rating": 1, "source": "dialog_mood"}}
+{"instruction": "Context: dialog_turn:0 char:aria scene:bedroom\n\nOutput: happy", "output": "SCORE: 1\nREASON: Collected from dialog_mood", "input": "", "metadata": {"rating": 1, "source": "dialog_mood"}}
+{"instruction": "Context: dialog_turn:0 char:aria scene:bedroom\n\nOutput: excited", "output": "SCORE: 1\nREASON: Collected from dialog_mood", "input": "", "metadata": {"rating": 1, "source": "dialog_mood"}}
+{"instruction": "Context: dialog_turn:0 char:aria scene:bedroom\n\nOutput: happy", "output": "SCORE: 1\nREASON: Collected from dialog_mood", "input": "", "metadata": {"rating": 1, "source": "dialog_mood"}}
+{"instruction": "Context: dialog_turn:0 char:aria scene:bedroom\n\nOutput: excited", "output": "SCORE: 1\nREASON: Collected from dialog_mood", "input": "", "metadata": {"rating": 1, "source": "dialog_mood"}}

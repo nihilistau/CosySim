@@ -33,10 +33,14 @@ def get_tts_stream_url() -> str:
         url = get_tts_stream_url()  # e.g. "http://localhost:8600/generate_stream"
     """
     try:
-        from engine.config import get_config
-        base = get_config().get("tts.server_url", "http://localhost:8600")
+        from engine.port_registry import get_service_url
+        base = get_service_url("tts")
     except Exception:
-        base = "http://localhost:8600"
+        try:
+            from engine.config import get_config
+            base = get_config().get("tts.server_url", "http://localhost:8600")
+        except Exception:
+            base = "http://localhost:8600"
     return f"{base.rstrip('/')}/generate_stream"
 
 
@@ -49,10 +53,14 @@ def get_tts_ws_url() -> str:
         url = get_tts_ws_url()  # e.g. "ws://localhost:8600/ws/stream"
     """
     try:
-        from engine.config import get_config
-        base = get_config().get("tts.server_url", "http://localhost:8600")
+        from engine.port_registry import get_service_url
+        base = get_service_url("tts")
     except Exception:
-        base = "http://localhost:8600"
+        try:
+            from engine.config import get_config
+            base = get_config().get("tts.server_url", "http://localhost:8600")
+        except Exception:
+            base = "http://localhost:8600"
     base = base.rstrip("/")
     # Convert http(s):// to ws(s)://
     if base.startswith("https://"):

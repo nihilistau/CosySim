@@ -99,6 +99,7 @@ class BriefingRoomScene {
     this._setupClock();
     this._setupTickerRating();
     this._bindOperatorConsole();
+    this._connectNotifications();
     this.loadDashboard();
     this._pollLoop();
     this._refreshRatingStats();
@@ -194,6 +195,7 @@ class BriefingRoomScene {
         this._loadScheduler(),
         this._loadNlm(),
         this._loadOperator(),
+        this._loadFlywheelPanel(),
       ]);
     } catch (e) {
       console.warn('[BriefingRoom] loadDashboard error:', e);
@@ -270,6 +272,29 @@ class BriefingRoomScene {
       _setText('nlm-qa-pairs', last.qa_pairs ?? '—');
       _setText('nlm-last-cycle', last.timestamp ? last.timestamp.slice(0, 16) : '—');
       _setText('nlm-gaps', gaps.length);
+    } catch (_) { /* silent */ }
+  }
+
+  async _loadFlywheelPanel() {
+    try {
+      const data = await _api('/api/flywheel/stats');
+      const r = data.router || {};
+      const t = data.training || {};
+      const n = data.nexus || {};
+      const s = data.scheduler || {};
+
+      const hitRate = r.hit_rate != null ? `${Math.round(r.hit_rate * 100)}%` : (r.total_queries ? '0%' : '—');
+      _setText('fw-hit-rate', hitRate);
+      _setText('fw-queries', r.total_queries ?? '—');
+      _setText('fw-tokens-saved', r.total_tokens_saved != null ? r.total_tokens_saved.toLocaleString() : '—');
+      _setText('fw-examples', t.total_examples ?? '—');
+      _setText('fw-quality', t.avg_quality != null ? `${Math.round(t.avg_quality * 100)}%` : '—');
+      _setText('fw-entries', n.entries ?? '—');
+      _setText('fw-qa', n.qa_pairs ?? '—');
+      _setText('fw-rules', n.rules ?? '—');
+
+      const healthy = !n.error && !s.error;
+      _setText('flywheel-badge', healthy ? (s.running ? 'ACTIVE' : 'IDLE') : 'DEGRADED');
     } catch (_) { /* silent */ }
   }
 
@@ -864,6 +889,57 @@ class BriefingRoomScene {
 
   // ── Polling ────────────────────────────────────────────
 
+  // ── SSE Notifications ──────────────────────────────────────────────────
+  _connectNotifications() {
+    const container = document.getElementById('notification-container');
+    if (!container) return;
+    const port = window.SCENE_PORT || 5580;
+    const url = `http://localhost:${port}/api/notifications/stream`;
+    let es;
+    const connect = () => {
+      es = new EventSource(url);
+      es.onmessage = (e) => {
+        try {
+          const data = JSON.parse(e.data);
+          if (data.type === 'connected') return;
+          if (data.type === 'notification') this._showNotificationToast(data, container);
+        } catch (_) { /* ignore parse errors */ }
+      };
+      es.onerror = () => {
+        es.close();
+        setTimeout(connect, 10000);
+      };
+    };
+    connect();
+    this._notifSource = es;
+  }
+
+  _showNotificationToast(data, container) {
+    const ICONS = { info: 'ℹ️', success: '✅', warning: '⚠️', error: '❌' };
+    const severity = data.severity || 'info';
+    const toast = document.createElement('div');
+    toast.className = `notification-toast notification-toast--${severity}`;
+    toast.innerHTML = `
+      <span class="notification-toast__icon">${ICONS[severity] || ICONS.info}</span>
+      <div class="notification-toast__body">
+        <div class="notification-toast__title">${this._esc(data.title || data.category || 'System')}</div>
+        <div class="notification-toast__message">${this._esc(data.message || '')}</div>
+      </div>
+      <span class="notification-toast__time">${new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</span>`;
+    container.prepend(toast);
+    toast.addEventListener('click', () => {
+      toast.classList.add('is-dismissing');
+      setTimeout(() => toast.remove(), 300);
+    });
+    setTimeout(() => {
+      if (toast.parentNode) {
+        toast.classList.add('is-dismissing');
+        setTimeout(() => toast.remove(), 300);
+      }
+    }, 6000);
+    while (container.children.length > 5) container.removeChild(container.lastChild);
+  }
+
   _pollLoop() {
     this._pollTimer = setInterval(() => {
       this._loadOverview();
@@ -877,6 +953,7 @@ class BriefingRoomScene {
   destroy() {
     if (this._pollTimer) clearInterval(this._pollTimer);
     if (this._clockTimer) clearInterval(this._clockTimer);
+    if (this._notifSource) this._notifSource.close();
     if (this.particles) this.particles.stop();
   }
 }

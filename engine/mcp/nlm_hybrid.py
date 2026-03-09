@@ -33,7 +33,9 @@ _PROXY_OPS = frozenset({
     "list_sources_fast", "delete_source",
 })
 
-_PROXY_BASE = "http://localhost:8800"
+from engine.port_registry import get_service_url as _get_svc_url
+
+_PROXY_BASE = _get_svc_url("nlm_proxy")
 
 
 class NLMHybrid:

@@ -202,7 +202,12 @@ class SceneArtManager:
     def __init__(self) -> None:
         """Initialise manager, loading config and lazy references."""
         cfg = get_config()
-        self._comfyui_url: str = cfg.get("art.comfyui_url", "http://localhost:8188").rstrip("/")
+        try:
+            from engine.port_registry import get_service_url
+            _comfyui_default = get_service_url("comfyui")
+        except Exception:
+            _comfyui_default = "http://localhost:8188"
+        self._comfyui_url: str = cfg.get("art.comfyui_url", _comfyui_default).rstrip("/")
         self._enabled: bool = bool(cfg.get("art.enabled", True))
         self._cache_ttl_hours: float = float(cfg.get("art.cache_ttl_hours", 24))
         self._adult_enabled: bool = bool(cfg.get("art.adult_enabled", True))

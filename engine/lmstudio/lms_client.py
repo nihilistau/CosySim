@@ -412,7 +412,8 @@ class LMSClient:
         try:
             r = self._client.get(f"{self.base_url}/api/v1/models", timeout=3.0)
             return r.status_code == 200
-        except Exception:
+        except Exception as exc:
+            logger.debug("LMStudio availability check failed: %s", exc)
             return False
 
     def get_models(
@@ -905,6 +906,7 @@ class LMSClient:
             handle = lms.llm(resolved) if resolved else lms.llm()
             return handle.count_tokens(text)
         except Exception:
+            logger.debug("Token count SDK call failed for model=%s, using heuristic", resolved)
             return max(1, len(text) // 4)
 
     def get_context_length(self, model: Optional[str] = None) -> int:

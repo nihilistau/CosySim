@@ -143,6 +143,7 @@ class NLMDirectClient:
         try:
             return self._registry.get_rpcid(operation, tier)
         except (KeyError, ValueError):
+            logger.debug("rpcid lookup failed for %s/%s", operation, tier)
             return None
 
     def _rpcid_pair(self, operation: str) -> tuple:
@@ -266,7 +267,8 @@ class NLMDirectClient:
         """Return the latest ARGUS-mined NLM build label if available."""
         try:
             data = json.loads(_NLM_ARTIFACTS_PATH.read_text(encoding="utf-8"))
-        except (FileNotFoundError, OSError, json.JSONDecodeError):
+        except (FileNotFoundError, OSError, json.JSONDecodeError) as exc:
+            logger.debug("Offline build label unavailable: %s", exc)
             return None
 
         build_label = data.get("build_info", {}).get("build_label")
@@ -2157,6 +2159,7 @@ class NLMDirectClient:
                     "region": str(raw[2]) if len(raw) > 2 else "",
                 }
             except Exception:
+                logger.debug("Locale preference parsing partial failure for raw=%s", raw)
                 return {"locale": str(raw[0]) if raw else "en"}
         return {"locale": "en"}
 

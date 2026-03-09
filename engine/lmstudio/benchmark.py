@@ -174,7 +174,11 @@ class InferenceBenchmark:
         self._host = self._config.get("lmstudio.host", "localhost")
         self._port = self._config.get("lmstudio.port", 1234)
         self._base_url = f"http://{self._host}:{self._port}"
-        self._nexus_url = self._config.get("nexus.url", "http://localhost:8700/api")
+        try:
+            from engine.port_registry import get_service_url
+            self._nexus_url = get_service_url("nexus", "/api")
+        except Exception:
+            self._nexus_url = self._config.get("nexus.url", "http://localhost:8700/api")
         self._summaries: List[BenchmarkSummary] = []
 
     # ── Single run ──────────────────────────────────────────────────

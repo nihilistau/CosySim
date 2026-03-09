@@ -73,12 +73,19 @@ class WorkflowManager:
     lifecycle.
     """
 
-    def __init__(self, base_url: str = "http://localhost:8188") -> None:
+    def __init__(self, base_url: str = "") -> None:
         """Initialise the WorkflowManager.
 
         Args:
-            base_url: Base URL of the ComfyUI server.
+            base_url: Base URL of the ComfyUI server. Resolved from port
+                registry if empty.
         """
+        if not base_url:
+            try:
+                from engine.port_registry import get_service_url
+                base_url = get_service_url("comfyui")
+            except Exception:
+                base_url = "http://localhost:8188"
         self._base_url = base_url.rstrip("/")
         self._lock = threading.Lock()
         self._node_cache: Dict[str, Any] = {}
@@ -551,9 +558,13 @@ def get_workflow_manager() -> WorkflowManager:
         if _manager_instance is not None:
             return _manager_instance
         try:
-            from engine.config import get_config  # noqa: PLC0415
-            base_url = get_config().get("art.comfyui_url", "http://localhost:8188")
+            from engine.port_registry import get_service_url  # noqa: PLC0415
+            base_url = get_service_url("comfyui")
         except Exception:
-            base_url = "http://localhost:8188"
+            try:
+                from engine.config import get_config  # noqa: PLC0415
+                base_url = get_config().get("art.comfyui_url", "http://localhost:8188")
+            except Exception:
+                base_url = "http://localhost:8188"
         _manager_instance = WorkflowManager(base_url=base_url)
     return _manager_instance

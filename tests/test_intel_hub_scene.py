@@ -47,6 +47,7 @@ def hub_app():
         scene._host = "0.0.0.0"
         scene._port = 5580
         scene._activity = deque()
+        scene._notification_subscribers = []
         scene._socketio = None
         scene._stop_event = MagicMock()
         scene._register_routes()

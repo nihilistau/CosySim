@@ -29,7 +29,9 @@ CORS(app)
 
 # ──── Lazy Service Accessors ────
 
-_NEXUS_KMS_URL = "http://localhost:8700"
+from engine.port_registry import get_service_url as _get_svc_url
+
+_NEXUS_KMS_URL = _get_svc_url("nexus")
 _COLLECTED_DIR = Path("training/datasets/collected")
 
 _TYPE_MAP = {
