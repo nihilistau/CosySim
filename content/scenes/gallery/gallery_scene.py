@@ -309,6 +309,7 @@ class GalleryScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE
         self.register_health_route(self.app)
         self.register_hud_route(self.app)
         self.register_announcer_route(self.app)
+        self.register_inventory_route(self.app)
         self.app.secret_key = os.urandom(24)
         self.socketio = SocketIO(self.app, cors_allowed_origins="*", async_mode="threading")
 

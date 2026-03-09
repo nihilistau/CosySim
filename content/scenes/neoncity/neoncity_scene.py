@@ -221,6 +221,7 @@ class NeonCityScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="neo
         self.register_hack_route(self.app)
         self.register_world_events_route(self.app)
         self.register_announcer_route(self.app)
+        self.register_inventory_route(self.app)
 
         # Board-game state (legacy)
         self.state: Optional[NeonCityGameState] = None

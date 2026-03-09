@@ -85,6 +85,10 @@ class CommandCenterScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id
         self._register_monitoring_routes()
         self._register_scene_control_routes()
         self._register_socketio()
+        self.register_health_route(self.app)
+        self.register_hud_route(self.app)
+        self.register_announcer_route(self.app)
+        self.register_inventory_route(self.app)
 
         # Framework integration
         self._state_mgr = get_scene_state_manager()

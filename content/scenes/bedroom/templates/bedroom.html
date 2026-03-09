@@ -343,6 +343,10 @@
   <script src="/shared/js/cosysim-bench.js"></script>
   <script src="/shared/js/cosysim-voice.js"></script>
 
+  <!-- Three.js 3D engine (required for Penthouse 3D room) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
   <!-- Scene script -->
   <script src="{{ url_for('static', filename='bedroom.js') }}"></script>
   <script>window.SCENE_PARTICLE_CONFIG = { scene: 'bedroom' };</script>

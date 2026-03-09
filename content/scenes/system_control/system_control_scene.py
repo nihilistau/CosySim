@@ -164,8 +164,10 @@ class SystemControlScene(BaseScene, NexusSceneMixin):
         CORS(self.app)
 
         self._register_routes()
+        self.register_health_route(self.app)
         self.register_hud_route(self.app)
         self.register_announcer_route(self.app)
+        self.register_inventory_route(self.app)
         logger.info("SystemControlScene initialized on port %d", port)
 
     # ── Route registration ────────────────────────────────────────────────────

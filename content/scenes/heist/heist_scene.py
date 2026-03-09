@@ -138,6 +138,7 @@ class HeistScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_I
         self.register_health_route(self.app)
         self.register_hud_route(self.app)
         self.register_announcer_route(self.app)
+        self.register_inventory_route(self.app)
         CORS(self.app)
         self.socketio = SocketIO(self.app, cors_allowed_origins="*", async_mode="threading")
 

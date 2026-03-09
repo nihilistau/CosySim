@@ -384,6 +384,7 @@ class TavernScene(BaseScene, NexusSceneMixin):
         self.register_health_route(app)
         self.register_hud_route(app)
         self.register_announcer_route(app)
+        self.register_inventory_route(app)
         self.register_shop_route(app)
 
         # Bench metrics + TTS endpoints

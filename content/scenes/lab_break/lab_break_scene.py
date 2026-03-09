@@ -299,6 +299,7 @@ class LabBreakScene(BaseScene):
         self.register_health_route(self.app)
         self.register_hud_route(self.app)
         self.register_announcer_route(self.app)
+        self.register_inventory_route(self.app)
 
         self.socketio = SocketIO(
             self.app, cors_allowed_origins="*", manage_session=False,

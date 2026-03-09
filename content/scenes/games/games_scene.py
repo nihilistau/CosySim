@@ -358,6 +358,7 @@ class GamesScene(BaseScene, NexusSceneMixin):
         self.register_health_route(app)
         self.register_hud_route(app)
         self.register_announcer_route(app)
+        self.register_inventory_route(app)
         try:
             self.mount_overlay(app)
             self.mount_skills_server(app)

@@ -180,6 +180,7 @@ class RealmScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="realm"
         self.register_health_route(self.app)
         self.register_hud_route(self.app)
         self.register_announcer_route(self.app)
+        self.register_inventory_route(self.app)
         self.register_bench_route(self.app, self.socketio)
         self.register_tts_route(self.app)
 

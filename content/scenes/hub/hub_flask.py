@@ -233,6 +233,7 @@ class HubScene(BaseScene):
         self.register_health_route(self.app)
         self.register_hud_route(self.app)
         self.register_announcer_route(self.app)
+        self.register_inventory_route(self.app)
 
         # ChoiceLoader: scene templates first, then shared (for navbar_v2.html)
         _shared_tpl = _SCENE_DIR.parent.parent / "shared" / "templates"
