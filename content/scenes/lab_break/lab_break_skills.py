@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
-from engine.skills.registry import skill
+from engine.skills import skill
 
 logger = logging.getLogger(__name__)
 

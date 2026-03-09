@@ -112,18 +112,9 @@ class TheTerminalHub {
 
       container.innerHTML = groupScenes.map(s => this._sceneCardHTML(s)).join('');
 
-      // Wire click handlers
-      container.querySelectorAll('.scene-card').forEach(card => {
-        const url = card.dataset.url;
-        if (!url) return;
-        card.addEventListener('click', () => this.navigateTo(url));
-        card.addEventListener('keydown', e => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            this.navigateTo(url);
-          }
-        });
-      });
+      // Scene cards are now <a> elements with data-scene-nav — the shared
+      // cosysim-transitions.js handler picks up clicks automatically and
+      // applies the fade-through-black transition.  No extra wiring needed.
     });
   }
 
@@ -143,7 +134,8 @@ class TheTerminalHub {
     const url      = `http://localhost:${port}/`;
 
     return `
-<div class="scene-card ${status}" style="--scene-accent:${accent}"
+<a class="scene-card ${status}" style="--scene-accent:${accent}"
+     href="${this._escHtml(url)}" data-scene-nav
      data-url="${this._escHtml(url)}" data-scene="${this._escHtml(s.id)}"
      tabindex="0" role="button" aria-label="Open ${label}">
   <div class="scene-card-header">
@@ -157,7 +149,7 @@ class TheTerminalHub {
     <span class="scene-card-port">:${port}</span>
     <span class="scene-card-chars" id="chars-${this._escHtml(s.id)}"></span>
   </div>
-</div>`.trim();
+</a>`.trim();
   }
 
   // ── World clock ─────────────────────────────────────────────────

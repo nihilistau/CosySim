@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 import time
 import uuid
 from contextlib import contextmanager
@@ -28,6 +29,7 @@ class PhoneDB:
         self._path = db_path or _DB_PATH
         self._path.parent.mkdir(parents=True, exist_ok=True)
         self._sqlite3 = sqlite3
+        self._dm_lock = threading.Lock()
         self._init_tables()
 
     # ─── connection ──────────────────────────────────────────────────
@@ -146,30 +148,38 @@ class PhoneDB:
     # ─── thread helpers ──────────────────────────────────────────────
 
     def get_or_create_dm(self, char_id: str) -> str:
-        """Return thread_id for a DM with char_id, creating it if needed."""
-        with self.conn() as c:
-            row = c.execute(
-                """SELECT m.thread_id FROM phone_members m
-                   JOIN phone_members m2 ON m.thread_id = m2.thread_id
-                   JOIN phone_threads t  ON m.thread_id = t.id
-                   WHERE m.character_id=? AND m2.character_id='user' AND t.type='dm'
-                   LIMIT 1""",
-                (char_id,),
-            ).fetchone()
-            if row:
-                return row["thread_id"]
-            tid = str(uuid.uuid4())
-            now = datetime.now(timezone.utc).isoformat()
-            c.execute(
-                "INSERT INTO phone_threads(id,type,created_at,updated_at) VALUES(?,?,?,?)",
-                (tid, "dm", now, now),
-            )
-            for cid in (char_id, "user"):
+        """Return thread_id for a DM with *char_id*, creating one if needed.
+
+        Uses a global lock to prevent concurrent requests from creating
+        duplicate DM threads for the same character.
+        """
+        with self._dm_lock:
+            with self.conn() as c:
+                row = c.execute(
+                    """SELECT m.thread_id FROM phone_members m
+                       JOIN phone_members m2 ON m.thread_id = m2.thread_id
+                       JOIN phone_threads t  ON m.thread_id = t.id
+                       WHERE m.character_id=? AND m2.character_id='user'
+                             AND t.type='dm'
+                       LIMIT 1""",
+                    (char_id,),
+                ).fetchone()
+                if row:
+                    return row["thread_id"]
+                tid = str(uuid.uuid4())
+                now = datetime.now(timezone.utc).isoformat()
                 c.execute(
-                    "INSERT INTO phone_members(thread_id,character_id,joined_at) VALUES(?,?,?)",
-                    (tid, cid, now),
+                    "INSERT INTO phone_threads(id,type,created_at,updated_at)"
+                    " VALUES(?,?,?,?)",
+                    (tid, "dm", now, now),
                 )
-            return tid
+                for cid in (char_id, "user"):
+                    c.execute(
+                        "INSERT INTO phone_members(thread_id,character_id,joined_at)"
+                        " VALUES(?,?,?)",
+                        (tid, cid, now),
+                    )
+                return tid
 
     def create_group(self, name: str, member_ids: List[str]) -> str:
         """Create a group thread and return its id."""

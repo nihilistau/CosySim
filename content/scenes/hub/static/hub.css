@@ -208,6 +208,12 @@ a { color: inherit; text-decoration: none; }
 }
 
 /* ── Scene card ──────────────────────────────────────────────────── */
+/* Scene cards are <a> links — reset anchor defaults */
+a.scene-card {
+  color: inherit;
+  text-decoration: none;
+}
+
 .scene-card {
   --scene-accent: var(--hub-accent);       /* overridden per card via JS */
 
