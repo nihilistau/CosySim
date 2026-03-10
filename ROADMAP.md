@@ -1,6 +1,6 @@
 # CosySim Roadmap
 
-> Current: **v0.91b** "THE EVOLUTION" ✅ | Last updated: 2026-03
+> Current: **v1.02b** "NEONCITY 2: THE LIVING CITY" ✅ | Last updated: 2026-03
 
 ## Philosophy
 
@@ -10,54 +10,57 @@ The system's ultimate goal: **inhabit itself** — AI agents that maintain, impr
 
 ---
 
-## Current Shipped State: v0.91b — "THE EVOLUTION" ✅
+## Current Shipped State: v1.02b — "NEONCITY 2: THE LIVING CITY" ✅
 
-- **v0.89b — THE LOOP** closed the ARGUS → NotebookLM → Nexus distillation loop.
-- **v0.90b — THE BASELINE** reconciled all doc surfaces, fixed stale test assertions,
-  and committed 145 files of accumulated control-plane, runtime enforcement,
-  operator cockpit, and flywheel work as one coherent baseline.
-- **v0.91b — THE EVOLUTION** added Lab Break scene, NLM chain-prompting engine,
-  LMLink federation, bidirectional LMStudio server control, vision/evaluation
-  MCP skills, training pipeline wiring, template/navbar repairs, and a complete
-  documentation rewrite (8 core docs reconciled against measured codebase reality).
-- Current baseline: **20 scenes, 55 scheduler tasks, 9,577 tests passing
-  (9,963 total), version 0.91b**.
+The v1.0 milestone represents a complete overhaul from a loose scene collection
+into a unified cyberpunk RPG framework with deep game systems.
 
-## Current Planning Focus (2026-03)
+**Shipped in this release (8 phases):**
+- **Phase 1** — Character neurochemistry (6 neurotransmitters), skill progression
+  (8 skills, 6 levels), territory system (16 districts, crew HQ)
+- **Phase 2** — Unified neon_base.html template for all 17 scenes with cyberpunk
+  aesthetic (glass panels, scan-lines, particle system)
+- **Phase 3** — Phone panel CSS/JS rewrite + onboarding quest system (7 quests)
+- **Phase 4** — Cyberspace hacking engine (ICE barriers, programs, cyberdecks)
+- **Phase 5** — Living world (market economy, NPC routines, faction AI, weather)
+- **Phase 6** — Multiplayer foundation (sessions, presence, messaging, leaderboards)
+- **Phase 7** — In-game world news system + bottom-of-screen ticker in every scene
+- **Phase 8** — Documentation, version, and polish
 
-The next work should follow the already-started system-first program rather than
-the historical pre-0.87 roadmap snapshots below.
+**Baseline: 20 scenes, 38 skill packs / 373 skills, 10,720+ tests passing, v1.02b.**
 
-The control-plane stabilization tranche is now closed enough to move on:
-- shared control-plane truth now drives launcher, hub surfaces, system control,
-  intel hub, TUI, and scene health tooling
-- the default regression gate is green after the remaining legacy hardcoded
-  control-plane URLs were removed
-- the first runtime-enforcement tranche is also closed:
-  - lounge/casino runtime failures now surface explicit degraded state
-  - Canvas push failures no longer pretend success
-  - compute-router Copilot routing no longer depends on a hardcoded username
+## Post-v1.0 Roadmap (2026-Q2+)
 
-### 1. Keep the developer loop fast while foundation work continues
-- Prefer `python scripts\smart_test.py` for diff-based validation during active work.
-- Use `python scripts\smart_test.py --smoke` for quick sanity checks and
-  `python scripts\smart_test.py --domain <name>` for targeted domain runs.
-- Keep the standard repo pytest command as the tranche-closing regression gate,
-  but avoid paying the full-suite cost on every iteration.
+### 1. Nexus Knowledge Deepening
+- Continue filling Nexus with reusable Q&A, architecture decisions, and learnings
+- Strengthen query router with NLM-backed deep research tier
+- Automated knowledge freshness checks and stale entry cleanup
+- Training flywheel: feed all Q&A into fine-tuning pipeline
 
-### 2. Strengthen the Nexus flywheel
-- Deepen NotebookLM, ARGUS, and Nexus ingestion/distillation now that the
-  control plane and first runtime-enforcement tranche are both closed.
-- Focus on reusable Q&A capture, scheduled refresh, and compounding retrieval.
-- Current flywheel tranche progress:
-  - history notebook ingress is aligned with the real Nexus search/category path
-  - deep query-router asks now pass depth through to the NotebookLM-backed route
-  - Q&A compounding now distills stored answers and feeds successful generated
-    pairs into the training flywheel instead of caching raw entry dumps
-  - the dedicated `copilot-system-control` notebook now feeds a recurring
-    two-pass control artifact loop that stores Nexus artifacts, creates
-    TaskScheduler tasks, and compounds the training flywheel
-- Next inside this lane:
+### 2. NotebookLM Research Pipeline
+- News ingestion system: automated topic discovery, source curation, NLM distillation
+- Code documentation notebooks: upload codebase docs, query for implementation guidance
+- Architecture research: use NLM to evaluate design alternatives
+- Store all distilled knowledge back into Nexus
+
+### 3. Local Agent Autonomy
+- Agent task scheduler: break complex work into LMStudio-sized tasks
+- Fine-tune local models on CosySim-specific Q&A and code patterns
+- Agent self-improvement: benchmark, learn, adapt
+- Router agent: classify incoming tasks → delegate to appropriate model/agent
+
+### 4. Game System Integration
+- Wire neurochemistry into NPC conversation interceptors
+- Connect cyberspace to territory control outcomes
+- Living world events affect market prices and faction decisions
+- Player actions generate news articles visible in ticker
+- Multiplayer presence visible in scene UIs
+
+### 5. System Polish
+- TUI dashboard enhancements: real-time metrics, task queue display
+- Performance profiling and caching optimization
+- Scene health monitoring with auto-restart
+- Comprehensive integration test suite across all game systems
   - scheduled/session/news ingress tightening
   - wider deep-query exposure on MCP-facing Nexus tool surfaces where needed
   - flywheel observability and quality metrics
