@@ -1,27 +1,14 @@
-<!DOCTYPE html>
-<html lang="en" data-scene="intel_hub">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>THE BRIEFING ROOM — CosySim</title>
+{% extends 'neon_base.html' %}
+{% set scene_key = 'intel_hub' %}
+{% set scene_display_name = 'INTEL HUB' %}
+{% set scene_accent = '#8b5cf6' %}
+{% set scene_accent_rgb = '139 92 246' %}
 
-  <!-- CosySim Design System -->
-  <link rel="stylesheet" href="/shared/css/design_tokens.css">
-  <link rel="stylesheet" href="/shared/css/cosysim-components.css">
-  <link rel="stylesheet" href="/shared/css/cosysim-animations.css">
-
-  <!-- Google Fonts -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
-
-  <!-- Scene CSS -->
+{% block head_css %}
   <link rel="stylesheet" href="/intel_hub/static/css/intel_hub.css">
-</head>
+{% endblock %}
 
-<body class="cs-scene-body briefing-body" data-scene="intel_hub">
-
-  {% include 'navbar_v2.html' %}
+{% block scene_content %}
 
   <!-- ══════════════════════════════════════════════
        DATA STREAM CANVAS (background particles)
@@ -638,6 +625,9 @@
   </main><!-- /intel-layout -->
   <div class="operator-toast" id="operator-toast" hidden></div>
   <div class="notification-toast-container" id="notification-container"></div>
+{% endblock %}
+
+{% block body_scripts %}
   <!-- Mission Control auto-refresh -->
   <script>
     (function() {
@@ -764,14 +754,14 @@
       _loadFinetuneStatus();
       setInterval(_loadFinetuneStatus, 30000);
     })();
-  
+  </script>
+
   <div id="bench-hud" class="bench-hud" role="complementary" aria-label="Benchmark HUD"></div>
 
   <!-- ══════════════════════════════════════════════
        SCRIPTS
   ══════════════════════════════════════════════ -->
   <script src="/shared/js/cosysim-bench.js"></script>
-  <script src="/shared/js/socket.io.min.js"></script>
   <script>
     window.SCENE_PORT = {{ port }};
     window.SCENE_ACCENT = "{{ scene_accent|default('#06b6d4') }}";
@@ -893,5 +883,4 @@
       setInterval(() => { if (currentCategory !== '__events__') loadTicker(currentCategory); }, 5 * 60 * 1000);
     })();
   </script>
-</body>
-</html>
+{% endblock %}

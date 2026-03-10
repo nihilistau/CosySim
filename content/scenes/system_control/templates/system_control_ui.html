@@ -1,14 +1,14 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>⚙️ System Control</title>
-  <link rel="stylesheet" href="/static/css/system_control.css" />
-</head>
-<body class="dark-theme" data-scene="system_control">
+{% extends 'neon_base.html' %}
+{% set scene_key = 'system_control' %}
+{% set scene_display_name = 'SYSTEM CONTROL' %}
+{% set scene_accent = '#14b8a6' %}
+{% set scene_accent_rgb = '20 184 166' %}
 
-  {% include 'navbar_v2.html' %}
+{% block head_css %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/system_control.css') }}">
+{% endblock %}
+
+{% block scene_content %}
 
   <div class="sc-layout">
     <!-- Sidebar nav -->
@@ -219,7 +219,8 @@
     </main>
   </div>
 
-  <script src="/shared/js/socket.io.min.js"></script>
+{% endblock %}
+
+{% block body_scripts %}
   <script src="/static/js/system_control.js"></script>
-</body>
-</html>
+{% endblock %}

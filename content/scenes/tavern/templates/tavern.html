@@ -1,20 +1,14 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>THE RUSTY ANCHOR</title>
+{% extends 'neon_base.html' %}
+{% set scene_key = 'tavern' %}
+{% set scene_display_name = 'THE RUSTY ANCHOR' %}
+{% set scene_accent = '#f97316' %}
+{% set scene_accent_rgb = '249 115 22' %}
+
+{% block head_css %}
   <link rel="stylesheet" href="{{ url_for('static', filename='tavern.css') }}">
-  <link rel="stylesheet" href="/shared/css/design_tokens.css">
-  <link rel="stylesheet" href="/shared/css/cosysim-animations.css">
-  <link rel="stylesheet" href="/shared/css/cosysim-scene-fx.css">
-  <link rel="stylesheet" href="/shared/css/cosysim-shop.css">
-</head>
-<body data-scene="tavern" class="tavern-layout">
+{% endblock %}
 
-{% include 'navbar_v2.html' %}
-
-<canvas id="cs-particles"></canvas>
+{% block scene_content %}
 
   <!-- ══════════════════════════════════════════════════════════
        TAVERN HEADER
@@ -38,7 +32,7 @@
   <!-- ══════════════════════════════════════════════════════════
        MAIN 3-COLUMN LAYOUT
   ══════════════════════════════════════════════════════════════ -->
-  <main class="tavern-main">
+  <div class="tavern-main">
 
     <!-- ─── LEFT: Quest Board ───────────────────────────────── -->
     <aside class="quest-board-col">
@@ -123,7 +117,7 @@
       </div>
     </aside>
 
-  </main>
+  </div>
 
   <!-- ══════════════════════════════════════════════════════════
        BOTTOM BAR: Drinks + Active Quest + Bench HUD
@@ -219,10 +213,15 @@
     })();
   </script>
 
-<script src="/shared/js/socket.io.min.js"></script>
+{% endblock %}
+
+{% block scene_overlays %}
+{% include 'shop_modal.html' %}
+{% endblock %}
+
+{% block body_scripts %}
 <script src="{{ url_for('static', filename='tavern.js') }}"></script>
 <script src="/shared/js/cosysim-voice.js"></script>
-<script src="/shared/js/cosysim-shop.js"></script>
 <script>
   document.addEventListener('DOMContentLoaded', () => {
     window.scene = new RustyAnchorScene();
@@ -230,8 +229,4 @@
   });
 </script>
 <script>window.SCENE_PARTICLE_CONFIG = { scene: 'tavern' };</script>
-<script src="/shared/js/cosysim-particles.js"></script>
-{% include 'shop_modal.html' %}
-
-</body>
-</html>
+{% endblock %}

@@ -1,28 +1,29 @@
-<!DOCTYPE html>
-<html lang="en" data-scene="realm">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>THE SHATTERED THRONE — CosySim</title>
+{% extends 'neon_base.html' %}
+{% set scene_key = 'realm' %}
+{% set scene_display_name = 'THE SHATTERED THRONE' %}
+{% set scene_accent = '#6366f1' %}
+{% set scene_accent_rgb = '99 102 241' %}
 
-  <!-- Socket.IO -->
-  <script src="/shared/js/socket.io.min.js"></script>
-
-  <!-- CosySim shared design system -->
-  <link rel="stylesheet" href="/shared/css/design_tokens.css">
-  <link rel="stylesheet" href="/shared/css/cosysim-components.css">
-  <link rel="stylesheet" href="/shared/css/cosysim-animations.css">
-  <link rel="stylesheet" href="/shared/css/cosysim-scene-fx.css">
-
-  <!-- Scene CSS -->
+{% block head_css %}
   <link rel="stylesheet" href="{{ url_for('static', filename='realm.css') }}">
-</head>
+{% endblock %}
 
-<body class="realm-body" data-scene="realm">
-<canvas id="cs-particles"></canvas>
+{% block head_style %}
+  <style>
+    .consequences-panel{position:fixed;right:0;top:50%;transform:translateY(-50%);width:36px;background:rgba(0,0,0,.85);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,.08);border-right:none;border-radius:8px 0 0 8px;z-index:900;overflow:hidden;transition:width .25s ease;}
+    .consequences-panel.open{width:290px;}
+    .consequences-toggle{display:flex;align-items:center;gap:6px;width:100%;background:none;border:none;color:var(--scene-accent,#6366f1);font-size:.7rem;letter-spacing:.08em;padding:10px 8px;cursor:pointer;white-space:nowrap;}
+    .csq-label,.consequences-body{display:none;}
+    .consequences-panel.open .csq-label,.consequences-panel.open .consequences-body{display:block;}
+    .consequences-body{padding:0 12px 12px;}
+    .consequences-section h4{color:rgba(255,255,255,.45);font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;margin:8px 0 4px;}
+    .consequences-list{list-style:none;margin:0;padding:0;}
+    .consequences-list li{font-size:.68rem;color:rgba(255,255,255,.7);padding:3px 0;border-bottom:1px solid rgba(255,255,255,.05);}
+    .consequences-list li.empty{color:rgba(255,255,255,.3);font-style:italic;}
+  </style>
+{% endblock %}
 
-  {% include 'navbar_v2.html' %}
-
+{% block scene_content %}
   <!-- ═══════════════════════════════════════════════════════════ -->
   <!--  REALM HEADER                                              -->
   <!-- ═══════════════════════════════════════════════════════════ -->
@@ -53,7 +54,7 @@
   <!-- ═══════════════════════════════════════════════════════════ -->
   <!--  MAIN LAYOUT — 3 columns                                   -->
   <!-- ═══════════════════════════════════════════════════════════ -->
-  <main class="realm-layout" id="realm-main">
+  <div class="realm-layout" id="realm-main">
 
     <!-- ─── LEFT: Player Panel ─────────────────────────── -->
     <aside class="realm-panel realm-panel--left">
@@ -125,7 +126,6 @@
       <div class="realm-inventory">
         <h3 class="realm-inventory__title">⚔ Inventory</h3>
         <div class="inventory-grid" id="inventory-grid">
-          <!-- Slots filled by JS -->
           {% for i in range(16) %}
           <div class="inventory-slot" data-slot="{{ i }}" onclick="ShatteredThrone.onSlotClick(this)">
             <span class="inventory-slot__icon">·</span>
@@ -241,7 +241,7 @@
 
     </aside>
 
-  </main>
+  </div>
 
   <!-- ═══════════════════════════════════════════════════════════ -->
   <!--  BOTTOM BAR — Spell Bar + Bench HUD                       -->
@@ -285,29 +285,6 @@
     </div>
   </div>
 
-  <!-- Shared scripts -->
-  <script src="/shared/js/cosysim-core.js"></script>
-  <script src="/shared/js/cosysim-stream.js"></script>
-
-  <!-- Scene script -->
-  <script src="{{ url_for('static', filename='realm.js') }}"></script>
-
-  <script>
-    // Auto-init on DOMContentLoaded
-    document.addEventListener('DOMContentLoaded', () => {
-      window.ShatteredThrone = new ShatteredThroneScene();
-      ShatteredThrone.init();
-    });
-
-    // Enter key in custom input
-    document.addEventListener('DOMContentLoaded', () => {
-      document.getElementById('custom-input').addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') ShatteredThrone.sendMessage();
-      });
-    });
-  </script>
-  <script src="/shared/js/cosysim-voice.js"></script>
-
   <!-- ── Consequences Panel ──────────────────────────────────────── -->
   <div id="consequences-panel" class="consequences-panel">
     <button class="consequences-toggle" onclick="toggleConsequences()" title="Consequences">
@@ -324,18 +301,23 @@
       </div>
     </div>
   </div>
-  <style>
-    .consequences-panel{position:fixed;right:0;top:50%;transform:translateY(-50%);width:36px;background:rgba(0,0,0,.85);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,.08);border-right:none;border-radius:8px 0 0 8px;z-index:900;overflow:hidden;transition:width .25s ease;}
-    .consequences-panel.open{width:290px;}
-    .consequences-toggle{display:flex;align-items:center;gap:6px;width:100%;background:none;border:none;color:var(--accent,#a855f7);font-size:.7rem;letter-spacing:.08em;padding:10px 8px;cursor:pointer;white-space:nowrap;}
-    .csq-label,.consequences-body{display:none;}
-    .consequences-panel.open .csq-label,.consequences-panel.open .consequences-body{display:block;}
-    .consequences-body{padding:0 12px 12px;}
-    .consequences-section h4{color:rgba(255,255,255,.45);font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;margin:8px 0 4px;}
-    .consequences-list{list-style:none;margin:0;padding:0;}
-    .consequences-list li{font-size:.68rem;color:rgba(255,255,255,.7);padding:3px 0;border-bottom:1px solid rgba(255,255,255,.05);}
-    .consequences-list li.empty{color:rgba(255,255,255,.3);font-style:italic;}
-  </style>
+{% endblock %}
+
+{% block body_scripts %}
+  <script src="{{ url_for('static', filename='realm.js') }}"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      window.ShatteredThrone = new ShatteredThroneScene();
+      ShatteredThrone.init();
+    });
+
+    document.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('custom-input').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') ShatteredThrone.sendMessage();
+      });
+    });
+  </script>
+  <script src="/shared/js/cosysim-voice.js"></script>
   <script>
     function toggleConsequences(){document.getElementById('consequences-panel').classList.toggle('open');}
     (function csqPoll(){
@@ -349,7 +331,4 @@
     })();
   </script>
   <script>window.SCENE_PARTICLE_CONFIG = { scene: 'realm' };</script>
-  <script src="/shared/js/cosysim-particles.js"></script>
-
-</body>
-</html>
+{% endblock %}
