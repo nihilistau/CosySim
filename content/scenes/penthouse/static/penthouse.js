@@ -163,6 +163,10 @@ class PenthouseScene {
   _onSceneState(data) {
     const chars = data.characters || {};
     const ids   = Object.keys(chars);
+
+    // Update director state cache
+    _directorState.characters = chars;
+
     if (ids.length > 0) {
       const cid   = ids[0];
       const cdata = chars[cid] || {};
@@ -178,11 +182,15 @@ class PenthouseScene {
 
       if (cdata.stats) this.updateEmotions(cdata.stats);
     }
+
+    // Refresh director panel selects
+    _refreshCharSelects();
   }
 
   _onConstants(data) {
     // Scenarios from server constants (initial load)
     if (data.scenarios && Object.keys(data.scenarios).length) {
+      _directorState.scenarios = data.scenarios;
       const list = Object.entries(data.scenarios).map(([id, sc]) => ({
         id,
         label: sc.label || id,
@@ -193,6 +201,11 @@ class PenthouseScene {
       }));
       this._renderScenarios(list);
     }
+
+    // Cache locations, props, lighting
+    if (data.locations) _directorState.locations = data.locations;
+    if (data.props) _directorState.props = data.props;
+    if (data.lighting) _directorState.lighting = data.lighting;
   }
 
   /* ── Chat ───────────────────────────────────────────────────────── */
@@ -275,6 +288,7 @@ class PenthouseScene {
 
   _showSystemMessage(text) {
     this._renderMessage({ name: 'System', message: text, role: 'system' });
+    _addActivityItem(text, '📋');
   }
 
   /* ── Typing indicator ───────────────────────────────────────────── */
@@ -709,13 +723,582 @@ class PenthouseScene {
 }
 
 /* ══════════════════════════════════════════════════════════════════════
+   DIRECTOR PANEL FUNCTIONS — Global helpers for onclick handlers
+   ══════════════════════════════════════════════════════════════════════ */
+
+/** Cache for scene constants delivered on connect */
+const _directorState = {
+  characters: {},
+  locations: {},
+  props: {},
+  scenarios: {},
+  lighting: {},
+  directorInScene: false,
+  currentView: 0,
+  viewNames: [],
+};
+
+/* ── Scene Tab ──────────────────────────────────────────────────────── */
+
+function openCharPicker() {
+  const name = prompt('Enter character name to add (e.g. lola, viktor, aria):');
+  if (!name || !name.trim()) return;
+  fetch('/api/characters/add', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ character_id: name.trim().toLowerCase() }),
+  })
+    .then(r => r.json())
+    .then(d => {
+      if (d.error) PENTHOUSE._showSystemMessage('⚠ ' + d.error);
+      else {
+        PENTHOUSE._showSystemMessage('✨ Added ' + (d.name || name));
+        PENTHOUSE.socket && PENTHOUSE.socket.emit('request_state');
+      }
+    })
+    .catch(() => PENTHOUSE._showSystemMessage('⚠ Failed to add character'));
+}
+
+function setTime(preset) {
+  fetch('/api/scene/time', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ time: preset }),
+  })
+    .then(r => r.json())
+    .then(() => {
+      PENTHOUSE._showSystemMessage('🕐 Lighting: ' + preset);
+      document.querySelectorAll('#lightingGrid .cs-glass-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.key === preset);
+      });
+      if (window.penthouse3D && window.penthouse3D.setLighting) {
+        window.penthouse3D.setLighting(preset);
+      }
+    })
+    .catch(() => {});
+}
+
+function refreshModels() {
+  fetch('/api/v1/models')
+    .then(r => r.json())
+    .catch(() => ({ data: [] }))
+    .then(d => {
+      const list = document.getElementById('modelConfigList');
+      if (!list) return;
+      const models = d.data || d.models || [];
+      if (!models.length) { list.innerHTML = '<p class="ph-hint">No models loaded</p>'; return; }
+      list.innerHTML = models.map(m =>
+        '<div class="ph-model-item"><span class="ph-model-name">' + (m.id || m.name || '?') + '</span></div>'
+      ).join('');
+    });
+}
+
+function setAmbientTrack(track) {
+  PENTHOUSE._showSystemMessage('🎵 Ambient: ' + (track || 'off'));
+}
+
+function setAmbientVolume(val) {
+  // Audio volume is handled client-side
+}
+
+/* ── Cast Tab ───────────────────────────────────────────────────────── */
+
+function _refreshCharSelects() {
+  const chars = _directorState.characters;
+  const ids = Object.keys(chars);
+  const selects = ['whisperTarget', 'giveLineTarget', 'giveActionTarget', 'moveCharSelect', 'givePropChar'];
+  selects.forEach(selId => {
+    const sel = document.getElementById(selId);
+    if (!sel) return;
+    const first = sel.options[0];
+    sel.innerHTML = '';
+    sel.appendChild(first);
+    ids.forEach(cid => {
+      const o = document.createElement('option');
+      o.value = cid;
+      o.textContent = chars[cid].name || cid;
+      sel.appendChild(o);
+    });
+  });
+
+  const count = document.getElementById('charCount');
+  if (count) count.textContent = ids.length + '/2';
+
+  const noMsg = document.getElementById('noCharsMsg');
+  if (noMsg) noMsg.style.display = ids.length ? 'none' : '';
+
+  _renderCharStatSheets(chars);
+  _renderCastListCompact(chars);
+}
+
+function _renderCastListCompact(chars) {
+  const el = document.getElementById('charListCompact');
+  if (!el) return;
+  const ids = Object.keys(chars);
+  if (!ids.length) { el.innerHTML = '<p class="ph-hint">No characters in scene</p>'; return; }
+  el.innerHTML = ids.map(cid => {
+    const c = chars[cid];
+    return '<div class="ph-cast-item">' +
+      '<span class="ph-cast-dot"></span>' +
+      '<span class="ph-cast-name">' + PENTHOUSE._esc(c.name || cid) + '</span>' +
+      '<span class="ph-cast-loc">' + PENTHOUSE._esc(c.position || '?') + '</span>' +
+      '<button class="cs-icon-btn ph-cast-remove" onclick="removeChar(\'' + cid + '\')" title="Remove">✕</button>' +
+      '</div>';
+  }).join('');
+}
+
+function _renderCharStatSheets(chars) {
+  const el = document.getElementById('charStatSheets');
+  if (!el) return;
+  const ids = Object.keys(chars);
+  if (!ids.length) { el.innerHTML = ''; return; }
+  el.innerHTML = ids.map(cid => {
+    const c = chars[cid];
+    const stats = c.stats || {};
+    const STAT_KEYS = ['arousal','pleasure','happiness','horniness','drunkenness','dominance','fear','anger','openness','tiredness'];
+    return '<div class="ph-stat-sheet">' +
+      '<h4 class="ph-stat-sheet__name">' + PENTHOUSE._esc(c.name || cid) + '</h4>' +
+      '<div class="ph-stat-sheet__grid">' +
+      STAT_KEYS.map(k => {
+        const v = Math.round(parseFloat(stats[k] || 0));
+        return '<div class="ph-stat-mini">' +
+          '<span class="ph-stat-mini__label">' + k.slice(0,3).toUpperCase() + '</span>' +
+          '<div class="ph-stat-mini__bar"><div class="ph-stat-mini__fill" style="width:' + v + '%"></div></div>' +
+          '<span class="ph-stat-mini__val">' + v + '</span>' +
+          '</div>';
+      }).join('') +
+      '</div>' +
+      '<div class="ph-stat-sheet__meta">' +
+      '<span>Position: ' + PENTHOUSE._esc(c.position || '?') + '</span>' +
+      '<span>Outfit: ' + PENTHOUSE._esc(c.outfit || '?') + '</span>' +
+      '</div>' +
+      '</div>';
+  }).join('');
+}
+
+function removeChar(cid) {
+  if (!confirm('Remove ' + cid + ' from scene?')) return;
+  fetch('/api/characters/remove', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ character_id: cid }),
+  })
+    .then(r => r.json())
+    .then(() => {
+      PENTHOUSE._showSystemMessage('Removed ' + cid);
+      PENTHOUSE.socket && PENTHOUSE.socket.emit('request_state');
+    })
+    .catch(() => {});
+}
+
+/* ── Direct Tab ─────────────────────────────────────────────────────── */
+
+function enterScene() {
+  const name = document.getElementById('directorNameInput')?.value || 'The Director';
+  fetch('/api/director/enter', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  })
+    .then(r => r.json())
+    .then(d => {
+      _directorState.directorInScene = true;
+      const status = document.getElementById('directorStatus');
+      if (status) status.textContent = '✅ In scene as ' + name;
+      PENTHOUSE._showSystemMessage('🎬 Director entered as ' + name);
+    })
+    .catch(() => {});
+}
+
+function exitScene() {
+  fetch('/api/director/exit', { method: 'POST' })
+    .then(r => r.json())
+    .then(() => {
+      _directorState.directorInScene = false;
+      const status = document.getElementById('directorStatus');
+      if (status) status.textContent = '';
+      PENTHOUSE._showSystemMessage('🎬 Director left the scene');
+    })
+    .catch(() => {});
+}
+
+function placeDirectorAvatar() {
+  const data = {
+    gender: document.getElementById('dirAvatarGender')?.value || 'male',
+    skin: document.getElementById('dirAvatarSkin')?.value || 'fair',
+    hair: document.getElementById('dirAvatarHair')?.value || 'brown',
+    outfit: document.getElementById('dirAvatarOutfit')?.value || 'casual',
+    location: document.getElementById('dirAvatarLocation')?.value || 'couch',
+  };
+  fetch('/api/director/avatar', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  })
+    .then(r => r.json())
+    .then(() => PENTHOUSE._showSystemMessage('🎭 Avatar placed at ' + data.location))
+    .catch(() => {});
+}
+
+function removeDirectorAvatar() {
+  fetch('/api/director/avatar', { method: 'DELETE' })
+    .then(r => r.json())
+    .then(() => PENTHOUSE._showSystemMessage('🎭 Avatar removed'))
+    .catch(() => {});
+}
+
+function sendWhisper() {
+  const target = document.getElementById('whisperTarget')?.value || '';
+  const text = document.getElementById('whisperInput')?.value || '';
+  if (!text.trim()) return;
+  fetch('/api/director/whisper', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ target, message: text }),
+  })
+    .then(r => r.json())
+    .then(() => {
+      PENTHOUSE._showSystemMessage('🤫 Whisper sent' + (target ? ' to ' + target : ''));
+      document.getElementById('whisperInput').value = '';
+    })
+    .catch(() => {});
+}
+
+function giveLine() {
+  const target = document.getElementById('giveLineTarget')?.value || '';
+  const line = document.getElementById('giveLineInput')?.value || '';
+  if (!target || !line.trim()) { PENTHOUSE._showSystemMessage('⚠ Pick a character and enter a line'); return; }
+  fetch('/api/director/give_line', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ character_id: target, line }),
+  })
+    .then(r => r.json())
+    .then(d => {
+      const hint = document.getElementById('complianceHint');
+      if (hint && d.compliance) hint.textContent = 'Compliance: ' + d.compliance;
+      PENTHOUSE._showSystemMessage('📝 Line given to ' + target);
+      document.getElementById('giveLineInput').value = '';
+    })
+    .catch(() => {});
+}
+
+function giveAction() {
+  const target = document.getElementById('giveActionTarget')?.value || '';
+  const action = document.getElementById('giveActionInput')?.value || '';
+  if (!action.trim()) return;
+  fetch('/api/director/give_action', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ target, action }),
+  })
+    .then(r => r.json())
+    .then(() => {
+      PENTHOUSE._showSystemMessage('🎬 Action given' + (target ? ' to ' + target : ''));
+      document.getElementById('giveActionInput').value = '';
+    })
+    .catch(() => {});
+}
+
+function startConversation(type) {
+  fetch('/api/conversation/start', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type }),
+  })
+    .then(r => r.json())
+    .then(() => PENTHOUSE._showSystemMessage('💬 Started: ' + type.replace(/_/g, ' ')))
+    .catch(() => {});
+}
+
+/* ── Interact Tab ───────────────────────────────────────────────────── */
+
+function _buildInteractGrid() {
+  const grid = document.getElementById('interactLocationGrid');
+  if (!grid) return;
+  const LOCATIONS = [
+    { id: 'bed', emoji: '🛏', label: 'Bed' },
+    { id: 'couch', emoji: '🛋', label: 'Couch' },
+    { id: 'fireplace', emoji: '🔥', label: 'Fireplace' },
+    { id: 'bar', emoji: '🍸', label: 'Bar' },
+    { id: 'bathroom', emoji: '🛁', label: 'Bathroom' },
+    { id: 'vanity', emoji: '💄', label: 'Vanity' },
+    { id: 'balcony', emoji: '🌙', label: 'Balcony' },
+    { id: 'doorway', emoji: '🚪', label: 'Doorway' },
+  ];
+  grid.innerHTML = LOCATIONS.map(loc =>
+    '<button class="cs-glass-btn ph-grid-btn" onclick="showInteractions(\'' + loc.id + '\')">' +
+    loc.emoji + ' ' + loc.label + '</button>'
+  ).join('');
+}
+
+function showInteractions(locationId) {
+  fetch('/api/scene/locations')
+    .then(r => r.json())
+    .then(data => {
+      const loc = (data.locations || data)[locationId] || {};
+      const actions = loc.interactions || loc.actions || [];
+      const title = document.getElementById('interactLocationTitle');
+      const container = document.getElementById('interactActions');
+      if (title) { title.textContent = locationId.toUpperCase(); title.style.display = ''; }
+      if (!container) return;
+      if (!actions.length) {
+        container.innerHTML = '<p class="ph-hint">No interactions at ' + locationId + '</p>';
+        return;
+      }
+      container.innerHTML = actions.map(a => {
+        const label = typeof a === 'string' ? a : (a.label || a.name || a);
+        const aid = typeof a === 'string' ? a : (a.id || a.name || a);
+        return '<button class="cs-glass-btn ph-interact-btn" onclick="doInteraction(\'' +
+          locationId + '\', \'' + aid + '\')">' + PENTHOUSE._esc(label) + '</button>';
+      }).join('');
+    })
+    .catch(() => {});
+}
+
+function doInteraction(location, interaction) {
+  fetch('/api/scene/furniture_interact', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ location, interaction }),
+  })
+    .then(r => r.json())
+    .then(d => {
+      PENTHOUSE._showSystemMessage('🪑 ' + (d.message || interaction + ' at ' + location));
+      if (window.penthouse3D && window.penthouse3D.switchView) {
+        window.penthouse3D.switchView(location);
+      }
+    })
+    .catch(() => {});
+}
+
+function quickMoveChar() {
+  const charId = document.getElementById('moveCharSelect')?.value;
+  const loc = document.getElementById('moveLocSelect')?.value;
+  if (!charId) { PENTHOUSE._showSystemMessage('⚠ Select a character'); return; }
+  fetch('/api/spatial/move', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ character_id: charId, location: loc }),
+  })
+    .then(r => r.json())
+    .then(() => {
+      PENTHOUSE._showSystemMessage('🚶 Moved ' + charId + ' to ' + loc);
+      PENTHOUSE.socket && PENTHOUSE.socket.emit('request_state');
+    })
+    .catch(() => {});
+}
+
+/* ── Story Tab ──────────────────────────────────────────────────────── */
+
+function scenarioChanged() {
+  const picker = document.getElementById('scenarioPicker');
+  const preview = document.getElementById('scenarioPreview');
+  if (!picker || !preview) return;
+  const id = picker.value;
+  if (!id) { preview.style.display = 'none'; return; }
+  const sc = _directorState.scenarios[id];
+  if (sc) {
+    preview.style.display = '';
+    preview.innerHTML = '<p class="ph-scenario-opening">' + PENTHOUSE._esc(sc.opening || '') + '</p>' +
+      (sc.beats ? '<div class="ph-scenario-beats">' + sc.beats.map(b =>
+        '<span class="cs-chip">' + PENTHOUSE._esc(typeof b === 'string' ? b : b.type || '') + '</span>'
+      ).join('') + '</div>' : '');
+  }
+}
+
+function activateScenario() {
+  const id = document.getElementById('scenarioPicker')?.value;
+  if (!id) { PENTHOUSE._showSystemMessage('⚠ Pick a scenario first'); return; }
+  PENTHOUSE.selectScenario(id, id);
+  const display = document.getElementById('activeScenarioDisplay');
+  if (display) display.textContent = id;
+}
+
+function clearScenario() {
+  PENTHOUSE._activeScenarioId = null;
+  const display = document.getElementById('activeScenarioDisplay');
+  if (display) display.textContent = 'None';
+  PENTHOUSE._showSystemMessage('Scenario cleared');
+}
+
+function injectBeat() {
+  const text = document.getElementById('newBeatInput')?.value || '';
+  if (!text.trim()) return;
+  PENTHOUSE.socket && PENTHOUSE.socket.emit('director_nudge', { direction: 'inject', beat: text });
+  PENTHOUSE._showSystemMessage('📖 Beat injected');
+  document.getElementById('newBeatInput').value = '';
+
+  const list = document.getElementById('storyBeatsList');
+  if (list) {
+    const item = document.createElement('div');
+    item.className = 'ph-beat-item';
+    item.innerHTML = '<span class="cs-chip cs-chip--purple">INJECTED</span> ' + PENTHOUSE._esc(text);
+    list.appendChild(item);
+  }
+}
+
+function directorBroadcast() {
+  const text = document.getElementById('broadcastInput')?.value || '';
+  if (!text.trim()) return;
+  PENTHOUSE.socket && PENTHOUSE.socket.emit('chat_message', { message: '[BROADCAST] ' + text, role: 'director' });
+  PENTHOUSE._showSystemMessage('📢 Broadcast sent');
+  document.getElementById('broadcastInput').value = '';
+}
+
+/* ── Props Tab ──────────────────────────────────────────────────────── */
+
+function toggleProp(pid) {
+  const btn = document.getElementById('prop-' + pid);
+  if (!btn) return;
+  const active = btn.classList.toggle('active');
+  fetch('/api/props/toggle', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prop_id: pid, active }),
+  })
+    .then(r => r.json())
+    .then(d => PENTHOUSE._showSystemMessage((active ? '✅ ' : '❌ ') + (d.label || pid)))
+    .catch(() => {});
+}
+
+function givePropToChar() {
+  const charId = document.getElementById('givePropChar')?.value;
+  const propId = document.getElementById('givePropItem')?.value;
+  if (!charId || !propId) { PENTHOUSE._showSystemMessage('⚠ Select character and prop'); return; }
+  fetch('/api/props/give', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ character_id: charId, prop_id: propId }),
+  })
+    .then(r => r.json())
+    .then(() => PENTHOUSE._showSystemMessage('🎁 Gave ' + propId + ' to ' + charId))
+    .catch(() => {});
+}
+
+/* ── Events Tab ─────────────────────────────────────────────────────── */
+
+function fireEvent(eventType) {
+  fetch('/api/events/fire', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ event_type: eventType }),
+  })
+    .then(r => r.json())
+    .then(d => {
+      PENTHOUSE._showSystemMessage('⚡ Event: ' + eventType.replace(/_/g, ' '));
+      if (window.penthouse3D) {
+        const effects = {
+          flicker_lights: () => window.penthouse3D.setLighting && window.penthouse3D.setLighting('flicker'),
+          power_out: () => window.penthouse3D.setLighting && window.penthouse3D.setLighting('blackout'),
+          romantic_mood: () => window.penthouse3D.setLighting && window.penthouse3D.setLighting('candlelight'),
+          dim_lights: () => window.penthouse3D.setLighting && window.penthouse3D.setLighting('night'),
+          thunder: () => window.penthouse3D.setLighting && window.penthouse3D.setLighting('stormy'),
+        };
+        if (effects[eventType]) effects[eventType]();
+      }
+    })
+    .catch(() => {});
+}
+
+function fireCustomEvent() {
+  const text = document.getElementById('customEventInput')?.value || '';
+  if (!text.trim()) return;
+  fetch('/api/events/custom', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ description: text }),
+  })
+    .then(r => r.json())
+    .then(() => {
+      PENTHOUSE._showSystemMessage('⚡ Custom event fired');
+      document.getElementById('customEventInput').value = '';
+    })
+    .catch(() => {});
+}
+
+/* ── Settings Tab ───────────────────────────────────────────────────── */
+
+function updateSetting(key, value) {
+  if (window.penthouse3D) {
+    const settings = {
+      cameraSpeed: () => window.penthouse3D.setCameraSpeed && window.penthouse3D.setCameraSpeed(parseFloat(value)),
+      fov: () => window.penthouse3D.setFOV && window.penthouse3D.setFOV(parseFloat(value)),
+      zoom: () => window.penthouse3D.setZoom && window.penthouse3D.setZoom(parseFloat(value)),
+      ambient: () => window.penthouse3D.setAmbient && window.penthouse3D.setAmbient(parseFloat(value) / 100),
+      shadows: () => window.penthouse3D.setShadowQuality && window.penthouse3D.setShadowQuality(value),
+      fireIntensity: () => window.penthouse3D.setFireplace && window.penthouse3D.setFireplace(parseFloat(value) / 100),
+      wallColor: () => window.penthouse3D.setWallColor && window.penthouse3D.setWallColor(value),
+      floorColor: () => window.penthouse3D.setFloorColor && window.penthouse3D.setFloorColor(value),
+      rugColor: () => window.penthouse3D.setRugColor && window.penthouse3D.setRugColor(value),
+    };
+    if (settings[key]) settings[key]();
+  }
+
+  fetch('/api/scene/settings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ [key]: value }),
+  }).catch(() => {});
+}
+
+function _buildViewPresets() {
+  const grid = document.getElementById('viewPresetsGrid');
+  if (!grid || !window.penthouse3D) return;
+  const views = window.penthouse3D.getViewNames ? window.penthouse3D.getViewNames() : [];
+  _directorState.viewNames = views;
+  grid.innerHTML = views.map(v =>
+    '<button class="cs-glass-btn ph-grid-btn" onclick="switchCameraView(\'' + v + '\')">' +
+    v.charAt(0).toUpperCase() + v.slice(1) + '</button>'
+  ).join('');
+}
+
+function switchCameraView(viewName) {
+  if (window.penthouse3D && window.penthouse3D.switchView) {
+    window.penthouse3D.switchView(viewName);
+    PENTHOUSE._showSystemMessage('📷 View: ' + viewName);
+  }
+}
+
+function cycleView(dir) {
+  const views = _directorState.viewNames;
+  if (!views.length) return;
+  _directorState.currentView = (_directorState.currentView + dir + views.length) % views.length;
+  switchCameraView(views[_directorState.currentView]);
+}
+
+/* ── Activity Feed Helper ───────────────────────────────────────────── */
+
+function _addActivityItem(text, icon) {
+  const body = document.getElementById('ph-feed-body');
+  if (!body) return;
+  const empty = body.querySelector('.ph-feed-empty');
+  if (empty) empty.remove();
+
+  const item = document.createElement('div');
+  item.className = 'ph-feed-item';
+  const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  item.innerHTML = '<span class="ph-feed-icon">' + (icon || '•') + '</span>' +
+    '<span class="ph-feed-text">' + PENTHOUSE._esc(text) + '</span>' +
+    '<span class="ph-feed-time">' + time + '</span>';
+  body.prepend(item);
+
+  const items = body.querySelectorAll('.ph-feed-item');
+  items.forEach((el, i) => { if (i > 14) el.remove(); });
+}
+
+/* ══════════════════════════════════════════════════════════════════════
    BOOT
    ══════════════════════════════════════════════════════════════════════ */
 
 /** @type {PenthouseScene} */
 const PENTHOUSE = new PenthouseScene();
 
-document.addEventListener('DOMContentLoaded', () => PENTHOUSE.init());
+document.addEventListener('DOMContentLoaded', () => {
+  PENTHOUSE.init();
+  _buildInteractGrid();
+  setTimeout(_buildViewPresets, 2000);
+});
 
 // Expose globally for console debugging
 window.PENTHOUSE = PENTHOUSE;
