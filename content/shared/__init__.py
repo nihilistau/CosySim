@@ -14,10 +14,17 @@ _PORTRAITS_DIR = _Path(__file__).parent / "static" / "img" / "portraits"
 # is the standard nav include.  cosysim-assistant.js REMOVED in v0.95b —
 # cosysim-aria-portrait.js (loaded via aria_widget.html include) is the
 # unified Aria system.
-_INJECT_TAGS = (
-    '\n<!-- CosySim Shared -->'
+
+# Phone-panel assets — injected into non-phone scenes so they get the
+# slide-out phone sidebar.  The phone scene itself already IS the phone,
+# so injecting these again creates a duplicate panel, a blocking overlay
+# (z-index 8999), and a keyboard shortcut ('P') that can freeze the UI.
+_PHONE_PANEL_TAGS = (
     '\n<link rel="stylesheet" href="/shared/css/cosysim-phone-panel.css">'
     '\n<script src="/shared/js/cosysim-phone-panel.js" defer></script>'
+)
+
+_COMMON_TAGS = (
     '\n<link rel="stylesheet" href="/shared/css/portrait.css">'
     '\n<script src="/shared/js/portrait.js" defer></script>'
     '\n<link rel="stylesheet" href="/shared/css/cosysim-stt.css">'
@@ -27,6 +34,9 @@ _INJECT_TAGS = (
     '\n<link rel="stylesheet" href="/shared/css/reputation.css">'
     '\n<script src="/shared/js/reputation.js" defer></script>'
 )
+
+_INJECT_TAGS = '\n<!-- CosySim Shared -->' + _PHONE_PANEL_TAGS + _COMMON_TAGS
+_INJECT_TAGS_NO_PHONE = '\n<!-- CosySim Shared -->' + _COMMON_TAGS
 
 
 def register_shared_assets(app):
@@ -436,7 +446,10 @@ def register_shared_assets(app):
     except Exception:
         pass  # Flask not available (e.g., during tests)
 
-    # Auto-inject navbar + assistant into HTML responses
+    # Auto-inject shared CSS/JS into HTML responses.
+    # The phone scene is exempt from phone-panel injection because it
+    # already IS the phone — injecting the panel creates a duplicate
+    # overlay that blocks clicks and a 'P' keyboard shortcut conflict.
     @app.after_request
     def _inject_shared_assets(response):
         if (
@@ -446,6 +459,15 @@ def register_shared_assets(app):
         ):
             try:
                 data = response.get_data(as_text=True)
+
+                # Detect phone scene via data-scene attribute or phone_v2
+                # marker so we skip the redundant phone-panel assets.
+                _is_phone = (
+                    'data-scene="phone"' in data
+                    or "phone_v2.js" in data
+                )
+                tags = _INJECT_TAGS_NO_PHONE if _is_phone else _INJECT_TAGS
+
                 # Read portrait overlay HTML (lazy, once per request — cheap file read)
                 try:
                     _portrait_html = _PORTRAIT_TEMPLATE_PATH.read_text(encoding="utf-8")
@@ -453,13 +475,13 @@ def register_shared_assets(app):
                     _portrait_html = ""
                 # Inject before </body> if present, otherwise before </html>
                 if "</body>" in data:
-                    inject = _INJECT_TAGS
+                    inject = tags
                     if _portrait_html:
                         inject = _portrait_html + inject
                     data = data.replace("</body>", inject + "\n</body>", 1)
                     response.set_data(data)
                 elif "</html>" in data:
-                    inject = _INJECT_TAGS
+                    inject = tags
                     if _portrait_html:
                         inject = _portrait_html + inject
                     data = data.replace("</html>", inject + "\n</html>", 1)
