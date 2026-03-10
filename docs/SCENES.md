@@ -1,6 +1,6 @@
 # CosySim Scenes Guide
 
-> v0.91b — 20 Flask scenes, ~613 HTTP routes, ~51 Socket.IO event types
+> v1.03b — 20 Flask scenes, ~613 HTTP routes, ~51 Socket.IO event types, AAA overlay UI, survival mechanics, 8-tab director panels
 
 Complete reference for every scene in the CosySim simulation framework.
 
@@ -24,7 +24,7 @@ Scenes may additionally mix in:
 |-------|---------|-----------------|
 | `MCPSceneMixin` | MCP governance: skills, rules, timers, event bus | 14 |
 | `NexusSceneMixin` | Nexus KMS integration: knowledge, state persistence | 16 |
-| Custom mixins | Scene-specific decomposition (e.g., BedroomCombatMixin) | 1 (bedroom) |
+| Custom mixins | Scene-specific decomposition (e.g., PenthouseCombatMixin) | 1 (penthouse) |
 
 ### SCENE_METADATA
 
@@ -47,7 +47,7 @@ SCENE_METADATA = {
 | Port | Scene | Display Name | Type |
 |------|-------|-------------|------|
 | 5555 | phone | SIGNAL | Game |
-| 5556 | bedroom | THE PENTHOUSE | Game |
+| 5556 | penthouse | THE PENTHOUSE | Game |
 | 5557 | lounge | THE VELVET PIT | Game |
 | 5558 | tavern | THE RUSTY ANCHOR | Game |
 | 5559 | casino | CLUB NOIR | Game |
@@ -68,6 +68,85 @@ SCENE_METADATA = {
 | 8500 | hub | THE TERMINAL | Utility |
 
 Service ports: Nexus (8700), TTS (8600), NLM Proxy (8800), Canvas (5590/5595).
+
+---
+
+## Penthouse AAA Overlay System
+
+The Penthouse scene uses a full AAA-grade overlay architecture with stacked
+z-index layers and glass-morphism styling.
+
+### Layer Stack
+
+| Layer | z-index | Element | Position |
+|-------|---------|---------|----------|
+| 3D Canvas | z-0 | Background canvas | Full viewport |
+| Character Panel | z-100 | Character info | Left side |
+| Chat Dock | z-200 | Chat interface | Bottom |
+| Director Panel | z-500 | 8-tab control panel | Right side |
+| Toggle Button | z-600 | Director toggle | Top-right |
+
+### 8-Tab Director Panel
+
+| Tab | Purpose |
+|-----|---------|
+| Scene | Scene-wide settings, lighting, time of day |
+| Cast | Character roster, active/inactive management |
+| Direct | AI direction: tone, pacing, narrative constraints |
+| Interact | Interaction modes, relationship controls |
+| Story | Story arc tracking, plot points, branching |
+| Props | Prop inventory, placement, visibility |
+| Events | Scheduled events, triggers, timers |
+| Settings | Audio, visual, performance configuration |
+
+### Styling
+
+All panels use the `ph-` CSS prefix and glass-morphism design:
+
+```css
+.ph-panel {
+    backdrop-filter: blur(20px);
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+```
+
+### Template Architecture
+
+The Penthouse template extends `neon_base.html` and configures scene-specific
+variables via Jinja2 `{% set %}` blocks:
+
+```html
+{% set scene_key = "penthouse" %}
+{% set accent = "#ec4899" %}
+{% set accent_rgb = "236, 72, 153" %}
+{% extends "neon_base.html" %}
+```
+
+### Required Context
+
+`render_template()` must pass these context variables:
+
+| Variable | Type | Description |
+|----------|------|-------------|
+| `scenarios` | `list[dict]` | Available scenario definitions |
+| `props` | `list[dict]` | Prop catalog with placement data |
+| `lighting_presets` | `list[dict]` | Named lighting configurations |
+
+### JavaScript
+
+The `PenthouseScene` class manages UI state, and global director functions
+use a `_directorState` cache object to avoid redundant DOM queries:
+
+```javascript
+const _directorState = { activeTab: 'scene', panelOpen: false, cache: {} };
+
+class PenthouseScene {
+    constructor() { /* initializes overlay layers */ }
+    openDirector(tab) { /* switches to tab, updates _directorState */ }
+    closeDirector() { /* hides panel, clears cache */ }
+}
+```
 
 ---
 
@@ -200,7 +279,7 @@ Each scene declares its own accent colour:
 
 | Scene | Accent | Scene | Accent |
 |-------|--------|-------|--------|
-| bedroom | `#ec4899` | arena | `#f59e0b` |
+| penthouse | `#ec4899` | arena | `#f59e0b` |
 | phone | `#10b981` | realm | `#059669` |
 | lounge | `#f59e0b` | neoncity | `#06b6d4` |
 | tavern | `#92400e` | coders | `#4ade80` |
@@ -275,11 +354,16 @@ Characters send autonomous texts and maintain relationships.
 - Auto-texting system with configurable intervals per character
 - Message threading with read/unread tracking
 
+> **Phone Panel Injection Fix:** `content/shared/__init__.py` skips phone-panel
+> injection when `data-scene="phone"` is present in the response body. This
+> prevents a duplicate overlay at z-index 8999 that was blocking all clicks
+> on the phone UI.
+
 ---
 
-### Bedroom — THE PENTHOUSE (port 5556)
+### Penthouse — THE PENTHOUSE (port 5556)
 
-**Class:** `BedroomScene` · **Routes:** 67 · **Skills:** 11 · **Mixins:** BedroomCombatMixin
+**Class:** `PenthouseScene` · **Routes:** 67 · **Skills:** 11 · **Mixins:** PenthouseCombatMixin
 
 An adult roleplay scene featuring Lola as the primary character with full
 emotion system, outfit management, and room-based location mechanics.
@@ -288,17 +372,17 @@ emotion system, outfit management, and room-based location mechanics.
 
 | Skill | Description |
 |-------|-------------|
-| `bedroom_status` | Scene state — mood, outfit, time, location |
-| `bedroom_suggestion` | Suggest an activity |
-| `bedroom_set_mood` | Set room mood lighting |
-| `bedroom_change_outfit` | Change character outfit |
-| `bedroom_game_action` | Trigger a game mechanic |
-| `bedroom_roll_dice` | Roll dice for outcomes |
-| `bedroom_move_room` | Change room location |
-| `bedroom_inventory` | View inventory |
-| `bedroom_combat_attack` | Combat attack action |
-| `bedroom_combat_defend` | Combat defense action |
-| `bedroom_combat_status` | Current combat state |
+| `penthouse_status` | Scene state — mood, outfit, time, location |
+| `penthouse_suggestion` | Suggest an activity |
+| `penthouse_set_mood` | Set room mood lighting |
+| `penthouse_change_outfit` | Change character outfit |
+| `penthouse_game_action` | Trigger a game mechanic |
+| `penthouse_roll_dice` | Roll dice for outcomes |
+| `penthouse_move_room` | Change room location |
+| `penthouse_inventory` | View inventory |
+| `penthouse_combat_attack` | Combat attack action |
+| `penthouse_combat_defend` | Combat defense action |
+| `penthouse_combat_status` | Current combat state |
 
 #### Key Routes
 
@@ -317,7 +401,7 @@ emotion system, outfit management, and room-based location mechanics.
 - Room graph with connected locations
 - Outfit system with unlockable items
 - Time-of-day cycle affecting dialogue context
-- Combat system via BedroomCombatMixin
+- Combat system via PenthouseCombatMixin
 
 ---
 
@@ -751,6 +835,75 @@ cooperate for escape.
 
 ---
 
+## Lab Break Survival System
+
+Lab Break (port 5571) implements a full survival simulation with stat decay,
+crafting, item management, death tracking, and multiple escape routes.
+
+### Survival Stats
+
+6 stats with continuous decay timers:
+
+| Stat | Decay Rate | Death Trigger |
+|------|-----------|---------------|
+| Hunger | −1 / min | health damage at 0 |
+| Energy | −0.5 / min | collapse at 0 |
+| Hydration | −0.8 / min | health damage at 0 |
+| Health | no natural decay | death at 0 |
+| Stress | +0.3 / min | sanity damage at threshold |
+| Sanity | −0.2 / min | hallucinations at low values |
+
+Death occurs when health reaches 0. The system tracks cause of death
+(starvation, dehydration, injury, stress collapse) for post-mortem display.
+
+### Item Catalog
+
+30 items across 5 categories:
+
+| Category | Count | Examples |
+|----------|-------|---------|
+| Food | 8 | Rations, canned goods, protein bars |
+| Medical | 6 | Bandages, painkillers, medkit |
+| Tools | 7 | Wrench, wire cutters, flashlight |
+| Key Items | 5 | Keycard, fuse, circuit board |
+| Materials | 4 | Scrap metal, chemicals, tape |
+
+### Crafting
+
+4 crafting recipes combining found items:
+
+| Recipe | Ingredients | Result |
+|--------|-------------|--------|
+| Lockpick | Wire + Wrench | Opens locked doors |
+| EMP Device | Circuit board + Chemicals | Disables cameras |
+| Medkit+ | Bandages + Painkillers | Full health restore |
+| Rope Ladder | Tape + Scrap metal | Enables vent escape |
+
+### Escape Routes
+
+4 escape routes, each with stat and item requirements:
+
+| Route | Requirements | Difficulty |
+|-------|-------------|-----------|
+| Main Door | Keycard + EMP Device | Medium |
+| Ventilation | Rope Ladder, Energy ≥ 50 | Hard |
+| Sewers | Flashlight, Sanity ≥ 40 | Hard |
+| Negotiate | Persuasion skill, Trust ≥ 70 | Very Hard |
+
+### Agent Grid
+
+Characters occupy positions on a room-based grid. Movement between adjacent
+rooms costs energy. Interaction with objects and other characters is
+position-dependent — agents must be in the same room.
+
+### Checkpoint System
+
+Game state is saved to `localStorage` at key moments (room transitions,
+item pickups, stat thresholds). Players can load from the last checkpoint
+on death or page reload.
+
+---
+
 ## Scene Reference — Utility Scenes
 
 ---
@@ -1025,7 +1178,7 @@ fluctuations driven by WorldSim events, and faction allegiance mechanics.
 | `connect` | Client→Server | All | Socket.IO connection |
 | `chat` | Client→Server | Chat scenes | Player chat message |
 | `action` | Client→Server | Game scenes | Player action |
-| `typing` | Server→Client | Phone, Bedroom | Character typing indicator |
+| `typing` | Server→Client | Phone, Penthouse | Character typing indicator |
 | `new_message` | Server→Client | Phone | Incoming text message |
 | `game_update` | Server→Client | Games, Arena | Game state change |
 | `combat_update` | Server→Client | Arena, Realm | Combat state change |
@@ -1039,7 +1192,7 @@ fluctuations driven by WorldSim events, and faction allegiance mechanics.
 |------|-------|--------|------|
 | 1 | nexus_panel | 114 | Utility |
 | 2 | intel_hub | 77 | Utility |
-| 3 | bedroom | 67 | Game |
+| 3 | penthouse | 67 | Game |
 | 4 | phone | 66 | Game |
 | 5 | command_center | 38 | Service |
 | 6 | asset_studio | 33 | Utility |
@@ -1057,9 +1210,9 @@ fluctuations driven by WorldSim events, and faction allegiance mechanics.
 
 | Mixin | Count | Scenes |
 |-------|-------|--------|
-| `NexusSceneMixin` | 16 | bedroom, phone, lounge, tavern, casino, gallery, arena, realm, neoncity, coders, heist, games, grid, lab_break, intel_hub, nexus_panel |
-| `MCPSceneMixin` | 14 | bedroom, phone, lounge, tavern, casino, gallery, arena, realm, neoncity, coders, heist, games, grid, lab_break |
-| `BedroomCombatMixin` | 1 | bedroom |
+| `NexusSceneMixin` | 16 | penthouse, phone, lounge, tavern, casino, gallery, arena, realm, neoncity, coders, heist, games, grid, lab_break, intel_hub, nexus_panel |
+| `MCPSceneMixin` | 14 | penthouse, phone, lounge, tavern, casino, gallery, arena, realm, neoncity, coders, heist, games, grid, lab_break |
+| `PenthouseCombatMixin` | 1 | penthouse |
 
 ---
 

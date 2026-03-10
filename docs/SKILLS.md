@@ -1,9 +1,9 @@
-# CosySim Skills System — v0.65
+# CosySim Skills System — v1.03b
 
 Skills are Python callables that an LLM agent invokes as **tools** during inference.
 The `@skill` decorator registers them into the global `SKILL_REGISTRY`. LMStudio
 calls skills via MCP tool use during `/api/v1/chat` responses. The system now
-includes **206 skills across 22 packs** (14 core + 8 scene packs).
+includes **220 skills across 23 packs** (15 core + 8 scene packs).
 
 ---
 
@@ -42,6 +42,43 @@ VirtualAgentManager.infer()     engine/agents/virtual_agent_manager.py
 | `nexus` | nexus_skills.py | `nexus_search`, `nexus_add`, `nexus_nlm_ask`, `nexus_status`, `nexus_log_session`, `nexus_store_prompt`, `nexus_search_prompts`, `nexus_get_rules`, `nexus_submit_idea`, `nexus_changelog`, `nexus_ask`, `nexus_research`, `nexus_converse`, `nexus_finish_research`, `nexus_youtube` |
 | `coding` | coding_skills.py | `coding_store_snippet`, `coding_store_decision`, `coding_research`, `coding_store_bug`, `coding_log_session`, `coding_find_snippet`, `coding_list_decisions`, `coding_get_session` |
 | `nlm_forge` | nlm_forge_skills.py | `nlm_ask`, `nlm_batch_ask`, `nlm_distill`, `nlm_decompose`, `nlm_analyze`, `nlm_solve`, `nlm_build_topic`, `nlm_status`, `nlm_cache_stats`, `nlm_guided_distill` |
+| `debugger` | debugger_skills.py | `debug_scene`, `debug_watch`, `debug_console`, `debug_network`, `debug_eval`, `debug_dom`, `debug_z_stack`, `debug_click_test`, `debug_screenshot`, `debug_click`, `debug_navigate`, `debug_perf`, `debug_list_tabs`, `debug_health` |
+
+### Debugger Skills (`engine/skills/builtin/debugger_skills.py`)
+
+Pack: `debugger` | Category: `SYSTEM` | 14 skills
+
+These skills give LLM agents real-time access to scene diagnostics via the
+ARGUS CDP infrastructure.
+
+| Skill | Description | Parameters |
+|-------|-------------|------------|
+| `debug_scene` | Full diagnostics snapshot (console, network, DOM, performance) | `port: int` |
+| `debug_watch` | Live console + network monitor for specified duration | `port: int, duration: int = 10` |
+| `debug_console` | Capture console.log/warn/error messages | `port: int, duration: int = 5` |
+| `debug_network` | Capture HTTP request/response traffic | `port: int, duration: int = 5` |
+| `debug_eval` | Execute JavaScript in page context | `port: int, expression: str` |
+| `debug_dom` | Query DOM elements by CSS selector | `port: int, selector: str` |
+| `debug_z_stack` | Analyze z-index layering of positioned elements | `port: int` |
+| `debug_click_test` | Check which element receives click at coordinates | `port: int, x: int, y: int` |
+| `debug_screenshot` | Take CDP screenshot of the page | `port: int, output_path: str = ""` |
+| `debug_click` | Simulate click on a DOM element | `port: int, selector: str` |
+| `debug_navigate` | Navigate page to a URL | `port: int, url: str` |
+| `debug_perf` | Get performance.timing and resource metrics | `port: int` |
+| `debug_list_tabs` | List all Chrome/CDP tabs | (none) |
+| `debug_health` | Automated scene health check | `port: int` |
+
+**Usage example:**
+
+```python
+# Agent can diagnose a scene issue
+result = debug_scene(port=5556)
+# Returns: console errors, network failures, DOM state, performance metrics
+
+# Check what's blocking clicks
+result = debug_click_test(port=5556, x=400, y=300)
+# Returns: element tag, classes, z-index at that position
+```
 
 ### Scene Packs (content/scenes/{name}/{name}_skills.py)
 
