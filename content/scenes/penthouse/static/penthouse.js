@@ -741,18 +741,78 @@ const _directorState = {
 /* ── Scene Tab ──────────────────────────────────────────────────────── */
 
 function openCharPicker() {
-  const name = prompt('Enter character name to add (e.g. lola, viktor, aria):');
-  if (!name || !name.trim()) return;
-  fetch('/api/characters/add', {
+  const overlay = document.getElementById('ph-char-picker-overlay');
+  if (!overlay) return;
+  const listEl = document.getElementById('ph-char-picker-list');
+  if (listEl) listEl.innerHTML = '<p class="ph-hint">Loading characters…</p>';
+  overlay.classList.add('open');
+  overlay.style.display = 'flex';
+
+  fetch('/api/characters/list')
+    .then(r => r.json())
+    .then(d => {
+      const chars = d.characters || [];
+      if (!listEl) return;
+      if (!chars.length) {
+        listEl.innerHTML = '<p class="ph-hint">No characters in database.</p>';
+        return;
+      }
+      listEl.innerHTML = chars.map(c => {
+        const loaded = c.loaded ? ' ph-char-card--loaded' : '';
+        const badge = c.loaded ? '<span class="cs-chip cs-chip--green ph-char-badge">IN SCENE</span>' : '';
+        return '<div class="ph-char-card' + loaded + '" data-cid="' + PENTHOUSE._esc(c.id) + '">' +
+          '<div class="ph-char-card__name">' + PENTHOUSE._esc(c.name || c.id) + badge + '</div>' +
+          '<div class="ph-char-card__meta">' +
+            '<span class="ph-char-card__trait">' + PENTHOUSE._esc((c.traits || []).slice(0,3).join(', ') || 'No traits') + '</span>' +
+          '</div>' +
+          '<div class="ph-char-card__actions">' +
+            '<select class="ph-select ph-personality-select" id="personality-' + c.id + '">' +
+              '<option value="">Default personality</option>' +
+              '<option value="bold_dominant">Bold Dominant</option>' +
+              '<option value="shy_submissive">Shy Submissive</option>' +
+              '<option value="playful_tease">Playful Tease</option>' +
+              '<option value="intellectual_aloof">Intellectual Aloof</option>' +
+              '<option value="nurturing_warm">Nurturing Warm</option>' +
+            '</select>' +
+            (c.loaded
+              ? '<button class="cs-glass-btn cs-glass-btn--danger ph-char-card__btn" onclick="removeChar(\'' + c.id + '\')">Remove</button>'
+              : '<button class="cs-glass-btn cs-glass-btn--accent ph-char-card__btn" onclick="_loadCharFromPicker(\'' + c.id + '\')">Add to Scene</button>'
+            ) +
+          '</div>' +
+        '</div>';
+      }).join('');
+    })
+    .catch(() => {
+      if (listEl) listEl.innerHTML = '<p class="ph-hint">⚠ Failed to load characters.</p>';
+    });
+}
+
+function closeCharPicker() {
+  const overlay = document.getElementById('ph-char-picker-overlay');
+  if (overlay) {
+    overlay.classList.remove('open');
+    overlay.style.display = 'none';
+  }
+}
+
+function _loadCharFromPicker(charId) {
+  const personalitySelect = document.getElementById('personality-' + charId);
+  const personality = personalitySelect ? personalitySelect.value : '';
+  const body = { character_id: charId };
+  if (personality) body.personality = personality;
+
+  fetch('/api/character/load', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ character_id: name.trim().toLowerCase() }),
+    body: JSON.stringify(body),
   })
     .then(r => r.json())
     .then(d => {
-      if (d.error) PENTHOUSE._showSystemMessage('⚠ ' + d.error);
-      else {
-        PENTHOUSE._showSystemMessage('✨ Added ' + (d.name || name));
+      if (d.error) {
+        PENTHOUSE._showSystemMessage('⚠ ' + d.error);
+      } else {
+        PENTHOUSE._showSystemMessage('✨ Added ' + (d.character?.name || charId));
+        closeCharPicker();
         PENTHOUSE.socket && PENTHOUSE.socket.emit('request_state');
       }
     })
@@ -806,7 +866,7 @@ function setAmbientVolume(val) {
 function _refreshCharSelects() {
   const chars = _directorState.characters;
   const ids = Object.keys(chars);
-  const selects = ['whisperTarget', 'giveLineTarget', 'giveActionTarget', 'moveCharSelect', 'givePropChar'];
+  const selects = ['whisperTarget', 'giveLineTarget', 'giveActionTarget', 'moveCharSelect', 'givePropChar', 'modelAssignChar'];
   selects.forEach(selId => {
     const sel = document.getElementById(selId);
     if (!sel) return;
@@ -878,7 +938,7 @@ function _renderCharStatSheets(chars) {
 
 function removeChar(cid) {
   if (!confirm('Remove ' + cid + ' from scene?')) return;
-  fetch('/api/characters/remove', {
+  fetch('/api/character/remove', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ character_id: cid }),
@@ -886,6 +946,7 @@ function removeChar(cid) {
     .then(r => r.json())
     .then(() => {
       PENTHOUSE._showSystemMessage('Removed ' + cid);
+      closeCharPicker();
       PENTHOUSE.socket && PENTHOUSE.socket.emit('request_state');
     })
     .catch(() => {});
@@ -1267,6 +1328,107 @@ function cycleView(dir) {
   switchCameraView(views[_directorState.currentView]);
 }
 
+/* ── Agent Loop Controls ────────────────────────────────────────────── */
+
+function startAgentLoop() {
+  const intervalEl = document.getElementById('settingTickInterval');
+  const interval = intervalEl ? parseInt(intervalEl.value, 10) : 8;
+  fetch('/api/agents/start', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ interval }),
+  })
+    .then(r => r.json())
+    .then(d => {
+      if (d.error) {
+        PENTHOUSE._showSystemMessage('⚠ ' + d.error);
+      } else {
+        PENTHOUSE._showSystemMessage('▶ Agent loop started (every ' + interval + 's)');
+        _updateAgentLoopUI(true);
+      }
+    })
+    .catch(() => PENTHOUSE._showSystemMessage('⚠ Failed to start agent loop'));
+}
+
+function stopAgentLoop() {
+  fetch('/api/agents/stop', { method: 'POST' })
+    .then(r => r.json())
+    .then(() => {
+      PENTHOUSE._showSystemMessage('⏹ Agent loop stopped');
+      _updateAgentLoopUI(false);
+    })
+    .catch(() => {});
+}
+
+function manualTick() {
+  PENTHOUSE._showSystemMessage('⏩ Manual tick…');
+  fetch('/api/agents/tick', { method: 'POST' })
+    .then(r => r.json())
+    .then(d => {
+      const count = (d.actions || []).length;
+      PENTHOUSE._showSystemMessage('⏩ Tick done — ' + count + ' action(s)');
+    })
+    .catch(() => PENTHOUSE._showSystemMessage('⚠ Tick failed'));
+}
+
+function _updateAgentLoopUI(running) {
+  const startBtn = document.getElementById('agentLoopStart');
+  const stopBtn = document.getElementById('agentLoopStop');
+  const status = document.getElementById('agentLoopStatus');
+  if (startBtn) startBtn.disabled = running;
+  if (stopBtn) stopBtn.disabled = !running;
+  if (status) {
+    status.textContent = running ? '● Running' : '○ Stopped';
+    status.className = 'ph-agent-status' + (running ? ' ph-agent-status--active' : '');
+  }
+}
+
+function assignModelToChar() {
+  const charId = document.getElementById('modelAssignChar')?.value;
+  const modelId = document.getElementById('modelAssignModel')?.value;
+  if (!charId) { PENTHOUSE._showSystemMessage('⚠ Select a character first'); return; }
+  fetch('/api/agents/model', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ character_id: charId, model: modelId || null }),
+  })
+    .then(r => r.json())
+    .then(d => {
+      if (d.error) PENTHOUSE._showSystemMessage('⚠ ' + d.error);
+      else PENTHOUSE._showSystemMessage('🤖 Model assigned to ' + charId);
+    })
+    .catch(() => {});
+}
+
+function _refreshModelAssignList() {
+  const modelSel = document.getElementById('modelAssignModel');
+  if (!modelSel) return;
+  fetch('http://localhost:1234/api/v1/models')
+    .then(r => r.json())
+    .catch(() => ({ data: [] }))
+    .then(d => {
+      const models = d.data || d.models || [];
+      const firstOpt = '<option value="">Auto (profile default)</option>';
+      modelSel.innerHTML = firstOpt + models.map(m =>
+        '<option value="' + (m.id || '') + '">' + (m.id || m.name || '?') + '</option>'
+      ).join('');
+    });
+}
+
+/* ── First-Person Camera Controls ───────────────────────────────────── */
+
+function toggleFirstPerson() {
+  if (window.penthouse3D && window.penthouse3D.toggleFirstPerson) {
+    const active = window.penthouse3D.toggleFirstPerson();
+    const btn = document.getElementById('fpsToggleBtn');
+    if (btn) {
+      btn.classList.toggle('active', active);
+      btn.textContent = active ? '👁 Exit FPS' : '👁 First Person';
+    }
+    PENTHOUSE._showSystemMessage(active ? '👁 First-person mode — WASD to move, mouse to look, ESC to exit' : '👁 Orbital camera restored');
+  }
+}
+
 /* ── Activity Feed Helper ───────────────────────────────────────────── */
 
 function _addActivityItem(text, icon) {
@@ -1298,6 +1460,7 @@ document.addEventListener('DOMContentLoaded', () => {
   PENTHOUSE.init();
   _buildInteractGrid();
   setTimeout(_buildViewPresets, 2000);
+  setTimeout(_refreshModelAssignList, 1500);
 });
 
 // Expose globally for console debugging

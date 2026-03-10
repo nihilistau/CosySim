@@ -181,6 +181,8 @@
     window.penthouse3D = {
       switchView,
       getViewNames: () => Object.keys(CAMERA_VIEWS),
+      toggleFirstPerson: toggleFirstPersonMode,
+      isFirstPerson: () => fpsMode,
     };
   }
 
@@ -1375,6 +1377,9 @@
       }
     }
 
+    // ── First-person movement ──
+    updateFPS(dt);
+
     // ── Auto-orbit in overview ──
     if (currentView === 'overview' && !cameraAnimating) {
       autoOrbitAngle += dt * 0.05;
@@ -1505,6 +1510,136 @@
     };
     cameraAnimating = true;
     currentView = viewName;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  //  FIRST-PERSON CAMERA MODE
+  // ═══════════════════════════════════════════════════════════════════
+
+  let fpsMode = false;
+  const fpsState = {
+    euler: new THREE.Euler(0, 0, 0, 'YXZ'),
+    moveForward: false,
+    moveBackward: false,
+    moveLeft: false,
+    moveRight: false,
+    moveUp: false,
+    moveDown: false,
+    speed: 4.0,
+    lookSensitivity: 0.002,
+    playerHeight: 1.7,
+  };
+  const fpsDirection = new THREE.Vector3();
+  const fpsSideDir = new THREE.Vector3();
+
+  function enterFirstPerson() {
+    fpsMode = true;
+    controls.enabled = false;
+    camera.fov = 70;
+    camera.updateProjectionMatrix();
+    camera.position.set(0, fpsState.playerHeight, 0);
+    fpsState.euler.set(0, 0, 0, 'YXZ');
+
+    const canvas = renderer.domElement;
+    canvas.requestPointerLock = canvas.requestPointerLock || canvas.mozRequestPointerLock;
+    canvas.requestPointerLock();
+
+    document.addEventListener('mousemove', fpsMouseMove, false);
+    document.addEventListener('keydown', fpsKeyDown, false);
+    document.addEventListener('keyup', fpsKeyUp, false);
+    document.addEventListener('pointerlockchange', fpsPointerLockChange, false);
+    document.addEventListener('mozpointerlockchange', fpsPointerLockChange, false);
+  }
+
+  function exitFirstPerson() {
+    fpsMode = false;
+    controls.enabled = true;
+    fpsState.moveForward = fpsState.moveBackward = fpsState.moveLeft = fpsState.moveRight = false;
+    fpsState.moveUp = fpsState.moveDown = false;
+
+    if (document.pointerLockElement) {
+      document.exitPointerLock = document.exitPointerLock || document.mozExitPointerLock;
+      document.exitPointerLock();
+    }
+
+    document.removeEventListener('mousemove', fpsMouseMove, false);
+    document.removeEventListener('keydown', fpsKeyDown, false);
+    document.removeEventListener('keyup', fpsKeyUp, false);
+    document.removeEventListener('pointerlockchange', fpsPointerLockChange, false);
+    document.removeEventListener('mozpointerlockchange', fpsPointerLockChange, false);
+
+    switchView('overview');
+  }
+
+  function fpsPointerLockChange() {
+    if (!document.pointerLockElement && !document.mozPointerLockElement) {
+      if (fpsMode) exitFirstPerson();
+    }
+  }
+
+  function fpsMouseMove(ev) {
+    if (!fpsMode) return;
+    fpsState.euler.setFromQuaternion(camera.quaternion);
+    fpsState.euler.y -= ev.movementX * fpsState.lookSensitivity;
+    fpsState.euler.x -= ev.movementY * fpsState.lookSensitivity;
+    fpsState.euler.x = Math.max(-Math.PI / 2.2, Math.min(Math.PI / 2.2, fpsState.euler.x));
+    camera.quaternion.setFromEuler(fpsState.euler);
+  }
+
+  function fpsKeyDown(ev) {
+    switch (ev.code) {
+      case 'KeyW': case 'ArrowUp':    fpsState.moveForward  = true; break;
+      case 'KeyS': case 'ArrowDown':  fpsState.moveBackward = true; break;
+      case 'KeyA': case 'ArrowLeft':  fpsState.moveLeft     = true; break;
+      case 'KeyD': case 'ArrowRight': fpsState.moveRight    = true; break;
+      case 'Space':                   fpsState.moveUp       = true; ev.preventDefault(); break;
+      case 'ShiftLeft':               fpsState.moveDown     = true; break;
+      case 'Escape':                  exitFirstPerson(); break;
+    }
+  }
+
+  function fpsKeyUp(ev) {
+    switch (ev.code) {
+      case 'KeyW': case 'ArrowUp':    fpsState.moveForward  = false; break;
+      case 'KeyS': case 'ArrowDown':  fpsState.moveBackward = false; break;
+      case 'KeyA': case 'ArrowLeft':  fpsState.moveLeft     = false; break;
+      case 'KeyD': case 'ArrowRight': fpsState.moveRight    = false; break;
+      case 'Space':                   fpsState.moveUp       = false; break;
+      case 'ShiftLeft':               fpsState.moveDown     = false; break;
+    }
+  }
+
+  function updateFPS(dt) {
+    if (!fpsMode) return;
+    camera.getWorldDirection(fpsDirection);
+    fpsDirection.y = 0;
+    fpsDirection.normalize();
+    fpsSideDir.crossVectors(camera.up, fpsDirection).normalize();
+
+    const speed = fpsState.speed * dt;
+    if (fpsState.moveForward)  camera.position.addScaledVector(fpsDirection, speed);
+    if (fpsState.moveBackward) camera.position.addScaledVector(fpsDirection, -speed);
+    if (fpsState.moveLeft)     camera.position.addScaledVector(fpsSideDir, speed);
+    if (fpsState.moveRight)    camera.position.addScaledVector(fpsSideDir, -speed);
+    if (fpsState.moveUp)       camera.position.y += speed * 0.6;
+    if (fpsState.moveDown)     camera.position.y -= speed * 0.6;
+
+    // Clamp to room bounds
+    const hw = ROOM.w / 2 - 0.3;
+    const hd = ROOM.d / 2 - 0.3;
+    camera.position.x = Math.max(-hw, Math.min(hw, camera.position.x));
+    camera.position.z = Math.max(-hd, Math.min(hd, camera.position.z));
+    camera.position.y = Math.max(0.5, Math.min(ROOM.h - 0.2, camera.position.y));
+  }
+
+  function toggleFirstPersonMode() {
+    if (fpsMode) {
+      exitFirstPerson();
+      return false;
+    } else {
+      enterFirstPerson();
+      return true;
+    }
   }
 
   // ═══════════════════════════════════════════════════════════════════
