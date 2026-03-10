@@ -42,6 +42,20 @@
   <!-- ── World Event Ticker (top center) ───────────────────────── -->
   <div id="world-event-ticker" class="world-event-ticker" aria-live="polite"></div>
 
+  <!-- ── Character Picker Overlay ──────────────────────────────── -->
+  <div class="ph-char-picker-overlay" id="ph-char-picker-overlay" style="display:none" role="dialog" aria-modal="true" aria-label="Character picker">
+    <div class="ph-char-picker cs-glass-panel cs-glass-panel--strong">
+      <div class="ph-char-picker__header">
+        <h2 class="ph-char-picker__title">Select Character</h2>
+        <span class="cs-chip cs-chip--scene" id="charCountPicker">0/2</span>
+        <button class="cs-icon-btn ph-char-picker__close" onclick="closeCharPicker()" aria-label="Close">✕</button>
+      </div>
+      <div class="ph-char-picker__list" id="ph-char-picker-list">
+        <p class="ph-hint">Loading characters…</p>
+      </div>
+    </div>
+  </div>
+
   <!-- ══════════════════════════════════════════════════════════════
        A. FLOATING CHARACTER PANEL (left)
        ══════════════════════════════════════════════════════════════ -->
@@ -154,6 +168,28 @@
           <h3 class="ph-section-title">Agent Models</h3>
           <div id="modelConfigList" class="ph-model-list"></div>
           <button class="cs-glass-btn" onclick="refreshModels()">↻ Refresh</button>
+        </section>
+
+        <section class="ph-section">
+          <h3 class="ph-section-title">Agent Loop
+            <span class="ph-agent-status" id="agentLoopStatus">○ Stopped</span>
+          </h3>
+          <div class="ph-form-row">
+            <button class="cs-glass-btn cs-glass-btn--accent" id="agentLoopStart" onclick="startAgentLoop()">▶ Start</button>
+            <button class="cs-glass-btn cs-glass-btn--danger" id="agentLoopStop" onclick="stopAgentLoop()" disabled>⏹ Stop</button>
+            <button class="cs-glass-btn" onclick="manualTick()">⏩ Tick</button>
+          </div>
+        </section>
+
+        <section class="ph-section">
+          <h3 class="ph-section-title">Assign Model to Character</h3>
+          <select id="modelAssignChar" class="ph-select">
+            <option value="">— character —</option>
+          </select>
+          <select id="modelAssignModel" class="ph-select">
+            <option value="">Auto (profile default)</option>
+          </select>
+          <button class="cs-glass-btn cs-glass-btn--accent" onclick="assignModelToChar()">Assign</button>
         </section>
 
         <section class="ph-section">
@@ -436,6 +472,7 @@
           <div class="ph-form-row">
             <button class="cs-glass-btn" onclick="cycleView(-1)" title="Previous view">◀ Prev</button>
             <button class="cs-glass-btn" onclick="cycleView(1)" title="Next view">Next ▶</button>
+            <button class="cs-glass-btn cs-glass-btn--accent" id="fpsToggleBtn" onclick="toggleFirstPerson()">👁 First Person</button>
           </div>
         </section>
 
