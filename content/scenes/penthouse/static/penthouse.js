@@ -779,7 +779,7 @@ function setTime(preset) {
 }
 
 function refreshModels() {
-  fetch('/api/v1/models')
+  fetch('http://localhost:1234/api/v1/models')
     .then(r => r.json())
     .catch(() => ({ data: [] }))
     .then(d => {
