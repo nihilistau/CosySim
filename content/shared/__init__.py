@@ -409,6 +409,15 @@ def register_shared_assets(app):
 
     app.register_blueprint(shared_bp)
 
+    # Auto-mount news ticker API on every scene
+    try:
+        from engine.world.news_ticker import create_news_ticker_blueprint
+        news_bp = create_news_ticker_blueprint()
+        if news_bp.name not in app.blueprints:
+            app.register_blueprint(news_bp)
+    except Exception:
+        pass  # News ticker not available (e.g., during tests)
+
     # Auto-mount assistant API on this app
     try:
         from engine.assistant.assistant_bp import mount_assistant
