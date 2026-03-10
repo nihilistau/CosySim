@@ -1198,9 +1198,7 @@ class CommandCenterScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id
     # ------------------------------------------------------------------
 
     def start(self):
-        self.register_health_route(self.app)
-        self.register_hud_route(self.app)
-        self.register_announcer_route(self.app)
+        # NOTE: health/hud/announcer routes already registered in __init__
 
         # Wire MetricsCollector emit_fn to our SocketIO
         collector = self._get_collector()
