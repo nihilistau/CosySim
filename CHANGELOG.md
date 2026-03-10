@@ -3,6 +3,108 @@
 All notable changes to CosySim are documented here.
 
 ---
+## [1.02b] — "NEONCITY 2: THE LIVING CITY" — 2026-03
+
+Massive 8-phase overhaul transforming CosySim into a unified cyberpunk RPG
+with deep character systems, hacking mechanics, living world simulation,
+multiplayer foundation, and in-game news. 10,720+ tests passing.
+
+### Phase 1 — Character Neurochemistry & Skill Progression (v0.96b)
+- **Neurochemistry Engine** (`engine/characters/neurochemistry.py`): 6 neurotransmitters
+  (dopamine, serotonin, oxytocin, cortisol, adrenaline, endorphins), per-character
+  baselines, 30+ stimulus catalog, natural decay/recovery curves, derived emotional
+  states computed from neurotransmitter combinations
+- **Skill Progression** (`engine/world/skill_progression.py`): 8 skills with
+  use-based XP (diminishing returns), 6 level thresholds, skill check system
+  (roll vs difficulty + level + modifiers), player global XP and level (1–50)
+- **Territory System** (`engine/world/territory.py`): 16 districts with faction
+  control percentages, crew HQ with 5 room types, territory missions (capture,
+  defend, sabotage, recon), faction war events
+- 20 MCP skills: neurochemistry (3), progression (3), territory (14)
+- Config sections added to `config/default.yaml`
+- 130 new tests
+
+### Phase 2 — Unified Scene Template & Aesthetic Overhaul
+- **neon_base.html**: Unified Jinja2 base template with animated neon grid
+  background, CRT scan-line overlay, particle system, navbar v2, Aria widget,
+  Socket.IO auto-connect, keyboard shortcuts, scene accent injection
+- **neon_base.css** (597 lines): Glass panels, neon-glow utilities, responsive
+  breakpoints, tabs, badges, layout scaffolding
+- **neon_base.js** (148 lines): Auto-socket, particle init, keyboard shortcuts
+- All 17 scene templates converted to `{% extends 'neon_base.html' %}`
+- 15 integration tests (`test_phase2_neon_base.py`)
+
+### Phase 3a — Phone Panel Rewrite
+- Complete CSS/JS rewrite of `cosysim-phone-panel.css` and `.js`
+- Cyberpunk OS aesthetic with animated lock screen
+- 149 tests (`test_phase3_phone_panel.py`)
+
+### Phase 3b — Onboarding Quest System (v0.97b)
+- **OnboardingManager** (`engine/world/onboarding.py`, ~750 lines): 7-quest
+  chain with unlock progression, reward distribution, persistence
+- 12 MCP skills: quest navigation, status checks, reward claiming
+- Fixed threading deadlock (Lock → RLock)
+- 83 tests
+
+### Phase 4 — Cyberspace Hacking Depth (v0.98b)
+- **CyberspaceEngine** (`engine/world/cyberspace.py`, ~1200 lines): Network
+  topology with nodes/connections, 5 ICE types (barrier, trace, black ICE,
+  data wall, honeypot), 5 program types (icebreaker, cloak, siphon, virus,
+  backdoor), cyberdeck hardware with RAM/CPU/slots
+- Data extraction: steal credits, intel, faction secrets
+- 15 MCP skills for hacking gameplay
+- 115 tests
+
+### Phase 5 — Living World Engine (v0.99b)
+- **Market System** (`engine/world/market.py`): 30 goods across 8 categories,
+  12 shops, supply/demand economics, territory multipliers
+- **NPC Routines** (`engine/world/npc_routines.py`): 9 NPC archetypes with
+  time-based location schedules, interrupt/resume mechanics
+- **Faction AI** (`engine/world/faction_ai.py`): 6 factions with personality-
+  driven decision making, territory wars, alliance/betrayal dynamics
+- **Living World Orchestrator** (`engine/world/living_world.py`): Central daemon
+  with weather Markov chain, 10 stochastic event templates
+- Fixed RLock deadlock across all 4 modules
+- 16 MCP skills, 92 tests
+
+### Phase 6 — Multiplayer Foundation (v1.0b)
+- **Session Manager** (`engine/multiplayer/session_manager.py`): Player sessions
+  with heartbeat/timeout, per-session state isolation
+- **Presence System** (`engine/multiplayer/presence.py`): Online/away/busy
+  status, scene occupancy tracking, auto-cleanup on disconnect
+- **Messaging** (`engine/multiplayer/messaging.py`): P2P direct messages with
+  read/unread status, conversation threading, pagination
+- **Leaderboards** (`engine/multiplayer/leaderboards.py`): 6 categories
+  (credits, reputation, kills, heists, hacking, territory), weekly/all-time
+- 12 MCP skills, 85 tests
+
+### Phase 7 — In-Game World News System (v1.01b–v1.02b)
+- **WorldNewsGenerator** (`engine/world/news_generator.py`, ~640 lines):
+  Subscribes to 8 EventBus event types, 50+ headline/body templates across
+  8 categories (CRIME, ECONOMY, FACTION, TECH, SOCIAL, BREAKING, SPORTS,
+  UNDERWORLD), fingerprint dedup with 120s window, 200-article ring buffer
+- **NewsTicker** (`engine/world/news_ticker.py`, ~280 lines): Flask blueprint
+  with 9 API endpoints, severity-based formatting, category muting
+- **News Ticker Frontend**: Bottom-of-screen crawling ticker in every scene,
+  breaking news flash/glitch interrupts, Socket.IO live updates, keyboard
+  toggle (N key), responsive layout, XSS-safe rendering
+- 10 MCP skills, 103 tests (80 backend + 23 frontend)
+
+### Phase 8 — Polish & Documentation (v1.02b)
+- Updated version to 1.02b across pyproject.toml, launcher.py
+- Comprehensive CHANGELOG covering all 8 phases
+- README updated with current system stats
+- ROADMAP updated with post-v1.0 plans
+- Documentation for new systems: neurochemistry, cyberspace, multiplayer
+
+### Test Coverage
+- **10,720+ tests passing** (up from 9,587 at v0.95b)
+- 345 test files
+- 1 known pre-existing failure: `test_realm.py::test_combat_defeat_enemy`
+- New test suites: neurochemistry (130), phone panel (149), onboarding (83),
+  cyberspace (115), living world (92), multiplayer (85), world news (103)
+
+---
 ## [0.95b] — "SPRINT 2: THE DEEP REWORK" — 2026-03
 
 Deep rework: Penthouse 3D restored, Phone OS activated, inventory wired to all

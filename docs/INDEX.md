@@ -1,23 +1,23 @@
 # CosySim Documentation Index
 
-> Central navigation for all CosySim documentation. 48 docs covering architecture,
-> 20 scenes, 262 engine modules, the Nexus knowledge backbone, NotebookLM research
+> Central navigation for all CosySim documentation. 53 docs covering architecture,
+> 20 scenes, game systems, the Nexus knowledge backbone, NotebookLM research
 > integration, LMStudio local inference, and the full Google ecosystem SDK.
 
-## Quick Reference — v0.91b
+## Quick Reference — v1.02b
 
 | Metric | Value |
 |--------|-------|
-| Version | **0.91b** "THE EVOLUTION" (2026) |
-| Engine | **262 Python files** across 10 subsystems (~85k lines) |
-| Tests | **9,577 passed** / 9,963 collected |
+| Version | **1.02b** "NEONCITY 2: THE LIVING CITY" (2026) |
+| Engine | **280+ Python files** across 12 subsystems |
+| Tests | **10,720+ passed** / 345 test files |
 | Scenes | **20 Flask** (11 game + 6 utility + 3 service) + 3 Streamlit apps |
-| Skills | **31 packs · 278 skills** via `@skill` decorator |
+| Skills | **38 packs · 373 skills** via `@skill` decorator |
 | MCP tools | **42 modules** in `engine/mcp/tools/` |
+| Game systems | neurochemistry · cyberspace · territory · market · factions · multiplayer · news |
 | Scheduler | **55 autonomous tasks** (maintenance, distillation, training, benchmarks) |
 | Interceptors | **30+ pre/post-call hooks** in the agent pipeline |
 | NLM registry | **122 API entries** across 4 Google services (YAML-driven) |
-| Ports | **35 named endpoints** in the canonical port registry |
 
 ### Scene Port Map
 
@@ -85,6 +85,7 @@
 | Doc | Description |
 |-----|-------------|
 | [Architecture](ARCHITECTURE.md) | System design — 10 domains, layers, data flow, interceptor pipeline |
+| [Game Systems](GAME_SYSTEMS.md) | NeonCity 2 game systems — neurochemistry, cyberspace, territory, market, factions, multiplayer, news |
 | [MCP Framework](MCP_FRAMEWORK.md) | `@mcp_tool` decorator, governance, state coordination, dialog system, rules engine |
 | [Interceptors](INTERCEPTORS.md) | 30+ pre/post-call hooks — priorities, auto-registry, scene-specific interceptors |
 | [LMStudio](LMSTUDIO.md) | InferenceOrchestrator, ServerController, LMLink federation, TaskQueue, bearer auth |

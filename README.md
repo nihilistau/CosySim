@@ -1,30 +1,29 @@
 # CosySim
 
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/) [![Version: 0.91b](https://img.shields.io/badge/version-0.91b-blueviolet.svg)]() [![Scenes: 20](https://img.shields.io/badge/scenes-20-6f42c1.svg)]() [![Tests: 9577](https://img.shields.io/badge/tests-9%2C577-brightgreen.svg)]() [![Skills: 278](https://img.shields.io/badge/skills-278-0a7f5a.svg)]()
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/) [![Version: 1.02b](https://img.shields.io/badge/version-1.02b-blueviolet.svg)]() [![Scenes: 20](https://img.shields.io/badge/scenes-20-6f42c1.svg)]() [![Tests: 10720](https://img.shields.io/badge/tests-10%2C720-brightgreen.svg)]() [![Skills: 373](https://img.shields.io/badge/skills-373-0a7f5a.svg)]()
 
-> v0.91b — "THE EVOLUTION" — Local-first multi-scene AI simulation framework
+> v1.02b — "NEONCITY 2: THE LIVING CITY" — Local-first multi-scene AI simulation framework
 
 ## Overview
 
 CosySim is a self-improving AI simulation framework where **20 interactive scenes** run on local Flask/Socket.IO servers, powered by **LMStudio** local inference, **Nexus** knowledge management, and **NotebookLM** research distillation. Agents inhabit scenes, learn from interactions, and feed data back into the training pipeline — a closed loop that gets smarter over time.
 
-The framework is operated through a **TUI launcher** (`tui.py`), managed by **GitHub Copilot** with 19 specialized agents, and backed by **55 autonomous scheduler tasks** that handle maintenance, benchmarking, and knowledge curation.
+The framework features a **unified cyberpunk aesthetic** (neon_base template), **character neurochemistry**, **cyberspace hacking**, a **living world engine** (markets, NPC routines, faction AI), **multiplayer foundation**, and an **in-game news system** — all driven by the MCP skill pipeline.
 
 ## Runtime Snapshot
 
 | Metric | Value |
 |--------|-------|
-| Version | **0.91b** — "THE EVOLUTION" |
-| Tests | **9,577 passing** / 9,963 total |
+| Version | **1.02b** — "NEONCITY 2: THE LIVING CITY" |
+| Tests | **10,720+ passing** / 345 test files |
 | Scenes | **20** Flask scenes + 3 Streamlit apps |
 | Services | **12** launcher-managed services |
-| Skill packs | **31 packs / 278 skills** (`import engine.skills`) |
-| MCP tools | **42** domain modules (`engine/mcp/tools/`) |
+| Skill packs | **38 packs / 373 skills** |
+| MCP tools | **42** domain modules |
 | Interceptors | **26** auto-registered pipeline hooks |
 | Scheduler tasks | **55** autonomous recurring tasks |
-| Ports | **35** canonical endpoints |
 | Copilot agents | **19** specialized agent definitions |
-| Instructions | **12** coding instruction files |
+| Game systems | neurochemistry · cyberspace · territory · market · factions · multiplayer · news |
 
 ## Architecture
 
