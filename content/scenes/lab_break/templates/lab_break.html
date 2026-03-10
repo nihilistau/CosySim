@@ -1,8 +1,8 @@
 {% extends 'neon_base.html' %}
 {% set scene_key = 'lab_break' %}
 {% set scene_display_name = 'LAB BREAK' %}
-{% set scene_accent = '#10b981' %}
-{% set scene_accent_rgb = '16 185 129' %}
+{% set scene_accent = '#00ff88' %}
+{% set scene_accent_rgb = '0 255 136' %}
 
 {% block head_scripts %}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -20,7 +20,7 @@
 
 {% block scene_content %}
   <div class="lb-container">
-    <!-- LEFT: Observation Room (User's view) -->
+    <!-- LEFT: Observation Room -->
     <div class="lb-observation">
       <div class="lb-observation-header">
         <span class="lb-header-icon">👁</span>
@@ -28,24 +28,21 @@
         <span class="lb-header-status" id="lb-status">LIVE</span>
       </div>
 
-      <!-- Lab View (through one-way mirror) -->
+      <!-- Lab View -->
       <div class="lb-lab-view" id="lb-lab-view">
         <div class="lb-mirror-overlay"></div>
         <div class="lb-lab-3d" id="lb-lab-3d">
-          <!-- 3D Lab Room rendered via CSS -->
           <div class="lb-room">
             <div class="lb-floor"></div>
             <div class="lb-wall-back"></div>
             <div class="lb-wall-left"></div>
             <div class="lb-wall-right"></div>
 
-            <!-- Operating Table -->
             <div class="lb-table" id="lb-table">
               <div class="lb-table-surface"></div>
               <div class="lb-table-legs"></div>
             </div>
 
-            <!-- Agent Avatar -->
             <div class="lb-agent" id="lb-agent">
               <div class="lb-agent-body">
                 <div class="lb-agent-head" id="lb-agent-head"></div>
@@ -59,26 +56,28 @@
               <div class="lb-agent-emotion" id="lb-agent-emotion">{{ scene_data.emotions.dominant_emotion }}</div>
             </div>
 
-            <!-- Lab Equipment -->
             <div class="lb-equipment lb-eq-monitor">
               <div class="lb-eq-screen" id="lb-eq-screen"></div>
             </div>
             <div class="lb-equipment lb-eq-tray"></div>
             <div class="lb-equipment lb-eq-cabinet"></div>
 
-            <!-- Dropped Items -->
             <div class="lb-items-container" id="lb-items-container"></div>
 
-            <!-- Door -->
             <div class="lb-door" id="lb-door">
               <div class="lb-door-frame"></div>
               <div class="lb-door-panel" id="lb-door-panel"></div>
               <div class="lb-door-light" id="lb-door-light"></div>
             </div>
+
+            <div class="lb-pos-marker" data-pos="bed" style="left:20%;bottom:32%">🛏️</div>
+            <div class="lb-pos-marker" data-pos="vent" style="left:12%;top:18%">🔳</div>
+            <div class="lb-pos-marker" data-pos="toilet" style="left:85%;bottom:30%">🚽</div>
+            <div class="lb-pos-marker" data-pos="desk" style="left:30%;top:22%">📋</div>
+            <div class="lb-pos-marker" data-pos="exercise" style="left:65%;bottom:28%">💪</div>
           </div>
         </div>
 
-        <!-- Agent Speech Bubble -->
         <div class="lb-speech-bubble" id="lb-speech-bubble">
           <div class="lb-speech-text" id="lb-speech-text"></div>
         </div>
@@ -103,9 +102,28 @@
         </div>
         <div class="lb-vital-bar">
           <span class="lb-vital-label">STR</span>
-          <div class="lb-bar"><div class="lb-bar-fill lb-bar-stress" id="lb-bar-stress" style="width:{{ scene_data.vitals.stress }}%"></div></div>
-          <span class="lb-vital-val" id="lb-val-stress">{{ scene_data.vitals.stress|int }}</span>
+          <div class="lb-bar"><div class="lb-bar-fill lb-bar-strength" id="lb-bar-strength" style="width:50%"></div></div>
+          <span class="lb-vital-val" id="lb-val-strength">50</span>
         </div>
+        <div class="lb-vital-bar">
+          <span class="lb-vital-label">MNT</span>
+          <div class="lb-bar"><div class="lb-bar-fill lb-bar-mental" id="lb-bar-mental" style="width:70%"></div></div>
+          <span class="lb-vital-val" id="lb-val-mental">70</span>
+        </div>
+        <div class="lb-vital-bar">
+          <span class="lb-vital-label">HYD</span>
+          <div class="lb-bar"><div class="lb-bar-fill lb-bar-hydration" id="lb-bar-hydration" style="width:80%"></div></div>
+          <span class="lb-vital-val" id="lb-val-hydration">80</span>
+        </div>
+      </div>
+
+      <!-- Escape Meter -->
+      <div class="lb-escape-panel">
+        <span class="lb-escape-label">🔓 ESCAPE</span>
+        <div class="lb-escape-bar-outer">
+          <div class="lb-escape-bar-fill" id="lb-escape-fill" style="width:0%"></div>
+        </div>
+        <span class="lb-escape-val" id="lb-escape-val">0</span>
       </div>
 
       <!-- Emotion Display -->
@@ -144,22 +162,129 @@
         </div>
       </div>
 
+      <!-- Agent Position -->
+      <div class="lb-panel lb-panel-position">
+        <div class="lb-panel-title"><span class="lb-icon">🏃</span> AGENT POSITION</div>
+        <div class="lb-pos-grid">
+          <button class="lb-pos-btn active" data-pos="bed" title="Send to bed">🛏️ Bed</button>
+          <button class="lb-pos-btn" data-pos="door" title="Send to door">🚪 Door</button>
+          <button class="lb-pos-btn" data-pos="vent" title="Send to vent">🔳 Vent</button>
+          <button class="lb-pos-btn" data-pos="toilet" title="Send to toilet">🚽 Toilet</button>
+          <button class="lb-pos-btn" data-pos="desk" title="Send to desk">📋 Desk</button>
+          <button class="lb-pos-btn" data-pos="exercise" title="Send to exercise area">💪 Exercise</button>
+        </div>
+        <div class="lb-pos-status">Position: <span id="lb-pos-current">BED</span></div>
+      </div>
+
       <!-- Item Drop -->
       <div class="lb-panel lb-panel-items">
         <div class="lb-panel-title"><span class="lb-icon">📦</span> DROP ITEMS</div>
+        <div class="lb-item-tabs" id="lb-item-tabs">
+          <button class="lb-item-tab active" data-cat="tool">🔧</button>
+          <button class="lb-item-tab" data-cat="food">🍞</button>
+          <button class="lb-item-tab" data-cat="medical">💊</button>
+          <button class="lb-item-tab" data-cat="key">🔑</button>
+          <button class="lb-item-tab" data-cat="contraband">🗡️</button>
+        </div>
         <div class="lb-item-grid" id="lb-item-grid">
           {% for item in item_catalog %}
-          <button class="lb-item-btn" data-item-id="{{ item.id }}" title="{{ item.description }}">
+          <button class="lb-item-btn" data-item-id="{{ item.id }}" data-cat="{{ item.category }}" title="{{ item.description }}">
             <span class="lb-item-icon">
-              {% if item.category == 'food' %}🍎
+              {% if item.category == 'food' %}🍞
               {% elif item.category == 'tool' %}🔧
               {% elif item.category == 'medical' %}💊
-              {% elif item.category == 'document' %}📄
+              {% elif item.category == 'key' %}🔑
+              {% elif item.category == 'contraband' %}🗡️
               {% else %}📦{% endif %}
             </span>
             <span class="lb-item-name">{{ item.name }}</span>
           </button>
           {% endfor %}
+        </div>
+      </div>
+
+      <!-- Crafting -->
+      <div class="lb-panel lb-panel-crafting">
+        <div class="lb-panel-title"><span class="lb-icon">⚒️</span> CRAFTING</div>
+        <div class="lb-craft-list" id="lb-craft-list">
+          <div class="lb-craft-recipe" data-recipe="shiv">
+            <div class="lb-craft-name">🗡️ Shiv</div>
+            <div class="lb-craft-ingredients">Wire + Glass Shard</div>
+            <button class="lb-craft-btn" data-recipe="shiv" disabled>CRAFT</button>
+          </div>
+          <div class="lb-craft-recipe" data-recipe="emp">
+            <div class="lb-craft-name">💣 EMP Device</div>
+            <div class="lb-craft-ingredients">3× Radio Parts</div>
+            <button class="lb-craft-btn" data-recipe="emp" disabled>CRAFT</button>
+          </div>
+          <div class="lb-craft-recipe" data-recipe="escape_rope">
+            <div class="lb-craft-name">🪢 Escape Rope</div>
+            <div class="lb-craft-ingredients">Rope + 4× Vent Screws</div>
+            <button class="lb-craft-btn" data-recipe="escape_rope" disabled>CRAFT</button>
+          </div>
+          <div class="lb-craft-recipe" data-recipe="firstaid_crafted">
+            <div class="lb-craft-name">🏥 First Aid Kit</div>
+            <div class="lb-craft-ingredients">Bandage + Painkillers</div>
+            <button class="lb-craft-btn" data-recipe="firstaid_crafted" disabled>CRAFT</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Events -->
+      <div class="lb-panel lb-panel-events">
+        <div class="lb-panel-title"><span class="lb-icon">⚡</span> EVENTS</div>
+        <div class="lb-event-grid" id="lb-event-grid">
+          <button class="lb-event-btn" data-event="guard_patrol" title="Guard walks past">👮 Patrol</button>
+          <button class="lb-event-btn" data-event="power_outage" title="Lights go out for 5 min">🔌 Outage</button>
+          <button class="lb-event-btn" data-event="lockdown" title="All doors sealed">🔒 Lockdown</button>
+          <button class="lb-event-btn" data-event="meal_time" title="Food items available">🍽️ Meal</button>
+          <button class="lb-event-btn" data-event="exercise_hour" title="Can build strength">🏋️ Exercise</button>
+          <button class="lb-event-btn" data-event="lights_out" title="Mental fortitude test">🌙 Lights Out</button>
+          <button class="lb-event-btn" data-event="interrogation" title="Mental challenge">🔦 Interrogate</button>
+          <button class="lb-event-btn" data-event="cell_search" title="Contraband confiscated">🔍 Search</button>
+          <button class="lb-event-btn" data-event="new_prisoner" title="Potential ally NPC">🧑 Prisoner</button>
+          <button class="lb-event-btn" data-event="riot" title="Chaos — escape opportunities">🔥 Riot</button>
+          <button class="lb-event-btn" data-event="medical_check" title="Heal + potential steal">🏥 Medical</button>
+          <button class="lb-event-btn" data-event="solitary" title="Massive mental drain">⛓️ Solitary</button>
+        </div>
+      </div>
+
+      <!-- Escape Routes -->
+      <div class="lb-panel lb-panel-routes">
+        <div class="lb-panel-title"><span class="lb-icon">🚪</span> ESCAPE ROUTES</div>
+        <div class="lb-routes-list" id="lb-routes-list">
+          <div class="lb-route" data-route="vent">
+            <span class="lb-route-icon">🔳</span>
+            <div class="lb-route-info">
+              <span class="lb-route-name">Vent Shaft</span>
+              <span class="lb-route-req">Tool + Escape Rope</span>
+            </div>
+            <span class="lb-route-status" id="lb-route-vent">LOCKED</span>
+          </div>
+          <div class="lb-route" data-route="door">
+            <span class="lb-route-icon">🚪</span>
+            <div class="lb-route-info">
+              <span class="lb-route-name">Main Door</span>
+              <span class="lb-route-req">Keycard</span>
+            </div>
+            <span class="lb-route-status" id="lb-route-door">LOCKED</span>
+          </div>
+          <div class="lb-route" data-route="wall">
+            <span class="lb-route-icon">🧱</span>
+            <div class="lb-route-info">
+              <span class="lb-route-name">Break Wall</span>
+              <span class="lb-route-req">STR 80+</span>
+            </div>
+            <span class="lb-route-status" id="lb-route-wall">LOCKED</span>
+          </div>
+          <div class="lb-route" data-route="persuasion">
+            <span class="lb-route-icon">🗣️</span>
+            <div class="lb-route-info">
+              <span class="lb-route-name">Persuasion</span>
+              <span class="lb-route-req">MNT 90+</span>
+            </div>
+            <span class="lb-route-status" id="lb-route-persuasion">LOCKED</span>
+          </div>
         </div>
       </div>
 
@@ -200,6 +325,7 @@
 
       <!-- Game Controls -->
       <div class="lb-panel lb-panel-game">
+        <button class="lb-btn lb-btn-save" id="lb-btn-save">💾 SAVE CHECKPOINT</button>
         <button class="lb-btn lb-btn-reset" id="lb-btn-reset">🔄 RESET EXPERIMENT</button>
       </div>
     </div>
@@ -213,6 +339,23 @@
       <div class="lb-victory-stats" id="lb-victory-stats"></div>
       <button class="lb-btn lb-btn-replay" id="lb-btn-replay">RUN AGAIN</button>
     </div>
+  </div>
+
+  <!-- Death Overlay -->
+  <div class="lb-death-overlay" id="lb-death-overlay">
+    <div class="lb-death-content">
+      <div class="lb-death-glitch" data-text="SUBJECT TERMINATED">SUBJECT TERMINATED</div>
+      <div class="lb-death-cause" id="lb-death-cause">CAUSE: UNKNOWN</div>
+      <div class="lb-death-actions">
+        <button class="lb-btn lb-btn-restart" id="lb-btn-restart">🔄 RESTART</button>
+        <button class="lb-btn lb-btn-load" id="lb-btn-load">💾 LOAD CHECKPOINT</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hallucination Overlay -->
+  <div class="lb-hallucination-overlay" id="lb-hallucination-overlay">
+    <div class="lb-hallucination-text" id="lb-hallucination-text"></div>
   </div>
 
 {% endblock %}

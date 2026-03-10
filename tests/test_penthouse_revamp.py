@@ -157,11 +157,12 @@ class TestStaticAssets:
         html = _effective_content((TEMPLATE_ROOT / "penthouse.html").read_text(encoding="utf-8"))
         assert "socket.io" in html.lower()
 
-    def test_penthouse_css_3col_grid(self):
-        """penthouse.css must define the 3-column layout."""
+    def test_penthouse_css_overlay_layout(self):
+        """penthouse.css must define the overlay panel layout."""
         css = (STATIC_ROOT / "penthouse.css").read_text(encoding="utf-8")
-        assert "grid-template-columns" in css
-        assert "280px" in css  # left column width
+        assert ".ph-character-panel" in css
+        assert ".ph-director-panel" in css
+        assert ".ph-chat-dock" in css
 
     def test_penthouse_js_class_exists(self):
         """penthouse.js must define PenthouseScene class."""

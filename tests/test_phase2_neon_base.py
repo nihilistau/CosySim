@@ -60,7 +60,7 @@ EXPECTED_SCENE_ACCENTS = {
     "games": "#f43f5e",
     "asset_studio": "#a855f7",
     "grid": "#22d3ee",
-    "lab_break": "#10b981",
+    "lab_break": "#00ff88",
     "intel_hub": "#8b5cf6",
     "system_control": "#14b8a6",
 }
