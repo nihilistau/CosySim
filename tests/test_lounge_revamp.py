@@ -5,6 +5,7 @@ and presence of required static assets.
 """
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -13,6 +14,20 @@ import pytest
 # ── Constants ──────────────────────────────────────────────────────────────────
 
 LOUNGE_DIR = Path(__file__).parent.parent / "content" / "scenes" / "lounge"
+
+NEON_BASE = Path(__file__).parent.parent / "content" / "shared" / "templates" / "neon_base.html"
+
+
+def _effective_content(raw: str) -> str:
+    """If template extends neon_base.html, include base content for assertion checks."""
+    if "extends 'neon_base.html'" in raw or 'extends "neon_base.html"' in raw:
+        base = NEON_BASE.read_text(encoding="utf-8") if NEON_BASE.exists() else ""
+        combined = raw + "\n" + base
+        m = re.search(r"{%\s*set\s+scene_key\s*=\s*['\"](\w+)['\"]", raw)
+        if m:
+            combined = combined.replace("{{ scene_key }}", m.group(1))
+        return combined
+    return raw
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -185,7 +200,7 @@ def test_lounge_js_exists():
 
 def test_lounge_html_branding():
     """lounge.html must contain Velvet Pit branding and data-scene attribute."""
-    html = (LOUNGE_DIR / "templates" / "lounge.html").read_text(encoding="utf-8")
+    html = _effective_content((LOUNGE_DIR / "templates" / "lounge.html").read_text(encoding="utf-8"))
     assert "VELVET PIT"      in html
     assert 'data-scene="lounge"' in html
     assert "heat-meter"      in html

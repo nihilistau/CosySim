@@ -14,6 +14,7 @@ Covers:
 from __future__ import annotations
 
 import importlib
+import re
 import importlib.util
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -25,6 +26,22 @@ import pytest
 GALLERY_ROOT  = Path(__file__).parent.parent / "content" / "scenes" / "gallery"
 STATIC_ROOT   = GALLERY_ROOT / "static"
 TEMPLATE_ROOT = GALLERY_ROOT / "templates"
+
+NEON_BASE = Path(__file__).parent.parent / "content" / "shared" / "templates" / "neon_base.html"
+
+
+def _effective_content(raw: str) -> str:
+    """If template extends neon_base.html, include base content for assertion checks."""
+    if "extends 'neon_base.html'" in raw or 'extends "neon_base.html"' in raw:
+        base = NEON_BASE.read_text(encoding="utf-8") if NEON_BASE.exists() else ""
+        combined = raw + "\n" + base
+        m = re.search(r"{%\s*set\s+scene_key\s*=\s*['\"](\w+)['\"]", raw)
+        if m:
+            combined = combined.replace("{{ scene_key }}", m.group(1))
+        return combined
+    return raw
+
+
 
 
 # ── Import helpers ─────────────────────────────────────────────────────────────
@@ -225,19 +242,19 @@ class TestStaticAssets:
 
     def test_gallery_html_data_scene(self):
         """gallery.html must carry data-scene='gallery'."""
-        src = (TEMPLATE_ROOT / "gallery.html").read_text(encoding="utf-8")
+        src = _effective_content((TEMPLATE_ROOT / "gallery.html").read_text(encoding="utf-8"))
         assert 'data-scene="gallery"' in src, \
             "data-scene='gallery' not found in gallery.html"
 
     def test_gallery_html_socketio_cdn(self):
         """gallery.html must load the Socket.IO CDN script."""
-        src = (TEMPLATE_ROOT / "gallery.html").read_text(encoding="utf-8")
+        src = _effective_content((TEMPLATE_ROOT / "gallery.html").read_text(encoding="utf-8"))
         assert "socket.io" in src, \
             "Socket.IO CDN script not found in gallery.html"
 
     def test_gallery_html_navbar_include(self):
         """gallery.html must include navbar_v2.html."""
-        src = (TEMPLATE_ROOT / "gallery.html").read_text(encoding="utf-8")
+        src = _effective_content((TEMPLATE_ROOT / "gallery.html").read_text(encoding="utf-8"))
         assert "navbar_v2.html" in src, \
             "navbar_v2.html include not found in gallery.html"
 

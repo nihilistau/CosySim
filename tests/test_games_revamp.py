@@ -7,6 +7,7 @@ All tests run without a live Flask/Socket.IO server.
 from __future__ import annotations
 
 import importlib
+import re
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -16,6 +17,20 @@ import pytest
 # ── Helpers ────────────────────────────────────────────────────────────
 
 ROOT = Path(__file__).parent.parent
+
+NEON_BASE = Path(__file__).parent.parent / "content" / "shared" / "templates" / "neon_base.html"
+
+
+def _effective_content(raw: str) -> str:
+    """If template extends neon_base.html, include base content for assertion checks."""
+    if "extends 'neon_base.html'" in raw or 'extends "neon_base.html"' in raw:
+        base = NEON_BASE.read_text(encoding="utf-8") if NEON_BASE.exists() else ""
+        combined = raw + "\n" + base
+        m = re.search(r"{%\s*set\s+scene_key\s*=\s*['\"](\w+)['\"]", raw)
+        if m:
+            combined = combined.replace("{{ scene_key }}", m.group(1))
+        return combined
+    return raw
 
 
 def _mock_games_scene() -> MagicMock:
@@ -178,46 +193,46 @@ class TestGamesHtmlExists:
         assert self._html().exists(), f"Template not found: {self._html()}"
 
     def test_html_contains_the_arcade(self):
-        content = self._html().read_text(encoding="utf-8")
+        content = _effective_content(self._html().read_text(encoding="utf-8"))
         assert "THE ARCADE" in content
 
     def test_html_has_data_scene_games(self):
-        content = self._html().read_text(encoding="utf-8")
+        content = _effective_content(self._html().read_text(encoding="utf-8"))
         assert 'data-scene="games"' in content
 
     def test_html_has_game_selector(self):
-        content = self._html().read_text(encoding="utf-8")
+        content = _effective_content(self._html().read_text(encoding="utf-8"))
         assert "game-selector" in content
         assert "mystery" in content.lower()
         assert "dice" in content.lower()
         assert "truth" in content.lower()
 
     def test_html_has_investigation_board(self):
-        content = self._html().read_text(encoding="utf-8")
+        content = _effective_content(self._html().read_text(encoding="utf-8"))
         assert "investigation-board" in content
 
     def test_html_has_dice_3d(self):
-        content = self._html().read_text(encoding="utf-8")
+        content = _effective_content(self._html().read_text(encoding="utf-8"))
         assert "dice-3d" in content
 
     def test_html_has_leaderboard(self):
-        content = self._html().read_text(encoding="utf-8")
+        content = _effective_content(self._html().read_text(encoding="utf-8"))
         assert "leaderboard" in content
 
     def test_html_has_sparks_canvas(self):
-        content = self._html().read_text(encoding="utf-8")
+        content = _effective_content(self._html().read_text(encoding="utf-8"))
         assert "sparks-canvas" in content
 
     def test_html_has_socket_io(self):
-        content = self._html().read_text(encoding="utf-8")
+        content = _effective_content(self._html().read_text(encoding="utf-8"))
         assert "socket.io" in content.lower()
 
     def test_html_has_bench_hud(self):
-        content = self._html().read_text(encoding="utf-8")
+        content = _effective_content(self._html().read_text(encoding="utf-8"))
         assert "bench-hud" in content
 
     def test_html_includes_navbar(self):
-        content = self._html().read_text(encoding="utf-8")
+        content = _effective_content(self._html().read_text(encoding="utf-8"))
         assert "navbar" in content.lower()
 
 

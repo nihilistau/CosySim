@@ -27,6 +27,19 @@ SCENE_TEMPLATES = {
 NAVBAR      = ROOT / "content/shared/templates/navbar_v2.html"
 SCENE_FX    = ROOT / "content/shared/static/css/cosysim-scene-fx.css"
 DESIGN_TOKENS = ROOT / "content/shared/static/css/design_tokens.css"
+NEON_BASE   = ROOT / "content/shared/templates/neon_base.html"
+
+
+def _effective_content(raw: str) -> str:
+    """If template extends neon_base.html, include base content for assertion checks."""
+    if "extends 'neon_base.html'" in raw or 'extends "neon_base.html"' in raw:
+        base = NEON_BASE.read_text(encoding="utf-8") if NEON_BASE.exists() else ""
+        combined = raw + "\n" + base
+        m = re.search(r"{%\s*set\s+scene_key\s*=\s*['\"](\w+)['\"]", raw)
+        if m:
+            combined = combined.replace("{{ scene_key }}", m.group(1))
+        return combined
+    return raw
 
 REQUIRED_SCENES_IN_NAVBAR = [
     "bedroom", "phone", "lounge", "tavern", "casino",
@@ -47,7 +60,7 @@ def test_all_scene_templates_have_data_scene_attribute():
     """Every scene template must declare data-scene='<scene>' on its body element."""
     bad = []
     for name, path in SCENE_TEMPLATES.items():
-        content = path.read_text(encoding="utf-8")
+        content = _effective_content(path.read_text(encoding="utf-8"))
         # Accept data-scene on <body> or on <html> (some scenes use html-level attr)
         if not re.search(rf'data-scene=["\']?{name}["\']?', content):
             bad.append(name)
@@ -58,7 +71,7 @@ def test_all_scene_templates_include_navbar_v2():
     """Every template must include or extend navbar_v2.html (which injects neon_hud)."""
     bad = []
     for name, path in SCENE_TEMPLATES.items():
-        content = path.read_text(encoding="utf-8")
+        content = _effective_content(path.read_text(encoding="utf-8"))
         if "navbar_v2" not in content:
             bad.append(name)
     assert not bad, f"Templates missing navbar_v2 include/extend: {bad}"
@@ -74,7 +87,7 @@ def test_all_scene_templates_link_scene_css():
     """Every template must reference a scene-specific CSS file."""
     bad = []
     for name, path in SCENE_TEMPLATES.items():
-        content = path.read_text(encoding="utf-8")
+        content = _effective_content(path.read_text(encoding="utf-8"))
         if f"{name}.css" not in content:
             bad.append(name)
     assert not bad, f"Templates missing scene-specific CSS link: {bad}"

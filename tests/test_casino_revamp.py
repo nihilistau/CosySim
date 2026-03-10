@@ -7,6 +7,7 @@ All tests run without a live Flask/Socket.IO server.
 from __future__ import annotations
 
 import importlib
+import re
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -16,6 +17,19 @@ import pytest
 # ── Helpers ────────────────────────────────────────────────────────────
 
 ROOT = Path(__file__).parent.parent
+NEON_BASE = ROOT / "content" / "shared" / "templates" / "neon_base.html"
+
+
+def _effective_content(raw: str) -> str:
+    """If template extends neon_base.html, include base content for assertion checks."""
+    if "extends 'neon_base.html'" in raw or 'extends "neon_base.html"' in raw:
+        base = NEON_BASE.read_text(encoding="utf-8") if NEON_BASE.exists() else ""
+        combined = raw + "\n" + base
+        m = re.search(r"{%\s*set\s+scene_key\s*=\s*['\"](\w+)['\"]", raw)
+        if m:
+            combined = combined.replace("{{ scene_key }}", m.group(1))
+        return combined
+    return raw
 
 
 def _mock_scene(balance: int = 500, bj_state: dict | None = None) -> MagicMock:
@@ -313,23 +327,23 @@ class TestCasinoHtmlExists:
 
     def test_html_contains_club_noir(self):
         p = ROOT / "content" / "scenes" / "casino" / "templates" / "casino.html"
-        content = p.read_text(encoding="utf-8")
+        content = _effective_content(p.read_text(encoding="utf-8"))
         assert "CLUB NOIR" in content
 
     def test_html_has_data_scene_casino(self):
         p = ROOT / "content" / "scenes" / "casino" / "templates" / "casino.html"
-        content = p.read_text(encoding="utf-8")
+        content = _effective_content(p.read_text(encoding="utf-8"))
         assert 'data-scene="casino"' in content
 
     def test_html_has_action_buttons(self):
         p = ROOT / "content" / "scenes" / "casino" / "templates" / "casino.html"
-        content = p.read_text(encoding="utf-8")
+        content = _effective_content(p.read_text(encoding="utf-8"))
         for action in ("HIT", "STAND", "DOUBLE", "FOLD"):
             assert action in content, f"Missing action button: {action}"
 
     def test_html_has_socket_io(self):
         p = ROOT / "content" / "scenes" / "casino" / "templates" / "casino.html"
-        content = p.read_text(encoding="utf-8")
+        content = _effective_content(p.read_text(encoding="utf-8"))
         assert "socket.io" in content.lower()
 
     def test_html_has_sparks_canvas(self):

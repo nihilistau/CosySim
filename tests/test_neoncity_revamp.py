@@ -7,6 +7,7 @@ presence.  All engine subsystems are mocked so no running server is required.
 from __future__ import annotations
 
 import importlib
+import re
 import sys
 from pathlib import Path
 from typing import Any, Dict
@@ -25,6 +26,20 @@ _SCENE_MOD = f"{_SCENE_PKG}.neoncity_scene"
 
 #: Directory of the neoncity scene
 _NEONCITY_DIR = Path(__file__).parent.parent / "content" / "scenes" / "neoncity"
+
+NEON_BASE = Path(__file__).parent.parent / "content" / "shared" / "templates" / "neon_base.html"
+
+
+def _effective_content(raw: str) -> str:
+    """If template extends neon_base.html, include base content for assertion checks."""
+    if "extends 'neon_base.html'" in raw or 'extends "neon_base.html"' in raw:
+        base = NEON_BASE.read_text(encoding="utf-8") if NEON_BASE.exists() else ""
+        combined = raw + "\n" + base
+        m = re.search(r"{%\s*set\s+scene_key\s*=\s*['\"](\w+)['\"]", raw)
+        if m:
+            combined = combined.replace("{{ scene_key }}", m.group(1))
+        return combined
+    return raw
 
 
 def _mock_engine_modules() -> None:
@@ -327,13 +342,13 @@ class TestNeonCityHTMLExists:
     def test_neoncity_html_has_data_scene(self) -> None:
         """Template must include data-scene='neoncity' attribute."""
         template = _NEONCITY_DIR / "templates" / "neoncity.html"
-        content = template.read_text(encoding="utf-8")
+        content = _effective_content(template.read_text(encoding="utf-8"))
         assert 'data-scene="neoncity"' in content
 
     def test_neoncity_html_has_district_cards(self) -> None:
         """Template must include all 5 district card elements."""
         template = _NEONCITY_DIR / "templates" / "neoncity.html"
-        content = template.read_text(encoding="utf-8")
+        content = _effective_content(template.read_text(encoding="utf-8"))
         districts = [
             "black_market", "corporate_tower", "underground_club",
             "hacker_den", "street_level",
@@ -344,14 +359,14 @@ class TestNeonCityHTMLExists:
     def test_neoncity_html_has_faction_bars(self) -> None:
         """Template must include faction bar elements for all 6 factions."""
         template = _NEONCITY_DIR / "templates" / "neoncity.html"
-        content = template.read_text(encoding="utf-8")
+        content = _effective_content(template.read_text(encoding="utf-8"))
         for faction in ["OmniCorp", "NeoTech", "BlackMarket", "Ghost_Net", "SynthSec", "DeepState"]:
             assert faction in content, f"Faction missing from template: {faction}"
 
     def test_neoncity_html_has_socket_io(self) -> None:
         """Template must include Socket.IO script tag."""
         template = _NEONCITY_DIR / "templates" / "neoncity.html"
-        content = template.read_text(encoding="utf-8")
+        content = _effective_content(template.read_text(encoding="utf-8"))
         assert "socket.io" in content.lower()
 
 

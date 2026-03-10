@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import importlib
+import re
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -13,6 +14,19 @@ import pytest
 BEDROOM_ROOT = Path(__file__).parent.parent / "content" / "scenes" / "bedroom"
 STATIC_ROOT  = BEDROOM_ROOT / "static"
 TEMPLATE_ROOT = BEDROOM_ROOT / "templates"
+NEON_BASE = Path(__file__).parent.parent / "content" / "shared" / "templates" / "neon_base.html"
+
+
+def _effective_content(raw: str) -> str:
+    """If template extends neon_base.html, include base content for assertion checks."""
+    if "extends 'neon_base.html'" in raw or 'extends "neon_base.html"' in raw:
+        base = NEON_BASE.read_text(encoding="utf-8") if NEON_BASE.exists() else ""
+        combined = raw + "\n" + base
+        m = re.search(r"{%\s*set\s+scene_key\s*=\s*['\"](\w+)['\"]", raw)
+        if m:
+            combined = combined.replace("{{ scene_key }}", m.group(1))
+        return combined
+    return raw
 
 
 def _import_bedroom_scene():
@@ -128,19 +142,19 @@ class TestStaticAssets:
 
     def test_bedroom_html_data_scene_attribute(self):
         """bedroom.html must declare data-scene='bedroom' for design tokens."""
-        html = (TEMPLATE_ROOT / "bedroom.html").read_text(encoding="utf-8")
+        html = _effective_content((TEMPLATE_ROOT / "bedroom.html").read_text(encoding="utf-8"))
         assert 'data-scene="bedroom"' in html
 
     def test_bedroom_html_design_system_links(self):
         """bedroom.html must link all three shared design system CSS files."""
-        html = (TEMPLATE_ROOT / "bedroom.html").read_text(encoding="utf-8")
+        html = _effective_content((TEMPLATE_ROOT / "bedroom.html").read_text(encoding="utf-8"))
         assert "design_tokens.css" in html
         assert "cosysim-components.css" in html
         assert "cosysim-animations.css" in html
 
     def test_bedroom_html_socketio(self):
         """bedroom.html must include Socket.IO script tag."""
-        html = (TEMPLATE_ROOT / "bedroom.html").read_text(encoding="utf-8")
+        html = _effective_content((TEMPLATE_ROOT / "bedroom.html").read_text(encoding="utf-8"))
         assert "socket.io" in html.lower()
 
     def test_bedroom_css_3col_grid(self):
