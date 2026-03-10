@@ -1,18 +1,16 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>THE LAB — CosySim</title>
-  <script src="/shared/js/socket.io.min.js"></script>
-  <link rel="stylesheet" href="{{ url_for('static', filename='coders.css') }}">
-</head>
-<body data-scene="coders">
+{% extends 'neon_base.html' %}
+{% set scene_key = 'coders' %}
+{% set scene_display_name = 'THE SCORE' %}
+{% set scene_accent = '#06b6d4' %}
+{% set scene_accent_rgb = '6 182 212' %}
 
+{% block head_css %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='coders.css') }}">
+{% endblock %}
+
+{% block scene_content %}
   <!-- Matrix rain canvas — full background -->
   <canvas id="matrix-canvas"></canvas>
-
-  {% include 'navbar_v2.html' ignore missing %}
 
   <div class="coders-layout" id="app">
 
@@ -204,7 +202,8 @@
       <button class="lab-btn lab-btn--primary lab-btn--lg" id="start-btn-overlay">▶ INITIALIZE</button>
     </div>
   </div>
+{% endblock %}
 
+{% block body_scripts %}
   <script src="{{ url_for('static', filename='coders.js') }}"></script>
-</body>
-</html>
+{% endblock %}

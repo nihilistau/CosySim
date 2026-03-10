@@ -1,18 +1,16 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>THE ARCADE — CosySim</title>
-  <link rel="stylesheet" href="/static/shared/css/cosysim.css">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/games.css') }}">
-</head>
-<body data-scene="games" class="arcade-body">
+{% extends 'neon_base.html' %}
+{% set scene_key = 'games' %}
+{% set scene_display_name = 'THE ARCADE' %}
+{% set scene_accent = '#f43f5e' %}
+{% set scene_accent_rgb = '244 63 94' %}
 
+{% block head_css %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/games.css') }}">
+{% endblock %}
+
+{% block scene_content %}
   <!-- Sparks canvas (win particle effect) -->
   <canvas id="sparks-canvas" aria-hidden="true"></canvas>
-
-  {% include 'navbar_v2.html' ignore missing %}
 
   <!-- ═══════════════════════════════════════════════════════
        ARCADE HEADER — neon sign title
@@ -70,7 +68,7 @@
   <!-- ═══════════════════════════════════════════════════════
        MAIN CONTENT — 3-column layout
   ═══════════════════════════════════════════════════════ -->
-  <main class="games-layout" id="games-main">
+  <div class="games-layout" id="games-main">
 
     <!-- ── LEFT: Active game area ────────────────────────── -->
     <section class="games-layout__active" id="active-game-area">
@@ -261,12 +259,13 @@
       </div>
 
     </aside>
-  </main>
+  </div>
 
-  <!-- ── Bench HUD ──────────────────────────────────────── -->
+  <!-- ── Bench HUD──────────────────────────────────────── -->
   <div id="bench-hud" class="bench-hud" aria-label="Bench metrics"></div>
 
-  <script src="/shared/js/socket.io.min.js"></script>
+{% endblock %}
+
+{% block body_scripts %}
   <script src="{{ url_for('static', filename='js/games.js') }}"></script>
-</body>
-</html>
+{% endblock %}

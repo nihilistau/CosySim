@@ -1,34 +1,14 @@
-<!DOCTYPE html>
-<html lang="en" data-scene="gallery">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>THE OBSCURA — Dark Renaissance</title>
+{% extends 'neon_base.html' %}
+{% set scene_key = 'gallery' %}
+{% set scene_display_name = 'THE OBSCURA' %}
+{% set scene_accent = '#a855f7' %}
+{% set scene_accent_rgb = '168 85 247' %}
 
-  <!-- Scene accent CSS variables (violet) -->
-  <style>
-    :root {
-      --accent:       #7c3aed;
-      --accent-rgb:   124 58 237;
-      --accent-dim:   rgba(124, 58, 237, 0.18);
-      --accent-glow:  0 0 18px rgba(124, 58, 237, 0.55);
-      --cs-scene-accent: #7c3aed;
-      --cs-scene-glow:   0 0 18px rgba(124, 58, 237, 0.55);
-    }
-  </style>
-
-  <link rel="stylesheet" href="/shared/css/design_tokens.css">
-  <link rel="stylesheet" href="/shared/css/cosysim-animations.css">
-  <link rel="stylesheet" href="/shared/css/cosysim-scene-fx.css">
-  <link rel="stylesheet" href="/shared/css/cosysim-components.css">
+{% block head_css %}
   <link rel="stylesheet" href="{{ url_for('static', filename='gallery.css') }}">
-</head>
+{% endblock %}
 
-<body data-scene="gallery" class="obscura-body">
-<canvas id="cs-particles"></canvas>
-
-  {% include 'navbar_v2.html' ignore missing %}
-
+{% block scene_content %}
   <div class="obscura-wrapper">
 
     <!-- ── Gallery Header ─────────────────────────────────────── -->
@@ -52,11 +32,11 @@
     </div>
 
     <!-- ── Gallery Floor ──────────────────────────────────────── -->
-    <main class="gallery-floor" id="gallery-floor" role="main" aria-label="Gallery collection">
+    <div class="gallery-floor" id="gallery-floor" aria-label="Gallery collection">
       <div class="gallery-loading" id="gallery-loading">
         <div class="loading-pulse">Loading collection&hellip;</div>
       </div>
-    </main>
+    </div>
 
   </div><!-- /.obscura-wrapper -->
 
@@ -110,17 +90,12 @@
 
   <!-- Overlay backdrop (closes detail panel) -->
   <div class="overlay-backdrop" id="overlay-backdrop" aria-hidden="true"></div>
+{% endblock %}
 
-  {% include 'aria_widget.html' ignore missing %}
-
-  <!-- ── Scripts ─────────────────────────────────────────────────── -->
-  <script src="/shared/js/socket.io.min.js"></script>
+{% block body_scripts %}
   <script src="/shared/js/cosysim-particles3d.js"></script>
   <script src="/shared/js/cosysim-bench.js"></script>
   <script src="{{ url_for('static', filename='gallery.js') }}" defer></script>
   <script src="/shared/js/cosysim-voice.js"></script>
   <script>window.SCENE_PARTICLE_CONFIG = { scene: 'gallery' };</script>
-  <script src="/shared/js/cosysim-particles.js"></script>
-
-</body>
-</html>
+{% endblock %}

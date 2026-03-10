@@ -1,29 +1,25 @@
-<!DOCTYPE html>
-<html lang="en" data-scene="bedroom">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>THE PENTHOUSE — CosySim</title>
+{% extends 'neon_base.html' %}
+{% set scene_key = 'bedroom' %}
+{% set scene_display_name = 'THE PENTHOUSE' %}
+{% set scene_accent = '#f43f5e' %}
+{% set scene_accent_rgb = '244 63 94' %}
 
-  <!-- CosySim Design System -->
-  <link rel="stylesheet" href="/shared/css/design_tokens.css">
-  <link rel="stylesheet" href="/shared/css/cosysim-components.css">
-  <link rel="stylesheet" href="/shared/css/cosysim-animations.css">
-  <link rel="stylesheet" href="/shared/css/cosysim-scene-fx.css">
-
-
-  <!-- Scene CSS -->
+{% block head_css %}
   <link rel="stylesheet" href="{{ url_for('static', filename='bedroom.css') }}">
-</head>
+{% endblock %}
 
-<body class="cs-scene-body penthouse-body" data-scene="bedroom">
-<canvas id="cs-particles"></canvas>
-<div id="scene-container">
-  <canvas id="bedroom-canvas"></canvas>
-</div>
-<div id="world-event-ticker" class="world-event-ticker" aria-live="polite"></div>
+{% block head_scripts %}
+  <!-- Three.js 3D engine (must load in head for Penthouse 3D room) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+{% endblock %}
 
-  {% include 'navbar_v2.html' %}
+{% block scene_content %}
+
+  <div id="scene-container">
+    <canvas id="bedroom-canvas"></canvas>
+  </div>
+  <div id="world-event-ticker" class="world-event-ticker" aria-live="polite"></div>
 
   <!-- Adult Content Gate (session-cached) -->
   <div id="penthouse-gate" class="penthouse-gate" role="alertdialog" aria-modal="true" aria-labelledby="gate-title">
@@ -48,7 +44,7 @@
   </div>
 
   <!-- Scene: THE PENTHOUSE -->
-  <main class="bedroom-layout" id="bedroom-main" aria-label="The Penthouse scene">
+  <div class="bedroom-layout" id="bedroom-main" aria-label="The Penthouse scene">
 
     <!-- ── LEFT: Character portrait + emotion bars ───────────────── -->
     <aside class="bedroom-character-panel cs-glass-panel" aria-label="Character panel">
@@ -330,27 +326,19 @@
 
     </aside><!-- /right-panel -->
 
-  </main><!-- /bedroom-layout -->
+  </div><!-- /bedroom-layout -->
 
-  <!-- ARIA assistant widget -->
-  {% include 'aria_widget.html' %}
+{% endblock %}
 
-  <!-- Socket.IO -->
-  <script src="/shared/js/socket.io.min.js"></script>
-
-  <!-- Shared utilities -->
+{% block body_scripts %}
+  <!-- Shared utilities (not in neon_base) -->
   <script src="/shared/js/cosysim-particles3d.js"></script>
   <script src="/shared/js/cosysim-bench.js"></script>
   <script src="/shared/js/cosysim-voice.js"></script>
 
-  <!-- Three.js 3D engine (required for Penthouse 3D room) -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-
   <!-- Scene script -->
   <script src="{{ url_for('static', filename='bedroom.js') }}"></script>
   <script>window.SCENE_PARTICLE_CONFIG = { scene: 'bedroom' };</script>
-  <script src="/shared/js/cosysim-particles.js"></script>
 
   <!-- Living World integration -->
   <script>
@@ -414,6 +402,4 @@
     });
   }());
   </script>
-
-</body>
-</html>
+{% endblock %}

@@ -1,39 +1,14 @@
-<!DOCTYPE html>
-<html lang="en" data-scene="casino">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>CLUB NOIR — {{ scene_name or 'CLUB NOIR' }}</title>
+{% extends 'neon_base.html' %}
+{% set scene_key = 'casino' %}
+{% set scene_display_name = 'CLUB NOIR' %}
+{% set scene_accent = '#eab308' %}
+{% set scene_accent_rgb = '234 179 8' %}
 
-  <!-- Shared assets -->
-  <link rel="stylesheet" href="/shared/css/design_tokens.css">
-  <link rel="stylesheet" href="/shared/css/cosysim-animations.css">
-  <link rel="stylesheet" href="/shared/css/cosysim-scene-fx.css">
+{% block head_css %}
   <link rel="stylesheet" href="{{ url_for('static', filename='css/casino.css') }}">
+{% endblock %}
 
-  <!-- Socket.IO -->
-  <script src="/shared/js/socket.io.min.js"></script>
-  <!-- CosySim core -->
-  <script src="/shared/js/cosysim-core.js" defer></script>
-  <script src="/shared/js/cosysim-stream.js" defer></script>
-
-  <style>
-    :root {
-      --accent:     #f97316;
-      --accent-rgb: 249 115 22;
-      --accent-dim: rgba(249,115,22,0.18);
-      --accent-glow: 0 0 18px rgba(249,115,22,0.55);
-    }
-  </style>
-</head>
-
-<body data-scene="casino">
-<canvas id="cs-particles"></canvas>
-
-<!-- ══════════════════════════════════════════════════════════════
-     NAVBAR
-═══════════════════════════════════════════════════════════════ -->
-{% include 'navbar_v2.html' ignore missing %}
+{% block scene_content %}
 
 <!-- ══════════════════════════════════════════════════════════════
      CASINO SHELL
@@ -113,7 +88,7 @@
     </aside>
 
     <!-- MAIN TABLE -->
-    <main class="cn-main">
+    <div class="cn-main">
 
       <!-- Dealer portrait + speech ring -->
       <div class="cn-dealer-row">
@@ -182,7 +157,7 @@
         <span class="cn-bench-item" id="bench-nexus">—</span>
       </div>
 
-    </main>
+    </div>
 
     <!-- RIGHT SIDEBAR -->
     <aside class="cn-sidebar cn-sidebar--right">
@@ -292,10 +267,12 @@
   <span id="consequence-msg"></span>
 </div>
 
+{% endblock %}
+
+{% block body_scripts %}
 <script src="{{ url_for('static', filename='js/casino.js') }}"></script>
 <script src="/shared/js/cosysim-voice.js"></script>
 <script>window.SCENE_PARTICLE_CONFIG = { scene: 'casino' };</script>
-<script src="/shared/js/cosysim-particles.js"></script>
 
 <script>
 /* ── WORLD STATUS HUD ─────────────────────────────────────────── */
@@ -355,4 +332,4 @@
   }
 }());
 </script>
-</html>
+{% endblock %}

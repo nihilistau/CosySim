@@ -1,0 +1,173 @@
+{#
+  neon_base.html — NeonCity 2 Unified Scene Template
+  ===================================================
+  Every scene extends this base via:
+
+      {% extends 'neon_base.html' %}
+
+  Required context variables (set via {% set %} or render_template kwargs):
+      scene_key          — machine id, e.g. "bedroom", "arena", "grid"
+      scene_display_name — human label, e.g. "THE PENTHOUSE"
+      scene_accent       — CSS hex, e.g. "#c084fc"
+      scene_accent_rgb   — CSS rgb numbers, e.g. "192 132 252"
+
+  Optional context variables:
+      scene_version      — version string, default "v1.0"
+      hide_particles     — set true to disable particle canvas
+      hide_hud           — set true to hide the neon HUD strip
+      page_title         — override <title> (default: scene_display_name — NeonCity)
+
+  Overridable blocks:
+      {% block head_meta %}     — extra <meta> tags
+      {% block head_css %}      — extra <link> stylesheets
+      {% block head_style %}    — inline <style> overrides
+      {% block head_scripts %}  — scripts that must load in <head>
+      {% block scene_header %}  — optional scene-specific header/banner
+      {% block scene_content %} — MAIN content area (required)
+      {% block scene_sidebar %} — optional right sidebar
+      {% block scene_footer %}  — optional footer area
+      {% block scene_overlays %} — modals, drawers, overlays
+      {% block body_scripts %}  — scripts before </body>
+
+  This template self-loads:
+      - Design tokens, components, animations, scene-fx CSS
+      - Neon base layout CSS (grid bg, scan-lines, glass panels)
+      - Navbar v2 (with HUD strip)
+      - Aria widget
+      - Socket.IO, core.js, particles, ambient, stream, neon-hud JS
+      - Scene accent injection via CSS custom properties
+
+  register_shared_assets() auto-injects phone-panel, portrait, STT,
+  ambient, reputation CSS/JS before </body> — no duplication needed.
+#}
+
+{# ── Safe defaults ────────────────────────────────────────────────── #}
+{% set scene_key          = scene_key          | default('neoncity') %}
+{% set scene_display_name = scene_display_name | default('NEON CITY') %}
+{% set scene_accent       = scene_accent       | default('#00e5ff') %}
+{% set scene_accent_rgb   = scene_accent_rgb   | default('0 229 255') %}
+{% set scene_version      = scene_version      | default('v1.0') %}
+{% set current_scene      = scene_key %}
+{% set scene_name         = scene_display_name %}
+{% set page_title         = page_title | default(scene_display_name ~ ' — NeonCity') %}
+
+<!DOCTYPE html>
+<html lang="en" data-scene="{{ scene_key }}">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark">
+  <meta name="scene-key" content="{{ scene_key }}">
+  <meta name="scene-accent" content="{{ scene_accent }}">
+  <title>{{ page_title }}</title>
+
+  {# ── Fonts ──────────────────────────────────────────────────────── #}
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Orbitron:wght@400;500;700;900&display=swap">
+
+  {# ── Design System CSS (always loaded, order matters) ───────────── #}
+  <link rel="stylesheet" href="/shared/css/design_tokens.css">
+  <link rel="stylesheet" href="/shared/css/cosysim-components.css">
+  <link rel="stylesheet" href="/shared/css/cosysim-animations.css">
+  <link rel="stylesheet" href="/shared/css/cosysim-scene-fx.css">
+  <link rel="stylesheet" href="/shared/css/cosysim-scene.css">
+  <link rel="stylesheet" href="/shared/css/cosysim-shop.css">
+  <link rel="stylesheet" href="/shared/css/neon_base.css">
+
+  {# ── Scene accent injection ─────────────────────────────────────── #}
+  <style>
+    :root {
+      --scene-accent: {{ scene_accent }};
+      --scene-accent-rgb: {{ scene_accent_rgb }};
+      --scene-accent-dim: rgba({{ scene_accent_rgb | replace(' ', ', ') }}, 0.18);
+      --scene-accent-glow: 0 0 24px rgba({{ scene_accent_rgb | replace(' ', ', ') }}, 0.55);
+      --cs-scene-accent: {{ scene_accent }};
+      --cs-scene-accent-rgb: {{ scene_accent_rgb }};
+      --cs-scene-glow: rgba({{ scene_accent_rgb | replace(' ', ', ') }}, 0.4);
+    }
+  </style>
+
+  {# ── Extra meta from child template ─────────────────────────────── #}
+  {% block head_meta %}{% endblock %}
+
+  {# ── Scene-specific CSS from child template ─────────────────────── #}
+  {% block head_css %}{% endblock %}
+
+  {# ── Inline style overrides from child template ─────────────────── #}
+  {% block head_style %}{% endblock %}
+
+  {# ── Head scripts (rare — prefer body_scripts) ─────────────────── #}
+  {% block head_scripts %}{% endblock %}
+</head>
+
+<body class="neon-body" data-scene="{{ scene_key }}">
+
+  {# ── Scan-line overlay (CSS-only, always on) ────────────────────── #}
+  <div class="neon-scanlines" aria-hidden="true"></div>
+
+  {# ── Particle canvas (opt-out via hide_particles) ───────────────── #}
+  {% if not hide_particles %}
+  <canvas id="cs-particles" class="neon-particles" aria-hidden="true"></canvas>
+  {% endif %}
+
+  {# ── Neon grid background (CSS-driven) ──────────────────────────── #}
+  <div class="neon-grid-bg" aria-hidden="true"></div>
+
+  {# ── Navbar v2 (includes HUD strip) ─────────────────────────────── #}
+  {% include 'navbar_v2.html' %}
+
+  {# ── Main layout wrapper ────────────────────────────────────────── #}
+  <div class="neon-layout" id="neon-layout">
+
+    {# ── Scene header (optional) ──────────────────────────────────── #}
+    {% block scene_header %}{% endblock %}
+
+    {# ── Main content area ────────────────────────────────────────── #}
+    <main class="neon-main" id="neon-main" role="main">
+      {% block scene_content %}
+      <div class="neon-placeholder">
+        <h1>{{ scene_display_name }}</h1>
+        <p>Scene content not yet defined.</p>
+      </div>
+      {% endblock %}
+    </main>
+
+    {# ── Sidebar (optional) ───────────────────────────────────────── #}
+    {% block scene_sidebar %}{% endblock %}
+
+  </div>{# /.neon-layout #}
+
+  {# ── Footer area (optional) ─────────────────────────────────────── #}
+  {% block scene_footer %}{% endblock %}
+
+  {# ── Overlays (modals, drawers, etc.) ───────────────────────────── #}
+  {% block scene_overlays %}{% endblock %}
+
+  {# ── Aria portrait widget ───────────────────────────────────────── #}
+  {% include 'aria_widget.html' %}
+
+  {# ── Core scripts (order matters) ──────────────────────────────── #}
+  <script src="/shared/js/socket.io.min.js"></script>
+  <script src="/shared/js/cosysim-core.js"></script>
+  <script src="/shared/js/cosysim-stream.js"></script>
+  <script src="/shared/js/cosysim-neon-hud.js" defer></script>
+  <script src="/shared/js/cosysim-shop.js" defer></script>
+  <script src="/shared/js/cosysim-announcer.js" defer></script>
+
+  {# ── Particle system (if canvas present) ────────────────────────── #}
+  {% if not hide_particles %}
+  <script src="/shared/js/cosysim-particles.js" defer></script>
+  {% endif %}
+
+  {# ── Neon base initialization ───────────────────────────────────── #}
+  <script src="/shared/js/neon_base.js" defer></script>
+
+  {# ── Scene-specific scripts from child template ─────────────────── #}
+  {% block body_scripts %}{% endblock %}
+
+  {# ── register_shared_assets() auto-injects phone, portrait, STT,
+        ambient, reputation CSS/JS here before </body> ─────────────── #}
+
+</body>
+</html>

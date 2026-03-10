@@ -54,6 +54,14 @@ def _make_scene(port: int = 15567):
         )
         s.socketio = SocketIO(s.app, async_mode="threading")
 
+        # Add shared templates to Jinja loader (neon_base.html lives there)
+        import jinja2
+        _shared_tmpl = os.path.join(scene_dir, os.pardir, os.pardir, "shared", "templates")
+        s.app.jinja_loader = jinja2.ChoiceLoader([
+            s.app.jinja_loader,
+            jinja2.FileSystemLoader(os.path.normpath(_shared_tmpl)),
+        ])
+
         # Stub BaseScene helper methods called during _register_routes
         s.register_health_route = MagicMock()
         s.mount_overlay = MagicMock()

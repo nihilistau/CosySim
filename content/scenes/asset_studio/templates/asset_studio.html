@@ -1,17 +1,14 @@
-<!DOCTYPE html>
-<html lang="en" data-scene="asset_studio">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ASSET STUDIO — CosySim</title>
-  <link rel="stylesheet" href="/shared/css/design_tokens.css">
-  <link rel="stylesheet" href="/shared/css/cosysim-animations.css">
-  <link rel="stylesheet" href="/static/css/asset_studio.css">
-</head>
-<body data-scene="asset_studio">
+{% extends 'neon_base.html' %}
+{% set scene_key = 'asset_studio' %}
+{% set scene_display_name = 'ASSET STUDIO' %}
+{% set scene_accent = '#a855f7' %}
+{% set scene_accent_rgb = '168 85 247' %}
 
-<!-- Shared navbar -->
-{% include 'navbar_v2.html' ignore missing %}
+{% block head_css %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/asset_studio.css') }}">
+{% endblock %}
+
+{% block scene_content %}
 
 <div class="cs-studio-layout">
 
@@ -63,7 +60,7 @@
   </nav>
 
   <!-- ── Main content ──────────────────────────────────────────────────── -->
-  <main class="cs-studio-main" id="studio-main">
+  <div class="cs-studio-main" id="studio-main">
 
     <!-- LIBRARY tab -->
     <div class="cs-tab-panel active" id="tab-library">
@@ -888,9 +885,9 @@
       </div>
     </div>
 
-  </main>
+  </div>
 
-  <!-- ── Generation spinner overlay ──────────────────────────────────── -->
+  <!-- ── Generation spinner overlay──────────────────────────────────── -->
   <div class="cs-gen-spinner" id="gen-spinner" style="display:none">
     <div class="cs-spinner-inner">
       <div class="cs-spinner-ring"></div>
@@ -903,7 +900,8 @@
 <!-- Toast notifications -->
 <div class="cs-toast-container" id="toast-container"></div>
 
-<script src="/shared/js/socket.io.min.js"></script>
-<script src="/static/js/asset_studio.js"></script>
-</body>
-</html>
+{% endblock %}
+
+{% block body_scripts %}
+  <script src="{{ url_for('static', filename='js/asset_studio.js') }}"></script>
+{% endblock %}

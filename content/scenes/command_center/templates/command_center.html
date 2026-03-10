@@ -1,15 +1,14 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CosySim Command Center</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/command_center.css') }}">
-    <link rel="stylesheet" href="/shared/css/design_tokens.css">
-</head>
-<body data-scene="command_center">
+{% extends 'neon_base.html' %}
+{% set scene_key = 'command_center' %}
+{% set scene_display_name = 'COMMAND CENTER' %}
+{% set scene_accent = '#14b8a6' %}
+{% set scene_accent_rgb = '20 184 166' %}
 
-    {% include 'navbar_v2.html' %}
+{% block head_css %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/command_center.css') }}">
+{% endblock %}
+
+{% block scene_content %}
 
     <header class="cc-header">
         <h1>⚡ COSYSIM COMMAND CENTER</h1>
@@ -20,7 +19,7 @@
         </div>
     </header>
 
-    <main class="cc-grid">
+    <div class="cc-grid">
         <!-- LIVE SCENE MONITOR — New primary panel -->
         <section class="cc-panel cc-wide" id="panel-scenes">
             <div class="panel-header-row">
@@ -390,7 +389,7 @@
                 </div>
             </div>
         </section>
-    </main>
+    </div>
 
     <!-- Live Event Feed -->
     <section class="cc-feed" id="panel-feed">
@@ -406,9 +405,8 @@
         </div>
     </section>
 
-    <script src="/shared/js/socket.io.min.js"></script>
-    <script src="/shared/js/cosysim-core.js"></script>
-    <script src="/shared/js/cosysim-stream.js"></script>
-    <script src="{{ url_for('static', filename='js/command_center.js') }}"></script>
-</body>
-</html>
+{% endblock %}
+
+{% block body_scripts %}
+  <script src="{{ url_for('static', filename='js/command_center.js') }}"></script>
+{% endblock %}

@@ -1,21 +1,14 @@
-<!DOCTYPE html>
-<html lang="en" data-scene="heist">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>THE SCORE — CosySim</title>
+{% extends 'neon_base.html' %}
+{% set scene_key = 'heist' %}
+{% set scene_display_name = 'THE BRIEFING ROOM' %}
+{% set scene_accent = '#f59e0b' %}
+{% set scene_accent_rgb = '245 158 11' %}
 
-  <!-- CosySim design system -->
-  <link rel="stylesheet" href="/shared/css/design_tokens.css">
-  <link rel="stylesheet" href="/shared/css/cosysim-components.css">
-  <link rel="stylesheet" href="/shared/css/cosysim-animations.css">
-
-  <!-- Scene stylesheet -->
+{% block head_css %}
   <link rel="stylesheet" href="{{ url_for('static', filename='css/heist.css') }}">
-</head>
-<body class="cs-scene-body heist-body">
+{% endblock %}
 
-  {% include 'navbar_v2.html' %}
+{% block scene_content %}
 
   <!-- Blueprint grid overlay (decorative) -->
   <div class="blueprint-bg" aria-hidden="true"></div>
@@ -153,11 +146,10 @@
   <!-- Particles (embers — near heat-critical elements) -->
   <div id="heist-particles" class="heist-particles" aria-hidden="true"></div>
 
-  <!-- ── Scripts ─────────────────────────────────────────────── -->
-  <script src="/shared/js/socket.io.min.js"></script>
+{% endblock %}
+
+{% block body_scripts %}
   <script src="/shared/js/cosysim-particles3d.js"></script>
   <script src="/shared/js/cosysim-bench.js"></script>
   <script src="{{ url_for('static', filename='js/heist.js') }}"></script>
-
-</body>
-</html>
+{% endblock %}

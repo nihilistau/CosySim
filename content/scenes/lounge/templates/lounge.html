@@ -1,23 +1,14 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>THE VELVET PIT</title>
-  <link rel="stylesheet" href="/shared/css/design_tokens.css"/>
-  <link rel="stylesheet" href="{{ url_for('static', filename='lounge.css') }}"/>
-  <link rel="stylesheet" href="/shared/css/cosysim-animations.css">
-  <link rel="stylesheet" href="/shared/css/cosysim-scene-fx.css">
-  <script src="/shared/js/socket.io.min.js"></script>
-  <script src="/shared/js/cosysim-core.js"></script>
-  <script src="/shared/js/cosysim-stream.js"></script>
-  <script src="/shared/js/cosysim-particles3d.js"></script>
-  <link rel="stylesheet" href="/shared/css/cosysim-shop.css">
-</head>
-<body data-scene="lounge">
-<canvas id="cs-particles"></canvas>
+{% extends 'neon_base.html' %}
+{% set scene_key = 'lounge' %}
+{% set scene_display_name = 'THE VELVET PIT' %}
+{% set scene_accent = '#f43f5e' %}
+{% set scene_accent_rgb = '244 63 94' %}
 
-{% include 'navbar_v2.html' %}
+{% block head_css %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='lounge.css') }}">
+{% endblock %}
+
+{% block scene_content %}
 
 <!-- ═══════════════════════════════════════════════════════════════════════
      HEAT METER — top of viewport, amber → crimson
@@ -45,7 +36,7 @@
 <!-- ═══════════════════════════════════════════════════════════════════════
      MAIN CANVAS
 ═══════════════════════════════════════════════════════════════════════ -->
-<main class="lounge-layout">
+<div class="lounge-layout">
 
   <!-- ── LEFT: SEATING MAP ──────────────────────────────────────────── -->
   <aside class="lounge-panel panel-left">
@@ -173,7 +164,7 @@
 
   </aside>
 
-</main>
+</div>
 
 <!-- ═══════════════════════════════════════════════════════════════════════
      BOTTOM: DRINK MENU
@@ -210,11 +201,15 @@
   </div>
 </div>
 
+{% endblock %}
+
+{% block scene_overlays %}
+{% include 'shop_modal.html' %}
+{% endblock %}
+
+{% block body_scripts %}
+<script src="/shared/js/cosysim-particles3d.js"></script>
 <script src="{{ url_for('static', filename='lounge.js') }}"></script>
 <script src="/shared/js/cosysim-voice.js"></script>
-<script src="/shared/js/cosysim-shop.js"></script>
 <script>window.SCENE_PARTICLE_CONFIG = { scene: 'lounge' };</script>
-<script src="/shared/js/cosysim-particles.js"></script>
-{% include 'shop_modal.html' %}
-</body>
-</html>
+{% endblock %}

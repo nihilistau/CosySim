@@ -49,6 +49,27 @@ def register_shared_assets(app):
         return
     from flask import Blueprint, jsonify, request
 
+    # Ensure the app's Jinja loader includes shared templates (neon_base.html etc.)
+    _shared_tmpl_dir = str(_Path(__file__).parent / "templates")
+    try:
+        import jinja2
+        existing = app.jinja_loader
+        if existing is not None:
+            # Only add if shared templates not already in the loader
+            if not isinstance(existing, jinja2.ChoiceLoader) or not any(
+                getattr(ldr, "searchpath", [None])[0] == _shared_tmpl_dir
+                for ldr in existing.loaders
+                if hasattr(ldr, "searchpath") and ldr.searchpath
+            ):
+                app.jinja_loader = jinja2.ChoiceLoader([
+                    existing,
+                    jinja2.FileSystemLoader(_shared_tmpl_dir),
+                ])
+        else:
+            app.jinja_loader = jinja2.FileSystemLoader(_shared_tmpl_dir)
+    except Exception:
+        pass
+
     # Enable CORS so cross-port navbar health checks work
     try:
         from flask_cors import CORS
