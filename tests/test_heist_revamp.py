@@ -13,6 +13,7 @@ Covers:
 from __future__ import annotations
 
 import importlib
+import re
 import importlib.util
 import json
 from pathlib import Path
@@ -26,6 +27,20 @@ HEIST_ROOT    = Path(__file__).parent.parent / "content" / "scenes" / "heist"
 STATIC_CSS    = HEIST_ROOT / "static" / "css" / "heist.css"
 STATIC_JS     = HEIST_ROOT / "static" / "js"  / "heist.js"
 TEMPLATE_HTML = HEIST_ROOT / "templates" / "heist.html"
+
+NEON_BASE = Path(__file__).parent.parent / "content" / "shared" / "templates" / "neon_base.html"
+
+
+def _effective_content(raw: str) -> str:
+    """If template extends neon_base.html, include base content for assertion checks."""
+    if "extends 'neon_base.html'" in raw or 'extends "neon_base.html"' in raw:
+        base = NEON_BASE.read_text(encoding="utf-8") if NEON_BASE.exists() else ""
+        combined = raw + "\n" + base
+        m = re.search(r"{%\s*set\s+scene_key\s*=\s*['\"](\w+)['\"]", raw)
+        if m:
+            combined = combined.replace("{{ scene_key }}", m.group(1))
+        return combined
+    return raw
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────
@@ -129,55 +144,55 @@ class TestStaticAssets:
 
     def test_heist_html_data_scene_attribute(self):
         """heist.html body/html must declare data-scene='heist'."""
-        html = TEMPLATE_HTML.read_text(encoding="utf-8")
+        html = _effective_content(TEMPLATE_HTML.read_text(encoding="utf-8"))
         assert 'data-scene="heist"' in html, \
             "heist.html missing data-scene='heist' attribute"
 
     def test_heist_html_design_system_css(self):
         """heist.html must link all three shared design-system CSS files."""
-        html = TEMPLATE_HTML.read_text(encoding="utf-8")
+        html = _effective_content(TEMPLATE_HTML.read_text(encoding="utf-8"))
         assert "design_tokens.css"      in html, "Missing design_tokens.css link"
         assert "cosysim-components.css" in html, "Missing cosysim-components.css link"
         assert "cosysim-animations.css" in html, "Missing cosysim-animations.css link"
 
     def test_heist_html_socketio(self):
         """heist.html must include a Socket.IO script tag."""
-        html = TEMPLATE_HTML.read_text(encoding="utf-8")
+        html = _effective_content(TEMPLATE_HTML.read_text(encoding="utf-8"))
         assert "socket.io" in html.lower(), "heist.html missing Socket.IO script"
 
     def test_heist_html_navbar(self):
         """heist.html must include the navbar_v2.html template."""
-        html = TEMPLATE_HTML.read_text(encoding="utf-8")
+        html = _effective_content(TEMPLATE_HTML.read_text(encoding="utf-8"))
         assert "navbar_v2.html" in html, "heist.html should include navbar_v2.html"
 
     def test_heist_html_3col_layout(self):
         """heist.html must contain the 3-column panel structure."""
-        html = TEMPLATE_HTML.read_text(encoding="utf-8")
+        html = _effective_content(TEMPLATE_HTML.read_text(encoding="utf-8"))
         assert "job-panel"   in html, "heist.html missing job-panel (left column)"
         assert "board-panel" in html, "heist.html missing board-panel (center column)"
         assert "crew-panel"  in html, "heist.html missing crew-panel (right column)"
 
     def test_heist_html_phase_stepper(self):
         """heist.html must contain all four phase steps."""
-        html = TEMPLATE_HTML.read_text(encoding="utf-8")
+        html = _effective_content(TEMPLATE_HTML.read_text(encoding="utf-8"))
         for phase_data in ("planning", "approach", "execution", "escape"):
             assert phase_data in html, f"heist.html missing phase step '{phase_data}'"
 
     def test_heist_html_tension_meter(self):
         """heist.html must contain the SVG tension-meter element."""
-        html = TEMPLATE_HTML.read_text(encoding="utf-8")
+        html = _effective_content(TEMPLATE_HTML.read_text(encoding="utf-8"))
         assert "tension-meter" in html, "heist.html missing tension-meter SVG"
         assert "tension-line"  in html, "heist.html missing tension-line polyline"
 
     def test_heist_html_investigation_board(self):
         """heist.html must declare the investigation-board element."""
-        html = TEMPLATE_HTML.read_text(encoding="utf-8")
+        html = _effective_content(TEMPLATE_HTML.read_text(encoding="utf-8"))
         assert "investigation-board" in html, \
             "heist.html missing investigation-board element"
 
     def test_heist_html_particles_container(self):
         """heist.html must include the heist-particles container."""
-        html = TEMPLATE_HTML.read_text(encoding="utf-8")
+        html = _effective_content(TEMPLATE_HTML.read_text(encoding="utf-8"))
         assert "heist-particles" in html, "heist.html missing heist-particles div"
 
     def test_heist_css_blueprint_bg(self):

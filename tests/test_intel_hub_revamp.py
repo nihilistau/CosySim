@@ -15,10 +15,26 @@ Covers:
 """
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+
+
+NEON_BASE = Path(__file__).parent.parent / "content" / "shared" / "templates" / "neon_base.html"
+
+
+def _effective_content(raw: str) -> str:
+    """If template extends neon_base.html, include base content for assertion checks."""
+    if "extends 'neon_base.html'" in raw or 'extends "neon_base.html"' in raw:
+        base = NEON_BASE.read_text(encoding="utf-8") if NEON_BASE.exists() else ""
+        combined = raw + "\n" + base
+        m = re.search(r"{%\s*set\s+scene_key\s*=\s*['\"](\w+)['\"]", raw)
+        if m:
+            combined = combined.replace("{{ scene_key }}", m.group(1))
+        return combined
+    return raw
 
 # ── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -199,27 +215,27 @@ class TestIntelHubHtmlExists:
         assert self._TPL.exists(), "intel_hub.html template missing"
 
     def test_contains_briefing_room_title(self):
-        content = self._TPL.read_text(encoding="utf-8")
+        content = _effective_content(self._TPL.read_text(encoding="utf-8"))
         assert "THE BRIEFING ROOM" in content
 
     def test_contains_data_scene_attribute(self):
-        content = self._TPL.read_text(encoding="utf-8")
+        content = _effective_content(self._TPL.read_text(encoding="utf-8"))
         assert 'data-scene="intel_hub"' in content
 
     def test_contains_aria_panel(self):
-        content = self._TPL.read_text(encoding="utf-8")
+        content = _effective_content(self._TPL.read_text(encoding="utf-8"))
         assert "aria-center-panel" in content
 
     def test_contains_scene_health_grid(self):
-        content = self._TPL.read_text(encoding="utf-8")
+        content = _effective_content(self._TPL.read_text(encoding="utf-8"))
         assert "scene-health-grid" in content
 
     def test_includes_navbar(self):
-        content = self._TPL.read_text(encoding="utf-8")
+        content = _effective_content(self._TPL.read_text(encoding="utf-8"))
         assert "navbar_v2.html" in content
 
     def test_contains_data_stream_canvas(self):
-        content = self._TPL.read_text(encoding="utf-8")
+        content = _effective_content(self._TPL.read_text(encoding="utf-8"))
         assert "data-stream-canvas" in content
 
 

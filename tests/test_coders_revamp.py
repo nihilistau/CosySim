@@ -7,6 +7,7 @@ All tests run without a live Flask/Socket.IO server.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -14,6 +15,22 @@ import pytest
 
 ROOT = Path(__file__).parent.parent
 SCENE_DIR = ROOT / "content" / "scenes" / "coders"
+
+NEON_BASE = Path(__file__).parent.parent / "content" / "shared" / "templates" / "neon_base.html"
+
+
+def _effective_content(raw: str) -> str:
+    """If template extends neon_base.html, include base content for assertion checks."""
+    if "extends 'neon_base.html'" in raw or 'extends "neon_base.html"' in raw:
+        base = NEON_BASE.read_text(encoding="utf-8") if NEON_BASE.exists() else ""
+        combined = raw + "\n" + base
+        m = re.search(r"{%\s*set\s+scene_key\s*=\s*['\"](\w+)['\"]", raw)
+        if m:
+            combined = combined.replace("{{ scene_key }}", m.group(1))
+        return combined
+    return raw
+
+
 
 
 # ── Helpers ───────────────────────────────────────────────────────────
@@ -281,7 +298,7 @@ class TestCodersHtmlExists:
     @pytest.fixture(autouse=True)
     def _load(self):
         self.path = SCENE_DIR / "templates" / "coders.html"
-        self.content = self.path.read_text(encoding="utf-8")
+        self.content = _effective_content(self.path.read_text(encoding="utf-8"))
 
     def test_html_file_exists(self):
         assert self.path.exists(), f"Template not found: {self.path}"
@@ -322,7 +339,7 @@ class TestCodersCssExists:
     @pytest.fixture(autouse=True)
     def _load(self):
         self.path = SCENE_DIR / "static" / "coders.css"
-        self.content = self.path.read_text(encoding="utf-8")
+        self.content = _effective_content(self.path.read_text(encoding="utf-8"))
 
     def test_css_file_exists(self):
         assert self.path.exists(), f"CSS not found: {self.path}"
@@ -363,7 +380,7 @@ class TestCodersJsExists:
     @pytest.fixture(autouse=True)
     def _load(self):
         self.path = SCENE_DIR / "static" / "coders.js"
-        self.content = self.path.read_text(encoding="utf-8")
+        self.content = _effective_content(self.path.read_text(encoding="utf-8"))
 
     def test_js_file_exists(self):
         assert self.path.exists(), f"JS not found: {self.path}"

@@ -6,18 +6,30 @@ SCENES_DIR = Path("content/scenes")
 SHARED_CSS = Path("content/shared/static/css")
 SHARED_JS = Path("content/shared/static/js")
 SHARED_TEMPLATES = Path("content/shared/templates")
+NEON_BASE = Path("content/shared/templates/neon_base.html")
 
 GAME_SCENES = ["bedroom", "phone", "lounge", "tavern", "casino", "gallery", "arena", "realm", "neoncity"]
+
+
+def _effective_content(raw: str) -> str:
+    """If template extends neon_base.html, include base content for assertion checks."""
+    if "extends 'neon_base.html'" in raw or 'extends "neon_base.html"' in raw:
+        base = NEON_BASE.read_text(encoding="utf-8") if NEON_BASE.exists() else ""
+        combined = raw + "\n" + base
+        m = re.search(r"{%\s*set\s+scene_key\s*=\s*['\"](\w+)['\"]", raw)
+        if m:
+            combined = combined.replace("{{ scene_key }}", m.group(1))
+        return combined
+    return raw
 
 
 def _get_template(scene: str) -> str:
     """Find and return template content for a scene."""
     results = list((SCENES_DIR / scene).rglob("*.html"))
-    # Pick the main one (not partials) - typically the one with <html> or <body>
     for f in results:
         content = f.read_text(encoding="utf-8")
-        if "<body" in content:
-            return content
+        if "<body" in content or "{% extends" in content:
+            return _effective_content(content)
     return ""
 
 

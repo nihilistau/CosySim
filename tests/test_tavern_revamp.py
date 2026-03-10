@@ -6,6 +6,7 @@ existence, and Socket.IO event handler presence.
 from __future__ import annotations
 
 import importlib
+import re
 import os
 import unittest.mock as mock
 
@@ -19,6 +20,20 @@ import pytest
 TAVERN_DIR = os.path.join(os.path.dirname(__file__), "..", "content", "scenes", "tavern")
 STATIC_DIR = os.path.join(TAVERN_DIR, "static")
 TEMPLATE_DIR = os.path.join(TAVERN_DIR, "templates")
+
+NEON_BASE = os.path.join(os.path.dirname(__file__), "..", "content", "shared", "templates", "neon_base.html")
+
+
+def _effective_content(raw: str) -> str:
+    """If template extends neon_base.html, include base content for assertion checks."""
+    if "extends 'neon_base.html'" in raw or 'extends "neon_base.html"' in raw:
+        base = open(NEON_BASE, encoding="utf-8").read() if os.path.isfile(NEON_BASE) else ""
+        combined = raw + "\n" + base
+        m = re.search(r"{%\s*set\s+scene_key\s*=\s*['\"](\w+)['\"]", raw)
+        if m:
+            combined = combined.replace("{{ scene_key }}", m.group(1))
+        return combined
+    return raw
 
 
 # ---------------------------------------------------------------------------
@@ -308,13 +323,13 @@ class TestTavernStaticAssets:
     def test_tavern_html_contains_scene_attr(self):
         """HTML body has data-scene='tavern'."""
         path = os.path.join(TEMPLATE_DIR, "tavern.html")
-        content = open(path, encoding="utf-8").read()
+        content = _effective_content(open(path, encoding="utf-8").read())
         assert 'data-scene="tavern"' in content
 
     def test_tavern_html_contains_rusty_anchor(self):
         """HTML references THE RUSTY ANCHOR branding."""
         path = os.path.join(TEMPLATE_DIR, "tavern.html")
-        content = open(path, encoding="utf-8").read()
+        content = _effective_content(open(path, encoding="utf-8").read())
         assert "RUSTY ANCHOR" in content
 
     def test_tavern_css_contains_accent_color(self):

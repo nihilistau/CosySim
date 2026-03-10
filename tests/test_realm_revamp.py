@@ -7,6 +7,7 @@ Covers: scene metadata, skill registration, skill functions,
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -17,6 +18,20 @@ import pytest
 SCENE_DIR     = Path(__file__).parents[1] / "content" / "scenes" / "realm"
 TEMPLATES_DIR = SCENE_DIR / "templates"
 STATIC_DIR    = SCENE_DIR / "static"
+
+NEON_BASE = Path(__file__).parent.parent / "content" / "shared" / "templates" / "neon_base.html"
+
+
+def _effective_content(raw: str) -> str:
+    """If template extends neon_base.html, include base content for assertion checks."""
+    if "extends 'neon_base.html'" in raw or 'extends "neon_base.html"' in raw:
+        base = NEON_BASE.read_text(encoding="utf-8") if NEON_BASE.exists() else ""
+        combined = raw + "\n" + base
+        m = re.search(r"{%\s*set\s+scene_key\s*=\s*['\"](\w+)['\"]", raw)
+        if m:
+            combined = combined.replace("{{ scene_key }}", m.group(1))
+        return combined
+    return raw
 
 
 # ═════════════════════════════════════════════════════════════════════
@@ -175,12 +190,12 @@ class TestRealmAssetFiles:
 
     def test_realm_html_has_data_scene(self):
         """realm.html must declare data-scene='realm' on the body."""
-        html = (TEMPLATES_DIR / "realm.html").read_text(encoding="utf-8")
+        html = _effective_content((TEMPLATES_DIR / "realm.html").read_text(encoding="utf-8"))
         assert 'data-scene="realm"' in html
 
     def test_realm_html_has_socketio(self):
         """realm.html must load Socket.IO."""
-        html = (TEMPLATES_DIR / "realm.html").read_text(encoding="utf-8")
+        html = _effective_content((TEMPLATES_DIR / "realm.html").read_text(encoding="utf-8"))
         assert "socket.io" in html.lower()
 
     def test_realm_css_has_sanity_low(self):
