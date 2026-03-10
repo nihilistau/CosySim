@@ -37,6 +37,7 @@
   padding: 2rem;
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
+  pointer-events: auto;
 }
 
 .penthouse-gate[hidden] {
@@ -85,6 +86,19 @@
   gap: 0.75rem;
   justify-content: center;
   flex-wrap: wrap;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   OVERLAY PASS-THROUGH
+   The neon_base wrapper (.neon-layout/.neon-main) sits at z-index 1
+   above the canvas. We disable pointer-events on the wrapper so
+   mouse events fall through to the 3D canvas, then re-enable
+   pointer-events on each floating panel individually.
+   ══════════════════════════════════════════════════════════════ */
+
+.neon-layout,
+.neon-main {
+  pointer-events: none !important;
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -781,7 +795,8 @@
 }
 
 .ph-chat-dock.minimized .ph-chat-messages,
-.ph-chat-dock.minimized .ph-typing {
+.ph-chat-dock.minimized .ph-typing,
+.ph-chat-dock.minimized .ph-input-row {
   display: none;
 }
 
