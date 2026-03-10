@@ -95,9 +95,9 @@ SCENE_DEFS: Dict[str, Dict[str, Any]] = {
         "label": "SIGNAL",
         "auto_start": True,
     },
-    "bedroom": {
+    "penthouse": {
         "type": "flask",
-        "cls": "content.scenes.bedroom.bedroom_scene.BedroomScene",
+        "cls": "content.scenes.penthouse.penthouse_scene.PenthouseScene",
         "label": "THE PENTHOUSE",
         "auto_start": True,
     },

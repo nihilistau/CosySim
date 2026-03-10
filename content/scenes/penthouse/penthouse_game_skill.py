@@ -1,13 +1,13 @@
 """
-Bedroom Game Skills
+Penthouse Game Skills
 ===================
 
-MCP-backed game skill functions exposed to bedroom agents and the admin MCP
+MCP-backed game skill functions exposed to penthouse agents and the admin MCP
 tool surface.  Imported by ``engine/mcp/cosysim_server.py`` and registered
 as FastMCP tools (``launch_game``, ``get_active_game``, ``game_action``,
 ``game_history``).
 
-Each function is also callable directly from bedroom Flask routes and test
+Each function is also callable directly from penthouse Flask routes and test
 helpers without requiring the MCP server to be running.
 
 Game types
@@ -21,7 +21,7 @@ Game types
 
 Usage example
 -------------
->>> from content.scenes.bedroom.bedroom_game_skill import launch_game, game_action
+>>> from content.scenes.penthouse.penthouse_game_skill import launch_game, game_action
 >>> result = launch_game("char:001", "truth_or_dare")
 >>> result = game_action("char:001", "roll")
 >>> result = game_action("char:001", "answer", '{"completed": true}')
@@ -52,7 +52,7 @@ def launch_game(
     game_type:    str,
     case_index:   int = -1,
     *,
-    scene_id:     str = "bedroom",
+    scene_id:     str = "penthouse",
 ) -> str:
     """
     Start a Truth-or-Dare or Mystery game session, fully MCP-tracked.
@@ -62,7 +62,7 @@ def launch_game(
     character_id : str  Character / agent starting the game.
     game_type    : str  ``"truth_or_dare"`` or ``"mystery"``.
     case_index   : int  Mystery only — 0-based case index.  -1 = random.
-    scene_id     : str  Parent scene (default ``"bedroom"``).
+    scene_id     : str  Parent scene (default ``"penthouse"``).
 
     Returns
     -------

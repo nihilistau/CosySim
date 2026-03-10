@@ -53,11 +53,11 @@ def schedule_consequence(
       scene_event     — {"event": "tension_release"}
 
     Examples:
-      schedule_consequence("bedroom", "aria", "stat_adjust",
+      schedule_consequence("penthouse", "aria", "stat_adjust",
                           '{"stat": "arousal", "delta": 25}', 2,
                           "The kiss lingers — arousal builds.")
 
-      schedule_consequence("bedroom", "aria", "state_set",
+      schedule_consequence("penthouse", "aria", "state_set",
                           '{"field": "mood", "value": "vulnerable"}', 3,
                           "The confession settles in. She feels exposed.")
 

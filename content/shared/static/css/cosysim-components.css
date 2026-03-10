@@ -55,6 +55,45 @@
     border-color: rgba(255, 255, 255, 0.12);
     box-shadow: var(--cs-shadow-lg);
     transform: translateY(-1px);
+    animation: border-shimmer 2s ease-in-out infinite;
+}
+
+/* Corner accent marks on hover */
+.cs-glass-card {
+    position: relative;
+}
+
+.cs-glass-card::before,
+.cs-glass-card::after {
+    content: '';
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    pointer-events: none;
+}
+
+.cs-glass-card::before {
+    top: -1px;
+    left: -1px;
+    border-top: 2px solid rgba(var(--cs-scene-accent-rgb, 59 130 246), 0.5);
+    border-left: 2px solid rgba(var(--cs-scene-accent-rgb, 59 130 246), 0.5);
+    border-radius: var(--cs-radius-lg) 0 0 0;
+}
+
+.cs-glass-card::after {
+    bottom: -1px;
+    right: -1px;
+    border-bottom: 2px solid rgba(var(--cs-scene-accent-rgb, 59 130 246), 0.5);
+    border-right: 2px solid rgba(var(--cs-scene-accent-rgb, 59 130 246), 0.5);
+    border-radius: 0 0 var(--cs-radius-lg) 0;
+}
+
+.cs-glass-card:hover::before,
+.cs-glass-card:hover::after {
+    opacity: 1;
+    animation: corner-flash 2s ease-in-out infinite;
 }
 
 .cs-glass-card--active {
@@ -91,12 +130,40 @@
     background: var(--cs-glass-bg-light);
     border-color: rgba(255, 255, 255, 0.15);
     transform: translateY(-1px);
-    box-shadow: var(--cs-shadow-md);
+    box-shadow: var(--cs-shadow-md),
+                0 0 16px rgba(var(--cs-scene-accent-rgb, 59 130 246), 0.2);
 }
 
 .cs-glass-btn:active {
-    transform: translateY(0);
-    box-shadow: none;
+    transform: scale(0.97) translateY(0);
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.cs-glass-btn:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(var(--cs-scene-accent-rgb, 59 130 246), 0.5),
+                0 0 16px rgba(var(--cs-scene-accent-rgb, 59 130 246), 0.25);
+}
+
+/* Ripple effect on click */
+.cs-glass-btn {
+    position: relative;
+    overflow: hidden;
+}
+
+.cs-glass-btn::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.2) 0%, transparent 70%);
+    transform: scale(0);
+    opacity: 0;
+    border-radius: inherit;
+    pointer-events: none;
+}
+
+.cs-glass-btn:active::after {
+    animation: ripple-effect 0.5s ease-out;
 }
 
 .cs-glass-btn--accent {
@@ -194,8 +261,38 @@
 .cs-stat-bar__fill {
     height: 100%;
     border-radius: var(--cs-radius-full);
-    transition: width 600ms var(--cs-ease);
+    transition: width 0.5s ease;
     background: var(--cs-scene-accent);
+    position: relative;
+    overflow: hidden;
+}
+
+/* Animated shimmer on stat bar fill */
+.cs-stat-bar__fill::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+        90deg,
+        transparent 0%,
+        rgba(255, 255, 255, 0.15) 40%,
+        rgba(255, 255, 255, 0.25) 50%,
+        rgba(255, 255, 255, 0.15) 60%,
+        transparent 100%
+    );
+    background-size: 200% 100%;
+    animation: stat-shimmer 2.5s ease-in-out infinite;
+}
+
+/* Pulse glow when value is high (>80%) — apply via JS: .cs-stat-bar--high */
+.cs-stat-bar--high .cs-stat-bar__fill {
+    animation: glow-pulse 2s ease-in-out infinite;
+}
+
+/* Danger pulse when value is low (<20%) — apply via JS: .cs-stat-bar--critical */
+.cs-stat-bar--critical .cs-stat-bar__fill {
+    animation: cs-hp-danger 0.8s ease-in-out infinite;
+    box-shadow: 0 0 8px rgba(239, 68, 68, 0.5);
 }
 
 /* Emotion variants */
@@ -957,3 +1054,50 @@
 .cs-world-ticker__time { color: var(--cs-scene-accent); font-weight: var(--cs-weight-bold); }
 .cs-world-ticker__weather { color: var(--cs-neon-cyan); }
 .cs-world-ticker__event { color: var(--cs-yellow); animation: cs-pulse-glow-text 2s ease-in-out infinite; }
+
+/* ══════════════════════════════════════════════════════════════
+   AAA++ INPUT / TEXTAREA POLISH
+   ══════════════════════════════════════════════════════════════ */
+
+.cs-glass-panel input[type="text"],
+.cs-glass-panel input[type="search"],
+.cs-glass-panel textarea,
+.cs-glass-card input[type="text"],
+.cs-glass-card textarea {
+    background: var(--cs-bg-dark, rgba(0, 0, 0, 0.3));
+    border: 1px solid var(--cs-glass-border);
+    border-radius: var(--cs-radius-md);
+    color: var(--cs-text-primary);
+    padding: var(--cs-space-sm) var(--cs-space-md);
+    font-family: var(--cs-font-sans);
+    font-size: var(--cs-text-sm);
+    outline: none;
+    transition: border-color 0.25s ease,
+                box-shadow 0.25s ease;
+}
+
+.cs-glass-panel input[type="text"]:focus,
+.cs-glass-panel input[type="search"]:focus,
+.cs-glass-panel textarea:focus,
+.cs-glass-card input[type="text"]:focus,
+.cs-glass-card textarea:focus {
+    border-color: var(--cs-scene-accent, #3b82f6);
+    box-shadow: 0 0 0 2px rgba(var(--cs-scene-accent-rgb, 59 130 246), 0.2),
+                0 0 16px rgba(var(--cs-scene-accent-rgb, 59 130 246), 0.15);
+}
+
+.cs-glass-panel input::placeholder,
+.cs-glass-card input::placeholder,
+.cs-glass-panel textarea::placeholder,
+.cs-glass-card textarea::placeholder {
+    color: var(--cs-text-dim, #4b5563);
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.cs-glass-panel input:focus::placeholder,
+.cs-glass-card input:focus::placeholder,
+.cs-glass-panel textarea:focus::placeholder,
+.cs-glass-card textarea:focus::placeholder {
+    opacity: 0.5;
+    transform: translateX(4px);
+}

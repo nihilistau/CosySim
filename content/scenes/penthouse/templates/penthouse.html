@@ -1,11 +1,11 @@
 {% extends 'neon_base.html' %}
-{% set scene_key = 'bedroom' %}
+{% set scene_key = 'penthouse' %}
 {% set scene_display_name = 'THE PENTHOUSE' %}
 {% set scene_accent = '#f43f5e' %}
 {% set scene_accent_rgb = '244 63 94' %}
 
 {% block head_css %}
-  <link rel="stylesheet" href="{{ url_for('static', filename='bedroom.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='penthouse.css') }}">
 {% endblock %}
 
 {% block head_scripts %}
@@ -14,11 +14,14 @@
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 {% endblock %}
 
+{% block scene_background %}
+  <div id="scene-container">
+    <canvas id="penthouse-canvas"></canvas>
+  </div>
+{% endblock %}
+
 {% block scene_content %}
 
-  <div id="scene-container">
-    <canvas id="bedroom-canvas"></canvas>
-  </div>
   <div id="world-event-ticker" class="world-event-ticker" aria-live="polite"></div>
 
   <!-- Adult Content Gate (session-cached) -->
@@ -44,23 +47,23 @@
   </div>
 
   <!-- Scene: THE PENTHOUSE -->
-  <div class="bedroom-layout" id="bedroom-main" aria-label="The Penthouse scene">
+  <div class="penthouse-layout" id="penthouse-main" aria-label="The Penthouse scene">
 
     <!-- ── LEFT: Character portrait + emotion bars ───────────────── -->
-    <aside class="bedroom-character-panel cs-glass-panel" aria-label="Character panel">
+    <aside class="penthouse-character-panel cs-glass-panel" aria-label="Character panel">
 
       <!-- Portrait -->
-      <div class="bedroom-portrait-wrap" id="char-portrait-frame">
+      <div class="penthouse-portrait-wrap" id="char-portrait-frame">
         <div class="cs-portrait-frame cs-portrait-frame--2xl cs-portrait-frame--no-dot" id="portrait-inner">
-          <img id="char-portrait-img" src="" alt="Character portrait" class="bedroom-portrait-img">
-          <div class="bedroom-portrait-overlay"></div>
+          <img id="char-portrait-img" src="" alt="Character portrait" class="penthouse-portrait-img">
+          <div class="penthouse-portrait-overlay"></div>
         </div>
-        <div class="bedroom-char-name" id="char-name">—</div>
-        <div class="bedroom-speaking-ring" id="speaking-ring" aria-hidden="true"></div>
+        <div class="penthouse-char-name" id="char-name">—</div>
+        <div class="penthouse-speaking-ring" id="speaking-ring" aria-hidden="true"></div>
       </div>
 
       <!-- 10 Emotion Bars -->
-      <div class="bedroom-emotion-bars" role="group" aria-label="Emotion levels">
+      <div class="penthouse-emotion-bars" role="group" aria-label="Emotion levels">
 
         <div class="cs-stat-bar cs-stat-bar--arousal">
           <div class="cs-stat-bar__label">
@@ -165,22 +168,22 @@
       </div><!-- /emotion-bars -->
 
       <!-- Mood descriptor -->
-      <div class="bedroom-mood-text" id="mood-descriptor" aria-live="polite">Waiting...</div>
+      <div class="penthouse-mood-text" id="mood-descriptor" aria-live="polite">Waiting...</div>
 
     </aside><!-- /character-panel -->
 
     <!-- ── CENTER: City window + chat ────────────────────────────── -->
-    <section class="bedroom-main-panel" aria-label="Main scene panel">
+    <section class="penthouse-main-panel" aria-label="Main scene panel">
 
       <!-- Neon city window background -->
-      <div class="bedroom-window" id="bedroom-window" aria-hidden="true">
-        <div class="bedroom-window-particles" id="bedroom-particles"></div>
-        <div class="bedroom-city-silhouette"></div>
-        <div class="bedroom-window-reflection"></div>
+      <div class="penthouse-window" id="penthouse-window" aria-hidden="true">
+        <div class="penthouse-window-particles" id="penthouse-particles"></div>
+        <div class="penthouse-city-silhouette"></div>
+        <div class="penthouse-window-reflection"></div>
       </div>
 
       <!-- Scene header -->
-      <div class="cs-scene-header bedroom-header">
+      <div class="cs-scene-header penthouse-header">
         <h1 class="cs-scene-header__title">THE PENTHOUSE</h1>
         <div class="cs-scene-header__accent-line"></div>
         <p class="cs-scene-header__subtitle" id="director-beat-text">
@@ -189,8 +192,8 @@
       </div>
 
       <!-- Chat log -->
-      <div class="bedroom-chat"
-           id="bedroom-chat"
+      <div class="penthouse-chat"
+           id="penthouse-chat"
            role="log"
            aria-live="polite"
            aria-label="Conversation">
@@ -198,31 +201,31 @@
       </div>
 
       <!-- Typing indicator -->
-      <div class="bedroom-typing" id="bedroom-typing" aria-hidden="true">
-        <span class="bedroom-typing__dot"></span>
-        <span class="bedroom-typing__dot"></span>
-        <span class="bedroom-typing__dot"></span>
-        <span class="bedroom-typing__label" id="typing-char-name">…</span>
+      <div class="penthouse-typing" id="penthouse-typing" aria-hidden="true">
+        <span class="penthouse-typing__dot"></span>
+        <span class="penthouse-typing__dot"></span>
+        <span class="penthouse-typing__dot"></span>
+        <span class="penthouse-typing__label" id="typing-char-name">…</span>
       </div>
 
       <!-- Input row -->
-      <div class="bedroom-input-row">
+      <div class="penthouse-input-row">
         <textarea
-          class="bedroom-input"
-          id="bedroom-input"
+          class="penthouse-input"
+          id="penthouse-input"
           rows="2"
           placeholder="Speak your desires..."
           aria-label="Message input"
           maxlength="2000"
         ></textarea>
-        <div class="bedroom-input-actions">
-          <button class="cs-glass-btn cs-glass-btn--accent" id="bedroom-send" aria-label="Send message">
+        <div class="penthouse-input-actions">
+          <button class="cs-glass-btn cs-glass-btn--accent" id="penthouse-send" aria-label="Send message">
             Send
           </button>
-          <button class="cs-icon-btn" id="bedroom-voice-btn" title="Voice input" aria-label="Voice input">
+          <button class="cs-icon-btn" id="penthouse-voice-btn" title="Voice input" aria-label="Voice input">
             🎤
           </button>
-          <button class="cs-icon-btn" id="bedroom-clear-btn" title="Clear chat" aria-label="Clear chat">
+          <button class="cs-icon-btn" id="penthouse-clear-btn" title="Clear chat" aria-label="Clear chat">
             🗑
           </button>
         </div>
@@ -231,20 +234,20 @@
     </section><!-- /main-panel -->
 
     <!-- ── RIGHT: Scenarios + Director + Economy + Memories ──────── -->
-    <aside class="bedroom-right-panel" aria-label="Control panels">
+    <aside class="penthouse-right-panel" aria-label="Control panels">
 
       <!-- Scenario selector -->
-      <div class="cs-glass-panel bedroom-panel-section">
-        <h3 class="bedroom-panel-title">
+      <div class="cs-glass-panel penthouse-panel-section">
+        <h3 class="penthouse-panel-title">
           <span>SCENARIOS</span>
           <span class="cs-chip" id="scenario-count-chip">—</span>
         </h3>
-        <div class="bedroom-scenarios" id="bedroom-scenarios" role="list">
+        <div class="penthouse-scenarios" id="penthouse-scenarios" role="list">
           <!-- Scenario cards populated by JS -->
-          <div class="bedroom-scenarios__empty">Click "Load" to fetch scenarios</div>
+          <div class="penthouse-scenarios__empty">Click "Load" to fetch scenarios</div>
         </div>
-        <div class="bedroom-scenarios-controls">
-          <select class="bedroom-intensity-select" id="scenario-intensity" aria-label="Intensity level">
+        <div class="penthouse-scenarios-controls">
+          <select class="penthouse-intensity-select" id="scenario-intensity" aria-label="Intensity level">
             <option value="1">🌸 Mild</option>
             <option value="2" selected>🌹 Moderate</option>
             <option value="3">🔥 Intense</option>
@@ -256,17 +259,17 @@
       </div>
 
       <!-- Scene Director -->
-      <div class="cs-glass-panel bedroom-panel-section bedroom-director-panel">
-        <h3 class="bedroom-panel-title">DIRECTOR</h3>
+      <div class="cs-glass-panel penthouse-panel-section penthouse-director-panel">
+        <h3 class="penthouse-panel-title">DIRECTOR</h3>
         <div id="director-panel">
-          <div class="bedroom-director-beat-type">
+          <div class="penthouse-director-beat-type">
             <div class="cs-chip" id="beat-type-chip">—</div>
-            <span class="bedroom-director-beat-label">Current Beat</span>
+            <span class="penthouse-director-beat-label">Current Beat</span>
           </div>
-          <p class="bedroom-director-instruction" id="beat-instruction">
+          <p class="penthouse-director-instruction" id="beat-instruction">
             The story is unfolding.
           </p>
-          <div class="bedroom-director-actions">
+          <div class="penthouse-director-actions">
             <button class="cs-glass-btn" data-nudge="escalation" title="Push the scene forward">
               ↑ Escalate
             </button>
@@ -281,10 +284,10 @@
       </div>
 
       <!-- Economy / Credits -->
-      <div class="cs-glass-panel bedroom-panel-section">
-        <h3 class="bedroom-panel-title">CREDITS</h3>
-        <div class="bedroom-economy-row">
-          <div class="cs-economy-ticker" id="bedroom-credits" aria-live="polite">₵ —</div>
+      <div class="cs-glass-panel penthouse-panel-section">
+        <h3 class="penthouse-panel-title">CREDITS</h3>
+        <div class="penthouse-economy-row">
+          <div class="cs-economy-ticker" id="penthouse-credits" aria-live="polite">₵ —</div>
           <button class="cs-icon-btn" id="refresh-credits-btn" title="Refresh balance" aria-label="Refresh credits">
             ↺
           </button>
@@ -292,41 +295,41 @@
       </div>
 
       <!-- Character Memory -->
-      <div class="cs-glass-panel bedroom-panel-section">
-        <h3 class="bedroom-panel-title">MEMORIES</h3>
-        <div class="bedroom-memories" id="bedroom-memories" aria-live="polite">
-          <div class="bedroom-memories__empty">No memories yet.</div>
+      <div class="cs-glass-panel penthouse-panel-section">
+        <h3 class="penthouse-panel-title">MEMORIES</h3>
+        <div class="penthouse-memories" id="penthouse-memories" aria-live="polite">
+          <div class="penthouse-memories__empty">No memories yet.</div>
         </div>
       </div>
 
       <!-- World Status -->
-      <div class="cs-glass-panel bedroom-panel-section" id="world-status-panel">
-        <h3 class="bedroom-panel-title">
+      <div class="cs-glass-panel penthouse-panel-section" id="world-status-panel">
+        <h3 class="penthouse-panel-title">
           <span>WORLD STATUS</span>
           <span class="cs-chip world-mood-chip" id="world-mood-chip">neutral</span>
         </h3>
-        <div class="bedroom-world-stats">
-          <div class="bedroom-world-stat">
-            <span class="bedroom-world-stat__label">₵ Credits</span>
-            <span class="bedroom-world-stat__value" id="world-credits">—</span>
+        <div class="penthouse-world-stats">
+          <div class="penthouse-world-stat">
+            <span class="penthouse-world-stat__label">₵ Credits</span>
+            <span class="penthouse-world-stat__value" id="world-credits">—</span>
           </div>
-          <div class="bedroom-world-stat">
-            <span class="bedroom-world-stat__label">Rep</span>
-            <span class="bedroom-world-stat__value" id="world-rep">—</span>
+          <div class="penthouse-world-stat">
+            <span class="penthouse-world-stat__label">Rep</span>
+            <span class="penthouse-world-stat__value" id="world-rep">—</span>
           </div>
-          <div class="bedroom-world-stat">
-            <span class="bedroom-world-stat__label">Heat</span>
-            <span class="bedroom-world-stat__value world-heat-val" id="world-heat">—</span>
+          <div class="penthouse-world-stat">
+            <span class="penthouse-world-stat__label">Heat</span>
+            <span class="penthouse-world-stat__value world-heat-val" id="world-heat">—</span>
           </div>
         </div>
-        <ul class="bedroom-world-events" id="world-events-list" aria-live="polite">
-          <li class="bedroom-world-events__empty">Loading world context…</li>
+        <ul class="penthouse-world-events" id="world-events-list" aria-live="polite">
+          <li class="penthouse-world-events__empty">Loading world context…</li>
         </ul>
       </div>
 
     </aside><!-- /right-panel -->
 
-  </div><!-- /bedroom-layout -->
+  </div><!-- /penthouse-layout -->
 
 {% endblock %}
 
@@ -336,9 +339,12 @@
   <script src="/shared/js/cosysim-bench.js"></script>
   <script src="/shared/js/cosysim-voice.js"></script>
 
+  <!-- 3D room background (Three.js) — must load before scene script -->
+  <script src="{{ url_for('static', filename='penthouse_3d.js') }}"></script>
+
   <!-- Scene script -->
-  <script src="{{ url_for('static', filename='bedroom.js') }}"></script>
-  <script>window.SCENE_PARTICLE_CONFIG = { scene: 'bedroom' };</script>
+  <script src="{{ url_for('static', filename='penthouse.js') }}"></script>
+  <script>window.SCENE_PARTICLE_CONFIG = { scene: 'penthouse' };</script>
 
   <!-- Living World integration -->
   <script>
@@ -368,7 +374,7 @@
       if (repEl)  repEl.textContent  = rep;
       if (heatEl) {
         heatEl.textContent = heat;
-        heatEl.className = 'bedroom-world-stat__value world-heat-val' +
+        heatEl.className = 'penthouse-world-stat__value world-heat-val' +
           (heat >= 70 ? ' world-heat-val--danger' : heat >= 40 ? ' world-heat-val--warn' : '');
       }
       if (chipEl) {
@@ -378,10 +384,10 @@
       if (listEl) {
         const events = ctx.world_context || [];
         if (events.length === 0) {
-          listEl.innerHTML = '<li class="bedroom-world-events__empty">No notable world events.</li>';
+          listEl.innerHTML = '<li class="penthouse-world-events__empty">No notable world events.</li>';
         } else {
           listEl.innerHTML = events
-            .map(e => `<li class="bedroom-world-events__item">${e}</li>`)
+            .map(e => `<li class="penthouse-world-events__item">${e}</li>`)
             .join('');
         }
       }
@@ -393,8 +399,8 @@
       .then(applyWorldContext)
       .catch(() => {});
 
-    // Listen for real-time updates via Socket.IO (socket defined by bedroom.js)
-    document.addEventListener('bedroom-socket-ready', function (ev) {
+    // Listen for real-time updates via Socket.IO (socket defined by penthouse.js))
+    document.addEventListener('penthouse-socket-ready', function (ev) {
       const socket = ev.detail;
       if (socket) {
         socket.on('world_context_update', applyWorldContext);

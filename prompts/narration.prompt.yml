@@ -20,8 +20,8 @@ messages:
       Recent event: {{recent_event}}
       Mood: {{scene_mood}}
 testData:
-  - scene_name: bedroom
-    setting_description: "A cozy apartment bedroom with warm lighting"
+  - scene_name: penthouse
+    setting_description: "A cozy apartment penthouse with warm lighting"
     time_of_day: evening
     characters: "Lola"
     recent_event: "Player just arrived home"

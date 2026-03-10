@@ -187,9 +187,9 @@ NPC_ACTIONS_RICH: List[Dict[str, Any]] = [
         "narrative": "The all-hands call is cancelled. Someone orders pizza. Normalcy restored.",
     },
     {
-        "scene": "bedroom", "actor": "lola", "event_type": "npc_action",
+        "scene": "penthouse", "actor": "lola", "event_type": "npc_action",
         "title": "Late-night confession", "intensity": 1.5, "economy_impact": 0,
-        "affected_scenes": ["bedroom"],
+        "affected_scenes": ["penthouse"],
         "desc": "Lola shares something she's been keeping quiet for days.",
         "narrative": "The city hum fills the silence after she speaks. The penthouse feels smaller.",
     },

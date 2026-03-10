@@ -155,10 +155,10 @@ class TestGenerateDialoguePool:
         gen = _make_fresh_generator(nexus)
         mock_engine = MagicMock()
         with patch("engine.content.content_engine.get_content_engine", return_value=mock_engine):
-            gen.generate_dialogue_pool("bedroom", count=1, intensity=3)
+            gen.generate_dialogue_pool("penthouse", count=1, intensity=3)
         call_kwargs = mock_engine.add_to_pool.call_args[1]
         assert call_kwargs["pool"] == "dialogue"
-        assert call_kwargs["scene"] == "bedroom"
+        assert call_kwargs["scene"] == "penthouse"
         assert call_kwargs["intensity"] == 3
 
     def test_empty_nlm_returns_zero(self):

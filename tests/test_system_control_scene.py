@@ -256,13 +256,13 @@ class TestLauncherEndpoints:
 
     def test_launcher_toggle_known_service(self, sc_client) -> None:
         resp = sc_client.post(
-            "/api/launcher/scenes/bedroom",
+            "/api/launcher/scenes/penthouse",
             json={"auto_start": False},
             content_type="application/json",
         )
         assert resp.status_code == 200
         data = json.loads(resp.data)
-        assert data.get("target") == "bedroom"
+        assert data.get("target") == "penthouse"
         assert data.get("auto_start") is False
 
 
@@ -457,6 +457,6 @@ class TestEditableConfigsCatalogue:
 
         endpoints = {ep["id"]: ep for ep in _SERVICE_ENDPOINTS}
         assert endpoints["command_center"]["port"] == 5566
-        assert endpoints["bedroom"]["port"] == 5556
+        assert endpoints["penthouse"]["port"] == 5556
         assert endpoints["phone"]["port"] == 5555
         assert endpoints["tts"]["port"] == 8600

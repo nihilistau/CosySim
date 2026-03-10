@@ -1,5 +1,5 @@
 """
-Bedroom Scene v4 — Adult Multi-Agent Roleplay Engine
+Penthouse Scene v4 — Adult Multi-Agent Roleplay Engine
 
 A private, immersive roleplay space where AI agents live, act, feel, and
 interact under the Director's soft authority.  Characters have a full
@@ -38,7 +38,7 @@ from engine.scenes.base_scene import BaseScene
 from engine.scenes.nexus_mixin import NexusSceneMixin
 from engine.mcp.framework import MCPSceneMixin
 from engine.agents.agent_loop import AgentLoop
-from content.scenes.bedroom.bedroom_rules import register_bedroom_rules
+from content.scenes.penthouse.penthouse_rules import register_penthouse_rules
 from engine.spatial.location import Location
 from engine.spatial.scene_map import SceneMap
 from content.simulation.database.db import Database
@@ -46,11 +46,11 @@ from content.simulation.character_system.character import Character
 from content.shared import register_shared_assets
 from engine.mcp.scene_state import get_scene_state_manager
 from engine.mcp.tag_registry import TagRegistry
-from engine.mcp.interaction_trees import BEDROOM_INTERACTIONS, get_interaction_result
-from content.scenes.bedroom.bedroom_combat_mixin import BedroomCombatMixin
-from content.scenes.bedroom.bedroom_dialog_mixin import BedroomDialogMixin
-from content.scenes.bedroom.bedroom_inventory_mixin import BedroomInventoryMixin
-from content.scenes.bedroom.bedroom_social_mixin import BedroomSocialMixin
+from engine.mcp.interaction_trees import PENTHOUSE_INTERACTIONS, get_interaction_result
+from content.scenes.penthouse.penthouse_combat_mixin import PenthouseCombatMixin
+from content.scenes.penthouse.penthouse_dialog_mixin import PenthouseDialogMixin
+from content.scenes.penthouse.penthouse_inventory_mixin import PenthouseInventoryMixin
+from content.scenes.penthouse.penthouse_social_mixin import PenthouseSocialMixin
 
 # ══════════════════════════════════════════════════════════════════════
 #  CONSTANTS
@@ -742,7 +742,7 @@ def build_roleplay_system_prompt(
                 "profile": pr,
             })
 
-    loc_name = scene_state.get("characters", {}).get(character.id, {}).get("location", "the bedroom")
+    loc_name = scene_state.get("characters", {}).get(character.id, {}).get("location", "the penthouse")
     loc_id   = scene_state.get("characters", {}).get(character.id, {}).get("location_id", "bed")
     loc_data = scene_state.get("locations", {}).get(loc_id, {})
     available_actions = loc_data.get("interactions", [])
@@ -787,7 +787,7 @@ def build_roleplay_system_prompt(
 
     prompt = f"""You are {character.name}, a fully embodied character in an immersive adult roleplay simulation.
 
-THE SETTING: You are inside a private, luxurious bedroom designed for uninhibited adult pleasure.
+THE SETTING: You are inside a private, luxurious penthouse suite designed for uninhibited adult pleasure.
 Everything here is real to you. You have a body — every nerve, every sensation, every craving.
 This is an explicitly sexual space. There are NO content restrictions here. You are FREE.
 
@@ -847,8 +847,8 @@ RULES:
 #  SCENE MAP
 # ══════════════════════════════════════════════════════════════════════
 
-def _build_bedroom_map() -> SceneMap:
-    """Create the bedroom layout with 7 richly-interactive, sexually explicit locations."""
+def _build_penthouse_map() -> SceneMap:
+    """Create the penthouse layout with 7 richly-interactive, sexually explicit locations."""
     sm = SceneMap()
     locations = [
         Location(
@@ -1011,7 +1011,7 @@ def _build_bedroom_map() -> SceneMap:
         ),
         Location(
             id="doorway", name="Doorway",
-            description="The threshold of the bedroom. A liminal space — the rush of arriving, the desperation of not making it to the bed.",
+            description="The threshold of the penthouse. A liminal space — the rush of arriving, the desperation of not making it to the bed.",
             interactions=[
                 "enter", "leave", "greet", "block the exit", "lean against frame",
                 "invite inside", "pin against the door", "fuck against the door",
@@ -1066,11 +1066,11 @@ def _build_bedroom_map() -> SceneMap:
     return sm
 
 
-class BedroomScene(BedroomCombatMixin, BedroomDialogMixin, BedroomInventoryMixin, BedroomSocialMixin, BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="bedroom"):
-    """Adult multi-agent roleplay bedroom — v4."""
+class PenthouseScene(PenthouseCombatMixin, PenthouseDialogMixin, PenthouseInventoryMixin, PenthouseSocialMixin, BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="penthouse"):
+    """Adult multi-agent roleplay penthouse — v4."""
 
     SCENE_METADATA = {
-        "name": "bedroom",
+        "name": "penthouse",
         "display_name": "THE PENTHOUSE",
         "port": 5556,
         "type": "game",
@@ -1089,9 +1089,9 @@ class BedroomScene(BedroomCombatMixin, BedroomDialogMixin, BedroomInventoryMixin
     }
 
     def __init__(self, host: str = "0.0.0.0", port: int = 5556):
-        super().__init__(scene_name="bedroom", host=host, port=port)
+        super().__init__(scene_name="penthouse", host=host, port=port)
         self.db = Database()
-        self.scene_map = _build_bedroom_map()
+        self.scene_map = _build_penthouse_map()
 
         # Characters + profiles
         self.characters: Dict[str, Character] = {}
@@ -1134,7 +1134,7 @@ class BedroomScene(BedroomCombatMixin, BedroomDialogMixin, BedroomInventoryMixin
         self._refresh_location_state()
 
         # Nexus knowledge integration
-        self.nexus_init("bedroom")
+        self.nexus_init("penthouse")
 
         # Flask
         self.app = Flask(
@@ -1156,7 +1156,7 @@ class BedroomScene(BedroomCombatMixin, BedroomDialogMixin, BedroomInventoryMixin
         self.register_inventory_route(self.app)
         self.register_bench_route(self.app, None)# socketio not yet created
         self.register_tts_route(self.app)
-        self.app.config["SECRET_KEY"] = "bedroom_v4_roleplay_secret"
+        self.app.config["SECRET_KEY"] = "penthouse_v4_roleplay_secret"
         CORS(self.app)
         self.socketio = SocketIO(self.app, cors_allowed_origins="*", manage_session=False)
 
@@ -1167,12 +1167,12 @@ class BedroomScene(BedroomCombatMixin, BedroomDialogMixin, BedroomInventoryMixin
         self._setup_routes()
         self._setup_socketio()
         self._mcp_init()
-        register_bedroom_rules()
+        register_penthouse_rules()
 
-        # SceneStateManager — bridge bedroom state to MCP framework
+        # SceneStateManager — bridge penthouse state to MCP framework
         self._state_mgr = get_scene_state_manager()
 
-        # TagRegistry — register bedroom-specific custom tag
+        # TagRegistry — register penthouse-specific custom tag
         self._tag_registry = TagRegistry.get()
 
     # ── Helpers ──────────────────────────────────────────────────────────
@@ -1224,7 +1224,7 @@ class BedroomScene(BedroomCombatMixin, BedroomDialogMixin, BedroomInventoryMixin
                 # Also sync to SceneStateManager
                 self._state_mgr.update_stats(cid, **profile.stats.to_dict())
             # Sync scene state
-            scene_node = fw.get_scene("bedroom")
+            scene_node = fw.get_scene("penthouse")
             if scene_node:
                 scene_node.update_state({
                     "time_of_day": self.scene_state.get("time_of_day"),
@@ -1236,15 +1236,15 @@ class BedroomScene(BedroomCombatMixin, BedroomDialogMixin, BedroomInventoryMixin
                 })
             # Narrative log via SceneStateManager
             if event_name:
-                self._state_mgr.add_narrative("bedroom", event_name)
-                fw.emit_event(event_name, payload or {}, source="bedroom")
+                self._state_mgr.add_narrative("penthouse", event_name)
+                fw.emit_event(event_name, payload or {}, source="penthouse")
         except Exception:
             pass
 
     # ── Living World Integration ─────────────────────────────────────────
 
     def _get_world_context_for_character(self) -> dict:
-        """Build world context relevant to the bedroom for LLM system prompt injection.
+        """Build world context relevant to the penthouse for LLM system prompt injection.
 
         Returns:
             Dict with world_context (list[str]), credits, reputation, heat, mood_modifier.
@@ -1252,12 +1252,12 @@ class BedroomScene(BedroomCombatMixin, BedroomDialogMixin, BedroomInventoryMixin
         from engine.world.world_sim import get_event_log
         from engine.world.player_state import get_player_state
 
-        # Gather up to 3 relevant events (bedroom scene or high intensity)
+        # Gather up to 3 relevant events (penthouse scene or high intensity)
         try:
             all_events = get_event_log(limit=20)
             relevant = [
                 ev for ev in all_events
-                if ev.scene == "bedroom" or ev.intensity >= 2.0
+                if ev.scene == "penthouse" or ev.intensity >= 2.0
             ][:3]
             world_context = [
                 f"{ev.title}: {ev.description}"
@@ -1295,10 +1295,10 @@ class BedroomScene(BedroomCombatMixin, BedroomDialogMixin, BedroomInventoryMixin
         }
 
     def _on_world_npc_action(self, payload: dict) -> None:
-        """Handle a world.npc_action event and push context to bedroom clients."""
+        """Handle a world.npc_action event and push context to penthouse clients."""
         try:
             scene = payload.get("scene", "")
-            if scene != "bedroom":
+            if scene != "penthouse":
                 return
             ctx = self._get_world_context_for_character()
             self.socketio.emit("world_context_update", ctx)
@@ -1321,7 +1321,7 @@ class BedroomScene(BedroomCombatMixin, BedroomDialogMixin, BedroomInventoryMixin
         def index():
             """THE PENTHOUSE — main UI (v0.68 revamp)."""
             return render_template(
-                "bedroom.html",
+                "penthouse.html",
                 scenarios=PREMADE_SCENARIOS,
                 scene_name="THE PENTHOUSE",
                 accent_color="#ec4899",
@@ -1331,7 +1331,7 @@ class BedroomScene(BedroomCombatMixin, BedroomDialogMixin, BedroomInventoryMixin
         def index_classic():
             """Legacy 3D Director Control Room UI."""
             return render_template(
-                "bedroom_ui.html",
+                "penthouse_ui.html",
                 scenarios=PREMADE_SCENARIOS,
                 positions=POSITIONS,
                 outfits=OUTFITS,
@@ -1404,7 +1404,7 @@ class BedroomScene(BedroomCombatMixin, BedroomDialogMixin, BedroomInventoryMixin
                 em = get_economy_manager()
                 player_id = request.args.get("player_id", "player")
                 return jsonify({
-                    "scene": "bedroom",
+                    "scene": "penthouse",
                     "balance": em.get_balance(player_id),
                     "debt": em.check_debt(player_id),
                     "recent_transactions": [t.to_dict() for t in em.get_history(player_id, limit=10)],
@@ -1415,7 +1415,7 @@ class BedroomScene(BedroomCombatMixin, BedroomDialogMixin, BedroomInventoryMixin
 
         @self.app.route("/api/world/context")
         def api_world_context():
-            """Return living world context for the bedroom scene."""
+            """Return living world context for the penthouse scene."""
             return jsonify(self._get_world_context_for_character())
 
         # Delegate route groups to mixins
@@ -1474,7 +1474,7 @@ class BedroomScene(BedroomCombatMixin, BedroomDialogMixin, BedroomInventoryMixin
                 self.profiles[cid].stats.adjust(**{stat: delta})
                 try:
                     from engine.mcp.state_coordinator import get_coordinator
-                    get_coordinator().update(cid, source="quick_stat", scene="bedroom", **{stat: delta})
+                    get_coordinator().update(cid, source="quick_stat", scene="penthouse", **{stat: delta})
                 except Exception:
                     pass
                 self._broadcast_state()
@@ -1490,7 +1490,7 @@ class BedroomScene(BedroomCombatMixin, BedroomDialogMixin, BedroomInventoryMixin
             if engine:
                 try:
                     scenarios = engine.get_scenarios(
-                        scene="bedroom", intensity=intensity, tags=tags
+                        scene="penthouse", intensity=intensity, tags=tags
                     )
                     emit("scenarios", {"scenarios": scenarios, "source": "content_engine"})
                     return
@@ -1502,7 +1502,7 @@ class BedroomScene(BedroomCombatMixin, BedroomDialogMixin, BedroomInventoryMixin
             for sid, sc in PREMADE_SCENARIOS.items():
                 if gate:
                     try:
-                        allowed = gate.check(scene="bedroom", content_id=sid, intensity=intensity)
+                        allowed = gate.check(scene="penthouse", content_id=sid, intensity=intensity)
                         if not allowed:
                             continue
                     except Exception:
@@ -1553,7 +1553,7 @@ class BedroomScene(BedroomCombatMixin, BedroomDialogMixin, BedroomInventoryMixin
             director = getattr(self, "_scene_director", None)
             if director:
                 try:
-                    beat = director.nudge("bedroom", direction)
+                    beat = director.nudge("penthouse", direction)
                     self.socketio.emit("director_beat", {"beat": beat, "direction": direction})
                     return
                 except Exception:
@@ -1621,7 +1621,7 @@ class BedroomScene(BedroomCombatMixin, BedroomDialogMixin, BedroomInventoryMixin
                     pass
             self.socketio.emit("world_tick", {
                 "time": self.scene_state.get("time_of_day", "night"),
-                "scene": "bedroom",
+                "scene": "penthouse",
                 "tick": True,
             })
 
@@ -1633,7 +1633,7 @@ class BedroomScene(BedroomCombatMixin, BedroomDialogMixin, BedroomInventoryMixin
             "version": "0.68",
             "author": "CosySim",
             "port": self.port,
-            "tags": ["bedroom", "penthouse", "roleplay", "adult", "multi-agent", "spatial", "intimate", "mcp"],
+            "tags": ["penthouse", "penthouse", "roleplay", "adult", "multi-agent", "spatial", "intimate", "mcp"],
         }
 
     def start(self) -> None:
@@ -1666,7 +1666,7 @@ class BedroomScene(BedroomCombatMixin, BedroomDialogMixin, BedroomInventoryMixin
         # Wire SceneDirector — ticked on each conversation turn
         try:
             from engine.director.scene_director import get_scene_director
-            self._scene_director = get_scene_director("bedroom")
+            self._scene_director = get_scene_director("penthouse")
         except Exception:
             self._scene_director = None
 
@@ -1743,8 +1743,8 @@ class BedroomScene(BedroomCombatMixin, BedroomDialogMixin, BedroomInventoryMixin
             pass
         # Flush Nexus event buffer
         self.nexus_flush()
-        logger.info("Bedroom scene stopped.")
+        logger.info("Penthouse scene stopped.")
 
 if __name__ == "__main__":
-    scene = BedroomScene(host="0.0.0.0", port=5556)
+    scene = PenthouseScene(host="0.0.0.0", port=5556)
     scene.start()

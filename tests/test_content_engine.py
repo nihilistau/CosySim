@@ -343,12 +343,12 @@ class TestGetScenarioRespectsIntensity:
 
     def test_intensity_match(self):
         """get_scenario returns item whose intensity matches the request."""
-        low = _make_entry("bedroom", "scenario", intensity=1, title="Mild")
-        high = _make_entry("bedroom", "scenario", intensity=3, title="Intense")
+        low = _make_entry("penthouse", "scenario", intensity=1, title="Mild")
+        high = _make_entry("penthouse", "scenario", intensity=3, title="Intense")
         nexus = _make_mock_nexus(entries=[low, high])
         engine = _engine(nexus)
 
-        item = engine.get_scenario("bedroom", intensity=3)
+        item = engine.get_scenario("penthouse", intensity=3)
 
         assert item is not None
         assert item.intensity == 3
@@ -356,12 +356,12 @@ class TestGetScenarioRespectsIntensity:
 
     def test_adult_category_filter(self):
         """Adult-category filter correctly restricts results."""
-        plain = _make_entry("bedroom", "scenario", title="Mild Scenario")
-        explicit = _make_entry("bedroom", "scenario", adult_categories=["sexual"], title="Explicit")
+        plain = _make_entry("penthouse", "scenario", title="Mild Scenario")
+        explicit = _make_entry("penthouse", "scenario", adult_categories=["sexual"], title="Explicit")
         nexus = _make_mock_nexus(entries=[plain, explicit])
         engine = _engine(nexus)
 
-        item = engine.get_scenario("bedroom", adult_category="sexual")
+        item = engine.get_scenario("penthouse", adult_category="sexual")
 
         assert item is not None
         assert "sexual" in item.adult_categories
@@ -625,15 +625,15 @@ class TestRefillPool:
         """The NLM prompt mentions the scene and content_type."""
         nexus = _make_mock_nexus(entries=[])
         nexus.ask.return_value = {
-            "answer": self._nlm_json(1, "bedroom", "scenario"),
+            "answer": self._nlm_json(1, "penthouse", "scenario"),
             "source": "nlm",
         }
         engine = _engine(nexus)
 
-        engine.refill_pool("bedroom", "scenario", count=1)
+        engine.refill_pool("penthouse", "scenario", count=1)
 
         prompt = nexus.ask.call_args[0][0]
-        assert "bedroom" in prompt
+        assert "penthouse" in prompt
         assert "scenario" in prompt
 
 

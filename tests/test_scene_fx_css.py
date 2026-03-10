@@ -8,9 +8,9 @@ CSS_DIR = pathlib.Path(__file__).parent.parent / "content" / "shared" / "static"
 SCENE_FX = CSS_DIR / "cosysim-scene-fx.css"
 TOKENS   = CSS_DIR / "design_tokens.css"
 
-SCENES = ["bedroom", "phone", "lounge", "tavern", "casino", "gallery", "arena", "realm", "neoncity"]
+SCENES = ["penthouse", "phone", "lounge", "tavern", "casino", "gallery", "arena", "realm", "neoncity"]
 KEYFRAMES = [
-    "bedroom-glow", "phone-glitch", "lounge-drift", "tavern-flicker",
+    "penthouse-glow", "phone-glitch", "lounge-drift", "tavern-flicker",
     "casino-pulse", "gallery-float", "arena-rumble", "realm-breathe", "neoncity-scan",
 ]
 

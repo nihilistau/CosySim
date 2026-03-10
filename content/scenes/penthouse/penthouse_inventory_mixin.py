@@ -1,4 +1,4 @@
-"""Bedroom scene inventory, props, and outfit mixin."""
+"""penthouse scene inventory, props, and outfit mixin."""
 from __future__ import annotations
 
 import logging
@@ -11,13 +11,13 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class BedroomInventoryMixin:
+class PenthouseInventoryMixin:
     """Prop management, outfit/position changes, and personality assignment."""
 
     # ── Prop stat effects ───────────────────────────────────────────────
 
     def _apply_prop_stat_effect(self, prop_id: str) -> None:
-        from content.scenes.bedroom.bedroom_scene import PROPS
+        from content.scenes.penthouse.penthouse_scene import PROPS
 
         if prop_id not in PROPS:
             return
@@ -31,7 +31,7 @@ class BedroomInventoryMixin:
                 profile.stats.adjust(**prop_delta)
                 try:
                     from engine.mcp.state_coordinator import get_coordinator
-                    get_coordinator().update(cid, source="prop_effect", scene="bedroom", **prop_delta)
+                    get_coordinator().update(cid, source="prop_effect", scene="penthouse", **prop_delta)
                 except Exception:
                     pass
 
@@ -40,7 +40,7 @@ class BedroomInventoryMixin:
     def _setup_props_routes(self) -> None:
         """Register prop-management Flask routes on self.app."""
         from flask import jsonify, request
-        from content.scenes.bedroom.bedroom_scene import PROPS
+        from content.scenes.penthouse.penthouse_scene import PROPS
 
         @self.app.route("/api/props/list")
         def list_props():
@@ -84,7 +84,7 @@ class BedroomInventoryMixin:
     def _setup_outfit_routes(self) -> None:
         """Register outfit, position, and personality Flask routes on self.app."""
         from flask import jsonify, request
-        from content.scenes.bedroom.bedroom_scene import (
+        from content.scenes.penthouse.penthouse_scene import (
             OUTFITS, POSITIONS, PERSONALITY_PROFILES,
         )
 
@@ -100,7 +100,7 @@ class BedroomInventoryMixin:
                 self.profiles[cid].stats.adjust(arousal=10, explicitness=5)
                 try:
                     from engine.mcp.state_coordinator import get_coordinator
-                    get_coordinator().update(cid, source="outfit_change", scene="bedroom", arousal=10, explicitness=5)
+                    get_coordinator().update(cid, source="outfit_change", scene="penthouse", arousal=10, explicitness=5)
                 except Exception:
                     pass
             self._inject_to_loop("(environment)", f"{self.characters[cid].name} is now wearing: {outfit}.", "environment")

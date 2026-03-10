@@ -1,3 +1,24 @@
+/* ══════════════════════════════════════════════════
+   Z-INDEX HIERARCHY (CosySim Global Stack)
+   ══════════════════════════════════════════════════
+   99999  Scene transition overlay
+    9999  Modal overlays, content gates
+    9998  CRT scanline overlay
+    9200  Navbar dropdown menus
+    9100  Navbar / HUD
+    9000  Notification toasts
+    8000  Phone panel (slide-out)
+    7000  Aria assistant widget
+    5000  Neon HUD bar
+    1000  Dropdown menus, tooltips
+     100  Floating panels
+      10  Sticky headers
+       1  Main layout (.neon-layout)
+       0  Scene background (3D canvas)
+      -1  Particle canvas
+      -2  Neon grid background
+   ══════════════════════════════════════════════════ */
+
 /* ═══════════════════════════════════════════════════════════════════════════
    neon_base.css — NeonCity 2 Unified Scene Layout & Aesthetic
    ═══════════════════════════════════════════════════════════════════════════
@@ -189,26 +210,34 @@
 
 .neon-panel {
   background: var(--cs-glass-bg, rgba(10, 14, 23, 0.75));
-  backdrop-filter: blur(var(--cs-glass-blur, 24px));
-  -webkit-backdrop-filter: blur(var(--cs-glass-blur, 24px));
+  backdrop-filter: blur(20px) saturate(1.5);
+  -webkit-backdrop-filter: blur(20px) saturate(1.5);
   border: 1px solid var(--cs-glass-border, rgba(255, 255, 255, 0.06));
   border-radius: var(--cs-radius-lg, 8px);
   box-shadow: var(--cs-glass-shadow, 0 8px 32px rgba(0, 0, 0, 0.6));
   padding: var(--cs-space-lg, 16px);
-  transition: border-color var(--cs-duration-base, 250ms) var(--cs-ease),
-              box-shadow var(--cs-duration-base, 250ms) var(--cs-ease);
+  transition: border-color 0.3s var(--cs-ease),
+              box-shadow 0.3s var(--cs-ease),
+              transform 0.3s var(--cs-ease);
 }
 
 .neon-panel:hover {
-  border-color: rgba(var(--scene-accent-rgb, 0 229 255), 0.2);
+  border-color: rgba(var(--scene-accent-rgb, 0 229 255), 0.25);
   box-shadow: var(--cs-glass-shadow, 0 8px 32px rgba(0, 0, 0, 0.6)),
-              0 0 16px rgba(var(--scene-accent-rgb, 0 229 255), 0.1);
+              0 8px 32px rgba(var(--scene-accent-rgb, 0 229 255), 0.15);
+  transform: translateY(-2px);
 }
 
 .neon-panel--glow {
   border-color: rgba(var(--scene-accent-rgb, 0 229 255), 0.25);
   box-shadow: var(--cs-glass-shadow, 0 8px 32px rgba(0, 0, 0, 0.6)),
               0 0 24px rgba(var(--scene-accent-rgb, 0 229 255), 0.15);
+  animation: neon-panel-border-glow 4s ease-in-out infinite;
+}
+
+@keyframes neon-panel-border-glow {
+  0%, 100% { border-color: rgba(var(--scene-accent-rgb, 0 229 255), 0.15); }
+  50%      { border-color: rgba(var(--scene-accent-rgb, 0 229 255), 0.35); }
 }
 
 .neon-panel--compact {
@@ -229,10 +258,14 @@
   padding: var(--cs-space-lg, 16px) var(--cs-space-xl, 24px);
   background: linear-gradient(
     135deg,
-    rgba(var(--scene-accent-rgb, 0 229 255), 0.08) 0%,
-    transparent 60%
+    rgba(var(--scene-accent-rgb, 0 229 255), 0.12) 0%,
+    rgba(var(--scene-accent-rgb, 0 229 255), 0.03) 40%,
+    transparent 70%
   );
+  background-size: 200% 200%;
+  animation: gradient-shift 12s ease-in-out infinite;
   border-bottom: 1px solid rgba(var(--scene-accent-rgb, 0 229 255), 0.15);
+  position: relative;
 }
 
 .neon-scene-banner__title {
@@ -243,6 +276,7 @@
   text-transform: uppercase;
   color: var(--scene-accent, var(--cs-neon-cyan));
   text-shadow: 0 0 12px var(--cs-scene-glow, rgba(0, 229, 255, 0.4));
+  animation: neon-text-glow 3s ease-in-out infinite;
 }
 
 .neon-scene-banner__subtitle {
@@ -308,20 +342,55 @@
   border-radius: var(--cs-radius-lg, 8px);
   font-size: var(--cs-text-sm, 12px);
   line-height: var(--cs-leading-normal, 1.5);
-  animation: cs-slide-up var(--cs-duration-base, 250ms) var(--cs-ease);
+  animation: slide-up-fade 0.3s var(--cs-ease) both;
+}
+
+/* Typing indicator — three-dot bounce */
+.neon-chat__typing {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: var(--cs-space-sm, 8px) var(--cs-space-md, 12px);
+  background: var(--cs-bg-card, #111520);
+  border: 1px solid var(--cs-glass-border, rgba(255, 255, 255, 0.06));
+  border-left: 3px solid var(--scene-accent, var(--cs-neon-cyan));
+  border-radius: var(--cs-radius-lg, 8px);
+  align-self: flex-start;
+}
+
+.neon-chat__typing-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--cs-text-muted, #6b7280);
+  animation: neon-typing-bounce 1.4s ease-in-out infinite;
+}
+
+.neon-chat__typing-dot:nth-child(2) { animation-delay: 0.15s; }
+.neon-chat__typing-dot:nth-child(3) { animation-delay: 0.30s; }
+
+@keyframes neon-typing-bounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+  30%           { transform: translateY(-6px); opacity: 1; }
 }
 
 .neon-chat__bubble--npc {
   align-self: flex-start;
   background: var(--cs-bg-card, #111520);
   border: 1px solid var(--cs-glass-border, rgba(255, 255, 255, 0.06));
-  border-left: 2px solid var(--scene-accent, var(--cs-neon-cyan));
+  border-left: 3px solid var(--scene-accent, var(--cs-neon-cyan));
+  box-shadow: -4px 0 12px rgba(var(--scene-accent-rgb, 0 229 255), 0.08);
 }
 
 .neon-chat__bubble--player {
   align-self: flex-end;
-  background: rgba(var(--scene-accent-rgb, 0 229 255), 0.1);
+  background: linear-gradient(
+    135deg,
+    rgba(var(--scene-accent-rgb, 0 229 255), 0.12) 0%,
+    rgba(var(--scene-accent-rgb, 0 229 255), 0.06) 100%
+  );
   border: 1px solid rgba(var(--scene-accent-rgb, 0 229 255), 0.2);
+  border-right: 3px solid rgba(var(--scene-accent-rgb, 0 229 255), 0.4);
 }
 
 .neon-chat__bubble--system {

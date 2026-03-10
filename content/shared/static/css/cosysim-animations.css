@@ -457,3 +457,55 @@
     animation: none !important;
   }
 }
+
+/* ══════════════════════════════════════════════════════════════
+   AAA++ POLISH ANIMATIONS
+   ══════════════════════════════════════════════════════════════ */
+
+@keyframes border-shimmer {
+  0%, 100% { border-color: rgba(var(--scene-accent-rgb, 0 229 255), 0.1); }
+  50%      { border-color: rgba(var(--scene-accent-rgb, 0 229 255), 0.4); }
+}
+
+@keyframes gradient-shift {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@keyframes stat-shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 0 5px rgba(var(--scene-accent-rgb, 0 229 255), 0.3); }
+  50%      { box-shadow: 0 0 20px rgba(var(--scene-accent-rgb, 0 229 255), 0.6), 0 0 40px rgba(var(--scene-accent-rgb, 0 229 255), 0.2); }
+}
+
+@keyframes corner-flash {
+  0%, 100% { opacity: 0.3; }
+  50%      { opacity: 1; }
+}
+
+@keyframes slide-up-fade {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes neon-text-glow {
+  0%, 100% { text-shadow: 0 0 4px rgba(var(--scene-accent-rgb, 0 229 255), 0.5); }
+  50%      { text-shadow: 0 0 12px rgba(var(--scene-accent-rgb, 0 229 255), 0.8), 0 0 24px rgba(var(--scene-accent-rgb, 0 229 255), 0.3); }
+}
+
+@keyframes ripple-effect {
+  to { transform: scale(4); opacity: 0; }
+}
+
+/* ── AAA++ Utility Animation Classes ─────────────────────────── */
+
+.cs-anim-border-shimmer { animation: border-shimmer 2s ease-in-out infinite; }
+.cs-anim-gradient-shift { background-size: 200% 200%; animation: gradient-shift 6s ease-in-out infinite; }
+.cs-anim-glow-pulse     { animation: glow-pulse 2s ease-in-out infinite; }
+.cs-anim-slide-up-fade  { animation: slide-up-fade 0.3s var(--cs-ease) both; }
+.cs-anim-neon-text-glow { animation: neon-text-glow 3s ease-in-out infinite; }

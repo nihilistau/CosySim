@@ -1,8 +1,8 @@
 """
-Bedroom Skills — MCP skill functions for the Director's Bedroom scene.
+Penthouse Skills — MCP skill functions for The Penthouse scene.
 
 Exposes character management, stat control, environment props, interaction
-mechanics, and bedroom game functions as @skill-decorated functions callable
+mechanics, and penthouse game functions as @skill-decorated functions callable
 by LMS agents via tool use.
 """
 from __future__ import annotations
@@ -15,25 +15,25 @@ from engine.skills.skill import skill, SkillCategory
 logger = logging.getLogger(__name__)
 
 
-def _get_bedroom_scene():
-    """Look up the running Bedroom scene instance."""
+def _get_penthouse_scene():
+    """Look up the running penthouse scene instance."""
     from engine.scenes.base_scene import get_active_scene
-    return get_active_scene("bedroom")
+    return get_active_scene("penthouse")
 
 
 # ── Character Control ──────────────────────────────────────────
 
 @skill(
-    pack="bedroom",
-    tags=["game", "bedroom", "character"],
+    pack="penthouse",
+    tags=["game", "penthouse", "character"],
     category=SkillCategory.GAME,
-    description="Get the status of all characters in the bedroom.",
+    description="Get the status of all characters in the penthouse.",
 )
-def bedroom_character_status() -> str:
+def penthouse_character_status() -> str:
     """Return loaded characters, their stats, and positions."""
-    scene = _get_bedroom_scene()
+    scene = _get_penthouse_scene()
     if not scene:
-        return "Bedroom not active."
+        return "Penthouse not active."
     if not scene.characters:
         return "No characters loaded."
     lines = []
@@ -55,26 +55,26 @@ def bedroom_character_status() -> str:
 
 
 @skill(
-    pack="bedroom",
-    tags=["game", "bedroom", "character"],
+    pack="penthouse",
+    tags=["game", "penthouse", "character"],
     category=SkillCategory.GAME,
     description="Adjust a character's stat (arousal, happiness, horniness, etc).",
     cooldown=3,
 )
-def bedroom_adjust_stat(character_id: str = "", stat: str = "", delta: int = 0) -> str:
+def penthouse_adjust_stat(character_id: str = "", stat: str = "", delta: int = 0) -> str:
     """Adjust a character stat by delta amount."""
     if not character_id or not stat:
         return "Specify character_id and stat name."
-    scene = _get_bedroom_scene()
+    scene = _get_penthouse_scene()
     if not scene:
-        return "Bedroom not active."
+        return "Penthouse not active."
     profile = scene.profiles.get(character_id)
     if not profile:
         return f"Character {character_id} not loaded."
     profile.stats.adjust(**{stat: delta})
     try:
         from engine.mcp.state_coordinator import get_coordinator
-        get_coordinator().update(character_id, source="skill_adjust", scene="bedroom", **{stat: delta})
+        get_coordinator().update(character_id, source="skill_adjust", scene="penthouse", **{stat: delta})
     except Exception:
         pass
     scene._broadcast_state()
@@ -83,18 +83,18 @@ def bedroom_adjust_stat(character_id: str = "", stat: str = "", delta: int = 0) 
 
 
 @skill(
-    pack="bedroom",
-    tags=["game", "bedroom", "character"],
+    pack="penthouse",
+    tags=["game", "penthouse", "character"],
     category=SkillCategory.GAME,
     description="Give a character a scripted line to say.",
 )
-def bedroom_give_line(character_id: str = "", line: str = "") -> str:
+def penthouse_give_line(character_id: str = "", line: str = "") -> str:
     """Script a specific dialogue line for a character."""
     if not character_id or not line:
         return "Specify character_id and line."
-    scene = _get_bedroom_scene()
+    scene = _get_penthouse_scene()
     if not scene:
-        return "Bedroom not active."
+        return "Penthouse not active."
     char = scene.characters.get(character_id)
     if not char:
         return f"Character {character_id} not loaded."
@@ -108,19 +108,19 @@ def bedroom_give_line(character_id: str = "", line: str = "") -> str:
 
 
 @skill(
-    pack="bedroom",
-    tags=["game", "bedroom", "character"],
+    pack="penthouse",
+    tags=["game", "penthouse", "character"],
     category=SkillCategory.GAME,
     description="Whisper a secret instruction to a character.",
     cooldown=10,
 )
-def bedroom_whisper(character_id: str = "", instruction: str = "") -> str:
+def penthouse_whisper(character_id: str = "", instruction: str = "") -> str:
     """Send a hidden directive that shapes the character's next response."""
     if not character_id or not instruction:
         return "Specify character_id and instruction."
-    scene = _get_bedroom_scene()
+    scene = _get_penthouse_scene()
     if not scene:
-        return "Bedroom not active."
+        return "Penthouse not active."
     char = scene.characters.get(character_id)
     if not char:
         return f"Character {character_id} not loaded."
@@ -133,35 +133,35 @@ def bedroom_whisper(character_id: str = "", instruction: str = "") -> str:
 # ── Environment ────────────────────────────────────────────────
 
 @skill(
-    pack="bedroom",
-    tags=["game", "bedroom", "environment"],
+    pack="penthouse",
+    tags=["game", "penthouse", "environment"],
     category=SkillCategory.GAME,
-    description="Add a prop to the bedroom scene.",
+    description="Add a prop to the penthouse scene.",
 )
-def bedroom_add_prop(prop_name: str = "", location: str = "center") -> str:
-    """Place a prop in the bedroom scene."""
+def penthouse_add_prop(prop_name: str = "", location: str = "center") -> str:
+    """Place a prop in the penthouse scene."""
     if not prop_name:
         return "Specify a prop name."
-    scene = _get_bedroom_scene()
+    scene = _get_penthouse_scene()
     if not scene:
-        return "Bedroom not active."
+        return "Penthouse not active."
     if prop_name not in scene.room_props:
         scene.room_props.append(prop_name)
     scene._broadcast_state()
-    return f"Added '{prop_name}' to the bedroom."
+    return f"Added '{prop_name}' to the penthouse."
 
 
 @skill(
-    pack="bedroom",
-    tags=["game", "bedroom", "environment"],
+    pack="penthouse",
+    tags=["game", "penthouse", "environment"],
     category=SkillCategory.GAME,
     description="Set the time of day / lighting mood.",
 )
-def bedroom_set_time(time_of_day: str = "night") -> str:
+def penthouse_set_time(time_of_day: str = "night") -> str:
     """Change lighting: morning, afternoon, evening, night, midnight."""
-    scene = _get_bedroom_scene()
+    scene = _get_penthouse_scene()
     if not scene:
-        return "Bedroom not active."
+        return "Penthouse not active."
     valid = ["morning", "afternoon", "evening", "night", "midnight"]
     if time_of_day not in valid:
         return f"Unknown time. Options: {', '.join(valid)}"
@@ -171,27 +171,27 @@ def bedroom_set_time(time_of_day: str = "night") -> str:
     return f"Lighting set to {time_of_day}."
 
 
-# ── Bedroom Game ───────────────────────────────────────────────
+# ── Penthouse Game ───────────────────────────────────────────────
 
 @skill(
-    pack="bedroom",
-    tags=["game", "bedroom", "intimate"],
+    pack="penthouse",
+    tags=["game", "penthouse", "intimate"],
     category=SkillCategory.GAME,
-    description="Start the bedroom game (truth-or-dare / mystery) with loaded characters.",
+    description="Start the penthouse game (truth-or-dare / mystery) with loaded characters.",
     cooldown=15,
 )
-def bedroom_start_game(scenario: str = "truth_or_dare") -> str:
-    """Begin an intimate bedroom game scenario."""
-    scene = _get_bedroom_scene()
+def penthouse_start_game(scenario: str = "truth_or_dare") -> str:
+    """Begin an intimate penthouse game scenario."""
+    scene = _get_penthouse_scene()
     if not scene:
-        return "Bedroom not active."
+        return "Penthouse not active."
     if len(scene.characters) < 2:
         return "Need at least 2 characters loaded."
     player_ids = list(scene.characters.keys())[:3]
     names = {pid: scene.characters[pid].name for pid in player_ids}
     try:
         import time as _time
-        from content.scenes.bedroom.bedroom_scene import BedGameState
+        from content.scenes.penthouse.penthouse_scene import BedGameState
         scene.bed_game = BedGameState(
             active=True,
             players=player_ids,
@@ -200,24 +200,24 @@ def bedroom_start_game(scenario: str = "truth_or_dare") -> str:
         )
         scene._broadcast_state()
         scene.socketio.emit("bedgame_started", scene.bed_game.to_dict())
-        return f"Bedroom game started with {len(player_ids)} players: {', '.join(names.values())}."
+        return f"Penthouse Game started with {len(player_ids)} players: {', '.join(names.values())}."
     except Exception as exc:
         return f"Failed to start game: {exc}"
 
 
 @skill(
-    pack="bedroom",
-    tags=["game", "bedroom", "intimate"],
+    pack="penthouse",
+    tags=["game", "penthouse", "intimate"],
     category=SkillCategory.GAME,
-    description="Perform an action in the active bedroom game.",
+    description="Perform an action in the active penthouse game.",
 )
-def bedroom_game_action(action: str = "") -> str:
-    """Submit an action in the active bedroom game."""
+def penthouse_game_action(action: str = "") -> str:
+    """Submit an action in the active penthouse game."""
     if not action:
         return "What do you want to do?"
-    scene = _get_bedroom_scene()
+    scene = _get_penthouse_scene()
     if not scene:
-        return "Bedroom not active."
+        return "Penthouse not active."
     if not scene.bed_game.active:
         return "No game in progress."
     current = scene.bed_game.current_player_name
@@ -231,20 +231,20 @@ def bedroom_game_action(action: str = "") -> str:
 
 
 @skill(
-    pack="bedroom",
-    tags=["game", "bedroom", "intimate"],
+    pack="penthouse",
+    tags=["game", "penthouse", "intimate"],
     category=SkillCategory.GAME,
     description="Set the scene scenario and mood.",
 )
-def bedroom_set_scenario(scenario: str = "", mood: str = "") -> str:
-    """Configure the bedroom scenario and ambient mood."""
+def penthouse_set_scenario(scenario: str = "", mood: str = "") -> str:
+    """Configure the penthouse scenario and ambient mood."""
     if not scenario:
         return "Specify a scenario name."
-    scene = _get_bedroom_scene()
+    scene = _get_penthouse_scene()
     if not scene:
-        return "Bedroom not active."
+        return "Penthouse not active."
     # Check if scenario exists in premade list
-    from content.scenes.bedroom.bedroom_scene import PREMADE_SCENARIOS
+    from content.scenes.penthouse.penthouse_scene import PREMADE_SCENARIOS
     sc = PREMADE_SCENARIOS.get(scenario)
     if sc:
         scene.active_scenario = scenario
@@ -257,20 +257,20 @@ def bedroom_set_scenario(scenario: str = "", mood: str = "") -> str:
 
 
 @skill(
-    pack="bedroom",
-    tags=["game", "bedroom", "event"],
+    pack="penthouse",
+    tags=["game", "penthouse", "event"],
     category=SkillCategory.GAME,
-    description="Fire a custom event in the bedroom scene.",
+    description="Fire a custom event in the penthouse scene.",
     cooldown=10,
 )
-def bedroom_fire_event(event_type: str = "", details: str = "") -> str:
+def penthouse_fire_event(event_type: str = "", details: str = "") -> str:
     """Trigger a custom narrative or game event."""
     if not event_type:
         return "Specify event type."
-    scene = _get_bedroom_scene()
+    scene = _get_penthouse_scene()
     if not scene:
-        return "Bedroom not active."
-    msg = details or f"A {event_type} event occurs in the bedroom."
+        return "Penthouse not active."
+    msg = details or f"A {event_type} event occurs in the penthouse."
     scene._inject_to_loop("(Event)", f"[EVENT: {event_type}] {msg}", "event")
     scene.socketio.emit("scene_event", {"type": event_type, "message": msg})
     return f"Event fired: {event_type}. {details}"
@@ -280,8 +280,8 @@ def bedroom_fire_event(event_type: str = "", details: str = "") -> str:
 
 
 @skill(
-    pack="bedroom",
-    tags=["game", "bedroom", "scenarios"],
+    pack="penthouse",
+    tags=["game", "penthouse", "scenarios"],
     category=SkillCategory.GAME,
     description="Get current scenario options from the content pool.",
 )
@@ -297,20 +297,20 @@ def get_scenario_options(intensity: int = 2, tags: str = "") -> str:
     """
     import json
 
-    scene = _get_bedroom_scene()
+    scene = _get_penthouse_scene()
 
     # Try ContentEngine first
     try:
         from engine.content.content_engine import get_content_engine
         engine = get_content_engine()
-        result = engine.get_scenarios(scene="bedroom", intensity=intensity, tags=tags)
+        result = engine.get_scenarios(scene="penthouse", intensity=intensity, tags=tags)
         return json.dumps(result, ensure_ascii=False)
     except Exception:
         pass
 
     # Fallback: built-in PREMADE_SCENARIOS
     try:
-        from content.scenes.bedroom.bedroom_scene import PREMADE_SCENARIOS
+        from content.scenes.penthouse.penthouse_scene import PREMADE_SCENARIOS
         tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
         options = []
         for sid, sc in PREMADE_SCENARIOS.items():
@@ -326,8 +326,8 @@ def get_scenario_options(intensity: int = 2, tags: str = "") -> str:
 
 
 @skill(
-    pack="bedroom",
-    tags=["game", "bedroom", "director"],
+    pack="penthouse",
+    tags=["game", "penthouse", "director"],
     category=SkillCategory.GAME,
     description="Load a scenario into the scene director.",
 )
@@ -342,21 +342,21 @@ def load_scenario(scenario_id: str = "") -> str:
     """
     if not scenario_id:
         return "Specify scenario_id."
-    scene = _get_bedroom_scene()
+    scene = _get_penthouse_scene()
     if not scene:
-        return "Bedroom not active."
+        return "Penthouse not active."
 
     # Try SceneDirector
     try:
         from engine.director.scene_director import get_scene_director
-        director = get_scene_director("bedroom")
+        director = get_scene_director("penthouse")
         beat = director.load_scenario(scenario_id)
         return f"Scenario loaded. Beat: {beat}"
     except Exception:
         pass
 
     # Fallback: built-in scenario
-    from content.scenes.bedroom.bedroom_scene import PREMADE_SCENARIOS
+    from content.scenes.penthouse.penthouse_scene import PREMADE_SCENARIOS
     sc = PREMADE_SCENARIOS.get(scenario_id)
     if not sc:
         return f"Unknown scenario: {scenario_id}. Available: {', '.join(PREMADE_SCENARIOS.keys())}"
@@ -373,8 +373,8 @@ def load_scenario(scenario_id: str = "") -> str:
 
 
 @skill(
-    pack="bedroom",
-    tags=["game", "bedroom", "memory"],
+    pack="penthouse",
+    tags=["game", "penthouse", "memory"],
     category=SkillCategory.GAME,
     description="Check what the character remembers about the player.",
 )
@@ -389,9 +389,9 @@ def recall_memories(character_id: str = "") -> str:
     """
     if not character_id:
         return "Specify character_id."
-    scene = _get_bedroom_scene()
+    scene = _get_penthouse_scene()
     if not scene:
-        return "Bedroom not active."
+        return "Penthouse not active."
     if character_id not in scene.characters:
         return f"Character {character_id} not loaded."
 
@@ -411,8 +411,8 @@ def recall_memories(character_id: str = "") -> str:
 
 
 @skill(
-    pack="bedroom",
-    tags=["game", "bedroom", "memory"],
+    pack="penthouse",
+    tags=["game", "penthouse", "memory"],
     category=SkillCategory.GAME,
     description="Record a memorable moment in character memory.",
     cooldown=5,
@@ -434,9 +434,9 @@ def remember_moment(
     """
     if not character_id or not description:
         return "Specify character_id and description."
-    scene = _get_bedroom_scene()
+    scene = _get_penthouse_scene()
     if not scene:
-        return "Bedroom not active."
+        return "Penthouse not active."
     if character_id not in scene.characters:
         return f"Character {character_id} not loaded."
 
@@ -463,8 +463,8 @@ def remember_moment(
 
 
 @skill(
-    pack="bedroom",
-    tags=["game", "bedroom", "character"],
+    pack="penthouse",
+    tags=["game", "penthouse", "character"],
     category=SkillCategory.GAME,
     description="Get current emotion levels for a character.",
 )
@@ -479,9 +479,9 @@ def get_emotion_levels(character_id: str = "") -> str:
     """
     if not character_id:
         return "Specify character_id."
-    scene = _get_bedroom_scene()
+    scene = _get_penthouse_scene()
     if not scene:
-        return "Bedroom not active."
+        return "Penthouse not active."
     profile = scene.profiles.get(character_id)
     if not profile:
         return f"Character {character_id} not loaded."
@@ -498,8 +498,8 @@ def get_emotion_levels(character_id: str = "") -> str:
 
 
 @skill(
-    pack="bedroom",
-    tags=["game", "bedroom", "economy"],
+    pack="penthouse",
+    tags=["game", "penthouse", "economy"],
     category=SkillCategory.GAME,
     description="Unlock premium content with player credits.",
     cooldown=10,
@@ -516,9 +516,9 @@ def unlock_premium(content_id: str = "", cost: int = 100) -> str:
     """
     if not content_id:
         return "Specify content_id."
-    scene = _get_bedroom_scene()
+    scene = _get_penthouse_scene()
     if not scene:
-        return "Bedroom not active."
+        return "Penthouse not active."
 
     try:
         from engine.economy.economy import get_economy_manager
@@ -551,25 +551,25 @@ def unlock_premium(content_id: str = "", cost: int = 100) -> str:
 
 
 @skill(
-    pack="bedroom",
-    tags=["game", "bedroom", "world"],
+    pack="penthouse",
+    tags=["game", "penthouse", "world"],
     category=SkillCategory.ENVIRONMENT,
-    description="Get world context affecting the bedroom — recent events, Lola's mood modifier based on player status",
+    description="Get world context affecting the penthouse — recent events, Lola's mood modifier based on player status",
 )
-def get_bedroom_world_context() -> str:
-    """Return a formatted summary of living world context for the bedroom.
+def get_penthouse_world_context() -> str:
+    """Return a formatted summary of living world context for the penthouse.
 
     Returns:
         Multi-line string with world events, credits, rep, heat, and mood.
     """
-    scene = _get_bedroom_scene()
+    scene = _get_penthouse_scene()
     if not scene:
         # Fall back to calling the logic directly
         from engine.world.world_sim import get_event_log
         from engine.world.player_state import get_player_state
         try:
             events = get_event_log(limit=20)
-            relevant = [e for e in events if e.scene == "bedroom" or e.intensity >= 2.0][:3]
+            relevant = [e for e in events if e.scene == "penthouse" or e.intensity >= 2.0][:3]
             ctx_lines = [f"• {e.title}: {e.description}" for e in relevant]
             ps = get_player_state()
             state = ps.to_dict()
@@ -603,13 +603,13 @@ def get_bedroom_world_context() -> str:
 
 
 @skill(
-    pack="bedroom",
-    tags=["game", "bedroom", "reputation"],
+    pack="penthouse",
+    tags=["game", "penthouse", "reputation"],
     category=SkillCategory.SOCIAL,
-    description="Update player reputation based on bedroom interactions",
+    description="Update player reputation based on penthouse interactions",
 )
-def update_bedroom_reputation(delta: int = 0, reason: str = "bedroom_interaction") -> str:
-    """Adjust player reputation from a bedroom interaction outcome.
+def update_penthouse_reputation(delta: int = 0, reason: str = "penthouse_interaction") -> str:
+    """Adjust player reputation from a penthouse interaction outcome.
 
     Args:
         delta: Amount to change reputation (positive or negative).

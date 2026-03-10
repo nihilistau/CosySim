@@ -24,7 +24,7 @@ _DEFAULT_OUTPUT_DIR = "data/asset_studio/audio"
 
 # Ambient tone frequencies for each scene (Hz) — used for fallback tones.
 _SCENE_TONES: Dict[str, float] = {
-    "bedroom":  220.0,   # A3 — low and warm
+    "penthouse":  220.0,   # A3 — low and warm
     "lounge":   261.6,   # C4 — mellow
     "tavern":   329.6,   # E4 — earthy
     "casino":   440.0,   # A4 — bright

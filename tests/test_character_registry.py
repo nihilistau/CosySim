@@ -44,7 +44,7 @@ def _register_aria(reg: CharacterRegistry) -> CharacterRecord:
         personality={"warmth": 0.9, "curiosity": 0.8, "assertiveness": 0.5},
         backstory="A creative writer who loves late-night conversations.",
         voice_style="warm, playful",
-        scene_roles=["bedroom", "phone"],
+        scene_roles=["penthouse", "phone"],
     )
 
 
@@ -176,7 +176,7 @@ class TestRegistryProfileQueries:
 
     def test_list_characters_by_scene_role(self):
         self.reg.register("lena", name="Lena", scene_roles=["phone"])
-        bed = self.reg.list_characters(scene_role="bedroom")
+        bed = self.reg.list_characters(scene_role="penthouse")
         assert "aria" in bed
         assert "lena" not in bed
 

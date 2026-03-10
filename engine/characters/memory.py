@@ -14,7 +14,7 @@ Example::
         "The player asked Luna to wear the red dress",
         player_id="player",
         emotional_weight=0.8,
-        scene="bedroom",
+        scene="penthouse",
         tags=["wardrobe", "request"],
     )
 

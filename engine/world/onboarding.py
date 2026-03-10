@@ -360,7 +360,7 @@ def _build_onboarding_quests() -> List[OnboardingQuest]:
                     id="visit_penthouse",
                     description="Visit THE PENTHOUSE",
                     hint="The upscale social hub — find Lola",
-                    scene="bedroom",
+                    scene="penthouse",
                 ),
                 OnboardingObjective(
                     id="visit_tavern",
@@ -434,7 +434,7 @@ def _build_onboarding_quests() -> List[OnboardingQuest]:
                     id="meet_lola",
                     description="Meet Lola at THE PENTHOUSE",
                     hint="She knows everyone worth knowing",
-                    scene="bedroom",
+                    scene="penthouse",
                 ),
                 OnboardingObjective(
                     id="meet_frankie",
@@ -764,7 +764,7 @@ class OnboardingManager:
         """Record a scene visit and auto-advance relevant objectives.
 
         Args:
-            scene_name: The scene identifier (e.g., "grid", "bedroom").
+            scene_name: The scene identifier (e.g., "grid", "penthouse").
 
         Returns:
             Dict with any objectives that were completed, or None.
@@ -779,7 +779,7 @@ class OnboardingManager:
 
         scene_objective_map = {
             "grid": "visit_grid",
-            "bedroom": "visit_penthouse",
+            "penthouse": "visit_penthouse",
             "tavern": "visit_tavern",
             "casino": "visit_casino",
             "arena": "visit_arena",

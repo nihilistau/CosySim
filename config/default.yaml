@@ -41,7 +41,7 @@ scenes:
     port: 8501
     theme: "dark"
   
-  bedroom:
+  penthouse:
     host: "localhost"
     port: 5556
     debug: false

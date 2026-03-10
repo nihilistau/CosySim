@@ -84,7 +84,7 @@ def test_scene_presets_constant_defined(js_content):
 
 
 @pytest.mark.parametrize("scene", [
-    "bedroom", "phone", "lounge", "tavern", "casino",
+    "penthouse", "phone", "lounge", "tavern", "casino",
     "gallery", "arena", "realm", "neoncity",
 ])
 def test_scene_preset_defined(js_content, scene):
@@ -167,7 +167,7 @@ def test_hex_to_rgb_helper(js_content):
 
 def test_nine_presets_total(js_content):
     """Ensure exactly the 9 expected preset keys are in the PARTICLE_PRESETS block."""
-    expected = {"bedroom", "phone", "lounge", "tavern", "casino", "gallery", "arena", "realm", "neoncity"}
+    expected = {"penthouse", "phone", "lounge", "tavern", "casino", "gallery", "arena", "realm", "neoncity"}
     found = {scene for scene in expected if scene in js_content}
     assert found == expected, f"Missing presets: {expected - found}"
 

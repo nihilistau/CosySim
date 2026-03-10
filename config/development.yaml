@@ -15,7 +15,7 @@ scenes:
     debug: true
     auto_reload: true
   
-  bedroom:
+  penthouse:
     debug: true
 
 # Development TTS settings (faster, lower quality)

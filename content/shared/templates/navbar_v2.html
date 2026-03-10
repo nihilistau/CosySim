@@ -5,7 +5,7 @@
       {% include 'navbar_v2.html' %}
 
   Required context variables (with safe defaults below):
-      current_scene  — machine key, e.g. "bedroom"
+      current_scene  — machine key, e.g. "penthouse"
       scene_name     — display label, e.g. "THE PENTHOUSE"
       scene_accent   — CSS hex/rgb colour, e.g. "#c084fc"
 
@@ -27,7 +27,7 @@
   The first 8 entries are shown inline; the rest collapse into MORE ▼.
 #}
 {% set _scenes = [
-  { "key": "bedroom",         "label": "THE PENTHOUSE",     "port": 5556, "accent": "#c084fc" },
+  { "key": "penthouse",         "label": "THE PENTHOUSE",     "port": 5556, "accent": "#c084fc" },
   { "key": "phone",           "label": "SIGNAL",            "port": 5555, "accent": "#00e5ff" },
   { "key": "lounge",          "label": "VELVET PIT",        "port": 5557, "accent": "#f43f5e" },
   { "key": "tavern",          "label": "RUSTY ANCHOR",      "port": 5558, "accent": "#f97316" },

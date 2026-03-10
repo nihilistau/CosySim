@@ -521,7 +521,7 @@ class TestActivityLoggerDataCollection:
             "agent_id": "agent-1",
             "agent_name": "Aria",
             "reply": "Hello! How can I help?",
-            "scene": "bedroom",
+            "scene": "penthouse",
             "auto_results": {},
             "game_state": True,
             "user_input": "Hi there",

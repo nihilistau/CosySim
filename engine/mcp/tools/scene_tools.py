@@ -277,7 +277,7 @@ def resource_scene_status(scene_name: str) -> str:
     config = get_config()
     port = int(config.get(f"scenes.{scene_name}.port", 0))
     if not port:
-        known = {"phone": 5555, "bedroom": 5556, "hub": 8500, "admin": 8502}
+        known = {"phone": 5555, "penthouse": 5556, "hub": 8500, "admin": 8502}
         port = known.get(scene_name, 0)
     if not port:
         return json.dumps({"scene": scene_name, "status": "unknown", "error": "No port configured"})

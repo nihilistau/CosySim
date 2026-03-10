@@ -24,7 +24,7 @@ Usage::
     result = proc.result()
     print(result.clean_text)          # text with tags stripped
     print(result.mood_tags)           # ["happy"]
-    print(result.image_requests)      # ["a selfie in the bedroom"]
+    print(result.image_requests)      # ["a selfie in the penthouse"]
     print(result.tool_calls)          # [{name, args, output, success}]
 
 Or use the shortcut::
@@ -50,7 +50,7 @@ logger = logging.getLogger(__name__)
 
 # [MOOD:happy]  [MOOD:nervous,excited]
 _RE_MOOD = re.compile(r"\[MOOD:([^\]]+)\]", re.IGNORECASE)
-# [IMAGE:a selfie in the bedroom]  [SELFIE:cute pose]
+# [IMAGE:a selfie in the penthouse]  [SELFIE:cute pose]
 _RE_IMAGE = re.compile(r"\[(?:IMAGE|SELFIE|PHOTO):([^\]]+)\]", re.IGNORECASE)
 # [ACTION:sit down]  [ACTION:pick up phone]
 _RE_ACTION = re.compile(r"\[ACTION:([^\]]+)\]", re.IGNORECASE)

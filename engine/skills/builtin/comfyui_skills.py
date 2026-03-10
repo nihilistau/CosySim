@@ -200,7 +200,7 @@ def generate_scene_image(
     """Generate and inject an image directly into a scene's static asset folder.
 
     Args:
-        scene:       Target scene name (e.g. 'bedroom', 'casino', 'arena').
+        scene:       Target scene name (e.g. 'penthouse', 'casino', 'arena').
         image_type:  Asset category: 'background', 'item', 'atmosphere', 'portrait'.
         prompt:      Image prompt.  If empty, a default is built from scene + type.
         width:       Output width in pixels (default 1920 for backgrounds).
@@ -210,7 +210,7 @@ def generate_scene_image(
         filename:    Output filename stem (default: scene_imagetype_timestamp.png).
 
     Returns:
-        Static URL string (e.g. '/scenes/bedroom/static/img/bg_generated.png')
+        Static URL string (e.g. '/scenes/penthouse/static/img/bg_generated.png')
         on success, or an error message.
     """
     import time
@@ -225,7 +225,7 @@ def generate_scene_image(
         # Build prompt from scene context if not supplied
         if not prompt:
             scene_prompts = {
-                "bedroom":  "luxury penthouse bedroom at night, purple neon ambient lighting, moody atmosphere",
+                "penthouse":  "luxury penthouse penthouse at night, purple neon ambient lighting, moody atmosphere",
                 "casino":   "high-end casino floor, golden chandeliers, roulette tables, noir atmosphere",
                 "lounge":   "velvet underground lounge bar, deep red lighting, jazz atmosphere",
                 "tavern":   "rustic fantasy tavern interior, warm firelight, wooden beams",
@@ -303,7 +303,7 @@ def generate_all_scene_backgrounds(
     from pathlib import Path
 
     default_scenes = [
-        "bedroom", "phone", "lounge", "tavern", "casino",
+        "penthouse", "phone", "lounge", "tavern", "casino",
         "gallery", "arena", "realm", "neoncity",
     ]
     target_scenes: List[str] = scenes or default_scenes

@@ -540,7 +540,7 @@ class TestEdgeCases:
         """Metadata dict is serialized to JSON."""
         collector.record(RouterRecord(
             tier_selected="gpu_primary", task_type="chat", priority="interactive",
-            metadata={"scene": "bedroom", "turn": 5},
+            metadata={"scene": "penthouse", "turn": 5},
         ))
         collector.flush()
         out = str(tmp_path / "meta.jsonl")
@@ -548,7 +548,7 @@ class TestEdgeCases:
         with open(out, "r", encoding="utf-8") as f:
             data = json.loads(f.readline())
             meta = json.loads(data["metadata"])
-            assert meta["scene"] == "bedroom"
+            assert meta["scene"] == "penthouse"
             assert meta["turn"] == 5
 
     def test_record_with_empty_metadata(self, collector):

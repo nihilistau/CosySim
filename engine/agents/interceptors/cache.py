@@ -55,4 +55,4 @@ class _InterceptorCache:
 INTERCEPTOR_CACHE = _InterceptorCache(default_ttl=60.0)
 
 # Scenes that have their own dedicated interceptors; UniversalSceneInterceptor skips these.
-SCENES_WITH_DEDICATED_INTERCEPTOR: Set[str] = {"bedroom", "phone", "lounge", "gallery"}
+SCENES_WITH_DEDICATED_INTERCEPTOR: Set[str] = {"penthouse", "phone", "lounge", "gallery"}

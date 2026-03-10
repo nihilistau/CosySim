@@ -123,7 +123,7 @@ def get_scene_rules(scene_id: str) -> str:
     is expected, what is forbidden, and what the Director can activate.
 
     Args:
-        scene_id: e.g. "bedroom" or "phone"
+        scene_id: e.g. "penthouse" or "phone"
     """
     try:
         from engine.mcp.tools.scene_tools import get_scene_rules as _impl
@@ -144,7 +144,7 @@ def get_scene_available_actions(
     filtered by their current stats and the scene's permission matrix.
 
     Args:
-        scene_id:         e.g. "bedroom"
+        scene_id:         e.g. "penthouse"
         character_id:     e.g. "aria"
         stats_json:       JSON dict of current stats
         scene_state_json: JSON dict of scene state flags
@@ -169,7 +169,7 @@ def apply_scene_rule(
     target characters.  Can be used to set atmosphere, issue directives,
     adjust stats, etc. via a single memorable rule name.
 
-    Examples: "bedroom_lights_off", "bedroom_mood_lift", "phone_escalate"
+    Examples: "penthouse_lights_off", "penthouse_mood_lift", "phone_escalate"
 
     Args:
         scene_id:        Scene the rule belongs to
@@ -199,7 +199,7 @@ def get_scene_rules_summary(scene_id: str, character_id: str = "") -> str:
     Call this at scene start or when you're unsure what's appropriate.
 
     Args:
-        scene_id:     e.g. "bedroom" or "phone"
+        scene_id:     e.g. "penthouse" or "phone"
         character_id: The character you're working with
     """
     try:

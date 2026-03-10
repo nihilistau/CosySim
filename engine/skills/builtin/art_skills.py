@@ -107,7 +107,7 @@ def batch_generate_portraits(scene: str, mood: str = "neutral") -> str:
     :class:`PortraitCache`.
 
     Args:
-        scene: Scene slug (e.g. ``"bedroom"``, ``"casino"``).
+        scene: Scene slug (e.g. ``"penthouse"``, ``"casino"``).
         mood: Mood to generate portraits in.
 
     Returns:
@@ -164,7 +164,7 @@ def generate_scene_background(
     """Generate (or retrieve cached) a scene background.
 
     Args:
-        scene: Scene slug (e.g. ``"bedroom"``, ``"casino"``).
+        scene: Scene slug (e.g. ``"penthouse"``, ``"casino"``).
         time_of_day: Time of day (dawn/morning/afternoon/dusk/night/midnight).
         mood: Dramatic mood (neutral/tense/romantic/dangerous/mysterious etc.).
 

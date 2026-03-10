@@ -212,10 +212,10 @@ def _build_scene_categories() -> Dict[str, Dict[str, Any]]:
                     "#667eea",
                 ),
                 _scene_entry(
-                    "Bedroom",
-                    "🛏️",
-                    "bedroom",
-                    "bedroom",
+                    "The Penthouse",
+                    "🏙️",
+                    "penthouse",
+                    "penthouse",
                     "Multi-agent roleplay — characters, outfits, moods, director scenarios",
                     "#f093fb",
                 ),
@@ -352,9 +352,9 @@ def _build_quick_actions() -> List[Dict[str, str]]:
             "url": get_service_url("phone"),
         },
         {
-            "button": "🛏️ Bedroom",
-            "open_label": "Bedroom",
-            "url": get_service_url("bedroom"),
+            "button": "🏙️ The Penthouse",
+            "open_label": "The Penthouse",
+            "url": get_service_url("penthouse"),
         },
     ]
 
@@ -531,7 +531,7 @@ python launcher.py --mode all
 
 # Or launch individual scenes
 python launcher.py --mode phone
-python launcher.py --mode bedroom
+python launcher.py --mode penthouse
 python launcher.py --mode realm
 
 # Run tests (744 passing)

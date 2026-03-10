@@ -40,7 +40,7 @@ class TestPipelineMetrics:
     def test_record_and_get(self, db):
         db.record_pipeline(
             agent_id="lola",
-            scene_id="bedroom",
+            scene_id="penthouse",
             tier="gpu",
             model="qwen3-8b",
             latency_ms=350.0,

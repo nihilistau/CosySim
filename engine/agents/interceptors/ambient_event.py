@@ -41,7 +41,7 @@ class AmbientEventInterceptor(InterceptorBase):
 
     # Per-scene ambient event pools
     _SCENE_EVENTS: Dict[str, List[str]] = {
-        "bedroom": [
+        "penthouse": [
             "A soft notification chimes on the nightstand phone.",
             "Moonlight shifts through the curtains, casting new shadows.",
             "Music from a neighbor's apartment drifts faintly through the wall.",

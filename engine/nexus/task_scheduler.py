@@ -739,7 +739,7 @@ class TaskScheduler:
                 "title": "Polish scene",
                 "description": (
                     "Improve scene quality: better error handling, UI polish, "
-                    "skill coverage, test coverage. Reference bedroom scene as AAA standard."
+                    "skill coverage, test coverage. Reference penthouse scene as AAA standard."
                 ),
                 "priority": TaskPriority.LOW,
                 "complexity": TaskComplexity.MEDIUM,

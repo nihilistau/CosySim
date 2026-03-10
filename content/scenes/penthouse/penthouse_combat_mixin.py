@@ -1,4 +1,4 @@
-"""Bedroom scene combat and bed-game mechanics mixin."""
+"""penthouse scene combat and bed-game mechanics mixin."""
 from __future__ import annotations
 
 import logging
@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class BedroomCombatMixin:
+class PenthouseCombatMixin:
     """Bed-game lifecycle, escalation, and agent-action stat-drift methods."""
 
     # ── Bed Game helpers ────────────────────────────────────────────────
@@ -41,7 +41,7 @@ class BedroomCombatMixin:
     # ── Agent action callback ───────────────────────────────────────────
 
     def _on_agent_action(self, character_id: str, action: Dict) -> None:
-        from content.scenes.bedroom.bedroom_scene import PERSONALITY_PROFILES
+        from content.scenes.penthouse.penthouse_scene import PERSONALITY_PROFILES
 
         if self.story_beats:
             beat = self.story_beats[0]
@@ -142,13 +142,13 @@ class BedroomCombatMixin:
                     ssm = get_scene_state_manager()
                     rec = InteractionRecord(
                         interaction_id=str(_uuid.uuid4())[:8],
-                        scene_id="bedroom",
+                        scene_id="penthouse",
                         interaction_type=action_type,
                         initiator_id=character_id,
                         description=action.get("message", action_type),
                         stat_effects=stat_drifts.get(action_type, {}),
                     )
-                    ssm.log_interaction("bedroom", rec)
+                    ssm.log_interaction("penthouse", rec)
                 except Exception:
                     pass
         self._broadcast_state()
@@ -171,7 +171,7 @@ class BedroomCombatMixin:
     def _setup_bedgame_routes(self) -> None:
         """Register all bed-game Flask routes on self.app."""
         from flask import jsonify, request
-        from content.scenes.bedroom.bedroom_scene import (
+        from content.scenes.penthouse.penthouse_scene import (
             BED_GAME_ACTIONS, BedGameState, PREMADE_SCENARIOS,
         )
 
@@ -266,7 +266,7 @@ class BedroomCombatMixin:
                     self.profiles[pid].stats.adjust(**deltas)
                     try:
                         from engine.mcp.state_coordinator import get_coordinator
-                        get_coordinator().update(pid, source="bedgame_action", scene="bedroom", **deltas)
+                        get_coordinator().update(pid, source="bedgame_action", scene="penthouse", **deltas)
                     except Exception:
                         pass
             explicit_level = BED_GAME_ACTIONS.get(action_id, {}).get("explicit_level", 2) if action_id else 2

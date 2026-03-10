@@ -23,7 +23,7 @@ _SCHEMA: Dict[str, Dict[str, Any]] = {
     "database.sqlite.path":     {"type": str,   "required": True},
     # Scene ports
     "scenes.phone.port":        {"type": int,   "required": True,  "range": (1024, 65535)},
-    "scenes.bedroom.port":      {"type": int,   "required": True,  "range": (1024, 65535)},
+    "scenes.penthouse.port":      {"type": int,   "required": True,  "range": (1024, 65535)},
     "scenes.dashboard.port":    {"type": int,   "required": True,  "range": (1024, 65535)},
     # Legacy LLM
     "llm.default.base_url":     {"type": str,   "required": True},

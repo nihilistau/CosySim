@@ -97,8 +97,8 @@ class TestCharacterAgentConstruction:
         assert agent.config is cfg
 
     def test_stores_scene(self):
-        agent, _, _ = _build_agent(scene="bedroom")
-        assert agent.scene == "bedroom"
+        agent, _, _ = _build_agent(scene="penthouse")
+        assert agent.scene == "penthouse"
 
     def test_default_skill_packs_empty(self):
         agent, _, _ = _build_agent()

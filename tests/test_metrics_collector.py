@@ -54,7 +54,7 @@ class TestMetricsCollectorPipelineIntegration:
         # Mock a PipelineResult
         result = MagicMock()
         result.agent_id = "lola"
-        result.scene_id = "bedroom"
+        result.scene_id = "penthouse"
         result.tier = "gpu"
         result.model = "qwen3-8b"
         result.pipeline_latency_ms = 450.0
@@ -85,7 +85,7 @@ class TestMetricsCollectorPipelineIntegration:
 
         result = MagicMock()
         result.agent_id = "lola"
-        result.scene_id = "bedroom"
+        result.scene_id = "penthouse"
         result.tier = "gpu"
         result.model = ""
         result.pipeline_latency_ms = 100.0

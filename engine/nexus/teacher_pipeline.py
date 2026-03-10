@@ -431,7 +431,7 @@ class TeacherPipeline:
 
         templates: Dict[str, List[tuple[str, str]]] = {
             "qa_evaluator": [
-                ("How do I start the CosySim bedroom scene?", "ESSENTIAL"),
+                ("How do I start the CosySim penthouse scene?", "ESSENTIAL"),
                 ("What is the meaning of life?", "SKIP"),
                 ("How does the interceptor pipeline work?", "ESSENTIAL"),
                 ("What port does the Nexus KMS run on?", "ESSENTIAL"),
@@ -440,7 +440,7 @@ class TeacherPipeline:
             "router_v2": [
                 ("Search for interceptor docs", "nexus_search"),
                 ("What port is LMStudio on?", "nexus_ask"),
-                ("Start the bedroom scene", "scene_control"),
+                ("Start the penthouse scene", "scene_control"),
                 ("Synthesize speech for Aria", "tts_request"),
                 ("Run the backup now", "backup_request"),
             ],

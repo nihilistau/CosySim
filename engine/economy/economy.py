@@ -10,7 +10,7 @@ Usage::
     from engine.economy import get_economy_manager, TransactionType
 
     em = get_economy_manager()
-    txn = em.transact(50, TransactionType.EARN, "bedroom", "Won mini-game")
+    txn = em.transact(50, TransactionType.EARN, "penthouse", "Won mini-game")
     print(txn.balance_after)   # 1050
 """
 

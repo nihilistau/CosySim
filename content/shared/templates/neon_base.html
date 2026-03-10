@@ -115,6 +115,9 @@
   {# ── Neon grid background (CSS-driven) ──────────────────────────── #}
   <div class="neon-grid-bg" aria-hidden="true"></div>
 
+  {# ── Scene background (opt-in: 3D canvas, video, etc.) ────────── #}
+  {% block scene_background %}{% endblock %}
+
   {# ── Navbar v2 (includes HUD strip) ─────────────────────────────── #}
   {% include 'navbar_v2.html' %}
 

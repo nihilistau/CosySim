@@ -645,7 +645,7 @@ def api_set_directive():
 
         {
             "character_id": "lola",
-            "scene": "bedroom",
+            "scene": "penthouse",
             "type": "topic_steer",    // force_response | must_include | style_lock | topic_steer | mood_set | refuse
             "value": "talk about your childhood dream",
             "turns": 2               // optional, default 1

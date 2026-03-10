@@ -98,7 +98,7 @@ def memory_recall(
         try:
             from engine.mcp.scene_state import get_scene_state_manager
             ssm = get_scene_state_manager()
-            entries = ssm.get_narrative_entries(scene_id or "bedroom", limit=4)
+            entries = ssm.get_narrative_entries(scene_id or "penthouse", limit=4)
             results["recent"] = [e.get("event", "") for e in entries if e.get("event")]
         except Exception:
             results["recent"] = []

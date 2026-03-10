@@ -37,7 +37,7 @@ class TestAssetLibrary:
     def test_register_and_get(self, lib_db):
         asset_id = lib_db.register(
             asset_type="image", url="/test/img.png", title="Test Image",
-            scene="bedroom", prompt="a test image", metadata={"width": 512},
+            scene="penthouse", prompt="a test image", metadata={"width": 512},
         )
         assert asset_id
         a = lib_db.get_asset(asset_id)
@@ -50,21 +50,21 @@ class TestAssetLibrary:
         assert result == []
 
     def test_list_with_filter(self, lib_db):
-        lib_db.register("image", "/1.png", "Img1", "bedroom")
+        lib_db.register("image", "/1.png", "Img1", "penthouse")
         lib_db.register("voice", "/1.wav", "Voice1", "phone")
         result = lib_db.list_assets(asset_type="image")
         assert len(result) == 1
         assert result[0]["asset_type"] == "image"
 
     def test_favorite_toggle(self, lib_db):
-        aid = lib_db.register("image", "/fav.png", "Fav", "bedroom")
+        aid = lib_db.register("image", "/fav.png", "Fav", "penthouse")
         is_fav = lib_db.toggle_favorite(aid)
         assert is_fav is True
         is_fav = lib_db.toggle_favorite(aid)
         assert is_fav is False
 
     def test_delete(self, lib_db):
-        aid = lib_db.register("svg", "/del.svg", "Del", "bedroom")
+        aid = lib_db.register("svg", "/del.svg", "Del", "penthouse")
         assert lib_db.get_asset(aid) is not None
         lib_db.delete(aid)
         assert lib_db.get_asset(aid) is None
@@ -75,23 +75,23 @@ class TestAssetLibrary:
         assert lib_db.count() == 5
 
     def test_stats_by_type(self, lib_db):
-        lib_db.register("image", "/img.png", "Img", "bedroom")
-        lib_db.register("image", "/img2.png", "Img2", "bedroom")
+        lib_db.register("image", "/img.png", "Img", "penthouse")
+        lib_db.register("image", "/img2.png", "Img2", "penthouse")
         lib_db.register("voice", "/vox.wav", "Vox", "phone")
         stats = lib_db.stats()
         assert stats["by_type"]["image"] == 2
         assert stats["by_type"]["voice"] == 1
 
     def test_search(self, lib_db):
-        lib_db.register("image", "/s.png", "A Sunset", "bedroom")
-        lib_db.register("image", "/p.png", "A Portrait", "bedroom")
+        lib_db.register("image", "/s.png", "A Sunset", "penthouse")
+        lib_db.register("image", "/p.png", "A Portrait", "penthouse")
         result = lib_db.list_assets(search="Sunset")
         assert len(result) == 1
         assert result[0]["title"] == "A Sunset"
 
     def test_pagination(self, lib_db):
         for i in range(10):
-            lib_db.register("image", f"/{i}.png", f"P{i}", "bedroom")
+            lib_db.register("image", f"/{i}.png", f"P{i}", "penthouse")
         page1 = lib_db.list_assets(limit=5, offset=0)
         page2 = lib_db.list_assets(limit=5, offset=5)
         assert len(page1) == 5
@@ -215,7 +215,7 @@ class TestPromptBuilder:
         pos, neg = builder.build_portrait_prompt(
             character_id="lola",
             mood="happy",
-            scene="bedroom",
+            scene="penthouse",
             appearance="scarlet woman, flowing red hair",
         )
         assert "lola" in pos.lower()
@@ -537,7 +537,7 @@ def inject_app(tmp_path):
     @app.route("/api/scenes/list")
     def api_scenes_list():
         scenes = [
-            {"id": "bedroom", "name": "THE PENTHOUSE", "port": 5555},
+            {"id": "penthouse", "name": "THE PENTHOUSE", "port": 5555},
             {"id": "phone", "name": "SIGNAL", "port": 5556},
         ]
         return jsonify({"status": "ok", "scenes": scenes})
@@ -578,7 +578,7 @@ class TestInjectToSceneRoutes:
         assert data["status"] == "ok"
         assert len(data["scenes"]) >= 2
         ids = [s["id"] for s in data["scenes"]]
-        assert "bedroom" in ids
+        assert "penthouse" in ids
 
     def test_inject_missing_params(self, inject_app):
         client, _ = inject_app
@@ -592,7 +592,7 @@ class TestInjectToSceneRoutes:
     def test_inject_asset_not_found(self, inject_app):
         client, _ = inject_app
         res = client.post("/api/inject_to_scene",
-                          data=json.dumps({"scene": "bedroom", "asset_url": "/missing.png"}),
+                          data=json.dumps({"scene": "penthouse", "asset_url": "/missing.png"}),
                           content_type="application/json")
         assert res.status_code == 404
         data = json.loads(res.data)
@@ -602,7 +602,7 @@ class TestInjectToSceneRoutes:
         client, tmp_path = inject_app
         res = client.post("/api/inject_to_scene",
                           data=json.dumps({
-                              "scene": "bedroom",
+                              "scene": "penthouse",
                               "asset_url": "/some/path/test_img.png",
                               "image_type": "background",
                           }),
@@ -610,10 +610,10 @@ class TestInjectToSceneRoutes:
         assert res.status_code == 200
         data = json.loads(res.data)
         assert data["status"] == "ok"
-        assert data["scene"] == "bedroom"
+        assert data["scene"] == "penthouse"
         assert "background_injected.png" in data["filename"]
         # File was copied
-        target = tmp_path / "content" / "scenes" / "bedroom" / "static" / "img" / "background_injected.png"
+        target = tmp_path / "content" / "scenes" / "penthouse" / "static" / "img" / "background_injected.png"
         assert target.exists()
 
     def test_inject_custom_filename(self, inject_app):
@@ -652,8 +652,8 @@ def test_asset_studio_scene_list_uses_canonical_registry():
     assert response.status_code == 200
     data = json.loads(response.data)
     scenes = {scene["id"]: scene for scene in data["scenes"]}
-    assert scenes["bedroom"]["port"] == 5556
-    assert scenes["bedroom"]["name"] == "THE PENTHOUSE"
+    assert scenes["penthouse"]["port"] == 5556
+    assert scenes["penthouse"]["name"] == "THE PENTHOUSE"
     assert scenes["phone"]["port"] == 5555
     assert scenes["phone"]["name"] == "SIGNAL"
 

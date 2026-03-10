@@ -17,7 +17,7 @@ Example usage::
     from engine.art.scene_art import get_scene_art_manager
 
     mgr = get_scene_art_manager()
-    result = mgr.get_character_portrait("aria", mood="seductive", scene="bedroom")
+    result = mgr.get_character_portrait("aria", mood="seductive", scene="penthouse")
     print(result.url)
 """
 
@@ -57,7 +57,7 @@ def _get_content_gate():
 # ── Scene prompt defaults ─────────────────────────────────────────────────────
 
 _SCENE_PROMPTS: Dict[str, str] = {
-    "bedroom":  "luxurious penthouse bedroom, neon city through window, dark glamour",
+    "penthouse":  "luxurious penthouse penthouse, neon city through window, dark glamour",
     "lounge":   "underground lounge bar, velvet seating, amber lighting",
     "tavern":   "rustic fantasy tavern interior, fireplace, medieval",
     "casino":   "noir casino floor, card tables, dramatic shadows",
@@ -309,7 +309,7 @@ class SceneArtManager:
         """Return a widescreen background image for *scene*.
 
         Args:
-            scene: Scene slug from the scene prompt map (e.g. ``"bedroom"``).
+            scene: Scene slug from the scene prompt map (e.g. ``"penthouse"``).
             time_of_day: Time-of-day label (e.g. ``"night"``, ``"dawn"``).
             mood: Dramatic mood (e.g. ``"tense"``).
 

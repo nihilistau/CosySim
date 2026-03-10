@@ -105,7 +105,7 @@ class TestEarnCredits:
             from engine.economy.economy import EconomyManager, TransactionType
 
             em = EconomyManager(nexus_client=mock_nexus)
-            txn = em.transact(200, TransactionType.EARN, "bedroom", "Chore reward")
+            txn = em.transact(200, TransactionType.EARN, "penthouse", "Chore reward")
 
         assert txn.amount == 200
         assert txn.balance_after == 1200
@@ -253,7 +253,7 @@ class TestTransactionHistory:
             from engine.economy.economy import EconomyManager, TransactionType
 
             em = EconomyManager(nexus_client=mock_nexus)
-            em.transact(50, TransactionType.EARN, "bedroom", "Test earn")
+            em.transact(50, TransactionType.EARN, "penthouse", "Test earn")
 
         # Should have called add_entry with content_type="history"
         history_calls = [
@@ -271,7 +271,7 @@ class TestTransactionHistory:
             id="test-uuid-1",
             type=TransactionType.EARN,
             amount=100,
-            scene="bedroom",
+            scene="penthouse",
             description="Test",
             timestamp=time.time(),
             balance_after=1100,

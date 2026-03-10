@@ -237,7 +237,7 @@ def _get_doc_entries() -> list[tuple[str, str, str, str, list[str]]]:
             "- stop() — persist state, cleanup\n"
             "- get_plugin_info() — return metadata for hub discovery\n\n"
             "Port Map:\n"
-            "Phone:5555, Bedroom:5556, NeonCity:5557, Tavern:5558, Realm:5559, Casino:5560, "
+            "Phone:5555, penthouse:5556, NeonCity:5557, Tavern:5558, Realm:5559, Casino:5560, "
             "Heist:5561, Gallery:5562, Warzone:5563, Coders:5564, Lounge:5565, CommandCenter:5566, Games:5567\n"
             "Hub:8500, Dashboard:8501, Admin:8502, TTS:8600, WebBridge:8601\n\n"
             "Character Lifecycle: on_character_added() syncs to MCP + sets up personality. on_character_removed() cleans up MCP nodes.",
@@ -249,7 +249,7 @@ def _get_doc_entries() -> list[tuple[str, str, str, str, list[str]]]:
             "Decorator: @skill(pack='scene_name', description='LLM-facing desc', category='game', cooldown=5.0, cost=1.0, tags=[...])\n\n"
             "Categories: COMMUNICATION, MEMORY, MEDIA, GAME, SOCIAL, ENVIRONMENT, SYSTEM, NARRATIVE\n\n"
             "Core Packs (14): memory, character, comfyui, voice, tts, social, boards, training, notebooklm, nexus, coding, environment, narrative, system\n"
-            "Scene Packs (12): realm, bedroom, neoncity, phone, casino, heist, lounge, coders, command_center, arena, gallery, tavern\n\n"
+            "Scene Packs (12): realm, penthouse, neoncity, phone, casino, heist, lounge, coders, command_center, arena, gallery, tavern\n\n"
             "Registry: SKILL_REGISTRY singleton. Methods: all_tools(), get_pack_tools(pack), all_packs(), describe()\n\n"
             "Skills vs MCP Tools: @skill is for local LMStudio agents. @mcp.tool() is for Copilot/external. list_all_skills() MCP tool bridges both.",
             "document", "architecture", ["skills", "decorator", "registry", "packs"],
@@ -487,7 +487,7 @@ def _get_qa_pairs() -> list[tuple[str, str, str, list[str]]]:
         (
             "How do I run CosySim tests?",
             "python -m pytest tests/ -v --tb=short --ignore=tests/test_agent_loop.py --ignore=tests/live_wire_test.py\n\n"
-            "Single file: python -m pytest tests/test_bedroom_game.py -v\n"
+            "Single file: python -m pytest tests/test_penthouse_game.py -v\n"
             "By marker: python -m pytest tests/ -m unit\n\n"
             "Rules: Use plain assert (no unittest.TestCase), mock all external services, "
             "use tmp_path for file I/O, use fixtures from conftest.py (temp_db, event_chain, mock_config).",
@@ -524,7 +524,7 @@ def _get_qa_pairs() -> list[tuple[str, str, str, list[str]]]:
             "2. ComfyUI (external — if image generation needed, :8188)\n"
             "3. Nexus KMS: cd C:\\Files\\Nexus && python -m nexus\n"
             "4. CosySim TTS: python start_servers.ps1\n"
-            "5. CosySim Scenes: python launcher.py --scene bedroom\n"
+            "5. CosySim Scenes: python launcher.py --scene penthouse\n"
             "6. CosySim Hub: python launcher.py --hub\n\n"
             "Health checks: LMStudio GET :1234/api/v1/models, Nexus GET :8700/api/health, Scene GET :port/health",
             "infrastructure", ["startup", "deployment"],
@@ -605,7 +605,7 @@ def _get_qa_pairs() -> list[tuple[str, str, str, list[str]]]:
         (
             "How do I commit code changes?",
             "Use conventional commits with imperative mood:\n"
-            "feat: add bedroom mini-game mechanic\n"
+            "feat: add penthouse mini-game mechanic\n"
             "fix: correct stat decay timer\n"
             "docs: update SCENES.md\n"
             "test: add casino edge case tests\n"

@@ -16,7 +16,7 @@
   const SCENES = [
     { id: 'hub',       port: 8500, label: 'CosySim Hub',          icon: '🏠', group: 'tools' },
     { id: 'phone',     port: 5555, label: 'CosyPhone',            icon: '📱', group: 'core' },
-    { id: 'bedroom',   port: 5556, label: 'The Bedroom',          icon: '🛏️', group: 'core' },
+    { id: 'penthouse',   port: 5556, label: 'The penthouse',          icon: '🛏️', group: 'core' },
     { id: 'lounge',    port: 5557, label: 'The Velvet Lounge',    icon: '🎵', group: 'core' },
     { id: 'tavern',    port: 5558, label: "Dragon's Flagon",      icon: '🍺', group: 'core' },
     { id: 'casino',    port: 5559, label: 'Midnight Casino',      icon: '🎰', group: 'core' },

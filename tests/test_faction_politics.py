@@ -20,7 +20,7 @@ def _fresh_manager():
     return mgr
 
 
-def _sample_faction(fid: str = "alpha", scene: str = "bedroom") -> "Faction":
+def _sample_faction(fid: str = "alpha", scene: str = "penthouse") -> "Faction":
     from engine.story.faction_politics import Faction
     return Faction(id=fid, name=fid.title(), scene=scene)
 
@@ -31,7 +31,7 @@ def _sample_faction(fid: str = "alpha", scene: str = "bedroom") -> "Faction":
 class TestFaction:
     def test_defaults(self):
         from engine.story.faction_politics import Faction
-        f = Faction(id="x", name="X", scene="bedroom")
+        f = Faction(id="x", name="X", scene="penthouse")
         assert f.player_standing == 0
         assert f.relationships == {}
         assert f.tags == []
@@ -63,16 +63,16 @@ class TestFactionManagerRegistration:
     def test_register_replaces_existing(self):
         from engine.story.faction_politics import Faction
         mgr = _fresh_manager()
-        mgr.register(Faction(id="a", name="Old", scene="bedroom"))
-        mgr.register(Faction(id="a", name="New", scene="bedroom"))
+        mgr.register(Faction(id="a", name="Old", scene="penthouse"))
+        mgr.register(Faction(id="a", name="New", scene="penthouse"))
         assert mgr.get("a").name == "New"
 
     def test_get_by_scene(self):
         mgr = _fresh_manager()
-        mgr.register(_sample_faction("a", "bedroom"))
-        mgr.register(_sample_faction("b", "bedroom"))
+        mgr.register(_sample_faction("a", "penthouse"))
+        mgr.register(_sample_faction("b", "penthouse"))
         mgr.register(_sample_faction("c", "casino"))
-        result = mgr.get_by_scene("bedroom")
+        result = mgr.get_by_scene("penthouse")
         ids = {f.id for f in result}
         assert ids == {"a", "b"}
 
@@ -85,7 +85,7 @@ class TestFactionManagerRegistration:
         mgr.register(_sample_faction("a"))
         mgr.reset()
         assert mgr.get("a") is None
-        assert mgr.get_by_scene("bedroom") == []
+        assert mgr.get_by_scene("penthouse") == []
 
 
 # ──── modify_standing ─────────────────────────────────────────────────────────
@@ -108,14 +108,14 @@ class TestModifyStanding:
     def test_clamp_upper(self):
         from engine.story.faction_politics import Faction
         mgr = _fresh_manager()
-        mgr.register(Faction(id="a", name="A", scene="bedroom", player_standing=90))
+        mgr.register(Faction(id="a", name="A", scene="penthouse", player_standing=90))
         mgr.modify_standing("a", 50)
         assert mgr.get("a").player_standing == 100
 
     def test_clamp_lower(self):
         from engine.story.faction_politics import Faction
         mgr = _fresh_manager()
-        mgr.register(Faction(id="a", name="A", scene="bedroom", player_standing=-90))
+        mgr.register(Faction(id="a", name="A", scene="penthouse", player_standing=-90))
         mgr.modify_standing("a", -50)
         assert mgr.get("a").player_standing == -100
 
@@ -126,16 +126,16 @@ class TestModifyStanding:
     def test_no_cascade_when_disabled(self):
         from engine.story.faction_politics import Faction
         mgr = _fresh_manager()
-        mgr.register(Faction(id="a", name="A", scene="bedroom", relationships={"b": 80}))
-        mgr.register(Faction(id="b", name="B", scene="bedroom"))
+        mgr.register(Faction(id="a", name="A", scene="penthouse", relationships={"b": 80}))
+        mgr.register(Faction(id="b", name="B", scene="penthouse"))
         mgr.modify_standing("a", 20, cascade=False)
         assert mgr.get("b").player_standing == 0
 
     def test_ally_cascade_positive(self):
         from engine.story.faction_politics import Faction
         mgr = _fresh_manager()
-        mgr.register(Faction(id="a", name="A", scene="bedroom", relationships={"b": 100}))
-        mgr.register(Faction(id="b", name="B", scene="bedroom"))
+        mgr.register(Faction(id="a", name="A", scene="penthouse", relationships={"b": 100}))
+        mgr.register(Faction(id="b", name="B", scene="penthouse"))
         mgr.modify_standing("a", 40)
         # cascade_delta = int(40 * (100/200)) = 20
         assert mgr.get("b").player_standing == 20
@@ -143,8 +143,8 @@ class TestModifyStanding:
     def test_enemy_cascade_negative(self):
         from engine.story.faction_politics import Faction
         mgr = _fresh_manager()
-        mgr.register(Faction(id="a", name="A", scene="bedroom", relationships={"b": -100}))
-        mgr.register(Faction(id="b", name="B", scene="bedroom"))
+        mgr.register(Faction(id="a", name="A", scene="penthouse", relationships={"b": -100}))
+        mgr.register(Faction(id="b", name="B", scene="penthouse"))
         mgr.modify_standing("a", 40)
         # cascade_delta = int(40 * (-100/200)) = -20
         assert mgr.get("b").player_standing == -20
@@ -152,7 +152,7 @@ class TestModifyStanding:
     def test_cascade_missing_other_faction_ignored(self):
         from engine.story.faction_politics import Faction
         mgr = _fresh_manager()
-        mgr.register(Faction(id="a", name="A", scene="bedroom", relationships={"missing": 80}))
+        mgr.register(Faction(id="a", name="A", scene="penthouse", relationships={"missing": 80}))
         changes = mgr.modify_standing("a", 10)
         assert "missing" not in changes
 
@@ -160,17 +160,17 @@ class TestModifyStanding:
         from engine.story.faction_politics import Faction
         mgr = _fresh_manager()
         # relationship = 0 → cascade_delta = 0 → not included in changes
-        mgr.register(Faction(id="a", name="A", scene="bedroom", relationships={"b": 0}))
-        mgr.register(Faction(id="b", name="B", scene="bedroom"))
+        mgr.register(Faction(id="a", name="A", scene="penthouse", relationships={"b": 0}))
+        mgr.register(Faction(id="b", name="B", scene="penthouse"))
         changes = mgr.modify_standing("a", 10)
         assert "b" not in changes
 
     def test_returns_all_modified_factions(self):
         from engine.story.faction_politics import Faction
         mgr = _fresh_manager()
-        mgr.register(Faction(id="a", name="A", scene="bedroom", relationships={"b": 60, "c": -60}))
-        mgr.register(Faction(id="b", name="B", scene="bedroom"))
-        mgr.register(Faction(id="c", name="C", scene="bedroom"))
+        mgr.register(Faction(id="a", name="A", scene="penthouse", relationships={"b": 60, "c": -60}))
+        mgr.register(Faction(id="b", name="B", scene="penthouse"))
+        mgr.register(Faction(id="c", name="C", scene="penthouse"))
         changes = mgr.modify_standing("a", 20)
         assert set(changes.keys()) == {"a", "b", "c"}
 
@@ -181,14 +181,14 @@ class TestModifyStanding:
 class TestGetScenePolitics:
     def test_returns_scene_name(self):
         mgr = _fresh_manager()
-        result = mgr.get_scene_politics("bedroom")
-        assert result["scene"] == "bedroom"
+        result = mgr.get_scene_politics("penthouse")
+        assert result["scene"] == "penthouse"
 
     def test_returns_faction_list(self):
         from engine.story.faction_politics import Faction
         mgr = _fresh_manager()
-        mgr.register(Faction(id="a", name="Alpha", scene="bedroom", tags=["power"]))
-        result = mgr.get_scene_politics("bedroom")
+        mgr.register(Faction(id="a", name="Alpha", scene="penthouse", tags=["power"]))
+        result = mgr.get_scene_politics("penthouse")
         assert len(result["factions"]) == 1
         faction_data = result["factions"][0]
         assert faction_data["id"] == "a"
@@ -270,7 +270,7 @@ class TestFactionTemplates:
 
     def test_all_9_scenes_have_factions(self):
         from engine.story.faction_templates import SCENE_FACTIONS
-        expected = {"bedroom", "casino", "arena", "tavern", "lounge",
+        expected = {"penthouse", "casino", "arena", "tavern", "lounge",
                     "gallery", "realm", "neoncity", "phone"}
         assert set(SCENE_FACTIONS.keys()) == expected
 
@@ -333,9 +333,9 @@ class TestFactionSkills:
         from engine.skills.builtin.story_skills import get_faction_politics
         from engine.story.faction_politics import Faction, FactionManager
         mgr = FactionManager()
-        mgr.register(Faction(id="elite", name="The Elite", scene="bedroom"))
+        mgr.register(Faction(id="elite", name="The Elite", scene="penthouse"))
         with patch("engine.story.faction_politics.FactionManager.get_instance", return_value=mgr):
-            result = get_faction_politics("bedroom")
+            result = get_faction_politics("penthouse")
         assert isinstance(result, str)
 
     def test_get_faction_politics_no_factions(self):
@@ -350,7 +350,7 @@ class TestFactionSkills:
         from engine.skills.builtin.story_skills import change_faction_standing
         from engine.story.faction_politics import Faction, FactionManager
         mgr = FactionManager()
-        mgr.register(Faction(id="elite", name="The Elite", scene="bedroom"))
+        mgr.register(Faction(id="elite", name="The Elite", scene="penthouse"))
         with patch("engine.story.faction_politics.FactionManager.get_instance", return_value=mgr):
             result = change_faction_standing("elite", 20, "helped the cause")
         assert isinstance(result, str)
@@ -368,7 +368,7 @@ class TestFactionSkills:
         from engine.skills.builtin.story_skills import check_faction_standing
         from engine.story.faction_politics import Faction, FactionManager
         mgr = FactionManager()
-        mgr.register(Faction(id="elite", name="The Elite", scene="bedroom", player_standing=50))
+        mgr.register(Faction(id="elite", name="The Elite", scene="penthouse", player_standing=50))
         with patch("engine.story.faction_politics.FactionManager.get_instance", return_value=mgr):
             result = check_faction_standing("elite")
         assert isinstance(result, str)
@@ -394,7 +394,7 @@ class TestDailyChallengeManager:
     def test_get_challenge_returns_dict(self):
         dcm = self._fresh_dcm()
         with patch("engine.nexus.daily_challenge.get_nexus_client", side_effect=Exception("offline")):
-            challenge = dcm.get_challenge("bedroom")
+            challenge = dcm.get_challenge("penthouse")
         assert isinstance(challenge, dict)
 
     def test_challenge_has_required_keys(self):
@@ -417,11 +417,11 @@ class TestDailyChallengeManager:
         with patch("engine.nexus.daily_challenge.get_nexus_client", side_effect=Exception("offline")):
             with patch("engine.nexus.daily_challenge.date") as mock_date:
                 mock_date.today.return_value = date(2025, 1, 1)
-                first = dcm.get_challenge("bedroom")
+                first = dcm.get_challenge("penthouse")
                 mock_date.today.return_value = date(2025, 1, 2)
                 dcm._last_generated = date(2025, 1, 1)
                 dcm._today_challenges.clear()
-                second = dcm.get_challenge("bedroom")
+                second = dcm.get_challenge("penthouse")
         # Both should have required keys (different objects after clear)
         assert "title" in first
         assert "title" in second
@@ -431,7 +431,7 @@ class TestDailyChallengeManager:
 
 
 class TestFallbackChallenges:
-    SCENES = ["bedroom", "casino", "arena", "tavern", "lounge",
+    SCENES = ["penthouse", "casino", "arena", "tavern", "lounge",
               "gallery", "realm", "neoncity", "phone"]
 
     def _dcm(self):
@@ -471,9 +471,9 @@ class TestDailyChallengeSkills:
         dcm = DailyChallengeManager()
         with patch("engine.nexus.daily_challenge.get_nexus_client", side_effect=Exception("offline")):
             with patch("engine.nexus.daily_challenge.DailyChallengeManager.get_instance", return_value=dcm):
-                result = get_daily_challenge("bedroom")
+                result = get_daily_challenge("penthouse")
         assert isinstance(result, str)
-        assert "bedroom" in result.lower() or "Daily Challenge" in result
+        assert "penthouse" in result.lower() or "Daily Challenge" in result
 
     def test_complete_daily_challenge_returns_string(self):
         from engine.nexus.daily_challenge import DailyChallengeManager
@@ -482,7 +482,7 @@ class TestDailyChallengeSkills:
         with patch("engine.nexus.daily_challenge.get_nexus_client", side_effect=Exception("offline")):
             with patch("engine.nexus.daily_challenge.DailyChallengeManager.get_instance", return_value=dcm):
                 with patch("engine.nexus.client.get_nexus_client", side_effect=Exception("offline")):
-                    result = complete_daily_challenge("bedroom", "player succeeded")
+                    result = complete_daily_challenge("penthouse", "player succeeded")
         assert isinstance(result, str)
         assert "player succeeded" in result or "resolved" in result
 

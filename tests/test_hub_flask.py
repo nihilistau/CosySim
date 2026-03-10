@@ -287,7 +287,7 @@ class TestApiScenesRoute:
         mock_port.side_effect = lambda p: p == 5556
         resp = client.get("/api/scenes")
         data = resp.get_json()
-        bedroom = [s for s in data if s["id"] == "bedroom"][0]
+        bedroom = [s for s in data if s["id"] == "penthouse"][0]
         casino = [s for s in data if s["id"] == "casino"][0]
         assert bedroom["status"] == "online"
         assert casino["status"] == "offline"
@@ -296,14 +296,14 @@ class TestApiScenesRoute:
     def test_scene_has_icon(self, _mock_port, client):
         resp = client.get("/api/scenes")
         data = resp.get_json()
-        bedroom = [s for s in data if s["id"] == "bedroom"][0]
+        bedroom = [s for s in data if s["id"] == "penthouse"][0]
         assert "icon" in bedroom
 
     @patch("content.scenes.hub.hub_flask._port_open", return_value=False)
     def test_scene_has_desc(self, _mock_port, client):
         resp = client.get("/api/scenes")
         data = resp.get_json()
-        bedroom = [s for s in data if s["id"] == "bedroom"][0]
+        bedroom = [s for s in data if s["id"] == "penthouse"][0]
         assert len(bedroom.get("desc", "")) > 5
 
 
@@ -415,7 +415,7 @@ class TestSceneCatalogue:
     def test_catalogue_has_bedroom(self):
         from content.scenes.hub.hub_flask import SCENE_CATALOGUE
         ids = [s["id"] for s in SCENE_CATALOGUE]
-        assert "bedroom" in ids
+        assert "penthouse" in ids
 
     def test_catalogue_has_casino(self):
         from content.scenes.hub.hub_flask import SCENE_CATALOGUE

@@ -10,12 +10,12 @@ from engine.story.faction_politics import Faction, get_faction_manager
 # ──── Faction definitions ────────────────────────────────────────────────────
 
 SCENE_FACTIONS: dict = {
-    # ── bedroom ────────────────────────────────────────────────────────────
-    "bedroom": [
+    # ── penthouse ────────────────────────────────────────────────────────────
+    "penthouse": [
         Faction(
             id="elite",
             name="The Elite",
-            scene="bedroom",
+            scene="penthouse",
             description="High-society insiders who pull the strings.",
             player_standing=10,
             relationships={"press": -30},
@@ -24,7 +24,7 @@ SCENE_FACTIONS: dict = {
         Faction(
             id="press",
             name="The Press",
-            scene="bedroom",
+            scene="penthouse",
             description="Journalists and gossip networks — neutral observers.",
             player_standing=0,
             relationships={"elite": -30},

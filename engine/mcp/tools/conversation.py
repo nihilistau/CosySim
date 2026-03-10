@@ -37,7 +37,7 @@ def cross_scene_message(
     character in a *different* scene.
 
     This is how two agents in separate scenes communicate — phone calls while
-    in the bedroom, texts while in different locations, notifications that cross
+    in the penthouse, texts while in different locations, notifications that cross
     scene boundaries.
 
     The message lands in the target character's inbox and is injected into their
@@ -49,8 +49,8 @@ def cross_scene_message(
       event             — system-level event crossing scenes
       system            — director/framework event
 
-    Example: Aria in the bedroom texts the user in the phone scene:
-      cross_scene_message("aria", "bedroom", "user", "phone",
+    Example: Aria in the penthouse texts the user in the phone scene:
+      cross_scene_message("aria", "penthouse", "user", "phone",
                           "Thinking about last night... 🔥", "text")
 
     Args:

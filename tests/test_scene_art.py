@@ -329,7 +329,7 @@ class TestGenerate:
 
         with patch("engine.art.scene_art.requests.post", post_mock), \
              patch("engine.art.scene_art.requests.get", get_mock):
-            req = ArtRequest(id="r2", style=ArtStyle.SCENE_BG, prompt="bedroom")
+            req = ArtRequest(id="r2", style=ArtStyle.SCENE_BG, prompt="penthouse")
             result = manager._generate(req)
 
         # history endpoint must have been polled
@@ -601,9 +601,9 @@ class TestGetCharacterPortrait:
                              generation_ms=0, nexus_key="")
 
         manager._generate = fake_gen
-        manager.get_character_portrait("aria", scene="bedroom")
+        manager.get_character_portrait("aria", scene="penthouse")
 
-        assert "bedroom" in captured["req"].prompt or "penthouse" in captured["req"].prompt
+        assert "penthouse" in captured["req"].prompt or "penthouse" in captured["req"].prompt
 
 
 # ---------------------------------------------------------------------------
@@ -633,10 +633,10 @@ class TestGetSceneBg:
         manager._nexus.search.return_value = []
         captured = self._make_gen_stub(manager)
 
-        manager.get_scene_bg("bedroom", time_of_day="night", mood="romantic")
+        manager.get_scene_bg("penthouse", time_of_day="night", mood="romantic")
 
         prompt = captured["req"].prompt
-        assert "penthouse" in prompt or "bedroom" in prompt
+        assert "penthouse" in prompt or "penthouse" in prompt
 
     def test_get_scene_bg_unknown_scene_fallback(self, manager):
         """Unknown scene slug must use the default prompt without raising."""

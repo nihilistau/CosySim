@@ -10,7 +10,7 @@ Usage::
 
     from engine.assistant import get_assistant
     assistant = get_assistant()
-    reply = assistant.chat("What scene am I in?", scene_id="bedroom")
+    reply = assistant.chat("What scene am I in?", scene_id="penthouse")
 """
 from __future__ import annotations
 
@@ -327,7 +327,7 @@ class SystemAssistant:
             return "Hey there! I'm Aria, your system assistant. What can I help with?"
         if "help" in lower:
             return ("I can help you navigate scenes, check system status, or just chat. "
-                    "Try 'status', 'scenes', or 'go to bedroom'.")
+                    "Try 'status', 'scenes', or 'go to penthouse'.")
         if "thank" in lower:
             return "You're welcome! Let me know if you need anything else."
         scene_name = self._current_scene or "CosySim"

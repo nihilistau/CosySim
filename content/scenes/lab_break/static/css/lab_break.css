@@ -821,6 +821,36 @@ body[data-scene="lab_break"] {
   .lb-observation { height: 50vh; }
 }
 
+/* ──── 3D Background Integration ──── */
+
+.lb-container {
+  position: relative;
+  z-index: 1;
+}
+
+.lb-observation {
+  background: rgba(10, 14, 23, 0.65) !important;
+  backdrop-filter: blur(8px);
+}
+
+.lb-controls {
+  background: rgba(10, 14, 23, 0.7) !important;
+  backdrop-filter: blur(12px);
+}
+
+#lab-scene-container {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+#lab-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
 /* ──── Scrollbar ──── */
 
 .lb-controls::-webkit-scrollbar,

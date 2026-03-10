@@ -255,8 +255,8 @@ class TestHandlerDispatch:
             pattern=r"\[TEST:([^\]]+)\]",
             handler=handler,
         ))
-        result = reg.dispatch("test_tag", "hello", {"scene": "bedroom"})
-        handler.assert_called_once_with("test_tag", "hello", {"scene": "bedroom"})
+        result = reg.dispatch("test_tag", "hello", {"scene": "penthouse"})
+        handler.assert_called_once_with("test_tag", "hello", {"scene": "penthouse"})
         assert result == "ok"
 
     def test_dispatch_no_handler(self):

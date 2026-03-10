@@ -493,7 +493,7 @@ def search_web(query: str, max_results: int = 5) -> str:
 
 # ══════════════════════════════════════════════════════════════════════
 # ██████████████████████████████████████████████████████████████████████
-#  BEDROOM & PHONE  — Scene State, Wardrobe, Interactions, Narrative
+#  penthouse & PHONE  — Scene State, Wardrobe, Interactions, Narrative
 # ██████████████████████████████████████████████████████████████████████
 # ══════════════════════════════════════════════════════════════════════
 
@@ -656,14 +656,14 @@ def perform_interaction(
     interaction_type: str,
     initiator_id: str,
     target_id: str,
-    scene_id: str = "bedroom",
+    scene_id: str = "penthouse",
     subtype: str = "",
     intensity: int = 0,
 ) -> str:
     """
     Perform one of the 6 core interaction types between two characters.
 
-    BEDROOM interaction_types:
+    penthouse interaction_types:
       cuddle    — physical closeness (subtypes: embrace, spoon, lap_sit, entangled)
       kiss      — kissing (subtypes: soft, neck, deep, trail, urgent)
       caress    — tactile touch (subtypes: hair, back, face, body)
@@ -685,7 +685,7 @@ def perform_interaction(
 
 
 @mcp.tool()
-def list_available_interactions(character_id: str, scene_id: str = "bedroom") -> str:
+def list_available_interactions(character_id: str, scene_id: str = "penthouse") -> str:
     """
     List all interaction types and their accessible subtypes for a character
     based on their current stats.  Use this before calling perform_interaction
@@ -701,7 +701,7 @@ def list_available_interactions(character_id: str, scene_id: str = "bedroom") ->
 def get_interaction_details(
     interaction_type: str,
     subtype: str = "",
-    scene_id: str = "bedroom",
+    scene_id: str = "penthouse",
 ) -> str:
     """
     Get detailed information about a specific interaction type/subtype —
@@ -888,7 +888,7 @@ def get_character_agency_summary(character_id: str) -> str:
 
 
 @mcp.tool()
-def get_all_tools_for_scene(scene_id: str = "bedroom") -> str:
+def get_all_tools_for_scene(scene_id: str = "penthouse") -> str:
     """
     Get a complete reference of all MCP tools available in a scene.
     Call this at the start of a session so you know every tool at your disposal.
@@ -923,7 +923,7 @@ def director_action(
 
 
 @mcp.tool()
-def resolve_random_scene_event(scene_id: str = "bedroom") -> str:
+def resolve_random_scene_event(scene_id: str = "penthouse") -> str:
     """
     Generate a random scene event to keep things fresh and unpredictable.
     Call this when the scene feels stale or to inject spontaneity.
@@ -964,7 +964,7 @@ def character_register(
         backstory:        Short backstory paragraph
         voice_style:      Speaking style e.g. "warm and literary"
         pronouns:         e.g. "she/her"
-        scene_roles_json: JSON dict of scene → role  e.g. '{"bedroom": "lover"}'
+        scene_roles_json: JSON dict of scene → role  e.g. '{"penthouse": "lover"}'
     """
     from engine.mcp.tools.character import character_register
     return character_register(character_id, name, age, appearance_json, personality_json, backstory, voice_style, pronouns, scene_roles_json)
@@ -1116,7 +1116,7 @@ def get_dialog_options(
 
     Args:
         character_id:      e.g. "aria"
-        scene_id:          e.g. "bedroom" or "phone"
+        scene_id:          e.g. "penthouse" or "phone"
         context_tags_json: JSON list of current context tags e.g. '["intimate", "cuddle"]'
         stats_json:        JSON dict of current stats e.g. '{"arousal": 55, "openness": 40}'
         max_options:       Maximum number of options to return
@@ -1191,7 +1191,7 @@ def get_active_directive(character_id: str, scene_id: str) -> str:
 
     Args:
         character_id: e.g. "aria"
-        scene_id:     e.g. "bedroom"
+        scene_id:     e.g. "penthouse"
     """
     from engine.mcp.tools.dialog import get_active_directive
     return get_active_directive(character_id, scene_id)
@@ -1204,7 +1204,7 @@ def clear_directive(character_id: str, scene_id: str) -> str:
 
     Args:
         character_id: e.g. "aria"
-        scene_id:     e.g. "bedroom"
+        scene_id:     e.g. "penthouse"
     """
     from engine.mcp.tools.dialog import clear_directive
     return clear_directive(character_id, scene_id)
@@ -1240,7 +1240,7 @@ def get_scene_rules(scene_id: str) -> str:
     is expected, what is forbidden, and what the Director can activate.
 
     Args:
-        scene_id: e.g. "bedroom" or "phone"
+        scene_id: e.g. "penthouse" or "phone"
     """
     from engine.mcp.tools.scene import get_scene_rules
     return get_scene_rules(scene_id)
@@ -1258,7 +1258,7 @@ def get_scene_available_actions(
     filtered by their current stats and the scene's permission matrix.
 
     Args:
-        scene_id:         e.g. "bedroom"
+        scene_id:         e.g. "penthouse"
         character_id:     e.g. "aria"
         stats_json:       JSON dict of current stats
         scene_state_json: JSON dict of scene state flags
@@ -1279,7 +1279,7 @@ def apply_scene_rule(
     target characters.  Can be used to set atmosphere, issue directives,
     adjust stats, etc. via a single memorable rule name.
 
-    Examples: "bedroom_lights_off", "bedroom_mood_lift", "phone_escalate"
+    Examples: "penthouse_lights_off", "penthouse_mood_lift", "phone_escalate"
 
     Args:
         scene_id:        Scene the rule belongs to
@@ -1438,7 +1438,7 @@ def get_scene_rules_summary(scene_id: str, character_id: str = "") -> str:
     Call this at scene start or when you're unsure what's appropriate.
 
     Args:
-        scene_id:     e.g. "bedroom" or "phone"
+        scene_id:     e.g. "penthouse" or "phone"
         character_id: The character you're working with
     """
     from engine.mcp.tools.scene import get_scene_rules_summary
@@ -1559,7 +1559,7 @@ def cross_scene_message(
     character in a *different* scene.
 
     This is how two agents in separate scenes communicate — phone calls while
-    in the bedroom, texts while in different locations, notifications that cross
+    in the penthouse, texts while in different locations, notifications that cross
     scene boundaries.
 
     The message lands in the target character's inbox and is injected into their
@@ -1571,8 +1571,8 @@ def cross_scene_message(
       event             — system-level event crossing scenes
       system            — director/framework event
 
-    Example: Aria in the bedroom texts the user in the phone scene:
-      cross_scene_message("aria", "bedroom", "user", "phone",
+    Example: Aria in the penthouse texts the user in the phone scene:
+      cross_scene_message("aria", "penthouse", "user", "phone",
                           "Thinking about last night... 🔥", "text")
 
     Args:
@@ -1694,11 +1694,11 @@ def schedule_consequence(
       scene_event     — {"event": "tension_release"}
 
     Examples:
-      schedule_consequence("bedroom", "aria", "stat_adjust",
+      schedule_consequence("penthouse", "aria", "stat_adjust",
                           '{"stat": "arousal", "delta": 25}', 2,
                           "The kiss lingers — arousal builds.")
 
-      schedule_consequence("bedroom", "aria", "state_set",
+      schedule_consequence("penthouse", "aria", "state_set",
                           '{"field": "mood", "value": "vulnerable"}', 3,
                           "The confession settles in. She feels exposed.")
 

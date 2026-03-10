@@ -14,13 +14,13 @@ Each session adds:
   (mood, arousal, happiness, openness via SceneStateManager)
 * **AgentRouter messaging** — start/end events broadcast to registered agents
 * **ActivityBus integration** — state changes visible in admin panel activity feed
-* **MCPFramework consequences** — high-scoring events queue bedroom stat bonuses
+* **MCPFramework consequences** — high-scoring events queue penthouse stat bonuses
 
 MCPGameNode
 -----------
 A ``MCPSceneNode`` sub-type that represents a game as a "virtual sub-scene"
-under the parent bedroom scene.  Automatically registered with MCPFramework
-as ``bedroom/truth_or_dare`` or ``bedroom/mystery``.
+under the parent penthouse scene.  Automatically registered with MCPFramework
+as ``penthouse/truth_or_dare`` or ``penthouse/mystery``.
 
 GameSessionInterceptor
 ----------------------
@@ -119,7 +119,7 @@ class MCPGameSession:
     game_id      : str   Unique game identifier, e.g. ``tod_char-001``
     session_type : str   ``"truth_or_dare"`` | ``"mystery"``
     character_id : str   Primary player/host character
-    scene_id     : str   Parent scene (typically ``"bedroom"``)
+    scene_id     : str   Parent scene (typically ``"penthouse"``)
     """
 
     def __init__(
@@ -127,7 +127,7 @@ class MCPGameSession:
         game_id:      str,
         session_type: str,
         character_id: str,
-        scene_id:     str = "bedroom",
+        scene_id:     str = "penthouse",
     ) -> None:
         self.game_id      = game_id
         self.session_type = session_type
@@ -353,7 +353,7 @@ class MCPGameSession:
         self.log_event(event_label, final_note or f"Game over (won={won})", {"won": won})
         self._emit(event_label, final_note or f"Session {self.game_id} ended", {"won": won})
 
-        # Schedule post-game bedroom consequence
+        # Schedule post-game penthouse consequence
         if won:
             try:
                 from engine.mcp.framework import get_framework
@@ -471,7 +471,7 @@ def get_or_create_session(
     game_id:      str,
     session_type: str,
     character_id: str,
-    scene_id:     str = "bedroom",
+    scene_id:     str = "penthouse",
 ) -> MCPGameSession:
     """Return existing active session or create a fresh one."""
     with _REG_LOCK:

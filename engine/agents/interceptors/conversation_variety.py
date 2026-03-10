@@ -65,7 +65,7 @@ class ConversationVarietyInterceptor(InterceptorBase):
             "Reference earlier parts of the conversation to show you remember."
         )
 
-        if scene in ("bedroom", "phone"):
+        if scene in ("penthouse", "phone"):
             variety_lines.append(
                 "You may be flirty, seductive, suggestive, or vulgar "
                 "when the conversation naturally leads there. "

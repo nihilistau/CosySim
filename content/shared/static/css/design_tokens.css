@@ -161,8 +161,8 @@
 
     /* ── Scene Accent Presets (apply via scene CSS) ─────────── */
     /* Usage: scene file sets --cs-scene-accent to one of these  */
-    /* --cs-scene-accent: var(--cs-scene-bedroom);               */
-    --cs-scene-bedroom:     #ec4899;   /* Rose-pink — The Penthouse */
+    /* --cs-scene-accent: var(--cs-scene-penthouse);               */
+    --cs-scene-penthouse:     #ec4899;   /* Rose-pink — The Penthouse */
     --cs-scene-lounge:      #f59e0b;   /* Amber — The Velvet Pit */
     --cs-scene-tavern:      #92400e;   /* Dark amber — The Rusty Anchor */
     --cs-scene-casino:      #f97316;   /* Neon orange — Club Noir */
@@ -402,7 +402,7 @@
 }
 
 /* Scene-scoped accent override helpers */
-[data-scene="bedroom"]  { --cs-scene-accent: var(--cs-scene-bedroom);  --cs-scene-glow: rgba(236, 72, 153, 0.35); }
+[data-scene="penthouse"]  { --cs-scene-accent: var(--cs-scene-penthouse);  --cs-scene-glow: rgba(236, 72, 153, 0.35); }
 [data-scene="lounge"]   { --cs-scene-accent: var(--cs-scene-lounge);   --cs-scene-glow: rgba(245, 158, 11, 0.35); }
 [data-scene="tavern"]   { --cs-scene-accent: var(--cs-scene-tavern);   --cs-scene-glow: rgba(146, 64, 14, 0.35); }
 [data-scene="casino"]   { --cs-scene-accent: var(--cs-scene-casino);   --cs-scene-glow: rgba(249, 115, 22, 0.35); }

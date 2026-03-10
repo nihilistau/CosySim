@@ -23,7 +23,7 @@ testData:
   - character_name: Lola
     personality_traits: "flirty, witty, confident, playful"
     current_mood: happy
-    scene_name: bedroom
+    scene_name: penthouse
     player_input: "Hey, what are you up to?"
     expected: "A warm, playful greeting that stays in character"
   - character_name: Viktor

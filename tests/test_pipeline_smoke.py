@@ -487,9 +487,9 @@ class TestSceneAwareFiltering:
         assert base.applicable_scenes is None  # None = run everywhere
 
     def test_applicable_scenes_set_on_bedroom(self):
-        from engine.agents.interceptors import BedroomSceneInterceptor
-        b = BedroomSceneInterceptor()
-        assert b.applicable_scenes == {"bedroom"}
+        from engine.agents.interceptors import PenthouseSceneInterceptor
+        b = PenthouseSceneInterceptor()
+        assert b.applicable_scenes == {"penthouse"}
 
     def test_applicable_scenes_set_on_phone(self):
         from engine.agents.interceptors import PhoneSceneInterceptor
@@ -507,22 +507,22 @@ class TestSceneAwareFiltering:
         assert m.applicable_scenes is None
 
     def test_pipeline_skips_wrong_scene(self):
-        """BedroomSceneInterceptor should not run in phone scene."""
+        """PenthouseSceneInterceptor should not run in phone scene."""
         from engine.mcp.comms_framework import InterceptorPipeline
-        from engine.agents.interceptors import BedroomSceneInterceptor
+        from engine.agents.interceptors import PenthouseSceneInterceptor
         pipeline = InterceptorPipeline()
-        bedroom = BedroomSceneInterceptor()
+        bedroom = PenthouseSceneInterceptor()
         pipeline.add(bedroom)
         # Should be skippable
         assert pipeline._is_applicable(bedroom, {"scene": "phone"}) is False
 
     def test_pipeline_runs_matching_scene(self):
         from engine.mcp.comms_framework import InterceptorPipeline
-        from engine.agents.interceptors import BedroomSceneInterceptor
+        from engine.agents.interceptors import PenthouseSceneInterceptor
         pipeline = InterceptorPipeline()
-        bedroom = BedroomSceneInterceptor()
+        bedroom = PenthouseSceneInterceptor()
         pipeline.add(bedroom)
-        assert pipeline._is_applicable(bedroom, {"scene": "bedroom"}) is True
+        assert pipeline._is_applicable(bedroom, {"scene": "penthouse"}) is True
 
     def test_pipeline_runs_global_interceptor_anywhere(self):
         from engine.mcp.comms_framework import InterceptorPipeline
@@ -530,7 +530,7 @@ class TestSceneAwareFiltering:
         pipeline = InterceptorPipeline()
         mood = MoodSyncInterceptor()
         pipeline.add(mood)
-        assert pipeline._is_applicable(mood, {"scene": "bedroom"}) is True
+        assert pipeline._is_applicable(mood, {"scene": "penthouse"}) is True
         assert pipeline._is_applicable(mood, {"scene": "phone"}) is True
         assert pipeline._is_applicable(mood, {}) is True
 
@@ -788,7 +788,7 @@ class TestNaturalMoodDriftInterceptor:
     def test_applicable_scenes(self):
         from engine.agents.interceptors import NaturalMoodDriftInterceptor
         d = NaturalMoodDriftInterceptor()
-        assert "bedroom" in d.applicable_scenes
+        assert "penthouse" in d.applicable_scenes
         assert "phone" in d.applicable_scenes
         assert "lounge" in d.applicable_scenes
         assert "gallery" in d.applicable_scenes
@@ -870,8 +870,8 @@ class TestBedroomCoordinatorIntegration:
         """_on_agent_action should call get_coordinator()."""
         import inspect
         import importlib
-        mod = importlib.import_module("content.scenes.bedroom.bedroom_scene")
-        scene_cls = getattr(mod, "BedroomScene")
+        mod = importlib.import_module("content.scenes.penthouse.penthouse_scene")
+        scene_cls = getattr(mod, "PenthouseScene")
         source = inspect.getsource(scene_cls._on_agent_action)
         assert "get_coordinator" in source
         assert "state_coordinator" in source
@@ -962,8 +962,8 @@ class TestBedroomInteractionRecords:
 
     def test_bedroom_logs_interactions(self):
         import inspect, importlib
-        mod = importlib.import_module("content.scenes.bedroom.bedroom_scene")
-        cls = getattr(mod, "BedroomScene")
+        mod = importlib.import_module("content.scenes.penthouse.penthouse_scene")
+        cls = getattr(mod, "PenthouseScene")
         # Check across the full MRO (class + mixins)
         sources = "".join(inspect.getsource(c) for c in cls.__mro__ if c is not object)
         assert "log_interaction" in sources
@@ -1078,13 +1078,13 @@ class TestSceneTransitionTracking:
         fw = get_framework()
         # Clear history
         fw._player_scene_history.clear()
-        fw.record_scene_visit("bedroom")
+        fw.record_scene_visit("penthouse")
         fw.record_scene_visit("phone")
-        assert fw.get_previous_scene() == "bedroom"
+        assert fw.get_previous_scene() == "penthouse"
         journey = fw.get_player_journey(limit=3)
         assert len(journey) == 2
         assert journey[0]["scene"] == "phone"  # most recent first
-        assert journey[1]["scene"] == "bedroom"
+        assert journey[1]["scene"] == "penthouse"
 
     def test_no_previous_scene_initially(self):
         from engine.mcp.framework import get_framework
@@ -1128,7 +1128,7 @@ class TestUniversalSceneInterceptor:
     def test_skips_dedicated_scenes(self):
         from engine.agents.interceptors import UniversalSceneInterceptor
         i = UniversalSceneInterceptor()
-        for scene in ("bedroom", "phone", "lounge", "gallery"):
+        for scene in ("penthouse", "phone", "lounge", "gallery"):
             ctx = {"scene": scene, "agent_id": "test", "system_prompt": ""}
             i.pre_call(ctx)
             assert "CONTEXT]" not in ctx["system_prompt"], f"Should skip {scene}"
@@ -1251,7 +1251,7 @@ class TestBedroomTimedActionPhases:
 
     def test_early_phase_injection(self):
         """Early phase (< 30%) injects anticipation guidance."""
-        from engine.agents.interceptors import BedroomSceneInterceptor
+        from engine.agents.interceptors import PenthouseSceneInterceptor
         from engine.mcp.scene_state import get_scene_state_manager
 
         ssm = get_scene_state_manager()
@@ -1260,9 +1260,9 @@ class TestBedroomTimedActionPhases:
             phase_labels=["setup", "deepening", "climax"],
         )
 
-        i = BedroomSceneInterceptor()
-        ctx = {"scene": "bedroom", "agent_id": "lola", "system_prompt": "base",
-               "scene_id": "bedroom", "character_ids": ["lola"]}
+        i = PenthouseSceneInterceptor()
+        ctx = {"scene": "penthouse", "agent_id": "lola", "system_prompt": "base",
+               "scene_id": "penthouse", "character_ids": ["lola"]}
         i.pre_call(ctx)
 
         prompt = ctx["system_prompt"]
@@ -1274,7 +1274,7 @@ class TestBedroomTimedActionPhases:
 
     def test_mid_phase_injection(self):
         """Mid phase (30-70%) injects deepening guidance."""
-        from engine.agents.interceptors import BedroomSceneInterceptor
+        from engine.agents.interceptors import PenthouseSceneInterceptor
         from engine.mcp.scene_state import get_scene_state_manager
         import time
 
@@ -1286,9 +1286,9 @@ class TestBedroomTimedActionPhases:
         )
         time.sleep(0.01)  # Exceed duration → complete
 
-        i = BedroomSceneInterceptor()
-        ctx = {"scene": "bedroom", "agent_id": "lola", "system_prompt": "base",
-               "scene_id": "bedroom", "character_ids": ["lola"]}
+        i = PenthouseSceneInterceptor()
+        ctx = {"scene": "penthouse", "agent_id": "lola", "system_prompt": "base",
+               "scene_id": "penthouse", "character_ids": ["lola"]}
         i.pre_call(ctx)
 
         # Should not inject for completed actions
@@ -1296,11 +1296,11 @@ class TestBedroomTimedActionPhases:
 
     def test_no_injection_without_active_actions(self):
         """No injection when no timed actions are active."""
-        from engine.agents.interceptors import BedroomSceneInterceptor
+        from engine.agents.interceptors import PenthouseSceneInterceptor
 
-        i = BedroomSceneInterceptor()
-        ctx = {"scene": "bedroom", "agent_id": "lola", "system_prompt": "base",
-               "scene_id": "bedroom", "character_ids": ["lola"]}
+        i = PenthouseSceneInterceptor()
+        ctx = {"scene": "penthouse", "agent_id": "lola", "system_prompt": "base",
+               "scene_id": "penthouse", "character_ids": ["lola"]}
         i.pre_call(ctx)
         assert "ACTIVE INTERACTION" not in ctx["system_prompt"]
 
@@ -1355,7 +1355,7 @@ class TestUniversalSceneDescriptors:
         """Dedicated scenes (bedroom, phone, etc.) get no descriptor."""
         from engine.agents.interceptors import UniversalSceneInterceptor
         i = UniversalSceneInterceptor()
-        ctx = {"scene": "bedroom", "agent_id": "lola", "system_prompt": ""}
+        ctx = {"scene": "penthouse", "agent_id": "lola", "system_prompt": ""}
         i.pre_call(ctx)
         assert ctx["system_prompt"] == ""
 
@@ -1484,7 +1484,7 @@ class TestConversationRecapInterceptor:
         i = ConversationRecapInterceptor()
 
         # Conversation A
-        ctx_a1 = {"scene": "bedroom", "agent_id": "lola", "system_prompt": "",
+        ctx_a1 = {"scene": "penthouse", "agent_id": "lola", "system_prompt": "",
                   "user_message": "bedroom talk"}
         i.pre_call(ctx_a1)
         ctx_a1["response"] = "bedroom reply"
@@ -1498,7 +1498,7 @@ class TestConversationRecapInterceptor:
         i.post_call(ctx_b1)
 
         # Turn 2 of A should only have A's history
-        ctx_a2 = {"scene": "bedroom", "agent_id": "lola", "system_prompt": "",
+        ctx_a2 = {"scene": "penthouse", "agent_id": "lola", "system_prompt": "",
                   "user_message": "more bedroom"}
         i.pre_call(ctx_a2)
         assert "bedroom talk" in ctx_a2["system_prompt"]

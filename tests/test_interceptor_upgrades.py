@@ -96,13 +96,13 @@ class TestMoodSyncThresholdRules:
             "agent_id": "lola",
             "reply": "She smiled warmly. [MOOD:happy]",
             "parsed": self._make_parsed(),
-            "scene": "bedroom",
+            "scene": "penthouse",
         }
         with patch("engine.mcp.character_registry.get_character_registry") as mock_reg:
             mock_reg.return_value = MagicMock()
             interceptor.post_call(ctx)
 
-        mock_eval.assert_called_once_with("bedroom", "lola", ctx)
+        mock_eval.assert_called_once_with("penthouse", "lola", ctx)
 
     @patch("engine.agents.interceptors.MoodSyncInterceptor._evaluate_threshold_rules")
     def test_threshold_eval_skipped_when_no_scene(self, mock_eval):
@@ -139,17 +139,17 @@ class TestMoodSyncThresholdRules:
         mock_eng.apply_rule.return_value = {"ok": True}
         mock_eng_fn.return_value = mock_eng
 
-        ctx = {"agent_id": "lola", "scene": "bedroom"}
-        interceptor._evaluate_threshold_rules("bedroom", "lola", ctx)
+        ctx = {"agent_id": "lola", "scene": "penthouse"}
+        interceptor._evaluate_threshold_rules("penthouse", "lola", ctx)
 
         mock_eng.evaluate_threshold_rules.assert_called_once_with(
-            "bedroom", "lola", {"arousal": 70, "happiness": 50}
+            "penthouse", "lola", {"arousal": 70, "happiness": 50}
         )
         mock_eng.apply_rule.assert_called_once_with(
-            "bedroom", "intimate_unlock",
+            "penthouse", "intimate_unlock",
             target_ids=["lola"],
             issuer="threshold_auto",
-            ctx={"agent_id": "lola", "scene": "bedroom"},
+            ctx={"agent_id": "lola", "scene": "penthouse"},
         )
 
     @patch("engine.mcp.scene_state.get_scene_state_manager")
@@ -166,7 +166,7 @@ class TestMoodSyncThresholdRules:
         mock_eng.evaluate_threshold_rules.return_value = []
         mock_eng_fn.return_value = mock_eng
 
-        interceptor._evaluate_threshold_rules("bedroom", "lola", {})
+        interceptor._evaluate_threshold_rules("penthouse", "lola", {})
         mock_eng.apply_rule.assert_not_called()
 
     @patch("engine.mcp.scene_state.get_scene_state_manager")
@@ -178,7 +178,7 @@ class TestMoodSyncThresholdRules:
         mock_ssm_fn.side_effect = RuntimeError("SSM unavailable")
 
         # Should not raise
-        interceptor._evaluate_threshold_rules("bedroom", "lola", {})
+        interceptor._evaluate_threshold_rules("penthouse", "lola", {})
 
     @patch("engine.mcp.scene_state.get_scene_state_manager")
     @patch("engine.mcp.scene_rules_engine.get_rules_engine")
@@ -207,7 +207,7 @@ class TestMoodSyncThresholdRules:
             mock_reg.get_character.return_value = mock_rec
             mock_reg_fn.return_value = mock_reg
 
-            interceptor._evaluate_threshold_rules("bedroom", "lola", {})
+            interceptor._evaluate_threshold_rules("penthouse", "lola", {})
 
         # Check that stats dict included merged values
         call_args = mock_eng.evaluate_threshold_rules.call_args
@@ -235,5 +235,5 @@ class TestMoodSyncThresholdRules:
         mock_eng.apply_rule.return_value = {"ok": True}
         mock_eng_fn.return_value = mock_eng
 
-        interceptor._evaluate_threshold_rules("bedroom", "lola", {})
+        interceptor._evaluate_threshold_rules("penthouse", "lola", {})
         assert mock_eng.apply_rule.call_count == 2

@@ -195,7 +195,7 @@ class TestWatchContextBuilding:
     def test_from_request_with_attrs(self):
         class FakeRequest:
             agent_id = "lola"
-            scene = "bedroom"
+            scene = "penthouse"
             metadata = {
                 "character_name": "Lola",
                 "scene_rules": ["Be flirty"],
@@ -206,7 +206,7 @@ class TestWatchContextBuilding:
         pipeline = VirtualPipeline()
         ctx = pipeline._build_watch_context(FakeRequest())
         assert ctx.agent_id == "lola"
-        assert ctx.scene_id == "bedroom"
+        assert ctx.scene_id == "penthouse"
         assert ctx.character_name == "Lola"
         assert ctx.max_tokens == 200
 

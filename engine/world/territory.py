@@ -88,7 +88,7 @@ DISTRICT_NAMES: List[str] = [
 DISTRICT_SCENES: Dict[str, List[str]] = {
     "DOWNTOWN": ["velvet_pit", "club_noir", "obscura"],
     "COMBAT_ZONE": ["colosseum", "rusty_anchor"],
-    "HIGHRISE": ["bedroom", "command_center"],
+    "HIGHRISE": ["penthouse", "command_center"],
     "UNDERWORLD": ["score", "briefing_room"],
     "TECH_DISTRICT": ["lab", "grid", "arcade", "signal"],
     "OUTSKIRTS": ["shattered_throne", "neon_city", "asset_studio"],

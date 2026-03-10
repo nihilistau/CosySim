@@ -77,7 +77,7 @@ class TokenAheadRouter:
         router.on_intent_detected("image_generation", {"prompt": "selfie"})
 
         # When tag is confirmed in stream:
-        router.on_tag_detected("image", "a selfie in the bedroom")
+        router.on_tag_detected("image", "a selfie in the penthouse")
 
         # At end of generation:
         results = router.collect_results(timeout=5.0)

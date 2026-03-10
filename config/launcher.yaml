@@ -23,6 +23,8 @@ scenes:
     auto_start: false
   neoncity:
     auto_start: false
+  penthouse:
+    auto_start: false
   phone:
     auto_start: true
   realm:

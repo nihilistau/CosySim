@@ -38,7 +38,7 @@ def get_dialog_options(
 
     Args:
         character_id:      e.g. "aria"
-        scene_id:          e.g. "bedroom" or "phone"
+        scene_id:          e.g. "penthouse" or "phone"
         context_tags_json: JSON list of current context tags e.g. '["intimate", "cuddle"]'
         stats_json:        JSON dict of current stats e.g. '{"arousal": 55, "openness": 40}'
         max_options:       Maximum number of options to return
@@ -130,7 +130,7 @@ def get_active_directive(character_id: str, scene_id: str) -> str:
 
     Args:
         character_id: e.g. "aria"
-        scene_id:     e.g. "bedroom"
+        scene_id:     e.g. "penthouse"
     """
     try:
         from engine.mcp.dialog_system import get_dialog_system
@@ -147,7 +147,7 @@ def clear_directive(character_id: str, scene_id: str) -> str:
 
     Args:
         character_id: e.g. "aria"
-        scene_id:     e.g. "bedroom"
+        scene_id:     e.g. "penthouse"
     """
     try:
         from engine.mcp.dialog_system import get_dialog_system
