@@ -1,11 +1,13 @@
 """Tests for Phase 7 — World News System.
 
-Tests WorldNewsGenerator, NewsTicker, world_news_skills, and the Flask
-blueprint API endpoints.
+Tests WorldNewsGenerator, NewsTicker, world_news_skills, Flask blueprint
+API endpoints, and frontend asset integration (CSS, JS, neon_base wiring).
 """
 from __future__ import annotations
 
+import re
 import time
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -1011,3 +1013,147 @@ class TestNewsTickerBlueprint:
         data = resp.get_json()
         assert "generator" in data
         assert "ticker" in data
+
+
+# ──── Frontend Asset Integration Tests ────
+
+
+ROOT = Path(__file__).parent.parent
+
+NEON_BASE_HTML = ROOT / "content" / "shared" / "templates" / "neon_base.html"
+NEWS_TICKER_CSS = ROOT / "content" / "shared" / "static" / "css" / "cosysim-news-ticker.css"
+NEWS_TICKER_JS = ROOT / "content" / "shared" / "static" / "js" / "cosysim-news-ticker.js"
+
+
+class TestNewsFrontendAssets:
+    """Validates the news ticker CSS, JS, and template integration exist and are correct."""
+
+    def test_news_ticker_css_exists(self):
+        """cosysim-news-ticker.css exists."""
+        assert NEWS_TICKER_CSS.exists(), f"Missing {NEWS_TICKER_CSS}"
+
+    def test_news_ticker_js_exists(self):
+        """cosysim-news-ticker.js exists."""
+        assert NEWS_TICKER_JS.exists(), f"Missing {NEWS_TICKER_JS}"
+
+    def test_neon_base_loads_ticker_css(self):
+        """neon_base.html includes cosysim-news-ticker.css."""
+        content = NEON_BASE_HTML.read_text(encoding="utf-8")
+        assert "cosysim-news-ticker.css" in content
+
+    def test_neon_base_loads_ticker_js(self):
+        """neon_base.html includes cosysim-news-ticker.js."""
+        content = NEON_BASE_HTML.read_text(encoding="utf-8")
+        assert "cosysim-news-ticker.js" in content
+
+    def test_ticker_js_after_neon_base_js(self):
+        """cosysim-news-ticker.js loads after neon_base.js in the template."""
+        content = NEON_BASE_HTML.read_text(encoding="utf-8")
+        base_pos = content.find("neon_base.js")
+        ticker_pos = content.find("cosysim-news-ticker.js")
+        assert base_pos > 0, "neon_base.js not found"
+        assert ticker_pos > 0, "cosysim-news-ticker.js not found"
+        assert ticker_pos > base_pos, "ticker JS must load after neon_base.js"
+
+    def test_ticker_css_has_container(self):
+        """CSS defines the .cs-ticker container."""
+        css = NEWS_TICKER_CSS.read_text(encoding="utf-8")
+        assert ".cs-ticker " in css or ".cs-ticker{" in css
+
+    def test_ticker_css_has_visible_class(self):
+        """CSS defines .cs-ticker--visible."""
+        css = NEWS_TICKER_CSS.read_text(encoding="utf-8")
+        assert ".cs-ticker--visible" in css
+
+    def test_ticker_css_has_breaking_mode(self):
+        """CSS defines .cs-ticker--breaking."""
+        css = NEWS_TICKER_CSS.read_text(encoding="utf-8")
+        assert ".cs-ticker--breaking" in css
+
+    def test_ticker_css_has_category_tags(self):
+        """CSS defines category tag classes."""
+        css = NEWS_TICKER_CSS.read_text(encoding="utf-8")
+        for cat in ["crime", "economy", "faction", "tech", "social", "breaking", "sports", "underworld"]:
+            assert f".cs-ticker__tag--{cat}" in css, f"Missing tag class for {cat}"
+
+    def test_ticker_css_has_scroll_animation(self):
+        """CSS defines ticker-scroll keyframes."""
+        css = NEWS_TICKER_CSS.read_text(encoding="utf-8")
+        assert "ticker-scroll" in css
+
+    def test_ticker_css_has_breaking_banner(self):
+        """CSS defines the breaking news banner overlay."""
+        css = NEWS_TICKER_CSS.read_text(encoding="utf-8")
+        assert ".cs-ticker__breaking-banner" in css
+
+    def test_ticker_css_has_body_offset(self):
+        """CSS defines body padding when ticker is present."""
+        css = NEWS_TICKER_CSS.read_text(encoding="utf-8")
+        assert "has-ticker" in css
+
+    def test_ticker_css_has_responsive(self):
+        """CSS includes responsive breakpoints."""
+        css = NEWS_TICKER_CSS.read_text(encoding="utf-8")
+        assert "@media" in css
+
+    def test_ticker_js_defines_public_api(self):
+        """JS exposes CosyNewsTicker with required methods."""
+        js = NEWS_TICKER_JS.read_text(encoding="utf-8")
+        assert "CosyNewsTicker" in js
+        for method in ["show", "hide", "toggleMute", "refresh", "pushItem", "isVisible", "isMuted", "getItems"]:
+            assert method in js, f"Missing public method: {method}"
+
+    def test_ticker_js_fetches_api(self):
+        """JS fetches from /api/news/ticker and /api/news/breaking."""
+        js = NEWS_TICKER_JS.read_text(encoding="utf-8")
+        assert "/api/news/ticker" in js
+        assert "/api/news/breaking" in js
+
+    def test_ticker_js_builds_dom(self):
+        """JS creates DOM elements dynamically."""
+        js = NEWS_TICKER_JS.read_text(encoding="utf-8")
+        assert "cs-news-ticker" in js
+        assert "cs-breaking-banner" in js
+        assert "NEON NEWS" in js
+
+    def test_ticker_js_handles_socket_events(self):
+        """JS listens for news_article and breaking_news socket events."""
+        js = NEWS_TICKER_JS.read_text(encoding="utf-8")
+        assert "news_article" in js
+        assert "breaking_news" in js
+
+    def test_ticker_js_keyboard_toggle(self):
+        """JS supports keyboard shortcut (N key)."""
+        js = NEWS_TICKER_JS.read_text(encoding="utf-8")
+        # Check for N key binding
+        assert "'n'" in js or '"n"' in js
+
+    def test_ticker_js_has_fallback(self):
+        """JS has fallback items when API is unavailable."""
+        js = NEWS_TICKER_JS.read_text(encoding="utf-8")
+        assert "FALLBACK_ITEMS" in js
+
+    def test_ticker_js_deduplicates(self):
+        """JS deduplicates items by headline."""
+        js = NEWS_TICKER_JS.read_text(encoding="utf-8")
+        # Should check for existing headline before adding
+        assert "exists" in js or "some" in js
+
+    def test_ticker_js_escapes_html(self):
+        """JS escapes HTML in headlines to prevent XSS."""
+        js = NEWS_TICKER_JS.read_text(encoding="utf-8")
+        assert "_esc" in js
+        assert "&amp;" in js
+        assert "&lt;" in js
+
+    def test_ticker_css_has_glitch_effect(self):
+        """CSS defines glitch animation for breaking interrupts."""
+        css = NEWS_TICKER_CSS.read_text(encoding="utf-8")
+        assert "ticker-glitch" in css
+        assert ".cs-ticker--glitch" in css
+
+    def test_ticker_js_auto_dismiss_banner(self):
+        """JS auto-dismisses breaking banner after timeout."""
+        js = NEWS_TICKER_JS.read_text(encoding="utf-8")
+        assert "BREAKING_BANNER_MS" in js
+        assert "dismissBanner" in js
