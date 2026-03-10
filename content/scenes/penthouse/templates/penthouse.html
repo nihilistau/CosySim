@@ -9,7 +9,6 @@
 {% endblock %}
 
 {% block head_scripts %}
-  <!-- Three.js 3D engine (must load in head for Penthouse 3D room) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 {% endblock %}
@@ -22,9 +21,7 @@
 
 {% block scene_content %}
 
-  <div id="world-event-ticker" class="world-event-ticker" aria-live="polite"></div>
-
-  <!-- Adult Content Gate (session-cached) -->
+  <!-- ── Adult Content Gate ─────────────────────────────────────── -->
   <div id="penthouse-gate" class="penthouse-gate" role="alertdialog" aria-modal="true" aria-labelledby="gate-title">
     <div class="penthouse-gate__card cs-glass-panel cs-glass-panel--strong">
       <div class="penthouse-gate__icon">🔞</div>
@@ -36,321 +33,615 @@
         in your jurisdiction and consent to viewing this content.
       </p>
       <div class="penthouse-gate__actions">
-        <button class="cs-glass-btn cs-glass-btn--accent" id="gate-enter">
-          Enter — I'm an adult
-        </button>
-        <button class="cs-glass-btn cs-glass-btn--danger" id="gate-leave" onclick="window.location.href='/'">
-          Leave
-        </button>
+        <button class="cs-glass-btn cs-glass-btn--accent" id="gate-enter">Enter — I'm an adult</button>
+        <button class="cs-glass-btn cs-glass-btn--danger" id="gate-leave" onclick="window.location.href='/'">Leave</button>
       </div>
     </div>
   </div>
 
-  <!-- Scene: THE PENTHOUSE -->
-  <div class="penthouse-layout" id="penthouse-main" aria-label="The Penthouse scene">
+  <!-- ── World Event Ticker (top center) ───────────────────────── -->
+  <div id="world-event-ticker" class="world-event-ticker" aria-live="polite"></div>
 
-    <!-- ── LEFT: Character portrait + emotion bars ───────────────── -->
-    <aside class="penthouse-character-panel cs-glass-panel" aria-label="Character panel">
+  <!-- ══════════════════════════════════════════════════════════════
+       A. FLOATING CHARACTER PANEL (left)
+       ══════════════════════════════════════════════════════════════ -->
+  <aside class="ph-character-panel" id="ph-char-panel" aria-label="Character panel">
 
+    <button class="ph-panel-collapse-btn" id="ph-char-collapse" title="Collapse character panel" aria-label="Toggle character panel">
+      <span class="ph-collapse-icon">◀</span>
+    </button>
+
+    <div class="ph-char-inner" id="ph-char-inner">
       <!-- Portrait -->
-      <div class="penthouse-portrait-wrap" id="char-portrait-frame">
-        <div class="cs-portrait-frame cs-portrait-frame--2xl cs-portrait-frame--no-dot" id="portrait-inner">
-          <img id="char-portrait-img" src="" alt="Character portrait" class="penthouse-portrait-img">
-          <div class="penthouse-portrait-overlay"></div>
+      <div class="ph-portrait-wrap" id="char-portrait-frame">
+        <div class="cs-portrait-frame cs-portrait-frame--lg cs-portrait-frame--no-dot" id="portrait-inner">
+          <img id="char-portrait-img" src="" alt="Character portrait">
         </div>
-        <div class="penthouse-char-name" id="char-name">—</div>
-        <div class="penthouse-speaking-ring" id="speaking-ring" aria-hidden="true"></div>
+        <div class="ph-char-name" id="char-name">—</div>
+        <div class="ph-speaking-ring" id="speaking-ring" aria-hidden="true"></div>
       </div>
 
-      <!-- 10 Emotion Bars -->
-      <div class="penthouse-emotion-bars" role="group" aria-label="Emotion levels">
-
+      <!-- 5 Key Emotion Bars (compact) -->
+      <div class="ph-emotion-bars" role="group" aria-label="Emotion levels">
         <div class="cs-stat-bar cs-stat-bar--arousal">
-          <div class="cs-stat-bar__label">
-            <span>Arousal</span>
-            <span class="cs-stat-bar__value" id="stat-arousal-val">0</span>
-          </div>
-          <div class="cs-stat-bar__track">
-            <div class="cs-stat-bar__fill" id="stat-arousal" style="width:0%"></div>
-          </div>
+          <div class="cs-stat-bar__label"><span>Arousal</span><span class="cs-stat-bar__value" id="stat-arousal-val">0</span></div>
+          <div class="cs-stat-bar__track"><div class="cs-stat-bar__fill" id="stat-arousal" style="width:0%"></div></div>
         </div>
-
         <div class="cs-stat-bar cs-stat-bar--pleasure">
-          <div class="cs-stat-bar__label">
-            <span>Pleasure</span>
-            <span class="cs-stat-bar__value" id="stat-pleasure-val">0</span>
-          </div>
-          <div class="cs-stat-bar__track">
-            <div class="cs-stat-bar__fill" id="stat-pleasure" style="width:0%"></div>
-          </div>
+          <div class="cs-stat-bar__label"><span>Pleasure</span><span class="cs-stat-bar__value" id="stat-pleasure-val">0</span></div>
+          <div class="cs-stat-bar__track"><div class="cs-stat-bar__fill" id="stat-pleasure" style="width:0%"></div></div>
         </div>
-
         <div class="cs-stat-bar cs-stat-bar--happiness">
-          <div class="cs-stat-bar__label">
-            <span>Happiness</span>
-            <span class="cs-stat-bar__value" id="stat-happiness-val">0</span>
-          </div>
-          <div class="cs-stat-bar__track">
-            <div class="cs-stat-bar__fill" id="stat-happiness" style="width:0%"></div>
-          </div>
+          <div class="cs-stat-bar__label"><span>Happiness</span><span class="cs-stat-bar__value" id="stat-happiness-val">0</span></div>
+          <div class="cs-stat-bar__track"><div class="cs-stat-bar__fill" id="stat-happiness" style="width:0%"></div></div>
         </div>
-
         <div class="cs-stat-bar cs-stat-bar--horniness">
-          <div class="cs-stat-bar__label">
-            <span>Desire</span>
-            <span class="cs-stat-bar__value" id="stat-horniness-val">0</span>
-          </div>
-          <div class="cs-stat-bar__track">
-            <div class="cs-stat-bar__fill" id="stat-horniness" style="width:0%"></div>
-          </div>
+          <div class="cs-stat-bar__label"><span>Desire</span><span class="cs-stat-bar__value" id="stat-horniness-val">0</span></div>
+          <div class="cs-stat-bar__track"><div class="cs-stat-bar__fill" id="stat-horniness" style="width:0%"></div></div>
         </div>
-
-        <div class="cs-stat-bar cs-stat-bar--drunkenness">
-          <div class="cs-stat-bar__label">
-            <span>Intoxicated</span>
-            <span class="cs-stat-bar__value" id="stat-drunkenness-val">0</span>
-          </div>
-          <div class="cs-stat-bar__track">
-            <div class="cs-stat-bar__fill" id="stat-drunkenness" style="width:0%"></div>
-          </div>
-        </div>
-
         <div class="cs-stat-bar cs-stat-bar--dominance">
-          <div class="cs-stat-bar__label">
-            <span>Dominance</span>
-            <span class="cs-stat-bar__value" id="stat-dominance-val">0</span>
-          </div>
-          <div class="cs-stat-bar__track">
-            <div class="cs-stat-bar__fill" id="stat-dominance" style="width:0%"></div>
-          </div>
+          <div class="cs-stat-bar__label"><span>Dominance</span><span class="cs-stat-bar__value" id="stat-dominance-val">0</span></div>
+          <div class="cs-stat-bar__track"><div class="cs-stat-bar__fill" id="stat-dominance" style="width:0%"></div></div>
         </div>
-
-        <div class="cs-stat-bar cs-stat-bar--fear">
-          <div class="cs-stat-bar__label">
-            <span>Fear</span>
-            <span class="cs-stat-bar__value" id="stat-fear-val">0</span>
-          </div>
-          <div class="cs-stat-bar__track">
-            <div class="cs-stat-bar__fill" id="stat-fear" style="width:0%"></div>
-          </div>
-        </div>
-
-        <div class="cs-stat-bar cs-stat-bar--anger">
-          <div class="cs-stat-bar__label">
-            <span>Anger</span>
-            <span class="cs-stat-bar__value" id="stat-anger-val">0</span>
-          </div>
-          <div class="cs-stat-bar__track">
-            <div class="cs-stat-bar__fill" id="stat-anger" style="width:0%"></div>
-          </div>
-        </div>
-
-        <div class="cs-stat-bar cs-stat-bar--openness">
-          <div class="cs-stat-bar__label">
-            <span>Openness</span>
-            <span class="cs-stat-bar__value" id="stat-openness-val">0</span>
-          </div>
-          <div class="cs-stat-bar__track">
-            <div class="cs-stat-bar__fill" id="stat-openness" style="width:0%"></div>
-          </div>
-        </div>
-
-        <div class="cs-stat-bar cs-stat-bar--tiredness">
-          <div class="cs-stat-bar__label">
-            <span>Tired</span>
-            <span class="cs-stat-bar__value" id="stat-tiredness-val">0</span>
-          </div>
-          <div class="cs-stat-bar__track">
-            <div class="cs-stat-bar__fill" id="stat-tiredness" style="width:0%"></div>
-          </div>
-        </div>
-
-      </div><!-- /emotion-bars -->
+      </div>
 
       <!-- Mood descriptor -->
-      <div class="penthouse-mood-text" id="mood-descriptor" aria-live="polite">Waiting...</div>
+      <div class="ph-mood-text" id="mood-descriptor" aria-live="polite">Waiting...</div>
+    </div>
+  </aside>
 
-    </aside><!-- /character-panel -->
+  <!-- ══════════════════════════════════════════════════════════════
+       B. DIRECTOR TOGGLE (top-right hamburger)
+       ══════════════════════════════════════════════════════════════ -->
+  <button class="ph-director-toggle" id="ph-director-toggle" title="Director Panel" aria-label="Toggle Director Panel">
+    <span class="ph-hamburger">
+      <span></span><span></span><span></span>
+    </span>
+    <span class="ph-director-toggle__label">DIRECTOR</span>
+  </button>
 
-    <!-- ── CENTER: City window + chat ────────────────────────────── -->
-    <section class="penthouse-main-panel" aria-label="Main scene panel">
+  <!-- ══════════════════════════════════════════════════════════════
+       C. DIRECTOR PANEL (right slide-out, 400px)
+       ══════════════════════════════════════════════════════════════ -->
+  <aside class="ph-director-panel" id="ph-director-panel" aria-label="Director control panel">
 
-      <!-- Neon city window background -->
-      <div class="penthouse-window" id="penthouse-window" aria-hidden="true">
-        <div class="penthouse-window-particles" id="penthouse-particles"></div>
-        <div class="penthouse-city-silhouette"></div>
-        <div class="penthouse-window-reflection"></div>
-      </div>
+    <!-- Panel header -->
+    <div class="ph-director-header">
+      <h2 class="ph-director-title">DIRECTOR</h2>
+      <button class="cs-icon-btn ph-director-close" id="ph-director-close" title="Close" aria-label="Close director panel">✕</button>
+    </div>
 
-      <!-- Scene header -->
-      <div class="cs-scene-header penthouse-header">
-        <h1 class="cs-scene-header__title">THE PENTHOUSE</h1>
-        <div class="cs-scene-header__accent-line"></div>
-        <p class="cs-scene-header__subtitle" id="director-beat-text">
-          Above the neon city, nothing is forbidden.
-        </p>
-      </div>
+    <!-- Tab bar -->
+    <div class="ph-tab-bar" role="tablist">
+      <button class="ph-tab-btn active" data-tab="ph-tab-scene" role="tab" aria-selected="true">Scene</button>
+      <button class="ph-tab-btn" data-tab="ph-tab-cast" role="tab">Cast</button>
+      <button class="ph-tab-btn" data-tab="ph-tab-direct" role="tab">Direct</button>
+      <button class="ph-tab-btn" data-tab="ph-tab-interact" role="tab">Interact</button>
+      <button class="ph-tab-btn" data-tab="ph-tab-story" role="tab">Story</button>
+      <button class="ph-tab-btn" data-tab="ph-tab-props" role="tab">Props</button>
+      <button class="ph-tab-btn" data-tab="ph-tab-events" role="tab">Events</button>
+      <button class="ph-tab-btn" data-tab="ph-tab-settings" role="tab">⚙</button>
+    </div>
 
-      <!-- Chat log -->
-      <div class="penthouse-chat"
-           id="penthouse-chat"
-           role="log"
-           aria-live="polite"
-           aria-label="Conversation">
-        <!-- Messages injected by JS -->
-      </div>
+    <!-- Tab content area -->
+    <div class="ph-tab-body">
 
-      <!-- Typing indicator -->
-      <div class="penthouse-typing" id="penthouse-typing" aria-hidden="true">
-        <span class="penthouse-typing__dot"></span>
-        <span class="penthouse-typing__dot"></span>
-        <span class="penthouse-typing__dot"></span>
-        <span class="penthouse-typing__label" id="typing-char-name">…</span>
-      </div>
+      <!-- ── TAB 1: SCENE ──────────────────────────────────────── -->
+      <div class="ph-tab-content active" id="ph-tab-scene" role="tabpanel">
 
-      <!-- Input row -->
-      <div class="penthouse-input-row">
-        <textarea
-          class="penthouse-input"
-          id="penthouse-input"
-          rows="2"
-          placeholder="Speak your desires..."
-          aria-label="Message input"
-          maxlength="2000"
-        ></textarea>
-        <div class="penthouse-input-actions">
-          <button class="cs-glass-btn cs-glass-btn--accent" id="penthouse-send" aria-label="Send message">
-            Send
-          </button>
-          <button class="cs-icon-btn" id="penthouse-voice-btn" title="Voice input" aria-label="Voice input">
-            🎤
-          </button>
-          <button class="cs-icon-btn" id="penthouse-clear-btn" title="Clear chat" aria-label="Clear chat">
-            🗑
-          </button>
-        </div>
-      </div>
+        <section class="ph-section">
+          <h3 class="ph-section-title">Cast <span class="cs-chip cs-chip--scene" id="charCount">0/2</span></h3>
+          <div id="charListCompact" class="ph-cast-list"></div>
+          <button class="cs-glass-btn" onclick="openCharPicker()">+ Add Character</button>
+        </section>
 
-    </section><!-- /main-panel -->
+        <section class="ph-section">
+          <h3 class="ph-section-title">Lighting</h3>
+          <div class="ph-grid ph-grid--3" id="lightingGrid">
+            {% for key, preset in lighting_presets.items() %}
+            <button class="cs-glass-btn ph-grid-btn{% if key == 'evening' %} active{% endif %}"
+                    data-key="{{ key }}" onclick="setTime('{{ key }}')">{{ preset.label }}</button>
+            {% endfor %}
+          </div>
+        </section>
 
-    <!-- ── RIGHT: Scenarios + Director + Economy + Memories ──────── -->
-    <aside class="penthouse-right-panel" aria-label="Control panels">
+        <section class="ph-section">
+          <h3 class="ph-section-title">Locations</h3>
+          <div id="locationList" class="ph-location-list"></div>
+        </section>
 
-      <!-- Scenario selector -->
-      <div class="cs-glass-panel penthouse-panel-section">
-        <h3 class="penthouse-panel-title">
-          <span>SCENARIOS</span>
-          <span class="cs-chip" id="scenario-count-chip">—</span>
-        </h3>
-        <div class="penthouse-scenarios" id="penthouse-scenarios" role="list">
-          <!-- Scenario cards populated by JS -->
-          <div class="penthouse-scenarios__empty">Click "Load" to fetch scenarios</div>
-        </div>
-        <div class="penthouse-scenarios-controls">
-          <select class="penthouse-intensity-select" id="scenario-intensity" aria-label="Intensity level">
-            <option value="1">🌸 Mild</option>
-            <option value="2" selected>🌹 Moderate</option>
-            <option value="3">🔥 Intense</option>
-            <option value="4">⚡ Extreme</option>
-            <option value="5">🖤 Unlimited</option>
+        <section class="ph-section">
+          <h3 class="ph-section-title">Agent Models</h3>
+          <div id="modelConfigList" class="ph-model-list"></div>
+          <button class="cs-glass-btn" onclick="refreshModels()">↻ Refresh</button>
+        </section>
+
+        <section class="ph-section">
+          <h3 class="ph-section-title">Ambient Audio</h3>
+          <select class="ph-select" id="ambientTrack" onchange="setAmbientTrack(this.value)">
+            <option value="">Off</option>
           </select>
-          <button class="cs-glass-btn" id="load-scenarios-btn">Load</button>
-        </div>
+          <input type="range" class="ph-range" id="ambientVolume" min="0" max="100" value="30"
+                 oninput="setAmbientVolume(this.value)">
+        </section>
+
       </div>
 
-      <!-- Scene Director -->
-      <div class="cs-glass-panel penthouse-panel-section penthouse-director-panel">
-        <h3 class="penthouse-panel-title">DIRECTOR</h3>
-        <div id="director-panel">
-          <div class="penthouse-director-beat-type">
-            <div class="cs-chip" id="beat-type-chip">—</div>
-            <span class="penthouse-director-beat-label">Current Beat</span>
+      <!-- ── TAB 2: CAST ───────────────────────────────────────── -->
+      <div class="ph-tab-content" id="ph-tab-cast" role="tabpanel">
+
+        <section class="ph-section">
+          <h3 class="ph-section-title">Character Stats</h3>
+          <div id="charStatSheets" class="ph-stat-sheets"></div>
+          <p class="ph-hint" id="noCharsMsg">No characters loaded yet.</p>
+        </section>
+
+        <section class="ph-section">
+          <button class="cs-glass-btn cs-glass-btn--accent" onclick="openCharPicker()">+ Add Character</button>
+        </section>
+
+      </div>
+
+      <!-- ── TAB 3: DIRECT ─────────────────────────────────────── -->
+      <div class="ph-tab-content" id="ph-tab-direct" role="tabpanel">
+
+        <section class="ph-section">
+          <h3 class="ph-section-title">Director Identity</h3>
+          <div class="ph-form-row">
+            <input id="directorNameInput" type="text" placeholder="Director name" class="ph-input" value="The Director">
+            <button class="cs-glass-btn cs-glass-btn--accent" onclick="enterScene()">Enter</button>
+            <button class="cs-glass-btn" onclick="exitScene()">Exit</button>
           </div>
-          <p class="penthouse-director-instruction" id="beat-instruction">
-            The story is unfolding.
-          </p>
-          <div class="penthouse-director-actions">
-            <button class="cs-glass-btn" data-nudge="escalation" title="Push the scene forward">
-              ↑ Escalate
+          <div id="directorStatus" class="ph-status-text"></div>
+        </section>
+
+        <section class="ph-section">
+          <h3 class="ph-section-title">Director Avatar</h3>
+          <p class="ph-hint">Place your avatar in the scene to participate directly.</p>
+          <div class="ph-form-grid ph-form-grid--2">
+            <select id="dirAvatarGender" class="ph-select">
+              <option value="male">Male</option>
+              <option value="female">Female</option>
+            </select>
+            <select id="dirAvatarSkin" class="ph-select">
+              <option value="pale">Pale</option>
+              <option value="fair">Fair</option>
+              <option value="light">Light</option>
+              <option value="medium">Medium</option>
+              <option value="tan">Tan</option>
+              <option value="brown">Brown</option>
+              <option value="dark">Dark</option>
+            </select>
+            <select id="dirAvatarHair" class="ph-select">
+              <option value="black">Black</option>
+              <option value="brown">Brown</option>
+              <option value="blonde">Blonde</option>
+              <option value="red">Red</option>
+              <option value="auburn">Auburn</option>
+              <option value="platinum">Platinum</option>
+              <option value="silver">Silver</option>
+            </select>
+            <select id="dirAvatarOutfit" class="ph-select">
+              <option value="casual">Casual</option>
+              <option value="formal">Formal</option>
+              <option value="silk_robe">Silk Robe</option>
+              <option value="nothing">Nothing</option>
+              <option value="lingerie">Lingerie</option>
+              <option value="leather">Leather</option>
+              <option value="evening_dress">Evening Dress</option>
+            </select>
+          </div>
+          <select id="dirAvatarLocation" class="ph-select">
+            <option value="bed">🛏 Bed</option>
+            <option value="couch">🛋 Couch</option>
+            <option value="fireplace">🔥 Fireplace</option>
+            <option value="bar">🍸 Bar</option>
+            <option value="bathroom">🛁 Bathroom</option>
+            <option value="vanity">💄 Vanity</option>
+            <option value="balcony">🌙 Balcony</option>
+            <option value="doorway">🚪 Doorway</option>
+          </select>
+          <div class="ph-form-row">
+            <button class="cs-glass-btn cs-glass-btn--accent" onclick="placeDirectorAvatar()">Place Avatar</button>
+            <button class="cs-glass-btn" onclick="removeDirectorAvatar()">Remove</button>
+          </div>
+        </section>
+
+        <section class="ph-section">
+          <h3 class="ph-section-title">Whisper</h3>
+          <select id="whisperTarget" class="ph-select">
+            <option value="">All characters</option>
+          </select>
+          <textarea id="whisperInput" class="ph-textarea" rows="2" placeholder="Secret message…"></textarea>
+          <button class="cs-glass-btn cs-glass-btn--accent" onclick="sendWhisper()">Send Whisper</button>
+        </section>
+
+        <section class="ph-section">
+          <h3 class="ph-section-title">Give Line</h3>
+          <select id="giveLineTarget" class="ph-select">
+            <option value="">— pick character —</option>
+          </select>
+          <textarea id="giveLineInput" class="ph-textarea" rows="2" placeholder="Say exactly…"></textarea>
+          <div class="ph-form-row">
+            <span class="ph-hint" id="complianceHint"></span>
+            <button class="cs-glass-btn cs-glass-btn--accent" onclick="giveLine()">Give Line</button>
+          </div>
+        </section>
+
+        <section class="ph-section">
+          <h3 class="ph-section-title">Give Action</h3>
+          <select id="giveActionTarget" class="ph-select">
+            <option value="">All characters</option>
+          </select>
+          <textarea id="giveActionInput" class="ph-textarea" rows="2" placeholder="Do this action…"></textarea>
+          <button class="cs-glass-btn cs-glass-btn--accent" onclick="giveAction()">Give Action</button>
+        </section>
+
+        <section class="ph-section">
+          <h3 class="ph-section-title">Conversation Starters</h3>
+          <div class="ph-grid ph-grid--3">
+            <button class="cs-glass-btn ph-grid-btn" onclick="startConversation('flirt')">Flirt</button>
+            <button class="cs-glass-btn ph-grid-btn" onclick="startConversation('confession')">Confess</button>
+            <button class="cs-glass-btn ph-grid-btn" onclick="startConversation('dare')">Dare</button>
+            <button class="cs-glass-btn ph-grid-btn" onclick="startConversation('compliment')">Compliment</button>
+            <button class="cs-glass-btn ph-grid-btn" onclick="startConversation('fantasy')">Fantasy</button>
+            <button class="cs-glass-btn ph-grid-btn" onclick="startConversation('game')">Game</button>
+            <button class="cs-glass-btn ph-grid-btn" onclick="startConversation('power_play')">Power Play</button>
+            <button class="cs-glass-btn ph-grid-btn" onclick="startConversation('roleplay_meta')">New Encounter</button>
+          </div>
+        </section>
+
+      </div>
+
+      <!-- ── TAB 4: INTERACT ───────────────────────────────────── -->
+      <div class="ph-tab-content" id="ph-tab-interact" role="tabpanel">
+
+        <section class="ph-section">
+          <h3 class="ph-section-title">Furniture Interactions</h3>
+          <p class="ph-hint">Click a location to use its interactions.</p>
+          <div id="interactLocationGrid" class="ph-grid ph-grid--2"></div>
+        </section>
+
+        <section class="ph-section">
+          <h3 class="ph-section-title" id="interactLocationTitle" style="display:none">— Select a location —</h3>
+          <div id="interactActions" class="ph-interact-actions"></div>
+        </section>
+
+        <section class="ph-section">
+          <h3 class="ph-section-title">Quick Move</h3>
+          <p class="ph-hint">Move a character to a location.</p>
+          <select id="moveCharSelect" class="ph-select">
+            <option value="">— character —</option>
+          </select>
+          <select id="moveLocSelect" class="ph-select">
+            <option value="bed">🛏 Bed</option>
+            <option value="couch">🛋 Couch</option>
+            <option value="fireplace">🔥 Fireplace</option>
+            <option value="bar">🍸 Bar</option>
+            <option value="bathroom">🛁 Bathroom</option>
+            <option value="vanity">💄 Vanity</option>
+            <option value="balcony">🌙 Balcony</option>
+            <option value="doorway">🚪 Doorway</option>
+          </select>
+          <button class="cs-glass-btn cs-glass-btn--accent" onclick="quickMoveChar()">Move</button>
+        </section>
+
+      </div>
+
+      <!-- ── TAB 5: STORY ──────────────────────────────────────── -->
+      <div class="ph-tab-content" id="ph-tab-story" role="tabpanel">
+
+        <section class="ph-section">
+          <h3 class="ph-section-title">Active Scenario</h3>
+          <div class="ph-scenario-display" id="activeScenarioDisplay">None</div>
+          <select id="scenarioPicker" class="ph-select" onchange="scenarioChanged()">
+            <option value="">— pick a scenario —</option>
+            {% for key, sc in scenarios.items() %}
+            <option value="{{ key }}">{{ sc.emoji }} {{ sc.label }}</option>
+            {% endfor %}
+          </select>
+          <div id="scenarioPreview" class="ph-scenario-preview" style="display:none"></div>
+          <div class="ph-form-row">
+            <button class="cs-glass-btn cs-glass-btn--accent" onclick="activateScenario()">Launch Scenario</button>
+            <button class="cs-glass-btn" onclick="clearScenario()">Clear</button>
+          </div>
+        </section>
+
+        <section class="ph-section">
+          <h3 class="ph-section-title">Story Beats</h3>
+          <div id="storyBeatsList" class="ph-beats-list"></div>
+          <textarea id="newBeatInput" class="ph-textarea" rows="2" placeholder="Next story beat to inject…"></textarea>
+          <button class="cs-glass-btn cs-glass-btn--accent" onclick="injectBeat()">Inject Beat</button>
+        </section>
+
+        <section class="ph-section">
+          <h3 class="ph-section-title">Broadcast Message</h3>
+          <textarea id="broadcastInput" class="ph-textarea" rows="2" placeholder="Director speaks into the scene…"></textarea>
+          <button class="cs-glass-btn cs-glass-btn--accent" onclick="directorBroadcast()">Broadcast</button>
+        </section>
+
+      </div>
+
+      <!-- ── TAB 6: PROPS ──────────────────────────────────────── -->
+      <div class="ph-tab-content" id="ph-tab-props" role="tabpanel">
+
+        <section class="ph-section">
+          <h3 class="ph-section-title">Room Props</h3>
+          <p class="ph-hint">Click to add/remove props from the scene.</p>
+          <div class="ph-grid ph-grid--3" id="propGrid">
+            {% for pid, prop in props.items() %}
+            <button class="cs-glass-btn ph-prop-btn" id="prop-{{ pid }}" data-pid="{{ pid }}"
+                    onclick="toggleProp('{{ pid }}')" title="{{ prop.effect }}">
+              <span class="ph-prop-emoji">{{ prop.emoji }}</span>
+              <span class="ph-prop-label">{{ prop.label }}</span>
             </button>
-            <button class="cs-glass-btn" data-nudge="cool_down" title="Let the scene breathe">
-              ↓ Cool Down
-            </button>
-            <button class="cs-glass-btn" data-nudge="revelation" title="Surface a secret">
-              ✦ Reveal
-            </button>
+            {% endfor %}
           </div>
-        </div>
+        </section>
+
+        <section class="ph-section">
+          <h3 class="ph-section-title">Give Prop to Character</h3>
+          <select id="givePropChar" class="ph-select"><option value="">— character —</option></select>
+          <select id="givePropItem" class="ph-select">
+            <option value="">— prop —</option>
+            {% for pid, prop in props.items() %}
+            <option value="{{ pid }}">{{ prop.emoji }} {{ prop.label }}</option>
+            {% endfor %}
+          </select>
+          <button class="cs-glass-btn cs-glass-btn--accent" onclick="givePropToChar()">Give</button>
+        </section>
+
       </div>
 
-      <!-- Economy / Credits -->
-      <div class="cs-glass-panel penthouse-panel-section">
-        <h3 class="penthouse-panel-title">CREDITS</h3>
-        <div class="penthouse-economy-row">
-          <div class="cs-economy-ticker" id="penthouse-credits" aria-live="polite">₵ —</div>
-          <button class="cs-icon-btn" id="refresh-credits-btn" title="Refresh balance" aria-label="Refresh credits">
-            ↺
-          </button>
-        </div>
+      <!-- ── TAB 7: EVENTS ─────────────────────────────────────── -->
+      <div class="ph-tab-content" id="ph-tab-events" role="tabpanel">
+
+        <section class="ph-section">
+          <h3 class="ph-section-title">Environment Events</h3>
+          <div class="ph-grid ph-grid--2">
+            <button class="cs-glass-btn ph-event-btn" onclick="fireEvent('flicker_lights')">💡 Flicker Lights</button>
+            <button class="cs-glass-btn ph-event-btn" onclick="fireEvent('strange_sound')">👂 Strange Sound</button>
+            <button class="cs-glass-btn ph-event-btn" onclick="fireEvent('cold_draft')">🌬 Cold Draft</button>
+            <button class="cs-glass-btn ph-event-btn" onclick="fireEvent('move_object')">🪑 Move Object</button>
+            <button class="cs-glass-btn ph-event-btn" onclick="fireEvent('knock')">🚪 Knock</button>
+            <button class="cs-glass-btn ph-event-btn" onclick="fireEvent('power_out')">⚡ Power Out</button>
+            <button class="cs-glass-btn ph-event-btn ph-event-btn--romantic" onclick="fireEvent('romantic_mood')">🕯 Romantic Mood</button>
+            <button class="cs-glass-btn ph-event-btn" onclick="fireEvent('thunder')">⛈ Thunder</button>
+            <button class="cs-glass-btn ph-event-btn ph-event-btn--spicy" onclick="fireEvent('lock_door')">🔒 Lock Door</button>
+            <button class="cs-glass-btn ph-event-btn ph-event-btn--spicy" onclick="fireEvent('music_on')">🎵 Music On</button>
+            <button class="cs-glass-btn ph-event-btn ph-event-btn--spicy" onclick="fireEvent('candles_light')">🕯 All Candles</button>
+            <button class="cs-glass-btn ph-event-btn ph-event-btn--spicy" onclick="fireEvent('rose_petals')">🌹 Rose Petals</button>
+            <button class="cs-glass-btn ph-event-btn" onclick="fireEvent('phone_rings')">📱 Phone Rings</button>
+            <button class="cs-glass-btn ph-event-btn" onclick="fireEvent('door_opens')">🚪 Door Opens</button>
+            <button class="cs-glass-btn ph-event-btn ph-event-btn--romantic" onclick="fireEvent('stoke_fire')">🔥 Stoke Fire</button>
+            <button class="cs-glass-btn ph-event-btn ph-event-btn--romantic" onclick="fireEvent('dim_lights')">🌙 Dim Lights</button>
+          </div>
+        </section>
+
+        <section class="ph-section">
+          <h3 class="ph-section-title">Custom Event</h3>
+          <textarea id="customEventInput" class="ph-textarea" rows="2" placeholder="Describe what happens…"></textarea>
+          <button class="cs-glass-btn cs-glass-btn--accent" onclick="fireCustomEvent()">Fire Event</button>
+        </section>
+
       </div>
 
-      <!-- Character Memory -->
-      <div class="cs-glass-panel penthouse-panel-section">
-        <h3 class="penthouse-panel-title">MEMORIES</h3>
-        <div class="penthouse-memories" id="penthouse-memories" aria-live="polite">
-          <div class="penthouse-memories__empty">No memories yet.</div>
-        </div>
+      <!-- ── TAB 8: SETTINGS ───────────────────────────────────── -->
+      <div class="ph-tab-content" id="ph-tab-settings" role="tabpanel">
+
+        <section class="ph-section">
+          <h3 class="ph-section-title">Camera Views</h3>
+          <p class="ph-hint">Lock camera to a room area</p>
+          <div id="viewPresetsGrid" class="ph-grid ph-grid--3"></div>
+          <div class="ph-form-row">
+            <button class="cs-glass-btn" onclick="cycleView(-1)" title="Previous view">◀ Prev</button>
+            <button class="cs-glass-btn" onclick="cycleView(1)" title="Next view">Next ▶</button>
+          </div>
+        </section>
+
+        <section class="ph-section">
+          <h3 class="ph-section-title">Camera</h3>
+          <div class="ph-settings-grid">
+            <label class="ph-label">Camera Speed</label>
+            <input type="range" class="ph-range" id="settingCameraSpeed" min="1" max="10" value="5" oninput="updateSetting('cameraSpeed', this.value)">
+            <label class="ph-label">FOV</label>
+            <input type="range" class="ph-range" id="settingFov" min="30" max="90" value="55" oninput="updateSetting('fov', this.value)">
+            <label class="ph-label">Zoom</label>
+            <input type="range" class="ph-range" id="settingZoom" min="2" max="30" value="10" oninput="updateSetting('zoom', this.value)">
+          </div>
+        </section>
+
+        <section class="ph-section">
+          <h3 class="ph-section-title">Lighting</h3>
+          <div class="ph-settings-grid">
+            <label class="ph-label">Ambient Brightness</label>
+            <input type="range" class="ph-range" id="settingAmbient" min="0" max="100" value="15" oninput="updateSetting('ambient', this.value)">
+            <label class="ph-label">Shadow Quality</label>
+            <select id="settingShadows" class="ph-select" onchange="updateSetting('shadows', this.value)">
+              <option value="high">High (2048)</option>
+              <option value="medium" selected>Medium (1024)</option>
+              <option value="low">Low (512)</option>
+              <option value="off">Off</option>
+            </select>
+            <label class="ph-label">Fireplace Intensity</label>
+            <input type="range" class="ph-range" id="settingFireplace" min="0" max="100" value="60" oninput="updateSetting('fireIntensity', this.value)">
+          </div>
+        </section>
+
+        <section class="ph-section">
+          <h3 class="ph-section-title">Room Colors</h3>
+          <div class="ph-settings-grid">
+            <label class="ph-label">Wall Color</label>
+            <input type="color" class="ph-color-input" id="settingWallColor" value="#2a2a3d" onchange="updateSetting('wallColor', this.value)">
+            <label class="ph-label">Floor Color</label>
+            <input type="color" class="ph-color-input" id="settingFloorColor" value="#3d2b1f" onchange="updateSetting('floorColor', this.value)">
+            <label class="ph-label">Rug Color</label>
+            <input type="color" class="ph-color-input" id="settingRugColor" value="#4a2040" onchange="updateSetting('rugColor', this.value)">
+          </div>
+        </section>
+
+        <section class="ph-section">
+          <h3 class="ph-section-title">Agent</h3>
+          <div class="ph-settings-grid">
+            <label class="ph-label">Response Length</label>
+            <select id="settingResponseLen" class="ph-select" onchange="updateSetting('responseLen', this.value)">
+              <option value="short">Short</option>
+              <option value="medium" selected>Medium</option>
+              <option value="long">Long</option>
+            </select>
+            <label class="ph-label">Tick Interval (sec)</label>
+            <input type="range" class="ph-range" id="settingTickInterval" min="3" max="30" value="8" oninput="updateSetting('tickInterval', this.value)">
+          </div>
+        </section>
+
       </div>
 
-      <!-- World Status -->
-      <div class="cs-glass-panel penthouse-panel-section" id="world-status-panel">
-        <h3 class="penthouse-panel-title">
-          <span>WORLD STATUS</span>
-          <span class="cs-chip world-mood-chip" id="world-mood-chip">neutral</span>
-        </h3>
-        <div class="penthouse-world-stats">
-          <div class="penthouse-world-stat">
-            <span class="penthouse-world-stat__label">₵ Credits</span>
-            <span class="penthouse-world-stat__value" id="world-credits">—</span>
-          </div>
-          <div class="penthouse-world-stat">
-            <span class="penthouse-world-stat__label">Rep</span>
-            <span class="penthouse-world-stat__value" id="world-rep">—</span>
-          </div>
-          <div class="penthouse-world-stat">
-            <span class="penthouse-world-stat__label">Heat</span>
-            <span class="penthouse-world-stat__value world-heat-val" id="world-heat">—</span>
-          </div>
-        </div>
-        <ul class="penthouse-world-events" id="world-events-list" aria-live="polite">
-          <li class="penthouse-world-events__empty">Loading world context…</li>
-        </ul>
+    </div><!-- /ph-tab-body -->
+  </aside><!-- /director-panel -->
+
+  <!-- ══════════════════════════════════════════════════════════════
+       D. CHAT DOCK (bottom 25%)
+       ══════════════════════════════════════════════════════════════ -->
+  <section class="ph-chat-dock" id="ph-chat-dock" aria-label="Chat">
+
+    <!-- Dock collapse toggle -->
+    <button class="ph-chat-dock-toggle" id="ph-chat-toggle" title="Toggle chat" aria-label="Toggle chat dock">
+      <span class="ph-chat-toggle-icon">▼</span>
+      <span class="ph-chat-toggle-label">CHAT</span>
+    </button>
+
+    <!-- Chat messages -->
+    <div class="ph-chat-messages"
+         id="penthouse-chat"
+         role="log"
+         aria-live="polite"
+         aria-label="Conversation">
+    </div>
+
+    <!-- Typing indicator -->
+    <div class="ph-typing" id="penthouse-typing" aria-hidden="true">
+      <span class="ph-typing__dot"></span>
+      <span class="ph-typing__dot"></span>
+      <span class="ph-typing__dot"></span>
+      <span class="ph-typing__label" id="typing-char-name">…</span>
+    </div>
+
+    <!-- Input row -->
+    <div class="ph-input-row">
+      <textarea
+        class="ph-input"
+        id="penthouse-input"
+        rows="2"
+        placeholder="Speak your desires..."
+        aria-label="Message input"
+        maxlength="2000"
+      ></textarea>
+      <div class="ph-input-actions">
+        <button class="cs-glass-btn cs-glass-btn--accent" id="penthouse-send" aria-label="Send message">Send</button>
+        <button class="cs-icon-btn" id="penthouse-voice-btn" title="Voice input" aria-label="Voice input">🎤</button>
+        <button class="cs-icon-btn" id="penthouse-clear-btn" title="Clear chat" aria-label="Clear chat">🗑</button>
       </div>
+    </div>
+  </section>
 
-    </aside><!-- /right-panel -->
+  <!-- ══════════════════════════════════════════════════════════════
+       E. ACTIVITY FEED (bottom-left floating)
+       ══════════════════════════════════════════════════════════════ -->
+  <aside class="ph-activity-feed" id="ph-activity-feed" aria-label="Activity feed">
+    <div class="ph-feed-header">
+      <span class="ph-feed-title">Activity</span>
+      <button class="ph-feed-toggle" id="ph-feed-toggle" title="Toggle feed" aria-label="Toggle activity feed">−</button>
+    </div>
+    <div class="ph-feed-body" id="ph-feed-body">
+      <div class="ph-feed-empty">No activity yet.</div>
+    </div>
+  </aside>
 
-  </div><!-- /penthouse-layout -->
+  <!-- ══════════════════════════════════════════════════════════════
+       F. WORLD STATUS OVERLAY (compact floating)
+       ══════════════════════════════════════════════════════════════ -->
+  <div class="ph-world-status" id="world-status-panel">
+    <span class="cs-chip world-mood-chip" id="world-mood-chip">neutral</span>
+    <span class="ph-world-stat"><span class="ph-world-stat__label">₵</span> <span id="world-credits">—</span></span>
+    <span class="ph-world-stat"><span class="ph-world-stat__label">Rep</span> <span id="world-rep">—</span></span>
+    <span class="ph-world-stat"><span class="ph-world-stat__label">Heat</span> <span class="world-heat-val" id="world-heat">—</span></span>
+  </div>
 
 {% endblock %}
 
 {% block body_scripts %}
-  <!-- Shared utilities (not in neon_base) -->
   <script src="/shared/js/cosysim-particles3d.js"></script>
   <script src="/shared/js/cosysim-bench.js"></script>
   <script src="/shared/js/cosysim-voice.js"></script>
 
-  <!-- 3D room background (Three.js) — must load before scene script -->
   <script src="{{ url_for('static', filename='penthouse_3d.js') }}"></script>
-
-  <!-- Scene script -->
   <script src="{{ url_for('static', filename='penthouse.js') }}"></script>
   <script>window.SCENE_PARTICLE_CONFIG = { scene: 'penthouse' };</script>
 
-  <!-- Living World integration -->
+  <!-- Overlay panel wiring -->
   <script>
   (function () {
     'use strict';
 
+    /* ── Director panel toggle ────────────────────────────────── */
+    const directorPanel = document.getElementById('ph-director-panel');
+    const directorToggle = document.getElementById('ph-director-toggle');
+    const directorClose = document.getElementById('ph-director-close');
+
+    function toggleDirector() {
+      directorPanel.classList.toggle('open');
+      directorToggle.classList.toggle('active');
+    }
+
+    directorToggle.addEventListener('click', toggleDirector);
+    directorClose.addEventListener('click', toggleDirector);
+
+    /* ── Director tab switching ───────────────────────────────── */
+    const tabBtns = document.querySelectorAll('.ph-tab-btn');
+    const tabPanes = document.querySelectorAll('.ph-tab-content');
+
+    tabBtns.forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        const target = btn.getAttribute('data-tab');
+        tabBtns.forEach(function (b) { b.classList.remove('active'); b.setAttribute('aria-selected', 'false'); });
+        tabPanes.forEach(function (p) { p.classList.remove('active'); });
+        btn.classList.add('active');
+        btn.setAttribute('aria-selected', 'true');
+        document.getElementById(target).classList.add('active');
+      });
+    });
+
+    /* ── Chat dock collapse ───────────────────────────────────── */
+    const chatDock = document.getElementById('ph-chat-dock');
+    const chatToggle = document.getElementById('ph-chat-toggle');
+
+    chatToggle.addEventListener('click', function () {
+      chatDock.classList.toggle('minimized');
+      var icon = chatToggle.querySelector('.ph-chat-toggle-icon');
+      icon.textContent = chatDock.classList.contains('minimized') ? '▲' : '▼';
+    });
+
+    /* ── Character panel collapse ─────────────────────────────── */
+    const charPanel = document.getElementById('ph-char-panel');
+    const charCollapse = document.getElementById('ph-char-collapse');
+
+    charCollapse.addEventListener('click', function () {
+      charPanel.classList.toggle('collapsed');
+      var icon = charCollapse.querySelector('.ph-collapse-icon');
+      icon.textContent = charPanel.classList.contains('collapsed') ? '▶' : '◀';
+    });
+
+    /* ── Activity feed toggle ─────────────────────────────────── */
+    const feedToggle = document.getElementById('ph-feed-toggle');
+    const feedBody = document.getElementById('ph-feed-body');
+
+    feedToggle.addEventListener('click', function () {
+      const hidden = feedBody.style.display === 'none';
+      feedBody.style.display = hidden ? '' : 'none';
+      feedToggle.textContent = hidden ? '−' : '+';
+    });
+
+    /* ── World context integration ────────────────────────────── */
     const MOOD_CHIP_CLASSES = {
       tense:     'cs-chip--intensity-3',
       impressed: 'cs-chip--green',
@@ -368,38 +659,25 @@
       const repEl  = document.getElementById('world-rep');
       const heatEl = document.getElementById('world-heat');
       const chipEl = document.getElementById('world-mood-chip');
-      const listEl = document.getElementById('world-events-list');
 
       if (credEl) credEl.textContent = credits;
       if (repEl)  repEl.textContent  = rep;
       if (heatEl) {
         heatEl.textContent = heat;
-        heatEl.className = 'penthouse-world-stat__value world-heat-val' +
+        heatEl.className = 'world-heat-val' +
           (heat >= 70 ? ' world-heat-val--danger' : heat >= 40 ? ' world-heat-val--warn' : '');
       }
       if (chipEl) {
         chipEl.textContent = mood;
         chipEl.className = 'cs-chip world-mood-chip ' + (MOOD_CHIP_CLASSES[mood] || '');
       }
-      if (listEl) {
-        const events = ctx.world_context || [];
-        if (events.length === 0) {
-          listEl.innerHTML = '<li class="penthouse-world-events__empty">No notable world events.</li>';
-        } else {
-          listEl.innerHTML = events
-            .map(e => `<li class="penthouse-world-events__item">${e}</li>`)
-            .join('');
-        }
-      }
     }
 
-    // Fetch on load
     fetch('/api/world/context')
-      .then(r => r.json())
+      .then(function (r) { return r.json(); })
       .then(applyWorldContext)
-      .catch(() => {});
+      .catch(function () {});
 
-    // Listen for real-time updates via Socket.IO (socket defined by penthouse.js))
     document.addEventListener('penthouse-socket-ready', function (ev) {
       const socket = ev.detail;
       if (socket) {
