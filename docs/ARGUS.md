@@ -248,3 +248,137 @@ await self.step("new_flow_name", self._new_flow_name)
 The system never stops learning. Every crawl adds to the registry.
 Every new rpcid goes into Nexus. Every .proto stub gets refined.
 The more it runs, the more it knows.
+
+---
+
+## LiveDebugger — Real-Time Scene Diagnostics
+
+The LiveDebugger is a separate ARGUS component that reuses the CDP infrastructure
+for real-time CosySim scene debugging. While the crawlers map external APIs, the
+LiveDebugger points the same CDP tooling inward — attaching to running scene pages
+to capture console output, inspect the DOM, profile performance, and diagnose UI
+issues without leaving the terminal or agent context.
+
+### Architecture
+
+```
+scripts/argus/
+├── live_debugger.py      # Core async debugger (1149 lines)
+├── cdp_bridge.py         # CDP WebSocket client (used by both crawlers and debugger)
+└── tools/
+    └── debug_scene.py    # CLI tool with 10 subcommands (306 lines)
+
+engine/skills/builtin/
+└── debugger_skills.py    # 14 MCP skills for agent access (600 lines)
+```
+
+### Core Capabilities
+
+1. **Console Streaming** — Captures `console.log`, `console.warn`, and
+   `console.error` from the page in real-time via CDP `Runtime.consoleAPICalled`.
+2. **Network Monitoring** — Intercepts all HTTP requests and responses, tracks
+   loading time, and captures request/response bodies.
+3. **DOM Inspection** — Executes arbitrary JavaScript in page context via CDP
+   `Runtime.evaluate`. Query DOM state, check element visibility, read computed
+   styles.
+4. **Z-Stack Analysis** — Reports the z-index layering of all positioned elements
+   to diagnose overlay and blocking issues.
+5. **Click Testing** — Uses `document.elementFromPoint()` to verify which element
+   receives clicks at specific coordinates, exposing invisible overlays.
+6. **Vision Analysis** — Takes CDP screenshots and can analyse them with LMStudio
+   vision models (Qwen2-VL) for visual regression detection.
+7. **Performance Profiling** — Captures `performance.timing`, resource loading
+   waterfall, and memory usage.
+8. **Scene Health Check** — Automated validation: page loads, Socket.IO connects,
+   no console errors, API routes respond.
+
+### CLI Usage
+
+```powershell
+# Full diagnostics
+python -m scripts.argus.tools.debug_scene --port 5556
+
+# Live console monitoring (Ctrl+C to stop)
+python -m scripts.argus.tools.debug_scene --port 5556 --watch
+
+# Execute JavaScript
+python -m scripts.argus.tools.debug_scene --port 5556 --eval "document.title"
+
+# DOM queries
+python -m scripts.argus.tools.debug_scene --port 5556 --dom "div.ph-director-panel"
+
+# Z-index stack analysis
+python -m scripts.argus.tools.debug_scene --port 5556 --z-stack
+
+# Click target at coordinates
+python -m scripts.argus.tools.debug_scene --port 5556 --click-test 400,300
+
+# Take screenshot
+python -m scripts.argus.tools.debug_scene --port 5556 --screenshot
+
+# Performance metrics
+python -m scripts.argus.tools.debug_scene --port 5556 --perf
+
+# List Chrome tabs
+python -m scripts.argus.tools.debug_scene --port 5556 --tabs
+
+# Scene health check
+python -m scripts.argus.tools.debug_scene --port 5556 --health
+```
+
+### MCP Skills (14 skills, pack="debugger")
+
+All skills are exposed to agents via the `@skill(pack="debugger")` decorator in
+`debugger_skills.py`. Each skill wraps the async LiveDebugger core with a sync
+entry point.
+
+| Skill | Description | Key Parameters |
+|-------|-------------|----------------|
+| `debug_scene` | Full diagnostics snapshot | `port` |
+| `debug_watch` | Live console + network monitor | `port`, `duration` |
+| `debug_console` | Console log capture | `port`, `duration` |
+| `debug_network` | Network traffic capture | `port`, `duration` |
+| `debug_eval` | Execute JS in page | `port`, `expression` |
+| `debug_dom` | Query DOM elements | `port`, `selector` |
+| `debug_z_stack` | Z-index layer analysis | `port` |
+| `debug_click_test` | Check click target | `port`, `x`, `y` |
+| `debug_screenshot` | Capture screenshot | `port`, `output_path` |
+| `debug_click` | Simulate click | `port`, `selector` |
+| `debug_navigate` | Navigate to URL | `port`, `url` |
+| `debug_perf` | Performance metrics | `port` |
+| `debug_list_tabs` | List Chrome tabs | *(none)* |
+| `debug_health` | Scene health check | `port` |
+
+### Integration with Existing ARGUS
+
+- LiveDebugger reuses `CDPBridge` and `CDPSession` from `cdp_bridge.py` — the
+  same WebSocket client that powers the crawlers.
+- Same CDP port (`localhost:9222`) used by crawlers and debugger. Both can
+  coexist on different tabs.
+- Discoveries from debugging (new endpoints, JS errors) can be stored in Nexus
+  via `nexus_sink.py`.
+- Screenshots are stored in `data/argus/screenshots/`.
+
+### Async Pattern
+
+The LiveDebugger is fully async (`asyncio`). MCP skills use a sync wrapper to
+bridge the gap:
+
+```python
+def _run_async(coro):
+    loop = asyncio.new_event_loop()
+    try:
+        return loop.run_until_complete(coro)
+    finally:
+        loop.close()
+```
+
+> **Important:** Must use `asyncio.new_event_loop()` (not `asyncio.get_event_loop()`)
+> to avoid conflicts with already-running loops and to ensure compatibility with
+> the full test suite.
+
+### Testing
+
+```powershell
+python -m pytest tests/test_live_debugger.py -v  # 57 tests
+```

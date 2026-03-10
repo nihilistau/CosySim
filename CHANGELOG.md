@@ -3,6 +3,79 @@
 All notable changes to CosySim are documented here.
 
 ---
+## [1.03b] — "THE PENTHOUSE UPDATE" — 2026-03
+
+Scene system visual upgrade, ARGUS LiveDebugger toolbox, lab survival mechanics,
+and critical bug fixes. 10,720+ tests passing.
+
+### AAA Visual Overhaul
+- **Penthouse Overlay Layout** (`content/scenes/penthouse/templates/penthouse.html`, 600 lines):
+  Complete rewrite from 3-column grid to overlay system — 3D canvas at z-index 0
+  (fullscreen), character panel (left, z-100, collapsible), director panel (right,
+  z-500, 400px), chat dock (bottom, z-200, 25vh). All panels use glass-morphism
+  (`backdrop-filter: blur(20px)`).
+- **8-Tab Director Panel**: Scene setup, Cast management, Director controls,
+  Interactions, Story/narrative, Props/inventory, Events/triggers, Settings.
+  Wired with global JS onclick handlers and `_directorState` cache object.
+- **Penthouse CSS** (`penthouse.css`, 1041 lines): Full `ph-` prefix CSS system
+  for overlay panels
+- **Penthouse JS** (`penthouse.js`, ~1100 lines): PenthouseScene class + 400+
+  lines director panel functions
+
+### Lab Break Survival Mechanics
+- **Survival Stats**: 6 stats (health, hunger, energy, strength, mental,
+  hydration) with decay timers (5s tick)
+- **Death System**: Death at health=0 with cause tracking, game-over state
+- **Crafting**: 4 recipes from combinable items
+- **30 Items**: Across 5 categories in ITEM_CATALOG
+- **Escape Routes**: 4 escape routes with stat requirements
+- **Agent Movement**: Position grid system with agent interaction
+- **Checkpoint Save/Load**: Via localStorage
+- Lab CSS (1482 lines glass-morphism) + Lab JS (1103 lines survival system)
+
+### Phone Click Fix
+- Root cause: `content/shared/__init__.py` injected phone-panel JS/CSS into ALL
+  HTML responses
+- Phone scene got DUPLICATE phone panel overlay at z-index 8999 blocking all real
+  click targets
+- Fix: Detect `data-scene="phone"` in response body and skip phone-panel injection
+
+### ARGUS LiveDebugger
+- **Core Module** (`scripts/argus/live_debugger.py`, 1149 lines): Async CDP-based
+  debugger with console streaming, network monitoring, DOM inspection, vision
+  analysis, performance profiling, scene health checks. Built on
+  CDPBridge/CDPSession foundation.
+- **14 MCP Skills** (`engine/skills/builtin/debugger_skills.py`, 600 lines):
+  `debug_scene`, `debug_watch`, `debug_console`, `debug_network`, `debug_eval`,
+  `debug_dom`, `debug_z_stack`, `debug_click_test`, `debug_screenshot`,
+  `debug_click`, `debug_navigate`, `debug_perf`, `debug_list_tabs`, `debug_health`
+- **CLI Tool** (`scripts/argus/tools/debug_scene.py`, 306 lines): 10 subcommands
+  for command-line scene diagnostics
+- **57 tests** (`tests/test_live_debugger.py`)
+
+### Critical Fixes
+- Fixed penthouse 500 error: `render_template()` now passes `props=PROPS` and
+  `lighting_presets=LIGHTING_PRESETS` (was only passing `scenarios`)
+- Fixed phone scene click blocking (`data-scene="phone"` detection)
+- Fixed async test pattern: `asyncio.new_event_loop()` instead of
+  `get_event_loop()` for full suite compatibility
+
+### Test Coverage
+- 10,720+ tests passing (460 key scene tests verified: penthouse revamp +
+  debugger + neon base)
+- 57 new debugger tests
+- Updated test assertions for overlay layout (`test_penthouse_revamp.py`)
+- Lab accent color fix in `test_phase2_neon_base.py` (`#10b981` → `#00ff88`)
+
+### Git Commits (6 total)
+1. `feat: rename bedroom→penthouse, AAA visual overhaul, 3D lab scene`
+2. `feat(penthouse): rebuild layout from 3-column grid to overlay panels`
+3. `fix: exempt phone scene from phone-panel injection`
+4. `feat: penthouse director panel JS, lab survival mechanics, test fixes`
+5. `feat: ARGUS LiveDebugger — real-time CDP scene diagnostics toolbox`
+6. `fix(penthouse): pass lighting_presets and props to render_template`
+
+---
 ## [1.02b] — "NEONCITY 2: THE LIVING CITY" — 2026-03
 
 Massive 8-phase overhaul transforming CosySim into a unified cyberpunk RPG

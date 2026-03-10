@@ -12,7 +12,7 @@
 | Engine | **280+ Python files** across 12 subsystems |
 | Tests | **10,720+ passed** / 345 test files |
 | Scenes | **20 Flask** (11 game + 6 utility + 3 service) + 3 Streamlit apps |
-| Skills | **38 packs · 373 skills** via `@skill` decorator |
+| Skills | **39 packs · 387 skills** via `@skill` decorator |
 | MCP tools | **42 modules** in `engine/mcp/tools/` |
 | Game systems | neurochemistry · cyberspace · territory · market · factions · multiplayer · news |
 | Scheduler | **55 autonomous tasks** (maintenance, distillation, training, benchmarks) |
@@ -63,7 +63,7 @@
 | `engine/integrations/` | 25 | 19,700 | Google accounts, Colab, NLM direct client, Drive, compute routing |
 | `engine/mcp/` | 23 | 15,700 | MCP framework, RPC servers, dialog, state, governance |
 | `engine/lmstudio/` | 23 | 13,100 | Local inference, fine-tuning, model registry, ServerController, LMLink |
-| `engine/skills/builtin/` | 46 | 11,500 | 278 `@skill` functions across 31 packs |
+| `engine/skills/builtin/` | 47 | 12,000 | 292 `@skill` functions across 32 packs |
 | `engine/agents/` | 17 | 9,200 | Agent framework, VirtualAgent, Governor, 30+ interceptors |
 | `engine/scenes/` | 6 | 2,471 | BaseScene, SceneStateManager, scene lifecycle |
 | `engine/services/` | 6 | 1,214 | EventBus, WorldAnnouncer, TTS |
@@ -85,7 +85,7 @@
 | Doc | Description |
 |-----|-------------|
 | [Architecture](ARCHITECTURE.md) | System design — 10 domains, layers, data flow, interceptor pipeline |
-| [Game Systems](GAME_SYSTEMS.md) | NeonCity 2 game systems — neurochemistry, cyberspace, territory, market, factions, multiplayer, news |
+| [Game Systems](GAME_SYSTEMS.md) | NeonCity 2 game systems — neurochemistry, cyberspace, territory, market, factions, multiplayer, news, lab survival |
 | [MCP Framework](MCP_FRAMEWORK.md) | `@mcp_tool` decorator, governance, state coordination, dialog system, rules engine |
 | [Interceptors](INTERCEPTORS.md) | 30+ pre/post-call hooks — priorities, auto-registry, scene-specific interceptors |
 | [LMStudio](LMSTUDIO.md) | InferenceOrchestrator, ServerController, LMLink federation, TaskQueue, bearer auth |
@@ -98,8 +98,8 @@
 
 | Doc | Description |
 |-----|-------------|
-| [Scenes Reference](SCENES.md) | All 20 scenes — mechanics, APIs, routes, Socket.IO events |
-| [Skills](SKILLS.md) | `@skill` decorator, 31 builtin packs, runtime registry, MCP-facing metadata |
+| [Scenes Reference](SCENES.md) | All 20 scenes — mechanics, APIs, routes, Socket.IO events, penthouse overlay, lab survival |
+| [Skills](SKILLS.md) | `@skill` decorator, 32 builtin packs, runtime registry, MCP-facing metadata, debugger skill pack |
 | [Asset Studio](ASSET_STUDIO.md) | ComfyUI integration — 15 workflow variants, tuning engine, benchmarking |
 | [The Grid](THE_GRID.md) | THE GRID — 4 zones (Market, Station, Den, Broker), GridSkills |
 | [Neon HUD](NEON_HUD.md) | Universal HUD v2 — glass slide panels, phone overlay, announcer, inventory |
@@ -139,7 +139,7 @@
 
 | Doc | Description |
 |-----|-------------|
-| [ARGUS](ARGUS.md) | Browser automation system — Playwright + CDP, crawlers, decoders, discovery |
+| [ARGUS](ARGUS.md) | Browser automation system — Playwright + CDP, crawlers, decoders, discovery, LiveDebugger |
 
 ## APIs & Integration
 
