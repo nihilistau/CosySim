@@ -369,7 +369,7 @@ class TestSkillManifest:
     def test_optional_skills(self):
         from engine.mcp.comms_framework import SkillManifest, TRIGGER_OPTIONAL
         sm       = SkillManifest()
-        bedroom  = sm.get("bedroom")
+        bedroom  = sm.get("penthouse")
         optional = bedroom.optional_skills()
         assert all(s.trigger == TRIGGER_OPTIONAL for s in optional)
 
@@ -814,7 +814,7 @@ class TestBuildGovernanceContext:
     def test_different_scenes_produce_context(self):
         """Different scenes should work without error."""
         from engine.mcp.comms_framework import build_governance_context
-        for scene in ["phone", "bedroom", "gallery", "realm", "neoncity", "coders"]:
+        for scene in ["phone", "penthouse", "gallery", "realm", "neoncity", "coders"]:
             result = build_governance_context("test_agent", scene, "hello")
             assert isinstance(result, str), f"Failed for scene: {scene}"
 

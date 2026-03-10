@@ -10,7 +10,7 @@ Usage::
 
     from engine.agents import CharacterAgent
 
-    agent = CharacterAgent(char, db=db, scene="bedroom")
+    agent = CharacterAgent(char, db=db, scene="penthouse")
     reply = agent.reply("Hey, what are you up to?")
     print(reply)
 """

@@ -375,7 +375,7 @@ class TestContentWorkflow:
             ok=True, json=lambda: {"data": {"id": "cw-3"}}
         )
         cw = ContentWorkflow()
-        ids = cw.generate_scene_descriptions("bedroom")
+        ids = cw.generate_scene_descriptions("penthouse")
         assert len(ids) > 0
 
     @patch("requests.get")

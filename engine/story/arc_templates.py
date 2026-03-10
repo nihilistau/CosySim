@@ -6,11 +6,11 @@ import copy
 from engine.story.story_arc import ArcStep, ArcStatus, StoryArc, get_story_arc_engine
 
 SCENE_ARC_TEMPLATES: dict = {
-    "bedroom": [
+    "penthouse": [
         StoryArc(
-            id="bedroom_seduction",
+            id="penthouse_seduction",
             name="The Seduction",
-            scene="bedroom",
+            scene="penthouse",
             steps=[
                 ArcStep("open", "Open with charm"),
                 ArcStep("tension", "Build tension"),

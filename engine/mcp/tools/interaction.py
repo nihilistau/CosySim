@@ -28,14 +28,14 @@ def perform_interaction(
     interaction_type: str,
     initiator_id: str,
     target_id: str,
-    scene_id: str = "bedroom",
+    scene_id: str = "penthouse",
     subtype: str = "",
     intensity: int = 0,
 ) -> str:
     """
     Perform one of the 6 core interaction types between two characters.
 
-    BEDROOM interaction_types:
+    penthouse interaction_types:
       cuddle    — physical closeness (subtypes: embrace, spoon, lap_sit, entangled)
       kiss      — kissing (subtypes: soft, neck, deep, trail, urgent)
       caress    — tactile touch (subtypes: hair, back, face, body)
@@ -123,7 +123,7 @@ def perform_interaction(
 
 
 @mcp_tool
-def list_available_interactions(character_id: str, scene_id: str = "bedroom") -> str:
+def list_available_interactions(character_id: str, scene_id: str = "penthouse") -> str:
     """
     List all interaction types and their accessible subtypes for a character
     based on their current stats.  Use this before calling perform_interaction
@@ -150,7 +150,7 @@ def list_available_interactions(character_id: str, scene_id: str = "bedroom") ->
 def get_interaction_details(
     interaction_type: str,
     subtype: str = "",
-    scene_id: str = "bedroom",
+    scene_id: str = "penthouse",
 ) -> str:
     """
     Get detailed information about a specific interaction type/subtype —
@@ -161,7 +161,7 @@ def get_interaction_details(
     """
     try:
         it = _itrees()
-        trees = it.BEDROOM_INTERACTIONS if scene_id == "bedroom" else it.PHONE_INTERACTIONS
+        trees = it.PENTHOUSE_INTERACTIONS if scene_id == "penthouse" else it.PHONE_INTERACTIONS
         itype = trees.get(interaction_type)
         if not itype:
             return json.dumps({"error": f"Unknown type '{interaction_type}'"})

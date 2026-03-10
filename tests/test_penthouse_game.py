@@ -2,7 +2,7 @@
 
 import pytest
 from dataclasses import asdict
-from content.scenes.bedroom.bedroom_scene import (
+from content.scenes.penthouse.penthouse_scene import (
     BedGameState, AgentStats, BED_GAME_ACTIONS, ESCALATION_THRESHOLDS,
 )
 

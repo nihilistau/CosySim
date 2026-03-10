@@ -29,7 +29,7 @@ _SCENE_DIR = Path(__file__).parent
 # ── Scene catalogue ──────────────────────────────────────────────────
 # Groups: "neon_world" | "action" | "system"
 _SCENE_PRESENTATION: Dict[str, Dict[str, str]] = {
-    "bedroom": {
+    "penthouse": {
         "subtitle": "Desire & Danger",
         "icon": "🏙️",
         "group": "neon_world",

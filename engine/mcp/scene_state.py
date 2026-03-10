@@ -31,12 +31,12 @@ Quick start::
     snap = mgr.get_stats("char_1")                           # StatsSnapshot
 
     # Scene state
-    mgr.set_scene_state("bedroom", heat_level=35, phase="afterglow")
-    state = mgr.get_scene_state("bedroom")
+    mgr.set_scene_state("penthouse", heat_level=35, phase="afterglow")
+    state = mgr.get_scene_state("penthouse")
 
     # Narrative
-    mgr.add_narrative("bedroom", "char_1 kisses char_2 softly on the neck.")
-    tail = mgr.get_narrative("bedroom", limit=10)
+    mgr.add_narrative("penthouse", "char_1 kisses char_2 softly on the neck.")
+    tail = mgr.get_narrative("penthouse", limit=10)
 
     # Timed actions
     tok = mgr.start_timed_action("char_1", "striptease", duration=45)

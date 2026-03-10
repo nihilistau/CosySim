@@ -244,7 +244,7 @@ class TestOperatorRoutes:
                 "queue": {"summary": {"pending": 3}, "tasks": []},
                 "activity": {"active": [], "recent": [], "active_count": 0, "recent_count": 0},
                 "git": {"available": True, "branch": "main", "dirty": False},
-                "command_targets": [{"id": "bedroom", "label": "Bedroom", "port": 5555}],
+                "command_targets": [{"id": "penthouse", "label": "penthouse", "port": 5555}],
             },
         ):
             resp = client.get("/api/operator/status")

@@ -28,7 +28,7 @@ def who_is_here(scene_name: str) -> str:
     """List players currently in a specific scene.
 
     Args:
-        scene_name: Scene to check (e.g., "bedroom", "neoncity").
+        scene_name: Scene to check (e.g., "penthouse", "neoncity").
 
     Returns:
         Formatted list of players in the scene.

@@ -13,7 +13,7 @@ def _base_config():
         "database": {"sqlite": {"path": "data/cosysim.db"}},
         "scenes": {
             "phone": {"port": 5555},
-            "bedroom": {"port": 5556},
+            "penthouse": {"port": 5556},
             "dashboard": {"port": 8500},
         },
         "llm": {"default": {"base_url": "http://localhost:1234"}},
@@ -47,7 +47,7 @@ class TestBaseValidation:
 
     def test_port_conflict(self):
         cfg = _base_config()
-        cfg["scenes"]["bedroom"]["port"] = 5555  # same as phone
+        cfg["scenes"]["penthouse"]["port"] = 5555  # same as phone
         warnings = validate_config(cfg)
         assert any("conflict" in w for w in warnings)
 

@@ -12,7 +12,7 @@ from pathlib import Path
 ROOT = Path(__file__).parent.parent
 
 SCENE_TEMPLATES = {
-    "bedroom":  ROOT / "content/scenes/bedroom/templates/bedroom.html",
+    "penthouse":  ROOT / "content/scenes/penthouse/templates/penthouse.html",
     "phone":    ROOT / "content/scenes/phone/templates/phone.html",
     "casino":   ROOT / "content/scenes/casino/templates/casino.html",
     "lounge":   ROOT / "content/scenes/lounge/templates/lounge.html",
@@ -42,7 +42,7 @@ def _effective_content(raw: str) -> str:
     return raw
 
 REQUIRED_SCENES_IN_NAVBAR = [
-    "bedroom", "phone", "lounge", "tavern", "casino",
+    "penthouse", "phone", "lounge", "tavern", "casino",
     "gallery", "arena", "realm", "coders", "heist",
     "games", "grid", "intel", "neoncity", "hub",
 ]

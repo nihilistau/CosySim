@@ -19,7 +19,7 @@ def _fresh_engine():
     return engine
 
 
-def _sample_arc(arc_id: str = "test_arc", scene: str = "bedroom"):
+def _sample_arc(arc_id: str = "test_arc", scene: str = "penthouse"):
     from engine.story.story_arc import ArcStep, StoryArc
     return StoryArc(
         id=arc_id,
@@ -174,7 +174,7 @@ class TestStoryArcEngine:
 
     def test_get_scene_arcs_empty(self):
         engine = _fresh_engine()
-        assert engine.get_scene_arcs("bedroom") == []
+        assert engine.get_scene_arcs("penthouse") == []
 
     def test_get_scene_arcs_returns_registered(self):
         engine = _fresh_engine()
@@ -213,11 +213,11 @@ class TestStoryArcEngine:
         engine.register_hook("arc_advanced", lambda a: None)
         engine.reset()
         assert engine.get_arc("r1") is None
-        assert engine.get_scene_arcs("bedroom") == []
+        assert engine.get_scene_arcs("penthouse") == []
 
     def test_get_scene_state_no_arcs(self):
         engine = _fresh_engine()
-        state = engine.get_scene_state("bedroom")
+        state = engine.get_scene_state("penthouse")
         assert state["total_arcs"] == 0
         assert state["overall_progress"] == 0.0
 
@@ -227,7 +227,7 @@ class TestStoryArcEngine:
         arc = _sample_arc("sc1")
         engine.create_arc(arc)
         engine.advance_arc("sc1", "s1")
-        state = engine.get_scene_state("bedroom")
+        state = engine.get_scene_state("penthouse")
         assert state["total_arcs"] == 1
         assert state["active"] == 1
         assert state["completed"] == 0
@@ -239,7 +239,7 @@ class TestStoryArcEngine:
         engine.create_arc(arc)
         for sid in ("s1", "s2", "s3", "s4"):
             engine.advance_arc("sc_done", sid)
-        state = engine.get_scene_state("bedroom")
+        state = engine.get_scene_state("penthouse")
         assert state["completed"] == 1
         assert state["overall_progress"] == pytest.approx(1.0)
 
@@ -248,13 +248,13 @@ class TestStoryArcEngine:
         arc = _sample_arc("sc_fail")
         engine.create_arc(arc)
         engine.advance_arc("sc_fail", "s1", success=False)
-        state = engine.get_scene_state("bedroom")
+        state = engine.get_scene_state("penthouse")
         assert state["failed"] == 1
 
     def test_get_scene_state_arc_list_shape(self):
         engine = _fresh_engine()
         engine.create_arc(_sample_arc("shape1"))
-        state = engine.get_scene_state("bedroom")
+        state = engine.get_scene_state("penthouse")
         entry = state["arcs"][0]
         assert "id" in entry
         assert "name" in entry
@@ -334,7 +334,7 @@ class TestSingleton:
 
 class TestArcTemplates:
     EXPECTED_SCENES = {
-        "bedroom", "casino", "arena", "tavern",
+        "penthouse", "casino", "arena", "tavern",
         "lounge", "gallery", "realm", "neoncity", "phone",
     }
 
@@ -374,8 +374,8 @@ class TestArcTemplates:
         with patch("engine.story.arc_templates.get_story_arc_engine", return_value=engine2):
             seed_default_arcs()
         # Advance an arc in engine1, engine2's copy should be unaffected
-        arc1 = engine1.get_scene_arcs("bedroom")[0]
-        arc2 = engine2.get_scene_arcs("bedroom")[0]
+        arc1 = engine1.get_scene_arcs("penthouse")[0]
+        arc2 = engine2.get_scene_arcs("penthouse")[0]
         arc1.advance("open")
         assert arc2.steps[0].completed is False
 
@@ -384,7 +384,7 @@ class TestArcTemplates:
 
 
 class TestStorySkills:
-    def _engine_with_arc(self, arc_id="sk_arc", scene="bedroom"):
+    def _engine_with_arc(self, arc_id="sk_arc", scene="penthouse"):
         engine = _fresh_engine()
         arc = _sample_arc(arc_id, scene=scene)
         engine.create_arc(arc)
@@ -394,15 +394,15 @@ class TestStorySkills:
         engine = _fresh_engine()
         with patch("engine.skills.builtin.story_skills.get_story_arc_engine", return_value=engine):
             from engine.skills.builtin.story_skills import get_scene_story_state
-            result = get_scene_story_state("bedroom")
+            result = get_scene_story_state("penthouse")
         assert "No active story arcs" in result
 
     def test_get_scene_story_state_with_arc(self):
         engine = self._engine_with_arc("sk1")
         with patch("engine.skills.builtin.story_skills.get_story_arc_engine", return_value=engine):
             from engine.skills.builtin.story_skills import get_scene_story_state
-            result = get_scene_story_state("bedroom")
-        assert "bedroom" in result
+            result = get_scene_story_state("penthouse")
+        assert "penthouse" in result
         assert "Test Arc" in result
 
     def test_advance_story_step_not_found(self):
@@ -474,14 +474,14 @@ class TestStorySkills:
         engine = _fresh_engine()
         with patch("engine.skills.builtin.story_skills.get_story_arc_engine", return_value=engine):
             from engine.skills.builtin.story_skills import list_scene_arcs
-            result = list_scene_arcs("bedroom")
+            result = list_scene_arcs("penthouse")
         assert "No arcs" in result
 
     def test_list_scene_arcs_lists_arcs(self):
         engine = self._engine_with_arc("sk8")
         with patch("engine.skills.builtin.story_skills.get_story_arc_engine", return_value=engine):
             from engine.skills.builtin.story_skills import list_scene_arcs
-            result = list_scene_arcs("bedroom")
+            result = list_scene_arcs("penthouse")
         assert "sk8" in result
         assert "Test Arc" in result
 

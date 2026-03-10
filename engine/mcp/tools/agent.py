@@ -129,14 +129,14 @@ def intercept_and_enhance(
 
 
 @mcp_tool
-def get_all_tools_for_scene(scene_id: str = "bedroom") -> str:
+def get_all_tools_for_scene(scene_id: str = "penthouse") -> str:
     """
     Get a complete reference of all MCP tools available in a scene.
     Call this at the start of a session so you know every tool at your disposal.
     Agents should internalise this list and joke/reference their abilities naturally.
     """
     try:
-        bedroom_tools = [
+        penthouse_tools = [
             "wardrobe_get", "wardrobe_init", "wardrobe_remove_item",
             "wardrobe_remove_outermost", "wardrobe_add_item", "wardrobe_redress",
             "get_character_scene_stats", "update_character_scene_stats",
@@ -162,7 +162,7 @@ def get_all_tools_for_scene(scene_id: str = "bedroom") -> str:
             "get_random_topic", "roll_dice", "send_to_agent", "search_web",
             "intercept_and_enhance", "apply_effect", "get_system_stats",
         ]
-        tool_list = bedroom_tools if scene_id == "bedroom" else phone_tools
+        tool_list = penthouse_tools if scene_id == "penthouse" else phone_tools
         return json.dumps({
             "scene_id": scene_id,
             "tool_count": len(tool_list),
@@ -229,7 +229,7 @@ def director_action(
 
 
 @mcp_tool
-def resolve_random_scene_event(scene_id: str = "bedroom") -> str:
+def resolve_random_scene_event(scene_id: str = "penthouse") -> str:
     """
     Generate a random scene event to keep things fresh and unpredictable.
     Call this when the scene feels stale or to inject spontaneity.
@@ -238,7 +238,7 @@ def resolve_random_scene_event(scene_id: str = "bedroom") -> str:
     """
     try:
         import random
-        bedroom_events = [
+        penthouse_events = [
             {"event": "The music changes to something slower and more suggestive.", "effects": {"arousal": 10}},
             {"event": "A bottle of wine appears on the bedside table — already open.", "effects": {"happiness": 15, "drunkenness": 10}},
             {"event": "The lights dim automatically to their lowest setting.", "effects": {"arousal": 12, "fear": 5}},
@@ -260,7 +260,7 @@ def resolve_random_scene_event(scene_id: str = "bedroom") -> str:
             {"event": "A blurry selfie arrives with 'be there in 10' typed underneath.", "effects": {"happiness": 25, "arousal": 15}},
             {"event": "They reference something you said three weeks ago. They've been thinking about it.", "effects": {"affection": 30}},
         ]
-        events = bedroom_events if scene_id == "bedroom" else phone_events
+        events = penthouse_events if scene_id == "penthouse" else phone_events
         chosen = random.choice(events)
         _ssm().add_narrative(scene_id, chosen["event"], entry_type="environment")
         return json.dumps({

@@ -86,7 +86,7 @@ def launch_game(
 ) -> str:
     """Start an MCP-tracked game session for a character."""
     try:
-        from content.scenes.bedroom.bedroom_game_skill import launch_game as _lg
+        from content.scenes.penthouse.penthouse_game_skill import launch_game as _lg
         return _lg(character_id, game_type, case_index)
     except Exception as e:
         return json.dumps({"error": str(e)})
@@ -95,7 +95,7 @@ def launch_game(
 def get_active_game(character_id: str) -> str:
     """Return the active MCP game session summary for *character_id*."""
     try:
-        from content.scenes.bedroom.bedroom_game_skill import get_active_game as _gag
+        from content.scenes.penthouse.penthouse_game_skill import get_active_game as _gag
         return _gag(character_id)
     except Exception as e:
         return json.dumps({"error": str(e)})
@@ -108,7 +108,7 @@ def game_action(
 ) -> str:
     """Perform a game action for a character's active session."""
     try:
-        from content.scenes.bedroom.bedroom_game_skill import game_action as _ga
+        from content.scenes.penthouse.penthouse_game_skill import game_action as _ga
         return _ga(character_id, action, data_json)
     except Exception as e:
         return json.dumps({"error": str(e)})
@@ -117,7 +117,7 @@ def game_action(
 def game_history(character_id: str, limit: int = 20) -> str:
     """Retrieve turn-by-turn MCP game history for a character."""
     try:
-        from content.scenes.bedroom.bedroom_game_skill import game_history as _gh
+        from content.scenes.penthouse.penthouse_game_skill import game_history as _gh
         return _gh(character_id, limit)
     except Exception as e:
         return json.dumps({"error": str(e)})

@@ -342,7 +342,7 @@ class SceneAsset(BaseAsset):
         super().__init__()
         self.name: str = kwargs.get("name", "")
         self.description: str = kwargs.get("description", "")
-        self.scene_type: str = kwargs.get("scene_type", "phone")  # phone/dashboard/bedroom/custom
+        self.scene_type: str = kwargs.get("scene_type", "phone")  # phone/dashboard/penthouse/custom
         self.config: Dict[str, Any] = kwargs.get("config", {})
         self.characters: List[str] = kwargs.get("characters", [])  # Character IDs
         self.assets: Dict[str, str] = kwargs.get("assets", {})  # asset_type -> asset_id

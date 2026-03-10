@@ -44,7 +44,7 @@ def test_world_event_type_all_set_complete():
 
 def test_default_scene_subscriptions_has_expected_scenes():
     expected_scenes = {
-        "bedroom", "phone", "lounge", "tavern", "casino",
+        "penthouse", "phone", "lounge", "tavern", "casino",
         "gallery", "arena", "realm", "neoncity", "heist", "intel_hub",
     }
     assert expected_scenes <= set(DEFAULT_SCENE_SUBSCRIPTIONS.keys())
@@ -79,27 +79,27 @@ class TestSubscriptionManagement:
         self.cascade._subscriptions = {}
 
     def test_subscribe_adds_event_types(self):
-        self.cascade.subscribe("bedroom", [WorldEventType.SOCIAL])
-        assert WorldEventType.SOCIAL in self.cascade.get_subscriptions("bedroom")
+        self.cascade.subscribe("penthouse", [WorldEventType.SOCIAL])
+        assert WorldEventType.SOCIAL in self.cascade.get_subscriptions("penthouse")
 
     def test_subscribe_merges_with_existing(self):
-        self.cascade.subscribe("bedroom", [WorldEventType.SOCIAL])
-        self.cascade.subscribe("bedroom", [WorldEventType.ECONOMY])
-        subs = self.cascade.get_subscriptions("bedroom")
+        self.cascade.subscribe("penthouse", [WorldEventType.SOCIAL])
+        self.cascade.subscribe("penthouse", [WorldEventType.ECONOMY])
+        subs = self.cascade.get_subscriptions("penthouse")
         assert WorldEventType.SOCIAL in subs
         assert WorldEventType.ECONOMY in subs
 
     def test_unsubscribe_specific_type(self):
-        self.cascade.subscribe("bedroom", [WorldEventType.SOCIAL, WorldEventType.ECONOMY])
-        self.cascade.unsubscribe("bedroom", [WorldEventType.SOCIAL])
-        subs = self.cascade.get_subscriptions("bedroom")
+        self.cascade.subscribe("penthouse", [WorldEventType.SOCIAL, WorldEventType.ECONOMY])
+        self.cascade.unsubscribe("penthouse", [WorldEventType.SOCIAL])
+        subs = self.cascade.get_subscriptions("penthouse")
         assert WorldEventType.SOCIAL not in subs
         assert WorldEventType.ECONOMY in subs
 
     def test_unsubscribe_all(self):
-        self.cascade.subscribe("bedroom", [WorldEventType.SOCIAL])
-        self.cascade.unsubscribe("bedroom")
-        assert self.cascade.get_subscriptions("bedroom") == set()
+        self.cascade.subscribe("penthouse", [WorldEventType.SOCIAL])
+        self.cascade.unsubscribe("penthouse")
+        assert self.cascade.get_subscriptions("penthouse") == set()
 
     def test_unsubscribe_unknown_scene_is_noop(self):
         self.cascade.unsubscribe("nonexistent_scene")  # must not raise
@@ -128,7 +128,7 @@ class TestDispatch:
     def setup_method(self):
         self.cascade = EventCascade()
         self.cascade._subscriptions = {
-            "bedroom": {WorldEventType.SOCIAL},
+            "penthouse": {WorldEventType.SOCIAL},
             "casino": {WorldEventType.ECONOMY},
             "arena": {WorldEventType.COMBAT, WorldEventType.SOCIAL},
         }
@@ -183,7 +183,7 @@ class TestDelivery:
     def setup_method(self):
         self.cascade = EventCascade()
         self.evt = CascadeEvent(
-            scene="bedroom",
+            scene="penthouse",
             event_type=WorldEventType.SOCIAL,
             payload={"info": "party tonight"},
         )
@@ -233,13 +233,13 @@ class TestWorldSimBridge:
         assert self.cascade._started is True
 
     def test_on_world_sim_event_dict(self):
-        self.cascade.subscribe("bedroom", [WorldEventType.SOCIAL])
+        self.cascade.subscribe("penthouse", [WorldEventType.SOCIAL])
         self.cascade._deliver = MagicMock(return_value=True)
         self.cascade._on_world_sim_event({"type": WorldEventType.SOCIAL, "detail": "test"})
         assert self.cascade._deliver.call_count == 1
 
     def test_on_world_sim_event_missing_type_uses_social(self):
-        self.cascade.subscribe("bedroom", [WorldEventType.SOCIAL])
+        self.cascade.subscribe("penthouse", [WorldEventType.SOCIAL])
         self.cascade._deliver = MagicMock(return_value=True)
         self.cascade._on_world_sim_event({})  # no 'type' key
         assert self.cascade._deliver.call_count == 1  # social is default
@@ -269,7 +269,7 @@ class TestStats:
     def setup_method(self):
         self.cascade = EventCascade()
         self.cascade._subscriptions = {
-            "bedroom": {WorldEventType.SOCIAL},
+            "penthouse": {WorldEventType.SOCIAL},
         }
         self.cascade.reset_stats()
 
@@ -352,7 +352,7 @@ def test_cascade_event_custom_source():
 
 def test_fresh_cascade_has_default_subscriptions_loaded():
     c = EventCascade()
-    subs = c.get_subscriptions("bedroom")
+    subs = c.get_subscriptions("penthouse")
     assert WorldEventType.SOCIAL in subs
 
 

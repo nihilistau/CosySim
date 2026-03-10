@@ -49,11 +49,11 @@ class TestMoodContagion:
         fw = mock_fw_fn.return_value
         ssm = mock_ssm_fn.return_value
 
-        fw.get_character.return_value = _mock_char("bedroom")
+        fw.get_character.return_value = _mock_char("penthouse")
         fw.get_characters_in_scene.return_value = ["alice", "bob", "carol"]
 
         from engine.skills.builtin.social_skills import mood_contagion
-        result = mood_contagion("alice", "happy", intensity=0.5, scene_id="bedroom")
+        result = mood_contagion("alice", "happy", intensity=0.5, scene_id="penthouse")
 
         assert "bob" in result
         assert "carol" in result

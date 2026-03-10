@@ -45,7 +45,7 @@ def _make_entry(
     player_id: str = "player",
     content: str = "The player gave Luna a red rose.",
     emotional_weight: float = 0.7,
-    scene: str = "bedroom",
+    scene: str = "penthouse",
     tags: List[str] = None,
     days_old: int = 0,
 ) -> MemoryEntry:
@@ -128,7 +128,7 @@ def test_remember_creates_entry(mem, mock_nexus):
         "The player asked Luna to wear the red dress",
         player_id="player",
         emotional_weight=0.9,
-        scene="bedroom",
+        scene="penthouse",
         tags=["wardrobe"],
     )
 
@@ -137,7 +137,7 @@ def test_remember_creates_entry(mem, mock_nexus):
     assert entry.player_id == "player"
     assert entry.content == "The player asked Luna to wear the red dress"
     assert entry.emotional_weight == pytest.approx(0.9)
-    assert entry.scene == "bedroom"
+    assert entry.scene == "penthouse"
     assert "wardrobe" in entry.tags
 
     # Verify Nexus was called with correct arguments

@@ -19,8 +19,8 @@ def test_transitions_js_has_overlay() -> None:
     """transitions.js must contain overlay fade logic."""
     content = JS_PATH.read_text(encoding="utf-8")
     assert "cs-transition-overlay" in content
-    assert "fadeOut" in content
-    assert "fadeIn" in content
+    assert "navigate" in content
+    assert "cs-page-exit" in content
 
 
 def test_transitions_js_intercepts_data_scene_nav() -> None:
@@ -32,7 +32,7 @@ def test_transitions_js_intercepts_data_scene_nav() -> None:
 def test_transitions_js_duration_constant() -> None:
     """transitions.js must declare a DURATION constant."""
     content = JS_PATH.read_text(encoding="utf-8")
-    assert "DURATION" in content
+    assert "TRANSITION_MS" in content
 
 
 def test_navbar_loads_transitions_js() -> None:

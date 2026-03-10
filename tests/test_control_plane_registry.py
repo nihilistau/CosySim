@@ -33,7 +33,7 @@ class TestControlPlaneTemplates:
         metadata = get_target_metadata_catalogue()
 
         assert metadata["hub"]["group"] == "service"
-        assert metadata["bedroom"]["group"] == "scene"
+        assert metadata["penthouse"]["group"] == "scene"
         assert metadata["canvas"]["label"] == "Nexus Canvas"
 
 
@@ -43,7 +43,7 @@ class TestBuildLauncherCatalogues:
         services, scenes, all_targets = build_launcher_catalogues(_port_resolver)
 
         assert services["hub"]["port"] == _port_resolver("hub")
-        assert scenes["bedroom"]["port"] == _port_resolver("bedroom")
+        assert scenes["penthouse"]["port"] == _port_resolver("penthouse")
         assert all_targets["canvas"]["port"] == _port_resolver("canvas")
 
     def test_build_launcher_catalogues_applies_launcher_yaml_overrides(self, tmp_path: Path) -> None:
@@ -54,7 +54,7 @@ class TestBuildLauncherCatalogues:
             "  hub:\n"
             "    auto_start: false\n"
             "scenes:\n"
-            "  bedroom:\n"
+            "  penthouse:\n"
             "    auto_start: false\n",
             encoding="utf-8",
         )
@@ -63,5 +63,5 @@ class TestBuildLauncherCatalogues:
             services, scenes, all_targets = build_launcher_catalogues(_port_resolver)
 
         assert services["hub"]["auto_start"] is False
-        assert scenes["bedroom"]["auto_start"] is False
+        assert scenes["penthouse"]["auto_start"] is False
         assert all_targets["hub"]["auto_start"] is False

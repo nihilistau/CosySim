@@ -668,8 +668,8 @@ class TestGenerateSceneImage:
         mock_cfg.return_value = self._cfg()
         mock_wm_factory.return_value = self._mock_wm("/output/bg.png")
 
-        result = generate_scene_image(scene="bedroom", filename="bg_test")
-        assert result.startswith("/scenes/bedroom/static/img/")
+        result = generate_scene_image(scene="penthouse", filename="bg_test")
+        assert result.startswith("/scenes/penthouse/static/img/")
         assert result.endswith(".png")
 
     @patch("shutil.copy2")
@@ -738,7 +738,7 @@ class TestGenerateSceneImage:
         mock_cfg.return_value = self._cfg()
         mock_wm_factory.side_effect = RuntimeError("workflow manager down")
 
-        result = generate_scene_image(scene="bedroom", filename="test")
+        result = generate_scene_image(scene="penthouse", filename="test")
         assert "failed" in result.lower()
 
     @patch("shutil.copy2")
@@ -775,7 +775,7 @@ class TestGenerateAllSceneBackgrounds:
         )
 
         result = generate_all_scene_backgrounds(
-            scenes=["bedroom", "casino"], force=True
+            scenes=["penthouse", "casino"], force=True
         )
         assert "generated" in result.lower()
 
@@ -795,7 +795,7 @@ class TestGenerateAllSceneBackgrounds:
 
         # Make it think the bg file exists by patching Path.exists
         with patch("pathlib.Path.exists", return_value=True):
-            result = generate_all_scene_backgrounds(scenes=["bedroom"], force=False)
+            result = generate_all_scene_backgrounds(scenes=["penthouse"], force=False)
 
         assert "skipped" in result.lower()
 
@@ -839,7 +839,7 @@ class TestGenerateAllSceneBackgrounds:
         mock_wm_factory.side_effect = RuntimeError("wm dead")
 
         # Must not raise; errors should be counted
-        result = generate_all_scene_backgrounds(scenes=["bedroom"], force=True)
+        result = generate_all_scene_backgrounds(scenes=["penthouse"], force=True)
         assert "error" in result.lower()
 
 

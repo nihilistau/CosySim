@@ -200,7 +200,7 @@ def enforce_behavior(
                 if reason:
                     note += f" Reason: {reason}"
                 ssm.add_narrative(
-                    scene_id or "bedroom", note,
+                    scene_id or "penthouse", note,
                     entry_type="directive", character_id=character_id,
                 )
             except Exception:

@@ -100,10 +100,10 @@ def test_record_error_metadata():
 
 def test_record_scene_request_adds_sample():
     mc = _fresh_collector()
-    mc.record_scene_request("bedroom", "/api/chat", 35.0)
+    mc.record_scene_request("penthouse", "/api/chat", 35.0)
     s = mc._samples[0]
     assert s.event_type == "scene_request"
-    assert s.metadata["scene"] == "bedroom"
+    assert s.metadata["scene"] == "penthouse"
     assert s.metadata["endpoint"] == "/api/chat"
     assert s.value == 35.0
 
@@ -192,14 +192,14 @@ def test_summary_by_model_breakdown():
 
 def test_summary_scene_breakdown():
     mc = _fresh_collector()
-    mc.record_scene_request("bedroom", "/chat", 40.0)
-    mc.record_scene_request("bedroom", "/state", 20.0)
+    mc.record_scene_request("penthouse", "/chat", 40.0)
+    mc.record_scene_request("penthouse", "/state", 20.0)
     mc.record_scene_request("casino", "/bet", 10.0)
     summary = mc.get_summary()
     scenes = summary["scenes"]
-    assert "bedroom" in scenes
-    assert scenes["bedroom"]["requests"] == 2
-    assert abs(scenes["bedroom"]["avg_latency_ms"] - 30.0) < 0.01
+    assert "penthouse" in scenes
+    assert scenes["penthouse"]["requests"] == 2
+    assert abs(scenes["penthouse"]["avg_latency_ms"] - 30.0) < 0.01
     assert "casino" in scenes
 
 

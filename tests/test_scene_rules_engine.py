@@ -23,7 +23,7 @@ def _make_rule(**overrides):
     from engine.mcp.scene_rules_engine import RuleDefinition
     defaults = dict(
         rule_id="test_rule",
-        scene="bedroom",
+        scene="penthouse",
         label="Test Rule",
         description="A test rule",
         rule_type="always_on",
@@ -38,7 +38,7 @@ def _make_action(**overrides):
     from engine.mcp.scene_rules_engine import ActionDefinition
     defaults = dict(
         action_id="test_action",
-        scene="bedroom",
+        scene="penthouse",
         label="Test Action",
         description="A test action",
         intimacy_level=1,
@@ -129,13 +129,13 @@ class TestRuleEffect:
 
 class TestRuleDefinition:
     def test_applies_to_specific_scene(self):
-        rule = _make_rule(scene="bedroom")
-        assert rule.applies_to("bedroom") is True
+        rule = _make_rule(scene="penthouse")
+        assert rule.applies_to("penthouse") is True
         assert rule.applies_to("phone") is False
 
     def test_applies_to_wildcard(self):
         rule = _make_rule(scene="*")
-        assert rule.applies_to("bedroom") is True
+        assert rule.applies_to("penthouse") is True
         assert rule.applies_to("phone") is True
         assert rule.applies_to("anything") is True
 
@@ -215,38 +215,38 @@ class TestPermissionMatrix:
 
     def test_default_allowed(self):
         pm = self._make()
-        ok, reason = pm.check("bedroom", "aria", "kiss")
+        ok, reason = pm.check("penthouse", "aria", "kiss")
         assert ok is True
         assert "default" in reason
 
     def test_deny_blocks(self):
         pm = self._make()
-        pm.deny("bedroom", "aria", "kiss")
-        ok, reason = pm.check("bedroom", "aria", "kiss")
+        pm.deny("penthouse", "aria", "kiss")
+        ok, reason = pm.check("penthouse", "aria", "kiss")
         assert ok is False
         assert "denied" in reason
 
     def test_allow_overrides_deny(self):
         pm = self._make()
-        pm.deny("bedroom", "aria", "kiss")
-        pm.allow("bedroom", "aria", "kiss")
-        ok, reason = pm.check("bedroom", "aria", "kiss")
+        pm.deny("penthouse", "aria", "kiss")
+        pm.allow("penthouse", "aria", "kiss")
+        ok, reason = pm.check("penthouse", "aria", "kiss")
         assert ok is True
 
     def test_reset_clears_all(self):
         pm = self._make()
-        pm.deny("bedroom", "aria", "kiss")
-        pm.reset("bedroom")
-        ok, _ = pm.check("bedroom", "aria", "kiss")
+        pm.deny("penthouse", "aria", "kiss")
+        pm.reset("penthouse")
+        ok, _ = pm.check("penthouse", "aria", "kiss")
         assert ok is True
 
     def test_reset_specific_character(self):
         pm = self._make()
-        pm.deny("bedroom", "aria", "kiss")
-        pm.deny("bedroom", "luna", "kiss")
-        pm.reset("bedroom", character_id="aria")
-        ok_aria, _ = pm.check("bedroom", "aria", "kiss")
-        ok_luna, _ = pm.check("bedroom", "luna", "kiss")
+        pm.deny("penthouse", "aria", "kiss")
+        pm.deny("penthouse", "luna", "kiss")
+        pm.reset("penthouse", character_id="aria")
+        ok_aria, _ = pm.check("penthouse", "aria", "kiss")
+        ok_luna, _ = pm.check("penthouse", "luna", "kiss")
         assert ok_aria is True
         assert ok_luna is False
 
@@ -259,7 +259,7 @@ class TestSceneRulesEngineBootstrap:
     def test_init_bootstraps_rules(self):
         eng = _fresh_engine()
         # Should have global rules
-        all_rules = eng.get_rules("bedroom")
+        all_rules = eng.get_rules("penthouse")
         rule_ids = [r.rule_id for r in all_rules]
         assert "consent_always" in rule_ids
         assert "memory_continuity" in rule_ids
@@ -267,7 +267,7 @@ class TestSceneRulesEngineBootstrap:
 
     def test_global_rules_apply_to_all_scenes(self):
         eng = _fresh_engine()
-        bedroom_ids = {r.rule_id for r in eng.get_rules("bedroom")}
+        bedroom_ids = {r.rule_id for r in eng.get_rules("penthouse")}
         phone_ids = {r.rule_id for r in eng.get_rules("phone")}
         # Global rules appear in both
         assert "consent_always" in bedroom_ids
@@ -275,15 +275,15 @@ class TestSceneRulesEngineBootstrap:
 
     def test_bedroom_specific_rules(self):
         eng = _fresh_engine()
-        rules = eng.get_rules("bedroom")
+        rules = eng.get_rules("penthouse")
         rule_ids = [r.rule_id for r in rules]
-        assert "bedroom_wardrobe_first" in rule_ids
-        assert "bedroom_stats_drive_behaviour" in rule_ids
+        assert "penthouse_wardrobe_first" in rule_ids
+        assert "penthouse_stats_drive_behaviour" in rule_ids
 
     def test_bedroom_rules_not_in_phone(self):
         eng = _fresh_engine()
         phone_ids = {r.rule_id for r in eng.get_rules("phone")}
-        assert "bedroom_wardrobe_first" not in phone_ids
+        assert "penthouse_wardrobe_first" not in phone_ids
 
     def test_phone_specific_rules(self):
         eng = _fresh_engine()
@@ -294,14 +294,14 @@ class TestSceneRulesEngineBootstrap:
 
     def test_phone_rules_not_in_bedroom(self):
         eng = _fresh_engine()
-        bedroom_ids = {r.rule_id for r in eng.get_rules("bedroom")}
+        bedroom_ids = {r.rule_id for r in eng.get_rules("penthouse")}
         assert "phone_read_history" not in bedroom_ids
 
     def test_bedroom_actions_bootstrapped(self):
         eng = _fresh_engine()
         action = eng.get_action("cuddle")
         assert action is not None
-        assert action.scene == "bedroom"
+        assert action.scene == "penthouse"
 
     def test_phone_actions_bootstrapped(self):
         eng = _fresh_engine()
@@ -316,7 +316,7 @@ class TestSceneRulesEngineBootstrap:
 
     def test_rules_sorted_by_priority(self):
         eng = _fresh_engine()
-        rules = eng.get_rules("bedroom")
+        rules = eng.get_rules("penthouse")
         priorities = [r.priority for r in rules]
         assert priorities == sorted(priorities)
 
@@ -328,10 +328,10 @@ class TestSceneRulesEngineBootstrap:
 class TestSceneRulesEngineRuleManagement:
     def test_add_rule(self):
         eng = _fresh_engine()
-        custom = _make_rule(rule_id="custom_rule", scene="bedroom",
+        custom = _make_rule(rule_id="custom_rule", scene="penthouse",
                             label="Custom", priority=100)
         eng.add_rule(custom)
-        rules = eng.get_rules("bedroom")
+        rules = eng.get_rules("penthouse")
         assert any(r.rule_id == "custom_rule" for r in rules)
 
     def test_add_rule_replaces_existing(self):
@@ -340,7 +340,7 @@ class TestSceneRulesEngineRuleManagement:
         r2 = _make_rule(rule_id="dup", label="Second")
         eng.add_rule(r1)
         eng.add_rule(r2)
-        rules = [r for r in eng.get_rules("bedroom") if r.rule_id == "dup"]
+        rules = [r for r in eng.get_rules("penthouse") if r.rule_id == "dup"]
         assert len(rules) == 1
         assert rules[0].label == "Second"
 
@@ -354,7 +354,7 @@ class TestSceneRulesEngineRuleManagement:
         eng = _fresh_engine()
         eng.add_rule(_make_rule(rule_id="togglable", can_be_disabled=True))
         assert eng.toggle_rule("togglable", enabled=False) is True
-        rules = eng.get_rules("bedroom")
+        rules = eng.get_rules("penthouse")
         assert not any(r.rule_id == "togglable" for r in rules)  # disabled = excluded
 
     def test_toggle_nonexistent_rule(self):
@@ -363,8 +363,8 @@ class TestSceneRulesEngineRuleManagement:
 
     def test_get_rules_filter_by_type(self):
         eng = _fresh_engine()
-        always_on = eng.get_rules("bedroom", rule_type="always_on")
-        director = eng.get_rules("bedroom", rule_type="director_only")
+        always_on = eng.get_rules("penthouse", rule_type="always_on")
+        director = eng.get_rules("penthouse", rule_type="director_only")
         assert all(r.rule_type == "always_on" for r in always_on)
         assert all(r.rule_type == "director_only" for r in director)
 
@@ -392,7 +392,7 @@ class TestSceneRulesEngineRuleManagement:
 class TestSceneRulesEngineActionManagement:
     def test_add_action(self):
         eng = _fresh_engine()
-        eng.add_action(_make_action(action_id="custom_act", scene="bedroom"))
+        eng.add_action(_make_action(action_id="custom_act", scene="penthouse"))
         assert eng.get_action("custom_act") is not None
 
     def test_get_action_nonexistent(self):
@@ -401,7 +401,7 @@ class TestSceneRulesEngineActionManagement:
 
     def test_get_available_actions_bedroom(self):
         eng = _fresh_engine()
-        actions = eng.get_available_actions("bedroom", "aria",
+        actions = eng.get_available_actions("penthouse", "aria",
                                             stats={"arousal": 0, "openness": 0})
         assert isinstance(actions, list)
         assert len(actions) > 0
@@ -413,7 +413,7 @@ class TestSceneRulesEngineActionManagement:
     def test_get_available_actions_filters_by_stats(self):
         eng = _fresh_engine()
         # With low stats, striptease should be unavailable
-        actions = eng.get_available_actions("bedroom", "aria",
+        actions = eng.get_available_actions("penthouse", "aria",
                                             stats={"arousal": 0, "openness": 0})
         striptease = [a for a in actions if a["action_id"] == "striptease"]
         if striptease:
@@ -421,8 +421,8 @@ class TestSceneRulesEngineActionManagement:
 
     def test_get_available_actions_permission_denied(self):
         eng = _fresh_engine()
-        eng.deny_action("bedroom", "aria", "cuddle")
-        actions = eng.get_available_actions("bedroom", "aria")
+        eng.deny_action("penthouse", "aria", "cuddle")
+        actions = eng.get_available_actions("penthouse", "aria")
         cuddle = [a for a in actions if a["action_id"] == "cuddle"]
         assert len(cuddle) == 0  # denied actions are excluded
 
@@ -434,20 +434,20 @@ class TestSceneRulesEngineActionManagement:
 class TestSceneRulesEnginePermissions:
     def test_check_permission_default(self):
         eng = _fresh_engine()
-        ok, reason = eng.check_permission("bedroom", "aria", "anything")
+        ok, reason = eng.check_permission("penthouse", "aria", "anything")
         assert ok is True
 
     def test_deny_and_check(self):
         eng = _fresh_engine()
-        eng.deny_action("bedroom", "aria", "striptease")
-        ok, reason = eng.check_permission("bedroom", "aria", "striptease")
+        eng.deny_action("penthouse", "aria", "striptease")
+        ok, reason = eng.check_permission("penthouse", "aria", "striptease")
         assert ok is False
 
     def test_allow_overrides_deny(self):
         eng = _fresh_engine()
-        eng.deny_action("bedroom", "aria", "striptease")
-        eng.allow_action("bedroom", "aria", "striptease")
-        ok, _ = eng.check_permission("bedroom", "aria", "striptease")
+        eng.deny_action("penthouse", "aria", "striptease")
+        eng.allow_action("penthouse", "aria", "striptease")
+        ok, _ = eng.check_permission("penthouse", "aria", "striptease")
         assert ok is True
 
 
@@ -464,34 +464,34 @@ class TestSceneRulesEngineApplyRule:
             effects=[RuleEffect("stat_adjust", {"stat": "arousal", "delta": 10})],
         ))
         with patch("engine.mcp.state_coordinator.get_coordinator") as mock_coord:
-            result = eng.apply_rule("bedroom", "boost", target_ids=["aria"])
+            result = eng.apply_rule("penthouse", "boost", target_ids=["aria"])
         assert result["ok"] is True
         assert result["rule_id"] == "boost"
         assert len(result["effects_applied"]) == 1
 
     def test_apply_rule_not_found(self):
         eng = _fresh_engine()
-        result = eng.apply_rule("bedroom", "nonexistent_rule")
+        result = eng.apply_rule("penthouse", "nonexistent_rule")
         assert result["ok"] is False
         assert "not found" in result["error"]
 
     def test_apply_rule_disabled(self):
         eng = _fresh_engine()
         eng.add_rule(_make_rule(rule_id="disabled_rule", enabled=False))
-        result = eng.apply_rule("bedroom", "disabled_rule")
+        result = eng.apply_rule("penthouse", "disabled_rule")
         assert result["ok"] is False
         assert "disabled" in result["error"]
 
     def test_apply_action_not_found(self):
         eng = _fresh_engine()
-        result = eng.apply_action("bedroom", "nonexistent", "aria")
+        result = eng.apply_action("penthouse", "nonexistent", "aria")
         assert result["ok"] is False
         assert "not found" in result["error"]
 
     def test_apply_action_permission_denied(self):
         eng = _fresh_engine()
-        eng.deny_action("bedroom", "aria", "cuddle")
-        result = eng.apply_action("bedroom", "cuddle", "aria")
+        eng.deny_action("penthouse", "aria", "cuddle")
+        result = eng.apply_action("penthouse", "cuddle", "aria")
         assert result["ok"] is False
 
 
@@ -502,25 +502,25 @@ class TestSceneRulesEngineApplyRule:
 class TestSceneRulesEngineText:
     def test_get_rules_text_contains_scene_name(self):
         eng = _fresh_engine()
-        text = eng.get_rules_text("bedroom")
-        assert "BEDROOM" in text
+        text = eng.get_rules_text("penthouse")
+        assert "penthouse" in text
 
     def test_get_rules_text_contains_always_active(self):
         eng = _fresh_engine()
-        text = eng.get_rules_text("bedroom")
+        text = eng.get_rules_text("penthouse")
         assert "ALWAYS ACTIVE" in text
 
     def test_get_scene_summary(self):
         eng = _fresh_engine()
-        summary = eng.get_scene_summary("bedroom", character_id="aria")
-        assert summary["scene"] == "bedroom"
+        summary = eng.get_scene_summary("penthouse", character_id="aria")
+        assert summary["scene"] == "penthouse"
         assert "rules" in summary
         assert "actions" in summary
         assert len(summary["rules"]) > 0
 
     def test_get_scene_summary_no_character(self):
         eng = _fresh_engine()
-        summary = eng.get_scene_summary("bedroom")
+        summary = eng.get_scene_summary("penthouse")
         assert summary["actions"] == []
         assert len(summary["rules"]) > 0
 
@@ -553,6 +553,6 @@ class TestEdgeCases:
             ],
         )
         eng.add_rule(rule)
-        found = [r for r in eng.get_rules("bedroom") if r.rule_id == "multi_fx"]
+        found = [r for r in eng.get_rules("penthouse") if r.rule_id == "multi_fx"]
         assert len(found) == 1
         assert len(found[0].effects) == 3

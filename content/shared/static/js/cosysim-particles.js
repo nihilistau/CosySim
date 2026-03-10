@@ -14,7 +14,7 @@
  *     <body data-scene="tavern">
  *
  * Scene configs:
- *   bedroom:  { effect: 'float',     color: '#8b5cf6', count: 40,  speed: 0.3  }
+ *   penthouse:  { effect: 'float',     color: '#8b5cf6', count: 40,  speed: 0.3  }
  *   phone:    { effect: 'signal',    color: '#22d3ee', count: 30,  speed: 1.5  }
  *   lounge:   { effect: 'smoke',     color: '#a3a3a3', count: 60,  speed: 0.2  }
  *   tavern:   { effect: 'ember',     color: '#f97316', count: 50,  speed: 0.8  }
@@ -30,7 +30,7 @@
 // ──── Scene Presets ────
 
 const PARTICLE_PRESETS = {
-  bedroom:  { count: 40,  color: '#8b5cf6', effect: 'float',     size: 2, speed: 0.3,  opacity: 0.5  },
+  penthouse:  { count: 40,  color: '#8b5cf6', effect: 'float',     size: 2, speed: 0.3,  opacity: 0.5  },
   phone:    { count: 30,  color: '#22d3ee', effect: 'signal',    size: 1, speed: 1.5,  opacity: 0.4  },
   lounge:   { count: 60,  color: '#a3a3a3', effect: 'smoke',     size: 5, speed: 0.2,  opacity: 0.3  },
   tavern:   { count: 50,  color: '#f97316', effect: 'ember',     size: 2, speed: 0.8,  opacity: 0.8  },
@@ -585,7 +585,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const scene = document.body ? document.body.dataset.scene : null;
   const config = window.SCENE_PARTICLE_CONFIG
     || (scene && PARTICLE_PRESETS[scene])
-    || PARTICLE_PRESETS.bedroom;
+    || PARTICLE_PRESETS.penthouse;
 
   window.particleEngine = new ParticleEngine(canvas, config);
   window.particleEngine.start();

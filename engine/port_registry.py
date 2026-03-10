@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 _DEFAULT_PORTS: Dict[str, int] = {
     # Launcher-managed scenes
     "phone": 5555,
-    "bedroom": 5556,
+    "penthouse": 5556,
     "lounge": 5557,
     "tavern": 5558,
     "casino": 5559,
@@ -72,7 +72,7 @@ _ALIASES: Dict[str, str] = {
 # Logical groupings for display / conflict detection.
 SERVICE_GROUPS: Dict[str, List[str]] = {
     "scenes": [
-        "phone", "bedroom", "lounge", "tavern", "casino", "gallery",
+        "phone", "penthouse", "lounge", "tavern", "casino", "gallery",
         "arena", "realm", "neoncity", "coders", "heist",
         "command_center", "games", "asset_studio", "grid",
         "lab_break",
@@ -92,7 +92,7 @@ ALL_SCENE_TARGETS: Tuple[str, ...] = SCENE_IDS
 
 SCENE_HEALTH_TARGETS: Tuple[str, ...] = (
     "phone",
-    "bedroom",
+    "penthouse",
     "lounge",
     "tavern",
     "casino",
@@ -116,7 +116,7 @@ SCENE_HEALTH_TARGETS: Tuple[str, ...] = (
 )
 
 HUB_CATALOGUE_TARGETS: Tuple[str, ...] = (
-    "bedroom",
+    "penthouse",
     "neoncity",
     "grid",
     "lounge",
@@ -150,7 +150,7 @@ HUB_HEALTH_TARGETS: Tuple[str, ...] = (
     "system_control",
     "intel_hub",
     "phone",
-    "bedroom",
+    "penthouse",
     "lounge",
     "tavern",
     "casino",
@@ -181,7 +181,7 @@ SYSTEM_CONTROL_TARGETS: Tuple[str, ...] = (
     "hub",
     "nexus_panel",
     "command_center",
-    "bedroom",
+    "penthouse",
     "phone",
     "heist",
     "realm",
@@ -198,7 +198,7 @@ SYSTEM_CONTROL_TARGETS: Tuple[str, ...] = (
 )
 
 ASSET_STUDIO_INJECT_SCENES: Tuple[str, ...] = (
-    "bedroom",
+    "penthouse",
     "phone",
     "lounge",
     "tavern",

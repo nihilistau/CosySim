@@ -154,7 +154,7 @@ def cdp_dom(port: int = 5556, selector: str = "") -> str:
     """Inspect DOM of a live scene tab.
 
     Args:
-        port: Scene port (e.g. 5556 for bedroom/phone).
+        port: Scene port (e.g. 5556 for penthouse/phone).
         selector: Optional CSS selector to extract a specific element.
 
     Returns:

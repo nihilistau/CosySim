@@ -183,12 +183,12 @@ ARCHETYPE_SCHEDULES: Dict[str, List[Dict[str, str]]] = {
 # Map abstract location tokens to scene names by district
 LOCATION_MAP: Dict[str, Dict[str, str]] = {
     "DOWNTOWN": {
-        "home": "bedroom", "bar": "velvet_pit", "club": "club_noir",
+        "home": "penthouse", "bar": "velvet_pit", "club": "club_noir",
         "streets": "neon_city", "shop": "neon_city", "boutique": "obscura",
         "cafe": "lounge", "back_room": "briefing_room", "underground": "score",
         "gym": "colosseum", "arena": "colosseum", "lab": "lab",
         "grid": "grid", "warehouse": "neon_city", "checkpoint": "neon_city",
-        "patrol": "neon_city", "penthouse": "bedroom", "office": "command_center",
+        "patrol": "neon_city", "penthouse": "penthouse", "office": "command_center",
         "territory": "neon_city",
     },
     "COMBAT_ZONE": {
@@ -197,16 +197,16 @@ LOCATION_MAP: Dict[str, Dict[str, str]] = {
         "cafe": "rusty_anchor", "back_room": "rusty_anchor", "underground": "score",
         "gym": "colosseum", "arena": "colosseum", "lab": "lab",
         "grid": "grid", "warehouse": "neon_city", "checkpoint": "neon_city",
-        "patrol": "neon_city", "penthouse": "bedroom", "office": "rusty_anchor",
+        "patrol": "neon_city", "penthouse": "penthouse", "office": "rusty_anchor",
         "territory": "neon_city",
     },
     "HIGHRISE": {
-        "home": "bedroom", "bar": "lounge", "club": "club_noir",
+        "home": "penthouse", "bar": "lounge", "club": "club_noir",
         "streets": "neon_city", "shop": "neon_city", "boutique": "obscura",
         "cafe": "lounge", "back_room": "command_center", "underground": "score",
         "gym": "colosseum", "arena": "colosseum", "lab": "lab",
         "grid": "grid", "warehouse": "neon_city", "checkpoint": "command_center",
-        "patrol": "neon_city", "penthouse": "bedroom", "office": "command_center",
+        "patrol": "neon_city", "penthouse": "penthouse", "office": "command_center",
         "territory": "neon_city",
     },
     "UNDERWORLD": {
@@ -215,7 +215,7 @@ LOCATION_MAP: Dict[str, Dict[str, str]] = {
         "cafe": "rusty_anchor", "back_room": "briefing_room", "underground": "score",
         "gym": "colosseum", "arena": "colosseum", "lab": "lab",
         "grid": "grid", "warehouse": "score", "checkpoint": "neon_city",
-        "patrol": "neon_city", "penthouse": "bedroom", "office": "briefing_room",
+        "patrol": "neon_city", "penthouse": "penthouse", "office": "briefing_room",
         "territory": "neon_city",
     },
     "TECH_DISTRICT": {
@@ -224,7 +224,7 @@ LOCATION_MAP: Dict[str, Dict[str, str]] = {
         "cafe": "lounge", "back_room": "grid", "underground": "grid",
         "gym": "colosseum", "arena": "colosseum", "lab": "lab",
         "grid": "grid", "warehouse": "neon_city", "checkpoint": "neon_city",
-        "patrol": "neon_city", "penthouse": "bedroom", "office": "lab",
+        "patrol": "neon_city", "penthouse": "penthouse", "office": "lab",
         "territory": "neon_city",
     },
     "OUTSKIRTS": {
@@ -233,7 +233,7 @@ LOCATION_MAP: Dict[str, Dict[str, str]] = {
         "cafe": "neon_city", "back_room": "shattered_throne", "underground": "score",
         "gym": "colosseum", "arena": "colosseum", "lab": "lab",
         "grid": "grid", "warehouse": "neon_city", "checkpoint": "neon_city",
-        "patrol": "neon_city", "penthouse": "bedroom", "office": "shattered_throne",
+        "patrol": "neon_city", "penthouse": "penthouse", "office": "shattered_throne",
         "territory": "neon_city",
     },
 }

@@ -134,7 +134,7 @@ class TestStreamWatcher:
         self.watcher = StreamWatcher(config=self.config)
 
     def test_start_session(self):
-        ctx = WatchContext(scene_id="bedroom", agent_id="lola")
+        ctx = WatchContext(scene_id="penthouse", agent_id="lola")
         self.watcher.start_session(ctx)
         analysis = self.watcher.get_analysis()
         assert analysis.tokens_analyzed == 0

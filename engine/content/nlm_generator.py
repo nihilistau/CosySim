@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 
 #: Scenes that the generator will seed when ``seed_all_scenes()`` is called.
 GENERATOR_SCENES: List[str] = [
-    "bedroom",
+    "penthouse",
     "casino",
     "lounge",
     "tavern",
@@ -46,7 +46,7 @@ GENERATOR_SCENES: List[str] = [
 
 #: Content types generated per scene (subset of ContentEngine.CONTENT_TYPES).
 _CONTENT_TYPES_PER_SCENE: Dict[str, List[str]] = {
-    "bedroom":  ["scenario", "dialogue", "arc"],
+    "penthouse":  ["scenario", "dialogue", "arc"],
     "casino":   ["event", "scenario", "dialogue"],
     "lounge":   ["dialogue", "event", "lore"],
     "tavern":   ["quest", "event", "dialogue", "lore"],

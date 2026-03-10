@@ -36,7 +36,7 @@ class NaturalMoodDriftInterceptor(InterceptorBase):
     """
     name     = "natural_mood_drift"
     priority = 5
-    applicable_scenes = {"bedroom", "phone", "lounge", "gallery", "warzone",
+    applicable_scenes = {"penthouse", "phone", "lounge", "gallery", "warzone",
                          "casino", "heist", "realm", "neoncity", "coders"}
 
     # Per-stat drift rates (delta per call, toward baseline)

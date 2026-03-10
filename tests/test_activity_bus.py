@@ -198,12 +198,12 @@ class TestActivityContextManager:
     def test_context_manager_yields_activity(self, bus):
         """The yielded object is a proper Activity instance."""
         with bus.activity(kind="memory", label="storing",
-                          agent_id="char-lola", scene="bedroom",
+                          agent_id="char-lola", scene="penthouse",
                           model="qwen3-8b") as act:
             assert isinstance(act, Activity)
             assert act.kind == "memory"
             assert act.agent_id == "char-lola"
-            assert act.scene == "bedroom"
+            assert act.scene == "penthouse"
             assert act.model == "qwen3-8b"
 
     def test_context_manager_passes_extra(self, bus):

@@ -160,9 +160,9 @@ scenes:
       when: always
 
   # ──────────────────────────────────────────────────────────────────────
-  #  BEDROOM  —  Adult multi-agent roleplay
+  #  penthouse  —  Adult multi-agent roleplay
   # ──────────────────────────────────────────────────────────────────────
-  bedroom:
+  penthouse:
     # Auto: always run before response — ground the agent in the scene
     - name: get_character_scene_stats
       trigger: auto
@@ -275,7 +275,7 @@ scenes:
       when: always
     - name: get_scene_rules
       trigger: optional
-      description: "Read the full bedroom scene rules — capabilities, guidance, constraints"
+      description: "Read the full penthouse scene rules — capabilities, guidance, constraints"
       when: first_message
     - name: get_all_tools_for_scene
       trigger: optional
@@ -344,7 +344,7 @@ scenes:
       when: always
     - name: get_scene_rules_summary
       trigger: optional
-      description: "Get full summary of bedroom scene rules, permission matrix, and active constraints"
+      description: "Get full summary of penthouse scene rules, permission matrix, and active constraints"
       when: first_message
     - name: enforce_behavior
       trigger: optional
@@ -352,10 +352,10 @@ scenes:
       when: always
     - name: scene_broadcast
       trigger: optional
-      description: "Broadcast a message or event to all characters currently present in the bedroom"
+      description: "Broadcast a message or event to all characters currently present in the penthouse"
       when: always
 
-    # ── Game skills (bedroom) ─────────────────────────────────────────
+    # ── Game skills (penthouse) ─────────────────────────────────────────
     - name: launch_game
       trigger: optional
       description: "Start a Truth-or-Dare or Mystery game session — fully MCP-tracked with turn history and stat sync. game_type: 'truth_or_dare' | 'mystery'"

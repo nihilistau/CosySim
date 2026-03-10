@@ -10,7 +10,7 @@ import importlib
 import pytest
 
 SCENES = [
-    "content.scenes.bedroom",
+    "content.scenes.penthouse",
     "content.scenes.tavern",
     "content.scenes.games",
     "content.scenes.realm",

@@ -35,7 +35,7 @@ class TestPortLookup:
         reg = _fresh_registry()
         ports = reg.all_ports()
         assert len(ports) >= 25
-        assert "bedroom" in ports
+        assert "penthouse" in ports
         assert "lmstudio" in ports
         assert "orpheus_tts" in ports
 
@@ -94,7 +94,7 @@ class TestGroups:
         reg = _fresh_registry()
         scenes = reg.for_group("scenes")
         assert "phone" in scenes
-        assert "bedroom" in scenes
+        assert "penthouse" in scenes
         assert "grid" in scenes
         assert len(scenes) == 19
 
@@ -128,14 +128,14 @@ class TestConfigIntegration:
         mock_cfg = MagicMock()
         mock_cfg.get.side_effect = lambda key, *args: {
             "scenes.phone.port": 6000,
-            "scenes.bedroom.port": 6001,
+            "scenes.penthouse.port": 6001,
         }.get(key, args[0] if args else None)
 
         with patch("engine.config.get_config", return_value=mock_cfg):
             from engine.port_registry import PortRegistry
             reg = PortRegistry()
         assert reg.get("phone") == 6000
-        assert reg.get("bedroom") == 6001
+        assert reg.get("penthouse") == 6001
 
     def test_loads_lmstudio_port(self):
         mock_cfg = MagicMock()
@@ -162,7 +162,7 @@ class TestConvenienceFunctions:
         with patch("engine.port_registry._registry", None):
             with patch("engine.port_registry.PortRegistry._load_from_config"):
                 from engine.port_registry import get_port
-                assert get_port("bedroom") == 5556
+                assert get_port("penthouse") == 5556
 
     def test_get_service_url_function(self):
         with patch("engine.port_registry._registry", None):
@@ -194,8 +194,8 @@ class TestCanonicalControlPlaneHelpers:
         from engine.port_registry import build_scene_listing
 
         scenes = {scene["id"]: scene for scene in build_scene_listing()}
-        assert scenes["bedroom"]["port"] == 5556
-        assert scenes["bedroom"]["name"] == "THE PENTHOUSE"
+        assert scenes["penthouse"]["port"] == 5556
+        assert scenes["penthouse"]["name"] == "THE PENTHOUSE"
         assert scenes["phone"]["port"] == 5555
         assert scenes["phone"]["name"] == "SIGNAL"
 
@@ -211,9 +211,9 @@ class TestCanonicalControlPlaneHelpers:
     def test_build_target_listing_includes_health_url_metadata(self):
         from engine.port_registry import build_target_listing
 
-        targets = {target["id"]: target for target in build_target_listing(("lmstudio", "bedroom"))}
+        targets = {target["id"]: target for target in build_target_listing(("lmstudio", "penthouse"))}
         assert targets["lmstudio"]["health_url"] == "http://localhost:1234/api/v1/models"
-        assert targets["bedroom"]["health_url"] == "http://localhost:5556/api/health"
+        assert targets["penthouse"]["health_url"] == "http://localhost:5556/api/health"
 
     def test_hub_catalogue_targets_include_new_control_plane_surfaces(self):
         from engine.port_registry import HUB_CATALOGUE_TARGETS

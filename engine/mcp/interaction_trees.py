@@ -1,7 +1,7 @@
 """
 CosySim Interaction Trees
 ==========================
-Defines the 6 core interaction types for the Bedroom scene and 6 for the
+Defines the 6 core interaction types for the penthouse scene and 6 for the
 Phone scene.  Each type has:
 
   * subtypes      — the specific flavour of that interaction
@@ -61,13 +61,13 @@ class InteractionType:
 
 
 # ══════════════════════════════════════════════════════════════════════
-#  BEDROOM — 6 INTERACTION TYPES
+#  penthouse — 6 INTERACTION TYPES
 # ══════════════════════════════════════════════════════════════════════
 
-BEDROOM_INTERACTIONS: Dict[str, InteractionType] = {}
+PENTHOUSE_INTERACTIONS: Dict[str, InteractionType] = {}
 
 # ─── 1. CUDDLE ───────────────────────────────────────────────────────
-BEDROOM_INTERACTIONS["cuddle"] = InteractionType(
+PENTHOUSE_INTERACTIONS["cuddle"] = InteractionType(
     id="cuddle", label="Cuddle", default_subtype="spoon",
     description="Warm physical closeness — comfort, safety, and growing heat.",
     subtypes=[
@@ -127,7 +127,7 @@ BEDROOM_INTERACTIONS["cuddle"] = InteractionType(
 )
 
 # ─── 2. KISS ─────────────────────────────────────────────────────────
-BEDROOM_INTERACTIONS["kiss"] = InteractionType(
+PENTHOUSE_INTERACTIONS["kiss"] = InteractionType(
     id="kiss", label="Kiss", default_subtype="soft",
     description="From tender peck to breathless and desperate.",
     subtypes=[
@@ -203,7 +203,7 @@ BEDROOM_INTERACTIONS["kiss"] = InteractionType(
 )
 
 # ─── 3. CARESS ───────────────────────────────────────────────────────
-BEDROOM_INTERACTIONS["caress"] = InteractionType(
+PENTHOUSE_INTERACTIONS["caress"] = InteractionType(
     id="caress", label="Caress", default_subtype="hair",
     description="Tactile exploration — sensory intimacy, body awareness.",
     subtypes=[
@@ -264,7 +264,7 @@ BEDROOM_INTERACTIONS["caress"] = InteractionType(
 )
 
 # ─── 4. STRIPTEASE ───────────────────────────────────────────────────
-BEDROOM_INTERACTIONS["striptease"] = InteractionType(
+PENTHOUSE_INTERACTIONS["striptease"] = InteractionType(
     id="striptease", label="Striptease", default_subtype="slow_reveal",
     description="The art of undressing — making the act itself an event.",
     subtypes=[
@@ -327,7 +327,7 @@ BEDROOM_INTERACTIONS["striptease"] = InteractionType(
 )
 
 # ─── 5. INTIMATE ─────────────────────────────────────────────────────
-BEDROOM_INTERACTIONS["intimate"] = InteractionType(
+PENTHOUSE_INTERACTIONS["intimate"] = InteractionType(
     id="intimate", label="Intimate", default_subtype="foreplay",
     description="Sexual encounters — from slow teasing to full passion.",
     subtypes=[
@@ -404,7 +404,7 @@ BEDROOM_INTERACTIONS["intimate"] = InteractionType(
 )
 
 # ─── 6. DEEP TALK ────────────────────────────────────────────────────
-BEDROOM_INTERACTIONS["deep_talk"] = InteractionType(
+PENTHOUSE_INTERACTIONS["deep_talk"] = InteractionType(
     id="deep_talk", label="Deep Talk", default_subtype="pillow_talk",
     description="Words as intimacy — from play to vulnerability.",
     subtypes=[
@@ -733,7 +733,7 @@ def get_interaction_result(
     *,
     initiator_stats: Optional[Dict] = None,
     target_stats: Optional[Dict] = None,
-    scene: str = "bedroom",
+    scene: str = "penthouse",
     intensity_override: Optional[int] = None,
 ) -> Dict[str, Any]:
     """
@@ -757,7 +757,7 @@ def get_interaction_result(
         "note":              str,
     }
     """
-    trees = BEDROOM_INTERACTIONS if scene == "bedroom" else PHONE_INTERACTIONS
+    trees = PENTHOUSE_INTERACTIONS if scene == "penthouse" else PHONE_INTERACTIONS
     itype = trees.get(interaction_type)
 
     if not itype:
@@ -814,9 +814,9 @@ def get_interaction_result(
     }
 
 
-def list_interaction_types(scene: str = "bedroom") -> Dict[str, Any]:
+def list_interaction_types(scene: str = "penthouse") -> Dict[str, Any]:
     """Return a structured summary of all available interaction types."""
-    trees = BEDROOM_INTERACTIONS if scene == "bedroom" else PHONE_INTERACTIONS
+    trees = PENTHOUSE_INTERACTIONS if scene == "penthouse" else PHONE_INTERACTIONS
     return {
         iid: {
             "label": it.label,
@@ -830,9 +830,9 @@ def list_interaction_types(scene: str = "bedroom") -> Dict[str, Any]:
     }
 
 
-def get_available_interactions(character_stats: Dict, scene: str = "bedroom") -> List[Dict]:
+def get_available_interactions(character_stats: Dict, scene: str = "penthouse") -> List[Dict]:
     """Return only the interaction types/subtypes this character can access right now."""
-    trees = BEDROOM_INTERACTIONS if scene == "bedroom" else PHONE_INTERACTIONS
+    trees = PENTHOUSE_INTERACTIONS if scene == "penthouse" else PHONE_INTERACTIONS
     available = []
     for iid, itype in trees.items():
         accessible_subtypes = []

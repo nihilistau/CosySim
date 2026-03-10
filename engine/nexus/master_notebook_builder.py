@@ -390,7 +390,7 @@ def build_engine_services_bundle() -> str:
 def build_scenes_bundle() -> str:
     """Bundle scene implementations (top 8 scenes)."""
     key_scenes = [
-        "bedroom", "nexus_panel", "phone", "command_center",
+        "penthouse", "nexus_panel", "phone", "command_center",
         "lounge", "heist", "system_control", "games",
     ]
     paths = []
@@ -462,7 +462,7 @@ def build_frontend_js_bundle() -> str:
     """Bundle all JavaScript frontend files."""
     js_dirs = [
         _ROOT / "content" / "shared" / "static" / "js",
-        _ROOT / "content" / "scenes" / "bedroom" / "static" / "js",
+        _ROOT / "content" / "scenes" / "penthouse" / "static" / "js",
         _ROOT / "content" / "scenes" / "nexus_panel" / "static" / "js",
         _ROOT / "content" / "scenes" / "phone" / "static" / "js",
         _ROOT / "content" / "scenes" / "command_center" / "static" / "js",
@@ -487,7 +487,7 @@ def build_tests_bundle() -> str:
         "test_local_agent_bridge.py",
         "test_nlm_forge_skills.py",
         "test_nexus_panel.py",
-        "test_bedroom_game.py",
+        "test_penthouse_game.py",
         "test_copilot_bridge.py",
         "test_autonomy_skills.py",
         "test_news_nlm_pipeline.py",

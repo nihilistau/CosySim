@@ -397,7 +397,7 @@ def character_register(
         backstory:        Short backstory paragraph
         voice_style:      Speaking style e.g. "warm and literary"
         pronouns:         e.g. "she/her"
-        scene_roles_json: JSON dict of scene → role  e.g. '{"bedroom": "lover"}'
+        scene_roles_json: JSON dict of scene → role  e.g. '{"penthouse": "lover"}'
     """
     try:
         from engine.mcp.tools.character_tools import character_register as _impl

@@ -193,7 +193,7 @@ class TestStoreMemory:
     @patch("content.simulation.database.rag.RAGMemory")
     def test_store_with_chain_context(self, MockRAG, mock_ctx):
         """Chain context values flow through to add_memory."""
-        ctx = _chain_context(chain_id="chain-xyz", scene_id="bedroom")
+        ctx = _chain_context(chain_id="chain-xyz", scene_id="penthouse")
         mock_ctx.return_value = ctx
         rag_inst = MockRAG.return_value
 
@@ -202,7 +202,7 @@ class TestStoreMemory:
 
         kwargs = rag_inst.add_memory.call_args[1]
         assert kwargs["chain_id"] == "chain-xyz"
-        assert kwargs["scene_id"] == "bedroom"
+        assert kwargs["scene_id"] == "penthouse"
 
     @patch("engine.skills.chain_context.get_chain_context")
     @patch("content.simulation.database.rag.RAGMemory")

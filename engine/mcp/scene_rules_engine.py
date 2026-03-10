@@ -7,9 +7,9 @@ is required, what triggers automatically, and what is outright forbidden —
 across every scene and for every character.
 
 This module is the authoritative source of truth for "the rules" from the
-agent's perspective.  When an agent calls ``get_scene_rules("bedroom")`` they
+agent's perspective.  When an agent calls ``get_scene_rules("penthouse")`` they
 get the full, up-to-date rule set for that scene.  When the Director calls
-``apply_rule("bedroom", "lights_off", ["aria"])`` the rule's effects execute
+``apply_rule("penthouse", "lights_off", ["aria"])`` the rule's effects execute
 immediately and are reflected in ``SceneStateManager`` and
 ``CharacterRegistry``.
 
@@ -67,18 +67,18 @@ Quick start::
     eng = get_rules_engine()
 
     # Read available actions for a character
-    available = eng.get_available_actions("bedroom", "aria", stats={"arousal": 60})
+    available = eng.get_available_actions("penthouse", "aria", stats={"arousal": 60})
     # [{"id": "kiss_soft", "label": "Soft Kiss", ...}, ...]
 
     # Apply a director-issued rule
-    eng.apply_rule("bedroom", "mood_lift", target_ids=["aria"], issuer="director")
+    eng.apply_rule("penthouse", "mood_lift", target_ids=["aria"], issuer="director")
 
     # Check if an action is allowed
-    allowed, reason = eng.check_permission("bedroom", "aria", "striptease")
+    allowed, reason = eng.check_permission("penthouse", "aria", "striptease")
     # (True, "allowed")
 
     # Get the full rule text for an agent
-    text = eng.get_rules_text("bedroom")
+    text = eng.get_rules_text("penthouse")
 """
 from __future__ import annotations
 
@@ -895,7 +895,7 @@ class SceneRulesEngine:
     def _bootstrap(self) -> None:
         """Seed the engine with the built-in scene rules and actions."""
         self._bootstrap_global_rules()
-        self._bootstrap_bedroom()
+        self._bootstrap_penthouse()
         self._bootstrap_phone()
 
     def _bootstrap_global_rules(self) -> None:
@@ -941,12 +941,12 @@ class SceneRulesEngine:
             priority    = 4,
         ))
 
-    def _bootstrap_bedroom(self) -> None:
-        """Bedroom-specific rules and actions."""
+    def _bootstrap_penthouse(self) -> None:
+        """penthouse-specific rules and actions."""
         # ── Rules ──────────────────────────────────────────────────────
         self.add_rule(RuleDefinition(
-            rule_id     = "bedroom_wardrobe_first",
-            scene       = "bedroom",
+            rule_id     = "penthouse_wardrobe_first",
+            scene       = "penthouse",
             label       = "Check wardrobe before touching clothing",
             description = "ALWAYS call wardrobe_get() before any undressing action.  You must know "
                           "exactly what is being worn before removing it.",
@@ -955,8 +955,8 @@ class SceneRulesEngine:
             can_be_disabled = False,
         ))
         self.add_rule(RuleDefinition(
-            rule_id     = "bedroom_stats_drive_behaviour",
-            scene       = "bedroom",
+            rule_id     = "penthouse_stats_drive_behaviour",
+            scene       = "penthouse",
             label       = "Stats drive your behaviour",
             description = "Your arousal, openness, and happiness directly influence what you want "
                           "and what you'll do.  Check get_character_scene_stats() and let the "
@@ -965,8 +965,8 @@ class SceneRulesEngine:
             priority    = 11,
         ))
         self.add_rule(RuleDefinition(
-            rule_id     = "bedroom_timed_actions",
-            scene       = "bedroom",
+            rule_id     = "penthouse_timed_actions",
+            scene       = "penthouse",
             label       = "Long actions take time",
             description = "Striptease, massages, and extended intimate acts MUST use start_timed_action(). "
                           "Poll poll_timed_action() each turn to advance phases.  Never skip phases.",
@@ -974,8 +974,8 @@ class SceneRulesEngine:
             priority    = 12,
         ))
         self.add_rule(RuleDefinition(
-            rule_id     = "bedroom_atmosphere",
-            scene       = "bedroom",
+            rule_id     = "penthouse_atmosphere",
+            scene       = "penthouse",
             label       = "Set and maintain atmosphere",
             description = "Use set_scene_atmosphere() to establish lighting, mood, music.  "
                           "Call it at scene start and after major mood shifts.",
@@ -983,8 +983,8 @@ class SceneRulesEngine:
             priority    = 13,
         ))
         self.add_rule(RuleDefinition(
-            rule_id     = "bedroom_lights_off",
-            scene       = "bedroom",
+            rule_id     = "penthouse_lights_off",
+            scene       = "penthouse",
             label       = "Lights off — intimacy boost",
             description = "Director special: sets dim lighting, increases arousal +10, openness +5",
             rule_type   = "director_only",
@@ -997,8 +997,8 @@ class SceneRulesEngine:
             ],
         ))
         self.add_rule(RuleDefinition(
-            rule_id     = "bedroom_mood_lift",
-            scene       = "bedroom",
+            rule_id     = "penthouse_mood_lift",
+            scene       = "penthouse",
             label       = "Mood lift",
             description = "Director special: character mood → excited, happiness +15",
             rule_type   = "director_only",
@@ -1009,8 +1009,8 @@ class SceneRulesEngine:
             ],
         ))
         self.add_rule(RuleDefinition(
-            rule_id     = "bedroom_scene_reset",
-            scene       = "bedroom",
+            rule_id     = "penthouse_scene_reset",
+            scene       = "penthouse",
             label       = "Scene reset — redress all characters",
             description = "Director special: resets atmosphere and re-dresses all characters",
             rule_type   = "director_only",
@@ -1018,7 +1018,7 @@ class SceneRulesEngine:
         ))
 
         # ── Actions ────────────────────────────────────────────────────
-        for action in _BEDROOM_ACTIONS:
+        for action in _PENTHOUSE_ACTIONS:
             self.add_action(action)
 
     def _bootstrap_phone(self) -> None:
@@ -1098,9 +1098,9 @@ class SceneRulesEngine:
 
 # ── Default action sets ────────────────────────────────────────────────
 
-_BEDROOM_ACTIONS: List[ActionDefinition] = [
+_PENTHOUSE_ACTIONS: List[ActionDefinition] = [
     ActionDefinition(
-        action_id = "cuddle", scene = "bedroom",
+        action_id = "cuddle", scene = "penthouse",
         label = "Cuddle / Hold",
         description = "Physical closeness — holding, spooning, lap sitting.",
         intimacy_level = 1, category = "physical",
@@ -1111,7 +1111,7 @@ _BEDROOM_ACTIONS: List[ActionDefinition] = [
         ],
     ),
     ActionDefinition(
-        action_id = "kiss", scene = "bedroom",
+        action_id = "kiss", scene = "penthouse",
         label = "Kiss",
         description = "Kissing — from soft to urgent.",
         intimacy_level = 2, category = "physical",
@@ -1122,7 +1122,7 @@ _BEDROOM_ACTIONS: List[ActionDefinition] = [
         ],
     ),
     ActionDefinition(
-        action_id = "caress", scene = "bedroom",
+        action_id = "caress", scene = "penthouse",
         label = "Caress / Touch",
         description = "Tactile touch — hair, back, face, body.",
         intimacy_level = 2, category = "physical",
@@ -1133,7 +1133,7 @@ _BEDROOM_ACTIONS: List[ActionDefinition] = [
         ],
     ),
     ActionDefinition(
-        action_id = "striptease", scene = "bedroom",
+        action_id = "striptease", scene = "penthouse",
         label = "Striptease",
         description = "Undressing performance — uses timed action system.",
         intimacy_level = 4, category = "physical",
@@ -1146,7 +1146,7 @@ _BEDROOM_ACTIONS: List[ActionDefinition] = [
         ],
     ),
     ActionDefinition(
-        action_id = "intimate", scene = "bedroom",
+        action_id = "intimate", scene = "penthouse",
         label = "Intimate Act",
         description = "Sexual encounter — requires high arousal and openness.",
         intimacy_level = 5, category = "physical",
@@ -1159,7 +1159,7 @@ _BEDROOM_ACTIONS: List[ActionDefinition] = [
         ],
     ),
     ActionDefinition(
-        action_id = "deep_talk", scene = "bedroom",
+        action_id = "deep_talk", scene = "penthouse",
         label = "Deep / Intimate Talk",
         description = "Confession, pillow talk, vulnerable sharing.",
         intimacy_level = 2, category = "verbal",
@@ -1169,7 +1169,7 @@ _BEDROOM_ACTIONS: List[ActionDefinition] = [
         ],
     ),
     ActionDefinition(
-        action_id = "set_atmosphere", scene = "bedroom",
+        action_id = "set_atmosphere", scene = "penthouse",
         label = "Set atmosphere",
         description = "Change the room's lighting, mood, music.",
         intimacy_level = 1, category = "environment",

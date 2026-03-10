@@ -173,7 +173,7 @@ class TestMetricsCollectorWiring:
 
         result = MagicMock()
         result.agent_id = "lola"
-        result.scene_id = "bedroom"
+        result.scene_id = "penthouse"
         result.tier = "gpu"
         result.model = "test-model"
         result.pipeline_latency_ms = 100
@@ -198,7 +198,7 @@ class TestMetricsCollectorWiring:
 
         # Request attached to result
         req = MagicMock()
-        req.scene = "bedroom"
+        req.scene = "penthouse"
         req.agent_id = "lola"
         req.priority = "interactive"
         req.metadata = {"character_name": "Lola"}

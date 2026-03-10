@@ -255,7 +255,7 @@ class TestSceneCategories:
         real_get_port = port_registry.get_port
         overrides = {
             "phone": 6105,
-            "bedroom": 6106,
+            "penthouse": 6106,
             "admin": 9102,
             "asset_studio": 6168,
         }

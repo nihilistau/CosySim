@@ -7,7 +7,7 @@ the EventBus, and persists beat history.
 Typical use::
 
     director = get_scene_director()
-    beat = director.tick("bedroom", scene_state)
+    beat = director.tick("penthouse", scene_state)
     if beat:
         inject_into_prompt(beat.instruction)
 """
@@ -136,7 +136,7 @@ _MILESTONE_TURNS = {10, 25, 50, 100, 200}
 #:   ``avoid_beats``          – beat types that should never be auto-selected
 #:   ``escalation_threshold`` – arousal level at which ESCALATION fires (default 80)
 SCENE_BEAT_CONFIGS: Dict[str, Dict] = {
-    "bedroom": {
+    "penthouse": {
         "preferred_beats": [BeatType.ESCALATION, BeatType.COOL_DOWN, BeatType.REWARD],
         "avoid_beats": [BeatType.WORLD_EVENT],
         "escalation_threshold": 70,
@@ -465,7 +465,7 @@ class SceneDirector:
         on each user turn).
 
         Args:
-            scene: Identifier of the active scene (e.g. ``"bedroom"``).
+            scene: Identifier of the active scene (e.g. ``"penthouse"``).
             scene_state: Current state snapshot.  Recognised keys:
 
                 - ``turn_count`` (int)

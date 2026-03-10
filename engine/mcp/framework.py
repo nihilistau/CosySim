@@ -11,7 +11,7 @@ Architecture
 
 ``MCPFramework``  (global singleton — the root)
 │
-├─── ``MCPSceneNode``  (one per active scene: "bedroom", "phone", …)
+├─── ``MCPSceneNode``  (one per active scene: "penthouse", "phone", …)
 │     ├── local rules (from SceneRulesEngine)
 │     ├── present characters  (MCPCharacterNode refs)
 │     ├── event subscriptions
@@ -29,8 +29,8 @@ Cross-scene communication
 Characters in *different* scenes can communicate through a shared
 ``CrossSceneBridge`` managed by MCPFramework.  Example use-cases:
 
-* Phone call between "phone" scene (user) and "bedroom" scene (Aria)
-* Message notification arriving while the agent is in the bedroom
+* Phone call between "phone" scene (user) and "penthouse" scene (Aria)
+* Message notification arriving while the agent is in the penthouse
 * Director-issued event that spans multiple scenes simultaneously
 
 Consequence chains
@@ -44,7 +44,7 @@ MCPSceneMixin
 A lightweight mixin that makes any ``BaseScene`` subclass aware of the
 MCP framework automatically::
 
-    class BedroomScene(BaseScene, MCPSceneMixin, scene_id="bedroom"):
+    class PenthouseScene(BaseScene, MCPSceneMixin, scene_id="penthouse"):
         ...
 
 The mixin calls ``MCPFramework.get().register_scene(self)`` in ``__init_subclass__``
@@ -57,23 +57,23 @@ Standalone use::
     fw = get_framework()
 
     # Register a scene node  
-    bedroom = fw.get_scene("bedroom")   # auto-created if not exists
+    penthouse = fw.get_scene("penthouse")   # auto-created if not exists
 
-    # Register a character and put them in the bedroom
+    # Register a character and put them in the penthouse
     aria = fw.get_character("aria")
-    aria.enter_scene("bedroom")
+    aria.enter_scene("penthouse")
 
-    # Send a cross-scene message (bedroom → phone)
+    # Send a cross-scene message (penthouse → phone)
     fw.cross_scene_send(
         from_char="user", from_scene="phone",
-        to_char="aria",   to_scene="bedroom",
+        to_char="aria",   to_scene="penthouse",
         message="Hey, thinking about you.",
         message_type="text",
     )
 
     # Schedule a consequence
     fw.schedule_consequence(
-        scene_id="bedroom", character_id="aria",
+        scene_id="penthouse", character_id="aria",
         consequence_type="stat_adjust",
         params={"stat": "arousal", "delta": 15},
         trigger_after_turns=2,
@@ -712,9 +712,9 @@ class MCPSceneMixin:
 
     Usage::
 
-        class BedroomScene(BaseScene, MCPSceneMixin, mcp_scene_id="bedroom"):
+        class PenthouseScene(BaseScene, MCPSceneMixin, mcp_scene_id="penthouse"):
             def __init__(self, ...):
-                super().__init__(scene_name="bedroom", ...)
+                super().__init__(scene_name="penthouse", ...)
                 self._mcp_init()   # call after super().__init__
 
     The mixin automatically:

@@ -128,7 +128,7 @@ class SkillManifest:
             {"name": "roll_dice",      "trigger": "optional", "description": "Generate a random outcome (1–100)"},
             {"name": "log_event",      "trigger": "auto",     "description": "Log this interaction to the event chain"},
         ],
-        "bedroom": [
+        "penthouse": [
             {"name": "search_memory",  "trigger": "auto",     "description": "Recall relevant past encounters"},
             {"name": "update_mood",    "trigger": "optional", "description": "Update character mood"},
             {"name": "adjust_relationship", "trigger": "optional", "description": "Adjust relationship metrics"},

@@ -36,7 +36,7 @@ class NexusSceneMixin:
         """Initialise Nexus integration for this scene.
 
         Args:
-            scene_id: Unique scene identifier (e.g. "bedroom", "tavern").
+            scene_id: Unique scene identifier (e.g. "penthouse", "tavern").
         """
         self._nexus_scene_id: str = scene_id
         self._nexus_client = None

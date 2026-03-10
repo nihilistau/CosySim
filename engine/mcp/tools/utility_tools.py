@@ -205,7 +205,7 @@ def suggest_activity_logic(scene_id: str = "phone") -> str:
             {"name": "Roleplay", "desc": "Suggest a fun scenario to act out", "heat_min": 40},
             {"name": "Flirting game", "desc": "See who can be more creative with compliments", "heat_min": 30},
         ],
-        "bedroom": [
+        "penthouse": [
             {"name": "Set the mood", "desc": "Change lighting, music, atmosphere", "heat_min": 0},
             {"name": "Wardrobe change", "desc": "Try on different outfits", "heat_min": 10},
             {"name": "Dance", "desc": "Put on music and dance together", "heat_min": 20},

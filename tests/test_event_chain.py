@@ -151,7 +151,7 @@ class TestGetRecentChains:
 
     def test_scene_filter(self, event_chain):
         event_chain.start_chain("phone", summary="Phone chain")
-        event_chain.start_chain("bedroom", summary="Bedroom chain")
+        event_chain.start_chain("penthouse", summary="Bedroom chain")
 
         phone_chains = event_chain.get_recent_chains(scene_id="phone")
         for c in phone_chains:

@@ -56,7 +56,7 @@ class TestSystemInventory:
         )
         scenes = next(domain for domain in inventory["domains"] if domain["id"] == "scenes")
         assert any(target["id"] == "system_control" for target in control_plane["service_targets"])
-        assert any(target["id"] == "bedroom" for target in scenes["scene_targets"])
+        assert any(target["id"] == "penthouse" for target in scenes["scene_targets"])
 
     def test_build_system_inventory_compact_mode_omits_catalogues(self):
         """Compact inventory keeps the split without full service/scene catalogues."""

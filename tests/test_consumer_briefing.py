@@ -117,7 +117,7 @@ class TestGapPrompt:
         cb = ConsumerBriefing()
         covered = ["What is the config key for the bedroom port?"]
         prompt = cb.build_gap_prompt(covered)
-        assert "bedroom" in prompt.lower() or "config key" in prompt.lower()
+        assert "penthouse" in prompt.lower() or "config key" in prompt.lower()
 
     def test_gap_prompt_with_empty_list(self):
         cb = ConsumerBriefing()

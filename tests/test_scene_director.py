@@ -19,7 +19,7 @@ import pytest
 # Helpers
 # ---------------------------------------------------------------------------
 
-_SCENE = "bedroom"
+_SCENE = "penthouse"
 
 
 def _make_state(

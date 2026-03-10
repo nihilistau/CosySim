@@ -1,11 +1,11 @@
 """
-Bedroom Scene — MCP Rules Initialisation
+penthouse scene — MCP Rules Initialisation
 ==========================================
-Called from ``BedroomScene.__init__`` after ``_mcp_init()`` to populate the
-bedroom's ``MCPSceneNode`` with rules, actions, permission matrix, and
+Called from ``PenthouseScene.__init__`` after ``_mcp_init()`` to populate the
+penthouse's ``MCPSceneNode`` with rules, actions, permission matrix, and
 initial atmosphere.
 
-All bedroom logic that used to be scattered across the Python scene file is now
+All penthouse logic that used to be scattered across the Python scene file is now
 declared here as first-class MCP rules.  The governing interceptor, the agent,
 and the Director can all read and apply these rules via the standard MCP tools.
 """
@@ -16,7 +16,7 @@ from typing import Any, Dict, List
 
 logger = logging.getLogger(__name__)
 
-SCENE_ID = "bedroom"
+SCENE_ID = "penthouse"
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -534,11 +534,11 @@ TIMED_ACTION_DURATIONS: Dict[str, int] = {
 #  REGISTER EVERYTHING
 # ──────────────────────────────────────────────────────────────────────────────
 
-def register_bedroom_rules() -> None:
+def register_penthouse_rules() -> None:
     """
-    Called once during BedroomScene initialisation.
+    Called once during PenthouseScene initialisation.
 
-    Registers all rules and actions for the bedroom scene into the
+    Registers all rules and actions for the penthouse scene into the
     MCPFramework's SceneNode and SceneRulesEngine.
 
     Safe to call multiple times — subsequent calls are no-ops.
@@ -600,11 +600,11 @@ def register_bedroom_rules() -> None:
         # ── Default atmosphere ──────────────────────────────────────────────
         ssm.set_atmosphere(SCENE_ID, lighting="evening", mood="relaxed", music="ambient")
 
-        logger.info("Bedroom MCP rules registered: %d rules, %d actions",
+        logger.info("Penthouse MCP rules registered: %d rules, %d actions",
                     len(all_rule_defs), len(_ACTIONS))
 
     except Exception as exc:
-        logger.warning("register_bedroom_rules failed: %s", exc)
+        logger.warning("register_penthouse_rules failed: %s", exc)
 
 
 def get_timed_action_duration(action_type: str) -> int:

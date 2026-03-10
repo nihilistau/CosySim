@@ -65,10 +65,10 @@ class TestAgentTaskManager:
         assert task_id == ""
 
     def test_create_task_with_tags(self):
-        self.mgr.create_task("Tagged task", tags=["bedroom", "bug"])
+        self.mgr.create_task("Tagged task", tags=["penthouse", "bug"])
         call_kwargs = self.mock_client.add_entry.call_args
         tags = call_kwargs.kwargs.get("tags", call_kwargs[1].get("tags", []))
-        assert "bedroom" in tags
+        assert "penthouse" in tags
         assert "bug" in tags
 
     def test_update_status(self):

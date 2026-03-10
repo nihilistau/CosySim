@@ -24,7 +24,7 @@ CHALLENGE_PROMPT_TEMPLATE = (
 )
 
 SCENE_THEMES: Dict[str, str] = {
-    "bedroom": "luxury penthouse, seduction, high society secrets",
+    "penthouse": "luxury penthouse, seduction, high society secrets",
     "casino": "underground gambling, noir atmosphere, high stakes",
     "arena": "gladiatorial combat, spectacle, honor and glory",
     "tavern": "medieval tavern, mercenaries, rumors and contracts",
@@ -36,7 +36,7 @@ SCENE_THEMES: Dict[str, str] = {
 }
 
 _FALLBACK_CHALLENGES: Dict[str, Dict[str, Any]] = {
-    "bedroom": {
+    "penthouse": {
         "title": "The Secret Admirer",
         "description": "Uncover who left the cryptic note",
         "win_condition": "Identify the admirer and arrange a meeting",

@@ -14,7 +14,7 @@
  *
  * Presets:
  *   neon_rain       — vertical cyan/blue neon streaks (NeonCity, Penthouse)
- *   rose_petals     — 3D spinning petals with physics (Bedroom romantic)
+ *   rose_petals     — 3D spinning petals with physics (penthouse romantic)
  *   champagne       — rising bubbles with shimmer (celebration)
  *   embers          — fire sparks drifting upward (Tavern, Heist)
  *   sparks          — burst celebration (Casino, Arena win)
@@ -775,7 +775,7 @@
    * Scene-to-preset mapping for automatic scene theming.
    */
   ParticleSystem3D.SCENE_PRESETS = {
-    bedroom:  'rose_petals',
+    penthouse:  'rose_petals',
     lounge:   'smoke',
     tavern:   'embers',
     casino:   'sparks',

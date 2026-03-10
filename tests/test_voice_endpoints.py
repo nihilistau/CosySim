@@ -112,9 +112,9 @@ class TestChatEndpoint:
     def test_chat_passes_scene_id(self, client, mock_assistant):
         """scene_id is forwarded to assistant.chat()."""
         with patch("engine.assistant.system_assistant.get_assistant", return_value=mock_assistant):
-            client.post("/api/assistant/chat", json={"message": "Hey", "scene_id": "bedroom"})
+            client.post("/api/assistant/chat", json={"message": "Hey", "scene_id": "penthouse"})
 
-        mock_assistant.chat.assert_called_once_with("Hey", scene_id="bedroom")
+        mock_assistant.chat.assert_called_once_with("Hey", scene_id="penthouse")
 
     def test_chat_with_voice_flag(self, client, mock_assistant):
         """voice=True adds audio_url and _voice_text to response."""

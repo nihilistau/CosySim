@@ -26,7 +26,7 @@ Usage::
     from engine.agents.virtual_agent_manager import get_virtual_agent_manager
 
     mgr = get_virtual_agent_manager()
-    agent = mgr.create_agent(character, scene="bedroom")
+    agent = mgr.create_agent(character, scene="penthouse")
     reply = agent.reply("Hey, what are you up to?")
 """
 from __future__ import annotations

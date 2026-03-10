@@ -47,7 +47,7 @@ def make_result(
     return result
 
 
-def make_request(scene="bedroom", agent_id="lola", priority="interactive"):
+def make_request(scene="penthouse", agent_id="lola", priority="interactive"):
     req = MagicMock()
     req.scene = scene
     req.agent_id = agent_id
@@ -90,7 +90,7 @@ class TestTrainingCapture:
         candidates = tmp_db.get_training_candidates(dataset="priority_classify")
         assert len(candidates) == 1
         c = candidates[0]
-        assert "bedroom" in c["input_text"]
+        assert "penthouse" in c["input_text"]
         assert "lola" in c["input_text"]
 
     def test_captures_tool_routing(self, tmp_db):

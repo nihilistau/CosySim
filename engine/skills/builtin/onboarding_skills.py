@@ -147,7 +147,7 @@ def onboarding_visit_scene(scene_name: str) -> str:
     """Record a scene visit.
 
     Args:
-        scene_name: Scene identifier (e.g., 'grid', 'bedroom', 'tavern').
+        scene_name: Scene identifier (e.g., 'grid', 'penthouse', 'tavern').
 
     Returns:
         JSON string with any objectives completed.

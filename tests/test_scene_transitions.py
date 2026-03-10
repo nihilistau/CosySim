@@ -5,7 +5,7 @@ from pathlib import Path
 SHARED_JS = Path("content/shared/static/js")
 SHARED_CSS = Path("content/shared/static/css")
 SHARED_TEMPLATES = Path("content/shared/templates")
-SCENE_NAMES = ["bedroom", "phone", "lounge", "tavern", "casino", "gallery", "arena", "realm", "neoncity", "hub"]
+SCENE_NAMES = ["penthouse", "phone", "lounge", "tavern", "casino", "gallery", "arena", "realm", "neoncity", "hub"]
 
 
 def test_transitions_js_exists():
@@ -16,8 +16,8 @@ def test_transitions_js_has_core_logic():
     js = (SHARED_JS / "cosysim-transitions.js").read_text(encoding="utf-8")
     assert "data-scene-nav" in js
     assert "cs-page-exit" in js
-    assert "cs-page-enter" in js
-    assert "TRANSITION_DURATION" in js
+    assert "cs-page-materialize" in js
+    assert "TRANSITION_MS" in js
 
 
 def test_transitions_js_prevents_default():

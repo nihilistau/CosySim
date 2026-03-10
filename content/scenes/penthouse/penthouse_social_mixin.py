@@ -1,4 +1,4 @@
-"""Bedroom scene social, character, spatial, and scenario mixin."""
+"""penthouse scene social, character, spatial, and scenario mixin."""
 from __future__ import annotations
 
 import logging
@@ -11,13 +11,13 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class BedroomSocialMixin:
+class PenthouseSocialMixin:
     """Character lifecycle, stats, spatial movement, scenarios, and utility routes."""
 
     # ── Character loading ───────────────────────────────────────────────
 
     def _load_character(self, char_id: str, personality_key: str = None) -> Optional[Any]:
-        from content.scenes.bedroom.bedroom_scene import (
+        from content.scenes.penthouse.penthouse_scene import (
             OUTFITS, POSITIONS, PERSONALITY_PROFILES, AgentStats, CharacterProfile,
         )
         from content.simulation.character_system.character import Character
@@ -55,7 +55,7 @@ class BedroomSocialMixin:
         try:
             from engine.mcp.framework import get_framework
             fw = get_framework()
-            fw.get_character(char.id).enter_scene("bedroom")
+            fw.get_character(char.id).enter_scene("penthouse")
         except Exception:
             pass
         return char
@@ -63,7 +63,7 @@ class BedroomSocialMixin:
     # ── Character state refresh ─────────────────────────────────────────
 
     def _refresh_character_state(self) -> None:
-        from content.scenes.bedroom.bedroom_scene import (
+        from content.scenes.penthouse.penthouse_scene import (
             PERSONALITY_PROFILES, CharacterProfile,
         )
 
@@ -122,7 +122,7 @@ class BedroomSocialMixin:
                 if not cid:
                     return jsonify({"error": "No character_id"}), 400
                 if len(self.characters) >= 2 and cid not in self.characters:
-                    return jsonify({"error": "Maximum 2 characters in bedroom"}), 400
+                    return jsonify({"error": "Maximum 2 characters in penthouse"}), 400
                 char = self._load_character(cid, personality)
                 if not char:
                     return jsonify({"error": "Character not found"}), 404
@@ -165,7 +165,7 @@ class BedroomSocialMixin:
             self.profiles[cid].stats.adjust(**{stat: delta})
             try:
                 from engine.mcp.state_coordinator import get_coordinator
-                get_coordinator().update(cid, source="director_adjust", scene="bedroom", **{stat: delta})
+                get_coordinator().update(cid, source="director_adjust", scene="penthouse", **{stat: delta})
             except Exception:
                 pass
             self._broadcast_state()
@@ -184,7 +184,7 @@ class BedroomSocialMixin:
             self.profiles[cid].stats.clamp()
             try:
                 from engine.mcp.state_coordinator import get_coordinator
-                get_coordinator().update(cid, source="director_set", scene="bedroom", **{stat: value})
+                get_coordinator().update(cid, source="director_set", scene="penthouse", **{stat: value})
             except Exception:
                 pass
             self._broadcast_state()
@@ -195,7 +195,7 @@ class BedroomSocialMixin:
     def _setup_spatial_routes(self) -> None:
         """Register location/movement Flask routes on self.app."""
         from flask import jsonify, request
-        from content.scenes.bedroom.bedroom_scene import POSITIONS
+        from content.scenes.penthouse.penthouse_scene import POSITIONS
 
         @self.app.route("/api/location/move", methods=["POST"])
         def move_character():
@@ -225,7 +225,7 @@ class BedroomSocialMixin:
     def _setup_scenario_routes(self) -> None:
         """Register scenario and story-beat Flask routes on self.app."""
         from flask import jsonify, request
-        from content.scenes.bedroom.bedroom_scene import PREMADE_SCENARIOS
+        from content.scenes.penthouse.penthouse_scene import PREMADE_SCENARIOS
 
         @self.app.route("/api/scenario/list")
         def list_scenarios():
@@ -244,7 +244,7 @@ class BedroomSocialMixin:
                     profile.stats.adjust(**{stat: delta})
                     try:
                         from engine.mcp.state_coordinator import get_coordinator
-                        get_coordinator().update(cid, source="scenario_mood", scene="bedroom", **{stat: delta})
+                        get_coordinator().update(cid, source="scenario_mood", scene="penthouse", **{stat: delta})
                     except Exception:
                         pass
             self._inject_to_loop("(Scene)", sc["opening"], "scenario")
@@ -289,7 +289,7 @@ class BedroomSocialMixin:
         """Register mode, history, ambient, constants, and MCP API routes."""
         from flask import jsonify, request
         from pathlib import Path
-        from content.scenes.bedroom.bedroom_scene import (
+        from content.scenes.penthouse.penthouse_scene import (
             POSITIONS, OUTFITS, PROPS, PERSONALITY_PROFILES,
             LIGHTING_PRESETS, PREMADE_SCENARIOS,
         )
@@ -343,7 +343,7 @@ class BedroomSocialMixin:
             try:
                 from engine.mcp.framework import get_framework
                 fw = get_framework()
-                scene_node = fw.get_scene("bedroom")
+                scene_node = fw.get_scene("penthouse")
                 return jsonify({"ok": True, "state": scene_node.get_state() if scene_node else {}})
             except Exception as exc:
                 return jsonify({"ok": False, "error": str(exc)}), 500
@@ -409,7 +409,7 @@ class BedroomSocialMixin:
                 return jsonify({"ok": True, "config": {
                     "agent_profiles": config.get("agent_profiles", {}),
                     "framework": config.get("framework", {}),
-                    "scenes.bedroom": config.get("scenes.bedroom", {}),
+                    "scenes.penthouse": config.get("scenes.penthouse", {}),
                 }})
             except Exception as exc:
                 return jsonify({"ok": False, "error": str(exc)}), 500

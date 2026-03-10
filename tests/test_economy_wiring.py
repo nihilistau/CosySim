@@ -167,7 +167,7 @@ class TestGalleryEconomyRoute(_EconomyRouteBase):
 
 
 class TestBedroomEconomyRoute(_EconomyRouteBase):
-    scene_cls_path = "content.scenes.bedroom.bedroom_scene.BedroomScene"
+    scene_cls_path = "content.scenes.penthouse.penthouse_scene.PenthouseScene"
     scene_port = 19567
 
 

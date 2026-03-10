@@ -59,7 +59,7 @@ Quick start::
     ds = get_dialog_system()
 
     # Get contextual options for an agent
-    options = ds.get_options("aria", "bedroom", context_tags=["kiss", "intimate"])
+    options = ds.get_options("aria", "penthouse", context_tags=["kiss", "intimate"])
     # [{"label": "Lean into it", "text": "She tilts her face up…", "tag": "accept"}]
 
     # Enhance speech
@@ -67,13 +67,13 @@ Quick start::
     # "Oh, I guess so… if that's what you want." (adapted to her voice)
 
     # Issue a directive
-    ds.set_directive("aria", "bedroom",
+    ds.set_directive("aria", "penthouse",
                      directive_type="must_include",
                      value="She blushes deeply",
                      turns=1)
 
     # Resolve a directive before LLM call
-    d = ds.get_active_directive("aria", "bedroom")
+    d = ds.get_active_directive("aria", "penthouse")
     if d and d.directive_type == "force_response":
         return d.value   # bypass LLM entirely
 """
@@ -180,7 +180,7 @@ class DialogNode:
 
     Fields
     ------
-    node_id      — unique id (e.g. "bedroom_intimate_offer")
+    node_id      — unique id (e.g. "penthouse_intimate_offer")
     scene        — which scene this belongs to
     situation    — description of when this node activates
     tags         — topic/context tags used to match against current conversation
@@ -914,14 +914,14 @@ class DialogSystem:
 
     def _bootstrap_trees(self) -> None:
         """
-        Seed default dialog nodes for bedroom and phone scenes.
+        Seed default dialog nodes for penthouse and phone scenes.
         Scene startup code should call ``add_node()`` with scene-specific trees.
         """
-        # ── Bedroom default nodes ──────────────────────────────────────
-        bedroom = self.get_tree("bedroom")
-        bedroom.add_node(DialogNode(
-            node_id   = "bedroom_closeness",
-            scene     = "bedroom",
+        # ── penthouse default nodes ──────────────────────────────────────
+        penthouse = self.get_tree("penthouse")
+        penthouse.add_node(DialogNode(
+            node_id   = "penthouse_closeness",
+            scene     = "penthouse",
             situation = "Physically close, early intimacy",
             tags      = ["cuddle", "close", "touch"],
             options   = [
@@ -939,9 +939,9 @@ class DialogSystem:
                     tag="deflect", weight=0.5),
             ],
         ))
-        bedroom.add_node(DialogNode(
-            node_id   = "bedroom_intimate_offer",
-            scene     = "bedroom",
+        penthouse.add_node(DialogNode(
+            node_id   = "penthouse_intimate_offer",
+            scene     = "penthouse",
             situation = "An intimate move is offered or suggested",
             tags      = ["intimate", "kiss", "offer", "invite"],
             min_arousal = 20.0,
@@ -960,9 +960,9 @@ class DialogSystem:
                     tag="deflect", weight=0.6),
             ],
         ))
-        bedroom.add_node(DialogNode(
-            node_id   = "bedroom_charged",
-            scene     = "bedroom",
+        penthouse.add_node(DialogNode(
+            node_id   = "penthouse_charged",
+            scene     = "penthouse",
             situation = "High-heat charged moment",
             tags      = ["striptease", "intimate", "charged", "explicit"],
             min_arousal = 55.0, min_openness = 40.0,
@@ -981,9 +981,9 @@ class DialogSystem:
                     tag="redirect", weight=0.7),
             ],
         ))
-        bedroom.add_node(DialogNode(
-            node_id   = "bedroom_talk",
-            scene     = "bedroom",
+        penthouse.add_node(DialogNode(
+            node_id   = "penthouse_talk",
+            scene     = "penthouse",
             situation = "Conversation, connection, pillow talk",
             tags      = ["deep_talk", "confession", "pillow_talk", "talk"],
             options   = [

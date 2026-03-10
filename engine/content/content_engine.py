@@ -15,7 +15,7 @@ Each content item is stored as a ``note`` entry with:
   * ``tags``       – list including ``scene:{scene}``, ``type:{content_type}``,
                      ``intensity:{0-3}``, and optionally ``adult:{category}``
 
-Typical search query: ``"scene:bedroom type:scenario intensity:2"``
+Typical search query: ``"scene:penthouse type:scenario intensity:2"``
 
 Example::
 
@@ -83,7 +83,7 @@ class ContentItem:
         id: Unique identifier (Nexus entry ID or generated UUID).
         title: Short descriptive title visible to the LLM.
         content: Full content body (quest text, event description, etc.).
-        scene: Scene this item belongs to (e.g. ``"bedroom"``, ``"tavern"``).
+        scene: Scene this item belongs to (e.g. ``"penthouse"``, ``"tavern"``).
         content_type: Category of content – one of ``quest``, ``event``,
             ``scenario``, ``lore``, ``dialogue``, ``arc``, ``fighter``,
             ``world_event``.

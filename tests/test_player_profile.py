@@ -68,7 +68,7 @@ class TestDecisionEntry:
     def test_to_dict_round_trip(self) -> None:
         entry = DecisionEntry(
             decision_id="d-001",
-            scene="bedroom",
+            scene="penthouse",
             description="Chose to help Lola",
             timestamp=999.0,
             consequences=["lola relationship +10"],
@@ -76,7 +76,7 @@ class TestDecisionEntry:
         d = entry.to_dict()
         restored = DecisionEntry.from_dict(d)
         assert restored.decision_id == "d-001"
-        assert restored.scene == "bedroom"
+        assert restored.scene == "penthouse"
         assert restored.consequences == ["lola relationship +10"]
 
 
@@ -118,28 +118,28 @@ class TestPlayerProfileInstantiation:
 class TestSessionTracking:
     def test_record_session_start_returns_string_id(self) -> None:
         profile = _fresh_profile()
-        sid = profile.record_session_start("bedroom")
+        sid = profile.record_session_start("penthouse")
         assert isinstance(sid, str) and len(sid) > 0
 
     def test_record_session_start_increments_scene_visits(self) -> None:
         profile = _fresh_profile()
-        profile.record_session_start("bedroom")
-        profile.record_session_start("bedroom")
+        profile.record_session_start("penthouse")
+        profile.record_session_start("penthouse")
         profile.record_session_start("kitchen")
-        assert profile.scene_visits["bedroom"] == 2
+        assert profile.scene_visits["penthouse"] == 2
         assert profile.scene_visits["kitchen"] == 1
 
     def test_record_session_start_appends_session(self) -> None:
         profile = _fresh_profile()
-        sid = profile.record_session_start("bedroom")
+        sid = profile.record_session_start("penthouse")
         assert len(profile.sessions) == 1
         assert profile.sessions[0]["session_id"] == sid
-        assert profile.sessions[0]["scene"] == "bedroom"
+        assert profile.sessions[0]["scene"] == "penthouse"
         assert profile.sessions[0]["end_time"] is None
 
     def test_record_session_end_sets_end_time(self) -> None:
         profile = _fresh_profile()
-        sid = profile.record_session_start("bedroom")
+        sid = profile.record_session_start("penthouse")
         before = time.time()
         profile.record_session_end(sid)
         after = time.time()
@@ -210,20 +210,20 @@ class TestRelationships:
 class TestDecisions:
     def test_record_decision_creates_entry(self) -> None:
         profile = _fresh_profile()
-        entry = profile.record_decision("bedroom", "Chose to confess to Lola")
+        entry = profile.record_decision("penthouse", "Chose to confess to Lola")
         assert isinstance(entry, DecisionEntry)
-        assert entry.scene == "bedroom"
+        assert entry.scene == "penthouse"
         assert entry.description == "Chose to confess to Lola"
         assert len(profile.decisions) == 1
 
     def test_record_decision_with_consequences(self) -> None:
         profile = _fresh_profile()
-        entry = profile.record_decision("bedroom", "Helped Lola", ["lola +10"])
+        entry = profile.record_decision("penthouse", "Helped Lola", ["lola +10"])
         assert entry.consequences == ["lola +10"]
 
     def test_record_decision_default_consequences_empty(self) -> None:
         profile = _fresh_profile()
-        entry = profile.record_decision("bedroom", "Did nothing")
+        entry = profile.record_decision("penthouse", "Did nothing")
         assert entry.consequences == []
 
     def test_record_decision_has_unique_id(self) -> None:
@@ -253,20 +253,20 @@ class TestSummaries:
 
     def test_get_scene_summary_returns_string(self) -> None:
         profile = _fresh_profile()
-        profile.record_session_start("bedroom")
+        profile.record_session_start("penthouse")
         result = profile.get_scene_summary()
-        assert "bedroom" in result
+        assert "penthouse" in result
 
 
 class TestSerialization:
     def test_to_dict_from_dict_round_trip(self) -> None:
         profile = _fresh_profile()
         profile.display_name = "Alice"
-        sid = profile.record_session_start("bedroom")
+        sid = profile.record_session_start("penthouse")
         profile.record_session_end(sid)
         profile.update_relationship("lola", 30.0, notes="met her")
-        profile.record_decision("bedroom", "Chose friendship", ["lola +5"])
-        profile.reputation["bedroom"] = 42.0
+        profile.record_decision("penthouse", "Chose friendship", ["lola +5"])
+        profile.reputation["penthouse"] = 42.0
 
         data = profile.to_dict()
 
@@ -274,16 +274,16 @@ class TestSerialization:
         profile2.from_dict(data)
 
         assert profile2.display_name == "Alice"
-        assert profile2.scene_visits["bedroom"] == 1
+        assert profile2.scene_visits["penthouse"] == 1
         assert "lola" in profile2.relationships
         assert profile2.relationships["lola"].score == 30.0
         assert len(profile2.decisions) == 1
-        assert profile2.reputation["bedroom"] == 42.0
+        assert profile2.reputation["penthouse"] == 42.0
 
     def test_to_dict_is_json_serializable(self) -> None:
         profile = _fresh_profile()
         profile.update_relationship("lola", 10.0)
-        profile.record_decision("bedroom", "some choice")
+        profile.record_decision("penthouse", "some choice")
         data = profile.to_dict()
         # Must not raise
         json.dumps(data)

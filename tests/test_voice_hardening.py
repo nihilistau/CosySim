@@ -162,7 +162,7 @@ class TestBaseSceneRegisterTTSRoute:
 # ══════════════════════════════════════════════════════════════════════
 
 _NINE_SCENES = [
-    "bedroom", "phone", "lounge", "tavern",
+    "penthouse", "phone", "lounge", "tavern",
     "casino", "gallery", "arena", "realm", "neoncity",
 ]
 

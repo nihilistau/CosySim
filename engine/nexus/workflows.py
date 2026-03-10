@@ -12,7 +12,7 @@ Usage:
     # Generate character content
     cw = ContentWorkflow()
     cw.generate_greetings("lola", personality_tags=["flirty", "confident"])
-    cw.generate_scene_descriptions("bedroom")
+    cw.generate_scene_descriptions("penthouse")
 
     # Research a topic
     rw = ResearchWorkflow()

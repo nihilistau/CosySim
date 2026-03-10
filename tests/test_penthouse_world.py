@@ -1,11 +1,11 @@
-"""Tests for Bedroom scene — living world integration (v0.75 NEON CITY Track D).
+"""Tests for penthouse scene — living world integration (v0.75 NEON CITY Track D).
 
 Covers:
 - GET /api/world/context response shape
 - mood_modifier logic (heat/rep thresholds)
 - world_context capped at 3 items
-- get_bedroom_world_context skill
-- update_bedroom_reputation skill
+- get_penthouse_world_context skill
+- update_penthouse_reputation skill
 - PlayerState reset between tests
 """
 from __future__ import annotations
@@ -24,8 +24,8 @@ import pytest
 # Paths
 # ---------------------------------------------------------------------------
 
-BEDROOM_ROOT = Path(__file__).parent.parent / "content" / "scenes" / "bedroom"
-SKILLS_FILE  = BEDROOM_ROOT / "bedroom_skills.py"
+penthouse_ROOT = Path(__file__).parent.parent / "content" / "scenes" / "penthouse"
+SKILLS_FILE  = penthouse_ROOT / "penthouse_skills.py"
 
 # ---------------------------------------------------------------------------
 # Minimal SimEvent stub for testing (mirrors engine.world.world_sim.SimEvent)
@@ -80,7 +80,7 @@ def flask_client():
     @app.route("/api/world/context")
     def _world_context_route():
         events = get_event_log(limit=20)
-        relevant = [e for e in events if e.scene == "bedroom" or e.intensity >= 2.0][:3]
+        relevant = [e for e in events if e.scene == "penthouse" or e.intensity >= 2.0][:3]
         wc = [f"{e.title}: {e.description}" for e in relevant]
         ps = get_player_state()
         state = ps.to_dict()
@@ -109,14 +109,14 @@ def mock_events():
 
 
 # ---------------------------------------------------------------------------
-# Helper: build a BedroomScene._get_world_context_for_character directly
+# Helper: build a PenthouseScene._get_world_context_for_character directly
 # ---------------------------------------------------------------------------
 
 
 def _make_world_context_fn(events, ps_state: dict):
     """Return a callable equivalent to _get_world_context_for_character, seeded with test data."""
     def _fn():
-        relevant = [e for e in events if e.scene == "bedroom" or e.intensity >= 2.0][:3]
+        relevant = [e for e in events if e.scene == "penthouse" or e.intensity >= 2.0][:3]
         wc = [f"{e.title}: {e.description}" for e in relevant]
         credits = ps_state.get("credits", 0)
         rep     = ps_state.get("reputation", 50)
@@ -232,7 +232,7 @@ class TestWorldContextLength:
 
     def test_at_most_3_items_from_many_events(self):
         events = [
-            _SimEvent(id=f"e{i}", title=f"T{i}", description=f"D{i}", scene="bedroom", intensity=3.0)
+            _SimEvent(id=f"e{i}", title=f"T{i}", description=f"D{i}", scene="penthouse", intensity=3.0)
             for i in range(10)
         ]
         fn = _make_world_context_fn(events, {"credits": 0, "reputation": 50, "heat": 0})
@@ -249,10 +249,10 @@ class TestWorldContextLength:
         assert len(ctx["world_context"]) == 1
         assert "High" in ctx["world_context"][0]
 
-    def test_bedroom_scene_events_included_regardless_of_intensity(self):
+    def test_penthouse_scene_events_included_regardless_of_intensity(self):
         events = [
-            _SimEvent(id="b1", title="BedEvent", description="Low but in bedroom",
-                      scene="bedroom", intensity=0.1),
+            _SimEvent(id="b1", title="BedEvent", description="Low but in penthouse",
+                      scene="penthouse", intensity=0.1),
         ]
         fn = _make_world_context_fn(events, {"credits": 0, "reputation": 50, "heat": 0})
         ctx = fn()
@@ -274,7 +274,7 @@ class TestWorldContextLength:
 
 
 def _import_skills_module():
-    """Import bedroom_skills with mocked deps; @skill passes through the function."""
+    """Import penthouse_skills with mocked deps; @skill passes through the function."""
     skill_mock = MagicMock()
     # Make @skill(...)  return a passthrough decorator
     skill_mock.side_effect = lambda *a, **kw: lambda fn: fn
@@ -289,81 +289,81 @@ def _import_skills_module():
         "engine.mcp.state_coordinator": MagicMock(),
     }
     with patch.dict("sys.modules", mocks):
-        sys.modules.pop("bedroom_skills_test", None)
-        spec = importlib.util.spec_from_file_location("bedroom_skills_test", SKILLS_FILE)
+        sys.modules.pop("penthouse_skills_test", None)
+        spec = importlib.util.spec_from_file_location("penthouse_skills_test", SKILLS_FILE)
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)  # type: ignore[union-attr]
     return mod
 
 
-class TestGetBedroomWorldContextSkill:
-    """get_bedroom_world_context returns a formatted string."""
+class TestGetpenthouseWorldContextSkill:
+    """get_penthouse_world_context returns a formatted string."""
 
     def test_returns_string(self, player_state):
         mod = _import_skills_module()
         with patch("engine.world.world_sim.get_event_log", return_value=[]):
-            result = mod.get_bedroom_world_context()
+            result = mod.get_penthouse_world_context()
         assert isinstance(result, str)
 
     def test_contains_credits_label(self, player_state):
         mod = _import_skills_module()
         with patch("engine.world.world_sim.get_event_log", return_value=[]):
-            result = mod.get_bedroom_world_context()
+            result = mod.get_penthouse_world_context()
         assert "Credits" in result
 
     def test_contains_mood_label(self, player_state):
         mod = _import_skills_module()
         with patch("engine.world.world_sim.get_event_log", return_value=[]):
-            result = mod.get_bedroom_world_context()
+            result = mod.get_penthouse_world_context()
         assert "Mood" in result
 
     def test_includes_event_title_when_relevant(self, player_state):
         ev = _SimEvent(id="e1", title="Fire at Penthouse", description="Sprinklers triggered",
-                       scene="bedroom", intensity=2.0)
+                       scene="penthouse", intensity=2.0)
         mod = _import_skills_module()
         with patch("engine.world.world_sim.get_event_log", return_value=[ev]):
-            result = mod.get_bedroom_world_context()
+            result = mod.get_penthouse_world_context()
         assert "Fire at Penthouse" in result
 
 
-class TestUpdateBedroomReputationSkill:
-    """update_bedroom_reputation modifies PlayerState and returns confirmation."""
+class TestUpdatepenthouseReputationSkill:
+    """update_penthouse_reputation modifies PlayerState and returns confirmation."""
 
     def test_positive_delta_increases_rep(self, player_state):
         initial = player_state.to_dict()["reputation"]
         mod = _import_skills_module()
-        mod.update_bedroom_reputation(delta=10)
+        mod.update_penthouse_reputation(delta=10)
         assert player_state.to_dict()["reputation"] == initial + 10
 
     def test_negative_delta_decreases_rep(self, player_state):
         initial = player_state.to_dict()["reputation"]
         mod = _import_skills_module()
-        mod.update_bedroom_reputation(delta=-5)
+        mod.update_penthouse_reputation(delta=-5)
         assert player_state.to_dict()["reputation"] == initial - 5
 
     def test_zero_delta_returns_no_change_message(self):
         mod = _import_skills_module()
-        result = mod.update_bedroom_reputation(delta=0)
+        result = mod.update_penthouse_reputation(delta=0)
         assert "No reputation change" in result
 
     def test_returns_new_rep_in_string(self, player_state):
         mod = _import_skills_module()
-        result = mod.update_bedroom_reputation(delta=5, reason="test")
+        result = mod.update_penthouse_reputation(delta=5, reason="test")
         assert str(player_state.to_dict()["reputation"]) in result
 
     def test_custom_reason_in_return(self, player_state):
         mod = _import_skills_module()
-        result = mod.update_bedroom_reputation(delta=3, reason="charmed_lola")
+        result = mod.update_penthouse_reputation(delta=3, reason="charmed_lola")
         assert "charmed_lola" in result
 
     def test_rep_clamped_at_100(self, player_state):
         player_state.update_reputation(100, "max")  # set to near max
         mod = _import_skills_module()
-        mod.update_bedroom_reputation(delta=50)
+        mod.update_penthouse_reputation(delta=50)
         assert player_state.to_dict()["reputation"] <= 100
 
     def test_rep_clamped_at_0(self, player_state):
         player_state.update_reputation(-100, "min")  # set to near min
         mod = _import_skills_module()
-        mod.update_bedroom_reputation(delta=-50)
+        mod.update_penthouse_reputation(delta=-50)
         assert player_state.to_dict()["reputation"] >= 0

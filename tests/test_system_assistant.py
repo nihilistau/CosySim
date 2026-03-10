@@ -21,8 +21,8 @@ def _make_assistant():
 def _mock_port_registry():
     """Build a mock PortRegistry with a tiny scene list."""
     reg = MagicMock()
-    reg.SERVICE_GROUPS = {"scenes": ["bedroom", "casino"]}
-    reg.get_port = MagicMock(side_effect=lambda n: {"bedroom": 5556, "casino": 5559}[n])
+    reg.SERVICE_GROUPS = {"scenes": ["penthouse", "casino"]}
+    reg.get_port = MagicMock(side_effect=lambda n: {"penthouse": 5556, "casino": 5559}[n])
     return reg
 
 
@@ -160,8 +160,8 @@ class TestChat:
         assert result["timestamp"] <= time.time()
 
     def test_chat_tracks_scene_id(self, assistant):
-        result = assistant.chat("hello", scene_id="bedroom")
-        assert result["scene_id"] == "bedroom"
+        result = assistant.chat("hello", scene_id="penthouse")
+        assert result["scene_id"] == "penthouse"
 
     def test_chat_remembers_scene_id(self, assistant):
         assistant.chat("hello", scene_id="casino")
@@ -206,7 +206,7 @@ class TestCommandStatus:
             "vram_used_mb": 6000,
             "vram_total_mb": 12000,
             "loaded_models": ["model-a"],
-            "active_scenes": ["bedroom", "casino"],
+            "active_scenes": ["penthouse", "casino"],
             "agent_count": 3,
         })
         return a
@@ -221,7 +221,7 @@ class TestCommandStatus:
 
     def test_status_reply_has_scenes(self, assistant):
         result = assistant.chat("status")
-        assert "bedroom" in result["reply"]
+        assert "penthouse" in result["reply"]
         assert "casino" in result["reply"]
 
     def test_status_reply_has_vram(self, assistant):
@@ -258,7 +258,7 @@ class TestCommandScenes:
     def assistant(self):
         a = _make_assistant()
         a.get_scene_list = MagicMock(return_value=[
-            {"id": "bedroom", "port": 5556, "label": "Bedroom", "status": "online"},
+            {"id": "penthouse", "port": 5556, "label": "penthouse", "status": "online"},
             {"id": "casino", "port": 5559, "label": "Casino", "status": "offline"},
         ])
         return a
@@ -273,7 +273,7 @@ class TestCommandScenes:
 
     def test_scenes_reply_has_label(self, assistant):
         result = assistant.chat("scenes")
-        assert "Bedroom" in result["reply"]
+        assert "penthouse" in result["reply"]
         assert "Casino" in result["reply"]
 
     def test_scenes_reply_has_port(self, assistant):
@@ -300,28 +300,28 @@ class TestCommandNavigate:
     def assistant(self):
         a = _make_assistant()
         a.get_scene_list = MagicMock(return_value=[
-            {"id": "bedroom", "port": 5556, "label": "Bedroom", "status": "online"},
+            {"id": "penthouse", "port": 5556, "label": "penthouse", "status": "online"},
             {"id": "casino", "port": 5559, "label": "Casino", "status": "offline"},
         ])
         return a
 
-    def test_go_to_bedroom_source(self, assistant):
-        result = assistant.chat("go to bedroom")
+    def test_go_to_penthouse_source(self, assistant):
+        result = assistant.chat("go to penthouse")
         assert result["source"] == "command"
 
-    def test_go_to_bedroom_mood(self, assistant):
-        result = assistant.chat("go to bedroom")
+    def test_go_to_penthouse_mood(self, assistant):
+        result = assistant.chat("go to penthouse")
         assert result["mood"] == "excited"
 
-    def test_go_to_bedroom_has_action(self, assistant):
-        result = assistant.chat("go to bedroom")
+    def test_go_to_penthouse_has_action(self, assistant):
+        result = assistant.chat("go to penthouse")
         assert "action" in result
         assert result["action"]["type"] == "navigate"
         assert result["action"]["port"] == 5556
 
-    def test_go_to_bedroom_reply(self, assistant):
-        result = assistant.chat("go to bedroom")
-        assert "Bedroom" in result["reply"]
+    def test_go_to_penthouse_reply(self, assistant):
+        result = assistant.chat("go to penthouse")
+        assert "penthouse" in result["reply"]
         assert "🚀" in result["reply"]
 
     def test_navigate_to_casino(self, assistant):
@@ -336,8 +336,8 @@ class TestCommandNavigate:
         assert "action" not in result
 
     def test_go_to_partial_match(self, assistant):
-        """Partial ID match works (e.g. 'bed' matches 'bedroom')."""
-        result = assistant.chat("go to bed")
+        """Partial ID match works (e.g. 'pent' matches 'penthouse')."""
+        result = assistant.chat("go to pent")
         assert "action" in result
         assert result["action"]["port"] == 5556
 
@@ -386,7 +386,7 @@ class TestGetSystemSummary:
             mock_rm.return_value.status.return_value = {
                 "vram_used_mb": 4000, "vram_total_mb": 12000,
             }
-            mock_scenes.return_value = {"bedroom": MagicMock()}
+            mock_scenes.return_value = {"penthouse": MagicMock()}
             mock_reg.return_value.list_characters.return_value = ["aria", "npc1"]
 
             summary = assistant.get_system_summary()
@@ -467,22 +467,22 @@ class TestGetSceneList:
         mock_get_reg.return_value = _mock_port_registry()
         result = assistant.get_scene_list()
         ids = [s["id"] for s in result]
-        assert "bedroom" in ids
+        assert "penthouse" in ids
         assert "casino" in ids
 
     @patch("engine.port_registry.get_port_registry")
     def test_scene_port_correct(self, mock_get_reg, assistant):
         mock_get_reg.return_value = _mock_port_registry()
         result = assistant.get_scene_list()
-        bedroom = [s for s in result if s["id"] == "bedroom"][0]
-        assert bedroom["port"] == 5556
+        penthouse = [s for s in result if s["id"] == "penthouse"][0]
+        assert penthouse["port"] == 5556
 
     @patch("engine.port_registry.get_port_registry")
     def test_scene_label_is_titled(self, mock_get_reg, assistant):
         mock_get_reg.return_value = _mock_port_registry()
         result = assistant.get_scene_list()
-        bedroom = [s for s in result if s["id"] == "bedroom"][0]
-        assert bedroom["label"] == "Bedroom"
+        penthouse = [s for s in result if s["id"] == "penthouse"][0]
+        assert penthouse["label"] == "Penthouse"
 
 
 # ═══════════════════════════════════════════════════════════════

@@ -61,7 +61,7 @@ class TestLauncherEventCascadeWiring:
         """launcher.py VERSION is at least 0.91b."""
         import pathlib
         src = pathlib.Path("launcher.py").read_text(encoding="utf-8")
-        assert 'VERSION = "0.91b"' in src
+        assert 'VERSION = "1.02b"' in src
 
 
 # ──── BaseScene._wire_event_cascade ──────────────────────────────────────────
@@ -87,14 +87,14 @@ class TestBaseSceneWireEventCascade:
             cascade = MagicMock()
             mock_get.return_value = cascade
 
-            scene = self._make_scene("bedroom")
+            scene = self._make_scene("penthouse")
             scene._wire_event_cascade()
 
             cascade.subscribe.assert_called_once()
             args = cascade.subscribe.call_args
-            assert args[0][0] == "bedroom"
+            assert args[0][0] == "penthouse"
             subscribed = set(args[0][1])
-            expected = set(DEFAULT_SCENE_SUBSCRIPTIONS["bedroom"])
+            expected = set(DEFAULT_SCENE_SUBSCRIPTIONS["penthouse"])
             assert subscribed == expected
 
     def test_unknown_scene_does_not_subscribe(self) -> None:
@@ -126,7 +126,7 @@ class TestBaseSceneWireEventCascade:
     def test_cascade_import_failure_is_silent(self) -> None:
         """If EventCascade is unavailable the method does not raise."""
         with patch.dict("sys.modules", {"engine.world.event_cascade": None}):
-            scene = self._make_scene("bedroom")
+            scene = self._make_scene("penthouse")
             # Should not raise even when the module is unavailable
             try:
                 scene._wire_event_cascade()

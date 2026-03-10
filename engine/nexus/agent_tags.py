@@ -8,8 +8,8 @@ Usage:
     from engine.nexus.agent_tags import get_task_manager
     mgr = get_task_manager()
 
-    task_id = mgr.create_task("Fix bedroom dropdowns", agent="copilot",
-                              priority="high", tags=["bedroom", "bug"])
+    task_id = mgr.create_task("Fix penthouse dropdowns", agent="copilot",
+                              priority="high", tags=["penthouse", "bug"])
     mgr.update_status(task_id, "in_progress")
     mgr.complete_task(task_id, summary="Fixed character state broadcast")
     tasks = mgr.list_tasks(status="pending", agent="copilot")
@@ -37,7 +37,7 @@ class AgentTask:
     title: str = ""
     description: str = ""
     status: str = "pending"  # pending | in_progress | done | blocked | cancelled
-    agent: str = ""          # who is assigned (copilot, scene:bedroom, etc.)
+    agent: str = ""          # who is assigned (copilot, scene:penthouse, etc.)
     priority: str = "normal" # low | normal | high | critical
     tags: List[str] = field(default_factory=list)
     created_at: float = 0.0

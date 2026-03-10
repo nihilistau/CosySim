@@ -21,7 +21,7 @@
 
 /* ── 1. Per-scene CSS custom property overrides ───────────────────────── */
 
-[data-scene="bedroom"]  { --cs-scene-accent: #8b5cf6; --cs-scene-glow: rgba(139, 92, 246, 0.20); }
+[data-scene="penthouse"]  { --cs-scene-accent: #8b5cf6; --cs-scene-glow: rgba(139, 92, 246, 0.20); }
 [data-scene="phone"]    { --cs-scene-accent: #22d3ee; --cs-scene-glow: rgba(34, 211, 238, 0.18); }
 [data-scene="lounge"]   { --cs-scene-accent: #9ca3af; --cs-scene-glow: rgba(156, 163, 175, 0.12); }
 [data-scene="tavern"]   { --cs-scene-accent: #f97316; --cs-scene-glow: rgba(249, 115, 22, 0.20); }
@@ -41,8 +41,8 @@
  * will-change hints the GPU to composite the element before animation starts.
  */
 
-[data-scene="bedroom"] {
-  animation: bedroom-glow 15s ease-in-out infinite;
+[data-scene="penthouse"] {
+  animation: penthouse-glow 15s ease-in-out infinite;
   will-change: box-shadow;
 }
 
@@ -120,8 +120,8 @@
 
 /* ── 4. @keyframes — 9 distinct animations ────────────────────────────── */
 
-/* Bedroom — deep purple haze pulse: dual-radius inset vignette breathes in/out */
-@keyframes bedroom-glow {
+/* penthouse — deep purple haze pulse: dual-radius inset vignette breathes in/out */
+@keyframes penthouse-glow {
   0%   {
     box-shadow:
       inset 0 0  80px rgba(139, 92, 246, 0.00),
@@ -276,8 +276,8 @@
 
 /* ── 5. Interactive element accent per scene ──────────────────────────── */
 
-[data-scene="bedroom"]  .btn-primary,
-[data-scene="bedroom"]  .cs-accent { color: var(--cs-scene-accent); }
+[data-scene="penthouse"]  .btn-primary,
+[data-scene="penthouse"]  .cs-accent { color: var(--cs-scene-accent); }
 
 [data-scene="phone"]    .btn-primary,
 [data-scene="phone"]    .cs-accent { color: var(--cs-scene-accent); }
@@ -307,7 +307,7 @@
 [data-scene="grid"]     .cs-accent { color: var(--cs-scene-accent); }
 
 /* Focus ring — match scene accent */
-[data-scene="bedroom"]  :focus-visible { outline-color: var(--cs-scene-accent); }
+[data-scene="penthouse"]  :focus-visible { outline-color: var(--cs-scene-accent); }
 [data-scene="phone"]    :focus-visible { outline-color: var(--cs-scene-accent); }
 [data-scene="lounge"]   :focus-visible { outline-color: var(--cs-scene-accent); }
 [data-scene="tavern"]   :focus-visible { outline-color: var(--cs-scene-accent); }
@@ -320,7 +320,7 @@
 
 /* ── 6. Scrollbar accent per scene ────────────────────────────────────── */
 
-[data-scene="bedroom"]  ::-webkit-scrollbar-thumb { background: var(--cs-scene-accent); }
+[data-scene="penthouse"]  ::-webkit-scrollbar-thumb { background: var(--cs-scene-accent); }
 [data-scene="phone"]    ::-webkit-scrollbar-thumb { background: var(--cs-scene-accent); }
 [data-scene="lounge"]   ::-webkit-scrollbar-thumb { background: var(--cs-scene-accent); }
 [data-scene="tavern"]   ::-webkit-scrollbar-thumb { background: var(--cs-scene-accent); }
@@ -344,4 +344,65 @@
     animation: none !important;
     transition: none !important;
   }
+}
+
+/* ── 8. AAA++ Scene-specific ambient glow overlays ─────────────────────── */
+/*
+ * Subtle radial glow cast from the bottom-center of each scene to
+ * reinforce the per-scene colour identity on panels, borders, and shadows.
+ */
+
+[data-scene] .neon-panel {
+  border-color: rgba(var(--scene-accent-rgb, 0 229 255), 0.08);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.6),
+    0 0 1px rgba(var(--scene-accent-rgb, 0 229 255), 0.15);
+}
+
+[data-scene] .neon-panel:hover {
+  border-color: rgba(var(--scene-accent-rgb, 0 229 255), 0.25);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.6),
+    0 4px 24px var(--cs-scene-glow, rgba(0, 229, 255, 0.12)),
+    0 0 1px rgba(var(--scene-accent-rgb, 0 229 255), 0.3);
+}
+
+/* Per-scene ambient glow overlay — bottom-edge radial tint */
+[data-scene]::after {
+  content: '';
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 40vh;
+  background: radial-gradient(
+    ellipse at 50% 100%,
+    var(--cs-scene-glow, rgba(0, 229, 255, 0.06)) 0%,
+    transparent 70%
+  );
+  pointer-events: none;
+  z-index: -1;
+  opacity: 0.6;
+}
+
+/* Scene-specific accent intensity tuning */
+[data-scene="arena"]::after    { opacity: 0.8; }
+[data-scene="casino"]::after   { opacity: 0.7; }
+[data-scene="tavern"]::after   { opacity: 0.75; }
+[data-scene="neoncity"]::after { opacity: 0.7; }
+[data-scene="grid"]::after     { opacity: 0.85; }
+
+/* Scene-accent-tinted borders for interactive elements */
+[data-scene] .neon-btn {
+  border-color: rgba(var(--scene-accent-rgb, 0 229 255), 0.25);
+}
+
+[data-scene] .neon-btn:hover {
+  box-shadow: 0 0 16px var(--cs-scene-glow, rgba(0, 229, 255, 0.2)),
+              inset 0 0 8px rgba(var(--scene-accent-rgb, 0 229 255), 0.08);
+}
+
+[data-scene] .neon-chat__input:focus {
+  box-shadow: 0 0 0 2px var(--cs-scene-glow, rgba(0, 229, 255, 0.15)),
+              0 0 12px var(--cs-scene-glow, rgba(0, 229, 255, 0.1));
 }

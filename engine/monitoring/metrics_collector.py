@@ -123,7 +123,7 @@ class MetricsCollector:
         """Record an HTTP request handled by a scene.
 
         Args:
-            scene_name:  Scene slug (e.g. ``"bedroom"``).
+            scene_name:  Scene slug (e.g. ``"penthouse"``).
             endpoint:    Request path or route name.
             latency_ms:  Handler latency in milliseconds.
         """

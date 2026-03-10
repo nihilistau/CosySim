@@ -502,7 +502,7 @@ Saves significant compute every day.
 Examples:
 - "How do I run the test suite?"
 - "What is the @skill decorator signature?"
-- "What port does the bedroom scene run on?"
+- "What port does the penthouse scene run on?"
 - "What is the current CosySim version?"
 
 ## Priority 4 — Frequently Queried

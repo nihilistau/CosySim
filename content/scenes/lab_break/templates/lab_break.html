@@ -4,8 +4,18 @@
 {% set scene_accent = '#10b981' %}
 {% set scene_accent_rgb = '16 185 129' %}
 
+{% block head_scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+{% endblock %}
+
 {% block head_css %}
   <link rel="stylesheet" href="{{ url_for('static', filename='css/lab_break.css') }}">
+{% endblock %}
+
+{% block scene_background %}
+<div id="lab-scene-container" style="position:fixed;inset:0;z-index:0;pointer-events:none;">
+  <canvas id="lab-canvas"></canvas>
+</div>
 {% endblock %}
 
 {% block scene_content %}
@@ -209,4 +219,5 @@
 
 {% block body_scripts %}
   <script src="/static/js/lab_break.js"></script>
+  <script src="{{ url_for('static', filename='lab_3d.js') }}"></script>
 {% endblock %}

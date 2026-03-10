@@ -52,19 +52,19 @@ class TestDialogOption:
 class TestDialogNode:
     def test_matches_with_overlapping_tags(self):
         from engine.mcp.dialog_system import DialogNode
-        node = DialogNode(node_id="n1", scene="bedroom", situation="test",
+        node = DialogNode(node_id="n1", scene="penthouse", situation="test",
                           tags=["cuddle", "close"])
         assert node.matches(["cuddle", "kiss"]) is True
 
     def test_matches_with_no_overlap(self):
         from engine.mcp.dialog_system import DialogNode
-        node = DialogNode(node_id="n1", scene="bedroom", situation="test",
+        node = DialogNode(node_id="n1", scene="penthouse", situation="test",
                           tags=["cuddle", "close"])
         assert node.matches(["fight", "run"]) is False
 
     def test_matches_empty_context_returns_true(self):
         from engine.mcp.dialog_system import DialogNode
-        node = DialogNode(node_id="n1", scene="bedroom", situation="test",
+        node = DialogNode(node_id="n1", scene="penthouse", situation="test",
                           tags=["cuddle"])
         assert node.matches([]) is True
 
@@ -292,7 +292,7 @@ class TestSpeechEnhancer:
 class TestDialogSystem:
     def test_init_bootstraps_trees(self):
         ds = _fresh_dialog_system()
-        bedroom_tree = ds.get_tree("bedroom")
+        bedroom_tree = ds.get_tree("penthouse")
         assert bedroom_tree is not None
         assert len(bedroom_tree._nodes) > 0
 
@@ -304,7 +304,7 @@ class TestDialogSystem:
 
     def test_get_options_returns_dicts(self):
         ds = _fresh_dialog_system()
-        opts = ds.get_options("aria", "bedroom", context_tags=["cuddle"])
+        opts = ds.get_options("aria", "penthouse", context_tags=["cuddle"])
         assert isinstance(opts, list)
         if opts:
             assert "label" in opts[0]
@@ -342,9 +342,9 @@ class TestDialogSystem:
 
     def test_set_and_get_directive(self):
         ds = _fresh_dialog_system()
-        ds.set_directive("aria", "bedroom", "force_response",
+        ds.set_directive("aria", "penthouse", "force_response",
                          "She leans in.", turns=2)
-        d = ds.get_active_directive("aria", "bedroom")
+        d = ds.get_active_directive("aria", "penthouse")
         assert d is not None
         assert d.directive_type == "force_response"
         assert d.value == "She leans in."
@@ -352,19 +352,19 @@ class TestDialogSystem:
 
     def test_consume_directive_decrements_turns(self):
         ds = _fresh_dialog_system()
-        ds.set_directive("aria", "bedroom", "must_include",
+        ds.set_directive("aria", "penthouse", "must_include",
                          "blushes", turns=1)
-        consumed = ds.consume_directive("aria", "bedroom")
+        consumed = ds.consume_directive("aria", "penthouse")
         assert consumed is not None
         assert consumed.value == "blushes"
         # After consumption, directive is cleared
-        assert ds.get_active_directive("aria", "bedroom") is None
+        assert ds.get_active_directive("aria", "penthouse") is None
 
     def test_clear_directive(self):
         ds = _fresh_dialog_system()
-        ds.set_directive("aria", "bedroom", "topic_steer", "stars")
-        ds.clear_directive("aria", "bedroom")
-        assert ds.get_active_directive("aria", "bedroom") is None
+        ds.set_directive("aria", "penthouse", "topic_steer", "stars")
+        ds.clear_directive("aria", "penthouse")
+        assert ds.get_active_directive("aria", "penthouse") is None
 
     def test_directive_lifecycle_set_get_clear(self):
         ds = _fresh_dialog_system()
@@ -380,30 +380,30 @@ class TestDialogSystem:
 
     def test_conversation_heat(self):
         ds = _fresh_dialog_system()
-        assert ds.get_conversation_heat("aria", "bedroom") == 0.0
-        new_heat = ds.bump_heat("aria", "bedroom", 30)
+        assert ds.get_conversation_heat("aria", "penthouse") == 0.0
+        new_heat = ds.bump_heat("aria", "penthouse", 30)
         assert new_heat == 30.0
-        assert ds.get_conversation_heat("aria", "bedroom") == 30.0
+        assert ds.get_conversation_heat("aria", "penthouse") == 30.0
 
     def test_heat_clamped(self):
         ds = _fresh_dialog_system()
-        ds.bump_heat("aria", "bedroom", 200)
-        assert ds.get_conversation_heat("aria", "bedroom") == 100.0
+        ds.bump_heat("aria", "penthouse", 200)
+        assert ds.get_conversation_heat("aria", "penthouse") == 100.0
 
     def test_record_and_get_topics(self):
         ds = _fresh_dialog_system()
-        ds.record_topics("aria", "bedroom", ["cuddle", "kiss"])
-        ds.record_topics("aria", "bedroom", ["talk"])
-        tags = ds.get_recent_topics("aria", "bedroom")
+        ds.record_topics("aria", "penthouse", ["cuddle", "kiss"])
+        ds.record_topics("aria", "penthouse", ["talk"])
+        tags = ds.get_recent_topics("aria", "penthouse")
         assert "cuddle" in tags
         assert "talk" in tags
 
     def test_tick_and_get_turn(self):
         ds = _fresh_dialog_system()
-        assert ds.get_turn("aria", "bedroom") == 0
-        ds.tick("aria", "bedroom")
-        ds.tick("aria", "bedroom")
-        assert ds.get_turn("aria", "bedroom") == 2
+        assert ds.get_turn("aria", "penthouse") == 0
+        ds.tick("aria", "penthouse")
+        ds.tick("aria", "penthouse")
+        assert ds.get_turn("aria", "penthouse") == 2
 
     def test_build_memory_hook_empty(self):
         ds = _fresh_dialog_system()
@@ -430,23 +430,23 @@ class TestDialogSystem:
 
     def test_separate_convo_per_character_scene(self):
         ds = _fresh_dialog_system()
-        ds.bump_heat("aria", "bedroom", 50)
-        ds.bump_heat("luna", "bedroom", 10)
-        assert ds.get_conversation_heat("aria", "bedroom") == 50.0
-        assert ds.get_conversation_heat("luna", "bedroom") == 10.0
+        ds.bump_heat("aria", "penthouse", 50)
+        ds.bump_heat("luna", "penthouse", 10)
+        assert ds.get_conversation_heat("aria", "penthouse") == 50.0
+        assert ds.get_conversation_heat("luna", "penthouse") == 10.0
 
     def test_style_lock_via_set_directive(self):
         ds = _fresh_dialog_system()
-        ds.set_directive("aria", "bedroom", "style_lock", "charged", turns=2)
-        d = ds.get_active_directive("aria", "bedroom")
+        ds.set_directive("aria", "penthouse", "style_lock", "charged", turns=2)
+        d = ds.get_active_directive("aria", "penthouse")
         assert d.directive_type == "style_lock"
         assert d.value == "charged"
 
     def test_record_response_and_branch(self):
         ds = _fresh_dialog_system()
-        ds.record_response("aria", "bedroom", "resp-001", "happy")
-        ds.record_response("aria", "bedroom", "resp-002", "excited")
-        branch = ds.get_branch_point("aria", "bedroom", 0)
+        ds.record_response("aria", "penthouse", "resp-001", "happy")
+        ds.record_response("aria", "penthouse", "resp-002", "excited")
+        branch = ds.get_branch_point("aria", "penthouse", 0)
         assert branch == "resp-001"
 
 

@@ -12,7 +12,7 @@ agents are registered, batch inference is used for parallel decisions.
 
 Usage::
 
-    loop = AgentLoop(scene_map, db, socketio, scene_id="bedroom")
+    loop = AgentLoop(scene_map, db, socketio, scene_id="penthouse")
     loop.register_character(char_a)
     loop.register_character(char_b)
     loop.start(interval=30)
@@ -66,7 +66,7 @@ class AgentLoop:
         db=None,
         socketio=None,
         llm_url: str = "",
-        scene_id: str = "bedroom",
+        scene_id: str = "penthouse",
     ):
         self.scene_map = scene_map
         self.db = db

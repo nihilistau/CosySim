@@ -6,7 +6,7 @@
   'use strict';
 
   const SCENE_AMBIENTS = {
-    bedroom:  { type: 'rain',          volume: 0.08, bpm: 0 },
+    penthouse:  { type: 'rain',          volume: 0.08, bpm: 0 },
     casino:   { type: 'crowd',         volume: 0.06, bpm: 120 },
     arena:    { type: 'crowd_intense', volume: 0.1,  bpm: 140 },
     tavern:   { type: 'tavern_noise',  volume: 0.07, bpm: 80 },
@@ -23,7 +23,7 @@
       this.nodes = [];
       this.volume = 0.5;
       this.enabled = false;
-      this.scene = document.body?.dataset?.scene || 'bedroom';
+      this.scene = document.body?.dataset?.scene || 'penthouse';
       this._initOnInteraction();
     }
 
@@ -42,7 +42,7 @@
     }
 
     _startAmbient() {
-      const config = SCENE_AMBIENTS[this.scene] || SCENE_AMBIENTS.bedroom;
+      const config = SCENE_AMBIENTS[this.scene] || SCENE_AMBIENTS.penthouse;
       this.enabled = true;
 
       const gainNode = this.ctx.createGain();

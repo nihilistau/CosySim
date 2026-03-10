@@ -49,8 +49,8 @@ class TestNexusInit:
 
     def test_init_sets_scene_id(self):
         """Scene id is stored on the instance."""
-        scene = _init_scene(_make_mock_client(), scene_id="bedroom")
-        assert scene._nexus_scene_id == "bedroom"
+        scene = _init_scene(_make_mock_client(), scene_id="penthouse")
+        assert scene._nexus_scene_id == "penthouse"
 
     def test_init_client_available(self):
         """When the client reports available, flag is set True."""
@@ -386,15 +386,15 @@ class TestStoreMemory:
 
     def test_calls_add_entry_with_correct_params(self):
         client = _make_mock_client()
-        scene = _init_scene(client, scene_id="bedroom")
+        scene = _init_scene(client, scene_id="penthouse")
         scene.nexus_store_memory("npc_01", "saw player enter", importance="high")
         client.add_entry.assert_called_once_with(
-            title="Memory: npc_01 in bedroom",
+            title="Memory: npc_01 in penthouse",
             content="saw player enter",
             content_type="memory",
-            category="bedroom",
-            tags=["bedroom", "npc_01", "memory", "high"],
-            created_by="scene:bedroom",
+            category="penthouse",
+            tags=["penthouse", "npc_01", "memory", "high"],
+            created_by="scene:penthouse",
         )
 
     def test_default_importance_is_normal(self):

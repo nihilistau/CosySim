@@ -4,7 +4,7 @@ tests/test_interaction_trees.py
 
 Unit tests for engine.mcp.interaction_trees:
   - InteractionSubtype / InteractionType data classes
-  - BEDROOM_INTERACTIONS / PHONE_INTERACTIONS registries
+  - PENTHOUSE_INTERACTIONS / PHONE_INTERACTIONS registries
   - get_interaction_result() resolver
   - list_interaction_types()
   - get_available_interactions()
@@ -17,7 +17,7 @@ from __future__ import annotations
 import unittest
 
 from engine.mcp.interaction_trees import (
-    BEDROOM_INTERACTIONS,
+    PENTHOUSE_INTERACTIONS,
     PHONE_INTERACTIONS,
     InteractionSubtype,
     InteractionType,
@@ -97,20 +97,20 @@ class TestInteractionType(unittest.TestCase):
 class TestBedroomInteractions(unittest.TestCase):
     def test_expected_types_exist(self):
         expected = {"cuddle", "kiss", "caress", "striptease"}
-        self.assertTrue(expected.issubset(set(BEDROOM_INTERACTIONS.keys())))
+        self.assertTrue(expected.issubset(set(PENTHOUSE_INTERACTIONS.keys())))
 
     def test_each_type_has_subtypes(self):
-        for iid, it in BEDROOM_INTERACTIONS.items():
+        for iid, it in PENTHOUSE_INTERACTIONS.items():
             self.assertGreater(len(it.subtypes), 0, f"{iid} has no subtypes")
 
     def test_subtypes_have_phases(self):
-        for iid, it in BEDROOM_INTERACTIONS.items():
+        for iid, it in PENTHOUSE_INTERACTIONS.items():
             for sub in it.subtypes:
                 self.assertGreater(len(sub.phases), 0,
                                    f"{iid}/{sub.id} has no phases")
 
     def test_subtypes_have_fragments(self):
-        for iid, it in BEDROOM_INTERACTIONS.items():
+        for iid, it in PENTHOUSE_INTERACTIONS.items():
             for sub in it.subtypes:
                 self.assertGreater(len(sub.fragments), 0,
                                    f"{iid}/{sub.id} has no fragments")
@@ -201,7 +201,7 @@ class TestGetInteractionResult(unittest.TestCase):
 
 class TestListInteractionTypes(unittest.TestCase):
     def test_bedroom_types(self):
-        types = list_interaction_types("bedroom")
+        types = list_interaction_types("penthouse")
         self.assertIn("cuddle", types)
         self.assertIn("kiss", types)
         cuddle_info = types["cuddle"]
@@ -214,7 +214,7 @@ class TestListInteractionTypes(unittest.TestCase):
         self.assertIn("flirt_text", types)
 
     def test_subtype_entries_have_expected_keys(self):
-        types = list_interaction_types("bedroom")
+        types = list_interaction_types("penthouse")
         for sub in types["cuddle"]["subtypes"]:
             self.assertIn("id", sub)
             self.assertIn("label", sub)

@@ -153,10 +153,10 @@ class TestSessionManager:
 
     def test_set_scene(self, sm):
         s = sm.create_session("p1", "Alice")
-        assert sm.set_scene(s.session_id, "bedroom") is True
-        assert s.connected_scene == "bedroom"
+        assert sm.set_scene(s.session_id, "penthouse") is True
+        assert s.connected_scene == "penthouse"
         state = sm.get_state(s.session_id)
-        assert state.active_location == "bedroom"
+        assert state.active_location == "penthouse"
 
     def test_set_status(self, sm):
         from engine.multiplayer.session_manager import PlayerStatus
@@ -196,17 +196,17 @@ class TestSessionManager:
     def test_get_players_in_scene(self, sm):
         s1 = sm.create_session("p1", "Alice")
         s2 = sm.create_session("p2", "Bob")
-        sm.set_scene(s1.session_id, "bedroom")
-        sm.set_scene(s2.session_id, "bedroom")
-        players = sm.get_players_in_scene("bedroom")
+        sm.set_scene(s1.session_id, "penthouse")
+        sm.set_scene(s2.session_id, "penthouse")
+        players = sm.get_players_in_scene("penthouse")
         assert len(players) == 2
 
     def test_stats(self, sm):
         sm.create_session("p1", "Alice")
-        sm.set_scene(sm.get_session_by_player("p1").session_id, "bedroom")
+        sm.set_scene(sm.get_session_by_player("p1").session_id, "penthouse")
         stats = sm.get_stats()
         assert stats["total_sessions"] == 1
-        assert "bedroom" in stats["by_scene"]
+        assert "penthouse" in stats["by_scene"]
 
     def test_reset(self, sm):
         sm.create_session("p1", "Alice")
@@ -262,24 +262,24 @@ class TestPresenceTracker:
     def test_join_scene(self):
         result = self.pt.player_connected("p1", "Alice")
         sid = result["session_id"]
-        assert self.pt.player_joined_scene(sid, "bedroom") is True
-        players = self.pt.get_scene_occupancy("bedroom")
+        assert self.pt.player_joined_scene(sid, "penthouse") is True
+        players = self.pt.get_scene_occupancy("penthouse")
         assert len(players) == 1
 
     def test_scene_transition(self):
         result = self.pt.player_connected("p1", "Alice")
         sid = result["session_id"]
-        self.pt.player_joined_scene(sid, "bedroom")
+        self.pt.player_joined_scene(sid, "penthouse")
         self.pt.player_joined_scene(sid, "neoncity")
-        assert len(self.pt.get_scene_occupancy("bedroom")) == 0
+        assert len(self.pt.get_scene_occupancy("penthouse")) == 0
         assert len(self.pt.get_scene_occupancy("neoncity")) == 1
 
     def test_leave_scene(self):
         result = self.pt.player_connected("p1", "Alice")
         sid = result["session_id"]
-        self.pt.player_joined_scene(sid, "bedroom")
+        self.pt.player_joined_scene(sid, "penthouse")
         assert self.pt.player_left_scene(sid) is True
-        assert len(self.pt.get_scene_occupancy("bedroom")) == 0
+        assert len(self.pt.get_scene_occupancy("penthouse")) == 0
 
     def test_set_status(self):
         result = self.pt.player_connected("p1", "Alice")
@@ -297,11 +297,11 @@ class TestPresenceTracker:
     def test_get_all_presence(self):
         r1 = self.pt.player_connected("p1", "Alice")
         r2 = self.pt.player_connected("p2", "Bob")
-        self.pt.player_joined_scene(r1["session_id"], "bedroom")
-        self.pt.player_joined_scene(r2["session_id"], "bedroom")
+        self.pt.player_joined_scene(r1["session_id"], "penthouse")
+        self.pt.player_joined_scene(r2["session_id"], "penthouse")
         pres = self.pt.get_all_presence()
-        assert "bedroom" in pres
-        assert len(pres["bedroom"]) == 2
+        assert "penthouse" in pres
+        assert len(pres["penthouse"]) == 2
 
     def test_recent_events(self):
         self.pt.player_connected("p1", "Alice")
@@ -582,8 +582,8 @@ class TestMultiplayerSkills:
         sm = get_session_manager()
         s1 = sm.create_session("alice", "Alice")
         s2 = sm.create_session("bob", "Bob")
-        sm.set_scene(s1.session_id, "bedroom")
-        sm.set_scene(s2.session_id, "bedroom")
+        sm.set_scene(s1.session_id, "penthouse")
+        sm.set_scene(s2.session_id, "penthouse")
         yield
         reset_session_manager()
         reset_message_store()
@@ -597,7 +597,7 @@ class TestMultiplayerSkills:
 
     def test_who_is_here(self):
         from engine.skills.builtin.multiplayer_skills import who_is_here
-        result = who_is_here("bedroom")
+        result = who_is_here("penthouse")
         assert "Alice" in result
         assert "Bob" in result
 

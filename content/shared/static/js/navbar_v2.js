@@ -25,7 +25,7 @@
 
 /** Port map for scene health-check pings. */
 const SCENE_PORTS = {
-    bedroom:  5556,
+    penthouse:  5556,
     phone:    5555,
     lounge:   5557,
     tavern:   5558,
@@ -370,7 +370,7 @@ class CosyNavbar {
      * Fire a fetch against the scene health endpoint.
      * Uses a 4-second timeout; updates the status dot on result.
      *
-     * @param {string} sceneKey  Machine key, e.g. "bedroom".
+     * @param {string} sceneKey  Machine key, e.g. "penthouse".
      * @param {number} port      HTTP port the scene listens on.
      */
     _pingScene(sceneKey, port) {

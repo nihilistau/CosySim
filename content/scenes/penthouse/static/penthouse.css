@@ -4,9 +4,26 @@
  * Scene-specific styles on top of the CosySim design system.
  * Requires: design_tokens.css · cosysim-components.css · cosysim-animations.css
  *
- * This file handles ONLY layout & bedroom-specific overrides.
+ * This file handles ONLY layout & penthouse-specific overrides.
  * All glass panels, stat bars, buttons, and chips come from the shared system.
  */
+
+/* ══════════════════════════════════════════════════════════════
+   3D CANVAS BACKGROUND — Three.js room renders behind UI panels
+   ══════════════════════════════════════════════════════════════ */
+
+#scene-container {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: auto;
+}
+
+#penthouse-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
 
 /* ══════════════════════════════════════════════════════════════
    SCENE BODY — full viewport, deep black glass foundation
@@ -93,7 +110,7 @@
    3-COLUMN SCENE LAYOUT
    ══════════════════════════════════════════════════════════════ */
 
-.bedroom-layout {
+.penthouse-layout {
   display: grid;
   grid-template-columns: 280px 1fr 300px;
   grid-template-rows: 1fr;
@@ -108,7 +125,7 @@
    LEFT PANEL — Character portrait + emotion bars
    ══════════════════════════════════════════════════════════════ */
 
-.bedroom-character-panel {
+.penthouse-character-panel {
   display: flex;
   flex-direction: column;
   gap: 1rem;
@@ -125,7 +142,7 @@
 }
 
 /* Portrait wrapper */
-.bedroom-portrait-wrap {
+.penthouse-portrait-wrap {
   position: relative;
   display: flex;
   flex-direction: column;
@@ -135,7 +152,7 @@
   border-bottom: 1px solid var(--cs-glass-border);
 }
 
-.bedroom-portrait-img {
+.penthouse-portrait-img {
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -145,7 +162,7 @@
   background: var(--cs-bg-card);
 }
 
-.bedroom-portrait-overlay {
+.penthouse-portrait-overlay {
   position: absolute;
   inset: 0;
   border-radius: inherit;
@@ -157,7 +174,7 @@
   pointer-events: none;
 }
 
-.bedroom-char-name {
+.penthouse-char-name {
   font-size: 1rem;
   font-weight: 600;
   color: var(--cs-text-primary);
@@ -166,7 +183,7 @@
 }
 
 /* Speaking ring around portrait */
-.bedroom-speaking-ring {
+.penthouse-speaking-ring {
   position: absolute;
   top: 0;
   left: 50%;
@@ -180,14 +197,14 @@
   transition: opacity 0.3s ease;
 }
 
-.bedroom-speaking-ring.active {
+.penthouse-speaking-ring.active {
   opacity: 1;
   animation: cs-speaking-ring 0.8s ease-in-out infinite;
   box-shadow: 0 0 20px var(--cs-scene-glow);
 }
 
 /* Emotion bars */
-.bedroom-emotion-bars {
+.penthouse-emotion-bars {
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
@@ -195,7 +212,7 @@
 }
 
 /* Mood descriptor */
-.bedroom-mood-text {
+.penthouse-mood-text {
   font-size: 0.75rem;
   color: var(--cs-scene-accent);
   text-align: center;
@@ -214,31 +231,27 @@
    CENTER PANEL — Neon city window + chat
    ══════════════════════════════════════════════════════════════ */
 
-.bedroom-main-panel {
+.penthouse-main-panel {
   display: flex;
   flex-direction: column;
   position: relative;
   overflow: hidden;
-  background: var(--cs-bg-dark);
+  background: transparent;
 }
 
 /* Neon city background window */
-.bedroom-window {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  pointer-events: none;
-  z-index: 0;
+.penthouse-window {
+  display: none;  /* 3D room via penthouse_3d.js replaces this CSS background */
 }
 
-.bedroom-window-particles {
+.penthouse-window-particles {
   position: absolute;
   inset: 0;
   z-index: 1;
 }
 
 /* Neon city silhouette — CSS-painted building skyline */
-.bedroom-city-silhouette {
+.penthouse-city-silhouette {
   position: absolute;
   bottom: 0;
   left: 0;
@@ -261,7 +274,7 @@
 }
 
 /* Individual building shapes via clip-path pseudo-element */
-.bedroom-city-silhouette::before {
+.penthouse-city-silhouette::before {
   content: '';
   position: absolute;
   bottom: 0;
@@ -289,7 +302,7 @@
 }
 
 /* Neon window glow accents on buildings */
-.bedroom-city-silhouette::after {
+.penthouse-city-silhouette::after {
   content: '';
   position: absolute;
   bottom: 20%;
@@ -309,7 +322,7 @@
 }
 
 /* Glass reflection on window */
-.bedroom-window-reflection {
+.penthouse-window-reflection {
   position: absolute;
   inset: 0;
   background: linear-gradient(
@@ -322,7 +335,7 @@
 }
 
 /* Scene header floating above window */
-.bedroom-header {
+.penthouse-header {
   position: relative;
   z-index: 10;
   padding: 1.25rem 1.5rem 0.75rem;
@@ -334,7 +347,7 @@
 }
 
 /* Chat log */
-.bedroom-chat {
+.penthouse-chat {
   position: relative;
   z-index: 10;
   flex: 1;
@@ -352,7 +365,7 @@
 }
 
 /* Individual chat messages */
-.bedroom-message {
+.penthouse-message {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
@@ -360,23 +373,23 @@
   animation: cs-fade-in-up 0.25s var(--cs-ease) both;
 }
 
-.bedroom-message--player {
+.penthouse-message--player {
   align-self: flex-end;
   align-items: flex-end;
 }
 
-.bedroom-message--char {
+.penthouse-message--char {
   align-self: flex-start;
   align-items: flex-start;
 }
 
-.bedroom-message--system {
+.penthouse-message--system {
   align-self: center;
   align-items: center;
   max-width: 100%;
 }
 
-.bedroom-message__name {
+.penthouse-message__name {
   font-size: 0.7rem;
   font-weight: 600;
   letter-spacing: 0.05em;
@@ -384,11 +397,11 @@
   color: var(--cs-text-muted);
 }
 
-.bedroom-message--player .bedroom-message__name {
+.penthouse-message--player .penthouse-message__name {
   color: var(--cs-scene-accent);
 }
 
-.bedroom-message__bubble {
+.penthouse-message__bubble {
   padding: 0.65rem 1rem;
   border-radius: var(--cs-radius-lg, 12px);
   font-size: 0.875rem;
@@ -396,14 +409,14 @@
   border: 1px solid var(--cs-glass-border);
 }
 
-.bedroom-message--player .bedroom-message__bubble {
+.penthouse-message--player .penthouse-message__bubble {
   background: rgba(236, 72, 153, 0.12);
   border-color: rgba(236, 72, 153, 0.25);
   color: var(--cs-text-primary);
   border-bottom-right-radius: 4px;
 }
 
-.bedroom-message--char .bedroom-message__bubble {
+.penthouse-message--char .penthouse-message__bubble {
   background: var(--cs-glass-bg);
   backdrop-filter: blur(var(--cs-blur-sm));
   -webkit-backdrop-filter: blur(var(--cs-blur-sm));
@@ -411,7 +424,7 @@
   border-bottom-left-radius: 4px;
 }
 
-.bedroom-message--system .bedroom-message__bubble {
+.penthouse-message--system .penthouse-message__bubble {
   background: transparent;
   border-color: transparent;
   color: var(--cs-text-dim);
@@ -419,13 +432,13 @@
   font-style: italic;
 }
 
-.bedroom-message__ts {
+.penthouse-message__ts {
   font-size: 0.65rem;
   color: var(--cs-text-dim);
 }
 
 /* Typing indicator */
-.bedroom-typing {
+.penthouse-typing {
   position: relative;
   z-index: 10;
   display: none;
@@ -436,11 +449,11 @@
   font-size: 0.75rem;
 }
 
-.bedroom-typing.visible {
+.penthouse-typing.visible {
   display: flex;
 }
 
-.bedroom-typing__dot {
+.penthouse-typing__dot {
   width: 5px;
   height: 5px;
   border-radius: 50%;
@@ -448,15 +461,15 @@
   animation: cs-bounce 1.2s ease-in-out infinite;
 }
 
-.bedroom-typing__dot:nth-child(2) { animation-delay: 0.2s; }
-.bedroom-typing__dot:nth-child(3) { animation-delay: 0.4s; }
+.penthouse-typing__dot:nth-child(2) { animation-delay: 0.2s; }
+.penthouse-typing__dot:nth-child(3) { animation-delay: 0.4s; }
 
-.bedroom-typing__label {
+.penthouse-typing__label {
   color: var(--cs-scene-accent);
 }
 
 /* Input row */
-.bedroom-input-row {
+.penthouse-input-row {
   position: relative;
   z-index: 10;
   display: flex;
@@ -471,7 +484,7 @@
   border-top: 1px solid var(--cs-glass-border);
 }
 
-.bedroom-input {
+.penthouse-input {
   flex: 1;
   padding: 0.65rem 0.875rem;
   background: var(--cs-glass-bg);
@@ -490,17 +503,17 @@
   max-height: 120px;
 }
 
-.bedroom-input:focus {
+.penthouse-input:focus {
   border-color: rgba(236, 72, 153, 0.4);
   box-shadow: 0 0 0 3px rgba(236, 72, 153, 0.08);
 }
 
-.bedroom-input::placeholder {
+.penthouse-input::placeholder {
   color: var(--cs-text-dim);
   font-style: italic;
 }
 
-.bedroom-input-actions {
+.penthouse-input-actions {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
@@ -510,7 +523,7 @@
    RIGHT PANEL — Scenarios, Director, Economy, Memories
    ══════════════════════════════════════════════════════════════ */
 
-.bedroom-right-panel {
+.penthouse-right-panel {
   display: flex;
   flex-direction: column;
   gap: 0;
@@ -524,7 +537,7 @@
   scrollbar-color: rgba(236, 72, 153, 0.3) transparent;
 }
 
-.bedroom-panel-section {
+.penthouse-panel-section {
   border-radius: 0 !important;
   border-left: none;
   border-right: none;
@@ -533,12 +546,12 @@
   border-bottom: 1px solid var(--cs-glass-border);
 }
 
-.bedroom-panel-section:last-child {
+.penthouse-panel-section:last-child {
   border-bottom: none;
   flex: 1;
 }
 
-.bedroom-panel-title {
+.penthouse-panel-title {
   font-size: 0.65rem;
   font-weight: 700;
   letter-spacing: 0.12em;
@@ -551,7 +564,7 @@
 }
 
 /* Scenario cards */
-.bedroom-scenarios {
+.penthouse-scenarios {
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
@@ -563,7 +576,7 @@
   margin-bottom: 0.6rem;
 }
 
-.bedroom-scenarios__empty {
+.penthouse-scenarios__empty {
   font-size: 0.75rem;
   color: var(--cs-text-dim);
   font-style: italic;
@@ -571,7 +584,7 @@
   padding: 0.75rem 0;
 }
 
-.bedroom-scenario-card {
+.penthouse-scenario-card {
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -587,48 +600,48 @@
   width: 100%;
 }
 
-.bedroom-scenario-card:hover {
+.penthouse-scenario-card:hover {
   border-color: rgba(236, 72, 153, 0.3);
   background: rgba(236, 72, 153, 0.07);
   color: var(--cs-text-primary);
   transform: translateX(2px);
 }
 
-.bedroom-scenario-card.active {
+.penthouse-scenario-card.active {
   border-color: var(--cs-scene-accent);
   background: rgba(236, 72, 153, 0.12);
   color: var(--cs-scene-accent);
 }
 
-.bedroom-scenario-card.premium {
+.penthouse-scenario-card.premium {
   border-color: rgba(234, 179, 8, 0.3);
 }
 
-.bedroom-scenario-emoji {
+.penthouse-scenario-emoji {
   font-size: 1rem;
   flex-shrink: 0;
 }
 
-.bedroom-scenario-label {
+.penthouse-scenario-label {
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.bedroom-scenario-lock {
+.penthouse-scenario-lock {
   font-size: 0.65rem;
   color: var(--cs-yellow);
   flex-shrink: 0;
 }
 
-.bedroom-scenarios-controls {
+.penthouse-scenarios-controls {
   display: flex;
   gap: 0.4rem;
   align-items: center;
 }
 
-.bedroom-intensity-select {
+.penthouse-intensity-select {
   flex: 1;
   padding: 0.35rem 0.5rem;
   background: var(--cs-glass-bg);
@@ -640,25 +653,25 @@
   outline: none;
 }
 
-.bedroom-intensity-select option {
+.penthouse-intensity-select option {
   background: var(--cs-bg-card);
   color: var(--cs-text-primary);
 }
 
 /* Director panel */
-.bedroom-director-beat-type {
+.penthouse-director-beat-type {
   display: flex;
   align-items: center;
   gap: 0.5rem;
   margin-bottom: 0.5rem;
 }
 
-.bedroom-director-beat-label {
+.penthouse-director-beat-label {
   font-size: 0.7rem;
   color: var(--cs-text-dim);
 }
 
-.bedroom-director-instruction {
+.penthouse-director-instruction {
   font-size: 0.78rem;
   line-height: 1.55;
   color: var(--cs-text-secondary);
@@ -670,13 +683,13 @@
   border-radius: 0 var(--cs-radius-sm, 4px) var(--cs-radius-sm, 4px) 0;
 }
 
-.bedroom-director-actions {
+.penthouse-director-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 0.35rem;
 }
 
-.bedroom-director-actions .cs-glass-btn {
+.penthouse-director-actions .cs-glass-btn {
   flex: 1;
   min-width: 72px;
   font-size: 0.7rem;
@@ -684,14 +697,14 @@
 }
 
 /* Economy row */
-.bedroom-economy-row {
+.penthouse-economy-row {
   display: flex;
   align-items: center;
   gap: 0.5rem;
 }
 
 /* Memory items */
-.bedroom-memories {
+.penthouse-memories {
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
@@ -701,7 +714,7 @@
   scrollbar-color: rgba(236, 72, 153, 0.2) transparent;
 }
 
-.bedroom-memories__empty {
+.penthouse-memories__empty {
   font-size: 0.75rem;
   color: var(--cs-text-dim);
   font-style: italic;
@@ -709,7 +722,7 @@
   padding: 0.5rem 0;
 }
 
-.bedroom-memory-item {
+.penthouse-memory-item {
   display: flex;
   align-items: flex-start;
   gap: 0.5rem;
@@ -723,7 +736,7 @@
   animation: cs-fade-in-up 0.2s ease both;
 }
 
-.bedroom-memory-weight {
+.penthouse-memory-weight {
   flex-shrink: 0;
   width: 3px;
   border-radius: 2px;
@@ -737,18 +750,18 @@
    ══════════════════════════════════════════════════════════════ */
 
 @media (max-width: 1024px) {
-  .bedroom-layout {
+  .penthouse-layout {
     grid-template-columns: 240px 1fr 260px;
   }
 }
 
 @media (max-width: 768px) {
-  .bedroom-layout {
+  .penthouse-layout {
     grid-template-columns: 1fr;
     grid-template-rows: auto 1fr auto;
   }
 
-  .bedroom-character-panel {
+  .penthouse-character-panel {
     border-right: none;
     border-bottom: 1px solid var(--cs-glass-border);
     border-radius: 0;
@@ -759,23 +772,23 @@
     max-height: 160px;
   }
 
-  .bedroom-portrait-wrap {
+  .penthouse-portrait-wrap {
     width: 80px;
     border-bottom: none;
     padding-bottom: 0;
   }
 
-  .bedroom-emotion-bars {
+  .penthouse-emotion-bars {
     flex: 1;
     min-width: 200px;
     gap: 0.35rem;
   }
 
-  .bedroom-mood-text {
+  .penthouse-mood-text {
     width: 100%;
   }
 
-  .bedroom-right-panel {
+  .penthouse-right-panel {
     border-left: none;
     border-top: 1px solid var(--cs-glass-border);
     max-height: 260px;
@@ -784,27 +797,27 @@
     overflow-y: hidden;
   }
 
-  .bedroom-panel-section {
+  .penthouse-panel-section {
     min-width: 240px;
     border-bottom: none;
     border-right: 1px solid var(--cs-glass-border);
   }
 
-  .bedroom-panel-section:last-child {
+  .penthouse-panel-section:last-child {
     border-right: none;
   }
 }
 
 @media (max-width: 480px) {
-  .bedroom-layout {
+  .penthouse-layout {
     grid-template-rows: 100px 1fr 180px;
   }
 
-  .bedroom-character-panel {
+  .penthouse-character-panel {
     max-height: 100px;
   }
 
-  .bedroom-portrait-wrap {
+  .penthouse-portrait-wrap {
     width: 60px;
   }
 
@@ -819,43 +832,43 @@
    ══════════════════════════════════════════════════════════════ */
 
 /* Stat bar pulse on big change */
-@keyframes bedroom-stat-pulse {
+@keyframes penthouse-stat-pulse {
   0%   { box-shadow: 0 0 0 0 rgba(236, 72, 153, 0.5); }
   50%  { box-shadow: 0 0 0 6px rgba(236, 72, 153, 0); }
   100% { box-shadow: 0 0 0 0 rgba(236, 72, 153, 0); }
 }
 
 .cs-stat-bar__fill--pulse {
-  animation: bedroom-stat-pulse 0.6s ease-out;
+  animation: penthouse-stat-pulse 0.6s ease-out;
 }
 
 /* Economy gain flash */
-@keyframes bedroom-credits-gain {
+@keyframes penthouse-credits-gain {
   0%   { color: var(--cs-green); transform: scale(1.08); }
   100% { color: inherit; transform: scale(1); }
 }
 
-.bedroom-credits-gain {
-  animation: bedroom-credits-gain 0.5s ease-out;
+.penthouse-credits-gain {
+  animation: penthouse-credits-gain 0.5s ease-out;
 }
 
 /* Scenario card active flash */
-@keyframes bedroom-card-activate {
+@keyframes penthouse-card-activate {
   0%   { box-shadow: 0 0 0 0 rgba(236, 72, 153, 0.6); }
   100% { box-shadow: 0 0 0 12px rgba(236, 72, 153, 0); }
 }
 
-.bedroom-scenario-card.activated {
-  animation: bedroom-card-activate 0.5s ease-out;
+.penthouse-scenario-card.activated {
+  animation: penthouse-card-activate 0.5s ease-out;
 }
 
 /* Celebration burst on milestone */
-@keyframes bedroom-celebrate {
+@keyframes penthouse-celebrate {
   0%   { transform: scale(1); }
   20%  { transform: scale(1.04); }
   100% { transform: scale(1); }
 }
 
-.bedroom-main-panel.celebrating {
-  animation: bedroom-celebrate 0.4s ease-out;
+.penthouse-main-panel.celebrating {
+  animation: penthouse-celebrate 0.4s ease-out;
 }

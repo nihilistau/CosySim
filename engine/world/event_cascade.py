@@ -7,7 +7,7 @@ it cares about; the cascade layer filters and delivers them.
 Usage (in a scene's start() method):
     from engine.world.event_cascade import get_event_cascade
     cascade = get_event_cascade()
-    cascade.subscribe("bedroom", [WorldEventType.ECONOMY, WorldEventType.MOOD])
+    cascade.subscribe("penthouse", [WorldEventType.ECONOMY, WorldEventType.MOOD])
 
 The cascade emits 'world_event' Socket.IO events to each subscribed scene's
 socket namespace (or broadcasts via the cross-scene relay if available).
@@ -62,7 +62,7 @@ class WorldEventType:
 # Scenes that care about world events by default (can be overridden at runtime)
 
 DEFAULT_SCENE_SUBSCRIPTIONS: Dict[str, List[str]] = {
-    "bedroom":  [WorldEventType.SOCIAL, WorldEventType.RUMOUR, WorldEventType.NPC],
+    "penthouse":  [WorldEventType.SOCIAL, WorldEventType.RUMOUR, WorldEventType.NPC],
     "phone":    [WorldEventType.SOCIAL, WorldEventType.POLITICAL, WorldEventType.CRIME],
     "lounge":   [WorldEventType.SOCIAL, WorldEventType.ECONOMY, WorldEventType.RUMOUR],
     "tavern":   [WorldEventType.SOCIAL, WorldEventType.CRIME, WorldEventType.RUMOUR, WorldEventType.NPC],
@@ -129,7 +129,7 @@ class EventCascade:
         """Register a scene's interest in specific event types.
 
         Args:
-            scene: Scene name (e.g. 'bedroom', 'casino').
+            scene: Scene name (e.g. 'penthouse', 'casino').
             event_types: List of WorldEventType constants.
         """
         with self._lock:

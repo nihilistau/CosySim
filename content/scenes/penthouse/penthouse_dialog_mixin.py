@@ -1,4 +1,4 @@
-"""Bedroom scene dialogue, director controls, and agent-loop mixin."""
+"""penthouse scene dialogue, director controls, and agent-loop mixin."""
 from __future__ import annotations
 
 import logging
@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class BedroomDialogMixin:
+class PenthouseDialogMixin:
     """Director directives, conversation starters, events, and agent-loop wiring."""
 
     # ── Governance helper ───────────────────────────────────────────────
@@ -20,7 +20,7 @@ class BedroomDialogMixin:
         """Get governance directives from the interceptor pipeline."""
         try:
             from engine.mcp.comms_framework import build_governance_context
-            ctx = build_governance_context(agent_id, "bedroom", "")
+            ctx = build_governance_context(agent_id, "penthouse", "")
             return f"{ctx}\n\n" if ctx else ""
         except Exception:
             return ""
@@ -30,7 +30,7 @@ class BedroomDialogMixin:
     def _start_agent_loop(self, interval: float = 30) -> None:
         from engine.agents.agent_loop import AgentLoop
         from engine.agents.character_agent import CharacterAgent
-        from content.scenes.bedroom.bedroom_scene import (
+        from content.scenes.penthouse.penthouse_scene import (
             CharacterProfile, build_roleplay_system_prompt,
         )
 
@@ -40,7 +40,7 @@ class BedroomDialogMixin:
             scene_map=self.scene_map,
             db=self.db,
             socketio=self.socketio,
-            scene_id="bedroom",
+            scene_id="penthouse",
         )
         for cid, char in self.characters.items():
             agent_cfg = self.agent_model_config.get(cid, {})
@@ -63,11 +63,11 @@ class BedroomDialogMixin:
                 db=self.db,
                 skill_packs=["memory", "character"],
                 model=agent_cfg.get("model") or profile_model,
-                scene="bedroom",
+                scene="penthouse",
             )
             try:
                 from engine.mcp.comms_framework import get_governor
-                agent = get_governor(agent, scene="bedroom")
+                agent = get_governor(agent, scene="penthouse")
             except Exception:
                 pass
             self.agent_loop.register_character(char, agent=agent)
@@ -95,7 +95,7 @@ class BedroomDialogMixin:
 
     def _on_env_change(self, evt) -> None:
         """React to environment_change events from the framework event bus."""
-        if evt.payload.get("scene_id") == "bedroom":
+        if evt.payload.get("scene_id") == "penthouse":
             try:
                 change = evt.payload.get("change_type", "")
                 if change == "lighting":
@@ -113,7 +113,7 @@ class BedroomDialogMixin:
 
     def _on_story_beat(self, evt) -> None:
         """Inject story beats from the event bus."""
-        if evt.payload.get("scene_id") == "bedroom":
+        if evt.payload.get("scene_id") == "penthouse":
             beat = evt.payload.get("beat", "")
             if beat and beat not in self.story_beats:
                 self.story_beats.append(beat)
@@ -127,7 +127,7 @@ class BedroomDialogMixin:
     def _setup_director_routes(self) -> None:
         """Register director-control Flask routes on self.app."""
         from flask import jsonify, request
-        from content.scenes.bedroom.bedroom_scene import PERSONALITY_PROFILES
+        from content.scenes.penthouse.penthouse_scene import PERSONALITY_PROFILES
 
         @self.app.route("/api/director/whisper", methods=["POST"])
         def whisper():
@@ -256,7 +256,7 @@ class BedroomDialogMixin:
             actor_name = self.characters[actor_id].name if actor_id in self.characters else self.director_name
             target_name = self.characters[target_id].name if target_id in self.characters else "the room"
 
-            from engine.mcp.interaction_trees import BEDROOM_INTERACTIONS, get_interaction_result
+            from engine.mcp.interaction_trees import PENTHOUSE_INTERACTIONS, get_interaction_result
             tree_result = None
             interaction_lower = interaction.lower().strip()
             tree_map = {
@@ -282,7 +282,7 @@ class BedroomDialogMixin:
                 except Exception:
                     pass
                 tree_result = get_interaction_result(
-                    matched_type, scene="bedroom", initiator_stats=actor_stats
+                    matched_type, scene="penthouse", initiator_stats=actor_stats
                 )
 
             if tree_result and not tree_result.get("error"):
@@ -309,7 +309,7 @@ class BedroomDialogMixin:
         def list_interactions():
             """List available interaction types with stat requirements."""
             from engine.mcp.interaction_trees import list_interaction_types
-            return jsonify({"ok": True, "interactions": list_interaction_types("bedroom")})
+            return jsonify({"ok": True, "interactions": list_interaction_types("penthouse")})
 
     # ── Conversation routes ─────────────────────────────────────────────
 

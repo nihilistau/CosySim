@@ -19,7 +19,7 @@ AMB_CSS    = CSS_DIR / "cosysim-ambient.css"
 INIT_PY    = SHARED  / "__init__.py"
 ADMIN_HTML = TEMPLATES / "admin_overlay.html"
 
-SCENES_9   = ["bedroom", "casino", "arena", "tavern", "lounge", "gallery", "realm", "neoncity", "phone"]
+SCENES_9   = ["penthouse", "casino", "arena", "tavern", "lounge", "gallery", "realm", "neoncity", "phone"]
 
 
 # ── File existence ─────────────────────────────────────────────────────────────

@@ -7,7 +7,7 @@ Priority: qa_evaluator first (replaces Gemini stage F), then router_v2.
 Usage::
     from engine.lmstudio.finetuned_router import get_finetuned_router
     router = get_finetuned_router()
-    result = router.route("qa_evaluator", "How do I start the bedroom scene?")
+    result = router.route("qa_evaluator", "How do I start the penthouse scene?")
 """
 from __future__ import annotations
 

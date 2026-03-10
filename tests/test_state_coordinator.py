@@ -171,12 +171,12 @@ class TestEvents:
         events = []
         coord.on_state_changed(lambda event, snap: events.append(event))
 
-        coord.update("lola", mood="happy", scene="bedroom", source="test")
+        coord.update("lola", mood="happy", scene="penthouse", source="test")
 
         assert len(events) == 1
         assert events[0]["character_id"] == "lola"
         assert events[0]["type"] == "state_changed"
-        assert events[0]["scene"] == "bedroom"
+        assert events[0]["scene"] == "penthouse"
         assert events[0]["source"] == "test"
         assert "mood" in events[0]["changes"]
 

@@ -1,5 +1,5 @@
 /**
- * THE PENTHOUSE — BedroomScene JS  v0.68 "Dark Renaissance"
+ * THE PENTHOUSE — PenthouseScene JS  v0.68 "Dark Renaissance"
  * ==========================================================
  * Manages all client-side logic for the Penthouse UI:
  *   Socket.IO connection · Chat rendering · Emotion bars ·
@@ -13,7 +13,7 @@
    CONSTANTS
    ══════════════════════════════════════════════════════════════════════ */
 
-const BEDROOM_SOCKET_URL = `${location.protocol}//${location.hostname}:${location.port}`;
+const PENTHOUSE_SOCKET_URL = `${location.protocol}//${location.hostname}:${location.port}`;
 
 const MOOD_DESCRIPTORS = {
   max_arousal:     'Burning with desire…',
@@ -45,10 +45,10 @@ const BEAT_CHIP_CLASSES = {
 };
 
 /* ══════════════════════════════════════════════════════════════════════
-   BedroomScene CLASS
+   PenthouseScene CLASS
    ══════════════════════════════════════════════════════════════════════ */
 
-class BedroomScene {
+class PenthouseScene {
   constructor() {
     /** @type {import('socket.io-client').Socket|null} */
     this.socket        = null;
@@ -98,7 +98,7 @@ class BedroomScene {
   /* ── Socket.IO ──────────────────────────────────────────────────── */
 
   _setupSocket() {
-    this.socket = io(BEDROOM_SOCKET_URL, {
+    this.socket = io(PENTHOUSE_SOCKET_URL, {
       transports: ['websocket', 'polling'],
       reconnectionAttempts: 10,
       reconnectionDelay: 1500,
@@ -247,23 +247,23 @@ class BedroomScene {
    * @param {{ name?: string, message?: string, role?: string, timestamp?: string }} msg
    */
   _renderMessage(msg) {
-    const chat = document.getElementById('bedroom-chat');
+    const chat = document.getElementById('penthouse-chat');
     if (!chat) return;
 
     const role    = msg.role || (msg.name === 'You' ? 'player' : 'char');
     const wrapper = document.createElement('div');
-    wrapper.className = `bedroom-message bedroom-message--${role}`;
+    wrapper.className = `penthouse-message penthouse-message--${role}`;
 
     const name = document.createElement('div');
-    name.className = 'bedroom-message__name';
+    name.className = 'penthouse-message__name';
     name.textContent = msg.name || (role === 'player' ? 'You' : 'Character');
 
     const bubble = document.createElement('div');
-    bubble.className = 'bedroom-message__bubble';
+    bubble.className = 'penthouse-message__bubble';
     bubble.textContent = msg.message || '';
 
     const ts = document.createElement('div');
-    ts.className = 'bedroom-message__ts';
+    ts.className = 'penthouse-message__ts';
     ts.textContent = msg.timestamp
       ? new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -280,7 +280,7 @@ class BedroomScene {
   /* ── Typing indicator ───────────────────────────────────────────── */
 
   _setTyping(charName, visible) {
-    const el    = document.getElementById('bedroom-typing');
+    const el    = document.getElementById('penthouse-typing');
     const label = document.getElementById('typing-char-name');
     if (!el) return;
     this._agentTyping = visible;
@@ -382,13 +382,13 @@ class BedroomScene {
    * @param {Array<{id: string, label: string, emoji: string, premium?: boolean}>} scenarios
    */
   _renderScenarios(scenarios) {
-    const container = document.getElementById('bedroom-scenarios');
+    const container = document.getElementById('penthouse-scenarios');
     const chip      = document.getElementById('scenario-count-chip');
     if (!container) return;
 
     container.innerHTML = '';
     if (!scenarios || !scenarios.length) {
-      container.innerHTML = '<div class="bedroom-scenarios__empty">No scenarios available.</div>';
+      container.innerHTML = '<div class="penthouse-scenarios__empty">No scenarios available.</div>';
       return;
     }
 
@@ -396,15 +396,15 @@ class BedroomScene {
 
     for (const sc of scenarios) {
       const card = document.createElement('button');
-      card.className = 'bedroom-scenario-card' + (sc.premium ? ' premium' : '');
+      card.className = 'penthouse-scenario-card' + (sc.premium ? ' premium' : '');
       card.dataset.scenarioId = sc.id || '';
       card.setAttribute('role', 'listitem');
       card.setAttribute('aria-label', sc.label || sc.id);
 
       card.innerHTML = `
-        <span class="bedroom-scenario-emoji">${sc.emoji || '🎭'}</span>
-        <span class="bedroom-scenario-label">${this._esc(sc.label || sc.id)}</span>
-        ${sc.premium ? '<span class="bedroom-scenario-lock">₵</span>' : ''}
+        <span class="penthouse-scenario-emoji">${sc.emoji || '🎭'}</span>
+        <span class="penthouse-scenario-label">${this._esc(sc.label || sc.id)}</span>
+        ${sc.premium ? '<span class="penthouse-scenario-lock">₵</span>' : ''}
       `;
 
       card.addEventListener('click', () => this.selectScenario(sc.id, sc.label || sc.id));
@@ -421,7 +421,7 @@ class BedroomScene {
     if (!id || !this.socket) return;
 
     // Update active state
-    document.querySelectorAll('.bedroom-scenario-card').forEach(c => {
+    document.querySelectorAll('.penthouse-scenario-card').forEach(c => {
       c.classList.toggle('active', c.dataset.scenarioId === id);
       if (c.dataset.scenarioId === id) c.classList.add('activated');
     });
@@ -484,26 +484,26 @@ class BedroomScene {
    * @param {Array<{description: string, weight?: number}>} memories
    */
   _renderMemories(memories) {
-    const container = document.getElementById('bedroom-memories');
+    const container = document.getElementById('penthouse-memories');
     if (!container) return;
 
     // Clear empty placeholder
-    const empty = container.querySelector('.bedroom-memories__empty');
+    const empty = container.querySelector('.penthouse-memories__empty');
     if (empty) empty.remove();
 
     for (const mem of memories) {
       const item = document.createElement('div');
-      item.className = 'bedroom-memory-item';
+      item.className = 'penthouse-memory-item';
       const weight = parseFloat(mem.weight || 0.5);
       item.innerHTML = `
-        <div class="bedroom-memory-weight" style="--weight-opacity:${weight.toFixed(2)}"></div>
+        <div class="penthouse-memory-weight" style="--weight-opacity:${weight.toFixed(2)}"></div>
         <span>${this._esc(mem.description || '')}</span>
       `;
       container.prepend(item);
     }
 
     // Cap at 20 memories shown
-    const items = container.querySelectorAll('.bedroom-memory-item');
+    const items = container.querySelectorAll('.penthouse-memory-item');
     items.forEach((el, i) => { if (i > 19) el.remove(); });
   }
 
@@ -514,15 +514,15 @@ class BedroomScene {
    * @param {number} balance
    */
   updateCredits(balance) {
-    const el = document.getElementById('bedroom-credits');
+    const el = document.getElementById('penthouse-credits');
     if (!el) return;
     const prev = this._balance;
     this._balance = typeof balance === 'number' ? balance : parseFloat(balance) || 0;
     el.textContent = `₵ ${this._balance.toLocaleString()}`;
     if (this._balance > prev) {
-      el.classList.remove('bedroom-credits-gain');
+      el.classList.remove('penthouse-credits-gain');
       void el.offsetWidth;
-      el.classList.add('bedroom-credits-gain');
+      el.classList.add('penthouse-credits-gain');
     }
   }
 
@@ -553,7 +553,7 @@ class BedroomScene {
   /* ── Particle system ────────────────────────────────────────────── */
 
   _initParticles() {
-    const container = document.getElementById('bedroom-particles');
+    const container = document.getElementById('penthouse-particles');
     if (!container || typeof ParticleSystem3D === 'undefined') return;
     try {
       this._particleSystem = new ParticleSystem3D(container, 'neon_rain');
@@ -571,7 +571,7 @@ class BedroomScene {
         setTimeout(() => this._particleSystem.setPreset('neon_rain'), 2500);
       } catch (_) {}
     }
-    const main = document.getElementById('bedroom-main');
+    const main = document.getElementById('penthouse-main');
     if (main) {
       main.classList.add('celebrating');
       setTimeout(() => main.classList.remove('celebrating'), 500);
@@ -594,8 +594,8 @@ class BedroomScene {
 
   _setupDOM() {
     // Send button
-    const sendBtn = document.getElementById('bedroom-send');
-    const input   = document.getElementById('bedroom-input');
+    const sendBtn = document.getElementById('penthouse-send');
+    const input   = document.getElementById('penthouse-input');
 
     if (sendBtn && input) {
       sendBtn.addEventListener('click', () => {
@@ -621,17 +621,17 @@ class BedroomScene {
     }
 
     // Clear chat
-    const clearBtn = document.getElementById('bedroom-clear-btn');
+    const clearBtn = document.getElementById('penthouse-clear-btn');
     if (clearBtn) {
       clearBtn.addEventListener('click', () => {
-        const chat = document.getElementById('bedroom-chat');
+        const chat = document.getElementById('penthouse-chat');
         if (chat) chat.innerHTML = '';
         this._messageCount = 0;
       });
     }
 
     // Voice button
-    const voiceBtn = document.getElementById('bedroom-voice-btn');
+    const voiceBtn = document.getElementById('penthouse-voice-btn');
     if (voiceBtn) {
       voiceBtn.addEventListener('click', () => {
         if (typeof window.voiceManager !== 'undefined') {
@@ -685,7 +685,7 @@ class BedroomScene {
     rec.interimResults = false;
     rec.onresult = e => {
       const text = e.results[0][0].transcript;
-      const input = document.getElementById('bedroom-input');
+      const input = document.getElementById('penthouse-input');
       if (input) input.value = text;
     };
     rec.start();
@@ -712,8 +712,8 @@ class BedroomScene {
    BOOT
    ══════════════════════════════════════════════════════════════════════ */
 
-/** @type {BedroomScene} */
-const PENTHOUSE = new BedroomScene();
+/** @type {PenthouseScene} */
+const PENTHOUSE = new PenthouseScene();
 
 document.addEventListener('DOMContentLoaded', () => PENTHOUSE.init());
 

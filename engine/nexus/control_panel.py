@@ -491,7 +491,7 @@ elif page == "🎭 Content Generator":
                 ids = cw.generate_reactions(char_id)
                 st.success(f"Generated {len(ids)} reaction sets")
             elif content_type == "scene_descriptions":
-                scene = st.text_input("Scene ID", value="bedroom")
+                scene = st.text_input("Scene ID", value="penthouse")
                 ids = cw.generate_scene_descriptions(scene)
                 st.success(f"Generated {len(ids)} descriptions")
 

@@ -27,7 +27,7 @@ NEON_BASE_JS = ROOT / "content" / "shared" / "static" / "js" / "neon_base.js"
 
 ALL_SCENE_TEMPLATES = {
     "arena": ROOT / "content/scenes/arena/templates/arena.html",
-    "bedroom": ROOT / "content/scenes/bedroom/templates/bedroom.html",
+    "penthouse": ROOT / "content/scenes/penthouse/templates/penthouse.html",
     "casino": ROOT / "content/scenes/casino/templates/casino.html",
     "coders": ROOT / "content/scenes/coders/templates/coders.html",
     "command_center": ROOT / "content/scenes/command_center/templates/command_center.html",
@@ -46,7 +46,7 @@ ALL_SCENE_TEMPLATES = {
 }
 
 EXPECTED_SCENE_ACCENTS = {
-    "bedroom": "#f43f5e",
+    "penthouse": "#f43f5e",
     "lounge": "#f43f5e",
     "tavern": "#f97316",
     "casino": "#eab308",
@@ -67,7 +67,7 @@ EXPECTED_SCENE_ACCENTS = {
 
 SCENE_CLASSES = {
     "arena": ("content.scenes.arena", "ArenaScene"),
-    "bedroom": ("content.scenes.bedroom.bedroom_scene", "BedroomScene"),
+    "penthouse": ("content.scenes.penthouse.penthouse_scene", "PenthouseScene"),
     "casino": ("content.scenes.casino.casino_scene", "CasinoScene"),
     "coders": ("content.scenes.coders.coders_scene", "CodersScene"),
     "command_center": ("content.scenes.command_center.command_center_scene", "CommandCenterScene"),
@@ -397,7 +397,7 @@ class TestSceneTemplateConversion:
 
     def test_bedroom_has_threejs_in_head_scripts(self):
         """Bedroom must use head_scripts block for Three.js CDN."""
-        content = ALL_SCENE_TEMPLATES["bedroom"].read_text(encoding="utf-8")
+        content = ALL_SCENE_TEMPLATES["penthouse"].read_text(encoding="utf-8")
         assert "head_scripts" in content
         assert "three.min.js" in content or "three.js" in content
 
@@ -474,7 +474,7 @@ class TestSceneLifecycle:
 
     SCENE_PY_FILES = {
         "arena": ROOT / "content/scenes/arena/__init__.py",
-        "bedroom": ROOT / "content/scenes/bedroom/bedroom_scene.py",
+        "penthouse": ROOT / "content/scenes/penthouse/penthouse_scene.py",
         "casino": ROOT / "content/scenes/casino/casino_scene.py",
         "coders": ROOT / "content/scenes/coders/coders_scene.py",
         "command_center": ROOT / "content/scenes/command_center/command_center_scene.py",

@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 SCENE_CONTENT_SEEDS: list[dict[str, Any]] = [
     {
-        "scene": "bedroom",
+        "scene": "penthouse",
         "pool": "dialogue",
         "items": [
             "You look distracted tonight. Something on your mind?",
@@ -140,7 +140,7 @@ def seed_nexus_qa() -> None:
     qa_pairs = [
         (
             "What scenes are in CosySim?",
-            "CosySim has 14 active scenes: THE PENTHOUSE (bedroom), SIGNAL (phone), "
+            "CosySim has 14 active scenes: THE PENTHOUSE (penthouse), SIGNAL (phone), "
             "THE VELVET PIT (lounge), THE RUSTY ANCHOR (tavern), CLUB NOIR (casino), "
             "THE OBSCURA (gallery), THE COLOSSEUM (arena), THE SHATTERED THRONE (realm), "
             "NEON CITY, THE LAB (coders), THE SCORE (heist), THE ARCADE (games), "

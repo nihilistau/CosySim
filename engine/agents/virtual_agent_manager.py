@@ -46,7 +46,7 @@ Usage::
     mgr = get_virtual_agent_manager()
 
     # Register an agent
-    agent = mgr.create_agent(character, scene="bedroom")
+    agent = mgr.create_agent(character, scene="penthouse")
     reply = agent.reply("Hello!")
 
     # Batch decisions for multiple agents

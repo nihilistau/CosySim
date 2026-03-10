@@ -35,7 +35,7 @@ class SceneManager:
         """
         KNOWN_SCENES = {
             "phone":   {"cls": "content.scenes.phone.phone_scene_v2.PhoneSceneV2",   "port": 5555, "label": "CosyPhone OS"},
-            "bedroom": {"cls": "content.scenes.bedroom.bedroom_scene.BedroomScene",   "port": 5556, "label": "The Bedroom"},
+            "penthouse": {"cls": "content.scenes.penthouse.penthouse_scene.PenthouseScene",   "port": 5556, "label": "The penthouse"},
             "lounge":  {"cls": "content.scenes.lounge.lounge_scene.LoungeScene",       "port": 5557, "label": "The Velvet Lounge"},
             "casino":  {"cls": "content.scenes.casino.casino_scene.CasinoScene",       "port": 5559, "label": "Midnight Casino"},
             "gallery": {"cls": "content.scenes.gallery.gallery_scene.GalleryScene",    "port": 5560, "label": "The Gallery"},

@@ -28,7 +28,7 @@ from engine.agents.interceptors.policy_enforcer import PolicyEnforcerInterceptor
 from engine.agents.interceptors.memory_enhancer import MemoryEnhancerInterceptor
 from engine.agents.interceptors.response_shaper import ResponseShaperInterceptor
 from engine.agents.interceptors.activity_logger import ActivityLoggerInterceptor
-from engine.agents.interceptors.bedroom_scene import BedroomSceneInterceptor
+from engine.agents.interceptors.penthouse_scene import PenthouseSceneInterceptor
 from engine.agents.interceptors.phone_scene import PhoneSceneInterceptor
 from engine.agents.interceptors.lounge_scene import LoungeSceneInterceptor
 from engine.agents.interceptors.gallery_scene import GallerySceneInterceptor
@@ -60,7 +60,7 @@ _REGISTRY: list[Type] = [
     MemoryEnhancerInterceptor,
     ResponseShaperInterceptor,
     ActivityLoggerInterceptor,
-    BedroomSceneInterceptor,
+    PenthouseSceneInterceptor,
     PhoneSceneInterceptor,
     LoungeSceneInterceptor,
     GallerySceneInterceptor,
@@ -115,7 +115,7 @@ __all__ = [
     "MemoryEnhancerInterceptor",
     "ResponseShaperInterceptor",
     "ActivityLoggerInterceptor",
-    "BedroomSceneInterceptor",
+    "PenthouseSceneInterceptor",
     "PhoneSceneInterceptor",
     "LoungeSceneInterceptor",
     "GallerySceneInterceptor",

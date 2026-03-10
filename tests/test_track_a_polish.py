@@ -8,7 +8,7 @@ SHARED_JS = Path("content/shared/static/js")
 SHARED_TEMPLATES = Path("content/shared/templates")
 NEON_BASE = Path("content/shared/templates/neon_base.html")
 
-GAME_SCENES = ["bedroom", "phone", "lounge", "tavern", "casino", "gallery", "arena", "realm", "neoncity"]
+GAME_SCENES = ["penthouse", "phone", "lounge", "tavern", "casino", "gallery", "arena", "realm", "neoncity"]
 
 
 def _effective_content(raw: str) -> str:

@@ -127,9 +127,9 @@ class TestGeneratePortraitSkill:
         mgr = _mock_art_manager("/view?filename=aria.png")
         with patch("engine.art.scene_art.get_scene_art_manager", return_value=mgr):
             from engine.skills.builtin.art_skills import generate_portrait
-            result = generate_portrait("aria", mood="happy", scene="bedroom")
+            result = generate_portrait("aria", mood="happy", scene="penthouse")
         assert "/view?filename=aria.png" in result
-        mgr.get_character_portrait.assert_called_once_with("aria", mood="happy", scene="bedroom")
+        mgr.get_character_portrait.assert_called_once_with("aria", mood="happy", scene="penthouse")
 
     def test_stores_url_in_portrait_cache(self):
         from engine.art.portrait_cache import PortraitCache
@@ -210,7 +210,7 @@ class TestGenerateActionCardSkill:
         mgr = _mock_art_manager(card_url="/view?filename=card.png")
         with patch("engine.art.scene_art.get_scene_art_manager", return_value=mgr):
             from engine.skills.builtin.art_skills import generate_action_card
-            result = generate_action_card("A dramatic kiss in the moonlight", scene="bedroom", intensity=1)
+            result = generate_action_card("A dramatic kiss in the moonlight", scene="penthouse", intensity=1)
         assert "/view?filename=card.png" in result
         mgr.get_action_card.assert_called_once()
 
@@ -222,7 +222,7 @@ class TestBatchGeneratePortraitsSkill:
         mock_char = MagicMock()
         mock_char.char_id = "aria"
         mock_char.id = "aria"
-        mock_char.scene = "bedroom"
+        mock_char.scene = "penthouse"
 
         mock_registry = MagicMock()
         mock_registry.get_all_characters.return_value = [mock_char]
@@ -236,7 +236,7 @@ class TestBatchGeneratePortraitsSkill:
              patch("engine.art.scene_art.get_scene_art_manager", return_value=mgr), \
              patch("engine.art.portrait_cache.get_portrait_cache", return_value=fresh_cache):
             from engine.skills.builtin.art_skills import batch_generate_portraits
-            result = batch_generate_portraits("bedroom", mood="neutral")
+            result = batch_generate_portraits("penthouse", mood="neutral")
 
         assert "aria" in result
         assert fresh_cache.get_url("aria", "neutral") == "/view?filename=aria.png"

@@ -204,7 +204,7 @@ class TestSceneDirectorAccessor:
         with patch("engine.director.scene_director._bus", return_value=mock_bus):
             with patch("engine.director.scene_director._event_types") as et:
                 et.return_value.DIRECTOR_BEAT_FIRED = "director.beat_fired"
-                result = director.tick("bedroom", {
+                result = director.tick("penthouse", {
                     "turn_count": 3,
                     "emotion_levels": {"arousal": 40.0},
                     "idle_seconds": 10.0,
@@ -223,12 +223,12 @@ class TestSceneBeatConfigs:
 
     def test_bedroom_avoids_world_event(self):
         from engine.director.scene_director import SCENE_BEAT_CONFIGS, BeatType
-        cfg = SCENE_BEAT_CONFIGS.get("bedroom", {})
+        cfg = SCENE_BEAT_CONFIGS.get("penthouse", {})
         assert BeatType.WORLD_EVENT in cfg.get("avoid_beats", [])
 
     def test_bedroom_has_lower_escalation_threshold(self):
         from engine.director.scene_director import SCENE_BEAT_CONFIGS
-        cfg = SCENE_BEAT_CONFIGS.get("bedroom", {})
+        cfg = SCENE_BEAT_CONFIGS.get("penthouse", {})
         assert cfg.get("escalation_threshold", 80) < 80
 
     def test_all_configs_have_required_keys(self):
@@ -249,7 +249,7 @@ class TestSceneBeatConfigs:
         with patch("engine.director.scene_director._bus", return_value=mock_bus):
             with patch("engine.director.scene_director._event_types") as et:
                 et.return_value.DIRECTOR_BEAT_FIRED = "director.beat_fired"
-                beat = director.tick("bedroom", {
+                beat = director.tick("penthouse", {
                     "turn_count": 3,
                     "emotion_levels": {"arousal": 75.0},
                     "idle_seconds": 0.0,

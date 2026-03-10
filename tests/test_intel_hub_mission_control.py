@@ -27,7 +27,7 @@ def hub_app():
             "total_tokens": 12000,
             "by_model": {},
         },
-        "scenes": {"bedroom": {"requests": 10, "avg_latency_ms": 20.0}},
+        "scenes": {"penthouse": {"requests": 10, "avg_latency_ms": 20.0}},
         "errors": {},
         "collector": {"sample_count": 50, "oldest_sample_age_s": 100.0},
     }
