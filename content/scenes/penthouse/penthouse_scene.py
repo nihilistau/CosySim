@@ -1323,6 +1323,8 @@ class PenthouseScene(PenthouseCombatMixin, PenthouseDialogMixin, PenthouseInvent
             return render_template(
                 "penthouse.html",
                 scenarios=PREMADE_SCENARIOS,
+                props=PROPS,
+                lighting_presets=LIGHTING_PRESETS,
                 scene_name="THE PENTHOUSE",
                 accent_color="#ec4899",
             )
