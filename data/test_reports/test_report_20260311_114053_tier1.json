@@ -1,0 +1,63 @@
+{
+  "timestamp": "2026-03-11T00:40:53+00:00",
+  "tier": 1,
+  "total": 130,
+  "passed": 130,
+  "failed": 0,
+  "skipped": 0,
+  "errors": 0,
+  "duration_seconds": 14.27,
+  "test_files": [
+    "test_config.py",
+    "test_config_validator.py",
+    "test_decorators.py",
+    "test_port_registry.py",
+    "test_scene_imports.py",
+    "test_skill_progression.py",
+    "test_skills.py"
+  ],
+  "slowest_tests": [
+    {
+      "test": "tests/test_scene_imports.py::test_scene_imports_cleanly[content.scenes.penthouse]",
+      "duration": 3.26
+    },
+    {
+      "test": "tests/test_scene_imports.py::test_scene_imports_cleanly[content.scenes.gallery]",
+      "duration": 3.0
+    },
+    {
+      "test": "tests/test_scene_imports.py::test_scene_imports_cleanly[content.scenes.realm]",
+      "duration": 1.76
+    },
+    {
+      "test": "tests/test_scene_imports.py::test_scene_imports_cleanly[content.scenes.casino]",
+      "duration": 1.76
+    },
+    {
+      "test": "tests/test_scene_imports.py::test_scene_imports_cleanly[content.scenes.phone]",
+      "duration": 1.47
+    },
+    {
+      "test": "tests/test_decorators.py::test_pydantic_model_serialised",
+      "duration": 0.21
+    },
+    {
+      "test": "tests/test_scene_imports.py::test_scene_imports_cleanly[content.scenes.hub]",
+      "duration": 0.07
+    },
+    {
+      "test": "tests/test_scene_imports.py::test_scene_imports_cleanly[content.scenes.system_control]",
+      "duration": 0.06
+    },
+    {
+      "test": "tests/test_scene_imports.py::test_scene_imports_cleanly[content.scenes.intel_hub]",
+      "duration": 0.06
+    },
+    {
+      "test": "tests/test_config.py::TestDotNotation::test_missing_key_returns_default",
+      "duration": 0.05
+    }
+  ],
+  "return_code": 0,
+  "status": "PASSED"
+}

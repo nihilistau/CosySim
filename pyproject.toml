@@ -397,7 +397,11 @@ norecursedirs = ["tests/tmp", ".git", "__pycache__", "*.egg-info", "node_modules
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: marks tests as integration tests",
-    "unit: marks tests as unit tests",
+    "unit: Unit tests (fast, no external deps)",
+    "scene: Scene-specific tests",
+    "browser: Tests requiring browser/CDP",
+    "nexus: Tests requiring Nexus server",
+    "smoke: Quick smoke tests for CI",
 ]
 
 [tool.coverage.run]

@@ -776,4 +776,26 @@ testing:
     - dom_health
   store_results_in_nexus: true
   schedule_interval_minutes: 0
+  smart_runner:
+    enabled: true
+    default_tier: 2
+    parallel_workers: 4
+    timing_cache: "data/test_timing.json"
+    reports_dir: "data/test_reports"
+    skip_patterns:
+      - "test_agent_loop.py"
+      - "live_wire_test.py"
+    tier_1_patterns:
+      - "test_scene_imports"
+      - "test_skill_registry"
+      - "test_config"
+    tier_2_patterns:
+      - "test_penthouse*"
+      - "test_phone*"
+      - "test_lab*"
+      - "test_multiplayer*"
+    tier_3_patterns:
+      - "test_pipeline*"
+      - "test_copilot*"
+      - "test_nexus*"
 
