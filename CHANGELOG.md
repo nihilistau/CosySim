@@ -3,6 +3,45 @@
 All notable changes to CosySim are documented here.
 
 ---
+## [1.04b] — "SYSTEM INTEGRATION" — 2026-03
+
+Penthouse scene fixes, smart test runner, comprehensive documentation overhaul,
+and Nexus-first integration. 2,751 tier-2 tests passing in 106s.
+
+### Penthouse Scene Fixes
+- **LMStudio Auth**: Frontend `refreshModels()` and `_refreshModelAssignList()`
+  now use backend proxy `/api/models/available` instead of direct LMStudio fetch
+  (fixes missing Bearer token error)
+- **Character Picker**: Added `traits` field mapping (tags→traits), improved error
+  handling with detailed messages and console logging
+- **Character Picker Overlay**: Modal with personality selection, 5 seeded characters
+- **Agent Loop UI**: Start/Stop/Tick buttons with live status indicator
+- **Model Assignment**: Per-character LMStudio model selection dropdown
+- **First-Person Camera**: Pointer-lock, WASD movement, mouse look, room bounds
+- **YAML Settings**: Penthouse positions, outfits, personalities, stats exposed to config
+
+### Smart Test System
+- **Smart Test Runner** (`scripts/smart_test_runner.py`, 1001 lines): git-diff
+  detection, 4-tier strategy (Tier 1: 14s smoke, Tier 2: 106s scene, Tier 3: 5min
+  integration, Tier 4: full), timing cache, JSON reports
+- **Automated Test Scheduler** (`scripts/test_scheduler.py`): Scheduling, 4 MCP
+  skills (run_tests, test_status, test_report, list_test_runs)
+- **Pytest Markers**: Added scene, browser, nexus, smoke markers
+
+### Documentation Overhaul
+- **22 files**: Renamed "bedroom" → "penthouse" across all documentation
+- **3 stub docs expanded**: CONTENT_GUIDE (465 lines), ECONOMY_GUIDE (418 lines),
+  ARENA_GUIDE (434 lines) — all with code examples and cross-references
+- **4 system docs updated**: TESTING.md (+223 lines), CONFIGURATION.md (+134 lines),
+  SCENES.md (+104 lines), NEXUS_INTEGRATION.md (+134 lines)
+
+### Nexus Integration
+- Copilot rules reseeded with updated docs (7 stored, 8 updated, 7 deduped)
+- Self-maintaining loop documented in NEXUS_INTEGRATION.md
+- Smart query router pipeline documented
+
+---
+
 ## [1.03b] — "THE PENTHOUSE UPDATE" — 2026-03
 
 Scene system visual upgrade, ARGUS LiveDebugger toolbox, lab survival mechanics,
