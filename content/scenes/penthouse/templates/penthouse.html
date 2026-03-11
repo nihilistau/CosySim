@@ -302,6 +302,62 @@
             <button class="cs-glass-btn cs-glass-btn--accent" onclick="placeDirectorAvatar()">Place Avatar</button>
             <button class="cs-glass-btn" onclick="removeDirectorAvatar()">Remove</button>
           </div>
+          <!-- Director interaction controls (visible when avatar placed) -->
+          <div id="directorInteractControls" style="display:none; margin-top:8px;">
+            <div class="ph-form-grid ph-form-grid--2">
+              <select id="dirAnimState" class="ph-select" onchange="setDirectorAnimState(this.value)">
+                <option value="idle">Idle</option>
+                <option value="sit">Sit</option>
+                <option value="lie">Lie Down</option>
+                <option value="lounge">Lounge</option>
+                <option value="kneel">Kneel</option>
+                <option value="all_fours">All Fours</option>
+                <option value="dance">Dance</option>
+                <option value="flirt">Flirt</option>
+                <option value="wave">Wave</option>
+                <option value="warm">Warm by Fire</option>
+                <option value="bathe">Bathe</option>
+                <option value="primp">Primp</option>
+              </select>
+              <select id="dirMoveLocation" class="ph-select" onchange="moveDirectorTo(this.value)">
+                <option value="">— Move To —</option>
+                <option value="bed">🛏 Bed</option>
+                <option value="couch">🛋 Couch</option>
+                <option value="fireplace">🔥 Fireplace</option>
+                <option value="bar">🍸 Bar</option>
+                <option value="bathroom">🛁 Bathroom</option>
+                <option value="vanity">💄 Vanity</option>
+                <option value="balcony">🌙 Balcony</option>
+                <option value="doorway">🚪 Doorway</option>
+              </select>
+            </div>
+            <div class="ph-form-grid ph-form-grid--2" style="margin-top:4px;">
+              <select id="dirOutfitChange" class="ph-select" onchange="changeDirectorOutfit(this.value)">
+                <option value="">— Change Outfit —</option>
+                <option value="casual">Casual</option>
+                <option value="formal">Formal</option>
+                <option value="silk_robe">Silk Robe</option>
+                <option value="nothing">Nothing</option>
+                <option value="lingerie">Lingerie</option>
+                <option value="leather">Leather</option>
+                <option value="evening_dress">Evening Dress</option>
+                <option value="swimwear">Swimwear</option>
+                <option value="underwear">Underwear</option>
+              </select>
+              <select id="dirExpression" class="ph-select" onchange="setDirectorExpression(this.value)">
+                <option value="">— Expression —</option>
+                <option value="happy">😊 Happy</option>
+                <option value="flirty">😏 Flirty</option>
+                <option value="aroused">🥵 Aroused</option>
+                <option value="shy">😳 Shy</option>
+                <option value="angry">😠 Angry</option>
+                <option value="sad">😢 Sad</option>
+                <option value="surprised">😮 Surprised</option>
+                <option value="sleepy">😴 Sleepy</option>
+                <option value="neutral">😐 Neutral</option>
+              </select>
+            </div>
+          </div>
         </section>
 
         <section class="ph-section">

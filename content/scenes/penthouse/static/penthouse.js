@@ -1229,6 +1229,9 @@ function placeDirectorAvatar() {
       if (window.CharacterBridge) {
         window.CharacterBridge.placeDirectorAvatar(data);
       }
+      // Show interaction controls
+      const ctrl = document.getElementById('directorInteractControls');
+      if (ctrl) ctrl.style.display = 'block';
       PENTHOUSE._showSystemMessage('🎭 Avatar placed at ' + data.location);
     })
     .catch(() => {});
@@ -1241,9 +1244,46 @@ function removeDirectorAvatar() {
       if (window.CharacterBridge) {
         window.CharacterBridge.removeDirectorAvatar();
       }
+      // Hide interaction controls
+      const ctrl = document.getElementById('directorInteractControls');
+      if (ctrl) ctrl.style.display = 'none';
       PENTHOUSE._showSystemMessage('🎭 Avatar removed');
     })
     .catch(() => {});
+}
+
+function setDirectorAnimState(state) {
+  if (state && window.CharacterBridge) {
+    CharacterBridge.setDirectorState(state);
+  }
+}
+
+function moveDirectorTo(locationId) {
+  if (!locationId || !window.CharacterBridge) return;
+  CharacterBridge.moveDirectorTo(locationId);
+  // Update the animation state dropdown to match the inferred state
+  if (window.PenthouseAnim) {
+    const inferred = PenthouseAnim.inferAnimState(locationId, 'idle');
+    const sel = document.getElementById('dirAnimState');
+    if (sel && inferred) sel.value = inferred;
+  }
+  // Reset the move dropdown
+  const moveSel = document.getElementById('dirMoveLocation');
+  if (moveSel) moveSel.value = '';
+}
+
+function changeDirectorOutfit(outfit) {
+  if (!outfit || !window.CharacterBridge) return;
+  CharacterBridge.setDirectorOutfit(outfit);
+  const sel = document.getElementById('dirOutfitChange');
+  if (sel) sel.value = '';
+}
+
+function setDirectorExpression(expression) {
+  if (!expression || !window.CharacterBridge) return;
+  CharacterBridge.setMood('Director', expression);
+  const sel = document.getElementById('dirExpression');
+  if (sel) sel.value = '';
 }
 
 function sendWhisper() {
