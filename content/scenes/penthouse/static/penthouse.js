@@ -138,6 +138,10 @@ class PenthouseScene {
     // World tick
     s.on('world_tick',     data => this._onWorldTick(data));
 
+    // NPC scheduler events
+    s.on('npc_activity',   data => this._onNpcActivity(data));
+    s.on('npc_location',   data => this._onNpcLocation(data));
+
     // Bench HUD live push
     s.on('bench:update',   data => {
       if (typeof BenchHUD !== 'undefined') BenchHUD.update(data);
@@ -145,6 +149,11 @@ class PenthouseScene {
 
     // Errors
     s.on('error',          data => this._showSystemMessage(`⚠ ${data.message || 'Unknown error'}`));
+
+    // Agent loop events
+    s.on('agent_action',        data => this._onAgentAction(data));
+    s.on('agent_tick',          data => this._onAgentTick(data));
+    s.on('character_speaking',  data => this._onCharacterSpeaking(data));
   }
 
   _onConnect() {
@@ -156,6 +165,20 @@ class PenthouseScene {
   _onDisconnect() {
     this._showSystemMessage('Connection lost. Reconnecting…');
     this._setTyping('', false);
+  }
+
+  /* ── NPC scheduler handlers ────────────────────────────────────── */
+
+  _onNpcActivity(data) {
+    const name     = data.character_name || data.character_id || 'NPC';
+    const activity = data.activity || 'idle';
+    this._showSystemMessage(`🏙 ${name}: ${activity}`);
+  }
+
+  _onNpcLocation(data) {
+    const name     = data.character_name || data.character_id || 'NPC';
+    const location = data.location || 'unknown';
+    console.log(`[NPC] ${name} moved to ${location}`);
   }
 
   /* ── Scene state handlers ───────────────────────────────────────── */
@@ -289,6 +312,40 @@ class PenthouseScene {
   _showSystemMessage(text) {
     this._renderMessage({ name: 'System', message: text, role: 'system' });
     _addActivityItem(text, '📋');
+  }
+
+  /* ── Agent loop event handlers ───────────────────────────────────── */
+
+  _onAgentAction(data) {
+    const action = data.action || 'idle';
+    const charName = data.character_name || 'Unknown';
+
+    // Speech actions are handled via chat_message / chat_response
+    if (action === 'speak') return;
+
+    if (action !== 'idle') {
+      const desc = data.description || `${charName} ${action}s`;
+      this._showSystemMessage(`🎭 ${desc}`);
+    }
+  }
+
+  _onAgentTick(data) {
+    const tick = data.tick || 0;
+    const actions = data.actions || [];
+    console.log(`[AgentLoop] Tick #${tick}: ${actions.length} actions`);
+  }
+
+  _onCharacterSpeaking(data) {
+    const charName = data.character_name || 'Unknown';
+    const message = data.message || '';
+    if (message) {
+      this._onChatResponse({
+        name: charName,
+        character_name: charName,
+        message: message,
+        timestamp: data.timestamp || new Date().toISOString(),
+      });
+    }
   }
 
   /* ── Typing indicator ───────────────────────────────────────────── */
