@@ -121,6 +121,20 @@
     <span class="ph-director-toggle__label">STYLE</span>
   </button>
 
+  <!-- Model import toggle -->
+  <button class="ph-model-import-toggle" id="ph-model-import-toggle" title="Model Library" aria-label="Toggle Model Library"
+    onclick="window.PenthouseModelImport && PenthouseModelImport.toggle()">
+    <span style="font-size:18px">📦</span>
+    <span class="ph-director-toggle__label">MODELS</span>
+  </button>
+
+  <!-- Animation Studio toggle -->
+  <button class="ph-anim-studio-toggle" id="ph-anim-studio-toggle" title="Animation Studio" aria-label="Toggle Animation Studio"
+    onclick="window.PenthouseAnimStudio && PenthouseAnimStudio.toggle()">
+    <span style="font-size:18px">🎬</span>
+    <span class="ph-director-toggle__label">ANIM</span>
+  </button>
+
   <!-- ══════════════════════════════════════════════════════════════
        C. DIRECTOR PANEL (right slide-out, 400px)
        ══════════════════════════════════════════════════════════════ -->
@@ -624,6 +638,8 @@
   <script src="{{ url_for('static', filename='js/character_bridge.js') }}"></script>
   <script src="{{ url_for('static', filename='js/penthouse_config.js') }}"></script>
   <script src="{{ url_for('static', filename='js/penthouse_customizer.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/penthouse_model_import.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/penthouse_anim_studio.js') }}"></script>
   <script src="{{ url_for('static', filename='penthouse.js') }}"></script>
   <script>window.SCENE_PARTICLE_CONFIG = { scene: 'penthouse' };</script>
 
