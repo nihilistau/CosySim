@@ -215,3 +215,13 @@ materials:
   lip:
     roughness: 0.4
     metalness: 0.05
+
+# 3D Model Import Configuration
+# ==============================
+model_import:
+  max_file_size_mb: 50
+  allowed_formats: [glb, vrm, gltf]
+  models_directory: "data/penthouse/models"
+  auto_normalize: true
+  default_scale: 1.0
+  default_height: 1.7
