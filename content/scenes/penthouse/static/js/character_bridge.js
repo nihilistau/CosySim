@@ -358,17 +358,40 @@ window.CharacterBridge = (function () {
     const label = createNameLabel('Director', '#ffd700');
     if (label) model.group.add(label);
 
-    _directorSprite = {
+    // Register with AnimManager for full animation support
+    if (window.PenthouseAnim && PenthouseAnim.AnimManager) {
+      PenthouseAnim.AnimManager.register('Director', model);
+      const inferredState = PenthouseAnim.inferAnimState(locationId, 'idle');
+      if (inferredState) {
+        PenthouseAnim.AnimManager.setState('Director', inferredState);
+      }
+    }
+
+    // Track in characters map so director participates like agents
+    characters['director'] = {
       model: model,
       targetPos: new THREE.Vector3(locPos.x + 1.2, 0, locPos.z),
+      locationId: locationId,
+      currentMood: 'neutral',
+      label: label,
+      bubble: null,
+      bubbleTimer: 0,
+      isDirector: true,
     };
 
-    console.info('[CharBridge] Director avatar placed at %s', locationId);
+    _directorSprite = characters['director'];
+
+    console.info('[CharBridge] Director avatar placed at %s (registered with AnimManager)', locationId);
   }
 
   function removeDirectorAvatar() {
     if (_directorSprite) {
       _scene.remove(_directorSprite.model.group);
+      // Unregister from AnimManager
+      if (window.PenthouseAnim && PenthouseAnim.AnimManager) {
+        PenthouseAnim.AnimManager.unregister('Director');
+      }
+      delete characters['director'];
       _directorSprite = null;
       console.info('[CharBridge] Director avatar removed');
     }
@@ -414,8 +437,9 @@ window.CharacterBridge = (function () {
       }
     }
 
-    // Director avatar animation
-    if (_directorSprite && _directorSprite.model.bodyGroup) {
+    // Director avatar: position lerp handled in main loop above since director
+    // is now in the characters map. Only need fallback if not in map for some reason.
+    if (_directorSprite && !characters['director'] && _directorSprite.model.bodyGroup) {
       _directorSprite.model.group.position.lerp(
         _directorSprite.targetPos, Math.min(1, dt * 3)
       );
@@ -498,6 +522,28 @@ window.CharacterBridge = (function () {
       if (window.PenthouseAnim) return PenthouseAnim.AnimManager.getDebugInfo();
       return {};
     },
+    // Director-specific controls
+    moveDirectorTo: (locationId) => {
+      const dir = characters['director'];
+      if (!dir) return;
+      const locPos = _locationPositions[locationId] || { x: 0, y: 0, z: 0 };
+      dir.targetPos.set(locPos.x + 1.2, 0, locPos.z);
+      dir.locationId = locationId;
+      if (window.PenthouseAnim) {
+        const state = PenthouseAnim.inferAnimState(locationId, 'idle');
+        if (state) PenthouseAnim.AnimManager.setState('Director', state);
+      }
+    },
+    setDirectorState: (state) => {
+      if (window.PenthouseAnim) PenthouseAnim.AnimManager.setState('Director', state);
+    },
+    setDirectorOutfit: (outfit) => {
+      const dir = characters['director'];
+      if (dir && dir.model && window.CharModels) {
+        CharModels.updateOutfit(dir.model, outfit);
+      }
+    },
+    isDirectorPlaced: () => !!characters['director'],
   };
 
 })();
