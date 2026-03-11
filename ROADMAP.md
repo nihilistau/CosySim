@@ -1,6 +1,6 @@
 # CosySim Roadmap
 
-> Current: **v1.02b** "NEONCITY 2: THE LIVING CITY" ✅ | Last updated: 2026-03
+> Current: **v1.04b** "SYSTEM INTEGRATION" ✅ | Last updated: 2026-06
 
 ## Philosophy
 
@@ -27,9 +27,57 @@ into a unified cyberpunk RPG framework with deep game systems.
 - **Phase 7** — In-game world news system + bottom-of-screen ticker in every scene
 - **Phase 8** — Documentation, version, and polish
 
-**Baseline: 20 scenes, 38 skill packs / 373 skills, 10,720+ tests passing, v1.02b.**
+**Baseline: 20 scenes, 55+ skill packs / ~420 skills, 10,988 tests passing (330 files), v1.04b.**
 
-## Post-v1.0 Roadmap (2026-Q2+)
+---
+
+## Shipped: v1.03b — "THE PENTHOUSE UPDATE" ✅
+
+- [x] Penthouse overlay layout — 3D canvas + overlay panels
+- [x] 8-tab director panel (Scene, Cast, Dialog, Actions, Scenario, World, Settings, Debug)
+- [x] Lab Break survival mechanics — 6 stats, death system, crafting, 30 items
+- [x] Phone scene click-blocking fix
+- [x] ARGUS LiveDebugger CDP diagnostics toolbox
+- [x] Version bump, docs update
+
+---
+
+## Shipped: v1.04b — "SYSTEM INTEGRATION" ✅
+
+- [x] Penthouse LMStudio auth fix — backend proxy for Bearer token
+- [x] Character picker overlay modal with personality selection
+- [x] Agent loop UI — Start/Stop/Tick with live status indicator
+- [x] Model assignment per character
+- [x] First-person camera mode — WASD, pointer-lock, room bounds
+- [x] YAML-driven penthouse settings
+- [x] Smart test runner — 4-tier strategy: Tier 1 in 14s, Tier 2 in 106s vs 20+ min full
+- [x] Automated test scheduler with MCP skills
+- [x] Pytest markers: unit, integration, slow, scene, browser, nexus, smoke
+- [x] Documentation overhaul: 22 files bedroom→penthouse, 3 stubs expanded, 4 system docs updated
+- [x] Nexus rules reseeded
+- **Tests: 10,988 passing** (330 files, 2,751 in tier-2 suite)
+
+## Active: v1.05b — Current Sprint
+
+### Local Agent Task Queue
+- [ ] Priority-based task queue with retry logic and load balancing
+- [ ] Agent task scheduler with MCP skill integration
+
+### System Recovery MCP Skills
+- [ ] Backup, restore, diagnostics, and auto-heal skills
+- [ ] Self-recovery workflows for common failure modes
+
+### Prompt Template Registry
+- [ ] Versioned prompt templates with expansion and A/B testing
+- [ ] Template management MCP skills
+
+### Metrics Dashboard
+- [ ] Flask blueprint at `/metrics/dashboard`
+- [ ] Real-time system metrics and performance tracking
+
+---
+
+## Post-v1.0 Roadmap (2026-Q3+)
 
 ### 1. Nexus Knowledge Deepening
 - Continue filling Nexus with reusable Q&A, architecture decisions, and learnings
@@ -44,7 +92,6 @@ into a unified cyberpunk RPG framework with deep game systems.
 - Store all distilled knowledge back into Nexus
 
 ### 3. Local Agent Autonomy
-- Agent task scheduler: break complex work into LMStudio-sized tasks
 - Fine-tune local models on CosySim-specific Q&A and code patterns
 - Agent self-improvement: benchmark, learn, adapt
 - Router agent: classify incoming tasks → delegate to appropriate model/agent
@@ -61,16 +108,13 @@ into a unified cyberpunk RPG framework with deep game systems.
 - Performance profiling and caching optimization
 - Scene health monitoring with auto-restart
 - Comprehensive integration test suite across all game systems
-  - scheduled/session/news ingress tightening
-  - wider deep-query exposure on MCP-facing Nexus tool surfaces where needed
-  - flywheel observability and quality metrics
 
-### 3. Continue runtime hardening in follow-on sweeps
+### 6. Continue runtime hardening in follow-on sweeps
 - Keep removing silent-success fallbacks from remaining scene/service paths as
   they are discovered.
 - Preserve the explicit degraded-state contract added in the current tranche.
 
-### 4. Build richer control surfaces after the foundation holds
+### 7. Build richer control surfaces after the foundation holds
 - The first **operator-cockpit** slice is now in place inside Intel Hub:
   - LAN/mobile-friendly operator console
   - Nexus-backed off-turn inbox ingestion
