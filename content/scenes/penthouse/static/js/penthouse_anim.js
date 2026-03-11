@@ -499,8 +499,8 @@
       if (this.currentState === 'sit') {
         const s = t;
 
-        // Lower body position
-        model.group.position.y = -0.35 * s + (model._baseY || 0);
+        // Raise to couch seat level
+        model.group.position.y = 0.50 * s + (model._baseY || 0);
 
         // Legs bent at ~90°
         if (model.legL) {
@@ -564,8 +564,8 @@
       if (this.currentState === 'lie') {
         const l = t;
 
-        // Lower and rotate body to horizontal
-        model.group.position.y = -0.6 * l + (model._baseY || 0);
+        // Raise to bed mattress level
+        model.group.position.y = 0.70 * l + (model._baseY || 0);
         model.bodyGroup.rotation.x = -1.4 * l;  // lean far back
 
         // Legs extended, slightly apart
@@ -601,8 +601,8 @@
       if (this.currentState === 'lounge') {
         const l = t;
 
-        // Lowered, leaning back
-        model.group.position.y = -0.3 * l + (model._baseY || 0);
+        // Raise to couch level, leaning back
+        model.group.position.y = 0.50 * l + (model._baseY || 0);
         model.bodyGroup.rotation.x = -0.4 * l;
 
         // Legs stretched out, one crossed
@@ -687,8 +687,8 @@
       if (this.currentState === 'warm') {
         const w = t;
 
-        // Seated position
-        model.group.position.y = -0.3 * w + (model._baseY || 0);
+        // On floor level
+        model.group.position.y = 0.0 * w + (model._baseY || 0);
 
         // Legs bent, tucked
         if (model.legL) {
@@ -752,8 +752,8 @@
       if (this.currentState === 'bathe') {
         const b = t;
 
-        // Lowered into tub
-        model.group.position.y = -0.5 * b + (model._baseY || 0);
+        // Partially submerged in tub
+        model.group.position.y = 0.35 * b + (model._baseY || 0);
 
         // Body slightly reclined
         model.bodyGroup.rotation.x = -0.25 * b;
@@ -809,7 +809,7 @@
       // ── SIT_CROSS state (legs crossed elegantly) ───────────────
       if (this.currentState === 'sit_cross') {
         const s = t;
-        model.group.position.y = -0.35 * s + (model._baseY || 0);
+        model.group.position.y = 0.50 * s + (model._baseY || 0);
         if (model.legL) {
           model.legL.rotation.x = -1.4 * s;
           model.legL.rotation.z = -0.05 * s;
@@ -833,7 +833,7 @@
       // ── SIT_LEAN state (leaning back casually) ─────────────────
       if (this.currentState === 'sit_lean') {
         const s = t;
-        model.group.position.y = -0.32 * s + (model._baseY || 0);
+        model.group.position.y = 0.48 * s + (model._baseY || 0);
         model.bodyGroup.rotation.x = -0.25 * s;
         if (model.legL) {
           model.legL.rotation.x = -1.1 * s;
@@ -856,7 +856,7 @@
       // ── SIT_FLOOR state (sitting on the floor) ─────────────────
       if (this.currentState === 'sit_floor') {
         const s = t;
-        model.group.position.y = -0.55 * s + (model._baseY || 0);
+        model.group.position.y = 0.0 * s + (model._baseY || 0);
         if (model.legL) {
           model.legL.rotation.x = -0.9 * s;
           model.legL.rotation.z = -0.3 * s;
@@ -909,7 +909,7 @@
       // ── LIE_SIDE state (lying on one side) ─────────────────────
       if (this.currentState === 'lie_side') {
         const l = t;
-        model.group.position.y = -0.65 * l + (model._baseY || 0);
+        model.group.position.y = 0.65 * l + (model._baseY || 0);
         model.bodyGroup.rotation.x = -1.3 * l;
         model.bodyGroup.rotation.z = 0.4 * l;  // rolled to side
         if (model.legL) {
@@ -939,7 +939,7 @@
       // ── LIE_FRONT state (lying face-down) ──────────────────────
       if (this.currentState === 'lie_front') {
         const l = t;
-        model.group.position.y = -0.7 * l + (model._baseY || 0);
+        model.group.position.y = 0.65 * l + (model._baseY || 0);
         model.bodyGroup.rotation.x = -1.55 * l;  // face down
         if (model.legL) {
           model.legL.rotation.x = 0.1 * l;
@@ -962,7 +962,7 @@
       // ── KNEEL state (upright kneeling) ─────────────────────────
       if (this.currentState === 'kneel') {
         const k = t;
-        model.group.position.y = -0.45 * k + (model._baseY || 0);
+        model.group.position.y = 0.0 * k + (model._baseY || 0);
         if (model.legL) {
           model.legL.rotation.x = -1.6 * k;
           model.legL.rotation.z = -0.03 * k;
@@ -985,7 +985,7 @@
       // ── KNEEL_SIT state (sitting on heels) ─────────────────────
       if (this.currentState === 'kneel_sit') {
         const k = t;
-        model.group.position.y = -0.55 * k + (model._baseY || 0);
+        model.group.position.y = 0.0 * k + (model._baseY || 0);
         if (model.legL) {
           model.legL.rotation.x = -2.0 * k;
           model.legL.rotation.z = -0.05 * k;
@@ -1007,7 +1007,7 @@
       // ── ALL_FOURS state ────────────────────────────────────────
       if (this.currentState === 'all_fours') {
         const a = t;
-        model.group.position.y = -0.5 * a + (model._baseY || 0);
+        model.group.position.y = 0.0 * a + (model._baseY || 0);
         model.bodyGroup.rotation.x = 1.1 * a;  // torso forward/horizontal
         if (model.legL) {
           model.legL.rotation.x = -1.6 * a;
@@ -1034,7 +1034,7 @@
       if (this.currentState === 'crawl') {
         this.walkPhase += dt * 2.0;
         const c = t;
-        model.group.position.y = -0.5 * c + (model._baseY || 0);
+        model.group.position.y = 0.0 * c + (model._baseY || 0);
         model.bodyGroup.rotation.x = 1.0 * c;
         const phase = this.walkPhase;
         if (model.armL) {
@@ -1057,7 +1057,7 @@
       // ── SPRAWL state (spread out on floor/bed) ─────────────────
       if (this.currentState === 'sprawl') {
         const s = t;
-        model.group.position.y = -0.7 * s + (model._baseY || 0);
+        model.group.position.y = 0.0 * s + (model._baseY || 0);
         model.bodyGroup.rotation.x = -1.5 * s;
         if (model.legL) {
           model.legL.rotation.x = -0.3 * s;
@@ -1345,7 +1345,7 @@
       // ── LAP_SIT state (sitting on someone's lap) ───────────────
       if (this.currentState === 'lap_sit') {
         const l = t;
-        model.group.position.y = -0.2 * l + (model._baseY || 0);
+        model.group.position.y = 0.50 * l + (model._baseY || 0);
         if (model.legL) {
           model.legL.rotation.x = -1.2 * l;
           model.legL.rotation.z = -0.2 * l;
@@ -1369,7 +1369,7 @@
       // ── STRADDLE state (straddling, facing) ────────────────────
       if (this.currentState === 'straddle') {
         const s = t;
-        model.group.position.y = -0.25 * s + (model._baseY || 0);
+        model.group.position.y = 0.50 * s + (model._baseY || 0);
         if (model.legL) {
           model.legL.rotation.x = -1.3 * s;
           model.legL.rotation.z = -0.4 * s;
@@ -1394,7 +1394,7 @@
         this.walkPhase += dt * 2.0;
         const r = t;
         const p = this.walkPhase;
-        model.group.position.y = (-0.25 + 0.08 * Math.sin(p)) * r + (model._baseY || 0);
+        model.group.position.y = (0.50 + 0.08 * Math.sin(p)) * r + (model._baseY || 0);
         if (model.legL) {
           model.legL.rotation.x = (-1.3 + 0.1 * Math.sin(p)) * r;
           model.legL.rotation.z = -0.4 * r;
@@ -1418,7 +1418,7 @@
       // ── GOING_DOWN state (kneeling oral position) ──────────────
       if (this.currentState === 'going_down') {
         const g = t;
-        model.group.position.y = -0.5 * g + (model._baseY || 0);
+        model.group.position.y = 0.0 * g + (model._baseY || 0);
         if (model.legL) {
           model.legL.rotation.x = -1.8 * g;
           model.legL.rotation.z = -0.05 * g;
@@ -1446,7 +1446,7 @@
       // ── MISSIONARY state (lying back, legs parted) ─────────────
       if (this.currentState === 'missionary') {
         const m = t;
-        model.group.position.y = -0.65 * m + (model._baseY || 0);
+        model.group.position.y = 0.65 * m + (model._baseY || 0);
         model.bodyGroup.rotation.x = -1.4 * m;
         if (model.legL) {
           model.legL.rotation.x = -0.5 * m;
@@ -1473,7 +1473,7 @@
         this.walkPhase += dt * 2.2;
         const dg = t;
         const p = this.walkPhase;
-        model.group.position.y = -0.5 * dg + (model._baseY || 0);
+        model.group.position.y = 0.0 * dg + (model._baseY || 0);
         model.bodyGroup.rotation.x = 1.1 * dg;
         if (model.legL) {
           model.legL.rotation.x = -1.5 * dg;
@@ -1499,7 +1499,7 @@
       // ── SPOONING state (lying side-by-side) ────────────────────
       if (this.currentState === 'spooning') {
         const sp = t;
-        model.group.position.y = -0.65 * sp + (model._baseY || 0);
+        model.group.position.y = 0.65 * sp + (model._baseY || 0);
         model.bodyGroup.rotation.x = -1.3 * sp;
         model.bodyGroup.rotation.z = 0.35 * sp;
         if (model.legL) {
@@ -1552,7 +1552,7 @@
       // ── SUBMISSIVE state (kneeling, head lowered) ──────────────
       if (this.currentState === 'submissive') {
         const sb = t;
-        model.group.position.y = -0.5 * sb + (model._baseY || 0);
+        model.group.position.y = 0.0 * sb + (model._baseY || 0);
         model.bodyGroup.rotation.x = 0.2 * sb;
         if (model.legL) {
           model.legL.rotation.x = -1.8 * sb;

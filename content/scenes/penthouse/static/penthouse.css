@@ -318,6 +318,16 @@
   transform: rotate(-45deg) translate(3px, -4px);
 }
 
+/* Hide other toggles when director is active */
+.ph-director-toggle.active ~ .ph-customizer-toggle,
+.ph-director-toggle.active ~ .ph-model-import-toggle,
+.ph-director-toggle.active ~ .ph-anim-studio-toggle {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(60px);
+  transition: all 0.3s ease;
+}
+
 .ph-director-toggle__label {
   font-size: 0.65rem;
   font-weight: 700;
