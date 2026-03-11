@@ -431,3 +431,95 @@ def _make_skill_mock() -> MagicMock:
     mock_mod.skill = lambda **kw: (lambda fn: fn)
     mock_mod.SkillCategory = MagicMock(GAME="game")
     return mock_mod
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  Animation Skills
+# ══════════════════════════════════════════════════════════════════════
+
+class TestAnimationSkills:
+    """Validate animation skill functions exist and return proper messages."""
+
+    @pytest.fixture(autouse=True)
+    def _import(self):
+        """Import penthouse_skills with mocked dependencies."""
+        skill_mock = _make_skill_mock()
+        with patch.dict("sys.modules", {
+            "engine.skills.skill": skill_mock,
+        }):
+            import importlib
+            mod = importlib.import_module("content.scenes.penthouse.penthouse_skills")
+            importlib.reload(mod)
+            self.mod = mod
+
+    def test_list_animations_returns_string(self):
+        result = self.mod.penthouse_list_animations()
+        assert isinstance(result, str)
+        assert "idle" in result
+        assert "walk" in result
+
+    def test_list_animations_has_categories(self):
+        result = self.mod.penthouse_list_animations()
+        assert "Basic" in result
+        assert "Intimate" in result
+        assert "Action" in result
+
+    def test_list_animations_has_expressions(self):
+        result = self.mod.penthouse_list_animations()
+        assert "Expressions" in result
+        assert "neutral" in result
+
+    def test_set_animation_requires_character_id(self):
+        result = self.mod.penthouse_set_animation(character_id="", state="idle")
+        assert "Specify" in result
+
+    def test_set_animation_rejects_unknown_state(self):
+        result = self.mod.penthouse_set_animation(character_id="lola", state="nonexistent")
+        assert "Unknown" in result or "unknown" in result.lower()
+
+    def test_set_expression_requires_character_id(self):
+        result = self.mod.penthouse_set_expression(character_id="", expression="happy")
+        assert "Specify" in result
+
+    def test_set_expression_rejects_unknown(self):
+        result = self.mod.penthouse_set_expression(character_id="lola", expression="xyz")
+        assert "Unknown" in result or "unknown" in result.lower()
+
+    def test_paired_animation_requires_both_ids(self):
+        result = self.mod.penthouse_paired_animation(
+            character_id_1="lola", character_id_2="", animation="embrace"
+        )
+        assert "both" in result.lower() or "Specify" in result
+
+    def test_paired_animation_rejects_non_paired(self):
+        result = self.mod.penthouse_paired_animation(
+            character_id_1="lola", character_id_2="viktor", animation="idle"
+        )
+        assert "not a paired" in result.lower()
+
+    def test_interaction_chain_requires_chain(self):
+        result = self.mod.penthouse_interaction_chain(
+            character_id="lola", chain=""
+        )
+        assert "Specify" in result
+
+    def test_interaction_chain_rejects_unknown(self):
+        result = self.mod.penthouse_interaction_chain(
+            character_id="lola", chain="nonexistent"
+        )
+        assert "Unknown" in result or "unknown" in result.lower()
+
+    def test_change_outfit_requires_both(self):
+        result = self.mod.penthouse_change_outfit(character_id="", outfit="")
+        assert "Specify" in result
+
+    def test_valid_anim_states_list_populated(self):
+        assert len(self.mod.VALID_ANIM_STATES) >= 50
+        assert "idle" in self.mod.VALID_ANIM_STATES
+        assert "missionary" in self.mod.VALID_ANIM_STATES
+        assert "dance_slow" in self.mod.VALID_ANIM_STATES
+
+    def test_valid_expressions_list_populated(self):
+        assert len(self.mod.VALID_EXPRESSIONS) >= 12
+        assert "neutral" in self.mod.VALID_EXPRESSIONS
+        assert "aroused" in self.mod.VALID_EXPRESSIONS

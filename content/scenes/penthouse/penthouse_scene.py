@@ -1569,7 +1569,20 @@ class PenthouseScene(PenthouseAnimStudioMixin, PenthouseModelMixin, PenthouseCom
                 "outfits": _load_yaml("outfits"),
                 "scene": _load_yaml("scene"),
                 "animations": _load_yaml("animations"),
+                "interactions": _load_yaml("interactions"),
             })
+
+        @self.app.route("/api/config/interactions")
+        def api_config_interactions():
+            return jsonify(_load_yaml("interactions"))
+
+        @self.app.route("/api/config/models")
+        def api_config_models():
+            path = os.path.join(self._config_dir(), "models", "catalog.yaml")
+            if not os.path.exists(path):
+                return jsonify({})
+            with open(path, "r", encoding="utf-8") as f:
+                return jsonify(yaml.safe_load(f) or {})
 
     # ── SocketIO─────────────────────────────────────────────────────────
     def _setup_socketio(self):
