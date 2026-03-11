@@ -51,7 +51,7 @@ catalog:
     thumbnail: null
 
   example2:
-    file: "example2.glb.glb"
+    file: "example2.glb"
     source_dir: "C:/Files/Models/avatat_models"
     size_mb: 4.3
     type: unknown

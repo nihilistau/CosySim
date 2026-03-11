@@ -1,6 +1,6 @@
 # CosySim Roadmap
 
-> Current: **v1.04b** "SYSTEM INTEGRATION" ✅ | Last updated: 2026-06
+> Current: **v1.06b** "AAA+++ ANIMATION" ✅ | Last updated: 2026-03
 
 ## Philosophy
 
@@ -27,7 +27,7 @@ into a unified cyberpunk RPG framework with deep game systems.
 - **Phase 7** — In-game world news system + bottom-of-screen ticker in every scene
 - **Phase 8** — Documentation, version, and polish
 
-**Baseline: 20 scenes, 55+ skill packs / ~420 skills, 10,988 tests passing (330 files), v1.04b.**
+**Baseline: 20 scenes, 55+ skill packs / ~420 skills, 10,988 tests passing (330 files), v1.06b.**
 
 ---
 
@@ -57,23 +57,56 @@ into a unified cyberpunk RPG framework with deep game systems.
 - [x] Nexus rules reseeded
 - **Tests: 10,988 passing** (330 files, 2,751 in tier-2 suite)
 
-## Active: v1.05b — Current Sprint
+## Shipped: v1.05b — "AUTONOMY SPRINT" ✅
 
-### Local Agent Task Queue
-- [ ] Priority-based task queue with retry logic and load balancing
-- [ ] Agent task scheduler with MCP skill integration
+- [x] Priority-based task queue with retry logic and load balancing
+- [x] Agent task scheduler with MCP skill integration
+- [x] Backup, restore, diagnostics, and auto-heal skills (8 MCP skills)
+- [x] Self-recovery workflows for common failure modes
+- [x] Versioned prompt templates with expansion and A/B testing (20 built-in)
+- [x] Template management MCP skills (5 skills)
+- [x] Flask blueprint at `/metrics/dashboard` (cyberpunk glass-morphism UI)
+- [x] Real-time system metrics and performance tracking (6 API endpoints)
 
-### System Recovery MCP Skills
-- [ ] Backup, restore, diagnostics, and auto-heal skills
-- [ ] Self-recovery workflows for common failure modes
+---
 
-### Prompt Template Registry
-- [ ] Versioned prompt templates with expansion and A/B testing
-- [ ] Template management MCP skills
+## Shipped: v1.06b — "AAA+++ ANIMATION" ✅
 
-### Metrics Dashboard
-- [ ] Flask blueprint at `/metrics/dashboard`
-- [ ] Real-time system metrics and performance tracking
+- [x] 55-state animation state machine with procedural bone animation
+- [x] 111 built-in poses across 12 categories
+- [x] 5-tab Animation Studio UI (Poses, Expressions, Sequences, Library, Models)
+- [x] Director avatar with full AnimManager registration and interactive controls
+- [x] 6 MCP animation skills for agent-driven animation control
+- [x] YAML content system (animations.yaml, interactions.yaml, catalog.yaml)
+- [x] Reusable engine/animation/ framework (AnimationConfig, PoseLibrary, ModelCatalog)
+- [x] Model browser with search/filter for 21 cataloged models
+- [x] Code quality polish (silent exception logging, config constants, validation helpers)
+- [x] 128 new tests (14 skill + 114 framework)
+
+---
+
+## Active: v1.07b — Current Sprint
+
+### NotebookLM Research Pipeline
+- [ ] Automated topic discovery and source curation
+- [ ] NLM-driven knowledge distillation into Nexus
+- [ ] News ingestion system: fetch, notebook, distill, store
+- [ ] Code documentation notebooks for implementation guidance
+
+### Nexus Knowledge Deepening
+- [ ] Query router NLM-backed deep research tier
+- [ ] Automated knowledge freshness checks and stale entry cleanup
+- [ ] Training flywheel: feed all Q&A into fine-tuning pipeline
+
+### Local Agent Autonomy
+- [ ] Fine-tune local models on CosySim-specific Q&A and code patterns
+- [ ] Agent self-improvement: benchmark → learn → adapt loop
+- [ ] Router agent: classify tasks → delegate to appropriate model/agent
+
+### System Polish
+- [ ] Scene health monitoring with auto-restart
+- [ ] Performance profiling and caching optimization
+- [ ] Comprehensive integration test suite across all game systems
 
 ---
 

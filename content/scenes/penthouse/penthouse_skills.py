@@ -21,6 +21,27 @@ def _get_penthouse_scene():
     return get_active_scene("penthouse")
 
 
+def _validate_character(character_id: str, scene=None):
+    """Validate character exists in running penthouse scene.
+
+    Args:
+        character_id: Character to validate.
+        scene: Optional pre-fetched scene instance.
+
+    Returns:
+        Tuple of (scene, error_message). If error_message is None, scene is valid.
+    """
+    if not character_id:
+        return None, "Specify a character_id."
+    if scene is None:
+        scene = _get_penthouse_scene()
+    if not scene:
+        return None, "Penthouse not active."
+    if character_id not in scene.characters:
+        return None, f"Character {character_id} not loaded."
+    return scene, None
+
+
 # ── Character Control ──────────────────────────────────────────
 
 @skill(
@@ -75,8 +96,8 @@ def penthouse_adjust_stat(character_id: str = "", stat: str = "", delta: int = 0
     try:
         from engine.mcp.state_coordinator import get_coordinator
         get_coordinator().update(character_id, source="skill_adjust", scene="penthouse", **{stat: delta})
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("State coordinator update failed: %s", exc)
     scene._broadcast_state()
     new_val = getattr(profile.stats, stat, None)
     return f"Adjusted {character_id}.{stat} by {delta:+d} → now {new_val}."
@@ -305,8 +326,8 @@ def get_scenario_options(intensity: int = 2, tags: str = "") -> str:
         engine = get_content_engine()
         result = engine.get_scenarios(scene="penthouse", intensity=intensity, tags=tags)
         return json.dumps(result, ensure_ascii=False)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Scenario engine lookup failed: %s", exc)
 
     # Fallback: built-in PREMADE_SCENARIOS
     try:
@@ -352,8 +373,8 @@ def load_scenario(scenario_id: str = "") -> str:
         director = get_scene_director("penthouse")
         beat = director.load_scenario(scenario_id)
         return f"Scenario loaded. Beat: {beat}"
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Scenario load failed: %s", exc)
 
     # Fallback: built-in scenario
     from content.scenes.penthouse.penthouse_scene import PREMADE_SCENARIOS
@@ -404,10 +425,10 @@ def recall_memories(character_id: str = "") -> str:
             return f"{scene.characters[character_id].name} has no memories of the player yet."
         lines = [f"- [{m.get('weight', 0):.1f}] {m.get('description', '')}" for m in memories]
         return f"Memories of {scene.characters[character_id].name}:\n" + "\n".join(lines)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Memory recall failed: %s", exc)
 
-    return f"{scene.characters[character_id].name} has a fresh perspective — no memories stored yet."
+    return f"{scene.characters[character_id].name} has a fresh perspective— no memories stored yet."
 
 
 @skill(
@@ -864,8 +885,8 @@ def penthouse_change_outfit(character_id: str = "", outfit: str = "") -> str:
             "old_outfit": old_outfit,
             "animate": True,
         })
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Interaction chain emit failed: %s", exc)
     scene._broadcast_state()
     return f"Changed {character_id} outfit from '{old_outfit}' to '{outfit}'."
 

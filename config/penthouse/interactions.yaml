@@ -360,7 +360,7 @@ chains:
         duration: 3.0
       - action: beckon
         duration: 2.0
-      - action: approach
+      - action: walk
         duration: 1.5
       - action: intimate_touch
         duration: 4.0

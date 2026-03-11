@@ -21,9 +21,24 @@
 
 window.CharacterBridge = (function () {
 
+  // ── Configuration ──
+  const BRIDGE_CONFIG = {
+    colors: ['#ff6b9d', '#51cf66', '#ffd43b', '#74c0fc', '#ff922b', '#da77f2'],
+    labelHeight: 2.0,
+    bubbleHeight: 2.5,
+    maxBubbleTextLength: 60,
+    occupantOffset2P: 0.6,
+    occupantOffsetNP: 0.7,
+    bubbleDurationMs: 6000,
+    labelCanvas: { width: 256, height: 64 },
+    bubbleCanvas: { width: 512, height: 128 },
+    labelFontSize: 32,
+    bubbleFontSize: 16,
+  };
+
   // ─── State ───────────────────────────────────────────────────────
   const characters = {};   // charId → { model, targetPos, currentOutfit, bubble }
-  const CHAR_COLORS = ['#ff6b9d', '#51cf66', '#64b5f6', '#ffd54f', '#e040fb', '#ff8a65'];
+  const CHAR_COLORS = BRIDGE_CONFIG.colors;
   let _scene = null;
   let _locationPositions = {};
   let _animRegistered = false;
@@ -122,8 +137,8 @@ window.CharacterBridge = (function () {
       const idx = occ.indexOf(cid);
       const count = occ.length;
       let offsetX = 0;
-      if (count === 2) offsetX = (idx === 0) ? -0.6 : 0.6;
-      else if (count >= 3) offsetX = (idx - 1) * 0.7;
+      if (count === 2) offsetX = (idx === 0) ? -BRIDGE_CONFIG.occupantOffset2P : BRIDGE_CONFIG.occupantOffset2P;
+      else if (count >= 3) offsetX = (idx - 1) * BRIDGE_CONFIG.occupantOffsetNP;
 
       sprite.targetPos.set(locPos.x + offsetX, 0, locPos.z);
     }
@@ -208,8 +223,8 @@ window.CharacterBridge = (function () {
   function createNameLabel(name, color) {
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
-    canvas.width = 256;
-    canvas.height = 64;
+    canvas.width = BRIDGE_CONFIG.labelCanvas.width;
+    canvas.height = BRIDGE_CONFIG.labelCanvas.height;
 
     // Background pill
     ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
@@ -248,7 +263,7 @@ window.CharacterBridge = (function () {
     });
     const sprite = new THREE.Sprite(mat);
     sprite.scale.set(1.0, 0.25, 1);
-    sprite.position.set(0, 2.0, 0);  // above head
+    sprite.position.set(0, BRIDGE_CONFIG.labelHeight, 0);  // above head
     return sprite;
   }
 
@@ -266,8 +281,8 @@ window.CharacterBridge = (function () {
 
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
-    canvas.width = 512;
-    canvas.height = 128;
+    canvas.width = BRIDGE_CONFIG.bubbleCanvas.width;
+    canvas.height = BRIDGE_CONFIG.bubbleCanvas.height;
 
     // Bubble background
     ctx.fillStyle = 'rgba(20, 20, 40, 0.85)';
@@ -291,7 +306,7 @@ window.CharacterBridge = (function () {
     ctx.stroke();
 
     // Truncate text
-    const maxLen = 60;
+    const maxLen = BRIDGE_CONFIG.maxBubbleTextLength;
     const display = text.length > maxLen ? text.substring(0, maxLen) + '…' : text;
 
     ctx.fillStyle = '#e0e0e0';
@@ -326,10 +341,10 @@ window.CharacterBridge = (function () {
     });
     const sprite = new THREE.Sprite(mat);
     sprite.scale.set(2.0, 0.5, 1);
-    sprite.position.set(0, 2.5, 0);  // above name label
+    sprite.position.set(0, BRIDGE_CONFIG.bubbleHeight, 0);  // above name label
     entry.model.group.add(sprite);
     entry.bubble = sprite;
-    entry.bubbleTimer = duration || 5.0;
+    entry.bubbleTimer = duration || (BRIDGE_CONFIG.bubbleDurationMs / 1000);
   }
 
   // ─── Director Avatar ─────────────────────────────────────────────
@@ -422,7 +437,7 @@ window.CharacterBridge = (function () {
 
       // Name label bob
       if (entry.label) {
-        entry.label.position.y = 2.0 + Math.sin(t * 1.5) * 0.03;
+        entry.label.position.y = BRIDGE_CONFIG.labelHeight + Math.sin(t * 1.5) * 0.03;
       }
 
       // Chat bubble timer

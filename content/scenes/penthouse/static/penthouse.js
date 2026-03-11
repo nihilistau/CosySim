@@ -1053,7 +1053,7 @@ function setTime(preset) {
         window.penthouse3D.setLighting(preset);
       }
     })
-    .catch(() => {});
+    .catch(err => console.warn('[Penthouse] Set scene time failed:', err));
 }
 
 function refreshModels() {
@@ -1176,10 +1176,10 @@ function removeChar(cid) {
       closeCharPicker();
       PENTHOUSE.socket && PENTHOUSE.socket.emit('request_state');
     })
-    .catch(() => {});
+    .catch(err => console.warn('[Penthouse] Remove character failed:', err));
 }
 
-/* ── Direct Tab ─────────────────────────────────────────────────────── */
+/* ── Direct Tab─────────────────────────────────────────────────────── */
 
 function enterScene() {
   const name = document.getElementById('directorNameInput')?.value || 'The Director';
@@ -1195,7 +1195,7 @@ function enterScene() {
       if (status) status.textContent = '✅ In scene as ' + name;
       PENTHOUSE._showSystemMessage('🎬 Director entered as ' + name);
     })
-    .catch(() => {});
+    .catch(err => console.warn('[Penthouse] Director enter scene failed:', err));
 }
 
 function exitScene() {
@@ -1207,7 +1207,7 @@ function exitScene() {
       if (status) status.textContent = '';
       PENTHOUSE._showSystemMessage('🎬 Director left the scene');
     })
-    .catch(() => {});
+    .catch(err => console.warn('[Penthouse] Director exit scene failed:', err));
 }
 
 function placeDirectorAvatar() {
@@ -1234,7 +1234,7 @@ function placeDirectorAvatar() {
       if (ctrl) ctrl.style.display = 'block';
       PENTHOUSE._showSystemMessage('🎭 Avatar placed at ' + data.location);
     })
-    .catch(() => {});
+    .catch(err => console.warn('[Penthouse] Place director avatar failed:', err));
 }
 
 function removeDirectorAvatar() {
@@ -1249,7 +1249,7 @@ function removeDirectorAvatar() {
       if (ctrl) ctrl.style.display = 'none';
       PENTHOUSE._showSystemMessage('🎭 Avatar removed');
     })
-    .catch(() => {});
+    .catch(err => console.warn('[Penthouse] Remove director avatar failed:', err));
 }
 
 function setDirectorAnimState(state) {
@@ -1300,7 +1300,7 @@ function sendWhisper() {
       PENTHOUSE._showSystemMessage('🤫 Whisper sent' + (target ? ' to ' + target : ''));
       document.getElementById('whisperInput').value = '';
     })
-    .catch(() => {});
+    .catch(err => console.warn('[Penthouse] Send whisper failed:', err));
 }
 
 function giveLine() {
@@ -1319,7 +1319,7 @@ function giveLine() {
       PENTHOUSE._showSystemMessage('📝 Line given to ' + target);
       document.getElementById('giveLineInput').value = '';
     })
-    .catch(() => {});
+    .catch(err => console.warn('[Penthouse] Give line failed:', err));
 }
 
 function giveAction() {
@@ -1336,7 +1336,7 @@ function giveAction() {
       PENTHOUSE._showSystemMessage('🎬 Action given' + (target ? ' to ' + target : ''));
       document.getElementById('giveActionInput').value = '';
     })
-    .catch(() => {});
+    .catch(err => console.warn('[Penthouse] Give action failed:', err));
 }
 
 function startConversation(type) {
@@ -1347,7 +1347,7 @@ function startConversation(type) {
   })
     .then(r => r.json())
     .then(() => PENTHOUSE._showSystemMessage('💬 Started: ' + type.replace(/_/g, ' ')))
-    .catch(() => {});
+    .catch(err => console.warn('[Penthouse] Start conversation failed:', err));
 }
 
 /* ── Interact Tab ───────────────────────────────────────────────────── */
@@ -1392,7 +1392,7 @@ function showInteractions(locationId) {
           locationId + '\', \'' + aid + '\')">' + PENTHOUSE._esc(label) + '</button>';
       }).join('');
     })
-    .catch(() => {});
+    .catch(err => console.warn('[Penthouse] Fetch location interactions failed:', err));
 }
 
 function doInteraction(location, interaction) {
@@ -1408,7 +1408,7 @@ function doInteraction(location, interaction) {
         window.penthouse3D.switchView(location);
       }
     })
-    .catch(() => {});
+    .catch(err => console.warn('[Penthouse] Furniture interaction failed:', err));
 }
 
 function quickMoveChar() {
@@ -1425,7 +1425,7 @@ function quickMoveChar() {
       PENTHOUSE._showSystemMessage('🚶 Moved ' + charId + ' to ' + loc);
       PENTHOUSE.socket && PENTHOUSE.socket.emit('request_state');
     })
-    .catch(() => {});
+    .catch(err => console.warn('[Penthouse] Move character failed:', err));
 }
 
 /* ── Story Tab ──────────────────────────────────────────────────────── */
@@ -1498,7 +1498,7 @@ function toggleProp(pid) {
   })
     .then(r => r.json())
     .then(d => PENTHOUSE._showSystemMessage((active ? '✅ ' : '❌ ') + (d.label || pid)))
-    .catch(() => {});
+    .catch(err => console.warn('[Penthouse] Toggle prop failed:', err));
 }
 
 function givePropToChar() {
@@ -1512,7 +1512,7 @@ function givePropToChar() {
   })
     .then(r => r.json())
     .then(() => PENTHOUSE._showSystemMessage('🎁 Gave ' + propId + ' to ' + charId))
-    .catch(() => {});
+    .catch(err => console.warn('[Penthouse] Give prop to character failed:', err));
 }
 
 /* ── Events Tab ─────────────────────────────────────────────────────── */
@@ -1537,7 +1537,7 @@ function fireEvent(eventType) {
         if (effects[eventType]) effects[eventType]();
       }
     })
-    .catch(() => {});
+    .catch(err => console.warn('[Penthouse] Fire event failed:', err));
 }
 
 function fireCustomEvent() {
@@ -1553,7 +1553,7 @@ function fireCustomEvent() {
       PENTHOUSE._showSystemMessage('⚡ Custom event fired');
       document.getElementById('customEventInput').value = '';
     })
-    .catch(() => {});
+    .catch(err => console.warn('[Penthouse] Fire custom event failed:', err));
 }
 
 /* ── Settings Tab ───────────────────────────────────────────────────── */
@@ -1578,7 +1578,7 @@ function updateSetting(key, value) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ [key]: value }),
-  }).catch(() => {});
+  }).catch(err => console.warn('[Penthouse] Scene settings update failed:', err));
 }
 
 function _buildViewPresets() {
@@ -1635,7 +1635,7 @@ function stopAgentLoop() {
       PENTHOUSE._showSystemMessage('⏹ Agent loop stopped');
       _updateAgentLoopUI(false);
     })
-    .catch(() => {});
+    .catch(err => console.warn('[Penthouse] Stop agent loop failed:', err));
 }
 
 function manualTick() {
@@ -1675,7 +1675,7 @@ function assignModelToChar() {
       if (d.error) PENTHOUSE._showSystemMessage('⚠ ' + d.error);
       else PENTHOUSE._showSystemMessage('🤖 Model assigned to ' + charId);
     })
-    .catch(() => {});
+    .catch(err => console.warn('[Penthouse] Agent model assignment failed:', err));
 }
 
 function _refreshModelAssignList() {
