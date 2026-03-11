@@ -371,6 +371,34 @@
     }
     .as-section-title:first-child { margin-top: 0; }
 
+    /* ── Library category sections ────────────────────────────────── */
+    .as-lib-section { margin-bottom: 8px; }
+    .as-lib-section-title {
+      font-size: 11px;
+      color: #b794f4;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      margin: 6px 0 4px;
+      padding: 3px 6px;
+      background: rgba(102,126,234,0.08);
+      border-radius: 4px;
+    }
+    .as-lib-section:first-child .as-lib-section-title { margin-top: 0; }
+    .as-lib-builtin {
+      border-left: 2px solid #b794f4;
+    }
+    .as-badge {
+      display: inline-block;
+      font-size: 9px;
+      padding: 1px 4px;
+      background: rgba(183,148,244,0.2);
+      border: 1px solid rgba(183,148,244,0.4);
+      border-radius: 3px;
+      color: #b794f4;
+      vertical-align: middle;
+      margin-left: 4px;
+    }
+
     /* ── Loop toggle ───────────────────────────────────────────────── */
     .as-toggle {
       display: inline-flex;
@@ -1159,21 +1187,56 @@
       container.innerHTML = '<div class="as-empty">No saved poses yet.</div>';
       return;
     }
-    var html = '';
+
+    // Group poses by category
+    var groups = {};
     keys.forEach(function (id) {
       var pose = _poseLibrary[id];
-      html += '<div class="as-lib-card" data-pose-id="' + id + '">';
-      html += '  <div class="as-lib-name">' + (pose.name || 'Unnamed') + '</div>';
-      html += '  <div class="as-lib-meta">';
-      html += '    ' + (pose.joint_count || Object.keys(pose.joints || {}).length) + ' joints';
-      if (pose.created_at) {
-        html += ' \u2022 ' + pose.created_at.substring(0, 10);
-      }
-      html += '  </div>';
-      html += '  <div class="as-lib-actions">';
-      html += '    <button class="as-btn as-btn--sm as-lib-load" data-pose-id="' + id + '">Load</button>';
-      html += '    <button class="as-btn as-btn--sm as-btn--accent as-lib-del" data-pose-id="' + id + '">Del</button>';
-      html += '  </div>';
+      var cat = pose.category || (pose.builtin ? 'built-in' : 'custom');
+      if (!groups[cat]) groups[cat] = [];
+      groups[cat].push({ id: id, pose: pose });
+    });
+
+    // Render order: furniture first, then basic, gesture, social, then custom
+    var catOrder = ['furniture', 'basic', 'gesture', 'social', 'custom'];
+    var catLabels = {
+      furniture: '🪑 Furniture Interactions',
+      basic: '🧍 Basic Poses',
+      gesture: '👋 Gestures',
+      social: '💃 Social',
+      custom: '✏️ Custom Poses'
+    };
+    // Include any categories not in the predefined order
+    Object.keys(groups).forEach(function (cat) {
+      if (catOrder.indexOf(cat) === -1) catOrder.push(cat);
+    });
+
+    var html = '';
+    catOrder.forEach(function (cat) {
+      var items = groups[cat];
+      if (!items || items.length === 0) return;
+      html += '<div class="as-lib-section">';
+      html += '  <div class="as-lib-section-title">' + (catLabels[cat] || cat) + '</div>';
+      items.forEach(function (item) {
+        var pose = item.pose;
+        var isBuiltin = pose.builtin;
+        html += '<div class="as-lib-card' + (isBuiltin ? ' as-lib-builtin' : '') + '" data-pose-id="' + item.id + '">';
+        html += '  <div class="as-lib-name">' + (pose.name || 'Unnamed');
+        if (isBuiltin) html += ' <span class="as-badge">built-in</span>';
+        html += '</div>';
+        html += '  <div class="as-lib-meta">';
+        html += '    ' + (pose.joint_count || Object.keys(pose.joints || {}).length) + ' joints';
+        if (pose.location && pose.location !== 'any') html += ' \u2022 ' + pose.location;
+        if (!isBuiltin && pose.created_at) html += ' \u2022 ' + pose.created_at.substring(0, 10);
+        html += '  </div>';
+        html += '  <div class="as-lib-actions">';
+        html += '    <button class="as-btn as-btn--sm as-lib-load" data-pose-id="' + item.id + '">Load</button>';
+        if (!isBuiltin) {
+          html += '    <button class="as-btn as-btn--sm as-btn--accent as-lib-del" data-pose-id="' + item.id + '">Del</button>';
+        }
+        html += '  </div>';
+        html += '</div>';
+      });
       html += '</div>';
     });
     container.innerHTML = html;
