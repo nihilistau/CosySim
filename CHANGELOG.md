@@ -3,6 +3,36 @@
 All notable changes to CosySim are documented here.
 
 ---
+## [1.08b] — "GAME SYSTEM INTEGRATION" — 2026-03
+
+Cross-system wiring sprint — connecting neurochemistry, territory control,
+market economy, and news generation into a cohesive cyberpunk world simulation.
+
+### Game System Integration
+- **NeurochemistryInterceptor registered** — Priority 4 interceptor now active
+  in the 26-interceptor pipeline. Injects character emotional state (6
+  neurotransmitters → 8 behaviour modifiers) into every LLM system prompt.
+  Post-call detects mood-altering keywords and applies stimuli.
+- **get_character_modifier()** — New convenience function for game systems to
+  query neurochemistry modifiers (focus, motivation, risk_tolerance, etc.)
+  without importing the full neurochemistry manager.
+- **Hack engine → territory multiplier** — Successful hacks in faction-controlled
+  territory now grant up to +50% bonus XP and credits based on the dominant
+  faction's control percentage.
+- **Custom news publishing API** — `WorldNewsGenerator.publish_custom_article()`
+  allows conversations, skills, and player actions to generate NeonCity Chronicle
+  articles visible in the news ticker.
+- **publish_news skill** — New LLM-callable skill (pack=world_news) for agents
+  to publish custom news articles with category, severity, district, and byline.
+
+### Files Changed
+- `engine/agents/interceptors/__init__.py` — Import + register NeurochemistryInterceptor
+- `engine/characters/neurochemistry.py` — Added `get_character_modifier()` utility
+- `engine/services/hack_engine.py` — Territory control bonus on hack rewards
+- `engine/world/news_generator.py` — Added `publish_custom_article()` method
+- `engine/skills/builtin/world_news_skills.py` — Added `publish_news` skill
+
+---
 ## [1.07b] — "PIPELINE INTELLIGENCE" — 2026-03
 
 Complete NLM pipeline, Nexus knowledge deepening, local agent autonomy, and

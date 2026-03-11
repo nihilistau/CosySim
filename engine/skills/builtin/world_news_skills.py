@@ -370,3 +370,53 @@ def news_by_category(category: str, limit: int = 5) -> str:
         lines.append(f"  [{a['article_id']}] {a['headline']}  ({age_str})")
 
     return "\n".join(lines)
+
+
+@skill(
+    pack="world_news",
+    description="Publish a custom news article to the NeonCity Chronicle ticker",
+    category="COMMUNICATION",
+    cooldown=10.0,
+    cost=2.0,
+    tags=["news", "publish", "custom", "ticker"],
+)
+def publish_news(
+    headline: str,
+    body: str,
+    category: str = "social",
+    severity: int = 2,
+    district: str = "",
+    byline: str = "",
+) -> str:
+    """Publish a custom news article visible in the city news ticker.
+
+    Use this when conversations, events, or character actions should become
+    public news. The article will appear in the NeonCity Chronicle ticker,
+    phone news app, and NPC awareness system.
+
+    Args:
+        headline: Short headline (shown in ticker scroll).
+        body: Full article body text (1-3 paragraphs).
+        category: One of: crime, economy, faction, tech, social, breaking, sports, underworld.
+        severity: 1=routine, 2=notable, 3=significant, 4=major, 5=breaking.
+        district: District the event occurred in (optional).
+        byline: Author credit (defaults to 'NeonCity Chronicle Staff').
+
+    Returns:
+        Confirmation with article ID or error message.
+    """
+    from engine.world.news_generator import get_news_generator
+
+    gen = get_news_generator()
+    article_id = gen.publish_custom_article(
+        headline=headline,
+        body=body,
+        category=category,
+        severity=severity,
+        district=district,
+        byline=byline or "NeonCity Chronicle Staff",
+    )
+
+    if article_id:
+        return f"Published: [{article_id}] \"{headline}\" — category={category}, severity={severity}"
+    return f"Article not published (possible duplicate): \"{headline}\""

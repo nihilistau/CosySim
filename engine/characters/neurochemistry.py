@@ -908,3 +908,28 @@ def get_neurochemistry_manager() -> NeurochemistryManager:
             if _manager_instance is None:
                 _manager_instance = NeurochemistryManager()
     return _manager_instance
+
+
+def get_character_modifier(character_id: str, modifier: str) -> float:
+    """Get a specific behaviour modifier for a character.
+
+    Convenience function for game systems (hack engine, market, combat)
+    to apply neurochemistry-derived modifiers to gameplay outcomes.
+
+    Args:
+        character_id: Character to query.
+        modifier: One of: motivation, social_openness, risk_tolerance, focus,
+            pain_tolerance, stress_resistance, trust_tendency, creativity.
+
+    Returns:
+        Modifier multiplier (0.3–2.0), or 1.0 if character has no state.
+    """
+    try:
+        mgr = get_neurochemistry_manager()
+        state = mgr.get_state(character_id)
+        if state is None:
+            return 1.0
+        mods = state.get_modifiers()
+        return getattr(mods, modifier, 1.0)
+    except Exception:
+        return 1.0

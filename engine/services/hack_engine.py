@@ -42,6 +42,12 @@ def get_player_state():
     return _gps()
 
 
+def get_territory_manager():
+    """Wrapper so tests can patch ``engine.services.hack_engine.get_territory_manager``."""
+    from engine.world.territory import get_territory_manager as _gtm
+    return _gtm()
+
+
 # ──── Constants ────────────────────────────────────────────────────────────────
 
 # Hex codes pool used to populate the grid
@@ -383,12 +389,26 @@ class HackEngine:
             rewards_granted = list(target.rewards)
             xp_delta = target.security_level * 20
 
+            # Territory control bonus: hacking in faction-controlled areas grants
+            # extra XP and credit rewards proportional to the dominant faction's
+            # control percentage (up to +50% at 100% control).
+            territory_bonus = 1.0
+            try:
+                tm = get_territory_manager()
+                faction, control_pct = tm.get_dominant_faction(target.location)
+                if control_pct > 0:
+                    territory_bonus = 1.0 + (control_pct / 100.0) * 0.5
+                    xp_delta = int(xp_delta * territory_bonus)
+            except Exception as exc:
+                logger.debug("HackEngine: territory bonus unavailable: %s", exc)
+
             # Apply credit rewards to PlayerState
             try:
                 ps = get_player_state()
                 for reward in rewards_granted:
                     if reward.startswith("credits:"):
-                        amount = int(reward.split(":")[1])
+                        base_amount = int(reward.split(":")[1])
+                        amount = int(base_amount * territory_bonus)
                         ps.earn_credits(amount, reason=f"hack:{target.target_id}")
                     elif reward.startswith("intel:"):
                         pass  # Callers can handle intel grants
