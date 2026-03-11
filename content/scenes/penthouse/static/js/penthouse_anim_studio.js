@@ -1,7 +1,7 @@
 /**
  * PenthouseAnimStudio — Animation Studio UI for the Penthouse scene.
  *
- * Provides four tabs: Poses, Expressions, Sequences, Library.
+ * Provides five tabs: Poses, Expressions, Sequences, Library, Models.
  * Communicates with PenthouseAnim, CharacterBridge, and CharModels APIs.
  * Persists poses/sequences to the backend via /api/anim/* routes.
  *
@@ -29,6 +29,11 @@
   let _seqStartTime = 0;
   let _seqRafId = null;
   let _seqCurrentIdx = 0;
+
+  // Model browser state
+  let _modelCatalog = {};
+  let _modelFilter = 'all';
+  let _modelSearch = '';
 
   // Joint editing defaults (radians stored internally)
   const BONE_NAMES = [
@@ -441,6 +446,161 @@
 
     /* ── Import/Export file input ───────────────────────────────────── */
     .as-file-input { display: none; }
+
+    /* ── Model Browser Tab ─────────────────────────────────────────── */
+    .as-model-search {
+      width: 100%;
+      padding: 6px 10px;
+      background: rgba(30, 30, 60, 0.8);
+      border: 1px solid rgba(102, 126, 234, 0.3);
+      border-radius: 6px;
+      color: #e0e0e0;
+      font-size: 12px;
+      margin-bottom: 8px;
+      box-sizing: border-box;
+    }
+    .as-model-search::placeholder { color: #555; }
+    .as-model-search:focus {
+      outline: none;
+      border-color: rgba(102, 126, 234, 0.6);
+    }
+    .as-model-filters {
+      display: flex;
+      gap: 3px;
+      margin-bottom: 8px;
+      flex-wrap: wrap;
+    }
+    .as-model-filter-btn {
+      padding: 3px 8px;
+      background: rgba(30, 30, 60, 0.6);
+      border: 1px solid rgba(102, 126, 234, 0.2);
+      border-radius: 4px;
+      color: #888;
+      font-size: 10px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .as-model-filter-btn:hover { color: #ccc; }
+    .as-model-filter-btn.active {
+      background: rgba(102, 126, 234, 0.3);
+      border-color: rgba(102, 126, 234, 0.5);
+      color: #e0e0e0;
+    }
+    .as-model-stats {
+      font-size: 10px;
+      color: #666;
+      margin-bottom: 6px;
+      text-align: right;
+    }
+    .as-model-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 6px;
+      max-height: 280px;
+      overflow-y: auto;
+      margin-bottom: 8px;
+    }
+    .as-model-card {
+      padding: 8px;
+      background: rgba(30, 30, 60, 0.6);
+      border: 1px solid rgba(102, 126, 234, 0.15);
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .as-model-card:hover {
+      background: rgba(102, 126, 234, 0.2);
+      border-color: rgba(102, 126, 234, 0.4);
+      transform: translateY(-1px);
+    }
+    .as-model-card.selected {
+      border-color: rgba(102, 126, 234, 0.7);
+      background: rgba(102, 126, 234, 0.15);
+    }
+    .as-model-card-icon {
+      width: 100%;
+      height: 52px;
+      background: rgba(0, 0, 0, 0.4);
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      margin-bottom: 4px;
+    }
+    .as-model-card-name {
+      font-size: 10px;
+      font-weight: 600;
+      color: #d0d0d0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-bottom: 2px;
+    }
+    .as-model-card-meta {
+      font-size: 9px;
+      color: #777;
+    }
+    .as-model-detail {
+      background: rgba(15, 15, 35, 0.9);
+      border: 1px solid rgba(102, 126, 234, 0.25);
+      border-radius: 8px;
+      padding: 10px;
+      margin-top: 4px;
+    }
+    .as-model-detail-hdr {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid rgba(102, 126, 234, 0.15);
+    }
+    .as-model-detail-hdr h4 { margin: 0; font-size: 13px; color: #e0e0e0; }
+    .as-model-detail-close {
+      background: none; border: none; color: #888; cursor: pointer; font-size: 14px;
+    }
+    .as-model-detail-close:hover { color: #ccc; }
+    .as-model-detail-icon {
+      width: 100%;
+      height: 70px;
+      background: rgba(0, 0, 0, 0.5);
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 28px;
+      margin-bottom: 8px;
+    }
+    .as-model-detail-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      padding: 3px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.03);
+    }
+    .as-model-detail-row .label { color: #888; }
+    .as-model-detail-row .value { color: #ccc; font-weight: 500; }
+    .as-model-detail-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 3px;
+      margin-top: 6px;
+    }
+    .as-model-tag {
+      padding: 2px 6px;
+      background: rgba(102, 126, 234, 0.15);
+      border: 1px solid rgba(102, 126, 234, 0.2);
+      border-radius: 3px;
+      font-size: 9px;
+      color: #aaa;
+    }
+    .as-model-empty {
+      text-align: center;
+      color: #555;
+      font-size: 12px;
+      padding: 24px 10px;
+    }
   `;
 
   // ── Helpers ────────────────────────────────────────────────────────
@@ -582,11 +742,13 @@
       '    <button class="as-tab" data-tab="expressions">Expressions</button>',
       '    <button class="as-tab" data-tab="sequences">Sequences</button>',
       '    <button class="as-tab" data-tab="library">Library</button>',
+      '    <button class="as-tab" data-tab="models">Models</button>',
       '  </div>',
       buildPosesTab(),
       buildExpressionsTab(),
       buildSequencesTab(),
       buildLibraryTab(),
+      buildModelsTab(),
       '</div>'
     ].join('\n');
   }
@@ -705,6 +867,155 @@
     return html;
   }
 
+  // ── Models Tab ─────────────────────────────────────────────────────
+
+  function buildModelsTab() {
+    var h = '<div class="as-tab-content" id="as-tab-models" style="display:none">';
+    h += '<div class="as-section-title">\uD83D\uDCE6 Model Browser</div>';
+    h += '<input type="text" class="as-model-search" id="as-model-search" placeholder="Search models by name, type, or tag\u2026">';
+    h += '<div class="as-model-filters" id="as-model-filters">';
+    h += '  <button class="as-model-filter-btn active" data-mfilter="all">All</button>';
+    h += '  <button class="as-model-filter-btn" data-mfilter="character">\uD83D\uDC64 Characters</button>';
+    h += '  <button class="as-model-filter-btn" data-mfilter="prop">\uD83C\uDF81 Props</button>';
+    h += '  <button class="as-model-filter-btn" data-mfilter="clothing">\uD83D\uDC57 Clothing</button>';
+    h += '  <button class="as-model-filter-btn" data-mfilter="environment">\uD83C\uDFE0 Environment</button>';
+    h += '</div>';
+    h += '<div class="as-model-stats" id="as-model-stats"></div>';
+    h += '<div class="as-model-grid" id="as-model-grid">';
+    h += '  <div class="as-model-empty">Loading models\u2026</div>';
+    h += '</div>';
+    h += '<div class="as-model-detail" id="as-model-detail" style="display:none">';
+    h += '  <div class="as-model-detail-hdr">';
+    h += '    <h4 id="as-model-detail-name">Model</h4>';
+    h += '    <button class="as-model-detail-close" id="as-model-detail-close">\u2715</button>';
+    h += '  </div>';
+    h += '  <div class="as-model-detail-icon" id="as-model-detail-icon">\uD83D\uDCE6</div>';
+    h += '  <div id="as-model-detail-body"></div>';
+    h += '</div>';
+    h += '</div>';
+    return h;
+  }
+
+  var _MODEL_TYPE_ICONS = {
+    character: '\uD83D\uDC64', prop: '\uD83C\uDF81',
+    clothing: '\uD83D\uDC57', environment: '\uD83C\uDFE0', unknown: '\uD83D\uDCE6'
+  };
+
+  function loadModelCatalog() {
+    fetchJSON('/api/config/models').then(function (data) {
+      _modelCatalog = data.catalog || data || {};
+      // Remove non-model keys
+      delete _modelCatalog.categories;
+      delete _modelCatalog.bone_mapping;
+      delete _modelCatalog.import_settings;
+      renderModelGrid();
+    }).catch(function () {
+      var grid = document.getElementById('as-model-grid');
+      if (grid) grid.innerHTML = '<div class="as-model-empty">Failed to load catalog.</div>';
+    });
+  }
+
+  function getFilteredModels() {
+    var result = {};
+    var q = _modelSearch.toLowerCase();
+    Object.keys(_modelCatalog).forEach(function (id) {
+      var entry = _modelCatalog[id];
+      if (!entry || typeof entry !== 'object' || !entry.file) return;
+      if (_modelFilter !== 'all' && entry.type !== _modelFilter) return;
+      if (q) {
+        var haystack = (id + ' ' + (entry.description || '') + ' ' + (entry.file || '') +
+          ' ' + (entry.tags || []).join(' ') + ' ' + (entry.type || '') + ' ' + (entry.gender || '')).toLowerCase();
+        if (haystack.indexOf(q) === -1) return;
+      }
+      result[id] = entry;
+    });
+    return result;
+  }
+
+  function renderModelGrid() {
+    var grid = document.getElementById('as-model-grid');
+    if (!grid) return;
+    var filtered = getFilteredModels();
+    var keys = Object.keys(filtered);
+
+    var stats = document.getElementById('as-model-stats');
+    if (stats) {
+      var total = Object.keys(_modelCatalog).filter(function (k) {
+        var e = _modelCatalog[k]; return e && typeof e === 'object' && e.file;
+      }).length;
+      stats.textContent = keys.length + ' of ' + total + ' models';
+    }
+
+    if (keys.length === 0) {
+      grid.innerHTML = '<div class="as-model-empty">No models match your search.</div>';
+      return;
+    }
+
+    var html = '';
+    keys.forEach(function (id) {
+      var m = filtered[id];
+      var icon = _MODEL_TYPE_ICONS[m.type] || '\uD83D\uDCE6';
+      var skel = m.has_skeleton ? '\u2699' : '';
+      var displayName = id.replace(/_/g, ' ');
+      html += '<div class="as-model-card" data-mid="' + id + '">';
+      html += '  <div class="as-model-card-icon">' + icon + '</div>';
+      html += '  <div class="as-model-card-name" title="' + id + '">' + displayName + '</div>';
+      html += '  <div class="as-model-card-meta">' + (m.size_mb || '?') + ' MB ' + skel + '</div>';
+      html += '</div>';
+    });
+    grid.innerHTML = html;
+
+    grid.querySelectorAll('.as-model-card').forEach(function (card) {
+      card.addEventListener('click', function () {
+        grid.querySelectorAll('.as-model-card').forEach(function (c) { c.classList.remove('selected'); });
+        card.classList.add('selected');
+        showModelDetail(card.dataset.mid);
+      });
+    });
+  }
+
+  function showModelDetail(modelId) {
+    var m = _modelCatalog[modelId];
+    if (!m) return;
+    var icon = _MODEL_TYPE_ICONS[m.type] || '\uD83D\uDCE6';
+    document.getElementById('as-model-detail-name').textContent = modelId.replace(/_/g, ' ');
+    document.getElementById('as-model-detail-icon').textContent = icon;
+
+    var body = document.getElementById('as-model-detail-body');
+    var rows = [
+      ['Type', (icon + ' ' + (m.type || 'unknown'))],
+      ['Gender', m.gender || '\u2014'],
+      ['File', m.file || '\u2014'],
+      ['Size', (m.size_mb || '?') + ' MB'],
+      ['Skeleton', m.has_skeleton ? '\u2705 Yes' : '\u274C No'],
+      ['Animations', m.has_animations ? '\u2705 Yes' : '\u274C No'],
+      ['Poly Estimate', m.poly_estimate || '\u2014'],
+      ['Description', m.description || '\u2014'],
+    ];
+    var html = '';
+    rows.forEach(function (r) {
+      html += '<div class="as-model-detail-row">';
+      html += '  <span class="label">' + r[0] + '</span>';
+      html += '  <span class="value">' + r[1] + '</span>';
+      html += '</div>';
+    });
+    if (m.tags && m.tags.length) {
+      html += '<div class="as-model-detail-tags">';
+      m.tags.forEach(function (tag) {
+        html += '<span class="as-model-tag">' + tag + '</span>';
+      });
+      html += '</div>';
+    }
+    body.innerHTML = html;
+    document.getElementById('as-model-detail').style.display = '';
+  }
+
+  function closeModelDetail() {
+    document.getElementById('as-model-detail').style.display = 'none';
+    var grid = document.getElementById('as-model-grid');
+    if (grid) grid.querySelectorAll('.as-model-card').forEach(function (c) { c.classList.remove('selected'); });
+  }
+
   // ── Event wiring ───────────────────────────────────────────────────
 
   function wireEvents() {
@@ -720,6 +1031,7 @@
         var target = document.getElementById('as-tab-' + tab.dataset.tab);
         if (target) target.style.display = '';
         if (tab.dataset.tab === 'library') refreshLibraryTab();
+        if (tab.dataset.tab === 'models') loadModelCatalog();
       });
     });
 
@@ -820,6 +1132,29 @@
     });
     document.getElementById('as-import-file').addEventListener('change', importLibrary);
     document.getElementById('as-export-lib').addEventListener('click', exportLibrary);
+
+    // Model browser events
+    var modelSearchInput = document.getElementById('as-model-search');
+    if (modelSearchInput) {
+      modelSearchInput.addEventListener('input', function (e) {
+        _modelSearch = e.target.value;
+        renderModelGrid();
+      });
+    }
+    _panel.querySelectorAll('.as-model-filter-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        _panel.querySelectorAll('.as-model-filter-btn').forEach(function (b) {
+          b.classList.remove('active');
+        });
+        btn.classList.add('active');
+        _modelFilter = btn.dataset.mfilter;
+        renderModelGrid();
+      });
+    });
+    var detailClose = document.getElementById('as-model-detail-close');
+    if (detailClose) {
+      detailClose.addEventListener('click', closeModelDetail);
+    }
   }
 
   // ── Draggable ──────────────────────────────────────────────────────
