@@ -51,6 +51,8 @@ from content.scenes.penthouse.penthouse_combat_mixin import PenthouseCombatMixin
 from content.scenes.penthouse.penthouse_dialog_mixin import PenthouseDialogMixin
 from content.scenes.penthouse.penthouse_inventory_mixin import PenthouseInventoryMixin
 from content.scenes.penthouse.penthouse_social_mixin import PenthouseSocialMixin
+from content.scenes.penthouse.penthouse_model_mixin import PenthouseModelMixin
+from content.scenes.penthouse.penthouse_anim_studio_mixin import PenthouseAnimStudioMixin
 
 # ══════════════════════════════════════════════════════════════════════
 #  CONSTANTS
@@ -1072,7 +1074,7 @@ def _build_penthouse_map() -> SceneMap:
     return sm
 
 
-class PenthouseScene(PenthouseCombatMixin, PenthouseDialogMixin, PenthouseInventoryMixin, PenthouseSocialMixin, BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="penthouse"):
+class PenthouseScene(PenthouseAnimStudioMixin, PenthouseModelMixin, PenthouseCombatMixin, PenthouseDialogMixin, PenthouseInventoryMixin, PenthouseSocialMixin, BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="penthouse"):
     """Adult multi-agent roleplay penthouse — v4."""
 
     SCENE_METADATA = {
@@ -1528,6 +1530,8 @@ class PenthouseScene(PenthouseCombatMixin, PenthouseDialogMixin, PenthouseInvent
         self._setup_event_routes()
         self._setup_agent_routes()
         self._setup_utility_routes()
+        self._setup_model_routes()
+        self._setup_anim_studio_routes()
 
     # ── YAML Config API ────────────────────────────────────────────────
     def _setup_config_routes(self) -> None:
