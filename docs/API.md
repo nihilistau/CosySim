@@ -10,7 +10,7 @@ Overlay admin panel, the TTS service, and Socket.IO real-time events.
 1. [Overview](#overview)
 2. [Common Patterns](#common-patterns)
 3. [Phone Scene API (port 5555)](#phone-scene-api-port-5555)
-4. [Bedroom Scene API (port 5556)](#bedroom-scene-api-port-5556)
+4. [Penthouse Scene API (port 5556)](#penthouse-scene-api-port-5556)
 5. [Casino Scene API (port 5559)](#casino-scene-api-port-5559)
 6. [Realm Scene API (port 5562)](#realm-scene-api-port-5562)
 7. [Command Center API (port 5566)](#command-center-api-port-5566)
@@ -31,7 +31,7 @@ channels for real-time updates.
 | Service | Port | Framework |
 |---------|------|-----------|
 | Phone | 5555 | Flask + SocketIO |
-| Bedroom | 5556 | Flask + SocketIO |
+| Penthouse | 5556 | Flask + SocketIO |
 | Casino | 5559 | Flask + SocketIO |
 | Realm | 5562 | Flask + SocketIO |
 | NeonCity | 5563 | Flask + SocketIO |
@@ -57,7 +57,7 @@ channels for real-time updates.
 {"ok": false, "error": "human-readable message"}
 ```
 
-Some older Bedroom endpoints use `{"success": true}` / `{"error": "..."}`.
+Some older Penthouse endpoints use `{"success": true}` / `{"error": "..."}`.
 
 **Base URL:** `http://localhost:<port>`
 
@@ -168,7 +168,7 @@ Base URL: `http://localhost:5555`
 
 ---
 
-## Bedroom Scene API (port 5556)
+## Penthouse Scene API (port 5556)
 
 Base URL: `http://localhost:5556`
 
@@ -273,12 +273,12 @@ Base URL: `http://localhost:5556`
 | GET | `/api/ambient/tracks` | List ambient audio tracks | — |
 | GET | `/api/meta/constants` | All constants (positions, outfits, props, etc.) | — |
 
-### MCP Framework (Bedroom)
+### MCP Framework (Penthouse)
 
 | Method | Endpoint | Description | Body / Params |
 |--------|----------|-------------|---------------|
 | GET | `/api/mcp/status` | Framework status | — |
-| GET | `/api/mcp/scene-state` | Bedroom MCP scene node state | — |
+| GET | `/api/mcp/scene-state` | Penthouse MCP scene node state | — |
 | GET | `/api/mcp/event-log` | Recent events | `?limit=50` |
 | GET | `/api/mcp/lmstudio` | LMStudio config & status | — |
 | GET | `/api/mcp/resources` | Resource manager status | — |
@@ -633,7 +633,7 @@ Connect: `const socket = io('http://localhost:<port>');`
 | `story_beat` | Server→Client | `{...payload}` | Story beat triggered |
 | `admin_wipe` | Server→Client | `{messages, media}` | Admin wipe completed |
 
-### Bedroom Scene (port 5556)
+### Penthouse Scene (port 5556)
 
 | Event | Direction | Payload | Description |
 |-------|-----------|---------|-------------|

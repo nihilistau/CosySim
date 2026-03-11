@@ -136,7 +136,7 @@ Each scene has `host`, `port`, and `debug` settings. Default host is `localhost`
 | Scene | Port |
 |-------|------|
 | `phone` | 5555 |
-| `bedroom` | 5556 |
+| `penthouse` | 5556 |
 | `lounge` | 5557 |
 | `casino` | 5559 |
 | `gallery` | 5560 |
@@ -340,7 +340,7 @@ system.environment: development
 database.sqlite.path: simulation_dev.db
 scenes.phone.debug: true
 scenes.phone.auto_reload: true
-scenes.bedroom.debug: true
+scenes.penthouse.debug: true
 tts.warm_start: false
 tts.device: cpu
 stt.device: cpu
@@ -405,6 +405,6 @@ Defines 11 TTS voice profiles with description, model size, reference audio, and
 Registers skills per scene with trigger types (`auto`, `optional`, `required`). Key scenes:
 
 - **phone** — 32 skills (memory, stats, narrative, web search, cross-scene messaging)
-- **bedroom** — 39+ skills (wardrobe, interactions, timed actions, mini-games)
+- **penthouse** — 39+ skills (wardrobe, interactions, timed actions, mini-games)
 - **lounge** — drinks, performances, secrets, heat tracking
 - **casino** — poker, tells, moods, narrative injection

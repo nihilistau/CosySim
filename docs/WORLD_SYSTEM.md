@@ -74,7 +74,7 @@ reset_city_map()
 | **Neon Strip** | `neoncity` (Neon City), `casino` (Club Noir), `lounge` (The Lounge) |
 | **Tech Quarter** | `grid` (The Grid / Coders), `asset_studio` (Asset Studio) |
 | **Underworld** | `heist` (The Score), `arena` (The Colosseum) |
-| **Residential** | `bedroom` (The Bedroom), `realm` (The Realm) |
+| **Residential** | `penthouse` (The Penthouse), `realm` (The Realm) |
 | **Comms** | `phone` (GhostSignal), `coders` (Coder Den), `tavern` (The Tavern), `gallery` (The Gallery) |
 
 Each node carries: `node_id`, `display_name`, `district`, `scene_port`, `description`.
@@ -513,7 +513,7 @@ beats can trigger dialogue, faction shifts, economy events, or custom callbacks.
 ```python
 from engine.director.scene_director import get_scene_director
 director = get_scene_director()
-director.schedule_beat("intro_monologue", delay_seconds=30, scene="bedroom")
+director.schedule_beat("intro_monologue", delay_seconds=30, scene="penthouse")
 director.on_beat("intro_monologue", my_callback)
 ```
 

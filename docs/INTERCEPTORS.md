@@ -48,7 +48,7 @@ User message
 | `user_message` | pre | The player's message |
 | `messages` | pre | Full message list sent to the LLM |
 | `reply` | post | The LLM's response text |
-| `scene` | both | Current scene name (e.g. `"bedroom"`, `"phone"`) |
+| `scene` | both | Current scene name (e.g. `"penthouse"`, `"phone"`) |
 | `agent_id` | both | Character ID |
 | `agent_name` | both | Character display name |
 | `skill_manifest` | pre | `SceneManifest` for available skills |
@@ -92,7 +92,7 @@ These modify `ctx["system_prompt"]` before the LLM sees it.
 | 8 | `CharacterRegistryInterceptor` | — | all | Inject character identity (name, mood, personality, skills). Load personality profile from DB. Handle `force_response` directives |
 | 10 | `RouterMessageInjector` | `router_message_injector` | all | Drain pending agent-to-agent inbox messages (local + cross-scene). Inject player journey context |
 | 12 | `DialogDirectiveInterceptor` | — | all | Inject `must_include`, `style_lock`, `topic_steer`, `mood_set` directives from the DialogSystem |
-| 15 | `BedroomSceneInterceptor` | — | bedroom | Inject wardrobe state, emotional/physical stats, atmosphere, recent narrative |
+| 15 | `PenthouseSceneInterceptor` | — | penthouse | Inject wardrobe state, emotional/physical stats, atmosphere, recent narrative |
 | 15 | `PhoneSceneInterceptor` | — | phone | Inject conversation heat, vibe hints, stats, narrative context, available MCP actions |
 | 15 | `LoungeSceneInterceptor` | — | lounge | Inject trust, heat, stage performance, cocktail menu, back-room access, MCP actions |
 | 15 | `GallerySceneInterceptor` | — | gallery | Inject artwork context, exhibition state, mood, narrative, conversation pacing |
@@ -106,8 +106,8 @@ These modify `ctx["system_prompt"]` before the LLM sees it.
 | 60 | `PolicyEnforcerInterceptor` | `policy_enforcer` | all | Inject token-budget instruction (min/max reply tokens from `InteractionPolicy`) |
 | 70 | `MemoryEnhancerInterceptor` | `memory_enhancer` | all | Extra RAG search on user message. Append top-3 relevant memories. **Disabled by default** |
 
-¹ `NaturalMoodDriftInterceptor` has `applicable_scenes` set to bedroom, phone, lounge, gallery, arena, casino, heist, realm, neoncity, coders.
-² `UniversalSceneInterceptor` skips bedroom, phone, lounge, gallery (which have dedicated interceptors).
+¹ `NaturalMoodDriftInterceptor` has `applicable_scenes` set to penthouse, phone, lounge, gallery, arena, casino, heist, realm, neoncity, coders.
+² `UniversalSceneInterceptor` skips penthouse, phone, lounge, gallery (which have dedicated interceptors).
 
 ### Post-Call Interceptors
 
@@ -144,7 +144,7 @@ engine/agents/interceptors/
 ├── character_registry.py  ← CharacterRegistryInterceptor   (pri 8)
 ├── router_injector.py     ← RouterMessageInjector          (pri 10)
 ├── dialog_directive.py    ← DialogDirectiveInterceptor     (pri 12)
-├── scene_bedroom.py       ← BedroomSceneInterceptor        (pri 15)
+├── scene_penthouse.py       ← PenthouseSceneInterceptor        (pri 15)
 ├── scene_phone.py         ← PhoneSceneInterceptor          (pri 15)
 ├── scene_lounge.py        ← LoungeSceneInterceptor         (pri 15)
 ├── scene_gallery.py       ← GallerySceneInterceptor        (pri 15)
@@ -229,8 +229,8 @@ comms:
 Interceptors can declare `applicable_scenes` to limit where they run:
 
 ```python
-class BedroomSceneInterceptor(InterceptorBase):
-    applicable_scenes = {"bedroom"}   # only runs in bedroom scene
+class PenthouseSceneInterceptor(InterceptorBase):
+    applicable_scenes = {"penthouse"}   # only runs in penthouse scene
 ```
 
 When `applicable_scenes` is `None` (the default), the interceptor runs in
@@ -391,7 +391,7 @@ Mapped via `engine/config.py` → `comms.governance_enabled`.
 LLM, returning the full `ResponseContext` for inspection:
 
 ```python
-gov = get_governor(agent, scene="bedroom")
+gov = get_governor(agent, scene="penthouse")
 ctx = gov.context_dump("Hello there!")
 print(ctx["system_prompt"])  # see everything interceptors injected
 ```
@@ -402,7 +402,7 @@ print(ctx["system_prompt"])  # see everything interceptors injected
 gov.pipeline.names
 # ['nexus_prompt', 'natural_mood_drift', 'conversation_recap',
 #  'character_registry', 'router_messages', 'dialog_directive',
-#  'bedroom_scene', 'phone_scene', 'lounge_scene', 'gallery_scene',
+#  'penthouse_scene', 'phone_scene', 'lounge_scene', 'gallery_scene',
 #  'universal_scene', 'ambient_events', 'auto_results',
 #  'skill_awareness', 'game', 'personality_guard',
 #  'conversation_variety', 'policy_enforcer', 'memory_enhancer',

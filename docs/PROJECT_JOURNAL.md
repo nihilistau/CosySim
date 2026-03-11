@@ -476,7 +476,7 @@ CosySim has 18 active scenes, each a self-contained experiment:
 | Port | Scene | Description |
 |------|-------|-------------|
 | 5555 | Phone / GhostSignal | Cyberpunk hacker OS, Aria companion, 12 apps |
-| 5556 | Bedroom / Penthouse | Intimate AI companion, portrait system |
+| 5556 | Penthouse | Intimate AI companion, portrait system |
 | 5557 | Lounge | Social scene, faction dynamics |
 | 5558 | Tavern | Medieval RPG, quest system |
 | 5559 | Casino | Economic simulation, gambling mechanics |

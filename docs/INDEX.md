@@ -24,7 +24,7 @@
 | Port | ID | Display Name | Type |
 |------|----|-------------|------|
 | 5555 | phone | SIGNAL | Game |
-| 5556 | bedroom | THE PENTHOUSE | Game |
+| 5556 | penthouse | THE PENTHOUSE | Game |
 | 5557 | lounge | THE VELVET PIT | Game |
 | 5558 | tavern | THE RUSTY ANCHOR | Game |
 | 5559 | casino | CLUB NOIR | Game |

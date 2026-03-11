@@ -146,7 +146,7 @@ DEFAULT_SCENE_SUBSCRIPTIONS = {
     "casino":    ["world.economy_tick", "world.faction_shift"],
     "neoncity":  ["world.tick", "world.faction_shift", "world.npc_action"],
     "phone":     ["world.ghost_message"],
-    "bedroom":   ["world.tick"],
+    "penthouse":   ["world.tick"],
     "grid":      ["world.tick", "world.economy_tick", "world.faction_shift",
                   "world.npc_action", "world.ghost_message"],
     # … 10 more scenes
@@ -203,7 +203,7 @@ Default: **90 seconds** (configurable via `world.economy_tick_interval_seconds`)
 | NeonCity | `_on_economy_tick` | Updates district price index |
 | THE GRID | `_on_economy_tick` | Refreshes vendor prices |
 | Phone | `_on_economy_tick` | Triggers NEXUS FEED news item |
-| Bedroom | `_on_economy_tick` | Updates world status widget |
+| Penthouse | `_on_economy_tick` | Updates world status widget |
 
 ---
 

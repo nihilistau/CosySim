@@ -225,7 +225,7 @@ All 10 active scenes implement the full design system with v0.75 Universal Neon 
 
 | Scene | Display Name | Port | Grade | Distinguishing Feature |
 |-------|-------------|------|-------|----------------------|
-| bedroom | THE PENTHOUSE | 5555 | A++ | 10-bar emotion system, intimacy gates, Director beats, world context widget |
+| penthouse | THE PENTHOUSE | 5555 | A++ | 10-bar emotion system, intimacy gates, Director beats, world context widget |
 | phone | SIGNAL | 5556 | A++ | 0xGH0ST 5-act mystery, ghost terminal modal, autonomous texting, news feed |
 | lounge | THE VELVET PIT | 5557 | A+ | Heat meter, Lola+Viktor NPCs, trust economy, smoke drift FX |
 | tavern | THE RUSTY ANCHOR | 5558 | A+ | Quest board, 3D dice, time-of-day cycle, 4 NPCs, candle flicker FX |

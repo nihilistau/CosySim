@@ -216,7 +216,7 @@ per-character state (stats, inventory, relationships, speech patterns).
 BaseScene: The foundation for all 18 scenes. Required overrides: start(), stop(),
 get_plugin_info(). Key methods: register_health_route(), register_hud_route(),
 _mcp_register_scene(), on_character_added(), on_character_removed(). Scenes run as
-Flask apps on dedicated ports (bedroom:5555, phone:5556, lounge:5557, etc.).
+Flask apps on dedicated ports (penthouse:5555, phone:5556, lounge:5557, etc.).
 
 @skill decorator: Marks functions as LLM-callable tools. Parameters: pack (grouping),
 description (what the LLM sees), category (GAME/SOCIAL/MEMORY/etc.), cooldown (seconds),
@@ -313,7 +313,7 @@ entries → weekly NLM distillation → training examples. The system identifies
 
 ## 7. SCENE CATALOG (300 words)
 List all 18 scenes with port, type, and key features:
-bedroom (5555): The Penthouse — LolA companion, relationship system, ambient AI
+penthouse (5555): The Penthouse — LolA companion, relationship system, ambient AI
 phone (5556): GhostSignal OS — encrypted hacker OS, Aria companion app, faction messages  
 lounge (5557): The Lounge — social scene, bartender, faction regulars
 tavern (5558): The Tavern — fantasy setting, Viktor merchant, quest system

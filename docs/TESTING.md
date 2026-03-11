@@ -27,7 +27,7 @@ Test configuration is defined in `pyproject.toml` under `[tool.pytest.ini_option
 | test_realm.py | 58 | Realm scene logic |
 | test_scene_rules_engine.py | 65 | Scene rules engine |
 | test_casino_game.py | 42 | Casino game mechanics |
-| test_bedroom_game.py | 40 | Bedroom scene interactions |
+| test_penthouse_game.py | 40 | Penthouse scene interactions |
 | test_heist.py | 43 | Heist scene |
 | test_command_center.py | 32 | Command center scene |
 | test_neoncity.py | 26 | Neon City scene |

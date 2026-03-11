@@ -22,7 +22,7 @@ CosySim runs as a constellation of services: Flask scenes, Streamlit apps, FastA
 │  ┌─────────────────────┐  ┌─────────────────┐  ┌───────────────────┐   │
 │  │  Flask Scenes        │  │ Streamlit Apps   │  │ FastAPI Services  │   │
 │  │  :5555–5570          │  │ :8500–8504       │  │ :8600–8601        │   │
-│  │  phone, bedroom,     │  │ hub, dashboard,  │  │ tts, mcp_bridge   │   │
+│  │  phone, penthouse,     │  │ hub, dashboard,  │  │ tts, mcp_bridge   │   │
 │  │  lounge, tavern, ... │  │ admin, assets,   │  │                   │   │
 │  │                      │  │ creator          │  │                   │   │
 │  └─────────────────────┘  └─────────────────┘  └───────────────────┘   │
@@ -75,7 +75,7 @@ Step 3: CosySim Scenes
 ```powershell
 # 1. Start LMStudio (ensure a model is loaded)
 # 2. Launch a single scene
-python launcher.py --mode bedroom
+python launcher.py --mode penthouse
 ```
 
 ### Full Stack Start
@@ -143,7 +143,7 @@ Any Flask scene, Streamlit app, or service name is a valid mode:
 ```bash
 # Flask scenes
 python launcher.py --mode phone
-python launcher.py --mode bedroom
+python launcher.py --mode penthouse
 python launcher.py --mode lounge
 python launcher.py --mode tavern
 python launcher.py --mode casino
@@ -183,7 +183,7 @@ Running `python launcher.py` with no arguments opens an interactive menu:
 ╠══════════════════════════════════════════════════════════════╣
 ║  Scenes:                                                     ║
 ║    1. phone     - CosyPhone OS           (port 5555)         ║
-║    2. bedroom   - The Bedroom            (port 5556)         ║
+║    2. penthouse   - The Penthouse            (port 5556)         ║
 ║    ...                                                       ║
 ║  Services:                                                   ║
 ║    7. hub       - Central Hub             (port 8500)         ║
@@ -284,7 +284,7 @@ All ports used by CosySim, grouped by category. Ports are configured in `config/
 | Port | Scene | Label |
 |------|-------|-------|
 | 5555 | `phone` | CosyPhone OS |
-| 5556 | `bedroom` | The Bedroom |
+| 5556 | `penthouse` | The Penthouse |
 | 5557 | `lounge` | The Velvet Lounge |
 | 5558 | `tavern` | Dragon's Flagon Tavern |
 | 5559 | `casino` | Midnight Casino |
@@ -383,7 +383,7 @@ Set environment with `COSYSIM_ENV`:
 
 ```powershell
 $env:COSYSIM_ENV = "development"
-python launcher.py --mode bedroom
+python launcher.py --mode penthouse
 ```
 
 ### Database Initialization
@@ -431,7 +431,7 @@ Stop-Process -Id <PID> -Force
 pip install -r requirements.txt
 
 # Verify the scene module exists
-python -c "from content.scenes.bedroom.bedroom_scene import BedroomScene"
+python -c "from content.scenes.penthouse.penthouse_scene import PenthouseScene"
 ```
 
 ### Streamlit Apps Won't Start
