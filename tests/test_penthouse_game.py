@@ -264,7 +264,7 @@ class TestAgentStats:
         d = s.to_dict()
         expected = {"arousal", "horniness", "drunkenness", "tiredness",
                     "happiness", "anger", "fear", "pleasure",
-                    "explicitness", "openness"}
+                    "explicitness", "openness", "dominance", "affection"}
         assert set(d.keys()) == expected
 
     def test_apply_action_stat_effects(self):
