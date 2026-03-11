@@ -1,0 +1,63 @@
+{
+  "timestamp": "2026-03-11T03:21:18+00:00",
+  "tier": 1,
+  "total": 130,
+  "passed": 130,
+  "failed": 0,
+  "skipped": 0,
+  "errors": 0,
+  "duration_seconds": 13.42,
+  "test_files": [
+    "test_skill_progression.py",
+    "test_skills.py",
+    "test_port_registry.py",
+    "test_config.py",
+    "test_decorators.py",
+    "test_config_validator.py",
+    "test_scene_imports.py"
+  ],
+  "slowest_tests": [
+    {
+      "test": "tests/test_scene_imports.py::test_scene_imports_cleanly[content.scenes.penthouse]",
+      "duration": 3.5
+    },
+    {
+      "test": "tests/test_scene_imports.py::test_scene_imports_cleanly[content.scenes.tavern]",
+      "duration": 2.09
+    },
+    {
+      "test": "tests/test_scene_imports.py::test_scene_imports_cleanly[content.scenes.neoncity]",
+      "duration": 2.03
+    },
+    {
+      "test": "tests/test_scene_imports.py::test_scene_imports_cleanly[content.scenes.phone]",
+      "duration": 1.36
+    },
+    {
+      "test": "tests/test_scene_imports.py::test_scene_imports_cleanly[content.scenes.gallery]",
+      "duration": 1.14
+    },
+    {
+      "test": "tests/test_decorators.py::test_pydantic_model_serialised",
+      "duration": 0.24
+    },
+    {
+      "test": "tests/test_scene_imports.py::test_scene_imports_cleanly[content.scenes.intel_hub]",
+      "duration": 0.09
+    },
+    {
+      "test": "tests/test_skills.py::TestChainContext::test_set_and_get",
+      "duration": 0.09
+    },
+    {
+      "test": "tests/test_skill_progression.py::TestSkillManager::test_award_xp_difficulty_multiplier",
+      "duration": 0.08
+    },
+    {
+      "test": "tests/test_skill_progression.py::TestSkillManager::test_skill_check_auto_xp",
+      "duration": 0.07
+    }
+  ],
+  "return_code": 0,
+  "status": "PASSED"
+}
