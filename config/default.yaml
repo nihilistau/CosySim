@@ -752,6 +752,23 @@ nexus:
   enabled: true
   base_url: "http://localhost:8700"
   auto_submit: false
+  knowledge_expiry:
+    default_max_age_days: 90
+    category_ttl_days:
+      news: 2
+      session: 30
+      memory: 60
+      auto: 90
+      architecture: 365
+      api: 180
+      debugging: 60
+      testing: 90
+      system: 365
+      research: 90
+      history: 30
+      plan: 30
+    stale_threshold: 0.2
+    auto_archive_stale: false
   operator_inbox:
     state_path: "data/operator_inbox_state.json"
     auto_sync_schedule: "every_15m"
