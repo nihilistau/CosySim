@@ -1,6 +1,6 @@
 # CosySim Roadmap
 
-> Current: **v1.07b** "PIPELINE INTELLIGENCE" ✅ | Last updated: 2026-03
+> Current: **v1.08b** "GAME SYSTEM INTEGRATION" ✅ | Last updated: 2026-03
 
 ## Philosophy
 
@@ -110,13 +110,14 @@ into a unified cyberpunk RPG framework with deep game systems.
 
 ---
 
-## Active: v1.08b — Current Sprint
+## Shipped: v1.08b — "GAME SYSTEM INTEGRATION" ✅
 
 ### Game System Integration
-- [ ] Wire neurochemistry into NPC conversation interceptors
-- [ ] Connect cyberspace to territory control outcomes
-- [ ] Living world events affect market prices and faction decisions
-- [ ] Player actions generate news articles visible in ticker
+- [x] Wire neurochemistry into NPC conversation interceptors (NeurochemistryInterceptor registered, priority 4)
+- [x] Hack engine → territory control reward multiplier (up to +50% bonus)
+- [x] Custom news publishing from conversations/skills/player actions
+- [x] `publish_news` skill for LLM-driven article generation
+- [x] `get_character_modifier()` utility for game system neurochemistry queries
 
 ### Live Pipeline Validation
 - [ ] End-to-end news pipeline run: fetch → NLM distill → Nexus store → training flywheel

@@ -42,6 +42,7 @@ from engine.agents.interceptors.natural_mood_drift import NaturalMoodDriftInterc
 from engine.agents.interceptors.conversation_recap import ConversationRecapInterceptor
 from engine.agents.interceptors.relationship_event import RelationshipEventInterceptor
 from engine.agents.interceptors.nexus_prompt import NexusPromptInterceptor
+from engine.characters.neurochemistry import NeurochemistryInterceptor
 # RelationshipContextInterceptor: re-export the split version (uses get_character_memory)
 from engine.agents.interceptors.relationship_context import RelationshipContextInterceptor  # noqa: F401
 from engine.agents.dialogue_gate import DialogueGateInterceptor  # noqa: F401
@@ -50,6 +51,7 @@ GameSessionInterceptor = GameInterceptor
 GameRulesInterceptor = GameInterceptor
 
 _REGISTRY: list[Type] = [
+    NeurochemistryInterceptor,
     RouterMessageInjector,
     AutoResultInjector,
     SkillAwarenessInterceptor,

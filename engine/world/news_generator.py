@@ -797,6 +797,52 @@ class WorldNewsGenerator:
         """Manually inject an article (for testing or custom events)."""
         return self._publish_article(article)
 
+    def publish_custom_article(
+        self,
+        headline: str,
+        body: str,
+        category: str = NewsCategory.SOCIAL.value,
+        severity: int = NewsSeverity.NOTABLE.value,
+        district: str = "",
+        byline: str = "NeonCity Chronicle Staff",
+        related_npcs: Optional[List[str]] = None,
+        related_players: Optional[List[str]] = None,
+    ) -> Optional[str]:
+        """Publish a custom news article from conversations, skills, or player actions.
+
+        This is the public API for creating news articles that don't originate
+        from EventBus events — e.g. gossip, player-generated content, or
+        AI conversation outcomes that should appear in the news ticker.
+
+        Args:
+            headline: Article headline (shown in ticker).
+            body: Full article body text.
+            category: NewsCategory value string.
+            severity: NewsSeverity int value.
+            district: District where the event occurred.
+            byline: Author credit.
+            related_npcs: NPC IDs involved.
+            related_players: Player IDs involved.
+
+        Returns:
+            Article ID if published, None if deduped.
+        """
+        article = NewsArticle(
+            headline=headline,
+            body=body,
+            category=category,
+            severity=severity,
+            district=district,
+            byline=byline,
+            related_npcs=related_npcs or [],
+            related_players=related_players or [],
+            source_event_type="custom",
+        )
+        if self._publish_article(article):
+            logger.info("News: custom article published: %s", headline[:60])
+            return article.article_id
+        return None
+
     # ──── Query API ────
 
     def get_headlines(
