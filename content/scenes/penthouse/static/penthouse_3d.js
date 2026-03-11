@@ -181,6 +181,18 @@
     // External animation callbacks (used by character_bridge.js)
     const _externalAnimCallbacks = [];
 
+    // Mutable location positions (overridable from YAML config)
+    let _locationPositions = {
+      bed:       { x: -5,   y: 0, z: -1 },
+      couch:     { x:  5.5, y: 0, z:  0 },
+      fireplace: { x: -2,   y: 0, z:  5.5 },
+      bar:       { x: -3,   y: 0, z: -5.5 },
+      vanity:    { x:  3,   y: 0, z: -5.8 },
+      bath:      { x:  6.5, y: 0, z: -4.5 },
+      balcony:   { x:  5,   y: 0, z:  5.5 },
+      doorway:   { x:  0,   y: 0, z: -6.5 },
+    };
+
     window.penthouse3D = {
       switchView,
       getViewNames: () => Object.keys(CAMERA_VIEWS),
@@ -192,16 +204,7 @@
       getCamera: () => camera,
       getRenderer: () => renderer,
 
-      getLocationPositions: () => ({
-        bed:       { x: -5,   y: 0, z: -1 },
-        couch:     { x:  5.5, y: 0, z:  0 },
-        fireplace: { x: -2,   y: 0, z:  5.5 },
-        bar:       { x: -3,   y: 0, z: -5.5 },
-        vanity:    { x:  3,   y: 0, z: -5.8 },
-        bath:      { x:  6.5, y: 0, z: -4.5 },
-        balcony:   { x:  5,   y: 0, z:  5.5 },
-        doorway:   { x:  0,   y: 0, z: -6.5 },
-      }),
+      getLocationPositions: () => ({ ..._locationPositions }),
 
       addToAnimationLoop: (cb) => {
         if (typeof cb === 'function') _externalAnimCallbacks.push(cb);
@@ -210,6 +213,27 @@
       removeFromAnimationLoop: (cb) => {
         const idx = _externalAnimCallbacks.indexOf(cb);
         if (idx !== -1) _externalAnimCallbacks.splice(idx, 1);
+      },
+
+      // ── YAML Config setters ───────────────────────────────────────
+      setLocationPositions: (positions) => {
+        Object.assign(_locationPositions, positions);
+      },
+
+      setCameraViews: (views) => {
+        for (const [name, view] of Object.entries(views)) {
+          CAMERA_VIEWS[name] = view;
+        }
+      },
+
+      setLightingPresets: (presets) => {
+        // Store for runtime switching
+        window._penthouse3D_lightingPresets = presets;
+      },
+
+      setEffectsConfig: (effects) => {
+        // Store for runtime access
+        window._penthouse3D_effectsConfig = effects;
       },
     };
 

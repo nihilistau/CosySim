@@ -1,0 +1,217 @@
+# Penthouse Character Appearance Configuration
+# =============================================
+# All character visual properties — skin tones, hair, per-character looks,
+# body dimensions. Served to frontend via /api/config/characters.
+#
+# Modify this file to change character appearances without touching JS code.
+
+skin_tones:
+  pale:       "0xfde7d6"
+  light:      "0xffe0bd"
+  fair:       "0xf5c7a1"
+  medium:     "0xd4a574"
+  olive:      "0xc4a882"
+  tan:        "0xc68642"
+  brown:      "0x8d5524"
+  dark:       "0x5c3310"
+  ebony:      "0x3b1e08"
+
+hair_colors:
+  black:       "0x1a1a1a"
+  dark_brown:  "0x3b2314"
+  brown:       "0x6b4423"
+  auburn:      "0x8b3a1a"
+  red:         "0xaa3322"
+  ginger:      "0xcc5533"
+  blonde:      "0xd4a853"
+  platinum:    "0xe8dcc8"
+  pink:        "0xff69b4"
+  purple:      "0x9966cc"
+  blue:        "0x3366cc"
+  white:       "0xe0e0e0"
+  silver:      "0xc0c0c0"
+
+eye_colors:
+  brown:       "0x6b4423"
+  hazel:       "0x8b7355"
+  green:       "0x3a5a3a"
+  blue:        "0x4488cc"
+  grey:        "0x888899"
+  amber:       "0xcc8833"
+  violet:      "0x8844aa"
+  dark:        "0x5a4030"
+  teal:        "0x338888"
+
+special_colors:
+  nipple:      "0xc4756a"
+  lip:         "0xcc5566"
+
+# Per-character default appearance
+characters:
+  lola:
+    display_name: "Lola Voss"
+    gender: female
+    skin: fair
+    hair: dark_brown
+    iris: "0x6b4423"
+    personality: bold_dominant
+    default_outfit: lingerie
+    default_location: bed
+    body_scale: 1.0
+    voice_style: sultry
+
+  viktor:
+    display_name: "Viktor Crane"
+    gender: male
+    skin: medium
+    hair: black
+    iris: "0x3a5a3a"
+    personality: mysterious_dark
+    default_outfit: casual
+    default_location: bar
+    body_scale: 1.05
+    voice_style: deep
+
+  aria:
+    display_name: "Aria Frost"
+    gender: female
+    skin: light
+    hair: blonde
+    iris: "0x4488cc"
+    personality: shy_submissive
+    default_outfit: silk_robe
+    default_location: vanity
+    body_scale: 0.95
+    voice_style: soft
+
+  frankie:
+    display_name: "Frankie Torres"
+    gender: male
+    skin: tan
+    hair: brown
+    iris: "0x5a4030"
+    personality: playful_tease
+    default_outfit: casual
+    default_location: couch
+    body_scale: 1.0
+    voice_style: warm
+
+  mira:
+    display_name: "Mira Volkov"
+    gender: female
+    skin: medium
+    hair: auburn
+    iris: "0x654321"
+    personality: romantic_sensual
+    default_outfit: evening_dress
+    default_location: fireplace
+    body_scale: 0.98
+    voice_style: breathy
+
+# Body dimension tables (scene units)
+body_dimensions:
+  female:
+    height: 1.65
+    head_radius: 0.12
+    head_y: 1.50
+    neck_radius: 0.045
+    neck_height: 0.08
+    torso_y: 0.80
+    torso_scale_z: 0.72
+    torso_profile:
+      - [0.001, 0.00]
+      - [0.15,  0.02]
+      - [0.16,  0.06]
+      - [0.14,  0.12]
+      - [0.095, 0.22]
+      - [0.10,  0.28]
+      - [0.13,  0.36]
+      - [0.14,  0.42]
+      - [0.15,  0.46]
+      - [0.06,  0.50]
+      - [0.045, 0.55]
+      - [0.001, 0.55]
+    breast_radius: 0.072
+    breast_local_y: 0.38
+    breast_spacing: 0.08
+    breast_forward: 0.09
+    nipple_radius: 0.014
+    shoulder_y: 1.30
+    shoulder_spacing: 0.15
+    hip_y: 0.82
+    hip_spacing: 0.09
+    upper_arm_radius: [0.040, 0.032]
+    upper_arm_height: 0.26
+    lower_arm_radius: [0.032, 0.025]
+    lower_arm_height: 0.24
+    hand: { width: 0.03, height: 0.05, depth: 0.02 }
+    thigh_radius: [0.080, 0.055]
+    thigh_height: 0.37
+    knee_radius: 0.048
+    shin_radius: [0.050, 0.038]
+    shin_height: 0.39
+    foot: { width: 0.06, height: 0.06, depth: 0.15 }
+    butt_radius: 0.10
+    butt_local_y: 0.04
+
+  male:
+    height: 1.78
+    head_radius: 0.13
+    head_y: 1.62
+    neck_radius: 0.055
+    neck_height: 0.10
+    torso_y: 0.88
+    torso_scale_z: 0.68
+    torso_profile:
+      - [0.001, 0.00]
+      - [0.13,  0.02]
+      - [0.14,  0.06]
+      - [0.13,  0.12]
+      - [0.12,  0.22]
+      - [0.14,  0.28]
+      - [0.17,  0.36]
+      - [0.18,  0.42]
+      - [0.19,  0.48]
+      - [0.07,  0.52]
+      - [0.055, 0.60]
+      - [0.001, 0.60]
+    pec_local_y: 0.40
+    pec_radius: 0.035
+    shoulder_y: 1.42
+    shoulder_spacing: 0.19
+    hip_y: 0.90
+    hip_spacing: 0.09
+    upper_arm_radius: [0.048, 0.038]
+    upper_arm_height: 0.28
+    lower_arm_radius: [0.038, 0.030]
+    lower_arm_height: 0.26
+    hand: { width: 0.035, height: 0.055, depth: 0.025 }
+    thigh_radius: [0.090, 0.060]
+    thigh_height: 0.42
+    knee_radius: 0.052
+    shin_radius: [0.055, 0.042]
+    shin_height: 0.42
+    foot: { width: 0.07, height: 0.06, depth: 0.17 }
+    penis_base_radius: 0.020
+    penis_tip_radius: 0.015
+    penis_height: 0.08
+    penis_local_y: -0.02
+    testicle_radius: 0.022
+    butt_radius: 0.09
+    butt_local_y: 0.04
+
+# Material properties
+materials:
+  skin:
+    roughness: 0.65
+    metalness: 0.0
+    subsurface_approx: 0.15
+  hair:
+    roughness: 0.5
+    metalness: 0.05
+  eye:
+    roughness: 0.1
+    metalness: 0.3
+  lip:
+    roughness: 0.4
+    metalness: 0.05

@@ -1,0 +1,191 @@
+# Penthouse Outfit & Clothing Configuration
+# ===========================================
+# Outfit definitions, clothing layers, colors, and hide maps.
+# Served to frontend via /api/config/outfits.
+
+# Outfit → layer mapping (which clothing pieces make up each outfit)
+outfits:
+  nothing:
+    label: "Nothing"
+    emoji: "🔴"
+    layers: []
+    category: explicit
+
+  lingerie:
+    label: "Lingerie"
+    emoji: "💋"
+    layers: [bra, panties]
+    category: intimate
+
+  evening_dress:
+    label: "Evening Dress"
+    emoji: "👗"
+    layers: [dress]
+    category: formal
+
+  silk_robe:
+    label: "Silk Robe"
+    emoji: "🧥"
+    layers: [robe]
+    category: casual
+
+  casual:
+    label: "Casual"
+    emoji: "👕"
+    layers: [tshirt, shorts]
+    category: casual
+
+  lace_bodysuit:
+    label: "Lace Bodysuit"
+    emoji: "🖤"
+    layers: [bodysuit]
+    category: intimate
+
+  leather:
+    label: "Leather"
+    emoji: "🖤"
+    layers: [top_leather, pants]
+    category: bold
+
+  schoolgirl:
+    label: "Schoolgirl"
+    emoji: "📚"
+    layers: [crop_top, skirt]
+    category: costume
+
+  nurse:
+    label: "Nurse"
+    emoji: "🏥"
+    layers: [dress_short]
+    category: costume
+
+  topless:
+    label: "Topless"
+    emoji: "🔥"
+    layers: [shorts]
+    category: explicit
+
+  bottomless:
+    label: "Bottomless"
+    emoji: "🔥"
+    layers: [tshirt]
+    category: explicit
+
+  see_through:
+    label: "See-Through"
+    emoji: "👀"
+    layers: [bodysuit_sheer]
+    category: intimate
+
+  leather_harness:
+    label: "Leather Harness"
+    emoji: "⛓"
+    layers: [harness]
+    category: bold
+
+  stockings_only:
+    label: "Stockings Only"
+    emoji: "🦵"
+    layers: [stockings]
+    category: explicit
+
+  collar_and_leash:
+    label: "Collar & Leash"
+    emoji: "🐕"
+    layers: [collar]
+    category: bold
+
+  formal_suit:
+    label: "Formal Suit"
+    emoji: "🤵"
+    layers: [jacket, pants, shirt]
+    category: formal
+
+  swimwear:
+    label: "Swimwear"
+    emoji: "👙"
+    layers: [bikini_top, bikini_bottom]
+    category: casual
+
+  athletic:
+    label: "Athletic"
+    emoji: "🏃"
+    layers: [sports_bra, leggings]
+    category: casual
+
+  sleep:
+    label: "Sleepwear"
+    emoji: "😴"
+    layers: [sleep_top, sleep_shorts]
+    category: casual
+
+# Anatomy parts hidden by each clothing layer
+layer_hides:
+  bra:             [nippleL, nippleR]
+  panties:         [genitalia]
+  tshirt:          [nippleL, nippleR]
+  top_leather:     [nippleL, nippleR]
+  crop_top:        [nippleL, nippleR]
+  shorts:          [genitalia]
+  pants:           [genitalia]
+  dress:           [nippleL, nippleR, genitalia]
+  dress_short:     [nippleL, nippleR, genitalia]
+  robe:            [nippleL, nippleR, genitalia]
+  bodysuit:        [nippleL, nippleR, genitalia]
+  bodysuit_sheer:  []
+  skirt:           [genitalia]
+  harness:         []
+  stockings:       []
+  collar:          []
+  jacket:          [nippleL, nippleR]
+  shirt:           [nippleL, nippleR]
+  bikini_top:      [nippleL, nippleR]
+  bikini_bottom:   [genitalia]
+  sports_bra:      [nippleL, nippleR]
+  leggings:        [genitalia]
+  sleep_top:       [nippleL, nippleR]
+  sleep_shorts:    [genitalia]
+
+# Default color themes per outfit
+outfit_colors:
+  nothing:          null
+  lingerie:         { color: "0x1a0a0a", accent: "0xcc2244" }
+  evening_dress:    { color: "0x220022", accent: "0x880066" }
+  silk_robe:        { color: "0xd4c4e0", accent: "0xaa88cc" }
+  casual:           { color: "0x334455", accent: "0x556677" }
+  lace_bodysuit:    { color: "0x1a1a1a", accent: "0x333333", alpha: 0.45 }
+  leather:          { color: "0x1a1a1a", accent: "0x222222", shiny: true }
+  schoolgirl:       { color: "0xffffff", accent: "0x223366" }
+  nurse:            { color: "0xfafafa", accent: "0xcc2233" }
+  topless:          { color: "0x334455", accent: "0x556677" }
+  bottomless:       { color: "0x445566", accent: "0x556677" }
+  see_through:      { color: "0x111111", accent: "0x222222", alpha: 0.25 }
+  leather_harness:  { color: "0x1a1a1a", accent: "0x444444", shiny: true }
+  stockings_only:   { color: "0x111111", accent: "0x222222" }
+  collar_and_leash: { color: "0x331111", accent: "0x666666", shiny: true }
+  formal_suit:      { color: "0x1a1a2e", accent: "0x333355" }
+  swimwear:         { color: "0x2244aa", accent: "0x4466cc" }
+  athletic:         { color: "0x222222", accent: "0x44cc88" }
+  sleep:            { color: "0x556688", accent: "0x778899" }
+
+# Outfit categories for UI grouping
+categories:
+  casual:
+    label: "Casual"
+    order: 1
+  formal:
+    label: "Formal"
+    order: 2
+  intimate:
+    label: "Intimate"
+    order: 3
+  bold:
+    label: "Bold"
+    order: 4
+  costume:
+    label: "Costume"
+    order: 5
+  explicit:
+    label: "Explicit"
+    order: 6
+    requires_18: true
