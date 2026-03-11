@@ -1,0 +1,338 @@
+# External Model Catalog
+# ====================================
+# Registry of external GLB/VRM models available for import.
+# Scanned from C:\Files\Models\avatat_models and other sources.
+# Models are loaded on-demand via GLTFLoader when selected.
+
+# Source directories to scan for models
+source_directories:
+  - path: "C:/Files/Models/avatat_models"
+    label: "Avatar Models"
+    auto_scan: true
+  - path: "data/penthouse/models/imported"
+    label: "Imported Models"
+    auto_scan: true
+
+# Import settings
+import:
+  max_file_size_mb: 200
+  supported_formats: [".glb", ".gltf", ".vrm"]
+  auto_normalize: true
+  target_height: 1.8  # meters
+  center_on_feet: true
+  apply_shadow: true
+
+# Model catalog — each entry describes an external model
+catalog:
+  alice_ivy:
+    file: "alice_ivy.glb"
+    source_dir: "C:/Files/Models/avatat_models"
+    size_mb: 183.1
+    type: character
+    gender: female
+    description: "High-detail female character - Alice Ivy"
+    tags: [detailed, female, full_body]
+    has_skeleton: true
+    has_animations: false
+    poly_estimate: high
+    thumbnail: null
+
+  erotic_blondie:
+    file: "erotic_blondie.glb"
+    source_dir: "C:/Files/Models/avatat_models"
+    size_mb: 10.8
+    type: character
+    gender: female
+    description: "Blonde female character model"
+    tags: [female, blonde, adult]
+    has_skeleton: true
+    has_animations: false
+    poly_estimate: medium
+    thumbnail: null
+
+  example2:
+    file: "example2.glb.glb"
+    source_dir: "C:/Files/Models/avatat_models"
+    size_mb: 4.3
+    type: unknown
+    gender: unknown
+    description: "Example model"
+    tags: [example]
+    has_skeleton: false
+    has_animations: false
+    poly_estimate: low
+    thumbnail: null
+
+  heart_prop:
+    file: "heart_01.glb"
+    source_dir: "C:/Files/Models/avatat_models"
+    size_mb: 1.0
+    type: prop
+    gender: none
+    description: "Heart-shaped prop/decoration"
+    tags: [prop, heart, decoration, romantic]
+    has_skeleton: false
+    has_animations: false
+    poly_estimate: low
+    thumbnail: null
+
+  mini_dress_girl:
+    file: "mini_onepiece_dress_girl_download_fbx.glb"
+    source_dir: "C:/Files/Models/avatat_models"
+    size_mb: 11.2
+    type: character
+    gender: female
+    description: "Girl in mini onepiece dress"
+    tags: [female, dress, casual]
+    has_skeleton: true
+    has_animations: false
+    poly_estimate: medium
+    thumbnail: null
+
+  nicole:
+    file: "nicole.glb"
+    source_dir: "C:/Files/Models/avatat_models"
+    size_mb: 15.1
+    type: character
+    gender: female
+    description: "Nicole character model"
+    tags: [female, named_character]
+    has_skeleton: true
+    has_animations: false
+    poly_estimate: medium
+    thumbnail: null
+
+  nina:
+    file: "nina.glb"
+    source_dir: "C:/Files/Models/avatat_models"
+    size_mb: 28.4
+    type: character
+    gender: female
+    description: "Nina character model - high detail"
+    tags: [female, named_character, detailed]
+    has_skeleton: true
+    has_animations: false
+    poly_estimate: high
+    thumbnail: null
+
+  nude_lying:
+    file: "nude_female_human_body_lying_down.glb"
+    source_dir: "C:/Files/Models/avatat_models"
+    size_mb: 2.8
+    type: character
+    gender: female
+    description: "Female body in lying down pose"
+    tags: [female, nude, lying, reference]
+    has_skeleton: false
+    has_animations: false
+    poly_estimate: low
+    thumbnail: null
+
+  romp_prop:
+    file: "romp_shine_stimulator.glb"
+    source_dir: "C:/Files/Models/avatat_models"
+    size_mb: 0.7
+    type: prop
+    gender: none
+    description: "Adult prop/accessory"
+    tags: [prop, adult, accessory]
+    has_skeleton: false
+    has_animations: false
+    poly_estimate: low
+    thumbnail: null
+
+  school_girl:
+    file: "school_girl_sit_on_a_chair.glb"
+    source_dir: "C:/Files/Models/avatat_models"
+    size_mb: 36.2
+    type: character
+    gender: female
+    description: "Girl sitting on chair - posed model"
+    tags: [female, sitting, chair, posed]
+    has_skeleton: true
+    has_animations: false
+    poly_estimate: high
+    thumbnail: null
+
+  selfie_girl_v2:
+    file: "selfie_girl (1).glb"
+    source_dir: "C:/Files/Models/avatat_models"
+    size_mb: 23.1
+    type: character
+    gender: female
+    description: "Selfie girl variant 2 - higher detail"
+    tags: [female, posed, selfie]
+    has_skeleton: true
+    has_animations: false
+    poly_estimate: high
+    thumbnail: null
+
+  selfie_girl:
+    file: "selfie_girl.glb"
+    source_dir: "C:/Files/Models/avatat_models"
+    size_mb: 17.0
+    type: character
+    gender: female
+    description: "Selfie girl - original"
+    tags: [female, posed, selfie]
+    has_skeleton: true
+    has_animations: false
+    poly_estimate: medium
+    thumbnail: null
+
+  sexy_girl:
+    file: "sexy_girl.glb"
+    source_dir: "C:/Files/Models/avatat_models"
+    size_mb: 7.8
+    type: character
+    gender: female
+    description: "Stylized female character"
+    tags: [female, stylized, adult]
+    has_skeleton: true
+    has_animations: false
+    poly_estimate: medium
+    thumbnail: null
+
+  sexy_nude_lady:
+    file: "sexy_nude_lady.glb"
+    source_dir: "C:/Files/Models/avatat_models"
+    size_mb: 20.2
+    type: character
+    gender: female
+    description: "Adult female character model"
+    tags: [female, adult, nude]
+    has_skeleton: true
+    has_animations: false
+    poly_estimate: medium
+    thumbnail: null
+
+  sport_girl:
+    file: "sport_girl.glb"
+    source_dir: "C:/Files/Models/avatat_models"
+    size_mb: 33.1
+    type: character
+    gender: female
+    description: "Athletic girl in sportswear"
+    tags: [female, athletic, sportswear]
+    has_skeleton: true
+    has_animations: false
+    poly_estimate: high
+    thumbnail: null
+
+  stylized_women:
+    file: "stylized_women.glb"
+    source_dir: "C:/Files/Models/avatat_models"
+    size_mb: 48.7
+    type: character
+    gender: female
+    description: "Stylized women - multiple characters or high detail"
+    tags: [female, stylized, detailed]
+    has_skeleton: true
+    has_animations: false
+    poly_estimate: very_high
+    thumbnail: null
+
+  unboxing_allure:
+    file: "unboxing_allure.glb"
+    source_dir: "C:/Files/Models/avatat_models"
+    size_mb: 12.6
+    type: character
+    gender: female
+    description: "Allure unboxing character"
+    tags: [female, adult]
+    has_skeleton: true
+    has_animations: false
+    poly_estimate: medium
+    thumbnail: null
+
+  undies_lingerie:
+    file: "undies_lingerie_lp.glb"
+    source_dir: "C:/Files/Models/avatat_models"
+    size_mb: 5.6
+    type: character
+    gender: female
+    description: "Low-poly lingerie model"
+    tags: [female, lingerie, low_poly]
+    has_skeleton: true
+    has_animations: false
+    poly_estimate: low
+    thumbnail: null
+
+  woman_bikini:
+    file: "woman_sitting_in_black_bikini.glb"
+    source_dir: "C:/Files/Models/avatat_models"
+    size_mb: 69.5
+    type: character
+    gender: female
+    description: "Woman sitting in black bikini - very high detail"
+    tags: [female, bikini, sitting, detailed]
+    has_skeleton: true
+    has_animations: false
+    poly_estimate: very_high
+    thumbnail: null
+
+# ──── Model Categories ────
+categories:
+  character:
+    label: "Characters"
+    description: "Full body character models with or without skeleton"
+    icon: "👤"
+  prop:
+    label: "Props & Items"
+    description: "Objects, accessories, and decorations"
+    icon: "🎁"
+  clothing:
+    label: "Clothing"
+    description: "Standalone clothing/outfit models"
+    icon: "👗"
+  environment:
+    label: "Environment"
+    description: "Room elements, furniture, decorations"
+    icon: "🏠"
+  unknown:
+    label: "Uncategorized"
+    description: "Models not yet categorized"
+    icon: "❓"
+
+# ──── Skeleton Mapping ────
+# Maps common bone names from external models to our internal skeleton
+bone_mapping:
+  # Common names → our bone names
+  mixamorig:Hips: hips
+  mixamorig:Spine: spine
+  mixamorig:Spine1: spine1
+  mixamorig:Spine2: spine2
+  mixamorig:Neck: neck
+  mixamorig:Head: head
+  mixamorig:LeftShoulder: shoulder_l
+  mixamorig:LeftArm: arm_l
+  mixamorig:LeftForeArm: forearm_l
+  mixamorig:LeftHand: hand_l
+  mixamorig:RightShoulder: shoulder_r
+  mixamorig:RightArm: arm_r
+  mixamorig:RightForeArm: forearm_r
+  mixamorig:RightHand: hand_r
+  mixamorig:LeftUpLeg: thigh_l
+  mixamorig:LeftLeg: shin_l
+  mixamorig:LeftFoot: foot_l
+  mixamorig:RightUpLeg: thigh_r
+  mixamorig:RightLeg: shin_r
+  mixamorig:RightFoot: foot_r
+  # VRM/VRoid names
+  J_Bip_C_Hips: hips
+  J_Bip_C_Spine: spine
+  J_Bip_C_Chest: spine2
+  J_Bip_C_Neck: neck
+  J_Bip_C_Head: head
+  J_Bip_L_UpperArm: arm_l
+  J_Bip_L_LowerArm: forearm_l
+  J_Bip_L_Hand: hand_l
+  J_Bip_R_UpperArm: arm_r
+  J_Bip_R_LowerArm: forearm_r
+  J_Bip_R_Hand: hand_r
+  J_Bip_L_UpperLeg: thigh_l
+  J_Bip_L_LowerLeg: shin_l
+  J_Bip_L_Foot: foot_l
+  J_Bip_R_UpperLeg: thigh_r
+  J_Bip_R_LowerLeg: shin_r
+  J_Bip_R_Foot: foot_r

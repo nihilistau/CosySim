@@ -1,0 +1,441 @@
+# Penthouse Interactions Configuration
+# ====================================
+# Maps location+action pairs to animation states, expressions, and effects.
+# Used by inferAnimState() and the agent animation skill.
+
+# ──── Location Interaction Definitions ────
+# Each location defines: default state, available interactions,
+# furniture mechanics, and capacity limits.
+
+locations:
+  bed:
+    default_state: lie
+    capacity: 3
+    surface_type: soft
+    interactions:
+      sleep:
+        state: lie
+        expression: sleepy
+        duration: null  # indefinite
+      rest:
+        state: lounge
+        expression: neutral
+      cuddle:
+        state: spooning
+        expression: happy
+        paired: true
+        roles: [big_spoon, little_spoon]
+      massage:
+        state: massage
+        expression: aroused
+        paired: true
+        roles: [giver, receiver]
+      pillow_talk:
+        state: lie_side
+        expression: happy
+        paired: true
+      intimate:
+        state: missionary
+        expression: aroused
+        paired: true
+        roles: [top, bottom]
+      doggy:
+        state: doggy
+        expression: aroused
+        paired: true
+        roles: [giver, receiver]
+      ride:
+        state: ride
+        expression: aroused
+        paired: true
+        roles: [rider, receiver]
+      kneel:
+        state: kneel
+        expression: seductive
+      all_fours:
+        state: all_fours
+        expression: seductive
+      sit_edge:
+        state: sit
+        expression: neutral
+      read:
+        state: lie
+        expression: neutral
+      sprawl:
+        state: sprawl
+        expression: sleepy
+
+  couch:
+    default_state: lounge
+    capacity: 3
+    surface_type: soft
+    interactions:
+      sit:
+        state: sit
+        expression: neutral
+      lounge:
+        state: lounge
+        expression: neutral
+      cuddle:
+        state: spooning
+        expression: happy
+        paired: true
+      lap_sit:
+        state: lap_sit
+        expression: seductive
+        paired: true
+        roles: [sitter, seated]
+      straddle:
+        state: straddle
+        expression: aroused
+        paired: true
+        roles: [rider, seated]
+      conversation:
+        state: sit_lean
+        expression: happy
+      drink:
+        state: drink
+        expression: neutral
+      intimate:
+        state: ride
+        expression: aroused
+        paired: true
+      watch:
+        state: sit
+        expression: neutral
+      nap:
+        state: lounge
+        expression: sleepy
+
+  bar:
+    default_state: drink
+    capacity: 4
+    surface_type: counter
+    interactions:
+      drink:
+        state: drink
+        expression: neutral
+      lean:
+        state: lean
+        expression: neutral
+      flirt:
+        state: flirt
+        expression: seductive
+      talk:
+        state: lean
+        expression: happy
+      pour:
+        state: interact
+        expression: neutral
+      smoke:
+        state: smoke
+        expression: neutral
+      phone:
+        state: phone
+        expression: neutral
+      toast:
+        state: drink
+        expression: happy
+      serve:
+        state: interact
+        expression: happy
+      argue:
+        state: arms_crossed
+        expression: angry
+
+  vanity:
+    default_state: primp
+    capacity: 2
+    surface_type: counter
+    interactions:
+      primp:
+        state: primp
+        expression: neutral
+      makeup:
+        state: primp
+        expression: neutral
+      mirror:
+        state: primp
+        expression: seductive
+      flirt:
+        state: seductive_pose
+        expression: seductive
+      pose:
+        state: pose
+        expression: seductive
+      undress:
+        state: undress
+        expression: shy
+      sit:
+        state: sit
+        expression: neutral
+
+  bath:
+    default_state: bathe
+    capacity: 2
+    surface_type: water
+    interactions:
+      bathe:
+        state: bathe
+        expression: neutral
+      soak:
+        state: bathe
+        expression: happy
+      wash:
+        state: bathe
+        expression: neutral
+      relax:
+        state: bathe
+        expression: sleepy
+      intimate:
+        state: intimate_touch
+        expression: aroused
+        paired: true
+      play:
+        state: bathe
+        expression: happy
+      step_in:
+        state: walk
+        expression: neutral
+        duration: 1.5
+
+  balcony:
+    default_state: gaze
+    capacity: 2
+    surface_type: railing
+    interactions:
+      gaze:
+        state: gaze
+        expression: neutral
+      lean:
+        state: lean
+        expression: neutral
+      smoke:
+        state: smoke
+        expression: neutral
+      talk:
+        state: lean
+        expression: happy
+      romantic:
+        state: embrace
+        expression: happy
+        paired: true
+      kiss:
+        state: kiss_standing
+        expression: aroused
+        paired: true
+      phone:
+        state: phone
+        expression: neutral
+      contemplate:
+        state: gaze
+        expression: sad
+      dance:
+        state: dance_slow
+        expression: happy
+        paired: true
+
+  fireplace:
+    default_state: warm
+    capacity: 3
+    surface_type: floor
+    interactions:
+      warm:
+        state: warm
+        expression: neutral
+      cozy:
+        state: sit_floor
+        expression: happy
+      cuddle:
+        state: spooning
+        expression: happy
+        paired: true
+      romantic:
+        state: embrace
+        expression: aroused
+        paired: true
+      drink:
+        state: drink
+        expression: neutral
+      talk:
+        state: sit_floor
+        expression: happy
+      intimate:
+        state: intimate_touch
+        expression: aroused
+        paired: true
+      lie:
+        state: lie
+        expression: neutral
+      massage:
+        state: massage
+        expression: aroused
+        paired: true
+
+  doorway:
+    default_state: idle
+    capacity: 2
+    surface_type: standing
+    interactions:
+      enter:
+        state: walk
+        expression: neutral
+        duration: 2.0
+      leave:
+        state: walk
+        expression: neutral
+        duration: 2.0
+      greet:
+        state: idle
+        expression: happy
+      wait:
+        state: idle
+        expression: neutral
+      lean:
+        state: lean
+        expression: neutral
+      flirt:
+        state: seductive_pose
+        expression: seductive
+      argue:
+        state: arms_crossed
+        expression: angry
+      goodbye:
+        state: idle
+        expression: sad
+
+# ──── Universal Interactions ────
+# Available regardless of location
+universal:
+  dance_slow:
+    state: dance_slow
+    expression: happy
+    paired: true
+    roles: [lead, follow]
+  dance_sway:
+    state: dance_sway
+    expression: happy
+  embrace:
+    state: embrace
+    expression: happy
+    paired: true
+  kiss:
+    state: kiss_standing
+    expression: aroused
+    paired: true
+  flirt:
+    state: flirt
+    expression: seductive
+  undress:
+    state: undress
+    expression: shy
+  stretch:
+    state: stretch
+    expression: neutral
+  beckon:
+    state: beckon
+    expression: seductive
+  blow_kiss:
+    state: blow_kiss
+    expression: seductive
+  shrug:
+    state: shrug
+    expression: neutral
+  phone:
+    state: phone
+    expression: neutral
+  hair_flip:
+    state: hair_flip
+    expression: seductive
+  pose:
+    state: pose
+    expression: seductive
+
+# ──── Interaction Chains ────
+# Multi-step interaction sequences that play in order
+chains:
+  seduction:
+    steps:
+      - action: flirt
+        duration: 3.0
+      - action: beckon
+        duration: 2.0
+      - action: approach
+        duration: 1.5
+      - action: intimate_touch
+        duration: 4.0
+      - action: kiss
+        duration: 3.0
+
+  strip_tease:
+    steps:
+      - action: dance_sway
+        duration: 4.0
+      - action: hair_flip
+        duration: 1.5
+      - action: seductive_pose
+        duration: 3.0
+      - action: undress
+        duration: 3.0
+      - action: pose
+        duration: 2.0
+
+  romantic_evening:
+    steps:
+      - action: drink
+        duration: 4.0
+      - action: flirt
+        duration: 3.0
+      - action: dance_slow
+        duration: 6.0
+        paired: true
+      - action: kiss
+        duration: 3.0
+        paired: true
+      - action: embrace
+        duration: 4.0
+        paired: true
+
+  morning_routine:
+    steps:
+      - action: stretch
+        duration: 2.0
+      - action: walk
+        duration: 1.5
+      - action: bathe
+        duration: 5.0
+      - action: primp
+        duration: 4.0
+      - action: undress  # change clothes
+        duration: 2.0
+
+# ──── Transition Rules ────
+# Animation state transitions that require special handling
+transitions:
+  # Standing to floor transitions require lowering
+  standing_to_ground:
+    from: [idle, lean, arms_crossed, hands_behind]
+    to: [kneel, kneel_sit, all_fours, sit_floor, crawl, sprawl]
+    intermediate: kneel
+    duration: 0.8
+
+  # Floor to standing requires rising
+  ground_to_standing:
+    from: [kneel, kneel_sit, all_fours, sit_floor, crawl, sprawl]
+    to: [idle, lean, arms_crossed, hands_behind, walk]
+    intermediate: kneel
+    duration: 1.0
+
+  # Lying requires getting up through sitting
+  lying_to_standing:
+    from: [lie, lie_side, lie_front, lounge]
+    to: [idle, walk, lean, arms_crossed]
+    intermediate: sit
+    duration: 1.5
+
+  # Standing to lying goes through sitting
+  standing_to_lying:
+    from: [idle, walk, lean]
+    to: [lie, lie_side, lie_front, lounge]
+    intermediate: sit
+    duration: 1.2

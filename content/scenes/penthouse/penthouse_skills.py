@@ -628,3 +628,292 @@ def update_penthouse_reputation(delta: int = 0, reason: str = "penthouse_interac
         return f"Reputation {direction} by {abs(delta):+d} ({reason}). New reputation: {new_rep}."
     except Exception as exc:
         return f"Reputation update failed: {exc}"
+
+
+# ── Animation Control ──────────────────────────────────────────
+
+VALID_ANIM_STATES = [
+    "idle", "walk", "run",
+    "sit", "sit_cross", "sit_lean", "sit_floor",
+    "lean", "arms_crossed", "hands_behind",
+    "lie", "lie_side", "lie_front", "lounge",
+    "kneel", "kneel_sit", "all_fours", "crawl", "sprawl",
+    "interact", "drink", "gaze", "warm", "primp", "bathe",
+    "dance_slow", "dance_sway", "stretch", "undress", "massage",
+    "beckon", "hair_flip", "blow_kiss", "shrug", "phone", "smoke", "flirt",
+    "embrace", "kiss_standing", "lap_sit", "straddle", "ride",
+    "going_down", "missionary", "doggy", "spooning",
+    "dominant_pose", "submissive", "seductive_pose", "intimate_touch",
+    "pose",
+]
+
+VALID_EXPRESSIONS = [
+    "neutral", "happy", "aroused", "seductive", "orgasm",
+    "sad", "angry", "fear", "surprised", "shy", "drunk",
+    "sleepy", "dominant", "disgusted", "bored", "playful",
+]
+
+
+@skill(
+    pack="penthouse",
+    tags=["game", "penthouse", "animation"],
+    category=SkillCategory.GAME,
+    description=(
+        "Set a character's animation state. States include: idle, walk, run, "
+        "sit, lie, kneel, all_fours, dance_slow, dance_sway, undress, massage, "
+        "embrace, kiss_standing, lap_sit, straddle, ride, going_down, missionary, "
+        "doggy, spooning, dominant_pose, submissive, seductive_pose, intimate_touch, "
+        "flirt, stretch, beckon, hair_flip, blow_kiss, shrug, phone, smoke, pose."
+    ),
+    cooldown=1,
+)
+def penthouse_set_animation(character_id: str = "", state: str = "idle") -> str:
+    """Set a character's 3D animation state.
+
+    Args:
+        character_id: The character identifier (e.g. 'lola', 'viktor').
+        state: Animation state name from the available states list.
+
+    Returns:
+        Confirmation of the animation change.
+    """
+    if not character_id:
+        return "Specify character_id."
+    if state not in VALID_ANIM_STATES:
+        return f"Unknown state '{state}'. Valid: {', '.join(VALID_ANIM_STATES[:20])}..."
+    scene = _get_penthouse_scene()
+    if not scene:
+        return "Penthouse not active."
+    if character_id not in scene.characters:
+        return f"Character {character_id} not loaded."
+    try:
+        scene.socketio.emit("set_animation", {
+            "character_id": character_id,
+            "state": state,
+        })
+        return f"Set {character_id} animation to '{state}'."
+    except Exception as exc:
+        return f"Animation change failed: {exc}"
+
+
+@skill(
+    pack="penthouse",
+    tags=["game", "penthouse", "animation"],
+    category=SkillCategory.GAME,
+    description=(
+        "Set a character's facial expression. Options: neutral, happy, aroused, "
+        "seductive, orgasm, sad, angry, fear, surprised, shy, drunk, sleepy, "
+        "dominant, disgusted, bored, playful."
+    ),
+    cooldown=1,
+)
+def penthouse_set_expression(character_id: str = "", expression: str = "neutral") -> str:
+    """Set a character's facial expression.
+
+    Args:
+        character_id: The character identifier.
+        expression: Expression name from available presets.
+
+    Returns:
+        Confirmation of expression change.
+    """
+    if not character_id:
+        return "Specify character_id."
+    if expression not in VALID_EXPRESSIONS:
+        return f"Unknown expression '{expression}'. Valid: {', '.join(VALID_EXPRESSIONS)}"
+    scene = _get_penthouse_scene()
+    if not scene:
+        return "Penthouse not active."
+    if character_id not in scene.characters:
+        return f"Character {character_id} not loaded."
+    try:
+        scene.socketio.emit("set_expression", {
+            "character_id": character_id,
+            "expression": expression,
+        })
+        return f"Set {character_id} expression to '{expression}'."
+    except Exception as exc:
+        return f"Expression change failed: {exc}"
+
+
+@skill(
+    pack="penthouse",
+    tags=["game", "penthouse", "animation"],
+    category=SkillCategory.GAME,
+    description=(
+        "Trigger a paired/interaction animation between two characters. "
+        "Examples: embrace, kiss_standing, lap_sit, straddle, ride, going_down, "
+        "missionary, doggy, spooning, massage, dance_slow, intimate_touch."
+    ),
+    cooldown=2,
+)
+def penthouse_paired_animation(
+    character_id_1: str = "",
+    character_id_2: str = "",
+    animation: str = "",
+) -> str:
+    """Start a paired animation between two characters.
+
+    Args:
+        character_id_1: First character (typically initiator/active role).
+        character_id_2: Second character (typically receiver/passive role).
+        animation: The paired animation state name.
+
+    Returns:
+        Confirmation of the paired animation start.
+    """
+    if not character_id_1 or not character_id_2:
+        return "Specify both character_id_1 and character_id_2."
+    if not animation:
+        return "Specify animation name."
+    paired_states = [
+        "embrace", "kiss_standing", "lap_sit", "straddle", "ride",
+        "going_down", "missionary", "doggy", "spooning",
+        "dominant_pose", "submissive", "intimate_touch",
+        "massage", "dance_slow",
+    ]
+    if animation not in paired_states:
+        return f"'{animation}' is not a paired animation. Valid: {', '.join(paired_states)}"
+    scene = _get_penthouse_scene()
+    if not scene:
+        return "Penthouse not active."
+    if character_id_1 not in scene.characters:
+        return f"Character {character_id_1} not loaded."
+    if character_id_2 not in scene.characters:
+        return f"Character {character_id_2} not loaded."
+    try:
+        scene.socketio.emit("paired_animation", {
+            "character_id_1": character_id_1,
+            "character_id_2": character_id_2,
+            "animation": animation,
+        })
+        return (
+            f"Started paired animation '{animation}' between "
+            f"{character_id_1} and {character_id_2}."
+        )
+    except Exception as exc:
+        return f"Paired animation failed: {exc}"
+
+
+@skill(
+    pack="penthouse",
+    tags=["game", "penthouse", "animation"],
+    category=SkillCategory.GAME,
+    description="List all available animation states and their categories.",
+)
+def penthouse_list_animations() -> str:
+    """Return all available animation states grouped by category."""
+    categories = {
+        "Basic": ["idle", "walk", "run"],
+        "Seated": ["sit", "sit_cross", "sit_lean", "sit_floor"],
+        "Standing": ["lean", "arms_crossed", "hands_behind"],
+        "Lying": ["lie", "lie_side", "lie_front", "lounge"],
+        "Ground": ["kneel", "kneel_sit", "all_fours", "crawl", "sprawl"],
+        "Furniture": ["interact", "drink", "gaze", "warm", "primp", "bathe"],
+        "Action": [
+            "dance_slow", "dance_sway", "stretch", "undress", "massage",
+            "beckon", "hair_flip", "blow_kiss", "shrug", "phone", "smoke", "flirt",
+        ],
+        "Intimate": [
+            "embrace", "kiss_standing", "lap_sit", "straddle", "ride",
+            "going_down", "missionary", "doggy", "spooning",
+            "dominant_pose", "submissive", "seductive_pose", "intimate_touch",
+        ],
+        "Special": ["pose"],
+    }
+    lines = ["Animation States:"]
+    for cat, states in categories.items():
+        lines.append(f"\n{cat}: {', '.join(states)}")
+    lines.append(f"\nExpressions: {', '.join(VALID_EXPRESSIONS)}")
+    return "\n".join(lines)
+
+
+@skill(
+    pack="penthouse",
+    tags=["game", "penthouse", "animation", "clothing"],
+    category=SkillCategory.GAME,
+    description=(
+        "Change a character's outfit. Use outfit names from the wardrobe config."
+    ),
+    cooldown=2,
+)
+def penthouse_change_outfit(character_id: str = "", outfit: str = "") -> str:
+    """Change a character's current outfit with animation.
+
+    Args:
+        character_id: The character identifier.
+        outfit: Outfit name from available wardrobe (e.g. 'casual', 'lingerie', 'nude').
+
+    Returns:
+        Confirmation of outfit change.
+    """
+    if not character_id or not outfit:
+        return "Specify character_id and outfit."
+    scene = _get_penthouse_scene()
+    if not scene:
+        return "Penthouse not active."
+    profile = scene.profiles.get(character_id)
+    if not profile:
+        return f"Character {character_id} not loaded."
+    old_outfit = profile.outfit
+    profile.outfit = outfit
+    try:
+        scene.socketio.emit("outfit_change", {
+            "character_id": character_id,
+            "outfit": outfit,
+            "old_outfit": old_outfit,
+            "animate": True,
+        })
+    except Exception:
+        pass
+    scene._broadcast_state()
+    return f"Changed {character_id} outfit from '{old_outfit}' to '{outfit}'."
+
+
+@skill(
+    pack="penthouse",
+    tags=["game", "penthouse", "animation"],
+    category=SkillCategory.GAME,
+    description=(
+        "Trigger an interaction chain — a multi-step animation sequence. "
+        "Available chains: seduction, strip_tease, romantic_evening, morning_routine."
+    ),
+    cooldown=5,
+)
+def penthouse_interaction_chain(
+    character_id: str = "",
+    chain: str = "",
+    partner_id: Optional[str] = None,
+) -> str:
+    """Start a multi-step interaction chain animation sequence.
+
+    Args:
+        character_id: The primary character performing the chain.
+        chain: Chain name (seduction, strip_tease, romantic_evening, morning_routine).
+        partner_id: Optional partner for paired steps in the chain.
+
+    Returns:
+        Confirmation of chain start.
+    """
+    if not character_id or not chain:
+        return "Specify character_id and chain name."
+    valid_chains = ["seduction", "strip_tease", "romantic_evening", "morning_routine"]
+    if chain not in valid_chains:
+        return f"Unknown chain '{chain}'. Valid: {', '.join(valid_chains)}"
+    scene = _get_penthouse_scene()
+    if not scene:
+        return "Penthouse not active."
+    if character_id not in scene.characters:
+        return f"Character {character_id} not loaded."
+    try:
+        scene.socketio.emit("interaction_chain", {
+            "character_id": character_id,
+            "chain": chain,
+            "partner_id": partner_id,
+        })
+        msg = f"Started '{chain}' chain for {character_id}"
+        if partner_id:
+            msg += f" with {partner_id}"
+        return msg + "."
+    except Exception as exc:
+        return f"Chain start failed: {exc}"

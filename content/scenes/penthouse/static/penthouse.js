@@ -154,6 +154,13 @@ class PenthouseScene {
     s.on('agent_action',        data => this._onAgentAction(data));
     s.on('agent_tick',          data => this._onAgentTick(data));
     s.on('character_speaking',  data => this._onCharacterSpeaking(data));
+
+    // Animation skill events
+    s.on('set_animation',      data => this._onSetAnimation(data));
+    s.on('set_expression',     data => this._onSetExpression(data));
+    s.on('paired_animation',   data => this._onPairedAnimation(data));
+    s.on('outfit_change',      data => this._onOutfitChange(data));
+    s.on('interaction_chain',  data => this._onInteractionChain(data));
   }
 
   _onConnect() {
@@ -395,6 +402,101 @@ class PenthouseScene {
         timestamp: data.timestamp || new Date().toISOString(),
       });
     }
+  }
+
+  // ── Animation Skill Handlers ────────────────────────────────────
+
+  _onSetAnimation(data) {
+    const { character_id, state } = data;
+    if (!character_id || !state) return;
+    if (window.CharacterBridge) {
+      window.CharacterBridge.setAnimState(character_id, state);
+    }
+    _addActivityItem(`${character_id} → ${state}`, '🎭');
+  }
+
+  _onSetExpression(data) {
+    const { character_id, expression } = data;
+    if (!character_id || !expression) return;
+    if (window.CharacterBridge) {
+      window.CharacterBridge.setExpression(character_id, expression);
+    }
+  }
+
+  _onPairedAnimation(data) {
+    const { character_id_1, character_id_2, animation } = data;
+    if (!character_id_1 || !character_id_2 || !animation) return;
+    if (window.CharacterBridge) {
+      window.CharacterBridge.setAnimState(character_id_1, animation);
+      window.CharacterBridge.setAnimState(character_id_2, animation);
+    }
+    _addActivityItem(`${character_id_1} & ${character_id_2}: ${animation}`, '💕');
+  }
+
+  _onOutfitChange(data) {
+    const { character_id, outfit, animate } = data;
+    if (!character_id || !outfit) return;
+    if (window.CharacterBridge) {
+      if (animate) {
+        window.CharacterBridge.setAnimState(character_id, 'undress');
+        setTimeout(() => {
+          window.CharacterBridge.setOutfit(character_id, outfit);
+          window.CharacterBridge.setAnimState(character_id, 'idle');
+        }, 2000);
+      } else {
+        window.CharacterBridge.setOutfit(character_id, outfit);
+      }
+    }
+    _addActivityItem(`${character_id} changed to ${outfit}`, '👗');
+  }
+
+  _onInteractionChain(data) {
+    const { character_id, chain, partner_id } = data;
+    if (!character_id || !chain) return;
+
+    const chains = {
+      seduction: [
+        { state: 'flirt', delay: 0 },
+        { state: 'beckon', delay: 3000 },
+        { state: 'intimate_touch', delay: 5000 },
+        { state: 'kiss_standing', delay: 9000 },
+      ],
+      strip_tease: [
+        { state: 'dance_sway', delay: 0 },
+        { state: 'hair_flip', delay: 4000 },
+        { state: 'seductive_pose', delay: 5500 },
+        { state: 'undress', delay: 8500 },
+        { state: 'pose', delay: 11500 },
+      ],
+      romantic_evening: [
+        { state: 'drink', delay: 0 },
+        { state: 'flirt', delay: 4000 },
+        { state: 'dance_slow', delay: 7000 },
+        { state: 'kiss_standing', delay: 13000 },
+        { state: 'embrace', delay: 16000 },
+      ],
+      morning_routine: [
+        { state: 'stretch', delay: 0 },
+        { state: 'walk', delay: 2000 },
+        { state: 'bathe', delay: 3500 },
+        { state: 'primp', delay: 8500 },
+        { state: 'idle', delay: 12500 },
+      ],
+    };
+
+    const steps = chains[chain];
+    if (!steps) return;
+
+    const bridge = window.CharacterBridge;
+    if (!bridge) return;
+
+    steps.forEach(step => {
+      setTimeout(() => {
+        bridge.setAnimState(character_id, step.state);
+        if (partner_id) bridge.setAnimState(partner_id, step.state);
+      }, step.delay);
+    });
+    _addActivityItem(`${character_id} started ${chain}`, '✨');
   }
 
   /* ── Typing indicator ───────────────────────────────────────────── */

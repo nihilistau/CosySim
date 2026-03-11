@@ -20,53 +20,164 @@
   // ═══════════════════════════════════════════════════════════════════
 
   const ANIM_STATES = {
-    idle:       { id: 'idle',       priority: 0 },
-    walk:       { id: 'walk',       priority: 1 },
-    sit:        { id: 'sit',        priority: 2 },
-    lean:       { id: 'lean',       priority: 2 },
-    lie:        { id: 'lie',        priority: 2 },
-    lounge:     { id: 'lounge',     priority: 2 },
-    interact:   { id: 'interact',   priority: 3 },
-    drink:      { id: 'drink',      priority: 3 },
-    gaze:       { id: 'gaze',       priority: 2 },
-    warm:       { id: 'warm',       priority: 2 },
-    primp:      { id: 'primp',      priority: 3 },
-    bathe:      { id: 'bathe',      priority: 3 },
-    pose:       { id: 'pose',       priority: 4 },
+    // ── Basic Movement ──
+    idle:           { id: 'idle',           priority: 0 },
+    walk:           { id: 'walk',           priority: 1 },
+    run:            { id: 'run',            priority: 1 },
+
+    // ── Seated Variations ──
+    sit:            { id: 'sit',            priority: 2 },
+    sit_cross:      { id: 'sit_cross',      priority: 2 },
+    sit_lean:       { id: 'sit_lean',       priority: 2 },
+    sit_floor:      { id: 'sit_floor',      priority: 2 },
+
+    // ── Standing Variations ──
+    lean:           { id: 'lean',           priority: 2 },
+    arms_crossed:   { id: 'arms_crossed',   priority: 2 },
+    hands_behind:   { id: 'hands_behind',   priority: 2 },
+
+    // ── Lying Variations ──
+    lie:            { id: 'lie',            priority: 2 },
+    lie_side:       { id: 'lie_side',       priority: 2 },
+    lie_front:      { id: 'lie_front',      priority: 2 },
+    lounge:         { id: 'lounge',         priority: 2 },
+
+    // ── Ground Positions ──
+    kneel:          { id: 'kneel',          priority: 2 },
+    kneel_sit:      { id: 'kneel_sit',      priority: 2 },
+    all_fours:      { id: 'all_fours',      priority: 2 },
+    crawl:          { id: 'crawl',          priority: 2 },
+    sprawl:         { id: 'sprawl',         priority: 2 },
+
+    // ── Furniture Interactions ──
+    interact:       { id: 'interact',       priority: 3 },
+    drink:          { id: 'drink',          priority: 3 },
+    gaze:           { id: 'gaze',           priority: 2 },
+    warm:           { id: 'warm',           priority: 2 },
+    primp:          { id: 'primp',          priority: 3 },
+    bathe:          { id: 'bathe',          priority: 3 },
+
+    // ── Action/Gesture ──
+    dance_slow:     { id: 'dance_slow',     priority: 3 },
+    dance_sway:     { id: 'dance_sway',     priority: 3 },
+    stretch:        { id: 'stretch',        priority: 3 },
+    undress:        { id: 'undress',        priority: 3 },
+    massage:        { id: 'massage',        priority: 3 },
+    beckon:         { id: 'beckon',         priority: 3 },
+    hair_flip:      { id: 'hair_flip',      priority: 3 },
+    blow_kiss:      { id: 'blow_kiss',      priority: 3 },
+    shrug:          { id: 'shrug',          priority: 3 },
+    phone:          { id: 'phone',          priority: 3 },
+    smoke:          { id: 'smoke',          priority: 3 },
+
+    // ── Intimate/Paired ──
+    embrace:        { id: 'embrace',        priority: 4 },
+    kiss_standing:  { id: 'kiss_standing',  priority: 4 },
+    lap_sit:        { id: 'lap_sit',        priority: 4 },
+    straddle:       { id: 'straddle',       priority: 4 },
+    ride:           { id: 'ride',           priority: 4 },
+    going_down:     { id: 'going_down',     priority: 4 },
+    missionary:     { id: 'missionary',     priority: 4 },
+    doggy:          { id: 'doggy',          priority: 4 },
+    spooning:       { id: 'spooning',       priority: 4 },
+    dominant_pose:  { id: 'dominant_pose',  priority: 4 },
+    submissive:     { id: 'submissive',     priority: 4 },
+    seductive_pose: { id: 'seductive_pose', priority: 4 },
+    flirt:          { id: 'flirt',          priority: 3 },
+    intimate_touch: { id: 'intimate_touch', priority: 4 },
+
+    // ── Special ──
+    pose:           { id: 'pose',           priority: 4 },
   };
 
   // Blend durations (seconds) between state transitions
   const BLEND_DURATIONS = {
-    'idle→walk':     0.4,
-    'walk→idle':     0.5,
-    'idle→sit':      0.8,
-    'sit→idle':      0.7,
-    'idle→lean':     0.6,
-    'lean→idle':     0.5,
-    'idle→lie':      1.2,
-    'lie→idle':      1.0,
-    'idle→lounge':   1.0,
-    'lounge→idle':   0.8,
-    'idle→interact': 0.3,
-    'interact→idle': 0.4,
-    'idle→drink':    0.4,
-    'drink→idle':    0.3,
-    'idle→gaze':     0.6,
-    'gaze→idle':     0.5,
-    'idle→warm':     0.7,
-    'warm→idle':     0.5,
-    'idle→primp':    0.5,
-    'primp→idle':    0.4,
-    'idle→bathe':    1.0,
-    'bathe→idle':    0.8,
-    'idle→pose':     0.5,
-    'pose→idle':     0.6,
-    'sit→lie':       1.0,
-    'lie→sit':       0.9,
-    'sit→lounge':    0.6,
-    'lounge→sit':    0.5,
-    'lean→drink':    0.3,
-    'drink→lean':    0.3,
+    // ── Basic transitions ──
+    'idle→walk':     0.4,  'walk→idle':     0.5,
+    'idle→run':      0.3,  'run→idle':      0.4,  'walk→run': 0.3, 'run→walk': 0.4,
+
+    // ── Seated ──
+    'idle→sit':      0.8,  'sit→idle':      0.7,
+    'idle→sit_cross': 0.9, 'sit_cross→idle': 0.7,
+    'idle→sit_lean': 0.8,  'sit_lean→idle': 0.7,
+    'idle→sit_floor': 1.0, 'sit_floor→idle': 0.9,
+    'sit→sit_cross': 0.5,  'sit_cross→sit': 0.5,
+    'sit→sit_lean': 0.4,   'sit_lean→sit': 0.4,
+
+    // ── Standing poses ──
+    'idle→lean':     0.6,  'lean→idle':     0.5,
+    'idle→arms_crossed': 0.5, 'arms_crossed→idle': 0.4,
+    'idle→hands_behind': 0.5, 'hands_behind→idle': 0.4,
+
+    // ── Lying ──
+    'idle→lie':      1.2,  'lie→idle':      1.0,
+    'idle→lie_side': 1.3,  'lie_side→idle': 1.1,
+    'idle→lie_front': 1.4, 'lie_front→idle': 1.2,
+    'idle→lounge':   1.0,  'lounge→idle':   0.8,
+    'sit→lie':       1.0,  'lie→sit':       0.9,
+    'sit→lounge':    0.6,  'lounge→sit':    0.5,
+    'lie→lie_side':  0.8,  'lie_side→lie':  0.8,
+    'lie→lie_front': 1.0,  'lie_front→lie': 1.0,
+
+    // ── Ground ──
+    'idle→kneel':    0.9,  'kneel→idle':    0.8,
+    'idle→kneel_sit': 1.0, 'kneel_sit→idle': 0.9,
+    'idle→all_fours': 1.1, 'all_fours→idle': 1.0,
+    'idle→crawl':    1.2,  'crawl→idle':    1.0,
+    'idle→sprawl':   1.3,  'sprawl→idle':   1.1,
+    'kneel→all_fours': 0.6, 'all_fours→kneel': 0.6,
+    'kneel→kneel_sit': 0.5, 'kneel_sit→kneel': 0.5,
+    'all_fours→crawl': 0.3, 'crawl→all_fours': 0.3,
+
+    // ── Furniture ──
+    'idle→interact': 0.3,  'interact→idle': 0.4,
+    'idle→drink':    0.4,  'drink→idle':    0.3,
+    'idle→gaze':     0.6,  'gaze→idle':     0.5,
+    'idle→warm':     0.7,  'warm→idle':     0.5,
+    'idle→primp':    0.5,  'primp→idle':    0.4,
+    'idle→bathe':    1.0,  'bathe→idle':    0.8,
+    'lean→drink':    0.3,  'drink→lean':    0.3,
+
+    // ── Action/Gesture ──
+    'idle→dance_slow': 0.6,  'dance_slow→idle': 0.5,
+    'idle→dance_sway': 0.5,  'dance_sway→idle': 0.4,
+    'idle→stretch':    0.5,  'stretch→idle':    0.6,
+    'idle→undress':    0.4,  'undress→idle':    0.5,
+    'idle→massage':    0.5,  'massage→idle':    0.5,
+    'idle→beckon':     0.3,  'beckon→idle':     0.3,
+    'idle→hair_flip':  0.3,  'hair_flip→idle':  0.4,
+    'idle→blow_kiss':  0.3,  'blow_kiss→idle':  0.3,
+    'idle→shrug':      0.3,  'shrug→idle':      0.3,
+    'idle→phone':      0.4,  'phone→idle':      0.3,
+    'idle→smoke':      0.4,  'smoke→idle':      0.3,
+    'dance_slow→dance_sway': 0.4, 'dance_sway→dance_slow': 0.4,
+
+    // ── Intimate/Paired ──
+    'idle→embrace':    0.6,  'embrace→idle':    0.5,
+    'idle→kiss_standing': 0.5, 'kiss_standing→idle': 0.4,
+    'idle→flirt':      0.3,  'flirt→idle':      0.3,
+    'idle→seductive_pose': 0.5, 'seductive_pose→idle': 0.5,
+    'idle→dominant_pose': 0.4, 'dominant_pose→idle': 0.4,
+    'idle→submissive': 0.5,  'submissive→idle': 0.5,
+    'idle→intimate_touch': 0.4, 'intimate_touch→idle': 0.4,
+    'sit→lap_sit':     0.6,  'lap_sit→sit':     0.5,
+    'idle→lap_sit':    0.8,  'lap_sit→idle':    0.7,
+    'idle→straddle':   0.8,  'straddle→idle':   0.7,
+    'idle→ride':       0.8,  'ride→idle':       0.7,
+    'kneel→going_down': 0.5, 'going_down→kneel': 0.5,
+    'idle→going_down': 0.9,  'going_down→idle': 0.8,
+    'lie→missionary':  0.6,  'missionary→lie':  0.6,
+    'idle→missionary': 1.0,  'missionary→idle': 0.9,
+    'all_fours→doggy': 0.4,  'doggy→all_fours': 0.4,
+    'idle→doggy':      1.1,  'doggy→idle':      1.0,
+    'lie_side→spooning': 0.5, 'spooning→lie_side': 0.5,
+    'idle→spooning':   1.2,  'spooning→idle':   1.0,
+    'straddle→ride':   0.4,  'ride→straddle':   0.4,
+
+    // ── Pose/Special ──
+    'idle→pose':     0.5,  'pose→idle':     0.6,
+
+    // ── Fallback ──
     '*':             0.5,
   };
 
@@ -671,6 +782,841 @@
         model.bodyGroup.position.x = 0.008 * Math.sin(time * 0.7) * b;
         model.bodyGroup.position.z = 0.005 * Math.sin(time * 0.5 + 1.0) * b;
       }
+
+      // ═════════════════════════════════════════════════════════════
+      //  BODY POSITION STATES
+      // ═════════════════════════════════════════════════════════════
+
+      // ── RUN state ──────────────────────────────────────────────
+      if (this.currentState === 'run') {
+        this.walkPhase += dt * 5.5;
+        const r = t;
+        if (model.armL) {
+          model.armL.rotation.x = 0.55 * Math.sin(this.walkPhase) * r;
+          model.armL.rotation.z = -0.15 * r;
+        }
+        if (model.armR) {
+          model.armR.rotation.x = -0.55 * Math.sin(this.walkPhase) * r;
+          model.armR.rotation.z = 0.15 * r;
+        }
+        if (model.legL) model.legL.rotation.x = 0.6 * Math.sin(this.walkPhase) * r;
+        if (model.legR) model.legR.rotation.x = -0.6 * Math.sin(this.walkPhase) * r;
+        model.bodyGroup.position.y = 0.04 * Math.abs(Math.sin(this.walkPhase * 2)) * r;
+        model.bodyGroup.rotation.x = 0.08 * r;
+        model.bodyGroup.rotation.z = 0.04 * Math.sin(this.walkPhase) * r;
+      }
+
+      // ── SIT_CROSS state (legs crossed elegantly) ───────────────
+      if (this.currentState === 'sit_cross') {
+        const s = t;
+        model.group.position.y = -0.35 * s + (model._baseY || 0);
+        if (model.legL) {
+          model.legL.rotation.x = -1.4 * s;
+          model.legL.rotation.z = -0.05 * s;
+        }
+        if (model.legR) {
+          model.legR.rotation.x = -1.2 * s;
+          model.legR.rotation.z = 0.2 * s;  // crossed over
+          model.legR.rotation.y = -0.3 * s;
+        }
+        if (model.armL) {
+          model.armL.rotation.x = 0.15 * s;
+          model.armL.rotation.z = -0.2 * s;
+        }
+        if (model.armR) {
+          model.armR.rotation.x = 0.25 * s;
+          model.armR.rotation.z = 0.1 * s;
+        }
+        model.bodyGroup.rotation.x = 0.03 * s;
+      }
+
+      // ── SIT_LEAN state (leaning back casually) ─────────────────
+      if (this.currentState === 'sit_lean') {
+        const s = t;
+        model.group.position.y = -0.32 * s + (model._baseY || 0);
+        model.bodyGroup.rotation.x = -0.25 * s;
+        if (model.legL) {
+          model.legL.rotation.x = -1.1 * s;
+          model.legL.rotation.z = -0.1 * s;
+        }
+        if (model.legR) {
+          model.legR.rotation.x = -1.0 * s;
+          model.legR.rotation.z = 0.15 * s;
+        }
+        if (model.armL) {
+          model.armL.rotation.x = -0.1 * s;
+          model.armL.rotation.z = -0.5 * s;
+        }
+        if (model.armR) {
+          model.armR.rotation.x = 0.1 * s;
+          model.armR.rotation.z = 0.4 * s;
+        }
+      }
+
+      // ── SIT_FLOOR state (sitting on the floor) ─────────────────
+      if (this.currentState === 'sit_floor') {
+        const s = t;
+        model.group.position.y = -0.55 * s + (model._baseY || 0);
+        if (model.legL) {
+          model.legL.rotation.x = -0.9 * s;
+          model.legL.rotation.z = -0.3 * s;
+        }
+        if (model.legR) {
+          model.legR.rotation.x = -1.2 * s;
+          model.legR.rotation.z = 0.1 * s;
+        }
+        if (model.armL) {
+          model.armL.rotation.x = 0.3 * s;
+          model.armL.rotation.z = -0.15 * s;
+        }
+        if (model.armR) {
+          model.armR.rotation.x = 0.2 * s;
+          model.armR.rotation.z = 0.2 * s;
+        }
+      }
+
+      // ── ARMS_CROSSED state (standing, confident) ───────────────
+      if (this.currentState === 'arms_crossed') {
+        const a = t;
+        if (model.armL) {
+          model.armL.rotation.x = -0.7 * a;
+          model.armL.rotation.z = -0.35 * a;
+        }
+        if (model.armR) {
+          model.armR.rotation.x = -0.7 * a;
+          model.armR.rotation.z = 0.35 * a;
+        }
+        if (model.headData && model.headData.group) {
+          model.headData.group.rotation.x = -0.05 * a;
+        }
+        model.bodyGroup.rotation.x = -0.03 * a;
+      }
+
+      // ── HANDS_BEHIND state (hands behind back, formal) ─────────
+      if (this.currentState === 'hands_behind') {
+        const h = t;
+        if (model.armL) {
+          model.armL.rotation.x = 0.4 * h;
+          model.armL.rotation.z = 0.2 * h;
+        }
+        if (model.armR) {
+          model.armR.rotation.x = 0.4 * h;
+          model.armR.rotation.z = -0.2 * h;
+        }
+        model.bodyGroup.rotation.x = -0.05 * h;
+      }
+
+      // ── LIE_SIDE state (lying on one side) ─────────────────────
+      if (this.currentState === 'lie_side') {
+        const l = t;
+        model.group.position.y = -0.65 * l + (model._baseY || 0);
+        model.bodyGroup.rotation.x = -1.3 * l;
+        model.bodyGroup.rotation.z = 0.4 * l;  // rolled to side
+        if (model.legL) {
+          model.legL.rotation.x = -0.3 * l;
+          model.legL.rotation.z = -0.15 * l;
+        }
+        if (model.legR) {
+          model.legR.rotation.x = -0.5 * l;
+          model.legR.rotation.z = 0.1 * l;
+        }
+        if (model.armL) {
+          model.armL.rotation.x = -0.8 * l;
+          model.armL.rotation.z = -0.3 * l;
+        }
+        if (model.armR) {
+          model.armR.rotation.x = -0.3 * l;
+          model.armR.rotation.z = 0.4 * l;
+        }
+        const breath = 1.0 + this.breathDepth * 0.4 * Math.sin(time * this.breathRate * Math.PI * 2);
+        const torso = model.bodyGroup.children[0];
+        if (torso) {
+          torso.scale.x = breath;
+          torso.scale.z = (d ? d.torsoScaleZ : 1) * breath;
+        }
+      }
+
+      // ── LIE_FRONT state (lying face-down) ──────────────────────
+      if (this.currentState === 'lie_front') {
+        const l = t;
+        model.group.position.y = -0.7 * l + (model._baseY || 0);
+        model.bodyGroup.rotation.x = -1.55 * l;  // face down
+        if (model.legL) {
+          model.legL.rotation.x = 0.1 * l;
+          model.legL.rotation.z = -0.1 * l;
+        }
+        if (model.legR) {
+          model.legR.rotation.x = 0.1 * l;
+          model.legR.rotation.z = 0.1 * l;
+        }
+        if (model.armL) {
+          model.armL.rotation.x = -1.0 * l;
+          model.armL.rotation.z = -0.5 * l;
+        }
+        if (model.armR) {
+          model.armR.rotation.x = -1.0 * l;
+          model.armR.rotation.z = 0.5 * l;
+        }
+      }
+
+      // ── KNEEL state (upright kneeling) ─────────────────────────
+      if (this.currentState === 'kneel') {
+        const k = t;
+        model.group.position.y = -0.45 * k + (model._baseY || 0);
+        if (model.legL) {
+          model.legL.rotation.x = -1.6 * k;
+          model.legL.rotation.z = -0.03 * k;
+        }
+        if (model.legR) {
+          model.legR.rotation.x = -1.6 * k;
+          model.legR.rotation.z = 0.03 * k;
+        }
+        if (model.armL) {
+          model.armL.rotation.x = 0.1 * k;
+          model.armL.rotation.z = -0.1 * k;
+        }
+        if (model.armR) {
+          model.armR.rotation.x = 0.1 * k;
+          model.armR.rotation.z = 0.1 * k;
+        }
+        model.bodyGroup.rotation.x = 0.05 * k;
+      }
+
+      // ── KNEEL_SIT state (sitting on heels) ─────────────────────
+      if (this.currentState === 'kneel_sit') {
+        const k = t;
+        model.group.position.y = -0.55 * k + (model._baseY || 0);
+        if (model.legL) {
+          model.legL.rotation.x = -2.0 * k;
+          model.legL.rotation.z = -0.05 * k;
+        }
+        if (model.legR) {
+          model.legR.rotation.x = -2.0 * k;
+          model.legR.rotation.z = 0.05 * k;
+        }
+        if (model.armL) {
+          model.armL.rotation.x = 0.2 * k;
+          model.armL.rotation.z = -0.15 * k;
+        }
+        if (model.armR) {
+          model.armR.rotation.x = 0.2 * k;
+          model.armR.rotation.z = 0.15 * k;
+        }
+      }
+
+      // ── ALL_FOURS state ────────────────────────────────────────
+      if (this.currentState === 'all_fours') {
+        const a = t;
+        model.group.position.y = -0.5 * a + (model._baseY || 0);
+        model.bodyGroup.rotation.x = 1.1 * a;  // torso forward/horizontal
+        if (model.legL) {
+          model.legL.rotation.x = -1.6 * a;
+          model.legL.rotation.z = -0.1 * a;
+        }
+        if (model.legR) {
+          model.legR.rotation.x = -1.6 * a;
+          model.legR.rotation.z = 0.1 * a;
+        }
+        if (model.armL) {
+          model.armL.rotation.x = -1.5 * a;
+          model.armL.rotation.z = -0.1 * a;
+        }
+        if (model.armR) {
+          model.armR.rotation.x = -1.5 * a;
+          model.armR.rotation.z = 0.1 * a;
+        }
+        if (model.headData && model.headData.group) {
+          model.headData.group.rotation.x = -0.4 * a;
+        }
+      }
+
+      // ── CRAWL state (moving on all fours) ──────────────────────
+      if (this.currentState === 'crawl') {
+        this.walkPhase += dt * 2.0;
+        const c = t;
+        model.group.position.y = -0.5 * c + (model._baseY || 0);
+        model.bodyGroup.rotation.x = 1.0 * c;
+        const phase = this.walkPhase;
+        if (model.armL) {
+          model.armL.rotation.x = (-1.5 + 0.3 * Math.sin(phase)) * c;
+          model.armL.rotation.z = -0.1 * c;
+        }
+        if (model.armR) {
+          model.armR.rotation.x = (-1.5 - 0.3 * Math.sin(phase)) * c;
+          model.armR.rotation.z = 0.1 * c;
+        }
+        if (model.legL) {
+          model.legL.rotation.x = (-1.6 - 0.2 * Math.sin(phase)) * c;
+        }
+        if (model.legR) {
+          model.legR.rotation.x = (-1.6 + 0.2 * Math.sin(phase)) * c;
+        }
+        model.bodyGroup.rotation.z = 0.03 * Math.sin(phase * 0.5) * c;
+      }
+
+      // ── SPRAWL state (spread out on floor/bed) ─────────────────
+      if (this.currentState === 'sprawl') {
+        const s = t;
+        model.group.position.y = -0.7 * s + (model._baseY || 0);
+        model.bodyGroup.rotation.x = -1.5 * s;
+        if (model.legL) {
+          model.legL.rotation.x = -0.3 * s;
+          model.legL.rotation.z = -0.4 * s;
+        }
+        if (model.legR) {
+          model.legR.rotation.x = -0.2 * s;
+          model.legR.rotation.z = 0.5 * s;
+        }
+        if (model.armL) {
+          model.armL.rotation.x = -1.3 * s;
+          model.armL.rotation.z = -0.7 * s;
+        }
+        if (model.armR) {
+          model.armR.rotation.x = -0.5 * s;
+          model.armR.rotation.z = 0.8 * s;
+        }
+      }
+
+      // ═════════════════════════════════════════════════════════════
+      //  ACTION / GESTURE STATES
+      // ═════════════════════════════════════════════════════════════
+
+      // ── DANCE_SLOW state (slow romantic sway) ──────────────────
+      if (this.currentState === 'dance_slow') {
+        this.walkPhase += dt * 1.5;
+        const ds = t;
+        const phase = this.walkPhase;
+        model.bodyGroup.rotation.y = 0.15 * Math.sin(phase * 0.5) * ds;
+        model.bodyGroup.rotation.z = 0.05 * Math.sin(phase * 0.7) * ds;
+        model.bodyGroup.position.y = 0.02 * Math.sin(phase) * ds;
+        if (model.armL) {
+          model.armL.rotation.x = -0.3 * ds;
+          model.armL.rotation.z = (-0.3 + 0.1 * Math.sin(phase * 0.6)) * ds;
+        }
+        if (model.armR) {
+          model.armR.rotation.x = -0.4 * ds;
+          model.armR.rotation.z = (0.2 + 0.1 * Math.sin(phase * 0.6 + 1.0)) * ds;
+        }
+        if (model.legL) model.legL.rotation.x = 0.05 * Math.sin(phase * 0.5) * ds;
+        if (model.legR) model.legR.rotation.x = -0.05 * Math.sin(phase * 0.5) * ds;
+      }
+
+      // ── DANCE_SWAY state (hip-swaying dance) ───────────────────
+      if (this.currentState === 'dance_sway') {
+        this.walkPhase += dt * 2.5;
+        const ds = t;
+        const p = this.walkPhase;
+        model.bodyGroup.rotation.y = 0.2 * Math.sin(p * 0.7) * ds;
+        model.bodyGroup.rotation.z = 0.08 * Math.sin(p * 1.3) * ds;
+        model.bodyGroup.position.y = 0.03 * Math.abs(Math.sin(p)) * ds;
+        model.bodyGroup.position.x = 0.04 * Math.sin(p * 0.5) * ds;
+        if (model.armL) {
+          model.armL.rotation.x = (-0.2 + 0.3 * Math.sin(p)) * ds;
+          model.armL.rotation.z = (-0.2 + 0.15 * Math.sin(p * 0.8)) * ds;
+        }
+        if (model.armR) {
+          model.armR.rotation.x = (-0.3 + 0.3 * Math.sin(p + 1.5)) * ds;
+          model.armR.rotation.z = (0.2 - 0.15 * Math.sin(p * 0.8 + 1.0)) * ds;
+        }
+        if (model.legL) {
+          model.legL.rotation.x = 0.1 * Math.sin(p * 0.7) * ds;
+          model.legL.rotation.z = -0.05 * Math.sin(p) * ds;
+        }
+        if (model.legR) {
+          model.legR.rotation.x = -0.1 * Math.sin(p * 0.7) * ds;
+          model.legR.rotation.z = 0.05 * Math.sin(p) * ds;
+        }
+      }
+
+      // ── STRETCH state ──────────────────────────────────────────
+      if (this.currentState === 'stretch') {
+        const st = t;
+        const phase = Math.sin(time * 0.4);
+        if (model.armL) {
+          model.armL.rotation.x = (-1.8 + 0.1 * phase) * st;
+          model.armL.rotation.z = (-0.2 + 0.05 * phase) * st;
+        }
+        if (model.armR) {
+          model.armR.rotation.x = (-1.8 + 0.1 * phase) * st;
+          model.armR.rotation.z = (0.2 - 0.05 * phase) * st;
+        }
+        model.bodyGroup.rotation.x = (-0.1 + 0.03 * phase) * st;
+        if (model.legL) model.legL.rotation.x = 0.03 * phase * st;
+        if (model.legR) model.legR.rotation.x = -0.02 * phase * st;
+      }
+
+      // ── UNDRESS state (removing clothing gesture) ──────────────
+      if (this.currentState === 'undress') {
+        const u = t;
+        const phase = Math.sin(time * 0.6);
+        if (model.armR) {
+          model.armR.rotation.x = (-0.4 + 0.3 * phase) * u;
+          model.armR.rotation.z = (0.3 + 0.1 * phase) * u;
+        }
+        if (model.armL) {
+          model.armL.rotation.x = (-0.6 - 0.2 * phase) * u;
+          model.armL.rotation.z = (-0.2 + 0.1 * phase) * u;
+        }
+        model.bodyGroup.rotation.y = 0.05 * Math.sin(time * 0.3) * u;
+        model.bodyGroup.rotation.z = 0.03 * phase * u;
+      }
+
+      // ── MASSAGE state (giving/receiving massage) ───────────────
+      if (this.currentState === 'massage') {
+        const m = t;
+        const phase = time * 1.2;
+        if (model.armL) {
+          model.armL.rotation.x = (-0.5 + 0.15 * Math.sin(phase)) * m;
+          model.armL.rotation.z = -0.2 * m;
+        }
+        if (model.armR) {
+          model.armR.rotation.x = (-0.5 + 0.15 * Math.sin(phase + 1.5)) * m;
+          model.armR.rotation.z = 0.2 * m;
+        }
+        model.bodyGroup.rotation.x = 0.1 * m;
+        model.bodyGroup.rotation.y = 0.03 * Math.sin(phase * 0.5) * m;
+      }
+
+      // ── BECKON state (come-hither finger curl) ─────────────────
+      if (this.currentState === 'beckon') {
+        const b = t;
+        const curl = Math.sin(time * 2.0);
+        if (model.armR) {
+          model.armR.rotation.x = (-0.6 + 0.05 * curl) * b;
+          model.armR.rotation.z = 0.15 * b;
+        }
+        if (model.armL) {
+          model.armL.rotation.x = 0.1 * b;
+          model.armL.rotation.z = -0.1 * b;
+        }
+        if (model.headData && model.headData.group) {
+          model.headData.group.rotation.y = 0.08 * b;
+          model.headData.group.rotation.z = 0.05 * b;
+        }
+        model.bodyGroup.rotation.x = 0.03 * b;
+      }
+
+      // ── HAIR_FLIP state ────────────────────────────────────────
+      if (this.currentState === 'hair_flip') {
+        const h = t;
+        const flip = Math.sin(time * 1.5);
+        if (model.armR) {
+          model.armR.rotation.x = (-1.3 + 0.3 * flip) * h;
+          model.armR.rotation.z = 0.2 * h;
+        }
+        if (model.armL) {
+          model.armL.rotation.x = 0.15 * h;
+          model.armL.rotation.z = -0.2 * h;
+        }
+        if (model.headData && model.headData.group) {
+          model.headData.group.rotation.z = 0.15 * Math.sin(time * 1.5 + 0.5) * h;
+          model.headData.group.rotation.y = 0.1 * flip * h;
+        }
+        model.bodyGroup.rotation.z = 0.04 * flip * h;
+      }
+
+      // ── BLOW_KISS state ────────────────────────────────────────
+      if (this.currentState === 'blow_kiss') {
+        const bk = t;
+        const phase = Math.sin(time * 1.0);
+        if (model.armR) {
+          model.armR.rotation.x = (-0.8 - 0.2 * Math.max(0, phase)) * bk;
+          model.armR.rotation.z = (0.3 + 0.1 * Math.max(0, phase)) * bk;
+        }
+        if (model.armL) {
+          model.armL.rotation.x = 0.1 * bk;
+          model.armL.rotation.z = -0.15 * bk;
+        }
+        if (model.headData && model.headData.group) {
+          model.headData.group.rotation.x = -0.05 * bk;
+          model.headData.group.rotation.y = 0.1 * bk;
+        }
+      }
+
+      // ── SHRUG state ────────────────────────────────────────────
+      if (this.currentState === 'shrug') {
+        const sh = t;
+        const bounce = Math.sin(time * 2.5);
+        if (model.armL) {
+          model.armL.rotation.x = (-0.3 + 0.1 * bounce) * sh;
+          model.armL.rotation.z = (-0.5 + 0.1 * bounce) * sh;
+        }
+        if (model.armR) {
+          model.armR.rotation.x = (-0.3 + 0.1 * bounce) * sh;
+          model.armR.rotation.z = (0.5 - 0.1 * bounce) * sh;
+        }
+        if (model.headData && model.headData.group) {
+          model.headData.group.rotation.z = 0.08 * sh;
+        }
+      }
+
+      // ── PHONE state (holding phone to ear) ─────────────────────
+      if (this.currentState === 'phone') {
+        const ph = t;
+        if (model.armR) {
+          model.armR.rotation.x = -1.2 * ph;
+          model.armR.rotation.z = 0.3 * ph;
+        }
+        if (model.armL) {
+          model.armL.rotation.x = 0.2 * ph;
+          model.armL.rotation.z = -0.1 * ph;
+        }
+        if (model.headData && model.headData.group) {
+          model.headData.group.rotation.z = 0.1 * ph;
+        }
+        model.bodyGroup.rotation.y = 0.02 * Math.sin(time * 0.3) * ph;
+      }
+
+      // ── SMOKE state (holding cigarette) ────────────────────────
+      if (this.currentState === 'smoke') {
+        const sm = t;
+        const puff = Math.sin(time * 0.5);
+        if (model.armR) {
+          model.armR.rotation.x = (-0.5 - 0.3 * Math.max(0, puff)) * sm;
+          model.armR.rotation.z = 0.15 * sm;
+        }
+        if (model.armL) {
+          model.armL.rotation.x = 0.1 * sm;
+          model.armL.rotation.z = -0.15 * sm;
+        }
+        if (model.headData && model.headData.group) {
+          model.headData.group.rotation.x = (-0.05 - 0.03 * Math.max(0, puff)) * sm;
+        }
+      }
+
+      // ── FLIRT state (playful attention-getting) ────────────────
+      if (this.currentState === 'flirt') {
+        const f = t;
+        const sway = Math.sin(time * 1.0);
+        model.bodyGroup.rotation.y = 0.08 * sway * f;
+        model.bodyGroup.rotation.z = 0.04 * Math.sin(time * 0.7) * f;
+        if (model.armL) {
+          model.armL.rotation.x = (0.15 + 0.1 * sway) * f;
+          model.armL.rotation.z = -0.2 * f;
+        }
+        if (model.armR) {
+          model.armR.rotation.x = (-0.3 + 0.15 * sway) * f;
+          model.armR.rotation.z = 0.25 * f;
+        }
+        if (model.headData && model.headData.group) {
+          model.headData.group.rotation.y = 0.1 * sway * f;
+          model.headData.group.rotation.z = 0.06 * f;
+        }
+      }
+
+      // ═════════════════════════════════════════════════════════════
+      //  INTIMATE / PAIRED STATES
+      // ═════════════════════════════════════════════════════════════
+
+      // ── EMBRACE state (standing embrace/hug) ───────────────────
+      if (this.currentState === 'embrace') {
+        const e = t;
+        if (model.armL) {
+          model.armL.rotation.x = -0.5 * e;
+          model.armL.rotation.z = -0.4 * e;
+        }
+        if (model.armR) {
+          model.armR.rotation.x = -0.6 * e;
+          model.armR.rotation.z = 0.3 * e;
+        }
+        model.bodyGroup.rotation.x = 0.05 * e;
+        const sway = Math.sin(time * 0.4);
+        model.bodyGroup.rotation.y = 0.02 * sway * e;
+      }
+
+      // ── KISS_STANDING state ────────────────────────────────────
+      if (this.currentState === 'kiss_standing') {
+        const k = t;
+        model.bodyGroup.rotation.x = 0.08 * k;
+        if (model.armL) {
+          model.armL.rotation.x = -0.4 * k;
+          model.armL.rotation.z = -0.5 * k;
+        }
+        if (model.armR) {
+          model.armR.rotation.x = -0.6 * k;
+          model.armR.rotation.z = 0.4 * k;
+        }
+        if (model.headData && model.headData.group) {
+          model.headData.group.rotation.x = 0.1 * k;
+          model.headData.group.rotation.z = 0.15 * k;
+        }
+      }
+
+      // ── LAP_SIT state (sitting on someone's lap) ───────────────
+      if (this.currentState === 'lap_sit') {
+        const l = t;
+        model.group.position.y = -0.2 * l + (model._baseY || 0);
+        if (model.legL) {
+          model.legL.rotation.x = -1.2 * l;
+          model.legL.rotation.z = -0.2 * l;
+        }
+        if (model.legR) {
+          model.legR.rotation.x = -1.2 * l;
+          model.legR.rotation.z = 0.2 * l;
+        }
+        if (model.armL) {
+          model.armL.rotation.x = -0.3 * l;
+          model.armL.rotation.z = -0.3 * l;
+        }
+        if (model.armR) {
+          model.armR.rotation.x = -0.4 * l;
+          model.armR.rotation.z = 0.2 * l;
+        }
+        model.bodyGroup.rotation.x = 0.05 * l;
+        model.bodyGroup.rotation.y = 0.03 * Math.sin(time * 0.5) * l;
+      }
+
+      // ── STRADDLE state (straddling, facing) ────────────────────
+      if (this.currentState === 'straddle') {
+        const s = t;
+        model.group.position.y = -0.25 * s + (model._baseY || 0);
+        if (model.legL) {
+          model.legL.rotation.x = -1.3 * s;
+          model.legL.rotation.z = -0.4 * s;
+        }
+        if (model.legR) {
+          model.legR.rotation.x = -1.3 * s;
+          model.legR.rotation.z = 0.4 * s;
+        }
+        if (model.armL) {
+          model.armL.rotation.x = -0.3 * s;
+          model.armL.rotation.z = -0.2 * s;
+        }
+        if (model.armR) {
+          model.armR.rotation.x = -0.3 * s;
+          model.armR.rotation.z = 0.2 * s;
+        }
+        model.bodyGroup.rotation.x = 0.1 * s;
+      }
+
+      // ── RIDE state (rhythmic riding motion) ────────────────────
+      if (this.currentState === 'ride') {
+        this.walkPhase += dt * 2.0;
+        const r = t;
+        const p = this.walkPhase;
+        model.group.position.y = (-0.25 + 0.08 * Math.sin(p)) * r + (model._baseY || 0);
+        if (model.legL) {
+          model.legL.rotation.x = (-1.3 + 0.1 * Math.sin(p)) * r;
+          model.legL.rotation.z = -0.4 * r;
+        }
+        if (model.legR) {
+          model.legR.rotation.x = (-1.3 + 0.1 * Math.sin(p)) * r;
+          model.legR.rotation.z = 0.4 * r;
+        }
+        if (model.armL) {
+          model.armL.rotation.x = (-0.3 + 0.1 * Math.sin(p * 0.5)) * r;
+          model.armL.rotation.z = -0.2 * r;
+        }
+        if (model.armR) {
+          model.armR.rotation.x = (-0.3 + 0.1 * Math.sin(p * 0.5)) * r;
+          model.armR.rotation.z = 0.2 * r;
+        }
+        model.bodyGroup.rotation.x = (0.1 + 0.05 * Math.sin(p)) * r;
+        model.bodyGroup.rotation.z = 0.03 * Math.sin(p * 0.7) * r;
+      }
+
+      // ── GOING_DOWN state (kneeling oral position) ──────────────
+      if (this.currentState === 'going_down') {
+        const g = t;
+        model.group.position.y = -0.5 * g + (model._baseY || 0);
+        if (model.legL) {
+          model.legL.rotation.x = -1.8 * g;
+          model.legL.rotation.z = -0.05 * g;
+        }
+        if (model.legR) {
+          model.legR.rotation.x = -1.8 * g;
+          model.legR.rotation.z = 0.05 * g;
+        }
+        if (model.armL) {
+          model.armL.rotation.x = -0.4 * g;
+          model.armL.rotation.z = -0.15 * g;
+        }
+        if (model.armR) {
+          model.armR.rotation.x = -0.5 * g;
+          model.armR.rotation.z = 0.1 * g;
+        }
+        model.bodyGroup.rotation.x = 0.15 * g;
+        if (model.headData && model.headData.group) {
+          model.headData.group.rotation.x = 0.1 * g;
+          const bob = Math.sin(time * 1.5);
+          model.headData.group.rotation.x += 0.05 * bob * g;
+        }
+      }
+
+      // ── MISSIONARY state (lying back, legs parted) ─────────────
+      if (this.currentState === 'missionary') {
+        const m = t;
+        model.group.position.y = -0.65 * m + (model._baseY || 0);
+        model.bodyGroup.rotation.x = -1.4 * m;
+        if (model.legL) {
+          model.legL.rotation.x = -0.5 * m;
+          model.legL.rotation.z = -0.4 * m;
+        }
+        if (model.legR) {
+          model.legR.rotation.x = -0.5 * m;
+          model.legR.rotation.z = 0.4 * m;
+        }
+        if (model.armL) {
+          model.armL.rotation.x = -0.6 * m;
+          model.armL.rotation.z = -0.5 * m;
+        }
+        if (model.armR) {
+          model.armR.rotation.x = -0.5 * m;
+          model.armR.rotation.z = 0.4 * m;
+        }
+        const rhythm = Math.sin(time * 1.8);
+        model.bodyGroup.position.y = 0.02 * rhythm * m;
+      }
+
+      // ── DOGGY state (on all fours, receiving) ──────────────────
+      if (this.currentState === 'doggy') {
+        this.walkPhase += dt * 2.2;
+        const dg = t;
+        const p = this.walkPhase;
+        model.group.position.y = -0.5 * dg + (model._baseY || 0);
+        model.bodyGroup.rotation.x = 1.1 * dg;
+        if (model.legL) {
+          model.legL.rotation.x = -1.5 * dg;
+          model.legL.rotation.z = -0.15 * dg;
+        }
+        if (model.legR) {
+          model.legR.rotation.x = -1.5 * dg;
+          model.legR.rotation.z = 0.15 * dg;
+        }
+        if (model.armL) {
+          model.armL.rotation.x = -1.5 * dg;
+          model.armL.rotation.z = -0.1 * dg;
+        }
+        if (model.armR) {
+          model.armR.rotation.x = -1.5 * dg;
+          model.armR.rotation.z = 0.1 * dg;
+        }
+        // Rhythmic motion
+        model.bodyGroup.position.z = 0.03 * Math.sin(p) * dg;
+        model.bodyGroup.rotation.z = 0.02 * Math.sin(p * 0.7) * dg;
+      }
+
+      // ── SPOONING state (lying side-by-side) ────────────────────
+      if (this.currentState === 'spooning') {
+        const sp = t;
+        model.group.position.y = -0.65 * sp + (model._baseY || 0);
+        model.bodyGroup.rotation.x = -1.3 * sp;
+        model.bodyGroup.rotation.z = 0.35 * sp;
+        if (model.legL) {
+          model.legL.rotation.x = -0.4 * sp;
+          model.legL.rotation.z = -0.1 * sp;
+        }
+        if (model.legR) {
+          model.legR.rotation.x = -0.6 * sp;
+          model.legR.rotation.z = 0.1 * sp;
+        }
+        if (model.armL) {
+          model.armL.rotation.x = -0.4 * sp;
+          model.armL.rotation.z = -0.3 * sp;
+        }
+        if (model.armR) {
+          model.armR.rotation.x = -0.5 * sp;
+          model.armR.rotation.z = 0.2 * sp;
+        }
+        const breathSp = 1.0 + this.breathDepth * 0.4 * Math.sin(time * this.breathRate * Math.PI * 2);
+        const torsoSp = model.bodyGroup.children[0];
+        if (torsoSp) {
+          torsoSp.scale.x = breathSp;
+          torsoSp.scale.z = (d ? d.torsoScaleZ : 1) * breathSp;
+        }
+      }
+
+      // ── DOMINANT_POSE state (standing over, authoritative) ─────
+      if (this.currentState === 'dominant_pose') {
+        const dp = t;
+        model.bodyGroup.rotation.x = -0.05 * dp;
+        if (model.armL) {
+          model.armL.rotation.x = 0.15 * dp;
+          model.armL.rotation.z = -0.3 * dp;
+        }
+        if (model.armR) {
+          model.armR.rotation.x = -0.3 * dp;
+          model.armR.rotation.z = 0.15 * dp;
+        }
+        if (model.legL) {
+          model.legL.rotation.z = -0.1 * dp;
+        }
+        if (model.legR) {
+          model.legR.rotation.z = 0.1 * dp;
+        }
+        if (model.headData && model.headData.group) {
+          model.headData.group.rotation.x = -0.1 * dp;
+        }
+      }
+
+      // ── SUBMISSIVE state (kneeling, head lowered) ──────────────
+      if (this.currentState === 'submissive') {
+        const sb = t;
+        model.group.position.y = -0.5 * sb + (model._baseY || 0);
+        model.bodyGroup.rotation.x = 0.2 * sb;
+        if (model.legL) {
+          model.legL.rotation.x = -1.8 * sb;
+          model.legL.rotation.z = -0.03 * sb;
+        }
+        if (model.legR) {
+          model.legR.rotation.x = -1.8 * sb;
+          model.legR.rotation.z = 0.03 * sb;
+        }
+        if (model.armL) {
+          model.armL.rotation.x = 0.3 * sb;
+          model.armL.rotation.z = -0.1 * sb;
+        }
+        if (model.armR) {
+          model.armR.rotation.x = 0.3 * sb;
+          model.armR.rotation.z = 0.1 * sb;
+        }
+        if (model.headData && model.headData.group) {
+          model.headData.group.rotation.x = 0.2 * sb;
+        }
+      }
+
+      // ── SEDUCTIVE_POSE state (alluring posture) ────────────────
+      if (this.currentState === 'seductive_pose') {
+        const se = t;
+        const sway = Math.sin(time * 0.6);
+        model.bodyGroup.rotation.y = 0.08 * sway * se;
+        model.bodyGroup.rotation.z = 0.05 * se;
+        if (model.armL) {
+          model.armL.rotation.x = 0.15 * se;
+          model.armL.rotation.z = -0.25 * se;
+        }
+        if (model.armR) {
+          model.armR.rotation.x = (-0.6 + 0.1 * sway) * se;
+          model.armR.rotation.z = 0.3 * se;
+        }
+        if (model.legL) {
+          model.legL.rotation.z = -0.05 * se;
+        }
+        if (model.legR) {
+          model.legR.rotation.x = 0.1 * se;
+          model.legR.rotation.z = 0.12 * se;
+        }
+        if (model.headData && model.headData.group) {
+          model.headData.group.rotation.y = 0.1 * sway * se;
+          model.headData.group.rotation.z = 0.08 * se;
+        }
+      }
+
+      // ── INTIMATE_TOUCH state (gentle touch/caress) ─────────────
+      if (this.currentState === 'intimate_touch') {
+        const it = t;
+        const caress = Math.sin(time * 0.8);
+        if (model.armR) {
+          model.armR.rotation.x = (-0.4 + 0.15 * caress) * it;
+          model.armR.rotation.z = (0.2 + 0.05 * caress) * it;
+        }
+        if (model.armL) {
+          model.armL.rotation.x = (-0.2 + 0.1 * caress) * it;
+          model.armL.rotation.z = -0.15 * it;
+        }
+        model.bodyGroup.rotation.x = 0.05 * it;
+        model.bodyGroup.rotation.y = 0.03 * caress * it;
+      }
     }
 
     _applyExpression() {
@@ -880,17 +1826,69 @@
   function inferAnimState(locationId, activity) {
     const act = (activity || '').toLowerCase();
 
-    // Explicit activity overrides
-    if (act.includes('walk') || act.includes('moving')) return 'walk';
-    if (act.includes('drink') || act.includes('sip')) return 'drink';
-    if (act.includes('bathe') || act.includes('shower') || act.includes('wash')) return 'bathe';
-    if (act.includes('primp') || act.includes('groom') || act.includes('makeup')) return 'primp';
-    if (act.includes('interact') || act.includes('using')) return 'interact';
-    if (act.includes('pose') || act.includes('sex')) return 'pose';
-    if (act.includes('lie') || act.includes('sleep') || act.includes('rest')) return 'lie';
-    if (act.includes('lounge') || act.includes('relax') || act.includes('sprawl')) return 'lounge';
-    if (act.includes('gaze') || act.includes('look') || act.includes('stare')) return 'gaze';
-    if (act.includes('warm') || act.includes('fire')) return 'warm';
+    // ── Explicit activity overrides (most specific first) ──
+
+    // Movement
+    if (act.includes('run') || act.includes('sprint') || act.includes('rush')) return 'run';
+    if (act.includes('walk') || act.includes('moving') || act.includes('approach')) return 'walk';
+    if (act.includes('crawl')) return 'crawl';
+
+    // Intimate/Adult (highest priority when matched)
+    if (act.includes('missionary')) return 'missionary';
+    if (act.includes('doggy') || act.includes('from behind')) return 'doggy';
+    if (act.includes('spooning') || act.includes('spoon')) return 'spooning';
+    if (act.includes('riding') || act.includes('ride') || act.includes('cowgirl')) return 'ride';
+    if (act.includes('straddle') || act.includes('mount')) return 'straddle';
+    if (act.includes('going down') || act.includes('oral') || act.includes('blowjob') || act.includes('cunnilingus')) return 'going_down';
+    if (act.includes('lap sit') || act.includes('lap dance') || act.includes('on lap')) return 'lap_sit';
+    if (act.includes('kiss') && (act.includes('stand') || act.includes('deep'))) return 'kiss_standing';
+    if (act.includes('embrace') || act.includes('hug') || act.includes('hold')) return 'embrace';
+    if (act.includes('touch') || act.includes('caress') || act.includes('fondle') || act.includes('grope')) return 'intimate_touch';
+    if (act.includes('dominant') || act.includes('command') || act.includes('order') || act.includes('intimidat')) return 'dominant_pose';
+    if (act.includes('submissive') || act.includes('obey') || act.includes('submit') || act.includes('beg')) return 'submissive';
+    if (act.includes('seduct') || act.includes('tease') || act.includes('tempt') || act.includes('allur')) return 'seductive_pose';
+    if (act.includes('flirt') || act.includes('wink') || act.includes('come hither')) return 'flirt';
+
+    // Actions & Gestures
+    if (act.includes('dance') && (act.includes('slow') || act.includes('romantic'))) return 'dance_slow';
+    if (act.includes('dance') || act.includes('sway') || act.includes('groove')) return 'dance_sway';
+    if (act.includes('undress') || act.includes('strip') || act.includes('remove') || act.includes('take off')) return 'undress';
+    if (act.includes('stretch') || act.includes('yawn') || act.includes('wake')) return 'stretch';
+    if (act.includes('massage') || act.includes('rub')) return 'massage';
+    if (act.includes('beckon') || act.includes('come here')) return 'beckon';
+    if (act.includes('hair flip') || act.includes('toss hair')) return 'hair_flip';
+    if (act.includes('blow kiss')) return 'blow_kiss';
+    if (act.includes('shrug')) return 'shrug';
+    if (act.includes('phone') || act.includes('call') || act.includes('text')) return 'phone';
+    if (act.includes('smoke') || act.includes('cigarette') || act.includes('vape')) return 'smoke';
+
+    // Body positions
+    if (act.includes('kneel') && (act.includes('sit') || act.includes('heel'))) return 'kneel_sit';
+    if (act.includes('kneel')) return 'kneel';
+    if (act.includes('all fours') || act.includes('hands and knees')) return 'all_fours';
+    if (act.includes('sprawl') || act.includes('spread')) return 'sprawl';
+    if (act.includes('arms crossed') || act.includes('cross arms')) return 'arms_crossed';
+    if (act.includes('hands behind') || act.includes('at ease')) return 'hands_behind';
+    if (act.includes('sit') && (act.includes('cross') || act.includes('leg'))) return 'sit_cross';
+    if (act.includes('sit') && (act.includes('lean') || act.includes('back'))) return 'sit_lean';
+    if (act.includes('sit') && (act.includes('floor') || act.includes('ground'))) return 'sit_floor';
+
+    // Furniture/location activities
+    if (act.includes('drink') || act.includes('sip') || act.includes('cocktail') || act.includes('wine')) return 'drink';
+    if (act.includes('bathe') || act.includes('shower') || act.includes('wash') || act.includes('soak')) return 'bathe';
+    if (act.includes('primp') || act.includes('groom') || act.includes('makeup') || act.includes('mirror')) return 'primp';
+    if (act.includes('interact') || act.includes('using') || act.includes('use')) return 'interact';
+    if (act.includes('pose') || act.includes('model') || act.includes('show off')) return 'pose';
+
+    // Lying variations
+    if (act.includes('lie') && act.includes('side')) return 'lie_side';
+    if (act.includes('lie') && (act.includes('front') || act.includes('face down') || act.includes('stomach'))) return 'lie_front';
+    if (act.includes('lie') || act.includes('sleep') || act.includes('rest') || act.includes('nap')) return 'lie';
+    if (act.includes('lounge') || act.includes('relax') || act.includes('chill')) return 'lounge';
+    if (act.includes('gaze') || act.includes('look') || act.includes('stare') || act.includes('view')) return 'gaze';
+    if (act.includes('warm') || act.includes('fire') || act.includes('cozy')) return 'warm';
+    if (act.includes('cuddle') || act.includes('snuggle')) return 'spooning';
+    if (act.includes('make out') || act.includes('kiss')) return 'kiss_standing';
 
     // Location-based defaults with furniture-specific animations
     switch (locationId) {
