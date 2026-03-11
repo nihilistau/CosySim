@@ -1261,6 +1261,13 @@
     var pose = _poseLibrary[poseId];
     if (!pose || !pose.joints) return;
     applyAllBoneRotations(_selectedCharId, pose.joints);
+      // Set animation state to 'pose' so state machine doesn't overwrite bones
+      if (window.CharacterBridge) {
+        const charIds = CharacterBridge.getCharacterIds();
+        if (charIds.length > 0) {
+          CharacterBridge.setAnimState(charIds[0], 'pose');
+        }
+      }
     syncSlidersFromCharacter();
   }
 

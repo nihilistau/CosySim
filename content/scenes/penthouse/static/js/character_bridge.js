@@ -482,7 +482,16 @@ window.CharacterBridge = (function () {
     setMood: (name, mood) => {
       if (window.PenthouseAnim) PenthouseAnim.AnimManager.setMood(name, mood);
     },
-    setLookTarget: (name, target) => {
+    setExpression: (name, expression) => {
+      if (window.PenthouseAnim) PenthouseAnim.AnimManager.setMood(name, expression);
+    },
+    setOutfit: (charId, outfit) => {
+      const char = characters[charId];
+      if (char && char.model && window.CharModels) {
+        CharModels.updateOutfit(char.model, outfit);
+      }
+    },
+    setLookTarget:(name, target) => {
       if (window.PenthouseAnim) PenthouseAnim.AnimManager.setLookTarget(name, target);
     },
     getAnimDebug: () => {
