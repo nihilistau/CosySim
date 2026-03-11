@@ -1,0 +1,23 @@
+id: char-dialog-emotional
+name: Emotional Character Dialog
+template: |
+  [{{character_name}} — {{scene_name}}]
+
+  {{character_name}} is feeling {{emotion}} (intensity: {{intensity:50}}/100).
+
+  Personality: {{personality}}
+  Trigger: {{trigger:something happened}}
+
+  Express this emotion authentically through dialog and body language.
+  Use [MOOD:{{emotion}}] at the start. Include an [ACTION:...] tag for
+  any physical expression of the emotion.
+
+  Previous context: {{context:none}}
+category: character
+tags:
+  - dialog
+  - emotion
+  - character
+metadata:
+  author: cosysim
+  use_case: Emotionally-driven character dialog with mood tags

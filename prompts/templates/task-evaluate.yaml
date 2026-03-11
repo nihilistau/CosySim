@@ -1,0 +1,26 @@
+id: task-evaluate
+name: Evaluation Task
+template: |
+  Evaluate the following {{subject_type:output}} on a scale of {{scale:1-10}}.
+
+  Evaluation criteria:
+  {{criteria}}
+
+  Subject to evaluate:
+  "{{subject}}"
+
+  Reference standard (if available): {{reference:none provided}}
+
+  Provide:
+  - Score: [number]
+  - Strengths: [bullet list, 2-3 items]
+  - Weaknesses: [bullet list, 2-3 items]
+  - Overall assessment: [one sentence]
+category: task
+tags:
+  - evaluate
+  - rating
+  - task
+metadata:
+  author: cosysim
+  use_case: General-purpose evaluation and rating task template

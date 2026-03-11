@@ -1,0 +1,27 @@
+id: eval-factual-accuracy
+name: Factual Accuracy Check
+template: |
+  Check the factual accuracy of the following {{content_type:statement}}.
+
+  Domain: {{domain:general knowledge}}
+  Source material: {{source:none provided}}
+
+  Content to verify:
+  "{{content}}"
+
+  For each factual claim:
+  1. Identify the claim.
+  2. Rate confidence in accuracy: HIGH / MEDIUM / LOW / UNKNOWN.
+  3. Note any corrections needed.
+
+  Output JSON:
+  {"claims": [{"claim": "...", "accuracy": "...", "correction": "..."}], "overall_accuracy": 0-1, "notes": "..."}
+category: evaluation
+tags:
+  - factual
+  - accuracy
+  - evaluation
+  - verification
+metadata:
+  author: cosysim
+  use_case: Automated factual accuracy checking for generated content

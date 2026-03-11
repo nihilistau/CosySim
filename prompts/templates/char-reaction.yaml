@@ -1,0 +1,22 @@
+id: char-reaction
+name: Character Reaction
+template: |
+  {{character_name}} witnesses the following event:
+  "{{event}}"
+
+  Character personality: {{personality}}
+  Current mood: {{mood:neutral}}
+  Relationship to event source: {{relationship:neutral}}
+
+  Write {{character_name}}'s immediate reaction (1-3 sentences).
+  Include emotional response, any dialog, and physical reaction.
+  Use [MOOD:new_emotion] if the mood changes.
+  Use [ACTION:description] for physical reactions.
+category: character
+tags:
+  - reaction
+  - event
+  - character
+metadata:
+  author: cosysim
+  use_case: Character reaction to in-game events

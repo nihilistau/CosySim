@@ -1,0 +1,22 @@
+id: scene-event
+name: World Event Narration
+template: |
+  A {{event_type}} event occurs in {{scene_name}}:
+  "{{event_description}}"
+
+  Severity: {{severity:minor}}
+  Affected characters: {{affected_characters:everyone present}}
+  Current scene state: {{scene_state:calm}}
+
+  Narrate this event in 2-4 sentences. Describe what happens, how
+  the environment changes, and hint at the immediate impact on
+  those present. Use [IMAGE:prompt] if a visual would enhance the moment.
+category: scene
+tags:
+  - event
+  - narration
+  - world
+  - scene
+metadata:
+  author: cosysim
+  use_case: World event narration for dynamic scenes

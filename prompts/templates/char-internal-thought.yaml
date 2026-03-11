@@ -1,0 +1,24 @@
+id: char-internal-thought
+name: Character Internal Monologue
+template: |
+  [Internal thought — {{character_name}}]
+
+  {{character_name}} is reflecting on: {{topic}}
+
+  Personality: {{personality}}
+  Mood: {{mood:contemplative}}
+  Recent events: {{recent_events:nothing notable}}
+
+  Write a brief internal monologue (2-4 sentences) that reveals
+  {{character_name}}'s true feelings, hidden motivations, or private
+  observations. This is NOT spoken aloud — it is pure inner thought.
+  The tone should match their personality and current emotional state.
+category: character
+tags:
+  - internal
+  - thought
+  - character
+  - monologue
+metadata:
+  author: cosysim
+  use_case: Character internal monologue for narrative depth
