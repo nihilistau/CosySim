@@ -377,6 +377,24 @@ lmstudio:
     default_n_parallel: 4       # continuous batching slots for model loads
     unified_kv_cache: true      # LMStudio 0.4.0 unified KV cache
 
+  # ── Task Queue (LMS Task Bridge async execution) ────────────────
+  task_queue:
+    enabled: true
+    workers: 1                  # number of background worker threads
+    max_queue_size: 100         # 0 = unbounded
+    retry_max: 3                # max retries per failed task
+    retry_backoff: [1, 2, 4]    # backoff seconds per retry attempt
+    fallback_model: ""          # model to try when primary fails (empty = none)
+    task_routing:               # route task types to specific models
+      code_review: ""
+      security_check: ""
+      test_generate: ""
+      doc_generate: ""
+      refactor: ""
+      summarize: ""
+      evaluate: ""
+      translate: ""
+
   # ── Remote Inference Hosts ──────────────────────────────────────
   remote_hosts: []
   #   - name: "colab_l4"
