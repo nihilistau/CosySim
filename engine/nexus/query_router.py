@@ -462,7 +462,7 @@ class NexusQueryRouter:
     def _store_qa(self, client, question: str, answer: str,
                   category: str = "", tags: Optional[List[str]] = None,
                   source_hint: str = "system") -> None:
-        """Store a Q&A pair in Nexus for future reuse."""
+        """Store a Q&A pair in Nexus and feed to training flywheel."""
         try:
             all_tags = list(tags or []) + ["auto-cached", f"source:{source_hint}"]
             client.add_qa(
@@ -475,6 +475,27 @@ class NexusQueryRouter:
             logger.debug("Stored Q&A in Nexus: %s", question[:60])
         except Exception as exc:
             logger.debug("Failed to store Q&A: %s", exc)
+
+        # Feed to training flywheel for fine-tuning data collection
+        self._feed_training_flywheel(question, answer, source_hint, category)
+
+    def _feed_training_flywheel(self, question: str, answer: str,
+                                source: str, category: str) -> None:
+        """Send Q&A pair to training flywheel for local model fine-tuning data."""
+        try:
+            from engine.nexus.training_flywheel import get_training_flywheel
+            flywheel = get_training_flywheel()
+            confidence = 0.7 if source in ("nlm", "nlm_direct") else 0.6
+            flywheel.collect_from_qa(
+                question=question,
+                answer=answer,
+                source=source,
+                confidence=confidence,
+                category=category or "auto",
+            )
+            logger.debug("Fed Q&A to training flywheel: %s", question[:60])
+        except Exception as exc:
+            logger.debug("Training flywheel feed failed (non-critical): %s", exc)
 
     def _nlm_backend_available(self, client) -> bool:
         """Best-effort check for any direct NotebookLM backend availability."""

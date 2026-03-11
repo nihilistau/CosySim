@@ -15,6 +15,9 @@ Usage:
     python -m engine.nexus.bridge health
     python -m engine.nexus.bridge seed [docs|qa|rules|prompts|conventions|all]
     python -m engine.nexus.bridge maintain [health|dedup|cleanup]
+    python -m engine.nexus.bridge news-fetch [--category ai_ml] [--store] [--max 20]
+    python -m engine.nexus.bridge news-digest [--category ai_ml]
+    python -m engine.nexus.bridge news-sources
 """
 from __future__ import annotations
 
@@ -200,6 +203,68 @@ def cmd_maintain(args: argparse.Namespace) -> None:
     _output({"error": f"Unknown action: {args.action}"})
 
 
+def cmd_news_fetch(args: argparse.Namespace) -> None:
+    """Fetch news from configured sources, filter, and store to Nexus."""
+    try:
+        from engine.nexus.news_sources import get_news_registry
+        registry = get_news_registry()
+        articles = registry.fetch_all(category=getattr(args, "category", ""))
+        filtered = registry.filter_articles(articles)
+        max_articles = getattr(args, "max_articles", 20)
+        top = filtered[:max_articles]
+        if getattr(args, "store", False):
+            stored = registry.store_to_nexus(top)
+            _output({
+                "fetched": len(articles),
+                "filtered": len(filtered),
+                "stored": stored,
+                "top_titles": [a.get("title", "")[:80] for a in top[:10]],
+            })
+        else:
+            _output({
+                "fetched": len(articles),
+                "filtered": len(filtered),
+                "articles": [
+                    {"title": a.get("title", ""), "source": a.get("source", ""),
+                     "category": a.get("category", ""), "score": a.get("score", 0)}
+                    for a in top
+                ],
+            })
+    except Exception as exc:
+        _output({"error": f"News fetch failed: {exc}"})
+
+
+def cmd_news_digest(args: argparse.Namespace) -> None:
+    """Generate a markdown digest of recent news."""
+    try:
+        from engine.nexus.news_sources import get_news_registry
+        registry = get_news_registry()
+        articles = registry.fetch_all(category=getattr(args, "category", ""))
+        filtered = registry.filter_articles(articles)
+        digest_lines = [f"# News Digest ({len(filtered)} articles)\n"]
+        for i, art in enumerate(filtered[:20], 1):
+            title = art.get("title", "Untitled")
+            source = art.get("source", "unknown")
+            url = art.get("url", "")
+            digest_lines.append(f"{i}. **{title}** — {source}")
+            if url:
+                digest_lines.append(f"   {url}")
+        _output({"digest": "\n".join(digest_lines), "count": len(filtered)})
+    except Exception as exc:
+        _output({"error": f"News digest failed: {exc}"})
+
+
+def cmd_news_sources(args: argparse.Namespace) -> None:
+    """List configured news sources."""
+    try:
+        from engine.nexus.news_sources import get_news_registry
+        registry = get_news_registry()
+        sources = registry.list_sources()
+        _output({"sources": sources, "count": len(sources)})
+    except Exception as exc:
+        _output({"error": f"Failed to list news sources: {exc}"})
+
+
 def main() -> None:
     """CLI entry point."""
     parser = argparse.ArgumentParser(
@@ -275,6 +340,23 @@ def main() -> None:
     p.add_argument("action", nargs="?", default="health",
                    choices=["health", "dedup", "cleanup"])
     p.set_defaults(func=cmd_maintain)
+
+    # news-fetch
+    p = subs.add_parser("news-fetch", help="Fetch and filter news from configured sources")
+    p.add_argument("--category", default="", help="Category filter (ai_ml, security, etc.)")
+    p.add_argument("--max", dest="max_articles", type=int, default=20,
+                   help="Max articles to return (default: 20)")
+    p.add_argument("--store", action="store_true", help="Store articles to Nexus")
+    p.set_defaults(func=cmd_news_fetch)
+
+    # news-digest
+    p = subs.add_parser("news-digest", help="Generate markdown news digest")
+    p.add_argument("--category", default="", help="Category filter")
+    p.set_defaults(func=cmd_news_digest)
+
+    # news-sources
+    p = subs.add_parser("news-sources", help="List configured news sources")
+    p.set_defaults(func=cmd_news_sources)
 
     args = parser.parse_args()
     try:

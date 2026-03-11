@@ -643,18 +643,43 @@ class KnowledgeScorer:
         self,
         max_age_days: int = 90,
         all_entries: Optional[List[Dict[str, Any]]] = None,
+        category_ttl_days: Optional[Dict[str, int]] = None,
     ) -> None:
         self._max_age_days = max_age_days
+        self._category_ttl: Dict[str, int] = category_ttl_days or {}
         self._all_titles: List[str] = []
         if all_entries:
             self._all_titles = [
                 e.get("title", "").lower().strip() for e in all_entries
             ]
+        if not self._category_ttl:
+            self._load_category_ttl_from_config()
+
+    def _load_category_ttl_from_config(self) -> None:
+        """Load category TTL overrides from config/default.yaml."""
+        try:
+            from engine.config import get_config
+            cfg = get_config()
+            ttl_map = cfg.get("nexus.knowledge_expiry.category_ttl_days", {})
+            if isinstance(ttl_map, dict):
+                self._category_ttl = ttl_map
+            default = cfg.get("nexus.knowledge_expiry.default_max_age_days", 0)
+            if default and isinstance(default, (int, float)):
+                self._max_age_days = int(default)
+        except Exception:
+            pass
+
+    def _get_max_age_for_entry(self, entry: Dict[str, Any]) -> int:
+        """Return the max age in days for an entry based on its category."""
+        category = (entry.get("category") or "").lower().strip()
+        return self._category_ttl.get(category, self._max_age_days)
 
     # ── Individual dimension scorers ──────────────────────────
 
     def freshness(self, entry: Dict[str, Any]) -> float:
         """Score based on entry age.  1.0 = brand new, 0.0 = max_age_days old.
+
+        Uses per-category TTL when configured (e.g., news=2 days, architecture=365).
 
         Args:
             entry: Nexus entry dict (expects ``created_at`` or ``updated_at``).
@@ -672,8 +697,9 @@ class KnowledgeScorer:
                 entry_dt = datetime.fromisoformat(
                     str(ts_str).replace("Z", "+00:00")
                 )
+            max_age = self._get_max_age_for_entry(entry)
             age_days = (datetime.now(timezone.utc) - entry_dt).total_seconds() / 86400
-            return round(max(0.0, 1.0 - age_days / self._max_age_days), 4)
+            return round(max(0.0, 1.0 - age_days / max_age), 4)
         except (ValueError, TypeError, OSError):
             return 0.0
 
