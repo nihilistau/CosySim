@@ -568,6 +568,15 @@ class AgentLoop:
                 self.shared_log = self.shared_log[-self._shared_log_max:]
             result["description"] = f'{character.name} says: "{message}"'
 
+            # Emit character_speaking so the UI chat panel shows the speech
+            if self.socketio and message:
+                self.socketio.emit("character_speaking", {
+                    "character_id": character_id,
+                    "character_name": character.name,
+                    "message": message,
+                    "timestamp": timestamp,
+                })
+
         elif action in ("flirt", "touch", "kiss", "cuddle", "intimate"):
             # Physical interaction — check proximity
             nearby = self.scene_map.get_nearby_characters(character_id)

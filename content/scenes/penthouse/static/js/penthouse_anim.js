@@ -20,12 +20,19 @@
   // ═══════════════════════════════════════════════════════════════════
 
   const ANIM_STATES = {
-    idle:     { id: 'idle',     priority: 0 },
-    walk:     { id: 'walk',     priority: 1 },
-    sit:      { id: 'sit',      priority: 2 },
-    lean:     { id: 'lean',     priority: 2 },
-    interact: { id: 'interact', priority: 3 },
-    pose:     { id: 'pose',     priority: 4 },
+    idle:       { id: 'idle',       priority: 0 },
+    walk:       { id: 'walk',       priority: 1 },
+    sit:        { id: 'sit',        priority: 2 },
+    lean:       { id: 'lean',       priority: 2 },
+    lie:        { id: 'lie',        priority: 2 },
+    lounge:     { id: 'lounge',     priority: 2 },
+    interact:   { id: 'interact',   priority: 3 },
+    drink:      { id: 'drink',      priority: 3 },
+    gaze:       { id: 'gaze',       priority: 2 },
+    warm:       { id: 'warm',       priority: 2 },
+    primp:      { id: 'primp',      priority: 3 },
+    bathe:      { id: 'bathe',      priority: 3 },
+    pose:       { id: 'pose',       priority: 4 },
   };
 
   // Blend durations (seconds) between state transitions
@@ -36,11 +43,31 @@
     'sit→idle':      0.7,
     'idle→lean':     0.6,
     'lean→idle':     0.5,
+    'idle→lie':      1.2,
+    'lie→idle':      1.0,
+    'idle→lounge':   1.0,
+    'lounge→idle':   0.8,
     'idle→interact': 0.3,
     'interact→idle': 0.4,
+    'idle→drink':    0.4,
+    'drink→idle':    0.3,
+    'idle→gaze':     0.6,
+    'gaze→idle':     0.5,
+    'idle→warm':     0.7,
+    'warm→idle':     0.5,
+    'idle→primp':    0.5,
+    'primp→idle':    0.4,
+    'idle→bathe':    1.0,
+    'bathe→idle':    0.8,
     'idle→pose':     0.5,
     'pose→idle':     0.6,
-    '*':             0.5,  // default
+    'sit→lie':       1.0,
+    'lie→sit':       0.9,
+    'sit→lounge':    0.6,
+    'lounge→sit':    0.5,
+    'lean→drink':    0.3,
+    'drink→lean':    0.3,
+    '*':             0.5,
   };
 
   // ═══════════════════════════════════════════════════════════════════
@@ -421,6 +448,229 @@
         // Slight forward lean
         model.bodyGroup.rotation.x = 0.05 * i;
       }
+
+      // ── LIE state (bed — reclining on back) ───────────────────
+      if (this.currentState === 'lie') {
+        const l = t;
+
+        // Lower and rotate body to horizontal
+        model.group.position.y = -0.6 * l + (model._baseY || 0);
+        model.bodyGroup.rotation.x = -1.4 * l;  // lean far back
+
+        // Legs extended, slightly apart
+        if (model.legL) {
+          model.legL.rotation.x = -0.2 * l;
+          model.legL.rotation.z = -0.08 * l;
+        }
+        if (model.legR) {
+          model.legR.rotation.x = -0.15 * l;
+          model.legR.rotation.z = 0.06 * l;
+        }
+
+        // One arm behind head, other resting
+        if (model.armL) {
+          model.armL.rotation.x = -1.2 * l;
+          model.armL.rotation.z = -0.6 * l;
+        }
+        if (model.armR) {
+          model.armR.rotation.x = 0.2 * l;
+          model.armR.rotation.z = 0.15 * l;
+        }
+
+        // Gentle breathing in lying position
+        const breath = 1.0 + this.breathDepth * 0.5 * Math.sin(time * this.breathRate * Math.PI * 2);
+        const torso = model.bodyGroup.children[0];
+        if (torso) {
+          torso.scale.x = breath;
+          torso.scale.z = (d ? d.torsoScaleZ : 1) * breath;
+        }
+      }
+
+      // ── LOUNGE state (couch — sprawled relaxation) ─────────────
+      if (this.currentState === 'lounge') {
+        const l = t;
+
+        // Lowered, leaning back
+        model.group.position.y = -0.3 * l + (model._baseY || 0);
+        model.bodyGroup.rotation.x = -0.4 * l;
+
+        // Legs stretched out, one crossed
+        if (model.legL) {
+          model.legL.rotation.x = -0.8 * l;
+          model.legL.rotation.z = -0.05 * l;
+        }
+        if (model.legR) {
+          model.legR.rotation.x = -1.0 * l;
+          model.legR.rotation.z = 0.15 * l;
+        }
+
+        // Arms spread along couch back
+        if (model.armL) {
+          model.armL.rotation.x = -0.1 * l;
+          model.armL.rotation.z = -0.7 * l;
+        }
+        if (model.armR) {
+          model.armR.rotation.x = 0.15 * l;
+          model.armR.rotation.z = 0.5 * l;
+        }
+
+        // Slow relaxed breathing
+        const breath = 1.0 + this.breathDepth * 0.6 * Math.sin(time * this.breathRate * Math.PI * 2);
+        const torso = model.bodyGroup.children[0];
+        if (torso) {
+          torso.scale.x = breath;
+          torso.scale.z = (d ? d.torsoScaleZ : 1) * breath;
+        }
+      }
+
+      // ── DRINK state (holding glass at bar) ─────────────────────
+      if (this.currentState === 'drink') {
+        const dk = t;
+
+        // Slight lean on bar
+        model.bodyGroup.rotation.x = -0.08 * dk;
+
+        // One arm holding glass, other resting on bar
+        if (model.armR) {
+          const sip = Math.sin(time * 0.4);
+          model.armR.rotation.x = (-0.8 - 0.15 * Math.max(0, sip)) * dk;
+          model.armR.rotation.z = 0.2 * dk;
+        }
+        if (model.armL) {
+          model.armL.rotation.x = 0.3 * dk;
+          model.armL.rotation.z = -0.25 * dk;
+        }
+
+        // Casual weight shift
+        model.bodyGroup.position.x = 0.02 * Math.sin(time * 0.3) * dk;
+      }
+
+      // ── GAZE state (balcony — leaning on railing, looking out) ─
+      if (this.currentState === 'gaze') {
+        const g = t;
+
+        // Forward lean onto railing
+        model.bodyGroup.rotation.x = 0.2 * g;
+        model.bodyGroup.position.z = 0.1 * g;
+
+        // Both arms resting on railing
+        if (model.armL) {
+          model.armL.rotation.x = 0.5 * g;
+          model.armL.rotation.z = -0.1 * g;
+        }
+        if (model.armR) {
+          model.armR.rotation.x = 0.5 * g;
+          model.armR.rotation.z = 0.1 * g;
+        }
+
+        // Head tilted up slightly (stargazing)
+        if (model.headData && model.headData.group) {
+          model.headData.group.rotation.x = -0.1 * g;
+        }
+
+        // Gentle wind sway
+        model.bodyGroup.rotation.y = 0.015 * Math.sin(time * 0.5) * g;
+      }
+
+      // ── WARM state (fireplace — sitting with hands toward fire) ─
+      if (this.currentState === 'warm') {
+        const w = t;
+
+        // Seated position
+        model.group.position.y = -0.3 * w + (model._baseY || 0);
+
+        // Legs bent, tucked
+        if (model.legL) {
+          model.legL.rotation.x = -1.2 * w;
+          model.legL.rotation.z = -0.1 * w;
+        }
+        if (model.legR) {
+          model.legR.rotation.x = -1.3 * w;
+          model.legR.rotation.z = 0.08 * w;
+        }
+
+        // Hands extended toward fire
+        if (model.armL) {
+          model.armL.rotation.x = -0.6 * w;
+          model.armL.rotation.z = -0.15 * w;
+        }
+        if (model.armR) {
+          model.armR.rotation.x = -0.6 * w;
+          model.armR.rotation.z = 0.15 * w;
+        }
+
+        // Flickering warm glow sway
+        model.bodyGroup.rotation.y = 0.01 * Math.sin(time * 0.8 + Math.random() * 0.1) * w;
+      }
+
+      // ── PRIMP state (vanity — sitting at mirror, grooming) ─────
+      if (this.currentState === 'primp') {
+        const p = t;
+
+        // Seated
+        model.group.position.y = -0.35 * p + (model._baseY || 0);
+
+        // Legs together, under desk
+        if (model.legL) {
+          model.legL.rotation.x = -1.4 * p;
+          model.legL.rotation.z = -0.02 * p;
+        }
+        if (model.legR) {
+          model.legR.rotation.x = -1.4 * p;
+          model.legR.rotation.z = 0.02 * p;
+        }
+
+        // One hand touching face, other holding item
+        if (model.armR) {
+          const gesture = Math.sin(time * 0.6);
+          model.armR.rotation.x = (-0.7 - 0.1 * gesture) * p;
+          model.armR.rotation.z = 0.2 * p;
+        }
+        if (model.armL) {
+          model.armL.rotation.x = -0.4 * p;
+          model.armL.rotation.z = -0.3 * p;
+        }
+
+        // Slight head tilt studying reflection
+        if (model.headData && model.headData.group) {
+          model.headData.group.rotation.y = 0.05 * Math.sin(time * 0.4) * p;
+        }
+      }
+
+      // ── BATHE state (bath — seated in tub, relaxed) ────────────
+      if (this.currentState === 'bathe') {
+        const b = t;
+
+        // Lowered into tub
+        model.group.position.y = -0.5 * b + (model._baseY || 0);
+
+        // Body slightly reclined
+        model.bodyGroup.rotation.x = -0.25 * b;
+
+        // Legs submerged, slightly bent
+        if (model.legL) {
+          model.legL.rotation.x = -0.6 * b;
+          model.legL.rotation.z = -0.1 * b;
+        }
+        if (model.legR) {
+          model.legR.rotation.x = -0.5 * b;
+          model.legR.rotation.z = 0.1 * b;
+        }
+
+        // Arms resting on tub edge
+        if (model.armL) {
+          model.armL.rotation.x = -0.1 * b;
+          model.armL.rotation.z = -0.6 * b;
+        }
+        if (model.armR) {
+          model.armR.rotation.x = -0.1 * b;
+          model.armR.rotation.z = 0.6 * b;
+        }
+
+        // Gentle water sway
+        model.bodyGroup.position.x = 0.008 * Math.sin(time * 0.7) * b;
+        model.bodyGroup.position.z = 0.005 * Math.sin(time * 0.5 + 1.0) * b;
+      }
     }
 
     _applyExpression() {
@@ -632,20 +882,27 @@
 
     // Explicit activity overrides
     if (act.includes('walk') || act.includes('moving')) return 'walk';
-    if (act.includes('interact') || act.includes('using') || act.includes('drink')) return 'interact';
+    if (act.includes('drink') || act.includes('sip')) return 'drink';
+    if (act.includes('bathe') || act.includes('shower') || act.includes('wash')) return 'bathe';
+    if (act.includes('primp') || act.includes('groom') || act.includes('makeup')) return 'primp';
+    if (act.includes('interact') || act.includes('using')) return 'interact';
     if (act.includes('pose') || act.includes('sex')) return 'pose';
+    if (act.includes('lie') || act.includes('sleep') || act.includes('rest')) return 'lie';
+    if (act.includes('lounge') || act.includes('relax') || act.includes('sprawl')) return 'lounge';
+    if (act.includes('gaze') || act.includes('look') || act.includes('stare')) return 'gaze';
+    if (act.includes('warm') || act.includes('fire')) return 'warm';
 
-    // Location-based defaults
+    // Location-based defaults with furniture-specific animations
     switch (locationId) {
-      case 'bed':      return 'idle';  // could be sit/lie but idle is safest default
-      case 'couch':    return 'sit';
-      case 'bar':      return 'lean';
-      case 'vanity':   return 'sit';
-      case 'bath':     return 'sit';
-      case 'balcony':  return 'lean';
-      case 'fireplace': return 'sit';
-      case 'doorway':  return 'idle';
-      default:         return 'idle';
+      case 'bed':       return 'lie';
+      case 'couch':     return 'lounge';
+      case 'bar':       return 'drink';
+      case 'vanity':    return 'primp';
+      case 'bath':      return 'bathe';
+      case 'balcony':   return 'gaze';
+      case 'fireplace': return 'warm';
+      case 'doorway':   return 'idle';
+      default:          return 'idle';
     }
   }
 

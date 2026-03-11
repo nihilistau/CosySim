@@ -330,9 +330,29 @@ class PenthouseScene {
   _onAgentAction(data) {
     const action = data.action || 'idle';
     const charName = data.character_name || 'Unknown';
+    const charId = data.character_id || '';
 
-    // Speech actions are handled via chat_message / chat_response
+    // Speech actions are handled via character_speaking event
     if (action === 'speak') return;
+
+    // Update 3D character animation based on action
+    if (window.CharacterBridge && charId) {
+      if (action === 'move' && data.target) {
+        // Trigger walk animation while moving
+        CharacterBridge.setAnimState(charId, 'walk');
+      } else if (['flirt', 'touch', 'kiss', 'cuddle', 'intimate'].includes(action)) {
+        CharacterBridge.setAnimState(charId, 'interact');
+        if (window.PenthouseAnim) {
+          PenthouseAnim.AnimManager.setMood(charName, action === 'intimate' ? 'aroused' : 'seductive');
+        }
+      } else if (action === 'interact') {
+        CharacterBridge.setAnimState(charId, 'interact');
+      }
+      // Show a 3D chat bubble for action descriptions
+      if (data.description && action !== 'idle') {
+        CharacterBridge.showChatBubble(charId, data.description, 5);
+      }
+    }
 
     if (action !== 'idle') {
       const desc = data.description || `${charName} ${action}s`;
@@ -344,6 +364,24 @@ class PenthouseScene {
     const tick = data.tick || 0;
     const actions = data.actions || [];
     console.log(`[AgentLoop] Tick #${tick}: ${actions.length} actions`);
+
+    // Process ALL character actions from this tick
+    for (const act of actions) {
+      const cid = act.character_id || '';
+      const charName = act.character_name || '';
+      const action = act.action || 'idle';
+
+      // Update 3D character positions for move actions
+      if (action === 'move' && act.success && window.CharacterBridge) {
+        // After move completes, request fresh scene state to update positions
+        if (this.socket) this.socket.emit('request_state');
+      }
+
+      // Show activity feed for non-idle actions (speak handled by character_speaking)
+      if (action !== 'idle' && action !== 'speak' && act.description) {
+        _addActivityItem(`${act.description}`, action === 'interact' ? '🔧' : '🎭');
+      }
+    }
   }
 
   _onCharacterSpeaking(data) {
