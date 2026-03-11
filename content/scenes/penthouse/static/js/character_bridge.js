@@ -96,11 +96,22 @@ window.CharacterBridge = (function () {
         sprite.currentOutfit = outfit;
       }
 
-      // Update expression from mood/feeling
+      // Update expression from mood/feeling (via AnimManager if available)
       const mood = info.feeling || info.mood || 'neutral';
       if (sprite.currentMood !== mood) {
-        CharModels.setExpression(sprite.model, mood);
+        if (window.PenthouseAnim) {
+          PenthouseAnim.AnimManager.setMood(info.name || cid, mood);
+        } else {
+          CharModels.setExpression(sprite.model, mood);
+        }
         sprite.currentMood = mood;
+      }
+
+      // Infer animation state from location
+      const locId = info.location_id || 'bed';
+      if (window.PenthouseAnim) {
+        const inferredState = PenthouseAnim.inferAnimState(locId, info.activity);
+        PenthouseAnim.AnimManager.setState(info.name || cid, inferredState);
       }
 
       // Calculate target position from location
@@ -142,6 +153,16 @@ window.CharacterBridge = (function () {
     const outfit = info?.outfit || 'casual';
     CharModels.updateOutfit(model, outfit);
 
+    // Register with animation state machine
+    if (window.PenthouseAnim) {
+      const animState = PenthouseAnim.AnimManager.register(name, model);
+      const locId = info?.location_id || 'bed';
+      animState.setState(PenthouseAnim.inferAnimState(locId));
+      if (info?.feeling || info?.mood) {
+        animState.setMood(info.feeling || info.mood);
+      }
+    }
+
     // Add to scene
     _scene.add(model.group);
 
@@ -172,6 +193,11 @@ window.CharacterBridge = (function () {
   function removeCharacter(charId) {
     const entry = characters[charId];
     if (!entry) return;
+
+    // Unregister from animation state machine
+    if (window.PenthouseAnim) {
+      PenthouseAnim.AnimManager.unregister(charId);
+    }
 
     _scene.remove(entry.model.group);
     delete characters[charId];
@@ -353,15 +379,22 @@ window.CharacterBridge = (function () {
   // Called every frame by penthouse3D animation loop
 
   function animationTick(dt, t) {
-    // Animate all characters
+    // Update animation state machine for all characters
+    const useAnimManager = window.PenthouseAnim && PenthouseAnim.AnimManager;
+
+    if (useAnimManager) {
+      PenthouseAnim.AnimManager.updateAll(t);
+    }
+
+    // Per-character updates
     for (const entry of Object.values(characters)) {
       // Smooth position lerp
       if (!CharModels.isPoseActive()) {
         entry.model.group.position.lerp(entry.targetPos, Math.min(1, dt * 3));
       }
 
-      // Idle animation (breathing, sway, arm swing)
-      if (entry.model.bodyGroup && !CharModels.isPoseActive()) {
+      // Fallback idle animation (if AnimManager not available)
+      if (!useAnimManager && entry.model.bodyGroup && !CharModels.isPoseActive()) {
         CharModels.animate(entry.model, t);
       }
 
@@ -377,7 +410,6 @@ window.CharacterBridge = (function () {
           entry.model.group.remove(entry.bubble);
           entry.bubble = null;
         } else if (entry.bubbleTimer < 1.0) {
-          // Fade out
           entry.bubble.material.opacity = entry.bubbleTimer;
         }
       }
@@ -388,7 +420,9 @@ window.CharacterBridge = (function () {
       _directorSprite.model.group.position.lerp(
         _directorSprite.targetPos, Math.min(1, dt * 3)
       );
-      CharModels.animate(_directorSprite.model, t);
+      if (!useAnimManager) {
+        CharModels.animate(_directorSprite.model, t);
+      }
     }
 
     // Sex pose animation (overrides individual when active)
@@ -413,7 +447,12 @@ window.CharacterBridge = (function () {
 
     // Set expressions for pose
     for (const p of participants) {
-      CharModels.setExpression(p.model, p.mood === 'neutral' ? 'aroused' : p.mood);
+      const expressionMood = p.mood === 'neutral' ? 'aroused' : p.mood;
+      if (window.PenthouseAnim) {
+        PenthouseAnim.AnimManager.setMood(p.model.name || '', expressionMood);
+      } else {
+        CharModels.setExpression(p.model, expressionMood);
+      }
     }
 
     CharModels.startPose(poseName, participants);
@@ -437,6 +476,20 @@ window.CharacterBridge = (function () {
     getCharacter: (id) => characters[id] || null,
     getCharacterIds: () => Object.keys(characters),
     getCharacterCount: () => Object.keys(characters).length,
+    // Animation state machine access
+    setAnimState: (name, state) => {
+      if (window.PenthouseAnim) PenthouseAnim.AnimManager.setState(name, state);
+    },
+    setMood: (name, mood) => {
+      if (window.PenthouseAnim) PenthouseAnim.AnimManager.setMood(name, mood);
+    },
+    setLookTarget: (name, target) => {
+      if (window.PenthouseAnim) PenthouseAnim.AnimManager.setLookTarget(name, target);
+    },
+    getAnimDebug: () => {
+      if (window.PenthouseAnim) return PenthouseAnim.AnimManager.getDebugInfo();
+      return {};
+    },
   };
 
 })();
