@@ -749,21 +749,30 @@ function openCharPicker() {
   overlay.style.display = 'flex';
 
   fetch('/api/characters/list')
-    .then(r => r.json())
+    .then(r => {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    })
     .then(d => {
+      console.log('[Penthouse] Character list:', d.count, 'characters');
       const chars = d.characters || [];
       if (!listEl) return;
+      if (d.error) {
+        listEl.innerHTML = '<p class="ph-hint">⚠ ' + PENTHOUSE._esc(d.error) + '</p>';
+        return;
+      }
       if (!chars.length) {
-        listEl.innerHTML = '<p class="ph-hint">No characters in database.</p>';
+        listEl.innerHTML = '<p class="ph-hint">No characters in database. Run seed or create characters.</p>';
         return;
       }
       listEl.innerHTML = chars.map(c => {
         const loaded = c.loaded ? ' ph-char-card--loaded' : '';
         const badge = c.loaded ? '<span class="cs-chip cs-chip--green ph-char-badge">IN SCENE</span>' : '';
+        const traits = (c.traits || c.tags || []).slice(0,3).join(', ') || 'No traits';
         return '<div class="ph-char-card' + loaded + '" data-cid="' + PENTHOUSE._esc(c.id) + '">' +
           '<div class="ph-char-card__name">' + PENTHOUSE._esc(c.name || c.id) + badge + '</div>' +
           '<div class="ph-char-card__meta">' +
-            '<span class="ph-char-card__trait">' + PENTHOUSE._esc((c.traits || []).slice(0,3).join(', ') || 'No traits') + '</span>' +
+            '<span class="ph-char-card__trait">' + PENTHOUSE._esc(traits) + '</span>' +
           '</div>' +
           '<div class="ph-char-card__actions">' +
             '<select class="ph-select ph-personality-select" id="personality-' + c.id + '">' +
@@ -782,8 +791,9 @@ function openCharPicker() {
         '</div>';
       }).join('');
     })
-    .catch(() => {
-      if (listEl) listEl.innerHTML = '<p class="ph-hint">⚠ Failed to load characters.</p>';
+    .catch(err => {
+      console.error('[Penthouse] Character load failed:', err);
+      if (listEl) listEl.innerHTML = '<p class="ph-hint">⚠ Failed to load characters: ' + err.message + '</p>';
     });
 }
 
@@ -839,17 +849,26 @@ function setTime(preset) {
 }
 
 function refreshModels() {
-  fetch('http://localhost:1234/api/v1/models')
+  fetch('/api/models/available')
     .then(r => r.json())
-    .catch(() => ({ data: [] }))
+    .catch(() => ({ loaded: [], available: [] }))
     .then(d => {
       const list = document.getElementById('modelConfigList');
       if (!list) return;
-      const models = d.data || d.models || [];
-      if (!models.length) { list.innerHTML = '<p class="ph-hint">No models loaded</p>'; return; }
-      list.innerHTML = models.map(m =>
-        '<div class="ph-model-item"><span class="ph-model-name">' + (m.id || m.name || '?') + '</span></div>'
+      const models = d.loaded || [];
+      const avail = d.available || [];
+      if (!models.length && !avail.length) { list.innerHTML = '<p class="ph-hint">No models loaded</p>'; return; }
+      let html = models.map(m =>
+        '<div class="ph-model-item"><span class="ph-model-name">' + (m.id || m.display_name || '?') +
+        '</span><span class="cs-chip cs-chip--green">loaded</span></div>'
       ).join('');
+      if (avail.length) {
+        html += avail.map(m =>
+          '<div class="ph-model-item"><span class="ph-model-name">' + (m.id || m.display_name || '?') +
+          '</span><span class="cs-chip">available</span></div>'
+        ).join('');
+      }
+      list.innerHTML = html;
     });
 }
 
@@ -1403,14 +1422,14 @@ function assignModelToChar() {
 function _refreshModelAssignList() {
   const modelSel = document.getElementById('modelAssignModel');
   if (!modelSel) return;
-  fetch('http://localhost:1234/api/v1/models')
+  fetch('/api/models/available')
     .then(r => r.json())
-    .catch(() => ({ data: [] }))
+    .catch(() => ({ loaded: [], available: [] }))
     .then(d => {
-      const models = d.data || d.models || [];
+      const models = (d.loaded || []).concat(d.available || []);
       const firstOpt = '<option value="">Auto (profile default)</option>';
       modelSel.innerHTML = firstOpt + models.map(m =>
-        '<option value="' + (m.id || '') + '">' + (m.id || m.name || '?') + '</option>'
+        '<option value="' + (m.id || '') + '">' + (m.id || m.display_name || '?') + '</option>'
       ).join('');
     });
 }
