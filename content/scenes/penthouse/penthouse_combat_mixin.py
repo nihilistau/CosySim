@@ -166,6 +166,53 @@ class PenthouseCombatMixin:
             tags=[character_id, action_type],
         )
 
+        # ── Agent → World feedback loop ────────────────────────────────
+        _SIGNIFICANT_ACTIONS = {
+            "speak", "flirt", "kiss", "cuddle", "intimate", "touch",
+            "fight", "sex", "fuck", "orgasm", "aftercare",
+        }
+        # Feed significant actions into WorldState as events
+        if action_type in _SIGNIFICANT_ACTIONS:
+            try:
+                import uuid as _uuid
+                from engine.world.world_state import get_world_state, WorldEvent
+                ws = get_world_state()
+                target = action.get("target", "")
+                ws.add_event(WorldEvent(
+                    id=str(_uuid.uuid4())[:8],
+                    name=f"character_{action_type}",
+                    description=(
+                        f"{char_name} {action_type}s"
+                        + (f" with {target}" if target else "")
+                    ),
+                    scene="penthouse",
+                    event_type=f"character_{action_type}",
+                    started_at=time.time(),
+                    expires_at=time.time() + 300,
+                    active=True,
+                    payload={
+                        "character_id": character_id,
+                        "action": action_type,
+                        "stat_drifts": stat_drifts.get(action_type, {}),
+                    },
+                ))
+            except Exception as _we:
+                logger.debug("World state event failed: %s", _we)
+
+        # Update NPC runtime state in the registry
+        try:
+            from engine.world.npc_state import get_npc_state_registry
+            get_npc_state_registry().update(
+                character_id,
+                activity=action_type,
+                mood=action.get("mood", "neutral"),
+                location="penthouse",
+                last_action=action_type,
+                last_action_time=time.time(),
+            )
+        except Exception as _ns:
+            logger.debug("NPC state update failed: %s", _ns)
+
     # ── Bed Game routes ─────────────────────────────────────────────────
 
     def _setup_bedgame_routes(self) -> None:
