@@ -1512,6 +1512,9 @@ class PenthouseScene(PenthouseCombatMixin, PenthouseDialogMixin, PenthouseInvent
             """Return living world context for the penthouse scene."""
             return jsonify(self._get_world_context_for_character())
 
+        # ── YAML Config API routes ──────────────────────────────────────
+        self._setup_config_routes()
+
         # Delegate route groups to mixins
         self._setup_character_routes()
         self._setup_stat_routes()
@@ -1525,6 +1528,44 @@ class PenthouseScene(PenthouseCombatMixin, PenthouseDialogMixin, PenthouseInvent
         self._setup_event_routes()
         self._setup_agent_routes()
         self._setup_utility_routes()
+
+    # ── YAML Config API ────────────────────────────────────────────────
+    def _setup_config_routes(self) -> None:
+        """Serve YAML configuration files as JSON for frontend consumption."""
+        import yaml
+        config_dir = Path(__file__).resolve().parents[3] / "config" / "penthouse"
+
+        def _load_yaml(name: str) -> dict:
+            path = config_dir / f"{name}.yaml"
+            if not path.exists():
+                return {}
+            with open(path, "r", encoding="utf-8") as f:
+                return yaml.safe_load(f) or {}
+
+        @self.app.route("/api/config/characters")
+        def api_config_characters():
+            return jsonify(_load_yaml("characters"))
+
+        @self.app.route("/api/config/outfits")
+        def api_config_outfits():
+            return jsonify(_load_yaml("outfits"))
+
+        @self.app.route("/api/config/scene")
+        def api_config_scene():
+            return jsonify(_load_yaml("scene"))
+
+        @self.app.route("/api/config/animations")
+        def api_config_animations():
+            return jsonify(_load_yaml("animations"))
+
+        @self.app.route("/api/config/all")
+        def api_config_all():
+            return jsonify({
+                "characters": _load_yaml("characters"),
+                "outfits": _load_yaml("outfits"),
+                "scene": _load_yaml("scene"),
+                "animations": _load_yaml("animations"),
+            })
 
     # ── SocketIO─────────────────────────────────────────────────────────
     def _setup_socketio(self):

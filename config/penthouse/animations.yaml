@@ -1,0 +1,185 @@
+# Penthouse Animation Configuration
+# ====================================
+# Idle animations, expressions, pose definitions.
+# Served to frontend via /api/config/animations.
+
+# Idle animation parameters
+idle:
+  breathing:
+    torso_scale_min: 1.0
+    torso_scale_max: 1.015
+    speed: 1.2
+    axis: y
+
+  body_sway:
+    amplitude: 0.005
+    speed: 0.7
+    axis: x
+
+  arm_swing:
+    amplitude: 0.04
+    speed: 0.8
+
+  leg_flex:
+    amplitude: 0.02
+    speed: 0.6
+
+  head_micro:
+    amplitude_x: 0.015
+    amplitude_z: 0.01
+    speed: 0.5
+
+# Facial expression definitions
+# Each expression defines morph-like values for face features
+expressions:
+  neutral:
+    label: "Neutral"
+    mouth_open: 0.0
+    smile: 0.0
+    brow_raise: 0.0
+    eye_squint: 0.0
+    blush: 0.0
+    pupil_dilate: 0.0
+
+  happy:
+    label: "Happy"
+    mouth_open: 0.1
+    smile: 0.8
+    brow_raise: 0.2
+    eye_squint: 0.15
+    blush: 0.1
+    pupil_dilate: 0.1
+
+  aroused:
+    label: "Aroused"
+    mouth_open: 0.3
+    smile: 0.2
+    brow_raise: 0.1
+    eye_squint: 0.3
+    blush: 0.6
+    pupil_dilate: 0.5
+
+  seductive:
+    label: "Seductive"
+    mouth_open: 0.15
+    smile: 0.4
+    brow_raise: 0.3
+    eye_squint: 0.4
+    blush: 0.3
+    pupil_dilate: 0.3
+
+  orgasm:
+    label: "Orgasm"
+    mouth_open: 0.9
+    smile: 0.1
+    brow_raise: 0.0
+    eye_squint: 0.9
+    blush: 0.9
+    pupil_dilate: 0.8
+
+  sad:
+    label: "Sad"
+    mouth_open: 0.0
+    smile: -0.5
+    brow_raise: -0.3
+    eye_squint: 0.0
+    blush: 0.0
+    pupil_dilate: -0.1
+
+  angry:
+    label: "Angry"
+    mouth_open: 0.2
+    smile: -0.7
+    brow_raise: -0.6
+    eye_squint: 0.3
+    blush: 0.2
+    pupil_dilate: 0.1
+
+  fear:
+    label: "Afraid"
+    mouth_open: 0.4
+    smile: -0.3
+    brow_raise: 0.8
+    eye_squint: 0.0
+    blush: 0.0
+    pupil_dilate: 0.6
+
+  surprised:
+    label: "Surprised"
+    mouth_open: 0.6
+    smile: 0.0
+    brow_raise: 0.9
+    eye_squint: 0.0
+    blush: 0.1
+    pupil_dilate: 0.5
+
+  shy:
+    label: "Shy"
+    mouth_open: 0.0
+    smile: 0.2
+    brow_raise: -0.1
+    eye_squint: 0.1
+    blush: 0.5
+    pupil_dilate: 0.2
+
+  drunk:
+    label: "Drunk"
+    mouth_open: 0.2
+    smile: 0.5
+    brow_raise: 0.1
+    eye_squint: 0.4
+    blush: 0.4
+    pupil_dilate: 0.3
+
+  sleepy:
+    label: "Sleepy"
+    mouth_open: 0.05
+    smile: 0.1
+    brow_raise: -0.2
+    eye_squint: 0.7
+    blush: 0.0
+    pupil_dilate: -0.2
+
+  dominant:
+    label: "Dominant"
+    mouth_open: 0.1
+    smile: 0.3
+    brow_raise: 0.4
+    eye_squint: 0.2
+    blush: 0.0
+    pupil_dilate: 0.2
+
+# Transition speeds for expression blending (seconds)
+expression_blend:
+  default_duration: 0.5
+  fast_duration: 0.2
+  slow_duration: 1.0
+
+# Position lerp speed (how fast characters move to new locations)
+movement:
+  lerp_speed: 3.0
+  run_lerp_speed: 6.0
+
+# Character placement offsets when multiple occupants at same location
+occupant_offsets:
+  two_occupants: [-0.6, 0.6]
+  three_occupants: [-0.7, 0.0, 0.7]
+  four_occupants: [-1.0, -0.35, 0.35, 1.0]
+
+# Name label display
+name_label:
+  height_above_head: 2.0
+  bob_amplitude: 0.03
+  bob_speed: 1.5
+  scale: [1.0, 0.25, 1.0]
+  bg_opacity: 0.6
+
+# Chat bubble display
+chat_bubble:
+  height_above_head: 2.5
+  default_duration: 5.0
+  fade_duration: 1.0
+  max_chars: 60
+  scale: [2.0, 0.5, 1.0]
+  bg_color: "rgba(20, 20, 40, 0.85)"
+  border_color: "0x667eea"

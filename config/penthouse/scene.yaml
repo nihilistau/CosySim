@@ -1,0 +1,270 @@
+# Penthouse Scene Environment Configuration
+# ============================================
+# Room dimensions, locations, camera views, lighting, materials, effects.
+# Served to frontend via /api/config/scene.
+
+room:
+  width: 16
+  height: 4
+  depth: 14
+  accent_color: "0x667eea"
+  background_color: "0x08081a"
+  fog_density: 0.018
+
+# Location zones with 3D positions and properties
+locations:
+  bed:
+    label: "Bed"
+    emoji: "🛏"
+    position: { x: -5, y: 0, z: -1 }
+    capacity: 3
+    privacy: 0.95
+    comfort: 1.0
+    spiciness: 10
+    interactions:
+      - lie down
+      - cuddle
+      - pillow talk
+      - sleep
+      - massage
+      - undress
+      - kiss
+      - make out
+
+  couch:
+    label: "Couch"
+    emoji: "🛋"
+    position: { x: 5.5, y: 0, z: 0 }
+    capacity: 3
+    privacy: 0.5
+    comfort: 0.85
+    spiciness: 6
+    interactions:
+      - sit
+      - cuddle
+      - talk
+      - watch TV
+      - lap dance
+      - make out
+
+  fireplace:
+    label: "Fireplace"
+    emoji: "🔥"
+    position: { x: -2, y: 0, z: 5.5 }
+    capacity: 2
+    privacy: 0.65
+    comfort: 0.9
+    spiciness: 7
+    interactions:
+      - sit by fire
+      - cozy up
+      - romantic talk
+      - slow dance
+      - make out
+
+  bar:
+    label: "Bar"
+    emoji: "🍸"
+    position: { x: -3, y: 0, z: -5.5 }
+    capacity: 3
+    privacy: 0.3
+    comfort: 0.6
+    spiciness: 4
+    interactions:
+      - mix drink
+      - pour shots
+      - toast
+      - flirt
+      - lean in close
+
+  vanity:
+    label: "Vanity"
+    emoji: "💄"
+    position: { x: 3, y: 0, z: -5.8 }
+    capacity: 2
+    privacy: 0.4
+    comfort: 0.5
+    spiciness: 5
+    interactions:
+      - do makeup
+      - style hair
+      - admire reflection
+      - undress slowly
+
+  bath:
+    label: "Bath"
+    emoji: "🛁"
+    position: { x: 6.5, y: 0, z: -4.5 }
+    capacity: 2
+    privacy: 0.85
+    comfort: 0.95
+    spiciness: 8
+    interactions:
+      - soak together
+      - wash partner
+      - bubble bath
+      - splash around
+
+  balcony:
+    label: "Balcony"
+    emoji: "🌙"
+    position: { x: 5, y: 0, z: 5.5 }
+    capacity: 2
+    privacy: 0.2
+    comfort: 0.5
+    spiciness: 5
+    interactions:
+      - look at city
+      - smoke
+      - lean on railing
+      - romantic moment
+
+  doorway:
+    label: "Doorway"
+    emoji: "🚪"
+    position: { x: 0, y: 0, z: -6.5 }
+    capacity: 2
+    privacy: 0.1
+    comfort: 0.2
+    spiciness: 3
+    interactions:
+      - enter
+      - leave
+      - greet
+      - peek in
+
+# Camera view presets
+camera_views:
+  overview:
+    position: { x: 10, y: 9, z: 10 }
+    target: { x: 0, y: 0.5, z: 0 }
+    fov: 55
+    label: "Overview"
+  bed:
+    position: { x: -1, y: 3, z: -1 }
+    target: { x: -5, y: 0.6, z: -1 }
+    fov: 48
+    label: "Bed"
+  couch:
+    position: { x: 1, y: 3, z: 0 }
+    target: { x: 5.5, y: 0.6, z: 0 }
+    fov: 48
+    label: "Couch"
+  bath:
+    position: { x: 3, y: 2.5, z: -3 }
+    target: { x: 6.5, y: 0.5, z: -4.5 }
+    fov: 46
+    label: "Bath"
+  fireplace:
+    position: { x: 2, y: 2.5, z: 2 }
+    target: { x: -2, y: 0.6, z: 4.5 }
+    fov: 48
+    label: "Fireplace"
+  vanity:
+    position: { x: 0, y: 2.5, z: -3 }
+    target: { x: 3, y: 0.8, z: -5.8 }
+    fov: 45
+    label: "Vanity"
+  bar:
+    position: { x: 0, y: 2.5, z: -2 }
+    target: { x: -3, y: 0.8, z: -5.5 }
+    fov: 46
+    label: "Bar"
+  balcony:
+    position: { x: 2, y: 2.5, z: 3 }
+    target: { x: 5, y: 0.5, z: 5.5 }
+    fov: 48
+    label: "Balcony"
+
+# Lighting presets (time of day)
+lighting:
+  morning:
+    ambient_intensity: 0.4
+    ambient_color: "0xfff5e0"
+    directional_intensity: 0.6
+    directional_color: "0xffeedd"
+    neon_opacity: 0.3
+    fog_density: 0.012
+    background: "0x1a1a3a"
+
+  afternoon:
+    ambient_intensity: 0.5
+    ambient_color: "0xffffff"
+    directional_intensity: 0.7
+    directional_color: "0xffffff"
+    neon_opacity: 0.2
+    fog_density: 0.010
+    background: "0x2a2a4a"
+
+  evening:
+    ambient_intensity: 0.25
+    ambient_color: "0x1a1a2e"
+    directional_intensity: 0.35
+    directional_color: "0xffeedd"
+    neon_opacity: 0.75
+    fog_density: 0.018
+    background: "0x08081a"
+
+  night:
+    ambient_intensity: 0.15
+    ambient_color: "0x0a0a1e"
+    directional_intensity: 0.15
+    directional_color: "0xaabbdd"
+    neon_opacity: 1.0
+    fog_density: 0.025
+    background: "0x040410"
+
+  romantic:
+    ambient_intensity: 0.2
+    ambient_color: "0x2a1020"
+    directional_intensity: 0.2
+    directional_color: "0xff9988"
+    neon_opacity: 0.5
+    fog_density: 0.020
+    background: "0x0a0510"
+
+# Effects
+effects:
+  fireplace:
+    enabled: true
+    ember_count: 15
+    light_count: 3
+    flicker_speed: 10.0
+    color_warmth: 0.9
+
+  neon:
+    enabled: true
+    pulse_speed: 1.2
+    base_opacity: 0.75
+    hue_shift: 0.03
+
+  rain:
+    enabled: true
+    drop_count: 30
+    drop_speed_min: 2.0
+    drop_speed_max: 4.0
+
+  city_lights:
+    enabled: true
+    dot_count: 150
+    twinkle_speed_range: [0.5, 2.5]
+
+  post_processing:
+    vignette: true
+    vignette_opacity: 0.7
+    film_grain: true
+    grain_opacity: 0.02
+    bloom_copies: 3
+    bloom_opacity: 0.08
+
+# First-person camera
+first_person:
+  player_height: 1.7
+  move_speed: 4.0
+  look_sensitivity: 0.002
+  fov: 70
+
+# Auto-orbit in overview
+auto_orbit:
+  enabled: true
+  speed: 0.3
