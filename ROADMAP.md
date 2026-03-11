@@ -139,12 +139,12 @@ into a unified cyberpunk RPG framework with deep game systems.
 
 ## Post-v1.0 Roadmap (2026-Q3+)
 
-### 1. Game System Integration
-- Wire neurochemistry into NPC conversation interceptors
-- Connect cyberspace to territory control outcomes
-- Living world events affect market prices and faction decisions
-- Player actions generate news articles visible in ticker
-- Multiplayer presence visible in scene UIs
+### 1. Live Pipeline Validation (v1.09b candidate)
+- End-to-end news pipeline: fetch → NLM distill → Nexus store → training flywheel
+- Bootstrap notebook refresh with live NLM distillation
+- Scheduler daemon live test: verify all 47 tasks fire correctly
+- Training flywheel export and fine-tune dry run
+- Requires: NLM auth recovery first
 
 ### 2. Advanced NLM Automation
 - Architecture research: use NLM to evaluate design alternatives autonomously

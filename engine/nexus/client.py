@@ -773,6 +773,7 @@ def get_nexus_client(base_url: str = None) -> NexusClient:
                         from engine.config import get_config
                         base_url = get_config().get("nexus.base_url", _DEFAULT_URL)
                     except Exception:
+                        logger.debug("Config unavailable for nexus.base_url, using default")
                         base_url = _DEFAULT_URL
                 _client = NexusClient(base_url)
     return _client

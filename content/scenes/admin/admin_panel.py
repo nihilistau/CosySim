@@ -4,12 +4,15 @@ Admin Control Panel
 System administration dashboard for managing assets, characters, scenes, and configuration.
 """
 
+import logging
 import streamlit as st
 import sys
 import json
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Optional
+
+logger = logging.getLogger(__name__)
 
 # Add project root to path
 from engine.paths import ROOT as project_root, CONFIG_DIR, BACKUPS_DIR, CONTENT_DIR, IMAGES_DIR
@@ -1113,8 +1116,8 @@ def show_dependency_graph():
             deps = st.session_state.asset_manager.get_dependencies(asset['id'])
             for dep_id in deps:
                 edges.append({"source": asset['id'], "target": dep_id})
-        except:
-            pass
+        except Exception as exc:
+            logger.warning("Failed to resolve dependencies for %s: %s", asset['id'], exc)
     
     st.markdown(f"**Nodes:** {len(nodes)} | **Edges:** {len(edges)}")
     
@@ -1136,8 +1139,8 @@ def show_dependency_graph():
             for orphan_id in orphans:
                 try:
                     st.session_state.asset_manager.delete(orphan_id)
-                except:
-                    pass
+                except Exception as exc:
+                    logger.warning("Failed to delete orphan %s: %s", orphan_id, exc)
             st.success("Cleaned!")
             st.rerun()
     else:
