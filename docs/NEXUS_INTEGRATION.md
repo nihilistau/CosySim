@@ -1059,6 +1059,140 @@ python -m pytest tests/test_query_router.py tests/test_copilot_bridge.py tests/t
 
 ---
 
+## Self-Maintaining Loop
+
+> Updated for v1.04b
+
+CosySim's Copilot stack operates as a self-improving cycle where the repository,
+Nexus, and agent sessions continuously reinforce each other.
+
+### The Repo → Nexus → Agents → Improvements → Repo Cycle
+
+```
+Repository (instructions, agents, hooks, docs)
+        │
+        ▼
+Copilot runtime executes from .github/
+        │
+        ├── hooks call copilot_bridge for task-aware Nexus/NLM context
+        ├── hooks call nexus_session_logger for checkpoint/compaction export
+        └── agents follow repo rules while working
+        │
+        ▼
+Nexus stores histories, changelogs, rules, memories, Q&A, improvements
+        │
+        ├── copilot_self_config syncs repo assets with Nexus mirrors
+        ├── scheduler_daemon keeps maintenance and follow-ups moving
+        └── future agents query Nexus first instead of starting from scratch
+        │
+        ▼
+Agents discover improvements via Nexus
+        │
+        └── Improvements committed back to repo → cycle repeats
+```
+
+This loop means the system becomes easier to operate the more sessions it records.
+
+### Copilot Bridge Session Lifecycle
+
+`engine/nexus/copilot_bridge.py` manages the full session lifecycle:
+
+| Phase | Method | What Happens |
+|-------|--------|-------------|
+| **Start** | `bridge.session_start(task)` | Warm-loads Nexus, NLM, router, forge; builds task context from resume handoff, control packets, operator directives |
+| **Pre-plan** | `bridge.pre_plan(task, files)` | Queries NLM, builds action manifest, generates recommendations |
+| **End** | `bridge.session_end(summary)` | Distills learnings, stores session metrics, persists Q&A pairs |
+
+Resources loaded at session start:
+- **Resume handoff** — previous session state and decisions
+- **Context packets** — architecture docs, control-plane rules
+- **Control context** — latest control notebook summary from Nexus flywheel
+- **Operator directives** — pending user notes/questions from operator inbox
+- **Startup services** — Nexus, router, forge, scheduler, inbox health status
+
+### Session Logger for Checkpoint/Compaction Export
+
+`engine/nexus/nexus_session_logger.py` exports Copilot CLI session events
+to Nexus at three granularities:
+
+```powershell
+# Export current checkpoint to Nexus
+python engine/nexus/nexus_session_logger.py checkpoint
+
+# Full snapshot before context compaction (CRITICAL — run before compaction!)
+python engine/nexus/nexus_session_logger.py compact
+
+# Finalize session — distill Q&A, store summary
+python engine/nexus/nexus_session_logger.py end
+```
+
+Hook integration (`.github/hooks/`):
+- `sessionStart` → `handle_start()`
+- `sessionEnd` → `handle_end()`
+- `userPromptSubmitted` → `handle_prompt()` — auto-detects new checkpoints
+- `preCompaction` → `handle_compaction()` — captures full snapshot
+
+### Nexus-First Design Enforcement
+
+Every agent and session follows this discipline:
+
+1. **Before work** — `nexus_smart_query(question)` or `nexus_search(topic)` to
+   check for existing knowledge, decisions, and patterns.
+2. **Check rules** — `nexus_get_rules(scope)` for governance constraints.
+3. **During work** — store architecture decisions, code snippets, and reusable
+   patterns as they are discovered.
+4. **After work** — persist session outcomes: Q&A pairs, changelog notes,
+   histories, improvements, and learnings.
+5. **Backfill misses** — if knowledge is found outside Nexus, write it back as
+   both a knowledge entry and a Q&A pair before finishing.
+
+### Smart Query Router Pipeline
+
+`engine/nexus/query_router.py` — the preferred entry point for all information
+retrieval. Uses a 5-tier pipeline:
+
+```
+Question arrives
+    │
+    ▼
+1. Q&A Cache ──────── Direct lookup in Nexus Q&A pairs
+    │ miss              Instant, high confidence
+    ▼
+2. FTS5 Knowledge ──── Full-text search across entries
+    │ miss              Fast, medium confidence
+    ▼
+3. Nexus Smart Ask ─── Server-side pipeline (cache → FTS → NLM)
+    │ miss              Medium speed, high confidence
+    ▼
+4. Direct NLM Ask ──── NotebookLM unified ask
+    │ miss              Slower, high confidence (grounded)
+    ▼
+5. LLM Fallback ────── Local LMStudio inference
+                        Variable confidence, uses tokens
+```
+
+**Auto-store behavior:** Every answer from tiers 4 and 5 is automatically stored
+back as a Q&A pair. First query costs tokens; every subsequent identical query
+is served from cache for free.
+
+### Knowledge Backfill Pattern
+
+When Nexus doesn't have an answer and you find it elsewhere:
+
+```powershell
+# Store both a knowledge entry AND a Q&A pair
+python -m engine.nexus.bridge backfill "How does X work?" "X works by..." --source "docs/path"
+
+# Or via MCP tools:
+nexus_add(title="How X works", content="...", content_type="note", category="dev")
+nexus_add_qa(question="How does X work?", answer="X works by...")
+```
+
+This ensures the knowledge is discoverable by both search and direct Q&A lookup
+in future sessions.
+
+---
+
 ## See Also
 
 - [Architecture](ARCHITECTURE.md) — Full engine subsystem overview

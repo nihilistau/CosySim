@@ -1,6 +1,6 @@
 # CosySim Scenes Guide
 
-> v1.03b — 20 Flask scenes, ~613 HTTP routes, ~51 Socket.IO event types, AAA overlay UI, survival mechanics, 8-tab director panels
+> v1.04b — 20 Flask scenes, ~613 HTTP routes, ~51 Socket.IO event types, AAA overlay UI, survival mechanics, 8-tab director panels
 
 Complete reference for every scene in the CosySim simulation framework.
 
@@ -363,10 +363,80 @@ Characters send autonomous texts and maintain relationships.
 
 ### Penthouse — THE PENTHOUSE (port 5556)
 
-**Class:** `PenthouseScene` · **Routes:** 67 · **Skills:** 11 · **Mixins:** PenthouseCombatMixin
+**Class:** `PenthouseScene` · **Routes:** 67 · **Skills:** 11 · **Mixins:** PenthouseCombatMixin, PenthouseSocialMixin
 
-An adult roleplay scene featuring Lola as the primary character with full
-emotion system, outfit management, and room-based location mechanics.
+> Updated for v1.04b — character picker, agent loop UI, first-person camera, YAML-driven config
+
+An adult roleplay scene featuring multi-character support with full emotion
+system, outfit management, room-based location mechanics, and an AI agent loop.
+
+#### v1.04b Features
+
+##### Character Picker Overlay
+
+A modal overlay for selecting and loading characters into the scene:
+
+- **`GET /api/characters/list`** — Lists all available database characters with load status
+- **`POST /api/character/load`** — Loads a character with optional personality profile
+  assignment (`bold_dominant`, `shy_submissive`, `playful_tease`,
+  `intellectual_aloof`, `nurturing_warm`). Max 2 characters enforced.
+- **`POST /api/character/remove`** — Removes a character from the active scene
+- **`GET /api/characters/loaded`** — Lists currently loaded characters with full state
+
+##### Agent Loop UI (Start / Stop / Tick)
+
+The director panel exposes agent loop controls with a live status indicator:
+
+- **Start** — Activates the `AgentLoop`, enabling autonomous character decisions
+- **Stop** — Pauses the agent loop while preserving state
+- **Tick** — Manually triggers a single agent decision cycle
+- Scene state includes `agent_loop_running: bool` flag broadcast via Socket.IO
+- Player chat messages are injected into the loop via `_inject_to_loop()`
+
+##### Model Assignment
+
+Per-character LMStudio model selection via the director panel:
+
+- Dropdown lists available models from the LMStudio backend
+- Each character can be assigned a different model for inference
+- API calls proxy through the backend — **no direct frontend-to-LMStudio calls**
+
+##### First-Person Camera Mode
+
+Pointer-lock first-person view with room-bounded movement:
+
+- **WASD** — Movement within room bounds
+- **Mouse look** — Free camera rotation via pointer lock
+- Configurable via `scenes.penthouse.enable_first_person: true` in YAML
+- Toggle between overview and first-person via `default_camera_view` setting
+
+##### Director Mode (8 Tabs)
+
+| Tab | Purpose |
+|-----|---------|
+| Scene | Lighting presets, time-of-day, room overview |
+| Cast | Character picker, load/remove, personality assignment |
+| Dialog | Chat controls, agent loop Start/Stop/Tick |
+| Actions | Game actions, dice rolls, activity suggestions |
+| Scenario | Scenario selection with mood shifts |
+| World | World tick, location graph, furniture interaction |
+| Settings | Camera mode, model assignment, YAML overrides |
+| Debug | ARGUS LiveDebugger, state inspection, Socket.IO monitor |
+
+##### Backend Proxy for LMStudio
+
+All LMStudio API calls route through the Flask backend, not directly from the
+frontend. This ensures:
+- Bearer token (`lmstudio.api_token`) stays server-side
+- Request shaping and governance interceptors apply
+- No CORS or token-exposure issues in the browser
+
+##### YAML-Configurable Settings
+
+All scene parameters are exposed in `config/default.yaml` under
+`scenes.penthouse`. See [Configuration](CONFIGURATION.md) for the full block
+including positions, outfits, personality profiles, stats, agent loop interval,
+and camera settings.
 
 #### Skills
 
@@ -394,14 +464,34 @@ emotion system, outfit management, and room-based location mechanics.
 | POST | `/api/outfit` | Change outfit |
 | GET | `/api/characters` | List characters |
 | GET | `/api/state` | Full game state |
+| GET | `/api/characters/list` | Character picker — available characters |
+| POST | `/api/character/load` | Load character with personality |
+| POST | `/api/character/remove` | Remove character from scene |
+| GET | `/api/characters/loaded` | Currently loaded characters |
+| POST | `/api/character/stats/adjust` | Adjust stat by delta |
+| POST | `/api/location/move` | Move character to position |
+| GET | `/api/scenario/list` | Available scenarios |
+| POST | `/api/scenario/set` | Load scenario with mood shifts |
+
+#### Socket.IO Events
+
+| Event | Direction | Purpose |
+|-------|-----------|---------|
+| `chat_message` | Client→Server | Inject player message into agent loop |
+| `quick_stat` | Client→Server | Adjust character stat |
+| `director_nudge` | Client→Server | Nudge direction (escalation/cool_down/revelation) |
+| `load_scenario` | Client→Server | Load scenario beat |
+| `world_tick` | Client→Server | Push world state update |
+| `request_state` | Client→Server | Request full state broadcast |
 
 #### State
 
-- Emotion system (0–100 per axis: happiness, arousal, trust, comfort)
-- Room graph with connected locations
-- Outfit system with unlockable items
+- Emotion system (0–100 per axis: arousal, pleasure, happiness, horniness, and 6 more)
+- Room graph with connected locations (bed, couch, fireplace, bar, bathroom, vanity, balcony, doorway)
+- Outfit system with 10 outfit states
 - Time-of-day cycle affecting dialogue context
 - Combat system via PenthouseCombatMixin
+- Agent loop with configurable interval (`agent_loop_interval: 8`)
 
 ---
 

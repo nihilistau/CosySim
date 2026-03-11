@@ -30,7 +30,7 @@ Access config values with dot notation: `config.get("lmstudio.base_url")`.
 | Key | Default | Description |
 |-----|---------|-------------|
 | `name` | CosySim AI Playground | Project name |
-| `version` | 0.50b | Current version |
+| `version` | 1.04b | Current version |
 | `environment` | default | Active environment |
 
 ### paths
@@ -74,7 +74,7 @@ Access config values with dot notation: `config.get("lmstudio.base_url")`.
 |-----|---------|-------------|
 | `host` | 127.0.0.1 | Server host |
 | `port` | 1234 | Server port |
-| `api_token` | (empty) | API token |
+| `api_token` | (bearer token) | Bearer auth token for LMStudio API — required for authenticated requests. Set via config, never hardcode. |
 | `context_length` | 4096 | Default context window |
 | `vram_cap_mb` | (hardware-dependent) | VRAM limit |
 | `load_mode` | concurrent | Model loading strategy |
@@ -132,6 +132,66 @@ Access config values with dot notation: `config.get("lmstudio.base_url")`.
 ### scenes
 
 Each scene has `host`, `port`, and `debug` settings. Default host is `localhost`, debug is `false`.
+Some scenes expose additional YAML-configurable settings.
+
+#### Penthouse Extended Settings
+
+> Updated for v1.04b
+
+The penthouse scene supports extensive YAML configuration beyond the standard
+`host`/`port`/`debug` keys:
+
+```yaml
+scenes:
+  penthouse:
+    host: "localhost"
+    port: 5556
+    debug: false
+    max_characters: 2                    # Max concurrent characters in scene
+    agent_loop_interval: 8               # Agent decision interval (seconds)
+    default_lighting: "evening"          # Initial lighting preset
+    default_camera_view: "overview"      # Starting camera angle
+    enable_first_person: true            # Enable pointer-lock first-person mode
+    positions:                           # Valid character positions
+      - bed
+      - couch
+      - fireplace
+      - bar
+      - bathroom
+      - vanity
+      - balcony
+      - doorway
+    outfits:                             # Available outfit states
+      - casual
+      - formal
+      - silk_robe
+      - nothing
+      - lingerie
+      - leather
+      - evening_dress
+      - swimwear
+      - athletic
+      - sleep
+    personality_profiles:                # Character personality templates
+      - bold_dominant
+      - shy_submissive
+      - playful_tease
+      - intellectual_aloof
+      - nurturing_warm
+    stats:                               # Character stat dimensions (0–100)
+      - arousal
+      - pleasure
+      - happiness
+      - horniness
+      - drunkenness
+      - dominance
+      - fear
+      - anger
+      - openness
+      - tiredness
+```
+
+#### All Scene Ports
 
 | Scene | Port |
 |-------|------|
@@ -298,10 +358,46 @@ Defines resolution, format, and constraints for generated media:
 
 ### testing
 
+> Updated for v1.04b — smart test runner and automated scheduler
+
 | Key | Default | Description |
 |-----|---------|-------------|
 | `database` | `simulation_test.db` | Test database file |
 | `mock_external_services` | true | Mock LLM/TTS in tests |
+| `default_suite` | `full` | Default suite for scheduler |
+| `scene_ports` | `[5555, 5556, 5571, 8500]` | Scene ports for health checks |
+| `unit_test_timeout` | 300 | Unit test timeout (seconds) |
+| `health_check_timeout` | 30 | Scene health check timeout |
+| `store_results_in_nexus` | true | Persist results in Nexus KMS |
+| `schedule_interval_minutes` | 0 | Recurring schedule (0 = disabled) |
+
+#### testing.smart_runner
+
+Controls the tiered test runner (`scripts/smart_test_runner.py`):
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `enabled` | true | Enable smart runner features |
+| `default_tier` | 2 | Default tier when none specified |
+| `parallel_workers` | 4 | pytest-xdist worker count |
+| `timing_cache` | `data/test_timing.json` | Per-test timing data cache |
+| `reports_dir` | `data/test_reports` | JSON report output directory |
+| `skip_patterns` | `[test_agent_loop.py, live_wire_test.py]` | Always-skipped test patterns |
+| `tier_1_patterns` | `[test_scene_imports, ...]` | Tier 1 (smoke) file patterns |
+| `tier_2_patterns` | `[test_penthouse*, ...]` | Tier 2 (core) file patterns |
+| `tier_3_patterns` | `[test_pipeline*, ...]` | Tier 3 (integration) file patterns |
+
+#### testing.browser_checks
+
+Controls CDP-based browser test suites used by the test scheduler:
+
+| Check | Description |
+|-------|-------------|
+| `console_errors` | Capture JavaScript console errors |
+| `network_failures` | Detect failed network requests |
+| `dom_health` | Validate DOM structure and rendering |
+
+See [Testing](TESTING.md) for CLI usage and the full 4-tier strategy.
 
 ### assets
 
@@ -408,3 +504,37 @@ Registers skills per scene with trigger types (`auto`, `optional`, `required`). 
 - **penthouse** — 39+ skills (wardrobe, interactions, timed actions, mini-games)
 - **lounge** — drinks, performances, secrets, heat tracking
 - **casino** — poker, tells, moods, narrative injection
+
+---
+
+## Top-Level YAML Keys Reference
+
+> Updated for v1.04b — complete list of `config/default.yaml` top-level sections
+
+| Key | Description |
+|-----|-------------|
+| `system` | Project name, version (`1.04b`), environment |
+| `paths` | Directory paths (data, models, cache, logs) |
+| `database` | SQLite + ChromaDB settings |
+| `llm` | LLM provider, model, temperature |
+| `lmstudio` | LMStudio connection, `api_token`, model profiles, speculative decoding |
+| `agent_profiles` | Per-profile context/token/temperature limits (big, small, router) |
+| `tts` | Text-to-speech engine and streaming |
+| `stt` | Speech-to-text engine and model |
+| `scenes` | Per-scene host/port/debug + extended settings (see penthouse) |
+| `hardware` | GPU, VRAM, RAM, CPU specs |
+| `comfyui` | ComfyUI image generation settings |
+| `media_standards` | Image/video/audio format constraints |
+| `mcp` | MCP server port and registered servers |
+| `characters` | Default personality, role, memory settings |
+| `services` | Autonomous messenger, voice/video calls |
+| `security` | Input validation, rate limiting |
+| `logging` | Log level, file, rotation |
+| `pipeline` | Inference pipeline, kill switch, branching |
+| `observability` | Metrics DB, alerts, retention |
+| `training` | Auto-capture, training triggers, datasets |
+| `notebooklm` | NLM Live Proxy and notebook settings |
+| `comms` | Governance, interceptors, skill manifests |
+| `framework` | MCP framework state persistence |
+| `testing` | Test DB, smart runner, scheduler, browser checks |
+| `assets` | Asset validation and versioning |
