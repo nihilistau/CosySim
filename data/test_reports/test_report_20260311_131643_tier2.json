@@ -1,0 +1,129 @@
+{
+  "timestamp": "2026-03-11T02:16:43+00:00",
+  "tier": 2,
+  "total": 2751,
+  "passed": 2751,
+  "failed": 0,
+  "skipped": 0,
+  "errors": 0,
+  "duration_seconds": 99.29,
+  "test_files": [
+    "test_skill_progression.py",
+    "test_skills.py",
+    "test_port_registry.py",
+    "test_config.py",
+    "test_decorators.py",
+    "test_gallery.py",
+    "test_announcer.py",
+    "test_arena_scene.py",
+    "test_arena_engine.py",
+    "test_casino_game.py",
+    "test_casino_revamp.py",
+    "test_casino_world.py",
+    "test_character_agent.py",
+    "test_character_memory.py",
+    "test_character_registry.py",
+    "test_character_skills.py",
+    "test_coders_revamp.py",
+    "test_config_validator.py",
+    "test_database.py",
+    "test_dialog_system.py",
+    "test_event_chain.py",
+    "test_gallery_revamp.py",
+    "test_games.py",
+    "test_games_revamp.py",
+    "test_governance_rules.py",
+    "test_heist.py",
+    "test_heist_revamp.py",
+    "test_hub_flask.py",
+    "test_hub_revamp.py",
+    "test_hub_scene.py",
+    "test_intel_hub_mission_control.py",
+    "test_intel_hub_news.py",
+    "test_intel_hub_revamp.py",
+    "test_lounge.py",
+    "test_lounge_revamp.py",
+    "test_memory_skills.py",
+    "test_multiplayer.py",
+    "test_navbar_v2.py",
+    "test_neoncity.py",
+    "test_neoncity_revamp.py",
+    "test_neoncity_world.py",
+    "test_penthouse_game.py",
+    "test_penthouse_revamp.py",
+    "test_penthouse_world.py",
+    "test_phone_assistant.py",
+    "test_phone_dashboard.py",
+    "test_phone_news.py",
+    "test_phone_revamp.py",
+    "test_phone_routing.py",
+    "test_phone_skills.py",
+    "test_phone_world.py",
+    "test_realm.py",
+    "test_realm_revamp.py",
+    "test_router.py",
+    "test_router_data.py",
+    "test_router_v3_benchmark.py",
+    "test_router_v3_client.py",
+    "test_router_v3_dataset.py",
+    "test_scene_rules_engine.py",
+    "test_scene_state.py",
+    "test_social_skills.py",
+    "test_stream_processor.py",
+    "test_tavern.py",
+    "test_tavern_revamp.py",
+    "test_tts_manager.py",
+    "test_world_skills.py",
+    "test_coders.py",
+    "test_scene_imports.py",
+    "test_intel_hub_scene.py",
+    "test_tts.py",
+    "test_governance.py",
+    "test_router_finetune_cycle.py",
+    "test_lab_break.py"
+  ],
+  "slowest_tests": [
+    {
+      "test": "tests/test_lab_break.py::TestLabBreakRoutes::test_speak_valid",
+      "duration": 30.01
+    },
+    {
+      "test": "tests/test_lab_break.py::TestLabBreakScene::test_handle_user_message_cruel",
+      "duration": 30.01
+    },
+    {
+      "test": "tests/test_router_finetune_cycle.py::TestRouterFinetuneSchedulerCallbacks::test_dataset_augment_callback_covers_all_models",
+      "duration": 22.58
+    },
+    {
+      "test": "tests/test_router_finetune_cycle.py::TestRouterFinetuneSchedulerCallbacks::test_dataset_augment_callback_tolerates_single_model_failure",
+      "duration": 20.52
+    },
+    {
+      "test": "tests/test_lab_break.py::TestLabBreakScene::test_handle_user_message_kind",
+      "duration": 18.93
+    },
+    {
+      "test": "tests/test_governance.py::TestBuildGovernanceContext::test_different_scenes_produce_context",
+      "duration": 10.48
+    },
+    {
+      "test": "tests/test_coders.py::TestCodersRoomState::test_execute_code_timeout",
+      "duration": 10.02
+    },
+    {
+      "test": "tests/test_governance.py::TestBuildGovernanceContext::test_returns_string",
+      "duration": 8.53
+    },
+    {
+      "test": "tests/test_tts.py::TestQwen3TTSEngine::test_load_models_graceful_when_no_models",
+      "duration": 7.3
+    },
+    {
+      "test": "tests/test_tts.py::TestTTSServer::test_generate_short",
+      "duration": 5.05
+    }
+  ],
+  "return_code": 0,
+  "status": "PASSED"
+}

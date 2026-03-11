@@ -107,29 +107,27 @@ class TestSceneHealthHelper:
         assert data["online"] == data["total"]
 
     def test_system_overview_uses_canonical_lmstudio_url(self):
-        """LMStudio status should use the canonical service URL."""
+        """LMStudio status should use the authenticated LMS client."""
         from content.scenes.intel_hub.intel_hub_scene import IntelHubScene
 
         scene = IntelHubScene.__new__(IntelHubScene)
-        mock_response = MagicMock(ok=True)
-        mock_response.json.return_value = {"data": [{"id": "model-a"}]}
+        mock_client = MagicMock()
+        mock_client.get_models.return_value = [{"id": "model-a", "key": "model-a"}]
 
         with (
             patch("content.scenes.intel_hub.intel_hub_scene._get_system_resources", return_value={}),
             patch("content.scenes.intel_hub.intel_hub_scene._get_operator_inbox_items", return_value={"summary": {}}),
             patch("content.scenes.intel_hub.intel_hub_scene._get_operator_queue", return_value={"summary": {}}),
             patch(
-                "content.scenes.intel_hub.intel_hub_scene.get_service_url",
-                return_value="http://localhost:4321/api/v1/models",
-            ) as mock_url,
-            patch("requests.get", return_value=mock_response) as mock_get,
+                "engine.lmstudio.lms_client.get_lms_client",
+                return_value=mock_client,
+            ),
         ):
             overview = scene._get_overview()
 
         assert overview["lmstudio"]["available"] is True
         assert overview["lmstudio"]["models"] == ["model-a"]
-        mock_url.assert_any_call("lmstudio", path="/api/v1/models")
-        mock_get.assert_any_call("http://localhost:4321/api/v1/models", timeout=2)
+        mock_client.get_models.assert_called_once_with(loaded_only=False, raw=True)
 
     def test_vtt_config_uses_canonical_whisper_fallback(self):
         """Whisper fallback URL should come from the canonical port registry."""
