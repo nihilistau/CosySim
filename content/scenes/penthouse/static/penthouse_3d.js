@@ -178,12 +178,43 @@
     animate();
     console.log('[Penthouse3D] v2.0 AAA++ initialised');
 
+    // External animation callbacks (used by character_bridge.js)
+    const _externalAnimCallbacks = [];
+
     window.penthouse3D = {
       switchView,
       getViewNames: () => Object.keys(CAMERA_VIEWS),
       toggleFirstPerson: toggleFirstPersonMode,
       isFirstPerson: () => fpsMode,
+
+      // ── Character integration API ─────────────────────────────────
+      getScene: () => scene,
+      getCamera: () => camera,
+      getRenderer: () => renderer,
+
+      getLocationPositions: () => ({
+        bed:       { x: -5,   y: 0, z: -1 },
+        couch:     { x:  5.5, y: 0, z:  0 },
+        fireplace: { x: -2,   y: 0, z:  5.5 },
+        bar:       { x: -3,   y: 0, z: -5.5 },
+        vanity:    { x:  3,   y: 0, z: -5.8 },
+        bath:      { x:  6.5, y: 0, z: -4.5 },
+        balcony:   { x:  5,   y: 0, z:  5.5 },
+        doorway:   { x:  0,   y: 0, z: -6.5 },
+      }),
+
+      addToAnimationLoop: (cb) => {
+        if (typeof cb === 'function') _externalAnimCallbacks.push(cb);
+      },
+
+      removeFromAnimationLoop: (cb) => {
+        const idx = _externalAnimCallbacks.indexOf(cb);
+        if (idx !== -1) _externalAnimCallbacks.splice(idx, 1);
+      },
     };
+
+    // Store reference for animate() to call external callbacks
+    window._penthouse3D_animCallbacks = _externalAnimCallbacks;
   }
 
   // ═══════════════════════════════════════════════════════════════════
@@ -1486,6 +1517,14 @@
       grainQuad.quaternion.copy(camera.quaternion);
       grainQuad.translateZ(-0.105);
       if (!grainQuad.parent) scene.add(grainQuad);
+    }
+
+    // ── External animation callbacks (character models, etc.) ──
+    const cbs = window._penthouse3D_animCallbacks;
+    if (cbs) {
+      for (let i = 0; i < cbs.length; i++) {
+        try { cbs[i](dt, t); } catch (e) { console.warn('[Penthouse3D] anim callback error:', e); }
+      }
     }
 
     renderer.render(scene, camera);

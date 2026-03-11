@@ -185,10 +185,16 @@ class PenthouseScene {
 
   _onSceneState(data) {
     const chars = data.characters || {};
+    const locs  = data.locations || {};
     const ids   = Object.keys(chars);
 
     // Update director state cache
     _directorState.characters = chars;
+
+    // ── Sync 3D character models via CharacterBridge ──
+    if (window.CharacterBridge) {
+      window.CharacterBridge.syncCharacters(chars, locs);
+    }
 
     if (ids.length > 0) {
       const cid   = ids[0];
@@ -253,6 +259,11 @@ class PenthouseScene {
     if (data.name === 'You' || data.role === 'player') return;
     this._renderMessage(data);
     this._setTyping('', false);
+
+    // Show 3D chat bubble over character
+    if (window.CharacterBridge && data.character_id && data.message) {
+      window.CharacterBridge.showChatBubble(data.character_id, data.message, 6);
+    }
 
     // Voice output
     if (this._voiceEnabled && typeof window.voiceManager !== 'undefined') {
@@ -1073,14 +1084,25 @@ function placeDirectorAvatar() {
     body: JSON.stringify(data),
   })
     .then(r => r.json())
-    .then(() => PENTHOUSE._showSystemMessage('🎭 Avatar placed at ' + data.location))
+    .then(() => {
+      // Spawn 3D director avatar
+      if (window.CharacterBridge) {
+        window.CharacterBridge.placeDirectorAvatar(data);
+      }
+      PENTHOUSE._showSystemMessage('🎭 Avatar placed at ' + data.location);
+    })
     .catch(() => {});
 }
 
 function removeDirectorAvatar() {
   fetch('/api/director/avatar', { method: 'DELETE' })
     .then(r => r.json())
-    .then(() => PENTHOUSE._showSystemMessage('🎭 Avatar removed'))
+    .then(() => {
+      if (window.CharacterBridge) {
+        window.CharacterBridge.removeDirectorAvatar();
+      }
+      PENTHOUSE._showSystemMessage('🎭 Avatar removed');
+    })
     .catch(() => {});
 }
 
