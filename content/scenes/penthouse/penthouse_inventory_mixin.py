@@ -135,3 +135,37 @@ class PenthouseInventoryMixin:
             self.profiles[cid].dislikes = list(p_info["dislikes"])
             self._broadcast_state()
             return jsonify({"success": True})
+
+        @self.app.route("/api/character/outfit/color", methods=["POST"])
+        def set_outfit_color():
+            """Set custom color theme for a character's current outfit."""
+            data = request.json or {}
+            cid = data.get("character_id")
+            color = data.get("color")
+            accent = data.get("accent")
+            if cid not in self.profiles:
+                return jsonify({"error": "Character not found"}), 404
+            if not hasattr(self.profiles[cid], "outfit_colors"):
+                self.profiles[cid].outfit_colors = {}
+            outfit = self.profiles[cid].outfit
+            self.profiles[cid].outfit_colors[outfit] = {
+                "color": color,
+                "accent": accent,
+            }
+            self._broadcast_state()
+            return jsonify({"success": True})
+
+        @self.app.route("/api/character/appearance", methods=["POST"])
+        def set_appearance():
+            """Set character appearance properties (skin, hair, eyes)."""
+            data = request.json or {}
+            cid = data.get("character_id")
+            if cid not in self.profiles:
+                return jsonify({"error": "Character not found"}), 404
+            if not hasattr(self.profiles[cid], "appearance"):
+                self.profiles[cid].appearance = {}
+            for key in ("skin", "hair_color", "hair_style", "eye_color"):
+                if key in data:
+                    self.profiles[cid].appearance[key] = data[key]
+            self._broadcast_state()
+            return jsonify({"success": True})
