@@ -1313,6 +1313,92 @@ class PenthouseScene(PenthouseCombatMixin, PenthouseDialogMixin, PenthouseInvent
                 "type": msg_type,
             })
 
+    def _generate_chat_response(self, sender_name: str, message: str) -> None:
+        """Generate an immediate agent response to a player chat message.
+
+        Picks the most appropriate loaded character, runs inference via
+        the agent loop pipeline, and emits the result over Socket.IO.
+        Designed to run in a daemon thread so the chat handler returns
+        immediately.
+        """
+        if not self.characters:
+            return
+
+        char_id, char = next(iter(self.characters.items()))
+        char_name: str = getattr(char, "name", char_id)
+
+        self.socketio.emit("agent_typing", {"character_name": char_name})
+
+        response_text = ""
+        try:
+            if self.agent_loop and char_id in self.agent_loop._characters:
+                from engine.agents.virtual_agent import InferenceRequest
+                from engine.agents.stream_processor import strip_token_artifacts
+
+                recent: List[Dict[str, Any]] = []
+                if hasattr(self.agent_loop, "_log_lock"):
+                    with self.agent_loop._log_lock:
+                        recent = list(self.agent_loop.shared_log[-8:])
+                elif self.agent_loop.shared_log:
+                    recent = list(self.agent_loop.shared_log[-8:])
+
+                log_lines = "\n".join(
+                    f"  {e.get('name', '?')}: {e.get('text', '')}"
+                    for e in recent
+                )
+
+                prompt = (
+                    f"Recent conversation:\n{log_lines}\n\n"
+                    f"{sender_name} just said: {message}\n\n"
+                    f"Respond as {char_name} in character."
+                )
+
+                conv_id = f"penthouse_chat_{char_id}"
+                request = InferenceRequest(
+                    agent_id=char_id,
+                    messages=[{"role": "user", "content": prompt}],
+                    conversation_id=conv_id,
+                    temperature=0.85,
+                    max_output_tokens=300,
+                    store=True,
+                    priority=1,
+                    metadata={
+                        "type": "penthouse_chat_response",
+                        "scene": "penthouse",
+                        "sender": sender_name,
+                    },
+                )
+
+                proc = self.agent_loop._infer(request)
+                response_text = strip_token_artifacts(
+                    proc.clean_text or proc.raw_text or ""
+                )
+
+                if proc.mood_tags:
+                    try:
+                        profile = self.profiles.get(char_id)
+                        if profile and hasattr(profile, "stats"):
+                            profile.stats.adjust(mood=5)
+                    except Exception:
+                        pass
+        except Exception as exc:
+            logger.warning("Chat response inference failed for %s: %s", char_id, exc)
+
+        if not response_text:
+            response_text = f"*{char_name} looks at you thoughtfully*"
+
+        ts = datetime.now().isoformat()
+        self.socketio.emit("chat_response", {
+            "name": char_name,
+            "character_id": char_id,
+            "character_name": char_name,
+            "message": response_text,
+            "timestamp": ts,
+        })
+        self.socketio.emit("agent_done")
+
+        self._inject_to_loop(char_name, response_text, "speech")
+
     # ── Routes ──────────────────────────────────────────────────────────
     def _setup_routes(self) -> None:
         """Register all Flask routes — core routes here, groups via mixins."""
@@ -1466,6 +1552,14 @@ class PenthouseScene(PenthouseCombatMixin, PenthouseDialogMixin, PenthouseInvent
             name = self.director_name if self.director_in_scene else "You"
             self._inject_to_loop(name, msg, "speech")
             self.socketio.emit("chat_message", {"name": name, "message": msg, "timestamp": ts})
+
+            def _respond() -> None:
+                try:
+                    self._generate_chat_response(name, msg)
+                except Exception as exc:
+                    logger.warning("Chat response generation failed: %s", exc)
+
+            threading.Thread(target=_respond, daemon=True, name="chat-respond").start()
 
         @self.socketio.on("quick_stat")
         def handle_quick_stat(data):
@@ -1715,6 +1809,18 @@ class PenthouseScene(PenthouseCombatMixin, PenthouseDialogMixin, PenthouseInvent
         except Exception:
             self._event_bus = None
 
+        # Wire NPC scheduler for autonomous NPC behavior
+        try:
+            from engine.agents.npc_scheduler import get_npc_scheduler
+            npc_sched = get_npc_scheduler()
+            if not npc_sched._running:
+                npc_sched.start()
+            self._npc_scheduler = npc_sched
+            logger.info("NPC scheduler wired to penthouse")
+        except Exception as exc:
+            logger.warning("NPC scheduler init failed: %s", exc)
+            self._npc_scheduler = None
+
         self.socketio.run(self.app, host=self.host, port=self.port,
                           debug=False, allow_unsafe_werkzeug=True)
 
@@ -1737,6 +1843,12 @@ class PenthouseScene(PenthouseCombatMixin, PenthouseDialogMixin, PenthouseInvent
     def stop(self) -> None:
         if self.agent_loop:
             self.agent_loop.stop()
+        # Stop NPC scheduler if we started it
+        try:
+            if getattr(self, "_npc_scheduler", None) and self._npc_scheduler._running:
+                self._npc_scheduler.stop()
+        except Exception:
+            pass
         # Persist framework state
         try:
             from engine.mcp.framework import get_framework
