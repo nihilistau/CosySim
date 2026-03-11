@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cosysim"
-version = "1.04b"
+version = "1.05b"
 description = "CosySim - AI Virtual Companion Simulation System with voice/video calls and interactive scenes"
 readme = "README.md"
 requires-python = ">=3.10"

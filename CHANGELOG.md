@@ -3,6 +3,52 @@
 All notable changes to CosySim are documented here.
 
 ---
+## [1.05b] — "AUTONOMY SPRINT" — 2026-03
+
+Local agent task queue, system recovery skills, prompt template registry,
+metrics dashboard, and ROADMAP overhaul. 2,751 tier-2 tests passing in 99s.
+
+### Task Queue System
+- **Priority Queue**: 5 priority levels (CRITICAL→BACKGROUND), thread-safe with
+  `queue.PriorityQueue`, async submit/result pattern
+- **Queue Workers**: Daemon threads with configurable concurrency, retry with
+  exponential backoff (3 attempts), fallback model support
+- **Load Balancing**: Round-robin across loaded models, config-based task routing
+- **6 New Task Types**: code_review, security_check, test_generate, doc_generate,
+  translate, refactor (extending existing 5)
+- **YAML Config**: `lmstudio.task_queue` section with workers, max_queue_size,
+  retry settings, task routing map
+- **Fixed**: `check_lmstudio()` now sends Bearer auth header from config
+
+### System Recovery Skills
+- **8 MCP Skills** (`engine/skills/builtin/recovery_skills.py`):
+  restart_service, backup_database, restore_database, analyze_error_log,
+  health_recover, config_snapshot, config_rollback, system_diagnostics
+- Self-healing capabilities: detect unhealthy services, auto-recover
+- Database backup with 10-backup rotation, pre-restore safety backup
+- Config snapshot/rollback with diff summary
+
+### Prompt Template Registry
+- **`engine/prompts/prompt_registry.py`**: Thread-safe singleton with versioning,
+  `{{var:default}}` rendering, batch expansion, EMA quality tracking
+- **20 Built-in Templates**: system (5), character (5), scene (3), task (4),
+  evaluation (3) — stored as YAML in `prompts/templates/`
+- **5 MCP Skills**: list_prompt_templates, render_prompt, expand_prompt,
+  prompt_stats, rate_prompt
+- **Nexus Sync**: `sync_to_nexus()` pushes all templates to knowledge base
+
+### Metrics Dashboard
+- **Flask Blueprint** at `/metrics/dashboard`: cyberpunk glass-morphism UI
+- **6 API Endpoints**: system, tests, tasks, nexus, models, overview
+- **Real-time Panels**: service health, test results, model performance,
+  Nexus knowledge stats, recent activity
+- **Auto-refresh**: 30s polling with toggle, vanilla JS, no dependencies
+- **Hub Integration**: Registered at `http://localhost:8500/metrics/dashboard`
+
+### Documentation
+- ROADMAP updated from v1.02b → v1.04b with all shipped features
+
+---
 ## [1.04b] — "SYSTEM INTEGRATION" — 2026-03
 
 Penthouse scene fixes, smart test runner, comprehensive documentation overhaul,
