@@ -335,6 +335,32 @@
   max-width: 80px;
 }
 
+/* ── Customizer Toggle ─────────────────────────────────────── */
+.ph-customizer-toggle {
+  position: fixed;
+  right: 16px;
+  top: 140px;
+  z-index: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(16px) saturate(1.4);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  transition: all 0.25s ease;
+  pointer-events: auto;
+}
+.ph-customizer-toggle:hover {
+  background: rgba(102, 126, 234, 0.15);
+  border-color: rgba(102, 126, 234, 0.3);
+  color: #667eea;
+}
+
 /* ══════════════════════════════════════════════════════════════
    DIRECTOR PANEL (right slide-out, 400px)
    ══════════════════════════════════════════════════════════════ */
@@ -1151,6 +1177,11 @@
   .ph-director-toggle {
     right: 8px;
     top: 64px;
+  }
+
+  .ph-customizer-toggle {
+    right: 8px;
+    top: 120px;
   }
 
   .ph-chat-dock {

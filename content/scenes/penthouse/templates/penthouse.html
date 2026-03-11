@@ -114,6 +114,13 @@
     <span class="ph-director-toggle__label">DIRECTOR</span>
   </button>
 
+  <!-- Customizer toggle -->
+  <button class="ph-customizer-toggle" id="ph-customizer-toggle" title="Character Customizer" aria-label="Toggle Customizer"
+    onclick="window.PenthouseCustomizer && PenthouseCustomizer.toggle()">
+    <span style="font-size:18px">✨</span>
+    <span class="ph-director-toggle__label">STYLE</span>
+  </button>
+
   <!-- ══════════════════════════════════════════════════════════════
        C. DIRECTOR PANEL (right slide-out, 400px)
        ══════════════════════════════════════════════════════════════ -->
@@ -616,6 +623,7 @@
   <script src="{{ url_for('static', filename='js/penthouse_anim.js') }}"></script>
   <script src="{{ url_for('static', filename='js/character_bridge.js') }}"></script>
   <script src="{{ url_for('static', filename='js/penthouse_config.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/penthouse_customizer.js') }}"></script>
   <script src="{{ url_for('static', filename='penthouse.js') }}"></script>
   <script>window.SCENE_PARTICLE_CONFIG = { scene: 'penthouse' };</script>
 
