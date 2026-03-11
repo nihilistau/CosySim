@@ -458,19 +458,19 @@ class PenthouseDialogMixin:
             try:
                 from engine.lmstudio.lms_client import get_lms_client
                 client = get_lms_client()
-                loaded = client.get_models(loaded_only=True)
+                loaded = client.get_models(loaded_only=True, raw=True)
                 models["loaded"] = [
                     {"id": m["id"], "display_name": m.get("display_name", m["id"]),
                      "params": m.get("params", ""), "context_length": m.get("context_length", 0)}
                     for m in loaded
                 ]
-                all_models = client.get_models(loaded_only=False)
+                all_models = client.get_models(loaded_only=False, raw=True)
                 loaded_ids = {m["id"] for m in loaded}
                 models["available"] = [
                     {"id": m["id"], "display_name": m.get("display_name", m["id"]),
                      "params": m.get("params", "")}
                     for m in all_models if m["id"] not in loaded_ids
                 ]
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.error("Failed to fetch models: %s", exc)
             return jsonify(models)

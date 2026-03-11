@@ -913,13 +913,12 @@ class IntelHubScene(BaseScene):
         except Exception:
             pass
         try:
-            import requests
-            r = requests.get(_lmstudio_models_url(), timeout=2)
-            if r.ok:
-                models = r.json().get("data", [])
-                overview["lmstudio"] = {"available": True, "models": [m.get("id") for m in models]}
-        except Exception:
-            pass
+            from engine.lmstudio.lms_client import get_lms_client
+            client = get_lms_client()
+            lms_models = client.get_models(loaded_only=False, raw=True)
+            overview["lmstudio"] = {"available": True, "models": [m.get("id") for m in lms_models]}
+        except Exception as exc:
+            logger.warning("LMStudio model check failed: %s", exc)
         try:
             from engine.nexus.scheduler_daemon import get_scheduler_daemon
             daemon = get_scheduler_daemon()
