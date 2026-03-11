@@ -60,7 +60,7 @@ SERVICE_DEFS: Dict[str, Dict[str, Any]] = {
         "type": "fastapi",
         "factory": "engine.mcp.web_bridge.create_bridge_app",
         "label": "MCP Bridge",
-        "auto_start": False,
+        "auto_start": True,
     },
     "canvas": {
         "type": "node",
@@ -78,7 +78,7 @@ SERVICE_DEFS: Dict[str, Dict[str, Any]] = {
         "type": "flask",
         "cls": "engine.mcp.nlm_live_proxy.NLMProxyServer",
         "label": "NLM Live Proxy",
-        "auto_start": False,
+        "auto_start": True,
     },
     "system_control": {
         "type": "flask",
@@ -141,7 +141,7 @@ SCENE_DEFS: Dict[str, Dict[str, Any]] = {
         "type": "flask",
         "cls": "content.scenes.neoncity.neoncity_scene.NeonCityScene",
         "label": "NEON CITY",
-        "auto_start": False,
+        "auto_start": True,
     },
     "coders": {
         "type": "flask",
@@ -177,7 +177,7 @@ SCENE_DEFS: Dict[str, Dict[str, Any]] = {
         "type": "flask",
         "cls": "content.scenes.intel_hub.intel_hub_scene.IntelHubScene",
         "label": "THE BRIEFING ROOM",
-        "auto_start": False,
+        "auto_start": True,
     },
     "asset_studio": {
         "type": "flask",
