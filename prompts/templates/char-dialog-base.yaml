@@ -1,0 +1,20 @@
+id: char-dialog-base
+name: Basic Character Dialog
+template: |
+  [{{character_name}} — {{scene_name}}]
+
+  {{character_name}} is speaking to {{target:someone}}.
+  Personality: {{personality}}
+  Current mood: {{mood:neutral}}
+
+  Context: {{context}}
+
+  Respond as {{character_name}} in 1-3 sentences. Stay in character.
+category: character
+tags:
+  - dialog
+  - character
+  - conversation
+metadata:
+  author: cosysim
+  use_case: Basic character dialog generation

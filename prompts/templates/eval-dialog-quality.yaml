@@ -1,0 +1,29 @@
+id: eval-dialog-quality
+name: Dialog Quality Evaluation
+template: |
+  Rate the naturalness and quality of the following character dialog.
+
+  Character: {{character_name}}
+  Personality: {{personality}}
+  Scene context: {{context}}
+
+  Dialog to evaluate:
+  "{{dialog}}"
+
+  Rate on these dimensions (each 0-1):
+  - Naturalness: Does it sound like real speech?
+  - Character consistency: Does it match the stated personality?
+  - Engagement: Would this keep a player interested?
+  - Immersion: Does it maintain the scene atmosphere?
+
+  Output JSON:
+  {"naturalness": X, "consistency": X, "engagement": X, "immersion": X, "overall": X, "notes": "..."}
+category: evaluation
+tags:
+  - dialog
+  - quality
+  - evaluation
+  - ab-test
+metadata:
+  author: cosysim
+  use_case: Automated dialog quality evaluation for A/B testing

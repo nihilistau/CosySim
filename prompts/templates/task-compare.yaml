@@ -1,0 +1,28 @@
+id: task-compare
+name: Comparison Task
+template: |
+  Compare the following two {{item_type:items}} and determine which is better
+  for the purpose of {{purpose}}.
+
+  Item A:
+  "{{item_a}}"
+
+  Item B:
+  "{{item_b}}"
+
+  Comparison criteria: {{criteria:overall quality and relevance}}
+
+  Provide:
+  - Winner: [A or B]
+  - Score A: [1-10]
+  - Score B: [1-10]
+  - Key differences: [bullet list, 2-4 items]
+  - Recommendation: [one sentence]
+category: task
+tags:
+  - compare
+  - ab-test
+  - task
+metadata:
+  author: cosysim
+  use_case: A/B comparison and selection task template

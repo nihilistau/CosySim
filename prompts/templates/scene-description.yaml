@@ -1,0 +1,21 @@
+id: scene-description
+name: Scene Environment Description
+template: |
+  Describe the {{scene_name}} environment.
+
+  Location type: {{location_type}}
+  Time of day: {{time_of_day:evening}}
+  Weather/atmosphere: {{atmosphere:calm and quiet}}
+  Key features: {{features:standard furnishings}}
+
+  Write a vivid 2-3 sentence description focusing on sensory details:
+  what someone would see, hear, smell, and feel upon entering. Set
+  the mood for a {{tone:immersive}} experience.
+category: scene
+tags:
+  - description
+  - environment
+  - scene
+metadata:
+  author: cosysim
+  use_case: Scene environment description for narration

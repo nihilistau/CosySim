@@ -1,0 +1,22 @@
+id: task-summarize
+name: Summarization Task
+template: |
+  Summarize the following {{content_type:text}} in {{length:2-3 sentences}}.
+
+  Focus on: {{focus:key points and conclusions}}
+  Audience: {{audience:technical readers}}
+  Tone: {{tone:professional}}
+
+  Content to summarize:
+  {{content}}
+
+  Provide a clear, concise summary that captures the essential information.
+  Do not add opinions or information not present in the original.
+category: task
+tags:
+  - summarize
+  - task
+  - nlp
+metadata:
+  author: cosysim
+  use_case: General-purpose summarization task template

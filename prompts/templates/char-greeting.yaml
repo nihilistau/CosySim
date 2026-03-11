@@ -1,0 +1,21 @@
+id: char-greeting
+name: Character Greeting
+template: |
+  {{character_name}} is meeting {{target}} for the {{meeting_type:first time}}.
+
+  Character personality: {{personality}}
+  Setting: {{setting:a cozy room}}
+  Time: {{time_of_day:evening}}
+
+  Write a greeting that reflects {{character_name}}'s personality and
+  the social context. Include a brief physical description or action.
+  Keep it to 2-3 sentences.
+category: character
+tags:
+  - dialog
+  - greeting
+  - introduction
+  - character
+metadata:
+  author: cosysim
+  use_case: Character introduction and greeting generation

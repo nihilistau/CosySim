@@ -1,0 +1,21 @@
+id: scene-transition
+name: Scene Transition Narration
+template: |
+  Narrate a transition from {{from_scene}} to {{to_scene}}.
+
+  Transition type: {{transition_type:walk}}
+  Characters moving: {{characters}}
+  Reason for transition: {{reason:exploring}}
+  Time elapsed: {{time_elapsed:a few minutes}}
+
+  Write a smooth 2-3 sentence transition that bridges the two
+  environments. Describe the journey, sensory shift, and arrival.
+  Maintain narrative continuity with the current mood: {{mood:neutral}}.
+category: scene
+tags:
+  - transition
+  - narration
+  - scene
+metadata:
+  author: cosysim
+  use_case: Narration for scene-to-scene transitions

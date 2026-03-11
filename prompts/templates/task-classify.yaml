@@ -1,0 +1,23 @@
+id: task-classify
+name: Classification Task
+template: |
+  Classify the following {{content_type:text}} into one of these categories:
+  {{categories}}
+
+  Classification criteria: {{criteria:best semantic fit}}
+
+  Content to classify:
+  "{{content}}"
+
+  Respond with ONLY:
+  - Category: [chosen category]
+  - Confidence: [high/medium/low]
+  - Reasoning: [one sentence explaining why]
+category: task
+tags:
+  - classify
+  - task
+  - nlp
+metadata:
+  author: cosysim
+  use_case: General-purpose classification task template
