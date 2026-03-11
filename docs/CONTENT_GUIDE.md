@@ -14,8 +14,8 @@ per player. All content is stored in and generated from Nexus + NLM.
 ```python
 from engine.content.content_engine import get_content_engine
 engine = get_content_engine()
-item = engine.get("bedroom", "scenario")   # random scenario from pool
-engine.add("bedroom", "scenario", "Victoria traces a finger along the bar...")
+item = engine.get("penthouse", "scenario")   # random scenario from pool
+engine.add("penthouse", "scenario", "Victoria traces a finger along the bar...")
 ```
 
 ## ContentGate (`engine/content/content_gate.py`)
@@ -46,5 +46,5 @@ Or per scene:
 ```python
 from engine.nexus.teacher_pipeline import TeacherPipeline
 tp = TeacherPipeline()
-tp.generate_content("bedroom", content_type="scenarios", count=20)
+tp.generate_content("penthouse", content_type="scenarios", count=20)
 ```

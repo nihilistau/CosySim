@@ -236,7 +236,7 @@ AgentGovernor
 | 8 | `CharacterRegistryInterceptor` | Syncs character mood/energy into system prompt |
 | 10 | `RouterMessageInjector` | Drains agent inbox, injects pending messages |
 | 12 | `DialogDirectiveInterceptor` | Applies scene dialog directives |
-| 15 | `BedroomSceneInterceptor` | Bedroom-specific system prompt additions |
+| 15 | `PenthouseSceneInterceptor` | Penthouse-specific system prompt additions |
 | 15 | `PhoneSceneInterceptor` | Phone scene prompt additions + ConversationHeat |
 | 15 | `LoungeSceneInterceptor` | Lounge scene prompt additions |
 | 15 | `GallerySceneInterceptor` | Gallery-specific prompt additions |
@@ -292,7 +292,7 @@ LLM call entirely.
 ```
 MCPFramework (singleton)
 ├── scenes/
-│   ├── bedroom/     (MCPSceneNode)
+│   ├── penthouse/     (MCPSceneNode)
 │   │   ├── characters/
 │   │   │   ├── lola/  (MCPCharacterNode — stats, inventory, relationships)
 │   │   │   └── aria/
@@ -367,7 +367,7 @@ def my_skill(target: str, amount: int = 1) -> str:
 
 Every scene directory can contain a `*_skills.py` file with scene-specific skills:
 
-arena, asset_studio, bedroom, casino, coders, command_center, gallery, games,
+arena, asset_studio, penthouse, casino, coders, command_center, gallery, games,
 grid, heist, hub, intel_hub, lab_break, lounge, neoncity, nexus_panel, phone,
 realm, tavern
 
@@ -447,7 +447,7 @@ from `config.get("lmstudio.api_token")`, never hardcoded.
 
 | Port | Scene | Class | Description |
 |------|-------|-------|-------------|
-| 5556 | bedroom | BedroomScene | Multi-agent roleplay engine with combat/dialog/inventory |
+| 5556 | penthouse | PenthouseScene | Multi-agent roleplay engine with combat/dialog/inventory |
 | 5558 | tavern | TavernScene | Gritty dockside tavern with quest board |
 | 5559 | casino | CasinoScene | High-stakes poker and gambling at Club Noir |
 | 5560 | gallery | GalleryScene | Dark art gallery with private viewings |
@@ -723,7 +723,7 @@ Located in `training/datasets/`:
 ```python
 from engine.config import get_config
 cfg = get_config()
-port = cfg.get("scenes.bedroom.port", 5556)
+port = cfg.get("scenes.penthouse.port", 5556)
 model = cfg.get("lmstudio.models.primary", "default-model")
 ```
 
@@ -843,7 +843,7 @@ in scene or service code.
 | Port | Scene | Type |
 |------|-------|------|
 | 5555 | phone | utility |
-| 5556 | bedroom | game |
+| 5556 | penthouse | game |
 | 5557 | lounge | social |
 | 5558 | tavern | adventure |
 | 5559 | casino | game |

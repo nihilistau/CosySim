@@ -186,7 +186,7 @@ timer.is_expired     # bool
 from engine.skills.registry import skill
 
 @skill(
-    pack="bedroom",                    # grouping (scene/module name)
+    pack="penthouse",                    # grouping (scene/module name)
     description="LLM-facing desc",    # what the LLM sees
     category="GAME",                   # see categories below
     cooldown=5.0,                      # min seconds between calls
@@ -238,10 +238,10 @@ from engine.skills.registry import SKILL_REGISTRY
 SKILL_REGISTRY.register(skill_entry)
 
 # Discovery
-skills = SKILL_REGISTRY.get_pack("bedroom")        # all bedroom skills
+skills = SKILL_REGISTRY.get_pack("penthouse")        # all penthouse skills
 skills = SKILL_REGISTRY.get_by_category("GAME")     # all game skills
 skills = SKILL_REGISTRY.get_by_tag("combat")         # tagged skills
-skill = SKILL_REGISTRY.get("bedroom.set_mood")       # exact lookup
+skill = SKILL_REGISTRY.get("penthouse.set_mood")       # exact lookup
 all_skills = SKILL_REGISTRY.list_all()               # everything
 count = SKILL_REGISTRY.count()                        # total count
 ```
@@ -254,7 +254,7 @@ count = SKILL_REGISTRY.count()                        # total count
 
 | Pack | File | Skills | Scene |
 |------|------|--------|-------|
-| `bedroom` | `bedroom_skills.py` | 8 | Bedroom (5556) |
+| `penthouse` | `penthouse_skills.py` | 8 | Penthouse (5556) |
 | `phone` | `phone_skills.py` | 6 | Phone (5555) |
 | `lounge` | `lounge_skills.py` | 7 | Lounge (5557) |
 | `tavern` | `tavern_skills.py` | 8 | Tavern (5558) |
@@ -333,7 +333,7 @@ class InterceptorBase:
 The pipeline runs all applicable interceptors in priority order:
 
 ```python
-pipeline = InterceptorPipeline(scene_id="bedroom")
+pipeline = InterceptorPipeline(scene_id="penthouse")
 # pre_call: priority 10, 12, 15, ..., 70 (ascending)
 request = pipeline.run_pre_call(request, context)
 # LLM inference happens here
@@ -348,7 +348,7 @@ response = pipeline.run_post_call(response, context)
 | 1 | `activity_logger.py` | ActivityLogger | 10 | all | Log tool calls to DataCollector |
 | 2 | `ambient_event.py` | AmbientEvent | 30 | game | Inject world events into context |
 | 3 | `auto_result.py` | AutoResult | 20 | all | Inject AUTO skill results |
-| 4 | `bedroom_scene.py` | BedroomScene | 40 | bedroom | Bedroom-specific logic |
+| 4 | `penthouse_scene.py` | PenthouseScene | 40 | penthouse | Penthouse-specific logic |
 | 5 | `cache.py` | Cache | 5 | all | Response cache v1 |
 | 6 | `_cache.py` | CacheV2 | 5 | all | Response cache v2 |
 | 7 | `character_registry.py` | CharacterRegistry | 15 | all | Inject character state |
@@ -416,7 +416,7 @@ The governance wrapper in `engine/mcp/comms_framework.py` (lines 506–726).
 ### Reply Pipeline
 
 ```python
-governor = get_governor(agent, scene="bedroom")
+governor = get_governor(agent, scene="penthouse")
 
 response = governor.reply(
     user_message="Hello, how are you?",
@@ -772,7 +772,7 @@ from engine.mcp.character_registry import get_character_registry
 
 registry = get_character_registry()
 character = registry.get("lola")          # by ID
-characters = registry.get_by_scene("bedroom")
+characters = registry.get_by_scene("penthouse")
 all_chars = registry.list_all()
 ```
 
@@ -864,7 +864,7 @@ comms:
     - AmbientEvent
     - GameInterceptor
     - UniversalScene
-    - BedroomScene
+    - PenthouseScene
     - LoungeScene
     - GalleryScene
     - PhoneScene

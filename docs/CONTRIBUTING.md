@@ -15,7 +15,7 @@ python -m pytest tests/ -v --tb=short
 
 # Launch for manual testing
 python launcher.py --mode phone      # :5555
-python launcher.py --mode bedroom    # :5556
+python launcher.py --mode penthouse    # :5556
 python launcher.py --mode hub        # :8500
 python launcher.py --mode admin      # :8502
 
@@ -31,7 +31,7 @@ python launcher.py --status
 engine/          Reusable framework (DO NOT put scene-specific logic here)
   mcp/tools/     MCP tool modules (8 domain files, 67 functions)
 content/         Example scenes + simulation services
-  scenes/        Phone, bedroom, hub, casino, realm, neoncity, coders, heist, arena, gallery, lounge
+  scenes/        Phone, penthouse, hub, casino, realm, neoncity, coders, heist, arena, gallery, lounge
   simulation/    Database, RAG, character system, services
   shared/        Shared CSS/themes used by all scenes
 config/          YAML settings (ports, URLs, thresholds)

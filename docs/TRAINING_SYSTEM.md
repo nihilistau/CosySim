@@ -283,7 +283,7 @@ dc.collect_conversation(
 ```
 
 Volume: **every interaction** across all 15 active scenes. High-traffic scenes
-(bedroom, phone, lounge) generate hundreds of samples per session.
+(penthouse, phone, lounge) generate hundreds of samples per session.
 
 ---
 

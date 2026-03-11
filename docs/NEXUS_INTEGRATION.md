@@ -165,7 +165,7 @@ client.update_session(session_id, summary="Added NLM fallback tier")
 ### Rules Engine
 
 ```python
-rules = client.get_rules(scope="scene:bedroom", rule_type="governance")
+rules = client.get_rules(scope="scene:penthouse", rule_type="governance")
 client.add_rule(
     scope="global", rule_type="enforcement",
     name="nexus-first", condition="before_task",

@@ -85,7 +85,7 @@ result = debug_click_test(port=5556, x=400, y=300)
 | Pack | Module | Skills | Count |
 |------|--------|--------|-------|
 | `realm` | realm_skills.py | inventory CRUD, stat checks, director control, murder mystery, fourth-wall, desperation dice | 16 |
-| `bedroom` | bedroom_skills.py | wardrobe, interactions, stats, consent, atmosphere, narrative, timed actions, furniture | 10 |
+| `penthouse` | penthouse_skills.py | wardrobe, interactions, stats, consent, atmosphere, narrative, timed actions, furniture | 10 |
 | `neoncity` | neoncity_skills.py | player status, movement, combat, hacking, storm queries, events, end turn | 9 |
 | `phone` | phone_skills.py | message send/read, contacts, media, call controls | 6 |
 | `casino` | casino_skills.py | game state, betting, cards, table management, jackpots, check, raise, bluff | 9 |

@@ -476,7 +476,7 @@ CosySim has 18 active scenes, each a self-contained experiment:
 | Port | Scene | Description |
 |------|-------|-------------|
 | 5555 | Phone / GhostSignal | Cyberpunk hacker OS, Aria companion, 12 apps |
-| 5556 | Bedroom / Penthouse | Intimate AI companion, portrait system |
+| 5556 | Penthouse | Intimate AI companion, portrait system |
 | 5557 | Lounge | Social scene, faction dynamics |
 | 5558 | Tavern | Medieval RPG, quest system |
 | 5559 | Casino | Economic simulation, gambling mechanics |
@@ -1612,7 +1612,7 @@ except GovernanceError as e:
 python -m pytest tests/ -v --tb=short --ignore=tests/test_agent_loop.py --ignore=tests/live_wire_test.py
 
 # Single file
-python -m pytest tests/test_bedroom_game.py -v
+python -m pytest tests/test_penthouse_game.py -v
 
 # By pattern
 python -m pytest tests/ -k "test_inference" -v
@@ -1821,7 +1821,7 @@ except GovernanceError as e:
 python -m pytest tests/ -v --tb=short --ignore=tests/test_agent_loop.py --ignore=tests/live_wire_test.py
 
 # Single file
-python -m pytest tests/test_bedroom_game.py -v
+python -m pytest tests/test_penthouse_game.py -v
 
 # By pattern
 python -m pytest tests/ -k "test_inference" -v
@@ -2689,7 +2689,7 @@ udio calls MCP tool: search_memory(...)
 | 8 | `CharacterRegistryInterceptor` | PRE | Syncs character mood/energy into system prompt |
 | 10 | `RouterMessageInjector` | PRE | Drains agent inbox, injects pending messages into context |
 | 12 | `DialogDirectiveInterceptor` | PRE | Applies scene dialog directives |
-| 15 | `BedroomSceneInterceptor` | PRE | Bedroom-specific system prompt additions |
+| 15 | `PenthouseSceneInterceptor` | PRE | Penthouse-specific system prompt additions |
 | 15 | `PhoneSceneInterceptor` | PRE | Phone scene prompt additions + ConversationHeat |
 | 15 | `LoungeSceneInterceptor` | PRE | Lounge scene prompt additions |
 | 20 | `AutoResultInjector` | PRE | Injects auto-triggered skill results |
@@ -2737,7 +2737,7 @@ gov.pipeline.remove("weather_injector") # remove by name
 | Port | Scene | Description |
 |------|-------|-------------|
 | 5555 | phone | CosyPhone OS |
-| 5556 | bedroom | Multi-agent spatial |
+| 5556 | penthouse | Multi-agent spatial |
 | 5557 | lounge | The Velvet Lounge |
 | 5559 | casino | Midnight Casino |
 | 5560 | gallery | Art evaluation |
@@ -2857,7 +2857,7 @@ pip install -e .
 
 # Launch scenes
 python launcher.py --mode phone      # Port 5555
-python launcher.py --mode bedroom    # Port 5556
+python launcher.py --mode penthouse    # Port 5556
 python launcher.py --mode hub        # Port 8500 (Streamlit)
 python launcher.py --mode admin      # Port 8502 (Streamlit)
 
@@ -2907,7 +2907,7 @@ udio calls MCP tool: search_memory(...)
 | 8 | `CharacterRegistryInterceptor` | PRE | Syncs character mood/energy into system prompt |
 | 10 | `RouterMessageInjector` | PRE | Drains agent inbox, injects pending messages into context |
 | 12 | `DialogDirectiveInterceptor` | PRE | Applies scene dialog directives |
-| 15 | `BedroomSceneInterceptor` | PRE | Bedroom-specific system prompt additions |
+| 15 | `PenthouseSceneInterceptor` | PRE | Penthouse-specific system prompt additions |
 | 15 | `PhoneSceneInterceptor` | PRE | Phone scene prompt additions + ConversationHeat |
 | 15 | `LoungeSceneInterceptor` | PRE | Lounge scene prompt additions |
 | 20 | `AutoResultInjector` | PRE | Injects auto-triggered skill results |
@@ -2955,7 +2955,7 @@ gov.pipeline.remove("weather_injector") # remove by name
 | Port | Scene | Description |
 |------|-------|-------------|
 | 5555 | phone | CosyPhone OS |
-| 5556 | bedroom | Multi-agent spatial |
+| 5556 | penthouse | Multi-agent spatial |
 | 5557 | lounge | The Velvet Lounge |
 | 5559 | casino | Midnight Casino |
 | 5560 | gallery | Art evaluation |
@@ -3075,7 +3075,7 @@ pip install -e .
 
 # Launch scenes
 python launcher.py --mode phone      # Port 5555
-python launcher.py --mode bedroom    # Port 5556
+python launcher.py --mode penthouse    # Port 5556
 python launcher.py --mode hub        # Port 8500 (Streamlit)
 python launcher.py --mode admin      # Port 8502 (Streamlit)
 

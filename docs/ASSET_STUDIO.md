@@ -153,11 +153,11 @@ Generate a character headshot. Wraps `generate_image` with portrait-appropriate 
 
 ### `generate_scene_image(scene, image_type, prompt, width, height, steps, cfg, filename)`
 Generate an image and inject it into the target scene's `static/img/` folder.
-Returns the Flask static URL (e.g. `/scenes/bedroom/static/img/bg_001.png`).
+Returns the Flask static URL (e.g. `/scenes/penthouse/static/img/bg_001.png`).
 
 Scene-aware auto-prompts are built if no prompt is supplied:
 ```
-bedroom  → luxury penthouse at night, purple neon
+penthouse  → luxury penthouse at night, purple neon
 casino   → high-end casino floor, golden chandeliers, noir
 tavern   → rustic fantasy tavern, warm firelight
 arena    → gladiatorial arena, stone walls, torches

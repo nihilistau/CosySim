@@ -61,7 +61,7 @@ engine/agents/interceptors/
 ├── character_registry.py            ← CharacterRegistryInterceptor (pri 8)
 ├── router_injector.py               ← RouterMessageInjector (pri 10)
 ├── dialog_directive.py              ← DialogDirectiveInterceptor (pri 12)
-├── scene_bedroom.py                 ← BedroomSceneInterceptor (pri 15)
+├── scene_penthouse.py                 ← PenthouseSceneInterceptor (pri 15)
 ├── scene_phone.py                   ← PhoneSceneInterceptor (pri 15)
 ├── scene_lounge.py                  ← LoungeSceneInterceptor (pri 15)
 ├── scene_gallery.py                 ← GallerySceneInterceptor (pri 15)
@@ -316,7 +316,7 @@ class NaturalMoodDriftInterceptor(InterceptorBase):
 from engine.agents.interceptors import (
     nexus_prompt, mood_drift, recap, character_registry,
     router_injector, dialog_directive,
-    scene_bedroom, scene_phone, scene_lounge, scene_gallery, scene_universal,
+    scene_penthouse, scene_phone, scene_lounge, scene_gallery, scene_universal,
     ambient_events, auto_results, skill_awareness, game,
     personality_guard, conversation_variety, policy_enforcer, memory_enhancer,
     response_shaper, tts_style, activity_logger, mood_sync, relationship_event,
@@ -463,7 +463,7 @@ for entry in results:
 `NexusClient.get_rules()` → `List[NexusRule]`.
 
 ```python
-rules = await nx.get_rules(scope="bedroom")
+rules = await nx.get_rules(scope="penthouse")
 for rule in rules:
     print(rule.scope, rule.priority, rule.content)
 ```

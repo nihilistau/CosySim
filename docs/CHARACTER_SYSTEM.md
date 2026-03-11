@@ -148,7 +148,7 @@ entry = mem.remember(
     "The player asked Luna to wear the red dress",
     player_id="player",
     emotional_weight=0.8,
-    scene="bedroom",
+    scene="penthouse",
     tags=["wardrobe", "request"],
 )
 
@@ -311,7 +311,7 @@ governor.pipeline.add(ReputationInterceptor())
 ## Emotion Model (0–100 Stats)
 
 Each scene exposes a different subset of emotion stats, all tracked in
-`SceneStateManager`. The bedroom scene has the most complete model:
+`SceneStateManager`. The penthouse scene has the most complete model:
 
 | Stat | Range | Description |
 |------|-------|-------------|
