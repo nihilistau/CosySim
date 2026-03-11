@@ -1266,7 +1266,7 @@
   function open() {
     createPanel();
     _isOpen = true;
-    _panel.style.display = '';
+    _panel.style.display = 'block';
     populateCharPicker();
     syncSlidersFromCharacter();
     loadPoseLibrary();

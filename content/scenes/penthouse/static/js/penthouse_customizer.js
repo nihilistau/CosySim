@@ -128,7 +128,7 @@
   function open(charId) {
     createPanel();
     _isOpen = true;
-    _panel.style.display = '';
+    _panel.style.display = 'block';
     _selectedCharId = charId || null;
 
     // Load config if available

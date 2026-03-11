@@ -115,7 +115,6 @@ window.CharacterBridge = (function () {
       }
 
       // Calculate target position from location
-      const locId = info.location_id || 'bed';
       const locPos = _locationPositions[locId] || locs[locId]?.pos || { x: 0, y: 0, z: 0 };
 
       // Offset for multiple occupants at same location
