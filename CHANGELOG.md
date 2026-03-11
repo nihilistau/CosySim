@@ -3,6 +3,95 @@
 All notable changes to CosySim are documented here.
 
 ---
+## [1.06b] — "AAA+++ ANIMATION" — 2026-03
+
+Complete penthouse animation overhaul — 55-state machine, 111 pose library,
+5-tab animation studio, model browser, director avatar controls, YAML-driven
+content framework, and reusable engine/animation module.
+
+### Animation State Machine
+- **55 Animation States** across 10 categories: idle, movement, standing,
+  seated (4 variants), lying (4 variants), ground (6 variants), furniture
+  interactions, actions/gestures, intimate/paired (13 states), and special
+- **Procedural Animation**: Full bone-level animation code for every state —
+  breathing, limb IK, weight shifting, blinking, look-at, expression blending
+- **State Blending**: Smooth crossfade transitions with per-pair blend durations
+  (40+ custom blend overrides)
+- **Y-Position System**: Furniture-aware vertical offsets — characters sit on
+  couches (y=-0.32), lie on beds (y=-0.10), kneel on floors (y=-0.44)
+
+### Pose Library
+- **111 Built-in Poses** across 12 categories: standing, seated, lying, ground,
+  action, social, intimate, paired, furniture, expressive, dynamic, custom
+- **Pose CRUD**: Save, load, update, delete with built-in protection
+- **Category Filtering**: Browse by category, location, or search across all fields
+
+### Animation Studio UI
+- **5-Tab Interface**: Poses, Expressions, Sequences, Library, Models
+- **Pose Editor**: Per-joint rotation sliders, real-time 3D preview, save/load
+- **Expression Blending**: Smooth morph between 15 expression states
+- **Sequence Builder**: Chain animations with timing and transitions
+- **Model Browser**: Search/filter 21 cataloged models by type/gender/tags
+
+### Director Avatar System
+- **Full AnimManager Registration**: Director avatar gets same animation
+  capabilities as agent characters (was previously idle-only)
+- **Interactive Controls**: Move to location, change animation state, set
+  outfit, set expression — all from director panel UI
+- **Paired Interactions**: Director can participate in paired animations with
+  agent characters
+
+### MCP Animation Skills (6 new)
+- `set_animation(character_id, state)` — Set character animation state
+- `set_expression(character_id, expression)` — Set facial expression
+- `paired_animation(char1, char2, animation)` — Paired animation between two characters
+- `change_outfit(character_id, outfit)` — Change character clothing
+- `interaction_chain(character_id, chain_name)` — Run multi-step interaction sequence
+- `list_animations()` — List all available states, expressions, outfits
+
+### YAML Content System
+- **animations.yaml**: 10 state categories, 40+ blend overrides, 13 paired
+  animation configs, clothing transition definitions, event triggers
+- **interactions.yaml**: 8 locations × actions → animation state mappings,
+  4 multi-step interaction chains, universal action fallbacks
+- **models/catalog.yaml**: 21 GLB model entries with skeleton info, bone
+  mapping, import settings, source directory scanning
+
+### Reusable Animation Framework (`engine/animation/`)
+- **AnimationConfig**: YAML config loader with dot-notation access, state
+  category lookups, blend duration resolution, interaction chain sequencing
+- **PoseLibrary**: JSON-backed pose CRUD with category management, validation,
+  bulk import/export, built-in pose protection
+- **ModelCatalog**: YAML-backed model registry with directory scanning, bone
+  name mapping, import pipeline settings, search/filter
+
+### Code Quality Polish
+- Replaced all silent `except Exception: pass` with proper logging (5 sites)
+- Replaced all 20 silent `.catch(() => {})` with descriptive error logging
+- Extracted magic numbers to `BRIDGE_CONFIG` constants in character_bridge.js
+- Added `_validate_character()` helper to consolidate repeated validation
+- Fixed YAML issues: duplicate file extension, invalid chain reference,
+  missing animation states in state_categories
+
+### Bug Fixes (6 commits)
+- Fixed fatal `const locId` duplicate declaration crash in character_bridge.js
+- Fixed 2nd agent character not interacting (stub handlers, missing socket emit)
+- Fixed characters sinking into/floating above furniture (Y-position math)
+- Fixed director avatar not animating (AnimManager registration)
+- Fixed Animation Studio/Customizer panel toggles (`display = 'block'`)
+- Fixed director panel overlay covering menu toggles
+
+### Tests
+- 14 new animation skill tests in test_penthouse_revamp.py
+- 114 new framework tests in test_animation_framework.py
+- All 277+ core tests passing
+
+### Documentation
+- `docs/guides/animation_creation.md` — Comprehensive animation authoring guide
+- Updated SCENES.md with animation system details
+- Updated ROADMAP.md with shipped features
+
+---
 ## [1.05b] — "AUTONOMY SPRINT" — 2026-03
 
 Local agent task queue, system recovery skills, prompt template registry,

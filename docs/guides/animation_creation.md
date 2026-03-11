@@ -305,6 +305,58 @@ expressions:
     pupil_dilate: 0.0
 ```
 
+## Y-Position System (CRITICAL)
+
+Character models have their origin at **feet level** (`group.position.y = 0` means
+feet on floor). For furniture interactions, characters must be lowered so their body
+reference point aligns with the furniture surface.
+
+### Formula
+
+```
+group.y = furniture_surface_height - body_reference_point
+```
+
+### Body Reference Points (Female Character)
+
+| Reference | Height | Used For |
+|-----------|--------|----------|
+| headY | 1.50 | — |
+| torsoY | 0.80 | Lying poses |
+| hipY | 0.82 | Seated, bathing poses |
+| thighH | 0.37 | — |
+| shinH | 0.39 | Kneeling poses |
+| kneeH | 0.39 | Floor poses |
+
+### Furniture Surface Heights
+
+| Surface | Height | Source |
+|---------|--------|--------|
+| Bed mattress top | 0.70 | platform(0.06) + frame(0.24) + mattress(0.28) |
+| Couch seat top | 0.50 | seat(y=0.25, h=0.50) |
+| Bathtub water | 0.35 | tub interior |
+| Floor | 0.00 | ground level |
+
+### Pre-Calculated Y Offsets
+
+| State | Calculation | Y Value |
+|-------|------------|---------|
+| sit | couch(0.50) - hipY(0.82) | **-0.32** |
+| lie | bed(0.70) - torsoY(0.80) | **-0.10** |
+| lie_side | bed(0.70) - torsoY(0.80) | **-0.10** |
+| lie_front | bed(0.70) - torsoY(0.80) | **-0.10** |
+| lounge | couch(0.50) - torsoY(0.80) | **-0.30** |
+| kneel | floor(0.00) - kneeH(0.39) | **-0.44** |
+| all_fours | floor(0.00) - kneeH(0.39) | **-0.44** |
+| bathe | tub(0.35) - hipY(0.82) | **-0.47** |
+| missionary | bed(0.70) - torsoY(0.80) | **-0.10** |
+| doggy | bed(0.70) - kneeH(0.39) | **-0.32** |
+| spooning | bed(0.70) - torsoY(0.80) | **-0.10** |
+
+> ⚠️ **ALL values must be NEGATIVE.** Positive values make characters float above
+> furniture. The math is subtracting a larger body reference from a smaller surface
+> height, which always yields a negative number.
+
 ## API Reference
 
 ### MCP Skills (Agent-Callable)

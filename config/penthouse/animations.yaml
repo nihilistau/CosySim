@@ -211,7 +211,7 @@ state_categories:
     description: "Lying/reclining positions"
   ground:
     priority: 3
-    states: [kneel, kneel_sit, all_fours, sprawl]
+    states: [kneel, kneel_sit, all_fours, crawl, sprawl, crouching]
     description: "Ground-level positions"
   furniture:
     priority: 3
@@ -219,7 +219,7 @@ state_categories:
     description: "Furniture interaction states"
   action:
     priority: 4
-    states: [dance_slow, dance_sway, stretch, undress, massage, beckon, hair_flip, blow_kiss, shrug, phone, smoke, flirt]
+    states: [dance_slow, dance_sway, stretch, undress, dressing, massage, beckon, hair_flip, blow_kiss, shrug, phone, smoke, flirt, celebrating, eating, dancing, drinking]
     description: "Gestural and action animations"
   intimate:
     priority: 5

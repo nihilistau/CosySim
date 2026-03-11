@@ -1,6 +1,6 @@
 # CosySim Scenes Guide
 
-> v1.04b — 20 Flask scenes, ~613 HTTP routes, ~51 Socket.IO event types, AAA overlay UI, survival mechanics, 8-tab director panels
+> v1.06b — 20 Flask scenes, ~613 HTTP routes, ~51 Socket.IO event types, AAA overlay UI, 55-state animation system, survival mechanics, 8-tab director panels
 
 Complete reference for every scene in the CosySim simulation framework.
 
@@ -146,6 +146,88 @@ class PenthouseScene {
     openDirector(tab) { /* switches to tab, updates _directorState */ }
     closeDirector() { /* hides panel, clears cache */ }
 }
+```
+
+### Animation System (v1.06b)
+
+The Penthouse scene includes a complete AAA+++ 3D animation system built on
+Three.js procedural bone animation.
+
+#### Script Load Order (11 scripts, ORDER MATTERS)
+
+```
+Three.js r128 → OrbitControls → penthouse_3d.js → character_models.js →
+penthouse_anim.js → character_bridge.js → penthouse_config.js →
+penthouse_customizer.js → penthouse_model_import.js →
+penthouse_anim_studio.js → penthouse.js
+```
+
+#### Animation State Machine — 55 States
+
+| Category | States | Priority |
+|----------|--------|----------|
+| Idle | idle | 0 |
+| Movement | walk, run, crawl | 1 |
+| Standing | lean, arms_crossed, hands_behind | 2 |
+| Seated | sit, sit_cross, sit_lean, sit_floor | 2 |
+| Lying | lie, lie_side, lie_front, lounge | 2 |
+| Ground | kneel, kneel_sit, all_fours, sprawl, crouching | 3 |
+| Furniture | interact, drink, gaze, warm, primp, bathe | 3 |
+| Action | dance_slow, dance_sway, stretch, undress, dressing, massage, beckon, hair_flip, blow_kiss, shrug, phone, smoke, flirt, celebrating, eating, dancing, drinking | 4 |
+| Intimate | embrace, kiss_standing, lap_sit, straddle, ride, going_down, missionary, doggy, spooning, dominant_pose, submissive, seductive_pose, intimate_touch | 5 |
+| Special | pose | 6 |
+
+#### Y-Position Math (CRITICAL)
+
+Character model origin is at feet level. For furniture interactions:
+
+```
+group.y = furniture_surface_height - body_reference_point
+```
+
+| Surface | Height | Reference | group.y |
+|---------|--------|-----------|---------|
+| Couch seat | 0.50 | hipY (0.82) | **-0.32** |
+| Bed mattress | 0.70 | torsoY (0.80) | **-0.10** |
+| Floor | 0.00 | kneeH (0.39) | **-0.44** |
+| Bathtub | 0.35 | hipY (0.82) | **-0.47** |
+
+All Y-position values must be **negative** (lowering from standing to surface).
+
+#### MCP Animation Skills
+
+6 skills in `penthouse_skills.py`:
+- `set_animation(character_id, state)` — Set animation state
+- `set_expression(character_id, expression)` — Set facial expression
+- `paired_animation(char1, char2, animation)` — Paired interaction
+- `change_outfit(character_id, outfit)` — Change clothing
+- `interaction_chain(character_id, chain)` — Multi-step sequence
+- `list_animations()` — List all available animations
+
+#### Animation Studio UI (5 tabs)
+
+| Tab | Purpose |
+|-----|---------|
+| Poses | Per-joint rotation editing with real-time 3D preview |
+| Expressions | Morph value sliders for 15 expression states |
+| Sequences | Chain animations with timing and transitions |
+| Library | Browse/save/load pose presets (111 built-in) |
+| Models | Search/filter 21 cataloged GLB models |
+
+#### YAML Configuration
+
+- `config/penthouse/animations.yaml` — State categories, blend overrides, paired configs
+- `config/penthouse/interactions.yaml` — Location→action→state mappings, chains
+- `config/penthouse/models/catalog.yaml` — Model registry with bone mapping
+
+#### Reusable Framework (`engine/animation/`)
+
+```python
+from engine.animation import AnimationConfig, PoseLibrary, ModelCatalog
+
+config = AnimationConfig("config/penthouse")
+poses = PoseLibrary("data/penthouse/animations/poses.json")
+catalog = ModelCatalog("config/penthouse/models/catalog.yaml")
 ```
 
 ---
