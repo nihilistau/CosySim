@@ -34,10 +34,10 @@ def main():
         nonlocal passed, failed
         if ok:
             passed += 1
-            print(f"  ✓ {name}", flush=True)
+            print(f"  [OK] {name}", flush=True)
         else:
             failed += 1
-            print(f"  ✗ {name}: {detail}", flush=True)
+            print(f"  [FAIL] {name}: {detail}", flush=True)
 
     # ── Health ──
     print("\n[1] Health check", flush=True)
