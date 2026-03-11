@@ -249,6 +249,15 @@ class HubScene(BaseScene):
         except Exception as exc:
             logger.debug("News feed API not available: %s", exc)
 
+        # Optional: metrics dashboard blueprint
+        try:
+            from engine.nexus.metrics_dashboard import create_dashboard_blueprint
+            metrics_bp = create_dashboard_blueprint()
+            if metrics_bp is not None:
+                self.app.register_blueprint(metrics_bp, url_prefix="/metrics")
+        except Exception as exc:
+            logger.debug("Metrics dashboard not available: %s", exc)
+
         self._setup_routes()
         logger.info("HubScene (THE TERMINAL) created on port %d", port)
 

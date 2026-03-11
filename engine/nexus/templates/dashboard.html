@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CosySim System Dashboard</title>
+  <style>
+    :root {
+      --bg-primary: #0a0e1a;
+      --bg-secondary: #111827;
+      --bg-card: rgba(17, 24, 39, 0.7);
+      --border-color: rgba(0, 229, 255, 0.15);
+      --text-primary: #e2e8f0;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      --accent-cyan: #00e5ff;
+      --accent-green: #22c55e;
+      --accent-red: #ef4444;
+      --accent-amber: #f59e0b;
+      --accent-purple: #a855f7;
+      --accent-pink: #ec4899;
+      --glow-cyan: 0 0 20px rgba(0, 229, 255, 0.3);
+      --glow-green: 0 0 12px rgba(34, 197, 94, 0.4);
+      --glow-red: 0 0 12px rgba(239, 68, 68, 0.4);
+      --radius: 12px;
+      --glass-blur: blur(16px);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+      line-height: 1.5;
+    }
+
+    /* ── Header ────────────────────────────────────────── */
+    .dash-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 24px;
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--border-color);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      backdrop-filter: var(--glass-blur);
+    }
+    .dash-header h1 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: var(--accent-cyan);
+      text-shadow: var(--glow-cyan);
+      letter-spacing: 0.5px;
+    }
+    .dash-header h1 span {
+      color: var(--text-muted);
+      font-weight: 400;
+      font-size: 0.85rem;
+      margin-left: 8px;
+    }
+    .header-controls {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .status-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+    .status-dot.live { background: var(--accent-green); box-shadow: var(--glow-green); }
+    .status-dot.paused { background: var(--accent-amber); }
+    #refresh-label { font-size: 0.8rem; color: var(--text-secondary); }
+    #toggle-refresh {
+      background: rgba(0, 229, 255, 0.1);
+      border: 1px solid var(--border-color);
+      color: var(--accent-cyan);
+      padding: 4px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.8rem;
+      transition: background 0.2s;
+    }
+    #toggle-refresh:hover { background: rgba(0, 229, 255, 0.2); }
+    #last-update { font-size: 0.75rem; color: var(--text-muted); }
+
+    /* ── Layout ────────────────────────────────────────── */
+    .dash-container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+
+    /* ── Metric Cards Row ──────────────────────────────── */
+    .cards-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .metric-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius);
+      padding: 20px;
+      backdrop-filter: var(--glass-blur);
+      transition: border-color 0.3s;
+    }
+    .metric-card:hover { border-color: rgba(0, 229, 255, 0.35); }
+    .metric-card .label {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+    .metric-card .value {
+      font-size: 2rem;
+      font-weight: 700;
+      color: var(--accent-cyan);
+      text-shadow: var(--glow-cyan);
+    }
+    .metric-card .sub {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      margin-top: 4px;
+    }
+
+    /* ── Panels Grid ───────────────────────────────────── */
+    .panels-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+    @media (max-width: 900px) {
+      .panels-grid { grid-template-columns: 1fr; }
+    }
+    .panel {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius);
+      backdrop-filter: var(--glass-blur);
+      overflow: hidden;
+    }
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--border-color);
+      background: rgba(0, 229, 255, 0.03);
+    }
+    .panel-header h2 {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--accent-cyan);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .panel-header .badge {
+      font-size: 0.7rem;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-weight: 600;
+    }
+    .badge-green { background: rgba(34,197,94,0.15); color: var(--accent-green); }
+    .badge-red { background: rgba(239,68,68,0.15); color: var(--accent-red); }
+    .badge-amber { background: rgba(245,158,11,0.15); color: var(--accent-amber); }
+    .panel-body { padding: 16px 18px; }
+
+    /* ── Service Grid ──────────────────────────────────── */
+    .service-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 10px;
+    }
+    .service-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 8px;
+      background: rgba(0, 0, 0, 0.2);
+      font-size: 0.82rem;
+    }
+    .svc-dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .svc-dot.ok { background: var(--accent-green); box-shadow: var(--glow-green); }
+    .svc-dot.err { background: var(--accent-red); box-shadow: var(--glow-red); }
+    .svc-name { color: var(--text-primary); }
+    .svc-latency { color: var(--text-muted); font-size: 0.72rem; margin-left: auto; }
+
+    /* ── Bar Chart ─────────────────────────────────────── */
+    .bar-chart { display: flex; flex-direction: column; gap: 6px; }
+    .bar-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .bar-label {
+      width: 100px;
+      font-size: 0.78rem;
+      color: var(--text-secondary);
+      text-align: right;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .bar-track {
+      flex: 1;
+      height: 18px;
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 4px;
+      overflow: hidden;
+      position: relative;
+    }
+    .bar-fill {
+      height: 100%;
+      border-radius: 4px;
+      transition: width 0.5s ease;
+      min-width: 2px;
+    }
+    .bar-fill.cyan { background: linear-gradient(90deg, var(--accent-cyan), #06b6d4); }
+    .bar-fill.green { background: linear-gradient(90deg, var(--accent-green), #4ade80); }
+    .bar-fill.red { background: linear-gradient(90deg, var(--accent-red), #f87171); }
+    .bar-fill.purple { background: linear-gradient(90deg, var(--accent-purple), #c084fc); }
+    .bar-value {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      width: 55px;
+      text-align: right;
+    }
+
+    /* ── Tables ────────────────────────────────────────── */
+    .mini-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+    .mini-table th {
+      text-align: left;
+      padding: 6px 8px;
+      border-bottom: 1px solid var(--border-color);
+      color: var(--text-muted);
+      font-weight: 500;
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .mini-table td {
+      padding: 6px 8px;
+      border-bottom: 1px solid rgba(255,255,255,0.03);
+      color: var(--text-secondary);
+    }
+    .mini-table tr:hover td { background: rgba(0, 229, 255, 0.03); }
+    .status-tag {
+      display: inline-block;
+      padding: 1px 8px;
+      border-radius: 8px;
+      font-size: 0.72rem;
+      font-weight: 600;
+    }
+    .st-completed { background: rgba(34,197,94,0.15); color: var(--accent-green); }
+    .st-pending { background: rgba(245,158,11,0.15); color: var(--accent-amber); }
+    .st-failed { background: rgba(239,68,68,0.15); color: var(--accent-red); }
+    .st-in_progress { background: rgba(0,229,255,0.15); color: var(--accent-cyan); }
+    .st-claimed { background: rgba(168,85,247,0.15); color: var(--accent-purple); }
+    .st-blocked { background: rgba(239,68,68,0.1); color: var(--accent-red); }
+
+    .empty-state {
+      text-align: center;
+      padding: 30px;
+      color: var(--text-muted);
+      font-size: 0.85rem;
+    }
+
+    /* ── Full-width panel ──────────────────────────────── */
+    .panel-full { grid-column: 1 / -1; }
+
+    /* ── Loading ───────────────────────────────────────── */
+    .loading {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 40px;
+      color: var(--text-muted);
+      gap: 10px;
+    }
+    .spinner {
+      width: 18px; height: 18px;
+      border: 2px solid var(--border-color);
+      border-top-color: var(--accent-cyan);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Error state ───────────────────────────────────── */
+    .error-msg {
+      color: var(--accent-red);
+      font-size: 0.82rem;
+      padding: 8px;
+      background: rgba(239, 68, 68, 0.08);
+      border-radius: 6px;
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Header ─────────────────────────────────────────── -->
+<header class="dash-header">
+  <h1>CosySim System Dashboard <span>— v1.04b</span></h1>
+  <div class="header-controls">
+    <span class="status-dot live" id="live-dot"></span>
+    <span id="refresh-label">Auto-refresh: 30s</span>
+    <button id="toggle-refresh" onclick="toggleRefresh()">Pause</button>
+    <span id="last-update"></span>
+  </div>
+</header>
+
+<div class="dash-container">
+  <!-- ── Top Metric Cards ──────────────────────────────── -->
+  <div class="cards-row">
+    <div class="metric-card">
+      <div class="label">Services Online</div>
+      <div class="value" id="card-services">—</div>
+      <div class="sub" id="card-services-sub">checking…</div>
+    </div>
+    <div class="metric-card">
+      <div class="label">Tests Passing</div>
+      <div class="value" id="card-tests">—</div>
+      <div class="sub" id="card-tests-sub">—</div>
+    </div>
+    <div class="metric-card">
+      <div class="label">Nexus Entries</div>
+      <div class="value" id="card-nexus">—</div>
+      <div class="sub" id="card-nexus-sub">—</div>
+    </div>
+    <div class="metric-card">
+      <div class="label">Queue Depth</div>
+      <div class="value" id="card-queue">—</div>
+      <div class="sub" id="card-queue-sub">—</div>
+    </div>
+  </div>
+
+  <!-- ── Panels ────────────────────────────────────────── -->
+  <div class="panels-grid">
+
+    <!-- System Health -->
+    <div class="panel">
+      <div class="panel-header">
+        <h2>System Health</h2>
+        <span class="badge badge-green" id="health-badge">Loading</span>
+      </div>
+      <div class="panel-body" id="panel-health">
+        <div class="loading"><div class="spinner"></div>Checking services…</div>
+      </div>
+    </div>
+
+    <!-- Test Results -->
+    <div class="panel">
+      <div class="panel-header">
+        <h2>Test Results</h2>
+        <span class="badge badge-green" id="test-badge">—</span>
+      </div>
+      <div class="panel-body" id="panel-tests">
+        <div class="loading"><div class="spinner"></div>Loading tests…</div>
+      </div>
+    </div>
+
+    <!-- Model Performance -->
+    <div class="panel">
+      <div class="panel-header">
+        <h2>Model Performance</h2>
+        <span class="badge badge-green" id="model-badge">—</span>
+      </div>
+      <div class="panel-body" id="panel-models">
+        <div class="loading"><div class="spinner"></div>Querying LMStudio…</div>
+      </div>
+    </div>
+
+    <!-- Nexus Knowledge -->
+    <div class="panel">
+      <div class="panel-header">
+        <h2>Nexus Knowledge</h2>
+        <span class="badge badge-green" id="nexus-badge">—</span>
+      </div>
+      <div class="panel-body" id="panel-nexus">
+        <div class="loading"><div class="spinner"></div>Loading Nexus…</div>
+      </div>
+    </div>
+
+    <!-- Recent Activity (full width) -->
+    <div class="panel panel-full">
+      <div class="panel-header">
+        <h2>Recent Activity</h2>
+        <span class="badge badge-green" id="activity-badge">—</span>
+      </div>
+      <div class="panel-body" id="panel-activity">
+        <div class="loading"><div class="spinner"></div>Loading tasks…</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  const BASE = window.location.pathname.replace(/\/dashboard\/?$/, '');
+  let refreshTimer = null;
+  let refreshEnabled = true;
+  const REFRESH_INTERVAL = 30000;
+
+  function apiUrl(path) {
+    return BASE + path;
+  }
+
+  /* ── Fetch helpers ─────────────────────────────────── */
+  async function fetchJson(path) {
+    try {
+      const resp = await fetch(apiUrl(path));
+      if (!resp.ok) return null;
+      return await resp.json();
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /* ── Render: Service Health ────────────────────────── */
+  function renderHealth(data) {
+    const el = document.getElementById('panel-health');
+    const badge = document.getElementById('health-badge');
+    if (!data || !data.services) {
+      el.innerHTML = '<div class="error-msg">Could not load system metrics</div>';
+      badge.textContent = 'Error';
+      badge.className = 'badge badge-red';
+      return;
+    }
+
+    const svcs = data.services;
+    const onlineCount = Object.values(svcs).filter(s => s.ok).length;
+    const totalCount = Object.keys(svcs).length;
+
+    document.getElementById('card-services').textContent = onlineCount;
+    document.getElementById('card-services-sub').textContent = `of ${totalCount} services`;
+
+    badge.textContent = `${onlineCount}/${totalCount}`;
+    badge.className = onlineCount === totalCount ? 'badge badge-green' : 'badge badge-amber';
+
+    let html = '<div class="service-grid">';
+    for (const [name, info] of Object.entries(svcs)) {
+      const ok = info.ok;
+      const lat = info.latency_ms > 0 ? `${info.latency_ms}ms` : '';
+      html += `<div class="service-item">
+        <span class="svc-dot ${ok ? 'ok' : 'err'}"></span>
+        <span class="svc-name">${name}</span>
+        <span class="svc-latency">${lat}</span>
+      </div>`;
+    }
+    html += '</div>';
+
+    if (data.hardware && Object.keys(data.hardware).length) {
+      const hw = data.hardware;
+      html += '<div style="margin-top:14px; display:flex; gap:16px; flex-wrap:wrap; font-size:0.8rem; color:var(--text-secondary)">';
+      if (hw.cpu_pct !== undefined) html += `<span>CPU: ${hw.cpu_pct}%</span>`;
+      if (hw.ram_pct !== undefined) html += `<span>RAM: ${hw.ram_pct}%</span>`;
+      if (hw.gpu_vram_pct !== undefined) html += `<span>VRAM: ${hw.gpu_vram_pct}%</span>`;
+      if (hw.gpu_temp_c !== undefined) html += `<span>GPU: ${hw.gpu_temp_c}°C</span>`;
+      html += '</div>';
+    }
+
+    if (data.disk && data.disk.percent !== undefined) {
+      html += `<div style="margin-top:8px; font-size:0.78rem; color:var(--text-muted)">
+        Disk: ${data.disk.used_gb}/${data.disk.total_gb} GB (${data.disk.percent}%)
+      </div>`;
+    }
+
+    el.innerHTML = html;
+  }
+
+  /* ── Render: Test Results ──────────────────────────── */
+  function renderTests(data) {
+    const el = document.getElementById('panel-tests');
+    const badge = document.getElementById('test-badge');
+    if (!data) {
+      el.innerHTML = '<div class="error-msg">Could not load test metrics</div>';
+      badge.textContent = 'Error';
+      badge.className = 'badge badge-red';
+      return;
+    }
+
+    const latest = data.latest || {};
+    const passed = latest.passed || 0;
+    const total = latest.total || 0;
+    const failed = latest.failed || 0;
+
+    document.getElementById('card-tests').textContent = total > 0 ? `${Math.round(passed/total*100)}%` : '—';
+    document.getElementById('card-tests-sub').textContent = total > 0 ? `${passed}/${total} passed` : 'no reports';
+
+    badge.textContent = latest.status || '—';
+    badge.className = latest.status === 'PASSED' ? 'badge badge-green' : 'badge badge-red';
+
+    let html = '';
+    if (total > 0) {
+      html += `<div style="margin-bottom:14px; font-size:0.85rem">
+        <strong>${latest.status}</strong> — ${passed} passed, ${failed} failed, ${latest.skipped || 0} skipped
+        <br><span style="color:var(--text-muted)">Tier ${latest.tier || '?'} · ${(latest.duration_seconds || 0).toFixed(1)}s · ${latest.timestamp || ''}</span>
+      </div>`;
+    }
+
+    // Pass rate history bars
+    const history = data.history || [];
+    if (history.length > 0) {
+      html += '<div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:6px">PASS RATE HISTORY</div>';
+      html += '<div class="bar-chart">';
+      for (const h of history) {
+        const color = h.rate >= 100 ? 'green' : h.rate >= 80 ? 'cyan' : 'red';
+        html += `<div class="bar-row">
+          <span class="bar-label">T${h.tier || '?'}</span>
+          <div class="bar-track"><div class="bar-fill ${color}" style="width:${h.rate}%"></div></div>
+          <span class="bar-value">${h.rate}%</span>
+        </div>`;
+      }
+      html += '</div>';
+    }
+
+    // Slowest tests
+    const slowest = (data.slowest_by_file || []).slice(0, 5);
+    if (slowest.length > 0) {
+      html += '<div style="font-size:0.75rem;color:var(--text-muted);margin:14px 0 6px">SLOWEST TEST FILES</div>';
+      html += '<div class="bar-chart">';
+      const maxDur = Math.max(...slowest.map(s => s.duration));
+      for (const s of slowest) {
+        const pct = maxDur > 0 ? (s.duration / maxDur * 100) : 0;
+        html += `<div class="bar-row">
+          <span class="bar-label" title="${s.file}">${s.file.replace('tests/', '')}</span>
+          <div class="bar-track"><div class="bar-fill purple" style="width:${pct}%"></div></div>
+          <span class="bar-value">${s.duration.toFixed(1)}s</span>
+        </div>`;
+      }
+      html += '</div>';
+    }
+
+    if (!html) html = '<div class="empty-state">No test reports found</div>';
+    el.innerHTML = html;
+  }
+
+  /* ── Render: Models ────────────────────────────────── */
+  function renderModels(data) {
+    const el = document.getElementById('panel-models');
+    const badge = document.getElementById('model-badge');
+    if (!data) {
+      el.innerHTML = '<div class="error-msg">Could not load model metrics</div>';
+      badge.textContent = 'Offline';
+      badge.className = 'badge badge-red';
+      return;
+    }
+
+    badge.textContent = data.lmstudio_online ? `${data.model_count} loaded` : 'Offline';
+    badge.className = data.lmstudio_online ? 'badge badge-green' : 'badge badge-red';
+
+    let html = '';
+
+    // Loaded models
+    const models = data.loaded_models || [];
+    if (models.length > 0) {
+      html += '<div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:6px">LOADED MODELS</div>';
+      html += '<table class="mini-table"><tr><th>Model</th><th>Type</th></tr>';
+      for (const m of models) {
+        html += `<tr><td style="color:var(--text-primary)">${m.id}</td><td>${m.type || '—'}</td></tr>`;
+      }
+      html += '</table>';
+    }
+
+    // Performance stats
+    const perf = data.performance || [];
+    if (perf.length > 0) {
+      html += '<div style="font-size:0.75rem;color:var(--text-muted);margin:14px 0 6px">PERFORMANCE (pipeline avg)</div>';
+      html += '<table class="mini-table"><tr><th>Model</th><th>Latency</th><th>TPS</th><th>Calls</th></tr>';
+      for (const p of perf) {
+        const lat = p.avg_latency ? `${Math.round(p.avg_latency)}ms` : '—';
+        const tps = p.avg_tps ? p.avg_tps.toFixed(1) : '—';
+        html += `<tr>
+          <td style="color:var(--text-primary)">${p.model || 'unknown'}</td>
+          <td>${lat}</td><td>${tps}</td><td>${p.call_count || 0}</td>
+        </tr>`;
+      }
+      html += '</table>';
+    }
+
+    if (!html) html = '<div class="empty-state">LMStudio offline or no metrics</div>';
+    el.innerHTML = html;
+  }
+
+  /* ── Render: Nexus Knowledge ───────────────────────── */
+  function renderNexus(data) {
+    const el = document.getElementById('panel-nexus');
+    const badge = document.getElementById('nexus-badge');
+    if (!data) {
+      el.innerHTML = '<div class="error-msg">Could not load Nexus metrics</div>';
+      badge.textContent = 'Error';
+      badge.className = 'badge badge-red';
+      return;
+    }
+
+    document.getElementById('card-nexus').textContent = data.total_entries || 0;
+    const fresh = data.freshness_hours;
+    document.getElementById('card-nexus-sub').textContent = fresh !== null && fresh !== undefined
+      ? `updated ${fresh}h ago`
+      : 'freshness unknown';
+
+    badge.textContent = `${data.total_entries || 0} entries`;
+    badge.className = 'badge badge-green';
+
+    let html = '';
+
+    // Categories
+    const cats = data.categories || {};
+    const catEntries = Object.entries(cats).sort((a, b) => b[1] - a[1]);
+    if (catEntries.length > 0) {
+      html += '<div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:6px">BY CATEGORY</div>';
+      html += '<div class="bar-chart">';
+      const maxCat = Math.max(...catEntries.map(c => c[1]));
+      for (const [cat, count] of catEntries.slice(0, 8)) {
+        const pct = maxCat > 0 ? (count / maxCat * 100) : 0;
+        html += `<div class="bar-row">
+          <span class="bar-label">${cat}</span>
+          <div class="bar-track"><div class="bar-fill cyan" style="width:${pct}%"></div></div>
+          <span class="bar-value">${count}</span>
+        </div>`;
+      }
+      html += '</div>';
+    }
+
+    // Content types
+    const types = data.content_types || {};
+    const typeEntries = Object.entries(types).sort((a, b) => b[1] - a[1]);
+    if (typeEntries.length > 0) {
+      html += '<div style="font-size:0.75rem;color:var(--text-muted);margin:14px 0 6px">BY TYPE</div>';
+      html += '<div style="display:flex;gap:12px;flex-wrap:wrap">';
+      for (const [t, c] of typeEntries) {
+        html += `<span style="font-size:0.8rem;color:var(--text-secondary)">${t}: <strong style="color:var(--accent-cyan)">${c}</strong></span>`;
+      }
+      html += '</div>';
+    }
+
+    // Q&A cache
+    if (data.qa_cache_size > 0) {
+      html += `<div style="margin-top:12px;font-size:0.8rem;color:var(--text-secondary)">
+        Q&A Cache: <strong style="color:var(--accent-green)">${data.qa_cache_size}</strong> entries
+      </div>`;
+    }
+
+    if (!html) html = '<div class="empty-state">No Nexus data available</div>';
+    el.innerHTML = html;
+  }
+
+  /* ── Render: Recent Activity ───────────────────────── */
+  function renderActivity(data) {
+    const el = document.getElementById('panel-activity');
+    const badge = document.getElementById('activity-badge');
+    if (!data) {
+      el.innerHTML = '<div class="error-msg">Could not load task metrics</div>';
+      badge.textContent = 'Error';
+      badge.className = 'badge badge-red';
+      return;
+    }
+
+    const counts = data.counts || {};
+    const pending = (counts.pending || 0) + (counts.claimed || 0) + (counts.in_progress || 0);
+
+    document.getElementById('card-queue').textContent = pending;
+    document.getElementById('card-queue-sub').textContent =
+      `${counts.completed || 0} done · ${counts.failed || 0} failed`;
+
+    badge.textContent = `${data.total || 0} tasks`;
+    badge.className = 'badge badge-green';
+
+    let html = '';
+
+    // Summary row
+    html += '<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:14px;font-size:0.82rem">';
+    for (const [status, count] of Object.entries(counts)) {
+      if (count > 0) {
+        html += `<span><span class="status-tag st-${status}">${status}</span> ${count}</span>`;
+      }
+    }
+    if (data.avg_latency_s > 0) {
+      html += `<span style="color:var(--text-muted)">Avg latency: ${data.avg_latency_s}s</span>`;
+    }
+    html += '</div>';
+
+    // Recent tasks table
+    const recent = data.recent || [];
+    if (recent.length > 0) {
+      html += '<table class="mini-table"><tr><th>Task</th><th>Status</th><th>Created</th></tr>';
+      for (const t of recent) {
+        const ts = t.created_at ? t.created_at.substring(0, 19) : '—';
+        html += `<tr>
+          <td style="color:var(--text-primary)">${t.title || '(untitled)'}</td>
+          <td><span class="status-tag st-${t.status}">${t.status}</span></td>
+          <td>${ts}</td>
+        </tr>`;
+      }
+      html += '</table>';
+    } else {
+      html += '<div class="empty-state">No tasks in queue</div>';
+    }
+
+    el.innerHTML = html;
+  }
+
+  /* ── Master Refresh ────────────────────────────────── */
+  async function refreshDashboard() {
+    const [system, tests, tasks, nexus, models] = await Promise.all([
+      fetchJson('/api/metrics/system'),
+      fetchJson('/api/metrics/tests'),
+      fetchJson('/api/metrics/tasks'),
+      fetchJson('/api/metrics/nexus'),
+      fetchJson('/api/metrics/models'),
+    ]);
+
+    renderHealth(system);
+    renderTests(tests);
+    renderModels(models);
+    renderNexus(nexus);
+    renderActivity(tasks);
+
+    document.getElementById('last-update').textContent =
+      'Updated: ' + new Date().toLocaleTimeString();
+  }
+
+  function toggleRefresh() {
+    refreshEnabled = !refreshEnabled;
+    const btn = document.getElementById('toggle-refresh');
+    const dot = document.getElementById('live-dot');
+    const label = document.getElementById('refresh-label');
+
+    if (refreshEnabled) {
+      btn.textContent = 'Pause';
+      dot.className = 'status-dot live';
+      label.textContent = 'Auto-refresh: 30s';
+      refreshTimer = setInterval(refreshDashboard, REFRESH_INTERVAL);
+    } else {
+      btn.textContent = 'Resume';
+      dot.className = 'status-dot paused';
+      label.textContent = 'Paused';
+      clearInterval(refreshTimer);
+    }
+  }
+
+  // Initial load
+  refreshDashboard();
+  refreshTimer = setInterval(refreshDashboard, REFRESH_INTERVAL);
+</script>
+
+</body>
+</html>
