@@ -3,6 +3,54 @@
 All notable changes to CosySim are documented here.
 
 ---
+## [1.07b] — "PIPELINE INTELLIGENCE" — 2026-03
+
+Complete NLM pipeline, Nexus knowledge deepening, local agent autonomy, and
+system polish — closing all gaps between data collection and self-improvement.
+
+### NotebookLM Research Pipeline
+- **NewsSourceRegistry** — 30+ RSS/API sources across 7 categories (ai_ml,
+  local_inference, open_source, python, security, science, dev_tools)
+- **NewsNLMPipeline** — Full distillation chain: fetch articles → build digest
+  → create/reuse NLM notebook → run 10 curated questions → store Q&A in Nexus
+- **Bootstrap Notebooks** — 4 purpose-built notebooks (architecture, copilot
+  instructions, session history, codebase) with 30 distillation questions
+- **News CLI** — `python -m engine.nexus.bridge news-fetch/news-digest/news-sources`
+
+### Nexus Knowledge Deepening
+- **5-Tier Query Router** — Q&A cache → FTS search → Nexus ask → direct NLM →
+  LLM fallback, all with confidence scoring and auto-store
+- **Training Flywheel Wiring** — Query router now feeds every NLM/LLM answer
+  to `training_flywheel.collect_from_qa()` (NLM=0.7 confidence, LLM=0.6)
+- **Per-Category Knowledge Expiry** — 12 TTL policies in config (news=2d,
+  session=30d, architecture=365d) wired into KnowledgeScorer freshness scoring
+- **Quality Report** — Automated stale detection, duplicate scoring,
+  completeness checks with configurable thresholds
+
+### Local Agent Autonomy
+- **Fine-Tuning Orchestrator** — Unsloth QLoRA pipeline for Qwen 270M/1.7B and
+  Llama 3 3B with job queue, checkpoint management, auto-merge
+- **Benchmark Runner** — Accuracy/F1/latency tracking with auto-promotion logic
+  for models that score above threshold
+- **Content Router** — Task classification and delegation with JSON/tagged/plain
+  text parsing and routing hints
+
+### System Polish
+- **Scene Health Check** — HTTP + CDP diagnostics, required route validation,
+  shared asset 404 detection, known bug pattern matching
+- **Interceptor Cache** — TTL-based thread-safe caching for agent interceptors
+- **LMStudio Benchmark** — TTFT, throughput, latency distribution, VRAM monitoring
+- **47 Scheduler Tasks** — Automated news fetch (8h), NLM distillation (1h),
+  training sync (daily), knowledge quality (weekly), control notebook (8h)
+- **337 test files** covering all subsystems
+
+### Code Quality
+- Replaced 5 silent `except: pass` in penthouse_skills.py with proper logging
+- Replaced 20 silent `.catch(() => {})` in penthouse.js with descriptive warnings
+- Extracted magic numbers to `BRIDGE_CONFIG` constants in character_bridge.js
+- Fixed YAML: duplicate extension, invalid chain reference, missing categories
+
+---
 ## [1.06b] — "AAA+++ ANIMATION" — 2026-03
 
 Complete penthouse animation overhaul — 55-state machine, 111 pose library,

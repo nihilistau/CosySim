@@ -1,6 +1,6 @@
 # CosySim Roadmap
 
-> Current: **v1.06b** "AAA+++ ANIMATION" ✅ | Last updated: 2026-03
+> Current: **v1.07b** "PIPELINE INTELLIGENCE" ✅ | Last updated: 2026-03
 
 ## Philosophy
 
@@ -27,7 +27,7 @@ into a unified cyberpunk RPG framework with deep game systems.
 - **Phase 7** — In-game world news system + bottom-of-screen ticker in every scene
 - **Phase 8** — Documentation, version, and polish
 
-**Baseline: 20 scenes, 55+ skill packs / ~420 skills, 10,988 tests passing (330 files), v1.06b.**
+**Baseline: 20 scenes, 55+ skill packs / ~420 skills, 10,988 tests passing (337 files), v1.07b.**
 
 ---
 
@@ -85,62 +85,76 @@ into a unified cyberpunk RPG framework with deep game systems.
 
 ---
 
-## Active: v1.07b — Current Sprint
+## Shipped: v1.07b — "PIPELINE INTELLIGENCE" ✅
 
 ### NotebookLM Research Pipeline
-- [ ] Automated topic discovery and source curation
-- [ ] NLM-driven knowledge distillation into Nexus
-- [ ] News ingestion system: fetch, notebook, distill, store
-- [ ] Code documentation notebooks for implementation guidance
+- [x] Automated topic discovery and source curation (NewsSourceRegistry, 30+ sources, 7 categories)
+- [x] NLM-driven knowledge distillation into Nexus (NewsNLMPipeline, 10 distillation questions)
+- [x] News ingestion system: fetch → notebook → distill → store (full pipeline with scheduler)
+- [x] Code documentation notebooks for implementation guidance (4 bootstrap notebooks)
 
 ### Nexus Knowledge Deepening
-- [ ] Query router NLM-backed deep research tier
-- [ ] Automated knowledge freshness checks and stale entry cleanup
-- [ ] Training flywheel: feed all Q&A into fine-tuning pipeline
+- [x] Query router NLM-backed deep research tier (5-tier pipeline, tier 4 = direct NLM)
+- [x] Automated knowledge freshness checks and stale entry cleanup (per-category TTL, quality scoring)
+- [x] Training flywheel: feed all Q&A into fine-tuning pipeline (query router → flywheel wiring)
 
 ### Local Agent Autonomy
-- [ ] Fine-tune local models on CosySim-specific Q&A and code patterns
-- [ ] Agent self-improvement: benchmark → learn → adapt loop
-- [ ] Router agent: classify tasks → delegate to appropriate model/agent
+- [x] Fine-tune local models on CosySim-specific Q&A and code patterns (Unsloth QLoRA orchestrator)
+- [x] Agent self-improvement: benchmark → learn → adapt loop (BenchmarkRunner + auto-promotion)
+- [x] Router agent: classify tasks → delegate to appropriate model/agent (ContentRouter)
 
 ### System Polish
-- [ ] Scene health monitoring with auto-restart
-- [ ] Performance profiling and caching optimization
-- [ ] Comprehensive integration test suite across all game systems
+- [x] Scene health monitoring with auto-restart (scene_health_check.py + CDP diagnostics)
+- [x] Performance profiling and caching optimization (InterceptorCache + Nexus cache + LMStudio bench)
+- [x] Comprehensive integration test suite across all game systems (337 test files, 10,988 tests)
+
+---
+
+## Active: v1.08b — Current Sprint
+
+### Game System Integration
+- [ ] Wire neurochemistry into NPC conversation interceptors
+- [ ] Connect cyberspace to territory control outcomes
+- [ ] Living world events affect market prices and faction decisions
+- [ ] Player actions generate news articles visible in ticker
+
+### Live Pipeline Validation
+- [ ] End-to-end news pipeline run: fetch → NLM distill → Nexus store → training flywheel
+- [ ] Bootstrap notebook refresh with live NLM distillation
+- [ ] Scheduler daemon live test: verify all 47 tasks fire correctly
+- [ ] Training flywheel export and fine-tune dry run
+
+### TUI & Operator Dashboard
+- [ ] TUI dashboard enhancements: real-time metrics, task queue display
+- [ ] Operator HUD: queue, health, retry/resume, force-complete
+- [ ] Multiplayer presence visible in scene UIs
+
+### Runtime Hardening
+- [ ] Remove remaining silent-success fallbacks across scenes
+- [ ] Add missing error recovery paths in agent loop
+- [ ] Nexus server startup reliability improvements
 
 ---
 
 ## Post-v1.0 Roadmap (2026-Q3+)
 
-### 1. Nexus Knowledge Deepening
-- Continue filling Nexus with reusable Q&A, architecture decisions, and learnings
-- Strengthen query router with NLM-backed deep research tier
-- Automated knowledge freshness checks and stale entry cleanup
-- Training flywheel: feed all Q&A into fine-tuning pipeline
-
-### 2. NotebookLM Research Pipeline
-- News ingestion system: automated topic discovery, source curation, NLM distillation
-- Code documentation notebooks: upload codebase docs, query for implementation guidance
-- Architecture research: use NLM to evaluate design alternatives
-- Store all distilled knowledge back into Nexus
-
-### 3. Local Agent Autonomy
-- Fine-tune local models on CosySim-specific Q&A and code patterns
-- Agent self-improvement: benchmark, learn, adapt
-- Router agent: classify incoming tasks → delegate to appropriate model/agent
-
-### 4. Game System Integration
+### 1. Game System Integration
 - Wire neurochemistry into NPC conversation interceptors
 - Connect cyberspace to territory control outcomes
 - Living world events affect market prices and faction decisions
 - Player actions generate news articles visible in ticker
 - Multiplayer presence visible in scene UIs
 
-### 5. System Polish
+### 2. Advanced NLM Automation
+- Architecture research: use NLM to evaluate design alternatives autonomously
+- Multi-notebook orchestration for complex research sessions
+- NLM-driven code generation with distilled implementation guides
+- Automated notebook lifecycle management (create → populate → distill → archive)
+
+### 3. System Evolution
 - TUI dashboard enhancements: real-time metrics, task queue display
-- Performance profiling and caching optimization
-- Scene health monitoring with auto-restart
-- Comprehensive integration test suite across all game systems
+- Full autonomous operation: local agents maintain system without human input
+- Cross-scene interaction and shared world state
 
 ### 6. Continue runtime hardening in follow-on sweeps
 - Keep removing silent-success fallbacks from remaining scene/service paths as
