@@ -108,10 +108,11 @@ class PenthouseSocialMixin:
                 for c in db_chars:
                     c["source"] = "database"
                     c["loaded"] = c["id"] in self.characters
-                return jsonify({"characters": db_chars})
+                    c["traits"] = c.get("tags", [])
+                return jsonify({"characters": db_chars, "count": len(db_chars)})
             except Exception as exc:
                 logger.error("list_characters failed: %s", exc, exc_info=True)
-                return jsonify({"error": str(exc)}), 500
+                return jsonify({"characters": [], "error": str(exc), "count": 0}), 500
 
         @self.app.route("/api/character/load", methods=["POST"])
         def load_character():
